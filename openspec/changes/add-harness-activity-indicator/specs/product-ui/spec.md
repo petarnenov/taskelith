@@ -18,3 +18,7 @@ Every card or row that shows a harness session, on the board, in the task detail
 #### Scenario: Reduced motion
 - **WHEN** the user's system asks for reduced motion
 - **THEN** no indicator spins, and the labels still name each state
+
+#### Scenario: Ownership uncertain
+- **WHEN** Taskelith has lost contact with the session's worker and does not know whether the harness works
+- **THEN** the indicator is still and drawn in the danger color, and the label says that ownership is uncertain

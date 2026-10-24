@@ -1,7 +1,7 @@
 # product-ui Specification
 
 ## Purpose
-Define the web product's information architecture and interaction rules decided by the owner on 2026-10-24 (ADR 0008), for implementation from G3 onwards.
+Define the web product's information architecture and interaction rules decided by the owner on 2026-10-24 (ADR 0008), and later owner decisions recorded in their changes, such as the harness activity indicator of 2026-10-25, for implementation from G3 onwards.
 
 ## Requirements
 
