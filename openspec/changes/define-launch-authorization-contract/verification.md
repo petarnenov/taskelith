@@ -16,7 +16,7 @@ G2 work plan item 3, started under the owner's decision of 2026-10-25 that G2 st
 
 ## Checks
 
-In the worktree, Node v24.22.1, npm 12.2.1: `make verify` passed, including strict validation and the archive dry-run of this change; re-run after the pass-1, pass-2, and pass-3 fixes with the same result; before the pass-3 fixes `origin/dev` (`7850c70`, including the comment length check) was merged in without conflicts.
+In the worktree, Node v24.22.1, npm 12.2.1: `make verify` passed, including strict validation and the archive dry-run of this change; re-run after the pass-1, pass-2, pass-3, and pass-4 fixes with the same result; before the pass-3 fixes `origin/dev` (`7850c70`, including the comment length check) was merged in without conflicts.
 
 ## Independent review
 
@@ -45,7 +45,11 @@ Assigned reviewer (rotation): Codex CLI, `-m gpt-6.1-sol -c model_reasoning_effo
   3. Medium: planning admissions got prerequisite gates G1 never checked. Relied-on gates are now by admission kind: none for planning.
   4. Medium: start acceptance had no recovery fence. Start observations carry the epoch; outside the current epoch or in quarantine they are kept as evidence for reconciliation only.
   5. Medium: the spec missed four contract guarantees. Added: one spawn across grants, replay only while unexpired and non-terminal, the supervisor's spawn deadline, and no start after the seal, each with a scenario.
-- **Pass 4 (permitted by the owner on 2026-10-25).** Pending.
+- **Pass 4 (permitted by the owner on 2026-10-25) — session `01a17020-9557-7573-94eb-4d0b54e57bff`.** Pass-3 findings 1–3 and 5 confirmed resolved, 4 resolved in the contract. Findings: 0 Critical, 2 High, 1 Medium, 0 Low. The owner decided on 2026-10-25 to fix them and permit a fifth pass. All accepted and resolved:
+  1. High: a first start reported after the exit could move an `exited` execution back to `started`. Terminal states never change; a later start is recorded as history.
+  2. High: adding a pending gate to a prerequisite stage escaped invalidation. Adding or removing a gate is a writer, found by run and dependent stages.
+  3. Medium: the spec cancelled a current-epoch start received in quarantine, which the contract keeps as evidence. The spec now orders the evidence-only, history, and unauthorized cases as the contract does.
+- **Pass 5 (permitted by the owner on 2026-10-25).** Pending.
 
 ## Remaining gates
 

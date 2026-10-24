@@ -17,6 +17,10 @@ A worker SHALL start a new execution only under a launch authorization that the 
 ### Requirement: Invalidation ordering
 Every transaction that changes a compared value SHALL run serializably and SHALL, in the same transaction and even when the result is empty, read the non-terminal owning executions it affects and their grants, whatever the grants' expiry, revoke those grants, and write a cancellation command for each affected attempt. Aborted writers SHALL be retried as a whole.
 
+#### Scenario: Gate added to a prerequisite stage
+- **WHEN** a pending gate is added to a prerequisite stage after a grant
+- **THEN** the grant is revoked and a cancellation command is written
+
 #### Scenario: Invalidation races authorization
 - **WHEN** an invalidation and an authorization run concurrently, including a writer that affects many attempts
 - **THEN** the result is either a rejection or a revocation with a cancellation command, never an unrevoked stale authorization
@@ -67,11 +71,19 @@ The worker SHALL hand an authorization to the supervisor, and the supervisor SHA
 - **THEN** it reconciles by execution identity and re-authorizes with a new operation ID before any spawn
 
 ### Requirement: Start observations
-A start SHALL be recorded once per execution, independently of arrival time, for a grant bound to that execution, at the current epoch outside quarantine, of the owning execution not `not-started`; a duplicate SHALL return the recorded fact. A new start failing these checks SHALL become an unauthorized start, cancelled for that execution only; an old-epoch one SHALL only be kept as evidence.
+A start for a grant bound to its execution SHALL be recorded once, independently of arrival time; a duplicate SHALL return the recorded fact. One from an older epoch or received in quarantine SHALL only be kept as evidence; one of an `exited` execution SHALL be history without a transition; any other failing start SHALL be an unauthorized start, cancelled for that execution only.
 
 #### Scenario: Timely start reported late
 - **WHEN** a start under a granted authorization is reported after an outage longer than the TTL
 - **THEN** it is recorded as a start, and a duplicate report returns the recorded fact
+
+#### Scenario: First start after exit
+- **WHEN** the first start observation of an execution arrives after its exit was recorded
+- **THEN** the start is recorded as history and the execution stays `exited`
+
+#### Scenario: Start in quarantine
+- **WHEN** a current-epoch start observation arrives during restore quarantine
+- **THEN** it is kept as evidence, no state changes, and no cancellation is written
 
 #### Scenario: Duplicate after a later execution
 - **WHEN** a recorded start of execution A is reported again after A exited and execution B was authorized
