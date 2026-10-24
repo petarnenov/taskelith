@@ -24,8 +24,7 @@ test('selects the comment syntax by file name and shebang', () => {
   assert.equal(commentSyntax('README.md', () => ''), undefined);
 });
 
-test('exempts lockfiles and captured third-party artifacts', () => {
-  assert.equal(commentSyntax('pnpm-lock.yaml', () => ''), undefined);
+test('exempts captured third-party artifacts', () => {
   assert.equal(commentSyntax('docs/qualification/speckit-1.2.3/scaffold/run.sh', () => ''), undefined);
   const scaffold = 'packages/plugins/sdlc-speckit/fixtures/working-copy/.specify/scripts/bash/common.sh';
   assert.equal(commentSyntax(scaffold, () => ''), undefined);
@@ -35,6 +34,10 @@ test('reads the first line only for an extensionless file', () => {
   const unread = () => assert.fail('the first line was read');
   assert.equal(commentSyntax('scripts/setup.ts', unread), 'slash');
   assert.equal(commentSyntax('README.md', unread), undefined);
+});
+
+test('does not count a shebang as a comment', () => {
+  assert.deepEqual(slashComments('#!/usr/bin/env node\n// a\n// b\n'), [{ firstLine: 2, lastLine: 3 }]);
 });
 
 test('joins adjacent own-line slash comments into one comment', () => {

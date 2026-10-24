@@ -26,8 +26,6 @@ export interface Violation {
 const SLASH_EXTENSIONS = new Set(['.ts', '.mts', '.cts', '.js', '.mjs', '.cjs']);
 const HASH_EXTENSIONS = new Set(['.sh', '.yml', '.yaml']);
 const HASH_BASENAMES = new Set(['Makefile', 'Dockerfile']);
-// The only lockfile kind in scope; npm's lockfile is JSON and out of scope.
-const LOCKFILES = new Set(['pnpm-lock.yaml']);
 // The SpecKit fixture scaffold is a byte-for-byte copy of the qualification
 // capture, so both are third-party artifacts.
 const EXEMPT_DIRS = ['docs/qualification/', 'packages/plugins/sdlc-speckit/fixtures/working-copy/.specify/'];
@@ -36,7 +34,7 @@ const EXEMPT_DIRS = ['docs/qualification/', 'packages/plugins/sdlc-speckit/fixtu
 export function commentSyntax(path: string, readFirstLine: () => string): CommentSyntax | undefined {
   const name = posix.basename(path);
   const extension = posix.extname(name);
-  if (LOCKFILES.has(name) || EXEMPT_DIRS.some((dir) => path.startsWith(dir))) return undefined;
+  if (EXEMPT_DIRS.some((dir) => path.startsWith(dir))) return undefined;
   if (SLASH_EXTENSIONS.has(extension)) return 'slash';
   if (HASH_EXTENSIONS.has(extension) || HASH_BASENAMES.has(name)) return 'hash';
   if (extension === '' && readFirstLine().startsWith('#!')) return 'hash';

@@ -11,7 +11,7 @@ On 2026-10-25 the owner approved the task `enforce-comment-length`; the coordina
 - Every changed comment keeps its contract or rationale. Of the 38 files with shortened comments, 37 change only comment lines, and `Makefile` also adds the `npm run verify:comments` step.
 - `docs/dependencies/licenses.json` changes only in its provenance digests of `package.json` and `scripts/dependency-inventory.ts`, regenerated with `npm run inventory:dependencies`.
 - Evidence check: the change adds no external link.
-- Requirements stay under 500 characters (250, 420, and 181).
+- Requirements stay under 500 characters (250, 436, and 181).
 
 ## Checks
 
@@ -51,6 +51,12 @@ Assigned reviewer (rotation): Claude Code with `claude-fable-5-1`, effort medium
   9. Low: this record called `Makefile` comment-only; corrected.
   10. Low: `.mts`, `.cts`, and `.cjs` had no test; added.
   11. Low: the `plain-data.ts` comment put a throwing inspection among the problems; reworded.
+- **Pass 3 at `05366f6` — session `62d24e54-584b-4be1-ae7f-bb878bef1bde`.** SHA-256 snapshots before and after were equal (`7b99d62d…b80d`). The reviewer confirmed all 11 pass 2 findings as resolved. Findings: 0 Critical, 0 High, 0 Medium, 5 Low. As a Low-only pass, they were fixed without another review (unreviewed fixes):
+  1. Low: this record gave 420 characters for the scope requirement; it is 436.
+  2. Low: `docs/releases.md` did not list the comment length check among the `make verify` steps; added.
+  3. Low: the `pnpm-lock.yaml` exemption was dead; removed from the script, its test, and the design.
+  4. Low: no test protected that a shebang in a TypeScript file is no comment; added.
+  5. Low: "the owner picks the first" in `event-metadata.ts` was ambiguous; now "the owning module".
 
 ## Remaining gates
 

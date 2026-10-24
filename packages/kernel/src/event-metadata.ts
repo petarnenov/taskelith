@@ -11,7 +11,7 @@ export type CorrelationId = Identifier<'CorrelationId'>;
 export type CausationId = Identifier<'CausationId'>;
 
 // Dot-separated segments of lowercase letters, digits, and inner hyphens, each
-// starting with a letter, as in `sdlc.gate.passed`; the owner picks the first.
+// starting with a letter, as in `sdlc.gate.passed`; the owning module picks the first.
 export type EventType = string & { readonly [eventTypeBrand]: true };
 export type SchemaVersion = number & { readonly [schemaVersionBrand]: true };
 
