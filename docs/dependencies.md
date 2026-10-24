@@ -75,6 +75,7 @@ An audit exits nonzero when findings exist; retain and inspect its JSON rather t
 | Component | Exact selection and terms | Status and qualification limits |
 | --- | --- | --- |
 | Claude Code (G3) | `@anthropic-ai/claude-agent-sdk@0.3.308` with bundled CLI 2.1.308; proprietary, under Anthropic's legal agreements | `candidate`. macOS x86_64 egress and native-capability evidence is recorded in the [qualification record](qualification/claude-code.md). Open before admission: Linux, macOS arm64, the subscription account mechanism and credential-exposure tests required by [ADR 0005](decisions/0005-harness-subscription-account-pools.md), running with `DISABLE_AUTOUPDATER=1`, any alternative subscription-authenticated provider path, and independent adoption evidence. |
+| Codex (G4) | `@openai/codex@0.164.0` (`codex app-server`); Apache-2.0 | `candidate`. macOS x86_64 egress and native-capability evidence is recorded in the [qualification record](qualification/codex.md), whose "Remaining before admission" list holds the open gates, including OpenAI's data-handling terms, Linux, macOS arm64, and the temporary-directory fallback after a crash. The vendor calls app-server experimental. |
 
 ## Planned components
 
