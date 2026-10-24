@@ -54,3 +54,7 @@ Repository documentation, specifications, comments, issues, and pull requests ar
 ## License
 
 [MIT](LICENSE).
+
+## Releases
+
+Versions and npm publication are automated from main using Conventional Commits and GitHub Actions OIDC. See [release policy and setup](https://github.com/petarnenov/taskelith/blob/main/docs/releases.md).

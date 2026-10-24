@@ -642,3 +642,7 @@ These sources inform technology and framework integration. Pin and verify the ac
 - [PostgreSQL license](https://www.postgresql.org/about/licence/)
 - [NATS server source and license](https://github.com/nats-io/nats-server)
 - [Neo4j Community source and edition licensing](https://github.com/neo4j/neo4j)
+
+## Automated versioning and package publication
+
+Taskelith uses semantic-release and Conventional Commits for automatic semantic versions, tags, release notes, and npm publication from main after verification. GitHub Actions authenticates to npm through OIDC trusted publishing without stored npm publish tokens or per-release MFA. Account administration retains MFA. See [the release policy](https://github.com/petarnenov/taskelith/blob/main/docs/releases.md) for setup, version rules, and recovery.

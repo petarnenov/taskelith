@@ -26,3 +26,9 @@
 - Run `npm test` and validate any changed OpenSpec artifacts.
 - Inspect the actual package tarball before publishing; never include credentials or local state.
 - Use conventional commit messages without attribution or session trailers.
+
+## Automated release policy
+
+- Follow [docs/releases.md](docs/releases.md) for commit classification and publishing.
+- The owner authorizes automatic releases from main after all verification gates pass.
+- Do not manually bump package versions or introduce npm publish tokens.
