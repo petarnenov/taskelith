@@ -28,7 +28,7 @@ Branches that change dependencies or the generator regenerate both retained file
 
 - the `post-merge` hook compares the merged package manifest, lockfile, Node pin, and generator sources with the provenance hashes in `licenses.json`, without running npm, and prints the changed inputs and the remedy;
 - `make verify` runs the same comparison first in check mode and fails with the same message, before the full drift check;
-- the `pre-push` hook refuses a push while the inventory files or their inputs have uncommitted changes, because `make verify` checks the working tree rather than the pushed commit.
+- the `pre-push` hook refuses a push while the inventory files or their inputs have uncommitted changes, or one that updates a ref to a commit other than the checked-out one, because `make verify` checks the working tree rather than the pushed commit.
 
 Both hooks use only Node.js built-ins, so they work before `npm ci`.
 

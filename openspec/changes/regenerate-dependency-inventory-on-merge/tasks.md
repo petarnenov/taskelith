@@ -2,7 +2,7 @@
 
 - [x] 1.1 Add `.gitattributes` entries for both inventory files, and configure the driver in `make hooks`, `make setup`, and `make doctor`.
 - [x] 1.2 Add the provenance staleness check, use it in check mode, and add the `post-merge` hook and `make dependency-inventory`.
-- [x] 1.3 Add the `pre-push` check for uncommitted inventory changes, with the hook helpers on Node.js built-ins only.
+- [x] 1.3 Add the `pre-push` checks for uncommitted inventory changes and for pushed commits other than the checked-out one, with the hook helpers on Node.js built-ins only and the hooks on the pinned Node.js.
 - [x] 1.4 Test the staleness check, both hook scripts without `node_modules`, the environment checks, and a real git merge through the repository's attributes.
 
 ## 2. Documentation

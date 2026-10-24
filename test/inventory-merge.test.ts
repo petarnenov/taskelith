@@ -8,7 +8,9 @@ import { INVENTORY_MERGE_DRIVER, INVENTORY_MERGE_DRIVER_KEY } from '../scripts/e
 import { INVENTORY_FILES, INVENTORY_INPUTS, sha256 } from '../scripts/inventory-provenance.ts';
 
 const repository = resolve(import.meta.dirname, '..');
-const hookScripts = ['scripts/inventory-provenance.ts', 'scripts/check-inventory-inputs.ts', 'scripts/check-committed-inventory.ts'];
+const hookScripts = [
+  'scripts/inventory-provenance.ts', 'scripts/pre-push-checks.ts', 'scripts/check-inventory-inputs.ts', 'scripts/check-pre-push.ts',
+];
 
 function withScratch(prefix: string, body: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), prefix));
@@ -68,8 +70,8 @@ function manifest(name: string): string {
   return JSON.stringify({ name, type: 'module' });
 }
 
-function runHookScript(root: string, script: string) {
-  return spawnSync(process.execPath, ['--experimental-strip-types', script], { cwd: root, encoding: 'utf8' });
+function runHookScript(root: string, script: string, input = '') {
+  return spawnSync(process.execPath, ['--experimental-strip-types', script], { cwd: root, encoding: 'utf8', input });
 }
 
 test('the post-merge check passes on a fresh inventory and names the stale inputs', () => {
@@ -86,6 +88,10 @@ test('the post-merge check passes on a fresh inventory and names the stale input
   });
 });
 
+function pushOf(root: string, ref: string): string {
+  return `${ref} ${git(root, 'rev-parse', ref).trim()} ${ref} ${'0'.repeat(40)}\n`;
+}
+
 test('the pre-push check refuses uncommitted inventory files and inputs only', () => {
   withScratch('taskelith-inventory-committed-', root => {
     mkdirSync(join(root, 'scripts'));
@@ -93,16 +99,37 @@ test('the pre-push check refuses uncommitted inventory files and inputs only', (
     checkoutWithFreshInventory(root);
     git(root, 'add', '-A');
     git(root, 'commit', '-q', '-m', 'base');
-    assert.equal(runHookScript(root, 'scripts/check-committed-inventory.ts').status, 0);
+    const push = pushOf(root, 'refs/heads/feature');
+    assert.equal(runHookScript(root, 'scripts/check-pre-push.ts', push).status, 0);
     write(root, 'notes.md', 'unrelated');
-    assert.equal(runHookScript(root, 'scripts/check-committed-inventory.ts').status, 0);
+    assert.equal(runHookScript(root, 'scripts/check-pre-push.ts', push).status, 0);
     write(root, INVENTORY_FILES[1], '{"regenerated": true}');
     write(root, 'package-lock.json', 'merged lockfile');
-    const refused = runHookScript(root, 'scripts/check-committed-inventory.ts');
+    const refused = runHookScript(root, 'scripts/check-pre-push.ts', push);
     assert.equal(refused.status, 1);
     assert.match(refused.stderr,
       /^pre-push: uncommitted dependency inventory changes: docs\/dependencies\/sbom\.cdx\.json, package-lock\.json; regenerate/);
     git(root, 'commit', '-q', '-am', 'regenerate');
-    assert.equal(runHookScript(root, 'scripts/check-committed-inventory.ts').status, 0);
+    assert.equal(runHookScript(root, 'scripts/check-pre-push.ts', pushOf(root, 'refs/heads/feature')).status, 0);
+  });
+});
+
+test('the pre-push check refuses a pushed commit other than the checked-out one', () => {
+  withScratch('taskelith-pre-push-refs-', root => {
+    mkdirSync(join(root, 'scripts'));
+    git(root, 'init', '-q', '-b', 'feature');
+    checkoutWithFreshInventory(root);
+    git(root, 'add', '-A');
+    git(root, 'commit', '-q', '-m', 'base');
+    git(root, 'switch', '-q', '-c', 'other');
+    write(root, 'notes.md', 'other work');
+    git(root, 'add', '-A');
+    git(root, 'commit', '-q', '-m', 'other');
+    git(root, 'switch', '-q', 'feature');
+    const refused = runHookScript(root, 'scripts/check-pre-push.ts', pushOf(root, 'refs/heads/other'));
+    assert.equal(refused.status, 1);
+    assert.match(refused.stderr, /^pre-push: make verify checks only the checked-out commit; check out and push refs\/heads\/other separately/);
+    const deletion = `(delete) ${'0'.repeat(40)} refs/heads/old ${'1'.repeat(40)}\n`;
+    assert.equal(runHookScript(root, 'scripts/check-pre-push.ts', deletion + pushOf(root, 'refs/heads/feature')).status, 0);
   });
 });
