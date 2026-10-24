@@ -1,8 +1,8 @@
 # Bootstrap governance policy
 
-Policy version: 1. Status: repository bootstrap policy; runtime enforcement is not implemented.
+Policy version: 2 (2026-10-24: adds the independent review process). Status: repository bootstrap policy; runtime enforcement is not implemented.
 
-Owner acceptance: Petar Nenov accepted the SDLC policy on 2026-10-24 in the project conversation. On 2026-10-24, the owner explicitly authorized a separate Codex reviewer agent (`gpt-6.1-sol` with `model_reasoning_effort = "medium"`) for independent review of the current and subsequent G0 changes. Integration and release authorization remain distinct.
+Owner acceptance: Petar Nenov accepted the SDLC policy on 2026-10-24 in the project conversation. On 2026-10-24, the owner explicitly authorized a separate Codex reviewer agent (`gpt-6.1-sol` with `model_reasoning_effort = "medium"`) for independent review of the current and subsequent G0 changes, and later the same day the further reviewers listed under [Independent review process](#independent-review-process). Integration and release authorization remain distinct.
 
 ## Authority
 
@@ -11,6 +11,23 @@ The owner, Petar Nenov, defines scope and accepts product and architecture decis
 The implementer records author checks. An independent reviewer must be a person or separately authorized agent that did not author the change; self-review is never independent review. The owner may explicitly accept a documented review exception for bounded bootstrap work. Never infer an exception from silence or mark the review as passed because an exception was granted.
 
 The owner or an explicitly authorized integrator controls merging and pushing. Finishing local work does not itself authorize integration. Release authority follows [the release policy](releases.md): qualifying changes integrated into main may publish automatically after verification. Deployment requires separate owner authorization.
+
+## Independent review process
+
+These rules were set or approved by the owner on 2026-10-24; the source of each is in parentheses.
+
+- **Authorized reviewers** (owner). Each runs read-only, with the model and effort set in the invocation, not only in the prompt. `verification.md` records the invocation; where a tool reports the model or effort in its output or log, that report is recorded as confirmation.
+  - Codex CLI: model `gpt-6.1-sol`, `model_reasoning_effort = "medium"`, sandbox `read-only`. In this configuration it has had no network access.
+  - Antigravity CLI: model `gemini-4-argon-medium`, effort `medium`, mode `plan`. In this configuration it has fetched public web pages.
+  - Claude Code: model `claude-fable-5-1`, effort `medium`, permission mode `plan`, editing tools disallowed. It can fetch public web pages when network access is allowed; in this configuration it has queried GitHub with the `gh` CLI.
+- **One reviewer per task** (owner). Each task has one assigned reviewer, and no second reviewer cross-reviews it. Re-review passes by the assigned reviewer are allowed.
+- **Rotation** (approved by the owner). Consecutive tasks go to different reviewers in turn, unless a task needs a particular reviewer.
+- **External facts** (approved by the owner). A task whose review depends on external facts goes to a reviewer with network access.
+- **Proof of read-only review** (approved by the owner). Take a SHA-256 snapshot of all tracked and untracked files before and after each pass, plus any external evidence directory shared with the reviewer. A change made by the reviewer invalidates the pass.
+- **Review prompt** (approved by the owner; ADR 0004). The prompt names the [ADR 0004](decisions/0004-first-class-engineering-principles.md) principles as criteria and asks for every instance of a problem, not examples. `verification.md` records the reviewer, model, effort, session ID, findings, and their resolution.
+- **Before the first pass** (approved by the owner). The author self-checks the change against the review criteria and runs the evidence check, and `verification.md` records both. In this repository the evidence check means that every external link is pinned to a tag, commit, or exact version, or labeled as an unversioned page.
+- **At most three passes per task** (owner). If Critical, High, or Medium findings remain after the third pass, the author stops and presents options to the owner: fix them without review (recorded as unreviewed fixes), accept them as a known risk, or defer them. Any further pass needs the owner's permission.
+- **Low findings are fixed** (owner). If a pass finds only Low findings, they are fixed and recorded as unreviewed fixes, and the reviewer is not called again. Low findings reported together with higher-severity findings are fixed with them and checked in the next pass or, after the third pass, recorded as unreviewed fixes.
 
 ## Lifecycle and records
 
@@ -30,7 +47,7 @@ The proposal, design, capability specification, tasks, and verification record f
 
 ## Evidence freshness
 
-Tie review to the actual source revision, or to a base revision and explicitly identified working-tree diff before a commit exists. Record commands against the resulting tree. Changes to requirements, policy, implementation, or verification inputs invalidate affected evidence; repeat the relevant checks and obtain renewed review before acceptance. Documentation-only edits need editorial and reference checks, not invented runtime coverage.
+Tie review to the actual source revision, or to a base revision and explicitly identified working-tree diff before a commit exists. Record commands against the resulting tree. Changes to requirements, policy, implementation, or verification inputs invalidate affected evidence; repeat the relevant checks and obtain renewed review before acceptance, except where the [independent review process](#independent-review-process) allows unreviewed fixes, which are recorded as such. Documentation-only edits need editorial and reference checks, not invented runtime coverage.
 
 Do not rewrite historical records as if this policy applied before it existed. The existing bootstrap and automated-release verification records remain author evidence with their stated limits. Passing local checks does not prove CI execution, external deployment, distributed recovery, or independent review.
 
