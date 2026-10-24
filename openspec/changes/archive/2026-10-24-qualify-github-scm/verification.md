@@ -54,3 +54,7 @@ Remaining findings: 0.
 ## Remaining gates
 
 Merge into `dev`; promotion to `main`; the gates in the qualification record. The owner decided to keep the App's permissions unchanged.
+
+## Integration and archival
+
+The owner authorized integration and archival on 2026-10-24. Integrated into `dev` at `2edf5cf` through pull request #25 (rebase merge); no workflow ran for the pull request or the push to `dev`. It reaches `main` with the next promotion. Archived with the pinned OpenSpec CLI afterwards, in a separate git worktree.
