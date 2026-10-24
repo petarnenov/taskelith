@@ -16,7 +16,7 @@ G2 work plan item 6, assigned by the coordinator under the owner's decision of 2
 
 ## Checks
 
-In the worktree, Node v24.22.1, npm 12.2.1: `make verify` passed, including strict validation and the archive dry-run of this change; re-run after the pass-1 and pass-2 fixes with the same result.
+In the worktree, Node v24.22.1, npm 12.2.1: `make verify` passed, including strict validation and the archive dry-run of this change; re-run after the pass-1 and pass-2 fixes and after the unreviewed pass-3 Low fixes with the same result.
 
 ## Independent review
 
@@ -49,7 +49,17 @@ Assigned reviewer (rotation): Claude Code, `claude -p --model claude-fable-5-1 -
   12. Low: the spec's disk floor omitted "free" and "whichever is larger". Fixed.
   13. Low: task 2.1 was unchecked. Checked.
   14. Low: the worker `control-not-enforceable` row narrowed section 6. Now "release under section 6".
+- **Pass 3 — session `37728f66-94ac-4672-aa3e-820054571f6a`, on `c6f5a1e`.** Snapshot before and after: `85c847e4c4d384edebdc94ed16be85ab4410cf33de39e0215d5b7d89b0f74677`, equal. Every pass-1 and pass-2 finding confirmed resolved, pass-2 finding 1 for a single chain only (new finding 1). Findings: 0 Critical, 1 High, 1 Medium, 7 Low.
+  1. High, open: several delegating attempts waiting for their children can hold every unit of a project or run quota, or every fleet slot, so that no child can be reserved; nothing supersedes a waiting parent. The reviewer proposes admitting a delegation only while waiting parents leave at least one unit free in every scope it charges. Sent to the owner through the coordinator.
+  2. Medium, open: cancelling an acknowledged assignment with no grant on a healthy, reachable worker has no defined release path, and "a cancellation request on its own" reads as contradicting the list of assignment ends. The reviewer proposes that the cancellation transaction read grants at `SERIALIZABLE` like supersession and release when there are none. Sent to the owner through the coordinator.
+  3. Low, unreviewed fix: operator reconciliation released without ending the assignment. It now records the outcome and ends the assignment in the same transaction.
+  4. Low, unreviewed fix: supersession of an acknowledged assignment did not reach the worker. It writes an assignment-ended command, and the worker also ends the assignment on `assignment-not-active`.
+  5. Low, unreviewed fix: the refusal clause excluded refusals after an earlier grant. A refusal ends the assignment and release follows section 6.
+  6. Low, unreviewed fix: the chain check compared `d + 1` with the child's own run quota. It now counts per scope the units the chain holds there, with its own reason `delegation-chain-exceeds-quota`.
+  7. Low, unreviewed fix: `worker-slots-exhausted` did not affect eligibility. A slot or capacity refusal makes the worker ineligible until its next declaration or a terminal execution.
+  8. Low, unreviewed fix: the writer list omitted the attempt's admission and terminal state. Added.
+  9. Low, unreviewed fix: the worker did not check the sum of CPU and memory. It refuses with `worker-capacity-exhausted` when the sum exceeds its host capacity less the daemon ceiling.
 
 ## Remaining gates
 
-Integration into `dev` and archive; items 18, 20, and 24 implement the section 12 tests; items 4 and 5 confirm the launch record seal and the journal counts this contract relies on.
+The owner's decision on pass-3 findings 1 and 2, and on the effective delegation depth under the default run quota (pass-2 finding 1). Integration into `dev` and archive; items 18, 20, and 24 implement the section 12 tests; items 4 and 5 confirm the launch record seal and the journal counts this contract relies on.

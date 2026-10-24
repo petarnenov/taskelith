@@ -67,8 +67,8 @@ A delegated child SHALL be bound at creation to its parent, derived from the aut
 - **THEN** the child is rejected with `delegation-depth-exceeded`
 
 #### Scenario: Chain larger than the run quota
-- **WHEN** the run quota is 2 and a child of depth 2 is requested
-- **THEN** it is rejected with `delegation-depth-exceeded`, because its waiting ancestors hold both units
+- **WHEN** the run quota is 2 and a child of depth 2 in the root's run is requested
+- **THEN** it is rejected with `delegation-chain-exceeds-quota`, because its waiting ancestors hold both units
 
 #### Scenario: Ninth attempt
 - **WHEN** a task tree has charged 8 attempts and any task in it needs another
