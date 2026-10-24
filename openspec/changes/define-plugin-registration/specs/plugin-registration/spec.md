@@ -16,10 +16,10 @@ A plugin manifest SHALL be a JSON object with exactly the fields `id`, `version`
 - **THEN** registration returns an `invalid` failure whose message names the field
 
 ### Requirement: Manifest field formats
-In a plugin manifest, `id` and each capability SHALL be 1 to 64 lowercase letters, digits, and inner hyphens, starting with a letter; `version` SHALL be a semantic version; `pluginApiRange` SHALL be a caret range `^MAJOR.MINOR.PATCH`; `port` SHALL be a PascalCase name of at most 64 characters; and capabilities SHALL be unique.
+In a plugin manifest, `id` and each capability SHALL be 1 to 64 lowercase letters, digits, and inner hyphens, starting with a letter; `version` SHALL be a semantic version and `pluginApiRange` a caret range `^MAJOR.MINOR.PATCH`, each at most 64 characters; `port` SHALL be a PascalCase name of at most 64 characters; and capabilities SHALL be unique and at most 64.
 
 #### Scenario: Field formats
-- **WHEN** `id` is `Sdlc_Example`, `version` is `1.4`, `pluginApiRange` is `0.1.0`, `port` is `sdlcFramework`, or a capability is repeated
+- **WHEN** `id` is `Sdlc_Example`, `version` is `1.4`, `pluginApiRange` is `0.1.0`, `port` is `sdlcFramework`, or a capability is repeated, or there are 65 capabilities
 - **THEN** registration returns an `invalid` failure that locates the field
 
 ### Requirement: Schema validation before admission
@@ -59,7 +59,7 @@ A caret range SHALL accept versions from its minimum with the same major version
 - **THEN** none is accepted
 
 ### Requirement: Library-level registration
-Registration SHALL be a library function of the `@taskelith/plugin-sdk` package that returns a kernel `Result`, holds no state, and starts no process; the package SHALL be private, and the published `taskelith` package SHALL NOT include it.
+Registration SHALL be a library function of the `@taskelith/plugin-sdk` package that returns a kernel `Result`, keeps no registry of admitted plugins, and starts no process; the package SHALL be private, and the published `taskelith` package SHALL NOT include it.
 
 #### Scenario: Package tests
 - **WHEN** `make verify` runs

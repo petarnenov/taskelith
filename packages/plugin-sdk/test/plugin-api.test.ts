@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PLUGIN_API_VERSION, satisfiesCaretRange } from '@taskelith/plugin-sdk';
 
-test('the plugin API version is a release version', () => {
-  assert.match(PLUGIN_API_VERSION, /^\d+\.\d+\.\d+$/);
+test('the plugin API version is a release version its own caret range accepts', () => {
+  assert.match(PLUGIN_API_VERSION, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
+  assert.equal(satisfiesCaretRange(PLUGIN_API_VERSION, `^${PLUGIN_API_VERSION}`), true);
 });
 
 test('a caret range from 1.0.0 accepts the same major version from its minimum', () => {

@@ -69,6 +69,8 @@ test('malformed field values are invalid and located', () => {
     [{ capabilities: 'structural-validation' }, '/capabilities'],
     [{ capabilities: ['Structural'] }, '/capabilities/0'],
     [{ capabilities: ['resume', 'resume'] }, '/capabilities'],
+    [{ capabilities: Array.from({ length: 65 }, (_, index) => `capability-${index}`) }, '/capabilities'],
+    [{ version: `1.0.0-${'a'.repeat(64)}` }, '/version'],
   ];
   for (const [overrides, location] of cases) {
     const error = failureOf(manifest(overrides));
