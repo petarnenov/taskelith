@@ -18,11 +18,11 @@ The repository checks SHALL be defined once, as the `make verify` target, which 
 ## ADDED Requirements
 
 ### Requirement: Archive dry run
-`npm run verify:archive` SHALL copy `openspec/` to a temporary directory, archive every active change there in name order with the pinned OpenSpec CLI, its telemetry and update check off, and then run `validate --all --strict` on the copy, failing with the change name and the validator's message. It SHALL pass when no change is active, SHALL not change the repository, and SHALL remove the copy in every case.
+`npm run verify:archive` SHALL copy `openspec/` to a temporary directory, archive every active change there in name order with the pinned OpenSpec CLI, its telemetry and update check off, and then run `validate --all --strict` on the copy, failing with the change name and the validator's message. It SHALL pass when no change is active, SHALL not change the repository, and SHALL remove the copy unless the check is killed with SIGKILL.
 
 #### Scenario: New capability without a Purpose
 - **WHEN** an active change creates a capability whose delta has no `## Purpose`
-- **THEN** `make verify` fails and names the change, the capability, and the placeholder Purpose issue
+- **THEN** `make verify` fails and names the change, the capability (nested ones by their path), and the placeholder Purpose issue
 
 #### Scenario: Requirement too long once applied
 - **WHEN** an active change's delta makes a main spec fail strict validation once archived
@@ -38,4 +38,4 @@ The repository checks SHALL be defined once, as the `make verify` target, which 
 
 #### Scenario: Interrupted check
 - **WHEN** the check receives SIGINT or SIGTERM
-- **THEN** it stops the OpenSpec CLI, removes the temporary copy, and exits nonzero
+- **THEN** it stops the OpenSpec CLI, waits for it to exit, removes the temporary copy, and exits nonzero

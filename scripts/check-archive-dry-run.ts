@@ -1,8 +1,7 @@
-import { execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { constants, tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { promisify } from 'node:util';
+import { basename, dirname, join, sep } from 'node:path';
 
 // Archives every active change in a temporary copy of openspec/ and validates
 // the copy strictly, so that archive failures show before handoff.
@@ -12,7 +11,8 @@ const ARCHIVE_DIRECTORY = 'archive';
 // The pinned CLI of this clone, also when the check runs on another directory.
 const OPENSPEC_BIN = join(import.meta.dirname, '..', 'node_modules', '.bin', 'openspec');
 const INTERRUPTING_SIGNALS: readonly NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
-const execFileAsync = promisify(execFile);
+const COMMAND_TIMEOUT_MS = 300_000;
+const SPEC_FILE = 'spec.md';
 // Telemetry and the update check off keep the check offline.
 const OFFLINE_ENVIRONMENT = { OPENSPEC_TELEMETRY: '0', DO_NOT_TRACK: '1', OPENSPEC_NO_UPDATE_CHECK: '1' };
 
@@ -27,6 +27,15 @@ export function directoryNames(entries: readonly DirectoryEntry[]): string[] {
 
 export function activeChanges(entries: readonly DirectoryEntry[]): string[] {
   return directoryNames(entries).filter((name) => name !== ARCHIVE_DIRECTORY);
+}
+
+// A capability is a directory with a spec.md under a change's specs/, nested
+// ones included; its id is that directory's path, as the CLI reports it.
+export function capabilityIds(relativePaths: readonly string[]): string[] {
+  return relativePaths
+    .filter((path) => basename(path) === SPEC_FILE && dirname(path) !== '.')
+    .map((path) => dirname(path).split(sep).join('/'))
+    .sort();
 }
 
 interface ValidationIssue {
@@ -72,23 +81,61 @@ function subdirectories(directory: string): DirectoryEntry[] {
 }
 
 function capabilitiesOf(changesDirectory: string, change: string): string[] {
-  return directoryNames(subdirectories(join(changesDirectory, change, 'specs')));
+  const specs = join(changesDirectory, change, 'specs');
+  return existsSync(specs) ? capabilityIds(readdirSync(specs, { recursive: true, encoding: 'utf8' })) : [];
 }
 
-async function openspec(copy: string, args: readonly string[], interruption: AbortSignal): Promise<string> {
-  const { stdout } = await execFileAsync(OPENSPEC_BIN, args, {
-    cwd: copy,
-    encoding: 'utf8',
-    env: { ...process.env, ...OFFLINE_ENVIRONMENT },
-    signal: interruption,
-    timeout: 300_000,
+export class CommandFailure extends Error {
+  readonly stdout: string;
+  readonly stderr: string;
+
+  constructor(stdout: string, stderr: string, reason: string) {
+    super(`${reason}: ${stdout}${stderr}`);
+    this.stdout = stdout;
+    this.stderr = stderr;
+  }
+}
+
+export class CommandInterrupted extends Error {}
+
+export interface CommandOptions {
+  readonly cwd: string;
+  readonly env: NodeJS.ProcessEnv;
+}
+
+// An interruption terminates the command and settles only after it exits,
+// so that nothing writes into a directory the caller then removes.
+export function runCommand(file: string, args: readonly string[], options: CommandOptions, interruption: AbortSignal): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (interruption.aborted) {
+      reject(new CommandInterrupted());
+      return;
+    }
+    const child = spawn(file, args, { ...options, stdio: ['ignore', 'pipe', 'pipe'], timeout: COMMAND_TIMEOUT_MS });
+    const terminate = () => child.kill('SIGTERM');
+    interruption.addEventListener('abort', terminate, { once: true });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8').on('data', (chunk: string) => { stdout += chunk; });
+    child.stderr.setEncoding('utf8').on('data', (chunk: string) => { stderr += chunk; });
+    child.on('error', (error) => {
+      if (child.pid === undefined) reject(error);
+    });
+    child.on('close', (code, signal) => {
+      interruption.removeEventListener('abort', terminate);
+      if (interruption.aborted) reject(new CommandInterrupted());
+      else if (code === 0) resolve(stdout);
+      else reject(new CommandFailure(stdout, stderr, `exit ${code ?? signal}`));
+    });
   });
-  return stdout;
 }
 
-function commandOutput(error: unknown): string {
-  const { stdout, stderr, message } = error as { stdout?: string; stderr?: string; message: string };
-  return `${stdout ?? ''}${stderr ?? ''}` || message;
+function openspec(copy: string, args: readonly string[], interruption: AbortSignal): Promise<string> {
+  return runCommand(OPENSPEC_BIN, args, { cwd: copy, env: { ...process.env, ...OFFLINE_ENVIRONMENT } }, interruption);
+}
+
+function commandOutput(error: CommandFailure): string {
+  return `${error.stdout}${error.stderr}` || error.message;
 }
 
 // A failed archive changes no file, so the remaining changes still archive.
@@ -98,7 +145,7 @@ async function archiveAll(copy: string, changes: readonly string[], interruption
     try {
       await openspec(copy, ['archive', change, '--yes'], interruption);
     } catch (error) {
-      if (interruption.aborted) throw error;
+      if (!(error instanceof CommandFailure)) throw error;
       problems.push(archiveProblem(change, commandOutput(error)));
     }
   }
@@ -110,9 +157,8 @@ async function validateAll(copy: string, interruption: AbortSignal): Promise<Val
   try {
     return JSON.parse(await openspec(copy, ['validate', '--all', '--strict', '--json', '--no-interactive'], interruption));
   } catch (error) {
-    const { stdout } = error as { stdout?: string };
-    if (interruption.aborted || stdout === undefined || stdout === '') throw error;
-    return JSON.parse(stdout);
+    if (!(error instanceof CommandFailure) || error.stdout === '') throw error;
+    return JSON.parse(error.stdout);
   }
 }
 

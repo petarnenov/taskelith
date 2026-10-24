@@ -10,14 +10,14 @@ Assigned by the coordinator on 2026-10-25 under the agent task protocol, after t
 - A failed archive leaves the copy unchanged ("Aborted. No files were changed."), so the remaining changes still archive and every problem is reported in one run.
 - Telemetry and the update check are off through `OPENSPEC_TELEMETRY=0`, `DO_NOT_TRACK=1`, and `OPENSPEC_NO_UPDATE_CHECK=1`; the CLI needs no network or git for `archive` and `validate`.
 - Evidence check: the environment variables come from the pinned `@fission-ai/openspec` 1.14.3 sources (`dist/telemetry/index.d.ts` and `dist/core/version-check.js`); the JSON report shape (`items[].id`, `type`, `valid`, `issues[].level`, `path`, `message`) and the nonzero exit with a JSON report on failure were observed with that version. No external page is linked.
-- Each changed requirement is under 500 characters (463 and 411), and the check archived this change itself during `make verify`.
+- Each changed requirement is under 500 characters (463 and 437), and the check archived this change itself during `make verify`.
 - Every comment the change adds is at most two lines of at most 80 characters.
 
 ## Checks
 
 macOS, Node.js v24.22.1, npm 12.2.1, Docker running.
 
-- `node --experimental-strip-types --test test/check-archive-dry-run.test.ts`: 8 tests, 0 failed, three runs in a row. Five unit tests cover the pure parts; three run the script on a fixture project with its own `TMPDIR`: a capability without a Purpose fails and leaves no copy, a linked `openspec/specs` stays empty, and SIGTERM after the copy exists exits 143 and leaves no copy.
+- `node --experimental-strip-types --test test/check-archive-dry-run.test.ts`: 13 tests, 0 failed, three runs in a row after the pass-2 fixes (8 after pass 1). Six unit tests cover the pure parts. Three test the command runner with Node.js child processes: output and failure, an interruption that settles only after the child has run its SIGTERM handler and exited, and an interruption before the start. Four run the script on a fixture project with its own `TMPDIR`: a capability without a Purpose fails and leaves no copy, a nested capability is named after its change, a linked `openspec/specs` stays empty, and SIGTERM after the copy exists exits 143 and leaves no copy.
 - Node.js v24.22.1 `cpSync` with `recursive` and `dereference` kept a nested symbolic link as a link in a scratch reproduction, which is why the script copies by hand.
 - Reproductions in a scratch directory outside the worktree, with a copy of `openspec/`, running the worktree's script (before pass 1 through a symlink to the worktree's `node_modules`; the second case was repeated after the pass-1 fixes without it, with the same result):
 
@@ -29,7 +29,7 @@ macOS, Node.js v24.22.1, npm 12.2.1, Docker running.
 
   After each run the SHA-256 digest of every file under the scratch `openspec/` was unchanged, and no `taskelith-archive-dry-run-*` directory was left in `$TMPDIR`.
 - The no-active-change case ran in the worktree on `36ea29f` with the script added but before the change directory was created: "No active OpenSpec change; nothing to archive.", exit 0.
-- `make verify` passed before pass 1 (233 tests, 0 failed) and after the pass-1 fixes (236 tests, 0 failed), each time with coverage thresholds met, no undeclared contract change, 33 strict OpenSpec validations, the archive dry run, and package verification.
+- `make verify` passed before pass 1 (233 tests, 0 failed), after the pass-1 fixes (236 tests), and after the pass-2 fixes (241 tests), each time with coverage thresholds met, no undeclared contract change, 33 strict OpenSpec validations, the archive dry run, and package verification.
 
 ## Independent review
 
@@ -39,6 +39,12 @@ Assigned reviewer: Codex CLI (Codex Sol, medium), by rotation; Antigravity CLI i
   1. High: `cpSync` keeps symbolic links, so an archive in the copy could write through a linked `openspec/specs` into the repository. The script now copies by hand and follows links, since `cpSync`'s `dereference` keeps nested links; a fixture test with a linked `specs` directory covers it.
   2. Medium: SIGINT or SIGTERM ended Node.js without running the `finally` block, leaving the copy. The CLI now runs asynchronously under an `AbortController`; the signals abort it, the copy is removed, and the check exits with 128 plus the signal number. A fixture test covers SIGTERM; the design and the delta state that SIGKILL is outside the guarantee.
   3. Low: task 2.1 was open although this record reported its checks. It is now checked.
+
+- **Pass 2 — session `01a16fc1-bcf6-79f1-8b52-b2d5d60008a0`, on `840e365`.** Same invocation; the output header reported model `gpt-6.1-sol`, reasoning effort `medium`, and sandbox `read-only`. SHA-256 snapshots before and after were equal. The reviewer confirmed the resolution of pass-1 findings 1 and 3 and found finding 2 partly resolved (new finding 1). It ran the unit tests (5 passed); its sandbox refused `mkdtemp` (`EPERM`), so the fixture tests did not run there. New findings: 0 Critical, 0 High, 2 Medium, 2 Low, all fixed, for the next pass to check:
+  1. Medium: on abort, promisified `execFile` rejects before the child closes, so the copy could be removed while the CLI still wrote to it. A new `runCommand` spawns the CLI, sends SIGTERM on abort, and settles only on `close`; a test proves that the interrupted command settles after its child's SIGTERM handler has run.
+  2. Medium: only top-level directories under a change's `specs/` were taken as capabilities, so a nested capability such as `area/demo` was reported as `no active change`. `capabilityIds` now takes the directory of every `spec.md`, recursively, with `/` separators; a unit test and a fixture test cover it.
+  3. Low: the signal test's polling interval was never cleared if the child exited before creating the copy, and the test had no time limit. The interval is now cleared on `close`, and the signal and interruption tests have time limits.
+  4. Low: the requirement said the copy is removed in every case, while the design excludes SIGKILL. The requirement now says "unless the check is killed with SIGKILL".
 
 ## Limitations
 

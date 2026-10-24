@@ -1,10 +1,19 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { activeChanges, archiveProblem, directoryNames, validationProblems } from '../scripts/check-archive-dry-run.ts';
+import {
+  activeChanges,
+  archiveProblem,
+  capabilityIds,
+  CommandFailure,
+  CommandInterrupted,
+  directoryNames,
+  runCommand,
+  validationProblems,
+} from '../scripts/check-archive-dry-run.ts';
 
 function entry(name: string, directory = true) {
   return { name, isDirectory: () => directory };
@@ -17,6 +26,11 @@ test('directory names are sorted and exclude files', () => {
 test('active changes exclude the archive directory', () => {
   assert.deepEqual(activeChanges([entry('archive'), entry('fix-b'), entry('add-a')]), ['add-a', 'fix-b']);
   assert.deepEqual(activeChanges([entry('archive')]), []);
+});
+
+test('capabilities are the directories holding a spec.md, nested ones included', () => {
+  const paths = ['integration-flow', join('integration-flow', 'spec.md'), join('area', 'demo', 'spec.md'), join('area', 'notes.md'), 'spec.md'];
+  assert.deepEqual(capabilityIds(paths), ['area/demo', 'integration-flow']);
 });
 
 test('invalid items are named after the change itself or the changes whose deltas touch them', () => {
@@ -55,20 +69,25 @@ interface Fixture {
   readonly specs: string;
 }
 
+interface FixtureOptions {
+  readonly linkedSpecs?: boolean;
+  readonly capability?: string;
+}
+
 // A project whose one active change creates a capability without a Purpose.
-function fixture(t: test.TestContext, linkedSpecs = false): Fixture {
+function fixture(t: test.TestContext, { linkedSpecs = false, capability = 'demo' }: FixtureOptions = {}): Fixture {
   const root = mkdtempSync(join(tmpdir(), 'taskelith-archive-fixture-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const project = join(root, 'project');
   const temporary = join(root, 'tmp');
   const specs = join(linkedSpecs ? root : join(project, 'openspec'), 'specs');
   const change = join(project, 'openspec', 'changes', 'add-demo');
-  for (const directory of [temporary, specs, join(project, 'openspec', 'changes', 'archive'), join(change, 'specs', 'demo')]) {
+  for (const directory of [temporary, specs, join(project, 'openspec', 'changes', 'archive'), join(change, 'specs', capability)]) {
     mkdirSync(directory, { recursive: true });
   }
   if (linkedSpecs) symlinkSync(specs, join(project, 'openspec', 'specs'));
   writeFileSync(join(change, 'proposal.md'), '## Why\nA fixture change whose new capability has no Purpose.\n\n## What Changes\n- demo\n');
-  writeFileSync(join(change, 'specs', 'demo', 'spec.md'), DELTA_WITHOUT_PURPOSE);
+  writeFileSync(join(change, 'specs', capability, 'spec.md'), DELTA_WITHOUT_PURPOSE);
   return { project, temporary, specs };
 }
 
@@ -77,23 +96,33 @@ interface Run {
   readonly stderr: string;
 }
 
-function runCheck({ project, temporary }: Fixture, onStart: (pid: number) => void = () => {}): Promise<Run> {
+// Optionally sends a signal once the check has created its copy.
+function runCheck({ project, temporary }: Fixture, signal?: NodeJS.Signals): Promise<Run> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['--experimental-strip-types', SCRIPT], { cwd: project, env: { ...process.env, TMPDIR: temporary } });
+    const timer = setInterval(() => {
+      if (signal === undefined || readdirSync(temporary).length === 0) return;
+      clearInterval(timer);
+      child.kill(signal);
+    }, 10);
     let stderr = '';
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     child.on('error', reject);
-    child.on('close', (code) => resolve({ code, stderr }));
-    onStart(child.pid ?? 0);
+    child.on('close', (code) => {
+      clearInterval(timer);
+      resolve({ code, stderr });
+    });
   });
 }
 
-function sendWhenCopied(temporary: string, pid: number, signal: NodeJS.Signals): void {
-  const timer = setInterval(() => {
-    if (readdirSync(temporary).length === 0) return;
-    clearInterval(timer);
-    process.kill(pid, signal);
-  }, 10);
+function waitFor(condition: () => boolean): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setInterval(() => {
+      if (!condition()) return;
+      clearInterval(timer);
+      resolve();
+    }, 10);
+  });
 }
 
 test('a change whose new capability has no Purpose fails, and the copy is removed', async (t) => {
@@ -106,8 +135,16 @@ test('a change whose new capability has no Purpose fails, and the copy is remove
   assert.deepEqual(readdirSync(join(project.project, 'openspec', 'changes')).sort(), ['add-demo', 'archive']);
 });
 
+test('a nested capability is named after its change', async (t) => {
+  const project = fixture(t, { capability: join('area', 'demo') });
+  const run = await runCheck(project);
+
+  assert.equal(run.code, 1);
+  assert.match(run.stderr, /^add-demo: spec area\/demo: \[WARNING\] overview: Purpose section is still a placeholder/m);
+});
+
 test('linked specs are copied, so archiving never writes through the link', async (t) => {
-  const project = fixture(t, true);
+  const project = fixture(t, { linkedSpecs: true });
   const run = await runCheck(project);
 
   assert.equal(run.code, 1);
@@ -115,11 +152,49 @@ test('linked specs are copied, so archiving never writes through the link', asyn
   assert.equal(readFileSync(join(project.project, 'openspec', 'changes', 'add-demo', 'specs', 'demo', 'spec.md'), 'utf8'), DELTA_WITHOUT_PURPOSE);
 });
 
-test('SIGTERM stops the check and removes the copy', async (t) => {
+test('SIGTERM stops the check and removes the copy', { timeout: 60_000 }, async (t) => {
   const project = fixture(t);
-  const run = await runCheck(project, (pid) => sendWhenCopied(project.temporary, pid, 'SIGTERM'));
+  const run = await runCheck(project, 'SIGTERM');
 
   assert.equal(run.code, 143);
   assert.match(run.stderr, /interrupted by SIGTERM/);
   assert.deepEqual(readdirSync(project.temporary), []);
+});
+
+const NODE = process.execPath;
+
+test('a command resolves with its output, and a failing one rejects with it', async () => {
+  const options = { cwd: tmpdir(), env: process.env };
+  const never = new AbortController().signal;
+
+  assert.equal(await runCommand(NODE, ['-e', 'process.stdout.write("ok")'], options, never), 'ok');
+  await assert.rejects(runCommand(NODE, ['-e', 'console.log("out"); console.error("err"); process.exit(3)'], options, never), (error) => {
+    assert.ok(error instanceof CommandFailure);
+    assert.equal(error.stdout, 'out\n');
+    assert.equal(error.stderr, 'err\n');
+    return true;
+  });
+});
+
+test('an interrupted command settles only after it has exited', { timeout: 30_000 }, async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'taskelith-command-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const ready = join(directory, 'ready');
+  const exited = join(directory, 'exited');
+  const program = 'const fs = require("node:fs");'
+    + `process.on("SIGTERM", () => setTimeout(() => { fs.writeFileSync(${JSON.stringify(exited)}, ""); process.exit(0); }, 200));`
+    + `fs.writeFileSync(${JSON.stringify(ready)}, ""); setInterval(() => {}, 1000);`;
+  const interruption = new AbortController();
+  const command = runCommand(NODE, ['-e', program], { cwd: directory, env: process.env }, interruption.signal);
+
+  await waitFor(() => existsSync(ready));
+  interruption.abort();
+  await assert.rejects(command, CommandInterrupted);
+  assert.ok(existsSync(exited));
+});
+
+test('an interruption before the start runs nothing', async () => {
+  const interruption = new AbortController();
+  interruption.abort();
+  await assert.rejects(runCommand(NODE, ['-e', ''], { cwd: tmpdir(), env: process.env }, interruption.signal), CommandInterrupted);
 });
