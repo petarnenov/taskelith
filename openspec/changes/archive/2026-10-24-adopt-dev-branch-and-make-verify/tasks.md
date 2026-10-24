@@ -12,6 +12,6 @@
 
 ## 3. Rollout
 
-- [ ] 3.1 Merge into `main` through the current flow.
-- [ ] 3.2 Create and push `dev` from the updated `main`.
-- [ ] 3.3 Make `dev` the default branch and confirm that a push to `dev` starts no workflow.
+- [x] 3.1 Merge into `main` through the current flow.
+- [x] 3.2 Create and push `dev` from the updated `main`.
+- [x] 3.3 Make `dev` the default branch and confirm that a push to `dev` starts no workflow.
