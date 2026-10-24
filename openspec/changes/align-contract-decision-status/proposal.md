@@ -1,6 +1,6 @@
 ## Why
 
-The owner decided D2 (b) and D3 (a) on 2026-10-24, as `docs/g1-plan.md` records, but `docs/contract-tooling.md` and the "Contract tooling" section of `docs/dependencies.md` still describe both decisions as open. A peer session (Desi) reported the mismatch, and the owner asked for the fix ("2 ДА НАПРАВИ").
+The owner decided D2 (b) and D3 (a) on 2026-10-24, as `docs/g1-plan.md` records, but `docs/contract-tooling.md` and the "Contract tooling" section of `docs/dependencies.md` still describe both decisions as open. A peer session (Desi) reported the mismatch, and the owner explicitly asked for this correction on 2026-10-24.
 
 ## What Changes
 
