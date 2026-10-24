@@ -1,6 +1,6 @@
 # G0 foundation status
 
-As of 2026-10-24. This is a readiness ledger, not evidence that the architecture is implemented. **G0 is closed** on `dev` by the owner's decision ([ADR 0007](decisions/0007-g0-closure.md)): its exit evidence was reproduced from a fresh clone, and the open work items below are deferred to named later gates.
+As of 2026-10-25. This is a readiness ledger, not evidence that the architecture is implemented. **G1 is closed** on `dev` ([ADR 0010](decisions/0010-g1-closure.md)); see [G1 status](#g1-status). **G0 is closed** on `dev` by the owner's decision ([ADR 0007](decisions/0007-g0-closure.md)): its exit evidence was reproduced from a fresh clone, and the open work items below are deferred to named later gates.
 
 ## Established bootstrap
 
@@ -39,6 +39,19 @@ As of 2026-10-24. This is a readiness ledger, not evidence that the architecture
 
 The owner selected Linux and macOS, superseding the earlier Linux-first proposal, and the initial matrix ([ADR 0007](decisions/0007-g0-closure.md)). Platform-specific implementation remains unstarted. On 2026-10-24, the owner explicitly authorized a separate Codex reviewer agent (`gpt-6.1-sol` with `model_reasoning_effort = "medium"`), which reviewed all five local G0 foundation changes across four review sessions (`01a16d74-cd29-7642-b4e0-28a59e62c662`, `01a16d80-a7e5-7981-86e0-1768a2e1cdd6`, `01a16d8a-ff6f-76a2-ae26-6a3bbb2675c3`, and `01a16d8f-bcec-7910-94b1-14dfb1af3f72`), with all findings resolved and verified (0 remaining findings). Later G0 changes record their own reviews in their `verification.md`. The deferred items and their gates are listed in the table above.
 
+## G1 status
+
+G1 delivered the kernel, the SDLC workflow model, gates, task admission, plugin registration, the frozen `SdlcFramework` port with its conformance suite, the OpenSpec adapter, both frameworks' fixtures, and the first wire contracts ([G1 work plan](g1-plan.md), items 1 to 13). Its exit evidence was reproduced from a fresh clone (change `close-g1`), and G1 is closed ([ADR 0010](decisions/0010-g1-closure.md)).
+
+| Deferred item | Gate |
+| --- | --- |
+| Pre-G2 contracts: launch linearization and expiry, supervisor identity and adoption, local journal durability, capacity reservations | G2, before execution code ([G2 work plan](g2-plan.md) items 3 to 6) |
+| Ownership generation of an admission; attempt and assignment state machines | G2 ([G2 work plan](g2-plan.md) item 7) |
+| Durable repository adapters | G2 |
+| SpecKit adapter, SpecKit agent steps and interactive gate path through a qualified harness, SpecKit run on arm64 | G4 |
+| Versioned plugin manifests, version negotiation, wider plugin API ranges, UI selection, generated manifest type | G4 |
+| SpecKit admission evidence | G8 |
+
 ## Later phases
 
-G1 introduces domain transitions and framework-neutral SDLC contracts after the foundation gates. The owner started G1 on 2026-10-24; its work items and open decisions are in the [G1 work plan](g1-plan.md). G2 adds durable execution. Its proposed work items and open decisions are in the [G2 work plan](g2-plan.md), and it starts after G1 closes. G3 adds the web product and first real agent. Both-framework replacement, learning, and fleet validation remain later gates. See [the delivery sequence](architecture.md#delivery-sequence). G0 is closed ([ADR 0007](decisions/0007-g0-closure.md)); runtime readiness is not claimed here.
+G1 introduced domain transitions and framework-neutral SDLC contracts and is closed ([ADR 0010](decisions/0010-g1-closure.md)). G2 adds durable execution. Its work items and decisions are in the [G2 work plan](g2-plan.md), and it starts when the G1 closure merges into `dev`. G3 adds the web product and first real agent. Both-framework replacement, learning, and fleet validation remain later gates. See [the delivery sequence](architecture.md#delivery-sequence). G0 is closed ([ADR 0007](decisions/0007-g0-closure.md)); runtime readiness is not claimed here.
