@@ -15,7 +15,7 @@ On 2026-10-25 the owner approved the task `enforce-comment-length`; the coordina
 
 ## Checks
 
-Node v24.22.1, npm 12.2.1, in the worktree: `make verify` passed at `4eb1d49` (278 tests) at `d74375c`, and at `0c3a8fd` (282 tests; 99.62% lines, 95.68% branches, 99.27% functions), each including `npm run verify:comments` and the archive dry run; `npm run openspec -- validate enforce-comment-length --strict` passed.
+Node v24.22.1, npm 12.2.1, in the worktree: `make verify` passed at `4eb1d49` (278 tests) at `d74375c` and `0c3a8fd` (282 tests), and at `804b88a` (283 tests; 99.62% lines, 95.68% branches, 99.27% functions), each including `npm run verify:comments` and the archive dry run; `npm run openspec -- validate enforce-comment-length --strict` passed.
 
 ## Independent review
 
@@ -56,7 +56,7 @@ Assigned reviewer (rotation): Claude Code with `claude-fable-5-1`, effort medium
   2. Low: `docs/releases.md` did not list the comment length check among the `make verify` steps; added.
   3. Low: the `pnpm-lock.yaml` exemption was dead; removed from the script, its test, and the design.
   4. Low: no test protected that a shebang in a TypeScript file is no comment; added.
-  5. Low: "the owner picks the first" in `event-metadata.ts` was ambiguous; now "the owning module".
+  5. Low: "the owner picks the first" in `event-metadata.ts` was ambiguous; now "the owning module". The first wording of that fix was 87 characters long, and `make verify` failed on it at `cd3f2cf`; `804b88a` shortened it.
 
 ## Remaining gates
 
