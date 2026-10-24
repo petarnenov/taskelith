@@ -23,7 +23,7 @@ The request names the immutable set of expected values: the assignment, its atte
 | Assignment and attempt | `assignmentId`, `attemptId`, `ownershipGeneration` from the journaled assignment command | The assignment exists, is active, is held by this worker at this generation, and its attempt is not cancelled or terminal |
 | Execution | `executionId`, created and journaled by the worker before the request (item 4) | The attempt's execution ownership (section 4) allows this execution |
 | Admission | The task's admission (`admissionId` and generation), named by the assignment | The admission belongs to this task and is in state `used`, as the task's dispatch left it ([`sdlc-task-admission`](../../openspec/specs/sdlc-task-admission/spec.md)) |
-| Gates and artifact revisions | The gates and the artifact revisions bound in the admission | Every such gate is still `passed` for the same revisions, and each bound revision is still the artifact's current revision |
+| Gates and artifact revisions | The artifact revisions bound in the admission, and the **relied-on gates**: the gates of the prerequisite stages of the admission's stage in the run's workflow definition version, the same set G1 admission checked. G1 admission records do not store gate identities, so the authority derives this set deterministically and records it in the grant; a planning admission's set may be empty | Every relied-on gate is still `passed` with the admission's bound revisions as its subject, and each bound revision is still the artifact's current revision |
 | Policy revision | `admission.policyRevision` | The run's current policy revision |
 | Capacity reservation | The reservation the assignment holds (item 6) | Still held for this attempt on this worker |
 
@@ -44,16 +44,21 @@ A serialization failure aborts the transaction; the authority retries the whole 
 
 An attempt has at most one owning execution at a time. Expiry of an authorization ends the permission to spawn, not the ownership of its execution:
 
-- A first authorization makes its `executionId` the attempt's owning execution.
-- Another authorization of the same `executionId` is allowed only while no start of it has been recorded and the worker reports, from its supervisor's launch record (item 4), that it has not started.
-- An authorization for a different `executionId` is rejected with `execution-conflict` until the owning execution has a recorded terminal fact: a recorded exit, or `not-started` established by reconciliation under item 4's rules. Uncertainty keeps the ownership and blocks another execution.
+- A first authorization makes its `executionId` the attempt's owning execution, in state `authorized`. The execution moves to `started` when its start is recorded, and to a terminal state, `exited` or `not-started`, only as below. Expiry of a grant changes neither the execution's state nor the grant's recorded state; expiry is computed from `issuedAt` and `ttl`.
+- Another authorization of the same `executionId` is allowed only while the execution is `authorized` and the worker reports, from its supervisor's launch record (item 4), that it has not started. The supervisor spawns at most once per `executionId` across all its grants: its launch record is written once, and a spawn under any grant first claims it.
+- `not-started` is recorded only after the worker has sealed the execution's launch record so that no spawn can follow under any grant, and reported that seal with the absence of a process (item 4). From then on every grant of the execution is void.
+- An authorization for a different `executionId` is rejected with `execution-conflict` until the owning execution is `exited` or `not-started`. Uncertainty keeps the ownership and blocks another execution.
+
+This section places two obligations on the supervisor identity contract (item 4) and the worker journal contract (item 5): a single, claimed spawn per execution identity, and an irreversible seal before `not-started` is reported.
 
 ## 5. Invalidation ordering
 
 Every transaction that changes a compared value runs at `SERIALIZABLE` isolation: a gate decision or reopening, a new artifact revision, a policy revision, an ownership change, a cancellation, a released reservation, a worker revocation, and entering restore quarantine. Each such writer must, in the same transaction:
 
-1. Read, unconditionally and even when the result is empty, every authorization in state `granted` and every execution in state `started` whose compared value it changes, by the predicate of its kind: by artifact for a new revision, by gate for a gate change, by run for a policy revision, by assignment for an ownership change, cancellation, or released reservation, by worker for a revocation, and every one for quarantine.
-2. Mark each such authorization `revoked` with its reason, and write a cancellation command to the outbox for each affected attempt.
+1. Read, unconditionally and even when the result is empty, every owning execution that is not terminal (`authorized` or `started`, whatever its grants' expiry) and its grants, whose compared value the writer changes, by the predicate of its kind: by artifact for a new revision, by the relied-on gates recorded in grants for a gate change, by run for a policy revision, by assignment for an ownership change, cancellation, or released reservation, by worker for a revocation, and every one for quarantine.
+2. Mark each such grant `revoked` with its reason, and write a cancellation command to the outbox for each affected attempt.
+
+An execution started under an expired grant and not yet reported is therefore still found and cancelled; its start, when reported, is recorded as a start of a cancelled execution.
 
 PostgreSQL commits only serializable histories ([PostgreSQL 18, Serializable isolation](https://www.postgresql.org/docs/18/transaction-iso.html#XACT-SERIALIZABLE)), so each invalidating writer is ordered either before or after each authorization it conflicts with:
 
@@ -70,7 +75,7 @@ The worker journals `operationId` and `executionId` before its first request (it
 
 - **Granted:** `launchAuthId`, `issuedAt`, `ttl`, `skew`, and the bound values.
 - **Rejected:** a reason from section 9. A rejection is final for that `operationId`.
-- **Transport retry:** the worker repeats the request with the same `operationId`. The authority does not run a new authorization; it checks the current quarantine state, recovery epoch, worker credential, and the recorded authorization's state, and returns the recorded grant only while it is still `granted`. Otherwise it returns `revoked` with its reason, or the rejection the current state requires. A retry never extends the worker's deadline (section 7).
+- **Transport retry:** the worker repeats the request with the same `operationId`. The authority does not run a new authorization; it checks the current quarantine state, recovery epoch, worker credential, and the recorded authorization's state, and returns the recorded grant only while it is `granted`, not expired by `issuedAt` and `ttl`, and its execution is not terminal. Otherwise it returns `revoked` with its reason, `expired`, or the rejection the current state requires. A retry never extends the worker's deadline (section 7).
 - **Changed request:** a repeat with the same `operationId` but different expected values is rejected with `operation-mismatch`.
 - **Re-authorization:** after expiry, a retryable rejection, or a restart, the worker journals a new `operationId` and runs the whole check again, within the ownership rule of section 4.
 
@@ -81,8 +86,8 @@ The protocol parameters are the authorization's `ttl` and `skew`, provisionally 
 - **Worker deadline:** the worker reads its **monotonic** clock before sending the **first** request of an `operationId`. It may hand the authorization to the supervisor only before that reading plus `ttl` minus `skew`. The reading precedes `issuedAt`, so the deadline is never later than the server's expiry, whatever the worker's wall clock says, and retries of the same `operationId` keep the first reading.
 - **Supervisor:** before spawning, the supervisor journals the `launchAuthId` and `executionId` as its launch record (item 4) and spawns only before the deadline. A spawn begun before the deadline is a start under that authorization.
 - **Restart:** a monotonic reading does not survive a restart. A worker or supervisor that restarts with a journaled authorization never spawns under it: it reconciles by `executionId` (item 4), and if no execution exists it re-authorizes with a new `operationId` (section 6).
-- **Start observations:** the observation of a start carries `launchAuthId` and `executionId` and is accepted once per execution; a duplicate returns the recorded fact. Its arrival time does not decide it, because a worker may report a timely start after an outage. A start for a `granted`, expired, or `revoked` authorization of the same execution is recorded as a start; for a `revoked` one, the cancellation already exists.
-- **Server side:** the server cannot observe the spawn time; under the trusted-host boundary of the [trust model](../trust-model.md), the worker's monotonic deadline enforces it. The server enforces what it can observe: an authorization covers one execution, expiry ends re-use for a spawn, ownership blocks a second execution (section 4), and revocation turns later invalidation into cancellation. A start reported for an unknown authorization, or for an execution the attempt does not own, becomes an `unauthorized-start` fact: the authority writes a cancellation command, keeps the evidence, and reconciles the execution, which is never adopted as current work.
+- **Start observations:** the observation of a start carries `launchAuthId` and `executionId`. The authority first checks that the grant exists and is bound to that `executionId`, that the execution is the attempt's owning execution, and that it is not `not-started`; only then does it record the start, once per execution, or return the recorded fact for a duplicate. Its arrival time does not decide it, because a worker may report a timely start after an outage. A start under an expired or `revoked` grant of the execution is recorded as a start; for a `revoked` one, the cancellation already exists.
+- **Server side:** the server cannot observe the spawn time; under the trusted-host boundary of the [trust model](../trust-model.md), the worker's monotonic deadline enforces it. The server enforces what it can observe: an authorization covers one execution, expiry ends re-use for a spawn, ownership blocks a second execution (section 4), and revocation turns later invalidation into cancellation. A start that fails any check of the previous item (an unknown grant, a grant bound to another execution, a non-owning execution, or one recorded `not-started`) becomes an `unauthorized-start` fact: the authority writes a cancellation command, keeps the evidence, and reconciles the execution, which is never adopted as current work.
 
 ## 8. Offline and quarantine behavior
 
@@ -102,8 +107,8 @@ Each check of sections 2 to 4 maps to one reason. The scheduler acts on the reas
 | Assignment missing, ended, or held by another worker | `assignment-not-active` | no | None; the current owner decides |
 | Ownership generation not current | `stale-ownership-generation` | no | None; the current owner decides |
 | Attempt cancelled or terminal | `attempt-not-launchable` | no | None |
-| Admission missing, of another task, or not `used` | `admission-not-current` | no | Re-admit the task |
-| A relied-on gate no longer `passed` | `gate-not-passed` | no | Re-admit after the gate passes |
+| Admission missing, of another task, not `used`, or at another generation than the expected one | `admission-not-current` | no | Re-admit the task |
+| A relied-on gate not `passed`, or `passed` for another subject than the bound revisions | `gate-not-passed` | no | Re-admit after the gate passes |
 | A bound artifact has a newer revision | `artifact-revision-changed` | no | Re-admit against the new revision |
 | Admission policy revision differs from the run's | `policy-revision-changed` | no | Re-admit under the current policy |
 | Reservation released or held elsewhere | `capacity-not-reserved` | no | Reserve again or reassign |
@@ -123,6 +128,9 @@ Items 17 and 24 implement these as tests through the deterministic test harness 
 - A lost first response followed by a retry returns the same grant and does not extend the deadline; a retry after revocation, worker revocation, or quarantine returns no grant; a changed request under the same `operationId` is rejected.
 - A worker whose wall clock is wrong by more than `skew` stops handing out an authorization at its monotonic deadline.
 - A timely start reported after an outage is recorded as a start; a duplicate start observation returns the recorded fact; a start under an unknown authorization becomes `unauthorized-start`.
-- After expiry with no recorded start, another execution identity is rejected until reconciliation records `not-started`.
+- After expiry with no recorded start, another execution identity is rejected until reconciliation records `not-started`; a supervisor paused before spawning, then resumed after the seal, does not spawn.
+- A timely spawn, a disconnect, expiry, and a policy change before the start is reported: the writer still finds the execution, writes a cancellation, and the late start is recorded.
+- A start observation with a known grant bound to another execution identity becomes `unauthorized-start`.
+- Two admissions with the same bound revisions but different relied-on gates are invalidated only by their own gates' changes; an admission generation mismatch and a gate passed for another subject are rejected with their reasons.
 - A restart with a journaled authorization never spawns under it.
 - Quarantine and an old recovery epoch grant nothing.

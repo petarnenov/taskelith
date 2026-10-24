@@ -16,7 +16,7 @@ G2 work plan item 3, started under the owner's decision of 2026-10-25 that G2 st
 
 ## Checks
 
-In the worktree, Node v24.22.1, npm 12.2.1: `make verify` passed, including strict validation and the archive dry-run of this change; re-run after the pass-1 fixes with the same result.
+In the worktree, Node v24.22.1, npm 12.2.1: `make verify` passed, including strict validation and the archive dry-run of this change; re-run after the pass-1 and pass-2 fixes with the same result.
 
 ## Independent review
 
@@ -33,7 +33,13 @@ Assigned reviewer (rotation): Codex CLI, `-m gpt-6.1-sol -c model_reasoning_effo
   8. Medium: "not superseded" invented an admission state. Replaced by comparisons on a `used` admission (design decision 7).
   9. Low: the status claimed a reviewed contract. Now "proposed ... under independent review".
   10. Low: no evidence check was recorded. Recorded in the self-check.
-- **Pass 2.** Pending.
+- **Pass 2 — session `01a17012-072f-7e51-8166-953933d26ee3`.** Pass-1 findings 1, 2, 4, 5, 8, 9, and 10 confirmed resolved; 3, 6, and 7 partly. Findings: 0 Critical, 2 High, 3 Medium, 0 Low. All accepted and resolved:
+  1. High: an execution started under an expired, unreported grant escaped invalidation. Writers now read every non-terminal owning execution and its grants whatever their expiry; expiry changes no recorded state; a test covers the sequence.
+  2. High: `not-started` did not stop a later spawn. `not-started` is recorded only after the worker seals the launch record irreversibly; the supervisor spawns at most once per execution across grants; both are stated as obligations on items 4 and 5, with a paused-supervisor test.
+  3. Medium: a known grant bound to another execution had no outcome. The start check verifies the binding first; any mismatch is `unauthorized-start`.
+  4. Medium: G1 admissions store no gate identities. The relied-on gates are derived from the prerequisite stages of the admission's stage in the run's workflow definition version and recorded in the grant; writers find grants by them.
+  5. Medium: generation and subject mismatches had no reason. Added to `admission-not-current` and `gate-not-passed`, with tests.
+- **Pass 3 (final).** Pending.
 
 ## Remaining gates
 

@@ -15,18 +15,22 @@ A worker SHALL start a new execution only under a launch authorization that the 
 - **THEN** it starts no queued work and retries with backoff
 
 ### Requirement: Invalidation ordering
-Every transaction that changes a compared value SHALL run serializably and SHALL, in the same transaction and even when the result is empty, read the granted authorizations and started executions it affects, revoke those authorizations, and write a cancellation command for each affected attempt. Aborted writers SHALL be retried as a whole.
+Every transaction that changes a compared value SHALL run serializably and SHALL, in the same transaction and even when the result is empty, read the non-terminal owning executions it affects and their grants, whatever the grants' expiry, revoke those grants, and write a cancellation command for each affected attempt. Aborted writers SHALL be retried as a whole.
 
 #### Scenario: Invalidation races authorization
 - **WHEN** an invalidation and an authorization run concurrently, including a writer that affects many attempts
 - **THEN** the result is either a rejection or a revocation with a cancellation command, never an unrevoked stale authorization
 
 ### Requirement: Execution ownership
-An attempt SHALL have at most one owning execution. Expiry SHALL end the permission to spawn but not ownership; another execution identity SHALL be authorized only after the owning execution has a recorded exit or a reconciled `not-started` fact.
+An attempt SHALL have at most one owning execution. Expiry SHALL end the permission to spawn but not ownership; another execution identity SHALL be authorized only after the owning execution has a recorded exit or a `not-started` fact recorded after its launch record was irreversibly sealed.
 
 #### Scenario: Expired grant without a recorded start
 - **WHEN** an authorization expired and no start or terminal fact is recorded
 - **THEN** an authorization for another execution identity is rejected with `execution-conflict`
+
+#### Scenario: Sealed execution
+- **WHEN** `not-started` is recorded after the worker sealed the launch record
+- **THEN** a supervisor resumed later does not spawn under any grant of that execution
 
 ### Requirement: Idempotent replay without reuse of stale grants
 A repeated request with the same operation ID SHALL return the recorded grant only while it is still granted and the quarantine state, recovery epoch, and worker credential are current; a reused operation ID with different values SHALL be rejected.
@@ -51,14 +55,14 @@ The worker SHALL hand an authorization to the supervisor only before its monoton
 - **THEN** it reconciles by execution identity and re-authorizes with a new operation ID before any spawn
 
 ### Requirement: Start observations
-A start observation SHALL be accepted once per execution, independently of its arrival time, for an authorization of that execution; a start for an unknown authorization or a non-owning execution SHALL be recorded as an unauthorized start, cancelled, and reconciled.
+A start observation SHALL be accepted once per execution, independently of its arrival time, for a grant bound to that execution of the owning execution; a start that fails these checks SHALL be recorded as an unauthorized start, cancelled, and reconciled.
 
 #### Scenario: Timely start reported late
 - **WHEN** a start under a granted authorization is reported after an outage longer than the TTL
 - **THEN** it is recorded as a start, and a duplicate report returns the recorded fact
 
-#### Scenario: Unknown authorization
-- **WHEN** a start is reported for an unknown authorization
+#### Scenario: Unknown or mismatched authorization
+- **WHEN** a start is reported for an unknown grant or for a grant bound to another execution
 - **THEN** it is recorded as an unauthorized start and a cancellation command is written
 
 ### Requirement: Quarantine fails closed
