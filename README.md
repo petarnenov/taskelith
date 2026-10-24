@@ -31,7 +31,7 @@ The CLI makes no network calls and writes no application state. The npm installa
 - Mandatory SDLC for all agent tasks, with replaceable OpenSpec and SpecKit adapters; Taskelith itself is developed only through OpenSpec.
 - First-class principles: Clean Code, SOLID, hexagonal architecture, microkernel, Docker, contract-first OpenAPI (and AsyncAPI for messages), Makefile-driven operation, and mandatory OpenSpec for developing Taskelith ([ADR 0004](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0004-first-class-engineering-principles.md)).
 - Neo4j-based learning and accumulated project knowledge.
-- Established open-source infrastructure; agent harnesses, open or closed, are removable plugins on a microkernel. No Electron, embedded browser, native mobile app, or original AO Cloud dependency.
+- Established open-source infrastructure; agent harnesses, open or closed, and SCM integrations (GitHub.com first) are removable plugins on a microkernel. No Electron, embedded browser, native mobile app, or original AO Cloud dependency.
 
 Read the [architecture and delivery plan](docs/architecture.md) for scope, risks, and acceptance criteria.
 
