@@ -40,7 +40,7 @@ The owner resolved the merge conflicts with "ауто мърдж побежда�
    - **Escalation.** A maintainer is asked only when the attempt budget is spent, a reconciled specification fails again, or no reviewer is available after three attempts.
    - **Reviewer.** Review never falls back to the implementer.
 4. **The project board is the landing page.**
-   - **Board.** Its columns are the platform lifecycle stages of [governance](../governance.md#lifecycle-and-records): Propose, Specify, Implement, Verify, Review, and Archived.
+   - **Board.** Its columns are the platform lifecycle stages of [governance](../governance.md#lifecycle-and-records) under short labels: Propose (Propose and inspect), Specify (Specify and design), Implement, Verify, Review, and Archived (Close).
      - Accept and integrate is the merge gate between Review and Archived.
      - Each card shows its framework's native step, or "platform-managed" where the [framework mapping](../sdlc-framework-mapping.md) records a gap.
      - Merging closes and archives the change and stops its agent session.
