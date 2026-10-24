@@ -17,4 +17,4 @@ The comment length rule of `AGENTS.md` (change `limit-comment-length`, 2026-10-2
 
 ## Impact
 
-Comments in 39 files, `Makefile`, `package.json`, a new script and test. No product behaviour changes and no dependency is added: the check uses the TypeScript compiler that the repository already pins.
+Comments in 38 files, `Makefile`, `package.json`, the provenance digests in `docs/dependencies/licenses.json`, a new script and test. No product behaviour changes and no dependency is added: the check uses the TypeScript compiler that the repository already pins.

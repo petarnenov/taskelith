@@ -22,7 +22,7 @@ export const ADMISSION_STATES = Object.freeze(['admitted', 'used', 'invalidated'
 export type AdmissionState = (typeof ADMISSION_STATES)[number];
 
 // The only allowed transitions. An admission is used once, at dispatch, and
-// only an unused one is invalidated; started work follows the execution module.
+// only an unused one is invalidated; started work is stopped and reconciled.
 export const ADMISSION_TRANSITIONS: Readonly<Record<AdmissionState, readonly AdmissionState[]>> = Object.freeze({
   admitted: Object.freeze(['used', 'invalidated'] as const),
   used: Object.freeze([] as const),

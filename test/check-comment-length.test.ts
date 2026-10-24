@@ -11,23 +11,29 @@ import {
 const LONG = 'x'.repeat(80);
 
 test('selects the comment syntax by file name and shebang', () => {
-  assert.equal(commentSyntax('src/cli.ts', ''), 'slash');
-  assert.equal(commentSyntax('release.config.js', ''), 'slash');
-  assert.equal(commentSyntax('test/fixed-archive-date.mjs', ''), 'slash');
-  assert.equal(commentSyntax('scripts/run-node-script.sh', ''), 'hash');
-  assert.equal(commentSyntax('.github/workflows/release.yml', ''), 'hash');
-  assert.equal(commentSyntax('Makefile', ''), 'hash');
-  assert.equal(commentSyntax('tools/speckit/Dockerfile', ''), 'hash');
-  assert.equal(commentSyntax('.githooks/pre-push', '#!/bin/sh'), 'hash');
-  assert.equal(commentSyntax('LICENSE', 'MIT License'), undefined);
-  assert.equal(commentSyntax('README.md', ''), undefined);
+  assert.equal(commentSyntax('src/cli.ts', () => ''), 'slash');
+  assert.equal(commentSyntax('release.config.js', () => ''), 'slash');
+  assert.equal(commentSyntax('test/fixed-archive-date.mjs', () => ''), 'slash');
+  assert.equal(commentSyntax('scripts/run-node-script.sh', () => ''), 'hash');
+  assert.equal(commentSyntax('.github/workflows/release.yml', () => ''), 'hash');
+  assert.equal(commentSyntax('Makefile', () => ''), 'hash');
+  assert.equal(commentSyntax('tools/speckit/Dockerfile', () => ''), 'hash');
+  assert.equal(commentSyntax('.githooks/pre-push', () => '#!/bin/sh'), 'hash');
+  assert.equal(commentSyntax('LICENSE', () => 'MIT License'), undefined);
+  assert.equal(commentSyntax('README.md', () => ''), undefined);
 });
 
 test('exempts lockfiles and captured third-party artifacts', () => {
-  assert.equal(commentSyntax('pnpm-lock.yaml', ''), undefined);
-  assert.equal(commentSyntax('docs/qualification/speckit-1.2.3/scaffold/run.sh', ''), undefined);
+  assert.equal(commentSyntax('pnpm-lock.yaml', () => ''), undefined);
+  assert.equal(commentSyntax('docs/qualification/speckit-1.2.3/scaffold/run.sh', () => ''), undefined);
   const scaffold = 'packages/plugins/sdlc-speckit/fixtures/working-copy/.specify/scripts/bash/common.sh';
-  assert.equal(commentSyntax(scaffold, ''), undefined);
+  assert.equal(commentSyntax(scaffold, () => ''), undefined);
+});
+
+test('reads the first line only for an extensionless file', () => {
+  const unread = () => assert.fail('the first line was read');
+  assert.equal(commentSyntax('scripts/setup.ts', unread), 'slash');
+  assert.equal(commentSyntax('README.md', unread), undefined);
 });
 
 test('joins adjacent own-line slash comments into one comment', () => {
@@ -45,6 +51,11 @@ test('keeps block and trailing comments apart from their neighbours', () => {
   ]);
 });
 
+test('counts a block comment after code over every line it spans', () => {
+  const source = ['const a = 1; /* one', '  two', '  three */', '// next'].join('\n');
+  assert.deepEqual(slashComments(source), [{ firstLine: 1, lastLine: 3 }, { firstLine: 4, lastLine: 4 }]);
+});
+
 test('ignores comment markers inside strings, templates, and regular expressions', () => {
   const source = ["const a = '// no';", 'const b = `/* no */`;', 'const c = /\\/\\/no/;'].join('\n');
   assert.deepEqual(slashComments(source), []);
@@ -56,6 +67,13 @@ test('finds own-line and trailing hash comments but not the shebang', () => {
     { firstLine: 2, lastLine: 3 },
     { firstLine: 4, lastLine: 4 },
     { firstLine: 6, lastLine: 6 },
+  ]);
+});
+
+test('finds a hash comment after a shell operator', () => {
+  assert.deepEqual(hashComments('echo a;# one\n(# two'), [
+    { firstLine: 1, lastLine: 1 },
+    { firstLine: 2, lastLine: 2 },
   ]);
 });
 
@@ -80,10 +98,18 @@ test('reports each comment line longer than 80 characters, counting code points'
   ]);
 });
 
+test('reports both the span and each long line of one comment', () => {
+  const source = [`# ${LONG}`, '# two', '# three'].join('\r\n');
+  assert.deepEqual(commentViolations('a.yml', source, hashComments(source)), [
+    { file: 'a.yml', line: 1, reason: 'comment spans 3 lines (max 2)' },
+    { file: 'a.yml', line: 1, reason: 'comment line is 82 characters (max 80)' },
+  ]);
+});
+
 test('checks a whole file by its syntax and skips files out of scope', () => {
-  assert.deepEqual(fileViolations('run.sh', `#!/bin/sh\n# ${LONG}\n`), [
+  assert.deepEqual(fileViolations('run.sh', () => `#!/bin/sh\n# ${LONG}\n`), [
     { file: 'run.sh', line: 2, reason: 'comment line is 82 characters (max 80)' },
   ]);
-  assert.deepEqual(fileViolations('notes.md', `# ${LONG}\n`), []);
-  assert.deepEqual(fileViolations('a.ts', '/** fits */\nexport {};'), []);
+  assert.deepEqual(fileViolations('notes.md', () => `# ${LONG}\n`), []);
+  assert.deepEqual(fileViolations('a.ts', () => '/** fits */\nexport {};'), []);
 });

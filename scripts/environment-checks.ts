@@ -115,8 +115,8 @@ function pinnedNodeActive(facts: EnvironmentFacts, pins: Pins): boolean {
   return facts.nodeVersion === `v${pins.node}`;
 }
 
-// Nothing is installed without the pinned Node.js, so no other Node.js gets
-// npm or dependencies; dependencies follow npm, which installs them.
+// Without the pinned Node.js nothing is installed, so no other Node.js gets npm
+// or dependencies; npm comes first because it installs the dependencies.
 export function setupSteps(facts: EnvironmentFacts, pins: Pins): SetupStep[] {
   const failing = new Set(checkEnvironment(facts, pins).filter((result) => !result.ok).map((result) => result.id));
   if (failing.has('node')) return [];

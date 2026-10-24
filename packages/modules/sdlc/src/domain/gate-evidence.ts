@@ -4,8 +4,8 @@ import { fieldFailure } from './field-failure.js';
 import { isDisplayText } from './display-text.js';
 import { parseGateSubject, type GateSubject } from './gate-subject.js';
 
-// Distinct evidence sources (architecture section 6). A gate accepts only its
-// kind, so a passed validator never stands in for a semantic approval.
+// Evidence from a validator, a reviewer, or a platform record (architecture
+// section 6); a gate accepts only its kind, so no validator replaces review.
 export const EVIDENCE_KINDS = Object.freeze(['structural-validation', 'semantic-approval', 'platform-record'] as const);
 
 export type EvidenceKind = (typeof EVIDENCE_KINDS)[number];

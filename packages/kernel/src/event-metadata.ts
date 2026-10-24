@@ -10,8 +10,8 @@ export type EventId = Identifier<'EventId'>;
 export type CorrelationId = Identifier<'CorrelationId'>;
 export type CausationId = Identifier<'CausationId'>;
 
-// Lowercase dot-separated segments that start with a letter, such as
-// `sdlc.gate.passed`; the owning module chooses the first segment.
+// Dot-separated segments of lowercase letters, digits, and inner hyphens, each
+// starting with a letter, as in `sdlc.gate.passed`; the owner picks the first.
 export type EventType = string & { readonly [eventTypeBrand]: true };
 export type SchemaVersion = number & { readonly [schemaVersionBrand]: true };
 

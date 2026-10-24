@@ -3,8 +3,8 @@ import { isDisplayText } from './display-text.js';
 
 declare const nativeReferenceBrand: unique symbol;
 
-// A plugin's own reference to a work item or artifact, such as a file path; it
-// is kept for display and traceability, never interpreted, and may be any text.
+// A plugin's own reference to a work item or artifact, such as a file path,
+// kept for display and never interpreted; unlike an identifier, any text.
 export type NativeReference = string & { readonly [nativeReferenceBrand]: true };
 
 export const MAX_NATIVE_REFERENCE_LENGTH = 1024;

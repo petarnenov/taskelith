@@ -6,8 +6,8 @@ import { diff } from '@asyncapi/diff';
 import { Parser } from '@asyncapi/parser';
 import { CONTRACT_DOCUMENTS } from './generate-contracts.ts';
 
-// Fails on a contract change since the origin/dev merge base that info.version
-// does not declare (ADR 0004 principle 6), using oasdiff and @asyncapi/diff.
+// Fails on a breaking contract change since the origin/dev merge base that
+// info.version does not declare (ADR 0004 principle 6).
 
 export const OASDIFF_IMAGE = 'tufin/oasdiff:v1.34.1@sha256:67a23cfea7d251e2ae34ee703ac8733c5d96bc2e7b90fd0f4d475ec99367b85f';
 const BASE_BRANCH = 'dev';

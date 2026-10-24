@@ -75,8 +75,8 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-// Copies JSON-like data, reading each property once by descriptor; arrays must
-// be dense, objects plain, and anything else, or a cycle, is a problem.
+// Copies JSON-like data, reading each property once by descriptor; anything
+// else, a sparse array, a cycle, or an inspection that throws is a problem.
 export function copyPlainData(path: string, value: unknown): Result<unknown, readonly string[]> {
   const problems: string[] = [];
   try {

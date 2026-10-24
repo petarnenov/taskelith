@@ -1,11 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
-// Enforces the comment rule of AGENTS.md: a comment spans at most two
-// physical lines, and each of them is at most 80 characters long.
+// Enforces the comment rule of AGENTS.md on exactly the file kinds it names,
+// with .mts, .cts, .mjs, and .cjs counted as TypeScript and JavaScript.
 
 export const MAX_COMMENT_LINES = 2;
 export const MAX_LINE_LENGTH = 80;
@@ -26,22 +26,20 @@ export interface Violation {
 const SLASH_EXTENSIONS = new Set(['.ts', '.mts', '.cts', '.js', '.mjs', '.cjs']);
 const HASH_EXTENSIONS = new Set(['.sh', '.yml', '.yaml']);
 const HASH_BASENAMES = new Set(['Makefile', 'Dockerfile']);
-const LOCKFILES = new Set(['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock']);
+// The only lockfile kind in scope; npm's lockfile is JSON and out of scope.
+const LOCKFILES = new Set(['pnpm-lock.yaml']);
 // The SpecKit fixture scaffold is a byte-for-byte copy of the qualification
 // capture, so both are third-party artifacts.
-const EXEMPT_DIRS = [
-  'docs/qualification/',
-  'packages/plugins/sdlc-speckit/fixtures/working-copy/.agent/',
-  'packages/plugins/sdlc-speckit/fixtures/working-copy/.specify/',
-];
+const EXEMPT_DIRS = ['docs/qualification/', 'packages/plugins/sdlc-speckit/fixtures/working-copy/.specify/'];
 
-export function commentSyntax(path: string, firstLine: string): CommentSyntax | undefined {
+// Reads the first line only for an extensionless file, to find its shebang.
+export function commentSyntax(path: string, readFirstLine: () => string): CommentSyntax | undefined {
   const name = posix.basename(path);
   const extension = posix.extname(name);
   if (LOCKFILES.has(name) || EXEMPT_DIRS.some((dir) => path.startsWith(dir))) return undefined;
   if (SLASH_EXTENSIONS.has(extension)) return 'slash';
   if (HASH_EXTENSIONS.has(extension) || HASH_BASENAMES.has(name)) return 'hash';
-  if (extension === '' && firstLine.startsWith('#!')) return 'hash';
+  if (extension === '' && readFirstLine().startsWith('#!')) return 'hash';
   return undefined;
 }
 
@@ -107,8 +105,8 @@ export function slashComments(text: string): Comment[] {
   }));
 }
 
-// The start of a `#` comment: outside quotes, at a word start, so that `$#`,
-// `${x#y}`, `a\ #b`, and quoted `#` are not comments.
+// A `#` outside quotes at a word start, after whitespace or a shell operator,
+// so that `$#`, `${x#y}`, `a\ #b`, and a quoted `#` are not comments.
 function hashCommentStart(line: string): number | undefined {
   let quote: string | undefined;
   let wordStart = true;
@@ -118,7 +116,7 @@ function hashCommentStart(line: string): number | undefined {
     else if (quote) quote = char === quote ? undefined : quote;
     else if (char === '"' || char === "'") quote = char;
     else if (char === '#' && wordStart) return index;
-    wordStart = !quote && /\s/.test(char);
+    wordStart = !quote && /[\s;&|()]/.test(char);
   }
   return undefined;
 }
@@ -152,19 +150,23 @@ export function commentViolations(file: string, text: string, comments: Comment[
   });
 }
 
-export function fileViolations(file: string, text: string): Violation[] {
-  const syntax = commentSyntax(file, text.split('\n', 1)[0]);
+export function fileViolations(file: string, readText: () => string): Violation[] {
+  const syntax = commentSyntax(file, () => readText().split('\n', 1)[0]);
   if (!syntax) return [];
+  const text = readText();
   return commentViolations(file, text, syntax === 'slash' ? slashComments(text) : hashComments(text));
 }
 
 function trackedFiles(root: string): string[] {
-  return execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' }).split('\0').filter(Boolean);
+  const files = execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' }).split('\0');
+  // A file deleted from the working tree but still in the index is skipped.
+  return files.filter((file) => file !== '' && existsSync(posix.join(root, file)));
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = process.cwd();
-  const violations = trackedFiles(root).flatMap((file) => fileViolations(file, readFileSync(posix.join(root, file), 'utf8')));
+  const violations = trackedFiles(root).flatMap((file) =>
+    fileViolations(file, () => readFileSync(posix.join(root, file), 'utf8')));
   for (const { file, line, reason } of violations) console.error(`${file}:${line}: ${reason}`);
   if (violations.length > 0) {
     console.error(`Comment length violations: ${violations.length}; see the rule in AGENTS.md.`);
