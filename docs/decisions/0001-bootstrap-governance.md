@@ -1,7 +1,7 @@
 # ADR 0001: Repository-governed bootstrap with OpenSpec
 
 Date: 2026-10-24
-Status: Accepted by the owner on 2026-10-24; independently reviewed by a separate Codex reviewer agent (`gpt-6.1-sol`, `effort: medium`) on 2026-10-24; integration remains pending.
+Status: Accepted by the owner on 2026-10-24; independently reviewed by a separate Codex reviewer agent (`gpt-6.1-sol`, `effort: medium`) on 2026-10-24; integration remains pending (see the dated note below).
 
 ## Context
 
@@ -17,4 +17,4 @@ Bootstrap tasks can proceed with auditable artifacts. CLI validation checks stru
 
 This decision does not qualify either framework's maturity, select runtime integrations, or establish G0 completion. Those gates remain in the foundation checklist. Replacing the selected repository framework requires an explicit tracked policy decision and preservation of prior evidence.
 
-Note, 2026-10-24: [ADR 0004](0004-first-class-engineering-principles.md) makes OpenSpec mandatory for developing Taskelith without exception, beyond bootstrap. Runtime ports stay framework-neutral, and managed projects select their own framework.
+Note, 2026-10-24: this ADR was integrated through pull request #3. The governance policy is now at version 2, which adds the independent review process. [ADR 0004](0004-first-class-engineering-principles.md) makes OpenSpec mandatory for developing Taskelith without exception, beyond bootstrap. Runtime ports stay framework-neutral, and managed projects select their own framework.

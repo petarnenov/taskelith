@@ -20,6 +20,7 @@
 - OpenSpec is mandatory for every task that develops Taskelith, without exception ([ADR 0004](docs/decisions/0004-first-class-engineering-principles.md)). Projects managed by Taskelith select their own framework through replaceable SDLC plugins.
 - Use the pinned local CLI through `npm run openspec -- ...`.
 - Record scope, requirements, verification evidence, and remaining gates. Do not claim independent review or deployment validation that did not occur.
+- Follow the [independent review process](docs/governance.md#independent-review-process): authorized read-only reviewers, one reviewer per task, at most three passes, and Low-only passes fixed without another review.
 - Publication and deployment require owner authorization. The initial repository/package publication is explicitly authorized by the bootstrap request.
 
 ## Checks and commits
