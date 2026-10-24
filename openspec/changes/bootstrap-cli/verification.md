@@ -12,9 +12,12 @@
 - Tarball SHA-256: 31194eedf53a4f43d3cff7f49c719c38a50a358390fd578ebead220b659cee08.
 - npm dependency audit during installation: 0 reported vulnerabilities. This is not a security certification.
 
-## Pending
+## Public publication
 
-- Public npm publication, followed by registry/installed-package verification.
+- Published taskelith@0.1.0 with public access: https://www.npmjs.com/package/taskelith/v/0.1.0.
+- Registry version and CLI bin match the package manifest. Registry SHA-512 integrity matches the tested tarball.
+- Installed taskelith@0.1.0 directly from the public npm registry into a fresh temporary directory with lifecycle scripts disabled. Help, version, bundled plan equality, and invalid usage exit code all passed.
+- Publication and registry verification completed on 2026-10-24.
 
 ## Review scope
 

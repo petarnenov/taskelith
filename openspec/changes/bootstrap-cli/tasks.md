@@ -12,4 +12,4 @@
 
 - [x] 3.1 Validate and inspect the actual npm tarball outside the checkout.
 - [x] 3.2 Commit and push the public repository.
-- [ ] 3.3 Publish npm version 0.1.0 and verify the public registry and installed CLI.
+- [x] 3.3 Publish npm version 0.1.0 and verify the public registry and installed CLI.
