@@ -70,6 +70,12 @@ npm sbom --sbom-format=cyclonedx --package-lock-only > /tmp/taskelith-toolchain-
 
 An audit exits nonzero when findings exist; retain and inspect its JSON rather than interpreting that as a collection failure. The metadata collector only queries public npm metadata; it does not update versions or credentials. Review a refreshed snapshot before replacing the checked-in evidence. Use `npm run inventory:dependencies` and `npm run verify:dependencies` for the normalized retained evidence described in the [inventory guide](dependency-inventory.md). npm's SBOM omits the globally installed Node/npm binary inventory. A new dependency revision requires refreshed qualification and checks, not automatic promotion to `accepted`.
 
+## Agent harnesses
+
+| Component | Exact selection and terms | Status and qualification limits |
+| --- | --- | --- |
+| Claude Code (G3) | `@anthropic-ai/claude-agent-sdk@0.3.308` with bundled CLI 2.1.308; proprietary, under Anthropic's legal agreements | `candidate`. macOS x86_64 egress and native-capability evidence is recorded in the [qualification record](qualification/claude-code.md). Open before admission: Linux, macOS arm64, the owner decision on device-level versus per-workspace credentials, running with `DISABLE_AUTOUPDATER=1`, alternative providers, and independent adoption evidence. |
+
 ## Planned components
 
 PostgreSQL, NATS/JetStream, Neo4j Community, React, SpecKit, embedding runtime, and model artifacts remain `candidate`, with exact deployment versions/digests unselected. The owner selected the agent harnesses Claude Code, Codex CLI, Antigravity CLI, and OpenCode, and the Forgejo SCM ([ADR 0003](decisions/0003-first-integrations-and-plugin-kernel.md)); each remains `candidate` until version-specific qualification. Selection is not admission. Architecture license baselines do not admit an edition or provider. Qualification must include maintenance and independent adoption relevant to the selected version, security reporting, real recovery/upgrade tests, and separate model rights/transparency evidence where applicable. No runtime service was installed or contacted by this task.
