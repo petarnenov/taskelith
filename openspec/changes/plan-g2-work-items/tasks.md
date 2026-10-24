@@ -5,5 +5,5 @@
 
 ## 2. Verification and review
 
-- [ ] 2.1 Run `make verify` and the OpenSpec strict validation.
+- [x] 2.1 Run `make verify`, the OpenSpec strict validation, and the link and evidence checks.
 - [ ] 2.2 Obtain independent review (assigned Antigravity Argon medium by rotation; reassigned by the coordinator to Claude Fable 5.1 medium after an Argon quota failure) and record results.

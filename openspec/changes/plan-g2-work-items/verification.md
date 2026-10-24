@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-Task assigned by the coordinator on 2026-10-24: decompose G2 into work items, modelled on the G1 plan, documentation only. Base revision: `021854a` on `dev`. Scope: `docs/g2-plan.md` (new), two sentences in `docs/foundation.md`, and this change. Prepared in the git worktree `../taskelith-worktrees/plan-g2-work-items` on branch `plan-g2-work-items`. Sources: `docs/architecture.md` sections 5–9 and 12–15, ADR 0004, ADR 0007, `docs/g1-plan.md`, the archived `plan-g1-work-items` change, the `sdlc-*`, `shared-kernel`, and `delivery-planning` specifications, `docs/operational-targets.md`, `docs/trust-model.md`, `docs/storage.md`, `docs/worker-platforms.md`, `docs/dependencies.md`, and the root `package.json`.
+Task assigned by the coordinator on 2026-10-24: decompose G2 into work items, modelled on the G1 plan, documentation only. Base revision: `021854a` on `dev`. Scope: `docs/g2-plan.md` (new), three sentences in `docs/foundation.md`, and this change. Prepared in the git worktree `../taskelith-worktrees/plan-g2-work-items` on branch `plan-g2-work-items`. Sources: `docs/architecture.md` sections 5–9 and 12–15, ADR 0004, ADR 0007, `docs/g1-plan.md`, the archived `plan-g1-work-items` change, the `sdlc-*`, `shared-kernel`, and `delivery-planning` specifications, `docs/operational-targets.md`, `docs/trust-model.md`, `docs/storage.md`, `docs/worker-platforms.md`, `docs/dependencies.md`, and the root `package.json`.
 
 The change adds no requirement: the `delivery-planning` requirement "Gate work plan" applies from G1 onward, so `.openspec.yaml` sets `skip_specs: true`, as the agent task protocol allows for documentation under an existing requirement.
 
@@ -11,10 +11,11 @@ The change adds no requirement: the `delivery-planning` requirement "Gate work p
 - Every element of the G2 row and exit evidence in architecture section 13, the four pre-G2 contracts of section 15, the deferrals of G1 decision D4 (a) and G1 item 7, and the G2 deferrals of ADR 0007 map to at least one item.
 - The work items, ordering, and recommendations are the author's proposals; each open decision is labelled as a proposal and names the items it blocks. No decision is made, no item is started, and no product code, dependency, or installation is added.
 - Version facts were collected by web search on 2026-10-24 and labelled as observations that item 1 confirms.
+- Evidence check: the added text contains no external link, only relative links to repository files, so no link needs a pin. Each relative target exists, and the two anchors (`architecture.md#delivery-sequence` and `architecture.md#15-decisions-still-requiring-evidence-or-owner-scope-confirmation`) match headings of `docs/architecture.md`. The same holds after each round of fixes.
 
 ## Checks
 
-In the worktree, Node v24.22.1: `make verify` passed before the first review pass (strict OpenSpec validation 33 passed, 0 failed; package verification passed). `npm run openspec -- validate plan-g2-work-items --strict` passed. After the pass-1 fixes, a script recomputed the waves from the "Depends on" column and compared every decision's "Blocks" entry with the "Blocked by" column; both matched. Results after the pass-1 fixes are recorded below.
+In the worktree, Node v24.22.1: `make verify` passed before the first review pass (strict OpenSpec validation 33 passed, 0 failed; package verification passed). `npm run openspec -- validate plan-g2-work-items --strict` passed. After the pass-1 fixes, a script recomputed the waves from the "Depends on" column and compared every decision's "Blocks" entry with the "Blocked by" column; both matched. After the pass-1 fixes: `make verify` passed (228 tests passed, 0 failed; strict OpenSpec validation 33 passed; package verification passed), and strict validation of the change passed. After the pass-2 fixes: the same `make verify` result, strict validation of the change passed, and the decision and wave cross-check matched again.
 
 ## Independent review
 
@@ -46,6 +47,20 @@ Reviewer after reassignment: Claude Fable 5.1 (`claude-fable-5-1`, confirmed in 
   19. Low: item 2 assumed JetStream. Item 2 and D3 (c) state that a RabbitMQ spike replaces it.
   20. Low: a grammar slip in the G2 summary. Fixed.
   21. Low: an overlong sentence in `docs/foundation.md`. Split.
+
+- **Pass 2 — session `361a7c6c-f80f-4c95-a2c5-46997029c9f2`, head `8f6b9bc`.** The reviewer confirmed all 21 pass-1 resolutions, re-checked the changed version and runner-label facts with WebFetch (5 calls), and recomputed the waves, the decision-to-row match, and the longest chains by script. New findings: 0 Critical, 0 High, 4 Medium, 8 Low. All accepted and resolved (unreviewed until pass 3):
+  1. Medium: D4 (a) was conditional on durability tests that item 5 does not run and item 14 runs only after D4. The condition left the option; the fallback to (b) is triggered by item 1's evaluation or item 14's durability tests.
+  2. Medium: D14 governed every item without appearing in any row, contrary to the `delivery-planning` scenario, and both of its options let items start. D14 now blocks no item, and the status says that until it is decided each item starts only with a separate owner approval.
+  3. Medium: the evidence check was not recorded. Recorded under the self-check, and task 2.1 names it.
+  4. Medium: `make verify` after the pass-1 fixes was not recorded. Recorded under Checks.
+  5. Low: D2 gave an end-of-life date that the NATS table does not state. It now says the 2.12 line is end of life and dates its final release.
+  6. Low: item 1 would register PostgreSQL and NATS JetStream again. It adds versions, digests, and evidence to their existing `candidate` rows and registers only new tools.
+  7. Low: item 10 assumed a proxy. It uses the partition mechanism D8 selects.
+  8. Low: the consequences of D3 (c) were incomplete. D3 (c) and `design.md` state that it replaces items 2 and 12 and makes D2 moot.
+  9. Low: the scope named two sentences in `docs/foundation.md`. Now three.
+  10. Low: the starting point omitted the `EvidenceStore` adapter and implied existing adapter packages. It names item 19 and says that item 11 creates the first package under `packages/adapters/`.
+  11. Low: item 22 omitted event-loop lag and database latency. Added.
+  12. Low: item 25 omitted the G2 part of the service lifecycle row. Added.
 
 ## Limitations
 
