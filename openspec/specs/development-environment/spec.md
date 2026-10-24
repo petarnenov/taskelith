@@ -6,7 +6,7 @@ Let a contributor check and prepare a clone for building and verifying Taskelith
 ## Requirements
 
 ### Requirement: Environment check
-`make doctor` SHALL run with the `.nvmrc` Node.js when nvm has it installed and the shell uses another version, and otherwise with the shell's Node.js; it SHALL check that git is available, that Node.js matches `.nvmrc`, that npm matches the CI pin, that the dependency tree is complete as `npm ls --all` reports it, and that the pre-push hook is enabled; it SHALL print each result with a remedy for each failure, exit non-zero when any check fails, and change nothing.
+`make doctor` SHALL run with the `.nvmrc` Node.js when nvm has it installed and the shell uses another version, and otherwise with the shell's Node.js; it SHALL check git, that Node.js matches `.nvmrc` and npm the CI pin, that `npm ls --all` passes, and that the hooks and the inventory merge driver are configured; it SHALL print each result with a remedy for each failure, exit non-zero when any check fails, and change nothing.
 
 #### Scenario: Dependencies missing
 - **WHEN** a clone has no `node_modules`, or lacks a locked package or workspace link, and npm is on `PATH` or the pinned Node.js is not active
@@ -32,8 +32,12 @@ Let a contributor check and prepare a clone for building and verifying Taskelith
 - **WHEN** the selected Node.js matches `.nvmrc` but npm is not on `PATH`
 - **THEN** the npm remedy names a reinstall of the pinned Node.js, which includes npm, and the dependency remedy says to fix the npm check first instead of naming `make setup`
 
+#### Scenario: Merge driver missing
+- **WHEN** git is available and `merge.dependency-inventory.driver` is not set to `true`
+- **THEN** `make doctor` reports the merge driver check as failed with the remedy `make setup` and exits non-zero
+
 ### Requirement: Environment setup
-`make setup` SHALL install what is missing and can be installed from the clone: the `.nvmrc` Node.js through nvm when nvm is installed, made nvm's default version, the CI npm pin, the dependencies from `package-lock.json` with `npm ci --ignore-scripts`, and the hook configuration; it SHALL then report the same checks as `make doctor`. It SHALL NOT install git or nvm.
+`make setup` SHALL install what is missing and can be installed from the clone: the `.nvmrc` Node.js through nvm when nvm is installed, made nvm's default version, the CI npm pin, the dependencies from `package-lock.json` with `npm ci --ignore-scripts`, and the hook and dependency inventory merge driver configuration; it SHALL then report the same checks as `make doctor`. It SHALL NOT install git or nvm.
 
 #### Scenario: Fresh worktree
 - **WHEN** `make setup` runs in a new worktree without `node_modules`
