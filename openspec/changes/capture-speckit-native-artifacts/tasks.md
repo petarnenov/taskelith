@@ -14,4 +14,4 @@
 ## 3. Verification and review
 
 - [x] 3.1 Run `make verify`.
-- [ ] 3.2 Obtain independent review (Claude Fable 5.1 medium, by rotation) and record results.
+- [x] 3.2 Obtain independent review (Claude Fable 5.1 medium, by rotation; two passes, the second Low-only) and record results.

@@ -44,6 +44,7 @@ copy_normalized() {
 # Replaces dates, timestamps, and the identifiers of the runs that the probes created.
 normalize_transcript() {
   local run_ids=() run
+  shopt -s nullglob
   for run in "$PROJECT"/.specify/workflows/runs/*/; do
     run_ids+=(-e "s/$(basename "$run")/<run-id>/g")
   done
@@ -55,7 +56,7 @@ probe_scaffold() {
   probe_in /tmp "Scaffold a project" \
     "specify init demo --integration generic --integration-options='--commands-dir .agent/commands/' --script sh --non-interactive --ignore-agent-tools"
   copy_normalized "$PROJECT" "$OUT/scaffold"
-  probe "Version" "pip show specify-cli | grep -E '^(Name|Version):'; python --version"
+  probe "Version" "pip show specify-cli | grep -E '^(Name|Version):'; python --version; grep PRETTY_NAME /etc/os-release; command -v git || echo 'git: not found'"
   probe "Scaffolded files" "find . -type f | LC_ALL=C sort"
 }
 
@@ -86,6 +87,7 @@ probe_workflow_engine() {
   probe "Run the bundled workflow without an agent CLI" "specify workflow run speckit -i 'spec=Add user authentication' --json"
   probe "Run the gate probe without a TTY" "specify workflow run $PROBE_WORKFLOW --json"
   run_id="$(latest_run_id)"
+  probe "Resume options" "specify workflow resume --help"
   probe "Resume without a verdict" "specify workflow resume $run_id --json"
   probe "Resume with an approving verdict" "specify workflow resume $run_id -i verdict=approve --json"
   probe "Resume a completed run" "specify workflow resume $run_id --json"

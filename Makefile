@@ -39,11 +39,11 @@ speckit-capture: speckit-image
 	mkdir -p $(SPECKIT_CAPTURE).tmp
 	docker run --rm --network none --user "$$(id -u):$$(id -g)" --env HOME=/tmp \
 		--volume "$(CURDIR)/tools/speckit:/tools:ro" --volume "$(CURDIR)/$(SPECKIT_CAPTURE).tmp:/out" \
-		$(SPECKIT_IMAGE) bash /tools/capture.sh
+		$(SPECKIT_IMAGE) bash /tools/capture.sh || { rm -rf $(SPECKIT_CAPTURE).tmp; exit 1; }
 	rm -rf $(SPECKIT_CAPTURE)
 	mv $(SPECKIT_CAPTURE).tmp $(SPECKIT_CAPTURE)
 
 speckit-lock:
-	docker run --rm --volume "$(CURDIR)/tools/speckit:/work" --workdir /work $(SPECKIT_BASE) sh -c \
-		'pip install --quiet --root-user-action=ignore uv==$(UV_PIN) && uv pip compile --quiet --generate-hashes \
+	docker run --rm --user "$$(id -u):$$(id -g)" --env HOME=/tmp --volume "$(CURDIR)/tools/speckit:/work" --workdir /work $(SPECKIT_BASE) sh -c \
+		'pip install --quiet --target /tmp/uv uv==$(UV_PIN) && /tmp/uv/bin/uv pip compile --quiet --generate-hashes \
 		--python-version 3.13 --python-platform x86_64-unknown-linux-gnu --no-header --output-file requirements.txt requirements.in'

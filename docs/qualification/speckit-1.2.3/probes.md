@@ -187,10 +187,12 @@ Exit code: 0
 ## Version
 
 ```console
-$ pip show specify-cli | grep -E '^(Name|Version):'; python --version
+$ pip show specify-cli | grep -E '^(Name|Version):'; python --version; grep PRETTY_NAME /etc/os-release; command -v git || echo 'git: not found'
 Name: specify-cli
 Version: 1.2.3
 Python 3.13.17
+PRETTY_NAME="Debian GNU/Linux 13 (trixie)"
+git: not found
 ```
 
 Exit code: 0
@@ -462,6 +464,28 @@ $ specify workflow run /tools/gate-probe.yml --json
     "choice": null
   }
 }
+```
+
+Exit code: 0
+
+## Resume options
+
+```console
+$ specify workflow resume --help
+                                                                                
+ Usage: specify workflow resume [OPTIONS] {run_id}                              
+                                                                                
+ Resume a paused or failed workflow run.                                        
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    run_id      <str>  Run ID to resume [required]                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --input  -i      <str>  Updated input values as key=value pairs              │
+│ --json                  Emit the resume outcome as a single JSON object      │
+│                         instead of formatted text.                           │
+│ --help                  Show this message and exit.                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 Exit code: 0

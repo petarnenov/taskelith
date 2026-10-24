@@ -13,7 +13,7 @@ Goals: a reproducible, offline capture of the scaffold, the helper scripts' beha
 - Run the capture with `--network none`, as the invoking user, with the tools mounted read-only.
 - Use the `generic` integration, which writes agent commands to a plain directory and needs no agent CLI.
 - Probe gates with two agent-free workflows (shell, gate, shell): one gate with `verdict_input`, one without, like the bundled gates.
-- Normalize dates, timestamps, and run identifiers in every output, so that repeated captures are identical and the committed tree changes only when SpecKit's behaviour does.
+- Normalize dates and timestamps in every output, and the identifiers of the probes' workflow runs in the transcript, so that repeated captures are identical and the committed tree changes only when SpecKit's behaviour does.
 - Commit the capture under `docs/qualification/speckit-1.2.3/` as evidence; item 10 derives fixtures from it in the plugin packages.
 
 ## Risks / Trade-offs

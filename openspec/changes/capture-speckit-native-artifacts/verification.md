@@ -10,7 +10,8 @@ The owner's G1 plan, item 9, run as owner decision D5 (a1); taken by the coordin
 
 - Environment: macOS x86_64, Docker Desktop server 29.5.2 (`linux/amd64`). Image `taskelith-speckit:1.2.3` built by `make speckit-image` on base `python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962`.
 - `make speckit-lock` compiled `tools/speckit/requirements.txt` (41 pins, SHA-256 `25a4786880d379d11c2588afb5751140e5bd1155f33483214528c2b4018f1f39` before review) with uv 0.13.5; pip-tools 7.5.1 failed first with pip 26.2.2, as the capture record states.
-- `make speckit-capture` ran with `--network none`. After the pass-1 fixes it was run twice at different times, and `diff -r` between the two outputs found no difference. The transcript records 34 probes: 26 with exit code 0 and 8 with exit code 1, each as the capture record describes.
+- `make speckit-capture` ran with `--network none`. After the pass-1 fixes, and again after the pass-2 fixes, it was run twice at different times, and `diff -r` between the two outputs found no difference. The final transcript records 35 probes: 27 with exit code 0 and 8 with exit code 1, each as the capture record describes.
+- After the pass-2 fixes, `make speckit-lock`, now run as the invoking user, reproduced `requirements.txt` byte for byte.
 - An exploration in a scratch image on the same base digest preceded the change; its results were reproduced by the committed capture, not cited separately.
 - External facts checked by the author: tag `v1.2.3` of `github/spec-kit` peels to commit `5ea8b1cf0a38699340a38e00d02770308997d8c0` (`git ls-remote`); the spec-kit, uv `0.13.5`, and commit links return HTTP 200; PyPI declares uv 0.13.5 `MIT OR Apache-2.0`, and the classifiers of `markdown-it-py` 4.2.0 and `mdurl` 0.1.2 (MIT) and `pathspec` 1.1.1 (MPL-2.0).
 
@@ -22,7 +23,7 @@ The owner's G1 plan, item 9, run as owner decision D5 (a1); taken by the coordin
 
 ## Checks
 
-In the worktree, Node v24.22.1, npm 12.2.1: `make verify` passed before review (tests with coverage, boundary and coverage-scope checks, dependency inventory, strict OpenSpec validation 25 passed, package verification) and again after the pass-1 fixes.
+In the worktree, Node v24.22.1, npm 12.2.1: `make verify` passed before review (tests with coverage, boundary and coverage-scope checks, dependency inventory, strict OpenSpec validation 25 passed, package verification), after the pass-1 fixes, and after the pass-2 fixes.
 
 ## Independent review
 
@@ -40,6 +41,17 @@ Assigned reviewer (rotation): Claude Code with `claude -p <prompt> --model claud
   9. Low: the claim that a check rewrites the pointer did not hold for `--paths-only`. A probe now shows that `--paths-only` leaves the pointer unchanged, and the records name the validating mode.
   10. Low: the Dockerfile's `WORKDIR /work` was unused. Removed.
   While fixing, the author also limited the mapping's validation claim to the bash script, the only variant run.
+
+- **Pass 2 — session `d3c4fc65-14b5-4364-b526-82b2682a0ea0`.** All ten pass-1 findings confirmed resolved; the reviewer rechecked the tag, licenses, hashes, digest, and probe counts. Findings: 0 Critical, 0 High, 0 Medium, 7 Low. Fixed without another pass, as the review process allows for a Low-only pass; **these fixes have not been independently reviewed**:
+  1. Low: the capture record cited the bundled workflow's `requires.integrations.any` list as support, but the file calls it advisory. The row now gives the missing CLI dispatch as the reason and calls the list a hint.
+  2. Low: the git and Debian facts were not in the transcript, and the with-and-without-git comparison came from the exploration. The "Version" probe now shows the Debian release and that git is absent, and the record labels the comparison as an exploration result.
+  3. Low: that a gate is decided only through `verdict_input` came from the source, not the transcript. A "Resume options" probe now shows the options, and both records name the source.
+  4. Low: a failed capture left the temporary directory behind. The target now removes it on failure.
+  5. Low: `speckit-lock` ran as root. It now runs as the invoking user and installs uv into a target directory.
+  6. Low: the design said run identifiers are normalized in every output. It now says the transcript.
+  7. Low: the run-identifier loop failed if no run existed. It now uses `nullglob`.
+
+Remaining findings: 0.
 
 ## Remaining gates
 
