@@ -44,8 +44,12 @@ Use the exact Node.js version in `.nvmrc` and the npm version pinned in CI. Deve
 ```sh
 make setup    # installs what is missing: the .nvmrc Node.js (through nvm, as its default), the npm pin, the locked dependencies, the hooks, the inventory merge driver
 make doctor   # checks the environment without changing it
-make verify   # the same checks CI runs
+make verify   # the same checks CI runs; needs Docker
+make services-up    # starts PostgreSQL and NATS for integration tests
+make services-down  # stops them and discards their data
 ```
+
+`make verify` runs the tests through `make test`, which starts the digest-pinned PostgreSQL and NATS containers of `infra/services/compose.yaml` on localhost ports 55432 and 54222, runs `npm test`, and stops them. Integration tests are named `*.integration.test.ts`; without the services they fail and name the remedy, so `npm test` alone needs `make services-up` first.
 
 `make setup` does not install git or nvm; `make doctor` names what is missing. With nvm, `make doctor`, `make verify`, and the `pre-push` hook switch to the `.nvmrc` Node.js on their own, and new shells start with it; run `nvm use` in a shell that was open before `make setup` when you run `npm` or `node` directly.
 
