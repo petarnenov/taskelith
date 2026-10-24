@@ -4,7 +4,7 @@ The owner asked on 2026-10-24 for a `make doctor` command that checks whether th
 
 ## What Changes
 
-- `make doctor`: checks git, the Node.js version in `.nvmrc`, the CI npm pin, dependencies installed from `package-lock.json` (`npm ls --all`), and the pre-push hook; prints each result with a remedy; exits non-zero when any check fails; changes nothing.
+- `make doctor`: checks git, the Node.js version in `.nvmrc`, the CI npm pin, a complete dependency tree (`npm ls --all`), and the pre-push hook; prints each result with a remedy; exits non-zero when any check fails; changes nothing.
 - `make setup`: installs the `.nvmrc` Node.js through nvm when nvm is installed and runs the rest with it; installs the npm pin, the locked dependencies (`npm ci --ignore-scripts`), and the hook configuration when they are missing; then reports the same checks. It does not install git or nvm.
 - The README, `AGENTS.md`, and the worktree steps in `docs/releases.md` use `make setup` and `make doctor`.
 

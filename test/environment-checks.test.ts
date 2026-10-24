@@ -43,11 +43,16 @@ test('setup installs npm before the dependencies and reinstalls them with the ne
   assert.deepEqual(setupSteps(checkEnvironment({ ...healthy, dependenciesInstalled: false }, pins)), ['install-dependencies']);
 });
 
-test('setup has no step for git or Node.js, which are installed outside the clone', () => {
-  const results = checkEnvironment({ ...healthy, gitAvailable: false, nodeVersion: 'v20.0.0' }, pins);
+test('without git, setup reports it and does not try to enable the hook', () => {
+  const results = checkEnvironment({ ...healthy, gitAvailable: false, hooksPath: undefined }, pins);
   assert.deepEqual(setupSteps(results), []);
   assert.match(formatReport(results), /FAIL git: not found\n {5}Install git/);
   assert.match(formatReport(results), /2 of 5 checks failed\.$/);
+});
+
+test('without the pinned Node.js, setup changes nothing', () => {
+  const results = checkEnvironment({ ...healthy, nodeVersion: 'v20.0.0', npmVersion: '10.0.0', dependenciesInstalled: false, hooksPath: undefined }, pins);
+  assert.deepEqual(setupSteps(results), []);
 });
 
 test('setup steps use the pinned npm, the lockfile, and the repository hooks', () => {

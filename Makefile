@@ -7,7 +7,7 @@ SPECKIT_BASE := python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e0717
 SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
-.PHONY: verify toolchain hooks speckit-image speckit-capture speckit-lock
+.PHONY: verify toolchain hooks doctor setup speckit-image speckit-capture speckit-lock
 
 verify: toolchain
 	npm test

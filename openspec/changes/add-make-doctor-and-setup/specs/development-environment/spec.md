@@ -4,7 +4,7 @@ Let a contributor check and prepare a clone for building and verifying Taskelith
 ## ADDED Requirements
 
 ### Requirement: Environment check
-`make doctor` SHALL check that git is available, that Node.js matches `.nvmrc`, that npm matches the CI pin, that the dependencies are installed as locked in `package-lock.json`, and that the pre-push hook is enabled; it SHALL print each result with a remedy for each failure, exit non-zero when any check fails, and change nothing.
+`make doctor` SHALL check that git is available, that Node.js matches `.nvmrc`, that npm matches the CI pin, that the dependency tree is complete as `npm ls --all` reports it, and that the pre-push hook is enabled; it SHALL print each result with a remedy for each failure, exit non-zero when any check fails, and change nothing.
 
 #### Scenario: Dependencies missing
 - **WHEN** a clone has no `node_modules`, or lacks a locked package or workspace link
@@ -36,3 +36,7 @@ Let a contributor check and prepare a clone for building and verifying Taskelith
 #### Scenario: System tool missing
 - **WHEN** git or nvm is missing
 - **THEN** setup does not install it, and the report names what to install
+
+#### Scenario: Pinned Node.js unavailable
+- **WHEN** the pinned Node.js cannot be used, for example because nvm is missing
+- **THEN** setup installs nothing into the other Node.js and reports the Node.js check as failed

@@ -82,7 +82,7 @@ export function checkEnvironment(facts: EnvironmentFacts, pins: Pins): CheckResu
     },
     {
       id: 'dependencies',
-      label: 'Dependencies installed from package-lock.json',
+      label: 'Dependency tree complete (npm ls --all)',
       ok: facts.dependenciesInstalled,
       detail: facts.dependenciesInstalled ? 'complete' : 'missing or out of date',
       remedy: 'Run make setup.'
@@ -99,13 +99,16 @@ export function checkEnvironment(facts: EnvironmentFacts, pins: Pins): CheckResu
 
 // Git and Node.js are installed outside the repository (Node.js through nvm in
 // the setup wrapper), so setup only adds what it can install from this clone.
+// Without the pinned Node.js it changes nothing, so that it never installs npm
+// or dependencies into another Node.js; without git it cannot enable the hook.
 // The order matters: dependencies are installed with the pinned npm.
 export function setupSteps(results: readonly CheckResult[]): SetupStep[] {
   const failing = new Set(results.filter((result) => !result.ok).map((result) => result.id));
+  if (failing.has('node')) return [];
   const steps: SetupStep[] = [];
   if (failing.has('npm')) steps.push('install-npm');
   if (failing.has('npm') || failing.has('dependencies')) steps.push('install-dependencies');
-  if (failing.has('hooks')) steps.push('enable-hooks');
+  if (failing.has('hooks') && !failing.has('git')) steps.push('enable-hooks');
   return steps;
 }
 

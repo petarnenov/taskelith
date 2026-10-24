@@ -10,9 +10,9 @@ Goals: one command to check and one to fix the local prerequisites of `make veri
 
 - **Pins come from the Makefile.** Both targets pass `NODE_PIN` and `NPM_PIN` to the scripts, so `.nvmrc` and the release workflow stay the only sources.
 - **Pure checks, thin runners.** `scripts/environment-checks.ts` turns collected facts into results and setup steps and is unit-tested with a fake command runner; `doctor.ts` and `setup.ts` only run commands and print.
-- **Dependencies are checked with `npm ls --all`.** It fails when `node_modules` is missing, when a locked package is missing, and when a workspace link is missing.
+- **Dependencies are checked with `npm ls --all`.** It fails when `node_modules` is missing, when a package is missing, and when a workspace link is missing. It checks the installed tree against the ranges in `package.json`, not against the exact lockfile versions, so a stale but compatible tree passes.
 - **Node.js through a small bash wrapper.** `scripts/with-pinned-node.sh` sources nvm when it is installed, runs `nvm install` (reads `.nvmrc`; a no-op when present), and runs the setup script with that Node.js. Without nvm it uses the Node.js on `PATH`, and the Node.js check reports the mismatch. The calling shell still needs `nvm use`, which setup says when the versions differ.
-- **Order of steps.** The npm pin is installed first and the dependencies are then installed with it; an npm change always reinstalls the dependencies.
+- **Order of steps.** The npm pin is installed first and the dependencies are then installed with it; an npm change always reinstalls the dependencies. Without the pinned Node.js, setup runs no step, so it never changes another Node.js's npm; without git, it does not try to enable the hook.
 - **doctor guards old Node.js.** A Node.js that cannot run the scripts (older than 22.6) gets a one-line message from the Makefile instead of a syntax error.
 
 ## Risks / Trade-offs

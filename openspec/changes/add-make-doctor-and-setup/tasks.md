@@ -9,5 +9,5 @@
 
 ## 3. Verification and review
 
-- [ ] 3.1 Run `make verify` and exercise both targets in a fresh worktree.
+- [x] 3.1 Run `make verify` and exercise both targets in a fresh worktree.
 - [ ] 3.2 Obtain independent review by rotation and record the results.

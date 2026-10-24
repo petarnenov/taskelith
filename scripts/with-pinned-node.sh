@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs a repository TypeScript script with the Node.js version in .nvmrc.
+# Runs the make setup script with the Node.js version in .nvmrc.
 # When nvm is installed, the pinned version is installed if missing and used
 # for this run only; the calling shell keeps its own Node.js until `nvm use`.
 set -eu
@@ -7,7 +7,7 @@ set -eu
 INVOKING_NODE="$(node -v 2>/dev/null || true)"
 export INVOKING_NODE
 
-nvm_script="${NVM_DIR:-$HOME/.nvm}/nvm.sh"
+nvm_script="${NVM_DIR:-${HOME:-}/.nvm}/nvm.sh"
 if [ -s "$nvm_script" ]; then
   set +eu
   . "$nvm_script" --no-use
