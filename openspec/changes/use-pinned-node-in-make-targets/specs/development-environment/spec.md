@@ -13,7 +13,7 @@
 
 #### Scenario: Node.js too old for the scripts
 - **WHEN** the selected Node.js cannot run the repository's TypeScript scripts, or no Node.js is found
-- **THEN** `make doctor` prints that and names installing nvm and running `make setup`, or installing the pinned Node.js manually
+- **THEN** `make doctor` prints that and names `make setup` with nvm and a manual install of the pinned Node.js without it
 
 #### Scenario: Shell on another Node.js after setup
 - **WHEN** the shell uses a Node.js other than `.nvmrc` and nvm has the pinned version installed

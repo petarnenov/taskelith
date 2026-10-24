@@ -21,14 +21,14 @@ verify-checks: toolchain
 	npm run verify:package
 
 toolchain:
-	@node_version="$$(node -v)"; \
+	@node_version="$$(node -v 2>/dev/null || echo 'none')"; \
 	if [ "$$node_version" != "v$(NODE_PIN)" ]; then \
-		echo "make verify: Node $$node_version does not match .nvmrc (v$(NODE_PIN)). Install nvm and run make setup, or install Node.js $(NODE_PIN) yourself." >&2; \
+		echo "make verify: Node $$node_version does not match .nvmrc (v$(NODE_PIN)). With nvm, run make setup to install Node.js $(NODE_PIN); without nvm, install Node.js $(NODE_PIN) yourself." >&2; \
 		exit 1; \
 	fi
 	@npm_version="$$(npm -v)"; \
 	if [ "$$npm_version" != "$(NPM_PIN)" ]; then \
-		echo "make verify: npm $$npm_version does not match the CI pin ($(NPM_PIN)). Run 'npm install --global npm@$(NPM_PIN) --ignore-scripts'." >&2; \
+		echo "make verify: npm $$npm_version does not match the CI pin ($(NPM_PIN)). Run make setup." >&2; \
 		exit 1; \
 	fi
 
@@ -60,8 +60,8 @@ speckit-lock:
 
 # Checks that this clone can build and verify, with the .nvmrc Node.js when nvm has it; changes nothing.
 doctor:
-	@NODE_PIN=$(NODE_PIN) NPM_PIN=$(NPM_PIN) bash scripts/with-pinned-node.sh use node --experimental-strip-types scripts/doctor.ts
+	@NODE_PIN=$(NODE_PIN) NPM_PIN=$(NPM_PIN) bash scripts/with-pinned-node.sh use bash scripts/run-node-script.sh scripts/doctor.ts
 
 # Installs what is missing: the .nvmrc Node.js (through nvm, if installed, as its default), the npm pin, the locked dependencies, and the pre-push hook.
 setup:
-	@NODE_PIN=$(NODE_PIN) NPM_PIN=$(NPM_PIN) bash scripts/with-pinned-node.sh install node --experimental-strip-types scripts/setup.ts
+	@NODE_PIN=$(NODE_PIN) NPM_PIN=$(NPM_PIN) bash scripts/with-pinned-node.sh install bash scripts/run-node-script.sh scripts/setup.ts
