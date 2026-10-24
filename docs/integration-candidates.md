@@ -67,7 +67,7 @@ Consequences for the plugins:
 
 ### Delivery sequence
 
-- **G3: Claude Code.** It is the first real harness and has every mandatory capability `verified`. The capability contract and conformance suite are written for the agent port, not for Claude Code (ADR 0003 consequences).
+- **G3: Claude Code.** It is the first real harness and has every mandatory capability `verified`; macOS x86_64 runs of the pinned SDK 0.3.308 (CLI 2.1.308, the CLI `stable` tag) confirmed them ([qualification record](qualification/claude-code.md)); the table above shows the latest releases observed earlier the same day. The capability contract and conformance suite are written for the agent port, not for Claude Code (ADR 0003 consequences).
 - **G4: Codex.** It must be a different harness from G3. It differs in vendor, process model, and protocol: a JSON-RPC app-server rather than a CLI-spawning SDK with NDJSON. That makes it a real test that the port is not an abstraction around one SDK. Codex conformance runs before the port is frozen. Risk: the vendor calls app-server experimental and unsupported for production, so the G4 plugin pins an exact version and qualification re-runs on each upgrade.
 - **After G4: `agy`, then OpenCode,** as additional plugins that add no kernel change.
 
