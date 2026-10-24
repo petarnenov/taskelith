@@ -24,6 +24,11 @@ git push -u origin <change>
 
 `--no-track` keeps `origin/dev` from becoming the branch's upstream, so `git push -u` sets the branch's own upstream. `node_modules` is per worktree, so each one needs `npm ci`. The `core.hooksPath` setting from `make hooks` is shared repository configuration, so the `pre-push` gate applies in every worktree. After the pull request is merged, from the main clone: `git switch dev && git pull --ff-only` to confirm the merge landed, then `git worktree remove ../taskelith-worktrees/<change>` and `git branch -D <change>`. `-D` is needed because a rebase merge rewrites the branch's commits, so git does not see the local branch as merged.
 
+Two pitfalls, both observed on 2026-10-24:
+
+- `gh pr merge --delete-branch` run from a worktree merges the pull request but leaves the remote branch in place: before deleting the local branch, `gh` switches the worktree to `dev`, which fails because the main clone has `dev` checked out, and `gh` stops before it deletes the remote branch. After confirming that the pull request is merged, delete the remote branch from the main clone with `git push origin --delete <change>`.
+- The `pre-push` hook runs `make verify` for every push, including a branch deletion such as `git push origin --delete <change>`. Run `nvm use` first; with a mismatched Node version the toolchain check fails and the deletion is refused.
+
 ## Branch protection
 
 Applied by the owner's authorization on 2026-10-24:
