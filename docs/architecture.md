@@ -1,10 +1,10 @@
 # Taskelith: greenfield software factory architecture and delivery plan
 
-Date: 2026-10-24  
+Date: 2026-10-24
 Status: Standalone planning baseline, revised after greenfield review R2; implementation and performance claims remain unverified.
 Review R2: Single-author design review on 2026-10-24. Eight additional findings are addressed at design level; no independent council or runtime tests are claimed.
-Subsequent owner constraint: Use established open-source dependencies only. The technology policy below postdates R2; its archived hash describes the earlier revision, not this update.  
-Project: Taskelith, a new independent repository and deployment. No existing product checkout, data, credentials, infrastructure, or governance is required.  
+Subsequent owner constraint: Use established open-source dependencies only. The technology policy below postdates R2; its archived hash describes the earlier revision, not this update.
+Project: Taskelith, a new independent repository and deployment. No existing product checkout, data, credentials, infrastructure, or governance is required.
 Scope: Build a self-hosted agent orchestration platform from an empty repository. This document supersedes the migration proposal for the new project's scope; the earlier document is historical context only.
 
 ## Project identity and owner communication rules
