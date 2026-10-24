@@ -2307,6 +2307,21 @@
       "externalReferences": []
     },
     {
+      "bom-ref": "@taskelith/plugin-sdk@0.0.0",
+      "type": "library",
+      "name": "@taskelith/plugin-sdk",
+      "version": "0.0.0",
+      "scope": "required",
+      "purl": "pkg:npm/%40taskelith/plugin-sdk@0.0.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:private",
+          "value": "true"
+        }
+      ],
+      "externalReferences": []
+    },
+    {
       "bom-ref": "@taskelith/sdlc@0.0.0",
       "type": "library",
       "name": "@taskelith/sdlc",
@@ -2547,6 +2562,34 @@
         {
           "alg": "SHA-512",
           "content": "d66e3fc9d6ce1816c74ed0586b8fc849072a7cf75903140bce3ef5c0cef54fc94fe24b5ecfc95cb15a25bec72bba3416e0226bfcb252ce867a99c7e7ab3610dc"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "ajv@8.20.0",
+      "type": "library",
+      "name": "ajv",
+      "version": "8.20.0",
+      "scope": "required",
+      "purl": "pkg:npm/ajv@8.20.0",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/ajv/-/ajv-8.20.0.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "4e16e58be3a53a3fa230f60505505f2773a60809da4b2367e0cd6fcfd4fa1a46b926df5b6bf1c8479ea3a32eb9b58ea4c7f142179557341f35f58eff194ac118"
         }
       ],
       "licenses": [
@@ -5006,6 +5049,34 @@
       ]
     },
     {
+      "bom-ref": "fast-deep-equal@3.1.3",
+      "type": "library",
+      "name": "fast-deep-equal",
+      "version": "3.1.3",
+      "scope": "required",
+      "purl": "pkg:npm/fast-deep-equal@3.1.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/fast-deep-equal/-/fast-deep-equal-3.1.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "7f7a90f68432f63d808417bf1fd542f75c0b98a042094fe00ce9ca340606e61b303bb04b2a3d3d1dce4760dcfd70623efb19690c22200da8ad56cd3701347ce1"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
       "bom-ref": "fast-string-truncated-width@3.0.3",
       "type": "library",
       "name": "fast-string-truncated-width",
@@ -5067,6 +5138,34 @@
         {
           "license": {
             "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "fast-uri@3.1.9",
+      "type": "library",
+      "name": "fast-uri",
+      "version": "3.1.9",
+      "scope": "required",
+      "purl": "pkg:npm/fast-uri@3.1.9",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/fast-uri/-/fast-uri-3.1.9.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "852ff45addd86b4e37a0a5ecd2c231acca4a4084d784c2c8ad500a2978b8828cc60bdbfb6115959d7219ce334f4ced3633d05dc4b096a8ad7245780dce257225"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
           }
         }
       ]
@@ -7188,6 +7287,34 @@
         }
       ],
       "externalReferences": [],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "json-schema-traverse@1.0.0",
+      "type": "library",
+      "name": "json-schema-traverse",
+      "version": "1.0.0",
+      "scope": "required",
+      "purl": "pkg:npm/json-schema-traverse@1.0.0",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/json-schema-traverse/-/json-schema-traverse-1.0.0.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "34cf3f3fd9f75e35e12199f594b86415a0024ce5114178d6855e0103f4673aff31be0aadaa9017f483b89914314b1d51968e2dab37aa6f4b0e96bb9a3b2dddba"
+        }
+      ],
       "licenses": [
         {
           "license": {
@@ -11100,6 +11227,34 @@
       ]
     },
     {
+      "bom-ref": "require-from-string@2.0.2",
+      "type": "library",
+      "name": "require-from-string",
+      "version": "2.0.2",
+      "scope": "required",
+      "purl": "pkg:npm/require-from-string@2.0.2",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/require-from-string/-/require-from-string-2.0.2.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "5dfd2759ee91b1ece214cbbe029f5b8a251b9a996ae92f7fa7eef0ed85cffc904786b5030d48706bebc0372b9bbaa7d9593bde53ffc36151ac0c6ed128bfef13"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
       "bom-ref": "resolve-from@4.0.0",
       "type": "library",
       "name": "resolve-from",
@@ -14820,6 +14975,13 @@
       "dependsOn": []
     },
     {
+      "ref": "@taskelith/plugin-sdk@0.0.0",
+      "dependsOn": [
+        "@taskelith/kernel@0.0.0",
+        "ajv@8.20.0"
+      ]
+    },
+    {
       "ref": "@taskelith/sdlc@0.0.0",
       "dependsOn": [
         "@taskelith/kernel@0.0.0"
@@ -14863,6 +15025,15 @@
       "dependsOn": [
         "clean-stack@5.3.0",
         "indent-string@5.0.0"
+      ]
+    },
+    {
+      "ref": "ajv@8.20.0",
+      "dependsOn": [
+        "fast-deep-equal@3.1.3",
+        "fast-uri@3.1.9",
+        "json-schema-traverse@1.0.0",
+        "require-from-string@2.0.2"
       ]
     },
     {
@@ -15305,6 +15476,10 @@
       "dependsOn": []
     },
     {
+      "ref": "fast-deep-equal@3.1.3",
+      "dependsOn": []
+    },
+    {
       "ref": "fast-string-truncated-width@3.0.3",
       "dependsOn": []
     },
@@ -15313,6 +15488,10 @@
       "dependsOn": [
         "fast-string-truncated-width@3.0.3"
       ]
+    },
+    {
+      "ref": "fast-uri@3.1.9",
+      "dependsOn": []
     },
     {
       "ref": "fast-wrap-ansi@0.2.2",
@@ -15672,6 +15851,10 @@
     },
     {
       "ref": "json-parse-even-better-errors@5.0.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "json-schema-traverse@1.0.0",
       "dependsOn": []
     },
     {
@@ -16551,6 +16734,10 @@
       "dependsOn": []
     },
     {
+      "ref": "require-from-string@2.0.2",
+      "dependsOn": []
+    },
+    {
       "ref": "resolve-from@4.0.0",
       "dependsOn": []
     },
@@ -16847,6 +17034,7 @@
         "@semantic-release/npm@13.2.0",
         "@semantic-release/release-notes-generator@14.1.1",
         "@taskelith/kernel@0.0.0",
+        "@taskelith/plugin-sdk@0.0.0",
         "@taskelith/sdlc@0.0.0",
         "@types/node@24.19.2",
         "conventional-changelog-conventionalcommits@9.3.1",
