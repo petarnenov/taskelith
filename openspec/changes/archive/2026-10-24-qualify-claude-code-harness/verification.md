@@ -76,3 +76,7 @@ Assigned reviewer: Claude Code with `--model claude-fable-5-1 --effort medium --
 ## Remaining gates
 
 Integration (commit, push, merge) and archival with owner authorization. Before admission: Linux x64 and arm64 in the worker container image, macOS arm64, the owner decision on device-level versus per-workspace credentials, the interrupted-turn re-run, repeated runs, and independent adoption evidence.
+
+## Integration and archival
+
+The owner authorized integration and archival on 2026-10-24. Integrated into `main` at `ff01226` through pull request #6 (rebase merge). The `main` workflow run 40097199008 passed verification; semantic-release found no relevant changes, so no version was released. Archived with the pinned OpenSpec CLI afterwards.
