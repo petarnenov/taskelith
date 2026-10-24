@@ -47,6 +47,7 @@ test('without git, setup reports it and does not try to enable the hook', () => 
   const results = checkEnvironment({ ...healthy, gitAvailable: false, hooksPath: undefined }, pins);
   assert.deepEqual(setupSteps(results), []);
   assert.match(formatReport(results), /FAIL git: not found\n {5}Install git/);
+  assert.match(formatReport(results), /FAIL pre-push hook enabled: not configured\n {5}Install git, then run make setup\./);
   assert.match(formatReport(results), /2 of 5 checks failed\.$/);
 });
 

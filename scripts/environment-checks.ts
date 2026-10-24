@@ -92,7 +92,7 @@ export function checkEnvironment(facts: EnvironmentFacts, pins: Pins): CheckResu
       label: 'pre-push hook enabled',
       ok: facts.hooksPath === HOOKS_PATH,
       detail: facts.hooksPath ?? 'not configured',
-      remedy: 'Run make setup.'
+      remedy: facts.gitAvailable ? 'Run make setup.' : 'Install git, then run make setup.'
     }
   ];
 }

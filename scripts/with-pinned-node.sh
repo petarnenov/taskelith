@@ -25,4 +25,9 @@ if ! command -v node >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 6) ? 0 : 1)'; then
+  echo "make setup: Node.js $(node -v) cannot run the repository scripts. Install nvm, or Node.js ${NODE_PIN:-from .nvmrc}, then run make setup again." >&2
+  exit 1
+fi
+
 exec node --experimental-strip-types "$@"

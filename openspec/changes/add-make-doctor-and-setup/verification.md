@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-The owner's request on 2026-10-24, paraphrased: add `make doctor`, which checks and verifies the dependencies the project needs to start, and `make setup`, which adds the missing ones. Base revision: `2890be6` on `dev`. Prepared in a git worktree. Scope: `Makefile`, `scripts/environment-checks.ts`, `scripts/doctor.ts`, `scripts/setup.ts`, `scripts/with-pinned-node.sh`, `test/environment-checks.test.ts`, `README.md`, `AGENTS.md`, `docs/releases.md`, and this change.
+The owner's request on 2026-10-24, paraphrased: add `make doctor`, which checks and verifies the dependencies the project needs to start, and `make setup`, which adds the missing ones. Base revision: `f6a6053` on `dev`. Prepared in a git worktree. Scope: `Makefile`, `scripts/environment-checks.ts`, `scripts/doctor.ts`, `scripts/setup.ts`, `scripts/with-pinned-node.sh`, `test/environment-checks.test.ts`, `README.md`, `AGENTS.md`, `docs/releases.md`, and this change.
 
 ## Author self-check before review
 
@@ -33,3 +33,13 @@ Assigned reviewer (rotation): Claude Code with model `claude-fable-5-1` (confirm
   4. Low: the wrapper failed under `set -u` without `HOME`, and its header described it as a general runner. It now falls back to an empty `HOME` and is described as the setup wrapper.
   5. Low: the dependency label and requirement promised lockfile-exact versions, but `npm ls --all` checks against the `package.json` ranges. The label, requirement, proposal, and design now say "dependency tree complete (`npm ls --all`)".
   6. Low: task 3.1 was unchecked, and `AGENTS.md` said "once per clone" while each worktree needs setup. Checked, and `AGENTS.md` now says once per worktree.
+- **Pass 2 — session `aa0483f1-b2f3-40d7-b7e7-90b0d1eea1af`, on `84d27fb`.** All six pass-1 resolutions confirmed. Findings: 0 Critical, 0 High, 0 Medium, 3 Low. Low-only pass, so all three were fixed without another review (recorded as unreviewed fixes):
+  1. Low: `make setup` without nvm and with Node.js older than 22.6 ended with `node: bad option: --experimental-strip-types`. The wrapper now checks the version and prints a message naming nvm and the pinned Node.js.
+  2. Low: without git, the hook check still advised "Run make setup." Its remedy is now "Install git, then run make setup.", and the test asserts it.
+  3. Low: the base revision was recorded as `2890be6`; the actual parent is `f6a6053`. Corrected. Both review prompts named the range from `2890be6`, which also contained the SpecKit capture merges (PRs #61 and #62); the reviewer identified the actual base and reviewed this change's commits.
+
+After the pass-2 fixes: `make verify` passed (144 tests, 0 failed, 27 strict validations), and `make setup` and `make doctor` both reported all checks passed.
+
+## Remaining gates
+
+Integration into `dev` and archiving, done by the integrating session.
