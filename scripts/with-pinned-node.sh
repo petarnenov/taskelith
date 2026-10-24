@@ -27,16 +27,26 @@ nvm_script="${NVM_DIR:-${HOME:-}/.nvm}/nvm.sh"
 install_pinned_node() {
   set +eu
   . "$nvm_script" --no-use
-  { nvm use --silent "$NODE_PIN" >/dev/null 2>&1 || nvm install "$NODE_PIN"; } && nvm alias default "$NODE_PIN"
-  nvm_status=$?
+  { nvm use --silent "$NODE_PIN" >/dev/null 2>&1 || nvm install "$NODE_PIN"; }
+  install_status=$?
+  if [ "$install_status" -eq 0 ]; then nvm alias default "$NODE_PIN"; fi
+  # nvm alias can exit 0 after a failed write, so the alias is read back.
+  default_version="$(nvm version default 2>/dev/null)"
   set -eu
-  if [ "$nvm_status" -ne 0 ]; then
-    echo "make setup: 'nvm install' or 'nvm alias default' failed for the version in .nvmrc." >&2
+  if [ "$install_status" -ne 0 ]; then
+    echo "make setup: 'nvm install' failed for the version in .nvmrc." >&2
+    exit 1
+  fi
+  if [ "$default_version" != "v$NODE_PIN" ]; then
+    echo "make setup: 'nvm alias default $NODE_PIN' did not take effect (default: ${default_version:-none})." >&2
     exit 1
   fi
 }
 
+# With NVM_SYMLINK_CURRENT set, nvm use replaces $NVM_DIR/current, which
+# make doctor must not change.
 use_pinned_node() {
+  unset NVM_SYMLINK_CURRENT
   set +eu
   . "$nvm_script" --no-use
   nvm use --silent "$NODE_PIN" >/dev/null 2>&1

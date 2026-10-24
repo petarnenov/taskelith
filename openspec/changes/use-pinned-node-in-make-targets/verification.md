@@ -31,7 +31,8 @@ macOS, Node.js v24.22.1 and v24.21.0 (and v20.1.0 for an old Node.js) installed 
 
 - `bash scripts/with-pinned-node.sh use` and `... bogus true` print the usage line and exit 2.
 - Not exercised: `make setup` with nvm but without the pinned version, which downloads Node.js; the `nvm install` branch is unchanged apart from running only when `nvm use` fails.
-- `make verify` passed before the first pass (215 tests, 0 failed) and after the pass-1 fixes with the same results.
+- Pass-2 reproductions with `$S/nvm-setup`: `make doctor` with `NVM_SYMLINK_CURRENT=true` passed under v24.22.1 and created no `$NVM_DIR/current`; `make setup` with a read-only `alias` directory whose `default` was `24.21.0` printed nvm's `default -> 24.22.1` line but then failed with "make setup: 'nvm alias default 24.22.1' did not take effect (default: v24.21.0)." and exit 2; with a writable `alias` directory it set `default` to `24.22.1`. The table above was repeated after the pass-2 fixes with the same results.
+- `make verify` passed before the first pass (215 tests, 0 failed), after the pass-1 fixes, and after the pass-2 fixes, each time with the same results.
 
 ## Independent review
 
@@ -46,6 +47,12 @@ Assigned reviewer: Antigravity CLI, chosen by the worker by rotation (the latest
   6. Low: the `integration-flow` requirement and `docs/releases.md` omitted the contract compatibility check from `make verify`. Both now name it.
   7. Low: the `toolchain` npm remedy named a global npm install, which would go to the shell's Node.js. It now names `make setup`.
 
+- **Pass 2 attempt — Antigravity conversation `e45aefa4-cc62-4a2b-9cf6-0103fbcfc8d4`, on `91f83f4`.** The run stopped after its first step with `RESOURCE_EXHAUSTED (code 429): Individual quota reached`, reset in about 157 hours, and produced no review. Snapshots before and after were equal. The owner granted a review exception on 2026-10-24: Codex CLI takes over the remaining passes of this task.
+- **Pass 2 — Codex CLI session `01a16faa-180c-7352-ba1b-5c311fbfef48`, on `91f83f4`.** Invoked as `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`; the output header reported model `gpt-6.1-sol`, reasoning effort `medium`, and sandbox `read-only`. SHA-256 snapshots before and after were equal. The reviewer confirmed the resolution of all seven pass-1 findings. New findings: 0 Critical, 0 High, 2 Medium, 1 Low, all fixed, for the next pass to check:
+  1. Medium: with `NVM_SYMLINK_CURRENT=true` inherited, `nvm use` replaces `$NVM_DIR/current`, so `make doctor` changed user state. `use` mode now unsets the variable before loading nvm.
+  2. Medium: `nvm alias` can exit 0 after a failed write (nvm v0.40.1), so a failed default alias passed as success. `install` mode now reads the alias back with `nvm version default` and fails when it is not the pin.
+  3. Low: the remedy in `scripts/run-node-script.sh` linked the unversioned nvm repository page. The link is removed.
+
 ## Remaining gates
 
-Review pass 2, handoff to the coordinator, integration into `dev`, and archiving.
+Review pass 3, handoff to the coordinator, integration into `dev`, and archiving.

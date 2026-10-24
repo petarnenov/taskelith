@@ -5,7 +5,7 @@
 set -eu
 : "${NODE_PIN:?NODE_PIN must be set; run this through make.}"
 
-remedy="With nvm (https://github.com/nvm-sh/nvm), run make setup to install Node.js $NODE_PIN; without nvm, install Node.js $NODE_PIN yourself."
+remedy="With nvm, run make setup to install Node.js $NODE_PIN; without nvm, install Node.js $NODE_PIN yourself."
 
 if ! command -v node >/dev/null 2>&1; then
   echo "Node.js not found. $remedy" >&2
