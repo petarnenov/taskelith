@@ -19,10 +19,8 @@ const REPOSITORY = fileURLToPath(new URL('../../../../', import.meta.url));
 const CAPTURE = join(REPOSITORY, `docs/qualification/speckit-${SPECKIT_VERSION}/scaffold`);
 const DERIVED_LABEL = /^<!-- Derived fixture: written by hand from the pinned SpecKit 1\.2\.3 template \.specify\/templates\/(spec|plan|tasks)-template\.md, with content from the archived OpenSpec change ([a-z-]+)\. No harness has run SpecKit's agent steps\. -->$/m;
 
-// Until G1 item 12 adds the test-only normaliser, a framework that answers each
-// request with the expected outcome of its case lets the conformance suite
-// check the expected outputs themselves: their shapes, domain parsing, and
-// capabilities.
+// Until G1 item 12 adds the normaliser, replaying each case's expected
+// outcome lets the conformance suite check the expected outputs themselves.
 function replayFramework(capabilities: SdlcFrameworkCapabilities, cases: readonly SdlcConformanceCase[]): SdlcFramework {
   const answer = async (operation: SdlcOperation, request: unknown): Promise<Result<any>> => {
     const match = cases.find((testCase) => testCase.operation === operation && isDeepStrictEqual(testCase.request, request));

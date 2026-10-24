@@ -10,8 +10,7 @@ import type {
 } from '@taskelith/sdlc';
 
 // Expected normalized outputs of an OpenSpec 1.14.3 plugin for the fixture
-// working copy, which holds three changes of this repository's archive. The
-// normalization rules are in ../fixtures/README.md.
+// working copy; provenance and rules are in ../fixtures/README.md.
 
 export const FIXTURES = fileURLToPath(new URL('../fixtures/', import.meta.url));
 export const WORKING_COPY = `${FIXTURES}working-copy`;
@@ -127,9 +126,8 @@ export function revisionsOf(fixture: OpenSpecMappingFixture, changeDirectory = `
   }));
 }
 
-// The instruction text of a stage is the `instruction` field that the pinned
-// CLI returns for its artifact, or for `apply` with every task done, kept
-// verbatim in fixtures/expected/.
+// The pinned CLI's `instruction` field for the stage (for `apply`, with every
+// task done), kept verbatim in fixtures/expected/.
 export function expectedInstructionText(stageId: string): string {
   return readFileSync(`${FIXTURES}expected/instructions/${stageId}.md`, 'utf8');
 }

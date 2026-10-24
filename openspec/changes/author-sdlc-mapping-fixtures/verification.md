@@ -41,6 +41,20 @@ Assigned reviewer (rotation): Antigravity CLI, `agy -p <prompt> --model gemini-4
   5. Low: task 2.1 was unchecked although `make verify` had run. Checked.
 - **Pass 2** (conversation `787d1624-76a5-4613-b95a-daf15abd3f7c`, snapshot `009866b0b716a480bd703ab7299327c53418320294b0348841d172c299f2da21`). All five pass-1 findings confirmed resolved; the whole change reviewed again. Findings: 0 Critical, 0 High, 0 Medium, 0 Low.
 
+## Conflict resolution
+
+The coordinating session returned the task under agent task protocol worker step 9: after item 13 (`define-sdlc-wire-contracts`) landed, merging `origin/dev` (`bbe0809`) conflicted in `package-lock.json`, `docs/dependencies/licenses.json`, and `docs/dependencies/sbom.cdx.json`.
+
+- Resolution (merge commit `d0a6808`): `dev`'s version of all three generated files, then `npm install --ignore-scripts`, which adds only the two workspace links, and `npm run inventory:dependencies` ("Generated 681 package paths; 19 with license coverage gaps (all reviewed; 4 declaration-only)"). Compared with `origin/dev`, the resolved files differ only by the two private workspace packages: their lockfile entries, the `package-lock.json` digest in `licenses.json`, and two SBOM components with their dependency entries. No file was edited by hand.
+- The inventory counts in `docs/dependencies.md` and `docs/dependency-inventory.md` are dated statements about earlier changes (487 and 492 paths); item 13 left them unchanged, and the two workspace links do not change the 681 installation paths, so no text changes.
+- In a separate commit, the code comments this change adds were shortened to at most two lines of at most 80 characters, following the comment rule pending on `dev` in `limit-comment-length`.
+- `make verify` passed with Docker running, on the working tree after the conflicts were resolved and the comments shortened, before either was committed: 228 tests passed, 0 failed; coverage 100% lines, 99.86% branches, 100% functions; boundary and coverage scope checks passed; contract compatibility: no undeclared breaking change; dependency inventory verified (681 package paths); strict OpenSpec validation 32 passed; package verification passed.
+
+- **Pass 3** (conversation `d55fad24-3365-4355-9893-501ca5f47fbe`, snapshot `30a3f77ee7ea97a199ce2a463418bed6fb97897614b5660671a19dc3fdce4d0b`), reviewing the merge commit `d0a6808`, the shortened comments, and this section, with the same invocation and the log confirming `gemini-4-argon-medium`. It confirmed that the resolved files differ from `origin/dev` only by the two workspace packages, that `verify:dependencies` passes with 681 paths, that the dated counts in the dependency documents stay correct, and that the comments keep their meaning within the rule. Findings: 0 Critical, 0 High, 0 Medium, 2 Low. Both accepted and fixed without another pass, as the review process allows for a Low-only pass, so these fixes are unreviewed:
+  1. Low: `tasks.md` was committed empty in `c3be131`, because the script that checked task 2.2 truncated the file before reading it. Restored with every task checked, plus task 2.3 for the conflict resolution.
+  2. Low: the record said `make verify` ran "before the merge commit" on a tree with the shortened comments, which the history does not show. It now says the run was on the working tree before either change was committed.
+- After the pass-3 fixes: `make verify` passed: 228 tests passed, 0 failed; coverage 100% lines, 99.86% branches, 100% functions; boundary and coverage scope checks passed; no undeclared contract breaking change; dependency inventory verified (681 package paths); strict OpenSpec validation 32 passed; package verification passed.
+
 ## Limitations
 
 - The SpecKit features are derived, not agent output.
@@ -49,4 +63,5 @@ Assigned reviewer (rotation): Antigravity CLI, `agy -p <prompt> --model gemini-4
 
 ## Remaining gates
 
+- The pass-3 fixes are unreviewed (Low-only pass).
 - Integration into `dev` by the coordinating session, then archiving the change.

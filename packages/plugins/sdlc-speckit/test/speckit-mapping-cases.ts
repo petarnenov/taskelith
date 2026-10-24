@@ -9,17 +9,15 @@ import type {
   WorkItemInput,
 } from '@taskelith/sdlc';
 
-// Expected normalized outputs of a SpecKit 1.2.3 plugin for the fixture working
-// copy: the pinned scaffold capture and three features derived from the pinned
-// templates. The normalization rules are in ../fixtures/README.md.
+// Expected normalized outputs of a SpecKit 1.2.3 plugin for the fixture
+// working copy; provenance and rules are in ../fixtures/README.md.
 
 export const FIXTURES = fileURLToPath(new URL('../fixtures/', import.meta.url));
 export const WORKING_COPY = `${FIXTURES}working-copy`;
 export const SPECKIT_VERSION = '1.2.3';
 
-// SpecKit has no structural validator and no closure operation, and its
-// bundled gates cannot be decided headlessly, so the platform supplies review,
-// verification, and closure.
+// No structural validator, no closure, and gates not decidable headlessly:
+// the platform supplies review, verification, and closure.
 export const CAPABILITIES: SdlcFrameworkCapabilities = {
   optionalOperations: [],
   nativeObligations: ['intake', 'specification', 'implementation'],
@@ -128,7 +126,7 @@ export function revisionsOf(fixture: SpecKitMappingFixture): ArtifactRevisionInp
   }));
 }
 
-// The instruction text of a native stage is its agent command prompt, verbatim
+// A native stage's instruction text is its agent command prompt, verbatim
 // as the pinned scaffold installs it.
 export function expectedInstructionText(stageId: string): string {
   return readFileSync(`${WORKING_COPY}/.agent/commands/${STAGE_COMMANDS[stageId]}`, 'utf8');
