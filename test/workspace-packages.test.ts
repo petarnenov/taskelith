@@ -24,6 +24,14 @@ test('lists existing workspace packages from directory and single-level patterns
   }
 });
 
+test('the repository builds, tests, and measures the control plane and worker apps', () => {
+  const packages = workspacePackageDirs(process.cwd());
+  for (const app of ['apps/control-plane', 'apps/worker']) {
+    assert(packages.includes(app), app);
+    assert.deepEqual(workspacePackageProblems(process.cwd(), app), [], app);
+  }
+});
+
 test('an empty or absent workspace list has no packages', () => {
   const root = mkdtempSync(join(tmpdir(), 'taskelith-workspaces-'));
   try {
