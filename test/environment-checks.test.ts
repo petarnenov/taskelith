@@ -23,7 +23,7 @@ test('a complete environment passes every check and needs no setup step', () => 
   const results = checkEnvironment(healthy, pins);
   assert.deepEqual(results.map((result) => result.id), ['git', 'node', 'npm', 'dependencies', 'hooks']);
   assert.ok(results.every((result) => result.ok));
-  assert.deepEqual(setupSteps(results), []);
+  assert.deepEqual(setupSteps(healthy, pins), []);
   assert.match(formatReport(results), /All checks passed\.$/);
 });
 
@@ -58,22 +58,35 @@ test('setup tells a shell on another Node.js to run nvm use, and stays quiet oth
 });
 
 test('setup installs npm before the dependencies and reinstalls them with the new npm', () => {
-  const results = checkEnvironment({ ...healthy, npmVersion: '11.6.0', hooksPath: undefined }, pins);
-  assert.deepEqual(setupSteps(results), ['install-npm', 'install-dependencies', 'enable-hooks']);
-  assert.deepEqual(setupSteps(checkEnvironment({ ...healthy, dependenciesInstalled: false }, pins)), ['install-dependencies']);
+  assert.deepEqual(setupSteps({ ...healthy, npmVersion: '11.6.0', hooksPath: undefined }, pins), ['install-npm', 'install-dependencies', 'enable-hooks']);
+  assert.deepEqual(setupSteps({ ...healthy, dependenciesInstalled: false }, pins), ['install-dependencies']);
+});
+
+test('with the pinned Node.js active but no npm, the remedies name a Node.js reinstall and setup skips the npm steps', () => {
+  const facts: EnvironmentFacts = { ...healthy, npmVersion: undefined, dependenciesInstalled: false, hooksPath: undefined };
+  const report = formatReport(checkEnvironment(facts, pins));
+  assert.match(report, /FAIL npm 12\.2\.1 \(CI pin\): not found\n {5}Reinstall Node\.js 24\.22\.1, which includes npm: with nvm, run nvm deactivate, nvm uninstall 24\.22\.1, and make setup; without nvm, reinstall Node\.js 24\.22\.1 yourself\./);
+  assert.match(report, /FAIL Dependency tree complete \(npm ls --all\): missing or out of date\n {5}Fix the npm check first; dependencies are installed with npm\./);
+  assert.deepEqual(setupSteps(facts, pins), ['enable-hooks']);
+});
+
+test('without the pinned Node.js, a missing npm and dependencies keep their usual remedies', () => {
+  const report = formatReport(checkEnvironment({ ...healthy, nodeVersion: 'v24.21.0', npmVersion: undefined, dependenciesInstalled: false }, pins));
+  assert.match(report, /FAIL npm 12\.2\.1 \(CI pin\): not found\n {5}Fix the Node\.js check first;/);
+  assert.match(report, /FAIL Dependency tree complete \(npm ls --all\): missing or out of date\n {5}Run make setup\./);
 });
 
 test('without git, setup reports it and does not try to enable the hook', () => {
-  const results = checkEnvironment({ ...healthy, gitAvailable: false, hooksPath: undefined }, pins);
-  assert.deepEqual(setupSteps(results), []);
+  const facts: EnvironmentFacts = { ...healthy, gitAvailable: false, hooksPath: undefined };
+  const results = checkEnvironment(facts, pins);
+  assert.deepEqual(setupSteps(facts, pins), []);
   assert.match(formatReport(results), /FAIL git: not found\n {5}Install git/);
   assert.match(formatReport(results), /FAIL pre-push hook enabled: not configured\n {5}Install git, then run make setup\./);
   assert.match(formatReport(results), /2 of 5 checks failed\.$/);
 });
 
 test('without the pinned Node.js, setup changes nothing', () => {
-  const results = checkEnvironment({ ...healthy, nodeVersion: 'v20.0.0', npmVersion: '10.0.0', dependenciesInstalled: false, hooksPath: undefined }, pins);
-  assert.deepEqual(setupSteps(results), []);
+  assert.deepEqual(setupSteps({ ...healthy, nodeVersion: 'v20.0.0', npmVersion: '10.0.0', dependenciesInstalled: false, hooksPath: undefined }, pins), []);
 });
 
 test('setup steps use the pinned npm, the lockfile, and the repository hooks', () => {
