@@ -35,3 +35,7 @@ Remaining findings: 0.
 ## Remaining gates
 
 Merge into `dev`; promotion to `main`; qualification of GitHub.com.
+
+## Integration and archival
+
+The owner authorized integration on 2026-10-24. Integrated into `dev` at `600ad11` through pull request #20 (rebase merge); no workflow ran for the pull request or the push to `dev`. It reaches `main` with the next promotion. Archived with the pinned OpenSpec CLI afterwards.
