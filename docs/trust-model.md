@@ -1,6 +1,6 @@
 # G0 identity, enrollment, and trust boundary contract
 
-Status: selected G0 design contract for future G1–G3 implementation; runtime authentication, enrollment services, and worker daemons are not implemented yet.
+Status: selected G0 design contract for future G2–G3 implementation; runtime authentication, enrollment services, and worker daemons are not implemented yet.
 
 ## 1. Principals and identity hierarchy
 

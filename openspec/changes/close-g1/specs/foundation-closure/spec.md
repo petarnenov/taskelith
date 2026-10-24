@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: G1 closure
-G1 SHALL be recorded as closed only when its exit evidence is reproduced from a fresh clone, every G1 work item is merged and archived, and each open item is deferred to a named later gate with the decision it follows, in the closure ADR and the foundation ledger.
+G1 SHALL be recorded as closed only when its exit evidence is reproduced from a fresh clone, every G1 work item is merged and archived, and each open item is deferred to a named later gate with the decision it follows or, where none exists, marked as the author's assignment for the owner to confirm, in the closure ADR and the foundation ledger.
 
 #### Scenario: Fresh clone
 - **WHEN** G1 closure is recorded

@@ -6,7 +6,7 @@ G1 work plan item 14 closes G1. Items 1 to 13 are merged and archived, and the o
 
 - Add ADR 0010 recording the exit evidence, the deferrals with the decision each follows, and the G1 closure.
 - Reproduce the G1 exit evidence from a fresh clone and record it.
-- Update the foundation ledger, the G1 and G2 work plans, architecture sections 13 and 15, and README.
+- Update the foundation ledger, the G1 and G2 work plans, architecture sections 13 and 15, README, and the statements that still described G1 as future work (SDLC framework mapping, trust model, Claude Code qualification record).
 
 ## Capabilities
 
