@@ -189,7 +189,7 @@ function checkModuleImport({ rel, spec, target, relative: isRelative }: ImportEd
   if (/^(?:src|packages)\/(?:adapters|plugins)\//.test(target) || /^apps\//.test(target)) {
     violations.push(`${rel}: ${layer} layer in module "${moduleName}" cannot import adapter, plugin, or app "${spec}" (R03)`);
   }
-  if (layer === 'domain' && new RegExp(`^(?:src|packages)/modules/${moduleName}/(?:src/)?(?:application|ports)(?:\\.[cm]?[jt]sx?)?(?:/|$)`).test(target)) {
+  if (layer === 'domain' && new RegExp(`^(?:src|packages)/modules/${moduleName}/(?:src/)?(?:application|ports?)(?:\\.[cm]?[jt]sx?)?(?:/|$)`).test(target)) {
     violations.push(`${rel}: domain layer in module "${moduleName}" cannot import ${target} (R03)`);
   }
   const otherModule = target.match(/^(?:src|packages)\/modules\/([^/]+)\/(.+)$/);

@@ -118,13 +118,11 @@ export {
 export {
   OPTIONAL_SDLC_OPERATIONS,
   SDLC_FRAMEWORK_PORT_VERSION,
-  parseSdlcFrameworkCapabilities,
   type ArtifactRequirement,
   type ArtifactRevisionData,
   type FinalizationReport,
   type FrameworkContext,
   type OptionalSdlcOperation,
-  type ParsedSdlcFrameworkCapabilities,
   type ResolvedWorkflow,
   type SdlcFramework,
   type SdlcFrameworkCapabilities,
@@ -140,6 +138,7 @@ export {
   type WorkflowDefinitionData,
   type WorkflowRequest,
 } from './ports/sdlc-framework.js';
+export { parseSdlcFrameworkCapabilities, type ParsedSdlcFrameworkCapabilities } from './ports/sdlc-framework-capabilities.js';
 export {
   runSdlcFrameworkConformance,
   type ExpectedOutcome,

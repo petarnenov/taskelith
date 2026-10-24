@@ -219,6 +219,13 @@ test('the plugin SDK reads a module only type-only through its port entry', () =
     writeFileSync(join(root, 'packages/modules/sdlc/src/application.ts'), "import type { Port } from '@taskelith/sdlc/port';\nexport type P = Port;\n");
     assert.deepEqual(checkWorkspaceBoundaries(root), []);
 
+    mkdirSync(join(root, 'packages/modules/sdlc/src/domain'));
+    writeFileSync(join(root, 'packages/modules/sdlc/src/domain/rule.ts'), "import { VERSION } from '@taskelith/sdlc/port';\nimport { p } from '../port.ts';\n");
+    const domainViolations = checkWorkspaceBoundaries(root);
+    assert.deepEqual(domainViolations.length, 2, domainViolations.join('\n'));
+    assert(domainViolations.every(v => v.includes('domain/rule.ts') && v.includes('cannot import packages/modules/sdlc/src/port.ts')));
+    rmSync(join(root, 'packages/modules/sdlc/src/domain'), { recursive: true });
+
     writeFileSync(
       join(root, 'packages/plugin-sdk/src/bad.ts'),
       [

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import {
@@ -434,6 +435,27 @@ test('a request that is not plain data is a fixture finding and the plugin is no
   const testCase = { name: 'bad request', operation: 'discoverWorkItems', request: { workingCopy: new Date(0) }, expected: { ok: false, code: 'not-found' } } as unknown as SdlcConformanceCase;
   assert.deepEqual(await findings(counted, [testCase]), ['bad request fixture: request.workingCopy must be a plain object']);
   assert.equal(calls, 0);
+});
+
+// The compiled modules the port entry loads, following relative imports.
+function portEntryModules(): string[] {
+  const dist = new URL('../dist/', import.meta.url);
+  const loaded = new Set<string>();
+  const visit = (path: string) => {
+    if (loaded.has(path)) return;
+    loaded.add(path);
+    const source = readFileSync(new URL(path, dist), 'utf8');
+    for (const [, specifier] of source.matchAll(/(?:^import\s*|\bfrom\s*)['"]([^'"]+)['"]/gm)) {
+      assert.ok(specifier!.startsWith('./'), `${path} loads ${specifier}`);
+      visit(new URL(specifier!, new URL(path, dist)).href.slice(dist.href.length));
+    }
+  };
+  visit('port.js');
+  return [...loaded].sort();
+}
+
+test('the port entry loads no domain or application code', () => {
+  assert.deepEqual(portEntryModules(), ['port.js', 'ports/sdlc-framework.js']);
 });
 
 test('the port entry carries only the frozen port, at version 1.0.0', () => {

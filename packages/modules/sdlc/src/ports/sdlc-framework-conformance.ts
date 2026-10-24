@@ -18,13 +18,12 @@ import {
   recordOf,
   type PlainShape,
 } from './plain-data.js';
+import { parseSdlcFrameworkCapabilities, type ParsedSdlcFrameworkCapabilities } from './sdlc-framework-capabilities.js';
 import {
   OPTIONAL_SDLC_OPERATIONS,
-  parseSdlcFrameworkCapabilities,
   type ArtifactRequirement,
   type ArtifactRevisionData,
   type FinalizationReport,
-  type ParsedSdlcFrameworkCapabilities,
   type ResolvedWorkflow,
   type SdlcFramework,
   type SdlcOperation,

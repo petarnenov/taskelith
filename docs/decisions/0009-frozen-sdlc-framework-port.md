@@ -9,9 +9,9 @@ G1 item 6 drafted the `SdlcFramework` port and its framework-neutral conformance
 
 Item 6 left one question open. The boundary check lets plugin source import only the kernel, the plugin SDK, and the contracts packages, so the OpenSpec adapter implemented the port through a structural copy of its shapes.
 
-Item 12 ran the SpecKit fixtures through the conformance suite with a test-only normaliser in the `@taskelith/sdlc-speckit` stub package. The normaliser reads the fixture working copy as the SpecKit normalization rules define. Every SpecKit case passed without a change to an operation, a request, or a result field:
+Item 12 ran the SpecKit fixtures through the conformance suite with a test-only normaliser in the `@taskelith/sdlc-speckit` stub package. The normaliser reads the fixture working copy as the SpecKit normalization rules define. Every SpecKit case passed without a change to an operation, a request, or a result field. The run and the SpecKit mapping showed:
 
-- A stage that produces several artifacts (SpecKit `plan`) fits the producing-stage field of an artifact requirement.
+- Each artifact names the one stage that produces it, so a stage with several outputs fits too. The fixtures do not exercise this: SpecKit's `plan` also writes `research.md`, `data-model.md`, and `contracts/`, but the fixture features have only `plan.md`.
 - Features named by their directory fit the explicit work item.
 - The absent validator and closure fit the optional operations.
 - Workflow gates fit platform-managed review stages.
