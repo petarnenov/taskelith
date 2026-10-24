@@ -1,9 +1,10 @@
 name: Verify and release
 
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -25,10 +26,7 @@ jobs:
           package-manager-cache: false
       - run: npm install --global npm@12.2.1 --ignore-scripts
       - run: npm ci --ignore-scripts
-      - run: npm test
-      - run: npm run verify:dependencies
-      - run: npm run openspec -- validate --all --strict --no-interactive
-      - run: npm run verify:package
+      - run: make verify
 
   release:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'

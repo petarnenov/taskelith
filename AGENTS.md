@@ -25,7 +25,8 @@
 
 ## Checks and commits
 
-- Run `npm test` and validate any changed OpenSpec artifacts.
+- Run `make hooks` once per clone. `make verify` must pass before every push; the `pre-push` hook enforces it.
+- Develop on feature branches that target `dev`, the default branch. Only promotion pull requests from `dev` target `main` (see [docs/releases.md](docs/releases.md)).
 - Inspect the actual package tarball before publishing; never include credentials or local state.
 - Use conventional commit messages without attribution or session trailers.
 

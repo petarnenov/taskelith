@@ -1,0 +1,3 @@
+#!/bin/sh
+# Blocks the push unless the repository checks pass (enable once per clone with `make hooks`).
+exec make verify
