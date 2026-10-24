@@ -43,7 +43,7 @@ Use the exact Node.js version in `.nvmrc` and the npm version pinned in CI. Deve
 
 ```sh
 nvm use
-npm ci
+npm ci --ignore-scripts
 make hooks    # once per clone: run make verify before every push
 make verify   # the same checks CI runs
 ```
