@@ -46,6 +46,14 @@ In the worktree, with Node v24.22.1, npm 12.2.1, Docker 29.5.2 running, and macO
 - `make verify` passed again after the pass-1 fixes, before commit `323fa8b`: 255 tests passed and 0 failed. Coverage was 99.63% lines, 95.68% branches, and 99.27% functions. All other checks passed as before.
 - `npm run openspec -- validate freeze-sdlc-framework-port --strict`: valid.
 
+### Merge with `dev` (worker step 9)
+
+The coordinator returned the task because `docs/dependencies/licenses.json` conflicted with `dev`: the `check-archive-dry-run` change on `dev` added a package script, which changed the provenance hash.
+
+- Merge commit `aef6793` merges `origin/dev` (`f775034`) into `086391e`. The merge brought the archive dry-run check (`scripts/check-archive-dry-run.ts`, `verify:archive`, and a Makefile change), the docs-only G2 plan, and updates to the agent task protocol and the foundation ledger. The only conflict was in the generated `licenses.json`.
+- Resolution: take `dev`'s file, run `npm ci --ignore-scripts`, then `npm run inventory:dependencies`, with no hand edits. Against `dev`, the regenerated evidence differs only in the lockfile digest and in this change's new `@taskelith/sdlc` and `@taskelith/plugin-sdk` workspace edges.
+- `make verify` passed at `aef6793`: 268 tests passed and 0 failed. Coverage was 99.63% lines, 95.68% branches, and 99.27% functions. The boundary and coverage scope checks passed, and the dependency inventory verified 681 package paths. Strict OpenSpec validation passed 34 of 34. The new archive dry run reported that every active OpenSpec change, this one included, archives into strictly valid specs. Package verification passed.
+
 ## Independent review
 
 Assigned reviewer: Codex CLI 0.164.0, run from the worktree as `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`. The prompt, output, and snapshot files were kept in a scratch directory outside the worktree. The prompt named these criteria:
@@ -63,10 +71,13 @@ It asked for every instance of each problem with its severity, file, line, and f
   4. Low: ADR 0009 and `design.md` presented a stage with several outputs as exercised. Both now say that the shape is assessed but not exercised by the fixtures.
 - **Pass 2** (session `01a16fda-3ed1-7201-a284-2784a8fff301`; the same model, reasoning effort, and sandbox were confirmed in the header). It confirmed the resolution of all four pass-1 findings and reviewed `61d180b..323fa8b` again. The snapshot before and after was `988402379b941abff5078d0aa4b1276aa15b1d9b77d9c4e6e439c9dd766d45be`, equal. Findings: 0 Critical, 0 High, 0 Medium, 0 Low.
 
-No unreviewed fixes. This record and the checked task boxes were written after pass 2.
+- **Pass 3** (session `01a16fe0-1df6-71d0-8bfc-bdd5ac5de88d`; the header confirmed the same model, reasoning effort, and sandbox). It reviewed the merge commit `aef6793`: the conflict resolution, lost or reverted content, the change on top of `dev` (`f775034..aef6793`), and its interaction with `dev`'s new content. The snapshot before and after was `27cd1e637788fb55f14923e0b0a2c0492f8ba3a82832c935723316afb831df09`, equal. The reviewer confirmed that the generated evidence matches the inventory, and that the four deltas merge into strictly valid specs with the pinned CLI. Findings: 0 Critical, 0 High, 0 Medium, 0 Low.
+
+No unreviewed fixes. This record and the checked task boxes were written after pass 2, and this record was extended after pass 3.
 
 ## Limitations and remaining gates
 
 - The normaliser reads the bundled workflow with a line reader for the pinned layout, not with a YAML parser. The SpecKit adapter (G4) replaces it.
 - `PLUGIN_API_VERSION` `0.2.0` instead of `1.0.0` is the author's choice, recorded in the design. The coordinator may raise it with the owner.
+- Pass 3 used the last review pass allowed for this task.
 - Remaining gates: integration into `dev` and archive by the coordinator.
