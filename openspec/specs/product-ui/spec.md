@@ -6,7 +6,7 @@ Define the web product's information architecture and interaction rules decided 
 ## Requirements
 
 ### Requirement: Project board as landing page
-The SPA's landing page SHALL be a per-project board whose columns are the platform lifecycle stages Propose, Specify, Implement, Verify, Review, and Archived, with Accept and integrate shown as the merge gate between Review and Archived.
+The SPA's landing page SHALL be a per-project board whose columns are governance's lifecycle stages under short labels, Propose (Propose and inspect), Specify (Specify and design), Implement, Verify, Review, and Archived (Close), with Accept and integrate shown as the merge gate between Review and Archived.
 
 #### Scenario: Native and platform-managed steps
 - **WHEN** a card is shown in a column
