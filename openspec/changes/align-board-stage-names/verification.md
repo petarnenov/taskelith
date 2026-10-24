@@ -18,7 +18,7 @@ In the worktree, Node v24.22.1, npm 12.2.1: `make verify` passed. `npm run opens
 Assigned reviewer (rotation): Codex CLI, model `gpt-6.1-sol` with `model_reasoning_effort = "medium"`, sandbox `read-only` (confirmed in the session header). SHA-256 snapshots of the worktree before and after the pass were equal.
 
 - **Pass 1 — session `01a16f60-4462-7802-8d14-81e2ce75e1c7`, on `ccaf7b3`.** Findings: 0 Critical, 0 High, 0 Medium, 2 Low. Low-only pass, so both were fixed without another review (recorded as unreviewed fixes):
-  1. Low: the new governance link in the architecture pointed at `main` without a pin. Now a relative link to `governance.md` in the same revision.
+  1. Low: the new governance link in the architecture pointed at `main` without a pin. A relative link fails package verification, because `docs/architecture.md` is packaged and `governance.md` is not; the sentence now names governance's "Lifecycle and records" section without a link.
   2. Low: task 2.1 was unchecked although `verification.md` reports the checks. Checked.
 
 ## Remaining gates
