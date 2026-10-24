@@ -8,7 +8,7 @@ An attempt runs only while it holds capacity that was reserved for it in Postgre
 
 - **Scheduler:** the control-plane `Scheduling` module (architecture section 6). It may run as several replicas; they share no in-memory capacity counters, and every placement decision is re-checked inside the reservation transaction (section 4).
 - **Launch authority:** the control-plane service of the [launch authorization contract](launch-authorization.md). It compares the reservation the assignment holds when it authorizes a launch.
-- **Execution reconciliation:** the control-plane service that records lifecycle facts from worker observations and operator decisions (G2 item 21). Only its transitions release a reservation (section 6).
+- **Execution reconciliation:** the control-plane service that records lifecycle facts from worker observations and operator decisions (G2 item 21). A reservation is released only by a transition of section 6.
 - **Worker:** the enrolled worker service ([trust model](../trust-model.md)). It enforces its own hard admission limits independently of the scheduler (section 8) and journals its decisions under the worker journal contract (G2 item 5, `define-worker-journal-contract`).
 
 ## 2. Resources and budgets
@@ -16,7 +16,7 @@ An attempt runs only while it holds capacity that was reserved for it in Postgre
 A reservation draws on two kinds of budget:
 
 - **Occupancy** is held while the reservation is `held` and returned when it is released: a worker slot, CPU and memory on that worker, a unit of the project and run concurrency quotas, and a unit of each provider credential's concurrency.
-- **Consumption** is charged once when the reservation is created and never returned: one attempt of the root task's delegation budget and, for an automatic retry, one unit of the task's retry allowance.
+- **Consumption** is charged once per attempt, by the attempt's first reservation, and never returned: one attempt of the root task's delegation budget and, for an automatic retry, one unit of the task's retry allowance. The charge is a record unique per `attemptId`, so a later reservation of the same attempt, after a refusal or a supersession without a grant, charges nothing.
 
 The values are the provisional defaults of the [operational targets](../operational-targets.md) section 1. An installation may change a configurable value within the targets' hard ceilings; the contract fixes the rules, not the numbers.
 
@@ -70,6 +70,8 @@ Reserving capacity and creating the assignment are one PostgreSQL transaction at
 
 Occupancy is derived from the reservation rows, or from counter rows that the same transaction updates; a replica never trusts a count it read outside the transaction. A placement chosen from a cached fleet snapshot is only a candidate.
 
+Serializable ordering covers only transactions that are themselves serializable, so every writer of a value this transaction reads also runs at `SERIALIZABLE`: a quota or worker capacity change, a capacity declaration, drain, admission pressure and its clearing, worker revocation, cancellation, an assignment's end, a release, a task's parent link, and entering quarantine.
+
 The first failed check decides the outcome with a reason from section 11: a waiting reason leaves the task queued for a later attempt at placement, and a rejecting reason ends its admission to capacity. A serialization failure aborts the whole transaction; the scheduler retries it with the same command identity and recomputes the placement from current state, so a retry may choose another worker or wait.
 
 ### Races between scheduler replicas
@@ -88,27 +90,27 @@ PostgreSQL commits only serializable histories ([PostgreSQL 18, Serializable iso
 
 ## 6. Release only with a justified lifecycle transition
 
-A reservation is released only in the same transaction that records one of these lifecycle facts, which becomes its `releasedBy`:
+A reservation is released only when both of these hold, in the transaction that records the later of them, which becomes its `releasedBy`:
 
-| Justifying fact | Condition |
-| --- | --- |
-| Execution `exited` | The attempt's owning execution reached `exited` and the attempt has no other non-terminal execution |
-| Execution `not-started` | `not-started` is recorded after the worker sealed the execution's launch record ([launch authorization](launch-authorization.md) section 4) |
-| Assignment ended before any grant | The assignment was rejected by the worker, cancelled, or superseded, and no launch authorization was ever granted for it |
-| Operator reconciliation | An operator with the authority of the [trust model](../trust-model.md) resolves an uncertain execution with a recorded, audited decision and its evidence |
+1. **The assignment has ended:** its attempt reached a terminal outcome (item 7), the worker refused the assignment (section 8), or it was cancelled or superseded. Superseding an acknowledged assignment is an ownership change of the [launch authorization contract](launch-authorization.md) section 5.
+2. **No execution under it is non-terminal:** every execution authorized under the assignment is `exited`, or `not-started` recorded after the worker sealed its launch record (launch authorization section 4), or no launch authorization was ever granted for it.
+
+The only other justifying fact is an **operator reconciliation**: an operator with the authority of the [trust model](../trust-model.md) resolves an uncertain execution with a recorded, audited decision and its evidence.
+
+`not-started` alone ends nothing: while the assignment is active, the worker may authorize a new execution under it (launch authorization sections 4 and 7) against the same held reservation. An assignment that ends while an execution is still `authorized` or `started` keeps its reservation; the end is a cancellation, and the reservation is released by the transaction that records that execution's terminal fact.
 
 Nothing else releases a reservation, and in particular not:
 
 - loss of contact, reachability `unknown`, or a missed heartbeat;
 - a revoked or decommissioned worker, whose attempts become uncertain ([trust model](../trust-model.md) section 4) and keep their reservations until reconciled;
 - the expiry or revocation of a launch authorization;
-- a cancellation request, which releases only when its outcome is recorded as one of the facts above;
+- a cancellation request on its own;
 - a worker restart, a control-plane restart, a scheduler failover, or a lowered quota or capacity;
 - the end of the parent task of a delegated child, or a new session identity of the same work.
 
 A lost-contact attempt therefore keeps its worker slot, resources, quotas, and credential units until ownership is resolved: uncertainty is not free capacity. The scheduler places no new work on an unreachable worker, so the held slot is not reused there either. The fleet capacity signal of item 22 reports held capacity of uncertain attempts separately from running and free capacity, as F22 requires.
 
-A release is an **invalidating writer** of the launch authorization contract (section 5 there). It runs at `SERIALIZABLE` isolation and, in the same transaction, reads unconditionally the affected grants and non-terminal owning executions by assignment, marks each such grant `revoked` with the reason `capacity-not-reserved`, and writes a cancellation command to the outbox for each affected attempt. Under the conditions above, that read is empty except for an operator reconciliation that resolves an execution as gone without a recorded exit; a launch authorization ordered after any release fails with `capacity-not-reserved`.
+A release is an **invalidating writer** of the launch authorization contract (section 5 there). It runs at `SERIALIZABLE` isolation and, in the same transaction, reads unconditionally the affected grants and non-terminal owning executions by assignment, marks each such grant `revoked` with the reason `capacity-not-reserved`, and writes a cancellation command to the outbox for each affected attempt. Under conditions 1 and 2 that read is empty; it finds an execution only in an operator reconciliation that resolves an execution as gone without a recorded terminal fact. An authorization serialized before the transaction that ends the assignment makes condition 2 false, so that transaction releases nothing; one serialized after it is rejected because the assignment is no longer active, and any authorization after a release fails with `capacity-not-reserved`.
 
 Releasing returns occupancy and never returns consumption: the delegation and retry budgets stay charged.
 
@@ -118,7 +120,7 @@ A delegated child task is created through SDLC admission like any other task (in
 
 - **Parent and root.** The control plane derives the parent from the authenticated delegating attempt, never from a request field. The child records `parentTaskId`, `rootTaskId` (the parent's root, or the parent itself when the parent is a root), and `depth` (the parent's depth plus one; a root has depth `0`). A child belongs to its root's project.
 - **Depth.** A child of depth greater than `3` is rejected with `delegation-depth-exceeded` when it is created.
-- **Shared attempts.** Every attempt of every task in the tree, the root's own attempts and all retries included, charges one attempt of the root's budget in its reservation transaction; a reservation that would make the total exceed `8` is rejected with `delegation-budget-exhausted`.
+- **Shared attempts.** Every attempt of every task in the tree, the root's own attempts and all retries included, charges one attempt of the root's budget, once, in its first reservation transaction (section 2); a reservation that would make the total exceed `8` is rejected with `delegation-budget-exhausted`.
 - **Shared quotas.** A child's attempts charge the project quota, the quota of the run the child is bound to, and the quota of the root task's run, the latter once when both runs are the same.
 - **No new budgets.** The budget is keyed by `rootTaskId` from the persisted parent link. A new session identity, a resumed or forked session, a new run, or a task created by a delegating agent without the parent link creates no independent budget: a task created from an attempt is always a child of that attempt's task.
 
@@ -130,13 +132,13 @@ The worker enforces its limits itself, whatever the scheduler reserved, because 
 
 | Limit | Value (operational targets) | Worker behavior |
 | --- | --- | --- |
-| Concurrent active attempts | Its configured slot count (`default: 2`) | Counts every non-terminal execution in its journal, uncertain ones included; refuses a new assignment beyond it with `worker-slots-exhausted` |
+| Concurrent active attempts | Its configured slot count (`default: 2`) | Counts, once per attempt, every acknowledged assignment that has not ended and every non-terminal execution in its journal, uncertain ones included; refuses a new assignment beyond it with `worker-slots-exhausted` |
 | Per-attempt CPU and memory | At most `2 vCPU` and `4 GiB` | Refuses a request above the ceiling with `resource-ceiling-exceeded`, and enforces the reserved values through the qualified controls of section 9 |
 | Disk free-space floor | At least `5 GiB` or `10%` free on `dataRoot`, whichever is larger | Below it, requests no new launch authorization, reports admission pressure, and truncates only nonessential buffered stream logs, never journal, inbox, or outbox records |
 | Journal backlog | At most `256 MiB` or `10,000` unacknowledged observation entries | Above it, admits no new attempt and reports admission pressure while existing attempts drain and reconcile |
 | Daemon overhead | At most `512 MiB` RSS; event-loop lag `p99` at most `200ms` | Above it, requests no new launch authorization until pressure subsides |
 
-- **Admission pressure** is an observation that makes the worker ineligible for new placement until a later observation clears it. An assignment the worker has not acknowledged is refused with the retryable reason `worker-admission-pressure`; an acknowledged one waits, keeping its reservation, and its launch is requested only when the pressure clears.
+- **Admission pressure** is an observation that makes the worker ineligible for new placement until a later observation clears it. An assignment the worker has not acknowledged is refused with the retryable reason `worker-admission-pressure`; an acknowledged one waits, keeping its reservation, and its launch is requested only when the pressure clears. After a bounded wait, a parameter of item 18, the scheduler may supersede an acknowledged assignment that has no grant and place the attempt again; section 6 decides whether the supersession releases.
 - **Refusal.** A refused assignment is reported as an observation. With no grant issued, it ends the assignment and releases its reservation (section 6).
 - **Unknown values.** A limit the worker cannot measure, such as free disk space that cannot be read, counts as exceeded.
 - **Declared capacity.** The worker declares its slot count, CPU and memory capacity, and enforceable controls at enrollment and whenever they change; a declaration is an observation. The scheduler uses the lower of the declared and the configured capacity. A lowered capacity blocks new reservations until held ones fit again, and releases nothing.
@@ -157,7 +159,8 @@ A task policy may require a control as **hard**: a CPU, memory, or disk limit, o
 [ADR 0005](../decisions/0005-harness-subscription-account-pools.md) makes a subscription account slot a provider credential of one harness, allowed for listed projects. This contract reserves it as a provider credential unit (section 2) and leaves its selection to G3:
 
 - **Same transaction.** In G3 the harness-neutral account pool port selects the slot inside the reservation transaction of section 4, by ADR 0005's least-loaded rule over the eligible slots (allowed for the project, healthy, not in cooldown, below the concurrency limit), and the reservation records it in `providerCredentials`. No eligible slot is the waiting reason `provider-concurrency-exhausted`, or a rejection when the policy rejects.
-- **Session affinity.** A reservation for a resumed session names the session's slot, and waits while that slot is unavailable; it never selects another slot.
+- **Session affinity.** A reservation for a resumed session names the slot the session started on, and waits while that slot is unavailable, or the session is reconciled by policy or an operator (ADR 0005 decision 5); it never silently selects another slot.
+- **Sessions and attempts.** A session has at most one active attempt, so a slot's active sessions, which ADR 0005 counts, are the attempts holding it.
 - **Cooldown and revocation.** Cooldown makes a slot ineligible for new reservations and releases no held one. A revoked or removed slot follows section 6: its in-flight attempts are drained or reconciled, and their reservations are released only by a justifying fact.
 - **Neutrality.** Reservation code, types, schemas, and tests name no harness or vendor (ADR 0005 decision 8).
 
@@ -178,10 +181,11 @@ The scheduler and the worker act on reasons, not text. Item 8 turns the worker's
 | Project quota full | `project-quota-exhausted` | Scheduler | Wait |
 | Run quota full | `run-quota-exhausted` | Scheduler | Wait |
 | Provider credential concurrency full | `provider-concurrency-exhausted` | Scheduler | Wait |
-| Delegation depth above `3` | `delegation-depth-exceeded` | Scheduler, at task creation | Reject |
+| Delegation depth above `3` | `delegation-depth-exceeded` | Task admission, at task creation | Reject |
 | Delegation attempts above `8` | `delegation-budget-exhausted` | Scheduler | Reject |
 | Automatic retries above the allowance, or a retry of uncertain execution | `retry-budget-exhausted` | Scheduler | Reject; reconcile instead |
-| Hard control not declared or not applicable | `control-not-enforceable` | Scheduler or worker | Wait for a declaring worker, or reject a hard spend limit |
+| Hard control not declared or not applicable | `control-not-enforceable` | Scheduler | Wait for a declaring worker, or reject a hard spend limit |
+| Hard control not applicable on the worker | `control-not-enforceable` | Worker | Release if no grant exists; place on another declaring worker |
 | Worker's concurrent attempts full | `worker-slots-exhausted` | Worker | Release; place again |
 | Disk floor, journal backlog, or daemon overhead exceeded | `worker-admission-pressure` | Worker | Release if not acknowledged; place again after the pressure clears |
 | Reservation released or held elsewhere | `capacity-not-reserved` | Launch authority | As the launch authorization contract states |
@@ -194,11 +198,14 @@ Items 18, 20, and 24 implement these as tests through the deterministic test har
 - Two replicas place the same attempt: one assignment and one held reservation exist.
 - A reservation transaction that crashes before commit leaves no reservation, assignment, or outbox command; one that commits leaves all three.
 - A disconnected, revoked, or crashed consuming worker keeps its reservations: the project quota stays occupied, no new work is placed on it, and the reservation is released only by a justifying fact or an audited operator reconciliation.
-- Release raced with launch authorization: either the authorization fails with `capacity-not-reserved`, or the release revokes the grant and writes a cancellation; an operator release of an uncertain execution writes the cancellation.
+- Ending an assignment raced with launch authorization: either the authorization is rejected and the reservation is released, or the grant stands, the end becomes a cancellation, and the reservation stays held until the execution's terminal fact; an operator release of an uncertain execution revokes its grant and writes the cancellation.
+- Grant, supervisor crash before spawn, seal, `not-started`: the reservation stays held and a new execution under the same assignment is authorized against it.
+- A worker refuses an attempt and the attempt is placed again: the second reservation charges no delegation or retry budget.
+- An acknowledged assignment waiting under admission pressure is superseded after the bounded wait, and the attempt is placed on another worker.
 - Expiry or revocation of a grant, a cancellation request, and a scheduler failover release nothing.
 - A child of depth `4` is rejected; the ninth attempt in a task tree is rejected, counting the root's attempts and retries; a new session identity or a resumed session draws on the same budget.
 - A third automatic retry is rejected, and an attempt with uncertain execution gets no automatic retry; retries back off from `5s` to at most `60s`.
-- A worker filled to its slot count refuses another assignment even when the scheduler's view was stale; a full journal and a disk below the floor stop new admissions and launches, report pressure, and lose no control record.
+- A worker filled to its slot count, counting acknowledged assignments without executions, refuses another assignment even when the scheduler's view was stale; a full journal and a disk below the floor stop new admissions and launches, report pressure, and lose no control record.
 - An attempt requiring a hard memory limit is placed only on a worker declaring it; a worker that cannot apply it refuses with `control-not-enforceable`; a hard spend limit is rejected.
 - A lowered quota or worker capacity blocks new reservations and releases no held one.
 - One project's retry loop or approval-blocked attempts do not stop another project from receiving capacity.
