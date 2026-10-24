@@ -6,11 +6,15 @@ Define the repository checks once as `make verify`, gate every push locally with
 ## Requirements
 
 ### Requirement: Single definition of the checks
-The repository checks SHALL be defined once, as the `make verify` target, which SHALL verify the Node version against `.nvmrc` and the npm version against the CI pin before running `npm test`, `npm run verify:dependencies`, strict validation of all OpenSpec artifacts, and `npm run verify:package`, in that order; the GitHub `verify` job SHALL run `make verify` and no separate list of checks.
+The repository checks SHALL be defined once, as the `make verify` target, which SHALL run with the `.nvmrc` Node.js when nvm has it and the shell uses another version, check Node against `.nvmrc` and npm against the CI pin, and then run `npm test`, `make contract-compatibility`, `npm run verify:dependencies`, strict validation of all OpenSpec artifacts, and `npm run verify:package`, in that order; the GitHub `verify` job SHALL run only `make verify`.
+
+#### Scenario: Shell on another Node version
+- **WHEN** `make verify` runs from a shell on another Node version and nvm has the `.nvmrc` version installed
+- **THEN** it runs every check with the `.nvmrc` version and its npm
 
 #### Scenario: Mismatched Node version
-- **WHEN** `make verify` runs with a Node version that differs from `.nvmrc`
-- **THEN** it fails before running any check and names the expected version and `nvm use`
+- **WHEN** `make verify` runs with a Node version that differs from `.nvmrc`, or with no Node.js, and nvm is missing or does not have that version
+- **THEN** its toolchain check fails before running any other check and names the expected version, `make setup` with nvm, and a manual install without it
 
 #### Scenario: CI verify job
 - **WHEN** the GitHub `verify` job runs
@@ -24,7 +28,7 @@ The repository checks SHALL be defined once, as the `make verify` target, which 
 - **THEN** the push is rejected
 
 #### Scenario: Branch deletion push
-- **WHEN** a remote branch is deleted with `git push origin --delete <branch>` with hooks enabled and a Node version that differs from `.nvmrc`
+- **WHEN** a remote branch is deleted with `git push origin --delete <branch>` with hooks enabled, a Node version that differs from `.nvmrc`, and no `.nvmrc` version available through nvm
 - **THEN** the `pre-push` hook runs `make verify`, its toolchain check fails, and the deletion is refused
 
 ### Requirement: Promotion flow and releases

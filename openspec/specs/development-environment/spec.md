@@ -6,7 +6,7 @@ Let a contributor check and prepare a clone for building and verifying Taskelith
 ## Requirements
 
 ### Requirement: Environment check
-`make doctor` SHALL check that git is available, that Node.js matches `.nvmrc`, that npm matches the CI pin, that the dependency tree is complete as `npm ls --all` reports it, and that the pre-push hook is enabled; it SHALL print each result with a remedy for each failure, exit non-zero when any check fails, and change nothing.
+`make doctor` SHALL run with the `.nvmrc` Node.js when nvm has it installed and the shell uses another version, and otherwise with the shell's Node.js; it SHALL check that git is available, that Node.js matches `.nvmrc`, that npm matches the CI pin, that the dependency tree is complete as `npm ls --all` reports it, and that the pre-push hook is enabled; it SHALL print each result with a remedy for each failure, exit non-zero when any check fails, and change nothing.
 
 #### Scenario: Dependencies missing
 - **WHEN** a clone has no `node_modules`, or lacks a locked package or workspace link, and npm is on `PATH` or the pinned Node.js is not active
@@ -17,19 +17,23 @@ Let a contributor check and prepare a clone for building and verifying Taskelith
 - **THEN** `make doctor` reports every check as passed and exits zero
 
 #### Scenario: Node.js too old for the scripts
-- **WHEN** the Node.js on `PATH` cannot run the repository's TypeScript scripts
-- **THEN** `make doctor` prints that the scripts need a newer Node.js, names `nvm use`, and names `make setup` only for a pinned Node.js that is not installed
+- **WHEN** the selected Node.js cannot run the repository's TypeScript scripts, or no Node.js is found
+- **THEN** `make doctor` prints that and names `make setup` with nvm and a manual install of the pinned Node.js without it
+
+#### Scenario: Shell on another Node.js after setup
+- **WHEN** the shell uses a Node.js other than `.nvmrc` and nvm has the pinned version installed
+- **THEN** `make doctor` runs its checks with the pinned version, reports the Node.js check as passed, and says that `nvm use` is needed only for running `npm` or `node` directly in that shell
 
 #### Scenario: Shell on another Node.js
-- **WHEN** the Node.js on `PATH` does not match `.nvmrc`
-- **THEN** the Node.js remedy names `nvm use` first and `make setup` only for a pinned Node.js that is not installed, and the npm remedy says to fix the Node.js check first instead of naming `make setup`
+- **WHEN** the shell uses a Node.js other than `.nvmrc` and nvm is missing or does not have the pinned version
+- **THEN** the Node.js remedy names `make setup` with nvm and a manual install without it, and the npm remedy says to fix the Node.js check first instead of naming `make setup`
 
 #### Scenario: Pinned Node.js without npm
-- **WHEN** the Node.js on `PATH` matches `.nvmrc` but npm is not on `PATH`
+- **WHEN** the selected Node.js matches `.nvmrc` but npm is not on `PATH`
 - **THEN** the npm remedy names a reinstall of the pinned Node.js, which includes npm, and the dependency remedy says to fix the npm check first instead of naming `make setup`
 
 ### Requirement: Environment setup
-`make setup` SHALL install what is missing and can be installed from the clone: the `.nvmrc` Node.js through nvm when nvm is installed, the CI npm pin, the dependencies from `package-lock.json` with `npm ci --ignore-scripts`, and the hook configuration; it SHALL then report the same checks as `make doctor`. It SHALL NOT install git or nvm.
+`make setup` SHALL install what is missing and can be installed from the clone: the `.nvmrc` Node.js through nvm when nvm is installed, made nvm's default version, the CI npm pin, the dependencies from `package-lock.json` with `npm ci --ignore-scripts`, and the hook configuration; it SHALL then report the same checks as `make doctor`. It SHALL NOT install git or nvm.
 
 #### Scenario: Fresh worktree
 - **WHEN** `make setup` runs in a new worktree without `node_modules`
@@ -37,7 +41,7 @@ Let a contributor check and prepare a clone for building and verifying Taskelith
 
 #### Scenario: Shell on another Node.js
 - **WHEN** the calling shell uses a Node.js other than `.nvmrc` and nvm is installed
-- **THEN** setup installs and uses the pinned version for its own run, says that its checks ran under that version, and tells the user to run `nvm use` before `make doctor` or `make verify`
+- **THEN** setup installs and uses the pinned version for its own run, makes it nvm's default, says that its checks ran under that version and that `make doctor` and `make verify` select it themselves, and names `nvm use` only for running `npm` or `node` directly in that shell
 
 #### Scenario: npm pin changes
 - **WHEN** npm is on `PATH` but does not match the CI pin
