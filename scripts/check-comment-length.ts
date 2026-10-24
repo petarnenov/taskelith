@@ -167,7 +167,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
   const violations = trackedFiles(root).flatMap((file) => fileViolations(file, readFileSync(posix.join(root, file), 'utf8')));
   for (const { file, line, reason } of violations) console.error(`${file}:${line}: ${reason}`);
   if (violations.length > 0) {
-    console.error(`${violations.length} comment length violations; see the comment rule in AGENTS.md.`);
+    console.error(`Comment length violations: ${violations.length}; see the rule in AGENTS.md.`);
     process.exit(1);
   }
   console.log('Every comment is within the comment length rule.');
