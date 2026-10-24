@@ -21,6 +21,7 @@
 - Use the pinned local CLI through `npm run openspec -- ...`.
 - Record scope, requirements, verification evidence, and remaining gates. Do not claim independent review or deployment validation that did not occur.
 - Follow the [independent review process](docs/governance.md#independent-review-process): authorized read-only reviewers, one reviewer per task, at most three passes, and Low-only passes fixed without another review.
+- When several agent sessions work in parallel, follow the [agent task protocol](docs/agent-task-protocol.md): workers develop and hand off one task at a time, and the coordinator integrates and archives it.
 - Publication and deployment require owner authorization. The initial repository/package publication is explicitly authorized by the bootstrap request.
 
 ## Checks and commits
