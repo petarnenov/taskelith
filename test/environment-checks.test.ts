@@ -48,13 +48,13 @@ test('with the pinned Node.js active, a wrong npm is fixed by setup', () => {
 });
 
 test('setup tells a shell on another Node.js to run nvm use, and stays quiet otherwise', () => {
-  assert.equal(shellNodeNotice('v24.22.1', 'v24.22.1'), undefined);
+  assert.equal(shellNodeNotice({ shell: 'v24.22.1', setup: 'v24.22.1' }), undefined);
   assert.equal(
-    shellNodeNotice('v24.21.0', 'v24.22.1'),
+    shellNodeNotice({ shell: 'v24.21.0', setup: 'v24.22.1' }),
     "These checks ran under Node.js v24.22.1, but your shell uses v24.21.0; run 'nvm use' before make doctor or make verify."
   );
-  assert.match(shellNodeNotice(undefined, 'v24.22.1') ?? '', /your shell uses none;/);
-  assert.match(shellNodeNotice('', 'v24.22.1') ?? '', /your shell uses none;/);
+  assert.match(shellNodeNotice({ shell: undefined, setup: 'v24.22.1' }) ?? '', /your shell uses none;/);
+  assert.match(shellNodeNotice({ shell: '', setup: 'v24.22.1' }) ?? '', /your shell uses none;/);
 });
 
 test('setup installs npm before the dependencies and reinstalls them with the new npm', () => {

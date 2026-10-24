@@ -8,12 +8,13 @@ The owner reported on 2026-10-24, paraphrased: from a shell on Node.js v24.21.0,
 
 - Behavior of the checks is unchanged: the same facts pass and fail; only the remedies and the setup closing message change.
 - The npm remedy depends on the Node.js check because each Node.js has its own npm; under the pinned Node.js it still names `make setup`.
+- Evidence check: the changed files cite no external sources; the evidence is the local runs below.
 
 ## Checks
 
 Node v24.22.1 installed through nvm, macOS, in the worktree:
 
-- From a shell on Node v24.21.0 (npm 11.19.0): `make setup` passed every check under v24.22.1 and printed "These checks ran under Node.js v24.22.1, but your shell uses v24.21.0; run 'nvm use' before make doctor or make verify." `make doctor` then failed the Node.js check with the remedy starting "Run nvm use" and the npm check with "Fix the Node.js check first; npm is checked under Node.js 24.22.1.", and exited 2.
+- From a shell on Node v24.21.0 (npm 11.19.0): `make setup` passed every check under v24.22.1 and printed "These checks ran under Node.js v24.22.1, but your shell uses v24.21.0; run 'nvm use' before make doctor or make verify." Before review, `make doctor` then failed the Node.js check with the remedy starting "Run nvm use" (reworded in pass 1) and the npm check with "Fix the Node.js check first; npm is checked under Node.js 24.22.1.", and exited 2.
 - After `nvm use`: `make doctor` passed all five checks.
 - Not exercised: doctor's guard for a Node.js older than 22.6 (no such Node.js installed); its message was checked by reading the `Makefile`.
 - `make verify` passed before review: 196 tests, 0 failed, coverage thresholds met, 30 strict OpenSpec validations, package verification.
@@ -29,8 +30,16 @@ Assigned reviewer: Claude Code, invoked as `claude -p "<prompt>" --model claude-
   4. Low, outside this change: with the pinned Node.js active but no npm on `PATH`, doctor advises `make setup`, whose `install-npm` step needs npm and fails. Not changed here; reported to the coordinator as a follow-up candidate.
   5. Low: empty `### New Capabilities` heading in `proposal.md`. Not changed: it is the OpenSpec template's section, kept empty as in earlier changes.
 
-After the pass-1 fixes: `make verify` passed (197 tests, 0 failed, 31 strict validations, package verification), and `make doctor` from a shell on v24.21.0 printed the new remedies.
+After the pass-1 fixes: `make verify` passed (197 tests, 0 failed, 31 strict validations, package verification), and `make doctor` from a shell on v24.21.0 printed "With nvm, run nvm use (run make setup first if Node.js 24.22.1 is not installed yet); without nvm, install Node.js 24.22.1 yourself." and "Fix the Node.js check first; npm is checked under Node.js 24.22.1."
+
+- **Pass 2 — session `83114c1a-d348-4127-bc18-6d98fc48451c`, on `6d8df80`.** `modelUsage` reported `claude-fable-5-1`. SHA-256 snapshots before and after were equal. All five pass-1 resolutions confirmed; the reviewer also ran `make doctor` without `node` on `PATH` to exercise the `Makefile` guard. Findings: 0 Critical, 0 High, 0 Medium, 4 Low. Low-only pass, so all four were fixed without another review (unreviewed fixes):
+  1. Low: the check record quoted the pre-pass-1 remedy and did not quote the new ones. The record now marks the old text and quotes the new remedies.
+  2. Low: the evidence check was not recorded. Added under the author self-check.
+  3. Low: without `node`, the `Makefile` guard printed "Node.js not found cannot run the repository scripts." It now reads "the repository scripts need Node.js 22.6 or later (found: none)."
+  4. Low: `shellNodeNotice` took two positional strings that could be swapped silently. It now takes `{ shell, setup }`.
+
+After the pass-2 fixes: `make verify` passed (197 tests, 0 failed, 31 strict validations, package verification); `make doctor` with only `/usr/bin:/bin` on `PATH` printed the new guard message and exited 2; `make setup` from a shell on v24.21.0 printed the notice through `shellNodeNotice`.
 
 ## Remaining gates
 
-Review pass 2, integration into `dev`, and archiving.
+Integration into `dev`, and archiving.

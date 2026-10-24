@@ -126,9 +126,14 @@ export function stepCommand(step: SetupStep, pins: Pins): { command: string; arg
 }
 
 // make setup runs under the pinned Node.js, which it cannot activate in the calling shell.
-export function shellNodeNotice(shellNode: string | undefined, setupNode: string): string | undefined {
-  if (shellNode === setupNode) return undefined;
-  return `These checks ran under Node.js ${setupNode}, but your shell uses ${shellNode || 'none'}; run 'nvm use' before make doctor or make verify.`;
+export interface NodeVersions {
+  readonly shell: string | undefined;
+  readonly setup: string;
+}
+
+export function shellNodeNotice({ shell, setup }: NodeVersions): string | undefined {
+  if (shell === setup) return undefined;
+  return `These checks ran under Node.js ${setup}, but your shell uses ${shell || 'none'}; run 'nvm use' before make doctor or make verify.`;
 }
 
 export function formatReport(results: readonly CheckResult[]): string {

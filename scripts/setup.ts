@@ -27,6 +27,6 @@ for (const step of setupSteps(check())) {
 
 const results = check();
 console.log(formatReport(results));
-const notice = shellNodeNotice(process.env.INVOKING_NODE, process.version);
+const notice = shellNodeNotice({ shell: process.env.INVOKING_NODE, setup: process.version });
 if (notice) console.log(notice);
 if (results.some((result) => !result.ok)) process.exit(1);

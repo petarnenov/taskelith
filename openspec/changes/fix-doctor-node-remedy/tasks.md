@@ -5,4 +5,4 @@
 ## 2. Verification and review
 
 - [x] 2.1 Run `make verify` and reproduce the owner's sequence from a shell on another Node.js.
-- [ ] 2.2 Obtain independent review by rotation and record the results.
+- [x] 2.2 Obtain independent review by rotation and record the results.
