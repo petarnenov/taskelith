@@ -1,8 +1,7 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:taskelith:plugin-manifest",
   "title": "Taskelith plugin manifest",
-  "description": "The G1 subset of the plugin manifest in architecture section 7. Keywords stay within the subset shared by JSON Schema draft-07 and 2020-12.",
+  "description": "The G1 subset of the plugin manifest in architecture section 7. Compiled as JSON Schema 2020-12; it declares no $schema and uses only keywords with the same meaning in draft-07.",
   "type": "object",
   "additionalProperties": false,
   "required": ["id", "version", "pluginApiRange", "port", "capabilities"],

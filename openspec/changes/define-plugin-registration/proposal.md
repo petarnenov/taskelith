@@ -5,9 +5,9 @@ G1 work item 8 ([docs/g1-plan.md](../../../docs/g1-plan.md)). The OpenSpec frame
 ## What Changes
 
 - Add the private workspace package `@taskelith/plugin-sdk` (`packages/plugin-sdk`), depending on `@taskelith/kernel`, with one public export:
-  - a JSON Schema 2020-12 document for the manifest subset of architecture section 7: identifier, package version, supported plugin API range, port, and capabilities, using only keywords shared by draft-07 and 2020-12;
-  - `PLUGIN_API_VERSION`, the plugin API version the SDK implements, and `satisfiesCaretRange`, the compatibility rule;
-  - `registerPlugin(manifest, host)`, which validates a manifest with ajv's `Ajv2020` and returns a kernel `Result`: an `invalid` failure for a manifest that fails the schema, `not-found` for a port the host does not offer, and `precondition-failed` for a plugin API range that excludes the SDK's version.
+  - a JSON Schema document, compiled as 2020-12 without a `$schema` declaration, for the manifest subset of architecture section 7: identifier, package version, supported plugin API range, port, and capabilities, using only keywords shared by draft-07 and 2020-12;
+  - `PLUGIN_API_VERSION`, the plugin API version the SDK implements, and `satisfiesCaretRange`, the compatibility rule, which rejects any version or range outside the release and caret forms it understands;
+  - `registerPlugin(manifest, host)`, which validates a manifest with ajv's `Ajv2020` behind a local adapter and returns a kernel `Result`: an `invalid` failure for a manifest that fails the schema, `not-found` for a port the host does not offer, and `precondition-failed` for a plugin API range that excludes the SDK's version.
 - Tests in `packages/plugin-sdk/test/` that import the package by name.
 - Add `ajv@8.20.0` as the first runtime dependency, exact-pinned in the plugin SDK only; `ajv-formats` is not added, because the schema uses no `format` keyword. Update the `ajv`, `ajv-formats`, and `json-schema-to-typescript` rows of the [dependency register](../../../docs/dependencies.md#contract-tooling) and regenerate the dependency inventory.
 - Let workspace packages ship JSON documents from `src/`: the shared `tsconfig.package.json` enables `resolveJsonModule` and includes `src/**/*.json`, and `tsconfig.check.json` enables `resolveJsonModule`.

@@ -24,3 +24,11 @@ test('a caret range below 0.1.0 accepts only its exact version', () => {
   assert.equal(satisfiesCaretRange('0.0.3', '^0.0.3'), true);
   assert.equal(satisfiesCaretRange('0.0.4', '^0.0.3'), false);
 });
+
+test('versions and ranges outside the understood forms are not satisfied', () => {
+  assert.equal(satisfiesCaretRange('1.2.3-beta', '^1.2.3'), false);
+  assert.equal(satisfiesCaretRange('1.2', '^1.2.3'), false);
+  assert.equal(satisfiesCaretRange('1.2.3', '1.2.3'), false);
+  assert.equal(satisfiesCaretRange('1.2.3', '^1.2'), false);
+  assert.equal(satisfiesCaretRange('1.2.3', '>=1.2.3'), false);
+});

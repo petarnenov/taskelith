@@ -5,7 +5,7 @@ Define the minimum plugin registration path of the microkernel: the manifest sub
 ## ADDED Requirements
 
 ### Requirement: Plugin manifest subset
-A plugin manifest SHALL be a JSON object with exactly the fields `id`, `version`, `pluginApiRange`, `port`, and `capabilities`, described by a JSON Schema 2020-12 document in the plugin SDK package that uses only keywords with the same meaning in JSON Schema draft-07.
+A plugin manifest SHALL be a JSON object with exactly the fields `id`, `version`, `pluginApiRange`, `port`, and `capabilities`, described by a JSON Schema document in the plugin SDK package that is compiled as JSON Schema 2020-12, declares no `$schema`, and uses only keywords with the same meaning in JSON Schema draft-07.
 
 #### Scenario: Valid manifest
 - **WHEN** a manifest declares `id` `sdlc-example`, `version` `1.4.0-rc.1+build.7`, a `pluginApiRange` that accepts the SDK's plugin API version, `port` `SdlcFramework`, and two distinct capabilities, and the host offers `SdlcFramework`
@@ -41,15 +41,22 @@ The registration function SHALL receive the ports the host offers and SHALL reje
 - **THEN** registration returns a `not-found` failure with the plugin identifier and `AgentHarness` in its details
 
 ### Requirement: Compatible plugin API only
-The plugin SDK SHALL declare the plugin API version it implements. The registration function SHALL reject a manifest whose caret range excludes that version with a `precondition-failed` failure whose details name the plugin identifier, the range, and the SDK's version. A caret range SHALL accept versions from its minimum with the same major version when the major is at least 1, with the same minor version when the major is 0 and the minor at least 1, and only its exact version otherwise.
+The plugin SDK SHALL declare the plugin API version it implements as a release version. The registration function SHALL reject a manifest whose caret range excludes that version with a `precondition-failed` failure whose details name the plugin identifier, the range, and the SDK's version.
 
 #### Scenario: Incompatible range
 - **WHEN** the SDK implements plugin API `0.1.0` and a manifest declares `^1.0.0`, `^0.2.0`, or `^0.0.1`
 - **THEN** registration returns a `precondition-failed` failure
 
+### Requirement: Caret range semantics
+A caret range SHALL accept versions from its minimum with the same major version when the major is at least 1, with the same minor version when the major is 0 and the minor at least 1, and only its exact version otherwise; a version or range in any other form SHALL NOT satisfy the check.
+
 #### Scenario: Caret semantics
 - **WHEN** `1.9.0` is checked against `^1.2.3`, `0.3.0` against `^0.2.3`, and `0.0.4` against `^0.0.3`
 - **THEN** the first is accepted and the other two are rejected
+
+#### Scenario: Unsupported forms
+- **WHEN** `1.2.3-beta` or `1.2` is checked against `^1.2.3`, or `1.2.3` against `1.2.3` or `>=1.2.3`
+- **THEN** none is accepted
 
 ### Requirement: Library-level registration
 Registration SHALL be a library function of the `@taskelith/plugin-sdk` package that returns a kernel `Result`, holds no state, and starts no process; the package SHALL be private, and the published `taskelith` package SHALL NOT include it.
