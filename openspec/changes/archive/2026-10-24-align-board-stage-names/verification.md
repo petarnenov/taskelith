@@ -24,3 +24,7 @@ Assigned reviewer (rotation): Codex CLI, model `gpt-6.1-sol` with `model_reasoni
 ## Remaining gates
 
 None for this documentation change.
+
+## Integration
+
+Integrated into `dev` through pull request #57, merge commit `4afafa4`, and archived with the pinned OpenSpec CLI.
