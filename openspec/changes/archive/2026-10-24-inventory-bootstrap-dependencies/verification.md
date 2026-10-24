@@ -41,3 +41,7 @@ Exact npm 12.2.1 `npm audit --json` returned exit 1 and the existing moderate ip
 ## Remaining gates
 
 Independent review of this change is complete. Integration (commit, push, merge), archival, and native Linux CI evidence remain pending. No review exception, push, release, or deployment is claimed. G0 qualification remains incomplete because of recorded maintenance/adoption gaps, 14 missing license-text coverage paths, global/native inventory, and 2 development audit findings.
+
+## Integration
+
+The owner authorized integration and archival on 2026-10-24. Integrated into `main` at `55866cfcf3e9e1c6c740ba63de556412354f5689` through pull request #3 (rebase merge). The `main` workflow run 40092893183 passed verification; semantic-release found no relevant changes, so no version was released. Archived with the pinned OpenSpec CLI afterwards.

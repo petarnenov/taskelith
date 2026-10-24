@@ -49,3 +49,7 @@ Remaining findings: 0.
 ## Remaining gates
 
 Owner decisions: whether `notice-only` and `declaration-only` evidence suffices for development tooling, and how to treat the advisories until npm ships a fixed bundle. Integration (commit, push, merge) and archival remain pending.
+
+## Integration
+
+The owner authorized integration and archival on 2026-10-24. Integrated into `main` at `55866cfcf3e9e1c6c740ba63de556412354f5689` through pull request #3 (rebase merge). The `main` workflow run 40092893183 passed verification; semantic-release found no relevant changes, so no version was released. Archived with the pinned OpenSpec CLI afterwards.

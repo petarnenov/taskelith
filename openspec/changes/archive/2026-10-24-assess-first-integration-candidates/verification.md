@@ -83,3 +83,7 @@ Checks after the pass-4 fixes, under Node v24.22.1 and npm 12.2.1: `npm test` 19
 ## Remaining gates
 
 Version-specific qualification of the selected integrations and dependency register updates, integration (commit, push, merge), and archival, which require explicit owner authorization. The owner's later decisions on `agy` approvals and non-telemetry vendor traffic (ADR 0003 decisions 10 and 11) were propagated to this document within `record-first-integration-decisions` and reviewed there by Antigravity pass 3 (conversation `35b4fc37-1137-48d5-bb29-7422c66c572a`).
+
+## Integration
+
+The owner authorized integration and archival on 2026-10-24. Integrated into `main` at `55866cfcf3e9e1c6c740ba63de556412354f5689` through pull request #3 (rebase merge). The `main` workflow run 40092893183 passed verification; semantic-release found no relevant changes, so no version was released. Archived with the pinned OpenSpec CLI afterwards.

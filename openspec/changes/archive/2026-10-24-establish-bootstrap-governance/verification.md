@@ -31,3 +31,7 @@ Environment: Node.js v24.22.1, npm 12.2.1 (matching CI pins), pinned OpenSpec 1.
 ## Remaining gates
 
 Owner policy acceptance and independent review are recorded. Integration (commit, push, merge) and archival remain pending owner authorization. No commit, push, publication, deployment, dependency qualification, or new CI execution is claimed. G0 remains incomplete; the foundation ledger records its outstanding work.
+
+## Integration
+
+The owner authorized integration and archival on 2026-10-24. Integrated into `main` at `55866cfcf3e9e1c6c740ba63de556412354f5689` through pull request #3 (rebase merge). The `main` workflow run 40092893183 passed verification; semantic-release found no relevant changes, so no version was released. Archived with the pinned OpenSpec CLI afterwards.

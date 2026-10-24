@@ -35,3 +35,7 @@ Official registry and upstream sources were inspected for release observations, 
 ## Remaining gates
 
 Independent review of this change is complete. No new owner admission decision, review exception, integration, archival, CI run, or deployment is claimed. The installed tools remain candidates under the full architecture qualification standard; the vulnerable bundled npm is replacement-required for admission. Initial usage remains documented historical fact, not retroactive qualification. No runtime service or model was admitted. G0 is not complete.
+
+## Integration
+
+The owner authorized integration and archival on 2026-10-24. Integrated into `main` at `55866cfcf3e9e1c6c740ba63de556412354f5689` through pull request #3 (rebase merge). The `main` workflow run 40092893183 passed verification; semantic-release found no relevant changes, so no version was released. Archived with the pinned OpenSpec CLI afterwards.
