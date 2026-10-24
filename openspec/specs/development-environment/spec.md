@@ -18,7 +18,11 @@ Let a contributor check and prepare a clone for building and verifying Taskelith
 
 #### Scenario: Node.js too old for the scripts
 - **WHEN** the Node.js on `PATH` cannot run the repository's TypeScript scripts
-- **THEN** `make doctor` prints that Node.js cannot run the scripts and names `make setup`
+- **THEN** `make doctor` prints that the scripts need a newer Node.js, names `nvm use`, and names `make setup` only for a pinned Node.js that is not installed
+
+#### Scenario: Shell on another Node.js
+- **WHEN** the Node.js on `PATH` does not match `.nvmrc`
+- **THEN** the Node.js remedy names `nvm use` first and `make setup` only for a pinned Node.js that is not installed, and the npm remedy says to fix the Node.js check first instead of naming `make setup`
 
 ### Requirement: Environment setup
 `make setup` SHALL install what is missing and can be installed from the clone: the `.nvmrc` Node.js through nvm when nvm is installed, the CI npm pin, the dependencies from `package-lock.json` with `npm ci --ignore-scripts`, and the hook configuration; it SHALL then report the same checks as `make doctor`. It SHALL NOT install git or nvm.
@@ -29,7 +33,7 @@ Let a contributor check and prepare a clone for building and verifying Taskelith
 
 #### Scenario: Shell on another Node.js
 - **WHEN** the calling shell uses a Node.js other than `.nvmrc` and nvm is installed
-- **THEN** setup installs and uses the pinned version for its own run and tells the user to run `nvm use`
+- **THEN** setup installs and uses the pinned version for its own run, says that its checks ran under that version, and tells the user to run `nvm use` before `make doctor` or `make verify`
 
 #### Scenario: npm pin changes
 - **WHEN** npm does not match the CI pin
