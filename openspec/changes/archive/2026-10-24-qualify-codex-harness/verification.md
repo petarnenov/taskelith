@@ -74,3 +74,7 @@ Remaining findings: 0.
 ## Remaining gates
 
 Merge into `dev`; promotion to `main`. Before admission: see "Remaining before admission" in the qualification record.
+
+## Integration and archival
+
+The owner authorized integration and archival on 2026-10-24. Integrated into `dev` at `e2341ea` through pull request #18 (rebase merge); no workflow ran for the pull request or the push to `dev`. It reaches `main` with the next promotion. Archived with the pinned OpenSpec CLI afterwards.
