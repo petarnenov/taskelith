@@ -26,7 +26,7 @@ Auto-merge SHALL merge at most one change into a target branch at a time.
 - **THEN** the second waits, queued, until the first has merged or left the merge flow
 
 ### Requirement: Standing approval rules
-A project-maintainer SHALL be able to record standing approval rules that Taskelith answers through the external approval client; each rule SHALL record its author, scope, and policy revision, every use SHALL be audited, and a request without a matching rule SHALL wait for a person.
+A project-maintainer SHALL be able to record standing approval rules that Taskelith answers through the external approval client; while auto-merge is on, pushing to the task's own branch SHALL be such a rule, and turning auto-merge off SHALL revoke it; each rule SHALL record its author, scope, and policy revision, every use SHALL be audited, and a request without a matching rule SHALL wait for a person.
 
 #### Scenario: Push while auto-merge is on
 - **WHEN** a task's harness asks to push to the task's own branch while auto-merge is on
@@ -37,7 +37,7 @@ A project-maintainer SHALL be able to record standing approval rules that Taskel
 - **THEN** the standing push rule no longer applies
 
 ### Requirement: Automatic merge-conflict resolution
-When auto-merge meets a conflict, the task's own harness SHALL resolve it in a fresh worktree, verify SHALL run again on the new head, the task's independent reviewer SHALL review the resolved diff, and only then SHALL the change merge; the flow SHALL have a budget of three attempts.
+When auto-merge meets a conflict, the task's own harness SHALL resolve it in the task's worktree, verify SHALL run again on the new head, the task's independent reviewer SHALL review the resolved diff, and only then SHALL the change merge; the flow SHALL have a budget of three attempts.
 
 #### Scenario: Textual conflict resolved
 - **WHEN** the harness resolves a conflict and verify and the review of the resolved diff pass

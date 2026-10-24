@@ -35,7 +35,7 @@ The owner resolved the merge conflicts with "ауто мърдж побежда�
    2. Verify runs again on the new head.
    3. The task's independent reviewer reviews the resolved diff.
    4. The change merges.
-   - **Attempt budget.** Each attempt starts from a fresh worktree, with a budget of three attempts.
+   - **Attempt budget.** The conflict-resolution flow has a budget of three attempts.
    - **Spec conflict.** When the target branch changed a contract that the task's specification depends on, the task returns to Specify. The harness reconciles the specification, and the later gates run again.
    - **Escalation.** A maintainer is asked only when the attempt budget is spent, a reconciled specification fails again, or no reviewer is available after three attempts.
    - **Reviewer.** Review never falls back to the implementer.
@@ -47,7 +47,7 @@ The owner resolved the merge conflicts with "ауто мърдж побежда�
    - **Task detail.** It shows the gate states (pending, passed, failed, stale, blocked), traceability, the run binding, and the admission.
    - **Screens.** Agent session (with a composer that stays visible), reviews, workers and account pools, new task, knowledge, a "Needs you" inbox that every screen updates, SCM integrations, and plugins.
    - **Board states.**
-     - The board defines first run, empty, loading, load error, live updates lost, no workers online, and read-only states.
+     - The board defines first run, empty, loading, load error, live updates lost, no workers online, and read-only states. On first run it guides the user through setup instead of showing an empty board.
      - A load error shows no data rather than data that may be wrong.
      - When live updates are lost, the board shows the time of its last known state, and the server rechecks every action.
    - **Design rules.**

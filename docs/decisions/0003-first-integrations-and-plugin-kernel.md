@@ -1,7 +1,7 @@
 # ADR 0003: First integrations, closed-harness scope, and plugin microkernel
 
 Date: 2026-10-24
-Status: Decisions made by the owner on 2026-10-24 in the project conversation; decisions 9 to 11 were added later the same day. Recording, independent review, implementation, and qualification are pending.
+Status: Decisions made by the owner on 2026-10-24 in the project conversation; decisions 9 to 11 were added later the same day; decision 11 was amended by [ADR 0008](0008-product-ui-and-integration-authority.md) the same day. Recording, independent review, implementation, and qualification are pending.
 
 ## Context
 
