@@ -1,6 +1,6 @@
 # Dependency decision register
 
-Assessment date: 2026-10-24. Scope: installed bootstrap tools, plus candidates that are selected or proposed but not installed (agent harnesses, SCM integrations, contract tooling); not runtime infrastructure admission.
+Assessment date: 2026-10-24. Scope: installed bootstrap tools, the containerized SpecKit capture tools, plus candidates that are selected or proposed but not installed (agent harnesses, SCM integrations, contract tooling); not runtime infrastructure admission.
 
 ## Status and evidence rules
 
@@ -107,6 +107,17 @@ Proposed in the [contract tooling evaluation](contract-tooling.md) (2026-10-24) 
 
 Not proposed, with reasons in the evaluation: `@hyperjump/json-schema@1.18.0` and `@cfworker/json-schema@4.1.1` (validator alternatives), `@hey-api/openapi-ts@0.99.0` (pre-1.0 runner-up), `@stoplight/spectral-cli@6.17.0` (linter runner-up), `@asyncapi/modelina@5.10.1` and `@asyncapi/cli@6.2.1`. `rejected`: `orval@8.44.0` (code-generation advisory history), `openapi-diff@0.24.1` (no OpenAPI 3.1 statement, stale), and `@useoptic/optic@1.0.9` (archived repository).
 
+## SDLC framework tools
+
+SpecKit runs only in its digest-pinned container through `make speckit-capture` (G1 decision D5 (a1)); the [capture record](qualification/speckit.md) holds the evidence. Nothing here is in `package.json`, the npm package, or `make verify`.
+
+| Component | Exact selection and license | Status and qualification limits |
+| --- | --- | --- |
+| SpecKit | PyPI `specify-cli==1.2.3`, upstream tag `v1.2.3`, commit `5ea8b1cf0a38699340a38e00d02770308997d8c0`; MIT; [spec-kit](https://github.com/github/spec-kit/tree/v1.2.3) | `candidate`. CLI, helper scripts, and workflow engine run offline in the container; agent steps not run. Maintenance, adoption, and security-channel evidence deferred to G8 ([ADR 0007](decisions/0007-g0-closure.md)). |
+| SpecKit Python dependencies | 40 exact pins besides `specify-cli` in [`tools/speckit/requirements.txt`](../tools/speckit/requirements.txt), installed with `--require-hashes --only-binary=:all:`; MIT, BSD, Apache-2.0, ISC, PSF-2.0, MIT-0, and MPL-2.0 (`pathspec` 1.1.1) declarations | `candidate`. Light license diligence only (ADR 0003 decision 9); `markdown-it-py`, `mdurl`, and `pathspec` declare licenses only through PyPI classifiers. A lock refresh is a reviewed change through `make speckit-lock`. |
+| Python base image | `python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962` (`python:3.13-slim` as pulled 2026-10-24; Python 3.13.17, Debian 13); PSF-2.0 for Python, Debian package licenses for the base | `candidate`. Built and run on `linux/amd64` only; arm64 unverified. The image's Debian package inventory and update policy are not assessed. |
+| uv | 0.13.5 from PyPI, `MIT OR Apache-2.0`; [uv](https://github.com/astral-sh/uv/tree/0.13.5) | `candidate`, maintainer tool only: compiles the lock file in a throwaway container (`make speckit-lock`); not in the image and not needed at run time. Installed without a hash check in that container. |
+
 ## Planned components
 
-PostgreSQL, NATS/JetStream, Neo4j Community, React, SpecKit, embedding runtime, and model artifacts remain `candidate`, with exact deployment versions/digests unselected. The owner selected the agent harnesses Claude Code, Codex CLI, Antigravity CLI, and OpenCode ([ADR 0003](decisions/0003-first-integrations-and-plugin-kernel.md)), GitHub.com as the first SCM, and Forgejo as a later second SCM ([ADR 0006](decisions/0006-github-first-scm.md)); each remains `candidate` until version-specific qualification. Selection is not admission. Architecture license baselines do not admit an edition or provider. Qualification must include maintenance and independent adoption relevant to the selected version, security reporting, real recovery/upgrade tests, and separate model rights/transparency evidence where applicable. No runtime service was installed or contacted by this task.
+PostgreSQL, NATS/JetStream, Neo4j Community, React, embedding runtime, and model artifacts remain `candidate`, with exact deployment versions/digests unselected. The owner selected the agent harnesses Claude Code, Codex CLI, Antigravity CLI, and OpenCode ([ADR 0003](decisions/0003-first-integrations-and-plugin-kernel.md)), GitHub.com as the first SCM, and Forgejo as a later second SCM ([ADR 0006](decisions/0006-github-first-scm.md)); each remains `candidate` until version-specific qualification. Selection is not admission. Architecture license baselines do not admit an edition or provider. Qualification must include maintenance and independent adoption relevant to the selected version, security reporting, real recovery/upgrade tests, and separate model rights/transparency evidence where applicable. No runtime service was installed or contacted by this task.

@@ -1,0 +1,19 @@
+# Agent-free workflow whose gate, like the bundled speckit workflow's gates, has no verdict_input.
+schema_version: '1.0'
+workflow:
+  id: gate-probe-interactive
+  name: Gate probe without a verdict input
+  version: 0.0.1
+  description: Shell step, gate without verdict_input, shell step
+steps:
+- id: before
+  type: shell
+  run: echo before > before.txt
+- id: review
+  type: gate
+  message: Review before continuing.
+  options: [approve, reject]
+  on_reject: abort
+- id: after
+  type: shell
+  run: echo after > after.txt
