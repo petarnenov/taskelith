@@ -15,7 +15,7 @@ On 2026-10-25 the owner approved the task `enforce-comment-length`; the coordina
 
 ## Checks
 
-Node v24.22.1, npm 12.2.1, in the worktree: `make verify` passed at `4eb1d49` (278 tests) and at `d74375c` (282 tests; 99.62% lines, 95.68% branches, 99.27% functions), each including `npm run verify:comments` and the archive dry run; `npm run openspec -- validate enforce-comment-length --strict` passed.
+Node v24.22.1, npm 12.2.1, in the worktree: `make verify` passed at `4eb1d49` (278 tests) at `d74375c`, and at `0c3a8fd` (282 tests; 99.62% lines, 95.68% branches, 99.27% functions), each including `npm run verify:comments` and the archive dry run; `npm run openspec -- validate enforce-comment-length --strict` passed.
 
 ## Independent review
 
@@ -39,6 +39,18 @@ Assigned reviewer (rotation): Claude Code with `claude-fable-5-1`, effort medium
   15. Low: dead exemptions (JSON lockfiles, `.agent/`) removed.
   16. Low: missing tests for a multi-line block after code, a comment with both violations, CRLF in a `#` file, and `;#`; added.
   17. Low: task 3.1 was unticked; ticked.
+- **Pass 2 at `5633499` — session `f9ad03ae-8754-484b-a938-a3a9cc96d27a`.** SHA-256 snapshots before and after were equal (`b6ea49c8…039b`). The reviewer confirmed findings 1, 2, 4 to 12, and 15 to 17 as resolved, and 3, 13, and 14 as resolved but imprecisely recorded or worded. Findings: 0 Critical, 0 High, 1 Medium, 10 Low.
+  1. Medium: the referral of finding 3 omitted worker step 3 of `docs/agent-task-protocol.md` and was missing from the remaining gates. Both are now recorded.
+  2. Low: the script's header claimed `AGENTS.md` names the file kinds; it now points to the scope requirement.
+  3. Low: the design made the same claim; corrected.
+  4. Low: a tracked symbolic link to a directory or a submodule crashed the check; only regular files are read now.
+  5. Low: an extensionless file was read twice; the text is now read once.
+  6. Low: "Makefiles, Dockerfiles" in the scope requirement was wider than the check; it now says files named `Makefile` or `Dockerfile`, and the design names `*.mk` and `Dockerfile.dev` as unchecked.
+  7. Low: the design did not name two missed cases, an apostrophe in a plain YAML scalar and quotes in a Makefile assignment; it now does.
+  8. Low: this record claimed a test for skipping deleted files; corrected.
+  9. Low: this record called `Makefile` comment-only; corrected.
+  10. Low: `.mts`, `.cts`, and `.cjs` had no test; added.
+  11. Low: the `plain-data.ts` comment put a throwing inspection among the problems; reworded.
 
 ## Remaining gates
 
