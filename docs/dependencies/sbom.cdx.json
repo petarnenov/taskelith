@@ -2307,6 +2307,21 @@
       "externalReferences": []
     },
     {
+      "bom-ref": "@taskelith/sdlc@0.0.0",
+      "type": "library",
+      "name": "@taskelith/sdlc",
+      "version": "0.0.0",
+      "scope": "required",
+      "purl": "pkg:npm/%40taskelith/sdlc@0.0.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:private",
+          "value": "true"
+        }
+      ],
+      "externalReferences": []
+    },
+    {
       "bom-ref": "@tufjs/canonical-json@2.0.0",
       "type": "library",
       "name": "@tufjs/canonical-json",
@@ -14805,6 +14820,12 @@
       "dependsOn": []
     },
     {
+      "ref": "@taskelith/sdlc@0.0.0",
+      "dependsOn": [
+        "@taskelith/kernel@0.0.0"
+      ]
+    },
+    {
       "ref": "@tufjs/canonical-json@2.0.0",
       "dependsOn": []
     },
@@ -16826,6 +16847,7 @@
         "@semantic-release/npm@13.2.0",
         "@semantic-release/release-notes-generator@14.1.1",
         "@taskelith/kernel@0.0.0",
+        "@taskelith/sdlc@0.0.0",
         "@types/node@24.19.2",
         "conventional-changelog-conventionalcommits@9.3.1",
         "semantic-release@25.0.9",
