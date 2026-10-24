@@ -69,7 +69,7 @@ Results:
 | Prompt correlation | `verified` | `egress-off`: both assistant messages carried a `user_message_uuid` equal to the client-supplied `uuid` of a user message the probe had sent. |
 | Resume after harness restart | `verified` | `resume-create`, `resume-continue`: a new process resumed the session by ID and recalled the code word under the same `session_id`. |
 | Permission request answered by an external client | `verified` | `approval-deny`, `approval-allow`: the `canUseTool` callback received the `Bash` request with its `toolUseID`. Deny: the command did not run, and the turn ended with `success`. Allow: the command ran. |
-| Interruption | `verified` | `interrupt`: the prompt asked for a 60 s `sleep` followed by a file write, and the probe approved every tool request without recording it. `interrupt()` at 8 s ended the turn at 8.0 s with `error_during_execution`; that the `sleep` was running at that moment is inferred, because the probe did not log the tool request. A check at 78 s found that the command after the `sleep` never ran. The harness process exited with code 1 after the interrupted result; the cause was not isolated. |
+| Interruption | `verified` (turn level) | `interrupt`: the prompt asked for a 60 s `sleep` followed by a file write, and the probe approved every tool request without recording it. `interrupt()` at 8 s ended the turn at 8.0 s with `error_during_execution`; that the `sleep` was running at that moment is inferred, because the probe did not log the tool request. A check at 78 s found that the file write after the `sleep` never happened; because the harness process exited right after the interrupted result, whether `interrupt()` alone cancels a running command is not isolated. The harness process exited with code 1 after the interrupted result; the cause was not isolated. |
 | Input requests other than permissions | not tested | No scenario asked the harness for non-permission user input. |
 | Exit and terminal outcome | `verified` | `success`, `error_during_execution`, and `error_max_turns` (`max-turns`) results were observed; the `max-turns` run also approved every tool request without recording it. The SDK also throws an exception after an error result, so the plugin must map both to one terminal outcome. |
 
@@ -113,4 +113,5 @@ Proposal for the port design, not yet decided: each plugin manifest declares its
 - An alternative provider or gateway path, if the owner wants one, authenticated only through a subscription (ADR 0005).
 - The automatic interrupted-turn re-run, and repeated runs to check stability.
 - Independent adoption evidence for the pinned version.
+- A host side-effect check with before-and-after listings, which the `harness-qualification` spec now requires; this record does not yet meet it.
 - A versioned conformance suite in the repository, run through `make`, once the agent port exists (G1).
