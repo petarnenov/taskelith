@@ -49,3 +49,7 @@ Remaining findings: 0.
 ## Remaining gates
 
 Merge into `dev`; the next promotion brings this change to `main`.
+
+## Integration and archival
+
+The owner authorized the settings and the documentation fix on 2026-10-24. Integrated into `dev` at `45998fb` through pull request #16 (rebase merge); no workflow ran for the pull request or the push to `dev`. It reaches `main` with the next promotion. Archived with the pinned OpenSpec CLI afterwards.
