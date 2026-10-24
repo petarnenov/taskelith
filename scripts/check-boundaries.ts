@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { isBuiltin } from 'node:module';
 import { dirname, extname, join, posix, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -132,7 +132,7 @@ function extIsGo(rel: string, base: string): boolean {
   return extname(rel) === '.go' || base === 'go.mod' || base === 'go.sum' || base === 'go.work';
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const violations = checkWorkspaceBoundaries(process.cwd());
   if (violations.length > 0) {
     for (const v of violations) process.stderr.write(`Boundary violation: ${v}\n`);

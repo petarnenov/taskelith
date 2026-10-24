@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { checkWorkspaceBoundaries } from '../scripts/check-boundaries.ts';
 
 test('current repository passes workspace boundary checks', () => {
@@ -68,6 +70,31 @@ test('boundary checker rejects Go artifacts, SDK imports in domain/application, 
     assert(violations.some(v => v.includes('apps/web/src/view.ts') && v.includes('"fs"')));
     assert(violations.some(v => v.includes('apps/web/src/view.ts') && v.includes('backend/worker module')));
     assert(violations.some(v => v.includes('src/cli.ts') && v.includes('cannot import development scripts')));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('boundary checker CLI runs when started through a symlinked path', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-boundaries-cli-'));
+  try {
+    const realDir = join(root, 'real');
+    const linkedDir = join(root, 'linked');
+    mkdirSync(realDir);
+    symlinkSync(realDir, linkedDir, 'dir');
+    symlinkSync(fileURLToPath(new URL('../scripts/check-boundaries.ts', import.meta.url)), join(realDir, 'check-boundaries.ts'));
+    const workspace = join(root, 'workspace');
+    mkdirSync(workspace);
+    writeFileSync(join(workspace, 'bridge.go'), 'package main\n');
+
+    const run = spawnSync(
+      process.execPath,
+      ['--experimental-strip-types', join(linkedDir, 'check-boundaries.ts')],
+      { cwd: workspace, encoding: 'utf8' },
+    );
+
+    assert.equal(run.status, 1, run.stderr);
+    assert.match(run.stderr, /Boundary violation: bridge\.go: .*R02\/R36/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
