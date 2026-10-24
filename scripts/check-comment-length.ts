@@ -1,11 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
-// Enforces the comment rule of AGENTS.md on exactly the file kinds it names,
-// with .mts, .cts, .mjs, and .cjs counted as TypeScript and JavaScript.
+// Enforces the comment rule of AGENTS.md on the file kinds of the scope
+// requirement, with .mts, .cts, .mjs, and .cjs as TypeScript and JavaScript.
 
 export const MAX_COMMENT_LINES = 2;
 export const MAX_LINE_LENGTH = 80;
@@ -151,16 +151,19 @@ export function commentViolations(file: string, text: string, comments: Comment[
 }
 
 export function fileViolations(file: string, readText: () => string): Violation[] {
-  const syntax = commentSyntax(file, () => readText().split('\n', 1)[0]);
+  let text: string | undefined;
+  const readOnce = () => (text ??= readText());
+  const syntax = commentSyntax(file, () => readOnce().split('\n', 1)[0]);
   if (!syntax) return [];
-  const text = readText();
+  text = readOnce();
   return commentViolations(file, text, syntax === 'slash' ? slashComments(text) : hashComments(text));
 }
 
 function trackedFiles(root: string): string[] {
   const files = execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' }).split('\0');
-  // A file deleted from the working tree but still in the index is skipped.
-  return files.filter((file) => file !== '' && existsSync(posix.join(root, file)));
+  // Skips index entries that are no regular file here: deleted files, symbolic
+  // links to directories, and submodules.
+  return files.filter((file) => file !== '' && statSync(posix.join(root, file), { throwIfNoEntry: false })?.isFile());
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {

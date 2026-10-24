@@ -12,7 +12,7 @@ A code comment SHALL span at most two lines of at most 80 characters each, count
 - **THEN** it counts as three lines and is written as `/** text */` instead
 
 ### Requirement: Comment length scope
-The comment length bound SHALL apply to every comment in tracked authored source, script, build, and configuration files: `*.ts`, `*.js`, `*.sh`, `*.yml`, and `*.yaml` files, Makefiles, Dockerfiles, and extensionless scripts. Generated files, meaning files a tool writes and no one edits by hand, lockfiles, captured third-party artifacts under `docs/qualification/`, and fixture copies of such captures SHALL be exempt.
+The comment length bound SHALL apply to every comment in tracked authored source, script, build, and configuration files: `*.ts`, `*.js`, `*.sh`, `*.yml`, and `*.yaml` files, files named `Makefile` or `Dockerfile`, and extensionless scripts. Generated files, meaning files a tool writes and no one edits by hand, lockfiles, captured third-party artifacts under `docs/qualification/`, and fixture copies of such captures SHALL be exempt.
 
 #### Scenario: Existing long comment touched
 - **WHEN** a change's diff edits a line of an existing comment that exceeds the bound

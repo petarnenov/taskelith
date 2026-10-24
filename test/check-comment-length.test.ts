@@ -14,6 +14,7 @@ test('selects the comment syntax by file name and shebang', () => {
   assert.equal(commentSyntax('src/cli.ts', () => ''), 'slash');
   assert.equal(commentSyntax('release.config.js', () => ''), 'slash');
   assert.equal(commentSyntax('test/fixed-archive-date.mjs', () => ''), 'slash');
+  for (const file of ['a.mts', 'a.cts', 'a.cjs']) assert.equal(commentSyntax(file, () => ''), 'slash');
   assert.equal(commentSyntax('scripts/run-node-script.sh', () => ''), 'hash');
   assert.equal(commentSyntax('.github/workflows/release.yml', () => ''), 'hash');
   assert.equal(commentSyntax('Makefile', () => ''), 'hash');

@@ -76,7 +76,7 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 }
 
 // Copies JSON-like data, reading each property once by descriptor; anything
-// else, a sparse array, a cycle, or an inspection that throws is a problem.
+// else or a cycle is a problem, and an inspection that throws is unreadable.
 export function copyPlainData(path: string, value: unknown): Result<unknown, readonly string[]> {
   const problems: string[] = [];
   try {

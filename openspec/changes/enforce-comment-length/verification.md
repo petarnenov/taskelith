@@ -8,7 +8,7 @@ On 2026-10-25 the owner approved the task `enforce-comment-length`; the coordina
 
 - The check, run over the tracked files at `d113b6a` before its fixture exemption existed, found 124 violations: 57 in the SpecKit fixture scaffold copy, now exempt as a copy of the capture, and 67 in 38 authored files, now 0. The design records the counting rules.
 - A comment line of 93 characters appended to `scripts/setup.ts` made the check exit 1 with `scripts/setup.ts:32: comment line is 93 characters (max 80)`; the line was then removed.
-- Every changed comment keeps its contract or rationale; the diff of the 38 comment-only files changes only comment lines.
+- Every changed comment keeps its contract or rationale. Of the 38 files with shortened comments, 37 change only comment lines, and `Makefile` also adds the `npm run verify:comments` step.
 - `docs/dependencies/licenses.json` changes only in its provenance digests of `package.json` and `scripts/dependency-inventory.ts`, regenerated with `npm run inventory:dependencies`.
 - Evidence check: the change adds no external link.
 - Requirements stay under 500 characters (250, 420, and 181).
@@ -24,7 +24,7 @@ Assigned reviewer (rotation): Claude Code with `claude-fable-5-1`, effort medium
 - **Pass 1 at `8cbf745` — session `67eb5016-6314-4baa-a04a-e8cdf0b113b0`.** SHA-256 snapshots before and after were equal (`ab9a94db…70d9`). Findings: 0 Critical, 0 High, 3 Medium, 14 Low.
   1. Medium: the baseline counts (42 and 82 in 39 files) did not reproduce; they are 57 and 67 in 38 files. Corrected in the design, proposal, and this record.
   2. Medium: the shortened comment in `scripts/check-contract-compatibility.ts` dropped "breaking". Restored.
-  3. Medium: `AGENTS.md` still states that the rule applies only to comments a diff adds or edits, and does not name the fixture copy exemption, so it disagrees with the modified requirements. `AGENTS.md` holds the owner's rule text and is outside the assigned scope, so it is not changed here; referred to the coordinator for an owner decision.
+  3. Medium: `AGENTS.md` still states that the rule applies only to comments a diff adds or edits, and does not name the fixture copy exemption, so it disagrees with the modified requirements. `AGENTS.md` holds the owner's rule text and is outside the assigned scope, so it is not changed here; referred to the coordinator for an owner decision. Worker step 3 of `docs/agent-task-protocol.md` states the same diff-based scope.
   4. Low: `native-reference.ts` claimed "any text"; now "unlike an identifier, any text".
   5. Low: `environment-checks.ts` setup comment was unclear; reworded.
   6. Low: `build-workspaces.ts` lost why an empty workspace is special; restored.
@@ -35,11 +35,12 @@ Assigned reviewer (rotation): Claude Code with `claude-fable-5-1`, effort medium
   11. Low: a `#` after `;`, `&`, `|`, `(`, or `)` was not a comment; it now starts one, with a test.
   12. Low: heredoc bodies and YAML block scalars were not named as a risk; the design names them.
   13. Low: other file kinds (`.tsx`, `*.mk`, and others) were silently unchecked; the design states that the kinds are exactly those `AGENTS.md` names.
-  14. Low: every tracked file was read, and a file deleted from the working tree crashed the check; the syntax is now chosen from the path first, an extensionless file is read only for its shebang, and deleted files are skipped, with a test.
+  14. Low: every tracked file was read, and a file deleted from the working tree crashed the check; the syntax is now chosen from the path first, an extensionless file is read only for its shebang, and deleted files are skipped; the shebang-only read has a test, the skipping does not.
   15. Low: dead exemptions (JSON lockfiles, `.agent/`) removed.
   16. Low: missing tests for a multi-line block after code, a comment with both violations, CRLF in a `#` file, and `;#`; added.
   17. Low: task 3.1 was unticked; ticked.
 
 ## Remaining gates
 
-Independent review, then merge into `dev` and archive by the coordinator.
+- Owner decision, referred to the coordinator: align the comment rule in `AGENTS.md` and worker step 3 of `docs/agent-task-protocol.md` with the modified requirements (every comment in scope, checked by `make verify`, fixture copies of captures exempt).
+- Merge into `dev` and archive by the coordinator.
