@@ -71,7 +71,7 @@ npm may require interactive MFA for this administrative action. Future authorize
 
 ## Verification and recovery
 
-The workflow installs locked dependencies without lifecycle scripts and runs `make verify`: tests with coverage thresholds of 75% for lines, branches, and functions and a check that every product module is covered, the contract compatibility check, the dependency inventory check, strict OpenSpec validation, and the packed file allowlist and installed CLI checks. Publishing runs only after verification succeeds. Workflow runs are serialized and are not cancelled mid-publication.
+The workflow installs locked dependencies without lifecycle scripts and runs `make verify`: the comment length check, tests with coverage thresholds of 75% for lines, branches, and functions and a check that every product module is covered, the contract compatibility check, the dependency inventory check, strict OpenSpec validation, and the packed file allowlist and installed CLI checks. Publishing runs only after verification succeeds. Workflow runs are serialized and are not cancelled mid-publication.
 
 Use the workflow's manual dispatch on main to retry. Before retrying after a partial publication failure, inspect npm versions, Git tags, and GitHub releases. Never move a published version tag or attempt to reuse an npm version. If npm publication succeeded but release notes failed, complete the missing GitHub release for the existing tag. If only a tag exists, investigate the failed publication before taking further action. Disable the workflow to suspend automatic publishing.
 

@@ -5,9 +5,8 @@ import { parseNativeReference, type NativeReference } from './native-reference.j
 
 export type ArtifactId = Identifier<'ArtifactId'>;
 
-// An immutable revision of a specification, plan, task list, or other workflow
-// output. The native reference says where the framework keeps the content, for
-// example a path at a commit; the digest identifies the content itself.
+// An immutable revision of a workflow output, such as a specification; the
+// native reference locates the content, and the digest identifies it.
 export interface ArtifactRevision {
   readonly artifactId: ArtifactId;
   readonly digest: ContentDigest;

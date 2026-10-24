@@ -4,9 +4,8 @@ import { Parser, type Diagnostic } from '@asyncapi/parser';
 import { compile, type JSONSchema } from 'json-schema-to-typescript';
 import openapiTS, { astToString } from 'openapi-typescript';
 
-// Generates the TypeScript types and the schema bundles of the wire contracts
-// from their documents (G1 decision D3 (a)). The output is build output: it is
-// written under src/generated/, which git ignores, before the workspace build.
+// Generates wire contract types and schema bundles (G1 decision D3 (a)) into
+// the git-ignored src/generated/ before the workspace build.
 
 export const CONTRACT_DOCUMENTS = Object.freeze({
   openapi: 'packages/contracts/documents/sdlc.openapi.json',

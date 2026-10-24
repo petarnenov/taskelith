@@ -3,9 +3,8 @@ import { err, ok, type Result } from './result.js';
 
 declare const identifierKind: unique symbol;
 
-// A branded string: identifiers of different kinds are not interchangeable at
-// compile time, and only parseIdentifier creates one. Owning modules declare
-// their own kinds, for example `type TaskId = Identifier<'TaskId'>`.
+// A branded string that only parseIdentifier creates; kinds do not mix, as in
+// `type TaskId = Identifier<'TaskId'>`, which the owning module declares.
 export type Identifier<Kind extends string> = string & { readonly [identifierKind]: Kind };
 
 export const MAX_IDENTIFIER_LENGTH = 128;

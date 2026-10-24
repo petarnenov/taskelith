@@ -1,5 +1,5 @@
-# SpecKit 1.2.3 for native-artifact capture; run only with --network none (G1 decision D5).
-# The Makefile passes the digest-pinned base image (SPECKIT_BASE).
+# SpecKit 1.2.3 for capture, only with --network none (G1 decision D5), on
+# the digest-pinned base image that the Makefile passes as SPECKIT_BASE.
 ARG BASE
 FROM ${BASE}
 COPY requirements.txt /tmp/requirements.txt

@@ -6,11 +6,8 @@ import { diff } from '@asyncapi/diff';
 import { Parser } from '@asyncapi/parser';
 import { CONTRACT_DOCUMENTS } from './generate-contracts.ts';
 
-// Fails when a contract document has a breaking change against its version at
-// the merge base with origin/dev and its info.version does not declare it
-// (ADR 0004 principle 6). OpenAPI documents are compared by oasdiff, run only
-// as its digest-pinned container without network access; AsyncAPI documents
-// by @asyncapi/diff. A document absent at the merge base passes.
+// Fails on a breaking contract change since the origin/dev merge base that
+// info.version does not declare (ADR 0004 principle 6).
 
 export const OASDIFF_IMAGE = 'tufin/oasdiff:v1.34.1@sha256:67a23cfea7d251e2ae34ee703ac8733c5d96bc2e7b90fd0f4d475ec99367b85f';
 const BASE_BRANCH = 'dev';
@@ -97,10 +94,8 @@ interface AsyncapiChange {
   readonly path: string;
 }
 
-// The parser adds x-parser-* annotations, such as generated schema
-// identifiers, to the objects it parses. The prefix is reserved for it: a
-// document may not use it for any key, so that every path through such a key
-// is an annotation.
+// The parser's own annotations; documents may not use the prefix, so that
+// every path through such a key is an annotation.
 const PARSER_PREFIX = 'x-parser-';
 
 export function reservedParserKeys(value: unknown, path = ''): string[] {
@@ -119,10 +114,8 @@ function isParserAnnotation(path: string): boolean {
   return path.split('/').some((segment) => segment.startsWith(PARSER_PREFIX));
 }
 
-// @asyncapi/diff leaves changes its standard does not classify, such as most
-// changes inside a payload schema, unclassified; they are treated as breaking.
-// It classifies a new info.version as breaking, but the version declares
-// changes rather than being one, so it is checked separately.
+// Unclassified changes, such as most payload schema changes, count as breaking;
+// a new info.version declares changes, so it is checked separately.
 export function asyncapiContractChanges(breaking: readonly AsyncapiChange[], unclassified: readonly AsyncapiChange[]): string[] {
   return [...breaking, ...unclassified]
     .filter((change) => change.path !== '/info/version' && !isParserAnnotation(change.path))

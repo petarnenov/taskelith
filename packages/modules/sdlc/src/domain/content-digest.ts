@@ -2,9 +2,8 @@ import { err, failure, ok, type Result } from '@taskelith/kernel';
 
 declare const contentDigestBrand: unique symbol;
 
-// An algorithm-prefixed digest of exact content, for example of a native
-// workflow schema or an artifact. Only SHA-256 is accepted until another
-// algorithm is needed.
+// An algorithm-prefixed digest of exact content, such as a workflow schema;
+// only SHA-256 is accepted until another algorithm is needed.
 export type ContentDigest = string & { readonly [contentDigestBrand]: true };
 
 const SHA256_DIGEST = /^sha256:[0-9a-f]{64}$/;

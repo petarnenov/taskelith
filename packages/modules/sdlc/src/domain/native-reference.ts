@@ -3,10 +3,8 @@ import { isDisplayText } from './display-text.js';
 
 declare const nativeReferenceBrand: unique symbol;
 
-// A framework plugin's own reference to a work item or artifact, such as a
-// change name or a file path at a commit. The domain stores it for display and
-// traceability and never interprets it; it may contain spaces and non-ASCII
-// text, unlike an identifier.
+// A plugin's own reference to a work item or artifact, such as a file path,
+// kept for display and never interpreted; unlike an identifier, any text.
 export type NativeReference = string & { readonly [nativeReferenceBrand]: true };
 
 export const MAX_NATIVE_REFERENCE_LENGTH = 1024;
