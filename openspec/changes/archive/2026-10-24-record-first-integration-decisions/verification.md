@@ -40,3 +40,7 @@ Remaining findings: 0.
 ## Remaining gates
 
 Integration (commit, push, merge) and archival, which require explicit owner authorization. The `assess-first-integration-candidates` change still has 6 open Medium findings. It must be reworked to reflect ADR 0003 and the Claude Code and Antigravity facts gathered on 2026-10-24, then re-reviewed by Codex.
+
+## Integration
+
+The owner authorized integration and archival on 2026-10-24. Integrated into `main` at `55866cfcf3e9e1c6c740ba63de556412354f5689` through pull request #3 (rebase merge). The `main` workflow run 40092893183 passed verification; semantic-release found no relevant changes, so no version was released. Archived with the pinned OpenSpec CLI afterwards.

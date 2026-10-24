@@ -44,3 +44,7 @@ All checks were executed under exact CI pins Node v24.22.1 and npm 12.2.1:
 ## Remaining gates
 
 Integration (commit, push, merge), archival, and owner decisions on the remaining G0 items (14 license-text coverage gaps, 2 bundled release-tool audit findings, and selection/qualification of the first OSS agent harness and self-hostable SCM integration) remain open.
+
+## Integration
+
+The owner authorized integration and archival on 2026-10-24. Integrated into `main` at `55866cfcf3e9e1c6c740ba63de556412354f5689` through pull request #3 (rebase merge). The `main` workflow run 40092893183 passed verification; semantic-release found no relevant changes, so no version was released. Archived with the pinned OpenSpec CLI afterwards.

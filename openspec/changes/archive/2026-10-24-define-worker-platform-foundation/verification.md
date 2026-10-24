@@ -31,3 +31,7 @@ No runtime tests for stateful path resolution were added to mirror prose: the re
 ## Remaining gates
 
 The OS-family choice is accepted by the owner, and independent review of the design contract is complete. No commit, integration, archive, CI execution, service installation, deployment, or publication was performed. Exact OS/distribution releases, CPU support, service modes, native dependencies, qualified integrations, identity/trust policy, operational targets, dependency admission, and G0 completion remain open.
+
+## Integration
+
+The owner authorized integration and archival on 2026-10-24. Integrated into `main` at `55866cfcf3e9e1c6c740ba63de556412354f5689` through pull request #3 (rebase merge). The `main` workflow run 40092893183 passed verification; semantic-release found no relevant changes, so no version was released. Archived with the pinned OpenSpec CLI afterwards.
