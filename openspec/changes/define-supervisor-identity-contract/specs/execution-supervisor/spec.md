@@ -15,7 +15,7 @@ A worker SHALL create an execution identity and journal it with the launch inten
 - **THEN** the worker reports the execution as uncertain, not as `not-started`
 
 ### Requirement: Launch record claimed once or sealed
-Each execution SHALL have one launch record, created exclusively and durably as either a claim by its first supervisor before its deadline or a seal. A supervisor SHALL spawn only after its claim succeeded, a party that loses the creation SHALL follow the winning record, and `not-started` SHALL be reported only after a durable seal is read.
+Each execution SHALL have one launch record, created exclusively and durably as either a claim by its first supervisor before its deadline or a seal. A supervisor SHALL spawn only after its claim succeeded, a party that loses the creation SHALL follow the winning record, `not-started` SHALL be reported only after a durable seal is read, and the record SHALL be removed only while the worker holds the execution's lock.
 
 #### Scenario: Seal and claim race
 - **WHEN** the worker seals while a delayed supervisor claims
@@ -69,7 +69,7 @@ Supervisors SHALL outlive a worker service restart where the operating system ke
 
 #### Scenario: Linux image upgrade
 - **WHEN** a Linux worker is upgraded by replacing its container
-- **THEN** its executions are drained first, and any not drained end with an unknown status
+- **THEN** its executions are drained first, and any not drained end with an unknown status only if the old namespace's end is proven, and are uncertain otherwise
 
 ### Requirement: Native evidence and a suspend-aware deadline
 Each platform SHALL supply its boot identity, process start time, process group, and parent links from the operating system, and the spawn deadline SHALL use a clock that counts system sleep. Behavior proven on one platform SHALL not establish it on another.

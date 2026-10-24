@@ -29,4 +29,4 @@ Goals: a contract that items 7, 8, 14, and 15 can implement and items 24 and 25 
 - A Node supervisor per execution costs memory; the contract counts it toward the execution's reservation (item 6).
 - Reading `kinfo_proc` and `mach_continuous_time` on macOS, and `CLOCK_BOOTTIME` and the cgroup files on Linux, from TypeScript needs mechanisms that item 15 must qualify, possibly a dependency that needs owner approval.
 - Requiring cgroup delegation narrows the supported Linux container settings; item 25 qualifies them.
-- On macOS, a harness whose processes leave their group can only end in an unproven termination, which holds its capacity until reconciled.
+- On macOS, an escape from the process group that the supervisor observes blocks the proof and holds the capacity until reconciled; an escape it does not observe can still lead to a false exit. That residual risk is accepted only through the harness qualification that a supported harness keeps its processes in its group.

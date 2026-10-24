@@ -13,7 +13,7 @@ G2 work plan item 4, assigned by the coordinator on 2026-10-25: a reviewed proto
 
 ## Checks
 
-Node v24.22.1, npm 12.2.1, in the worktree: `make verify` passed at `a326635`; `npm run openspec -- validate define-supervisor-identity-contract --strict` passed.
+Node v24.22.1, npm 12.2.1, in the worktree: `make verify` passed at `a326635`, `4cee8d8`, `4235c7d`, and after the final fixes and the merge of the current `dev`; `npm run openspec -- validate define-supervisor-identity-contract --strict` passed.
 
 ## Independent review
 
@@ -39,6 +39,16 @@ Assigned reviewer: Codex CLI with `gpt-6.1-sol`, reasoning effort medium, sandbo
   2. High: on Linux, a child with the supervisor's rights could move itself out of its containment. The process set must now have no write access to any cgroup of the worker, and the self-check must prove that a child can neither leave its containment nor change another.
   3. Medium: after a container replacement, a missing containment was taken as proof of exit. The worker now records the namespace incarnation; without proof that the old namespace's PID 1 died, the result is `uncertain`.
 
+- **Pass 3 at `4235c7d` — session `01a17029-e530-7571-bde6-980581e8410f`.** Confirmed the first two pass 2 resolutions and the third in the contract but not in the spec; 0 Critical, 1 High, 1 Medium, 1 Low. The worktree snapshots were equal. Item 3's draft file was removed from its worktree during the pass, after item 3 was integrated, so its external snapshot could not be taken afterwards; the reviewer ran in the `read-only` sandbox.
+
+## Unreviewed fixes after pass 3
+
+Pass 3 was the last allowed pass. The owner decided on 2026-10-25 to fix its High and Medium findings without another review; the Low is fixed under the Low-only rule. None of these fixes is reviewed.
+
+1. High: removing a finished execution's directory could delete a seal while a paused supervisor could still claim. The worker now removes the record only while it holds `lock` itself, taken without waiting, launch record last; a supervisor takes `lock` without waiting, exits if the directory or `intent` is missing, and never creates the directory. The spec requirement and a required test cover it.
+2. Medium: the Linux image-upgrade scenario ended undrained executions with an unknown status without proof of the old namespace's end. It now does so only with that proof, and reports `uncertain` otherwise.
+3. Low: `design.md` said that a macOS escape can only end in an unproven termination. It now separates an observed escape, which blocks the proof, from an unobserved one, the residual risk that the harness qualification accepts.
+
 ## Remaining gates
 
-Further review passes, then merge into `dev` and archive by the coordinator. The per-OS mechanisms of section 10, the Linux cgroup delegation, the container init, and the launchd behavior are qualification obligations of items 15 and 25 and G6.
+Merge into `dev` and archive by the coordinator. The per-OS mechanisms of section 10, the Linux cgroup delegation, the container init, and the launchd behavior are qualification obligations of items 15 and 25 and G6.

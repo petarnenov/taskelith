@@ -38,7 +38,7 @@ Every execution has a directory `worker/executions/<executionId>/` under the wor
 | `events` | Every supervisor | Append only | Descendant identities observed, cancellation steps, and termination evidence (section 8) |
 | `exit` | A supervisor | When the process set is proven empty | The child's exit code or signal, or an unknown status, and the termination evidence |
 
-The worker removes the directory only after the execution's terminal fact is recorded by the control plane and in its journal. An unreadable, corrupt, or newer-format file, or a combination the launch sequence cannot produce (for example a `handle` without a claim), is never guessed around: the execution becomes `uncertain` (section 7).
+The worker removes the directory only after the execution's terminal fact is recorded by the control plane and in its journal, and only while it holds `lock` itself, taken without waiting, so that no supervisor of the execution can hold it; it removes every file, the launch record last, and then the directory, before it releases `lock`. A supervisor takes `lock` without waiting and exits if it cannot, exits if the directory or `intent` is missing, and never creates the directory, so a supervisor that resumes after the cleanup cannot claim a launch record that a seal once occupied. An unreadable, corrupt, or newer-format file, or a combination the launch sequence cannot produce (for example a `handle` without a claim), is never guessed around: the execution becomes `uncertain` (section 7).
 
 ## 4. Launch sequence and crash points
 
@@ -48,7 +48,7 @@ The worker and supervisor run these steps in order. Each step is a named crash p
 2. **CP2** The worker creates the execution directory and writes `intent`.
 3. **CP3** The worker journals that the record exists (item 5). From this point on, a missing or damaged record is data loss, never evidence that nothing spawned.
 4. **CP4** The worker starts the supervisor as a detached process in a new session, passing only the execution directory.
-5. **CP5** The supervisor takes `lock`, writes `supervisor.1`, reads `intent`, and checks that the boot identity matches, that it can read the deadline clock, and that the deadline has not passed. If any check fails, it seals the launch record and exits.
+5. **CP5** The supervisor takes `lock` without waiting (it exits if it cannot), writes `supervisor.1`, reads `intent`, and checks that the boot identity matches, that it can read the deadline clock, and that the deadline has not passed. If any check fails, it seals the launch record and exits.
 6. **CP6** On Linux the supervisor creates the containment.
 7. **CP7** The supervisor creates the launch record as a claim. If the launch record already exists, it exits without spawning.
 8. **CP8** The supervisor spawns the child, before the deadline, as the leader of a new session and process group. On Linux the supervisor moves itself into the containment just before the spawn, so that the child is born inside it, and moves itself back to its own cgroup right after, so that the containment holds only the process set. A spawn begun before the deadline is a start under the claimed authorization (item 3).
@@ -188,6 +188,7 @@ Items 15, 24, and 25 implement these through the deterministic test harness (ite
 - A crash of the worker or a supervisor at each crash point CP1 to CP12, followed by recovery, gives the result section 6 assigns and never a second spawn.
 - The worker seals while a delayed supervisor claims: whichever creation wins, the other party reads it and follows it, and `not-started` is reported only when the seal won.
 - A supervisor paused before its claim while the worker seals does not spawn when it resumes.
+- A supervisor started before a seal and paused before taking `lock`, resumed after the terminal fact was recorded and the directory removed, does not spawn; while a paused supervisor holds `lock`, the worker does not remove the directory.
 - A recorded execution whose directory is deleted after CP3 gives `uncertain`, not `not-started`.
 - A child whose process ID is reused by an unrelated process after the child exited is not adopted, and no signal reaches the unrelated process.
 - The worker service restarts while executions run: supervisors are adopted, and the process sets are untouched.
