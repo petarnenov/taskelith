@@ -6,7 +6,7 @@ Check every Taskelith design, change, test, and review against the owner's first
 ## Requirements
 
 ### Requirement: First-class principles govern every change
-Every design, code change, test, and review of Taskelith SHALL be checked against the eight principles in ADR 0004, and a change that cannot meet one SHALL record the conflict and ask the owner instead of exempting itself.
+Every design, code change, test, and review of Taskelith SHALL be checked against the nine principles in ADR 0004, and a change that cannot meet one SHALL record the conflict and ask the owner instead of exempting itself.
 
 #### Scenario: Review of a change
 - **WHEN** an independent review of a Taskelith change is recorded in its `verification.md`
@@ -62,3 +62,14 @@ Every HTTP API SHALL be defined first in a versioned OpenAPI 3.1 document and ev
 #### Scenario: New endpoint
 - **WHEN** an HTTP endpoint is added or changed
 - **THEN** the OpenAPI document changes in the same change, and CI fails on an unversioned breaking change
+
+### Requirement: Code coverage threshold
+`make verify` SHALL fail when automated tests cover less than 75% of lines, branches, or functions of the compiled product code in `dist/`, measured without repository scripts, or when a product module under `src/` is missing from the coverage report.
+
+#### Scenario: Coverage below the threshold
+- **WHEN** a change lowers line, branch, or function coverage below 75%
+- **THEN** `make verify` fails locally and in CI
+
+#### Scenario: Untested product module
+- **WHEN** a product module under `src/` is not loaded by any test
+- **THEN** the coverage scope check names the module and `make verify` fails
