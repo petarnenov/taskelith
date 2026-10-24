@@ -41,6 +41,20 @@ test('accepts a report that covers every product module', () => {
   }
 });
 
+test('ignores a module whose compiled file declares only types', () => {
+  const root = workspace(['src/cli.ts', 'src/ports/clock.ts', 'src/core/plan.ts']);
+  try {
+    mkdirSync(join(root, 'dist/ports'), { recursive: true });
+    writeFileSync(join(root, 'dist/ports/clock.js'), 'export {};\n//# sourceMappingURL=clock.js.map\n');
+    mkdirSync(join(root, 'dist/core'), { recursive: true });
+    writeFileSync(join(root, 'dist/core/plan.js'), 'export const plan = 1;\n');
+    const lcov = `SF:${join(root, 'dist/cli.js')}\nend_of_record\n`;
+    assert.deepEqual(missingFromCoverage(root, lcov), ['src/core/plan.ts']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('resolves relative report paths against the workspace root, not the process directory', () => {
   const root = workspace(['src/cli.ts']);
   try {

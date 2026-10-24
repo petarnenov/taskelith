@@ -7,7 +7,7 @@ SPECKIT_BASE := python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e0717
 SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
-.PHONY: verify toolchain hooks speckit-image speckit-capture speckit-lock
+.PHONY: verify toolchain hooks doctor setup speckit-image speckit-capture speckit-lock
 
 verify: toolchain
 	npm test
@@ -47,3 +47,15 @@ speckit-lock:
 	docker run --rm --user "$$(id -u):$$(id -g)" --env HOME=/tmp --volume "$(CURDIR)/tools/speckit:/work" --workdir /work $(SPECKIT_BASE) sh -c \
 		'pip install --quiet --target /tmp/uv uv==$(UV_PIN) && /tmp/uv/bin/uv pip compile --quiet --generate-hashes \
 		--python-version 3.13 --python-platform x86_64-unknown-linux-gnu --no-header --output-file requirements.txt requirements.in'
+
+# Checks that this clone can build and verify; changes nothing.
+doctor:
+	@node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 6) ? 0 : 1)' 2>/dev/null || { \
+		echo "make doctor: Node.js $$(node -v 2>/dev/null || echo 'not found') cannot run the repository scripts. Run 'make setup'." >&2; \
+		exit 1; \
+	}
+	@NODE_PIN=$(NODE_PIN) NPM_PIN=$(NPM_PIN) node --experimental-strip-types scripts/doctor.ts
+
+# Installs what is missing: the .nvmrc Node.js (through nvm, if installed), the npm pin, the locked dependencies, and the pre-push hook.
+setup:
+	@NODE_PIN=$(NODE_PIN) NPM_PIN=$(NPM_PIN) bash scripts/with-pinned-node.sh scripts/setup.ts
