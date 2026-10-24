@@ -1,7 +1,7 @@
 # engineering-principles Specification
 
 ## Purpose
-Check every Taskelith design, change, test, and review against the owner's first-class principles in ADR 0004, and keep OpenSpec mandatory for developing Taskelith while managed projects choose their own framework.
+Check every Taskelith design, change, test, and review against the owner's first-class principles in ADR 0004 (principle 8 as amended by ADR 0008), and bind every task to the project's selected SDLC framework, with OpenSpec as the default.
 
 ## Requirements
 
