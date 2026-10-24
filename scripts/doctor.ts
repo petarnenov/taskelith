@@ -4,7 +4,6 @@ import {
 } from './environment-checks.ts';
 
 // `make doctor`: reports whether this clone can build and verify, without changing anything.
-// scripts/with-pinned-node.sh runs it with the Node.js version in .nvmrc when nvm has it.
 
 const run: CommandRunner = (command, args) => {
   const result = spawnSync(command, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });

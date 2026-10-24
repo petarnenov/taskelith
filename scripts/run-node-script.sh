@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Runs a repository TypeScript script, after checking that the Node.js on PATH
-# can strip its types (Node.js 22.6 or later).
+# Runs a repository TypeScript script if Node.js can strip types (22.6+).
 # Usage: run-node-script.sh <script.ts> [args...]
 set -eu
 : "${NODE_PIN:?NODE_PIN must be set; run this through make.}"

@@ -1,13 +1,6 @@
 #!/usr/bin/env bash
-# Runs a command with the Node.js version in .nvmrc, for this run only; the
-# calling shell keeps its own Node.js until `nvm use`.
-# Usage: with-pinned-node.sh <install|use> <command> [args...]
-#   install (make setup): installs the pinned version through nvm if missing
-#     (nvm install looks the version up online even when it is installed) and
-#     makes it nvm's default, so that new shells start with it.
-#   use (make doctor, make verify): switches to the pinned version when nvm
-#     has it; otherwise the shell's Node.js stays, and the command reports the
-#     mismatch.
+# Runs a command with the .nvmrc Node.js for this run only; the calling
+# shell keeps its own Node.js. Modes: install (setup), use (doctor, verify).
 set -eu
 
 usage="usage: with-pinned-node.sh <install|use> <command> [args...]"
@@ -24,6 +17,8 @@ export INVOKING_NODE
 
 nvm_script="${NVM_DIR:-${HOME:-}/.nvm}/nvm.sh"
 
+# nvm install looks the version up online, so it runs only when missing; the
+# default alias makes new shells start with the pinned version.
 install_pinned_node() {
   set +eu
   . "$nvm_script" --no-use
@@ -58,6 +53,7 @@ case "$mode" in
     if [ -s "$nvm_script" ]; then install_pinned_node; fi
     ;;
   use)
+    # Without the pinned version, the shell's Node.js stays and checks fail.
     if [ "$INVOKING_NODE" != "v$NODE_PIN" ] && [ -s "$nvm_script" ]; then use_pinned_node; fi
     ;;
   *)

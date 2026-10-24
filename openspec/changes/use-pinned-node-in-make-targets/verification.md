@@ -55,6 +55,14 @@ Assigned reviewer: Antigravity CLI, chosen by the worker by rotation (the latest
 
 - **Pass 3 — Codex CLI session `01a16fad-7d10-7611-8f42-d73ca124bb98`, on `1f0fda4`.** Same invocation; the output header reported model `gpt-6.1-sol`, reasoning effort `medium`, and sandbox `read-only`. SHA-256 snapshots before and after were equal. The reviewer confirmed the resolution of all three pass-2 findings and found no new problem: 0 Critical, 0 High, 0 Medium, 0 Low.
 
+## Unreviewed fixes after the third pass
+
+At integration the coordinator found that `dev` (`021854a`) had added the owner's comment rule to `AGENTS.md` (at most two lines of at most 80 characters, counting delimiters, indentation, and markers), and that six comments added by this branch broke it: three in the `Makefile` (96, 104, and 152 characters), one in `scripts/doctor.ts` (90 characters), the three-line header of `scripts/run-node-script.sh`, and the nine-line header of `scripts/with-pinned-node.sh`. The owner decided to shorten them and record the fix here as unreviewed, without a fourth review pass.
+
+- `origin/dev` was merged into the branch with a merge commit (`57697ac`), followed by `npm ci --ignore-scripts` for the new workspace packages.
+- The comments were shortened or split without changing code: the `Makefile` comments now fit two lines; the added line in `scripts/doctor.ts` was dropped; the wrapper's mode notes moved next to `install_pinned_node` and the `use` branch. Every comment line the branch adds is at most 79 characters, and no comment is longer than two lines.
+- `bash -n` passed for both scripts; the reproduction table above was repeated with the same results; `make verify` from a v24.21.0 shell passed with 228 tests, 0 failed, and 33 strict OpenSpec validations.
+
 ## Limitations
 
 - The reviewers did not run `make setup` or the full `make verify`, because both write files; the author ran them as recorded above.

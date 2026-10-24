@@ -9,7 +9,7 @@ UV_PIN := 0.13.5
 
 .PHONY: verify verify-checks toolchain hooks doctor setup speckit-image speckit-capture speckit-lock contract-compatibility
 
-# Runs with the .nvmrc Node.js when nvm has it, so that the shell does not need 'nvm use' first.
+# Uses the .nvmrc Node.js when nvm has it, so no 'nvm use' is needed first.
 verify:
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use $(MAKE) --no-print-directory verify-checks
 
@@ -58,10 +58,12 @@ speckit-lock:
 		'pip install --quiet --target /tmp/uv uv==$(UV_PIN) && /tmp/uv/bin/uv pip compile --quiet --generate-hashes \
 		--python-version 3.13 --python-platform x86_64-unknown-linux-gnu --no-header --output-file requirements.txt requirements.in'
 
-# Checks that this clone can build and verify, with the .nvmrc Node.js when nvm has it; changes nothing.
+# Checks that this clone can build and verify; changes nothing.
+# Uses the .nvmrc Node.js when nvm has it.
 doctor:
 	@NODE_PIN=$(NODE_PIN) NPM_PIN=$(NPM_PIN) bash scripts/with-pinned-node.sh use bash scripts/run-node-script.sh scripts/doctor.ts
 
-# Installs what is missing: the .nvmrc Node.js (through nvm, if installed, as its default), the npm pin, the locked dependencies, and the pre-push hook.
+# Installs what is missing: the .nvmrc Node.js (as nvm's default), the npm
+# pin, the locked dependencies, and the pre-push hook.
 setup:
 	@NODE_PIN=$(NODE_PIN) NPM_PIN=$(NPM_PIN) bash scripts/with-pinned-node.sh install bash scripts/run-node-script.sh scripts/setup.ts
