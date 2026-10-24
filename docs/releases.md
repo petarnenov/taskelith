@@ -17,7 +17,7 @@ Keep the main clone on `dev` and give each change a worktree outside it. From th
 git fetch origin
 git worktree add --no-track ../taskelith-worktrees/<change> -b <change> origin/dev
 cd ../taskelith-worktrees/<change>
-make setup && nvm use   # node_modules is per worktree
+make setup   # node_modules is per worktree
 # work, commit, then push; the pre-push hook runs make verify
 git push -u origin <change>
 ```
@@ -27,7 +27,7 @@ git push -u origin <change>
 Two pitfalls, both observed on 2026-10-24:
 
 - `gh pr merge --delete-branch` run from a worktree merges the pull request but leaves the remote branch in place: before deleting the local branch, `gh` switches the worktree to `dev`, which fails because the main clone has `dev` checked out, and `gh` stops before it deletes the remote branch. After confirming that the pull request is merged, delete the remote branch from the main clone with `git push origin --delete <change>`.
-- The `pre-push` hook runs `make verify` for every push, including a branch deletion such as `git push origin --delete <change>`. Run `nvm use` first; with a mismatched Node version the toolchain check fails and the deletion is refused.
+- The `pre-push` hook runs `make verify` for every push, including a branch deletion such as `git push origin --delete <change>`. `make verify` switches to the `.nvmrc` Node.js through nvm when nvm has it; without it, the toolchain check fails and the deletion is refused.
 
 ## Branch protection
 
