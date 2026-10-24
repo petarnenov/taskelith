@@ -9,13 +9,17 @@ On 2026-10-25 the owner approved the task `enforce-comment-length`; the coordina
 - The check, run over the tracked files at `d113b6a` before its fixture exemption existed, found 124 violations: 57 in the SpecKit fixture scaffold copy, now exempt as a copy of the capture, and 67 in 38 authored files, now 0. The design records the counting rules.
 - A comment line of 93 characters appended to `scripts/setup.ts` made the check exit 1 with `scripts/setup.ts:32: comment line is 93 characters (max 80)`; the line was then removed.
 - Every changed comment keeps its contract or rationale. Of the 38 files with shortened comments, 37 change only comment lines, and `Makefile` also adds the `npm run verify:comments` step.
-- `docs/dependencies/licenses.json` changes only in its provenance digests of `package.json` and `scripts/dependency-inventory.ts`, regenerated with `npm run inventory:dependencies`.
+- `docs/dependencies/licenses.json` changes only in its provenance digests of `package.json` and `scripts/dependency-inventory.ts`, regenerated with `npm run inventory:dependencies` before the merge of `dev` and with `make dependency-inventory` after it, because `dev` added that target and changed the inventory scripts.
 - Evidence check: the change adds no external link.
 - Requirements stay under 500 characters (250, 436, and 181).
 
 ## Checks
 
 Node v24.22.1, npm 12.2.1, in the worktree: `make verify` passed at `4eb1d49` (278 tests) at `d74375c` and `0c3a8fd` (282 tests), and at `804b88a` (283 tests; 99.62% lines, 95.68% branches, 99.27% functions), each including `npm run verify:comments` and the archive dry run; `npm run openspec -- validate enforce-comment-length --strict` passed.
+
+## Merge of dev (protocol step 9)
+
+On 2026-10-25 the coordinator returned the task because it conflicted with `dev`. `4e69c3e` merges `origin/dev` at `2d3b175` into `255a785`. The conflicts were in `.githooks/pre-push`, which keeps the check-pre-push line from `dev` under the shortened one-line comment, and in `scripts/environment-checks.ts`, which keeps `gitRemedy` from `dev` above the shortened two-line `npmRemedy` comment. `a6ac85f` regenerates `docs/dependencies/licenses.json` with `make dependency-inventory`; only provenance digests change. On the owner's decision, the merge commit was rebuilt with the same tree and parents and a message without git's conflict list, before any push. After `npm ci --ignore-scripts`, `make verify` passed at `6b0ba4b`, the same tree as `a6ac85f` (291 tests; 99.62% lines, 95.68% branches, 99.27% functions).
 
 ## Independent review
 
@@ -57,6 +61,11 @@ Assigned reviewer (rotation): Claude Code with `claude-fable-5-1`, effort medium
   3. Low: the `pnpm-lock.yaml` exemption was dead; removed from the script, its test, and the design.
   4. Low: no test protected that a shebang in a TypeScript file is no comment; added.
   5. Low: "the owner picks the first" in `event-metadata.ts` was ambiguous; now "the owning module". The first wording of that fix was 87 characters long, and `make verify` failed on it at `cd3f2cf`; `804b88a` shortened it.
+- **Pass 4 at `6b0ba4b` — session `a255ac0a-67e4-4639-addf-9efb2e0cf5d9`.** Permitted by the owner on 2026-10-25 and limited to the merge of `dev` and the inventory regeneration. SHA-256 snapshots before and after were equal (`6bb2f8ef…e3bf`). The reviewer confirmed both conflict resolutions, the comments brought in from `dev`, the provenance digests, and that the counts, the `docs/releases.md` step list, and strict validation still hold. Findings: 0 Critical, 0 High, 1 Medium, 1 Low.
+  1. Medium: this record did not cover the merge, the `make verify` result after it, or pass 4, and named only `npm run inventory:dependencies` for the regeneration. Recorded above and here.
+  2. Low: the merge commit message kept git's conflict list. The merge commit was rebuilt with a clean message.
+
+  Both are unreviewed record-only fixes, approved by the owner on 2026-10-25 without a further pass.
 
 ## Remaining gates
 
