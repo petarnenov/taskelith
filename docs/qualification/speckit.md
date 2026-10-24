@@ -47,9 +47,11 @@ OpenSpec trees need no capture: this repository's `openspec/changes/archive/` ho
 | A gate pauses without a TTY and resumes | `verified` | Without a TTY a gate returns `paused` with exit 0, with the gate's message and options in the JSON. `resume` with an approving `verdict_input` completes the run; a rejecting one aborts it with exit 1 under `on_reject: abort`; a value outside the options fails the run; resuming a completed run is refused. |
 | The bundled gates can be decided without a TTY | `refuted` | A gate without `verdict_input`, as in the bundled workflow, stays `paused` when resumed with a verdict input, and "Resume options" shows that `resume` takes only `--input` and `--json`; that the gate reads no other input was read from the pinned gate step's source. Deciding the bundled gates headlessly needs a workflow that adds `verdict_input`, or a TTY. The interactive path was not run. |
 | Runs persist under `.specify/workflows/runs/` | `verified` | Each run keeps `inputs.json`, `log.jsonl`, `state.json`, and a copy of `workflow.yml` in `.specify/workflows/runs/<run-id>/`; `workflow status --json` lists runs with status and update time. |
-| Agent commands behave as their prompts say | **(unverified)** | Not run: they need an agent harness (G3 and later). |
+| Agent commands behave as their prompts say | **(unverified)** | Not run: they need an agent harness (G4, [ADR 0010](../decisions/0010-g1-closure.md)). |
 
 ## Remaining before admission
+
+Note of 2026-10-25: [ADR 0010](../decisions/0010-g1-closure.md) moves the agent steps, the interactive gate path, `--require-spec`, and the arm64 run to G4, with the SpecKit adapter, and the qualification evidence to G8.
 
 - Run the agent steps through a qualified harness, and with it the interactive gate path.
 - Build and run the image on Linux arm64 and record the result.

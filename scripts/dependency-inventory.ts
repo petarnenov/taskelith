@@ -1,9 +1,9 @@
-import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
+import { REGENERATE_REMEDY, sha256 } from './inventory-provenance.ts';
 import { workspacePackageDirs } from './workspace-packages.ts';
 
-export const sha256 = (content: string | Buffer): string => createHash('sha256').update(content).digest('hex');
+export { sha256 };
 
 interface LockedPackage {
   version: string;
@@ -140,6 +140,6 @@ export function normalizeSbom(input: string): string {
 
 export function checkEvidence(actual: string, expectedPath: string): void {
   if (!existsSync(expectedPath) || readFileSync(expectedPath, 'utf8') !== actual) {
-    throw new Error(`Dependency evidence drift: ${expectedPath}; regenerate with npm run inventory:dependencies and review`);
+    throw new Error(`Dependency evidence drift: ${expectedPath}; ${REGENERATE_REMEDY}`);
   }
 }

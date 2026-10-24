@@ -7,7 +7,7 @@ SPECKIT_BASE := python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e0717
 SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
-.PHONY: verify verify-checks toolchain hooks doctor setup speckit-image speckit-capture speckit-lock contract-compatibility
+.PHONY: verify verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility
 
 # Uses the .nvmrc Node.js when nvm has it, so no 'nvm use' is needed first.
 verify:
@@ -36,6 +36,12 @@ toolchain:
 
 hooks:
 	git config core.hooksPath .githooks
+	git config merge.dependency-inventory.driver true
+
+# Regenerates docs/dependencies, for example after a merge left it stale; it
+# reinstalls first, because the inventory reads the installed packages.
+dependency-inventory:
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use sh -c 'npm ci --ignore-scripts && npm run inventory:dependencies'
 
 # Fails on an undeclared breaking contract change since the origin/dev merge
 # base; runs oasdiff as its digest-pinned container, so it needs Docker.
