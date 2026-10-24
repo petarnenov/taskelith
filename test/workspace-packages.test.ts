@@ -77,7 +77,7 @@ test('the contract reports manifest, export, base, and reference problems', () =
       'name must be @taskelith/sdlc',
       'must be private',
       'type must be module',
-      'exports must be only the root entry ./dist/index.js with types ./dist/index.d.ts',
+      'exports must be only the root entry ./dist/index.js with types ./dist/index.d.ts, and for a module also its port entry ./dist/port.js',
       'tsconfig.json must extend ../../../tsconfig.package.json',
       'tsconfig.json must take its layout from the shared package base, not override outDir',
       'depends on @taskelith/missing, which is not a workspace package',
@@ -85,6 +85,28 @@ test('the contract reports manifest, export, base, and reference problems', () =
     ]);
     rmSync(join(root, 'packages/kernel/tsconfig.json'));
     assert.deepEqual(workspacePackageProblems(root, 'packages/kernel'), ['tsconfig.json is missing']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('only a module package may also export its port entry', () => {
+  const root = contractWorkspace();
+  const exports = {
+    '.': { types: './dist/index.d.ts', default: './dist/index.js' },
+    './port': { types: './dist/port.d.ts', default: './dist/port.js' },
+  };
+  try {
+    writeFileSync(join(root, 'packages/modules/sdlc/package.json'), JSON.stringify({
+      name: '@taskelith/sdlc', private: true, type: 'module', exports, dependencies: { '@taskelith/kernel': '0.0.0' },
+    }));
+    writeFileSync(join(root, 'packages/kernel/package.json'), JSON.stringify({ name: '@taskelith/kernel', private: true, type: 'module', exports }));
+
+    assert.deepEqual(workspacePackageProblems(root, 'packages/modules/sdlc'), []);
+    assert.deepEqual(workspacePackageProblems(root, 'packages/kernel'), [
+      'exports must be only the root entry ./dist/index.js with types ./dist/index.d.ts, and for a module also its port entry ./dist/port.js',
+    ]);
+    assert.deepEqual(missingBuildOutputs(root, 'packages/modules/sdlc'), ['dist/index.js', 'dist/index.d.ts', 'dist/port.js', 'dist/port.d.ts']);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

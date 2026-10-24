@@ -1,6 +1,14 @@
+import type { SDLC_FRAMEWORK_PORT_VERSION } from '@taskelith/sdlc/port';
+
 // The version of the plugin API this SDK implements. Pre-1.0, so a plugin's
 // caret range accepts only the same minor version.
-export const PLUGIN_API_VERSION = '0.1.0';
+export const PLUGIN_API_VERSION = '0.2.0';
+
+// The frozen port versions this plugin API carries. A breaking port change
+// needs a breaking plugin API version, so registration rejects old plugins.
+export const PLUGIN_API_PORT_VERSIONS: { readonly SdlcFramework: typeof SDLC_FRAMEWORK_PORT_VERSION } = Object.freeze({
+  SdlcFramework: '1.0.0',
+});
 
 type Version = readonly [major: number, minor: number, patch: number];
 

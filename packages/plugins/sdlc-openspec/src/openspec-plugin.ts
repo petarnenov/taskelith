@@ -6,7 +6,7 @@ import type { OpenSpecCliOptions } from './openspec-cli.js';
 export const OPENSPEC_PLUGIN_MANIFEST = Object.freeze({
   id: 'sdlc-openspec',
   version: '0.0.0',
-  pluginApiRange: '^0.1.0',
+  pluginApiRange: '^0.2.0',
   port: 'SdlcFramework',
   capabilities: Object.freeze(OPENSPEC_CAPABILITIES.optionalOperations.map(kebabCase)),
 });

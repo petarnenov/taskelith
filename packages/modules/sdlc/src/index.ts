@@ -117,24 +117,28 @@ export {
 } from './domain/workflow-run-binding.js';
 export {
   OPTIONAL_SDLC_OPERATIONS,
-  parseSdlcFrameworkCapabilities,
+  SDLC_FRAMEWORK_PORT_VERSION,
   type ArtifactRequirement,
+  type ArtifactRevisionData,
   type FinalizationReport,
   type FrameworkContext,
   type OptionalSdlcOperation,
-  type ParsedSdlcFrameworkCapabilities,
   type ResolvedWorkflow,
   type SdlcFramework,
   type SdlcFrameworkCapabilities,
   type SdlcOperation,
+  type StageData,
   type StageInstructions,
   type StageRequest,
   type StructuralValidationReport,
   type StructuralValidationRequest,
   type ValidationProblem,
+  type WorkItemData,
   type WorkItemRequest,
+  type WorkflowDefinitionData,
   type WorkflowRequest,
 } from './ports/sdlc-framework.js';
+export { parseSdlcFrameworkCapabilities, type ParsedSdlcFrameworkCapabilities } from './ports/sdlc-framework-capabilities.js';
 export {
   runSdlcFrameworkConformance,
   type ExpectedOutcome,

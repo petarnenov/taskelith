@@ -1,3 +1,3 @@
-// Fixture-only stub (G1 item 10): fixtures/ and test/ only. G1 item 12 adds
-// a test-only normaliser here, and G4 completes the adapter.
+// Fixture-only stub: fixtures/ and test/, with a test-only normaliser in
+// test/ (G1 item 12). G4 completes the adapter.
 export {};

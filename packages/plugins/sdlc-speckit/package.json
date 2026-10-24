@@ -11,6 +11,7 @@
   },
   "devDependencies": {
     "@taskelith/kernel": "0.0.0",
+    "@taskelith/plugin-sdk": "0.0.0",
     "@taskelith/sdlc": "0.0.0"
   }
 }

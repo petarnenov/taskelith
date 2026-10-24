@@ -1,16 +1,20 @@
 # sdlc-framework-port Specification
 
 ## Purpose
-Define the draft `SdlcFramework` port of the SDLC module, its capability declaration, and the framework-neutral conformance suite that each framework plugin's tests run with that plugin's fixtures.
+Define the `SdlcFramework` port of the SDLC module, frozen as version 1, its capability declaration, and the framework-neutral conformance suite that each framework plugin's tests run with that plugin's fixtures.
 
 ## Requirements
 
-### Requirement: Draft framework port
-The SDLC module SHALL export a draft `SdlcFramework` port with the asynchronous operations `discoverWorkItems`, `resolveWorkflow`, `describeArtifacts`, `inspectArtifactRevisions`, `prepareStageInstructions`, `validateStructure`, and `finalize`, each returning a kernel `Result`, with requests and results in plain text shapes that reuse the workflow-model input shapes. The port SHALL live in the module's `ports` layer and SHALL name no specific framework.
+### Requirement: Frozen framework port
+The SDLC module SHALL export the `SdlcFramework` port, frozen as semantic version `1.0.0`, with the asynchronous operations `discoverWorkItems`, `resolveWorkflow`, `describeArtifacts`, `inspectArtifactRevisions`, `prepareStageInstructions`, `validateStructure`, and `finalize`, each returning a kernel `Result`, with requests and results in the port's own plain data shapes. The port SHALL live in the module's `ports` layer and SHALL name no specific framework.
 
 #### Scenario: Plugin result parsed by the module
 - **WHEN** a plugin returns a resolved workflow
 - **THEN** its definition is a workflow definition input that the workflow-model parser accepts or rejects
+
+#### Scenario: Domain change
+- **WHEN** a domain input type gains a field
+- **THEN** the port's shapes stay the same and the module fails to compile until its parsers accept them again
 
 ### Requirement: Explicit work item in requests
 Every work-item operation of the port SHALL take the working copy and the work item's native reference, workflow resolution SHALL take an optional work item, and no operation SHALL depend on an implicit current work item kept in the working copy.
@@ -61,3 +65,24 @@ The conformance suite SHALL report a resolved workflow whose native stages do no
 #### Scenario: Declared obligation without a native stage
 - **WHEN** a plugin declares `review` as a native obligation but its workflow covers review only with a platform-managed stage
 - **THEN** the report has a shape finding naming `review`
+
+### Requirement: Port entry
+The SDLC module SHALL export its frozen port through the port entry `@taskelith/sdlc/port`, which holds only the port's types and constants and no domain or application code.
+
+#### Scenario: Values of the port entry
+- **WHEN** the port entry is loaded
+- **THEN** its only values are the port version and the optional operations
+
+### Requirement: Breaking port changes
+A breaking change to the frozen port SHALL take a new major port version, recorded in an ADR, and SHALL pass both the OpenSpec and the SpecKit fixture sets through the conformance suite before it merges; a compatible change SHALL take a new minor version.
+
+#### Scenario: Removed result field
+- **WHEN** a change removes a field from a port result
+- **THEN** it raises the port's major version and the plugin API version it is carried by
+
+### Requirement: Conformance on both frameworks' fixtures
+The OpenSpec fixtures SHALL pass the conformance suite through the OpenSpec adapter, and the SpecKit fixtures through a test-only normaliser in the SpecKit stub package until the SpecKit adapter replaces it.
+
+#### Scenario: SpecKit fixtures
+- **WHEN** the conformance suite runs the SpecKit mapping cases against the normaliser on the fixture working copy
+- **THEN** it reports no findings

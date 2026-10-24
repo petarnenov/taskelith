@@ -19,7 +19,7 @@
       "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$"
     },
     "pluginApiRange": {
-      "description": "Supported plugin API versions as a caret range, for example ^0.1.0.",
+      "description": "Supported plugin API versions as a caret range, for example ^0.2.0.",
       "type": "string",
       "maxLength": 64,
       "pattern": "^\\^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
