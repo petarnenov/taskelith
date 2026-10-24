@@ -42,7 +42,7 @@ Development follows the [bootstrap governance policy](https://github.com/petarne
 Use the exact Node.js version in `.nvmrc` and the npm version pinned in CI. Development targets the `dev` branch; see the [release flow](https://github.com/petarnenov/taskelith/blob/main/docs/releases.md).
 
 ```sh
-make setup    # installs what is missing: the .nvmrc Node.js (through nvm, as its default), the npm pin, the locked dependencies, the pre-push hook
+make setup    # installs what is missing: the .nvmrc Node.js (through nvm, as its default), the npm pin, the locked dependencies, the hooks, the inventory merge driver
 make doctor   # checks the environment without changing it
 make verify   # the same checks CI runs
 ```

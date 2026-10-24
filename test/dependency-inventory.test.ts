@@ -3,7 +3,10 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { checkEvidence, checkLicenseReviews, collectLicenses, normalizeSbom, parseLicenseReviews, sha256 } from '../scripts/dependency-inventory.ts';
+import {
+  checkEvidence, checkInventoryInputs, checkLicenseReviews, collectLicenses, INVENTORY_INPUTS, normalizeSbom, parseLicenseReviews, sha256,
+  staleInventoryInputs,
+} from '../scripts/dependency-inventory.ts';
 import type { LicenseReview } from '../scripts/dependency-inventory.ts';
 
 test('bundled legacy licenses retain text hashes and expose missing coverage', () => {
@@ -91,6 +94,20 @@ test('drift detection leaves retained evidence unchanged', () => {
     assert.equal(readFileSync(path, 'utf8'), 'reviewed evidence');
     assert.throws(() => checkEvidence('new evidence', join(root, 'absent')), /drift/);
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('inventory inputs are stale when their content differs from the recorded provenance', () => {
+  const contents: Record<string, string> = Object.fromEntries(INVENTORY_INPUTS.map(path => [path, `content of ${path}`]));
+  const readInput = (path: string) => Buffer.from(contents[path]);
+  const provenance = Object.fromEntries(INVENTORY_INPUTS.map(path => [path, sha256(contents[path])]));
+  assert.deepEqual(staleInventoryInputs(provenance, readInput), []);
+  checkInventoryInputs(provenance, readInput);
+  contents['package-lock.json'] = 'merged lockfile';
+  assert.deepEqual(staleInventoryInputs(provenance, readInput), ['package-lock.json']);
+  assert.throws(() => checkInventoryInputs(provenance, readInput),
+    /^Error: Dependency inventory is stale; changed inputs: package-lock\.json; regenerate with make dependency-inventory/);
+  assert.deepEqual(staleInventoryInputs(undefined, readInput), [...INVENTORY_INPUTS]);
+  assert.deepEqual(staleInventoryInputs('not an object', readInput), [...INVENTORY_INPUTS]);
 });
 
 test('license coverage reviews must match every gap by exact manifest', () => {
