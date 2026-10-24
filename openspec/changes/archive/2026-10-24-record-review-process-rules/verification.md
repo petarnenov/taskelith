@@ -44,3 +44,7 @@ Remaining findings: 0.
 ## Remaining gates
 
 Integration (commit, push, merge) and archival with owner authorization.
+
+## Integration and archival
+
+The owner authorized integration and archival on 2026-10-24. Integrated into `main` at `049ee44` through pull request #12 (rebase merge). The `main` workflow run 40101098817 passed verification; semantic-release found no relevant changes, so no version was released. Archived with the pinned OpenSpec CLI afterwards.
