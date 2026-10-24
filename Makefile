@@ -32,14 +32,16 @@ hooks:
 
 # SpecKit runs only in its digest-pinned container (G1 decision D5); see docs/qualification/speckit.md.
 speckit-image:
-	docker build --quiet --tag $(SPECKIT_IMAGE) tools/speckit
+	docker build --quiet --build-arg BASE=$(SPECKIT_BASE) --tag $(SPECKIT_IMAGE) tools/speckit
 
 speckit-capture: speckit-image
-	rm -rf $(SPECKIT_CAPTURE)
-	mkdir -p $(SPECKIT_CAPTURE)
+	rm -rf $(SPECKIT_CAPTURE).tmp
+	mkdir -p $(SPECKIT_CAPTURE).tmp
 	docker run --rm --network none --user "$$(id -u):$$(id -g)" --env HOME=/tmp \
-		--volume "$(CURDIR)/tools/speckit:/tools:ro" --volume "$(CURDIR)/$(SPECKIT_CAPTURE):/out" \
+		--volume "$(CURDIR)/tools/speckit:/tools:ro" --volume "$(CURDIR)/$(SPECKIT_CAPTURE).tmp:/out" \
 		$(SPECKIT_IMAGE) bash /tools/capture.sh
+	rm -rf $(SPECKIT_CAPTURE)
+	mv $(SPECKIT_CAPTURE).tmp $(SPECKIT_CAPTURE)
 
 speckit-lock:
 	docker run --rm --volume "$(CURDIR)/tools/speckit:/work" --workdir /work $(SPECKIT_BASE) sh -c \

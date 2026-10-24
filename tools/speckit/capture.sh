@@ -2,7 +2,7 @@
 # Runs inside the taskelith-speckit image with --network none. Scaffolds a SpecKit project,
 # runs the deterministic CLI, helper scripts, and workflow engine, and writes the scaffolded
 # tree, the created feature directories, and a probe transcript to /out, with dates, timestamps,
-# and run identifiers normalized so that repeated captures are identical.
+# and workflow run identifiers normalized so that repeated captures are identical.
 set -euo pipefail
 
 readonly OUT=/out
@@ -13,11 +13,25 @@ readonly PROBE_WORKFLOW=/tools/gate-probe.yml
 readonly INTERACTIVE_PROBE_WORKFLOW=/tools/gate-probe-interactive.yml
 TODAY="$(date +%Y-%m-%d)"
 readonly TODAY
-
 readonly NORMALIZE_TIME=(-e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+\+00:00/<timestamp>/g' -e "s/$TODAY/<date>/g")
 
-normalize() {
-  sed -E "${NORMALIZE_TIME[@]}" -e 's/\b[0-9a-f]{8}\b/<run-id>/g'
+# probe_in <directory> <title> <command>: runs the command with bash and records it, its output, and its exit code.
+probe_in() {
+  local directory="$1" title="$2" command="$3" status=0 output
+  output="$(cd "$directory" && bash -o pipefail -c "$command" 2>&1 </dev/null)" || status=$?
+  {
+    printf '## %s\n\n```console\n$ %s\n%s\n```\n\n' "$title" "$command" "$output"
+    printf 'Exit code: %s\n\n' "$status"
+  } >>"$TRANSCRIPT"
+}
+
+probe() {
+  probe_in "$PROJECT" "$@"
+}
+
+latest_run_id() {
+  (cd "$PROJECT" && specify workflow status --json) |
+    python -c 'import json, sys; print(max(json.load(sys.stdin)["runs"], key=lambda run: run["updated_at"])["run_id"])'
 }
 
 # copy_normalized <source directory> <target directory>: copies a tree with dates and timestamps normalized.
@@ -27,29 +41,20 @@ copy_normalized() {
   find "$2" -type f -exec sed -E -i "${NORMALIZE_TIME[@]}" {} +
 }
 
-# probe <title> <command>: runs the command with bash in the project and records it, its output, and its exit code.
-probe() {
-  local title="$1" command="$2" status=0 output
-  output="$(cd "$PROJECT" && bash -c "$command" 2>&1 </dev/null)" || status=$?
-  {
-    printf '## %s\n\n```console\n' "$title"
-    printf '$ %s\n%s\n' "$command" "$output" | normalize
-    printf '```\n\nExit code: %s\n\n' "$status"
-  } >>"$TRANSCRIPT"
-}
-
-latest_run_id() {
-  (cd "$PROJECT" && specify workflow status --json) |
-    python -c 'import json, sys; print(max(json.load(sys.stdin)["runs"], key=lambda run: run["updated_at"])["run_id"])'
-}
-
-scaffold() {
-  (cd /tmp && specify init demo --integration generic --integration-options="--commands-dir .agent/commands/" \
-    --script sh --non-interactive --ignore-agent-tools >/dev/null)
-  copy_normalized "$PROJECT" "$OUT/scaffold"
+# Replaces dates, timestamps, and the identifiers of the runs that the probes created.
+normalize_transcript() {
+  local run_ids=() run
+  for run in "$PROJECT"/.specify/workflows/runs/*/; do
+    run_ids+=(-e "s/$(basename "$run")/<run-id>/g")
+  done
+  sed -E -i "${NORMALIZE_TIME[@]}" "${run_ids[@]}" "$TRANSCRIPT"
 }
 
 probe_scaffold() {
+  probe_in /tmp "Scaffold options" "specify init --help"
+  probe_in /tmp "Scaffold a project" \
+    "specify init demo --integration generic --integration-options='--commands-dir .agent/commands/' --script sh --non-interactive --ignore-agent-tools"
+  copy_normalized "$PROJECT" "$OUT/scaffold"
   probe "Version" "pip show specify-cli | grep -E '^(Name|Version):'; python --version"
   probe "Scaffolded files" "find . -type f | LC_ALL=C sort"
 }
@@ -66,8 +71,10 @@ probe_helper_scripts() {
   probe "Feature files after setting up tasks" "ls specs/001-user-auth"
   probe "Create a second feature" "bash $SCRIPTS/create-new-feature.sh --json --short-name audit-log 'Add an audit log'"
   probe "Current feature pointer after the second feature" "cat .specify/feature.json"
-  probe "Environment override of the current feature" "SPECIFY_FEATURE_DIRECTORY=specs/001-user-auth bash $SCRIPTS/check-prerequisites.sh --json"
-  probe "Current feature pointer after the override" "cat .specify/feature.json"
+  probe "Path resolution with an override" "SPECIFY_FEATURE_DIRECTORY=specs/001-user-auth bash $SCRIPTS/check-prerequisites.sh --json --paths-only"
+  probe "Current feature pointer after path resolution" "cat .specify/feature.json"
+  probe "Validation with an override" "SPECIFY_FEATURE_DIRECTORY=specs/001-user-auth bash $SCRIPTS/check-prerequisites.sh --json"
+  probe "Current feature pointer after validation" "cat .specify/feature.json"
   probe "Empty plan" ": > specs/002-audit-log/plan.md; SPECIFY_FEATURE_DIRECTORY=specs/002-audit-log bash $SCRIPTS/check-prerequisites.sh --json"
   copy_normalized "$PROJECT/specs" "$OUT/features"
 }
@@ -89,15 +96,15 @@ probe_workflow_engine() {
   probe "Resume a gate without a verdict input, passing a verdict" "specify workflow resume $(latest_run_id) -i verdict=approve --json"
   probe "Run status, ordered by update time" \
     "specify workflow status --json | python -c 'import json, sys; print(json.dumps(sorted(json.load(sys.stdin)[\"runs\"], key=lambda run: run[\"updated_at\"]), indent=2))'"
-  probe "Persisted run files" "find .specify/workflows/runs -type f | sed -E 's#runs/[0-9a-f]{8}/#runs/<run-id>/#' | LC_ALL=C sort | uniq -c"
+  probe "Persisted run files" "find .specify/workflows/runs -type f | sed -E 's#runs/[^/]+/#runs/<run-id>/#' | LC_ALL=C sort | uniq -c"
 }
 
 main() {
-  printf '# SpecKit probe transcript\n\nGenerated by `make speckit-capture` (`tools/speckit/capture.sh`); dates, run identifiers, and timestamps are normalized.\n\n' >"$TRANSCRIPT"
-  scaffold
+  printf '# SpecKit probe transcript\n\nGenerated by `make speckit-capture` (`tools/speckit/capture.sh`); dates, timestamps, and workflow run identifiers are normalized.\n\n' >"$TRANSCRIPT"
   probe_scaffold
   probe_helper_scripts
   probe_workflow_engine
+  normalize_transcript
 }
 
 main "$@"

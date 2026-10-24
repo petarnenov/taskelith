@@ -11,10 +11,10 @@ Date: 2026-10-24. Status: evidence for G1 item 9 ([G1 plan](../g1-plan.md)), run
 | Python dependencies | [`tools/speckit/requirements.txt`](../../tools/speckit/requirements.txt), 41 exact pins with SHA-256 hashes, compiled from [`requirements.in`](../../tools/speckit/requirements.in) by `make speckit-lock` with uv 0.13.5. The image installs it with `pip install --require-hashes --only-binary=:all:`, so no source build and no unhashed download can occur |
 | uv | 0.13.5, used only by `make speckit-lock` to compile the lock file, in a throwaway container on the same base digest. It is not in the image and not needed at run time: pip installs the locked wheels. pip-tools 7.5.1 was tried first and failed with pip 26.2.2 (`AttributeError: 'InstallRequirement' object has no attribute 'use_pep517'`) |
 | git | Not installed. `specify init` produced a byte-identical file list with and without git in the image, and the helper scripts ran without it |
-| Image | [`tools/speckit/Dockerfile`](../../tools/speckit/Dockerfile), built by `make speckit-image` as the local tag `taskelith-speckit:1.2.3`; on the author's machine image ID `sha256:d8010317c3ec9bba97259ab12b5c7ec9a533eadc4c03fd54b563d6f5124b4374`, `linux/amd64`, Docker Desktop server 29.5.2 |
+| Image | [`tools/speckit/Dockerfile`](../../tools/speckit/Dockerfile), which takes the base digest from the `Makefile` (`SPECKIT_BASE`), built by `make speckit-image` as the local tag `taskelith-speckit:1.2.3`; on the author's machine image ID `sha256:d8010317c3ec9bba97259ab12b5c7ec9a533eadc4c03fd54b563d6f5124b4374`, `linux/amd64`, Docker Desktop server 29.5.2 |
 | Host | macOS x86_64 (Docker Desktop). An arm64 build is **(unverified)**; the lock lists the hashes of every published wheel of each pinned version, but it was compiled for `x86_64-unknown-linux-gnu` |
 
-The transitive dependencies declare MIT, BSD-2-Clause, BSD-3-Clause, Apache-2.0, ISC, PSF-2.0, MIT-0, and dual Apache-2.0 or BSD licenses in their installed metadata; `markdown-it-py`, `mdurl`, and `pathspec` declare theirs only through classifiers, which were not read. This is the light license diligence of ADR 0003 decision 9, not a license-text audit.
+The transitive dependencies declare MIT, BSD-2-Clause, BSD-3-Clause, Apache-2.0, ISC, PSF-2.0, MIT-0, and dual Apache-2.0 or BSD licenses in their installed metadata. `markdown-it-py` 4.2.0 and `mdurl` 0.1.2 (MIT) and `pathspec` 1.1.1 (MPL-2.0, the only weak-copyleft license in the tree) declare theirs only through PyPI classifiers. This is the light license diligence of ADR 0003 decision 9, not a license-text audit.
 
 ## Method
 
@@ -23,9 +23,9 @@ The transitive dependencies declare MIT, BSD-2-Clause, BSD-3-Clause, Apache-2.0,
 1. scaffolds a project with `specify init demo --integration generic --integration-options="--commands-dir .agent/commands/" --script sh --non-interactive --ignore-agent-tools`; the `generic` integration writes the agent commands to a plain directory and needs no agent CLI;
 2. runs the bash helper scripts through the feature lifecycle they support without an agent;
 3. runs the workflow engine on the bundled `speckit` workflow and on two agent-free probe workflows, [`gate-probe.yml`](../../tools/speckit/gate-probe.yml) (a gate with `verdict_input`) and [`gate-probe-interactive.yml`](../../tools/speckit/gate-probe-interactive.yml) (a gate without it, like the bundled gates);
-4. writes the outputs to [`speckit-1.2.3/`](speckit-1.2.3/), replacing what was there.
+4. writes the outputs to a temporary directory, which replaces [`speckit-1.2.3/`](speckit-1.2.3/) only when the run succeeds.
 
-Dates, timestamps, and eight-hex-digit run identifiers are normalized in the outputs, so that a repeated capture is identical. The author ran the capture twice, at different times, and `diff -r` found no difference.
+Each probe runs with `bash -o pipefail`. Dates and timestamps are normalized in every output, and the identifiers of the workflow runs the probes created are normalized in the transcript, so that a repeated capture is identical. The author ran the capture twice, at different times, and `diff -r` found no difference.
 
 ## Captured tree
 
@@ -39,10 +39,10 @@ OpenSpec trees need no capture: this repository's `openspec/changes/archive/` ho
 
 | Claim | Result | Evidence in `probes.md` |
 | --- | --- | --- |
-| Scaffolding needs no network | `verified` | `specify init` exits 0 under `--network none`; the scaffold is built from assets bundled in the wheel. It creates no `.git`, and `init` has no `--no-git` option. |
-| `check-prerequisites` rejects a missing feature, a missing plan, an empty plan, and missing tasks | `verified` | "Prerequisites without a feature", "without a plan", "Empty plan", and "requiring tasks" each exit 1 with a named error; with a plan present it exits 0. |
+| Scaffolding needs no network | `verified` | "Scaffold a project": `specify init` exits 0 under `--network none`; the scaffold is built from assets bundled in the wheel. It creates no `.git` ("Scaffolded files"), and "Scaffold options" lists no `--no-git` option. |
+| `check-prerequisites` rejects a missing feature, a missing plan, an empty plan, and missing tasks | `verified` | "Prerequisites without a feature", "without a plan", "Empty plan", and "requiring tasks" each exit 1 with a named error; with a plan present it exits 0. Its `--require-spec` option was not run **(unverified)**. |
 | `setup-tasks` creates `tasks.md` | `refuted` | It exits 0 and returns the tasks template in its JSON output (`TASKS_TEMPLATE_CONTENT`) for the agent; the feature directory still has only `plan.md` and `spec.md`. |
-| The current feature is per working copy | `verified` | Each `create-new-feature` rewrites `.specify/feature.json`. `SPECIFY_FEATURE_DIRECTORY` overrides it, and `check-prerequisites` then writes the override back into `feature.json`, so even a check changes the shared pointer. Two features in one working copy therefore interfere; this was shown sequentially, not with concurrent processes. |
+| The current feature is per working copy | `verified` | Each `create-new-feature` rewrites `.specify/feature.json`. `SPECIFY_FEATURE_DIRECTORY` overrides it. In its validating mode `check-prerequisites` then writes the override back into `feature.json`, so even a check changes the shared pointer; with `--paths-only` it leaves the pointer unchanged. Two features in one working copy therefore interfere; this was shown sequentially, not with concurrent processes. |
 | The bundled workflow runs without an agent | `refuted` | `workflow run speckit` fails at its first step: the `generic` integration has no CLI dispatch. The workflow's `requires.integrations.any` lists `alquimia`, `claude`, `copilot`, `gemini`, and `opencode`. |
 | A gate pauses without a TTY and resumes | `verified` | Without a TTY a gate returns `paused` with exit 0, with the gate's message and options in the JSON. `resume` with an approving `verdict_input` completes the run; a rejecting one aborts it with exit 1 under `on_reject: abort`; a value outside the options fails the run; resuming a completed run is refused. |
 | The bundled gates can be decided without a TTY | `refuted` | A gate without `verdict_input`, as in the bundled workflow, stays `paused` when resumed with a verdict input. Deciding the bundled gates headlessly needs a workflow that adds `verdict_input`, or a TTY. The interactive path was not run. |
