@@ -4,6 +4,7 @@
 
 - Product: Taskelith. Repository, npm package, and CLI: `taskelith`.
 - All repository content, documentation, comments, specifications, issues, commits, and pull requests must be English.
+- A code comment is at most two lines of at most 80 characters each (owner rule, 2026-10-24). It applies to every comment a change adds or edits; longer existing comments are shortened when touched.
 - Chat, progress updates, reports, and final answers addressed to the owner must be Bulgarian. Preserve exact technical identifiers.
 
 ## Scope and architecture
