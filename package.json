@@ -34,11 +34,14 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "npm run build && node --experimental-strip-types --test test/*.test.ts",
+    "check:boundaries": "tsc -p tsconfig.check.json && node --experimental-strip-types scripts/check-boundaries.ts",
+    "test": "npm run build && npm run check:boundaries && node --experimental-strip-types --test test/*.test.ts",
     "prepack": "npm run build",
     "openspec": "openspec",
     "release": "semantic-release",
-    "verify:package": "node --experimental-strip-types scripts/verify-package.ts"
+    "verify:package": "node --experimental-strip-types scripts/verify-package.ts",
+    "inventory:dependencies": "node --experimental-strip-types scripts/inventory-dependencies.ts",
+    "verify:dependencies": "node --experimental-strip-types scripts/inventory-dependencies.ts --check"
   },
   "publishConfig": {
     "access": "public"
