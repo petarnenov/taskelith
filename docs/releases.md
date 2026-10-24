@@ -9,6 +9,21 @@ Taskelith uses semantic-release and GitHub Actions. The repository checks are de
 3. A promotion pull request from `dev` into `main` runs `make verify` in GitHub.
 4. Merging the promotion into `main` runs `make verify` again and releases qualifying changes.
 
+## Branch protection
+
+Applied by the owner's authorization on 2026-10-24:
+
+- `main` accepts changes only through a pull request whose `verify` check passed on a branch that is up to date with `main`. Administrators are included. Force pushes and deletion are blocked. Tags created by the release job are not affected.
+- `dev` blocks force pushes and deletion.
+- Squash merging is disabled for the repository; merge commits and rebase merges stay available.
+
+GitHub cannot require that a pull request into `main` comes from `dev`; that rule is kept by convention.
+
+Because the `verify` check must run on a branch that is up to date with `main`, synchronize `dev` after every promotion:
+
+- After a merge-commit promotion, `dev` is only behind: fast-forward it with `git fetch origin && git switch dev && git merge --ff-only origin/main && git push`.
+- After a rebase promotion, `main` holds rewritten copies of the promoted commits, so the histories diverge: merge `main` into `dev` with `git fetch origin && git switch dev && git merge origin/main && git push`. Merge-commit promotions avoid this step's extra merge commit.
+
 | Commit | Version change |
 | --- | --- |
 | `fix: correct CLI output` | Patch |
@@ -44,7 +59,9 @@ The owner requested this automatic publication policy. Changes merged or pushed 
 
 ## Sources
 
-- [npm security and 2FA-bypass token deprecation](https://github.blog/changelog/2026-07-08-npm-install-time-security-and-gat-bypass2fa-deprecation/)
-- [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/)
-- [npm trust CLI](https://docs.npmjs.com/cli/v12/commands/npm-trust/)
-- [semantic-release GitHub Actions](https://semantic-release.org/recipes/ci-configurations/github-actions/)
+A link labeled "docs" is an unversioned page, last retrieved on 2026-10-24; the others are pinned to a commit or tag.
+
+- npm security and 2FA-bypass token deprecation ([docs](https://github.blog/changelog/2026-07-08-npm-install-time-security-and-gat-bypass2fa-deprecation/))
+- [npm trusted publishing](https://github.com/npm/documentation/blob/6af52f08a7345a8a96fc095c1e3c6117bbbac72c/content/packages-and-modules/securing-your-code/trusted-publishers.mdx)
+- [npm trust CLI](https://github.com/npm/cli/blob/v12.2.1/docs/lib/content/commands/npm-trust.md)
+- semantic-release GitHub Actions recipe ([docs](https://semantic-release.org/recipes/ci-configurations/github-actions/))
