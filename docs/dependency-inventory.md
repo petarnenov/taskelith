@@ -27,7 +27,10 @@ This bootstrap command may download the specified tools from npm. It does not pu
 Branches that change dependencies or the generator regenerate both retained files, so merging them would conflict in generated JSON. `.gitattributes` routes both files to the `dependency-inventory` merge driver, which `make setup` and `make hooks` configure as `true`: when both sides changed a file, the merge keeps the current branch's version instead of conflicting or mixing lines from both sides. The kept version is then stale whenever the merged inputs differ from the ones it was generated from:
 
 - the `post-merge` hook compares the merged package manifest, lockfile, Node pin, and generator sources with the provenance hashes in `licenses.json`, without running npm, and prints the changed inputs and the remedy;
-- `make verify` runs the same comparison first in check mode and fails with the same message, before the full drift check.
+- `make verify` runs the same comparison first in check mode and fails with the same message, before the full drift check;
+- the `pre-push` hook refuses a push while the inventory files or their inputs have uncommitted changes, because `make verify` checks the working tree rather than the pushed commit.
+
+Both hooks use only Node.js built-ins, so they work before `npm ci`.
 
 The remedy is `make dependency-inventory`, which reinstalls the locked dependencies with `npm ci --ignore-scripts` under the pinned toolchain and regenerates both files; review their diff and commit it. Generation is deterministic for the merged inputs, so either merge direction ends with the same files. The hook does not run after a merge that stops on another conflict; `make verify` then reports the stale inventory after the merge is committed. GitHub's own merge does not use the driver, so merge `origin/dev` into a branch locally, as the [agent task protocol](agent-task-protocol.md) describes.
 

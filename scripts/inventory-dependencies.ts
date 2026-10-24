@@ -2,9 +2,8 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  checkEvidence, checkInventoryInputs, checkLicenseReviews, collectLicenses, INVENTORY_INPUTS, normalizeSbom, parseLicenseReviews, sha256,
-} from './dependency-inventory.ts';
+import { checkEvidence, checkLicenseReviews, collectLicenses, normalizeSbom, parseLicenseReviews } from './dependency-inventory.ts';
+import { checkInventoryInputs, INVENTORY_INPUTS, sha256 } from './inventory-provenance.ts';
 
 const args = process.argv.slice(2);
 assert(args.length === 0 || (args.length === 1 && args[0] === '--check'), 'Usage: inventory-dependencies.ts [--check]');

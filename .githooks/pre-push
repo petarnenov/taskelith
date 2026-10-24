@@ -1,3 +1,4 @@
 #!/bin/sh
 # Blocks the push unless the repository checks pass (enable once per clone with `make hooks`).
+NODE_PIN="$(cat .nvmrc)" bash scripts/run-node-script.sh scripts/check-committed-inventory.ts || exit 1
 exec make verify

@@ -6,6 +6,7 @@ Every change that touches dependencies or `package.json` regenerates `docs/depen
 
 - `.gitattributes` routes both generated inventory files to a `dependency-inventory` merge driver that keeps the current branch's version; `make hooks` and `make setup` configure it, and `make doctor` checks it.
 - A `post-merge` hook compares the merged inputs with the provenance hashes in `licenses.json`, without npm, and reports a stale inventory with the remedy.
+- The `pre-push` hook refuses a push while the inventory files or their inputs have uncommitted changes, because `make verify` checks the working tree.
 - `npm run verify:dependencies` (part of `make verify`) runs the same comparison first and fails with a message that names the changed inputs and `make dependency-inventory`.
 - A new `make dependency-inventory` target reinstalls the locked dependencies and regenerates both files under the pinned toolchain.
 - The agent task protocol (worker step 1, coordinator step 2), the release flow, the inventory guide, and the README describe the flow.

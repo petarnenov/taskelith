@@ -3,10 +3,8 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import {
-  checkEvidence, checkInventoryInputs, checkLicenseReviews, collectLicenses, INVENTORY_INPUTS, normalizeSbom, parseLicenseReviews, sha256,
-  staleInventoryInputs,
-} from '../scripts/dependency-inventory.ts';
+import { checkEvidence, checkLicenseReviews, collectLicenses, normalizeSbom, parseLicenseReviews, sha256 } from '../scripts/dependency-inventory.ts';
+import { checkInventoryInputs, INVENTORY_INPUTS, staleInventoryInputs } from '../scripts/inventory-provenance.ts';
 import type { LicenseReview } from '../scripts/dependency-inventory.ts';
 
 test('bundled legacy licenses retain text hashes and expose missing coverage', () => {

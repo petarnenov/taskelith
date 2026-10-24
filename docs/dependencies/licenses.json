@@ -8,8 +8,9 @@
     "package.json": "c27cf1f68013ac733665576dd8f6eae7dfeb71437b44d0e8d1d6f61c5272da5f",
     "package-lock.json": "7232793dd4234c886149d5f6047bd328f0853e45eae9baa6f42d19c210684009",
     ".nvmrc": "d9f318747a126ce2247661af67852b185def7789492eabfad7bba322be087c33",
-    "scripts/dependency-inventory.ts": "06f1529389cc2cc75a8c6583fa913d3f8f0cffb8d9aebbf9388f870eb46295c6",
-    "scripts/inventory-dependencies.ts": "94a677b44e98d4b8b21b10eb40a3ea23878a2c061f1f852bf6fe34b9e4d733b7"
+    "scripts/dependency-inventory.ts": "0b8cab332273cf4c325a83cdbf20d21ed5271ba4dc8c64ce39bc160aa3ef0b3f",
+    "scripts/inventory-dependencies.ts": "f6be1728d7706b65a25a3fb0d561ec8eee0527f7a9665fe519769caabe339594",
+    "scripts/inventory-provenance.ts": "7146327bc8a111a0d61115b720f43705a0e44c3bb7bee2228a993bf5c07c26b7"
   },
   "scope": "Locked npm installation paths; top-level license/notice files only; global binaries and nested vendored code excluded",
   "packageCount": 681,

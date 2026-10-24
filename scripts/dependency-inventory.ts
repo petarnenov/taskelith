@@ -1,9 +1,9 @@
-import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
+import { REGENERATE_REMEDY, sha256 } from './inventory-provenance.ts';
 import { workspacePackageDirs } from './workspace-packages.ts';
 
-export const sha256 = (content: string | Buffer): string => createHash('sha256').update(content).digest('hex');
+export { sha256 };
 
 interface LockedPackage {
   version: string;
@@ -141,29 +141,8 @@ export function normalizeSbom(input: string): string {
   return JSON.stringify(bom, null, 2) + '\n';
 }
 
-export const REGENERATE_REMEDY = 'regenerate with make dependency-inventory, review, and commit docs/dependencies';
-
 export function checkEvidence(actual: string, expectedPath: string): void {
   if (!existsSync(expectedPath) || readFileSync(expectedPath, 'utf8') !== actual) {
     throw new Error(`Dependency evidence drift: ${expectedPath}; ${REGENERATE_REMEDY}`);
-  }
-}
-
-export const INVENTORY_INPUTS = [
-  'package.json', 'package-lock.json', '.nvmrc',
-  'scripts/dependency-inventory.ts', 'scripts/inventory-dependencies.ts',
-] as const;
-
-// The inputs whose content no longer matches the provenance hashes recorded
-// in licenses.json; checked without npm, so it is fast enough for a hook.
-export function staleInventoryInputs(provenance: unknown, readInput: (path: string) => Buffer): string[] {
-  const recorded = typeof provenance === 'object' && provenance !== null ? provenance as Record<string, unknown> : {};
-  return INVENTORY_INPUTS.filter(path => recorded[path] !== sha256(readInput(path)));
-}
-
-export function checkInventoryInputs(provenance: unknown, readInput: (path: string) => Buffer): void {
-  const stale = staleInventoryInputs(provenance, readInput);
-  if (stale.length > 0) {
-    throw new Error(`Dependency inventory is stale; changed inputs: ${stale.join(', ')}; ${REGENERATE_REMEDY}`);
   }
 }
