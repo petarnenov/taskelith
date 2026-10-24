@@ -12,11 +12,11 @@ G2 work plan item 3, started under the owner's decision of 2026-10-25 that G2 st
 - The contract follows architecture sections 6 and 9, the trust model's `launchAuthId` binding, the operational targets, invariant 13, F17, R27, and decisions D7 (c) and D12 (a).
 - Items 4, 5, and 6 are referenced by item name, not by file, because they are written in parallel.
 - Each requirement is under 500 characters (394 at most after pass 3).
-- Evidence check: the only external link is the PostgreSQL 18 documentation of serializable isolation, added after pass 1; it is the official documentation of the decided major version (D1).
+- Evidence check: the external links are the PostgreSQL 18 documentation of serializable isolation (added after pass 1; the decided major version, D1) and the Linux kernel timekeeping documentation (added after pass 5); both are official upstream documentation.
 
 ## Checks
 
-In the worktree, Node v24.22.1, npm 12.2.1: `make verify` passed, including strict validation and the archive dry-run of this change; re-run after the pass-1, pass-2, pass-3, and pass-4 fixes with the same result; before the pass-3 fixes `origin/dev` (`7850c70`, including the comment length check) was merged in without conflicts.
+In the worktree, Node v24.22.1, npm 12.2.1: `make verify` passed, including strict validation and the archive dry-run of this change; re-run after the pass-1, pass-2, pass-3, pass-4, and pass-5 fixes with the same result; before the pass-3 fixes `origin/dev` (`7850c70`, including the comment length check) was merged in without conflicts.
 
 ## Independent review
 
@@ -49,8 +49,13 @@ Assigned reviewer (rotation): Codex CLI, `-m gpt-6.1-sol -c model_reasoning_effo
   1. High: a first start reported after the exit could move an `exited` execution back to `started`. Terminal states never change; a later start is recorded as history.
   2. High: adding a pending gate to a prerequisite stage escaped invalidation. Adding or removing a gate is a writer, found by run and dependent stages.
   3. Medium: the spec cancelled a current-epoch start received in quarantine, which the contract keeps as evidence. The spec now orders the evidence-only, history, and unauthorized cases as the contract does.
-- **Pass 5 (permitted by the owner on 2026-10-25).** Pending.
+- **Pass 5 (permitted by the owner on 2026-10-25) — session `01a17024-9534-7052-946b-8afa426c1f93`.** Earlier findings confirmed resolved except pass-3 4 and pass-4 3, partly. Findings: 0 Critical, 3 High, 2 Medium, 0 Low. Each pass found new edge cases (10, 5, 5, 3, 5), so the owner decided on 2026-10-25 to fix these without another pass and merge; items 17 and 24 implement every scenario of section 10 as a test and pass their own reviews. These fixes are unreviewed:
+  1. High: removing the last gate of a prerequisite stage left an empty, trivially passed set. Each prerequisite stage must still have a gate.
+  2. High: a monotonic clock that stops during suspend could start under an expired grant. The deadline uses a suspend-inclusive clock (Linux `CLOCK_BOOTTIME`, the macOS continuous clock); without one, unused grants are void after suspend.
+  3. High: replay and start observations did not check the grant's worker. Both are bound to the authenticated worker.
+  4. Medium: a future epoch could be accepted. Any epoch other than the current one is evidence only.
+  5. Medium: the unknown-grant scenario still cancelled in quarantine. Limited to the current epoch outside quarantine, with an evidence-only case.
 
 ## Remaining gates
 
-Independent review; integration into `dev` and archive.
+Integration into `dev` and archive; items 17 and 24 implement the section 10 tests; item 4 records the qualified suspend-inclusive clock per OS.
