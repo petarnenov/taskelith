@@ -35,7 +35,7 @@ The CLI makes no network calls and writes no application state. The npm installa
 
 Read the [architecture and delivery plan](docs/architecture.md) for scope, risks, and acceptance criteria.
 
-Development follows the [bootstrap governance policy](https://github.com/petarnenov/taskelith/blob/main/docs/governance.md). The [G0 foundation status](https://github.com/petarnenov/taskelith/blob/main/docs/foundation.md) records completed bootstrap work and the next bounded tasks; G0 is not yet complete.
+Development follows the [bootstrap governance policy](https://github.com/petarnenov/taskelith/blob/main/docs/governance.md). The [G0 foundation status](https://github.com/petarnenov/taskelith/blob/main/docs/foundation.md) records the foundation work; G0 was closed on 2026-10-24 ([ADR 0007](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0007-g0-closure.md)), with its open items deferred to later gates.
 
 ## Development
 

@@ -113,8 +113,8 @@ The findings agree with the Claude Code qualification, so the harness-neutral po
 
 ## Remaining before admission
 
-- OpenAI's data-handling terms, and whether its terms allow pooled subscriptions for automated use (ADR 0005).
-- Linux x64 and arm64 in the planned worker container image, and macOS arm64.
+- OpenAI's data-handling terms, and whether its terms allow pooled subscriptions for automated use (ADR 0005), reviewed before admission in G3 ([ADR 0007](../decisions/0007-g0-closure.md)).
+- Linux x64 and arm64 in the planned worker container image (G2, [ADR 0007](../decisions/0007-g0-closure.md)), and macOS arm64.
 - Non-permission input requests, and repeated runs.
 - The cause of the temporary-directory fallback after a crash.
 - Whether plugin-catalog polling and MCP traffic can be disabled.
