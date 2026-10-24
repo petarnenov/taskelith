@@ -1,0 +1,103 @@
+## Purpose
+Defines how the scheduler reserves worker slots, resources, quotas, and shared delegation budgets transactionally, when a reservation may be released, and how workers enforce hard admission limits and fail closed.
+
+## ADDED Requirements
+
+### Requirement: Transactional reservation
+The scheduler SHALL create a capacity reservation, its assignment, and the assignment command in one serializable transaction that re-checks the worker, every quota and budget the attempt charges, and the attempt's eligibility against current state, never against an in-memory counter. An attempt SHALL hold at most one held reservation, and a reservation SHALL never be moved or resized.
+
+#### Scenario: Replicas race for the last slot
+- **WHEN** two scheduler replicas place different attempts on the last free slot of a worker
+- **THEN** exactly one reservation commits and the other attempt waits or is placed elsewhere
+
+#### Scenario: Replicas place the same attempt
+- **WHEN** two scheduler replicas place the same attempt concurrently
+- **THEN** one assignment and one held reservation exist
+
+#### Scenario: Crash before commit
+- **WHEN** the reservation transaction fails before commit
+- **THEN** no reservation, assignment, or outbox command exists
+
+### Requirement: Quotas and budgets
+A reservation SHALL fit the worker's slots, CPU, and memory, the project and run concurrency quotas, and the concurrency of each provider credential it uses, with the operational targets' defaults (2 slots per worker, 4 attempts per project, 2 per run, 4 per credential, at most 2 vCPU and 4 GiB per attempt). Exhausted occupancy SHALL make the task wait; a request above a ceiling SHALL be rejected.
+
+#### Scenario: Project quota full
+- **WHEN** a project already holds 4 reservations and free workers exist
+- **THEN** its next attempt waits with `project-quota-exhausted`
+
+#### Scenario: Retry loop in another project
+- **WHEN** one project's attempts retry repeatedly
+- **THEN** another project's waiting task still receives capacity
+
+### Requirement: Justified release
+A reservation SHALL be released only in the transaction that records an exited execution, a `not-started` fact after the launch record was sealed, an assignment that ended with no grant ever issued, or an audited operator reconciliation. Loss of contact, worker revocation, grant expiry or revocation, a cancellation request, a restart, or a lowered quota SHALL release nothing. Release SHALL never refund delegation or retry budgets.
+
+#### Scenario: Lost-contact worker
+- **WHEN** a worker running an attempt loses contact or is revoked
+- **THEN** the attempt keeps its reservation and quotas until a justifying fact or operator reconciliation releases it
+
+#### Scenario: Cancellation requested
+- **WHEN** a cancellation is requested for a started attempt
+- **THEN** its reservation stays held until the exit or `not-started` fact is recorded
+
+### Requirement: Release ordered with launch authorization
+A release SHALL run at serializable isolation as an invalidating writer: in the same transaction it SHALL read the affected grants and non-terminal executions by assignment, revoke those grants, and write cancellation commands. The launch authority SHALL reject with `capacity-not-reserved` unless the assignment's reservation is held for this attempt on this worker.
+
+#### Scenario: Release races authorization
+- **WHEN** a release and a launch authorization of the same assignment run concurrently
+- **THEN** either the authorization fails with `capacity-not-reserved` or the release revokes the grant and writes a cancellation
+
+### Requirement: Shared delegation budget
+A delegated child SHALL be bound at creation to its parent, derived from the authenticated delegating attempt, and to its root task. Depth SHALL be at most 3 below the root; every attempt in the tree, retries included, SHALL charge the root's budget of 8 attempts and the project and run quotas. No session identity or run SHALL create an independent budget.
+
+#### Scenario: Depth exceeded
+- **WHEN** a task of depth 3 delegates a child
+- **THEN** the child is rejected with `delegation-depth-exceeded`
+
+#### Scenario: Ninth attempt
+- **WHEN** a task tree has charged 8 attempts and any task in it needs another
+- **THEN** the reservation is rejected with `delegation-budget-exhausted`
+
+#### Scenario: New session identity
+- **WHEN** delegated work resumes under a new session identity
+- **THEN** its attempts charge the same root budget
+
+### Requirement: Bounded automatic retry
+An automatic retry SHALL be a new attempt with a new reservation, allowed only after a proven-idempotent or safe failure whose reservation was released, at most 2 per task, with backoff from 5s to at most 60s with jitter. An attempt with uncertain execution SHALL get no automatic retry.
+
+#### Scenario: Third automatic retry
+- **WHEN** a task has used 2 automatic retries
+- **THEN** another automatic retry is rejected with `retry-budget-exhausted`
+
+#### Scenario: Uncertain execution
+- **WHEN** an attempt's execution is uncertain
+- **THEN** it is reconciled and not retried automatically
+
+### Requirement: Worker-side hard admission limits
+A worker SHALL enforce its own limits when it validates an assignment and before each launch authorization request: its slot count over every non-terminal journaled execution, per-attempt ceilings, the disk floor (5 GiB or 10% of `dataRoot`), the journal backlog (256 MiB or 10,000 entries), and daemon overhead. A limit it cannot measure SHALL count as exceeded, and no control record SHALL be lost.
+
+#### Scenario: Stale scheduler view
+- **WHEN** a worker at its slot count receives another assignment
+- **THEN** it refuses with `worker-slots-exhausted`
+
+#### Scenario: Disk below the floor
+- **WHEN** free space on `dataRoot` falls below the floor
+- **THEN** the worker requests no new launch authorization, reports admission pressure, and truncates only nonessential stream logs
+
+### Requirement: Fail-closed hard controls
+A control a task policy marks hard SHALL be reserved only on a worker that declares it enforceable on its qualified platform; a worker or supervisor that cannot apply it SHALL refuse with `control-not-enforceable` and start nothing. A hard spend limit SHALL be rejected until a provider enforces it, and usage SHALL be labeled estimated or confirmed.
+
+#### Scenario: Unenforceable memory limit
+- **WHEN** an attempt requires a hard memory limit and the worker cannot apply it
+- **THEN** the worker refuses with `control-not-enforceable` and the child does not start
+
+#### Scenario: Hard spend limit
+- **WHEN** a policy requires a hard spend limit and no provider enforces one
+- **THEN** the reservation is rejected with `control-not-enforceable`
+
+### Requirement: Subscription account slot extension
+A subscription account slot SHALL be reserved as a provider credential unit in the same reservation transaction, selected in G3 by the harness-neutral account pool port; a resumed session SHALL reserve its own slot, and cooldown or revocation of a slot SHALL release no held reservation.
+
+#### Scenario: Slot in cooldown
+- **WHEN** a slot enters cooldown while attempts hold it
+- **THEN** their reservations stay held and the slot receives no new reservation
