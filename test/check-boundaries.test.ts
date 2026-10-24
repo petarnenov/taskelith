@@ -282,7 +282,10 @@ test('API and browser apps cannot reach worker-only code, directly or through a 
     writeFileSync(join(root, 'packages/plugins/sdlc-openspec/src/index.ts'), "import { execFile } from 'node:child_process';\nexport const run = execFile;\n");
     writeFileSync(join(root, 'packages/adapters/nats/src/index.ts'), "import { run } from '@taskelith/sdlc-openspec';\nexport const bus = run;\n");
     writeFileSync(join(root, 'apps/worker/src/index.ts'), "import { spawn } from 'node:child_process';\nimport { launch } from '@taskelith/worker-process';\nimport { bus } from '@taskelith/nats';\nexport { spawn, launch, bus };\n");
-    writeFileSync(join(root, 'apps/control-plane/src/index.ts'), "import { id } from '@taskelith/kernel';\nimport type { Launch } from '@taskelith/worker-process';\nexport const plane = id;\n");
+    writeFileSync(
+      join(root, 'apps/control-plane/src/index.ts'),
+      "import { id } from '@taskelith/kernel';\nimport type { Launch } from '@taskelith/worker-process';\nimport { type Step, type Exit } from '@taskelith/worker';\nexport { type Bus } from '@taskelith/nats';\nexport const plane = id;\n",
+    );
     writeFileSync(join(root, 'apps/control-plane/test/launch.test.ts'), "import { spawn } from 'node:child_process';\nimport { launch } from '@taskelith/worker-process';\n");
     assert.deepEqual(checkWorkspaceBoundaries(root), []);
 
@@ -291,6 +294,10 @@ test('API and browser apps cannot reach worker-only code, directly or through a 
       "import { launch } from '@taskelith/worker-process';\nimport { spawn } from 'child_process';\nconst w = import('@taskelith/worker');\nimport { bus } from '@taskelith/nats';\nimport { s } from '../../worker/src/index.ts';\n",
     );
     writeFileSync(join(root, 'apps/web/src/view.ts'), "import pty from 'node-pty';\n");
+    writeFileSync(
+      join(root, 'apps/control-plane/src/forms.ts'),
+      "export { s } from '@taskelith/worker';\nconst cp = require('child_process');\nimport { type Step, step } from '@taskelith/worker';\nimport { execa } from 'execa';\n",
+    );
 
     const violations = checkWorkspaceBoundaries(root);
     const expected = [
@@ -302,6 +309,10 @@ test('API and browser apps cannot reach worker-only code, directly or through a 
       ['apps/control-plane/src/launch.ts', 'cannot import worker-only code "../../worker/src/index.ts" (apps/worker is worker-only)'],
       ['apps/web/src/view.ts', 'web SPA cannot import Node or server SDK "node-pty"'],
       ['apps/web/src/view.ts', 'cannot import process-launching module "node-pty"'],
+      ['apps/control-plane/src/forms.ts', 'cannot import worker-only code "@taskelith/worker" (apps/worker is worker-only)'],
+      ['apps/control-plane/src/forms.ts', 'cannot import process-launching module "child_process"'],
+      ['apps/control-plane/src/forms.ts', 'cannot import worker-only code "@taskelith/worker" (apps/worker is worker-only)'],
+      ['apps/control-plane/src/forms.ts', 'cannot import process-launching module "execa"'],
     ];
     for (const [file, message] of expected) {
       assert(violations.some(v => v.includes(file!) && v.includes(message!)), `${file}: ${message}\n${violations.join('\n')}`);
