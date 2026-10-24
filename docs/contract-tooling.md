@@ -1,6 +1,6 @@
 # Contract and schema tooling evaluation
 
-Date: 2026-10-24. Status: evaluation for item 3 of the G1 work plan (`docs/g1-plan.md`, not yet merged when this was written). Documentation only: no tool was installed into the repository, added to `package.json`, or run against a Taskelith contract. Every recommendation below is the **author's proposal**. The owner decides D2 (where contracts live) and D3 (document-first or code-first), and dependency admission follows the [dependency policy](architecture.md#established-open-source-technology-policy). Each proposed tool is recorded as `candidate` in the [dependency register](dependencies.md#contract-tooling).
+Date: 2026-10-24. Status: evaluation for item 3 of the G1 work plan (`docs/g1-plan.md`, not yet merged when this was written). Documentation only: no tool was installed into the repository, added to `package.json`, or run against a Taskelith contract. Every recommendation below is the **author's proposal**. The owner decided D2 (where contracts live) and D3 (document-first or code-first) after this evaluation, on 2026-10-24: D2 (b), a `packages/contracts` package, and D3 (a), document-first ([G1 plan](g1-plan.md#owner-decisions)). The D3 (b) sections remain as the record of the option not chosen. Dependency admission follows the [dependency policy](architecture.md#established-open-source-technology-policy). Each proposed tool is recorded as `candidate` in the [dependency register](dependencies.md#contract-tooling).
 
 [ADR 0004](decisions/0004-first-class-engineering-principles.md) principle 6 requires versioned OpenAPI 3.1 documents for HTTP APIs and AsyncAPI documents for NATS messages, TypeScript types, runtime validation, and clients generated from them, and a CI failure on an unversioned breaking change. Principle 5 requires every runnable component to ship as a digest-pinned OCI image, and principle 7 requires `make` targets. Architecture [section 6](architecture.md#6-hexagonal-architecture) requires runtime schema validation of all HTTP, message, and plugin inputs, and [section 9](architecture.md#9-messaging-and-execution-protocol) names the command and event envelope fields.
 
@@ -107,7 +107,7 @@ No maintained code-first generator for AsyncAPI 3 documents was found. Under D3 
 | Message and manifest types | `json-schema-to-typescript` on parser-extracted schemas | Inferred |
 | Runtime validation | ajv (`Ajv2020` for HTTP, draft-07 class for messages) with `ajv-formats` | TypeBox compiler or zod; ajv remains possible on generated schemas |
 | Breaking changes | oasdiff container; `@asyncapi/diff` | Same, on generated documents |
-| Owner action | Decide D2 and D3 | Decide D2 and D3, and grant an ADR 0004 principle 6 exception |
+| Owner decision | Chosen on 2026-10-24, with D2 (b) | Not chosen; it would have needed an ADR 0004 principle 6 exception |
 
 All generated output is produced by the build in `make verify` and not committed, under either D2 option (plan D2).
 
@@ -136,7 +136,7 @@ Run with the pinned `@fission-ai/openspec@1.14.3` and `OPENSPEC_TELEMETRY=0` in 
 - The TypeScript compatibility of `typebox@1.4.3` and `@sinclair/typebox@0.34.52` is taken from the TypeBox README and was not compiled against.
 - `@hey-api/openapi-ts` and orval OpenAPI 3.1 statements, `openapi-diff` 3.1 support and security policy, and every **search** adopter are unverified.
 - Network and telemetry behaviour of each selected CLI needs the egress test the dependency policy requires before admission.
-- Item 8 (plugin registration) and item 13 (wire contracts) depend on D2, D3, and this evaluation; they install the selected tools through their own changes.
+- Item 8 (plugin registration) installed ajv; item 13 (wire contracts) installs the remaining selected tools through its own change, under D2 (b) and D3 (a).
 
 ## Sources
 
