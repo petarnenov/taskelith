@@ -3,13 +3,8 @@
 const FIXED_TIME = Date.parse('2026-10-24T12:00:00Z');
 const SystemDate = Date;
 
-globalThis.Date = class FixedDate extends SystemDate {
-  constructor(...args) {
-    if (args.length === 0) super(FIXED_TIME);
-    else super(...args);
-  }
-
-  static now() {
-    return FIXED_TIME;
-  }
-};
+globalThis.Date = new Proxy(SystemDate, {
+  construct: (target, args, newTarget) => Reflect.construct(target, args.length === 0 ? [FIXED_TIME] : args, newTarget),
+  apply: () => new SystemDate(FIXED_TIME).toString(),
+  get: (target, key, receiver) => (key === 'now' ? () => FIXED_TIME : Reflect.get(target, key, receiver)),
+});

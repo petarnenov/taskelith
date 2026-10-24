@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { cp, mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, relative, sep } from 'node:path';
+import { isAbsolute, join, relative, sep } from 'node:path';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import {
   readArchiveLocation,
@@ -57,9 +57,13 @@ interface WorkingCopy {
   readonly toolVersion: string;
 }
 
-interface OpenChange extends WorkingCopy {
-  readonly change: string;
+// A working copy with the status of the change whose workflow is resolved.
+interface WorkflowSubject extends WorkingCopy {
   readonly status: ChangeStatus;
+}
+
+interface OpenChange extends WorkflowSubject {
+  readonly change: string;
 }
 
 interface ArtifactFile {
@@ -160,6 +164,9 @@ export class OpenSpecFramework implements SdlcFramework {
     if (!open.ok) return open;
     const { root, change, status, toolVersion } = open.value;
     const files = artifactFiles(status).map((file) => ({ ...file, path: relative(status.changeRoot, file.path) }));
+    if (files.some((file) => !isInside(file.path))) {
+      return err(failure('internal', `openspec status listed a file outside change ${change}`, { workItem: change }));
+    }
     const output = await runOpenSpec(this.#options, root, ['archive', change, '--yes']);
     if (!output.ok) return output;
     if (!output.value.succeeded) {
@@ -212,10 +219,16 @@ export class OpenSpecFramework implements SdlcFramework {
     const toolVersion = await this.toolVersion();
     if (!toolVersion.ok) return toolVersion;
     const root = await realpath(workingCopy).catch(() => undefined);
-    if (root === undefined) return err(failure('not-found', `working copy ${workingCopy} does not exist`, { workingCopy }));
-    const output = await this.command(root, ['list']);
+    if (root === undefined || !(await isDirectory(root))) {
+      return err(failure('not-found', `working copy ${workingCopy} is not a directory`, { workingCopy }));
+    }
+    const output = await runOpenSpec(this.#options, root, ['list']);
     if (!output.ok) return output;
-    const listed = readChangeList(output.value);
+    if (!output.value.succeeded) {
+      const message = readFailureMessage(output.value.json);
+      return err(failure('not-found', `working copy ${workingCopy} is not an OpenSpec root: ${message}`, { workingCopy }));
+    }
+    const listed = readChangeList(output.value.json);
     if (!listed.ok) return listed;
     if (listed.value.root !== root) {
       return err(failure('not-found', `working copy ${workingCopy} is not an OpenSpec root`, { workingCopy }));
@@ -237,21 +250,29 @@ export class OpenSpecFramework implements SdlcFramework {
 
   // OpenSpec reports a schema's artifact graph only for a change, so the
   // workflow of a new change is read from an empty change in a scratch copy.
-  private async openNewChange(workingCopy: string): Promise<Result<WorkingCopy & { readonly status: ChangeStatus }>> {
+  private async openNewChange(workingCopy: string): Promise<Result<WorkflowSubject>> {
     const copy = await this.openWorkingCopy(workingCopy);
     if (!copy.ok) return copy;
-    const probe = await mkdtemp(join(tmpdir(), 'taskelith-openspec-'));
     try {
-      await mkdir(join(probe, 'openspec', 'changes', PROBE_CHANGE), { recursive: true });
-      for (const entry of PROJECT_SCHEMA_ENTRIES) {
-        const source = join(copy.value.root, 'openspec', entry);
-        if (existsSync(source)) await cp(source, join(probe, 'openspec', entry), { recursive: true });
+      const probe = await mkdtemp(join(tmpdir(), 'taskelith-openspec-'));
+      try {
+        const status = await this.probeStatus(copy.value.root, probe);
+        return status.ok ? ok({ ...copy.value, status: status.value }) : status;
+      } finally {
+        await rm(probe, { recursive: true, force: true });
       }
-      const status = await this.changeStatus(probe, PROBE_CHANGE);
-      return status.ok ? ok({ ...copy.value, status: status.value }) : status;
-    } finally {
-      await rm(probe, { recursive: true, force: true });
+    } catch (error) {
+      return err(failure('internal', `the workflow probe failed: ${messageOf(error)}`));
     }
+  }
+
+  private async probeStatus(root: string, probe: string): Promise<Result<ChangeStatus>> {
+    await mkdir(join(probe, 'openspec', 'changes', PROBE_CHANGE), { recursive: true });
+    for (const entry of PROJECT_SCHEMA_ENTRIES) {
+      const source = join(root, 'openspec', entry);
+      if (existsSync(source)) await cp(source, join(probe, 'openspec', entry), { recursive: true });
+    }
+    return this.changeStatus(probe, PROBE_CHANGE);
   }
 
   private async changeStatus(root: string, change: string): Promise<Result<ChangeStatus>> {
@@ -266,14 +287,18 @@ export class OpenSpecFramework implements SdlcFramework {
     if (!location.ok) return location;
     const content = await readBytes(join(location.value, 'schema.yaml'));
     if (!content.ok) return content;
-    const version = SCHEMA_VERSION.exec(content.value.toString('utf8'))?.[1];
+    const version = SCHEMA_VERSION.exec(content.value.toString('utf8'))?.[2];
     if (version === undefined) return err(failure('internal', `schema ${schemaName} declares no version`, { schemaName }));
     return ok({ digest: sha256(content.value), version });
   }
 
-  private toolVersion(): Promise<Result<string>> {
+  // Only a successful check is kept, so a CLI that was briefly missing is
+  // checked again on the next operation.
+  private async toolVersion(): Promise<Result<string>> {
     this.#toolVersion ??= this.readToolVersion();
-    return this.#toolVersion;
+    const version = await this.#toolVersion;
+    if (!version.ok) this.#toolVersion = undefined;
+    return version;
   }
 
   private async readToolVersion(): Promise<Result<string>> {
@@ -295,8 +320,9 @@ export class OpenSpecFramework implements SdlcFramework {
   }
 }
 
-// The top-level `version` key of a schema.yaml file.
-const SCHEMA_VERSION = /^version:[ \t]*(\S+)[ \t]*$/m;
+// The top-level `version` scalar of a schema.yaml file, optionally quoted and
+// followed by a comment.
+const SCHEMA_VERSION = /^version:[ \t]*(["']?)([^"'#\s]+)\1[ \t]*(?:#.*)?$/m;
 
 // Schema artifacts are native stages: those without prerequisites cover
 // intake, the rest specification; verify and review are platform-managed.
@@ -326,6 +352,9 @@ function currentRevisions(open: OpenChange): Promise<Result<ArtifactRevision[]>>
 async function fileRevisions(root: string, files: readonly ArtifactFile[]): Promise<Result<ArtifactRevision[]>> {
   const revisions: ArtifactRevision[] = [];
   for (const file of files) {
+    if (!isInside(relative(root, file.path))) {
+      return err(failure('internal', `${file.path} is outside the working copy`, { path: file.path }));
+    }
     const content = await readBytes(file.path);
     if (!content.ok) return content;
     revisions.push({ artifactId: file.artifactId, digest: sha256(content.value), nativeReference: nativeReferenceOf(root, file.path) });
@@ -346,6 +375,11 @@ function invalidityProblems(issues: readonly string[]): { readonly message: stri
   return messages.map((message) => ({ message }));
 }
 
+// A relative path that stays inside its base directory.
+function isInside(relativePath: string): boolean {
+  return relativePath !== '' && !isAbsolute(relativePath) && relativePath !== '..' && !relativePath.startsWith(`..${sep}`);
+}
+
 function nativeReferenceOf(root: string, path: string): string {
   return relative(root, path).split(sep).join('/');
 }
@@ -354,8 +388,16 @@ async function readBytes(path: string): Promise<Result<Buffer>> {
   try {
     return ok(await readFile(path));
   } catch (error) {
-    return err(failure('internal', `${path} could not be read: ${(error as Error).message}`, { path }));
+    return err(failure('internal', `${path} could not be read: ${messageOf(error)}`, { path }));
   }
+}
+
+async function isDirectory(path: string): Promise<boolean> {
+  return (await stat(path)).isDirectory();
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function sha256(content: Buffer): string {

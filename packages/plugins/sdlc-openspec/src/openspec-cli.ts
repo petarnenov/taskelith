@@ -15,6 +15,7 @@ export interface CliOutput {
 }
 
 const MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
+const MAX_STDERR_DETAIL = 2000;
 
 // Set after the caller's environment, so that no option turns telemetry on.
 const NO_TELEMETRY = Object.freeze({ OPENSPEC_TELEMETRY: '0', DO_NOT_TRACK: '1' });
@@ -27,18 +28,18 @@ export function runOpenSpec(options: OpenSpecCliOptions, directory: string, args
       options.executable,
       [...args, '--json'],
       { cwd: directory, env: environment, encoding: 'utf8', maxBuffer: MAX_OUTPUT_BYTES },
-      (error, stdout) => resolve(readOutput(command, error, stdout)),
+      (error, stdout, stderr) => resolve(readOutput(command, error, stdout, stderr)),
     );
   });
 }
 
-function readOutput(command: string, error: ExecFileException | null, stdout: string): Result<CliOutput> {
+function readOutput(command: string, error: ExecFileException | null, stdout: string, stderr: string): Result<CliOutput> {
   if (error !== null && typeof error.code !== 'number') {
     return err(failure('unavailable', `${command} could not run: ${error.message}`, { command }));
   }
   try {
     return ok({ succeeded: error === null, json: JSON.parse(stdout) });
   } catch {
-    return err(failure('internal', `${command} printed no JSON`, { command }));
+    return err(failure('internal', `${command} printed no JSON`, { command, stderr: stderr.slice(0, MAX_STDERR_DETAIL) }));
   }
 }

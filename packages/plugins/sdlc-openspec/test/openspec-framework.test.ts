@@ -24,7 +24,7 @@ after(() => rmSync(SCRATCH, { recursive: true, force: true }));
 // archive date.
 const PINNED_CLI: OpenSpecCliOptions = {
   executable: join(REPOSITORY, 'node_modules/.bin/openspec'),
-  environment: { NODE_OPTIONS: `--import=${FIXED_ARCHIVE_DATE.href}`, TZ: 'UTC' },
+  environment: { NODE_OPTIONS: `--import="${FIXED_ARCHIVE_DATE.href}"`, TZ: 'UTC' },
 };
 
 const FIXTURE = MAPPING_FIXTURES[0]!;
@@ -80,9 +80,12 @@ test('registration admits the plugin for a host that offers the SdlcFramework po
 test('registration fails when the host does not offer the SdlcFramework port', () => {
   const registered = registerOpenSpecFramework({ ports: ['ScmProvider'] }, PINNED_CLI);
 
-  assert.equal(registered.ok, false);
   assert.equal(!registered.ok && registered.error.code, 'not-found');
+});
+
+test('the manifest declares the optional operations as its capabilities', () => {
   assert.equal(OPENSPEC_PLUGIN_MANIFEST.port, 'SdlcFramework');
+  assert.deepEqual(OPENSPEC_PLUGIN_MANIFEST.capabilities, ['validate-structure', 'finalize']);
 });
 
 test('finalization reports the archived revisions with unchanged digests', async () => {
@@ -134,6 +137,35 @@ test('a working copy that does not exist is not found', async () => {
   assert.equal(!discovered.ok && discovered.error.code, 'not-found');
 });
 
+test('a directory outside any OpenSpec project is not found', async () => {
+  const discovered = await framework().discoverWorkItems({ workingCopy: mkdtempSync(join(SCRATCH, 'empty-')) });
+
+  assert.equal(!discovered.ok && discovered.error.code, 'not-found');
+});
+
+test('a working copy that is a file is not found', async () => {
+  const file = join(workingCopy(), 'openspec/config.yaml');
+
+  const discovered = await framework().discoverWorkItems({ workingCopy: file });
+
+  assert.equal(!discovered.ok && discovered.error.code, 'not-found');
+});
+
+test('an artifact file outside the working copy is an internal failure', async () => {
+  const outside = fakeCli([
+    "const command = process.argv[2];",
+    "const root = { path: process.cwd() };",
+    "if (command === 'list') console.log(JSON.stringify({ changes: [{ name: 'outside' }], root }));",
+    "else console.log(JSON.stringify({ schemaName: 'spec-driven', changeRoot: process.cwd(), applyRequires: [],",
+    "  artifactPaths: { proposal: { existingOutputPaths: ['/etc/hosts'] } },",
+    "  artifacts: [{ id: 'proposal', requires: [], status: 'done' }] }));",
+  ].join('\n'));
+
+  const revisions = await framework(outside).inspectArtifactRevisions({ workingCopy: workingCopy(), workItem: 'outside' });
+
+  assert.equal(!revisions.ok && revisions.error.code, 'internal');
+});
+
 test('a directory inside an OpenSpec project is not an OpenSpec root', async () => {
   const discovered = await framework().discoverWorkItems({ workingCopy: join(workingCopy(), 'openspec/specs') });
 
@@ -170,5 +202,6 @@ test('the CLI runs without telemetry even when the caller enables it', async () 
 
   const discovered = await framework({ ...echo, environment }).discoverWorkItems({ workingCopy: workingCopy() });
 
-  assert.equal(!discovered.ok && discovered.error.message, 'openspec list failed: OPENSPEC_TELEMETRY=0 DO_NOT_TRACK=1');
+  assert.ok(!discovered.ok);
+  assert.match(discovered.error.message, /: OPENSPEC_TELEMETRY=0 DO_NOT_TRACK=1$/);
 });
