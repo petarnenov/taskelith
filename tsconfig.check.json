@@ -8,6 +8,10 @@
   },
   "include": [
     "src/**/*.ts",
+    "packages/*/src/**/*.ts",
+    "packages/*/*/src/**/*.ts",
+    "packages/*/test/**/*.ts",
+    "packages/*/*/test/**/*.ts",
     "scripts/**/*.ts",
     "test/**/*.ts",
     "test/**/*.d.ts"
