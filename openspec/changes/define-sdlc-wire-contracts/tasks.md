@@ -10,5 +10,5 @@
 
 ## 3. Verification and review
 
-- [ ] 3.1 Run `make verify` and record the results.
+- [x] 3.1 Run `make verify` and record the results.
 - [ ] 3.2 Obtain independent review (Codex Sol medium, by rotation) and record results.

@@ -17,7 +17,13 @@ const BASE_BRANCH = 'dev';
 const BASE_REF = `origin/${BASE_BRANCH}`;
 // oasdiff levels: 1 INFO, 2 WARN, 3 ERR. ERR is a breaking change.
 const OASDIFF_ERR = 3;
-const SEMANTIC_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:[-+].*)?$/;
+// The semantic versioning 2.0.0 grammar, with prerelease and build metadata.
+const PRERELEASE_IDENTIFIER = '(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)';
+const SEMANTIC_VERSION = new RegExp(
+  '^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)'
+  + `(?:-${PRERELEASE_IDENTIFIER}(?:\\.${PRERELEASE_IDENTIFIER})*)?`
+  + '(?:\\+[0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*)?$',
+);
 
 interface Version {
   readonly major: number;
@@ -39,8 +45,14 @@ export function declaresBreakingChange(baseVersion: string, headVersion: string)
   return head.major === 0 && head.minor > base.minor;
 }
 
+export function versionProblems(path: string, version: unknown): string[] {
+  if (typeof version === 'string' && parseVersion(version) !== undefined) return [];
+  return [`${path}: info.version ${String(version)} is not a semantic version`];
+}
+
 export function compatibilityProblems(path: string, baseVersion: string, headVersion: string, breakingChanges: readonly string[]): string[] {
-  if (parseVersion(headVersion) === undefined) return [`${path}: info.version ${headVersion} is not a semantic version`];
+  const invalid = versionProblems(path, headVersion);
+  if (invalid.length > 0) return invalid;
   if (breakingChanges.length === 0 || declaresBreakingChange(baseVersion, headVersion)) return [];
   return breakingChanges.map((change) => `${path}: breaking change without a new major version (or minor while 0.x) over ${baseVersion}: ${change}`);
 }
@@ -85,12 +97,25 @@ interface AsyncapiChange {
   readonly path: string;
 }
 
+// Keywords whose keys are names chosen by the document, such as property
+// names, rather than schema keywords.
+const SCHEMA_MAPS = new Set(['properties', 'patternProperties', 'definitions', '$defs', 'dependencies']);
+
+// The parser adds x-parser-* annotations, such as generated schema
+// identifiers, as keywords of the objects it parses. A key of a schema map,
+// such as a property named x-parser-field, is part of the contract.
+function isParserAnnotation(path: string): boolean {
+  const segments = path.split('/');
+  return segments.some((segment, index) => segment.startsWith('x-parser-') && !SCHEMA_MAPS.has(segments[index - 1] ?? ''));
+}
+
 // @asyncapi/diff leaves changes its standard does not classify, such as most
 // changes inside a payload schema, unclassified; they are treated as breaking.
-// The parser's own x-parser-* annotations are not part of the contract.
+// It classifies a new info.version as breaking, but the version declares
+// changes rather than being one, so it is checked separately.
 export function asyncapiContractChanges(breaking: readonly AsyncapiChange[], unclassified: readonly AsyncapiChange[]): string[] {
   return [...breaking, ...unclassified]
-    .filter((change) => !change.path.split('/').some((segment) => segment.startsWith('x-parser-')))
+    .filter((change) => change.path !== '/info/version' && !isParserAnnotation(change.path))
     .map((change) => `${change.action} ${change.path}`);
 }
 
@@ -131,15 +156,16 @@ async function checkDocuments(): Promise<string[]> {
   const base = mergeBase();
   const problems: string[] = [];
   for (const [kind, path] of Object.entries(CONTRACT_DOCUMENTS)) {
+    const headText = readFileSync(path, 'utf8');
+    const headVersion = JSON.parse(headText).info.version;
     const baseText = textAt(base, path);
     if (baseText === undefined) {
+      problems.push(...versionProblems(path, headVersion));
       console.log(`${path}: absent at the merge base ${base.slice(0, 12)}; nothing to compare.`);
       continue;
     }
-    const headText = readFileSync(path, 'utf8');
     const breaking = kind === 'openapi' ? openapiBreakingChanges(baseText, headText) : await asyncapiBreakingChanges(baseText, headText);
-    const versions = [JSON.parse(baseText).info.version, JSON.parse(headText).info.version];
-    problems.push(...compatibilityProblems(path, versions[0], versions[1], breaking));
+    problems.push(...compatibilityProblems(path, JSON.parse(baseText).info.version, headVersion, breaking));
     console.log(`${path}: ${breaking.length} breaking change(s) against ${base.slice(0, 12)}.`);
   }
   return problems;

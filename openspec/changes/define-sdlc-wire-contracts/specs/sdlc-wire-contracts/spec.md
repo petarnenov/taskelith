@@ -58,7 +58,7 @@ The package SHALL export `checkHttpSchema` and `checkMessageSchema`, which valid
 - **THEN** the check returns a violation naming the property
 
 ### Requirement: Breaking-change check
-`make verify` SHALL run `make contract-compatibility`, which compares each document with its version at the merge base of `HEAD` with `origin/dev`, fetching that branch when absent, and SHALL fail when a breaking change is not declared by `info.version`: a higher major version, or a higher minor version while the major version is 0. A document absent at the merge base SHALL pass, and a non-semantic `info.version` SHALL fail.
+`make verify` SHALL run `make contract-compatibility`, which compares each document with its version at the merge base of `HEAD` with `origin/dev`, fetching that branch when absent, and SHALL fail when a breaking change is not declared by `info.version`: a higher major version, or a higher minor version while the major version is 0. An `info.version` that does not follow the semantic versioning 2.0.0 grammar SHALL fail, also for a document absent at the merge base, which otherwise passes.
 
 #### Scenario: Undeclared breaking change
 - **WHEN** an operation is removed while `info.version` goes from 0.1.0 to 0.1.1
@@ -69,12 +69,20 @@ The package SHALL export `checkHttpSchema` and `checkMessageSchema`, which valid
 - **THEN** the check passes
 
 #### Scenario: New document
-- **WHEN** a document does not exist at the merge base
+- **WHEN** a document with a semantic `info.version` does not exist at the merge base
 - **THEN** the check passes for it
 
+#### Scenario: Malformed version
+- **WHEN** `info.version` is `0.2.0-` or `0.2.0-01`
+- **THEN** the check fails, also for a new document, and does not accept the version as declaring a breaking change
+
 ### Requirement: Breaking-change detectors
-OpenAPI documents SHALL be compared by oasdiff run only as its digest-pinned container without network access and with external references disallowed, counting ERR-level changes as breaking. AsyncAPI documents SHALL be compared by `@asyncapi/diff`, counting its breaking and unclassified changes as breaking and ignoring the parser's `x-parser-*` annotations.
+OpenAPI documents SHALL be compared by oasdiff run only as its digest-pinned container without network access and with external references disallowed, counting ERR-level changes as breaking. AsyncAPI documents SHALL be compared by `@asyncapi/diff`, counting its breaking and unclassified changes as breaking, except the change of `info.version` itself and the parser's `x-parser-*` annotations; a key of a schema map, such as a property named `x-parser-field`, is not an annotation.
 
 #### Scenario: Optional payload field added
 - **WHEN** an optional property is added to an AsyncAPI payload schema, which `@asyncapi/diff` leaves unclassified
 - **THEN** it counts as a breaking change that `info.version` must declare
+
+#### Scenario: Version-only release
+- **WHEN** only `info.version` of the AsyncAPI document changes from 0.1.0 to 0.1.1
+- **THEN** the check passes
