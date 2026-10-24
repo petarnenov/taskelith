@@ -4,7 +4,7 @@ On 2026-10-24 the owner set rules for parallel agent sessions: the coordinator a
 
 ## What Changes
 
-- Add `docs/agent-task-protocol.md`: roles (owner, coordinator, worker), worker steps from worktree to handoff, coordinator steps from assignment to archive and cleanup, and the reviewer invocations with their confirmations. It builds on `docs/governance.md` and `docs/releases.md`, and they take precedence.
+- Add `docs/agent-task-protocol.md`: roles (owner, coordinator, worker), worker steps from worktree to handoff, cleanup, and conflict handling, coordinator steps from assignment to integration, archive, and cleanup, and the reviewer invocations with their confirmations. It builds on `docs/governance.md` and `docs/releases.md`, and they take precedence.
 - Add a project skill `.claude/skills/taskelith-task-protocol/SKILL.md` that points Claude Code sessions to the protocol.
 - Link the protocol from `AGENTS.md`, which every harness reads.
 - Add the `agent-task-protocol` capability.
