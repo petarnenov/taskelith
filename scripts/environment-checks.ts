@@ -71,7 +71,7 @@ export function checkEnvironment(facts: EnvironmentFacts, pins: Pins): CheckResu
       label: `Node.js ${pins.node} (.nvmrc)`,
       ok: pinnedNodeActive(facts, pins),
       detail: facts.nodeVersion,
-      remedy: `With nvm, run nvm use (run make setup first if Node.js ${pins.node} is not installed yet); without nvm, install Node.js ${pins.node} yourself.`
+      remedy: `With nvm, run make setup to install Node.js ${pins.node}; without nvm, install Node.js ${pins.node} yourself.`
     },
     {
       id: 'npm',
@@ -145,15 +145,16 @@ export function stepCommand(step: SetupStep, pins: Pins): { command: string; arg
   }
 }
 
-// make setup runs under the pinned Node.js, which it cannot activate in the calling shell.
+// make setup, make doctor, and make verify run under the pinned Node.js, which
+// they cannot activate in the calling shell.
 export interface NodeVersions {
   readonly shell: string | undefined;
-  readonly setup: string;
+  readonly checks: string;
 }
 
-export function shellNodeNotice({ shell, setup }: NodeVersions): string | undefined {
-  if (shell === setup) return undefined;
-  return `These checks ran under Node.js ${setup}, but your shell uses ${shell || 'none'}; run 'nvm use' before make doctor or make verify.`;
+export function shellNodeNotice({ shell, checks }: NodeVersions): string | undefined {
+  if (shell === checks) return undefined;
+  return `These checks ran under Node.js ${checks}, which make doctor and make verify select on their own; your shell uses ${shell || 'none'}, so run 'nvm use' before running npm or node directly.`;
 }
 
 export function formatReport(results: readonly CheckResult[]): string {
