@@ -30,6 +30,13 @@ Assigned reviewer (rotation): Antigravity CLI 1.4.7, `--model gemini-4-argon-med
 
 Remaining findings: 0.
 
+## Rollout
+
+- Pull request #14 into `main` (the last one through the old flow) ran `make verify` on GitHub's Ubuntu runner: the `verify` job passed in 25 s, and the release job was skipped for the pull request. It was merged with a rebase as `f0876b2`. The `main` run 40102142350 passed `verify` and `release`; semantic-release found no relevant changes, so no version was released.
+- `dev` was created from `f0876b2` and pushed at 14:22 UTC; the pre-push hook ran `make verify`, which passed.
+- The default branch was switched with `gh repo edit petarnenov/taskelith --default-branch dev`; `gh repo view --json defaultBranchRef` returned `{"defaultBranchRef":{"name":"dev"}}`.
+- This archive was then integrated through a pull request into `dev`, as the test of the new flow. Its result (no workflow run for the pull request or the push to `dev`) is reported to the owner after the merge, because it cannot be recorded inside the commit it tests.
+
 ## Remaining gates
 
-Merge into `main`; creating `dev` and switching the default branch; confirming that a push to `dev` starts no run. Owner gate: branch protection for `main` and optionally `dev`.
+Owner gate: branch protection for `main` and optionally `dev`.
