@@ -1,3 +1,5 @@
+export { InMemoryAdmissionRepository } from './adapters/in-memory-admission-repository.js';
+export { TaskAdmissionService, type CreatedRevisionOutcome } from './application/task-admission-service.js';
 export {
   isSameArtifactRevision,
   parseArtifactRevision,
@@ -73,6 +75,25 @@ export {
   type StageState,
   type WorkflowProgress,
 } from './domain/stage-progress.js';
+export {
+  ADMISSION_STATES,
+  ADMISSION_TRANSITIONS,
+  TASK_KINDS,
+  admitImplementationTask,
+  admitPlanningTask,
+  invalidateAdmission,
+  isAdmissionOutdatedBy,
+  recordCreatedRevision,
+  useAdmission,
+  type AdmissionId,
+  type AdmissionState,
+  type GatedRunContext,
+  type RunContext,
+  type TaskAdmission,
+  type TaskAdmissionRequest,
+  type TaskId,
+  type TaskKind,
+} from './domain/task-admission.js';
 export { parseWorkItem, type WorkItem, type WorkItemId, type WorkItemInput } from './domain/work-item.js';
 export {
   parseWorkflowDefinition,
@@ -94,3 +115,33 @@ export {
   type WorkflowRunBinding,
   type WorkflowRunBindingInput,
 } from './domain/workflow-run-binding.js';
+export {
+  OPTIONAL_SDLC_OPERATIONS,
+  parseSdlcFrameworkCapabilities,
+  type ArtifactRequirement,
+  type FinalizationReport,
+  type FrameworkContext,
+  type OptionalSdlcOperation,
+  type ParsedSdlcFrameworkCapabilities,
+  type ResolvedWorkflow,
+  type SdlcFramework,
+  type SdlcFrameworkCapabilities,
+  type SdlcOperation,
+  type StageInstructions,
+  type StageRequest,
+  type StructuralValidationReport,
+  type StructuralValidationRequest,
+  type ValidationProblem,
+  type WorkItemRequest,
+  type WorkflowRequest,
+} from './ports/sdlc-framework.js';
+export {
+  runSdlcFrameworkConformance,
+  type ExpectedOutcome,
+  type SdlcConformanceCase,
+  type SdlcConformanceCheck,
+  type SdlcConformanceFinding,
+  type SdlcConformanceReport,
+} from './ports/sdlc-framework-conformance.js';
+export type { AdmissionRepository } from './ports/admission-repository.js';
+export type { Clock } from './ports/clock.js';
