@@ -1,6 +1,6 @@
 # OpenSpec mapping fixtures
 
-Shared mapping fixtures for OpenSpec 1.14.3 (G1 item 10). The expected normalized outputs are in [`../test/openspec-mapping-cases.ts`](../test/openspec-mapping-cases.ts) as cases of the framework-neutral conformance suite (`runSdlcFrameworkConformance` in `@taskelith/sdlc`). The adapter (G1 item 11) must pass them.
+Shared mapping fixtures for OpenSpec 1.14.3 (G1 item 10). The expected normalized outputs are in [`../test/openspec-mapping-cases.ts`](../test/openspec-mapping-cases.ts) as cases of the framework-neutral conformance suite (`runSdlcFrameworkConformance` in `@taskelith/sdlc`). The adapter in [`../src/`](../src/) (G1 item 11) passes them in [`../test/openspec-framework.test.ts`](../test/openspec-framework.test.ts), on a copy of the working copy with the CLI clock pinned to the archive date.
 
 ## Provenance
 

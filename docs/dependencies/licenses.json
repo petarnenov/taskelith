@@ -6,7 +6,7 @@
   },
   "provenance": {
     "package.json": "c27cf1f68013ac733665576dd8f6eae7dfeb71437b44d0e8d1d6f61c5272da5f",
-    "package-lock.json": "e6cff37e93be8a31ff2e09af3804744e7db350b8f0cc55398314f490b3842c78",
+    "package-lock.json": "3b0e39ce3a15ed64734bde950a6a5060b28f3e37d07859e0c192149498ccb741",
     ".nvmrc": "d9f318747a126ce2247661af67852b185def7789492eabfad7bba322be087c33",
     "scripts/dependency-inventory.ts": "9d04553665a48077fd52fde8274b1a3904cd71399ae2ce7d103402897b58ef46",
     "scripts/inventory-dependencies.ts": "e8701ad2180b92b1213398f10731083c10a0b885e36f0c8d860e0a58f5e7fc76"

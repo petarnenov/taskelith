@@ -31,8 +31,8 @@ import {
 const REPOSITORY = fileURLToPath(new URL('../../../../', import.meta.url));
 const OPENSPEC_PACKAGE = join(REPOSITORY, 'node_modules/@fission-ai/openspec');
 
-// Until the adapter exists (G1 item 11), replaying each case's expected
-// outcome lets the conformance suite check the expected outputs themselves.
+// Replaying each case's expected outcome lets the conformance suite check the
+// expected outputs themselves, apart from the adapter.
 function replayFramework(capabilities: SdlcFrameworkCapabilities, cases: readonly SdlcConformanceCase[]): SdlcFramework {
   const answer = async (operation: SdlcOperation, request: unknown): Promise<Result<any>> => {
     const match = cases.find((testCase) => testCase.operation === operation && isDeepStrictEqual(testCase.request, request));
