@@ -33,6 +33,37 @@ test('bundled legacy licenses retain text hashes and expose missing coverage', (
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test('workspace packages are first-party and skipped, while their installed dependencies are inventoried', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-license-workspace-'));
+  try {
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ workspaces: ['packages/modules/*'] }));
+    const nested = 'packages/modules/sdlc/node_modules/dep';
+    mkdirSync(join(root, nested), { recursive: true });
+    writeFileSync(join(root, 'packages/modules/sdlc/package.json'), JSON.stringify({ name: '@taskelith/sdlc', version: '0.0.0' }));
+    writeFileSync(join(root, nested, 'package.json'), JSON.stringify({ name: 'dep', version: '1.0.0', license: 'MIT' }));
+    writeFileSync(join(root, nested, 'LICENSE'), 'dep license');
+    const result = collectLicenses(root, {
+      'node_modules/@taskelith/sdlc': { version: '', link: true, resolved: 'packages/modules/sdlc' },
+      'packages/modules/sdlc': { version: '0.0.0' },
+      [nested]: { version: '1.0.0' },
+    });
+    assert.deepEqual(result.map(pkg => pkg.path), [nested]);
+    const workspace = { 'packages/modules/sdlc': { version: '0.0.0' } };
+    for (const [path, resolved] of [
+      ['node_modules/evil', '../outside'],
+      ['node_modules/../../outside', 'packages/modules/sdlc'],
+      ['node_modules/@taskelith/other', 'packages/modules/sdlc'],
+      ['node_modules/@taskelith/sdlc', 'packages/./modules/sdlc'],
+      ['node_modules/@taskelith/sdlc', 'packages/modules/not-a-workspace'],
+      ['node_modules/dep', nested],
+    ]) {
+      assert.throws(() => collectLicenses(root, { ...workspace, [path]: { version: '', link: true, resolved } }), /Unsupported linked package/, `${path} -> ${resolved}`);
+    }
+    assert.throws(() => collectLicenses(root, { 'node_modules/@taskelith/sdlc': { version: '', link: true, resolved: 'packages/modules/sdlc' } }), /Unsupported linked package/);
+    assert.throws(() => collectLicenses(root, { 'packages/modules/sdlc': { version: '0.0.0' } }), /Unsafe/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('SBOM normalization retains graph and metadata while removing volatile identifiers', () => {
   const input = {
     bomFormat: 'CycloneDX', specVersion: '1.5', serialNumber: 'urn:uuid:first',

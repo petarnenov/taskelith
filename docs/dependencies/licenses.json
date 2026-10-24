@@ -5,10 +5,10 @@
     "npm": "12.2.1"
   },
   "provenance": {
-    "package.json": "bb0be6851819469edd59694f39e1aa0dd3951346f0311ae5f57c5dd594d57b18",
-    "package-lock.json": "629bb33b94cdd4dea65d3490c90e4a1d6e9a5632d9d591091a53eaaeae71b47c",
+    "package.json": "3b46b7b2c410a33d50f05b869588b0002269556189450c2dae28514db6a2f372",
+    "package-lock.json": "be0f896e12fe75a2b048d5ddbb7f3ebba2810d778eb36bc94158a5d806030a64",
     ".nvmrc": "d9f318747a126ce2247661af67852b185def7789492eabfad7bba322be087c33",
-    "scripts/dependency-inventory.ts": "c5021e9924b53457b43b6acee0f47ba231d60ca161c3a69ad42ebe3a1608e66b",
+    "scripts/dependency-inventory.ts": "9d04553665a48077fd52fde8274b1a3904cd71399ae2ce7d103402897b58ef46",
     "scripts/inventory-dependencies.ts": "e8701ad2180b92b1213398f10731083c10a0b885e36f0c8d860e0a58f5e7fc76"
   },
   "scope": "Locked npm installation paths; top-level license/notice files only; global binaries and nested vendored code excluded",

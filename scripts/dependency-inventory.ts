@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
+import { workspacePackageDirs } from './workspace-packages.ts';
 
 export const sha256 = (content: string | Buffer): string => createHash('sha256').update(content).digest('hex');
 
@@ -10,12 +11,41 @@ interface LockedPackage {
   dev?: boolean;
   inBundle?: boolean;
   optional?: boolean;
+  link?: boolean;
+  resolved?: string;
+}
+
+// npm records each workspace package twice: a `node_modules/<name>` link and
+// the package directory itself. Both are first-party product code, not
+// dependencies, so the inventory skips them, but only for links that point to
+// a declared workspace package under the same name; packages installed inside
+// a workspace package's own node_modules are still inventoried.
+function workspaceDirectories(root: string, packages: Record<string, LockedPackage>): Set<string> {
+  const declared = new Map(workspacePackageDirs(root).map(dir => [dir, JSON.parse(readFileSync(join(root, dir, 'package.json'), 'utf8')).name]));
+  const directories = new Set<string>();
+  for (const [path, locked] of Object.entries(packages)) {
+    if (locked.link !== true) continue;
+    const target = locked.resolved ?? '';
+    const name = path.slice('node_modules/'.length);
+    if (!path.startsWith('node_modules/') || path.split('/').some(part => part === '..') || declared.get(target) !== name || packages[target] === undefined) {
+      throw new Error(`Unsupported linked package: ${path} -> ${target}`);
+    }
+    directories.add(target);
+  }
+  return directories;
+}
+
+function isInstallationPath(path: string, workspaces: Set<string>): boolean {
+  return path.startsWith('node_modules/') || [...workspaces].some(directory => path.startsWith(`${directory}/node_modules/`));
 }
 
 export function collectLicenses(root: string, packages: Record<string, LockedPackage>) {
-  return Object.entries(packages).filter(([path]) => path !== '').sort(([a], [b]) => a.localeCompare(b, 'en'))
+  const workspaces = workspaceDirectories(root, packages);
+  return Object.entries(packages)
+    .filter(([path, locked]) => path !== '' && locked.link !== true && !workspaces.has(path))
+    .sort(([a], [b]) => a.localeCompare(b, 'en'))
     .map(([path, locked]) => {
-      if (isAbsolute(path) || path.includes('\\') || path.split('/').some(part => part === '..') || !path.startsWith('node_modules/')) {
+      if (isAbsolute(path) || path.includes('\\') || path.split('/').some(part => part === '..') || !isInstallationPath(path, workspaces)) {
         throw new Error(`Unsafe lockfile installation path: ${path}`);
       }
       const directory = join(root, path);

@@ -23,15 +23,17 @@ test('boundary checker rejects Go artifacts, SDK imports in domain/application, 
     mkdirSync(join(root, 'src'), { recursive: true });
     mkdirSync(join(root, 'scripts'), { recursive: true });
 
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ workspaces: ['packages/modules/*', 'packages/adapters/*'] }));
+    writeFileSync(join(root, 'packages/modules/execution/package.json'), JSON.stringify({ name: '@taskelith/execution' }));
     writeFileSync(join(root, 'packages/modules/execution/index.ts'), 'export const ok = 1;\n');
     writeFileSync(join(root, 'packages/modules/execution/domain/internal.ts'), 'export const secret = 2;\n');
     writeFileSync(join(root, 'packages/adapters/postgres/client.ts'), 'export const pg = {};\n');
     writeFileSync(join(root, 'scripts/helper.ts'), 'export const dev = true;\n');
 
-    // Valid module imports including NodeNext .js extension to public index
+    // A valid cross-module import goes through the other package's name
     writeFileSync(
       join(root, 'packages/modules/sdlc/application/use-case.ts'),
-      "import { ok } from '../../execution/index.js';\nexport const run = () => ok;\n",
+      "import { ok } from '@taskelith/execution';\nexport const run = () => ok;\n",
     );
     assert.deepEqual(checkWorkspaceBoundaries(root), []);
 
@@ -95,6 +97,107 @@ test('boundary checker CLI runs when started through a symlinked path', () => {
 
     assert.equal(run.status, 1, run.stderr);
     assert.match(run.stderr, /Boundary violation: bridge\.go: .*R02\/R36/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('boundary checker applies layer rules inside package src/ and limits kernel and plugin imports', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-boundaries-packages-'));
+  try {
+    for (const dir of ['packages/kernel/src', 'packages/modules/sdlc/src/domain', 'packages/modules/sdlc/src/application', 'packages/plugins/sdlc-openspec/src']) {
+      mkdirSync(join(root, dir), { recursive: true });
+    }
+    writeFileSync(join(root, 'packages/kernel/src/index.ts'), "import { createHash } from 'node:crypto';\nexport const id = createHash;\n");
+    writeFileSync(join(root, 'packages/modules/sdlc/src/application/service.ts'), "import { id } from '@taskelith/kernel';\nexport const run = id;\n");
+    writeFileSync(
+      join(root, 'packages/plugins/sdlc-openspec/src/index.ts'),
+      "import { id } from '@taskelith/kernel';\nimport type { Port } from '@taskelith/plugin-sdk';\nimport { helper } from './helper.js';\nexport const plugin = { id, helper } as unknown as Port;\n",
+    );
+    assert.deepEqual(checkWorkspaceBoundaries(root), []);
+
+    writeFileSync(join(root, 'packages/modules/sdlc/src/domain/stage.ts'), "import { run } from '../application/service.ts';\nexport const stage = run;\n");
+    writeFileSync(
+      join(root, 'packages/kernel/src/bad.ts'),
+      "import { run } from '@taskelith/sdlc';\nimport { stage } from '../../modules/sdlc/src/domain/stage.ts';\nimport pg from 'pg';\n",
+    );
+    writeFileSync(
+      join(root, 'packages/plugins/sdlc-openspec/src/bad.ts'),
+      "import { run } from '@taskelith/sdlc';\nimport { stage } from '../../../modules/sdlc/src/domain/stage.ts';\nimport { id } from '@taskelith/kernel/src/index.ts';\n",
+    );
+
+    const violations = checkWorkspaceBoundaries(root);
+    assert(violations.some(v => v.includes('domain/stage.ts') && v.includes('cannot import packages/modules/sdlc/src/application/service.ts')));
+    assert(violations.some(v => v.includes('kernel/src/bad.ts') && v.includes('kernel cannot import workspace package "@taskelith/sdlc"')));
+    assert(violations.some(v => v.includes('kernel/src/bad.ts') && v.includes('kernel cannot import outside packages/kernel')));
+    assert(violations.some(v => v.includes('kernel/src/bad.ts') && v.includes('infrastructure SDK "pg"')));
+    assert(violations.some(v => v.includes('sdlc-openspec/src/bad.ts') && v.includes('may import only the kernel, plugin SDK, and contracts packages, not "@taskelith/sdlc"')));
+    assert(violations.some(v => v.includes('sdlc-openspec/src/bad.ts') && v.includes('crosses into another package')));
+    assert(violations.some(v => v.includes('kernel/src/bad.ts') && v.includes('crosses into another package')));
+    assert(violations.some(v => v.includes('sdlc-openspec/src/bad.ts') && v.includes('must be imported through its root export')));
+    assert.equal(violations.length, 8, violations.join('\n'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('boundary checker resolves workspace package names and guards package encapsulation and development code', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-boundaries-names-'));
+  try {
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ workspaces: ['packages/kernel', 'packages/modules/*', 'packages/adapters/*'] }));
+    const packages = { 'packages/kernel': '@taskelith/kernel', 'packages/modules/sdlc': '@taskelith/sdlc', 'packages/modules/execution': '@taskelith/execution', 'packages/adapters/postgres': '@taskelith/postgres' };
+    for (const [dir, name] of Object.entries(packages)) {
+      mkdirSync(join(root, dir, 'src'), { recursive: true });
+      mkdirSync(join(root, dir, 'test'), { recursive: true });
+      writeFileSync(join(root, dir, 'package.json'), JSON.stringify({ name }));
+    }
+    mkdirSync(join(root, 'packages/modules/sdlc/src/domain'), { recursive: true });
+    mkdirSync(join(root, 'packages/modules/sdlc/src/application'), { recursive: true });
+    mkdirSync(join(root, 'apps/web/src'), { recursive: true });
+    mkdirSync(join(root, 'src'), { recursive: true });
+    writeFileSync(join(root, 'packages/modules/sdlc/test/integration.test.ts'), "import pg from 'pg';\nimport { db } from '@taskelith/postgres';\n");
+    assert.deepEqual(checkWorkspaceBoundaries(root), []);
+
+    writeFileSync(join(root, 'packages/modules/sdlc/src/application/store.ts'), "import { db } from '@taskelith/postgres';\nimport { fixture } from '../../test/fixture.ts';\nimport { secret } from '../../../execution/src/internal.ts';\n");
+    writeFileSync(join(root, 'packages/modules/sdlc/src/domain/stage.ts'), "import service = require('../application');\n");
+    writeFileSync(join(root, 'packages/kernel/src/index.ts'), "import { helper } from '../../../scripts/helper.ts';\n");
+    writeFileSync(join(root, 'apps/web/src/view.ts'), "import { run } from '@taskelith/sdlc';\n");
+    writeFileSync(join(root, 'src/cli.ts'), "import { id } from '@taskelith/kernel';\nimport { secret } from '../packages/kernel/src/index.ts';\nimport { alias } from '#kernel';\n");
+    writeFileSync(join(root, 'packages/modules/sdlc/src/domain/rules.ts'), "import { a } from '../application.js';\nimport { p } from '../ports.ts';\n");
+    writeFileSync(join(root, 'packages/modules/sdlc/src/domain.ts'), "import { a } from './application.js';\n");
+    writeFileSync(join(root, 'packages/kernel/src/dynamic.ts'), "const a = import('@taskelith/sdlc', {});\nconst b = import(`@taskelith/execution`);\nconst c = require(`@taskelith/postgres`);\n");
+    writeFileSync(join(root, 'apps/web/src/installed.ts'), "import { x } from '../../../node_modules/@taskelith/sdlc/dist/index.js';\n");
+    writeFileSync(join(root, 'packages/modules/execution/src/compiled.ts'), "import { y } from '../../sdlc/dist/application/service.js';\nimport { z } from './../dist/index.js';\n");
+
+    const violations = checkWorkspaceBoundaries(root);
+    const expected = [
+      ['application/store.ts', 'cannot import adapter, plugin, or app "@taskelith/postgres"'],
+      ['application/store.ts', 'product source cannot import development scripts or tests (../../test/fixture.ts)'],
+      ['application/store.ts', 'relative import "../../../execution/src/internal.ts" crosses into another package'],
+      ['application/store.ts', 'cross-module import into "execution"'],
+      ['domain/stage.ts', 'cannot import packages/modules/sdlc/src/application'],
+      ['kernel/src/index.ts', 'product source cannot import development scripts or tests'],
+      ['kernel/src/index.ts', 'kernel cannot import outside packages/kernel'],
+      ['apps/web/src/view.ts', 'cannot import backend/worker module or adapter "@taskelith/sdlc"'],
+      ['src/cli.ts', 'published root package cannot import private workspace package "@taskelith/kernel"'],
+      ['src/cli.ts', 'relative import "../packages/kernel/src/index.ts" crosses into another package'],
+      ['src/cli.ts', 'package imports alias "#kernel"'],
+      ['domain/rules.ts', 'cannot import packages/modules/sdlc/src/application.js'],
+      ['domain/rules.ts', 'cannot import packages/modules/sdlc/src/ports.ts'],
+      ['sdlc/src/domain.ts', 'domain layer in module "sdlc" cannot import packages/modules/sdlc/src/application.js'],
+      ['kernel/src/dynamic.ts', 'kernel cannot import workspace package "@taskelith/sdlc"'],
+      ['kernel/src/dynamic.ts', 'kernel cannot import workspace package "@taskelith/execution"'],
+      ['kernel/src/dynamic.ts', 'kernel cannot import workspace package "@taskelith/postgres"'],
+      ['apps/web/src/installed.ts', 'reaches installed or built code'],
+      ['execution/src/compiled.ts', 'relative import "../../sdlc/dist/application/service.js" reaches installed or built code'],
+      ['execution/src/compiled.ts', 'relative import "../../sdlc/dist/application/service.js" crosses into another package'],
+      ['execution/src/compiled.ts', 'cross-module import into "sdlc"'],
+      ['execution/src/compiled.ts', 'relative import "./../dist/index.js" reaches installed or built code'],
+    ];
+    for (const [file, message] of expected) {
+      assert(violations.some(v => v.includes(file!) && v.includes(message!)), `${file}: ${message}\n${violations.join('\n')}`);
+    }
+    assert.equal(violations.length, expected.length, violations.join('\n'));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
