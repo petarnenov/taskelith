@@ -34,3 +34,7 @@ Remaining findings: 0.
 ## Remaining gates
 
 Merge into `dev`; removal of the worktree; promotion to `main`.
+
+## Integration and archival
+
+The owner authorized integration and archival on 2026-10-24. Integrated into `dev` at `2605bdd` through pull request #27 (rebase merge); no workflow ran for the pull request or the push to `dev`. It reaches `main` with the next promotion. Archived with the pinned OpenSpec CLI afterwards, in a worktree created with the documented commands.
