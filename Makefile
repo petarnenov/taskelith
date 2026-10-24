@@ -14,6 +14,7 @@ verify:
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use $(MAKE) --no-print-directory verify-checks
 
 verify-checks: toolchain
+	npm run verify:comments
 	npm test
 	$(MAKE) contract-compatibility
 	npm run verify:dependencies
