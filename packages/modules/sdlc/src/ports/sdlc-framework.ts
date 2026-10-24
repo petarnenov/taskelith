@@ -4,9 +4,8 @@ import type { Result } from '@taskelith/kernel';
 // Plain text shapes, which the module parses: plugin output is untrusted.
 export const SDLC_FRAMEWORK_PORT_VERSION = '1.0.0';
 
-// The working copy the plugin reads, as an opaque location from the caller.
-// Every work-item operation names its work item explicitly, so that no
-// operation depends on a framework's implicit current item in the working copy.
+// The working copy the plugin reads, as an opaque location. Operations name
+// their work item, never relying on a framework's implicit current item.
 export interface FrameworkContext {
   readonly workingCopy: string;
 }
@@ -112,11 +111,8 @@ export interface SdlcFrameworkCapabilities {
   readonly nativeObligations: readonly string[];
 }
 
-// Every operation reports expected outcomes as a kernel Result, using its
-// failure codes, for example `not-found` for an unknown work item and
-// `unavailable` for an undeclared operation or a missing tool. No operation
-// approves anything: semantic approval and gate decisions are recorded by the
-// platform, not returned by a plugin.
+// Operations return expected outcomes as kernel Results, such as `not-found`;
+// none approves anything, because only the platform records gate decisions.
 export interface SdlcFramework {
   readonly capabilities: SdlcFrameworkCapabilities;
   discoverWorkItems(request: FrameworkContext): Promise<Result<readonly WorkItemData[]>>;

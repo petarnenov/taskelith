@@ -50,7 +50,8 @@
     "verify:package": "node --experimental-strip-types scripts/verify-package.ts",
     "inventory:dependencies": "node --experimental-strip-types scripts/inventory-dependencies.ts",
     "verify:dependencies": "node --experimental-strip-types scripts/inventory-dependencies.ts --check",
-    "verify:archive": "node --experimental-strip-types scripts/check-archive-dry-run.ts"
+    "verify:archive": "node --experimental-strip-types scripts/check-archive-dry-run.ts",
+    "verify:comments": "node --experimental-strip-types scripts/check-comment-length.ts"
   },
   "publishConfig": {
     "access": "public"

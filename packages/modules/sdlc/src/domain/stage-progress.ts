@@ -21,9 +21,8 @@ export interface StageProgress {
   readonly changedAt: Instant;
 }
 
-// The stages of one workflow run and how far each has come. Whether a stage's
-// work is accepted is decided by its gates, which the transitions read; a
-// completed stage records only that the stage was finished.
+// How far each stage of one workflow run has come. Gates decide acceptance;
+// a completed stage records only that it was finished.
 export interface WorkflowProgress {
   readonly definition: WorkflowDefinition;
   readonly generation: Generation;

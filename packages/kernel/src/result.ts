@@ -10,8 +10,8 @@ export interface Err<E> {
   readonly error: E;
 }
 
-// Expected outcomes, such as invalid input or a rejected transition, are returned
-// as values so that ports and use cases declare them in their types.
+// Expected outcomes, such as invalid input or a rejected transition, are
+// returned as values so that ports and use cases declare them in their types.
 export type Result<T, E = Failure> = Ok<T> | Err<E>;
 
 export function ok<T>(value: T): Ok<T> {

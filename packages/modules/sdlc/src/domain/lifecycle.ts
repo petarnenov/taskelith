@@ -1,9 +1,7 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 
-// The obligations every workflow must cover (architecture section 6). A
-// framework names its own stages; each stage declares which obligations it
-// covers.
-// Frozen, because the parsers below read them at run time.
+// The obligations every workflow covers in its stages (architecture section
+// 6); frozen, because the parsers below read them at run time.
 export const LIFECYCLE_OBLIGATIONS = Object.freeze([
   'intake',
   'specification',
@@ -15,9 +13,8 @@ export const LIFECYCLE_OBLIGATIONS = Object.freeze([
 
 export type LifecycleObligation = (typeof LIFECYCLE_OBLIGATIONS)[number];
 
-// A native stage is a step of the framework itself; a platform-managed stage is
-// a gate or record the platform supplies where the framework has none, and the
-// UI must show it as such.
+// A native stage is a framework step; a platform-managed stage is a gate or
+// record the platform adds where the framework has none, and the UI says so.
 export const STAGE_ORIGINS = Object.freeze(['native', 'platform-managed'] as const);
 
 export type StageOrigin = (typeof STAGE_ORIGINS)[number];

@@ -22,9 +22,8 @@ export interface CreatedRevisionOutcome {
   readonly invalidated: readonly TaskAdmission[];
 }
 
-// The one entry point that admits tasks to workflow stages, records what
-// planning tasks create, and invalidates unused admissions when an artifact
-// they are bound to changes.
+// The one entry point that admits tasks, records what planning tasks create,
+// and invalidates unused admissions bound to a changed artifact.
 export class TaskAdmissionService {
   readonly #admissions: AdmissionRepository;
   readonly #clock: Clock;
@@ -50,10 +49,8 @@ export class TaskAdmissionService {
     return this.#change(id, (admission) => useAdmission(admission, expectedGeneration, this.#clock.now()));
   }
 
-  // Records a revision created by a dispatched planning task after
-  // invalidating the unused admissions that the revision outdates. The record
-  // is stored last, so that a failed invalidation leaves the planning
-  // admission at the expected generation and the same call can be repeated.
+  // Invalidates what the revision outdates before storing it, so a failed
+  // invalidation leaves the admission at its generation and the call retryable.
   async recordCreatedRevision(
     id: AdmissionId,
     expectedGeneration: Generation,
@@ -70,10 +67,8 @@ export class TaskAdmissionService {
     return ok(Object.freeze({ admission: next.value, invalidated: invalidated.value }));
   }
 
-  // Invalidates every unused admission that the revision outdates. A writer
-  // that changed one of them concurrently makes this fail with `conflict`;
-  // running it again invalidates the rest, because invalidated and used
-  // admissions are no longer unused.
+  // Invalidates every unused admission the revision outdates; a concurrent
+  // writer causes `conflict`, and a rerun invalidates the remaining ones.
   async invalidateOutdatedAdmissions(revision: ArtifactRevision): Promise<Result<readonly TaskAdmission[]>> {
     const candidates = await this.#admissions.listUnusedBoundTo(revision.artifactId);
     const invalidated: TaskAdmission[] = [];
