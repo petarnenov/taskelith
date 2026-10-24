@@ -6,7 +6,7 @@ Record the owner's integration, scope, and plugin microkernel decisions and keep
 ## Requirements
 
 ### Requirement: Recorded owner integration decisions
-The repository SHALL record the owner's integration, scope, telemetry, open-core, license-evidence, advisory, microkernel, license-diligence, vendor-traffic, and external-approval decisions in an ADR, and propagate them consistently to the architecture and dependency documentation without claiming qualification.
+The repository SHALL record the owner's integration, scope, telemetry, open-core, license-evidence, advisory, microkernel, license-diligence, vendor-traffic, external-approval, and first-SCM decisions in an ADR, and propagate them consistently to the architecture and dependency documentation without claiming qualification.
 
 #### Scenario: Selected harness is not yet qualified
 - **WHEN** a harness is owner-selected
@@ -14,7 +14,7 @@ The repository SHALL record the owner's integration, scope, telemetry, open-core
 
 #### Scenario: Closed-provider exception stays narrow
 - **WHEN** a closed or proprietary component is proposed
-- **THEN** it is admissible only as an agent harness or its model provider with recorded license, provider, data-handling, version, maintenance, and security terms, and any other closed integration requires an explicit owner scope change
+- **THEN** it is admissible only as an agent harness or its model provider, or as the closed, hosted SCM admitted by ADR 0006, with recorded license or terms, provider, data-handling, version, maintenance, and security evidence, and any other closed integration requires an explicit owner scope change
 
 #### Scenario: Opt-out telemetry
 - **WHEN** a component has telemetry on by default
@@ -54,3 +54,18 @@ Kernel and module code SHALL depend only on ports and declared capabilities, no 
 #### Scenario: Plugin registration
 - **WHEN** the composition root starts
 - **THEN** it registers only pinned plugin packages with manifests, and no hot reload or remote marketplace is used
+
+### Requirement: GitHub.com as the first SCM
+The first SCM integration SHALL be a GitHub.com plugin on the microkernel, admitted only after its terms of service, data-handling terms, API version, maintenance, and security evidence are recorded; it SHALL obtain a GitHub App installation token limited to the project's repositories for each run and deliver it only to that run; and Forgejo SHALL remain the second SCM plugin, added after the GitHub integration is proven.
+
+#### Scenario: Run needs repository access
+- **WHEN** a run for a project needs GitHub access
+- **THEN** it receives an installation token limited to that project's repositories, and no token for another project's repositories
+
+#### Scenario: Kernel neutrality
+- **WHEN** kernel or module code, types, schemas, or tests are checked
+- **THEN** none of them names GitHub; GitHub specifics live only in the SCM plugin
+
+#### Scenario: Admission
+- **WHEN** the GitHub.com plugin is proposed for admission
+- **THEN** its recorded terms, data-handling terms, API version, maintenance, and security evidence exist in the dependency register
