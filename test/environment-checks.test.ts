@@ -37,6 +37,16 @@ test('each missing part fails only its own check', () => {
   assert.deepEqual(failing({ ...healthy, hooksPath: '.husky' }), ['hooks']);
 });
 
+test('with the pinned Node.js installed but not active, the remedies name nvm use instead of looping back to setup', () => {
+  const report = formatReport(checkEnvironment({ ...healthy, nodeVersion: 'v24.21.0', npmVersion: '11.19.0' }, pins));
+  assert.match(report, /FAIL Node\.js 24\.22\.1 \(\.nvmrc\): v24\.21\.0\n {5}Run nvm use; if Node\.js 24\.22\.1 is not installed yet, run make setup first/);
+  assert.match(report, /FAIL npm 12\.2\.1 \(CI pin\): 11\.19\.0\n {5}Fix the Node\.js check first; npm is checked under Node\.js 24\.22\.1\./);
+});
+
+test('with the pinned Node.js active, a wrong npm is fixed by setup', () => {
+  assert.match(formatReport(checkEnvironment({ ...healthy, npmVersion: '11.19.0' }, pins)), /FAIL npm 12\.2\.1 \(CI pin\): 11\.19\.0\n {5}Run make setup\./);
+});
+
 test('setup installs npm before the dependencies and reinstalls them with the new npm', () => {
   const results = checkEnvironment({ ...healthy, npmVersion: '11.6.0', hooksPath: undefined }, pins);
   assert.deepEqual(setupSteps(results), ['install-npm', 'install-dependencies', 'enable-hooks']);

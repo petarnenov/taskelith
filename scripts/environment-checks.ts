@@ -58,6 +58,7 @@ export function collectFacts(run: CommandRunner, nodeVersion: string): Environme
 }
 
 export function checkEnvironment(facts: EnvironmentFacts, pins: Pins): CheckResult[] {
+  const pinnedNodeActive = facts.nodeVersion === `v${pins.node}`;
   return [
     {
       id: 'git',
@@ -69,16 +70,17 @@ export function checkEnvironment(facts: EnvironmentFacts, pins: Pins): CheckResu
     {
       id: 'node',
       label: `Node.js ${pins.node} (.nvmrc)`,
-      ok: facts.nodeVersion === `v${pins.node}`,
+      ok: pinnedNodeActive,
       detail: facts.nodeVersion,
-      remedy: `Run make setup (it installs Node.js ${pins.node} through nvm), then nvm use; without nvm, install Node.js ${pins.node} yourself.`
+      remedy: `Run nvm use; if Node.js ${pins.node} is not installed yet, run make setup first (it installs it through nvm). Without nvm, install Node.js ${pins.node} yourself.`
     },
     {
       id: 'npm',
       label: `npm ${pins.npm} (CI pin)`,
       ok: facts.npmVersion === pins.npm,
       detail: facts.npmVersion ?? 'not found',
-      remedy: 'Run make setup.'
+      // Each Node.js has its own npm, so the npm on PATH says nothing until the pinned Node.js is active.
+      remedy: pinnedNodeActive ? 'Run make setup.' : `Fix the Node.js check first; npm is checked under Node.js ${pins.node}.`
     },
     {
       id: 'dependencies',

@@ -29,6 +29,6 @@ const results = check();
 console.log(formatReport(results));
 const invokingNode = process.env.INVOKING_NODE;
 if (invokingNode !== process.version) {
-  console.log(`Your shell uses Node.js ${invokingNode || 'none'}; run 'nvm use' before make verify.`);
+  console.log(`These checks ran under Node.js ${process.version}, but your shell uses ${invokingNode || 'none'}; run 'nvm use' before make doctor or make verify.`);
 }
 if (results.some((result) => !result.ok)) process.exit(1);
