@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmodSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { after } from 'node:test';
@@ -164,6 +164,25 @@ test('an artifact file outside the working copy is an internal failure', async (
   const revisions = await framework(outside).inspectArtifactRevisions({ workingCopy: workingCopy(), workItem: 'outside' });
 
   assert.equal(!revisions.ok && revisions.error.code, 'internal');
+});
+
+test('finalizing a change that lists a file outside its directory is an internal failure', async () => {
+  const outside = fakeCli([
+    "const command = process.argv[2];",
+    "const root = { path: process.cwd() };",
+    "if (command === 'list') console.log(JSON.stringify({ changes: [{ name: 'outside' }], root }));",
+    "else if (command === 'status') console.log(JSON.stringify({ schemaName: 'spec-driven',",
+    "  changeRoot: `${process.cwd()}/openspec/changes/outside`, applyRequires: [],",
+    "  artifactPaths: { proposal: { existingOutputPaths: [`${process.cwd()}/openspec/config.yaml`] } },",
+    "  artifacts: [{ id: 'proposal', requires: [], status: 'done' }] }));",
+    "else require('node:fs').writeFileSync('archived', '');",
+  ].join('\n'));
+  const copy = workingCopy();
+
+  const finalized = await framework(outside).finalize({ workingCopy: copy, workItem: 'outside' });
+
+  assert.equal(!finalized.ok && finalized.error.code, 'internal');
+  assert.equal(existsSync(join(copy, 'archived')), false);
 });
 
 test('a directory inside an OpenSpec project is not an OpenSpec root', async () => {

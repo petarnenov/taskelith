@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
-import { cp, mkdir, mkdtemp, readFile, realpath, rm, stat } from 'node:fs/promises';
+import { access, cp, mkdir, mkdtemp, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
@@ -270,7 +269,7 @@ export class OpenSpecFramework implements SdlcFramework {
     await mkdir(join(probe, 'openspec', 'changes', PROBE_CHANGE), { recursive: true });
     for (const entry of PROJECT_SCHEMA_ENTRIES) {
       const source = join(root, 'openspec', entry);
-      if (existsSync(source)) await cp(source, join(probe, 'openspec', entry), { recursive: true });
+      if (await exists(source)) await cp(source, join(probe, 'openspec', entry), { recursive: true });
     }
     return this.changeStatus(probe, PROBE_CHANGE);
   }
@@ -392,8 +391,12 @@ async function readBytes(path: string): Promise<Result<Buffer>> {
   }
 }
 
-async function isDirectory(path: string): Promise<boolean> {
-  return (await stat(path)).isDirectory();
+function isDirectory(path: string): Promise<boolean> {
+  return stat(path).then((entry) => entry.isDirectory(), () => false);
+}
+
+function exists(path: string): Promise<boolean> {
+  return access(path).then(() => true, () => false);
 }
 
 function messageOf(error: unknown): string {

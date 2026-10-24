@@ -8,7 +8,7 @@ Goals: an adapter that passes every item-10 case through the real CLI, registrat
 
 ## Decisions
 
-- **CLI boundary.** `runOpenSpec` spawns the executable that the caller names (no shell) with `--json`, in the given directory, and returns the parsed output with whether the command succeeded, because `validate` reports an invalid change by failing. The telemetry variables are set after the caller's environment, so no option turns telemetry on. A spawn error is `unavailable`; output that is not JSON is `internal`, with the start of the CLI's standard error in the failure details.
+- **CLI boundary.** `runOpenSpec` spawns the executable that the caller names (no shell) with `--json`, in the given directory, and returns the parsed output with whether the command succeeded, because `validate` reports an invalid change by failing. The telemetry variables are set after the caller's environment, so no option turns telemetry on. A CLI that cannot start or does not finish within 120 seconds is `unavailable`; output over the size limit, a CLI ended by a signal, and output that is not JSON are `internal`, the last with the start of the CLI's standard error in the failure details.
 - **Untrusted output.** `cli-output.ts` reads each command's JSON field by field and returns `internal` on an unexpected shape. The adapter reads only files inside the working copy, and finalization only files inside the change directory; a path outside them is `internal`.
 - **Pinned version.** The first operation runs `version --json`, and an instance keeps the result once the check succeeds; any version other than 1.14.3 makes every operation fail with `unavailable`, because the normalization is defined for that version. The checked version is the upstream tool version and appears in evidence references.
 - **Working-copy root.** OpenSpec resolves the nearest root upwards. Every operation requires the working copy to be a directory, runs `list` there, and requires the command to succeed and the reported root to be the working copy's real path, so the adapter never reads or archives an enclosing project; otherwise it fails with `not-found`. A work item must be an active change in that list, else `not-found`.
@@ -23,6 +23,6 @@ Goals: an adapter that passes every item-10 case through the real CLI, registrat
 
 ## Risks / Trade-offs
 
-- Each operation spawns two to four CLI processes; the conformance test takes about 20 seconds. Caching would add state that the draft port does not need yet.
+- Each operation spawns two to four CLI processes; the conformance test takes 20 to 25 seconds. Caching would add state that the draft port does not need yet.
 - The schema version is read with a single-line pattern rather than a YAML parser, to avoid a new dependency; a schema whose `version` is not a single-line top-level scalar fails with `internal`.
 - Contract tooling section 9 marks the `archive --json` output as unverified. The finalization tests confirm its `archive.path` field and the `status` failure shape of a refused archive with the pinned CLI; `verification.md` records this, and section 9 is left to its owner.

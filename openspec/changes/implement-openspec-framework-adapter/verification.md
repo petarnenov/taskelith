@@ -19,6 +19,7 @@ G1 item 11 of the [G1 work plan](../../../docs/g1-plan.md), assigned by the coor
 - Scope: no change to the port, the suite, the expected outputs, or the boundary rules; no SpecKit work; no UI.
 - Comments: every comment line the change adds is at most 80 characters and every comment at most two lines, checked with a script over the diff.
 - Honest status: the conformance and finalization tests archive only copies in a temporary directory; nothing claims deployment or orchestration.
+- Evidence check: the change adds only repository-relative links and no external source; every CLI output it relies on was observed with the pinned CLI as recorded above.
 
 ## Checks
 
@@ -35,7 +36,7 @@ Assigned reviewer: Claude Code, `claude -p "<prompt>" --model claude-fable-5-1 -
 
 - **Pass 1** (session `21f1861c-8b50-49bd-8bc8-0a2f59eef520`; `modelUsage` named only `claude-fable-5-1`), reviewing `021854a..2fe772f`. Snapshot before and after: `e9683672818e910e4fbfaa3de8b9e5faa7413941cddd34639e2ddb6dce165ab8`, equal. The reviewer ran the adapter tests against the existing build (14 passed) and checked the CLI in an empty directory. Findings: 0 Critical, 0 High, 3 Medium, 9 Low. All accepted and resolved:
   1. Medium: a directory outside any OpenSpec project made `list` fail, which became `internal`, not the specified `not-found`. `list` failure is now `not-found`, and a test covers an empty directory.
-  2. Medium: absolute paths from the CLI output were read without checking that they lie in the working copy. Revisions are read only inside the working copy and finalization only inside the change directory, else `internal`; a test uses a stand-in CLI that lists `/etc/hosts`.
+  2. Medium: absolute paths from the CLI output were read without checking that they lie in the working copy. Revisions are read only inside the working copy and finalization only inside the change directory, else `internal`; a test uses a stand-in CLI that lists `/etc/hosts` (the finalization test came with the pass-2 fixes).
   3. Medium: a file-system error in the new-change probe would throw instead of returning a `Result`. The probe is wrapped and reports `internal`.
   4. Low: a failed version check stayed cached for the instance. Only a successful check is kept.
   5. Low: the CLI's standard error was lost when its output was not JSON. Its start is in the failure details.
@@ -47,10 +48,19 @@ Assigned reviewer: Claude Code, `claude -p "<prompt>" --model claude-fable-5-1 -
   11. Low: an unnamed intersection type. Named `WorkflowSubject`.
   12. Low: a working copy that is a file gave `unavailable`. A working copy must be a directory, else `not-found`; a test covers it.
 
+- **Pass 2** (session `40bb1e5a-11da-4199-9259-d257220fb5f0`; `modelUsage` named only `claude-fable-5-1`), reviewing `021854a..17384db` and confirming each pass-1 resolution against `2fe772f..17384db`. Snapshot before and after: `cb129f24d03e75222a706a473859a11d461c3f246446c61f76e5676693c06c7a`, equal. The reviewer confirmed all twelve pass-1 findings resolved. Findings: 0 Critical, 0 High, 0 Medium, 7 Low. All accepted and fixed without another pass, as the review process allows for a Low-only pass, so these fixes are unreviewed:
+  1. Low: `isDirectory` could throw if `stat` failed after `realpath`. A failed `stat` now means not a directory, so `not-found`.
+  2. Low: the finalization guard against a file outside the change directory had no test. A stand-in CLI lists such a file; finalization fails with `internal` and the stand-in's archive command never runs.
+  3. Low: the CLI had no timeout. It has 120 seconds, after which the operation is `unavailable`.
+  4. Low: an exceeded output limit or a signal was reported as `unavailable` although the CLI had started. Both are `internal`; only a CLI that cannot start or times out is `unavailable`.
+  5. Low: a synchronous `existsSync` in the asynchronous probe. Replaced with `access` from `node:fs/promises`.
+  6. Low: the design and this record gave different test durations. Both say 20 to 25 seconds.
+  7. Low: the author self-check had no evidence check. Added.
+
 ## Limitations
 
 - The adapter supports only what the pinned CLI reports; other CLI versions are refused.
-- The conformance test takes about 25 seconds, because each operation spawns the CLI two to four times.
+- The conformance test takes 20 to 25 seconds, because each operation spawns the CLI two to four times.
 - Plugin source keeps a structural copy of the port shapes until item 12 resolves plugin access to the port type.
 
 ## Remaining gates

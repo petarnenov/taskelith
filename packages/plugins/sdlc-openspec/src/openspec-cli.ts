@@ -15,6 +15,7 @@ export interface CliOutput {
 }
 
 const MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
+const TIMEOUT_MILLISECONDS = 120_000;
 const MAX_STDERR_DETAIL = 2000;
 
 // Set after the caller's environment, so that no option turns telemetry on.
@@ -27,15 +28,20 @@ export function runOpenSpec(options: OpenSpecCliOptions, directory: string, args
     execFile(
       options.executable,
       [...args, '--json'],
-      { cwd: directory, env: environment, encoding: 'utf8', maxBuffer: MAX_OUTPUT_BYTES },
+      { cwd: directory, env: environment, encoding: 'utf8', maxBuffer: MAX_OUTPUT_BYTES, timeout: TIMEOUT_MILLISECONDS },
       (error, stdout, stderr) => resolve(readOutput(command, error, stdout, stderr)),
     );
   });
 }
 
 function readOutput(command: string, error: ExecFileException | null, stdout: string, stderr: string): Result<CliOutput> {
+  if (error?.killed) {
+    return err(failure('unavailable', `${command} did not finish within ${TIMEOUT_MILLISECONDS} ms`, { command }));
+  }
   if (error !== null && typeof error.code !== 'number') {
-    return err(failure('unavailable', `${command} could not run: ${error.message}`, { command }));
+    // A string code other than the output limit means the CLI did not start.
+    const started = typeof error.code !== 'string' || error.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER';
+    return err(failure(started ? 'internal' : 'unavailable', `${command} failed to complete: ${error.message}`, { command }));
   }
   try {
     return ok({ succeeded: error === null, json: JSON.parse(stdout) });
