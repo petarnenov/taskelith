@@ -17,12 +17,12 @@ Keep the main clone on `dev` and give each change a worktree outside it. From th
 git fetch origin
 git worktree add --no-track ../taskelith-worktrees/<change> -b <change> origin/dev
 cd ../taskelith-worktrees/<change>
-nvm use && npm ci --ignore-scripts
+make setup && nvm use   # node_modules is per worktree
 # work, commit, then push; the pre-push hook runs make verify
 git push -u origin <change>
 ```
 
-`--no-track` keeps `origin/dev` from becoming the branch's upstream, so `git push -u` sets the branch's own upstream. `node_modules` is per worktree, so each one needs `npm ci`. The `core.hooksPath` setting from `make hooks` is shared repository configuration, so the `pre-push` gate applies in every worktree. After the pull request is merged, from the main clone: `git switch dev && git pull --ff-only` to confirm the merge landed, then `git worktree remove ../taskelith-worktrees/<change>` and `git branch -D <change>`. `-D` is needed because a rebase merge rewrites the branch's commits, so git does not see the local branch as merged.
+`--no-track` keeps `origin/dev` from becoming the branch's upstream, so `git push -u` sets the branch's own upstream. `node_modules` is per worktree, so each one needs `make setup`, which runs `npm ci` when the dependencies are missing. The `core.hooksPath` setting from `make hooks` is shared repository configuration, so the `pre-push` gate applies in every worktree. After the pull request is merged, from the main clone: `git switch dev && git pull --ff-only` to confirm the merge landed, then `git worktree remove ../taskelith-worktrees/<change>` and `git branch -D <change>`. `-D` is needed because a rebase merge rewrites the branch's commits, so git does not see the local branch as merged.
 
 Two pitfalls, both observed on 2026-10-24:
 
