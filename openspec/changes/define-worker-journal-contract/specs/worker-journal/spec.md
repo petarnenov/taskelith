@@ -51,6 +51,13 @@ The journal SHALL be an SQLite database opened with `EXCLUSIVE` locking set befo
 - **WHEN** power is lost after a commit returned success on storage that honors flushes
 - **THEN** the committed transaction is present after restart
 
+### Requirement: Open macOS durability gate
+On macOS the journal's durability guarantee SHALL hold only while `F_FULLFSYNC` does not fail after the startup check, and macOS journal durability SHALL not be claimed before native acceptance closes this gate.
+
+#### Scenario: macOS durability claim
+- **WHEN** native acceptance has not proven a mechanism that surfaces every `F_FULLFSYNC` failure
+- **THEN** no macOS journal durability is claimed
+
 #### Scenario: macOS filesystem without full flush
 - **WHEN** a macOS worker's data root is on a filesystem that does not support `F_FULLFSYNC`
 - **THEN** the worker fails startup

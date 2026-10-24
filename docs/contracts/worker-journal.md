@@ -53,7 +53,9 @@ Every protocol write is one explicit transaction (`BEGIN IMMEDIATE` to `COMMIT`)
 
 **macOS flush fallback.** When `F_FULLFSYNC` fails, SQLite 3.53.4 falls back to a plain `fsync` and returns that result ([`os_unix.c`](https://github.com/sqlite/sqlite/blob/version-3.53.4/src/os_unix.c#L3778-L3830)), and Node's `fs.fsync` on macOS goes through libuv 1.52.1, the version Node 24.22.1 bundles, which falls back to `F_BARRIERFSYNC` and then `fsync` ([`fs.c`](https://github.com/libuv/libuv/blob/v1.52.1/src/unix/fs.c#L170-L191)). Such a failure therefore cannot be detected per write, and switching the binding does not help, because both bundle the same SQLite. The worker instead accepts on macOS only a local filesystem on which `F_FULLFSYNC` is supported (APFS), checked at startup; the check is an item 14 qualification gate, and item 14 shows that a filesystem without `F_FULLFSYNC` support is refused.
 
-**Guarantee.** A transaction whose `COMMIT` returned success survives a process crash, an operating-system crash, and a power loss, on storage that honors flush requests and, on macOS, on a filesystem that passed the startup check. A transaction whose `COMMIT` failed or did not return may or may not survive; section 7 says how the worker acts on that. Storage that acknowledges flushes it has not performed is outside the guarantee; native acceptance (item 25) records the storage of each matrix entry.
+**Open macOS gate.** The startup check does not cover a later `F_FULLFSYNC` failure, which the fallback hides, so on macOS the guarantee below holds only while `F_FULLFSYNC` does not fail after the startup check. This is an open gate for items 14 and 25: macOS journal durability is not claimed before native acceptance. If item 14 finds a mechanism that surfaces every `F_FULLFSYNC` failure, it closes the gate; the owner decided this on 2026-10-25.
+
+**Guarantee.** A transaction whose `COMMIT` returned success survives a process crash, an operating-system crash, and a power loss, on storage that honors flush requests and, on macOS, on a filesystem that passed the startup check and only while `F_FULLFSYNC` does not fail after it (the open gate above). A transaction whose `COMMIT` failed or did not return may or may not survive; section 7 says how the worker acts on that. Storage that acknowledges flushes it has not performed is outside the guarantee; native acceptance (item 25) records the storage of each matrix entry.
 
 ## 4. Durable file rule
 
@@ -188,7 +190,7 @@ When the disk holding `dataRoot` is lost after the worker acknowledged commands,
 - **Item 7:** the execution states of section 5, uncertainty as evidence beside the state, and lost local history as a reconciliation input.
 - **Item 8:** `workerId`, `journalId`, sequence, and a deterministic `observationId` in every observation; the cumulative confirmation of section 6; the inventory report of section 8; the reason codes for rejected assignments (backlog, disk floor).
 - **Item 13:** enrollment creates the journal before `worker/identity`, and writes the identity under section 4.
-- **Item 14:** the settings of section 3 and their initialization order, the macOS `F_FULLFSYNC` startup check, the subtree rules of section 2, the lock mechanism, the start checks, the migrations, the republication bound of section 6, and the crash points of section 13.
+- **Item 14:** the settings of section 3 and their initialization order, the macOS `F_FULLFSYNC` startup check and the open macOS gate of section 3, the subtree rules of section 2, the lock mechanism, the start checks, the migrations, the republication bound of section 6, and the crash points of section 13.
 - **Items 20 and 21:** the write order and recovery of section 5 in the runtime, and the confirmation, sequence check, inventory reconciliation, and loss handling of sections 6, 8, and 11 in the control plane.
 
 ## 13. Required tests
