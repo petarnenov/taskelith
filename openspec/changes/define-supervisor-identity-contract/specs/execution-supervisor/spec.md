@@ -47,18 +47,22 @@ A worker SHALL report an execution as exited only when its whole process set is 
 - **THEN** the execution is not reported as exited
 
 ### Requirement: Contained process sets on Linux
-On Linux, every execution SHALL run in its own cgroup v2 containment that its descendants cannot leave, emptiness SHALL be read from the containment, cancellation SHALL kill through it, and a worker that cannot create one SHALL fail its self-check.
+On Linux, every execution SHALL run in its own cgroup v2 containment, the process set SHALL have no write access to any cgroup of the worker, emptiness SHALL be read from the containment, cancellation SHALL kill through it, and a worker whose self-check cannot prove that a child can neither leave its containment nor change another SHALL not be admitted.
 
-#### Scenario: Supervisor killed while its child runs
-- **WHEN** a Linux supervisor dies and its process set later exits
-- **THEN** the worker proves the exit from the unpopulated containment and reports it with an unknown status
+#### Scenario: Child tries to leave its containment
+- **WHEN** a child tries to move itself into another cgroup of the worker
+- **THEN** the move fails and the child stays in its containment
 
-### Requirement: Group signals on macOS
-On macOS, a supervisor SHALL signal the child's process group only while it holds the child unreaped, SHALL never signal by an identifier it no longer holds, and a harness supported on macOS SHALL keep its processes in its process group.
+#### Scenario: Container replaced without proof
+- **WHEN** a Linux worker container is replaced, the data root is kept, the old containments are no longer visible, and the old namespace's end is not proven
+- **THEN** each execution without an exit record is reported as uncertain
 
-#### Scenario: Cancellation after the child was reaped
-- **WHEN** a cancellation arrives after the supervisor reaped the child
-- **THEN** no group signal is sent and surviving processes are reported as an unproven termination
+### Requirement: Group signals and evidence on macOS
+On macOS, a supervisor SHALL signal the child's process group only while it holds the child unreaped, SHALL never signal by an identifier it no longer holds, SHALL prove the set empty only from a single-instant listing with no process carrying the group's ID, and a harness supported on macOS SHALL keep its processes in its group.
+
+#### Scenario: Descendant forked after the reap
+- **WHEN** a descendant forks a new process and exits after the child was reaped
+- **THEN** the new process keeps the group's ID and the set is not proven empty
 
 ### Requirement: Survival and drain per operating system
 Supervisors SHALL outlive a worker service restart where the operating system keeps their processes; every event that ends them, such as a container restart, an image upgrade, or an unqualified service stop, SHALL require drain. A worker SHALL read the record format of the previous supervisor version.

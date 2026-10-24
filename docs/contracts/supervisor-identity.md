@@ -18,8 +18,9 @@ The supervisor reports only through files in its execution record (section 3). T
 - **Execution identity (`executionId`):** the stable execution identity. The worker creates it as a random 128-bit identifier and journals it with the launch intent (item 5) before it asks for a launch authorization (item 3). It names at most one spawn and is never reused. The architecture's phrase "stable launch identity" (section 9, failure behavior) means this identity.
 - **Process identity:** the triple of boot identity, process ID, and process start time, read from the operating system (section 10). A process ID alone never identifies a process, because the kernel reuses process IDs. Two observations name the same process only if all three values are equal.
 - **Boot identity:** the identifier the kernel assigns to the current boot (section 10).
+- **Namespace incarnation (Linux):** the identity of the worker container's PID namespace, recorded in `intent`. A replaced container has a new incarnation, and its cgroup view may no longer show the old containments. The old namespace's end is proven only by evidence that its PID 1 died, because the kernel then ends every process of the namespace; the candidate is a lock on the data root held by that PID 1 for its whole life, which item 15 qualifies. Without that proof a missing containment proves nothing.
 - **Supervisor identity:** the process identity of a supervisor, recorded in a numbered supervisor record (section 3) together with the execution it serves.
-- **Containment:** on Linux, a cgroup v2 directory per execution, named from its `executionId` under the worker's cgroup, that the child and every descendant belong to from their creation and cannot leave without privileges the worker does not grant. macOS offers no equivalent; there the child's process group, while the supervisor still holds the unreaped child, is the closest boundary (section 8).
+- **Containment:** on Linux, a cgroup v2 directory per execution, named from its `executionId` under the worker's cgroup, that the child and every descendant belong to from their creation and cannot leave, because the process set has no write access to any cgroup of the worker (section 8). macOS offers no equivalent; there the child's process group, while the supervisor still holds the unreaped child, is the closest boundary (section 8).
 
 The execution states are those of the launch authorization contract (item 3): `authorized` (a grant exists and nothing has spawned), `started` (a start is recorded), and the terminal states `exited` and `not-started`. This contract defines when the worker may report the facts that move an execution between them (section 11); `uncertain` is an observation that leaves the state unchanged.
 
@@ -29,7 +30,7 @@ Every execution has a directory `worker/executions/<executionId>/` under the wor
 
 | File | Written by | When | Content |
 | --- | --- | --- | --- |
-| `intent` | Worker | Before it starts the supervisor; replaced only while no launch record exists | `executionId`, `attemptId`, `ownershipGeneration`, the current `launchAuthId`, the spawn deadline in the deadline clock (section 4) with the boot identity it is valid in, and the supervisor program version |
+| `intent` | Worker | Before it starts the supervisor; replaced only while no launch record exists | `executionId`, `attemptId`, `ownershipGeneration`, the current `launchAuthId`, the spawn deadline in the deadline clock (section 4) with the boot identity it is valid in, the namespace incarnation on Linux, and the supervisor program version |
 | `lock` | Every supervisor | For its whole life | An exclusive `flock` (section 6) |
 | `supervisor.<n>` | Each supervisor, once | Right after it takes `lock` | Its supervisor identity; `n` is one more than the highest existing number, created exclusively |
 | `launch` | The first supervisor, or the worker | Created once, exclusively | The **launch record**: either a **claim** (the `launchAuthId` it spawns under, `supervisor.1`, and the containment) or a **seal** |
@@ -86,8 +87,9 @@ When the worker service starts, it reads its journal and every execution directo
 | Claim; a supervisor is live | Its identity is alive | Adopt it: resume reading its files; nothing spawns |
 | Claim; `exit` present | None needed | Report the recorded exit |
 | Claim; `handle` records a spawn failure | None needed | The supervisor writes, or the worker completes, `exit` with the failure; report it |
-| Claim; no live supervisor; no `exit` | Linux: the containment is populated | Adopt: an adopting supervisor watches the containment; when it empties, write `exit` with an unknown status |
-| The same | Linux: the containment is not populated, or the boot changed | Write `exit` with an unknown status, and with the start unproven if there is no `handle`; report it |
+| Claim; no live supervisor; no `exit` | Linux: the recorded namespace incarnation is not the current one, and the old namespace's end is not proven | `uncertain` |
+| The same | Linux: the containment is populated | Adopt: an adopting supervisor watches the containment; when it empties, write `exit` with an unknown status |
+| The same | Linux: in the recorded namespace incarnation, the containment is not populated; or the boot changed; or the old namespace's end is proven | Write `exit` with an unknown status, and with the start unproven if there is no `handle`; report it |
 | The same | macOS, same boot, `handle` present: the child's identity is alive | Adopt the child (observation only, section 8) |
 | The same | macOS, same boot, `handle` present: the child's identity is not alive | `uncertain`: descendants may live, and no containment proves they do not |
 | The same | macOS, same boot, no `handle` | `uncertain` |
@@ -106,15 +108,18 @@ An exit with an unknown status ends the execution: no process of it can run. The
 
 `exit` is written, and `exited` reported, only when the whole process set is proven empty, not merely when the child exits. If the child exits and the set is not proven empty, the execution stays `started` and the worker reports the surviving processes.
 
-**Linux.** The containment holds the whole process set: a descendant cannot leave it, whatever sessions or forks it creates. The set is empty when the containment reports itself unpopulated. Cancellation writes to the containment's kill control, which kills every member at once without naming a process ID, so no reuse race exists. A Linux worker that cannot create a delegated cgroup v2 containment with a kill control fails its self-check and is not admitted. The container runtime settings that provide it are an item 15 and item 25 qualification.
+**Linux.** The containment holds the whole process set, whatever sessions or forks it creates, only if no process of the set can migrate itself or another process: migrating a process needs write access to the destination's `cgroup.procs` and to that of the common ancestor, and the supervisor has that access to move itself. The process set must therefore have no write access to any cgroup of the worker, which the supervisor ensures before the spawn, for example by running the child under a separate execution account or by giving it a read-only view of the cgroup filesystem; the mechanism is an item 15 qualification. A Linux worker is admitted only if its self-check proves that a child can neither leave its containment nor change another one, and that the containment has a kill control; the container runtime settings that provide this are an item 15 and item 25 qualification.
+
+- The set is empty when the containment reports itself unpopulated, which also covers descendant cgroups.
+- Cancellation writes to the containment's kill control, which kills every member, including members created by concurrent forks, without naming a process ID, so no reuse race exists.
 
 **macOS.** No containment exists, so termination evidence rests on the process group and on the processes the supervisor observed:
 
 - While the child runs, the supervisor records in `events` the identity of every descendant it sees, by walking parent links at a fixed interval and at cancellation.
 - The supervisor signals the child's process group only while it holds the child unreaped. A process group ID equals its leader's process ID, which no new process can receive until the child is reaped, so the signal cannot reach an unrelated group. It never signals by a process ID or group ID it no longer holds.
 - Cancellation sends the group a termination signal, waits a grace period, then kills the group, all before reaping the child.
-- After the child is reaped, the set is proven empty only if no process with the group's ID started before the reap, and no recorded descendant identity, is alive. Otherwise `exit` is not written, and the worker reports the survivors as an unproven termination.
-- A descendant that leaves the child's process group can escape both the signals and the evidence. A harness qualified for macOS must therefore be shown to keep its processes in its group (a G3 harness qualification obligation); a harness that does not is not supported on macOS.
+- A process inherits its parent's process group when it forks, and the kernel does not reuse a process group ID while any member exists, so the original group is gone only when no process at all carries its ID. After the child is reaped, the set is proven empty only if one kernel listing of all processes, taken at a single instant, contains no process with the group's ID, whatever its start time, and no recorded descendant identity is alive. A process with that ID that started after the reap may belong to an unrelated group, but it still blocks the proof: a false unproven termination is safe, a false `exited` is not. Whether the listing is taken at a single instant is an item 15 qualification; without it, no proof is possible and the worker reports an unproven termination.
+- A descendant that leaves the child's process group, by starting a new session or group, escapes both the signals and the evidence, and the supervisor's interval walk cannot be relied on to see it. The guarantee on macOS therefore rests on qualification: a harness supported on macOS must be shown to keep every process in its group (a G3 harness qualification obligation), and a harness that does not is not supported on macOS. An escape the supervisor does observe, a recorded descendant alive outside the group, is reported as an unproven termination; an escape it does not observe is the residual risk this qualification accepts.
 - An adopting supervisor on macOS is not the child's parent, so it cannot signal safely: it observes only. A cancellation it receives is reported as not executed, and the execution stays `started` for reconciliation.
 
 A cancellation request is never proof of termination (architecture section 9): the attempt is cancelled only on this evidence.
@@ -126,7 +131,7 @@ Invariant 8 requires a worker service upgrade to state whether child runtimes su
 | Event | Linux worker container | macOS native worker |
 | --- | --- | --- |
 | Worker service process crash or restart, container kept | Supervisors and process sets survive and are adopted, provided the container's main process is an init that outlives the worker service and reaps orphans; otherwise this is a container restart | Supervisors and process sets survive in their own sessions and are adopted |
-| Container restart or replacement (including an image upgrade) | Every process ends with the container's PID namespace: requires drain; an execution not drained ends with an unknown status, proven by its unpopulated containment | Not applicable |
+| Container restart or replacement (including an image upgrade) | Every process ends with the container's PID namespace: requires drain. An execution not drained ends with an unknown status only if the old namespace's end is proven (section 2); otherwise it is `uncertain` | Not applicable |
 | Worker package upgrade without replacing the processes | Not applicable: Linux workers upgrade by image | A running supervisor keeps its version, so the new worker must read the record format that supervisor writes; otherwise drain first |
 | Service manager stop | The container runtime's stop: as a container restart | The launchd job must not kill supervisors outside its process group; whether it does is a launchd qualification obligation (G6, decision D5), and until it is proven, a service stop requires drain |
 | Supervisor process crash | The process set survives and is adopted through its containment, without the child's exit status | The child is adopted for observation only (section 8), without its exit status |
@@ -173,7 +178,7 @@ The control plane decides the attempt's outcome from these facts; this contract 
 - **Item 5:** the launch intent with `executionId` is journaled before the authorization request, and the record's existence is journaled before the supervisor starts (CP3); the durable write rule covers the record's files and directory entries; the execution directory is part of the `worker/` subtree and outlives workspaces.
 - **Item 6:** an execution that is `uncertain`, has a `termination-unproven` set, or is being drained keeps its capacity reservation; the per-execution supervisor's memory counts toward the execution's reservation, not toward the worker daemon's overhead target.
 - **Item 7:** the execution states of section 2, with `uncertain` and `termination-unproven` as observations that keep ownership, and termination observed apart from cancellation requested.
-- **Item 15:** the supervisor and the adopting supervisor, the per-OS readers of section 10, the Linux containment and its self-check, and the crash points of section 4.
+- **Item 15:** the supervisor and the adopting supervisor, the per-OS readers of section 10, the Linux containment with the mechanism that denies the process set any cgroup write access and the self-check that proves it, the namespace incarnation and the proof of an old namespace's end, the single-instant process listing on macOS, and the crash points of section 4.
 - **G3 harness qualification:** a harness supported on macOS keeps its processes in its process group.
 
 ## 13. Required tests
@@ -188,10 +193,12 @@ Items 15, 24, and 25 implement these through the deterministic test harness (ite
 - The worker service restarts while executions run: supervisors are adopted, and the process sets are untouched.
 - A supervisor is killed while its child runs, then the adopting supervisor is killed too: each recovery adopts through the highest supervisor record, and the later exit is reported with an unknown status.
 - A crash between CP8 and CP9: on Linux the containment proves presence or absence; on macOS the result is `uncertain`.
-- A child that starts a descendant in its own session and then exits: on Linux the execution stays `started` until the containment empties; on macOS the escape is reported as `termination-unproven`.
+- A child that starts a descendant in its own session and then exits: on Linux the execution stays `started` until the containment empties; on macOS, when the supervisor has recorded the descendant, the escape is reported as `termination-unproven`.
+- On macOS, a child forks A and is reaped, then A forks B and exits before the next walk: B keeps the group's ID, so the set is not proven empty.
+- On Linux, a child that tries to move itself or a descendant into another cgroup of the worker fails, and the worker's self-check proves that it fails.
 - A spawn that fails before a child exists and a child that fails to execute its program each end with `exited` and the failure, without a second spawn.
 - A system suspend that outlasts the deadline between hand-off and claim leads to a seal, not a spawn.
 - A Linux worker without a delegated cgroup v2 containment fails its self-check.
-- A container restart and a machine reboot end every execution with an unknown status where no `exit` was written.
+- A machine reboot ends every execution with an unknown status where no `exit` was written; after a container replacement with the data root kept and the old cgroups gone, an execution is `uncertain` unless the old namespace's end is proven.
 - A corrupt, newer-format, or impossible record gives `uncertain`.
 - A worker of the next version reads records written by a supervisor of the previous version.

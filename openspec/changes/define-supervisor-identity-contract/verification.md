@@ -34,6 +34,11 @@ Assigned reviewer: Codex CLI with `gpt-6.1-sol`, reasoning effort medium, sandbo
   12. Medium: a failed spawn had no transition. `handle` records the spawn failure, and the execution ends with `exited` and the failure.
   13. Medium: this record was missing before pass 1. Added.
 
+- **Pass 2 at `4cee8d8` — session `01a17023-7c6d-7361-8637-868802e15b3f`.** Confirmed the resolutions of pass 1 and the coordinator's names; 0 Critical, 2 High, 1 Medium, 0 Low. The worktree snapshots were equal. The snapshot of item 3's draft changed during the pass, because that draft's author edited it in its own worktree at the same time; the reviewer ran in the `read-only` sandbox, so the change was not the reviewer's.
+  1. High: on macOS, a start-time cutoff missed processes forked after the reap, and the interval walk could miss an escape. The proof now needs one single-instant listing with no process carrying the group's ID, whatever its start time; an unobserved escape is the residual risk that the macOS harness qualification accepts, and the required tests include both counterexamples.
+  2. High: on Linux, a child with the supervisor's rights could move itself out of its containment. The process set must now have no write access to any cgroup of the worker, and the self-check must prove that a child can neither leave its containment nor change another.
+  3. Medium: after a container replacement, a missing containment was taken as proof of exit. The worker now records the namespace incarnation; without proof that the old namespace's PID 1 died, the result is `uncertain`.
+
 ## Remaining gates
 
 Further review passes, then merge into `dev` and archive by the coordinator. The per-OS mechanisms of section 10, the Linux cgroup delegation, the container init, and the launchd behavior are qualification obligations of items 15 and 25 and G6.
