@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseEventMetadata, parseEventType, parseSchemaVersion, type EventMetadataInput } from '@taskelith/kernel';
+import {
+  MAX_EVENT_TYPE_LENGTH, parseEventMetadata, parseEventType, parseSchemaVersion, type EventMetadataInput,
+} from '@taskelith/kernel';
 
 const input: EventMetadataInput = {
   eventId: 'evt-1',
@@ -41,11 +43,17 @@ test('parseEventMetadata names the first invalid field', () => {
   }
 });
 
+test('parseEventMetadata reports only the first invalid field in field order', () => {
+  const result = parseEventMetadata({ ...input, eventType: 'GatePassed', occurredAt: '2026-10-24' });
+  assert.equal(!result.ok && result.error.details.field, 'eventType');
+});
+
 test('parseEventType requires dot-separated lowercase segments', () => {
-  for (const text of ['sdlc.gate.passed', 'execution.attempt-started', 'a.b']) {
+  const longest = `a.${'b'.repeat(MAX_EVENT_TYPE_LENGTH - 2)}`;
+  for (const text of ['sdlc.gate.passed', 'execution.attempt-started', 'a.b', 'v2.gate-1', longest]) {
     assert.deepEqual(parseEventType(text), { ok: true, value: text });
   }
-  for (const text of ['', 'sdlc', 'Sdlc.gate', 'sdlc..gate', 'sdlc.gate.', '1sdlc.gate', 'sdlc.gate_passed', `a.${'b'.repeat(127)}`]) {
+  for (const text of ['', 'sdlc', 'Sdlc.gate', 'sdlc..gate', 'sdlc.gate.', '1sdlc.gate', 'sdlc.gate_passed', 'sdlc.gate-', 'a-.b', 'a.b--c', 'a.-b', `${longest}b`]) {
     assert.equal(parseEventType(text).ok, false, text);
   }
 });

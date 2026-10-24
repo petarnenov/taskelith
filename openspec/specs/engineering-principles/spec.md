@@ -1,7 +1,7 @@
 # engineering-principles Specification
 
 ## Purpose
-Check every Taskelith design, change, test, and review against the owner's first-class principles in ADR 0004, and keep OpenSpec mandatory for developing Taskelith while managed projects choose their own framework.
+Check every Taskelith design, change, test, and review against the owner's first-class principles in ADR 0004 (principle 8 as amended by ADR 0008), and bind every task to the project's selected SDLC framework, with OpenSpec as the default.
 
 ## Requirements
 
@@ -15,17 +15,6 @@ Every design, code change, test, and review of Taskelith SHALL be checked agains
 #### Scenario: A principle cannot be met
 - **WHEN** a change cannot meet one of the principles
 - **THEN** its `verification.md` records the conflict and the owner's decision
-
-### Requirement: Mandatory OpenSpec for Taskelith development
-Every task that develops Taskelith SHALL be bound to an OpenSpec change, while projects managed by Taskelith SHALL be able to select another spec-driven framework through replaceable SDLC plugins.
-
-#### Scenario: Task without a change
-- **WHEN** a task changes the Taskelith repository
-- **THEN** an OpenSpec change records its scope, verification, and review before integration
-
-#### Scenario: Managed project framework
-- **WHEN** a managed project selects SpecKit or another supported framework
-- **THEN** Taskelith runs that project's workflows through the selected framework plugin without requiring OpenSpec
 
 ### Requirement: Make targets as the operational interface
 Once the Makefile exists, documentation and CI SHALL invoke operations through `make` targets, with npm scripts allowed only as their implementation.
@@ -77,3 +66,22 @@ Every HTTP API SHALL be defined first in a versioned OpenAPI 3.1 document and ev
 #### Scenario: Untested workspace package module
 - **WHEN** a module under a workspace package's `src/` is not loaded by any test
 - **THEN** the coverage scope check names the module and `make verify` fails
+
+### Requirement: SDLC framework binding with OpenSpec as default
+Every task that develops Taskelith SHALL be bound to a change of the project's selected spec-driven framework, without exception; OpenSpec SHALL be the default framework, and every project, Taskelith included, SHALL be able to select another supported framework through replaceable SDLC plugins.
+
+#### Scenario: Task without a change
+- **WHEN** a task changes the Taskelith repository
+- **THEN** a change of the selected framework records its scope, verification, and review before integration
+
+#### Scenario: Default framework
+- **WHEN** no other framework has been selected for a project
+- **THEN** its tasks are bound to OpenSpec changes
+
+#### Scenario: Another framework selected
+- **WHEN** a project-maintainer selects SpecKit or another supported framework for a project
+- **THEN** new tasks bind to that framework through its plugin, and running work keeps its existing binding
+
+#### Scenario: Framework tooling not admitted
+- **WHEN** another framework is selected for this repository before its pinned tooling is admitted through the dependency policy
+- **THEN** the selection is not applied and tasks keep binding to OpenSpec

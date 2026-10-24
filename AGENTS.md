@@ -11,13 +11,13 @@
 - Implement only the requested work. The architecture plan is a roadmap, not blanket implementation authorization.
 - Product-owned code is TypeScript. Do not introduce Go code or a Go bridge.
 - Follow [docs/architecture.md](docs/architecture.md): hexagonal modules, explicit ports/adapters, and established OSS dependencies.
-- Design and review every change against the first-class principles in [ADR 0004](docs/decisions/0004-first-class-engineering-principles.md): Clean Code, SOLID, hexagonal architecture, microkernel, Docker, contract-first OpenAPI, Makefile-driven operation, mandatory OpenSpec, and code coverage of at least 75% of lines, branches, and functions.
+- Design and review every change against the first-class principles in [ADR 0004](docs/decisions/0004-first-class-engineering-principles.md): Clean Code, SOLID, hexagonal architecture, microkernel, Docker, contract-first OpenAPI, Makefile-driven operation, a mandatory SDLC framework with OpenSpec as the default, and code coverage of at least 75% of lines, branches, and functions.
 - Keep bootstrap status honest; do not expose commands that imply unimplemented orchestration.
 
 ## SDLC
 
 - Every agent task must be tracked through the selected SDLC framework, including docs and maintenance.
-- OpenSpec is mandatory for every task that develops Taskelith, without exception ([ADR 0004](docs/decisions/0004-first-class-engineering-principles.md)). Projects managed by Taskelith select their own framework through replaceable SDLC plugins.
+- Every task that develops Taskelith is bound to a change of the selected SDLC framework, without exception. OpenSpec is the default and the framework of this repository until a project-maintainer selects another ([ADR 0004](docs/decisions/0004-first-class-engineering-principles.md) principle 8 as amended by [ADR 0008](docs/decisions/0008-product-ui-and-integration-authority.md)). Every project, Taskelith included, selects its framework through replaceable SDLC plugins.
 - Use the pinned local CLI through `npm run openspec -- ...`.
 - Record scope, requirements, verification evidence, and remaining gates. Do not claim independent review or deployment validation that did not occur.
 - Follow the [independent review process](docs/governance.md#independent-review-process): authorized read-only reviewers, one reviewer per task, at most three passes, and Low-only passes fixed without another review.

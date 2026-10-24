@@ -1,6 +1,6 @@
 # Bootstrap governance policy
 
-Policy version: 2 (2026-10-24: adds the independent review process). Status: repository bootstrap policy; runtime enforcement is not implemented.
+Policy version: 3 (2026-10-24: version 2 added the independent review process; version 3 adds auto-merge as integration authority and the selectable SDLC framework, [ADR 0008](decisions/0008-product-ui-and-integration-authority.md)). Status: repository bootstrap policy; runtime enforcement is not implemented.
 
 Owner acceptance: Petar Nenov accepted the SDLC policy on 2026-10-24 in the project conversation. On 2026-10-24, the owner explicitly authorized a separate Codex reviewer agent (`gpt-6.1-sol` with `model_reasoning_effort = "medium"`) for independent review of the current and subsequent G0 changes, and later the same day the further reviewers listed under [Independent review process](#independent-review-process). Integration and release authorization remain distinct.
 
@@ -10,7 +10,7 @@ The owner, Petar Nenov, defines scope and accepts product and architecture decis
 
 The implementer records author checks. An independent reviewer must be a person or separately authorized agent that did not author the change; self-review is never independent review. The owner may explicitly accept a documented review exception for bounded bootstrap work. Never infer an exception from silence or mark the review as passed because an exception was granted.
 
-The owner or an explicitly authorized integrator controls merging and pushing. Finishing local work does not itself authorize integration. Release authority follows [the release policy](releases.md): qualifying changes integrated into main may publish automatically after verification. Deployment requires separate owner authorization.
+The owner or an explicitly authorized integrator controls merging and pushing. Finishing local work does not itself authorize integration. In a project managed by Taskelith, an enabled auto-merge setting, which only a project-maintainer changes, is that explicit authorization: pushing to the task's own branch is covered by a standing rule, a change whose gates have all passed is merged without a further human step, and where an earlier rule conflicts with auto-merge, auto-merge wins ([ADR 0008](decisions/0008-product-ui-and-integration-authority.md) decisions 2 and 3). Release authority follows [the release policy](releases.md): qualifying changes integrated into main may publish automatically after verification. Deployment requires separate owner authorization.
 
 ## Independent review process
 
@@ -31,7 +31,7 @@ These rules were set or approved by the owner on 2026-10-24; the source of each 
 
 ## Lifecycle and records
 
-Every task, including inspection, documentation, maintenance, emergency work, and delegated work, binds to an OpenSpec change, without exception ([ADR 0004](decisions/0004-first-class-engineering-principles.md)). Record inspection as a task in that change when it determines the scope. Use OpenSpec 1.14.3 through `npm run openspec -- ...`; the lockfile pins its dependency tree. A future framework upgrade is its own tracked change.
+Every task, including inspection, documentation, maintenance, emergency work, and delegated work, binds to a change of the selected SDLC framework, without exception; OpenSpec is the default and this repository's framework ([ADR 0004](decisions/0004-first-class-engineering-principles.md) principle 8 as amended by [ADR 0008](decisions/0008-product-ui-and-integration-authority.md)). Record inspection as a task in that change when it determines the scope. Use OpenSpec 1.14.3 through `npm run openspec -- ...`; the lockfile pins its dependency tree. A future framework upgrade is its own tracked change.
 
 | Stage | Required record and transition |
 | --- | --- |
@@ -40,7 +40,7 @@ Every task, including inspection, documentation, maintenance, emergency work, an
 | Implement | Task checklist and changes within the recorded scope. Material scope expansion returns to proposal. |
 | Verify | Exact commands, results, environment, relevant revision or reviewed diff, limitations, and remaining gates in `verification.md`. Run `make verify`, which includes `npm test` and strict validation of all OpenSpec artifacts. |
 | Review | Record author review separately from independent findings, reviewer identity, reviewed revision, and resolution. Structural validation is not semantic approval. |
-| Accept and integrate | Owner acceptance or explicit delegated authority, required review or recorded exception, and current verification. Record the integrated revision when integration occurs. |
+| Accept and integrate | Owner acceptance or explicit delegated authority (in a managed project, an enabled auto-merge setting), required review or recorded exception, and current verification. Record the integrated revision when integration occurs. |
 | Close | Reconcile tasks and evidence; archive using the pinned CLI only after acceptance/integration gates are satisfied. Local completion may leave these gates pending. |
 
 The proposal, design, capability specification, tasks, and verification record form the bootstrap evidence set. Reference the originating issue when one exists; no issue is required merely to duplicate an already recorded owner request. Task checkboxes show progress, not approval authority.
@@ -53,4 +53,4 @@ Do not rewrite historical records as if this policy applied before it existed. T
 
 ## Framework independence
 
-OpenSpec is mandatory for developing Taskelith, but it is not a product kernel dependency: each managed project selects its own framework through replaceable SDLC plugins ([ADR 0004](decisions/0004-first-class-engineering-principles.md)). Runtime workflow selection, immutable per-run framework bindings, SpecKit mappings, semantic admission, and evidence enforcement are G1–G4 work. See [ADR 0001](decisions/0001-bootstrap-governance.md) and [foundation status](foundation.md).
+OpenSpec is the default framework for developing Taskelith, but it is not a product kernel dependency: every project, Taskelith included, selects its framework through replaceable SDLC plugins ([ADR 0004](decisions/0004-first-class-engineering-principles.md), [ADR 0008](decisions/0008-product-ui-and-integration-authority.md)). Runtime workflow selection, immutable per-run framework bindings, SpecKit mappings, semantic admission, and evidence enforcement are G1–G4 work. See [ADR 0001](decisions/0001-bootstrap-governance.md) and [foundation status](foundation.md).

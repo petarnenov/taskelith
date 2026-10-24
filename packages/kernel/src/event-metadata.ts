@@ -10,14 +10,15 @@ export type EventId = Identifier<'EventId'>;
 export type CorrelationId = Identifier<'CorrelationId'>;
 export type CausationId = Identifier<'CausationId'>;
 
-// Dot-separated lowercase segments, for example `sdlc.gate.passed`; the owning
-// module chooses the first segment.
+// Dot-separated segments of lowercase letters, digits, and inner hyphens, each
+// starting with a letter, for example `sdlc.gate.passed`; the owning module
+// chooses the first segment.
 export type EventType = string & { readonly [eventTypeBrand]: true };
 export type SchemaVersion = number & { readonly [schemaVersionBrand]: true };
 
-// Metadata every event carries regardless of its producer. Execution-specific
-// fields such as attempt, ownership generation, and per-producer sequence belong
-// to the events of the module that owns them.
+// Metadata every event carries regardless of its producer. Attempt and ownership
+// generation belong to the Execution module's events; per-producer sequence is
+// decided with the wire envelopes (G1 item 13).
 export interface EventMetadata {
   readonly eventId: EventId;
   readonly eventType: EventType;
@@ -36,14 +37,15 @@ export interface EventMetadataInput {
   readonly causationId?: string;
 }
 
-const EVENT_TYPE = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/;
-const MAX_EVENT_TYPE_LENGTH = 128;
+const SEGMENT = '[a-z][a-z0-9]*(?:-[a-z0-9]+)*';
+const EVENT_TYPE = new RegExp(`^${SEGMENT}(?:\\.${SEGMENT})+$`);
+export const MAX_EVENT_TYPE_LENGTH = 128;
 
 export function parseEventType(text: string): Result<EventType> {
   if (text.length > MAX_EVENT_TYPE_LENGTH || !EVENT_TYPE.test(text)) {
     return err(failure(
       'invalid',
-      `EventType must be at most ${MAX_EVENT_TYPE_LENGTH} characters of dot-separated lowercase segments`,
+      `EventType must be at most ${MAX_EVENT_TYPE_LENGTH} characters of at least two dot-separated segments of lowercase letters, digits, and inner hyphens, each starting with a letter`,
     ));
   }
   return ok(text as EventType);

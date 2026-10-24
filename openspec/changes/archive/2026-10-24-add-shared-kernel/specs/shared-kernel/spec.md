@@ -11,9 +11,9 @@ The shared kernel SHALL contain only opaque identifiers, the basic error vocabul
 - **WHEN** a test constructs identifiers, instants, and event metadata from fixed inputs
 - **THEN** the results are the same on every run, because the kernel generates no identifiers and reads no time
 
-#### Scenario: Module-specific identifier
-- **WHEN** a module needs an identifier kind such as `TaskId`
-- **THEN** the module declares it as `Identifier<'TaskId'>` and the kernel is unchanged
+#### Scenario: No module-specific identifier kinds
+- **WHEN** the kernel's public export is inspected
+- **THEN** the only identifier kinds it declares are `EventId`, `CorrelationId`, and `CausationId`, and any other kind is created through `parseIdentifier` with a kind name the caller supplies
 
 ### Requirement: Opaque identifiers
 An identifier SHALL be a string branded with its kind and created only by a validating constructor that accepts 1 to 128 printable ASCII characters without whitespace and otherwise returns an `invalid` failure naming the kind.
@@ -36,12 +36,12 @@ The kernel SHALL define the failure codes `invalid`, `not-found`, `conflict`, `p
 ### Requirement: Typed results
 Expected outcomes SHALL be expressible as `Result<T, E>`, a union of a success carrying a value and a failure carrying an error, discriminated by an `ok` flag, with the error defaulting to `Failure`.
 
-#### Scenario: Port result
-- **WHEN** a port operation can fail in an expected way
-- **THEN** its return type declares the failure through `Result` instead of throwing
+#### Scenario: Success and failure
+- **WHEN** `ok(42)` and `err(failure('not-found', 'Task not found'))` are created
+- **THEN** the first has `ok` true and value 42, and the second has `ok` false and that failure as its error
 
 ### Requirement: Stable event metadata
-Event metadata SHALL consist of an event identity, an event type of at least two dot-separated lowercase segments and at most 128 characters, a positive integer schema version, an occurrence time as a canonical UTC instant, a correlation identity, and an optional causation identity. The metadata constructor SHALL return frozen metadata, or an `invalid` failure naming the first invalid field.
+Event metadata SHALL consist of an event identity, an event type of at most 128 characters made of at least two dot-separated segments of lowercase letters, digits, and inner hyphens, each starting with a letter, a positive integer schema version, an occurrence time as a canonical UTC instant, a correlation identity, and an optional causation identity. The metadata constructor SHALL return frozen metadata, or an `invalid` failure naming the first invalid field.
 
 #### Scenario: Valid metadata
 - **WHEN** metadata with a valid identity, type `sdlc.gate.passed`, schema version 1, time `2026-10-24T09:30:00.000Z`, and a correlation identity is constructed
@@ -52,11 +52,11 @@ Event metadata SHALL consist of an event identity, an event type of at least two
 - **THEN** the constructor returns an `invalid` failure whose details name that field
 
 ### Requirement: Execution fields outside the kernel
-Execution-specific event fields such as attempt, ownership generation, and per-producer sequence SHALL NOT be part of the kernel event metadata; the module that owns those events SHALL define them.
+The kernel event metadata SHALL NOT contain attempt or ownership generation, which belong to the events of the Execution module, and SHALL NOT contain a per-producer sequence until the wire envelopes decide where it belongs.
 
-#### Scenario: Execution event
-- **WHEN** the Execution module defines an attempt event
-- **THEN** it adds the attempt, generation, and sequence fields to its own event type next to the kernel metadata
+#### Scenario: Metadata fields
+- **WHEN** valid metadata is constructed
+- **THEN** its only fields are `eventId`, `eventType`, `schemaVersion`, `occurredAt`, `correlationId`, and, when given, `causationId`
 
 ### Requirement: Canonical instants
 An instant SHALL be a UTC time in the exact form `YYYY-MM-DDTHH:mm:ss.sssZ` that names a real time, so that equal instants are equal strings.
@@ -66,8 +66,8 @@ An instant SHALL be a UTC time in the exact form `YYYY-MM-DDTHH:mm:ss.sssZ` that
 - **THEN** the result is an `invalid` failure
 
 ### Requirement: Kernel coverage
-Tests SHALL import the kernel through its package name and SHALL cover every line, branch, and function of the compiled kernel.
+Tests SHALL import the kernel through its package name, so that coverage is measured over the compiled kernel, which `make verify` SHALL hold to the 75% line, branch, and function thresholds of ADR 0004 principle 9. A change to the kernel SHALL record its kernel coverage in its verification evidence.
 
 #### Scenario: Coverage report
 - **WHEN** `make verify` runs
-- **THEN** the coverage report lists each compiled kernel module at 100% lines, branches, and functions
+- **THEN** the coverage report lists every compiled kernel module, and the run fails if coverage is below 75%

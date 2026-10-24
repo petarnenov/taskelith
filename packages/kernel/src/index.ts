@@ -1,4 +1,5 @@
 export {
+  MAX_EVENT_TYPE_LENGTH,
   parseEventMetadata,
   parseEventType,
   parseSchemaVersion,
