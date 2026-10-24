@@ -12,4 +12,4 @@ ADR 0007 closed G0 with reproduced exit evidence and owner-decided deferrals. G1
 
 ## Risks
 
-- The two author's assignments may not match the owner's intent; the closure report asks the owner.
+- An author's assignment may not match the owner's intent; the owner reviewed and accepted all six on 2026-10-25.

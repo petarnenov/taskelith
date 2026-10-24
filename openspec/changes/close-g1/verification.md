@@ -21,12 +21,12 @@ Limit: the author's machine already had the pinned Node and npm through nvm, and
 ## Author self-check before review
 
 - Every G1 item 1 to 13 is merged into `dev` and archived under `openspec/changes/archive/`.
-- Each deferral in ADR 0010 names its source decision or record; the two without a named gate are marked as the author's assignment.
+- Each deferral in ADR 0010 names its source decision or record; the two without a named gate are marked as the author's assignment (six after pass 1; the owner accepted all six on 2026-10-25).
 - The four pre-G2 contracts stay G2 work (G2 plan items 3 to 6), and section 15 no longer lists the mapping feasibility as open.
 
 ## Checks
 
-In the worktree, Node v24.22.1, npm 12.2.1: `make verify` passed (268 tests passed, strict OpenSpec validation 34 passed, archive dry-run of `close-g1` strictly valid, package verification passed); the relative links of the changed documents resolve. Evidence check: the only new external links are the canonical `blob/main` links to ADR 0010 in `README.md` and architecture section 15; they follow the packaging rule and resolve after the later promotion to `main`, as in the G0 closure. Re-run after the pass-1 fixes with the same results.
+In the worktree, Node v24.22.1, npm 12.2.1: `make verify` passed (268 tests passed, strict OpenSpec validation 34 passed, archive dry-run of `close-g1` strictly valid, package verification passed); the relative links of the changed documents resolve. Evidence check: the only new external links are the canonical `blob/main` links to ADR 0010 in `README.md` and architecture section 15; they follow the packaging rule and resolve after the later promotion to `main`, as in the G0 closure. Re-run after the pass-1 fixes and after the pass-2 fixes with the same results.
 
 ## Independent review
 
@@ -52,7 +52,16 @@ Assigned reviewer (rotation; Antigravity is paused until its quota resets): Clau
   17. Low: the trust model said G1–G3 implementation. Now G2–G3.
   18. Low: the Claude Code record put the agent port in G1. Now G3.
   19. Low: the `foundation-closure` Purpose covers only G0. Rewritten at archive (design decision 4).
-- **Pass 2.** Pending.
+- **Pass 2 — session `3c508b66-ea6e-434c-9067-55e537edc82b`.** All 19 pass-1 findings confirmed resolved, and the whole change rechecked against the pass-1 criteria. Findings: 0 Critical, 0 High, 0 Medium, 7 Low. Because the pass found only Low findings, they were fixed without another review; these fixes are unreviewed:
+  1. Low: the SpecKit qualification record still put the agent steps in G3 and listed open items without a gate. Dated note and G4 reference added.
+  2. Low: governance called the SDLC models G1–G4 work. G1's delivery is stated; the rest is G2–G4.
+  3. Low: ADR 0010 cited item 12 as the owner's acceptance of `0.2.0`. Reworded.
+  4. Low: ADR 0010 and the G1 plan counted item 14 as already merged. Reworded.
+  5. Low: the design's risk still spoke of two assignments. Updated.
+  6. Low: the self-check still spoke of two assignments. Updated.
+  7. Low: the ledger's "this closure" became ambiguous. Now "the G0 closure (ADR 0007)".
+
+Owner decision of 2026-10-25, after pass 2: the owner accepted the four remaining author's assignments (SpecKit interactive gate path and `--require-spec`: G4; invalid-structure fixtures: G4; code-head identity: G3; plugin API `1.0.0`: G4). ADR 0010 records them as accepted; this is a record of the decision, not a reviewed change.
 
 ## Remaining gates
 
