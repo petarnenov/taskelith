@@ -12,7 +12,7 @@
 - Product-owned code is TypeScript. Do not introduce Go code or a Go bridge.
 - Follow [docs/architecture.md](docs/architecture.md): hexagonal modules, explicit ports/adapters, and established OSS dependencies.
 - Design and review every change against the first-class principles in [ADR 0004](docs/decisions/0004-first-class-engineering-principles.md): Clean Code, SOLID, hexagonal architecture, microkernel, Docker, contract-first OpenAPI, Makefile-driven operation, a mandatory SDLC framework with OpenSpec as the default, and code coverage of at least 75% of lines, branches, and functions.
-- A code comment is at most two lines of at most 80 characters each (owner rule, 2026-10-24). Count every line of the comment, including the `/**` and `*/` lines of a block comment, and count indentation and the comment marker. The rule applies to every comment whose lines a change's diff adds or edits, in authored source, script, build, and configuration files. Generated files, lockfiles, and captured third-party artifacts under `docs/qualification/` are exempt.
+- A code comment is at most two lines of at most 80 characters each (owner rule, 2026-10-24). Count every line of the comment, including the `/**` and `*/` lines of a block comment, and count indentation and the comment marker; a trailing comment counts its whole physical line. The rule applies to every comment whose lines a change's diff adds or edits, in authored source, script, build, and configuration files. Generated files (written by a tool, never edited by hand), lockfiles, and captured third-party artifacts under `docs/qualification/` are exempt.
 - Keep bootstrap status honest; do not expose commands that imply unimplemented orchestration.
 
 ## SDLC
