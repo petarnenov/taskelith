@@ -1,7 +1,7 @@
 {
   "extends": "../../../tsconfig.package.json",
   "compilerOptions": {
-    "types": []
+    "types": ["node"]
   },
-  "references": [{ "path": "../../kernel" }, { "path": "../../modules/sdlc" }]
+  "references": [{ "path": "../../kernel" }, { "path": "../../modules/sdlc" }, { "path": "../../plugin-sdk" }]
 }
