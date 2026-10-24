@@ -4,12 +4,12 @@ Date: 2026-10-25. Author verification and independent review are recorded below.
 
 ## Scope and source
 
-[G2 work plan](../../../docs/g2-plan.md) item 5, assigned by the coordinating session (Niki) to the worker session Pepi under decision D14 (a). Base revision: `7850c70` on `dev`. Scope: `docs/contracts/worker-journal.md` and this change, with the new `worker-journal` capability. Inputs: decisions D4 (a) and D7 (c), the storage contract, the trust model, the operational targets, architecture sections 5, 9, 14, and 15, the launch authorization contract of item 3 and the supervisor identity contract of item 4, whose names this contract uses. Both are under review in parallel: the first draft used item 3 at `53178c9` and item 4 at `a326635`; the pass-1 fixes align with item 3 at `96a0843`, since merged into `dev`, and item 4 at `4235c7d` (branch `define-supervisor-identity-contract`). After pass 1, `origin/dev` at `ddef6d2` (items 1 and 3 merged and archived) was merged into the branch; the contract now cites item 1's finding that both SQLite bindings bundle SQLite 3.53.4 ([G2 infrastructure](../../../docs/g2-infrastructure.md) section 4). A later change to either may require aligning this contract again.
+[G2 work plan](../../../docs/g2-plan.md) item 5, assigned by the coordinating session (Niki) to the worker session Pepi under decision D14 (a). Base revision: `7850c70` on `dev`. Scope: `docs/contracts/worker-journal.md` and this change, with the new `worker-journal` capability. Inputs: decisions D4 (a) and D7 (c), the storage contract, the trust model, the operational targets, architecture sections 5, 9, 14, and 15, the launch authorization contract of item 3 and the supervisor identity contract of item 4, whose names this contract uses. Both are under review in parallel: the first draft used item 3 at `53178c9` and item 4 at `a326635`; the pass-1 fixes align with item 3 at `96a0843`, since merged into `dev`, and item 4 at `4235c7d` (branch `define-supervisor-identity-contract`); item 4 was since merged into `dev` with the content the pass-2 and pass-3 reviews read at `4d90df6`. After pass 1, `origin/dev` at `ddef6d2` (items 1 and 3 merged and archived) was merged into the branch; the contract now cites item 1's finding that both SQLite bindings bundle SQLite 3.53.4 ([G2 infrastructure](../../../docs/g2-infrastructure.md) section 4). A later change to either may require aligning this contract again.
 
 ## Evidence
 
 - Environment: macOS x86_64, Node v24.22.1, npm 12.2.1.
-- Evidence check: the contract's two external links are pinned to tags, SQLite `version-3.53.4` (`src/os_unix.c` lines 3815–3829) and libuv `v1.52.1` (`src/unix/fs.c` lines 182–187). The author fetched both files at those tags on 2026-10-25 and confirmed the `F_FULLFSYNC` fallback to `fsync` in each, and `node -p process.versions.uv` under Node 24.22.1 prints `1.52.1`.
+- Evidence check: the contract's two external links are pinned to tags, SQLite `version-3.53.4` (`src/os_unix.c` lines 3778–3830, the function `full_fsync`, with the fallback on lines 3817–3829) and libuv `v1.52.1` (`src/unix/fs.c` lines 170–191, the function `uv__fs_fsync`, with the fallback on lines 182–186). The author fetched both files at those tags on 2026-10-25 and confirmed the `F_FULLFSYNC` fallback to `fsync` in each, and `node -p process.versions.uv` under Node 24.22.1 prints `1.52.1`.
 - Documentation and specification only; no code, package, or lockfile change.
 
 ## Author self-check before review
@@ -21,7 +21,7 @@ Date: 2026-10-25. Author verification and independent review are recorded below.
 
 ## Checks
 
-In the worktree: `npm run openspec -- validate define-worker-journal-contract --strict` passed, and `make verify` passed before review, after the pass-1 fixes, after the merge of `origin/dev`, and after the pass-2 fixes.
+In the worktree: `npm run openspec -- validate define-worker-journal-contract --strict` passed, and `make verify` passed before review, after the pass-1 fixes, after the merge of `origin/dev`, after the pass-2 fixes, and after the pass-3 anchor correction and the merge of `origin/dev` at `79ef345` (item 4 merged and archived; its contract is unchanged from `4d90df6`).
 
 ## Independent review
 
@@ -51,6 +51,13 @@ Assigned reviewer: Codex CLI with `codex exec -m gpt-6.1-sol -c model_reasoning_
   5. Medium: the spec requirement treated every repeated sequence as lost history. It now requires a different observation identity, with scenarios for a repeated publication and a conflicting sequence.
   6. Medium: a reader of a create-once file after `EEXIST` could act on a file whose directory entry was not yet durable. A reader now syncs the file and its directory before acting on a file it did not make durable itself, with a crash test between the winner's `link` and directory sync.
 
+- **Pass 3 — session `01a17033-f62f-72a2-a7d4-e8a612cd1d00`,** reviewed revision `6b3b5ca`; the header reports `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`. Snapshot before and after: `95939bf1…b38f`, equal. The reviewer confirmed pass-2 findings 1, 2, and 4 to 6 resolved, and 3 resolved in part, with the gap raised as finding 1 below. Findings: 0 Critical, 1 High, 0 Medium, 2 Low.
+  1. High, **open:** the startup check that the filesystem supports `F_FULLFSYNC` does not cover a later `F_FULLFSYNC` failure that the plain `fsync` fallback hides, so a commit or file barrier may return success without a full flush, and a later power loss may lose it. Neither binding nor Node's `fs.fsync` exposes the first failure, and a direct `fcntl` call needs code outside TypeScript. This is the third pass, so under the review process the finding goes to the owner, through the coordinator, with options: fix without review, accept as a known risk, or defer. Not changed in this revision.
+  2. Low, rejected with evidence: the reviewer, without network access, placed SQLite's fallback at lines 3599–3612. The author's fetch of `src/os_unix.c` at tag `version-3.53.4` shows `full_fsync` at line 3778 and the fallback on lines 3817–3829. The anchor was widened to the whole function.
+  3. Low, rejected with evidence: the reviewer said lines 182–187 of libuv's `src/unix/fs.c` lie in `uv__fs_fdatasync`. At tag `v1.52.1`, `uv__fs_fsync` starts at line 170 and `uv__fs_fdatasync` at line 194, so the fallback on lines 182–186 is in `uv__fs_fsync`. The anchor was widened to the whole function.
+
+The anchor widening is an unreviewed fix.
+
 ## Remaining gates
 
-Independent review; integration (push, pull request into `dev`, merge) and archival by the coordinator; implementation and tests in items 14, 20, 21, 24, and 25.
+The owner's decision on pass-3 finding 1; integration (push, pull request into `dev`, merge) and archival by the coordinator; implementation and tests in items 14, 20, 21, 24, and 25.
