@@ -1,4 +1,5 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { isDisplayText } from './display-text.js';
 
 declare const nativeReferenceBrand: unique symbol;
 
@@ -9,10 +10,9 @@ declare const nativeReferenceBrand: unique symbol;
 export type NativeReference = string & { readonly [nativeReferenceBrand]: true };
 
 export const MAX_NATIVE_REFERENCE_LENGTH = 1024;
-const CONTROL_CHARACTER = /\p{Cc}/u;
 
 export function parseNativeReference(text: string): Result<NativeReference> {
-  if (text.length === 0 || text.length > MAX_NATIVE_REFERENCE_LENGTH || CONTROL_CHARACTER.test(text)) {
+  if (!isDisplayText(text, MAX_NATIVE_REFERENCE_LENGTH)) {
     return err(failure(
       'invalid',
       `NativeReference must be 1-${MAX_NATIVE_REFERENCE_LENGTH} characters without control characters`,
