@@ -1,6 +1,6 @@
-# G0 foundation status
+# Foundation status
 
-As of 2026-10-24. This is a readiness ledger, not evidence that the architecture is implemented. **G0 is closed** on `dev` by the owner's decision ([ADR 0007](decisions/0007-g0-closure.md)): its exit evidence was reproduced from a fresh clone, and the open work items below are deferred to named later gates.
+As of 2026-10-25. This is a readiness ledger, not evidence that the architecture is implemented. **G1 is closed** on `dev` ([ADR 0010](decisions/0010-g1-closure.md)); see [G1 status](#g1-status). **G0 is closed** on `dev` by the owner's decision ([ADR 0007](decisions/0007-g0-closure.md)): its exit evidence was reproduced from a fresh clone, and the open work items below are deferred to named later gates.
 
 ## Established bootstrap
 
@@ -14,7 +14,7 @@ As of 2026-10-24. This is a readiness ledger, not evidence that the architecture
 - Retained [dependency SBOM and license evidence](dependency-inventory.md), exact-toolchain generation/checking, and clean-install reproduction. License coverage gaps are reviewed and bound to exact manifests; security findings and their upstream status are documented.
 - Initial Linux/macOS worker families selected by the owner on 2026-10-24: [ADR 0002](decisions/0002-linux-macos-worker-scope.md); initial matrix in [ADR 0007](decisions/0007-g0-closure.md). Native acceptance is pending for every entry.
 - First integrations, closed-harness scope, telemetry and open-core rules, dependency-evidence decisions, the plugin microkernel, and light license diligence until G8 decided by the owner on 2026-10-24: [ADR 0003](decisions/0003-first-integrations-and-plugin-kernel.md). Qualification and implementation are pending.
-- First-class engineering principles decided by the owner on 2026-10-24: [ADR 0004](decisions/0004-first-class-engineering-principles.md). The Makefile, container images, and API contracts are follow-up work.
+- First-class engineering principles decided by the owner on 2026-10-24: [ADR 0004](decisions/0004-first-class-engineering-principles.md). Container images are follow-up work.
 - Harness subscription account pools decided by the owner on 2026-10-24: [ADR 0005](decisions/0005-harness-subscription-account-pools.md). Provider terms and implementation are pending.
 - GitHub.com as the first SCM, with a GitHub App and per-run installation tokens, and Forgejo as a later second SCM, decided by the owner on 2026-10-24: [ADR 0006](decisions/0006-github-first-scm.md).
 - Product UI (project board as landing page, screens, board states, design rules), auto-merge as integration authority with conflict handling, intake with write-back, automatic worker admission, and the selectable SDLC framework, decided by the owner on 2026-10-24: [ADR 0008](decisions/0008-product-ui-and-integration-authority.md). Implementation follows the gates named there.
@@ -34,11 +34,25 @@ As of 2026-10-24. This is a readiness ledger, not evidence that the architecture
 | First integrations | Owner selected Claude Code (G3), Codex (G4), Antigravity CLI, and OpenCode, plus GitHub.com as the first SCM and Forgejo as a later second SCM ([ADR 0006](decisions/0006-github-first-scm.md)), and made closed harnesses admissible ([ADR 0003](decisions/0003-first-integrations-and-plugin-kernel.md); [candidate assessment](integration-candidates.md)). Claude Code and Codex have macOS x86_64 egress and capability evidence ([Claude Code](qualification/claude-code.md), [Codex](qualification/codex.md)), and GitHub.com has SCM evidence ([GitHub](qualification/github.md)); Linux qualification inside the worker image is deferred to G2, the terms reviews to before admission in G3, and the other gates in each qualification record are that integration's admission gates ([ADR 0007](decisions/0007-g0-closure.md)). Antigravity CLI and OpenCode are qualified with their plugins after G4, and Forgejo once the GitHub integration is proven (ADR 0006). |
 | Identity and trust | Design contract is recorded in [trust-model.md](trust-model.md) (operator bootstrap/recovery, project roles, worker enrollment/revocation, trusted-host boundary, and plugin capabilities). Runtime implementation and adversarial/recovery tests remain G2–G6 gates. |
 | Operational targets | Provisional resource budgets, retention windows, availability, and RPO/RTO objectives are recorded in [operational-targets.md](operational-targets.md) prior to measurements. Operator-specific production overrides and benchmark execution remain G2–G7 gates. |
-| Workspace boundaries | Automated full-repository TypeScript checking (`tsconfig.check.json`) and hexagonal/Go import boundary validation (`scripts/check-boundaries.ts`) run in `npm test`. Package-level exports will expand as G1+ modules are added. |
-| Governance integration | Done for the G0 changes: owner policy acceptance, independent review (each change's `verification.md` records reviewer, model, effort, and sessions), and archival under `openspec/changes/archive/`. The changes up to pull request #14 are integrated into `main`; the later G0 changes are integrated into `dev`, this closure is integrated into `dev` and archived when its change completes, and their promotion to `main` is a later owner decision. |
+| Workspace boundaries | Automated full-repository TypeScript checking (`tsconfig.check.json`) and hexagonal/Go import boundary validation (`scripts/check-boundaries.ts`) run in `npm test`. Package-level exports expanded with the G1 packages; G2 adds the runtime packages. |
+| Governance integration | Done for the G0 changes: owner policy acceptance, independent review (each change's `verification.md` records reviewer, model, effort, and sessions), and archival under `openspec/changes/archive/`. The changes up to pull request #14 are integrated into `main`; the later G0 changes are integrated into `dev`, the G0 closure (ADR 0007) is integrated into `dev` and archived, and their promotion to `main` is a later owner decision. |
 
 The owner selected Linux and macOS, superseding the earlier Linux-first proposal, and the initial matrix ([ADR 0007](decisions/0007-g0-closure.md)). Platform-specific implementation remains unstarted. On 2026-10-24, the owner explicitly authorized a separate Codex reviewer agent (`gpt-6.1-sol` with `model_reasoning_effort = "medium"`), which reviewed all five local G0 foundation changes across four review sessions (`01a16d74-cd29-7642-b4e0-28a59e62c662`, `01a16d80-a7e5-7981-86e0-1768a2e1cdd6`, `01a16d8a-ff6f-76a2-ae26-6a3bbb2675c3`, and `01a16d8f-bcec-7910-94b1-14dfb1af3f72`), with all findings resolved and verified (0 remaining findings). Later G0 changes record their own reviews in their `verification.md`. The deferred items and their gates are listed in the table above.
 
+## G1 status
+
+G1 delivered the kernel, the SDLC workflow model, gates, task admission, plugin registration, the frozen `SdlcFramework` port with its conformance suite, the OpenSpec adapter, both frameworks' fixtures, and the first wire contracts ([G1 work plan](g1-plan.md), items 1 to 13). Its exit evidence was reproduced from a fresh clone (change `close-g1`), and G1 is closed ([ADR 0010](decisions/0010-g1-closure.md)).
+
+| Deferred item | Gate |
+| --- | --- |
+| Pre-G2 contracts: launch linearization and expiry, supervisor identity and adoption, local journal durability, capacity reservations | G2, before execution code ([G2 work plan](g2-plan.md) items 3 to 6) |
+| Ownership generation of an admission; attempt and assignment state machines | G2 ([G2 work plan](g2-plan.md) item 7) |
+| Durable repository adapters | G2 ([G2 work plan](g2-plan.md) item 11) |
+| SpecKit adapter; SpecKit agent steps, interactive gate path, and `--require-spec` through a qualified harness; SpecKit run on arm64; fixtures with invalid structure or missing artifacts | G4 |
+| Versioned plugin manifests, version negotiation, wider plugin API ranges, plugin API `1.0.0`, UI selection, generated manifest type | G4 |
+| Code-head identity for head-bound verification and review | G3 |
+| SpecKit admission evidence | G8 |
+
 ## Later phases
 
-G1 introduces domain transitions and framework-neutral SDLC contracts after the foundation gates. The owner started G1 on 2026-10-24; its work items and open decisions are in the [G1 work plan](g1-plan.md). G2 adds durable execution. Its proposed work items and open decisions are in the [G2 work plan](g2-plan.md), and it starts after G1 closes. G3 adds the web product and first real agent. Both-framework replacement, learning, and fleet validation remain later gates. See [the delivery sequence](architecture.md#delivery-sequence). G0 is closed ([ADR 0007](decisions/0007-g0-closure.md)); runtime readiness is not claimed here.
+G1 introduced domain transitions and framework-neutral SDLC contracts and is closed ([ADR 0010](decisions/0010-g1-closure.md)). G2 adds durable execution. Its work items and decisions are in the [G2 work plan](g2-plan.md), and it starts when the G1 closure merges into `dev`. G3 adds the web product and first real agent. Both-framework replacement, learning, and fleet validation remain later gates. See [the delivery sequence](architecture.md#delivery-sequence). G0 is closed ([ADR 0007](decisions/0007-g0-closure.md)); runtime readiness is not claimed here.
