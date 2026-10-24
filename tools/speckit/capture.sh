@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# Runs inside the taskelith-speckit image with --network none. Scaffolds a SpecKit project,
-# runs the deterministic CLI, helper scripts, and workflow engine, and writes the scaffolded
-# tree, the created feature directories, and a probe transcript to /out, with dates, timestamps,
-# and workflow run identifiers normalized so that repeated captures are identical.
+# Captures a SpecKit scaffold, features, and probe transcript to /out, offline,
+# normalized so that repeated captures are identical (docs/qualification).
 set -euo pipefail
 
 readonly OUT=/out
@@ -15,7 +13,8 @@ TODAY="$(date +%Y-%m-%d)"
 readonly TODAY
 readonly NORMALIZE_TIME=(-e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+\+00:00/<timestamp>/g' -e "s/$TODAY/<date>/g")
 
-# probe_in <directory> <title> <command>: runs the command with bash and records it, its output, and its exit code.
+# probe_in <directory> <title> <command>: runs the command with bash and
+# records it, its output, and its exit code.
 probe_in() {
   local directory="$1" title="$2" command="$3" status=0 output
   output="$(cd "$directory" && bash -o pipefail -c "$command" 2>&1 </dev/null)" || status=$?
@@ -34,14 +33,15 @@ latest_run_id() {
     python -c 'import json, sys; print(max(json.load(sys.stdin)["runs"], key=lambda run: run["updated_at"])["run_id"])'
 }
 
-# copy_normalized <source directory> <target directory>: copies a tree with dates and timestamps normalized.
+# copy_normalized <source> <target>: copies a tree, normalizing dates and
+# timestamps.
 copy_normalized() {
   mkdir -p "$2"
   cp -R "$1/." "$2/"
   find "$2" -type f -exec sed -E -i "${NORMALIZE_TIME[@]}" {} +
 }
 
-# Replaces dates, timestamps, and the identifiers of the runs that the probes created.
+# Replaces dates, timestamps, and the identifiers of the probes' runs.
 normalize_transcript() {
   local run_ids=() run
   shopt -s nullglob

@@ -10,15 +10,13 @@ export type EventId = Identifier<'EventId'>;
 export type CorrelationId = Identifier<'CorrelationId'>;
 export type CausationId = Identifier<'CausationId'>;
 
-// Dot-separated segments of lowercase letters, digits, and inner hyphens, each
-// starting with a letter, for example `sdlc.gate.passed`; the owning module
-// chooses the first segment.
+// Lowercase dot-separated segments that start with a letter, such as
+// `sdlc.gate.passed`; the owning module chooses the first segment.
 export type EventType = string & { readonly [eventTypeBrand]: true };
 export type SchemaVersion = number & { readonly [schemaVersionBrand]: true };
 
-// Metadata every event carries regardless of its producer. Attempt and ownership
-// generation belong to the Execution module's events; per-producer sequence is
-// decided with the wire envelopes (G1 item 13).
+// Metadata of every event; attempt and ownership generation belong to Execution
+// events, and per-producer sequence to the wire envelopes (G1 item 13).
 export interface EventMetadata {
   readonly eventId: EventId;
   readonly eventType: EventType;

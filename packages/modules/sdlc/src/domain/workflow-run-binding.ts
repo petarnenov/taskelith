@@ -9,10 +9,8 @@ export type ToolVersion = Identifier<'ToolVersion'>;
 export type ConfigurationRevision = Identifier<'ConfigurationRevision'>;
 export type PolicyRevision = Identifier<'PolicyRevision'>;
 
-// What a workflow run is bound to when it is created (architecture section 6,
-// "Selection and switching"). The binding is immutable: changing a project or
-// installation default affects only new runs, and moving an existing run to
-// another framework is an explicit migration that records a new binding.
+// A run's immutable binding (architecture section 6): new defaults affect only
+// new runs, and moving a run to another framework is a migration.
 export interface WorkflowRunBinding {
   readonly pluginId: PluginId;
   readonly pluginVersion: PluginVersion;

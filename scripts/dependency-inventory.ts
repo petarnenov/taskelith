@@ -15,11 +15,8 @@ interface LockedPackage {
   resolved?: string;
 }
 
-// npm records each workspace package twice: a `node_modules/<name>` link and
-// the package directory itself. Both are first-party product code, not
-// dependencies, so the inventory skips them, but only for links that point to
-// a declared workspace package under the same name; packages installed inside
-// a workspace package's own node_modules are still inventoried.
+// npm records each workspace package as a link and a directory; both are
+// skipped only when the link names a declared workspace package.
 function workspaceDirectories(root: string, packages: Record<string, LockedPackage>): Set<string> {
   const declared = new Map(workspacePackageDirs(root).map(dir => [dir, JSON.parse(readFileSync(join(root, dir, 'package.json'), 'utf8')).name]));
   const directories = new Set<string>();

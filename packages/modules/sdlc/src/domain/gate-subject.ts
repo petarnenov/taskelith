@@ -1,9 +1,8 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { isSameArtifactRevision, type ArtifactId, type ArtifactRevision } from './artifact-revision.js';
 
-// The exact artifact revisions a gate judges and its evidence cites, at most
-// one revision per artifact, so that a newer revision of an artifact
-// identifies exactly the revision it replaces.
+// The revisions a gate judges, at most one per artifact, so that a newer
+// revision identifies exactly the revision it replaces.
 export type GateSubject = readonly ArtifactRevision[];
 
 export function parseGateSubject(revisions: readonly ArtifactRevision[]): Result<GateSubject> {

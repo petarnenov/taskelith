@@ -1,10 +1,7 @@
 import type { Result } from '@taskelith/kernel';
 
-// Runtime checks of JSON-like data from a plugin, which TypeScript types do
-// not prove. Untrusted data is first copied with copyPlainData, so that the
-// checks and the domain parsers read a value that cannot change or run code;
-// the shape checks and the equality below take only such copies, whose arrays
-// are dense and whose objects are plain.
+// Runtime checks of plugin data that types do not prove. They take only
+// copies from copyPlainData, which cannot change or run code.
 
 export type PlainShape =
   | { readonly kind: 'string' }
@@ -78,13 +75,8 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-// Copies plain data, reading every property once through its descriptor and
-// never through a getter: strings, numbers, booleans, null, undefined, arrays
-// whose own properties are exactly their elements and length, and objects
-// with Object.prototype or a null prototype whose own properties are all
-// enumerable string-keyed data properties. Anything else, including a cycle,
-// is a problem; an object whose inspection throws, such as a proxy, cannot be
-// read.
+// Copies JSON-like data, reading each property once by descriptor; arrays must
+// be dense, objects plain, and anything else, or a cycle, is a problem.
 export function copyPlainData(path: string, value: unknown): Result<unknown, readonly string[]> {
   const problems: string[] = [];
   try {

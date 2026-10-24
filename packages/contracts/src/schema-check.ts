@@ -12,10 +12,8 @@ export type { MessageSchemas };
 // in the input.
 export type SchemaViolations = readonly string[];
 
-// Adapter over ajv: HTTP schemas are JSON Schema 2020-12 (OpenAPI 3.1) and
-// message schemas are draft-07 (AsyncAPI 3.0), so each dialect has its own
-// validator instance. Callers see a typed value or violations, never ajv's
-// own types.
+// Adapter over ajv: HTTP schemas are JSON Schema 2020-12, message schemas
+// draft-07, so each dialect has its own validator; ajv types stay inside.
 let httpValidator: Ajv2020 | undefined;
 let messageValidator: Ajv | undefined;
 
@@ -36,7 +34,7 @@ export function checkMessageSchema<Name extends keyof MessageSchemas & string>(
 }
 
 function check<T>(validate: ValidateFunction | undefined, name: string, input: unknown): Result<T, SchemaViolations> {
-  // The name type admits only schemas of the document, which the bundle contains.
+  // The name type admits only schemas that the bundle contains.
   if (validate!(input)) return ok(input as T);
   return err(validate!.errors!.map((error) => describeError(name, error)));
 }

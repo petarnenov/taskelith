@@ -2,10 +2,8 @@ import { err, failure, ok, type Result } from '@taskelith/kernel';
 
 declare const generationBrand: unique symbol;
 
-// The version of a gate or of a workflow's stage progress. Every accepted
-// transition increments it, and every transition names the generation its
-// writer read, so that a writer working from an outdated read is rejected
-// (compare-and-set) instead of overwriting a newer state.
+// The version of a gate or stage progress. A transition names the version its
+// writer read and increments it (compare-and-set), so stale writes fail.
 export type Generation = number & { readonly [generationBrand]: true };
 
 export const FIRST_GENERATION = 1 as Generation;

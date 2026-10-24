@@ -9,10 +9,8 @@ const PUBLIC_EXPORT = { '.': { types: './dist/index.d.ts', default: './dist/inde
 // A module package may also export its port entry (ADR 0009).
 const MODULE_EXPORTS = { ...PUBLIC_EXPORT, './port': { types: './dist/port.d.ts', default: './dist/port.js' } };
 
-// Expands the root manifest's workspace patterns, which are either a
-// directory or a directory followed by a single `/*`, into the package
-// directories that exist. Packages are created with their first real use, so
-// patterns without a matching directory are expected.
+// Expands workspace patterns (`dir` or `dir/*`) into existing package
+// directories; a pattern may match none, as packages come with their first use.
 export function workspacePackageDirs(root: string): string[] {
   const manifestPath = join(root, 'package.json');
   if (!existsSync(manifestPath)) return [];

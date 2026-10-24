@@ -3,10 +3,8 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { missingBuildOutputs, workspacePackageDirs, workspacePackageProblems } from './workspace-packages.ts';
 
-// Checks every workspace package against the package contract, then builds
-// them with `tsc --build`, which orders the builds by the project references
-// the contract requires. TypeScript and npm both fail when there is nothing to
-// build, so an empty workspace is a successful no-op here.
+// Checks the workspace packages against their contract, then runs `tsc --build`
+// over their project references; with no package, it succeeds without building.
 const root = process.cwd();
 const packages = workspacePackageDirs(root);
 
