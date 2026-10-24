@@ -4,7 +4,7 @@
 `make doctor` SHALL check that git is available, that Node.js matches `.nvmrc`, that npm matches the CI pin, that the dependency tree is complete as `npm ls --all` reports it, and that the pre-push hook is enabled; it SHALL print each result with a remedy for each failure, exit non-zero when any check fails, and change nothing.
 
 #### Scenario: Dependencies missing
-- **WHEN** a clone has no `node_modules`, or lacks a locked package or workspace link
+- **WHEN** a clone has no `node_modules`, or lacks a locked package or workspace link, and npm is on `PATH` or the pinned Node.js is not active
 - **THEN** `make doctor` reports the dependency check as failed with the remedy `make setup` and exits non-zero
 
 #### Scenario: Complete environment
@@ -35,7 +35,7 @@
 - **THEN** setup installs and uses the pinned version for its own run, says that its checks ran under that version, and tells the user to run `nvm use` before `make doctor` or `make verify`
 
 #### Scenario: npm pin changes
-- **WHEN** npm does not match the CI pin
+- **WHEN** npm is on `PATH` but does not match the CI pin
 - **THEN** setup installs the pinned npm first and then reinstalls the dependencies with it
 
 #### Scenario: npm missing
