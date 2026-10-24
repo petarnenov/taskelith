@@ -6,7 +6,7 @@ As of 2026-10-24. This is a readiness ledger, not evidence that the architecture
 
 - Taskelith identity, English repository artifacts, and Bulgarian owner communication: `AGENTS.md`.
 - TypeScript CLI, pinned tooling, lockfile, and build: `package.json`, `tsconfig.json`.
-- Selected bootstrap workflow: OpenSpec 1.14.3; see [ADR 0001](decisions/0001-bootstrap-governance.md).
+- Development workflow: OpenSpec 1.14.3, mandatory for developing Taskelith; see [ADR 0001](decisions/0001-bootstrap-governance.md) and [ADR 0004](decisions/0004-first-class-engineering-principles.md).
 - Repository lifecycle policy in [governance](governance.md) accepted by the owner on 2026-10-24 and independently reviewed by an owner-authorized Codex reviewer agent (`gpt-6.1-sol`, `effort: medium`) on 2026-10-24; integration remains pending.
 - CI tests, strict OpenSpec validation, installed tarball checks, and automatic releases: `.github/workflows/release.yml` and [release policy](releases.md).
 - Bootstrap and automatic publication evidence: `openspec/changes/archive/2026-10-24-bootstrap-cli/verification.md` and `openspec/changes/archive/2026-10-24-automated-releases/verification.md`.
@@ -14,6 +14,7 @@ As of 2026-10-24. This is a readiness ledger, not evidence that the architecture
 - Retained [dependency SBOM and license evidence](dependency-inventory.md), exact-toolchain generation/checking, and clean-install reproduction. License coverage gaps are reviewed and bound to exact manifests; security findings and their upstream status are documented.
 - Initial Linux/macOS worker families selected by the owner on 2026-10-24: [ADR 0002](decisions/0002-linux-macos-worker-scope.md). Native acceptance is pending for both.
 - First integrations, closed-harness scope, telemetry and open-core rules, dependency-evidence decisions, the plugin microkernel, and light license diligence until G8 decided by the owner on 2026-10-24: [ADR 0003](decisions/0003-first-integrations-and-plugin-kernel.md). Qualification and implementation are pending.
+- First-class engineering principles decided by the owner on 2026-10-24: [ADR 0004](decisions/0004-first-class-engineering-principles.md). The Makefile, container images, and API contracts are follow-up work.
 - [Data namespace design](storage.md): platform defaults, explicit-root precedence, role separation, and identity-conflict behavior for future runtime implementation.
 - [Identity, enrollment, and trust boundary contract](trust-model.md): installation bootstrap/recovery authority, project-scoped roles, per-worker enrollment/revocation, trusted-host execution boundary, and plugin capability scoping.
 - [Provisional operational targets and resource budgets](operational-targets.md): pre-declared worker/project/delegation resource budgets, retention horizons, and provisional RPO/RTO and latency baselines for the 10, 100, and 1000 machine stages.

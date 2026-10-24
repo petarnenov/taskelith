@@ -22,6 +22,8 @@ Scope: Build a self-hosted agent orchestration platform from an empty repository
 
 Build Taskelith as a self-hosted software factory that develops and manages multiple projects in parallel, with a control plane, remote execution agents, a pure React SPA, and a centralized learning subsystem. Use Node.js and TypeScript for product-owned application code. Organize the product as a hexagonal modular application with a small domain kernel, explicit ports/adapters, and versioned plugins.
 
+All design follows eight first-class principles ([ADR 0004](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0004-first-class-engineering-principles.md)): Clean Code, SOLID, hexagonal architecture, the plugin microkernel, Docker images for every runnable component, contract-first OpenAPI (and AsyncAPI for messages), Makefile-driven operation, and mandatory OpenSpec for developing Taskelith.
+
 Every agent task participates in a governed specification-driven lifecycle. The SDLC module is a first-class capability. OpenSpec and SpecKit are replaceable framework plugins; neither framework owns the kernel or weakens mandatory review and verification gates.
 
 PostgreSQL stores operational state and canonical knowledge. Neo4j provides the knowledge graph and retrieval projection. NATS JetStream is the preferred durable messaging candidate, subject to a focused protocol/topology spike. Local embeddings support semantic retrieval. Validate correctness before making capacity claims at 10, 100, or 1000 machines.
@@ -258,7 +260,7 @@ packages/
 
 Plugin directory names are placeholders; the owner-selected harnesses and Forgejo SCM are not yet qualified or implemented, and no directory designates an approved package. Names are proposed, not a request to create empty packages. Add modules/adapters when their first real use case is implemented. Separate packages and exports must prevent worker-only process adapters from entering browser or API bundles.
 
-The SPA consumes versioned API contracts, not backend domain entities. All HTTP, message, and plugin inputs receive runtime schema validation. TypeScript types alone are not a trust boundary.
+The SPA consumes versioned API contracts, not backend domain entities. HTTP APIs are contract-first OpenAPI 3.1 documents and broker messages are AsyncAPI documents; types, runtime validation, and clients are generated from them (ADR 0004). All HTTP, message, and plugin inputs receive runtime schema validation. TypeScript types alone are not a trust boundary.
 
 ### First-class SDLC with replaceable frameworks
 
@@ -284,7 +286,7 @@ The user can say: **"Implement this using SpecKit."** For new work, the platform
 
 For an existing run, switching is an explicit migration: checkpoint/drain the affected work; preserve original artifacts; map native requirements, tasks, and evidence; identify unsupported/lossy mappings; validate the new artifact set and governing policy; invalidate affected approvals; and record the source/target bindings. If safe conversion is unavailable, retain the original run and create a linked successor after reconciling ownership. No active execution is silently moved to a new framework.
 
-The new platform's own governance is framework-neutral. A managed customer repository may still mandate a framework; selecting a conflicting framework exposes that policy conflict and requires an authorized policy revision. This compatibility behavior does not make OpenSpec mandatory for the new project.
+The platform's runtime governance of managed projects is framework-neutral. A managed customer repository may still mandate a framework; selecting a conflicting framework exposes that policy conflict and requires an authorized policy revision. Separately, developing Taskelith itself requires OpenSpec without exception ([ADR 0004](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0004-first-class-engineering-principles.md)); that rule does not make OpenSpec mandatory for managed projects.
 
 #### Universal lifecycle admission
 
@@ -529,7 +531,7 @@ An early prototype is not the final product: both frameworks, learning, and the 
 
 ### Fresh installation and deployment
 
-- Provide a self-hosted development/small-install composition with explicit volumes for PostgreSQL, NATS, Neo4j, and embeddings, and separately supervised worker agents. Kubernetes is not a prerequisite.
+- Provide a self-hosted development/small-install Docker Compose composition of digest-pinned OCI images with explicit volumes for PostgreSQL, NATS, Neo4j, and embeddings, and separately supervised worker agents; Linux workers run in a worker image and macOS workers run natively. Operate it through `make` targets (ADR 0004). Kubernetes is not a prerequisite.
 - Generate a unique installation identity and operator bootstrap credential. Require explicit worker enrollment; do not discover/import another application's state automatically.
 - Apply this project's own versioned database schemas and graph projection schema. Seed only required configuration, not fabricated lessons or credentials.
 - Ensure product-owned orchestration, API, worker, and CLI application code is TypeScript; inventory native third-party dependencies separately.
@@ -605,7 +607,7 @@ Use pure domain tests, shared port/adapter conformance suites, integration tests
 | First integrations | Owner selected Claude Code (G3), Codex (G4), then Antigravity CLI and OpenCode, plus Forgejo SCM, on 2026-10-24 | Version-specific qualification, provider terms, network-egress tests, and adapter conformance tests per plugin. |
 | Framework maturity | OpenSpec and SpecKit remain required candidates | Version-specific upstream maintenance, adoption evidence, and conformance; unresolved conflicts are explicit, not silent exemptions. |
 | Inference and model artifacts | Local/open baseline, exact implementations pending | Separate runtime/model licensing and maturity review plus learning/retrieval quality tests. |
-| Initial policy and storage | Taskelith name and language rules are decided; governance remains framework-neutral | Storage defaults, roles, and initial SDLC framework recorded in G0; propagate the decided identity and language rules to project instructions. |
+| Initial policy and storage | Taskelith name and language rules are decided; managed-project governance remains framework-neutral, and developing Taskelith requires OpenSpec (ADR 0004) | Storage defaults, roles, and the development SDLC framework recorded in G0; propagate the decided identity and language rules to project instructions. |
 | Broker topology | JetStream with bounded addressed command routing | Protocol and 1000-worker topology tests; no claim that the comparison is already measured. |
 | User authentication adapter | Self-hosted sessions with replaceable identity provider | Operator identity/recovery requirements and access model defined in the [G0 trust contract](https://github.com/petarnenov/taskelith/blob/main/docs/trust-model.md); runtime adapter implementation in G2/G3. |
 | Worker trust/isolation | Explicitly trusted enrolled hosts initially | Threat model for repositories, agents, secrets, and shell execution recorded in the [G0 trust contract](https://github.com/petarnenov/taskelith/blob/main/docs/trust-model.md); runtime enforcement in G2/G3. |
@@ -623,7 +625,7 @@ These open items do not erase the full scope or justify calling an early prototy
 
 This document is self-contained planning input for a new repository. It imports no `AGENTS.md`, ADR, issue-label convention, branch policy, host allocation, deployment permission, or review-model requirement from another project. Establish those details explicitly during G0.
 
-The required process is framework-neutral: every agent task has a tracked workflow/stage, specification or justified no-runtime-impact declaration, relevant review, verification, and closure evidence. Project policy defines the identities authorized to approve and integrate. Agents may execute authorized stages autonomously; task completion never authorizes publication or production deployment by itself.
+The required process for managed projects is framework-neutral, while Taskelith's own repository uses OpenSpec ([ADR 0004](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0004-first-class-engineering-principles.md)): every agent task has a tracked workflow/stage, specification or justified no-runtime-impact declaration, relevant review, verification, and closure evidence. Project policy defines the identities authorized to approve and integrate. Agents may execute authorized stages autonomously; task completion never authorizes publication or production deployment by itself.
 
 Keep architectural rationale in the new project's ADRs, framework-native specifications in their native version-controlled format, wire contracts in their declared schemas, and evidence tied to exact revisions. This plan's folder sketch is not a set of already existing files. Its requirements and gates are not claims of completed tests.
 

@@ -14,7 +14,7 @@ The owner or an explicitly authorized integrator controls merging and pushing. F
 
 ## Lifecycle and records
 
-Every task, including inspection, documentation, maintenance, emergency work, and delegated work, binds to an OpenSpec change during bootstrap. Record inspection as a task in that change when it determines the scope. Use OpenSpec 1.14.3 through `npm run openspec -- ...`; the lockfile pins its dependency tree. A future framework upgrade is its own tracked change.
+Every task, including inspection, documentation, maintenance, emergency work, and delegated work, binds to an OpenSpec change, without exception ([ADR 0004](decisions/0004-first-class-engineering-principles.md)). Record inspection as a task in that change when it determines the scope. Use OpenSpec 1.14.3 through `npm run openspec -- ...`; the lockfile pins its dependency tree. A future framework upgrade is its own tracked change.
 
 | Stage | Required record and transition |
 | --- | --- |
@@ -36,4 +36,4 @@ Do not rewrite historical records as if this policy applied before it existed. T
 
 ## Framework independence
 
-OpenSpec is the repository's selected bootstrap workflow, not a product kernel dependency. Runtime workflow selection, immutable per-run framework bindings, SpecKit mappings, semantic admission, and evidence enforcement are G1–G4 work. See [ADR 0001](decisions/0001-bootstrap-governance.md) and [foundation status](foundation.md).
+OpenSpec is mandatory for developing Taskelith, but it is not a product kernel dependency: each managed project selects its own framework through replaceable SDLC plugins ([ADR 0004](decisions/0004-first-class-engineering-principles.md)). Runtime workflow selection, immutable per-run framework bindings, SpecKit mappings, semantic admission, and evidence enforcement are G1–G4 work. See [ADR 0001](decisions/0001-bootstrap-governance.md) and [foundation status](foundation.md).
