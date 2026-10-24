@@ -21,6 +21,6 @@
 
 ## 5. Verification and review
 
-- [ ] 5.1 Dry-run the archive in a copy of `openspec/` and run `validate --all --strict` there.
-- [ ] 5.2 Run `make verify` and record the results.
-- [ ] 5.3 Obtain independent review (Codex Sol medium, read-only) and record results.
+- [x] 5.1 Dry-run the archive in a copy of `openspec/` and run `validate --all --strict` there.
+- [x] 5.2 Run `make verify` and record the results.
+- [x] 5.3 Obtain independent review (Codex Sol medium, read-only) and record results.
