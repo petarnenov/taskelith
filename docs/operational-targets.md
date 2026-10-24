@@ -20,7 +20,7 @@ Schedulers and workers enforce explicit capacity reservations before assignment 
 | Automatic retry budget | `<= 2` automatic retries for proven-idempotent/safe failures; `0` automatic retries for uncertain execution | Exponential backoff (`initial: 5s`, `max: 60s` with jitter). Uncertain or unmediated side-effect attempts require reconciliation rather than blind retry. |
 | Launch authorization validity window | `TTL: 30s`, maximum tolerated clock skew `5s` | Expired launch authorizations require a fresh online control-plane check before spawning an OS process (`F17`, `R27`). |
 
-The numeric CPU, memory, disk, session, and provider thresholds above are the provisional G0 admission targets. Native OS enforcement mechanisms (e.g., Linux cgroup v2 controls vs. macOS launchd/process limits) must be qualified separately per platform (`docs/worker-platforms.md`). Where an OS cannot enforce a hard limit requested by a task policy, the worker must fail admission closed rather than silently ignoring the requirement.
+The numeric CPU, memory, disk, session, and provider thresholds above are the provisional G0 admission targets. Enforcement mechanisms (e.g., container resource limits backed by cgroup v2 for containerized Linux workers vs. macOS launchd/process limits for native macOS workers) must be qualified separately per platform (`docs/worker-platforms.md`). Where an OS cannot enforce a hard limit requested by a task policy, the worker must fail admission closed rather than silently ignoring the requirement.
 
 ## 2. Retention, buffering, and replay horizons
 

@@ -16,3 +16,5 @@ Keep OpenSpec 1.14.3 as a pinned development dependency and use version-controll
 Bootstrap tasks can proceed with auditable artifacts. CLI validation checks structure and does not grant semantic approval. OpenSpec commands and document checkboxes are not a runtime security boundary. Runtime ports must remain framework-neutral; both OpenSpec and SpecKit native workflow fixtures must be examined before the G1 port is frozen.
 
 This decision does not qualify either framework's maturity, select runtime integrations, or establish G0 completion. Those gates remain in the foundation checklist. Replacing the selected repository framework requires an explicit tracked policy decision and preservation of prior evidence.
+
+Note, 2026-10-24: [ADR 0004](0004-first-class-engineering-principles.md) makes OpenSpec mandatory for developing Taskelith without exception, beyond bootstrap. Runtime ports stay framework-neutral, and managed projects select their own framework.
