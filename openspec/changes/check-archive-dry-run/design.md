@@ -4,11 +4,13 @@
 
 ## Goals / Non-Goals
 
-Goals: fail `make verify` on such a change before handoff, deterministically, offline, and without changing the repository. Non-goals: fixing the change automatically, or archiving changes in the repository.
+Goals: fail `make verify` on such a change before handoff, deterministically, offline, and without changing the repository. Non-goals: fixing the change automatically, archiving changes in the repository, or cleaning up after SIGKILL.
 
 ## Decisions
 
-- **Archive in a copy.** The script copies `openspec/` into a `mkdtemp` directory and runs the pinned CLI (`node_modules/.bin/openspec`, the binary behind `npm run openspec`) with that directory as its working directory, which the CLI takes as the project root. The copy is removed in a `finally` block.
+- **Archive in a copy.** The script copies `openspec/` into a `mkdtemp` directory and runs the pinned CLI (`node_modules/.bin/openspec` of the clone that holds the script, the binary behind `npm run openspec`) with that directory as its working directory, which the CLI takes as the project root. The copy is removed in a `finally` block.
+- **Links become files.** The copy follows symbolic links and copies their targets, so that an archive can never write through a link into the repository. A small recursive copy does this, because `cpSync` with `dereference` keeps nested links in Node.js 24.
+- **Interruption.** The CLI runs asynchronously under an `AbortController`. SIGINT and SIGTERM abort it, the `finally` block removes the copy, and the check exits with 128 plus the signal number. SIGKILL cannot be handled and may leave the copy in the system temporary directory.
 - **All active changes, then one validation.** Active changes are the directories under `openspec/changes/` other than `archive/`, archived in name order so the result is deterministic. One `validate --all --strict --json` run then checks the copy, as `make verify` checks the repository. Archiving all of them first also catches two changes that conflict once both are applied.
 - **Naming the change.** A failed archive names its change and the CLI output. A failed validation item names the changes whose `specs/<capability>/` deltas touch it, with each issue's level, path, and message from the JSON report.
 - **Offline.** `OPENSPEC_TELEMETRY=0`, `DO_NOT_TRACK=1`, and `OPENSPEC_NO_UPDATE_CHECK=1` turn off the CLI's telemetry and update check.

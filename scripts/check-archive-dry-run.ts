@@ -1,14 +1,18 @@
-import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { execFile } from 'node:child_process';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { constants, tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 
 // Archives every active change in a temporary copy of openspec/ and validates
 // the copy strictly, so that archive failures show before handoff.
 
 const OPENSPEC_DIRECTORY = 'openspec';
 const ARCHIVE_DIRECTORY = 'archive';
-const OPENSPEC_BIN = join('node_modules', '.bin', 'openspec');
+// The pinned CLI of this clone, also when the check runs on another directory.
+const OPENSPEC_BIN = join(import.meta.dirname, '..', 'node_modules', '.bin', 'openspec');
+const INTERRUPTING_SIGNALS: readonly NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
+const execFileAsync = promisify(execFile);
 // Telemetry and the update check off keep the check offline.
 const OFFLINE_ENVIRONMENT = { OPENSPEC_TELEMETRY: '0', DO_NOT_TRACK: '1', OPENSPEC_NO_UPDATE_CHECK: '1' };
 
@@ -71,14 +75,15 @@ function capabilitiesOf(changesDirectory: string, change: string): string[] {
   return directoryNames(subdirectories(join(changesDirectory, change, 'specs')));
 }
 
-function openspec(copy: string, args: readonly string[]): string {
-  return execFileSync(join(process.cwd(), OPENSPEC_BIN), args, {
+async function openspec(copy: string, args: readonly string[], interruption: AbortSignal): Promise<string> {
+  const { stdout } = await execFileAsync(OPENSPEC_BIN, args, {
     cwd: copy,
     encoding: 'utf8',
     env: { ...process.env, ...OFFLINE_ENVIRONMENT },
-    stdio: ['ignore', 'pipe', 'pipe'],
+    signal: interruption,
     timeout: 300_000,
   });
+  return stdout;
 }
 
 function commandOutput(error: unknown): string {
@@ -87,29 +92,42 @@ function commandOutput(error: unknown): string {
 }
 
 // A failed archive changes no file, so the remaining changes still archive.
-function archiveAll(copy: string, changes: readonly string[]): string[] {
-  return changes.flatMap((change) => {
+async function archiveAll(copy: string, changes: readonly string[], interruption: AbortSignal): Promise<string[]> {
+  const problems: string[] = [];
+  for (const change of changes) {
     try {
-      openspec(copy, ['archive', change, '--yes']);
-      return [];
+      await openspec(copy, ['archive', change, '--yes'], interruption);
     } catch (error) {
-      return [archiveProblem(change, commandOutput(error))];
+      if (interruption.aborted) throw error;
+      problems.push(archiveProblem(change, commandOutput(error)));
     }
-  });
+  }
+  return problems;
 }
 
 // validate exits nonzero when an item fails but still prints its JSON report.
-function validateAll(copy: string): ValidationReport {
+async function validateAll(copy: string, interruption: AbortSignal): Promise<ValidationReport> {
   try {
-    return JSON.parse(openspec(copy, ['validate', '--all', '--strict', '--json', '--no-interactive']));
+    return JSON.parse(await openspec(copy, ['validate', '--all', '--strict', '--json', '--no-interactive'], interruption));
   } catch (error) {
     const { stdout } = error as { stdout?: string };
-    if (stdout === undefined || stdout === '') throw error;
+    if (interruption.aborted || stdout === undefined || stdout === '') throw error;
     return JSON.parse(stdout);
   }
 }
 
-function checkArchives(): string[] {
+// Copies links as their targets, so that archiving writes only the copy;
+// cpSync keeps nested links even with its dereference option (Node 24).
+function copyResolvingLinks(source: string, target: string): void {
+  if (!statSync(source).isDirectory()) {
+    copyFileSync(source, target);
+    return;
+  }
+  mkdirSync(target);
+  for (const name of readdirSync(source)) copyResolvingLinks(join(source, name), join(target, name));
+}
+
+async function checkArchives(interruption: AbortSignal): Promise<string[]> {
   const changesDirectory = join(OPENSPEC_DIRECTORY, 'changes');
   const changes = activeChanges(subdirectories(changesDirectory));
   if (changes.length === 0) {
@@ -119,19 +137,33 @@ function checkArchives(): string[] {
   const capabilitiesByChange = new Map(changes.map((change) => [change, capabilitiesOf(changesDirectory, change)]));
   const copy = mkdtempSync(join(tmpdir(), 'taskelith-archive-dry-run-'));
   try {
-    cpSync(OPENSPEC_DIRECTORY, join(copy, OPENSPEC_DIRECTORY), { recursive: true });
-    const archiveProblems = archiveAll(copy, changes);
-    return [...archiveProblems, ...validationProblems(validateAll(copy), capabilitiesByChange)];
+    copyResolvingLinks(OPENSPEC_DIRECTORY, join(copy, OPENSPEC_DIRECTORY));
+    const archiveProblems = await archiveAll(copy, changes, interruption);
+    return [...archiveProblems, ...validationProblems(await validateAll(copy, interruption), capabilitiesByChange)];
   } finally {
     rmSync(copy, { recursive: true, force: true });
   }
 }
 
-if (import.meta.main) {
-  const problems = checkArchives();
-  if (problems.length > 0) {
+// SIGINT and SIGTERM stop the CLI and remove the copy before exiting.
+async function main(): Promise<number> {
+  const interruption = new AbortController();
+  let received: NodeJS.Signals | undefined;
+  const interrupt = (signal: NodeJS.Signals) => {
+    received = signal;
+    interruption.abort();
+  };
+  for (const signal of INTERRUPTING_SIGNALS) process.once(signal, interrupt);
+  try {
+    const problems = await checkArchives(interruption.signal);
     for (const problem of problems) console.error(problem);
-    process.exit(1);
+    if (problems.length === 0) console.log('Every active OpenSpec change archives into strictly valid specs.');
+    return problems.length === 0 ? 0 : 1;
+  } catch (error) {
+    if (received === undefined) throw error;
+    console.error(`Archive dry run interrupted by ${received}.`);
+    return 128 + constants.signals[received];
   }
-  console.log('Every active OpenSpec change archives into strictly valid specs.');
 }
+
+if (import.meta.main) process.exitCode = await main();

@@ -33,5 +33,9 @@ The repository checks SHALL be defined once, as the `make verify` target, which 
 - **THEN** the check passes without archiving anything
 
 #### Scenario: Repository unchanged
-- **WHEN** the check finishes, passing or failing
+- **WHEN** the check finishes, passing or failing, also when `openspec/` holds symbolic links
 - **THEN** the repository's files are unchanged and the temporary copy is removed
+
+#### Scenario: Interrupted check
+- **WHEN** the check receives SIGINT or SIGTERM
+- **THEN** it stops the OpenSpec CLI, removes the temporary copy, and exits nonzero

@@ -6,5 +6,5 @@
 
 ## 2. Verification and review
 
-- [ ] 2.1 Run `make verify` and reproduce the failure cases in a scratch copy.
+- [x] 2.1 Run `make verify` and reproduce the failure cases in a scratch copy.
 - [ ] 2.2 Obtain independent review by the assigned reviewer and record the results.
