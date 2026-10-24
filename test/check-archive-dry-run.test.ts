@@ -115,13 +115,23 @@ function runCheck({ project, temporary }: Fixture, signal?: NodeJS.Signals): Pro
   });
 }
 
-function waitFor(condition: () => boolean): Promise<void> {
-  return new Promise((resolve) => {
+// Polls until the condition holds, rejecting when the signal aborts.
+function waitFor(condition: () => boolean, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const stop = () => {
+      clearInterval(timer);
+      signal.removeEventListener('abort', cancel);
+    };
+    const cancel = () => {
+      stop();
+      reject(signal.reason);
+    };
     const timer = setInterval(() => {
       if (!condition()) return;
-      clearInterval(timer);
+      stop();
       resolve();
     }, 10);
+    signal.addEventListener('abort', cancel, { once: true });
   });
 }
 
@@ -185,9 +195,10 @@ test('an interrupted command settles only after it has exited', { timeout: 30_00
     + `process.on("SIGTERM", () => setTimeout(() => { fs.writeFileSync(${JSON.stringify(exited)}, ""); process.exit(0); }, 200));`
     + `fs.writeFileSync(${JSON.stringify(ready)}, ""); setInterval(() => {}, 1000);`;
   const interruption = new AbortController();
+  t.after(() => interruption.abort());
   const command = runCommand(NODE, ['-e', program], { cwd: directory, env: process.env }, interruption.signal);
 
-  await waitFor(() => existsSync(ready));
+  await waitFor(() => existsSync(ready), AbortSignal.any([t.signal, AbortSignal.timeout(10_000)]));
   interruption.abort();
   await assert.rejects(command, CommandInterrupted);
   assert.ok(existsSync(exited));

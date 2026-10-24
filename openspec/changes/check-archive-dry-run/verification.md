@@ -46,6 +46,13 @@ Assigned reviewer: Codex CLI (Codex Sol, medium), by rotation; Antigravity CLI i
   3. Low: the signal test's polling interval was never cleared if the child exited before creating the copy, and the test had no time limit. The interval is now cleared on `close`, and the signal and interruption tests have time limits.
   4. Low: the requirement said the copy is removed in every case, while the design excludes SIGKILL. The requirement now says "unless the check is killed with SIGKILL".
 
+- **Pass 3 — session `01a16fc6-1ae6-71c2-a723-439d3286d06d`, on `61c3dfe`.** Same invocation; the output header reported model `gpt-6.1-sol`, reasoning effort `medium`, and sandbox `read-only`. SHA-256 snapshots before and after were equal. The reviewer confirmed the resolution of pass-2 findings 1, 2, and 4 and found finding 3 partly resolved; its sandbox again refused the fixture tests (8 passed, 5 blocked by `EPERM`). New findings: 0 Critical, 0 High, 0 Medium, 1 Low:
+  1. Low: the new `waitFor` helper of the interruption test could keep the test process alive if the child never became ready, because its interval was never cleared; the test's time limit cancels the test but not the interval. Fixed without another pass, as the review process allows for a Low-only pass (see below).
+
+## Unreviewed fixes after the third pass
+
+- `waitFor` now takes an `AbortSignal` and clears its interval on success and on abort; the interruption test passes it the test's signal combined with a 10-second timeout, and aborts the command in its cleanup, which terminates the child. `node --experimental-strip-types --test test/check-archive-dry-run.test.ts` passed three runs in a row (13 tests, 0 failed), and `make verify` passed again (241 tests, 0 failed, with the other results as above).
+
 ## Limitations
 
 - SIGINT is handled by the same code path as SIGTERM but has no test of its own.
@@ -53,4 +60,4 @@ Assigned reviewer: Codex CLI (Codex Sol, medium), by rotation; Antigravity CLI i
 
 ## Remaining gates
 
-Independent review, handoff to the coordinator, integration into `dev`, and archiving.
+Handoff to the coordinator, integration into `dev`, and archiving.
