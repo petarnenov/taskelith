@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": []
   },
-  "references": [{ "path": "../../kernel" }, { "path": "../../modules/sdlc" }]
+  "references": [{ "path": "../../kernel" }, { "path": "../../modules/sdlc" }, { "path": "../../plugin-sdk" }]
 }

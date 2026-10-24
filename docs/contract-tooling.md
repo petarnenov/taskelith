@@ -126,8 +126,9 @@ Run with the pinned `@fission-ai/openspec@1.14.3` and `OPENSPEC_TELEMETRY=0` in 
 | `instructions <artifact> --change <change> --json` | 0 | `changeName`, `artifactId`, `schemaName`, `changeDir`, `planningHome`, `outputPath`, `resolvedOutputPath`, `existingOutputPaths`, `description`, `instruction`, `context`, `template`, `dependencies`, `unlocks`, `root` | Artifact authoring instructions |
 | `schemas --json` | 0 | array of schemas | Workflow schema identity |
 | `context --json`, `doctor --json` | 0 | `root`, `members`, `status` / `root`, `store`, `references`, `status` | Root resolution and health |
+| `archive <change> --yes --json` | 0 | `archive` (`change`, `archivedAs`, `path`, `specsUpdated`, `totals`), `root` | Finalization |
 
-`archive --help` and `new change --help` list a `--json` option; neither was run with it here, because archiving would change the repository, so their JSON output is **(unverified)**. Option D6 (a), spawning the pinned CLI and reading this output, is supported for read and validate operations.
+`archive --help` and `new change --help` list a `--json` option. Neither was run with it on 2026-10-24, because archiving would change the repository. The `archive` row was confirmed on 2026-10-25 by G1 item 12, with the pinned CLI, on a scratch copy of the OpenSpec fixture working copy. When the archive target already existed, the command printed `archive: null` and a `status` entry with the code `archive_target_exists`, and exited 1. The `new change --json` output is still **(unverified)**. Option D6 (a), spawning the pinned CLI and reading this output, is supported for read, validate, and archive operations.
 
 ## 10. Not verified and remaining work
 

@@ -33,23 +33,30 @@ function isImportOrRequire(node: ts.CallExpression): boolean {
   return ts.isIdentifier(node.expression) && node.expression.text === 'require' && node.arguments.length === 1;
 }
 
-function extractImports(filePath: string, source: string): string[] {
+interface ModuleImport {
+  spec: string;
+  typeOnly: boolean;
+}
+
+function extractImports(filePath: string, source: string): ModuleImport[] {
   const sf = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true);
-  const specs: string[] = [];
+  const imports: ModuleImport[] = [];
   const visit = (node: ts.Node) => {
-    if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
-      specs.push(node.moduleSpecifier.text);
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+      imports.push({ spec: node.moduleSpecifier.text, typeOnly: node.importClause?.isTypeOnly ?? false });
+    } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+      imports.push({ spec: node.moduleSpecifier.text, typeOnly: node.isTypeOnly });
     } else if (ts.isCallExpression(node) && isImportOrRequire(node) && node.arguments[0] && ts.isStringLiteralLike(node.arguments[0])) {
-      specs.push(node.arguments[0].text);
+      imports.push({ spec: node.arguments[0].text, typeOnly: false });
     } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) && ts.isStringLiteral(node.argument.literal)) {
-      specs.push(node.argument.literal.text);
+      imports.push({ spec: node.argument.literal.text, typeOnly: true });
     } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference) && ts.isStringLiteral(node.moduleReference.expression)) {
-      specs.push(node.moduleReference.expression.text);
+      imports.push({ spec: node.moduleReference.expression.text, typeOnly: node.isTypeOnly });
     }
     ts.forEachChild(node, visit);
   };
   visit(sf);
-  return specs;
+  return imports;
 }
 
 function toPosix(p: string): string {
@@ -68,6 +75,8 @@ interface ImportEdge {
   spec: string;
   target: string | null;
   relative: boolean;
+  typeOnly: boolean;
+  workspaces: Map<string, string>;
 }
 
 function workspacePackagesByName(root: string): Map<string, string> {
@@ -77,10 +86,20 @@ function workspacePackagesByName(root: string): Map<string, string> {
   }));
 }
 
+const PORT_ENTRY = 'port';
+
+// A module package's port entry, `@taskelith/<module>/port`: the frozen ports
+// that plugins implement, without the module's domain or application code.
+function isPortEntry(spec: string, workspaces: Map<string, string>): boolean {
+  const dir = workspaces.get(packageName(spec));
+  return dir !== undefined && dir.startsWith('packages/modules/') && spec === `${packageName(spec)}/${PORT_ENTRY}`;
+}
+
 function importTarget(file: string, spec: string, root: string, workspaces: Map<string, string>): string | null {
   if (spec.startsWith('.')) return toPosix(relative(root, resolve(dirname(file), spec)));
   const dir = workspaces.get(packageName(spec));
-  return dir ? `${dir}/src/index.ts` : null;
+  if (!dir) return null;
+  return isPortEntry(spec, workspaces) ? `${dir}/src/${PORT_ENTRY}.ts` : `${dir}/src/index.ts`;
 }
 
 // The product package that owns a path: the root package (`src/`), a workspace
@@ -107,7 +126,7 @@ function checkDevelopmentImport({ rel, spec, target, relative: isRelative }: Imp
   return [`${rel}: product source cannot import development scripts or tests (${spec})`];
 }
 
-function checkWorkspaceEncapsulation({ rel, spec, target, relative: isRelative }: ImportEdge): string[] {
+function checkWorkspaceEncapsulation({ rel, spec, target, relative: isRelative, workspaces }: ImportEdge): string[] {
   const violations: string[] = [];
   const owner = owningPackage(rel);
   if (owner === null) return violations;
@@ -117,8 +136,8 @@ function checkWorkspaceEncapsulation({ rel, spec, target, relative: isRelative }
   if (spec.startsWith('#')) {
     violations.push(`${rel}: package imports alias "${spec}" hides the imported package; import it by package name or relative path (R03)`);
   }
-  if (spec.startsWith(WORKSPACE_SCOPE) && spec !== packageName(spec)) {
-    violations.push(`${rel}: workspace package "${packageName(spec)}" must be imported through its root export, not "${spec}" (F11/R03)`);
+  if (spec.startsWith(WORKSPACE_SCOPE) && spec !== packageName(spec) && !isPortEntry(spec, workspaces)) {
+    violations.push(`${rel}: workspace package "${packageName(spec)}" must be imported through its root export or port entry, not "${spec}" (F11/R03)`);
   }
   if (owner === 'root' && rel.startsWith('src/') && spec.startsWith(WORKSPACE_SCOPE)) {
     violations.push(`${rel}: the published root package cannot import private workspace package "${spec}" until a distribution strategy exists (R03)`);
@@ -145,6 +164,15 @@ function checkPluginImport({ rel, spec }: ImportEdge): string[] {
   const plugin = rel.match(/^packages\/plugins\/([^/]+)\/src\//)?.[1];
   if (!plugin || !spec.startsWith(WORKSPACE_SCOPE) || PLUGIN_ALLOWED_PACKAGES.has(packageName(spec))) return [];
   return [`${rel}: plugin "${plugin}" may import only the kernel, plugin SDK, and contracts packages, not "${spec}" (ADR 0003)`];
+}
+
+// The plugin SDK re-exports frozen ports for plugins, so it reads a module
+// only for types and only through its port entry (ADR 0009).
+function checkPluginSdkImport({ rel, spec, typeOnly, workspaces }: ImportEdge): string[] {
+  if (!rel.startsWith('packages/plugin-sdk/src/')) return [];
+  if (!workspaces.get(packageName(spec))?.startsWith('packages/modules/')) return [];
+  if (isPortEntry(spec, workspaces) && typeOnly) return [];
+  return [`${rel}: the plugin SDK may import module "${packageName(spec)}" only type-only through its port entry, not "${spec}" (ADR 0009)`];
 }
 
 function checkModuleImport({ rel, spec, target, relative: isRelative }: ImportEdge): string[] {
@@ -184,7 +212,8 @@ function checkWebImport({ rel, spec, target, relative: isRelative }: ImportEdge)
 }
 
 const IMPORT_RULES = [
-  checkDevelopmentImport, checkWorkspaceEncapsulation, checkKernelImport, checkPluginImport, checkModuleImport, checkWebImport,
+  checkDevelopmentImport, checkWorkspaceEncapsulation, checkKernelImport, checkPluginImport, checkPluginSdkImport, checkModuleImport,
+  checkWebImport,
 ];
 
 export function checkWorkspaceBoundaries(root: string): string[] {
@@ -199,8 +228,9 @@ export function checkWorkspaceBoundaries(root: string): string[] {
     }
     if (!/\.(?:[cm]?ts|tsx)$/.test(rel)) continue;
 
-    for (const spec of extractImports(rel, readFileSync(file, 'utf8'))) {
-      const edge: ImportEdge = { rel, spec, target: importTarget(file, spec, root, workspaces), relative: spec.startsWith('.') };
+    for (const { spec, typeOnly } of extractImports(rel, readFileSync(file, 'utf8'))) {
+      const target = importTarget(file, spec, root, workspaces);
+      const edge: ImportEdge = { rel, spec, target, relative: spec.startsWith('.'), typeOnly, workspaces };
       if (edge.relative && edge.target!.startsWith('..')) {
         violations.push(`${rel}: import escapes repository root (${spec})`);
         continue;

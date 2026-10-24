@@ -202,3 +202,53 @@ test('boundary checker resolves workspace package names and guards package encap
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('the plugin SDK reads a module only type-only through its port entry', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-boundaries-sdk-'));
+  try {
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ workspaces: ['packages/kernel', 'packages/plugin-sdk', 'packages/modules/*'] }));
+    const packages = { 'packages/kernel': '@taskelith/kernel', 'packages/plugin-sdk': '@taskelith/plugin-sdk', 'packages/modules/sdlc': '@taskelith/sdlc' };
+    for (const [dir, name] of Object.entries(packages)) {
+      mkdirSync(join(root, dir, 'src'), { recursive: true });
+      writeFileSync(join(root, dir, 'package.json'), JSON.stringify({ name }));
+    }
+    writeFileSync(
+      join(root, 'packages/plugin-sdk/src/index.ts'),
+      "import { ok } from '@taskelith/kernel';\nimport type { Port } from '@taskelith/sdlc/port';\nexport type { Port as SdkPort } from '@taskelith/sdlc/port';\nexport type Other = import('@taskelith/sdlc/port').Port;\nexport const run = ok;\n",
+    );
+    writeFileSync(join(root, 'packages/modules/sdlc/src/application.ts'), "import type { Port } from '@taskelith/sdlc/port';\nexport type P = Port;\n");
+    assert.deepEqual(checkWorkspaceBoundaries(root), []);
+
+    writeFileSync(
+      join(root, 'packages/plugin-sdk/src/bad.ts'),
+      [
+        "import { VERSION } from '@taskelith/sdlc/port';",
+        "import { type Port } from '@taskelith/sdlc/port';",
+        "export { VERSION as V } from '@taskelith/sdlc/port';",
+        "import type { Stage } from '@taskelith/sdlc';",
+        "const later = import('@taskelith/sdlc/port');",
+        "import type { Rule } from '@taskelith/sdlc/domain';",
+        "import type { Kernel } from '@taskelith/kernel/port';",
+      ].join('\n'),
+    );
+
+    const violations = checkWorkspaceBoundaries(root);
+    const sdkRule = 'the plugin SDK may import module "@taskelith/sdlc" only type-only through its port entry';
+    const expected = [
+      [sdkRule, '"@taskelith/sdlc/port"'],
+      [sdkRule, '"@taskelith/sdlc/port"'],
+      [sdkRule, '"@taskelith/sdlc/port"'],
+      [sdkRule, '"@taskelith/sdlc"'],
+      [sdkRule, '"@taskelith/sdlc/port"'],
+      [sdkRule, '"@taskelith/sdlc/domain"'],
+      ['workspace package "@taskelith/sdlc" must be imported through its root export or port entry', '"@taskelith/sdlc/domain"'],
+      ['workspace package "@taskelith/kernel" must be imported through its root export or port entry', '"@taskelith/kernel/port"'],
+    ];
+    for (const [message, spec] of expected) {
+      assert(violations.some(v => v.includes('plugin-sdk/src/bad.ts') && v.includes(message!) && v.includes(spec!)), `${message} ${spec}\n${violations.join('\n')}`);
+    }
+    assert.equal(violations.length, expected.length, violations.join('\n'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

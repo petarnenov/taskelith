@@ -1,6 +1,6 @@
 # SpecKit mapping fixtures
 
-Shared mapping fixtures for SpecKit 1.2.3 (G1 item 10), in a fixture-only stub package that G1 item 12 extends with a test-only normaliser and G4 completes. The expected normalized outputs are in [`../test/speckit-mapping-cases.ts`](../test/speckit-mapping-cases.ts) as cases of the framework-neutral conformance suite (`runSdlcFrameworkConformance` in `@taskelith/sdlc`).
+Shared mapping fixtures for SpecKit 1.2.3 (G1 item 10), in a fixture-only stub package that G4 completes. A test-only normaliser, [`../test/speckit-normaliser.ts`](../test/speckit-normaliser.ts) (G1 item 12), applies the rules below to the working copy and passes every case. The expected normalized outputs are in [`../test/speckit-mapping-cases.ts`](../test/speckit-mapping-cases.ts) as cases of the framework-neutral conformance suite (`runSdlcFrameworkConformance` in `@taskelith/sdlc`).
 
 ## Provenance
 

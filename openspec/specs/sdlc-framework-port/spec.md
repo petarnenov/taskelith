@@ -1,7 +1,7 @@
 # sdlc-framework-port Specification
 
 ## Purpose
-Define the draft `SdlcFramework` port of the SDLC module, its capability declaration, and the framework-neutral conformance suite that each framework plugin's tests run with that plugin's fixtures.
+Define the `SdlcFramework` port of the SDLC module, frozen as version 1, its capability declaration, and the framework-neutral conformance suite that each framework plugin's tests run with that plugin's fixtures.
 
 ## Requirements
 

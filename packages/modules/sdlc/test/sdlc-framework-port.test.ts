@@ -6,22 +6,23 @@ import {
   OPTIONAL_SDLC_OPERATIONS,
   parseSdlcFrameworkCapabilities,
   runSdlcFrameworkConformance,
-  type ArtifactRevisionInput,
+  type ArtifactRevisionData,
   type ResolvedWorkflow,
   type SdlcConformanceCase,
   type SdlcFramework,
   type SdlcFrameworkCapabilities,
   type StageInstructions,
   type StructuralValidationReport,
-  type WorkItemInput,
+  type WorkItemData,
 } from '@taskelith/sdlc';
+import * as portEntry from '@taskelith/sdlc/port';
 
 // A framework-neutral stand-in for a plugin: a native graph without review,
 // verification, or closure, which the platform supplies.
 const CONTEXT = { workingCopy: '/work/copy' };
 const ITEM = { ...CONTEXT, workItem: 'feature 12' };
-const WORK_ITEMS: readonly WorkItemInput[] = [{ id: 'item-12', nativeReference: 'feature 12' }];
-const REVISIONS: readonly ArtifactRevisionInput[] = [
+const WORK_ITEMS: readonly WorkItemData[] = [{ id: 'item-12', nativeReference: 'feature 12' }];
+const REVISIONS: readonly ArtifactRevisionData[] = [
   { artifactId: 'proposal', digest: `sha256:${'aa'.repeat(32)}`, nativeReference: 'feature 12/proposal.md@1a2b3c4' },
 ];
 const WORKFLOW: ResolvedWorkflow = {
@@ -433,4 +434,10 @@ test('a request that is not plain data is a fixture finding and the plugin is no
   const testCase = { name: 'bad request', operation: 'discoverWorkItems', request: { workingCopy: new Date(0) }, expected: { ok: false, code: 'not-found' } } as unknown as SdlcConformanceCase;
   assert.deepEqual(await findings(counted, [testCase]), ['bad request fixture: request.workingCopy must be a plain object']);
   assert.equal(calls, 0);
+});
+
+test('the port entry carries only the frozen port, at version 1.0.0', () => {
+  assert.deepEqual(Object.keys(portEntry).sort(), ['OPTIONAL_SDLC_OPERATIONS', 'SDLC_FRAMEWORK_PORT_VERSION']);
+  assert.equal(portEntry.SDLC_FRAMEWORK_PORT_VERSION, '1.0.0');
+  assert.equal(portEntry.OPTIONAL_SDLC_OPERATIONS, OPTIONAL_SDLC_OPERATIONS);
 });

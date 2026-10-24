@@ -19,21 +19,21 @@ import {
 import { runOpenSpec, type OpenSpecCliOptions } from './openspec-cli.js';
 import type {
   ArtifactRequirement,
-  ArtifactRevision,
+  ArtifactRevisionData,
   FinalizationReport,
   FrameworkContext,
   ResolvedWorkflow,
   SdlcFramework,
   SdlcFrameworkCapabilities,
-  Stage,
+  StageData,
   StageInstructions,
   StageRequest,
   StructuralValidationReport,
   StructuralValidationRequest,
-  WorkItem,
+  WorkItemData,
   WorkItemRequest,
   WorkflowRequest,
-} from './sdlc-framework-shapes.js';
+} from '@taskelith/plugin-sdk';
 
 // The CLI version whose output this adapter normalizes (G1 decision D6 (a)).
 export const OPENSPEC_VERSION = '1.14.3';
@@ -86,7 +86,7 @@ export class OpenSpecFramework implements SdlcFramework {
     this.#options = options;
   }
 
-  async discoverWorkItems(request: FrameworkContext): Promise<Result<readonly WorkItem[]>> {
+  async discoverWorkItems(request: FrameworkContext): Promise<Result<readonly WorkItemData[]>> {
     const copy = await this.openWorkingCopy(request.workingCopy);
     if (!copy.ok) return copy;
     return ok([...copy.value.changes].sort().map((change) => ({ id: `openspec:${change}`, nativeReference: change })));
@@ -117,7 +117,7 @@ export class OpenSpecFramework implements SdlcFramework {
     })));
   }
 
-  async inspectArtifactRevisions(request: WorkItemRequest): Promise<Result<readonly ArtifactRevision[]>> {
+  async inspectArtifactRevisions(request: WorkItemRequest): Promise<Result<readonly ArtifactRevisionData[]>> {
     const open = await this.openChange(request);
     if (!open.ok) return open;
     return currentRevisions(open.value);
@@ -325,9 +325,9 @@ const SCHEMA_VERSION = /^version:[ \t]*(["']?)([^"'#\s]+)\1[ \t]*(?:#.*)?$/m;
 
 // Schema artifacts are native stages: those without prerequisites cover
 // intake, the rest specification; verify and review are platform-managed.
-function stagesOf(status: ChangeStatus): Stage[] {
+function stagesOf(status: ChangeStatus): StageData[] {
   return [
-    ...status.artifacts.map((artifact): Stage => ({
+    ...status.artifacts.map((artifact): StageData => ({
       id: artifact.id,
       obligations: [artifact.requires.length === 0 ? 'intake' : 'specification'],
       origin: 'native',
@@ -344,12 +344,12 @@ function artifactFiles(status: ChangeStatus): ArtifactFile[] {
   return status.artifacts.flatMap((artifact) => artifact.files.map((path) => ({ artifactId: artifact.id, path })));
 }
 
-function currentRevisions(open: OpenChange): Promise<Result<ArtifactRevision[]>> {
+function currentRevisions(open: OpenChange): Promise<Result<ArtifactRevisionData[]>> {
   return fileRevisions(open.root, artifactFiles(open.status));
 }
 
-async function fileRevisions(root: string, files: readonly ArtifactFile[]): Promise<Result<ArtifactRevision[]>> {
-  const revisions: ArtifactRevision[] = [];
+async function fileRevisions(root: string, files: readonly ArtifactFile[]): Promise<Result<ArtifactRevisionData[]>> {
+  const revisions: ArtifactRevisionData[] = [];
   for (const file of files) {
     if (!isInside(relative(root, file.path))) {
       return err(failure('internal', `${file.path} is outside the working copy`, { path: file.path }));
@@ -361,8 +361,8 @@ async function fileRevisions(root: string, files: readonly ArtifactFile[]): Prom
   return ok(revisions);
 }
 
-function isSameRevisionSet(subject: readonly ArtifactRevision[], current: readonly ArtifactRevision[]): boolean {
-  const key = (revision: ArtifactRevision) => JSON.stringify([revision.artifactId, revision.digest, revision.nativeReference]);
+function isSameRevisionSet(subject: readonly ArtifactRevisionData[], current: readonly ArtifactRevisionData[]): boolean {
+  const key = (revision: ArtifactRevisionData) => JSON.stringify([revision.artifactId, revision.digest, revision.nativeReference]);
   const currentKeys = new Set(current.map(key));
   return subject.length === current.length && new Set(subject.map(key)).size === subject.length
     && subject.every((revision) => currentKeys.has(key(revision)));
