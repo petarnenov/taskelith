@@ -1,0 +1,16 @@
+{
+  "name": "@taskelith/sdlc-openspec",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "devDependencies": {
+    "@taskelith/kernel": "0.0.0",
+    "@taskelith/sdlc": "0.0.0"
+  }
+}
