@@ -1,0 +1,22 @@
+## Context
+
+The repository is one package with `src/`, `dist/`, and a flat `test/`. The build, the coverage include pattern, the coverage scope check, and the dependency inventory assume that shape, and the inventory rejects linked packages, which is how npm installs workspace packages.
+
+## Goals / Non-Goals
+
+Make verification work for any number of workspace packages, including none. Do not create a package: the kernel is the next item and becomes the first package.
+
+## Decisions
+
+- Workspace patterns follow the architecture's layout: `packages/kernel`, `packages/contracts`, `packages/plugin-sdk`, and one level under `packages/modules`, `packages/adapters`, and `packages/plugins`. Applications under `apps/` are added with G2 and G3.
+- The package contract: a private manifest named `@taskelith/<directory name>` with `type: module` and exactly one root export (`./dist/index.js` with `./dist/index.d.ts`); a `tsconfig.json` that extends `tsconfig.package.json`, which sets `composite`, `declaration`, `rootDir` `src`, `outDir` `dist`, and the build information file inside `dist/` through `${configDir}`, and that references exactly the workspace packages it depends on. A package may set other compiler options, such as `types`, but not the layout. The contract reads `tsconfig.json` with TypeScript's parser, which accepts comments and trailing commas, and collects workspace dependencies from all four dependency sections without duplicates. Packages declare no `imports` aliases, and the boundary check rejects `#` specifiers in product code, because an alias would hide the imported package from the other rules. One root export keeps each package's public surface in one place; a package that needs another entry point would change this rule deliberately.
+- `scripts/build-workspaces.ts` checks the contract, runs `tsc --build` over the packages that exist, which orders them by their references, and checks that each produced `dist/index.js` and `dist/index.d.ts`. It runs before the root build so that the root could later consume packages, and succeeds when there is no package, because both `tsc --build` with an empty solution and `npm run --workspaces` fail then.
+- The published root package must not import workspace packages until a way to distribute them with it is decided; the boundary check enforces this.
+- The test globs use explicit depths (`packages/*/` and `packages/*/*/`); Node's test discovery skips `node_modules`. The coverage include patterns can still match a dependency's `dist/` under a package's `node_modules`, so coverage also excludes `**/node_modules/**`. Tests import a package through its name, so coverage counts its compiled `dist/`.
+- The dependency inventory skips npm's link entries for workspace packages and the package directories themselves. It accepts a link only when its key is a safe `node_modules/<name>` path, its target is a declared workspace package directory whose manifest has that name, and the lockfile lists that directory; any other link fails generation. Packages installed under a workspace package's `node_modules` are still inventoried. The SBOM keeps workspace packages as private components.
+- The boundary check resolves `@taskelith/<name>` imports to the named package's public entry, so the module and web rules apply to named imports as they do to relative ones. Each path belongs to a product package (root `src/`, a workspace package, or an application), and a relative import that crosses packages fails. Relative imports may not reach `node_modules/` or `dist/`, so installed links and build output cannot bypass ownership or layers. Dynamic `import()` with an options argument and template-literal specifiers are recognized. Layer, kernel, and plugin rules apply to `src/`, and a layer may be a directory or a single file such as `domain.ts`; module tests may import adapters and SDKs for integration tests; no package's `src/` may import scripts or tests, including its own.
+- End-to-end checks with temporary packages, removed afterwards, confirmed the build, tests, coverage, scope check, inventory, and package verification, including a clean build of a module package that depends on the kernel.
+
+## Risks / Trade-offs
+
+The workspace pattern expansion supports only a directory or one trailing `/*`, which is all the layout needs; a wider pattern would need a glob library. Package names under `@taskelith/` are never published, so the scope is not registered on npm.

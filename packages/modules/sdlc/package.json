@@ -1,0 +1,19 @@
+{
+  "name": "@taskelith/sdlc",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./port": {
+      "types": "./dist/port.d.ts",
+      "default": "./dist/port.js"
+    }
+  },
+  "dependencies": {
+    "@taskelith/kernel": "0.0.0"
+  }
+}

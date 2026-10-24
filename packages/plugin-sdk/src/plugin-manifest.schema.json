@@ -1,0 +1,45 @@
+{
+  "$id": "urn:taskelith:plugin-manifest",
+  "title": "Taskelith plugin manifest",
+  "description": "The G1 subset of the plugin manifest in architecture section 7. Compiled as JSON Schema 2020-12; it declares no $schema and uses only keywords with the same meaning in draft-07.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "version", "pluginApiRange", "port", "capabilities"],
+  "properties": {
+    "id": {
+      "description": "Stable plugin identifier: lowercase letters, digits, and inner hyphens, starting with a letter.",
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+    },
+    "version": {
+      "description": "Semantic version of the plugin package.",
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$"
+    },
+    "pluginApiRange": {
+      "description": "Supported plugin API versions as a caret range, for example ^0.2.0.",
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^\\^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+    },
+    "port": {
+      "description": "Name of the port the plugin implements, for example SdlcFramework.",
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[A-Z][A-Za-z0-9]*$"
+    },
+    "capabilities": {
+      "description": "Declared protocol capabilities: lowercase letters, digits, and inner hyphens, starting with a letter.",
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "maxLength": 64,
+        "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+      }
+    }
+  }
+}

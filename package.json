@@ -1,0 +1,73 @@
+{
+  "name": "taskelith",
+  "version": "0.1.0",
+  "description": "Self-hosted software factory for parallel project development. Bootstrap CLI and architecture plan.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Petar Nenov",
+  "bin": {
+    "taskelith": "dist/cli.js"
+  },
+  "files": [
+    "dist/",
+    "docs/architecture.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/petarnenov/taskelith.git"
+  },
+  "homepage": "https://github.com/petarnenov/taskelith#readme",
+  "bugs": {
+    "url": "https://github.com/petarnenov/taskelith/issues"
+  },
+  "keywords": [
+    "software-factory",
+    "agents",
+    "sdlc",
+    "typescript",
+    "self-hosted"
+  ],
+  "workspaces": [
+    "packages/kernel",
+    "packages/contracts",
+    "packages/plugin-sdk",
+    "packages/modules/*",
+    "packages/adapters/*",
+    "packages/plugins/*"
+  ],
+  "scripts": {
+    "build": "node --experimental-strip-types scripts/generate-contracts.ts && node --experimental-strip-types scripts/build-workspaces.ts && tsc -p tsconfig.json",
+    "check:boundaries": "tsc -p tsconfig.check.json && node --experimental-strip-types scripts/check-boundaries.ts",
+    "test": "npm run build && npm run check:boundaries && mkdir -p coverage && node --experimental-strip-types --test --experimental-test-coverage --test-coverage-include='dist/**/*.js' --test-coverage-include='packages/*/dist/**/*.js' --test-coverage-include='packages/*/*/dist/**/*.js' --test-coverage-exclude='**/node_modules/**' --test-coverage-lines=75 --test-coverage-branches=75 --test-coverage-functions=75 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info test/*.test.ts 'packages/*/test/*.test.ts' 'packages/*/*/test/*.test.ts' && node --experimental-strip-types scripts/check-coverage-scope.ts coverage/lcov.info",
+    "prepack": "npm run build",
+    "openspec": "openspec",
+    "release": "semantic-release",
+    "verify:package": "node --experimental-strip-types scripts/verify-package.ts",
+    "inventory:dependencies": "node --experimental-strip-types scripts/inventory-dependencies.ts",
+    "verify:dependencies": "node --experimental-strip-types scripts/inventory-dependencies.ts --check",
+    "verify:archive": "node --experimental-strip-types scripts/check-archive-dry-run.ts"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@asyncapi/diff": "0.6.0",
+    "@asyncapi/parser": "3.6.6",
+    "@fission-ai/openspec": "1.14.3",
+    "@semantic-release/commit-analyzer": "13.0.1",
+    "@semantic-release/github": "12.0.10",
+    "@semantic-release/npm": "13.2.0",
+    "@semantic-release/release-notes-generator": "14.1.1",
+    "@types/node": "24.19.2",
+    "conventional-changelog-conventionalcommits": "9.3.1",
+    "json-schema-to-typescript": "16.0.0",
+    "openapi-typescript": "7.13.0",
+    "semantic-release": "25.0.9",
+    "typescript": "5.9.3"
+  }
+}

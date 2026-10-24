@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "packages/*/src/**/*.ts",
+    "packages/*/*/src/**/*.ts",
+    "packages/*/test/**/*.ts",
+    "packages/*/*/test/**/*.ts",
+    "scripts/**/*.ts",
+    "test/**/*.ts",
+    "test/**/*.d.ts"
+  ]
+}
