@@ -8,4 +8,4 @@
 ## 2. Verification and review
 
 - [x] 2.1 Run `make verify`.
-- [ ] 2.2 Obtain independent review (Antigravity Argon medium, by rotation) and record results.
+- [x] 2.2 Obtain independent review (Antigravity Argon medium, by rotation; two passes, the second without findings) and record results.
