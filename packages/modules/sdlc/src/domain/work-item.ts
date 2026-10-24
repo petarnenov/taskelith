@@ -4,9 +4,8 @@ import { parseNativeReference, type NativeReference } from './native-reference.j
 
 export type WorkItemId = Identifier<'WorkItemId'>;
 
-// A unit of governed work, such as a change or a feature in the framework. The
-// framework plugin maps the native reference to the stable platform identifier;
-// the identifier stays the same when the native name or location changes.
+// A unit of governed work, such as a change or feature. The plugin maps its
+// native reference to a platform identifier that survives renames and moves.
 export interface WorkItem {
   readonly id: WorkItemId;
   readonly nativeReference: NativeReference;

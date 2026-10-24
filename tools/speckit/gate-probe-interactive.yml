@@ -1,4 +1,4 @@
-# Agent-free workflow whose gate, like the bundled speckit workflow's gates, has no verdict_input.
+# Agent-free workflow whose gate, like the bundled gates, has no verdict_input.
 schema_version: '1.0'
 workflow:
   id: gate-probe-interactive

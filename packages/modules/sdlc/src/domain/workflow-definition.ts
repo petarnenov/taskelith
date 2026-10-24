@@ -12,9 +12,8 @@ export type WorkflowId = Identifier<'WorkflowId'>;
 export type WorkflowVersion = Identifier<'WorkflowVersion'>;
 export type StageId = Identifier<'StageId'>;
 
-// A stage may combine several obligations, as native framework steps often do.
-// Dependencies are prerequisites and therefore acyclic; rework loops are
-// transitions back to an earlier stage, not dependency edges.
+// A stage may combine several obligations. Dependencies are acyclic
+// prerequisites; rework loops are transitions back, not dependency edges.
 export interface Stage {
   readonly id: StageId;
   readonly obligations: readonly LifecycleObligation[];
@@ -142,9 +141,8 @@ function graphFailure(message: string, details: Record<string, string>): Result<
   return err(failure('invalid', `stages: ${message}`, { field: 'stages', ...details }));
 }
 
-// Iterative depth-first search over the dependency edges, so that a long
-// dependency chain cannot exhaust the call stack. Returns the stages of the
-// first cycle found, starting and ending with the same stage.
+// Iterative depth-first search, so a long chain cannot exhaust the call stack;
+// returns the first cycle, starting and ending with the same stage.
 function findDependencyCycle(stages: readonly Stage[], byId: ReadonlyMap<StageId, Stage>): StageId[] | undefined {
   const finished = new Set<StageId>();
   for (const root of stages) {

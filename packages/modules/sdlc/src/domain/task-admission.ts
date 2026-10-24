@@ -11,9 +11,8 @@ import type { PolicyRevision, WorkflowRunBinding } from './workflow-run-binding.
 export type AdmissionId = Identifier<'AdmissionId'>;
 export type TaskId = Identifier<'TaskId'>;
 
-// A planning task works in a stage that covers intake or specification and no
-// implementation; an implementation task works in a stage that covers
-// implementation.
+// A planning task works in an intake or specification stage without
+// implementation; an implementation task works in an implementation stage.
 export const TASK_KINDS = Object.freeze(['planning', 'implementation'] as const);
 
 export type TaskKind = (typeof TASK_KINDS)[number];
@@ -22,19 +21,16 @@ export const ADMISSION_STATES = Object.freeze(['admitted', 'used', 'invalidated'
 
 export type AdmissionState = (typeof ADMISSION_STATES)[number];
 
-// The only allowed admission transitions. An admission is used once, when its
-// task is dispatched, and only an unused one is invalidated; started work
-// follows the stop and reconcile policy of the execution module.
+// The only allowed transitions. An admission is used once, at dispatch, and
+// only an unused one is invalidated; started work is stopped and reconciled.
 export const ADMISSION_TRANSITIONS: Readonly<Record<AdmissionState, readonly AdmissionState[]>> = Object.freeze({
   admitted: Object.freeze(['used', 'invalidated'] as const),
   used: Object.freeze([] as const),
   invalidated: Object.freeze([] as const),
 });
 
-// The record that lets one task of a workflow run be dispatched. It binds the
-// workflow stage, the work item, the exact artifact revisions the task works
-// from, and the policy revision of the run. The ownership generation of the
-// assignment is added with the execution module (G2).
+// Lets one task of a run be dispatched, bound to stage, work item, inputs, and
+// policy revision; the execution module (G2) adds the ownership generation.
 export interface TaskAdmission {
   readonly id: AdmissionId;
   readonly taskId: TaskId;
@@ -71,9 +67,8 @@ export interface GatedRunContext extends RunContext {
   readonly gates: readonly Gate[];
 }
 
-// Admits an implementation task only when it is bound to a work item and every
-// stage its stage depends on has passed. The task works from exactly the
-// revisions those passed gates judged.
+// Admits an implementation task bound to a work item once every stage it
+// depends on passed; it works from exactly the revisions those gates judged.
 export function admitImplementationTask(
   request: TaskAdmissionRequest,
   context: GatedRunContext,
@@ -98,9 +93,8 @@ export function admitImplementationTask(
   return ok(newAdmission(target.value, request.workItem, artifacts.value, context.binding, at));
 }
 
-// Admits a planning task without requiring a specification: it may work from
-// the revisions that already exist, possibly none, and records the revisions it
-// creates.
+// Admits a planning task without a specification: it works from existing
+// revisions, possibly none, and records the revisions it creates.
 export function admitPlanningTask(
   request: TaskAdmissionRequest,
   context: RunContext,
@@ -201,9 +195,8 @@ function taskKindOf(stage: Stage): TaskKind | undefined {
   return undefined;
 }
 
-// The revisions the given gates judged, at most one per artifact. Gates that
-// judged different revisions of one artifact describe no consistent set of
-// inputs, and the error names that artifact.
+// The revisions the gates judged, at most one per artifact; gates that judged
+// two revisions of one artifact are inconsistent, and the error names it.
 function judgedRevisions(gates: readonly Gate[]): Result<readonly ArtifactRevision[], ArtifactId> {
   const byArtifact = new Map<ArtifactId, ArtifactRevision>();
   for (const revision of gates.flatMap((gate) => gate.subject)) {

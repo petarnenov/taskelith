@@ -4,13 +4,8 @@ import { fieldFailure } from './field-failure.js';
 import { isDisplayText } from './display-text.js';
 import { parseGateSubject, type GateSubject } from './gate-subject.js';
 
-// Structural validation (a validator checked form and references), semantic
-// approval (a reviewer judged the content), and platform-managed records (the
-// platform recorded an obligation the framework has no operation for, such as
-// integration or closure) are distinct evidence sources (architecture section
-// 6). Each kind has its own source identity and verdicts, and a gate accepts
-// only the kind it requires, so a passed validator or a checked box can never
-// stand in for a semantic approval.
+// Evidence from a validator, a reviewer, or a platform record (architecture
+// section 6); a gate accepts only its kind, so no validator replaces review.
 export const EVIDENCE_KINDS = Object.freeze(['structural-validation', 'semantic-approval', 'platform-record'] as const);
 
 export type EvidenceKind = (typeof EVIDENCE_KINDS)[number];

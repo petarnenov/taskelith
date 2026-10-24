@@ -14,9 +14,8 @@ type Version = readonly [major: number, minor: number, patch: number];
 
 const RELEASE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
-// Caret semantics as in npm: ^1.2.3 accepts >=1.2.3 <2.0.0, ^0.2.3 accepts
-// >=0.2.3 <0.3.0, and ^0.0.3 accepts only 0.0.3. Only release versions and
-// `^MAJOR.MINOR.PATCH` ranges are understood; anything else is not satisfied.
+// npm caret semantics (^0.2.3 accepts >=0.2.3 <0.3.0) for release versions and
+// `^MAJOR.MINOR.PATCH` ranges only; anything else is not satisfied.
 export function satisfiesCaretRange(version: string, caretRange: string): boolean {
   const actual = parseReleaseVersion(version);
   const minimum = caretRange.startsWith('^') ? parseReleaseVersion(caretRange.slice(1)) : undefined;

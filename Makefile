@@ -1,4 +1,4 @@
-# Single definition of the repository checks: the local pre-push gate and the GitHub `verify` job.
+# Single definition of the repository checks: the pre-push gate and CI `verify`.
 NODE_PIN := $(shell cat .nvmrc)
 NPM_PIN := $(shell sed -n 's/.*npm install --global npm@\([0-9.]*\) --ignore-scripts.*/\1/p' .github/workflows/release.yml | head -n 1)
 
@@ -14,6 +14,7 @@ verify:
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use $(MAKE) --no-print-directory verify-checks
 
 verify-checks: toolchain
+	npm run verify:comments
 	npm test
 	$(MAKE) contract-compatibility
 	npm run verify:dependencies
@@ -42,12 +43,13 @@ hooks:
 dependency-inventory:
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use sh -c 'npm ci --ignore-scripts && npm run inventory:dependencies'
 
-# Fails on an undeclared breaking change of a contract document against the merge base with origin/dev;
-# runs oasdiff as its digest-pinned container, so it needs Docker.
+# Fails on an undeclared breaking contract change since the origin/dev merge
+# base; runs oasdiff as its digest-pinned container, so it needs Docker.
 contract-compatibility:
 	node --experimental-strip-types scripts/check-contract-compatibility.ts
 
-# SpecKit runs only in its digest-pinned container (G1 decision D5); see docs/qualification/speckit.md.
+# SpecKit runs only in its digest-pinned container (G1 decision D5); see
+# docs/qualification/speckit.md.
 speckit-image:
 	docker build --quiet --build-arg BASE=$(SPECKIT_BASE) --tag $(SPECKIT_IMAGE) tools/speckit
 

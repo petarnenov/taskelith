@@ -115,9 +115,8 @@ function gitRemedy(facts: EnvironmentFacts): string {
   return facts.gitAvailable ? 'Run make setup.' : 'Install git, then run make setup.';
 }
 
-// Each Node.js has its own npm, so the npm on PATH says nothing until the pinned
-// Node.js is active; under it, a missing npm means a broken Node.js install that
-// only a reinstall fixes.
+// Each Node.js has its own npm, so only under the pinned Node.js does a
+// missing npm mean a broken install, which only a reinstall fixes.
 function npmRemedy(facts: EnvironmentFacts, pins: Pins): string {
   if (!pinnedNodeActive(facts, pins)) return `Fix the Node.js check first; npm is checked under Node.js ${pins.node}.`;
   if (facts.npmVersion === undefined) {
@@ -134,12 +133,8 @@ function pinnedNodeActive(facts: EnvironmentFacts, pins: Pins): boolean {
   return facts.nodeVersion === `v${pins.node}`;
 }
 
-// Git and Node.js are installed outside the repository (Node.js through nvm in
-// the setup wrapper), so setup only adds what it can install from this clone.
-// Without the pinned Node.js it changes nothing, so that it never installs npm
-// or dependencies into another Node.js; without npm it cannot install either;
-// without git it cannot enable the hook.
-// The order matters: dependencies are installed with the pinned npm.
+// Without the pinned Node.js nothing is installed, so no other Node.js gets npm
+// or dependencies; npm comes first because it installs the dependencies.
 export function setupSteps(facts: EnvironmentFacts, pins: Pins): SetupStep[] {
   const failing = new Set(checkEnvironment(facts, pins).filter((result) => !result.ok).map((result) => result.id));
   if (failing.has('node')) return [];
