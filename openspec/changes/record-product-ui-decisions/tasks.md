@@ -10,5 +10,5 @@
 
 ## 3. Verification and review
 
-- [ ] 3.1 Run `make verify` and the link and evidence checks.
-- [ ] 3.2 Obtain independent review by rotation and record the results.
+- [x] 3.1 Run `make verify` and the link and evidence checks.
+- [x] 3.2 Obtain independent review by rotation and record the results.

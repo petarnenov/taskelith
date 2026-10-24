@@ -17,7 +17,7 @@ In the worktree, Node v24.22.1, npm 12.2.1: `make verify` passed (tests, coverag
 
 ## Independent review
 
-Assigned reviewer (rotation): Antigravity CLI with Gemini 4 Argon, effort medium, `--mode plan` (read-only); the log shows the model override `Gemini 4 Argon (Medium)` for every request. SHA-256 snapshots of the worktree before and after each pass were equal.
+Assigned reviewer (rotation): Antigravity CLI with Gemini 4 Argon, effort medium, `--mode plan` (read-only); the log shows the model override `Gemini 4 Argon (Medium)` for every request. Before pass 1 a SHA-256 snapshot of the worktree was taken; after it, `git status` showed no modified or untracked file before the rebase. Before and after pass 2 the SHA-256 snapshots were equal.
 
 - **Pass 1 — conversation `4ff76f53-8f0d-4650-8658-41077f77b92d`, on commit `c391b7b`.** Findings: 0 Critical, 0 High, 3 Medium, 4 Low. All accepted and resolved:
   1. Medium: the living `engineering-principles` spec's `## Purpose` still kept OpenSpec mandatory, and archiving does not update it. Edited directly.
@@ -27,3 +27,8 @@ Assigned reviewer (rotation): Antigravity CLI with Gemini 4 Argon, effort medium
   5. Low: architecture section 16 still said Taskelith's repository uses OpenSpec without the default and selection. Updated.
   6. Low: the governance authority sentence covered merging but not pushing. Added.
   7. Low: ADR 0003's status line did not note the amendment. Added.
+- **Pass 2 — conversation `b34d0dea-d1fb-40a3-bf10-11118e60894e`, on `f01971a` (base `6df3ce5`).** All seven pass-1 resolutions confirmed. Findings: 0 Critical, 0 High, 0 Medium, 0 Low.
+
+## Remaining gates
+
+None for this documentation change. The decisions are implemented in the gates named in ADR 0008; this change claims no implementation.
