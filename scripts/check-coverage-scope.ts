@@ -5,7 +5,8 @@ import { workspacePackageDirs } from './workspace-packages.ts';
 
 // Node's built-in coverage reports only modules that tests load, so this check
 // fails when a product module under src/ of the root package or of a workspace
-// package is missing from the coverage report.
+// package is missing from the coverage report. A module that declares only
+// types, such as a port, compiles to an empty module with nothing to cover.
 
 function sourceModules(root: string, dir: string): string[] {
   const full = join(root, dir);
@@ -34,9 +35,18 @@ function coveredFiles(root: string, lcov: string): Set<string> {
     .map((line) => relative(root, resolve(root, line.slice(3))).split(sep).join('/')));
 }
 
+function isTypeOnly(root: string, compiled: string): boolean {
+  const path = join(root, compiled);
+  if (!existsSync(path)) return false;
+  const code = readFileSync(path, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '').trim();
+  return code === 'export {};';
+}
+
 export function missingFromCoverage(root: string, lcov: string): string[] {
   const covered = coveredFiles(root, lcov);
-  return productSources(root).filter(({ compiled }) => !covered.has(compiled)).map(({ source }) => source);
+  return productSources(root)
+    .filter(({ compiled }) => !covered.has(compiled) && !isTypeOnly(root, compiled))
+    .map(({ source }) => source);
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
