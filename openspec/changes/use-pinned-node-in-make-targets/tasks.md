@@ -7,4 +7,4 @@
 ## 2. Verification and review
 
 - [x] 2.1 Run `make verify` and reproduce `make setup`, `make doctor`, and `make verify` from a shell on another Node.js, with and without nvm.
-- [ ] 2.2 Obtain independent review by the assigned reviewer and record the results.
+- [x] 2.2 Obtain independent review by the assigned reviewer and record the results.

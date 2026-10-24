@@ -53,6 +53,13 @@ Assigned reviewer: Antigravity CLI, chosen by the worker by rotation (the latest
   2. Medium: `nvm alias` can exit 0 after a failed write (nvm v0.40.1), so a failed default alias passed as success. `install` mode now reads the alias back with `nvm version default` and fails when it is not the pin.
   3. Low: the remedy in `scripts/run-node-script.sh` linked the unversioned nvm repository page. The link is removed.
 
+- **Pass 3 — Codex CLI session `01a16fad-7d10-7611-8f42-d73ca124bb98`, on `1f0fda4`.** Same invocation; the output header reported model `gpt-6.1-sol`, reasoning effort `medium`, and sandbox `read-only`. SHA-256 snapshots before and after were equal. The reviewer confirmed the resolution of all three pass-2 findings and found no new problem: 0 Critical, 0 High, 0 Medium, 0 Low.
+
+## Limitations
+
+- The reviewers did not run `make setup` or the full `make verify`, because both write files; the author ran them as recorded above.
+- `make setup` with nvm but without the pinned version (a download) was not exercised.
+
 ## Remaining gates
 
-Review pass 3, handoff to the coordinator, integration into `dev`, and archiving.
+Handoff to the coordinator, integration into `dev`, and archiving.
