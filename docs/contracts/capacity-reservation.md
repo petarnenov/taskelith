@@ -97,6 +97,8 @@ A reservation is released only when both of these hold, in the transaction that 
 
 The only other justifying fact is an **operator reconciliation**: an operator with the authority of the [trust model](../trust-model.md) resolves an uncertain execution with a recorded, audited decision and its evidence. The same transaction records the execution's outcome and ends the assignment, so an attempt never has an active assignment with a released reservation.
 
+**Cancellation.** The transaction that records the cancellation of an assignment reads the assignment's grants and executions at `SERIALIZABLE`. When no execution under it is non-terminal, it ends the assignment, releases, and writes an assignment-ended command to the worker's outbox. When one is `authorized` or `started`, it releases nothing: the end is a cancellation of that execution, and the transaction that records its terminal fact releases.
+
 **Bounded supersession.** The scheduler may supersede an assignment for which no launch authorization was ever granted when its worker has not acknowledged it within a bound, is unreachable, draining, or revoked, or has held it under admission pressure beyond a bound; item 18 fixes the bounds. The supersession reads the assignment's grants at `SERIALIZABLE`: with none it ends the assignment, releases, and writes an assignment-ended command to the worker's outbox, and a later authorization is rejected because the assignment is no longer active; with one it releases nothing, and the rules below apply.
 
 `not-started` alone ends nothing: while the assignment is active, the worker may authorize a new execution under it (launch authorization sections 4 and 7) against the same held reservation. An assignment that ends while an execution is still `authorized` or `started` keeps its reservation; the end is a cancellation, and the reservation is released by the transaction that records that execution's terminal fact.
@@ -106,7 +108,7 @@ Nothing else releases a reservation, and in particular not:
 - loss of contact, reachability `unknown`, or a missed heartbeat;
 - a revoked or decommissioned worker, whose attempts become uncertain ([trust model](../trust-model.md) section 4) and keep their reservations until reconciled;
 - the expiry or revocation of a launch authorization;
-- a cancellation request on its own;
+- a cancellation request while an execution under the assignment is non-terminal;
 - a worker restart, a control-plane restart, a scheduler failover, or a lowered quota or capacity;
 - the end of the parent task of a delegated child, or a new session identity of the same work.
 
@@ -124,6 +126,7 @@ A delegated child task is created through SDLC admission like any other task (in
 - **Depth.** A child of depth greater than `3` is rejected with `delegation-depth-exceeded` when it is created.
 - **Runnable chains.** A delegating attempt that waits for its child keeps its reservation, so a chain from the root to a child of depth `d` holds `d + 1` units of the project quota and, in each run quota the child charges, one unit per chain member that charges it. A child for which, in any quota it charges, these units exceed the quota could never run while its ancestors wait, and is rejected at creation with `delegation-chain-exceeds-quota`. With the default quotas (`4` per project, `2` per run) and children in the root's run, the effective depth is therefore `1`; reaching depth `3` there needs a run quota of at least `4`.
 - **Shared attempts.** Every attempt of every task in the tree, the root's own attempts and all retries included, charges one attempt of the root's budget, once, in its first reservation transaction (section 2); a reservation that would make the total exceed `8` is rejected with `delegation-budget-exhausted`.
+- **Progress across trees.** A **waiting parent** is an attempt with an admitted delegation whose child has not reached a terminal outcome. A delegation is admitted, in a `SERIALIZABLE` transaction, only if afterwards the waiting parents hold fewer units than the capacity of every quota the child charges (project, the child's run, the root's run) and fewer worker slots than the fleet's eligible slots, so that at least one unit in each stays free of waiting parents. Otherwise the delegation waits with `delegation-awaiting-capacity`, for at most a bound that item 18 fixes, and is then rejected with that reason, so that a delegating attempt never waits without bound while it holds a unit.
 - **Shared quotas.** A child's attempts charge the project quota, the quota of the run the child is bound to, and the quota of the root task's run, the latter once when both runs are the same.
 - **No new budgets.** The budget is keyed by `rootTaskId` from the persisted parent link. A new session identity, a resumed or forked session, a new run, or a task created by a delegating agent without the parent link creates no independent budget: a task created from an attempt is always a child of that attempt's task.
 
@@ -186,6 +189,7 @@ The scheduler and the worker act on reasons, not text. Item 8 turns the worker's
 | Run quota full | `run-quota-exhausted` | Scheduler | Wait |
 | Provider credential concurrency full | `provider-concurrency-exhausted` | Scheduler | Wait |
 | Delegation depth above `3` | `delegation-depth-exceeded` | Task admission, at task creation | Reject |
+| Waiting parents would hold every unit of a quota or the fleet's slots | `delegation-awaiting-capacity` | Task admission, at delegation | Wait up to the bound, then reject |
 | Delegation chain larger than a quota it charges | `delegation-chain-exceeds-quota` | Task admission, at task creation | Reject; raise the quota or flatten the tree |
 | Delegation attempts above `8` | `delegation-budget-exhausted` | Scheduler | Reject |
 | Automatic retries above the allowance, or a retry of uncertain execution | `retry-budget-exhausted` | Scheduler | Reject; reconcile instead |
@@ -214,5 +218,7 @@ Items 18, 20, and 24 implement these as tests through the deterministic test har
 - A worker filled to its slot count, counting acknowledged assignments without executions, refuses another assignment even when the scheduler's view was stale; a full journal and a disk below the floor stop new admissions and launches, report pressure, and lose no control record.
 - An attempt requiring a hard memory limit is placed only on a worker declaring it; a worker that cannot apply it refuses with `control-not-enforceable`; a hard spend limit is rejected.
 - A lowered quota or worker capacity blocks new reservations and releases no held one.
+- Four root attempts in a project with quota `4` each delegate a child: the fourth delegation waits with `delegation-awaiting-capacity` and is rejected after the bound, the three children run, and their parents finish; the same with two delegating roots in a run with quota `2`, and with waiting parents on every fleet slot.
+- Cancelling an acknowledged assignment with no grant on a healthy, reachable worker ends it, releases its reservation, and sends the worker an assignment-ended command; cancelling one with a started execution releases only at that execution's terminal fact.
 - One project's retry loop or approval-blocked attempts do not stop another project from receiving capacity.
 - An exhausted provider credential limit makes the next attempt that needs it wait.

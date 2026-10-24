@@ -16,7 +16,7 @@ G2 work plan item 6, assigned by the coordinator under the owner's decision of 2
 
 ## Checks
 
-In the worktree, Node v24.22.1, npm 12.2.1: `make verify` passed, including strict validation and the archive dry-run of this change; re-run after the pass-1 and pass-2 fixes and after the unreviewed pass-3 Low fixes with the same result.
+In the worktree, Node v24.22.1, npm 12.2.1: `make verify` passed, including strict validation and the archive dry-run of this change; re-run after the pass-1 and pass-2 fixes after the unreviewed pass-3 Low fixes, and after the owner-decided fixes with the same result.
 
 ## Independent review
 
@@ -50,8 +50,8 @@ Assigned reviewer (rotation): Claude Code, `claude -p --model claude-fable-5-1 -
   13. Low: task 2.1 was unchecked. Checked.
   14. Low: the worker `control-not-enforceable` row narrowed section 6. Now "release under section 6".
 - **Pass 3 — session `37728f66-94ac-4672-aa3e-820054571f6a`, on `c6f5a1e`.** Snapshot before and after: `85c847e4c4d384edebdc94ed16be85ab4410cf33de39e0215d5b7d89b0f74677`, equal. Every pass-1 and pass-2 finding confirmed resolved, pass-2 finding 1 for a single chain only (new finding 1). Findings: 0 Critical, 1 High, 1 Medium, 7 Low.
-  1. High, open: several delegating attempts waiting for their children can hold every unit of a project or run quota, or every fleet slot, so that no child can be reserved; nothing supersedes a waiting parent. The reviewer proposes admitting a delegation only while waiting parents leave at least one unit free in every scope it charges. Sent to the owner through the coordinator.
-  2. Medium, open: cancelling an acknowledged assignment with no grant on a healthy, reachable worker has no defined release path, and "a cancellation request on its own" reads as contradicting the list of assignment ends. The reviewer proposes that the cancellation transaction read grants at `SERIALIZABLE` like supersession and release when there are none. Sent to the owner through the coordinator.
+  1. High, unreviewed fix decided by the owner (D-A (a), 2026-10-25, through the coordinator): several delegating attempts waiting for their children could hold every unit of a project or run quota, or every fleet slot, so that no child could be reserved. A delegation is now admitted serializably only while waiting parents leave at least one unit free in every quota the child charges and in the fleet's eligible slots; otherwise it waits with `delegation-awaiting-capacity`. The author added that the wait is bounded (item 18 fixes the bound) and ends in a rejection, because a deferred delegating attempt also holds a unit and an unbounded deferral would recreate the deadlock. Test, requirement, and scenario added.
+  2. Medium, unreviewed fix decided by the owner (D-B (a), 2026-10-25): cancelling an acknowledged assignment with no grant on a healthy, reachable worker had no defined release path. The cancellation transaction now reads the assignment's grants and executions at `SERIALIZABLE`: with no non-terminal execution it ends the assignment, releases, and writes an assignment-ended command; with one, that execution's terminal fact releases. "A cancellation request on its own" now reads "while an execution under the assignment is non-terminal". Test and scenario added.
   3. Low, unreviewed fix: operator reconciliation released without ending the assignment. It now records the outcome and ends the assignment in the same transaction.
   4. Low, unreviewed fix: supersession of an acknowledged assignment did not reach the worker. It writes an assignment-ended command, and the worker also ends the assignment on `assignment-not-active`.
   5. Low, unreviewed fix: the refusal clause excluded refusals after an earlier grant. A refusal ends the assignment and release follows section 6.
@@ -60,6 +60,10 @@ Assigned reviewer (rotation): Claude Code, `claude -p --model claude-fable-5-1 -
   8. Low, unreviewed fix: the writer list omitted the attempt's admission and terminal state. Added.
   9. Low, unreviewed fix: the worker did not check the sum of CPU and memory. It refuses with `worker-capacity-exhausted` when the sum exceeds its host capacity less the daemon ceiling.
 
+## Owner decisions
+
+On 2026-10-25 the owner decided, through the coordinator, D-A (a) and D-B (a) above, and D-C (a): keep the fail-closed `delegation-chain-exceeds-quota` rule, under which depth 3 in the root's run needs a run quota of 4, an installation setting. `docs/operational-targets.md` does not state the interaction, so it is unchanged and the contract records it. The owner saw the interpretations of design.md (the 8-attempt budget counting every attempt in the tree, a reservation per child attempt, provider concurrency at attempt granularity, and subscription slots as a G3 extension in the same transaction).
+
 ## Remaining gates
 
-The owner's decision on pass-3 findings 1 and 2, and on the effective delegation depth under the default run quota (pass-2 finding 1). Integration into `dev` and archive; items 18, 20, and 24 implement the section 12 tests; items 4 and 5 confirm the launch record seal and the journal counts this contract relies on.
+Integration into `dev` and archive; items 18, 20, and 24 implement the section 12 tests; items 4 and 5 confirm the launch record seal and the journal counts this contract relies on.

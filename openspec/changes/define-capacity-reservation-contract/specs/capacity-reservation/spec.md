@@ -40,6 +40,10 @@ A reservation SHALL be released only when its assignment has ended and every exe
 - **WHEN** a cancellation is requested for a started attempt
 - **THEN** its reservation stays held until the exit or `not-started` fact is recorded
 
+#### Scenario: Cancellation without a grant
+- **WHEN** an acknowledged assignment with no grant on a healthy worker is cancelled
+- **THEN** the cancellation transaction ends the assignment, releases its reservation, and notifies the worker
+
 #### Scenario: Not started under an active assignment
 - **WHEN** `not-started` is recorded for an execution while its assignment is still active
 - **THEN** the reservation stays held and a new execution under the assignment can be authorized against it
@@ -81,6 +85,13 @@ A delegated child SHALL be bound at creation to its parent, derived from the aut
 #### Scenario: Attempt placed again
 - **WHEN** a worker refuses an attempt and the attempt is placed again
 - **THEN** the new reservation charges no delegation or retry budget
+
+### Requirement: Progress across delegation trees
+A delegation SHALL be admitted serializably only if afterwards the waiting parents, attempts whose admitted child is not terminal, hold fewer units than every quota the child charges and fewer than the fleet's eligible slots. Otherwise it SHALL wait with `delegation-awaiting-capacity` for at most a bound and then be rejected with that reason.
+
+#### Scenario: Waiting parents fill a project quota
+- **WHEN** four root attempts in a project with quota 4 each delegate a child
+- **THEN** the fourth delegation waits with `delegation-awaiting-capacity` and is rejected after the bound, while the three children run
 
 ### Requirement: Bounded automatic retry
 An automatic retry SHALL be a new attempt with a new reservation, allowed only after a proven-idempotent or safe failure whose reservation was released, at most 2 per task, with backoff from 5s to at most 60s with jitter. An attempt with uncertain execution SHALL get no automatic retry.
