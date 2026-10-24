@@ -38,7 +38,7 @@ Every task, including inspection, documentation, maintenance, emergency work, an
 | Propose and inspect | Owner request or authorized parent scope, bounded proposal, impacted capability, and exclusions. |
 | Specify and design | Testable requirements and design; documentation-only work declares no runtime impact. Record unresolved decisions rather than inventing approval. |
 | Implement | Task checklist and changes within the recorded scope. Material scope expansion returns to proposal. |
-| Verify | Exact commands, results, environment, relevant revision or reviewed diff, limitations, and remaining gates in `verification.md`. Run `npm test` and strict validation of changed OpenSpec artifacts. |
+| Verify | Exact commands, results, environment, relevant revision or reviewed diff, limitations, and remaining gates in `verification.md`. Run `make verify`, which includes `npm test` and strict validation of all OpenSpec artifacts. |
 | Review | Record author review separately from independent findings, reviewer identity, reviewed revision, and resolution. Structural validation is not semantic approval. |
 | Accept and integrate | Owner acceptance or explicit delegated authority, required review or recorded exception, and current verification. Record the integrated revision when integration occurs. |
 | Close | Reconcile tasks and evidence; archive using the pinned CLI only after acceptance/integration gates are satisfied. Local completion may leave these gates pending. |

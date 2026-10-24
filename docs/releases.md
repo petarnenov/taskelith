@@ -1,6 +1,13 @@
 # Automatic releases
 
-Taskelith uses semantic-release and GitHub Actions. Each push to main runs verification; qualifying Conventional Commits produce an npm version, a Git tag, GitHub release notes, and npm provenance. Pull requests only run verification.
+Taskelith uses semantic-release and GitHub Actions. The repository checks are defined once, as `make verify` in the root `Makefile`; the same target is the local gate and the GitHub `verify` job. Each push to `main` runs `make verify` and then the release job; qualifying Conventional Commits produce an npm version, a Git tag, GitHub release notes, and npm provenance.
+
+## Branch flow
+
+1. Development happens on feature branches, which are merged into `dev`, the default branch, through pull requests. Pushes and pull requests targeting `dev` run no workflow.
+2. Before every push, `make verify` must pass locally. Run `make hooks` once per clone; the `pre-push` hook then runs `make verify` and blocks the push on failure. The target first checks that Node matches `.nvmrc` and npm matches the CI pin.
+3. A promotion pull request from `dev` into `main` runs `make verify` in GitHub.
+4. Merging the promotion into `main` runs `make verify` again and releases qualifying changes.
 
 | Commit | Version change |
 | --- | --- |
@@ -9,7 +16,7 @@ Taskelith uses semantic-release and GitHub Actions. Each push to main runs verif
 | `feat!: replace CLI invocation` or a `BREAKING CHANGE:` footer | Major |
 | `docs:`, `test:`, `chore:` without breaking changes | No release |
 
-The largest increment since the last release wins. These rules also apply before 1.0; a breaking change advances the major version. Squash merges must preserve the intended Conventional Commit title and breaking-change footer.
+The largest increment since the last release wins. These rules also apply before 1.0; a breaking change advances the major version. One promotion may bundle several changes; their commits are analyzed together, and the largest increment among them wins. Promotions use a merge commit or a rebase, never a squash, so that semantic-release sees each Conventional Commit and its breaking-change footer.
 
 ## Version source of truth
 
@@ -29,7 +36,7 @@ npm may require interactive MFA for this administrative action. Future authorize
 
 ## Verification and recovery
 
-The workflow installs locked dependencies without lifecycle scripts, runs tests, validates OpenSpec, and checks the packed file allowlist and installed CLI. Publishing runs only after verification succeeds. Workflow runs are serialized and are not cancelled mid-publication.
+The workflow installs locked dependencies without lifecycle scripts and runs `make verify`: tests, the dependency inventory check, strict OpenSpec validation, and the packed file allowlist and installed CLI checks. Publishing runs only after verification succeeds. Workflow runs are serialized and are not cancelled mid-publication.
 
 Use the workflow's manual dispatch on main to retry. Before retrying after a partial publication failure, inspect npm versions, Git tags, and GitHub releases. Never move a published version tag or attempt to reuse an npm version. If npm publication succeeded but release notes failed, complete the missing GitHub release for the existing tag. If only a tag exists, investigate the failed publication before taking further action. Disable the workflow to suspend automatic publishing.
 
