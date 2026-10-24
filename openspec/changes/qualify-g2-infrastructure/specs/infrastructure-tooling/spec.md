@@ -16,7 +16,7 @@ Record a pinned, source-cited evaluation of the G2 infrastructure services, clie
 - **THEN** the evaluation compares candidates and labels its recommendation as the author's proposal
 
 ### Requirement: G2 infrastructure evidence
-The evaluation SHALL cite sources pinned to a tag, commit, exact package version, or image digest, or labeled as unversioned services with the observation date, SHALL mark runtime claims that were not exercised as unverified, and SHALL name each container image by its multi-arch index digest and its `linux/amd64` and `linux/arm64` manifest digests.
+The evaluation SHALL cite sources pinned to a tag, commit, exact package version, or image digest, or labeled as unversioned services with the observation date, SHALL mark runtime claims that were not exercised as unverified, and SHALL name each container image it proposes by its multi-arch index digest and its `linux/amd64` and `linux/arm64` manifest digests.
 
 #### Scenario: Image proposed
 - **WHEN** the evaluation proposes a container image

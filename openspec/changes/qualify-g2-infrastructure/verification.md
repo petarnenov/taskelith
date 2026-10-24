@@ -27,11 +27,22 @@ macOS (Darwin 25.6.0, arm64), Node v24.22.1 through `nvm use`, npm 12.2.1, Docke
 
 ## Checks
 
-In the worktree, Node v24.22.1, npm 12.2.1: `npm run openspec -- validate qualify-g2-infrastructure --strict` passed; `make verify` passed (276 tests passed, 0 failed; coverage 99.63% lines, 95.68% branches, 99.27% functions; strict OpenSpec validation 34 passed; archive dry run, dependency inventory, and package verification passed).
+In the worktree, Node v24.22.1, npm 12.2.1: `npm run openspec -- validate qualify-g2-infrastructure --strict` passed; `make verify` passed (276 tests passed, 0 failed; coverage 99.63% lines, 95.68% branches, 99.27% functions; strict OpenSpec validation 34 passed; archive dry run, dependency inventory, and package verification passed). After the pass-1 fixes, strict validation and the same `make verify` run passed again with the same results.
 
 ## Independent review
 
 Assigned reviewer: Claude Code with `claude -p <prompt> --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json`, run from the worktree; it has network access, which this item needs to check upstream facts. SHA-256 snapshots of `git ls-files -co --exclude-standard | xargs shasum -a 256 | shasum -a 256` were taken before and after each pass; prompts, outputs, and snapshots are kept outside the worktree.
+
+- **Pass 1 — session `52dc6195-a844-42e9-b272-105969199c10`**, at `ab82674`. The JSON `modelUsage` reports `claude-fable-5-1`. Snapshot before and after: `58a09b0b7a340607aad59bad141c41030429815ac2489dd2b5b2ac4a28a40658`, unchanged. The reviewer independently re-inspected all six image digests, npm facts, osv.dev, private-reporting settings, release dates, PostgreSQL and SQLite facts, and 52 links (all HTTP 200). Findings: 0 Critical, 0 High, 0 Medium, 8 Low. All accepted; the author confirmed findings 1 to 3 against the GitHub release and the advisory API before fixing:
+  1. Low: Node 24.22.1 is dated 2026-10-21 (release and `CHANGELOG_V24.md`), not 2026-10-20. Fixed.
+  2. Low: the Node 24.22.1 release fixes seven distinct CVEs, not eight. Fixed.
+  3. Low: `nats-io/nats-server` has 36 published repository advisories, not 38. Fixed.
+  4–5. Low: the proposal and design omitted item 10, which uses Toxiproxy. Added.
+  6. Low: the proposal's impact did not name the image variants among the open choices. Added.
+  7. Low: the evidence requirement named every image, while only proposed images list platform digests; it now says "each container image it proposes".
+  8. Low: task 2.1 was unchecked. Checked.
+
+By the [review process](../../../docs/governance.md#independent-review-process), a pass with only Low findings is fixed without another review; these fixes are **unreviewed**. After the fixes, strict validation and `make verify` passed again (see Checks).
 
 ## Limitations
 

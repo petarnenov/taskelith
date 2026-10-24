@@ -1,6 +1,6 @@
 ## Context
 
-The owner decided D1, D2, D4, D6, and D8 of the G2 plan on 2026-10-25. Item 1 records the evidence the dependency policy requires before items 2, 5, 9, 11, 12, and 14 install or run these components. G1 item 3 (`select-contract-and-schema-tooling`) set the pattern: an evaluation document with pinned sources and an "unverified" marker, and a register section that lists each proposed tool as `candidate`.
+The owner decided D1, D2, D4, D6, and D8 of the G2 plan on 2026-10-25. Item 1 records the evidence the dependency policy requires before items 2, 5, 9, 10, 11, 12, and 14 install or run these components. G1 item 3 (`select-contract-and-schema-tooling`) set the pattern: an evaluation document with pinned sources and an "unverified" marker, and a register section that lists each proposed tool as `candidate`.
 
 ## Goals / Non-Goals
 

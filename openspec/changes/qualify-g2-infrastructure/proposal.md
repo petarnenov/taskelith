@@ -1,6 +1,6 @@
 ## Why
 
-The G2 work plan (`docs/g2-plan.md`, item 1, `qualify-g2-infrastructure`) requires established open-source dependencies for G2 (ADR 0004, R35) and evidence for the owner's decisions D1, D2, D4, D6, and D8, all decided on 2026-10-25. Items 2, 5, 9, 11, 12, and 14 install or run these components; the dependency policy requires their exact versions, digests, licenses, security routes, and maintenance evidence to be recorded first.
+The G2 work plan (`docs/g2-plan.md`, item 1, `qualify-g2-infrastructure`) requires established open-source dependencies for G2 (ADR 0004, R35) and evidence for the owner's decisions D1, D2, D4, D6, and D8, all decided on 2026-10-25. Items 2, 5, 9, 10, 11, 12, and 14 install or run these components; the dependency policy requires their exact versions, digests, licenses, security routes, and maintenance evidence to be recorded first.
 
 ## What Changes
 
@@ -19,4 +19,4 @@ None.
 
 ## Impact
 
-Documentation only. No dependency or image is installed or added to `package.json`, a lockfile, Compose, or the Makefile; installation happens in item 9. No code, CI, or package impact. The owner's decisions D1, D2, D4, D6, and D8 stand; the evaluation chooses only among tools those decisions leave open (the driver, the migration tool, and the client), as the author's proposal.
+Documentation only. No dependency or image is installed or added to `package.json`, a lockfile, Compose, or the Makefile; installation happens in item 9. No code, CI, or package impact. The owner's decisions D1, D2, D4, D6, and D8 stand; the evaluation chooses only among tools those decisions leave open (the image variants, the driver, the migration tool, and the client), as the author's proposal.
