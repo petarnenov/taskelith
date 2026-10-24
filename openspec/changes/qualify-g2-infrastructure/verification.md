@@ -8,7 +8,7 @@ The owner's G2 plan, item 1 (`qualify-g2-infrastructure`), assigned on 2026-10-2
 
 ## Environment
 
-macOS (Darwin 25.6.0, x86_64), Node v24.22.1 through `nvm use`, npm 12.2.1, Docker 29.6.1 with buildx for image inspection.
+macOS (Darwin 25.6.0, arm64), Node v24.22.1 through `nvm use`, npm 12.2.1, Docker 29.6.1 with buildx for image inspection.
 
 ## Evidence
 
