@@ -1,11 +1,13 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
-import { join, relative, resolve, sep } from 'node:path';
+import { join, posix, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { workspacePackageDirs } from './workspace-packages.ts';
 
 // Node's built-in coverage reports only modules that tests load, so this check
-// fails when a product module under src/ is missing from the coverage report.
+// fails when a product module under src/ of the root package or of a workspace
+// package is missing from the coverage report.
 
-function sourceModules(root: string, dir = 'src'): string[] {
+function sourceModules(root: string, dir: string): string[] {
   const full = join(root, dir);
   if (!existsSync(full)) return [];
   return readdirSync(full).flatMap((entry) => {
@@ -15,8 +17,15 @@ function sourceModules(root: string, dir = 'src'): string[] {
   });
 }
 
-function compiledPath(sourcePath: string): string {
-  return sourcePath.replace(/^src/, 'dist').replace(/\.ts$/, '.js').split(sep).join('/');
+function productSources(root: string): { source: string; compiled: string }[] {
+  return ['', ...workspacePackageDirs(root)].flatMap((packageDir) => {
+    const sourceDir = posix.join(packageDir, 'src');
+    const distDir = posix.join(packageDir, 'dist');
+    return sourceModules(root, sourceDir).map((source) => {
+      const relativeSource = relative(sourceDir, source).split(sep).join('/');
+      return { source: source.split(sep).join('/'), compiled: posix.join(distDir, relativeSource.replace(/\.ts$/, '.js')) };
+    });
+  });
 }
 
 function coveredFiles(root: string, lcov: string): Set<string> {
@@ -27,7 +36,7 @@ function coveredFiles(root: string, lcov: string): Set<string> {
 
 export function missingFromCoverage(root: string, lcov: string): string[] {
   const covered = coveredFiles(root, lcov);
-  return sourceModules(root).filter((source) => !covered.has(compiledPath(source)));
+  return productSources(root).filter(({ compiled }) => !covered.has(compiled)).map(({ source }) => source);
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -36,5 +45,5 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     console.error(`Product modules missing from the coverage report: ${missing.join(', ')}`);
     process.exit(1);
   }
-  console.log('Every product module under src/ is in the coverage report.');
+  console.log('Every product module is in the coverage report.');
 }

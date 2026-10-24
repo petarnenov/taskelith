@@ -21,6 +21,8 @@ Every design, code change, test, and review is checked against all nine principl
 8. **Mandatory OpenSpec for Taskelith development.** Every task that develops Taskelith itself goes through an OpenSpec change, without exception: features, fixes, documentation, tests, maintenance, dependencies, infrastructure, qualification, and emergencies. This applies only to the development of Taskelith. Each project that Taskelith manages selects its own spec-driven framework, such as OpenSpec or SpecKit, through the replaceable SDLC framework plugins.
 9. **Code coverage of at least 75%.** Added by the owner on 2026-10-24. Automated tests cover at least 75% of lines, branches, and functions. `make verify` enforces the thresholds with Node's built-in test coverage over the compiled product code in `dist/` alone, so that well-tested repository scripts cannot mask low product coverage, and fails when a product module under `src/` is missing from the coverage report, because the built-in coverage counts only modules that tests load.
 
+   Amendment, 2026-10-24: after the owner chose npm workspaces for the code layout ([G1 work plan](../g1-plan.md), decision D1), the same rule covers every workspace package. Coverage is measured over the compiled code in `dist/` of the root package and of each workspace package, still without repository scripts, and the scope check covers the modules under `src/` of each.
+
 ## Consequences
 
 The architecture, repository instructions, governance policy, README, and foundation ledger are updated to match. This ADR does not implement anything. Follow-up changes, each tracked through OpenSpec:
