@@ -32,3 +32,7 @@ Remaining findings: 0.
 ## Remaining gates
 
 Integration (commit, push, merge) and archival with owner authorization; the follow-up changes listed in ADR 0004.
+
+## Integration and archival
+
+The owner authorized integration and archival on 2026-10-24. Integrated into `main` at `c63dc4b` through pull request #8 (rebase merge). The `main` workflow run 40098420411 passed verification; semantic-release found no relevant changes, so no version was released. Archived with the pinned OpenSpec CLI afterwards.
