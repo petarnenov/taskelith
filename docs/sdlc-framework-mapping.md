@@ -1,6 +1,6 @@
 # SDLC framework artifact mapping
 
-As of 2026-10-24. This is G1 preparation input for the framework-neutral SDLC model in [architecture section 6](architecture.md#first-class-sdlc-with-replaceable-frameworks). It describes native artifacts and maps them to the platform's lifecycle stages. It is not a port design, an adapter, or a conformance fixture set; those follow in G1.
+As of 2026-10-24. This is G1 preparation input for the framework-neutral SDLC model in [architecture section 6](architecture.md#first-class-sdlc-with-replaceable-frameworks). It describes native artifacts and maps them to the platform's lifecycle stages. It is not a port design, an adapter, or a conformance fixture set; G1 delivered those, and [ADR 0009](decisions/0009-frozen-sdlc-framework-port.md) froze the port on 2026-10-25.
 
 ## Pinned versions and inspection method
 
@@ -87,10 +87,11 @@ Every **(gap)** row needs an explicit platform-managed gate or closure record, s
 - **Clarification.** SpecKit records open questions inline (`[NEEDS CLARIFICATION: …]`) and resolves them with `clarify`; OpenSpec has no native marker. Both must surface as a planning obligation, not as implementation admission.
 - **Working-copy state.** SpecKit's current feature lives in `.specify/feature.json` or an environment variable; OpenSpec passes the change name explicitly. A worker must not rely on SpecKit's implicit current feature across parallel runs: features in one working copy share one pointer, which even a validating `check-prerequisites` rewrites **(verified)**, sequentially rather than with concurrent processes. Each run needs its own working copy and an explicit `SPECIFY_FEATURE_DIRECTORY`.
 
-## Remaining before the port is frozen
+## Remaining after the port froze
+
+Note of 2026-10-25: G1 ran the shared fixtures against both designs and froze the port ([ADR 0009](decisions/0009-frozen-sdlc-framework-port.md)); [ADR 0010](decisions/0010-g1-closure.md) moves the items below to G4 (agent steps) and G8 (qualification evidence).
 
 - Run SpecKit's agent steps through a qualified harness to verify the remaining **(unverified)** SpecKit claims above.
-- Turn representative artifacts from both frameworks into shared mapping fixtures and run them against both designs (architecture section 13, G1; requirement R34).
 - Record SpecKit's maintenance, adoption, and security-channel evidence in the dependency register as part of its qualification.
 
 ## Sources

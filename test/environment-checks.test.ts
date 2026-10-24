@@ -12,7 +12,8 @@ const healthy: EnvironmentFacts = {
   nodeVersion: 'v24.22.1',
   npmVersion: '12.2.1',
   dependenciesInstalled: true,
-  hooksPath: '.githooks'
+  hooksPath: '.githooks',
+  inventoryMergeDriver: 'true'
 };
 
 function failing(facts: EnvironmentFacts): string[] {
@@ -21,7 +22,7 @@ function failing(facts: EnvironmentFacts): string[] {
 
 test('a complete environment passes every check and needs no setup step', () => {
   const results = checkEnvironment(healthy, pins);
-  assert.deepEqual(results.map((result) => result.id), ['git', 'node', 'npm', 'dependencies', 'hooks']);
+  assert.deepEqual(results.map((result) => result.id), ['git', 'node', 'npm', 'dependencies', 'hooks', 'merge-driver']);
   assert.ok(results.every((result) => result.ok));
   assert.deepEqual(setupSteps(healthy, pins), []);
   assert.match(formatReport(results), /All checks passed\.$/);
@@ -35,6 +36,8 @@ test('each missing part fails only its own check', () => {
   assert.deepEqual(failing({ ...healthy, dependenciesInstalled: false }), ['dependencies']);
   assert.deepEqual(failing({ ...healthy, hooksPath: undefined }), ['hooks']);
   assert.deepEqual(failing({ ...healthy, hooksPath: '.husky' }), ['hooks']);
+  assert.deepEqual(failing({ ...healthy, inventoryMergeDriver: undefined }), ['merge-driver']);
+  assert.deepEqual(failing({ ...healthy, inventoryMergeDriver: 'git merge-file' }), ['merge-driver']);
 });
 
 test('without the pinned Node.js, the remedies name setup through nvm and fix the Node.js check before npm', () => {
@@ -62,6 +65,11 @@ test('setup installs npm before the dependencies and reinstalls them with the ne
   assert.deepEqual(setupSteps({ ...healthy, dependenciesInstalled: false }, pins), ['install-dependencies']);
 });
 
+test('setup configures a missing inventory merge driver after the hooks', () => {
+  assert.deepEqual(setupSteps({ ...healthy, hooksPath: undefined, inventoryMergeDriver: undefined }, pins), ['enable-hooks', 'enable-merge-driver']);
+  assert.deepEqual(setupSteps({ ...healthy, inventoryMergeDriver: undefined }, pins), ['enable-merge-driver']);
+});
+
 test('with the pinned Node.js active but no npm, the remedies name a Node.js reinstall and setup skips the npm steps', () => {
   const facts: EnvironmentFacts = { ...healthy, npmVersion: undefined, dependenciesInstalled: false, hooksPath: undefined };
   const report = formatReport(checkEnvironment(facts, pins));
@@ -76,23 +84,25 @@ test('without the pinned Node.js, a missing npm and dependencies keep their usua
   assert.match(report, /FAIL Dependency tree complete \(npm ls --all\): missing or out of date\n {5}Run make setup\./);
 });
 
-test('without git, setup reports it and does not try to enable the hook', () => {
-  const facts: EnvironmentFacts = { ...healthy, gitAvailable: false, hooksPath: undefined };
+test('without git, setup reports it and does not try to enable the hooks or the merge driver', () => {
+  const facts: EnvironmentFacts = { ...healthy, gitAvailable: false, hooksPath: undefined, inventoryMergeDriver: undefined };
   const results = checkEnvironment(facts, pins);
   assert.deepEqual(setupSteps(facts, pins), []);
   assert.match(formatReport(results), /FAIL git: not found\n {5}Install git/);
-  assert.match(formatReport(results), /FAIL pre-push hook enabled: not configured\n {5}Install git, then run make setup\./);
-  assert.match(formatReport(results), /2 of 5 checks failed\.$/);
+  assert.match(formatReport(results), /FAIL pre-push and post-merge hooks enabled: not configured\n {5}Install git, then run make setup\./);
+  assert.match(formatReport(results), /FAIL dependency inventory merge driver configured: not configured\n {5}Install git, then run make setup\./);
+  assert.match(formatReport(results), /3 of 6 checks failed\.$/);
 });
 
 test('without the pinned Node.js, setup changes nothing', () => {
   assert.deepEqual(setupSteps({ ...healthy, nodeVersion: 'v20.0.0', npmVersion: '10.0.0', dependenciesInstalled: false, hooksPath: undefined }, pins), []);
 });
 
-test('setup steps use the pinned npm, the lockfile, and the repository hooks', () => {
+test('setup steps use the pinned npm, the lockfile, the repository hooks, and the merge driver', () => {
   assert.deepEqual(stepCommand('install-npm', pins), { command: 'npm', args: ['install', '--global', 'npm@12.2.1', '--ignore-scripts'] });
   assert.deepEqual(stepCommand('install-dependencies', pins), { command: 'npm', args: ['ci', '--ignore-scripts'] });
   assert.deepEqual(stepCommand('enable-hooks', pins), { command: 'git', args: ['config', 'core.hooksPath', '.githooks'] });
+  assert.deepEqual(stepCommand('enable-merge-driver', pins), { command: 'git', args: ['config', 'merge.dependency-inventory.driver', 'true'] });
 });
 
 test('facts come from git and npm, and a failing command counts as missing', () => {
@@ -100,7 +110,8 @@ test('facts come from git and npm, and a failing command counts as missing', () 
     'git --version': { status: 0, stdout: 'git version 2.50.1\n' },
     'npm -v': { status: 0, stdout: '12.2.1\n' },
     'npm ls --all': { status: 1, stdout: '' },
-    'git config --get core.hooksPath': { status: 1, stdout: '' }
+    'git config --get core.hooksPath': { status: 1, stdout: '' },
+    'git config --get merge.dependency-inventory.driver': { status: 0, stdout: 'true\n' }
   };
   const calls: string[] = [];
   const facts = collectFacts((command, args) => {
@@ -108,7 +119,7 @@ test('facts come from git and npm, and a failing command counts as missing', () 
     calls.push(key);
     return outcomes[key] ?? { status: null, stdout: '' };
   }, 'v24.22.1');
-  assert.deepEqual(facts, { gitAvailable: true, nodeVersion: 'v24.22.1', npmVersion: '12.2.1', dependenciesInstalled: false, hooksPath: undefined });
+  assert.deepEqual(facts, { gitAvailable: true, nodeVersion: 'v24.22.1', npmVersion: '12.2.1', dependenciesInstalled: false, hooksPath: undefined, inventoryMergeDriver: 'true' });
   assert.ok(calls.includes('npm ls --all'));
 });
 

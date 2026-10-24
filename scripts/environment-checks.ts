@@ -12,9 +12,10 @@ export interface EnvironmentFacts {
   readonly npmVersion: string | undefined;
   readonly dependenciesInstalled: boolean;
   readonly hooksPath: string | undefined;
+  readonly inventoryMergeDriver: string | undefined;
 }
 
-export type CheckId = 'git' | 'node' | 'npm' | 'dependencies' | 'hooks';
+export type CheckId = 'git' | 'node' | 'npm' | 'dependencies' | 'hooks' | 'merge-driver';
 
 export interface CheckResult {
   readonly id: CheckId;
@@ -24,7 +25,7 @@ export interface CheckResult {
   readonly remedy: string;
 }
 
-export type SetupStep = 'install-npm' | 'install-dependencies' | 'enable-hooks';
+export type SetupStep = 'install-npm' | 'install-dependencies' | 'enable-hooks' | 'enable-merge-driver';
 
 export interface CommandOutcome {
   readonly status: number | null;
@@ -34,6 +35,10 @@ export interface CommandOutcome {
 export type CommandRunner = (command: string, args: readonly string[]) => CommandOutcome;
 
 export const HOOKS_PATH = '.githooks';
+// Keeps the current side of a generated inventory file in a merge; the
+// post-merge hook and make verify then report it if it is stale.
+export const INVENTORY_MERGE_DRIVER_KEY = 'merge.dependency-inventory.driver';
+export const INVENTORY_MERGE_DRIVER = 'true';
 
 export function readPins(env: Readonly<Record<string, string | undefined>>): Pins {
   const node = env.NODE_PIN?.trim();
@@ -48,12 +53,14 @@ export function collectFacts(run: CommandRunner, nodeVersion: string): Environme
   const git = run('git', ['--version']);
   const npm = run('npm', ['-v']);
   const hooks = run('git', ['config', '--get', 'core.hooksPath']);
+  const mergeDriver = run('git', ['config', '--get', INVENTORY_MERGE_DRIVER_KEY]);
   return {
     gitAvailable: git.status === 0,
     nodeVersion,
     npmVersion: npm.status === 0 ? npm.stdout.trim() : undefined,
     dependenciesInstalled: npm.status === 0 && run('npm', ['ls', '--all']).status === 0,
-    hooksPath: hooks.status === 0 ? hooks.stdout.trim() : undefined
+    hooksPath: hooks.status === 0 ? hooks.stdout.trim() : undefined,
+    inventoryMergeDriver: mergeDriver.status === 0 ? mergeDriver.stdout.trim() : undefined
   };
 }
 
@@ -89,12 +96,23 @@ export function checkEnvironment(facts: EnvironmentFacts, pins: Pins): CheckResu
     },
     {
       id: 'hooks',
-      label: 'pre-push hook enabled',
+      label: 'pre-push and post-merge hooks enabled',
       ok: facts.hooksPath === HOOKS_PATH,
       detail: facts.hooksPath ?? 'not configured',
-      remedy: facts.gitAvailable ? 'Run make setup.' : 'Install git, then run make setup.'
+      remedy: gitRemedy(facts)
+    },
+    {
+      id: 'merge-driver',
+      label: 'dependency inventory merge driver configured',
+      ok: facts.inventoryMergeDriver === INVENTORY_MERGE_DRIVER,
+      detail: facts.inventoryMergeDriver ?? 'not configured',
+      remedy: gitRemedy(facts)
     }
   ];
+}
+
+function gitRemedy(facts: EnvironmentFacts): string {
+  return facts.gitAvailable ? 'Run make setup.' : 'Install git, then run make setup.';
 }
 
 // Each Node.js has its own npm, so the npm on PATH says nothing until the pinned
@@ -130,7 +148,10 @@ export function setupSteps(facts: EnvironmentFacts, pins: Pins): SetupStep[] {
     if (failing.has('npm')) steps.push('install-npm');
     if (failing.has('npm') || failing.has('dependencies')) steps.push('install-dependencies');
   }
-  if (failing.has('hooks') && !failing.has('git')) steps.push('enable-hooks');
+  if (!failing.has('git')) {
+    if (failing.has('hooks')) steps.push('enable-hooks');
+    if (failing.has('merge-driver')) steps.push('enable-merge-driver');
+  }
   return steps;
 }
 
@@ -142,6 +163,8 @@ export function stepCommand(step: SetupStep, pins: Pins): { command: string; arg
       return { command: 'npm', args: ['ci', '--ignore-scripts'] };
     case 'enable-hooks':
       return { command: 'git', args: ['config', 'core.hooksPath', HOOKS_PATH] };
+    case 'enable-merge-driver':
+      return { command: 'git', args: ['config', INVENTORY_MERGE_DRIVER_KEY, INVENTORY_MERGE_DRIVER] };
   }
 }
 

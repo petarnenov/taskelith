@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { checkEvidence, checkLicenseReviews, collectLicenses, normalizeSbom, parseLicenseReviews, sha256 } from './dependency-inventory.ts';
+import { checkEvidence, checkLicenseReviews, collectLicenses, normalizeSbom, parseLicenseReviews } from './dependency-inventory.ts';
+import { checkInventoryInputs, INVENTORY_INPUTS, sha256 } from './inventory-provenance.ts';
 
 const args = process.argv.slice(2);
 assert(args.length === 0 || (args.length === 1 && args[0] === '--check'), 'Usage: inventory-dependencies.ts [--check]');
@@ -14,16 +15,20 @@ assert.equal(process.versions.node, expectedNode, 'Inventory requires the exact 
 const npmVersion = execFileSync('npm', ['--version'], { encoding: 'utf8', timeout: 30_000 }).trim();
 assert.equal(npmVersion, npmPins[0], 'Inventory requires the exact CI npm version');
 
+const directory = 'docs/dependencies';
+const readInput = (path: string) => readFileSync(path);
+if (args[0] === '--check') {
+  const retained = JSON.parse(readFileSync(join(directory, 'licenses.json'), 'utf8'));
+  checkInventoryInputs(retained.provenance, readInput);
+}
+
 const root = process.cwd();
 const lockText = readFileSync('package-lock.json', 'utf8');
 const packages = collectLicenses(root, JSON.parse(lockText).packages);
 const sbom = normalizeSbom(execFileSync('npm', ['sbom', '--sbom-format=cyclonedx', '--package-lock-only'], {
   encoding: 'utf8', timeout: 120_000, maxBuffer: 16 * 1024 * 1024,
 }));
-const provenance = Object.fromEntries([
-  'package.json', 'package-lock.json', '.nvmrc',
-  'scripts/dependency-inventory.ts', 'scripts/inventory-dependencies.ts',
-].map(path => [path, sha256(readFileSync(path))]));
+const provenance = Object.fromEntries(INVENTORY_INPUTS.map(path => [path, sha256(readInput(path))]));
 const inventory = JSON.stringify({
   schemaVersion: 1,
   toolchain: { node: process.versions.node, npm: npmVersion },
@@ -34,7 +39,6 @@ const inventory = JSON.stringify({
   packages,
 }, null, 2) + '\n';
 
-const directory = 'docs/dependencies';
 for (const [name, content] of [['licenses.json', inventory], ['sbom.cdx.json', sbom]]) {
   const path = join(directory, name);
   if (args[0] === '--check') checkEvidence(content, path);

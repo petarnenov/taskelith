@@ -115,4 +115,4 @@ Proposal for the port design, not yet decided: each plugin manifest declares its
 - Review of Anthropic's terms, including whether they allow pooled subscriptions for automated use (ADR 0005), before admission in G3 ([ADR 0007](../decisions/0007-g0-closure.md)).
 - Independent adoption evidence for the pinned version.
 - A host side-effect check with before-and-after listings, which the `harness-qualification` spec now requires; this record does not yet meet it.
-- A versioned conformance suite in the repository, run through `make`, once the agent port exists (G1).
+- A versioned conformance suite in the repository, run through `make`, once the agent port exists (G3).
