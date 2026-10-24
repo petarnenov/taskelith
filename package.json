@@ -1,0 +1,49 @@
+{
+  "name": "taskelith",
+  "version": "0.1.0",
+  "description": "Self-hosted software factory for parallel project development. Bootstrap CLI and architecture plan.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Petar Nenov",
+  "bin": {
+    "taskelith": "dist/cli.js"
+  },
+  "files": [
+    "dist/",
+    "docs/architecture.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/petarnenov/taskelith.git"
+  },
+  "homepage": "https://github.com/petarnenov/taskelith#readme",
+  "bugs": {
+    "url": "https://github.com/petarnenov/taskelith/issues"
+  },
+  "keywords": [
+    "software-factory",
+    "agents",
+    "sdlc",
+    "typescript",
+    "self-hosted"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --experimental-strip-types --test test/cli.test.ts",
+    "prepack": "npm run build",
+    "openspec": "openspec"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@fission-ai/openspec": "1.14.3",
+    "@types/node": "24.19.2",
+    "typescript": "5.9.3"
+  }
+}
