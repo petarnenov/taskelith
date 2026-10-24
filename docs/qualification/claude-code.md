@@ -22,7 +22,7 @@ These are the records ADR 0003 decision 2 requires before a closed harness is ad
 | License | Proprietary: "© Anthropic PBC. All rights reserved. Use is subject to the Legal Agreements" ([LICENSE.md](https://unpkg.com/@anthropic-ai/claude-agent-sdk@0.3.308/LICENSE.md)); legal agreements and data-handling terms ([docs](https://code.claude.com/docs/en/legal-and-compliance)) |
 | Provider dependency | Anthropic API by default. Amazon Bedrock, Google Vertex AI, Microsoft Foundry, or a gateway through `ANTHROPIC_BASE_URL` are alternatives ([docs](https://code.claude.com/docs/en/third-party-integrations)); none was tested |
 | Credentials used | The owner's claude.ai subscription through device authentication: the owner ran `/login` once with the pinned binary and a dedicated configuration directory (`CLAUDE_CONFIG_DIR`). On macOS the login is stored in the Keychain under a service name derived from that directory (`Claude Code-credentials-9b2abb1f`), separate from the owner's own entry (`Claude Code-credentials`); afterwards both logins reported `loggedIn: true`. The probe passed no credential and logged none. Whether a Bash command run by the agent can read the Keychain entry was not tested |
-| Credential scope | Device authentication binds the login to a worker host's configuration directory, not to a workspace. The [trust model](../trust-model.md) requires provider credentials scoped per workspace or project, so this is an open owner decision before G3. The owner has since chosen pools of subscription accounts per harness, to be recorded in ADR 0005 |
+| Credential scope | Device authentication binds the login to a worker host's configuration directory, not to a workspace. The [trust model](../trust-model.md) then required provider credentials scoped per workspace or project, so this was an open owner decision. It now scopes harness provider credentials to a subscription slot and its allowed projects. The owner has since chosen subscription account pools per harness ([ADR 0005](../decisions/0005-harness-subscription-account-pools.md)), which scope each credential to a slot and its allowed projects |
 | Security reporting | HackerOne ([SECURITY.md](https://github.com/anthropics/claude-code/blob/v2.1.308/SECURITY.md)) |
 | Maintenance | Frequent releases (see above). No vendor stability statement for the SDK was found |
 
@@ -109,8 +109,8 @@ Proposal for the port design, not yet decided: each plugin manifest declares its
 
 - Linux x64 and arm64 in the planned worker container image, and macOS arm64, with `DISABLE_AUTOUPDATER=1` and a check that nothing outside the configuration directory changes.
 - Non-permission input requests, which no scenario tested.
-- The credential model for subscription account pools, to be decided in ADR 0005, including whether an agent can read an injected credential.
-- An alternative provider or gateway path, if the owner wants one.
+- The subscription mechanism for account slots (a long-lived subscription token or a per-slot device login), its load, limit, and reset signals, and whether an agent can read an injected credential ([ADR 0005](../decisions/0005-harness-subscription-account-pools.md)).
+- An alternative provider or gateway path, if the owner wants one, authenticated only through a subscription (ADR 0005).
 - The automatic interrupted-turn re-run, and repeated runs to check stability.
 - Independent adoption evidence for the pinned version.
 - A versioned conformance suite in the repository, run through `make`, once the agent port exists (G1).

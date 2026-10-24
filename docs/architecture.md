@@ -330,7 +330,7 @@ An adapter implements a port. A plugin packages and registers adapters with meta
 Plugin contracts include:
 
 - Stable ID, package version, supported plugin API range, and declared protocol capabilities.
-- Validated configuration schema and explicit credential requirements.
+- Validated configuration schema and explicit credential requirements; harness plugins declare their subscription mechanisms and the load, limit, and reset signals they report for account pools ([ADR 0005](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0005-harness-subscription-account-pools.md)).
 - Factory plus initialize, health, drain, and shutdown hooks where applicable.
 - Capability discovery for chat, terminal, resume, approval handling, interruption, and platform support.
 - Explicit error mapping and cancellation behavior.
@@ -341,7 +341,7 @@ The plugin model is a microkernel ([ADR 0003](https://github.com/petarnenov/task
 
 In-process plugins are trusted code with process privileges. Isolate untrusted extensions in a separate process/container behind bounded RPC if that becomes a requirement. Application-level permissions are not an operating-system sandbox.
 
-Agent processes require per-workspace credentials and an explicit execution trust policy. Protecting the control plane does not contain arbitrary shell commands on a worker. Specify whether workers are dedicated trusted hosts or sandboxed execution environments before enabling untrusted repositories.
+Agent processes require scoped credentials (per-workspace Git/SCM credentials and per-run subscription slot credentials, [ADR 0005](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0005-harness-subscription-account-pools.md)) and an explicit execution trust policy. Protecting the control plane does not contain arbitrary shell commands on a worker. Specify whether workers are dedicated trusted hosts or sandboxed execution environments before enabling untrusted repositories.
 
 ### Durable chat turns and provider approvals
 
@@ -387,7 +387,7 @@ Every evidence record includes producer identity, task/attempt/run, input artifa
 
 ### Resource admission and delegation
 
-Reserve worker slots and requested resources transactionally, with explicit worker-side hard admission limits. Include CPU/memory/disk limits where enforceable, maximum concurrent sessions, provider/account concurrency, retry allowance, and per-project/run budgets. Native token/cost usage can lag; label estimated versus confirmed accounting and do not promise hard spend limits without provider enforcement.
+Reserve worker slots and requested resources transactionally, with explicit worker-side hard admission limits. Include CPU/memory/disk limits where enforceable, maximum concurrent sessions, provider/account concurrency, retry allowance, and per-project/run budgets. Harness runs also reserve a subscription account slot: the least-loaded eligible slot for the project, with cooldown after limit signals and session affinity (ADR 0005). Native token/cost usage can lag; label estimated versus confirmed accounting and do not promise hard spend limits without provider enforcement.
 
 Delegated children share a durable parent budget reservation and cannot create new independent budgets by changing session IDs. Reconcile actual usage and release reservations only with a justified lifecycle transition. Lost-contact attempts continue to consume reserved capacity until ownership is resolved; uncertainty is not free capacity. Use bounded backoff and fair admission to prevent one project, retry loop, or approval-blocked session from consuming the entire fleet. Low disk and full journals trigger explicit admission pressure and auditable truncation policies for nonessential output, never silent loss of accepted control records.
 
