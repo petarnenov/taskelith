@@ -70,7 +70,7 @@ Reserving capacity and creating the assignment are one PostgreSQL transaction at
 
 Occupancy is derived from the reservation rows, or from counter rows that the same transaction updates; a replica never trusts a count it read outside the transaction. A placement chosen from a cached fleet snapshot is only a candidate.
 
-Serializable ordering covers only transactions that are themselves serializable, so every writer of a value this transaction reads also runs at `SERIALIZABLE`: a quota or worker capacity change, a capacity declaration, drain, admission pressure and its clearing, worker revocation, cancellation, an assignment's end, a release, a task's parent link, and entering quarantine.
+Serializable ordering covers only transactions that are themselves serializable, so every writer of a value this transaction reads also runs at `SERIALIZABLE`: a quota or worker capacity change, a capacity declaration, drain, admission pressure and its clearing, a reachability change, worker revocation, cancellation, an assignment's end, a release, a task's parent link, and entering quarantine.
 
 The first failed check decides the outcome with a reason from section 11: a waiting reason leaves the task queued for a later attempt at placement, and a rejecting reason ends its admission to capacity. A serialization failure aborts the whole transaction; the scheduler retries it with the same command identity and recomputes the placement from current state, so a retry may choose another worker or wait.
 
@@ -97,6 +97,8 @@ A reservation is released only when both of these hold, in the transaction that 
 
 The only other justifying fact is an **operator reconciliation**: an operator with the authority of the [trust model](../trust-model.md) resolves an uncertain execution with a recorded, audited decision and its evidence.
 
+**Bounded supersession.** The scheduler may supersede an assignment for which no launch authorization was ever granted when its worker has not acknowledged it within a bound, is unreachable, draining, or revoked, or has held it under admission pressure beyond a bound; item 18 fixes the bounds. The supersession reads the assignment's grants at `SERIALIZABLE`: with none it ends the assignment and releases, and a later authorization is rejected because the assignment is no longer active; with one it releases nothing, and the rules below apply.
+
 `not-started` alone ends nothing: while the assignment is active, the worker may authorize a new execution under it (launch authorization sections 4 and 7) against the same held reservation. An assignment that ends while an execution is still `authorized` or `started` keeps its reservation; the end is a cancellation, and the reservation is released by the transaction that records that execution's terminal fact.
 
 Nothing else releases a reservation, and in particular not:
@@ -118,8 +120,9 @@ Releasing returns occupancy and never returns consumption: the delegation and re
 
 A delegated child task is created through SDLC admission like any other task (invariant 10) and is bound to its parent when it is created:
 
-- **Parent and root.** The control plane derives the parent from the authenticated delegating attempt, never from a request field. The child records `parentTaskId`, `rootTaskId` (the parent's root, or the parent itself when the parent is a root), and `depth` (the parent's depth plus one; a root has depth `0`). A child belongs to its root's project.
+- **Parent and root.** The control plane derives the parent from the delegating attempt, never from a request field: the delegation request is authenticated as the worker principal and names an attempt that this worker currently owns at the current ownership generation, which the control plane verifies (the wire form is item 8's, the harness side G3's). The child records `parentTaskId`, `rootTaskId` (the parent's root, or the parent itself when the parent is a root), and `depth` (the parent's depth plus one; a root has depth `0`). A child belongs to its root's project.
 - **Depth.** A child of depth greater than `3` is rejected with `delegation-depth-exceeded` when it is created.
+- **Runnable chains.** A delegating attempt that waits for its child keeps its reservation, so a chain from the root to a child of depth `d` holds `d + 1` units of the root run's and the project's quotas. A child whose `d + 1` exceeds the smallest of the project quota, the root run's quota, and its own run's quota could never run while its ancestors wait, and is rejected at creation with `delegation-depth-exceeded`. With the default quotas (`4` per project, `2` per run) the effective depth is therefore `1`; reaching depth `3` needs run quotas of at least `4`.
 - **Shared attempts.** Every attempt of every task in the tree, the root's own attempts and all retries included, charges one attempt of the root's budget, once, in its first reservation transaction (section 2); a reservation that would make the total exceed `8` is rejected with `delegation-budget-exhausted`.
 - **Shared quotas.** A child's attempts charge the project quota, the quota of the run the child is bound to, and the quota of the root task's run, the latter once when both runs are the same.
 - **No new budgets.** The budget is keyed by `rootTaskId` from the persisted parent link. A new session identity, a resumed or forked session, a new run, or a task created by a delegating agent without the parent link creates no independent budget: a task created from an attempt is always a child of that attempt's task.
@@ -136,9 +139,9 @@ The worker enforces its limits itself, whatever the scheduler reserved, because 
 | Per-attempt CPU and memory | At most `2 vCPU` and `4 GiB` | Refuses a request above the ceiling with `resource-ceiling-exceeded`, and enforces the reserved values through the qualified controls of section 9 |
 | Disk free-space floor | At least `5 GiB` or `10%` free on `dataRoot`, whichever is larger | Below it, requests no new launch authorization, reports admission pressure, and truncates only nonessential buffered stream logs, never journal, inbox, or outbox records |
 | Journal backlog | At most `256 MiB` or `10,000` unacknowledged observation entries | Above it, admits no new attempt and reports admission pressure while existing attempts drain and reconcile |
-| Daemon overhead | At most `512 MiB` RSS; event-loop lag `p99` at most `200ms` | Above it, requests no new launch authorization until pressure subsides |
+| Daemon overhead | At most `512 MiB` RSS; event-loop lag `p99` at most `200ms` | Above it, requests no new launch authorization and reports admission pressure until it subsides |
 
-- **Admission pressure** is an observation that makes the worker ineligible for new placement until a later observation clears it. An assignment the worker has not acknowledged is refused with the retryable reason `worker-admission-pressure`; an acknowledged one waits, keeping its reservation, and its launch is requested only when the pressure clears. After a bounded wait, a parameter of item 18, the scheduler may supersede an acknowledged assignment that has no grant and place the attempt again; section 6 decides whether the supersession releases.
+- **Admission pressure** is an observation that makes the worker ineligible for new placement until a later observation clears it. An assignment the worker has not acknowledged is refused with the retryable reason `worker-admission-pressure`; an acknowledged one waits, keeping its reservation, and its launch is requested only when the pressure clears. The scheduler's bounded supersession of section 6 applies to it.
 - **Refusal.** A refused assignment is reported as an observation. With no grant issued, it ends the assignment and releases its reservation (section 6).
 - **Unknown values.** A limit the worker cannot measure, such as free disk space that cannot be read, counts as exceeded.
 - **Declared capacity.** The worker declares its slot count, CPU and memory capacity, and enforceable controls at enrollment and whenever they change; a declaration is an observation. The scheduler uses the lower of the declared and the configured capacity. A lowered capacity blocks new reservations until held ones fit again, and releases nothing.
@@ -148,9 +151,9 @@ The worker enforces its limits itself, whatever the scheduler reserved, because 
 A task policy may require a control as **hard**: a CPU, memory, or disk limit, or a spend limit. A hard control is never silently weakened:
 
 - **Declaration.** A worker declares a control as enforceable only when it is qualified for the worker's platform ([worker platforms](../worker-platforms.md)): for example cgroup v2 limits for the Linux worker container. A Linux control is not advertised as a macOS guarantee.
-- **Scheduler.** It reserves capacity only on a worker that declares every hard control the attempt requires; when none does, the task waits if a declaring worker may enroll, and an operator sees why.
+- **Scheduler.** It reserves capacity only on a worker that declares every hard control the attempt requires; when none does, the task waits with `control-not-enforceable`, which the operator sees.
 - **Worker.** It re-checks the hard controls when it validates the assignment and before requesting launch authorization. A control it cannot apply is refused with `control-not-enforceable`, which is not retryable on that worker. The supervisor applies the controls before the child runs (item 4); if applying one fails, the child does not start.
-- **Spend limits.** No G2 control enforces spend. A policy that requires a hard spend limit is rejected at reservation with `control-not-enforceable` until a provider plugin declares provider-side enforcement; reported usage is labeled `estimated` or `confirmed`.
+- **Spend limits.** No G2 control enforces spend. A policy that requires a hard spend limit is rejected at reservation with `spend-limit-not-enforceable` until a provider plugin declares provider-side enforcement; reported usage is labeled `estimated` or `confirmed`.
 - **Soft requests.** A requested CPU or memory value that the policy does not mark hard is still reserved and counted, and is recorded as `reserved, not enforced` on a worker that cannot enforce it.
 - **Unavailable state.** When PostgreSQL is unreachable or in quarantine, no reservation is created; when the worker cannot read its journal or measure a limit, it admits nothing new.
 
@@ -160,7 +163,7 @@ A task policy may require a control as **hard**: a CPU, memory, or disk limit, o
 
 - **Same transaction.** In G3 the harness-neutral account pool port selects the slot inside the reservation transaction of section 4, by ADR 0005's least-loaded rule over the eligible slots (allowed for the project, healthy, not in cooldown, below the concurrency limit), and the reservation records it in `providerCredentials`. No eligible slot is the waiting reason `provider-concurrency-exhausted`, or a rejection when the policy rejects.
 - **Session affinity.** A reservation for a resumed session names the slot the session started on, and waits while that slot is unavailable, or the session is reconciled by policy or an operator (ADR 0005 decision 5); it never silently selects another slot.
-- **Sessions and attempts.** A session has at most one active attempt, so a slot's active sessions, which ADR 0005 counts, are the attempts holding it.
+- **Sessions and attempts.** Counting attempts equals ADR 0005's count of active sessions only if a session has at most one active attempt; item 7's domain model must establish that, or G3 counts sessions explicitly.
 - **Cooldown and revocation.** Cooldown makes a slot ineligible for new reservations and releases no held one. A revoked or removed slot follows section 6: its in-flight attempts are drained or reconciled, and their reservations are released only by a justifying fact.
 - **Neutrality.** Reservation code, types, schemas, and tests name no harness or vendor (ADR 0005 decision 8).
 
@@ -184,8 +187,9 @@ The scheduler and the worker act on reasons, not text. Item 8 turns the worker's
 | Delegation depth above `3` | `delegation-depth-exceeded` | Task admission, at task creation | Reject |
 | Delegation attempts above `8` | `delegation-budget-exhausted` | Scheduler | Reject |
 | Automatic retries above the allowance, or a retry of uncertain execution | `retry-budget-exhausted` | Scheduler | Reject; reconcile instead |
-| Hard control not declared or not applicable | `control-not-enforceable` | Scheduler | Wait for a declaring worker, or reject a hard spend limit |
-| Hard control not applicable on the worker | `control-not-enforceable` | Worker | Release if no grant exists; place on another declaring worker |
+| No eligible worker declares a hard control | `control-not-enforceable` | Scheduler | Wait for a declaring worker |
+| Hard control not applicable on the worker | `control-not-enforceable` | Worker | Release under section 6; place on another declaring worker |
+| Hard spend limit without provider enforcement | `spend-limit-not-enforceable` | Scheduler | Reject |
 | Worker's concurrent attempts full | `worker-slots-exhausted` | Worker | Release; place again |
 | Disk floor, journal backlog, or daemon overhead exceeded | `worker-admission-pressure` | Worker | Release if not acknowledged; place again after the pressure clears |
 | Reservation released or held elsewhere | `capacity-not-reserved` | Launch authority | As the launch authorization contract states |
@@ -201,9 +205,9 @@ Items 18, 20, and 24 implement these as tests through the deterministic test har
 - Ending an assignment raced with launch authorization: either the authorization is rejected and the reservation is released, or the grant stands, the end becomes a cancellation, and the reservation stays held until the execution's terminal fact; an operator release of an uncertain execution revokes its grant and writes the cancellation.
 - Grant, supervisor crash before spawn, seal, `not-started`: the reservation stays held and a new execution under the same assignment is authorized against it.
 - A worker refuses an attempt and the attempt is placed again: the second reservation charges no delegation or retry budget.
-- An acknowledged assignment waiting under admission pressure is superseded after the bounded wait, and the attempt is placed on another worker.
+- An assignment with no grant whose worker never acknowledges it, becomes unreachable, or waits under admission pressure beyond the bound is superseded, its reservation released, and a later authorization of it rejected; with a grant, supersession releases nothing.
 - Expiry or revocation of a grant, a cancellation request, and a scheduler failover release nothing.
-- A child of depth `4` is rejected; the ninth attempt in a task tree is rejected, counting the root's attempts and retries; a new session identity or a resumed session draws on the same budget.
+- A child of depth `4` is rejected; with the default run quota of `2`, a child of depth `2` is rejected at creation, and with run quotas of `4` it runs while its ancestors wait; the ninth attempt in a task tree is rejected, counting the root's attempts and retries; a new session identity or a resumed session draws on the same budget.
 - A third automatic retry is rejected, and an attempt with uncertain execution gets no automatic retry; retries back off from `5s` to at most `60s`.
 - A worker filled to its slot count, counting acknowledged assignments without executions, refuses another assignment even when the scheduler's view was stale; a full journal and a disk below the floor stop new admissions and launches, report pressure, and lose no control record.
 - An attempt requiring a hard memory limit is placed only on a worker declaring it; a worker that cannot apply it refuses with `control-not-enforceable`; a hard spend limit is rejected.

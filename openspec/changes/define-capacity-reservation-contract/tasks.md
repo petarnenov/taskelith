@@ -5,5 +5,5 @@
 
 ## 2. Verification and review
 
-- [ ] 2.1 Run `make verify`.
+- [x] 2.1 Run `make verify`.
 - [ ] 2.2 Obtain independent review (Claude Code, claude-fable-5-1 medium, by rotation) and record results.
