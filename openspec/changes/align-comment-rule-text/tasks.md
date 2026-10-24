@@ -5,5 +5,5 @@
 
 ## 2. Verification and review
 
-- [ ] 2.1 Run `make verify` and `npm run openspec -- validate align-comment-rule-text --strict`.
-- [ ] 2.2 Obtain independent review (Claude Code Fable 5.1 medium, assigned by the coordinator) and record results.
+- [x] 2.1 Run `make verify` and `npm run openspec -- validate align-comment-rule-text --strict`.
+- [x] 2.2 Obtain independent review (Claude Code Fable 5.1 medium, assigned by the coordinator) and record results.
