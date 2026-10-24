@@ -1,6 +1,6 @@
 ## Context
 
-The proof of concept shows a session state wherever a harness session appears: live, waiting for approval, idle, stopping, stopped, ownership uncertain, or no session. ADR 0008 states that merging stops a change's agent session. No contract defines a session state yet.
+The proof of concept's board shows a session state on each card: live, waiting for approval, waiting for instructions, idle, stopping, stopped, ownership uncertain, or no session. The other screens show the subset their sample data reaches; the session screen's scripted run has no approval step. ADR 0008 states that merging stops a change's agent session. No contract defines a session state yet.
 
 ## Goals / Non-Goals
 
@@ -8,7 +8,8 @@ Goal: state what the indicator shows and where. Non-goals: the session state mod
 
 ## Decisions
 
-- The owner chose three modes: working (spinning), waiting (still), and stopped or no session (still and muted). The looks are design choices: a spinning arc on a muted ring; a still ring with a filled center when it waits for a person; a muted ring, filled when stopped and dashed when there is no session; and a fourth look for the uncertain state below.
+- The owner chose three modes: working (spinning), waiting (still), and stopped or no session (still and muted). The looks are design choices: a spinning arc on a muted ring; a still ring with a filled center when it waits for a person; a still muted ring with an empty center when it waits for its next admission; a muted ring, filled when stopped and dashed when there is no session; and a fourth look for the uncertain state below.
+- On the reviews screen the indicator shows the reviewer's session; the implementer's session is shown on the board.
 - A stopping session still spins until the worker confirms that the process ended, because the harness may still be working.
 - Ownership uncertain is still and drawn in the danger color: Taskelith does not know whether the harness works, so it does not claim that it does.
 - One mapping from session state to indicator is used on every screen, so the same session looks the same everywhere. The proof of concept repeats the mapping in each artboard because artboards cannot share code; the SPA implements it as one shared component.
