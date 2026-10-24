@@ -15,7 +15,7 @@ The change adds no requirement: the `delivery-planning` requirement "Gate work p
 
 ## Checks
 
-In the worktree, Node v24.22.1: `make verify` passed before the first review pass (strict OpenSpec validation 33 passed, 0 failed; package verification passed). `npm run openspec -- validate plan-g2-work-items --strict` passed. After the pass-1 fixes, a script recomputed the waves from the "Depends on" column and compared every decision's "Blocks" entry with the "Blocked by" column; both matched. After the pass-1 fixes: `make verify` passed (228 tests passed, 0 failed; strict OpenSpec validation 33 passed; package verification passed), and strict validation of the change passed. After the pass-2 fixes: the same `make verify` result, strict validation of the change passed, and the decision and wave cross-check matched again.
+In the worktree, Node v24.22.1: `make verify` passed before the first review pass (strict OpenSpec validation 33 passed, 0 failed; package verification passed). `npm run openspec -- validate plan-g2-work-items --strict` passed. After the pass-1 fixes, a script recomputed the waves from the "Depends on" column and compared every decision's "Blocks" entry with the "Blocked by" column, and both matched; `make verify` passed (228 tests passed, 0 failed; strict OpenSpec validation 33 passed; package verification passed), and strict validation of the change passed. After the pass-2 fixes: the same `make verify` result, strict validation of the change passed, and the decision and wave cross-check matched again.
 
 ## Independent review
 
@@ -62,10 +62,22 @@ Reviewer after reassignment: Claude Fable 5.1 (`claude-fable-5-1`, confirmed in 
   11. Low: item 22 omitted event-loop lag and database latency. Added.
   12. Low: item 25 omitted the G2 part of the service lifecycle row. Added.
 
+- **Pass 3 (the last allowed pass) — session `25192aa0-ded5-44cf-a56e-8397f66cf009`, head `c77318c`.** The reviewer confirmed all 12 pass-2 resolutions, re-checked the version and runner-label facts with WebSearch (5 calls) and WebFetch (16 calls), and recomputed the waves, the decision-to-row match, and the longest chains by script; all matched. New findings: 0 Critical, 0 High, 1 Medium, 7 Low.
+  1. Medium, open: architecture section 15 requires all four pre-G2 contracts before G2 execution code, but item 7 does not depend on item 5 (the journal contract), so items 7, 11, and 18 have no path to item 5, and `design.md` says that every execution-code item depends on the four contracts. Proposed fix: add item 5 to item 7's "Depends on"; the waves and the longest chain do not change. Under the governance rule for findings left after the third pass, this finding is not fixed and goes to the owner with options (fix without review, accept as a known risk, or defer).
+  2. Low, unreviewed fix: item 16 used D10 without naming it. Item 16 is blocked by D10, and D10 blocks items 13 and 16.
+  3. Low, unreviewed fix: item 3 omitted the policy revision and the attempt and execution identities of the trust contract. Added.
+  4. Low, unreviewed fix: item 20 merged different limit reactions. It now pauses launch authorizations or blocks attempt admissions as the operational targets state, with the disk-floor truncation rule.
+  5. Low, unreviewed fix: item 8 omitted the evidence operations item 19 needs. Item 8 adds publishing and downloading evidence.
+  6. Low, unreviewed fix: item 1 still named a partition proxy. It names the partition mechanism (proxy or network disconnect).
+  7. Low, unreviewed fix: D11 (a) did not account for rows an ephemeral hosted runner cannot establish. Such rows are recorded as open with the entries.
+  8. Low, unreviewed fix: a duplicated sentence in Checks. Merged.
+
+After the pass-3 Low fixes: `make verify` and strict validation of the change passed, and the decision and wave cross-check matched (results below in Checks are unchanged).
+
 ## Limitations
 
 The version and runner-label facts are observations of 2026-10-24 from web sources; no image was pulled and no digest recorded. Item 1 confirms them.
 
 ## Remaining gates
 
-Remaining review passes, the coordinator's integration, and the owner decisions D1–D14. G2 starts only after `close-g1` and the owner's start.
+The owner's choice for the open pass-3 Medium finding, the coordinator's integration, and the owner decisions D1–D14. G2 starts only after `close-g1` and the owner's start.
