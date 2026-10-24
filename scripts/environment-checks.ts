@@ -69,23 +69,23 @@ export function checkEnvironment(facts: EnvironmentFacts, pins: Pins): CheckResu
     {
       id: 'node',
       label: `Node.js ${pins.node} (.nvmrc)`,
-      ok: facts.nodeVersion === `v${pins.node}`,
+      ok: pinnedNodeActive(facts, pins),
       detail: facts.nodeVersion,
-      remedy: `Run make setup (it installs Node.js ${pins.node} through nvm), then nvm use; without nvm, install Node.js ${pins.node} yourself.`
+      remedy: `With nvm, run nvm use (run make setup first if Node.js ${pins.node} is not installed yet); without nvm, install Node.js ${pins.node} yourself.`
     },
     {
       id: 'npm',
       label: `npm ${pins.npm} (CI pin)`,
       ok: facts.npmVersion === pins.npm,
       detail: facts.npmVersion ?? 'not found',
-      remedy: 'Run make setup.'
+      remedy: npmRemedy(facts, pins)
     },
     {
       id: 'dependencies',
       label: 'Dependency tree complete (npm ls --all)',
       ok: facts.dependenciesInstalled,
       detail: facts.dependenciesInstalled ? 'complete' : 'missing or out of date',
-      remedy: 'Run make setup.'
+      remedy: npmMissingUnderPinnedNode(facts, pins) ? 'Fix the npm check first; dependencies are installed with npm.' : 'Run make setup.'
     },
     {
       id: 'hooks',
@@ -97,17 +97,39 @@ export function checkEnvironment(facts: EnvironmentFacts, pins: Pins): CheckResu
   ];
 }
 
+// Each Node.js has its own npm, so the npm on PATH says nothing until the pinned
+// Node.js is active; under it, a missing npm means a broken Node.js install that
+// only a reinstall fixes.
+function npmRemedy(facts: EnvironmentFacts, pins: Pins): string {
+  if (!pinnedNodeActive(facts, pins)) return `Fix the Node.js check first; npm is checked under Node.js ${pins.node}.`;
+  if (facts.npmVersion === undefined) {
+    return `Reinstall Node.js ${pins.node}, which includes npm: with nvm, run nvm deactivate, nvm uninstall ${pins.node}, and make setup; without nvm, reinstall Node.js ${pins.node} yourself.`;
+  }
+  return 'Run make setup.';
+}
+
+function npmMissingUnderPinnedNode(facts: EnvironmentFacts, pins: Pins): boolean {
+  return pinnedNodeActive(facts, pins) && facts.npmVersion === undefined;
+}
+
+function pinnedNodeActive(facts: EnvironmentFacts, pins: Pins): boolean {
+  return facts.nodeVersion === `v${pins.node}`;
+}
+
 // Git and Node.js are installed outside the repository (Node.js through nvm in
 // the setup wrapper), so setup only adds what it can install from this clone.
 // Without the pinned Node.js it changes nothing, so that it never installs npm
-// or dependencies into another Node.js; without git it cannot enable the hook.
+// or dependencies into another Node.js; without npm it cannot install either;
+// without git it cannot enable the hook.
 // The order matters: dependencies are installed with the pinned npm.
-export function setupSteps(results: readonly CheckResult[]): SetupStep[] {
-  const failing = new Set(results.filter((result) => !result.ok).map((result) => result.id));
+export function setupSteps(facts: EnvironmentFacts, pins: Pins): SetupStep[] {
+  const failing = new Set(checkEnvironment(facts, pins).filter((result) => !result.ok).map((result) => result.id));
   if (failing.has('node')) return [];
   const steps: SetupStep[] = [];
-  if (failing.has('npm')) steps.push('install-npm');
-  if (failing.has('npm') || failing.has('dependencies')) steps.push('install-dependencies');
+  if (facts.npmVersion !== undefined) {
+    if (failing.has('npm')) steps.push('install-npm');
+    if (failing.has('npm') || failing.has('dependencies')) steps.push('install-dependencies');
+  }
   if (failing.has('hooks') && !failing.has('git')) steps.push('enable-hooks');
   return steps;
 }
@@ -121,6 +143,17 @@ export function stepCommand(step: SetupStep, pins: Pins): { command: string; arg
     case 'enable-hooks':
       return { command: 'git', args: ['config', 'core.hooksPath', HOOKS_PATH] };
   }
+}
+
+// make setup runs under the pinned Node.js, which it cannot activate in the calling shell.
+export interface NodeVersions {
+  readonly shell: string | undefined;
+  readonly setup: string;
+}
+
+export function shellNodeNotice({ shell, setup }: NodeVersions): string | undefined {
+  if (shell === setup) return undefined;
+  return `These checks ran under Node.js ${setup}, but your shell uses ${shell || 'none'}; run 'nvm use' before make doctor or make verify.`;
 }
 
 export function formatReport(results: readonly CheckResult[]): string {

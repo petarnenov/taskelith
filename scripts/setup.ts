@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import {
-  checkEnvironment, collectFacts, formatReport, readPins, setupSteps, stepCommand, type CommandRunner
+  checkEnvironment, collectFacts, formatReport, readPins, setupSteps, shellNodeNotice, stepCommand, type CommandRunner
 } from './environment-checks.ts';
 
 // `make setup`: adds the missing parts that can be installed from this clone,
@@ -13,9 +13,9 @@ const run: CommandRunner = (command, args) => {
 };
 
 const pins = readPins(process.env);
-const check = () => checkEnvironment(collectFacts(run, process.version), pins);
+const facts = () => collectFacts(run, process.version);
 
-for (const step of setupSteps(check())) {
+for (const step of setupSteps(facts(), pins)) {
   const { command, args } = stepCommand(step, pins);
   console.log(`> ${command} ${args.join(' ')}`);
   const result = spawnSync(command, args, { stdio: 'inherit' });
@@ -25,10 +25,8 @@ for (const step of setupSteps(check())) {
   }
 }
 
-const results = check();
+const results = checkEnvironment(facts(), pins);
 console.log(formatReport(results));
-const invokingNode = process.env.INVOKING_NODE;
-if (invokingNode !== process.version) {
-  console.log(`Your shell uses Node.js ${invokingNode || 'none'}; run 'nvm use' before make verify.`);
-}
+const notice = shellNodeNotice({ shell: process.env.INVOKING_NODE, setup: process.version });
+if (notice) console.log(notice);
 if (results.some((result) => !result.ok)) process.exit(1);

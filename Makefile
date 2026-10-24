@@ -7,10 +7,11 @@ SPECKIT_BASE := python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e0717
 SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
-.PHONY: verify toolchain hooks doctor setup speckit-image speckit-capture speckit-lock
+.PHONY: verify toolchain hooks doctor setup speckit-image speckit-capture speckit-lock contract-compatibility
 
 verify: toolchain
 	npm test
+	$(MAKE) contract-compatibility
 	npm run verify:dependencies
 	npm run openspec -- validate --all --strict --no-interactive
 	npm run verify:package
@@ -29,6 +30,11 @@ toolchain:
 
 hooks:
 	git config core.hooksPath .githooks
+
+# Fails on an undeclared breaking change of a contract document against the merge base with origin/dev;
+# runs oasdiff as its digest-pinned container, so it needs Docker.
+contract-compatibility:
+	node --experimental-strip-types scripts/check-contract-compatibility.ts
 
 # SpecKit runs only in its digest-pinned container (G1 decision D5); see docs/qualification/speckit.md.
 speckit-image:
@@ -51,7 +57,7 @@ speckit-lock:
 # Checks that this clone can build and verify; changes nothing.
 doctor:
 	@node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 6) ? 0 : 1)' 2>/dev/null || { \
-		echo "make doctor: Node.js $$(node -v 2>/dev/null || echo 'not found') cannot run the repository scripts. Run 'make setup'." >&2; \
+		echo "make doctor: the repository scripts need Node.js 22.6 or later (found: $$(node -v 2>/dev/null || echo 'none')). With nvm, run 'nvm use' (run 'make setup' first if Node.js $(NODE_PIN) is not installed yet); without nvm, install Node.js $(NODE_PIN)." >&2; \
 		exit 1; \
 	}
 	@NODE_PIN=$(NODE_PIN) NPM_PIN=$(NPM_PIN) node --experimental-strip-types scripts/doctor.ts
