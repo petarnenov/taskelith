@@ -22,7 +22,7 @@ Scope: Build a self-hosted agent orchestration platform from an empty repository
 
 Build Taskelith as a self-hosted software factory that develops and manages multiple projects in parallel, with a control plane, remote execution agents, a pure React SPA, and a centralized learning subsystem. Use Node.js and TypeScript for product-owned application code. Organize the product as a hexagonal modular application with a small domain kernel, explicit ports/adapters, and versioned plugins.
 
-All design follows eight first-class principles ([ADR 0004](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0004-first-class-engineering-principles.md)): Clean Code, SOLID, hexagonal architecture, the plugin microkernel, Docker images for every runnable component, contract-first OpenAPI (and AsyncAPI for messages), Makefile-driven operation, and mandatory OpenSpec for developing Taskelith.
+All design follows nine first-class principles ([ADR 0004](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0004-first-class-engineering-principles.md)): Clean Code, SOLID, hexagonal architecture, the plugin microkernel, Docker images for every runnable component, contract-first OpenAPI (and AsyncAPI for messages), Makefile-driven operation, mandatory OpenSpec for developing Taskelith, and code coverage of at least 75%.
 
 Every agent task participates in a governed specification-driven lifecycle. The SDLC module is a first-class capability. OpenSpec and SpecKit are replaceable framework plugins; neither framework owns the kernel or weakens mandatory review and verification gates.
 

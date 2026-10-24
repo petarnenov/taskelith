@@ -11,7 +11,7 @@
 - Implement only the requested work. The architecture plan is a roadmap, not blanket implementation authorization.
 - Product-owned code is TypeScript. Do not introduce Go code or a Go bridge.
 - Follow [docs/architecture.md](docs/architecture.md): hexagonal modules, explicit ports/adapters, and established OSS dependencies.
-- Design and review every change against the first-class principles in [ADR 0004](docs/decisions/0004-first-class-engineering-principles.md): Clean Code, SOLID, hexagonal architecture, microkernel, Docker, contract-first OpenAPI, Makefile-driven operation, and mandatory OpenSpec.
+- Design and review every change against the first-class principles in [ADR 0004](docs/decisions/0004-first-class-engineering-principles.md): Clean Code, SOLID, hexagonal architecture, microkernel, Docker, contract-first OpenAPI, Makefile-driven operation, mandatory OpenSpec, and code coverage of at least 75% of lines, branches, and functions.
 - Keep bootstrap status honest; do not expose commands that imply unimplemented orchestration.
 
 ## SDLC
