@@ -13,9 +13,9 @@ const run: CommandRunner = (command, args) => {
 };
 
 const pins = readPins(process.env);
-const check = () => checkEnvironment(collectFacts(run, process.version), pins);
+const facts = () => collectFacts(run, process.version);
 
-for (const step of setupSteps(check())) {
+for (const step of setupSteps(facts(), pins)) {
   const { command, args } = stepCommand(step, pins);
   console.log(`> ${command} ${args.join(' ')}`);
   const result = spawnSync(command, args, { stdio: 'inherit' });
@@ -25,7 +25,7 @@ for (const step of setupSteps(check())) {
   }
 }
 
-const results = check();
+const results = checkEnvironment(facts(), pins);
 console.log(formatReport(results));
 const notice = shellNodeNotice({ shell: process.env.INVOKING_NODE, setup: process.version });
 if (notice) console.log(notice);
