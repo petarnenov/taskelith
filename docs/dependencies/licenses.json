@@ -5,7 +5,7 @@
     "npm": "12.2.1"
   },
   "provenance": {
-    "package.json": "b11960e9919647b1fe360ad5ca3c30892fcfdd68653bdc456af67fdf1ef29319",
+    "package.json": "bb0be6851819469edd59694f39e1aa0dd3951346f0311ae5f57c5dd594d57b18",
     "package-lock.json": "629bb33b94cdd4dea65d3490c90e4a1d6e9a5632d9d591091a53eaaeae71b47c",
     ".nvmrc": "d9f318747a126ce2247661af67852b185def7789492eabfad7bba322be087c33",
     "scripts/dependency-inventory.ts": "c5021e9924b53457b43b6acee0f47ba231d60ca161c3a69ad42ebe3a1608e66b",
