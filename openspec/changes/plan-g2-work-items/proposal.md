@@ -4,7 +4,7 @@ G2 starts after G1 closes. Architecture section 13 requires each gate to be deco
 
 ## What Changes
 
-- Add `docs/g2-plan.md`: the G2 starting point, twenty-six work items with scope, purpose, dependencies, and blocking decisions, the dependency order with the items that can run in parallel, and fourteen open owner decisions with options and the author's labelled recommendations.
+- Add `docs/g2-plan.md`: the G2 starting point, twenty-seven work items with scope, purpose, dependencies, and blocking decisions, the dependency order with the items that can run in parallel, and fourteen open owner decisions with options and the author's labelled recommendations.
 - Link the plan from the foundation ledger's later-phases section.
 
 ## Capabilities
