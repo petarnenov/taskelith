@@ -25,15 +25,31 @@ macOS (Darwin 25.6.0), Node v24.22.1, npm 12.2.1, Docker 29.5.2 with Docker Comp
 - Per-run isolation (coordinator request before review): while a second project, `taskelith-concurrency-b-verify`, ran the integration test, slept 100 seconds, and ran it again through `scripts/services.sh run`, `make test` started its own project `taskelith-379063309-verify` on other ephemeral ports, passed 302 tests, and stopped only its own project; both runs of the second project then passed, and it removed itself (exit 0). `scripts/services.sh run taskelith-fail-verify false` exited 1 and left no container. `make services-up` printed `export TASKELITH_POSTGRES_URL=postgres://taskelith:taskelith@127.0.0.1:61514/taskelith` and `export TASKELITH_NATS_URL=nats://127.0.0.1:61515` for project `taskelith-379063309-dev`, and `make services-down` removed it. With `DOCKER_HOST=unix:///nonexistent.sock`, `make test` failed with the Docker message.
 - Before the isolation fix, from a state without `coverage/`, `make verify` passed: comment length check; services started and healthy; 302 tests passed, 0 failed, including both integration tests; coverage 99.63% lines, 95.74% branches, 99.28% functions, with `apps/control-plane/dist/index.js` and `service-endpoints.js` in the report; "Every product module is in the coverage report."; services removed; contract compatibility; dependency inventory verified (695 paths, 21 reviewed gaps); strict OpenSpec validation 36 passed; archive dry run; package verification. No `taskelith-services` container remained afterwards.
 - After the isolation fix, from a state without `coverage/`, `make verify` passed: 302 tests, 0 failed; coverage 99.63% lines, 95.74% branches, 99.28% functions; inventory 695 paths; strict OpenSpec validation 36 passed; archive dry run and package verification passed; no `taskelith-` container remained.
+- Pass 1 fixes: `scripts/services.sh run taskelith-sig-verify sleep 300`, sent `SIGTERM` after the services were healthy, exited 143, removed its project, and left no `sleep` process; `run ... sh -c 'exit 7'` exited 7; `services.sh` without arguments printed the usage and exited 2; with an unreachable `DOCKER_HOST`, `run` failed with the Docker message.
+- After the pass 1 fixes, on the merge of `origin/dev` (`ac55cb5`), from a state without `coverage/`: `make doctor` reported every check passed, including Docker; `make verify` passed with 303 tests, 0 failed; coverage 99.63% lines, 95.74% branches, 99.28% functions; inventory 695 paths, 21 reviewed gaps; strict OpenSpec validation 38 passed; archive dry run and package verification passed; no `taskelith-` container remained.
 
 ## Independent review
 
-Independent review: pending.
+Assigned reviewer: Claude Fable 5.1, medium effort, read-only, run by the coordinator. The model was confirmed, and the worktree snapshots before and after the pass were equal.
+
+- **Pass 1** (session `659eabe8-b9ed-47f2-a861-9f38c31b0f63`). Findings: 0 Critical, 0 High, 2 Medium, 10 Low. All accepted and resolved; the resolutions await the next pass:
+  1. Medium: a cancelled `make test` could leave its project running. `run` now runs the command in the background, waits for it, and turns `INT`, `TERM`, and `HUP` into exits 130 and 143 that stop the command, so the exit trap removes the project; only `SIGKILL` leaves it.
+  2. Medium: `make doctor` did not check Docker. `scripts/environment-checks.ts` adds a check of `docker info` and `docker compose version` with a remedy, with tests, and a MODIFIED delta of "Environment check" names Docker; README says setup does not install Docker.
+  3. Low: stale license gap counts. `docs/dependencies.md` and `docs/dependency-inventory.md` now state 21 reviewed paths and point to `license-reviews.json`.
+  4. Low: imports whose named bindings all carry an inline `type` counted as runtime imports. The worker-only rule now treats them as erased, with a test; the plugin SDK rule keeps the `import type` form its requirement names.
+  5. Low: the launcher list missed common libraries. `execa`, `cross-spawn`, `shelljs`, and `zx` were added, and the spec delta calls the set a named list.
+  6. Low: missing boundary tests. Added for `export { s } from '@taskelith/worker'`, `require('child_process')`, inline-type imports and re-exports (accepted), and a mixed inline-type import (rejected).
+  7. Low: the NATS INFO reader could hang or throw. It reads only the first line, rejects malformed JSON and a close before the line, and settles once.
+  8. Low: `services.sh` without arguments failed obscurely. It prints a usage message and exits 2.
+  9. Low: missing ports were not detected and URLs relied on word splitting. Each `compose port` result is checked with a clear message, and the URLs are exported.
+  10. Low: the "Application boundaries" requirement duplicated the existing boundary requirement. It is removed; a MODIFIED "Automated hexagonal boundary and TypeScript checks" carries the full text with an added scenario.
+  11. Low: design decision labels clashed with the owner's D1–D14. Renamed to Decision 1 to 5.
+  12. Low: a test name did not describe its assertion. Renamed to "the repository declares the control plane and worker apps as workspace packages that follow the contract".
 
 ## Limitations
 
 - Checked on macOS only; Linux CI with Docker is not yet observed for the services.
-- A run killed with `SIGKILL` leaves its project until the next `make test` in that worktree (design, Risks).
+- Only a run killed with `SIGKILL` leaves its project until the next `make test` in that worktree (design, Risks).
 - The images' package inventories and scans remain open, as the dependency register states.
 
 ## Remaining gates
