@@ -21090,6 +21090,7 @@
       "ref": "@taskelith/plugin-sdk@0.0.0",
       "dependsOn": [
         "@taskelith/kernel@0.0.0",
+        "@taskelith/sdlc@0.0.0",
         "ajv@8.20.0"
       ]
     },
@@ -21105,6 +21106,7 @@
       "ref": "@taskelith/sdlc-speckit@0.0.0",
       "dependsOn": [
         "@taskelith/kernel@0.0.0",
+        "@taskelith/plugin-sdk@0.0.0",
         "@taskelith/sdlc@0.0.0"
       ]
     },

@@ -1,9 +1,9 @@
 import { err, failure, isFailureCode, parseIdentifier, type Failure, type FailureCode, type Result } from '@taskelith/kernel';
-import { parseArtifactRevision, type ArtifactRevisionInput } from '../domain/artifact-revision.js';
+import { parseArtifactRevision } from '../domain/artifact-revision.js';
 import { parseContentDigest } from '../domain/content-digest.js';
 import { STRUCTURAL_VERDICTS, parseEvidenceReference } from '../domain/gate-evidence.js';
 import type { LifecycleObligation } from '../domain/lifecycle.js';
-import { parseWorkItem, type WorkItemInput } from '../domain/work-item.js';
+import { parseWorkItem } from '../domain/work-item.js';
 import { parseWorkflowDefinition } from '../domain/workflow-definition.js';
 import {
   BOOLEAN_SHAPE,
@@ -18,24 +18,22 @@ import {
   recordOf,
   type PlainShape,
 } from './plain-data.js';
+import { parseSdlcFrameworkCapabilities, type ParsedSdlcFrameworkCapabilities } from './sdlc-framework-capabilities.js';
 import {
   OPTIONAL_SDLC_OPERATIONS,
-  parseSdlcFrameworkCapabilities,
   type ArtifactRequirement,
+  type ArtifactRevisionData,
   type FinalizationReport,
-  type ParsedSdlcFrameworkCapabilities,
   type ResolvedWorkflow,
   type SdlcFramework,
   type SdlcOperation,
   type StageInstructions,
   type StructuralValidationReport,
+  type WorkItemData,
 } from './sdlc-framework.js';
 
-// DRAFT (G1 item 6): a framework-neutral conformance suite. A plugin package's
-// own tests run it with that package's fixtures and expected outputs and
-// assert that the report has no findings. The suite is plain code without a
-// test runner, so that any runner can drive it. Everything a plugin returns is
-// checked at run time before it is used.
+// A framework-neutral suite, without a test runner, that a plugin's tests run
+// on their own fixtures; it checks every plugin result at run time.
 
 export type ExpectedOutcome<Value> =
   | { readonly ok: true; readonly value: Value }
@@ -228,17 +226,17 @@ function valueProblems(testCase: SdlcConformanceCase, value: unknown, capabiliti
   const shape = plainShapeProblems('value', value, VALUE_SHAPES[testCase.operation]);
   if (shape.length > 0) return shape;
   switch (testCase.operation) {
-    case 'discoverWorkItems': return workItemProblems(value as readonly WorkItemInput[]);
+    case 'discoverWorkItems': return workItemProblems(value as readonly WorkItemData[]);
     case 'resolveWorkflow': return workflowProblems(value as ResolvedWorkflow, capabilities.nativeObligations);
     case 'describeArtifacts': return requirementProblems(value as readonly ArtifactRequirement[]);
-    case 'inspectArtifactRevisions': return revisionProblems('value', value as readonly ArtifactRevisionInput[]);
+    case 'inspectArtifactRevisions': return revisionProblems('value', value as readonly ArtifactRevisionData[]);
     case 'prepareStageInstructions': return instructionProblems(value as StageInstructions, testCase.request.stageId);
     case 'validateStructure': return validationProblems(value as StructuralValidationReport);
     case 'finalize': return finalizationProblems(value as FinalizationReport);
   }
 }
 
-function workItemProblems(workItems: readonly WorkItemInput[]): string[] {
+function workItemProblems(workItems: readonly WorkItemData[]): string[] {
   const problems = workItems.flatMap((workItem, index) => failed(`value[${index}]`, parseWorkItem(workItem)));
   const ids = workItems.map((workItem) => workItem.id);
   const repeated = ids.filter((id, index) => ids.indexOf(id) !== index);
@@ -270,7 +268,7 @@ function requirementProblems(requirements: readonly ArtifactRequirement[]): stri
   ]);
 }
 
-function revisionProblems(path: string, revisions: readonly ArtifactRevisionInput[]): string[] {
+function revisionProblems(path: string, revisions: readonly ArtifactRevisionData[]): string[] {
   return revisions.flatMap((revision, index) => failed(`${path}[${index}]`, parseArtifactRevision(revision)));
 }
 

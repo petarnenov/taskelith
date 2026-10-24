@@ -6,6 +6,8 @@ import ts from 'typescript';
 const PACKAGE_SCOPE = '@taskelith/';
 const LAYOUT_OPTIONS = ['composite', 'declaration', 'rootDir', 'outDir', 'tsBuildInfoFile'];
 const PUBLIC_EXPORT = { '.': { types: './dist/index.d.ts', default: './dist/index.js' } };
+// A module package may also export its port entry (ADR 0009).
+const MODULE_EXPORTS = { ...PUBLIC_EXPORT, './port': { types: './dist/port.d.ts', default: './dist/port.js' } };
 
 // Expands the root manifest's workspace patterns, which are either a
 // directory or a directory followed by a single `/*`, into the package
@@ -56,7 +58,9 @@ export function workspacePackageProblems(root: string, dir: string): string[] {
   if (manifest.name !== `${PACKAGE_SCOPE}${posix.basename(dir)}`) problems.push(`name must be ${PACKAGE_SCOPE}${posix.basename(dir)}`);
   if (manifest.private !== true) problems.push('must be private');
   if (manifest.type !== 'module') problems.push('type must be module');
-  if (!isDeepStrictEqual(manifest.exports, PUBLIC_EXPORT)) problems.push('exports must be only the root entry ./dist/index.js with types ./dist/index.d.ts');
+  if (!isDeepStrictEqual(manifest.exports, PUBLIC_EXPORT) && !(isModulePackage(dir) && isDeepStrictEqual(manifest.exports, MODULE_EXPORTS))) {
+    problems.push('exports must be only the root entry ./dist/index.js with types ./dist/index.d.ts, and for a module also its port entry ./dist/port.js');
+  }
   if (manifest.imports !== undefined) problems.push('must not declare imports aliases');
 
   const tsconfigPath = join(root, dir, 'tsconfig.json');
@@ -81,6 +85,12 @@ export function workspacePackageProblems(root: string, dir: string): string[] {
   return problems;
 }
 
+function isModulePackage(dir: string): boolean {
+  return dir.startsWith('packages/modules/');
+}
+
 export function missingBuildOutputs(root: string, dir: string): string[] {
-  return ['dist/index.js', 'dist/index.d.ts'].filter((output) => !existsSync(join(root, dir, output)));
+  const exports = readJson(join(root, dir, 'package.json')).exports ?? {};
+  const port = Object.hasOwn(exports, './port') ? ['dist/port.js', 'dist/port.d.ts'] : [];
+  return ['dist/index.js', 'dist/index.d.ts', ...port].filter((output) => !existsSync(join(root, dir, output)));
 }

@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./port": {
+      "types": "./dist/port.d.ts",
+      "default": "./dist/port.js"
     }
   },
   "dependencies": {
