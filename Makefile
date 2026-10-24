@@ -18,6 +18,7 @@ verify-checks: toolchain
 	$(MAKE) contract-compatibility
 	npm run verify:dependencies
 	npm run openspec -- validate --all --strict --no-interactive
+	npm run verify:archive
 	npm run verify:package
 
 toolchain:
