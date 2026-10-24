@@ -32,3 +32,7 @@ Assigned reviewer (rotation): Antigravity CLI with Gemini 4 Argon, effort medium
 ## Remaining gates
 
 None for this documentation change. The decisions are implemented in the gates named in ADR 0008; this change claims no implementation.
+
+## Integration
+
+Integrated into `dev` through pull request #45, merge commit `0c75b7b`, and archived with the pinned OpenSpec CLI.
