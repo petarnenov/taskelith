@@ -9,7 +9,7 @@ As of 2026-10-24. This is a readiness ledger, not evidence that the architecture
 - Selected bootstrap workflow: OpenSpec 1.14.3; see [ADR 0001](decisions/0001-bootstrap-governance.md).
 - Repository lifecycle policy in [governance](governance.md) accepted by the owner on 2026-10-24 and independently reviewed by an owner-authorized Codex reviewer agent (`gpt-6.1-sol`, `effort: medium`) on 2026-10-24; integration remains pending.
 - CI tests, strict OpenSpec validation, installed tarball checks, and automatic releases: `.github/workflows/release.yml` and [release policy](releases.md).
-- Bootstrap and automatic publication evidence: `openspec/changes/bootstrap-cli/verification.md` and `openspec/changes/automated-releases/verification.md`.
+- Bootstrap and automatic publication evidence: `openspec/changes/archive/2026-10-24-bootstrap-cli/verification.md` and `openspec/changes/archive/2026-10-24-automated-releases/verification.md`.
 - Initial [dependency decision register](dependencies.md) and public registry metadata snapshot; qualification gaps remain explicit.
 - Retained [dependency SBOM and license evidence](dependency-inventory.md), exact-toolchain generation/checking, and clean-install reproduction. License coverage gaps are reviewed and bound to exact manifests; security findings and their upstream status are documented.
 - Initial Linux/macOS worker families selected by the owner on 2026-10-24: [ADR 0002](decisions/0002-linux-macos-worker-scope.md). Native acceptance is pending for both.

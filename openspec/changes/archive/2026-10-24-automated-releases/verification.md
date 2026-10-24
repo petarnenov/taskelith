@@ -23,3 +23,7 @@ Completed on 2026-10-24:
 ## Scope
 
 Author verification only. Do not claim an independent review or successful OIDC release until actual run evidence is recorded.
+
+## Integration and archival
+
+Integrated into `main` in commits `397b737`, `b364fb2`, and `77b1450`. No independent review was performed; this record has author verification and the recorded release run evidence only. The owner authorized archival on 2026-10-24 on that basis. Archived with the pinned OpenSpec CLI.

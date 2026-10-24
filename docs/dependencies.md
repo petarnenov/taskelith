@@ -46,7 +46,7 @@ The workflow's checkout and setup-node actions remain pinned by commit SHA. GitH
 - DefinitelyTyped: [security policy](https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/SECURITY.md) describes private advisory reporting and best-effort/latest-release handling.
 - semantic-release and conventional-changelog: attempted root `SECURITY.md` lookups did not establish a reporting policy. Do not infer absence of a process from a failed lookup; confirm a maintained private channel for the selected components before acceptance.
 
-Compiler/types upgrades must preserve build and CLI behavior; OpenSpec upgrades must preserve native artifacts and strict validation. Release-tool changes must pass classification and rendering fixtures, installed-tarball verification, and an authorized CI release before claiming publication compatibility. Follow [release recovery](releases.md#verification-and-recovery): published versions/tags cannot be reused or moved. Existing activation evidence is in `openspec/changes/automated-releases/verification.md`; no partial-publication recovery drill was performed here.
+Compiler/types upgrades must preserve build and CLI behavior; OpenSpec upgrades must preserve native artifacts and strict validation. Release-tool changes must pass classification and rendering fixtures, installed-tarball verification, and an authorized CI release before claiming publication compatibility. Follow [release recovery](releases.md#verification-and-recovery): published versions/tags cannot be reused or moved. Existing activation evidence is in `openspec/changes/archive/2026-10-24-automated-releases/verification.md`; no partial-publication recovery drill was performed here.
 
 ## Audit and inventory observations
 

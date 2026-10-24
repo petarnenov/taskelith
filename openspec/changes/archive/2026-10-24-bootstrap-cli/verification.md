@@ -22,3 +22,7 @@
 ## Review scope
 
 Author verification only. No independent review, CI runner result, fleet runtime, or production-capacity validation is claimed. This is an explicitly owner-requested initial repository/package bootstrap.
+
+## Integration and archival
+
+Integrated into `main` in commits `8b71e0a`, `be6a1ed`, and `aad8135`. No independent review was performed; this record has author verification only. The owner authorized archival on 2026-10-24 on that basis. Archived with the pinned OpenSpec CLI.
