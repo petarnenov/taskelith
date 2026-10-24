@@ -23,6 +23,10 @@ The repository checks SHALL be defined once, as the `make verify` target, which 
 - **WHEN** a push is attempted with hooks enabled and a check fails
 - **THEN** the push is rejected
 
+#### Scenario: Branch deletion push
+- **WHEN** a remote branch is deleted with `git push origin --delete <branch>` with hooks enabled and a Node version that differs from `.nvmrc`
+- **THEN** the `pre-push` hook runs `make verify`, its toolchain check fails, and the deletion is refused
+
 ### Requirement: Promotion flow and releases
 `dev` SHALL be the default branch for development; GitHub SHALL run the workflow only for pull requests into `main`, pushes to `main`, and manual dispatch; promotions from `dev` to `main` SHALL use a merge commit or rebase, not a squash; and pushes to `main` SHALL keep releasing qualifying Conventional Commits.
 
