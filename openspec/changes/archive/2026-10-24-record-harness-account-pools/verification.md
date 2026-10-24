@@ -29,3 +29,7 @@ The owner then corrected the rule: Low findings are fixed, and a pass with only 
 ## Remaining gates
 
 Integration (commit, push, merge) and archival with owner authorization; provider-terms records per harness; implementation in G2 and G3.
+
+## Integration and archival
+
+The owner authorized integration and archival on 2026-10-24. Integrated into `main` at `c885568` through pull request #10 (rebase merge). The `main` workflow run 40099555219 passed verification; semantic-release found no relevant changes, so no version was released. Archived with the pinned OpenSpec CLI afterwards.
