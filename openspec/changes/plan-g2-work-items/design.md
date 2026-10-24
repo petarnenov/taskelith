@@ -9,7 +9,7 @@ Record an ordered, parallelizable plan and the decisions that block it, in the s
 ## Decisions
 
 - One OpenSpec change per work item, so that each is reviewed and merged independently.
-- The four pre-G2 protocol contracts of section 15 are separate documentation and specification items (3–6) that every execution-code item depends on, directly or through the domain model (item 7).
+- The four pre-G2 protocol contracts of section 15 are separate documentation and specification items (3–6), all in the first wave. The domain model (item 7) depends on all four, so every execution-code item that builds on it does too; the worker journal (item 14) and the supervisor (item 15) depend on the contracts they implement (item 5, and items 4 and 5 through item 14).
 - Infrastructure evaluation (item 1) covers every option of the version, library, journal, and test-infrastructure decisions, as G1 item 3 did, so that it can start before those decisions and supply their evidence.
 - A JetStream spike (item 2) precedes the transport adapter, because architecture section 9 makes the broker choice conditional on it. If the owner chooses RabbitMQ (D3 (c)), a RabbitMQ spike and adapter replace items 2 and 12.
 - Version facts in the decision table are observations of 2026-10-24 that item 1 confirms with digests.

@@ -63,7 +63,7 @@ Reviewer after reassignment: Claude Fable 5.1 (`claude-fable-5-1`, confirmed in 
   12. Low: item 25 omitted the G2 part of the service lifecycle row. Added.
 
 - **Pass 3 (the last allowed pass) — session `25192aa0-ded5-44cf-a56e-8397f66cf009`, head `c77318c`.** The reviewer confirmed all 12 pass-2 resolutions, re-checked the version and runner-label facts with WebSearch (5 calls) and WebFetch (16 calls), and recomputed the waves, the decision-to-row match, and the longest chains by script; all matched. New findings: 0 Critical, 0 High, 1 Medium, 7 Low.
-  1. Medium, open: architecture section 15 requires all four pre-G2 contracts before G2 execution code, but item 7 does not depend on item 5 (the journal contract), so items 7, 11, and 18 have no path to item 5, and `design.md` says that every execution-code item depends on the four contracts. Proposed fix: add item 5 to item 7's "Depends on"; the waves and the longest chain do not change. Under the governance rule for findings left after the third pass, this finding is not fixed and goes to the owner with options (fix without review, accept as a known risk, or defer).
+  1. Medium, open: architecture section 15 requires all four pre-G2 contracts before G2 execution code, but item 7 does not depend on item 5 (the journal contract), so items 7, 11, and 18 have no path to item 5, and `design.md` says that every execution-code item depends on the four contracts. Proposed fix: add item 5 to item 7's "Depends on"; the waves and the longest chain do not change. Under the governance rule for findings left after the third pass, it went to the owner with options (fix without review, accept as a known risk, or defer). The owner chose to fix it without review, relayed by the coordinator on 2026-10-25. Unreviewed fix after the third pass: item 7 now depends on items 3, 4, 5, and 6, so every execution-code item depends on all four contracts directly or through item 7; the recomputed waves and the longest chain are unchanged.
   2. Low, unreviewed fix: item 16 used D10 without naming it. Item 16 is blocked by D10, and D10 blocks items 13 and 16.
   3. Low, unreviewed fix: item 3 omitted the policy revision and the attempt and execution identities of the trust contract. Added.
   4. Low, unreviewed fix: item 20 merged different limit reactions. It now pauses launch authorizations or blocks attempt admissions as the operational targets state, with the disk-floor truncation rule.
@@ -74,10 +74,12 @@ Reviewer after reassignment: Claude Fable 5.1 (`claude-fable-5-1`, confirmed in 
 
 After the pass-3 Low fixes: `make verify` and strict validation of the change passed, and the decision and wave cross-check matched (results below in Checks are unchanged).
 
+After the owner's fix: `make verify` passed (228 tests passed, 0 failed; strict OpenSpec validation 33 passed; package verification passed), and the recomputed waves matched the table. Archive dry run, on 2026-10-25, in a copy of `openspec/` outside the worktree: `openspec archive plan-g2-work-items --yes` archived the change as `2026-10-25-plan-g2-work-items` with no spec changes, and `openspec validate --all --strict` then passed (32 passed, 0 failed); task 2.2 was still unchecked in that copy and is now checked.
+
 ## Limitations
 
 The version and runner-label facts are observations of 2026-10-24 from web sources; no image was pulled and no digest recorded. Item 1 confirms them.
 
 ## Remaining gates
 
-The owner's choice for the open pass-3 Medium finding, the coordinator's integration, and the owner decisions D1–D14. G2 starts only after `close-g1` and the owner's start.
+The coordinator's integration, and the owner decisions D1–D14. G2 starts only after `close-g1` and the owner's start.
