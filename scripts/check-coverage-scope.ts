@@ -3,10 +3,8 @@ import { join, posix, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { workspacePackageDirs } from './workspace-packages.ts';
 
-// Node's built-in coverage reports only modules that tests load, so this check
-// fails when a product module under src/ of the root package or of a workspace
-// package is missing from the coverage report. A module that declares only
-// types, such as a port, compiles to an empty module with nothing to cover.
+// Node's coverage reports only modules that tests load, so this fails on a
+// product module missing from the report, unless it declares only types.
 
 function sourceModules(root: string, dir: string): string[] {
   const full = join(root, dir);

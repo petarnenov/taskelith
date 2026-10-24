@@ -13,10 +13,8 @@ export const GATE_STATES = Object.freeze(['pending', 'passed', 'failed', 'stale'
 
 export type GateState = (typeof GATE_STATES)[number];
 
-// The only allowed gate transitions; every other one is rejected. A decided
-// gate is never overturned in place: a passed gate only becomes stale when its
-// subject is superseded, and a failed, stale, or blocked gate is reopened as
-// pending, with a new subject when the artifacts changed.
+// The only allowed transitions. A decision is never overturned in place: a
+// passed gate goes stale when superseded, and other gates reopen as pending.
 export const GATE_TRANSITIONS: Readonly<Record<GateState, readonly GateState[]>> = Object.freeze({
   pending: Object.freeze(['passed', 'failed', 'blocked', 'stale'] as const),
   passed: Object.freeze(['stale'] as const),
@@ -33,9 +31,8 @@ export type BlockReason = string & { readonly [blockReasonBrand]: true };
 
 export const MAX_BLOCK_REASON_LENGTH = 1024;
 
-// A gate of one stage that requires one kind of evidence about an exact
-// subject. The decision is the evidence that passed or failed the gate; a
-// stale gate keeps it to show what was superseded, and reopening clears it.
+// A stage gate that requires one evidence kind about an exact subject; its
+// decision stays when the gate goes stale and is cleared when it reopens.
 export interface Gate {
   readonly id: GateId;
   readonly stageId: StageId;

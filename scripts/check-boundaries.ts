@@ -67,9 +67,8 @@ function packageName(spec: string): string {
   return spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0]!;
 }
 
-// One import of one file, with its target as a repository-relative path when
-// the target is known: the resolved file for a relative import, or the public
-// entry of a workspace package imported by name.
+// One import of one file, with its known target as a repository path: the
+// resolved file of a relative import or the entry of a workspace package.
 interface ImportEdge {
   rel: string;
   spec: string;

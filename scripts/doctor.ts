@@ -3,7 +3,8 @@ import {
   checkEnvironment, collectFacts, formatReport, readPins, shellNodeNotice, type CommandRunner
 } from './environment-checks.ts';
 
-// `make doctor`: reports whether this clone can build and verify, without changing anything.
+// `make doctor`: reports whether this clone can build and verify; changes
+// nothing.
 
 const run: CommandRunner = (command, args) => {
   const result = spawnSync(command, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });

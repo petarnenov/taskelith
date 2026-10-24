@@ -3,9 +3,8 @@ import {
   checkEnvironment, collectFacts, formatReport, readPins, setupSteps, shellNodeNotice, stepCommand, type CommandRunner
 } from './environment-checks.ts';
 
-// `make setup`: adds the missing parts that can be installed from this clone,
-// then reports the result. scripts/with-pinned-node.sh runs it with the
-// Node.js version in .nvmrc when nvm is available.
+// `make setup`: installs what this clone can and reports the result; it runs
+// under the .nvmrc Node.js through scripts/with-pinned-node.sh.
 
 const run: CommandRunner = (command, args) => {
   const result = spawnSync(command, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });

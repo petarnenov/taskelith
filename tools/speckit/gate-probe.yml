@@ -1,4 +1,4 @@
-# Agent-free workflow that exercises the SpecKit workflow engine's gate, pause, and resume handling.
+# Agent-free workflow that exercises the engine's gate, pause, and resume.
 schema_version: '1.0'
 workflow:
   id: gate-probe
