@@ -7,10 +7,11 @@ SPECKIT_BASE := python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e0717
 SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
-.PHONY: verify toolchain hooks doctor setup speckit-image speckit-capture speckit-lock
+.PHONY: verify toolchain hooks doctor setup speckit-image speckit-capture speckit-lock contract-compatibility
 
 verify: toolchain
 	npm test
+	$(MAKE) contract-compatibility
 	npm run verify:dependencies
 	npm run openspec -- validate --all --strict --no-interactive
 	npm run verify:package
@@ -29,6 +30,11 @@ toolchain:
 
 hooks:
 	git config core.hooksPath .githooks
+
+# Fails on an undeclared breaking change of a contract document against the merge base with origin/dev;
+# runs oasdiff as its digest-pinned container, so it needs Docker.
+contract-compatibility:
+	node --experimental-strip-types scripts/check-contract-compatibility.ts
 
 # SpecKit runs only in its digest-pinned container (G1 decision D5); see docs/qualification/speckit.md.
 speckit-image:
