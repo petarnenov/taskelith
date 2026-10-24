@@ -53,6 +53,17 @@ Assigned reviewer: Codex CLI (Codex Sol, medium), by rotation; Antigravity CLI i
 
 - `waitFor` now takes an `AbortSignal` and clears its interval on success and on abort; the interruption test passes it the test's signal combined with a 10-second timeout, and aborts the command in its cleanup, which terminates the child. `node --experimental-strip-types --test test/check-archive-dry-run.test.ts` passed three runs in a row (13 tests, 0 failed), and `make verify` passed again (241 tests, 0 failed, with the other results as above).
 
+## Conflict resolution and fourth pass
+
+At integration the coordinator returned the task under worker step 9: `dev` (`61d180b`) had merged the OpenSpec framework adapter (#85, #86), which changed workspace dependencies and regenerated `docs/dependencies/licenses.json` and the SBOM, so merging it conflicted in `licenses.json`.
+
+- `origin/dev` was merged into the branch with a merge commit (`1192f24`, first parent `f0de1be`). The conflict was resolved by taking `dev`'s `licenses.json`, then `npm ci --ignore-scripts` and `npm run inventory:dependencies`, with no hand edit. The only difference of `docs/dependencies/` from `dev` is the `package.json` provenance hash, because the branch adds `verify:archive`.
+- `make verify` on the tree of `1192f24` (staged and run right before the merge commit, nothing changed after), macOS, Node.js v24.22.1, npm 12.2.1, Docker running: passed with 260 tests, 0 failed, coverage thresholds met, no undeclared contract change, 34 strict OpenSpec validations, the archive dry run with this change as the only active one, and package verification.
+- The owner explicitly authorized a fourth review pass on the merge commit on 2026-10-25.
+- **Pass 4 — Codex session `01a16fcb-027a-74f1-afe3-bd538c46d6ab`, on `1192f24` only.** Same invocation; the output header reported model `gpt-6.1-sol`, reasoning effort `medium`, and sandbox `read-only`. SHA-256 snapshots before and after were equal. The reviewer found `licenses.json` byte-identical to the generator's output for the merged inputs, no change lost in the merge, and no incompatibility with the new `openspec-framework-adapter` spec or the `sdlc-openspec` plugin. Findings: 0 Critical, 0 High, 1 Medium, 0 Low:
+  1. Medium: this record had no verification evidence for the merge tree, which evidence freshness requires. The `make verify` run above is now recorded.
+- The owner decided on 2026-10-25 to accept this documentation-only fix without a fifth pass; it is unreviewed.
+
 ## Limitations
 
 - SIGINT is handled by the same code path as SIGTERM but has no test of its own.
