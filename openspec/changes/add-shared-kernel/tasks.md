@@ -7,8 +7,8 @@
 
 ## 2. Integration with the workspace
 
-- [ ] 2.1 Merge `origin/dev` after `establish-g1-workspace` is merged, refresh `package-lock.json` and the dependency inventory.
-- [ ] 2.2 Run `make verify` in the worktree.
+- [x] 2.1 Merge `origin/dev` after `establish-g1-workspace` is merged, refresh `package-lock.json` and the dependency inventory.
+- [x] 2.2 Run `make verify` in the worktree.
 
 ## 3. Review
 
