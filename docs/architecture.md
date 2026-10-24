@@ -302,7 +302,7 @@ Intake -> Specify/Clarify -> Plan/Decompose -> Approval
        -> Implement -> Verify -> Independent Review -> Integrate -> Close
 ```
 
-This is a policy illustration, not a claim that both frameworks expose those exact commands; the stage order follows [governance](https://github.com/petarnenov/taskelith/blob/main/docs/governance.md#lifecycle-and-records). Rework loops return to the relevant stage. Release/deploy is a separate authorized stage, not implied by closure or agent autonomy.
+This is a policy illustration, not a claim that both frameworks expose those exact commands; the stage order follows [governance](governance.md#lifecycle-and-records). Rework loops return to the relevant stage. Release/deploy is a separate authorized stage, not implied by closure or agent autonomy.
 
 Before dispatch, the scheduler requires an admission record binding the workflow stage, task/work item, artifact digest, policy revision, and ownership generation. Receiving that record is not permission to launch later without revalidation. Immediately before a new launch, the worker calls the control-plane launch-authority port using the assignment identity and its journaled operation ID. The server transactionally compares the current gate, artifact revision, capacity reservation, worker identity, recovery epoch, and ownership generation, then records one launch authorization. Concurrent invalidation either precedes that transaction and rejects the launch, or follows it and becomes a cancellation/reconciliation request for already authorized work.
 

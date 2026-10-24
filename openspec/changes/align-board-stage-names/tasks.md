@@ -5,5 +5,5 @@
 
 ## 2. Verification and review
 
-- [ ] 2.1 Run `make verify` and the link checks.
-- [ ] 2.2 Obtain independent review by rotation and record the results.
+- [x] 2.1 Run `make verify` and the link checks.
+- [x] 2.2 Obtain independent review by rotation and record the results.
