@@ -2,7 +2,12 @@
 NODE_PIN := $(shell cat .nvmrc)
 NPM_PIN := $(shell sed -n 's/.*npm install --global npm@\([0-9.]*\) --ignore-scripts.*/\1/p' .github/workflows/release.yml | head -n 1)
 
-.PHONY: verify toolchain hooks
+SPECKIT_IMAGE := taskelith-speckit:1.2.3
+SPECKIT_BASE := python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962
+SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
+UV_PIN := 0.13.5
+
+.PHONY: verify toolchain hooks speckit-image speckit-capture speckit-lock
 
 verify: toolchain
 	npm test
@@ -24,3 +29,19 @@ toolchain:
 
 hooks:
 	git config core.hooksPath .githooks
+
+# SpecKit runs only in its digest-pinned container (G1 decision D5); see docs/qualification/speckit.md.
+speckit-image:
+	docker build --quiet --tag $(SPECKIT_IMAGE) tools/speckit
+
+speckit-capture: speckit-image
+	rm -rf $(SPECKIT_CAPTURE)
+	mkdir -p $(SPECKIT_CAPTURE)
+	docker run --rm --network none --user "$$(id -u):$$(id -g)" --env HOME=/tmp \
+		--volume "$(CURDIR)/tools/speckit:/tools:ro" --volume "$(CURDIR)/$(SPECKIT_CAPTURE):/out" \
+		$(SPECKIT_IMAGE) bash /tools/capture.sh
+
+speckit-lock:
+	docker run --rm --volume "$(CURDIR)/tools/speckit:/work" --workdir /work $(SPECKIT_BASE) sh -c \
+		'pip install --quiet --root-user-action=ignore uv==$(UV_PIN) && uv pip compile --quiet --generate-hashes \
+		--python-version 3.13 --python-platform x86_64-unknown-linux-gnu --no-header --output-file requirements.txt requirements.in'
