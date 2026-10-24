@@ -6,4 +6,4 @@
 ## 2. Verification and review
 
 - [x] 2.1 Run `make verify`.
-- [ ] 2.2 Obtain independent review (Codex Sol medium, by rotation) and record results.
+- [x] 2.2 Obtain independent review (Codex Sol medium, by rotation; two passes, the second Low-only) and record results.

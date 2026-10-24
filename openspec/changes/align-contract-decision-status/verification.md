@@ -8,7 +8,7 @@ The owner explicitly asked for this correction on 2026-10-24, after a peer sessi
 
 ## Author self-check before review
 
-- Searched `docs/` for D2 and D3: the only passages that presented them as open were the five edited in `docs/contract-tooling.md` (status paragraph, section 8 "Owner action" row, remaining-work bullet) and `docs/dependencies.md` (section introduction and the four code-first rows). The "(D3 b only)" role labels stay, because they describe what each tool serves.
+- Searched `docs/` for D2 and D3: the only passages that presented them as open were the eight edited ones: three in `docs/contract-tooling.md` (status paragraph, section 8 "Owner action" row, remaining-work bullet) and five in `docs/dependencies.md` (section introduction and the four code-first rows). The "(D3 b only)" role labels stay, because they describe what each tool serves.
 - No register status changed: the code-first rows stay `candidate` and are marked not to be installed.
 - The evaluation keeps its original date and says that the decisions came after it.
 - Evidence check: the change adds one internal link, `g1-plan.md#owner-decisions`, to an existing heading, and no external link.
@@ -24,3 +24,12 @@ Assigned reviewer (rotation): Codex with `codex exec -m gpt-6.1-sol -c model_rea
 - **Pass 1 — session `01a16f67-eddf-7a62-9b2e-a1d2b47de878`.** The reviewer confirmed that D2 (b) and D3 (a) match the plan, that no passage in `docs/` still presents them as open, and that no register status changed. Findings: 0 Critical, 0 High, 1 Medium, 1 Low. Both accepted and resolved:
   1. Medium: this `verification.md` was missing. Added.
   2. Low: the proposal quoted the owner's Bulgarian words, against the English-only rule for repository content. Replaced with an English statement.
+
+- **Pass 2 — session `01a16f6b-d1cb-7033-8b10-460c7ecb640e`.** Both pass-1 findings confirmed resolved. Findings: 0 Critical, 0 High, 0 Medium, 1 Low. Fixed without another pass, as the review process allows for a Low-only pass; **this fix has not been independently reviewed**:
+  1. Low: the self-check said "five" edited passages but listed eight. It now says eight: three in `docs/contract-tooling.md` and five in `docs/dependencies.md`.
+
+Remaining findings: 0.
+
+## Remaining gates
+
+Integration (push, pull request into `dev`, merge) and archival.
