@@ -4,7 +4,7 @@ On 2026-10-24 the owner ran `make doctor` from a shell on Node.js v24.21.0 with 
 
 ## What Changes
 
-- The Node.js check's remedy names `nvm use` first and `make setup` only for a pinned Node.js that is not installed yet.
+- The Node.js check's remedy, and doctor's message for a Node.js too old to run the scripts, name `nvm use` first and `make setup` only for a pinned Node.js that is not installed yet.
 - While the Node.js check fails, the npm check's remedy says to fix Node.js first, because each Node.js has its own npm; with the pinned Node.js active it still names `make setup`.
 - When the calling shell uses another Node.js, setup says its checks ran under the pinned Node.js and that the shell needs `nvm use` before `make doctor` or `make verify`.
 
@@ -17,4 +17,4 @@ On 2026-10-24 the owner ran `make doctor` from a shell on Node.js v24.21.0 with 
 
 ## Impact
 
-`scripts/environment-checks.ts`, `scripts/setup.ts`, and `test/environment-checks.test.ts`. No new dependency and no change to what the checks pass or fail.
+`Makefile`, `scripts/environment-checks.ts`, `scripts/setup.ts`, and `test/environment-checks.test.ts`. No new dependency and no change to what the checks pass or fail.

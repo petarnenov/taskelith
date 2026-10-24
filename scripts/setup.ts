@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import {
-  checkEnvironment, collectFacts, formatReport, readPins, setupSteps, stepCommand, type CommandRunner
+  checkEnvironment, collectFacts, formatReport, readPins, setupSteps, shellNodeNotice, stepCommand, type CommandRunner
 } from './environment-checks.ts';
 
 // `make setup`: adds the missing parts that can be installed from this clone,
@@ -27,8 +27,6 @@ for (const step of setupSteps(check())) {
 
 const results = check();
 console.log(formatReport(results));
-const invokingNode = process.env.INVOKING_NODE;
-if (invokingNode !== process.version) {
-  console.log(`These checks ran under Node.js ${process.version}, but your shell uses ${invokingNode || 'none'}; run 'nvm use' before make doctor or make verify.`);
-}
+const notice = shellNodeNotice(process.env.INVOKING_NODE, process.version);
+if (notice) console.log(notice);
 if (results.some((result) => !result.ok)) process.exit(1);

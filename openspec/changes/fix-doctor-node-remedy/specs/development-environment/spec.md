@@ -13,7 +13,7 @@
 
 #### Scenario: Node.js too old for the scripts
 - **WHEN** the Node.js on `PATH` cannot run the repository's TypeScript scripts
-- **THEN** `make doctor` prints that Node.js cannot run the scripts and names `make setup`
+- **THEN** `make doctor` prints that Node.js cannot run the scripts, names `nvm use`, and names `make setup` only for a pinned Node.js that is not installed
 
 #### Scenario: Shell on another Node.js
 - **WHEN** the Node.js on `PATH` does not match `.nvmrc`

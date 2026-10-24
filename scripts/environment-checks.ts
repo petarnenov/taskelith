@@ -72,7 +72,7 @@ export function checkEnvironment(facts: EnvironmentFacts, pins: Pins): CheckResu
       label: `Node.js ${pins.node} (.nvmrc)`,
       ok: pinnedNodeActive,
       detail: facts.nodeVersion,
-      remedy: `Run nvm use; if Node.js ${pins.node} is not installed yet, run make setup first (it installs it through nvm). Without nvm, install Node.js ${pins.node} yourself.`
+      remedy: `With nvm, run nvm use (run make setup first if Node.js ${pins.node} is not installed yet); without nvm, install Node.js ${pins.node} yourself.`
     },
     {
       id: 'npm',
@@ -123,6 +123,12 @@ export function stepCommand(step: SetupStep, pins: Pins): { command: string; arg
     case 'enable-hooks':
       return { command: 'git', args: ['config', 'core.hooksPath', HOOKS_PATH] };
   }
+}
+
+// make setup runs under the pinned Node.js, which it cannot activate in the calling shell.
+export function shellNodeNotice(shellNode: string | undefined, setupNode: string): string | undefined {
+  if (shellNode === setupNode) return undefined;
+  return `These checks ran under Node.js ${setupNode}, but your shell uses ${shellNode || 'none'}; run 'nvm use' before make doctor or make verify.`;
 }
 
 export function formatReport(results: readonly CheckResult[]): string {
