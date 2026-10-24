@@ -1,6 +1,5 @@
-# Integration test services for `make services-up`, pinned by the digests
-# in docs/g2-infrastructure.md; ports listen on localhost only.
-name: taskelith-services
+# Integration services run by scripts/services.sh, pinned by the digests in
+# docs/g2-infrastructure.md; ephemeral host ports on localhost only.
 
 services:
   postgres:
@@ -10,7 +9,7 @@ services:
       POSTGRES_PASSWORD: taskelith
       POSTGRES_DB: taskelith
     ports:
-      - "127.0.0.1:55432:5432"
+      - "127.0.0.1::5432"
     tmpfs:
       - /var/lib/postgresql
     healthcheck:
@@ -25,7 +24,7 @@ services:
     volumes:
       - ./nats-server.conf:/etc/nats/nats-server.conf:ro
     ports:
-      - "127.0.0.1:54222:4222"
+      - "127.0.0.1::4222"
     tmpfs:
       - /data
     healthcheck:

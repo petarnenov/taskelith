@@ -18,21 +18,23 @@ Alternative: list `apps/control-plane` and `apps/worker` explicitly. Rejected: e
 
 ### D2. Minimal package content
 
-The control plane gets one real piece: `readServiceEndpoints`, which reads `TASKELITH_POSTGRES_URL` and `TASKELITH_NATS_URL`, checks their schemes, and returns a kernel `Result` whose failure names the variable but never its value, which may hold a password. It has no defaults, so a missing setting fails at startup; the integration test helper supplies the Compose endpoints when the variables are unset. The worker gets an empty root export: no worker behaviour exists yet, and inventing a parser for it would duplicate the control plane's. An `export {};` module is treated as type-only by the coverage scope check.
+The control plane gets one real piece: `readServiceEndpoints`, which reads `TASKELITH_POSTGRES_URL` and `TASKELITH_NATS_URL`, checks their schemes, and returns a kernel `Result` whose failure names the variable but never its value, which may hold a password. It has no defaults, so a missing setting fails at startup; the integration tests read the same variables, which `make test` sets. The worker gets an empty root export: no worker behaviour exists yet, and inventing a parser for it would duplicate the control plane's. An `export {};` module is treated as type-only by the coverage scope check.
 
 Alternatives: a shared configuration package (premature with one consumer), or a placeholder `main` (would imply orchestration that does not exist).
 
-### D3. Compose services and `make` targets
+### D3. Compose services, projects, and `make` targets
 
-`infra/services/compose.yaml` pins `postgres:18.6-trixie` and `nats:2.15.1-alpine` by the index digests of the G2 infrastructure evaluation, with the fixed project name `taskelith-services`. Data lives in `tmpfs`, so nothing survives `down`. Ports bind to `127.0.0.1` on 55432 and 54222, away from the default ports a developer's own servers may use; the NATS monitoring port stays inside the container. PostgreSQL's health check uses TCP, because the image's initialization server listens only on the Unix socket. NATS mounts `nats-server.conf` with a `jetstream` block over the bundled configuration, which has JetStream off, and its health check calls `/healthz?js-enabled-only=true` with BusyBox `wget`, which is why the Alpine variant is used.
+`infra/services/compose.yaml` pins `postgres:18.6-trixie` and `nats:2.15.1-alpine` by the index digests of the G2 infrastructure evaluation. Data lives in `tmpfs`, so nothing survives `down`. Ports are published as `127.0.0.1::5432` and `127.0.0.1::4222`: localhost only, with a host port Docker chooses free; the NATS monitoring port stays inside the container. PostgreSQL's health check uses TCP, because the image's initialization server listens only on the Unix socket. NATS mounts `nats-server.conf` with a `jetstream` block over the bundled configuration, which has JetStream off, and its health check calls `/healthz?js-enabled-only=true` with BusyBox `wget`, which is why the Alpine variant is used.
 
-`make services-up` checks `docker info` first and fails with a message naming Docker, then runs `up --detach --wait`, removing the services when they do not become healthy. `make services-down` runs `down --volumes --remove-orphans`. `make test` runs `npm test` between them and keeps the test exit status. `make verify` calls `make test` in place of `npm test`.
+`scripts/services.sh` drives one Compose project, named by its caller. `up` checks `docker info` and fails with a message naming Docker, runs `up --detach --wait`, and removes the project when it does not become healthy. `down` runs `down --volumes --remove-orphans`. `run` starts the project, reads the ports back with `docker compose port`, runs a command with `TASKELITH_POSTGRES_URL` and `TASKELITH_NATS_URL` set, and stops the project from an exit trap, which keeps the command's exit status.
 
-Alternatives: Testcontainers (D8 (b), not chosen by the owner); leaving the services running after `make verify` (faster reruns, but state would leak between runs).
+The Makefile names the projects from the `cksum` of the worktree path: `taskelith-<id>-verify` for `make test`, which `make verify` calls in place of `npm test`, and `taskelith-<id>-dev` for `make services-up` and `make services-down`, which print the URLs to export. Two `make verify` runs in different worktrees therefore use different projects, with their own containers, network, and ports, and each stops only its own project; manual services in the same worktree are untouched. Docker assigns free host ports, so the projects cannot collide on a port. Checked: a second project ran the integration test, waited while `make test` started, passed, and stopped its own project, then ran the test again and passed.
+
+Alternatives: Testcontainers (D8 (b), not chosen by the owner); one fixed project and fixed ports (concurrent worktrees would stop each other's services, and the pre-push hook runs `make verify` in each); leaving the services running after `make verify` (state would leak between runs).
 
 ### D4. Integration tests and Docker
 
-Integration tests are named `*.integration.test.ts` in a package's `test/` directory. They run in the same `npm test` invocation and coverage gate as every other test. Without the services they fail with a message naming `make services-up`, `make test`, and `make verify`; they are never skipped, because a skipped test would let the gate pass without the evidence D8 (a) requires. `npm test` alone therefore needs `make services-up` first. Without Docker, `make verify` fails closed, as it already did for the contract check.
+Integration tests are named `*.integration.test.ts` in a package's `test/` directory. They run in the same `npm test` invocation and coverage gate as every other test. They read the service URLs from the environment and, without them or without the services, fail with a message naming `make test`, `make verify`, and the URLs that `make services-up` prints; they are never skipped, because a skipped test would let the gate pass without the evidence D8 (a) requires. Without Docker, `make verify` fails closed, as it already did for the contract check.
 
 The first integration test checks PostgreSQL with `pg@8.23.1` (`SHOW server_version_num` equals 180006) and NATS without a client package: a NATS server sends an `INFO` line on connect, and its `version` and `jetstream` fields prove the pinned version and JetStream. PostgreSQL has no equivalent without implementing its authentication, so `pg` and `@types/pg` are installed exact-pinned as development dependencies of `@taskelith/control-plane`, which owns the test. The NATS client packages wait for item 2's compatibility evidence and item 12.
 
@@ -49,6 +51,6 @@ Alternatives: a ban on `child_process` everywhere outside the worker, which woul
 ## Risks / Trade-offs
 
 - `make verify` takes longer: the first pull of both images, then a few seconds to start them.
-- The fixed project name and ports make two concurrent `make verify` runs on one machine, such as in two worktrees, share the services: the run that finishes first stops them under the other, and its tests fail. Running them one at a time avoids it; a per-worktree project name and ports are a possible follow-up.
-- `make verify` stops services that a developer started with `make services-up`.
+- Two concurrent `make verify` runs in the same worktree would share the verify project; they would already conflict on `dist/` and `coverage/`.
+- A run killed with `SIGKILL` leaves its project running; the next `make test` in that worktree reuses and then removes it.
 - The transitive rule follows only workspace imports; a third-party package that launches processes is not traced.

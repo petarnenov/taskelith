@@ -2,7 +2,11 @@
 NODE_PIN := $(shell cat .nvmrc)
 NPM_PIN := $(shell sed -n 's/.*npm install --global npm@\([0-9.]*\) --ignore-scripts.*/\1/p' .github/workflows/release.yml | head -n 1)
 
-SERVICES := docker compose --file infra/services/compose.yaml
+# Compose projects are named per worktree, so parallel worktrees never share
+# services; make verify and manual use get separate projects.
+SERVICES_ID := $(shell printf '%s' '$(CURDIR)' | cksum | cut -d ' ' -f 1)
+VERIFY_SERVICES := taskelith-$(SERVICES_ID)-verify
+DEV_SERVICES := taskelith-$(SERVICES_ID)-dev
 
 SPECKIT_IMAGE := taskelith-speckit:1.2.3
 SPECKIT_BASE := python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962
@@ -46,20 +50,19 @@ hooks:
 dependency-inventory:
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use sh -c 'npm ci --ignore-scripts && npm run inventory:dependencies'
 
-# Runs npm test, whose integration tests need the services, between
-# services-up and services-down; the services stop also when tests fail.
-test: services-up
-	@npm test; status=$$?; $(MAKE) --no-print-directory services-down; exit $$status
+# Runs npm test against its own services, which stop also when tests fail;
+# fails closed without Docker.
+test:
+	@bash scripts/services.sh run $(VERIFY_SERVICES) npm test
 
-# Starts PostgreSQL and NATS for integration tests and waits until healthy;
-# fails closed without Docker, as make verify needs them.
+# Starts PostgreSQL and NATS for manual integration test runs and prints
+# the URLs to export.
 services-up:
-	@docker info >/dev/null 2>&1 || { echo "make services-up: Docker is not available. Start Docker; make verify needs it for the integration services." >&2; exit 1; }
-	$(SERVICES) up --detach --wait --wait-timeout 120 || { $(SERVICES) down --volumes; exit 1; }
+	@bash scripts/services.sh up $(DEV_SERVICES)
 
-# Stops the services and discards their data.
+# Stops the services of services-up and discards their data.
 services-down:
-	$(SERVICES) down --volumes --remove-orphans
+	@bash scripts/services.sh down $(DEV_SERVICES)
 
 # Fails on an undeclared breaking contract change since the origin/dev merge
 # base; runs oasdiff as its digest-pinned container, so it needs Docker.

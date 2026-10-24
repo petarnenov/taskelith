@@ -1,19 +1,11 @@
 import { connect } from 'node:net';
 import { readServiceEndpoints, type ServiceEndpoints } from '@taskelith/control-plane';
 
-// The endpoints of infra/services/compose.yaml, unless the environment sets
-// other ones.
-const COMPOSE_POSTGRES_URL = 'postgres://taskelith:taskelith@127.0.0.1:55432/taskelith';
-const COMPOSE_NATS_URL = 'nats://127.0.0.1:54222';
-
-export const SERVICES_REMEDY = 'start the services with make services-up, or run make test or make verify';
+export const SERVICES_REMEDY = 'run make test or make verify, or export the URLs that make services-up prints';
 
 export function integrationEndpoints(): ServiceEndpoints {
-  const result = readServiceEndpoints({
-    TASKELITH_POSTGRES_URL: process.env.TASKELITH_POSTGRES_URL || COMPOSE_POSTGRES_URL,
-    TASKELITH_NATS_URL: process.env.TASKELITH_NATS_URL || COMPOSE_NATS_URL,
-  });
-  if (!result.ok) throw new Error(result.error.message);
+  const result = readServiceEndpoints(process.env);
+  if (!result.ok) throw new Error(`${result.error.message}; ${SERVICES_REMEDY}`);
   return result.value;
 }
 
