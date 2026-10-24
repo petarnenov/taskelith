@@ -5,5 +5,5 @@
 
 ## 2. Verification and review
 
-- [ ] 2.1 Run `make verify` and the link and evidence checks.
-- [ ] 2.2 Obtain independent review (Codex Sol medium, by rotation) and record results.
+- [x] 2.1 Run `make verify` and the link and evidence checks.
+- [x] 2.2 Obtain independent review (Codex Sol medium, by rotation) and record results.
