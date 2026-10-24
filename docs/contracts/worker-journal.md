@@ -36,7 +36,7 @@ The **control records** are every path in the table except `worker/workspaces/` 
 
 ## 3. Store and durability settings
 
-By decision D4 (a), the journal is SQLite through `node:sqlite` on the pinned Node 24.22.1, with `better-sqlite3` as the fallback. Both open the same SQLite 3 file format, so switching the binding changes no stored data; item 1 records the SQLite library version each binding bundles. The worker opens the journal with these settings, and item 14 verifies each one after opening:
+By decision D4 (a), the journal is SQLite through `node:sqlite` on the pinned Node 24.22.1, with `better-sqlite3` as the fallback. Both bundle SQLite 3.53.4 and open the same file format, so switching the binding changes no stored data ([G2 infrastructure](../g2-infrastructure.md) section 4, item 1). The worker opens the journal with these settings, and item 14 verifies each one after opening:
 
 | Setting | Required value | Reason |
 | --- | --- | --- |
