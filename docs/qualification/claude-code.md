@@ -107,11 +107,12 @@ Proposal for the port design, not yet decided: each plugin manifest declares its
 
 ## Remaining before admission
 
-- Linux x64 and arm64 in the planned worker container image, and macOS arm64, with `DISABLE_AUTOUPDATER=1` and a check that nothing outside the configuration directory changes.
+- Linux x64 and arm64 in the planned worker container image (G2, [ADR 0007](../decisions/0007-g0-closure.md)), and macOS arm64, with `DISABLE_AUTOUPDATER=1` and a check that nothing outside the configuration directory changes.
 - Non-permission input requests, which no scenario tested.
 - The subscription mechanism for account slots (a long-lived subscription token or a per-slot device login), its load, limit, and reset signals, and whether an agent can read an injected credential ([ADR 0005](../decisions/0005-harness-subscription-account-pools.md)).
 - An alternative provider or gateway path, if the owner wants one, authenticated only through a subscription (ADR 0005).
 - The automatic interrupted-turn re-run, and repeated runs to check stability.
+- Review of Anthropic's terms, including whether they allow pooled subscriptions for automated use (ADR 0005), before admission in G3 ([ADR 0007](../decisions/0007-g0-closure.md)).
 - Independent adoption evidence for the pinned version.
 - A host side-effect check with before-and-after listings, which the `harness-qualification` spec now requires; this record does not yet meet it.
 - A versioned conformance suite in the repository, run through `make`, once the agent port exists (G1).

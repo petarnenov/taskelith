@@ -66,7 +66,7 @@ Stated in harness-neutral terms, so that a later Forgejo plugin maps onto the sa
 
 ## Remaining before admission
 
-- Review of GitHub's terms of service and privacy statement against Taskelith's use.
+- Review of GitHub's terms of service and privacy statement against Taskelith's use, before admission in G3 ([ADR 0007](../decisions/0007-g0-closure.md)).
 - A real webhook receiver that verifies signatures on the raw body, in place of the API copy, covering every delivery of a run, including redeliveries and deliveries caused by cleanup.
 - A reviewer identity separate from the App for approvals.
 - Token refresh for runs longer than an hour, and rate-limit behaviour under load.

@@ -10,7 +10,7 @@ The [metadata snapshot](dependencies/toolchain-metadata.json) records registry p
 
 ## Direct development tools
 
-All nine packages below are development-only. Every row remains `candidate` for full architectural admission; the final column states why. No dependencies or versions were changed by this assessment.
+All nine packages below are development-only. Every row remains `candidate` for full architectural admission; the final column states why. Their remaining maintenance, adoption, security-channel, operational, upgrade, and recovery evidence is deferred to G8 ([ADR 0007](decisions/0007-g0-closure.md)). No dependencies or versions were changed by this assessment.
 
 | Package and exact version | Role | License; Node requirement | Upstream | Assessment and remaining admission evidence |
 | --- | --- | --- | --- | --- |
@@ -27,6 +27,8 @@ All nine packages below are development-only. Every row remains `candidate` for 
 The semantic-release upstream [manifest](https://github.com/semantic-release/semantic-release/blob/master/package.json) shows use of its four plugins and Node declarations. This is ecosystem integration evidence, not independent adoption of every Taskelith-pinned version. The VS Code [manifest](https://github.com/microsoft/vscode/blob/main/package.json) demonstrates real TypeScript-based build usage, but does not establish continued support for TypeScript 5.9.3. No stars, download counts, or unsupported claims close these gaps.
 
 ## Runtime and package-manager tools
+
+Remaining qualification of Node.js and npm, including the global binary inventory and nested vendored code, is deferred to G8 ([ADR 0007](decisions/0007-g0-closure.md)).
 
 | Component | Exact selection and license | Status and qualification limits |
 | --- | --- | --- |
@@ -74,14 +76,14 @@ An audit exits nonzero when findings exist; retain and inspect its JSON rather t
 
 | Component | Exact selection and terms | Status and qualification limits |
 | --- | --- | --- |
-| Claude Code (G3) | `@anthropic-ai/claude-agent-sdk@0.3.308` with bundled CLI 2.1.308; proprietary, under Anthropic's legal agreements | `candidate`. macOS x86_64 egress and native-capability evidence is recorded in the [qualification record](qualification/claude-code.md). Open before admission: Linux, macOS arm64, the subscription account mechanism and credential-exposure tests required by [ADR 0005](decisions/0005-harness-subscription-account-pools.md), running with `DISABLE_AUTOUPDATER=1`, any alternative subscription-authenticated provider path, and independent adoption evidence. |
-| Codex (G4) | `@openai/codex@0.164.0` (`codex app-server`); Apache-2.0 | `candidate`. macOS x86_64 egress and native-capability evidence is recorded in the [qualification record](qualification/codex.md), whose "Remaining before admission" list holds the open gates, including OpenAI's data-handling terms, Linux, macOS arm64, and the temporary-directory fallback after a crash. The vendor calls app-server experimental. |
+| Claude Code (G3) | `@anthropic-ai/claude-agent-sdk@0.3.308` with bundled CLI 2.1.308; proprietary, under Anthropic's legal agreements | `candidate`. macOS x86_64 egress and native-capability evidence is recorded in the [qualification record](qualification/claude-code.md). Open before admission: Anthropic's terms review before G3 and Linux in the worker image in G2 ([ADR 0007](decisions/0007-g0-closure.md)), macOS arm64, the subscription account mechanism and credential-exposure tests required by [ADR 0005](decisions/0005-harness-subscription-account-pools.md), running with `DISABLE_AUTOUPDATER=1`, any alternative subscription-authenticated provider path, and independent adoption evidence. |
+| Codex (G4) | `@openai/codex@0.164.0` (`codex app-server`); Apache-2.0 | `candidate`. macOS x86_64 egress and native-capability evidence is recorded in the [qualification record](qualification/codex.md), whose "Remaining before admission" list holds the open gates, including OpenAI's data-handling terms (reviewed before G3) and Linux in the worker image (G2), both per [ADR 0007](decisions/0007-g0-closure.md), macOS arm64, and the temporary-directory fallback after a crash. The vendor calls app-server experimental. |
 
 ## SCM integrations
 
 | Component | Exact selection and terms | Status and qualification limits |
 | --- | --- | --- |
-| GitHub.com (first SCM) | REST API version `2022-11-28` through a GitHub App with per-run installation tokens ([ADR 0006](decisions/0006-github-first-scm.md)); GitHub Terms of Service and Privacy Statement | `candidate`. Token scoping, denial, pull requests, statuses, merge blocking, and signed webhooks are recorded in the [qualification record](qualification/github.md), whose "Remaining before admission" list holds the open gates, including the terms review, the security-reporting process, maintenance evidence, and recovery and upgrade behaviour. |
+| GitHub.com (first SCM) | REST API version `2022-11-28` through a GitHub App with per-run installation tokens ([ADR 0006](decisions/0006-github-first-scm.md)); GitHub Terms of Service and Privacy Statement | `candidate`. Token scoping, denial, pull requests, statuses, merge blocking, and signed webhooks are recorded in the [qualification record](qualification/github.md), whose "Remaining before admission" list holds the open gates, including the terms review (before G3 per [ADR 0007](decisions/0007-g0-closure.md)), the security-reporting process, maintenance evidence, and recovery and upgrade behaviour. |
 
 ## Planned components
 
