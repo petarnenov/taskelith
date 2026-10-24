@@ -6,15 +6,12 @@ import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { INVENTORY_MERGE_DRIVER, INVENTORY_MERGE_DRIVER_KEY } from '../scripts/environment-checks.ts';
 import { INVENTORY_FILES, INVENTORY_INPUTS, sha256 } from '../scripts/inventory-provenance.ts';
+import { fixtureEnv } from './git-fixture-env.ts';
 
 const repository = resolve(import.meta.dirname, '..');
 const hookScripts = [
   'scripts/inventory-provenance.ts', 'scripts/pre-push-checks.ts', 'scripts/check-inventory-inputs.ts', 'scripts/check-pre-push.ts',
 ];
-
-// Git hooks export GIT_DIR and related variables; the fixtures drop them so
-// that their git commands act on their own repository, never on this one.
-const fixtureEnv = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')));
 
 function withScratch(prefix: string, body: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), prefix));
