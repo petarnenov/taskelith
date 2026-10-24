@@ -60,6 +60,10 @@ Assigned reviewer (rotation): Claude Code, `claude -p --model claude-fable-5-1 -
   8. Low, unreviewed fix: the writer list omitted the attempt's admission and terminal state. Added.
   9. Low, unreviewed fix: the worker did not check the sum of CPU and memory. It refuses with `worker-capacity-exhausted` when the sum exceeds its host capacity less the daemon ceiling.
 
+## Merge of `dev`
+
+`origin/dev` at `cc8585b` was merged with a merge commit and no conflicts; it brought the merged supervisor identity (item 4) and worker journal (item 5) contracts. Their obligations on this contract match it: uncertain, `termination-unproven`, and drained executions and executions with lost local history keep their reservations, and the backlog limit and disk floor are worker-side admission limits. One sentence was added after the merge, unreviewed: the per-execution supervisor's memory counts toward the execution's reservation, as item 4 states. `make verify` passed after the merge.
+
 ## Owner decisions
 
 On 2026-10-25 the owner decided, through the coordinator, D-A (a) and D-B (a) above, and D-C (a): keep the fail-closed `delegation-chain-exceeds-quota` rule, under which depth 3 in the root's run needs a run quota of 4, an installation setting. `docs/operational-targets.md` does not state the interaction, so it is unchanged and the contract records it. The owner saw the interpretations of design.md (the 8-attempt budget counting every attempt in the tree, a reservation per child attempt, provider concurrency at attempt granularity, and subscription slots as a G3 extension in the same transaction).

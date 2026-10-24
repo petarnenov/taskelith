@@ -31,6 +31,8 @@ The values are the provisional defaults of the [operational targets](../operatio
 | Delegation attempts | Consumption | Root task | `8` attempts in the whole task tree | Reject |
 | Automatic retries | Consumption | Task | `2` for a proven-idempotent or safe failure, `0` for uncertain execution | Reject; backoff `5s` initial, `60s` maximum, with jitter |
 
+The memory of an execution's per-execution supervisor (decision D7 (c), item 4) counts toward that execution's reservation, not toward the daemon ceiling.
+
 Worker-side limits that are not reserved centrally, but enforced by the worker, are in section 8: the disk floor, the journal backlog, and the daemon overhead ceiling.
 
 Provider credential concurrency is reserved at attempt granularity: an attempt that uses a credential holds one of its units for its whole life, so a credential admits at most its limit of concurrent attempts. Turn-level concurrency inside one attempt belongs to the harness plugin (G3). In G2 the executed program is a test-only scripted process (item 15) that uses no provider credential, so no reservation holds a credential unit yet; section 10 names the G3 extension.
