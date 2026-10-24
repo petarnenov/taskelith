@@ -97,16 +97,26 @@ interface AsyncapiChange {
   readonly path: string;
 }
 
-// Keywords whose keys are names chosen by the document, such as property
-// names, rather than schema keywords.
-const SCHEMA_MAPS = new Set(['properties', 'patternProperties', 'definitions', '$defs', 'dependencies']);
-
 // The parser adds x-parser-* annotations, such as generated schema
-// identifiers, as keywords of the objects it parses. A key of a schema map,
-// such as a property named x-parser-field, is part of the contract.
+// identifiers, to the objects it parses. The prefix is reserved for it: a
+// document may not use it for any key, so that every path through such a key
+// is an annotation.
+const PARSER_PREFIX = 'x-parser-';
+
+export function reservedParserKeys(value: unknown, path = ''): string[] {
+  if (typeof value !== 'object' || value === null) return [];
+  return Object.entries(value).flatMap(([key, child]) => {
+    const childPath = `${path}/${key}`;
+    return [...(key.startsWith(PARSER_PREFIX) ? [childPath] : []), ...reservedParserKeys(child, childPath)];
+  });
+}
+
+function reservedKeyProblems(path: string, document: unknown): string[] {
+  return reservedParserKeys(document).map((key) => `${path}: the key ${key} uses the prefix ${PARSER_PREFIX}, which the AsyncAPI parser reserves`);
+}
+
 function isParserAnnotation(path: string): boolean {
-  const segments = path.split('/');
-  return segments.some((segment, index) => segment.startsWith('x-parser-') && !SCHEMA_MAPS.has(segments[index - 1] ?? ''));
+  return path.split('/').some((segment) => segment.startsWith(PARSER_PREFIX));
 }
 
 // @asyncapi/diff leaves changes its standard does not classify, such as most
@@ -157,15 +167,17 @@ async function checkDocuments(): Promise<string[]> {
   const problems: string[] = [];
   for (const [kind, path] of Object.entries(CONTRACT_DOCUMENTS)) {
     const headText = readFileSync(path, 'utf8');
-    const headVersion = JSON.parse(headText).info.version;
+    const head = JSON.parse(headText);
+    const invalid = [...versionProblems(path, head.info.version), ...(kind === 'asyncapi' ? reservedKeyProblems(path, head) : [])];
+    problems.push(...invalid);
     const baseText = textAt(base, path);
     if (baseText === undefined) {
-      problems.push(...versionProblems(path, headVersion));
       console.log(`${path}: absent at the merge base ${base.slice(0, 12)}; nothing to compare.`);
       continue;
     }
+    if (invalid.length > 0) continue;
     const breaking = kind === 'openapi' ? openapiBreakingChanges(baseText, headText) : await asyncapiBreakingChanges(baseText, headText);
-    problems.push(...compatibilityProblems(path, JSON.parse(baseText).info.version, headVersion, breaking));
+    problems.push(...compatibilityProblems(path, JSON.parse(baseText).info.version, head.info.version, breaking));
     console.log(`${path}: ${breaking.length} breaking change(s) against ${base.slice(0, 12)}.`);
   }
   return problems;

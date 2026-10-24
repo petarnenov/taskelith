@@ -77,7 +77,7 @@ The package SHALL export `checkHttpSchema` and `checkMessageSchema`, which valid
 - **THEN** the check fails, also for a new document, and does not accept the version as declaring a breaking change
 
 ### Requirement: Breaking-change detectors
-OpenAPI documents SHALL be compared by oasdiff run only as its digest-pinned container without network access and with external references disallowed, counting ERR-level changes as breaking. AsyncAPI documents SHALL be compared by `@asyncapi/diff`, counting its breaking and unclassified changes as breaking, except the change of `info.version` itself and the parser's `x-parser-*` annotations; a key of a schema map, such as a property named `x-parser-field`, is not an annotation.
+OpenAPI documents SHALL be compared by oasdiff run only as its digest-pinned container without network access and with external references disallowed, counting ERR-level changes as breaking. AsyncAPI documents SHALL be compared by `@asyncapi/diff`, counting its breaking and unclassified changes as breaking, except the change of `info.version` itself and the parser's `x-parser-*` annotations.
 
 #### Scenario: Optional payload field added
 - **WHEN** an optional property is added to an AsyncAPI payload schema, which `@asyncapi/diff` leaves unclassified
@@ -86,3 +86,10 @@ OpenAPI documents SHALL be compared by oasdiff run only as its digest-pinned con
 #### Scenario: Version-only release
 - **WHEN** only `info.version` of the AsyncAPI document changes from 0.1.0 to 0.1.1
 - **THEN** the check passes
+
+### Requirement: Reserved parser prefix
+Because the AsyncAPI parser reserves the prefix `x-parser-` for its annotations, the check SHALL fail for an AsyncAPI document that uses it for any key.
+
+#### Scenario: Reserved prefix
+- **WHEN** the AsyncAPI document names an operation or a property `x-parser-user`
+- **THEN** the check fails and names the key

@@ -5,6 +5,7 @@ import {
   compatibilityProblems,
   declaresBreakingChange,
   oasdiffBreakingChanges,
+  reservedParserKeys,
   versionProblems,
 } from '../scripts/check-contract-compatibility.ts';
 
@@ -66,13 +67,21 @@ test('breaking and unclassified AsyncAPI changes count, parser annotations and t
     [
       { action: 'add', path: '/components/messages/gateOpened/payload/properties/metadata/allOf/0/required/7' },
       { action: 'edit', path: '/components/messages/gateReopened/payload/properties/metadata/x-parser-schema-id' },
-      { action: 'edit', path: '/components/messages/gateOpened/payload/properties/x-parser-user-field/type' },
     ],
   );
 
   assert.deepEqual(changes, [
     'remove /channels/sdlcEvents/messages/gateStale',
     'add /components/messages/gateOpened/payload/properties/metadata/allOf/0/required/7',
-    'edit /components/messages/gateOpened/payload/properties/x-parser-user-field/type',
   ]);
+});
+
+test('a document may not use the parser prefix for any key', () => {
+  const document = {
+    operations: { 'x-parser-user': { action: 'send' }, sendEvent: { action: 'send' } },
+    components: { schemas: { Event: { properties: { 'x-parser-field': { type: 'string' }, id: { type: 'string' } } } } },
+  };
+
+  assert.deepEqual(reservedParserKeys(document), ['/operations/x-parser-user', '/components/schemas/Event/properties/x-parser-field']);
+  assert.deepEqual(reservedParserKeys({ info: { title: 'x-parser-value' }, tags: ['x-parser-tag'] }), []);
 });
