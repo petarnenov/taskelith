@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  checkEnvironment, collectFacts, formatReport, readPins, setupSteps, stepCommand,
+  checkEnvironment, collectFacts, formatReport, readPins, setupSteps, shellNodeNotice, stepCommand,
   type CommandOutcome, type EnvironmentFacts
 } from '../scripts/environment-checks.ts';
 
@@ -35,6 +35,26 @@ test('each missing part fails only its own check', () => {
   assert.deepEqual(failing({ ...healthy, dependenciesInstalled: false }), ['dependencies']);
   assert.deepEqual(failing({ ...healthy, hooksPath: undefined }), ['hooks']);
   assert.deepEqual(failing({ ...healthy, hooksPath: '.husky' }), ['hooks']);
+});
+
+test('with the pinned Node.js installed but not active, the remedies name nvm use instead of looping back to setup', () => {
+  const report = formatReport(checkEnvironment({ ...healthy, nodeVersion: 'v24.21.0', npmVersion: '11.19.0' }, pins));
+  assert.match(report, /FAIL Node\.js 24\.22\.1 \(\.nvmrc\): v24\.21\.0\n {5}With nvm, run nvm use \(run make setup first if Node\.js 24\.22\.1 is not installed yet\); without nvm, install Node\.js 24\.22\.1 yourself\./);
+  assert.match(report, /FAIL npm 12\.2\.1 \(CI pin\): 11\.19\.0\n {5}Fix the Node\.js check first; npm is checked under Node\.js 24\.22\.1\./);
+});
+
+test('with the pinned Node.js active, a wrong npm is fixed by setup', () => {
+  assert.match(formatReport(checkEnvironment({ ...healthy, npmVersion: '11.19.0' }, pins)), /FAIL npm 12\.2\.1 \(CI pin\): 11\.19\.0\n {5}Run make setup\./);
+});
+
+test('setup tells a shell on another Node.js to run nvm use, and stays quiet otherwise', () => {
+  assert.equal(shellNodeNotice({ shell: 'v24.22.1', setup: 'v24.22.1' }), undefined);
+  assert.equal(
+    shellNodeNotice({ shell: 'v24.21.0', setup: 'v24.22.1' }),
+    "These checks ran under Node.js v24.22.1, but your shell uses v24.21.0; run 'nvm use' before make doctor or make verify."
+  );
+  assert.match(shellNodeNotice({ shell: undefined, setup: 'v24.22.1' }) ?? '', /your shell uses none;/);
+  assert.match(shellNodeNotice({ shell: '', setup: 'v24.22.1' }) ?? '', /your shell uses none;/);
 });
 
 test('setup installs npm before the dependencies and reinstalls them with the new npm', () => {

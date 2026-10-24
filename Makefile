@@ -51,7 +51,7 @@ speckit-lock:
 # Checks that this clone can build and verify; changes nothing.
 doctor:
 	@node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 6) ? 0 : 1)' 2>/dev/null || { \
-		echo "make doctor: Node.js $$(node -v 2>/dev/null || echo 'not found') cannot run the repository scripts. Run 'make setup'." >&2; \
+		echo "make doctor: the repository scripts need Node.js 22.6 or later (found: $$(node -v 2>/dev/null || echo 'none')). With nvm, run 'nvm use' (run 'make setup' first if Node.js $(NODE_PIN) is not installed yet); without nvm, install Node.js $(NODE_PIN)." >&2; \
 		exit 1; \
 	}
 	@NODE_PIN=$(NODE_PIN) NPM_PIN=$(NPM_PIN) node --experimental-strip-types scripts/doctor.ts
