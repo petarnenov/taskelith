@@ -12,6 +12,10 @@ const hookScripts = [
   'scripts/inventory-provenance.ts', 'scripts/pre-push-checks.ts', 'scripts/check-inventory-inputs.ts', 'scripts/check-pre-push.ts',
 ];
 
+// Git hooks export GIT_DIR and related variables; the fixtures drop them so
+// that their git commands act on their own repository, never on this one.
+const fixtureEnv = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')));
+
 function withScratch(prefix: string, body: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), prefix));
   try { body(root); } finally { rmSync(root, { recursive: true, force: true }); }
@@ -26,7 +30,7 @@ function git(root: string, ...args: string[]): string {
   return execFileSync('git', [
     '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
     '-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', ...args,
-  ], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  ], { cwd: root, encoding: 'utf8', env: fixtureEnv, stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
 function commitInventory(root: string, label: string): void {
@@ -71,7 +75,7 @@ function manifest(name: string): string {
 }
 
 function runHookScript(root: string, script: string, input = '') {
-  return spawnSync(process.execPath, ['--experimental-strip-types', script], { cwd: root, encoding: 'utf8', input });
+  return spawnSync(process.execPath, ['--experimental-strip-types', script], { cwd: root, encoding: 'utf8', env: fixtureEnv, input });
 }
 
 test('the post-merge check passes on a fresh inventory and names the stale inputs', () => {

@@ -27,6 +27,14 @@ Assigned reviewer (rotation): Codex CLI with `gpt-6.1-sol`, reasoning effort med
   2. Medium: the hooks ran the shell's Node.js instead of the pinned one. Both hooks now run through `scripts/with-pinned-node.sh use`.
 - **Pass 3 at `f09841c` — session `01a16ff6-51f8-7992-80b0-a3023a1c870b`.** Confirmed both resolutions and found no new problem: 0 Critical, 0 High, 0 Medium, 0 Low.
 
+## Incident after pass 3 and its fix (unreviewed)
+
+The first push of `d135225` ran the new git fixture tests inside the `pre-push` hook. Git exports `GIT_DIR` there, so the fixtures' git commands acted on this repository instead of their temporary ones. They set `core.bare=true` in the shared `.git/config`, moved the local `dev` to a fixture commit, created the local branches `feature` and `other`, switched this worktree to `feature`, and committed `61eb2f9`, which deletes almost every file, onto this branch, which the push then sent. Nothing was merged; the coordinator was told to hold integration.
+
+Repair, approved by the owner without a force push: `core.bare` was set back to `false`, the local `dev` was restored to `d113b6a` from its reflog, the worktree was switched back to this branch, and `5c1b21b` reverts `61eb2f9`; `git diff d135225 5c1b21b` is empty. Deleting the stray local branches `feature` and `other` was not permitted in this session and is left to the owner.
+
+Fix: the fixture tests now run git and the hook scripts with every `GIT_*` variable removed from their environment, in their own temporary repositories. `test/inventory-merge-isolation.test.ts` runs them with `GIT_DIR` and `GIT_WORK_TREE` naming a sentinel repository and asserts that its refs and configuration are unchanged; without the fix, the same run moved the sentinel's `dev` and failed three tests. After the fix, `make verify` passed, and the push ran it again from the `pre-push` hook, with the repository's refs and `core.bare` unchanged afterwards. This fix came after the third pass and is unreviewed; a further pass needs the owner's permission.
+
 ## Limitations
 
 - No automated test runs the hooks under a non-pinned shell Node.js; this was checked by hand, as recorded above.
