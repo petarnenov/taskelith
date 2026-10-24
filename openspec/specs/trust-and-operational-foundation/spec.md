@@ -43,7 +43,11 @@ The project SHALL typecheck all repository TypeScript files (`src/`, `scripts/`,
 - **THEN** the boundary checker fails with the offending file path
 
 #### Scenario: Subpath import of a workspace package
-- **WHEN** product code imports a subpath of a `@taskelith/` workspace package instead of its root export
+- **WHEN** product code imports a subpath of a `@taskelith/` workspace package other than a module package's port entry `port`, instead of its root export
+- **THEN** the boundary checker fails with the offending file path
+
+#### Scenario: Plugin SDK imports beyond a port entry
+- **WHEN** a file under `packages/plugin-sdk/src/` imports a module package other than with `import type` or `export type` through its port entry
 - **THEN** the boundary checker fails with the offending file path
 
 #### Scenario: Named import of a forbidden package
