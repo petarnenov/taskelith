@@ -51,13 +51,16 @@ By decision D4 (a), the journal is SQLite through `node:sqlite` on the pinned No
 
 Every protocol write is one explicit transaction (`BEGIN IMMEDIATE` to `COMMIT`) that records one command, one launch step, or one fact, so each transaction is small. The two settings above trigger checkpoints and limit the WAL left after them; they are not a hard cap, because the WAL grows past them until a checkpoint completes. The WAL's disk use therefore counts toward the disk floor of section 7, and a checkpoint that fails with an I/O error is a flush failure (section 7). After it first creates the database and WAL files, the worker syncs the `worker/journal/` directory, so that their directory entries survive a power loss.
 
-**Guarantee.** A transaction whose `COMMIT` returned success survives a process crash, an operating-system crash, and a power loss, on storage that honors flush requests. A transaction whose `COMMIT` failed or did not return may or may not survive; section 7 says how the worker acts on that. Storage that acknowledges flushes it has not performed is outside the guarantee; native acceptance (item 25) records the storage of each matrix entry.
+**macOS flush fallback.** When `F_FULLFSYNC` fails, SQLite 3.53.4 falls back to a plain `fsync` and returns that result ([`os_unix.c`](https://github.com/sqlite/sqlite/blob/version-3.53.4/src/os_unix.c#L3815-L3829)), and Node's `fs.fsync` on macOS goes through libuv 1.52.1, the version Node 24.22.1 bundles, which falls back to `F_BARRIERFSYNC` and then `fsync` ([`fs.c`](https://github.com/libuv/libuv/blob/v1.52.1/src/unix/fs.c#L182-L187)). Such a failure therefore cannot be detected per write, and switching the binding does not help, because both bundle the same SQLite. The worker instead accepts on macOS only a local filesystem on which `F_FULLFSYNC` is supported (APFS), checked at startup; the check is an item 14 qualification gate, and item 14 shows that a filesystem without `F_FULLFSYNC` support is refused.
+
+**Guarantee.** A transaction whose `COMMIT` returned success survives a process crash, an operating-system crash, and a power loss, on storage that honors flush requests and, on macOS, on a filesystem that passed the startup check. A transaction whose `COMMIT` failed or did not return may or may not survive; section 7 says how the worker acts on that. Storage that acknowledges flushes it has not performed is outside the guarantee; native acceptance (item 25) records the storage of each matrix entry.
 
 ## 4. Durable file rule
 
 Files outside the journal (the identity and the execution record of item 4) are written so that each is either absent or complete:
 
 - **Create once:** write the content to a temporary file in the same directory, `fsync` it, `link` it to the final name, which fails if that name exists, remove the temporary name, and `fsync` the directory. This gives the exclusive creation that item 4's `launch` and `supervisor.<n>` files need, with their content, in one step. When `link` fails because the name exists, the writer reads the existing file and decides from it (item 4 section 5).
+- **Using a file another process created:** the winner of a create-once may not yet have synced the directory, so a file visible to another process is not yet proof. Before acting on a create-once file it did not make durable itself in this process, including one found at start, a reader `fsync`s the file and its directory; a failure is a flush failure (section 7), and the reader takes no action on the file.
 - **Replace:** the same, with `rename` instead of `link`. Only these files are replaced: `worker/identity` on re-enrollment and when an operator starts a new journal incarnation (section 8), and an execution's `intent` while no `launch` file exists (item 4).
 - **Append-only:** each record is framed with its length and a checksum and is followed by an `fsync`. A torn record at the end is discarded on reading; a bad record anywhere else makes the file corrupt.
 - **New directory:** after creating a directory, `fsync` its parent.
@@ -82,10 +85,10 @@ Each commit below precedes the action in its row:
 | --- | --- | --- | --- |
 | W1 | The inbox entry and its outcome, in one transaction with what the command asks: for an accepted assignment its launch intent, for an accepted cancellation its cancellation request, and for a rejected command its rejection observation | Acknowledging the command to the broker | An acknowledged command, including a cancellation, is never lost (architecture section 9, step 4) |
 | W2 | A new `executionId`, or the current one for a re-authorization item 3 allows, and a new `operationId` with its expected values | Sending the first launch authorization request for that operation | Item 3 sections 6 and 7; item 4 crash point CP1 |
-| W3 | The grant, and the execution as `authorized`; or the rejection, and for a non-retryable one its observation | Writing or replacing `intent` (item 4, CP2) | A grant is never used without a journaled trace |
+| W3 | The grant, and the execution as `authorized`; or a retryable rejection; or a non-retryable rejection and its observation (item 3 section 9) | Writing or replacing `intent` (item 4, CP2) after a grant; any retry after a rejection | A grant is never used without a journaled trace, and a non-retryable rejection is never retried |
 | W4 | The execution record as written | Starting the supervisor (item 4, CP3 and CP4) | From here on, a missing or damaged record is data loss, never proof that nothing spawned |
-| W5 | A fact read from the execution record (`started` from `handle`, `exited` from `exit`), its state change, and its observation | Removing anything from the execution record | Facts reach the outbox before their source can go |
-| W6 | The execution as `not-started`, and its observation | — ; it follows reading back a durable seal (section 4) | `not-started` is reported only after the irreversible seal (item 3 section 4, item 4 section 5) |
+| W5 | A fact read from the execution record, its state change, and its observation: `started` from `handle` (W5s) or `exited` from `exit` (W5e) | Removing anything from the execution record | Facts reach the outbox before their source can go |
+| W6 | The execution as `not-started`, and its observation | — ; it follows reading a seal made durable under section 4 | `not-started` is reported only after the irreversible seal (item 3 section 4, item 4 section 5) |
 
 The worker writes its wall-clock time into records for diagnosis only. No safety decision reads it; the spawn deadline uses the clock item 3 and item 4 name, read in memory.
 
@@ -95,11 +98,14 @@ A duplicate command (its `commandId` already in the inbox) is acknowledged again
 
 | Last commit found | Recovery |
 | --- | --- |
-| W1, command not acknowledged | Nothing to do: the broker redelivers it, and the worker acknowledges it as a duplicate |
-| W1 with a cancellation request whose evidence is not recorded | Forward the cancellation to the execution's supervisor again (item 4 section 8) |
-| W2 without an outcome, or W3, and no W4 | Seal the execution under item 4 (its row "record not journaled"), commit W6, and re-authorize a new execution with a new `executionId` and `operationId` (item 3 section 7); never send the old operation again and never use its grant |
-| W4 | Item 4's recovery table decides from the execution record and native evidence: adopt, report a recorded exit, seal, or report `uncertain`; nothing is spawned |
-| W5 or W6 | Nothing to repeat; the outbox publishes the observation |
+| W1, command not acknowledged | Nothing to repeat for the acknowledgement: the broker redelivers the command, and the worker acknowledges it as a duplicate; the rows below still apply to what W1 recorded |
+| An accepted launch intent, not cancelled, without an execution or whose executions are all `not-started`, and no non-retryable rejection | Continue the launch: commit W2 for a new execution and request a current launch authorization (item 3). This holds whether or not the command was acknowledged, because the broker will not redeliver an acknowledged command |
+| W1 with a cancellation request whose evidence is not recorded | Forward the cancellation to the execution's supervisor again (item 4 section 8); a launch intent with an accepted cancellation and no execution launches nothing |
+| W2 without an outcome, or W3 with a grant, and no W4 | Seal the execution under item 4 (its row "record not journaled"), commit W6, and continue as the launch intent row says, with a new `executionId` and `operationId` (item 3 section 7); never send the old operation again and never use its grant |
+| W3 with a retryable rejection, and no W4 | Continue with a new `operationId` for the same execution (item 3 section 6) |
+| W3 with a non-retryable rejection | Nothing is retried; the rejection's observation reaches the control plane, and the scheduler acts on its reason (item 3 section 9) |
+| W4 or W5s, and no terminal fact | Item 4's recovery table decides from the execution record and native evidence: adopt and keep observing, forward a pending cancellation, report a recorded exit (W5e), seal, or report `uncertain`; nothing is spawned |
+| W5e or W6 | Nothing to repeat; the outbox publishes the observation |
 | Outbox entries not confirmed | Publish them again with the same `observationId` (section 6) |
 
 ## 6. Local outbox of observations
@@ -147,7 +153,7 @@ After a journal loss or a corrupt journal, the worker acknowledges, requests, an
 
 **Rollback.** A worker journal, or a `dataRoot` holding one, is never restored from a backup or snapshot: a restored journal has silently lost later commits, possibly including commands it had acknowledged. Restoring one is a journal loss, handled only by a new incarnation. The worker cannot detect every rollback itself, so the control plane does not rely on it:
 
-- **Sequence check.** A sequence at or below one already received for the same `journalId`, with a different `observationId`, proves a rollback. The control plane then treats it as a journal loss (section 11).
+- **Sequence check.** A sequence at or below one already received for the same `journalId`, with a different `observationId`, proves a rollback; the same sequence with the same `observationId` is an ordinary repeated publication. The control plane then treats it as a journal loss (section 11).
 - **Inventory reconciliation.** On every reconnect, the worker reports the assignments it holds and their executions' states. For an unfinished assignment of this worker that the report omits, the control plane re-sends the command with the same `commandId` if it recorded no grant for the attempt, and otherwise reconciles the attempt as having lost its local history (section 11). This holds whatever caused the omission, so it covers a rollback the sequence check misses.
 
 ## 9. Lock ownership
@@ -182,15 +188,20 @@ When the disk holding `dataRoot` is lost after the worker acknowledged commands,
 - **Item 7:** the execution states of section 5, uncertainty as evidence beside the state, and lost local history as a reconciliation input.
 - **Item 8:** `workerId`, `journalId`, sequence, and a deterministic `observationId` in every observation; the cumulative confirmation of section 6; the inventory report of section 8; the reason codes for rejected assignments (backlog, disk floor).
 - **Item 13:** enrollment creates the journal before `worker/identity`, and writes the identity under section 4.
-- **Item 14:** the settings of section 3 and their initialization order, the subtree rules of section 2, the lock mechanism, the start checks, the migrations, the republication bound of section 6, and the crash points of section 13.
+- **Item 14:** the settings of section 3 and their initialization order, the macOS `F_FULLFSYNC` startup check, the subtree rules of section 2, the lock mechanism, the start checks, the migrations, the republication bound of section 6, and the crash points of section 13.
 - **Items 20 and 21:** the write order and recovery of section 5 in the runtime, and the confirmation, sequence check, inventory reconciliation, and loss handling of sections 6, 8, and 11 in the control plane.
 
 ## 13. Required tests
 
 Items 14, 20, 21, 24, and 25 implement these through the deterministic test harness (item 10), on Linux in the worker image and natively on macOS. Each commit W1 to W6 is a named crash point, before and after its commit.
 
-- A crash before and after each of W1 to W6, followed by recovery, loses no acknowledged command, sends no request without its journaled `operationId`, never uses a grant journaled before the crash, never starts a supervisor without W4, and gives the result section 5 assigns.
+- A crash before and after each of W1 to W6 (W5s and W5e separately), followed by recovery, loses no acknowledged command, sends no request without its journaled `operationId`, never uses a grant journaled before the crash, never starts a supervisor without W4, and gives the result section 5 assigns.
 - A command delivered twice, before and after a crash between W1 and its acknowledgement, creates one inbox entry and one launch intent; a cancellation delivered the same way is forwarded and not lost.
+- A crash after W1 and the acknowledgement, before W2, continues the launch on restart with a current authorization; the broker does not redeliver.
+- A crash after W5s while the child runs adopts it and later reports its exit.
+- A non-retryable rejection journaled before a crash is not retried after it; a retryable one is retried with a new `operationId`.
+- A crash of a create-once winner between its `link` and its directory sync: a reader that saw the file syncs it before acting, and if the file is gone after power loss, no one acted on it.
+- On macOS, a filesystem without `F_FULLFSYNC` support is refused at startup.
 - A rejected command is acknowledged only after its rejection observation is committed.
 - A record journaled by W4 and then deleted gives `uncertain`, never `not-started`.
 - An injected `fsync`, checkpoint, or `COMMIT` I/O error stops acknowledgements, requests, and publications, and the worker stays stopped until a host restart or a new incarnation.

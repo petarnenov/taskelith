@@ -9,7 +9,7 @@ Date: 2026-10-25. Author verification and independent review are recorded below.
 ## Evidence
 
 - Environment: macOS x86_64, Node v24.22.1, npm 12.2.1.
-- The contract adds no external link; the evidence check therefore has nothing to pin.
+- Evidence check: the contract's two external links are pinned to tags, SQLite `version-3.53.4` (`src/os_unix.c` lines 3815–3829) and libuv `v1.52.1` (`src/unix/fs.c` lines 182–187). The author fetched both files at those tags on 2026-10-25 and confirmed the `F_FULLFSYNC` fallback to `fsync` in each, and `node -p process.versions.uv` under Node 24.22.1 prints `1.52.1`.
 - Documentation and specification only; no code, package, or lockfile change.
 
 ## Author self-check before review
@@ -21,7 +21,7 @@ Date: 2026-10-25. Author verification and independent review are recorded below.
 
 ## Checks
 
-In the worktree: `npm run openspec -- validate define-worker-journal-contract --strict` passed, and `make verify` passed before review and after the pass-1 fixes.
+In the worktree: `npm run openspec -- validate define-worker-journal-contract --strict` passed, and `make verify` passed before review, after the pass-1 fixes, after the merge of `origin/dev`, and after the pass-2 fixes.
 
 ## Independent review
 
@@ -42,6 +42,14 @@ Assigned reviewer: Codex CLI with `codex exec -m gpt-6.1-sol -c model_reasoning_
   12. Medium: disk loss recovery cited item 4's removed marker scan. It now cites item 4's populated containments on Linux.
   13. Medium: the recorded item 3 and item 4 revisions were outdated. The contract is aligned with the current ones, recorded above.
   14. Low: item 4's `fate` is now `launch`. Renamed, with `supervisor.<n>` added to the create-once files.
+
+- **Pass 2 — session `01a1702f-32c7-7ac1-80f0-ee44a08675b5`,** reviewed revision `3001e99`, with item 4 read at `4d90df6`; the header reports `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`. Snapshot before and after: `c7223ff5…a466`, equal. The reviewer confirmed pass-1 findings 2, 3, 5, and 7 to 14 resolved, and 1, 4, and 6 resolved in part, with the remaining gaps raised as the findings below. Findings: 0 Critical, 3 High, 3 Medium, 0 Low. All accepted and resolved:
+  1. High: an assignment acknowledged after W1 and crashed before W2 had no recovery. A recovery row now continues every accepted, uncancelled launch intent without a live execution, whether or not it was acknowledged, and a test covers it.
+  2. High: "W5: nothing to repeat" also ended recovery for a started, running execution. W5 is split into W5s and W5e; W4 or W5s without a terminal fact goes to item 4's recovery.
+  3. High: SQLite 3.53.4 falls back to `fsync` when `F_FULLFSYNC` fails and returns that result, so a failure is invisible per write. The author confirmed this in the source and found the same fallback in libuv 1.52.1. The worker now accepts on macOS only a filesystem that supports `F_FULLFSYNC`, checked at startup as an item 14 qualification gate, with a spec scenario and a test; the reviewer's link pointed at other lines and was corrected.
+  4. Medium: recovery after W3 re-authorized after any rejection. W3 now distinguishes a grant, a retryable rejection, and a non-retryable rejection, which is never retried.
+  5. Medium: the spec requirement treated every repeated sequence as lost history. It now requires a different observation identity, with scenarios for a repeated publication and a conflicting sequence.
+  6. Medium: a reader of a create-once file after `EEXIST` could act on a file whose directory entry was not yet durable. A reader now syncs the file and its directory before acting on a file it did not make durable itself, with a crash test between the winner's `link` and directory sync.
 
 ## Remaining gates
 

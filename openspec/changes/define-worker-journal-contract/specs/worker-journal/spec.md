@@ -10,34 +10,50 @@ A worker SHALL commit a command's inbox entry and outcome in one transaction wit
 - **WHEN** the worker crashes after committing an assignment and before acknowledging it, and the broker redelivers it
 - **THEN** the worker finds the entry, acknowledges the command, and creates no second launch intent
 
+#### Scenario: Crash after acknowledgement and before the launch
+- **WHEN** the worker crashes after committing and acknowledging an assignment and before journaling an execution
+- **THEN** on restart it continues the launch with a current launch authorization, without a redelivery
+
 #### Scenario: Cancellation redelivered after a crash
 - **WHEN** the worker crashes after committing a cancellation and before acknowledging it
 - **THEN** recovery forwards the journaled cancellation request, and the redelivered command is acknowledged as a duplicate
 
 ### Requirement: Journaled launch steps
-A worker SHALL commit the execution and operation identities before its first launch authorization request, the grant before writing the execution's intent, and the record's existence before starting the supervisor. After a restart it SHALL never send an earlier operation again, SHALL never use a grant journaled before the restart, and SHALL recover each execution from its last commit.
+A worker SHALL commit the execution and operation identities before its first launch authorization request, the grant before writing the execution's intent, and the record's existence before starting the supervisor. After a restart it SHALL never send an earlier operation again, never use a grant journaled before it, never retry a non-retryable rejection, and recover each execution from its last commit.
 
 #### Scenario: Crash after the grant and before the record is journaled
 - **WHEN** the worker restarts with a journaled grant and the execution record not journaled as written
 - **THEN** it seals the execution, reports `not-started`, spawns nothing under that grant, and re-authorizes a new execution
+
+#### Scenario: Restart after a start was journaled
+- **WHEN** the worker restarts after journaling a start and the child still runs
+- **THEN** it adopts the execution under the supervisor contract and later reports its exit
 
 #### Scenario: Record lost after it was journaled
 - **WHEN** the execution record was journaled as written and its directory is missing at restart
 - **THEN** the worker reports the execution as uncertain, never `not-started`
 
 ### Requirement: Seal before not-started
-A worker SHALL report `not-started` for an execution only after reading back its durable seal, and SHALL commit a fact read from an execution record, with its observation, before removing anything from that record.
+A worker SHALL report `not-started` for an execution only after reading its seal and, unless it made the seal durable itself, syncing the seal and its directory, and SHALL commit a fact read from an execution record, with its observation, before removing anything from that record.
 
 #### Scenario: Seal write fails
 - **WHEN** writing an execution's seal fails
 - **THEN** the worker reports no `not-started` for it
 
+#### Scenario: Seal visible before its directory sync
+- **WHEN** the worker finds a seal that another process linked and has not yet synced
+- **THEN** it syncs the file and its directory before reporting `not-started`
+
 ### Requirement: Durability settings
-The journal SHALL be an SQLite database opened with `EXCLUSIVE` locking set before `WAL` journal mode and before any other access, `synchronous` set to `FULL`, `fullfsync` and `checkpoint_fullfsync` on, a Taskelith `application_id`, and its format in `user_version`. Every protocol write SHALL be one small explicit transaction, and the worker SHALL verify the settings after opening.
+The journal SHALL be an SQLite database opened with `EXCLUSIVE` locking set before `WAL` journal mode and before any other access, `synchronous` set to `FULL`, `fullfsync` and `checkpoint_fullfsync` on, a Taskelith `application_id`, and its format in `user_version`. Every write SHALL be one small explicit transaction; the worker SHALL verify the settings and, on macOS, accept only a filesystem that supports `F_FULLFSYNC`.
 
 #### Scenario: Power loss after a commit
 - **WHEN** power is lost after a commit returned success on storage that honors flushes
 - **THEN** the committed transaction is present after restart
+
+#### Scenario: macOS filesystem without full flush
+- **WHEN** a macOS worker's data root is on a filesystem that does not support `F_FULLFSYNC`
+- **THEN** the worker fails startup
 
 #### Scenario: No shared-memory file
 - **WHEN** the worker has opened its journal
@@ -90,7 +106,15 @@ A worker SHALL check the journal's identity, format, and integrity on every star
 - **THEN** it acknowledges, requests, and publishes nothing until an operator starts a new journal incarnation
 
 ### Requirement: Detection of lost local history
-A worker journal SHALL never be restored from a backup. Every observation SHALL carry the journal incarnation and sequence, and on each reconnect the worker SHALL report the assignments it holds; the control plane SHALL treat a new incarnation, a repeated sequence, or an omitted unfinished assignment as lost local history.
+A worker journal SHALL never be restored from a backup. Every observation SHALL carry the journal incarnation and sequence, and on each reconnect the worker SHALL report the assignments it holds; the control plane SHALL treat a new incarnation, a repeated sequence with a different observation, or an omitted unfinished assignment as lost local history.
+
+#### Scenario: Repeated publication
+- **WHEN** the worker publishes an observation again with the same sequence and identity
+- **THEN** the control plane deduplicates it and finds no lost history
+
+#### Scenario: Conflicting sequence
+- **WHEN** the worker publishes a sequence already received with a different observation identity
+- **THEN** the control plane treats the worker's local history as lost
 
 #### Scenario: Journal restored from an older copy
 - **WHEN** a restored journal lost an acknowledged assignment for which no grant was recorded
