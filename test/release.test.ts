@@ -18,14 +18,15 @@ test('release notes render with the installed preset and writer', async () => {
   assert.match(notes, /compare\/v0\.1\.0\.\.\.v0\.1\.1/);
 });
 
-for (const [message, expected] of [
+const cases: ReadonlyArray<readonly [string, string | null]> = [
   ['fix: correct CLI output', 'patch'],
   ['feat: add project creation', 'minor'],
   ['feat!: replace CLI invocation', 'major'],
   ['fix: change output\n\nBREAKING CHANGE: output format changed', 'major'],
   ['docs: clarify setup', null],
   ['chore: maintain dependencies', null],
-]) {
+];
+for (const [message, expected] of cases) {
   test(`release classification: ${message.split('\n')[0]}`, async () => {
     const result = await analyzeCommits(analyzer, {
       cwd: process.cwd(), commits: [{ message }], logger: { log() {} },
