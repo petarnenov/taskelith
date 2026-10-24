@@ -22,44 +22,64 @@ Every transaction that changes a compared value SHALL run serializably and SHALL
 - **THEN** the result is either a rejection or a revocation with a cancellation command, never an unrevoked stale authorization
 
 ### Requirement: Execution ownership
-An attempt SHALL have at most one owning execution. Expiry SHALL end the permission to spawn but not ownership; another execution identity SHALL be authorized only after the owning execution has a recorded exit or a `not-started` fact recorded after its launch record was irreversibly sealed.
+An attempt SHALL have at most one owning execution, spawned at most once across all its grants. Expiry SHALL end the permission to spawn but not ownership; another execution identity SHALL be authorized only after the owning execution has a recorded exit or a `not-started` fact recorded after its launch record was irreversibly sealed.
 
 #### Scenario: Expired grant without a recorded start
 - **WHEN** an authorization expired and no start or terminal fact is recorded
 - **THEN** an authorization for another execution identity is rejected with `execution-conflict`
+
+#### Scenario: Two grants for one execution
+- **WHEN** an execution is authorized again after its first grant expired unused
+- **THEN** the supervisor spawns it at most once across both grants
 
 #### Scenario: Sealed execution
 - **WHEN** `not-started` is recorded after the worker sealed the launch record
 - **THEN** a supervisor resumed later does not spawn under any grant of that execution
 
 ### Requirement: Idempotent replay without reuse of stale grants
-A repeated request with the same operation ID SHALL return the recorded grant only while it is still granted and the quarantine state, recovery epoch, and worker credential are current; a reused operation ID with different values SHALL be rejected.
+A repeated request with the same operation ID SHALL return the recorded grant only while it is granted, unexpired, its execution not terminal, and the quarantine state, epoch, and worker credential are current; a reused operation ID with different values SHALL be rejected.
 
 #### Scenario: Lost first response
 - **WHEN** the first response is lost and the worker retries with the same operation ID
 - **THEN** it receives the same grant, no second one is recorded, and its deadline is not extended
+
+#### Scenario: Retry after expiry
+- **WHEN** the worker retries after the grant expired or its execution became terminal
+- **THEN** no grant is returned
 
 #### Scenario: Retry after revocation
 - **WHEN** the worker retries after the grant was revoked, the worker credential revoked, or quarantine entered
 - **THEN** no grant is returned
 
 ### Requirement: Expiry independent of the worker wall clock
-The worker SHALL hand an authorization to the supervisor only before its monotonic reading taken before the first request of that operation ID plus the TTL minus the skew, and SHALL never spawn under a journaled authorization after a restart.
+The worker SHALL hand an authorization to the supervisor, and the supervisor SHALL begin the spawn, only before the monotonic reading taken before the first request of that operation ID plus the TTL minus the skew; no spawn SHALL use a journaled authorization after a restart.
 
 #### Scenario: Wrong wall clock
 - **WHEN** the worker's wall clock is wrong by more than the skew
 - **THEN** the monotonic deadline still ends the authorization in time
+
+#### Scenario: Supervisor delayed after handoff
+- **WHEN** the supervisor receives the authorization but reaches the spawn after the deadline
+- **THEN** it does not spawn
 
 #### Scenario: Restart after authorization
 - **WHEN** the worker restarts after authorization and before a recorded start
 - **THEN** it reconciles by execution identity and re-authorizes with a new operation ID before any spawn
 
 ### Requirement: Start observations
-A start observation SHALL be accepted once per execution, independently of its arrival time, for a grant bound to that execution of the owning execution; a start that fails these checks SHALL be recorded as an unauthorized start, cancelled, and reconciled.
+A start SHALL be recorded once per execution, independently of arrival time, for a grant bound to that execution, at the current epoch outside quarantine, of the owning execution not `not-started`; a duplicate SHALL return the recorded fact. A new start failing these checks SHALL become an unauthorized start, cancelled for that execution only; an old-epoch one SHALL only be kept as evidence.
 
 #### Scenario: Timely start reported late
 - **WHEN** a start under a granted authorization is reported after an outage longer than the TTL
 - **THEN** it is recorded as a start, and a duplicate report returns the recorded fact
+
+#### Scenario: Duplicate after a later execution
+- **WHEN** a recorded start of execution A is reported again after A exited and execution B was authorized
+- **THEN** the recorded fact is returned and nothing is cancelled
+
+#### Scenario: Start after seal
+- **WHEN** a start is reported for an execution recorded `not-started`
+- **THEN** it is recorded as an unauthorized start of that execution
 
 #### Scenario: Unknown or mismatched authorization
 - **WHEN** a start is reported for an unknown grant or for a grant bound to another execution

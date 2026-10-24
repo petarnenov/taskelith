@@ -11,12 +11,12 @@ G2 work plan item 3, started under the owner's decision of 2026-10-25 that G2 st
 - Every element of item 3's scope has a section: linearization point (3), compared values (2), journaled operation ID (5), TTL and skew (6), expiry and re-authorization (5, 6), invalidation ordering (4), clock-independent safety (6).
 - The contract follows architecture sections 6 and 9, the trust model's `launchAuthId` binding, the operational targets, invariant 13, F17, R27, and decisions D7 (c) and D12 (a).
 - Items 4, 5, and 6 are referenced by item name, not by file, because they are written in parallel.
-- Each requirement is under 500 characters (379 at most after pass 1).
+- Each requirement is under 500 characters (394 at most after pass 3).
 - Evidence check: the only external link is the PostgreSQL 18 documentation of serializable isolation, added after pass 1; it is the official documentation of the decided major version (D1).
 
 ## Checks
 
-In the worktree, Node v24.22.1, npm 12.2.1: `make verify` passed, including strict validation and the archive dry-run of this change; re-run after the pass-1 and pass-2 fixes with the same result.
+In the worktree, Node v24.22.1, npm 12.2.1: `make verify` passed, including strict validation and the archive dry-run of this change; re-run after the pass-1, pass-2, and pass-3 fixes with the same result; before the pass-3 fixes `origin/dev` (`7850c70`, including the comment length check) was merged in without conflicts.
 
 ## Independent review
 
@@ -39,7 +39,13 @@ Assigned reviewer (rotation): Codex CLI, `-m gpt-6.1-sol -c model_reasoning_effo
   3. Medium: a known grant bound to another execution had no outcome. The start check verifies the binding first; any mismatch is `unauthorized-start`.
   4. Medium: G1 admissions store no gate identities. The relied-on gates are derived from the prerequisite stages of the admission's stage in the run's workflow definition version and recorded in the grant; writers find grants by them.
   5. Medium: generation and subject mismatches had no reason. Added to `admission-not-current` and `gate-not-passed`, with tests.
-- **Pass 3 (final).** Pending.
+- **Pass 3 — session `01a17016-eade-7041-83f4-77df56fb7170`.** Pass-1 findings 1 and 3–10 and pass-2 findings 1, 2, 3, and 5 confirmed resolved; pass-1 2 and pass-2 4 partly. Findings: 0 Critical, 2 High, 3 Medium, 0 Low. With the three passes used, the owner decided on 2026-10-25 to fix them and permit a fourth pass. All accepted and resolved:
+  1. High: requiring every relied-on gate to have all bound revisions as its subject rejected valid G1 admissions whose gates have different subjects. Each gate's own subject is now compared, by artifact identifier and digest, with the admission's bound revisions.
+  2. High: a duplicate start observation after a later execution was authorized could cancel that execution. A recorded start now returns the recorded fact before any ownership check, and an unauthorized start cancels only its own execution.
+  3. Medium: planning admissions got prerequisite gates G1 never checked. Relied-on gates are now by admission kind: none for planning.
+  4. Medium: start acceptance had no recovery fence. Start observations carry the epoch; outside the current epoch or in quarantine they are kept as evidence for reconciliation only.
+  5. Medium: the spec missed four contract guarantees. Added: one spawn across grants, replay only while unexpired and non-terminal, the supervisor's spawn deadline, and no start after the seal, each with a scenario.
+- **Pass 4 (permitted by the owner on 2026-10-25).** Pending.
 
 ## Remaining gates
 
