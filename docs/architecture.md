@@ -22,7 +22,7 @@ Scope: Build a self-hosted agent orchestration platform from an empty repository
 
 Build Taskelith as a self-hosted software factory that develops and manages multiple projects in parallel, with a control plane, remote execution agents, a pure React SPA, and a centralized learning subsystem. Use Node.js and TypeScript for product-owned application code. Organize the product as a hexagonal modular application with a small domain kernel, explicit ports/adapters, and versioned plugins.
 
-All design follows nine first-class principles ([ADR 0004](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0004-first-class-engineering-principles.md)): Clean Code, SOLID, hexagonal architecture, the plugin microkernel, Docker images for every runnable component, contract-first OpenAPI (and AsyncAPI for messages), Makefile-driven operation, mandatory OpenSpec for developing Taskelith, and code coverage of at least 75%.
+All design follows nine first-class principles ([ADR 0004](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0004-first-class-engineering-principles.md)): Clean Code, SOLID, hexagonal architecture, the plugin microkernel, Docker images for every runnable component, contract-first OpenAPI (and AsyncAPI for messages), Makefile-driven operation, a mandatory SDLC framework with OpenSpec as the default for developing Taskelith ([ADR 0008](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0008-product-ui-and-integration-authority.md)), and code coverage of at least 75%.
 
 Every agent task participates in a governed specification-driven lifecycle. The SDLC module is a first-class capability. OpenSpec and SpecKit are replaceable framework plugins; neither framework owns the kernel or weakens mandatory review and verification gates.
 
@@ -287,7 +287,7 @@ The user can say: **"Implement this using SpecKit."** For new work, the platform
 
 For an existing run, switching is an explicit migration: checkpoint/drain the affected work; preserve original artifacts; map native requirements, tasks, and evidence; identify unsupported/lossy mappings; validate the new artifact set and governing policy; invalidate affected approvals; and record the source/target bindings. If safe conversion is unavailable, retain the original run and create a linked successor after reconciling ownership. No active execution is silently moved to a new framework.
 
-The platform's runtime governance of managed projects is framework-neutral. A managed customer repository may still mandate a framework; selecting a conflicting framework exposes that policy conflict and requires an authorized policy revision. Separately, developing Taskelith itself requires OpenSpec without exception ([ADR 0004](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0004-first-class-engineering-principles.md)); that rule does not make OpenSpec mandatory for managed projects.
+The platform's runtime governance of managed projects is framework-neutral. A managed customer repository may still mandate a framework; selecting a conflicting framework exposes that policy conflict and requires an authorized policy revision. Developing Taskelith itself binds every task to a change of its selected framework without exception, with OpenSpec as the default ([ADR 0004](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0004-first-class-engineering-principles.md) principle 8 as amended by [ADR 0008](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0008-product-ui-and-integration-authority.md)); OpenSpec is a default, not a requirement, for every project.
 
 #### Universal lifecycle admission
 
@@ -352,7 +352,7 @@ The Execution module owns a durable ordered session timeline. User submissions h
 
 Persist a native permission/input request before displaying it. A response must identify the request, originating provider handle/generation, authenticated responder, and current attempt. A response is consumed once in the application journal, but a native provider may not offer exactly-once response delivery. If a timeout or crash makes native delivery uncertain, reconcile with supported provider state or expose an unresolved request; do not automatically approve, replay an unsafe tool action, or send an answer to a new native request with a reused ID.
 
-Runtime approval is distinct from SDLC approval. Passing a specification gate does not approve arbitrary shell execution. Conversely, approving a provider tool call does not authorize integration or completion. A disconnected SPA or revoked user session must not generate default approval.
+Runtime approval is distinct from SDLC approval. Passing a specification gate does not approve arbitrary shell execution. Conversely, approving a provider tool call does not authorize integration or completion. A disconnected SPA or revoked user session must not generate default approval. A project-maintainer's standing rule, such as pushing to the task's own branch while auto-merge is on, is an explicit approval policy rather than a default: it records its author, scope, and policy revision, and every use is audited ([ADR 0008](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0008-product-ui-and-integration-authority.md) decision 2).
 
 ## 8. Deployment and data ownership
 
@@ -482,6 +482,8 @@ Prove graph reconstruction from canonical records, including feedback, confirmat
 
 ## 11. SPA, authentication, and live traffic
 
+The SPA's landing page is the per-project board whose columns are the platform lifecycle stages; its screens, board states, design rules, auto-merge authority, and conflict handling are decided in [ADR 0008](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0008-product-ui-and-integration-authority.md).
+
 Serve the SPA and API behind a same-origin HTTPS endpoint initially. Use server-side authenticated sessions, appropriate cookie protections, CSRF protection for mutations, and server-side authorization. The user authentication provider is a replaceable adapter; a fresh installation must create its own authorized operator access without any legacy account or control-plane service.
 
 Enrollment exchanges a short-lived bootstrap credential for a worker identity. Support rotation, revocation, audit, and bounded permissions. Workers never receive PostgreSQL or Neo4j credentials. Secret values must not enter lessons, prompts, logs, event payloads, or browser bundles by default.
@@ -608,7 +610,7 @@ Use pure domain tests, shared port/adapter conformance suites, integration tests
 | First integrations | Owner selected Claude Code (G3), Codex (G4), then Antigravity CLI and OpenCode, plus GitHub.com as the first SCM (ADR 0006) and Forgejo as a later second SCM, on 2026-10-24 | Version-specific qualification, provider terms, network-egress tests, and adapter conformance tests per plugin. |
 | Framework maturity | OpenSpec and SpecKit remain required candidates | Version-specific upstream maintenance, adoption evidence, and conformance; unresolved conflicts are explicit, not silent exemptions. |
 | Inference and model artifacts | Local/open baseline, exact implementations pending | Separate runtime/model licensing and maturity review plus learning/retrieval quality tests. |
-| Initial policy and storage | Taskelith name and language rules are decided; managed-project governance remains framework-neutral, and developing Taskelith requires OpenSpec (ADR 0004) | Storage defaults, roles, and the development SDLC framework recorded in G0; propagate the decided identity and language rules to project instructions. |
+| Initial policy and storage | Taskelith name and language rules are decided; managed-project governance remains framework-neutral, and developing Taskelith uses OpenSpec by default with the framework selectable (ADR 0004, ADR 0008) | Storage defaults, roles, and the development SDLC framework recorded in G0; propagate the decided identity and language rules to project instructions. |
 | Broker topology | JetStream with bounded addressed command routing | Protocol and 1000-worker topology tests; no claim that the comparison is already measured. |
 | User authentication adapter | Self-hosted sessions with replaceable identity provider | Operator identity/recovery requirements and access model defined in the [G0 trust contract](https://github.com/petarnenov/taskelith/blob/main/docs/trust-model.md); runtime adapter implementation in G2/G3. |
 | Worker trust/isolation | Explicitly trusted enrolled hosts initially | Threat model for repositories, agents, secrets, and shell execution recorded in the [G0 trust contract](https://github.com/petarnenov/taskelith/blob/main/docs/trust-model.md); runtime enforcement in G2/G3. |
