@@ -12,4 +12,4 @@
 
 ## 3. Review
 
-- [ ] 3.1 Obtain independent review (Claude Fable 5.1 medium, by rotation) and record results.
+- [x] 3.1 Obtain independent review (Claude Fable 5.1 medium, by rotation; one pass with Low findings only, fixed without another pass) and record results.

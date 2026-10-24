@@ -15,7 +15,7 @@ export function parseIdentifier<Kind extends string>(kind: Kind, text: string): 
   if (text.length > MAX_IDENTIFIER_LENGTH || !PRINTABLE_WITHOUT_SPACE.test(text)) {
     return err(failure(
       'invalid',
-      `${kind} must be 1-${MAX_IDENTIFIER_LENGTH} printable ASCII characters without spaces`,
+      `${kind} must be 1-${MAX_IDENTIFIER_LENGTH} printable ASCII characters without whitespace`,
       { kind },
     ));
   }
