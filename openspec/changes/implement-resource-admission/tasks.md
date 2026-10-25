@@ -12,5 +12,5 @@
 ## 3. Records and verification
 
 - [x] 3.1 Record the provisional values in the operational targets and the capacity contract.
-- [ ] 3.2 Run `make verify` and record the results.
+- [x] 3.2 Run `make verify` and record the results.
 - [ ] 3.3 Obtain independent review (Claude Code, `claude-fable-5-1`, medium) and record results.

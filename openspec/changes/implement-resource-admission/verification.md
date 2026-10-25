@@ -27,11 +27,57 @@ Evidence check: the reasons, budgets, and transaction steps follow [the capacity
 
 Environment: macOS (Darwin 25.6.0, arm64), Node v24.22.1, npm 12.2.1 (through `make verify`), Docker Engine 29.6.1, Docker Compose v5.2.0, PostgreSQL 18.6 from the pinned image.
 
-On `28338ff`: `make verify` passed: comment rule, workspace package contract and boundary checks, 540 tests (including 15 resource admission and 13 capacity conformance integration tests), coverage 99.70% lines, 95.97% branches, 99.56% functions, contract compatibility, the dependency inventory (710 package paths), strict OpenSpec validation (45 items), the archive dry run, and package verification.
+On `28338ff`, before review: `make verify` passed: comment rule, workspace package contract and boundary checks, 540 tests (including 15 resource admission and 13 capacity conformance integration tests), coverage 99.70% lines, 95.97% branches, 99.56% functions, contract compatibility, the dependency inventory (710 package paths), strict OpenSpec validation (45 items), the archive dry run, and package verification.
+
+On `dbdf9a6`, after the pass 1 fixes: `make verify` passed with 542 tests, coverage 99.70% lines, 95.93% branches, 99.57% functions; the Scheduling operations have 100% line and 80–94% branch coverage.
+
+### Required tests of contract section 12
+
+| Required test | Where |
+| --- | --- |
+| Replicas racing for the last worker slot and the last project unit | Covered: `resource-admission.integration.test.ts` |
+| Replicas racing for the last run or credential unit, or the last delegation attempt | Run and credential exhaustion and the ninth tree attempt are covered sequentially; their races deferred to item 24 |
+| Two replicas placing the same attempt | Covered |
+| Crash before commit leaves nothing; a commit leaves all three | Covered (crash); the commit case is the placement test |
+| Disconnected, revoked, or crashed worker keeps its reservations | Partly: supersession only without a grant and a granted assignment is not superseded; the rest needs items 20 and 21 |
+| Ending an assignment raced with launch authorization; operator release | Deferred to items 17, 21, and 24 |
+| Grant, crash, seal, `not-started`, then a new execution under the same reservation | Deferred to items 15, 17, and 24 |
+| A refused attempt placed again charges nothing | Covered for a cancelled assignment placed again; refusal handling belongs to item 21 |
+| Supersession of an unacknowledged, unreachable, or pressured assignment; none with a grant | Covered for an unreachable worker and a grant; the time bounds are unit-level constants |
+| Expiry or revocation of a grant, a cancellation request, a failover release nothing | Covered for a cancellation with a running execution; the rest belongs to items 17 and 24 |
+| Delegation depth, chain, budget, and shared budgets | Covered for depth 4, the chain rule, and the ninth attempt; session identities belong to G3 |
+| Third automatic retry and retry of uncertain execution; backoff | Covered |
+| Worker-side slot, journal, and disk limits | Item 20 |
+| Hard controls placed only on declaring workers; spend limit | Covered |
+| Lowered quota or capacity releases nothing | Covered implicitly: quota changes release nothing because nothing but a release transition writes a reservation |
+| Four delegating roots and waiting parents on every slot | The waiting-parent rule is covered with the last slot; the four-root scenario is deferred to item 24 |
+| Cancelling an acknowledged assignment without a grant; with a started execution | Covered (offered without a grant, authorized execution) |
+| One project's retries do not starve another | The fair order is unit-tested; the scheduling loop belongs to a later item |
+| Exhausted provider credential makes the next attempt wait | Covered |
 
 ## Independent review
 
 Assigned reviewer: Claude Code with `claude -p --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json`, the prompt on stdin, run from the worktree; prompt and output files were kept outside the worktree.
+
+- **Pass 1 — session `bac88f9d-0cd2-40f4-8457-6178e97d125c`, reviewed `77f89a5` (diff `a1a27a1...HEAD`).** A first invocation ended with `Error: No messages returned from query` and produced no session, output, or review, so it is not counted; the same prompt was run again. `modelUsage` lists `claude-fable-5-1`. SHA-256 snapshots before and after were equal (`0a89e1a8…f6dda`). The reviewer reran strict validation, the boundary and comment checks, and the 19 Scheduling unit tests. Findings: 0 Critical, 2 High, 3 Medium, 13 Low. Resolutions, in `dbdf9a6`:
+  1. High: cancelling with a running execution requested cancellation but left the grant standing. The cancellation now revokes the owning execution's grants with `attempt-not-launchable` (an invalidating writer), which also requests the attempt's cancellation; the test checks the revoked grant.
+  2. High: `releaseAfterTerminalFact` opened its own transaction, so it could not run in the one recording the terminal fact. The operations are now `placeInTransaction`, `cancelInTransaction`, `releaseInTransaction`, and `supersedeInTransaction` on a `CapacityTransaction`, which the service wraps; the test records `not-started` and releases in one transaction.
+  3. Medium: provider credentials were stored but not counted. Each credential is checked against its default concurrency of 4 (`provider-concurrency-exhausted`), from a new `provider_credentials` column, with a test.
+  4. Medium: the automatic retry rule only checked that the earlier attempt ended. It now needs an outcome of `not-started` or `exited` with a proven start and a released reservation, with tests for the allowance, an unknown earlier attempt, and an accepted retry.
+  5. Medium: delegation admission trusted the parent task and attempt pair. It checks that the attempt is the parent's active, uncancelled attempt, with a test.
+  6. Low: the request checks precede the worker checks. Recorded with the reason in the contract's section 13.
+  7. Low: any task read failure became `attempt-not-reservable`. Only `not-found` does.
+  8. Low: a missing root lineage fell back to the child's run. It is `attempt-not-reservable`.
+  9. Low: a loser stopped by the held-reservation index got `conflict`. It is mapped to `attempt-already-reserved`.
+  10. Low: `task_lineage` had no index by run. Added.
+  11. Low: `chargedRuns` was written three times. One domain export serves all.
+  12. Low: placement read lineage and charges twice. They are read once.
+  13. Low: the in-memory ledger deleted closed delegations and took the concrete lineage class. Closed delegations stay recorded, the port is accepted, and the suite reopens a closed one.
+  14. Low: a derived parameter type stood for `ProjectId`. Replaced.
+  15. Low: the contract's status still said no code implemented it. Updated.
+  16. Low: task 3.2 was open. Ticked after `make verify`.
+  17. Low: no mapping of contract section 12's tests. The table above records what is covered and deferred.
+  18. Low: `SELECT *` on tables item 13 will extend. Columns are listed.
 
 ## Limitations
 
