@@ -114,8 +114,11 @@ async function repeatedSubmission(
 ): Promise<Result<TaskSubmission> | undefined> {
   const stored = await tx.admissions.get(admissionRequest.id as AdmissionId);
   if (!stored.ok) return stored.error.code === 'not-found' ? undefined : stored;
+  // A planning task's artifacts are its request's; an implementation task's
+  // come from its gates, so they are not compared.
+  const sameArtifacts = request.kind !== 'planning' || sameRevisions(stored.value.artifacts, request.artifacts ?? []);
   const same = stored.value.kind === request.kind && stored.value.stageId === request.stageId
-    && stored.value.workItemId === request.workItem?.id;
+    && stored.value.workItemId === request.workItem?.id && sameArtifacts;
   if (!same) return err(failure('conflict', `task ${request.taskId} was submitted with another request`, { task: request.taskId }));
   return ok({ taskId: stored.value.taskId, admission: admissionView(stored.value) });
 }
@@ -170,6 +173,12 @@ function admissionUsedEvent(runId: string, admission: TaskAdmission, correlation
     payload: { runId, admission: admissionView(admission) },
   };
   return ok({ metadata: metadata.value, subject: SDLC_EVENTS_SUBJECT, payload: JSON.parse(JSON.stringify(wire)) });
+}
+
+function sameRevisions(stored: readonly ArtifactRevision[], requested: readonly HttpSchemas['ArtifactRevision'][]): boolean {
+  const keys = (revisions: readonly { artifactId: string; digest: string; nativeReference: string }[]) =>
+    JSON.stringify(revisions.map(({ artifactId, digest, nativeReference }) => [artifactId, digest, nativeReference]).sort());
+  return keys(stored) === keys(requested);
 }
 
 function admissionView(admission: TaskAdmission): AdmissionView {

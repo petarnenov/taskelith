@@ -11,7 +11,9 @@ import {
   runOutboxPublisher,
   runQuarantineKeeper,
   TransportAddress,
+  TRANSPORT_LIMITS,
   type ControlPlaneConnection,
+  type TransportLimits,
 } from '@taskelith/nats';
 import { EventLoopLagMonitor, JsonLinesLogSink, runPeriodically, SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { InMemoryMetrics, Logger, sampleControlPlane, type LogSink } from '@taskelith/observability';
@@ -38,6 +40,8 @@ export interface ControlPlaneSettings extends Omit<AdministrationSettings, 'logg
   readonly workflows: readonly KnownWorkflow[];
   readonly logSink?: LogSink;
   readonly sweepMilliseconds?: number;
+  // Shorter or smaller ones only in tests; production takes the targets.
+  readonly transportLimits?: TransportLimits;
 }
 
 export interface RunningControlPlane {
@@ -70,13 +74,14 @@ async function wire(admin: Administration, settings: ControlPlaneSettings, logge
     ...(settings.natsTls === undefined ? {} : { tls: settings.natsTls }),
   });
   if (!broker.ok) return broker;
-  const topology = await prepareTopology(broker.value, address.value);
+  const limits = settings.transportLimits ?? TRANSPORT_LIMITS;
+  const topology = await prepareTopology(broker.value, address.value, limits);
   const enrollment = topology.ok ? await admin.enrollmentService() : topology;
   if (!enrollment.ok) {
     await broker.value.close();
     return enrollment;
   }
-  const quarantine = new Quarantine(broker.value.jsm, broker.value.js, address.value);
+  const quarantine = new Quarantine(broker.value.jsm, broker.value.js, address.value, limits);
   const database = admin.database;
   const api = createApiServer(new ControlPlaneApi({
     runs: new RunService(database, new WorkflowRegistry(settings.workflows)),
@@ -94,12 +99,12 @@ async function wire(admin: Administration, settings: ControlPlaneSettings, logge
   const controller = new AbortController();
   const lag = new EventLoopLagMonitor();
   const publisher = new OutboxPublisher(
-    new QuarantineGuardedOutbox(database, new PostgresOutboxRelay(database)), new JetStreamPublisher(broker.value.js), address.value, { logger },
+    new QuarantineGuardedOutbox(database, new PostgresOutboxRelay(database)), new JetStreamPublisher(broker.value.js), address.value, { logger, limits },
   );
   const sweep = settings.sweepMilliseconds ?? GRACE_WINDOW_SWEEP_MILLISECONDS;
   const loops = [
-    runOutboxPublisher(publisher, controller.signal),
-    runQuarantineKeeper(quarantine, controller.signal),
+    runOutboxPublisher(publisher, controller.signal, limits),
+    runQuarantineKeeper(quarantine, controller.signal, limits),
     runPeriodically(async () => logFailure(logger, 'fleet.grace-windows.failed', await enrollment.value.service.expireGraceWindows()), controller.signal, sweep),
     runPeriodically(() => sampleControlPlane(new PostgresControlPlaneSignals(database), metrics, logger), controller.signal),
     runPeriodically(() => lag.sample(metrics), controller.signal),
@@ -120,9 +125,9 @@ async function wire(admin: Administration, settings: ControlPlaneSettings, logge
   });
 }
 
-async function prepareTopology(broker: ControlPlaneConnection, address: TransportAddress): Promise<Result<void>> {
-  const streams = await ensureStreams(broker.jsm, address);
-  return streams.ok ? ensureAdvisoryConsumer(broker.jsm, address) : streams;
+async function prepareTopology(broker: ControlPlaneConnection, address: TransportAddress, limits: TransportLimits): Promise<Result<void>> {
+  const streams = await ensureStreams(broker.jsm, address, limits);
+  return streams.ok ? ensureAdvisoryConsumer(broker.jsm, address, limits) : streams;
 }
 
 function listen(server: Server, endpoint: ApiEndpoint): Promise<Result<ApiEndpoint>> {

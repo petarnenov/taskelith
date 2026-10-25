@@ -47,12 +47,22 @@ function readWorkflows(path: string | undefined): Result<readonly KnownWorkflow[
   }
   if (!Array.isArray(entries)) return err(failure('invalid', 'TASKELITH_WORKFLOWS must hold a list', { variable: 'TASKELITH_WORKFLOWS' }));
   const known: KnownWorkflow[] = [];
-  for (const entry of entries as Array<{ definition: WorkflowDefinitionInput; digest: unknown }>) {
-    const definition = parseWorkflowDefinition(entry.definition);
-    if (!definition.ok || typeof entry.digest !== 'string') {
-      return err(failure('invalid', 'TASKELITH_WORKFLOWS holds an invalid workflow', { variable: 'TASKELITH_WORKFLOWS' }));
-    }
-    known.push({ definition: definition.value, digest: entry.digest });
+  for (const entry of entries as unknown[]) {
+    const workflow = knownWorkflow(entry);
+    if (workflow === undefined) return err(failure('invalid', 'TASKELITH_WORKFLOWS holds an invalid workflow', { variable: 'TASKELITH_WORKFLOWS' }));
+    known.push(workflow);
   }
   return ok(known);
+}
+
+// The parser expects the input's shape, so a malformed entry is caught here.
+function knownWorkflow(entry: unknown): KnownWorkflow | undefined {
+  const { definition, digest } = (entry ?? {}) as { definition?: WorkflowDefinitionInput; digest?: unknown };
+  if (typeof digest !== 'string' || typeof definition !== 'object' || definition === null || !Array.isArray(definition.stages)) return undefined;
+  try {
+    const parsed = parseWorkflowDefinition(definition);
+    return parsed.ok ? { definition: parsed.value, digest } : undefined;
+  } catch {
+    return undefined;
+  }
 }
