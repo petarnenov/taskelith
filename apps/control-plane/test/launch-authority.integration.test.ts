@@ -2,27 +2,16 @@ import assert from 'node:assert/strict';
 import { after, beforeEach, test } from 'node:test';
 import pg from 'pg';
 import { checkMessageSchema } from '@taskelith/contracts';
-import { LaunchAuthority, LaunchRevokingFleetRegistry, RunService, TaskService, WorkflowRegistry, admissionIdOf } from '@taskelith/control-plane';
-import {
-  claimOwnership,
-  openAttempt,
-  parseLaunchParameters,
-  type AssignmentId,
-  type AttemptId,
-  type LaunchAuthorizationRequest,
-  type LaunchOutcome,
-  type WorkerId,
-} from '@taskelith/execution';
+import { LaunchRevokingFleetRegistry, WorkflowRegistry, type LaunchAuthority } from '@taskelith/control-plane';
+import { parseLaunchParameters, type LaunchOutcome, type WorkerId } from '@taskelith/execution';
 import { fleetToken, fleetWorker, type WorkerPrincipal } from '@taskelith/fleet';
-import { ok, type Result } from '@taskelith/kernel';
+import type { Result } from '@taskelith/kernel';
 import { PostgresDatabase, migrate } from '@taskelith/postgres';
-import { ResourceAdmissionService, invalidateLaunches, parseResourceRequest, type PlacementRequest } from '@taskelith/scheduling';
-import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
+import { invalidateLaunches } from '@taskelith/scheduling';
 import { CrashPoints, SimulatedCrash, id, integrationEndpoint, value } from '@taskelith/testing';
+import { LAUNCH_WORKFLOWS, createLaunchRun, launchAuthority, placedTask, type Placed } from './launch-fixtures.ts';
 
 const POSTGRES = integrationEndpoint('TASKELITH_POSTGRES_URL');
-const DIGEST = `sha256:${'ab'.repeat(32)}`;
-const SPEC = { artifactId: 'spec', digest: `sha256:${'aa'.repeat(32)}`, nativeReference: 'spec.md' };
 
 async function sql<Row extends pg.QueryResultRow>(url: URL, text: string, values: unknown[] = []): Promise<Row[]> {
   const client = new pg.Client({ connectionString: url.href });
@@ -52,31 +41,14 @@ function open(crashPoints?: CrashPoints): PostgresDatabase {
 }
 
 const database = open();
-const definition = value(parseWorkflowDefinition({
-  id: 'launch-workflow', version: '1', stages: [
-    { id: 'specs', obligations: ['intake', 'specification'], origin: 'native', dependsOn: [] },
-    { id: 'apply', obligations: ['implementation', 'review', 'verification', 'closure'], origin: 'native', dependsOn: ['specs'] },
-  ],
-}));
-const workflows = new WorkflowRegistry([{ definition, digest: DIGEST }]);
-const BINDING = {
-  pluginId: 'openspec', pluginVersion: '0.1.0', upstreamToolVersion: '1.6.0', workflowId: 'launch-workflow', workflowVersion: '1',
-  workflowDigest: DIGEST, configurationRevision: 'config-1', policyRevision: 'policy-1',
-};
-const PARAMETERS = value(parseLaunchParameters({ ttlMilliseconds: 30_000, skewMilliseconds: 5_000 }));
-let issued = 0;
-function authorityOn(store: PostgresDatabase, parameters = PARAMETERS): LaunchAuthority {
-  return new LaunchAuthority(store, { workflows, parameters, newLaunchAuthId: () => `launch-${++issued}` });
+const workflows = LAUNCH_WORKFLOWS;
+function authorityOn(store: PostgresDatabase, parameters?: Parameters<typeof launchAuthority>[1], registry = workflows): LaunchAuthority {
+  return launchAuthority(store, parameters, registry);
 }
 const authority = authorityOn(database);
 const fleet = new LaunchRevokingFleetRegistry(database);
 const WORKER = fleetWorker('worker-1', 'journal-1');
 const PRINCIPAL: WorkerPrincipal = { workerId: WORKER.workerId, generation: 1 };
-
-interface Placed {
-  readonly taskId: TaskId;
-  readonly request: LaunchAuthorizationRequest;
-}
 
 beforeEach(async () => {
   await sql(url, `TRUNCATE workflow_runs, gates, admissions, tasks, assignments, outbox, inbox, task_lineage, capacity_charges,
@@ -86,45 +58,11 @@ beforeEach(async () => {
   value(await fleet.addToken(fleetToken('token-1')));
   value(await fleet.enroll(fleetToken('token-1').hash, WORKER));
   await sql(url, 'UPDATE workers SET reachable = true');
-  value(await new RunService(database, workflows).createRun({ runId: 'run-1', projectId: 'project-1', binding: BINDING }));
+  await createLaunchRun(database);
 });
 
-// A submitted planning task whose first attempt is placed on the worker.
-async function placed(task = 'task-1', workerId: WorkerId = WORKER.workerId): Promise<Placed> {
-  const submitted = value(await new TaskService(database).submitTask('run-1', { taskId: task, kind: 'planning', stageId: 'specs', artifacts: [SPEC] }, id('CorrelationId', 'c-1')));
-  const taskId = submitted.taskId as TaskId;
-  const attemptId = id('AttemptId', `${task}-attempt`) as AttemptId;
-  const claimed = value(await database.transaction(async (tx) => {
-    const stored = await tx.tasks.get(taskId);
-    if (!stored.ok) return stored;
-    const at = await tx.now();
-    const attempted = openAttempt(stored.value, stored.value.ownershipGeneration, { id: attemptId }, at);
-    if (!attempted.ok) return attempted;
-    const opened = await tx.tasks.replace(attempted.value, stored.value.generation);
-    if (!opened.ok) return opened;
-    const owned = claimOwnership(attempted.value, attempted.value.ownershipGeneration, attemptId, at);
-    if (!owned.ok) return owned;
-    const replaced = await tx.tasks.replace(owned.value, attempted.value.generation);
-    return replaced.ok ? ok(owned.value) : replaced;
-  }));
-  const assignmentId = id('AssignmentId', `${task}-assignment`) as AssignmentId;
-  const placement: PlacementRequest = {
-    assignmentId, reservationId: id('ReservationId', `${task}-reservation`), commandId: id('EventId', `${task}-offer`),
-    correlationId: id('CorrelationId', 'c-1'), taskId, attemptId, ownershipGeneration: claimed.ownershipGeneration,
-    workerId, requested: value(parseResourceRequest({ cpuMillicores: 500, memoryMebibytes: 512, hardControls: [] })),
-    providerCredentials: [],
-  };
-  const outcome = value(await new ResourceAdmissionService(database, { pause: async () => {}, draw: () => 0 }).reserveWithRetry(placement));
-  assert.equal(outcome.kind, 'placed');
-  return {
-    taskId,
-    request: {
-      operationId: id('OperationId', `${task}-operation-1`), recoveryEpoch: 1 as never, assignmentId, attemptId,
-      ownershipGeneration: claimed.ownershipGeneration, executionId: id('ExecutionId', `${task}-execution-1`),
-      admissionId: id('AdmissionId', admissionIdOf('run-1', task)), admissionGeneration: submitted.admission.generation as never,
-      reportsNotStarted: false,
-    } as LaunchAuthorizationRequest,
-  };
+function placed(task = 'task-1', workerId: WorkerId = WORKER.workerId): Promise<Placed> {
+  return placedTask(database, task, workerId);
 }
 
 function kindOf(result: Result<LaunchOutcome>): string {
@@ -210,8 +148,15 @@ test('each check rejects with its reason in the contract order', async () => {
   assert.equal(kindOf(await authority.authorize({ ...PRINCIPAL, generation: 2 }, several)), 'rejected:stale-recovery-epoch', 'the first failed check');
 });
 
-test('a missing admission is a rejection, and a missing run reaches no decision', async () => {
+test('a missing admission is a rejection, and a missing run or workflow reaches no decision', async () => {
+  await sql(url, `INSERT INTO capacity_quotas (scope, scope_id, quota) VALUES ('project', 'project-1', 16), ('run', 'run-1', 16)`);
+  await sql(url, 'UPDATE workers SET slots = 8');
   const { request } = await placed();
+  const other = await placed('task-other');
+  await sql(url, `UPDATE admissions SET run_id = 'run-9' WHERE id = '${other.request.admissionId}'`);
+  assert.equal(kindOf(await authority.authorize(PRINCIPAL, other.request)), 'rejected:admission-not-current', 'bound to another run');
+  const unknown = await authorityOn(database, undefined, new WorkflowRegistry([])).authorize(PRINCIPAL, request);
+  assert.equal(unknown.ok ? 'decided' : unknown.error.code, 'unavailable', 'the run\'s workflow left the registry');
   await sql(url, 'DELETE FROM admissions');
   assert.equal(kindOf(await authority.authorize(PRINCIPAL, request)), 'rejected:admission-not-current');
   const second = await placed('task-2');
@@ -285,6 +230,14 @@ test('every predicate reaches the revocation and the cancellation through the wr
     assert.equal(kindOf(await authority.authorize(PRINCIPAL, launched.request)), 'revoked:artifact-revision-changed', name);
   }
   assert.equal((await rows(`SELECT 1 FROM outbox WHERE event_type = 'execution.cancellation.request'`)).length, cases.length);
+});
+
+test('a worker revoked before its first authorization is rejected, and nothing is cancelled', async () => {
+  const { request } = await placed();
+  value(await fleet.revoke(WORKER.workerId, WORKER.enrolledAt));
+  assert.equal(kindOf(await authority.authorize(PRINCIPAL, request)), 'rejected:worker-not-authorized');
+  assert.equal((await rows('SELECT 1 FROM launch_rejections')).length, 1);
+  assert.equal((await rows(`SELECT 1 FROM outbox WHERE event_type = 'execution.cancellation.request'`)).length, 0);
 });
 
 test('a worker revocation revokes its grants, cancels them, and leaves the executions uncertain', async () => {

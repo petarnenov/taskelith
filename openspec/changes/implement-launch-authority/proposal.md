@@ -42,5 +42,5 @@ None.
 
 - The packages `@taskelith/execution`, `@taskelith/sdlc`, `@taskelith/scheduling`, `@taskelith/postgres`, `@taskelith/control-plane`, and the new `@taskelith/worker-control-plane-client`.
 - One migration.
-- No OpenAPI or AsyncAPI changes: `execution.openapi.json` 0.2.0 and `execution.asyncapi.json` already declare the operation and the cancellation reason. The launch authorization contract gains section 11.
+- No OpenAPI or AsyncAPI changes: `execution.openapi.json` 0.2.x and `execution.asyncapi.json` already declare the operation and the cancellation reason. The launch authorization contract gains section 11.
 - No new third-party dependency.

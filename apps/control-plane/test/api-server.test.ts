@@ -321,3 +321,21 @@ test('authorizeLaunch maps every outcome to its contract shape, and needs a work
   assert.equal(failed(await api.handle('authorizeLaunch', anonymous, '')).code, 'internal');
   assert.equal(failed(await api.handle('authorizeLaunch', { ...request, body: { ...body, recoveryEpoch: 0 } }, '')).code, 'invalid');
 });
+
+test('an undecided launch operation is 503, never 500', async () => {
+  const launchServer = createApiServer({
+    ...handlers,
+    authenticateWorker: async () => ok({ workerId: 'worker-1' as never, generation: 1 }),
+    handle: async () => err(failure('internal', 'the index lost a grant')),
+  });
+  await new Promise<void>((resolve) => launchServer.listen(0, '127.0.0.1', () => resolve()));
+  after(() => new Promise<void>((resolve) => launchServer.close(() => resolve())));
+  const body = {
+    operationId: 'operation-1', recoveryEpoch: 1, assignmentId: 'assignment-1', attemptId: 'attempt-1', ownershipGeneration: 1,
+    executionId: 'execution-1', admissionId: 'admission-1', admissionGeneration: 1, reportsNotStarted: false,
+  };
+  const response = await fetch(`http://127.0.0.1:${(launchServer.address() as AddressInfo).port}/launch-authorizations`, {
+    method: 'POST', headers: { authorization: `Bearer tkwk_${'F'.repeat(43)}`, 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  assert.equal(response.status, 503);
+});

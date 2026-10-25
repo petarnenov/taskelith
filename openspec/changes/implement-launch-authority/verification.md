@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-25. Author verification is recorded below, and the independent review as far as it has run.
+Date: 2026-10-25. Author verification and independent review are recorded below.
 
 ## Scope and source
 
@@ -38,7 +38,7 @@ Recorded before pass 1.
   - invalidation raced with the authorization: six rounds, each with a fresh worker and a staggered revocation. The revocation lands on either side. No grant outlives it, and each revoked grant is cancelled once;
   - writers: a bulk run predicate, an empty predicate, and a worker revocation that also marks the execution uncertain;
   - ownership: re-authorization of an unspawned execution, and `execution-conflict` for another one;
-  - the index: `launch-records.integration.test.ts` checks every predicate, the run from the admission, and liveness after revocation;
+  - the index: `launch-records.integration.test.ts` checks every predicate, the run from the assignment, and liveness after revocation;
   - the migrations: the backfill of stored grants;
   - the HTTP operation: through the running control plane (`control-plane-api.integration.test.ts`), with the worker bearer, the operator refused, and a 400;
   - the wire mapping of all four outcomes (`api-server.test.ts`);
@@ -58,7 +58,7 @@ Recorded before pass 1.
   - G6: the restore quarantine's entry, likewise;
   - item 20: the retry loop, the journal steps W2 and W3, and the deadline;
   - item 21: start observations through the `launchAuthId` lookup, and reconciliation of uncertain executions;
-  - follow-up: item 18's cancellation keeps `assignment-ended` (B8).
+  - follow-up (B8): item 18's cancellation of a running assignment records the attempt's cancellation as `launch-revoked`, through `revokeLaunch`, while its command says `assignment-ended`.
 
 ## Checks
 
@@ -66,6 +66,8 @@ Recorded before pass 1.
 
 - Before pass 1, at `298360b`: 951 tests passed, 0 failed; coverage 99.18% lines, 91.61% branches, 98.84% functions. The comment, boundary, coverage-scope, dependency-inventory, contract-compatibility, OpenSpec, and package checks pass.
 - After the pass-1 fixes and the merge of `dev` at `c84ca71` (item 19), at `102d03b`: 990 tests passed, 0 failed; coverage 99.22% lines, 91.71% branches, 98.96% functions; every other check passes.
+
+- After the pass-2 fixes: 992 tests passed, 0 failed; coverage 99.23% lines, 91.73% branches, 98.96% functions; every other check passes.
 
 The merge of `dev` touched code, so the second pass reviews it too (protocol step 9). The conflicts were additive: the store port, the route table, the API services, the composition, the PostgreSQL transaction and committing adapters, and the tests gained both items' members. My migration `1792932000000` stays later than item 19's `1792931700000`.
 
@@ -101,10 +103,38 @@ The reviewer is OpenCode with model `opencode/deepseek-v4.1-flash` and variant `
 | L8 | Inaccurate statements in the proposal. | Fixed. |
 | L9 | A three-line SQL comment. | Fixed, although `verify:comments` does not cover SQL. |
 | L10 | No test of several failed checks at once. | Fixed: the first failed check wins. |
-| L11 | A missing run or an unknown workflow was a 500. | Fixed: `unavailable`, with a test, and nothing is recorded. |
+| L11 | A missing run or an unknown workflow was a 500. | Fixed: `unavailable`, and nothing is recorded. Pass 2 added the unknown workflow's test. |
 | L12 | Item 18's attempt records `launch-revoked` while its command says `assignment-ended`. | Not changed: item 18's behavior is outside this scope, and B8 recorded it as a follow-up. |
 | L13 | The backfill mask corrupted identifiers with a backslash. | Fixed: only the escapes `jsonb` rejects are masked. A test stores an artifact identifier with a backslash and a quote. |
 | L14 | A grant's run could be null. | Fixed: it is the assignment's run, which every grant has. A backfilled grant without its assignment row keeps a null run. |
 | L15 | The trust model says "active attempt", and the code marks executions. | Recorded in the design: an attempt without a grant has no execution that could run, and item 21 decides about it. |
 | L16 | The helper was tested through only two predicates. | Fixed: the run, assignment, artifact, worker, and all predicates go through the helper. The gate predicate is tested as a read. |
 | L17 | The other-worker test used an unenrolled worker. | Fixed: an enrolled worker B gets nothing and changes nothing of A's. |
+
+### Pass 2
+
+- Session `ses_e8bf21d95ffeqUwyPirDwQ4Fh0`, 2026-10-25 19:13 to 19:22, on `6352497`, including the merge `102d03b`.
+- Snapshot `1c3bfce4…79c0c` before and after: unchanged.
+- The agent ran 25 shell commands, and none was refused.
+- Result: Critical 0, High 0, Medium 3, Low 10.
+- Status of pass 1:
+  - fully resolved: H1, H2, M1, M2, M3, M5, M7, L1 to L5, L7, L9, L10, L13, L16, and L17;
+  - justified as recorded: M6, L6, L12, L14, and L15;
+  - partly resolved: M4, L8, and L11, which are its F4, F8, and F10.
+- It found the merge additive, with nothing of item 19 dropped.
+
+| # | Finding | Disposition |
+| --- | --- | --- |
+| F1 | After M1, the run came from the assignment without checking that it is the admission's run. | Fixed: an admission bound to another run is `admission-not-current`, with a test. |
+| F2 | The administration's `revoke-worker` was not tested with a grant. | Fixed: the administration test grants a launch through the shared fixture, runs `revoke-worker`, and finds the grant revoked, the execution uncertain, and one cancellation command. |
+| F3 | An internal failure of `authorizeLaunch` was a 500, which the contract does not declare. | Fixed: the route answers `internal` with 503, with a server test. |
+| F4 | The record of M4 claimed a deterministic test of the order "before". | Fixed: a test revokes the worker before its first authorization, and the text says which outcomes occur depends on timing. |
+| F5 | The index's run was described as the admission's. | Fixed: it is the assignment's. |
+| F6 | The design said a masked `nativeReference` fails closed. | Fixed: revisions compare by identifier and digest, so it changes no decision. |
+| F7 | The revisions backfill was described as `submitTask`'s order. | Fixed: the choice is arbitrary but fixed, and another digest fails closed, as the design and the migration comment say. |
+| F8 | The proposal named `execution.openapi.json` 0.2.0, which is 0.2.1 after the merge. | Fixed: 0.2.x. |
+| F9 | A backfilled grant without its assignment keeps a null run. | Recorded in the design: no G2 path stores such a grant, and every other predicate finds it. |
+| F10 | The unknown workflow had no test. | Fixed: a test with an empty registry gives `unavailable`. |
+| F11 | The B8 follow-up was described too broadly. | Fixed: the follow-up names the exact mismatch. |
+| F12 | The mask's comment was narrower than the mask, and it depended on `standard_conforming_strings`. | Fixed: `E''` strings, and the comment says that pairs are masked too. |
+| F13 | The trust model and a fleet comment spoke of active attempts. | Fixed: trust model section 4 says which executions become uncertain, and the comment names item 17's registry. |

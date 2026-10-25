@@ -50,7 +50,9 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
   },
   {
     operationId: 'authorizeLaunch', method: 'POST', pattern: /^\/launch-authorizations$/, security: 'workerCredential',
-    body: 'LaunchAuthorizationRequest', response: 'LaunchAuthorizationOutcome', success: 200, statuses: COMMON,
+    body: 'LaunchAuthorizationRequest', response: 'LaunchAuthorizationOutcome', success: 200,
+    // The contract has no 500: an undecided operation is retried (section 3).
+    statuses: { ...COMMON, internal: 503 },
   },
   {
     operationId: 'publishEvidence', method: 'POST', pattern: /^\/evidence$/, security: 'workerCredential', body: 'EvidencePublication', upload: true,

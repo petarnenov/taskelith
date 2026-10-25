@@ -38,7 +38,7 @@ These are coordinator decisions, taken as the worker recommended. The coordinato
   - Otherwise the domain decides on a context that is read entirely in the transaction: the assignment and reservation, the admission, the run's definition from the workflow registry, its gates, the current revisions, and the policy revision.
   - The grant is written with the task's record. A non-retryable rejection is recorded and commits, because the transaction's work returns it as a value.
 - **A decision is final, or none is reached.**
-  - The run comes from the assignment, so a missing admission is `admission-not-current`.
+  - The run comes from the assignment, so a missing admission is `admission-not-current`, and so is an admission bound to another run.
   - A run that is not stored, or whose workflow left the registry, reaches no decision: `unavailable`, which is a 503.
   - A concurrent decision of the same operation makes the loser's transaction a serialization failure, which reruns as a replay. A unique conflict is answered `unavailable`, so the worker's repeat replays the recorded decision.
 - **The worker check is the contract's.** "Enrolled, unrevoked, at its current credential generation" (section 2) is read in the transaction, so a revocation is ordered against the authorization. The principal's generation must be the current one. A predecessor within its grace window authenticates, and is then rejected here.
@@ -48,7 +48,9 @@ These are coordinator decisions, taken as the worker recommended. The coordinato
   - The predicates read partial indexes on live rows, GIN indexes for the artifacts and relied-on gates, so a writer's read is an index read that serializable conflict detection covers.
   - A grant's run is its assignment's, which every grant has.
   - The gate predicate takes a set of gates. A writer that adds, removes, or decides a gate names every gate of the stage, so a gate added to a prerequisite stage finds the grants that relied on that stage, and two admissions relying on other gates stay apart.
-  - The migration backfills the rows of stored tasks, and `current_revisions` from the used admissions in identity order, as `submitTask` would have seeded them. It masks only the escapes that `jsonb` rejects, those of NUL and surrogates. Identifiers are printable ASCII and never hold such an escape, so they are kept. A bound revision whose free text holds one becomes a different current revision, so its launch fails closed with `artifact-revision-changed`.
+  - The migration backfills the rows of stored tasks, and `current_revisions` from the used admissions. Admission identities are hashes, so which admission seeds an artifact of a run is arbitrary but fixed; a task bound to another digest fails closed with `artifact-revision-changed`.
+  - The backfill masks the escapes of NUL and of surrogates, pairs included, which `jsonb` may reject. Identifiers are printable ASCII and never hold such an escape, so they are kept. Launches compare revisions by identifier and digest only, so a masked `nativeReference` changes no decision.
+  - A backfilled grant whose assignment row is missing keeps a null run, so the run predicate cannot find it. Every other predicate can, and no G2 path stores a grant without its assignment.
 - **Crash points.** The transaction reaches `LaunchAuthorizationCommit` when its task repository inserted a new grant row. A crash after the commit is the lost-response case, and its retry replays the grant.
 - **Invalidation.**
   - `invalidateLaunches` reads the predicate's live grants, revokes each attempt's grants with `revokeLaunch`, and writes one cancellation command per attempt. The command's identity derives from the first grant, so a rerun sends the same command.
@@ -63,8 +65,8 @@ These are coordinator decisions, taken as the worker recommended. The coordinato
 ## Risks / Trade-offs
 
 - **No in-memory `LaunchRecords`.** The index is a projection of task records. `LAUNCH_RECORDS_CONFORMANCE` is the port's suite, and it runs against PostgreSQL, as do the authority's and the writers' tests. An in-memory adapter would have to follow the task repository's writes; no use case needs one in G2. The client has one adapter, whose tests are its contract.
-- **The race tests are not a proof.** Both sequential orders are tested deterministically: a revocation before the authorization rejects it, and one after revokes and cancels the grant. The concurrent rounds check that the invariant holds whichever side lands first, and the mix of outcomes depends on timing. Which transaction PostgreSQL makes the serialization victim is not forced. An empty read racing an authorization changes no compared value, so its order cannot be observed; it is the same index read as a non-empty one.
-- **Uncertainty covers executions.** A revoked worker's executions with a live grant become `uncertain` (B3). An active attempt without a grant has no execution that could run; item 21's reconciliation decides about the attempt.
+- **The race tests are not a proof.** Both sequential orders are tested deterministically: a revocation before the authorization rejects it with a recorded `worker-not-authorized`, and one after revokes and cancels the grant. The concurrent rounds check that the invariant holds whichever side lands first. Which outcomes occur depends on timing, and the test does not require both. Which transaction PostgreSQL makes the serialization victim is not forced. An empty read racing an authorization changes no compared value, so its order cannot be observed; it is the same index read as a non-empty one.
+- **Uncertainty covers executions.** A revoked worker's executions with a live grant become `uncertain` (B3), which trust model section 4 now states. An active attempt without a grant has no execution that could run; item 21's reconciliation decides about the attempt.
 - **Seeded current revisions.**
   - The first submission that binds an artifact fixes its current revision for the run. A later submission with another digest of that artifact is rejected with `artifact-revision-changed` at launch.
   - The contract keeps this fail-closed until G3's writer.

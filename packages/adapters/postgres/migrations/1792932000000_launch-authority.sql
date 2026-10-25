@@ -41,12 +41,12 @@ CREATE TABLE current_revisions (
   PRIMARY KEY (run_id, artifact_id)
 );
 
--- jsonb rejects only the escapes of NUL and of surrogates, which free text
--- may hold; identifiers are printable ASCII, so masking those keeps them.
+-- Masks NUL and surrogate escapes, pairs too, which jsonb may reject; ASCII
+-- identifiers hold none, and E'' keeps backslashes in any string setting.
 CREATE FUNCTION pg_temp.launch_record(record text) RETURNS jsonb
   LANGUAGE sql IMMUTABLE
-  AS $$ SELECT replace(regexp_replace(replace(record, '\\', chr(1)), '\\u(0000|[dD][89a-fA-F][0-9a-fA-F]{2})', '_', 'g'),
-    chr(1), '\\')::jsonb $$;
+  AS $$ SELECT replace(regexp_replace(replace(record, E'\\\\', chr(1)), E'\\\\u(0000|[dD][89a-fA-F][0-9a-fA-F]{2})', '_', 'g'),
+    chr(1), E'\\\\')::jsonb $$;
 
 -- A grant's run is its assignment's, which every grant has.
 INSERT INTO launch_authorizations (launch_auth_id, worker_id, operation_id, task_id, attempt_id, assignment_id, execution_id,
@@ -63,8 +63,8 @@ FROM tasks
   CROSS JOIN LATERAL jsonb_array_elements(execution -> 'grants') AS grant_record
   LEFT JOIN assignments ON assignments.id = grant_record ->> 'assignmentId';
 
--- The tasks submitted before this migration seed their runs' revisions as
--- submitTask does: the first used admission, in identity order, wins.
+-- Earlier tasks seed their runs' revisions. Admission identities are hashes,
+-- so which one wins is arbitrary but fixed; another digest fails closed.
 INSERT INTO current_revisions (run_id, artifact_id, revision)
 SELECT DISTINCT ON (admissions.run_id, artifact ->> 'artifactId') admissions.run_id, artifact ->> 'artifactId', artifact::text
 FROM admissions

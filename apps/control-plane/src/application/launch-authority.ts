@@ -82,20 +82,25 @@ export class LaunchAuthority {
 
   // Every current value, read in the deciding transaction (contract section 3).
   async #context(tx: ControlPlaneTransaction, assignment: Assignment, task: Task, checked: Checked): Promise<Result<LaunchContext>> {
-    const admission = await optional(tx.admissions.get(task.admissionId));
-    if (!admission.ok) return admission;
-    // The assignment names its run, so a missing admission is a rejection.
-    const run = await tx.runs.get(assignment.reservation.scope.runId);
+    const stored = await optional(tx.admissions.get(task.admissionId));
+    if (!stored.ok) return stored;
+    // The assignment names its run, so a missing admission is a rejection;
+    // one bound to another run is not the task's current one either.
+    const boundRun = await tx.catalog.runOfAdmission(task.admissionId);
+    if (!boundRun.ok) return boundRun;
+    const runId = assignment.reservation.scope.runId;
+    const admission = boundRun.value === runId ? stored.value : undefined;
+    const run = await tx.runs.get(runId);
     if (!run.ok) return run.error.code === 'not-found' ? noDecision(run.error.message) : run;
     const definition = this.#settings.workflows.resolve(run.value.binding);
     if (!definition.ok) return noDecision(definition.error.message);
-    const currentRevisions = await tx.revisions.current(run.value.id, artifactIdsOf(admission.value));
+    const currentRevisions = await tx.revisions.current(run.value.id, artifactIdsOf(admission));
     if (!currentRevisions.ok) return currentRevisions;
     return ok({
       ...checked,
       assignment: launchAssignment(assignment),
       reservation: launchReservation(assignment),
-      ...(admission.value === undefined ? {} : { admission: admission.value }),
+      ...(admission === undefined ? {} : { admission }),
       definition: definition.value,
       gates: await tx.gates.listByRun(run.value.id),
       currentRevisions: currentRevisions.value,
