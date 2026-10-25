@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { checkEvidence, checkLicenseReviews, collectLicenses, normalizeSbom, parseLicenseReviews, sha256 } from '../scripts/dependency-inventory.ts';
+import { checkInventoryInputs, INVENTORY_INPUTS, staleInventoryInputs } from '../scripts/inventory-provenance.ts';
 import type { LicenseReview } from '../scripts/dependency-inventory.ts';
 
 test('bundled legacy licenses retain text hashes and expose missing coverage', () => {
@@ -30,6 +31,67 @@ test('bundled legacy licenses retain text hashes and expose missing coverage', (
     assert.throws(() => collectLicenses(root, { [bundled]: { version: '9.0.0' } }), /differs from lockfile/);
     assert.throws(() => collectLicenses(root, { 'node_modules/absent': { version: '1.0.0' } }), /Missing installed package/);
     assert.throws(() => collectLicenses(root, { 'node_modules/../../outside': { version: '1.0.0' } }), /Unsafe/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('a package for one platform is recorded from the lockfile, installed or not', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-license-platform-'));
+  try {
+    const installed = 'node_modules/@scope/tool-darwin-arm64';
+    mkdirSync(join(root, installed), { recursive: true });
+    writeFileSync(join(root, installed, 'package.json'), JSON.stringify({ name: '@scope/tool-darwin-arm64', version: '9.9.9' }));
+    const locked = (os: string, cpu: string) => ({ version: '1.0.0', integrity: `sha512-${os}`, optional: true, license: 'MIT', os: [os], cpu: [cpu] });
+    const result = collectLicenses(root, {
+      [installed]: locked('darwin', 'arm64'),
+      'node_modules/@scope/tool-linux-x64': locked('linux', 'x64'),
+      'node_modules/@scope/tool-any': { version: '1.0.0', optional: true, os: ['linux'] },
+    });
+    assert.deepEqual(result[0], {
+      path: 'node_modules/@scope/tool-any', name: '@scope/tool-any', version: '1.0.0', integrity: null,
+      development: false, bundled: false, optional: true, declaration: null, declarationField: null,
+      manifestSha256: null, licenseFiles: [], platform: { os: ['linux'], cpu: [] }, inspected: false,
+      gaps: ['missing-license-declaration', 'license-text-not-inspected'],
+    });
+    assert.deepEqual(result.map(pkg => [pkg.name, pkg.version, pkg.declaration, pkg.gaps]), [
+      ['@scope/tool-any', '1.0.0', null, ['missing-license-declaration', 'license-text-not-inspected']],
+      ['@scope/tool-darwin-arm64', '1.0.0', 'MIT', ['license-text-not-inspected']],
+      ['@scope/tool-linux-x64', '1.0.0', 'MIT', ['license-text-not-inspected']],
+    ]);
+    const review = { path: 'node_modules/@scope/tool-any', version: '1.0.0', manifestSha256: 'lockfile', status: 'declaration-only' as const, finding: 'f', evidence: ['e'] };
+    const reviews = result.map(pkg => ({ ...review, path: pkg.path }));
+    assert.doesNotThrow(() => checkLicenseReviews(result, reviews));
+    assert.throws(() => checkLicenseReviews(result, reviews.slice(1)), /unreviewed/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('workspace packages are first-party and skipped, while their installed dependencies are inventoried', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-license-workspace-'));
+  try {
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ workspaces: ['packages/modules/*'] }));
+    const nested = 'packages/modules/sdlc/node_modules/dep';
+    mkdirSync(join(root, nested), { recursive: true });
+    writeFileSync(join(root, 'packages/modules/sdlc/package.json'), JSON.stringify({ name: '@taskelith/sdlc', version: '0.0.0' }));
+    writeFileSync(join(root, nested, 'package.json'), JSON.stringify({ name: 'dep', version: '1.0.0', license: 'MIT' }));
+    writeFileSync(join(root, nested, 'LICENSE'), 'dep license');
+    const result = collectLicenses(root, {
+      'node_modules/@taskelith/sdlc': { version: '', link: true, resolved: 'packages/modules/sdlc' },
+      'packages/modules/sdlc': { version: '0.0.0' },
+      [nested]: { version: '1.0.0' },
+    });
+    assert.deepEqual(result.map(pkg => pkg.path), [nested]);
+    const workspace = { 'packages/modules/sdlc': { version: '0.0.0' } };
+    for (const [path, resolved] of [
+      ['node_modules/evil', '../outside'],
+      ['node_modules/../../outside', 'packages/modules/sdlc'],
+      ['node_modules/@taskelith/other', 'packages/modules/sdlc'],
+      ['node_modules/@taskelith/sdlc', 'packages/./modules/sdlc'],
+      ['node_modules/@taskelith/sdlc', 'packages/modules/not-a-workspace'],
+      ['node_modules/dep', nested],
+    ]) {
+      assert.throws(() => collectLicenses(root, { ...workspace, [path]: { version: '', link: true, resolved } }), /Unsupported linked package/, `${path} -> ${resolved}`);
+    }
+    assert.throws(() => collectLicenses(root, { 'node_modules/@taskelith/sdlc': { version: '', link: true, resolved: 'packages/modules/sdlc' } }), /Unsupported linked package/);
+    assert.throws(() => collectLicenses(root, { 'packages/modules/sdlc': { version: '0.0.0' } }), /Unsafe/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -60,6 +122,20 @@ test('drift detection leaves retained evidence unchanged', () => {
     assert.equal(readFileSync(path, 'utf8'), 'reviewed evidence');
     assert.throws(() => checkEvidence('new evidence', join(root, 'absent')), /drift/);
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('inventory inputs are stale when their content differs from the recorded provenance', () => {
+  const contents: Record<string, string> = Object.fromEntries(INVENTORY_INPUTS.map(path => [path, `content of ${path}`]));
+  const readInput = (path: string) => Buffer.from(contents[path]);
+  const provenance = Object.fromEntries(INVENTORY_INPUTS.map(path => [path, sha256(contents[path])]));
+  assert.deepEqual(staleInventoryInputs(provenance, readInput), []);
+  checkInventoryInputs(provenance, readInput);
+  contents['package-lock.json'] = 'merged lockfile';
+  assert.deepEqual(staleInventoryInputs(provenance, readInput), ['package-lock.json']);
+  assert.throws(() => checkInventoryInputs(provenance, readInput),
+    /^Error: Dependency inventory is stale; changed inputs: package-lock\.json; regenerate with make dependency-inventory/);
+  assert.deepEqual(staleInventoryInputs(undefined, readInput), [...INVENTORY_INPUTS]);
+  assert.deepEqual(staleInventoryInputs('not an object', readInput), [...INVENTORY_INPUTS]);
 });
 
 test('license coverage reviews must match every gap by exact manifest', () => {

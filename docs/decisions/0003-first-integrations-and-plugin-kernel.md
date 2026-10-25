@@ -1,7 +1,7 @@
 # ADR 0003: First integrations, closed-harness scope, and plugin microkernel
 
 Date: 2026-10-24
-Status: Decisions made by the owner on 2026-10-24 in the project conversation; decisions 9 to 11 were added later the same day. Recording, independent review, implementation, and qualification are pending.
+Status: Decisions made by the owner on 2026-10-24 in the project conversation; decisions 9 to 11 were added later the same day; decision 11 was amended by [ADR 0008](0008-product-ui-and-integration-authority.md) the same day. Recording, independent review, implementation, and qualification are pending.
 
 ## Context
 
@@ -11,7 +11,7 @@ The architecture required an open-source first harness, a second harness, and a 
 
 1. **Agent harnesses.** The owner selected Claude Code, OpenAI Codex CLI, Antigravity CLI (`agy`), and OpenCode, to be delivered in that order. Claude Code is the first real harness (G3). Codex is the second (G4). Antigravity and OpenCode follow as additional plugins. Exact versions are pinned at qualification.
 2. **Scope change for closed harnesses.** Closed-source harnesses and closed model providers are admissible as full harness integrations on equal terms with open-source ones. For agent harnesses and their model providers, this replaces the rule that the baseline must have no mandatory closed provider. All other parts of the open-source policy are unchanged: infrastructure, storage, messaging, the SDLC framework, and build tooling. Each closed harness still needs recorded license terms, provider dependency, data-handling terms, version, maintenance, and security evidence before admission.
-3. **SCM.** Forgejo is the first SCM integration. The line and version are chosen at qualification, with an LTS line preferred.
+3. **SCM.** Forgejo is the first SCM integration. The line and version are chosen at qualification, with an LTS line preferred. (Superseded on 2026-10-24 by [ADR 0006](0006-github-first-scm.md): GitHub.com is the first SCM, and Forgejo a later second SCM plugin.)
 4. **Telemetry.** A component whose telemetry is on by default is admissible if the telemetry can be disabled by configuration, and a network-egress test confirms the configuration works.
 5. **Open-core.** A component whose vendor also sells a proprietary edition is admissible if every feature Taskelith requires is in the open-source edition.
 6. **License coverage evidence.** For development and release tooling, the `notice-only` and `declaration-only` evidence recorded in the [license reviews](../dependencies/license-reviews.json) is sufficient.
@@ -24,7 +24,7 @@ The architecture required an open-source first harness, a second harness, and a 
    - Startup registration of pinned packages stays in force; this decision does not authorize hot reload or a remote marketplace.
 9. **License diligence during development.** Until G8, a license name and one official source suffice as license evidence for candidates and dependencies. Checking the LICENSE file at a release tag for each candidate and manual per-package license review are not required. The automated dependency inventory check stays in force. G8 requires a full license audit before the first product release. This does not relax the closed-harness record requirements in decision 2.
 10. **Non-telemetry vendor traffic during development.** Until G8, documented outbound traffic to a harness vendor that is not telemetry, such as feature-flag checks, is acceptable. The network-egress test records every such destination. G8 decides whether it stays acceptable for release.
-11. **External approvals for every harness.** A harness plugin must answer native permission requests from an external client, comparable to the Claude Code and Codex mechanisms. Running a harness only under pre-set policy is not accepted as the target. For Antigravity CLI 1.4.7, whose headless mode soft-denies approval requests, finding a suitable mechanism is part of its plugin qualification.
+11. **External approvals for every harness.** A harness plugin must answer native permission requests from an external client, comparable to the Claude Code and Codex mechanisms. Running a harness only under pre-set policy is not accepted as the target. For Antigravity CLI 1.4.7, whose headless mode soft-denies approval requests, finding a suitable mechanism is part of its plugin qualification. *Amendment, 2026-10-24 ([ADR 0008](0008-product-ui-and-integration-authority.md) decision 2):* the external client may answer from a project-maintainer's audited standing rule, such as pushing to the task's own branch while auto-merge is on; the plugin requirement for external approvals is unchanged.
 
 ## Consequences
 

@@ -1,19 +1,19 @@
 # review-process Specification
 
 ## Purpose
-Govern independent review of Taskelith changes: authorized read-only reviewers, one reviewer per change with rotation, at most three passes, owner decisions on remaining findings, and Low-only passes fixed without another review.
+Govern independent review of Taskelith changes: authorized read-only reviewers, one reviewer per change at a time with rotation and a replacement when a reviewer is unavailable, at most three passes, owner decisions on remaining findings, and Low-only passes fixed without another review.
 
 ## Requirements
 
 ### Requirement: Authorized single-reviewer review
-Each Taskelith change without a review exception accepted by the owner under the governance policy SHALL be independently reviewed by one owner-authorized reviewer, invoked read-only with its model and effort set in the invocation; no second reviewer SHALL cross-review the same change, re-review passes by the assigned reviewer are allowed, and consecutive changes SHALL rotate among reviewers unless a change needs a particular one.
+Each Taskelith change without a review exception accepted by the owner under the governance policy SHALL be independently reviewed by one owner-authorized reviewer at a time, invoked read-only with its model and effort set in the invocation. Re-review passes are allowed; no second reviewer SHALL cross-review it, and only an unavailable reviewer's replacement may take it over. Consecutive changes SHALL rotate among reviewers unless a change needs a particular one.
 
 #### Scenario: Review recorded
 - **WHEN** a change's `verification.md` records an independent review
 - **THEN** it records the invocation, reviewer, model, effort, and session ID, and records that the SHA-256 snapshots taken before and after each pass were equal
 
 #### Scenario: Second reviewer requested for the same change
-- **WHEN** a change already has an assigned reviewer
+- **WHEN** a change already has an assigned reviewer that is available
 - **THEN** another authorized reviewer is not used for it
 
 #### Scenario: Review depends on external facts
@@ -45,3 +45,44 @@ Before the first pass, the author SHALL self-check the change against the review
 #### Scenario: First pass requested
 - **WHEN** the first review pass of a change is started
 - **THEN** `verification.md` already records the author's self-check and the evidence-check result
+
+### Requirement: Unavailable reviewer
+A reviewer whose review attempt does not run to a report SHALL NOT be used for any change for 30 minutes from that attempt; a pass that reports findings is not unavailability. The next authorized reviewer in the rotation that is not paused and meets the change's review requirements SHALL be proposed and, once assigned, SHALL review the remaining passes, first confirming the earlier findings and then reviewing the whole change.
+
+#### Scenario: Assigned reviewer fails to run
+- **WHEN** a review attempt by the assigned reviewer fails, for example without opening a session
+- **THEN** the next authorized reviewer in the rotation is proposed and, once assigned, its first pass confirms the resolution of the earlier passes' findings and reviews the whole change
+
+#### Scenario: Pass count after a switch
+- **WHEN** a change switches reviewer after its first pass
+- **THEN** the replacement's first pass is the change's second pass
+
+#### Scenario: Unavailable reviewer at assignment
+- **WHEN** a reviewer was unavailable less than 30 minutes ago and a new change is assigned
+- **THEN** the coordinator assigns the next reviewer in the rotation instead
+
+#### Scenario: Replacement needs network access
+- **WHEN** a change whose review depends on external facts loses its reviewer
+- **THEN** the replacement is a reviewer with network access
+
+#### Scenario: Exclusion ends
+- **WHEN** 30 minutes have passed since the failed attempt and no listed pause of that reviewer has an end time still in the future
+- **THEN** the reviewer may be assigned again
+
+### Requirement: Unavailable reviewer record
+A change's `verification.md` SHALL record each failed review attempt with its time and the reviewer switch. Failed attempts SHALL NOT count toward the pass cap, and the pass count SHALL carry over to the replacement.
+
+#### Scenario: Failed attempts recorded
+- **WHEN** a change switches reviewer after failed attempts
+- **THEN** `verification.md` lists each failed attempt with its time, and the pass numbering continues
+
+### Requirement: Rotation order
+Rotation SHALL follow the order of the authorized reviewer list in the governance policy, returning to the first after the last, and skip a reviewer that is unavailable, paused, or unable to meet the change's review requirements. Unless a change needs a particular reviewer, a new change SHALL go to the reviewer after the one most recently assigned.
+
+#### Scenario: Reviewer after a replacement
+- **WHEN** a replacement reviewer was the most recently assigned
+- **THEN** the next new change goes to the reviewer after the replacement in the list
+
+#### Scenario: Reviewer that cannot meet the requirements
+- **WHEN** the next reviewer in the list lacks network access and the change depends on external facts
+- **THEN** it is skipped for that change

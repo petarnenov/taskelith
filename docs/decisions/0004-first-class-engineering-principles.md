@@ -1,15 +1,15 @@
 # ADR 0004: First-class engineering principles
 
 Date: 2026-10-24
-Status: Decided by the owner on 2026-10-24 in the project conversation. Recorded; the Makefile, container images, and API contracts do not exist yet.
+Status: Decided by the owner on 2026-10-24 in the project conversation; principle 9 was added the same day and is enforced in `make verify`; principle 8 was amended by [ADR 0008](0008-product-ui-and-integration-authority.md) the same day. Recorded; container images and API contracts do not exist yet.
 
 ## Context
 
-The owner directed that eight principles be first-class in Taskelith and that all design be done against them. The architecture already required hexagonal modules and, since [ADR 0003](0003-first-integrations-and-plugin-kernel.md), a plugin microkernel. The other principles were implicit or absent: the architecture named no container, API-contract, or task-runner policy, and the repository instructions called OpenSpec a bootstrap choice that is "not a permanent core dependency".
+The owner directed that eight principles be first-class, and later the same day added a ninth (code coverage), in Taskelith and that all design be done against them. The architecture already required hexagonal modules and, since [ADR 0003](0003-first-integrations-and-plugin-kernel.md), a plugin microkernel. The other principles were implicit or absent: the architecture named no container, API-contract, or task-runner policy, and the repository instructions called OpenSpec a bootstrap choice that is "not a permanent core dependency".
 
 ## Decisions
 
-Every design, code change, test, and review is checked against all eight principles. A change that cannot meet one records the conflict and asks the owner, rather than silently exempting itself.
+Every design, code change, test, and review is checked against all nine principles. A change that cannot meet one records the conflict and asks the owner, rather than silently exempting itself.
 
 1. **Clean Code.** Code and tests are written for local reasoning: precise names, small single-purpose functions, explicit mutation, isolated error handling, and comments only for rationale or contracts. Review checks it. Automated lint rules are selected later through the dependency policy.
 2. **SOLID.** Modules have one reason to change. Integrations extend the product through plugins, not kernel edits. Every adapter of a port passes that port's shared conformance suite, so adapters are substitutable. Ports stay small and specific to their clients. Application code depends on ports, never on adapters.
@@ -19,6 +19,11 @@ Every design, code change, test, and review is checked against all eight princip
 6. **OpenAPI.** Every HTTP API, including the control-plane API used by the SPA and external clients, is contract-first: a versioned OpenAPI 3.1 document is written and reviewed before the implementation. TypeScript types, runtime request and response validation, and clients are generated from it. CI fails on an unversioned breaking change. Messages over NATS follow the same contract-first rule with AsyncAPI documents.
 7. **Makefile.** Every operation is run and managed through `make` targets: setup, build, test, checks, dependency inventory, OpenSpec validation, package verification, container build and run, and qualification runs. CI calls the same targets. npm scripts may remain the implementation behind a target, but documentation and CI invoke `make`.
 8. **Mandatory OpenSpec for Taskelith development.** Every task that develops Taskelith itself goes through an OpenSpec change, without exception: features, fixes, documentation, tests, maintenance, dependencies, infrastructure, qualification, and emergencies. This applies only to the development of Taskelith. Each project that Taskelith manages selects its own spec-driven framework, such as OpenSpec or SpecKit, through the replaceable SDLC framework plugins.
+
+   *Amendment, 2026-10-24 ([ADR 0008](0008-product-ui-and-integration-authority.md) decision 1):* Taskelith's own development may select its framework like any other project, with OpenSpec as the default. Every task is still bound to a change of the selected framework, without exception, and this repository keeps using OpenSpec until a project-maintainer selects another framework whose pinned tooling has been admitted through the dependency policy.
+9. **Code coverage of at least 75%.** Added by the owner on 2026-10-24. Automated tests cover at least 75% of lines, branches, and functions. `make verify` enforces the thresholds with Node's built-in test coverage over the compiled product code in `dist/` alone, so that well-tested repository scripts cannot mask low product coverage, and fails when a product module under `src/` is missing from the coverage report, because the built-in coverage counts only modules that tests load.
+
+   Amendment, 2026-10-24: after the owner chose npm workspaces for the code layout ([G1 work plan](../g1-plan.md), decision D1), the same rule covers every workspace package. Coverage is measured over the compiled code in `dist/` of the root package and of each workspace package, still without repository scripts, and the scope check covers the modules under `src/` of each.
 
 ## Consequences
 

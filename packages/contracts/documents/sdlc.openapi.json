@@ -1,0 +1,638 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Taskelith SDLC API",
+    "version": "0.3.0",
+    "description": "Creates SDLC workflow runs, submits tasks for admission, and reads admissions. Every operation requires the installation-owner credential (decision D10 (a))."
+  },
+  "paths": {
+    "/runs": {
+      "post": {
+        "operationId": "createRun",
+        "summary": "Create a workflow run bound to a framework workflow and policy revision",
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The run was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The operator credential is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A run with this identifier already exists with another binding.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The binding names a workflow, version, or digest the control plane does not know.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A service the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs/{runId}/tasks": {
+      "post": {
+        "operationId": "submitTask",
+        "summary": "Submit a task to a stage of a run for admission",
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "description": "The run.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The task was admitted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskSubmission"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The operator credential is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The run or the stage does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A task with this identifier already exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The task cannot be admitted, for example an implementation task without a work item or with prerequisite stages that have not passed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A service the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs/{runId}/admissions/{admissionId}": {
+      "get": {
+        "operationId": "readAdmission",
+        "summary": "Read an admission of a run",
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "description": "The run.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          },
+          {
+            "name": "admissionId",
+            "in": "path",
+            "required": true,
+            "description": "The admission.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The admission.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Admission"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The operator credential is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The run or the admission does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A service the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Identifier": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[\\x21-\\x7e]+$",
+        "description": "An opaque identifier of 1-128 printable ASCII characters without whitespace."
+      },
+      "Instant": {
+        "type": "string",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$",
+        "description": "A UTC time in the form YYYY-MM-DDTHH:mm:ss.sssZ."
+      },
+      "ContentDigest": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$",
+        "description": "sha256: followed by 64 lowercase hexadecimal characters."
+      },
+      "Generation": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "A compare-and-set generation that starts at 1."
+      },
+      "DisplayText": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024,
+        "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+        "description": "Text shown to people and never interpreted, without control characters."
+      },
+      "ArtifactRevision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "artifactId",
+          "digest",
+          "nativeReference"
+        ],
+        "description": "An immutable revision of a workflow artifact, identified by artifact and digest.",
+        "properties": {
+          "artifactId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "digest": {
+            "$ref": "#/components/schemas/ContentDigest"
+          },
+          "nativeReference": {
+            "$ref": "#/components/schemas/DisplayText"
+          }
+        }
+      },
+      "WorkItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "nativeReference"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "nativeReference": {
+            "$ref": "#/components/schemas/DisplayText"
+          }
+        }
+      },
+      "TaskKind": {
+        "type": "string",
+        "enum": [
+          "planning",
+          "implementation"
+        ]
+      },
+      "AdmissionState": {
+        "type": "string",
+        "enum": [
+          "admitted",
+          "used",
+          "invalidated"
+        ]
+      },
+      "Admission": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A task admission record. A used admission carries the ownership generation of the dispatch that used it.",
+        "required": [
+          "id",
+          "taskId",
+          "kind",
+          "workflowId",
+          "workflowVersion",
+          "stageId",
+          "artifacts",
+          "policyRevision",
+          "createdRevisions",
+          "state",
+          "generation",
+          "changedAt"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "taskId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TaskKind"
+          },
+          "workflowId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "workflowVersion": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "stageId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "workItemId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRevision"
+            }
+          },
+          "policyRevision": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "createdRevisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRevision"
+            }
+          },
+          "state": {
+            "$ref": "#/components/schemas/AdmissionState"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "ownershipGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "changedAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "invalidatedBy": {
+            "$ref": "#/components/schemas/ArtifactRevision"
+          }
+        }
+      },
+      "WorkflowRunBinding": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pluginId",
+          "pluginVersion",
+          "upstreamToolVersion",
+          "workflowId",
+          "workflowVersion",
+          "workflowDigest",
+          "configurationRevision",
+          "policyRevision"
+        ],
+        "properties": {
+          "pluginId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "pluginVersion": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "upstreamToolVersion": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "workflowId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "workflowVersion": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "workflowDigest": {
+            "$ref": "#/components/schemas/ContentDigest"
+          },
+          "configurationRevision": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "policyRevision": {
+            "$ref": "#/components/schemas/Identifier"
+          }
+        }
+      },
+      "CreateRunRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "runId",
+          "projectId",
+          "binding"
+        ],
+        "description": "The client chooses the run identifier, so that a retried request cannot create a second run.",
+        "properties": {
+          "runId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "projectId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "binding": {
+            "$ref": "#/components/schemas/WorkflowRunBinding"
+          }
+        }
+      },
+      "Run": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "runId",
+          "projectId",
+          "binding",
+          "createdAt"
+        ],
+        "properties": {
+          "runId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "projectId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "binding": {
+            "$ref": "#/components/schemas/WorkflowRunBinding"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/Instant"
+          }
+        }
+      },
+      "SubmitTaskRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "taskId",
+          "kind",
+          "stageId"
+        ],
+        "description": "The client chooses the task identifier. Artifacts are the revisions a planning task starts from; an implementation task is bound to the revisions its prerequisite gates judged.",
+        "properties": {
+          "taskId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TaskKind"
+          },
+          "stageId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "workItem": {
+            "$ref": "#/components/schemas/WorkItem"
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRevision"
+            }
+          }
+        }
+      },
+      "TaskSubmission": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "taskId",
+          "admission"
+        ],
+        "properties": {
+          "taskId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "admission": {
+            "$ref": "#/components/schemas/Admission"
+          }
+        }
+      },
+      "Failure": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "description": "A kernel failure: callers branch on the code, never on the message.",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "invalid",
+              "not-found",
+              "conflict",
+              "precondition-failed",
+              "forbidden",
+              "unavailable",
+              "internal"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "operatorToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The installation bootstrap credential."
+      }
+    }
+  }
+}

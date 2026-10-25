@@ -9,6 +9,237 @@
   },
   "reviews": [
     {
+      "path": "node_modules/@asyncapi/parser",
+      "version": "3.6.6",
+      "manifestSha256": "e4b2669ca86ef014e64c86fe312d2c1eefac3ed436c1006e17870241fcf26b66",
+      "status": "text-located",
+      "finding": "The monorepo root at the registry gitHead holds the full Apache-2.0 LICENSE and a NOTICE naming the AsyncAPI Initiative; packages/parser there declares version 3.6.6. The installed package ships only build output and the manifest.",
+      "evidence": [
+        "https://github.com/asyncapi/parser-js/blob/0a0884d9244374d1d6ac872cd7bd668128c16197/LICENSE",
+        "https://github.com/asyncapi/parser-js/blob/0a0884d9244374d1d6ac872cd7bd668128c16197/NOTICE"
+      ]
+    },
+    {
+      "path": "node_modules/@koromix/koffi-android-arm64",
+      "version": "3.3.3",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of koffi 3.3.3 for android-arm64, recorded from the lockfile. The published tarball, listed on 2026-10-25, holds index.js, package.json, README.md, and the binaries, declares MIT, and ships no license file. The full MIT text is LICENSE.txt of the koffi 3.3.3 package and of src/koffi at the upstream tag koffi/3.3.3, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/Koromix/rygel/blob/koffi/3.3.3/src/koffi/LICENSE.txt",
+        "https://registry.npmjs.org/@koromix/koffi-android-arm64/-/koffi-android-arm64-3.3.3.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@koromix/koffi-android-x64",
+      "version": "3.3.3",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of koffi 3.3.3 for android-x64, recorded from the lockfile. The published tarball, listed on 2026-10-25, holds index.js, package.json, README.md, and the binaries, declares MIT, and ships no license file. The full MIT text is LICENSE.txt of the koffi 3.3.3 package and of src/koffi at the upstream tag koffi/3.3.3, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/Koromix/rygel/blob/koffi/3.3.3/src/koffi/LICENSE.txt",
+        "https://registry.npmjs.org/@koromix/koffi-android-x64/-/koffi-android-x64-3.3.3.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@koromix/koffi-darwin-arm64",
+      "version": "3.3.3",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of koffi 3.3.3 for darwin-arm64, recorded from the lockfile. The published tarball, listed on 2026-10-25, holds index.js, package.json, README.md, and the binaries, declares MIT, and ships no license file. The full MIT text is LICENSE.txt of the koffi 3.3.3 package and of src/koffi at the upstream tag koffi/3.3.3, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/Koromix/rygel/blob/koffi/3.3.3/src/koffi/LICENSE.txt",
+        "https://registry.npmjs.org/@koromix/koffi-darwin-arm64/-/koffi-darwin-arm64-3.3.3.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@koromix/koffi-darwin-x64",
+      "version": "3.3.3",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of koffi 3.3.3 for darwin-x64, recorded from the lockfile. The published tarball, listed on 2026-10-25, holds index.js, package.json, README.md, and the binaries, declares MIT, and ships no license file. The full MIT text is LICENSE.txt of the koffi 3.3.3 package and of src/koffi at the upstream tag koffi/3.3.3, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/Koromix/rygel/blob/koffi/3.3.3/src/koffi/LICENSE.txt",
+        "https://registry.npmjs.org/@koromix/koffi-darwin-x64/-/koffi-darwin-x64-3.3.3.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@koromix/koffi-freebsd-arm64",
+      "version": "3.3.3",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of koffi 3.3.3 for freebsd-arm64, recorded from the lockfile. The published tarball, listed on 2026-10-25, holds index.js, package.json, README.md, and the binaries, declares MIT, and ships no license file. The full MIT text is LICENSE.txt of the koffi 3.3.3 package and of src/koffi at the upstream tag koffi/3.3.3, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/Koromix/rygel/blob/koffi/3.3.3/src/koffi/LICENSE.txt",
+        "https://registry.npmjs.org/@koromix/koffi-freebsd-arm64/-/koffi-freebsd-arm64-3.3.3.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@koromix/koffi-freebsd-ia32",
+      "version": "3.3.3",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of koffi 3.3.3 for freebsd-ia32, recorded from the lockfile. The published tarball, listed on 2026-10-25, holds index.js, package.json, README.md, and the binaries, declares MIT, and ships no license file. The full MIT text is LICENSE.txt of the koffi 3.3.3 package and of src/koffi at the upstream tag koffi/3.3.3, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/Koromix/rygel/blob/koffi/3.3.3/src/koffi/LICENSE.txt",
+        "https://registry.npmjs.org/@koromix/koffi-freebsd-ia32/-/koffi-freebsd-ia32-3.3.3.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@koromix/koffi-freebsd-x64",
+      "version": "3.3.3",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of koffi 3.3.3 for freebsd-x64, recorded from the lockfile. The published tarball, listed on 2026-10-25, holds index.js, package.json, README.md, and the binaries, declares MIT, and ships no license file. The full MIT text is LICENSE.txt of the koffi 3.3.3 package and of src/koffi at the upstream tag koffi/3.3.3, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/Koromix/rygel/blob/koffi/3.3.3/src/koffi/LICENSE.txt",
+        "https://registry.npmjs.org/@koromix/koffi-freebsd-x64/-/koffi-freebsd-x64-3.3.3.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@koromix/koffi-linux-arm",
+      "version": "3.3.3",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of koffi 3.3.3 for linux-arm, recorded from the lockfile. The published tarball, listed on 2026-10-25, holds index.js, package.json, README.md, and the binaries, declares MIT, and ships no license file. The full MIT text is LICENSE.txt of the koffi 3.3.3 package and of src/koffi at the upstream tag koffi/3.3.3, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/Koromix/rygel/blob/koffi/3.3.3/src/koffi/LICENSE.txt",
+        "https://registry.npmjs.org/@koromix/koffi-linux-arm/-/koffi-linux-arm-3.3.3.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@koromix/koffi-linux-arm64",
+      "version": "3.3.3",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of koffi 3.3.3 for linux-arm64, recorded from the lockfile. The published tarball, listed on 2026-10-25, holds index.js, package.json, README.md, and the binaries, declares MIT, and ships no license file. The full MIT text is LICENSE.txt of the koffi 3.3.3 package and of src/koffi at the upstream tag koffi/3.3.3, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/Koromix/rygel/blob/koffi/3.3.3/src/koffi/LICENSE.txt",
+        "https://registry.npmjs.org/@koromix/koffi-linux-arm64/-/koffi-linux-arm64-3.3.3.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@koromix/koffi-linux-ia32",
+      "version": "3.3.3",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of koffi 3.3.3 for linux-ia32, recorded from the lockfile. The published tarball, listed on 2026-10-25, holds index.js, package.json, README.md, and the binaries, declares MIT, and ships no license file. The full MIT text is LICENSE.txt of the koffi 3.3.3 package and of src/koffi at the upstream tag koffi/3.3.3, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/Koromix/rygel/blob/koffi/3.3.3/src/koffi/LICENSE.txt",
+        "https://registry.npmjs.org/@koromix/koffi-linux-ia32/-/koffi-linux-ia32-3.3.3.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@koromix/koffi-linux-loong64",
+      "version": "3.3.3",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of koffi 3.3.3 for linux-loong64, recorded from the lockfile. The published tarball, listed on 2026-10-25, holds index.js, package.json, README.md, and the binaries, declares MIT, and ships no license file. The full MIT text is LICENSE.txt of the koffi 3.3.3 package and of src/koffi at the upstream tag koffi/3.3.3, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/Koromix/rygel/blob/koffi/3.3.3/src/koffi/LICENSE.txt",
+        "https://registry.npmjs.org/@koromix/koffi-linux-loong64/-/koffi-linux-loong64-3.3.3.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@koromix/koffi-linux-ppc64",
+      "version": "3.3.3",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of koffi 3.3.3 for linux-ppc64, recorded from the lockfile. The published tarball, listed on 2026-10-25, holds index.js, package.json, README.md, and the binaries, declares MIT, and ships no license file. The full MIT text is LICENSE.txt of the koffi 3.3.3 package and of src/koffi at the upstream tag koffi/3.3.3, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/Koromix/rygel/blob/koffi/3.3.3/src/koffi/LICENSE.txt",
+        "https://registry.npmjs.org/@koromix/koffi-linux-ppc64/-/koffi-linux-ppc64-3.3.3.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@koromix/koffi-linux-riscv64",
+      "version": "3.3.3",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of koffi 3.3.3 for linux-riscv64, recorded from the lockfile. The published tarball, listed on 2026-10-25, holds index.js, package.json, README.md, and the binaries, declares MIT, and ships no license file. The full MIT text is LICENSE.txt of the koffi 3.3.3 package and of src/koffi at the upstream tag koffi/3.3.3, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/Koromix/rygel/blob/koffi/3.3.3/src/koffi/LICENSE.txt",
+        "https://registry.npmjs.org/@koromix/koffi-linux-riscv64/-/koffi-linux-riscv64-3.3.3.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@koromix/koffi-linux-x64",
+      "version": "3.3.3",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of koffi 3.3.3 for linux-x64, recorded from the lockfile. The published tarball, listed on 2026-10-25, holds index.js, package.json, README.md, and the binaries, declares MIT, and ships no license file. The full MIT text is LICENSE.txt of the koffi 3.3.3 package and of src/koffi at the upstream tag koffi/3.3.3, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/Koromix/rygel/blob/koffi/3.3.3/src/koffi/LICENSE.txt",
+        "https://registry.npmjs.org/@koromix/koffi-linux-x64/-/koffi-linux-x64-3.3.3.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@koromix/koffi-openbsd-arm64",
+      "version": "3.3.3",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of koffi 3.3.3 for openbsd-arm64, recorded from the lockfile. The published tarball, listed on 2026-10-25, holds index.js, package.json, README.md, and the binaries, declares MIT, and ships no license file. The full MIT text is LICENSE.txt of the koffi 3.3.3 package and of src/koffi at the upstream tag koffi/3.3.3, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/Koromix/rygel/blob/koffi/3.3.3/src/koffi/LICENSE.txt",
+        "https://registry.npmjs.org/@koromix/koffi-openbsd-arm64/-/koffi-openbsd-arm64-3.3.3.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@koromix/koffi-openbsd-ia32",
+      "version": "3.3.3",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of koffi 3.3.3 for openbsd-ia32, recorded from the lockfile. The published tarball, listed on 2026-10-25, holds index.js, package.json, README.md, and the binaries, declares MIT, and ships no license file. The full MIT text is LICENSE.txt of the koffi 3.3.3 package and of src/koffi at the upstream tag koffi/3.3.3, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/Koromix/rygel/blob/koffi/3.3.3/src/koffi/LICENSE.txt",
+        "https://registry.npmjs.org/@koromix/koffi-openbsd-ia32/-/koffi-openbsd-ia32-3.3.3.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@koromix/koffi-openbsd-x64",
+      "version": "3.3.3",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of koffi 3.3.3 for openbsd-x64, recorded from the lockfile. The published tarball, listed on 2026-10-25, holds index.js, package.json, README.md, and the binaries, declares MIT, and ships no license file. The full MIT text is LICENSE.txt of the koffi 3.3.3 package and of src/koffi at the upstream tag koffi/3.3.3, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/Koromix/rygel/blob/koffi/3.3.3/src/koffi/LICENSE.txt",
+        "https://registry.npmjs.org/@koromix/koffi-openbsd-x64/-/koffi-openbsd-x64-3.3.3.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@koromix/koffi-win32-arm64",
+      "version": "3.3.3",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of koffi 3.3.3 for win32-arm64, recorded from the lockfile. The published tarball, listed on 2026-10-25, holds index.js, package.json, README.md, and the binaries, declares MIT, and ships no license file. The full MIT text is LICENSE.txt of the koffi 3.3.3 package and of src/koffi at the upstream tag koffi/3.3.3, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/Koromix/rygel/blob/koffi/3.3.3/src/koffi/LICENSE.txt",
+        "https://registry.npmjs.org/@koromix/koffi-win32-arm64/-/koffi-win32-arm64-3.3.3.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@koromix/koffi-win32-ia32",
+      "version": "3.3.3",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of koffi 3.3.3 for win32-ia32, recorded from the lockfile. The published tarball, listed on 2026-10-25, holds index.js, package.json, README.md, and the binaries, declares MIT, and ships no license file. The full MIT text is LICENSE.txt of the koffi 3.3.3 package and of src/koffi at the upstream tag koffi/3.3.3, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/Koromix/rygel/blob/koffi/3.3.3/src/koffi/LICENSE.txt",
+        "https://registry.npmjs.org/@koromix/koffi-win32-ia32/-/koffi-win32-ia32-3.3.3.tgz"
+      ]
+    },
+    {
+      "path": "node_modules/@koromix/koffi-win32-x64",
+      "version": "3.3.3",
+      "manifestSha256": "lockfile",
+      "status": "text-located",
+      "finding": "Platform binary of koffi 3.3.3 for win32-x64, recorded from the lockfile. The published tarball, listed on 2026-10-25, holds index.js, package.json, README.md, and the binaries, declares MIT, and ships no license file. The full MIT text is LICENSE.txt of the koffi 3.3.3 package and of src/koffi at the upstream tag koffi/3.3.3, from which the binaries are built.",
+      "evidence": [
+        "https://github.com/Koromix/rygel/blob/koffi/3.3.3/src/koffi/LICENSE.txt",
+        "https://registry.npmjs.org/@koromix/koffi-win32-x64/-/koffi-win32-x64-3.3.3.tgz"
+      ]
+    },
+    {
       "path": "node_modules/@pnpm/config.env-replace",
       "version": "1.1.0",
       "manifestSha256": "9b4a44d8512167bfb3da97868493b8041d5027be2a118f7ee7362765b239c707",
@@ -23,6 +254,14 @@
       "status": "text-located",
       "finding": "Monorepo MIT LICENSE was added on 2022-05-24, before this version was published on 2022-11-21. The registry has no gitHead, so the exact release commit is not established.",
       "evidence": ["https://github.com/pnpm/components/blob/858ae8a31b11b98b4b9c660c1b067121eef029ec/LICENSE"]
+    },
+    {
+      "path": "node_modules/@redocly/openapi-core",
+      "version": "1.34.22",
+      "manifestSha256": "4bc3d0a40e53658d827c365412ce89f1ed3c3292d038e48c6cc20f4d25c2f3a6",
+      "status": "text-located",
+      "finding": "The monorepo root at the registry gitHead holds the full MIT LICENSE.md naming Redocly Inc.; packages/core there declares version 1.34.22 and has no license file of its own.",
+      "evidence": ["https://github.com/Redocly/redocly-cli/blob/3dc6bea04ade8c1463b0cc3858430d280257b829/LICENSE.md"]
     },
     {
       "path": "node_modules/@semantic-release/npm/node_modules/npm/node_modules/@npmcli/agent",
@@ -57,12 +296,28 @@
       "evidence": ["https://github.com/jslicense/spdx-license-ids/blob/a2a975daf48bbc2afdc8e7c304405b44c656fd53/README.md"]
     },
     {
+      "path": "node_modules/@stoplight/spectral-runtime",
+      "version": "1.1.6",
+      "manifestSha256": "b2e2446abb1ee3987c1433fec7dc3976a2b7ccdb3ac791d61bc4d3e7c15bb74a",
+      "status": "text-located",
+      "finding": "The monorepo root at the registry gitHead holds the full Apache-2.0 LICENSE; packages/runtime there declares version 1.1.6 with author Stoplight and has no license file of its own.",
+      "evidence": ["https://github.com/stoplightio/spectral/blob/a06d7b8f878d578bb37189ba76b1d1e136608e4d/LICENSE"]
+    },
+    {
       "path": "node_modules/array-ify",
       "version": "1.0.0",
       "manifestSha256": "a4007298ef8f68fdbc61918b2200ecfeac44a826949e763e4a117139645b5f4d",
       "status": "notice-only",
       "finding": "Installed README states 'MIT (c) Steve Mao'. The upstream tree at the registry gitHead has no license file.",
       "evidence": ["https://github.com/stevemao/array-ify/blob/e79e59b29cfa224478584370d7ba9932e224a76d/README.md"]
+    },
+    {
+      "path": "node_modules/change-case",
+      "version": "5.4.4",
+      "manifestSha256": "fd157305a17999a8a5db2f3bff0126e30898adaf98b1f3a06f9afbb34b897181",
+      "status": "text-located",
+      "finding": "The monorepo root at the registry gitHead holds the full MIT LICENSE naming Blake Embrey; packages/change-case there declares version 5.4.4 and has no license file of its own.",
+      "evidence": ["https://github.com/blakeembrey/change-case/blob/8aaff31471c918d3eac2b40939c601bee37375dd/LICENSE"]
     },
     {
       "path": "node_modules/isarray",
@@ -87,6 +342,22 @@
       "status": "declaration-only",
       "finding": "Declares MIT. Neither the package nor the upstream tree at the registry gitHead has license text. The README says the code was taken from npm/npm lib/config/nerf-dart.js; the license of that origin was not assessed.",
       "evidence": ["https://github.com/boennemann/nerf-dart/tree/e9a53497e0c3dcb42289607cf12986fcc1ba5b9d"]
+    },
+    {
+      "path": "node_modules/pg-types",
+      "version": "2.2.0",
+      "manifestSha256": "3ec0293cb38cc8d9475e3eb32ac5f19d195bf9fccc8b19a0714e6ecd6e7c2cf0",
+      "status": "text-located",
+      "finding": "Dependency of pg@8.23.1 (G2 item 9). The installed README ends with the full MIT License text, copyright 2014 Brian M. Carlson; no separate license file ships.",
+      "evidence": ["https://github.com/brianc/node-pg-types/blob/d9d9dfb87eb50914043cbc178c301b7dd3b0c50d/README.md"]
+    },
+    {
+      "path": "node_modules/pgpass",
+      "version": "1.0.5",
+      "manifestSha256": "d75240eb4fe759c10db9f903838275348676a8bdc1f329e20a833713cd7c99bd",
+      "status": "text-located",
+      "finding": "Dependency of pg@8.23.1 (G2 item 9). The installed README ends with the full MIT License text, copyright 2013-2016 Hannes Hörl; no separate license file ships.",
+      "evidence": ["https://github.com/hoegaarden/pgpass/blob/4230ed5e417ba6044ea7eb80b7c33db9ec301398/README.md"]
     },
     {
       "path": "node_modules/proxy-agent-negotiate",
@@ -122,6 +393,14 @@
         "https://github.com/sindresorhus/type-fest/blob/d07df21f8b79e35ad8411cb9ceb8b5cb8f40f9d4/license-mit",
         "https://github.com/sindresorhus/type-fest/blob/d07df21f8b79e35ad8411cb9ceb8b5cb8f40f9d4/license-cc0"
       ]
+    },
+    {
+      "path": "node_modules/tr46",
+      "version": "0.0.3",
+      "manifestSha256": "615087f58ee138fd35c2b414c355b72e36e5919725b8aecc1c34f6a5585b9779",
+      "status": "declaration-only",
+      "finding": "Declares MIT with author Sebastian Mayr. The upstream tree at the registry gitHead contains no license file or README, and the installed index.js has no license header.",
+      "evidence": ["https://github.com/Sebmaster/tr46.js/tree/a8009f9ce80ff5dbe71dd71e203afe4e4c878d28"]
     }
   ]
 }

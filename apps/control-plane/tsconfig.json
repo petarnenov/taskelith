@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.package.json",
+  "references": [
+    { "path": "../../packages/adapters/node-observability" },
+    { "path": "../../packages/modules/observability" },
+    { "path": "../../packages/modules/scheduling" },
+    { "path": "../../packages/modules/sdlc" },
+    { "path": "../../packages/kernel" },
+    { "path": "../../packages/contracts" },
+    { "path": "../../packages/testing" },
+    { "path": "../../packages/modules/access" },
+    { "path": "../../packages/modules/execution" },
+    { "path": "../../packages/modules/fleet" },
+    { "path": "../../packages/adapters/control-plane-store" },
+    { "path": "../../packages/adapters/data-root" },
+    { "path": "../../packages/adapters/evidence-volume" },
+    { "path": "../../packages/adapters/nats" },
+    { "path": "../../packages/adapters/postgres" },
+    { "path": "../../packages/adapters/secrets" }
+  ]
+}

@@ -1,0 +1,24 @@
+# Agent-free workflow that exercises the engine's gate, pause, and resume.
+schema_version: '1.0'
+workflow:
+  id: gate-probe
+  name: Gate probe
+  version: 0.0.1
+  description: Shell step, gate, shell step
+inputs:
+  verdict:
+    type: string
+    default: ''
+steps:
+- id: before
+  type: shell
+  run: echo before > before.txt
+- id: review
+  type: gate
+  message: Review before continuing.
+  options: [approve, reject]
+  on_reject: abort
+  verdict_input: verdict
+- id: after
+  type: shell
+  run: echo after > after.txt

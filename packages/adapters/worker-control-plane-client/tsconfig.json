@@ -1,0 +1,10 @@
+{
+  "extends": "../../../tsconfig.package.json",
+  "references": [
+    { "path": "../../contracts" },
+    { "path": "../../kernel" },
+    { "path": "../../modules/execution" },
+    { "path": "../../modules/sdlc" },
+    { "path": "../../testing" }
+  ]
+}

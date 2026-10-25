@@ -1,6 +1,6 @@
 # Bootstrap governance policy
 
-Policy version: 2 (2026-10-24: adds the independent review process). Status: repository bootstrap policy; runtime enforcement is not implemented.
+Policy version: 3 (2026-10-24: version 2 added the independent review process; version 3 adds auto-merge as integration authority and the selectable SDLC framework, [ADR 0008](decisions/0008-product-ui-and-integration-authority.md)). Status: repository bootstrap policy; runtime enforcement is not implemented.
 
 Owner acceptance: Petar Nenov accepted the SDLC policy on 2026-10-24 in the project conversation. On 2026-10-24, the owner explicitly authorized a separate Codex reviewer agent (`gpt-6.1-sol` with `model_reasoning_effort = "medium"`) for independent review of the current and subsequent G0 changes, and later the same day the further reviewers listed under [Independent review process](#independent-review-process). Integration and release authorization remain distinct.
 
@@ -10,18 +10,20 @@ The owner, Petar Nenov, defines scope and accepts product and architecture decis
 
 The implementer records author checks. An independent reviewer must be a person or separately authorized agent that did not author the change; self-review is never independent review. The owner may explicitly accept a documented review exception for bounded bootstrap work. Never infer an exception from silence or mark the review as passed because an exception was granted.
 
-The owner or an explicitly authorized integrator controls merging and pushing. Finishing local work does not itself authorize integration. Release authority follows [the release policy](releases.md): qualifying changes integrated into main may publish automatically after verification. Deployment requires separate owner authorization.
+The owner or an explicitly authorized integrator controls merging and pushing. Finishing local work does not itself authorize integration. In a project managed by Taskelith, an enabled auto-merge setting, which only a project-maintainer changes, is that explicit authorization: pushing to the task's own branch is covered by a standing rule, a change whose gates have all passed is merged without a further human step, and where an earlier rule conflicts with auto-merge, auto-merge wins ([ADR 0008](decisions/0008-product-ui-and-integration-authority.md) decisions 2 and 3). Release authority follows [the release policy](releases.md): qualifying changes integrated into main may publish automatically after verification. Deployment requires separate owner authorization.
 
 ## Independent review process
 
-These rules were set or approved by the owner on 2026-10-24; the source of each is in parentheses.
+These rules were set or approved by the owner on 2026-10-24 unless a rule names another date; the source of each is in parentheses.
 
 - **Authorized reviewers** (owner). Each runs read-only, with the model and effort set in the invocation, not only in the prompt. `verification.md` records the invocation; where a tool reports the model or effort in its output or log, that report is recorded as confirmation.
   - Codex CLI: model `gpt-6.1-sol`, `model_reasoning_effort = "medium"`, sandbox `read-only`. In this configuration it has had no network access.
   - Antigravity CLI: model `gemini-4-argon-medium`, effort `medium`, mode `plan`. In this configuration it has fetched public web pages.
+  - OpenCode CLI (approved by the owner on 2026-10-25, with the model chosen by the owner): model `opencode/deepseek-v4.1-flash` with the `high` variant, set in the invocation; OpenCode records the model and variant with each message; agent `reviewer` (configured by the coordinator, 2026-10-25), which denies editing and allows only an allowlist of read-only shell commands; a pattern allowlist is not a sandbox, so the snapshot remains the proof. The agent allows web fetch and search.
   - Claude Code: model `claude-fable-5-1`, effort `medium`, permission mode `plan`, editing tools disallowed. It can fetch public web pages when network access is allowed; in this configuration it has queried GitHub with the `gh` CLI.
-- **One reviewer per task** (owner). Each task has one assigned reviewer, and no second reviewer cross-reviews it. Re-review passes by the assigned reviewer are allowed.
-- **Rotation** (approved by the owner). Consecutive tasks go to different reviewers in turn, unless a task needs a particular reviewer.
+- **One reviewer per task** (owner). Each task has one assigned reviewer, and no second reviewer cross-reviews it. Re-review passes by the assigned reviewer are allowed. A switch under "Unavailable reviewer" below replaces the assigned reviewer; it is not a cross-review.
+- **Rotation** (approved by the owner). Consecutive tasks go to different reviewers in turn, unless a task needs a particular reviewer. The turn (coordinator, 2026-10-25) follows the order of the list above, returning to the first after the last, and skips a reviewer that is unavailable, paused, or unable to meet the task's review requirements. Unless a task needs a particular reviewer, a new task goes to the reviewer after the one most recently assigned, for whatever reason that one was assigned.
+- **Unavailable reviewer** (owner, 2026-10-25). A reviewer that is unavailable for any reason is not used for the next 30 minutes, and the next reviewer is proposed instead. Applying the one-reviewer, rotation, and three-pass rules (coordinator, 2026-10-25): unavailable means that a review attempt does not run to a report, for example an error, a run that opens no session, a quota limit, or an outage; a pass that runs and reports findings is not unavailability. The 30 minutes run from the failed attempt, whether or not the reviewer is assigned, and it is not retried inside them. The replacement is the next reviewer in the rotation that is not paused and meets the task's review requirements, such as network access under "External facts". The worker proposes it and the coordinator assigns it; when the coordinator develops the task itself, it chooses the replacement and records why. The replacement reviews the remaining passes: its first pass confirms the earlier passes' findings and then reviews the whole task. Failed attempts do not count toward the pass cap, and the pass count carries over. `verification.md` records each failed attempt with its time, and the switch. A longer pause is listed under "Reviewer pauses" in the [agent task protocol](agent-task-protocol.md#reviewer-pauses) until it ends.
 - **External facts** (approved by the owner). A task whose review depends on external facts goes to a reviewer with network access.
 - **Proof of read-only review** (approved by the owner). Take a SHA-256 snapshot of all tracked and untracked files before and after each pass, plus any external evidence directory shared with the reviewer. A change made by the reviewer invalidates the pass.
 - **Review prompt** (approved by the owner; ADR 0004). The prompt names the [ADR 0004](decisions/0004-first-class-engineering-principles.md) principles as criteria and asks for every instance of a problem, not examples. `verification.md` records the reviewer, model, effort, session ID, findings, and their resolution.
@@ -31,7 +33,7 @@ These rules were set or approved by the owner on 2026-10-24; the source of each 
 
 ## Lifecycle and records
 
-Every task, including inspection, documentation, maintenance, emergency work, and delegated work, binds to an OpenSpec change, without exception ([ADR 0004](decisions/0004-first-class-engineering-principles.md)). Record inspection as a task in that change when it determines the scope. Use OpenSpec 1.14.3 through `npm run openspec -- ...`; the lockfile pins its dependency tree. A future framework upgrade is its own tracked change.
+Every task, including inspection, documentation, maintenance, emergency work, and delegated work, binds to a change of the selected SDLC framework, without exception; OpenSpec is the default and this repository's framework ([ADR 0004](decisions/0004-first-class-engineering-principles.md) principle 8 as amended by [ADR 0008](decisions/0008-product-ui-and-integration-authority.md)). Record inspection as a task in that change when it determines the scope. Use OpenSpec 1.14.3 through `npm run openspec -- ...`; the lockfile pins its dependency tree. A future framework upgrade is its own tracked change.
 
 | Stage | Required record and transition |
 | --- | --- |
@@ -40,7 +42,7 @@ Every task, including inspection, documentation, maintenance, emergency work, an
 | Implement | Task checklist and changes within the recorded scope. Material scope expansion returns to proposal. |
 | Verify | Exact commands, results, environment, relevant revision or reviewed diff, limitations, and remaining gates in `verification.md`. Run `make verify`, which includes `npm test` and strict validation of all OpenSpec artifacts. |
 | Review | Record author review separately from independent findings, reviewer identity, reviewed revision, and resolution. Structural validation is not semantic approval. |
-| Accept and integrate | Owner acceptance or explicit delegated authority, required review or recorded exception, and current verification. Record the integrated revision when integration occurs. |
+| Accept and integrate | Owner acceptance or explicit delegated authority (in a managed project, an enabled auto-merge setting), required review or recorded exception, and current verification. Record the integrated revision when integration occurs. |
 | Close | Reconcile tasks and evidence; archive using the pinned CLI only after acceptance/integration gates are satisfied. Local completion may leave these gates pending. |
 
 The proposal, design, capability specification, tasks, and verification record form the bootstrap evidence set. Reference the originating issue when one exists; no issue is required merely to duplicate an already recorded owner request. Task checkboxes show progress, not approval authority.
@@ -53,4 +55,4 @@ Do not rewrite historical records as if this policy applied before it existed. T
 
 ## Framework independence
 
-OpenSpec is mandatory for developing Taskelith, but it is not a product kernel dependency: each managed project selects its own framework through replaceable SDLC plugins ([ADR 0004](decisions/0004-first-class-engineering-principles.md)). Runtime workflow selection, immutable per-run framework bindings, SpecKit mappings, semantic admission, and evidence enforcement are G1–G4 work. See [ADR 0001](decisions/0001-bootstrap-governance.md) and [foundation status](foundation.md).
+OpenSpec is the default framework for developing Taskelith, but it is not a product kernel dependency: every project, Taskelith included, selects its framework through replaceable SDLC plugins ([ADR 0004](decisions/0004-first-class-engineering-principles.md), [ADR 0008](decisions/0008-product-ui-and-integration-authority.md)). G1 delivered the framework-neutral models and the SpecKit fixtures ([ADR 0010](decisions/0010-g1-closure.md)); runtime workflow selection, immutable per-run framework bindings, semantic admission, and evidence enforcement are G2–G4 work. See [ADR 0001](decisions/0001-bootstrap-governance.md) and [foundation status](foundation.md).
