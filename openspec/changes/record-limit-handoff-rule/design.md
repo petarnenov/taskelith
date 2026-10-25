@@ -17,7 +17,7 @@ ADR 0005 decision 4 puts a slot into cooldown on a reported limit; decision 5, a
 
 - **Placement.** The rule is triggered by a limit signal, so it is an amendment to decision 4 ("Cooldown"); decision 5's amendment points to it so that its general rule for an unavailable slot no longer covers a limit.
 - **After the wait.** The owner said the task waits for the cooldown. The amendment reads this as waiting for the cooldown of the slot that reported the limit and continuing on that slot, because taking another slot of the same harness once the wait ends would still move the work to another account of that harness because of the limit. The new session still reads the handoff.
-- **Plan items.** Item 4 owns the session model, so it keeps the handoff for the next session; item 13 implements item 4 and needs no clause of its own. Item 12 owns selection, so it carries the different-harness choice and the wait. Item 18 observes limit signals in the worker, so it writes the handoff, stops the session, and gives the handoff to the next session.
+- **Plan items.** Item 4 owns the session model, so it keeps the handoff for the next session; item 13 implements item 4 and needs no clause of its own. Items 5 and 12 own the selection contract and its implementation, so they carry the different-harness choice and the wait. Item 18 observes limit signals in the worker, so it writes the handoff, stops the session, and gives the handoff to the next session.
 - **Spec delta.** The "Session affinity" requirement is modified again; the cooldown scenario keeps its name and now covers a limit with another eligible harness, a scenario covers a limit without one, and the new-session scenario is limited to sessions closed for another reason.
 
 ## Risks / Trade-offs

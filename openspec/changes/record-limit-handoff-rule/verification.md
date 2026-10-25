@@ -1,6 +1,6 @@
 ## Scope and source
 
-Change `record-limit-handoff-rule`, assigned by the coordinator on 2026-10-25 with Codex CLI (`gpt-6.1-sol`, medium effort, read-only) as the reviewer. Source: the owner's clarification of 2026-10-25 in the project conversation, given in Bulgarian and paraphrased here: when a session's subscription hits a usage or rate limit, the session writes a handoff and stops, and the work continues in a new session that reads the handoff; the new session goes only to a different harness, because the same harness on another subscription after a limit is the clearest case of "rotating accounts"; if no other harness is eligible, the task waits for the cooldown. Scope: ADR 0005 decisions 4 and 5 and status, G3 plan items 4, 12, and 18, "Consequences for D15" in the Codex and Claude Code qualification records, and the `harness-account-pools` "Session affinity" requirement. Excluded: code, and any change to D15, which the owner decided as (a).
+Change `record-limit-handoff-rule`, assigned by the coordinator on 2026-10-25 with Codex CLI (`gpt-6.1-sol`, medium effort, read-only) as the reviewer. Source: the owner's clarification of 2026-10-25 in the project conversation, given in Bulgarian and paraphrased here: when a session's subscription hits a usage or rate limit, the session writes a handoff and stops, and the work continues in a new session that reads the handoff; the new session goes only to a different harness, because the same harness on another subscription after a limit is the clearest case of "rotating accounts"; if no other harness is eligible, the task waits for the cooldown. Scope: ADR 0005 decisions 4 and 5 and status, G3 plan items 4, 5, 12, and 18, "Consequences for D15" in the Codex and Claude Code qualification records, and the `harness-account-pools` "Session affinity" requirement. Excluded: code, and any change to D15, which the owner decided as (a).
 
 ## Revision and environment
 
@@ -19,11 +19,18 @@ Branch `record-limit-handoff-rule` from `origin/dev` at `ba24952`. macOS x86_64,
 | Check | Result |
 | --- | --- |
 | `npm run openspec -- validate record-limit-handoff-rule --strict` | Passed before review |
-| `make verify` | Pending |
+| `make verify` | Passed at `25083cc` before pass 1, but recorded only after it; passed again before pass 2; the `pre-push` hook runs it on the final head |
 
 ## Review
 
-Pending.
+Pass 1 (Codex CLI):
+- Invocation: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, at head `25083cc`; the prompt and output were kept outside the worktree. The prompt named `AGENTS.md`, ADR 0004, the governance review process, ADR 0005, the G3 plan, both qualification records, and the `harness-account-pools` specification with its delta, and asked for a judgment of the "After the wait" reading.
+- Model confirmation: the output header shows `model: gpt-6.1-sol`, `reasoning effort: medium`, and `sandbox: read-only`. Session ID `01a174ec-96e9-75b3-bde6-6bb3298da448`.
+- Snapshot: `d330dec5761a8ff9dc4086d4bad94884464174da1230c712dc2cd218e25b69d3` before and after the pass.
+- Findings: 0 Critical, 0 High, 2 Medium, 1 Low. The reviewer judged the "After the wait" reading sound.
+  1. Medium: item 5, the selection contract, lacked the selection after a limit that item 12 implements. Resolution: added to item 5 and to the proposal, design, and tasks.
+  2. Medium: `make verify` was recorded as pending before pass 1. It had passed at `25083cc` before the pass but was not recorded; the table now says so.
+  3. Low: the delta's last sentence could be read with the slot as the subject. Resolution: the session is the subject.
 
 ## Limitations
 

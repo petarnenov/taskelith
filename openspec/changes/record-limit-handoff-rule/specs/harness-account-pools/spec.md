@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Session affinity
-A session SHALL keep its starting harness and slot until its work is finished and the session and its agent are closed, and resume SHALL use them; neither SHALL be switched. On a slot's usage or rate limit, the session SHALL write a handoff and stop, and a new session SHALL read it on a different harness, never another slot of the same harness, or wait for that slot's cooldown. Any other unavailable slot SHALL make a session wait or be drained or ended.
+A session SHALL keep its starting harness and slot until its work is finished and the session and its agent are closed, and resume SHALL use them; neither SHALL be switched. On a slot's usage or rate limit, the session SHALL write a handoff and stop, and a new session SHALL read it on a different harness, never another slot of the same harness, or wait for that slot's cooldown. A session whose slot is unavailable for another reason SHALL wait or be drained or ended, never moved.
 
 #### Scenario: Resume after restart
 - **WHEN** a session started with harness H on slot S is resumed

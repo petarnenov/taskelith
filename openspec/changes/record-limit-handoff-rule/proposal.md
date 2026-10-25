@@ -5,7 +5,7 @@ ADR 0005 decision 5, as amended by `record-session-harness-pinning`, keeps a ses
 ## What Changes
 
 - Add a dated amendment to ADR 0005 decision 4 ("Cooldown") with the rule, point decision 5's amendment to it for limits, and update the status.
-- In `docs/g3-plan.md`, add one clause each to items 4 (the handoff kept in the session model), 12 (the selection after a limit), and 18 (writing and delivering the handoff).
+- In `docs/g3-plan.md`, add one clause each to items 4 (the handoff kept in the session model), 5 and 12 (the selection after a limit, in the contract and its implementation), and 18 (writing and delivering the handoff).
 - Add one sentence to "Consequences for D15" in the Codex and Claude Code qualification records.
 - Modify the `harness-account-pools` "Session affinity" requirement.
 
