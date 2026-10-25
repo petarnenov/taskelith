@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import type { Result } from '@taskelith/kernel';
 import { checkLinuxContainment, LinuxContainment, linuxPlatform, parseCgroup, parseProcStat, parseUptime } from '@taskelith/worker-supervisor';
 
 // A stat line whose command holds spaces and a parenthesis.
@@ -94,6 +95,11 @@ test('a containment writes the cgroup v2 controls of its own directory', (t) => 
   assert.equal(new LinuxContainment(join(root, 'absent'), 'x', root).admit(1).ok, false);
 });
 
+function problems(result: Result<void, readonly string[]>): readonly string[] {
+  assert.equal(result.ok, false);
+  return result.ok ? [] : result.error;
+}
+
 test('the Linux self-check fails without cgroup v2, delegation, a kill control, or denied writes', (t) => {
   const root = mkdtempSync(join(tmpdir(), 'taskelith-selfcheck-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -104,17 +110,17 @@ test('the Linux self-check fails without cgroup v2, delegation, a kill control, 
   writeFileSync(join(root, 'cgroup.controllers'), 'cpu memory\n');
   const undelegated = checkLinuxContainment(options);
   assert.equal(undelegated.ok, false);
-  assert.match((undelegated as { error: string[] }).error[0]!, /not delegated/);
+  assert.match(problems(undelegated)[0]!, /not delegated/);
 
   mkdirSync(options.containmentParent);
   mkdirSync(options.home);
   const writable = checkLinuxContainment(options);
   assert.equal(writable.ok, false);
-  assert.deepEqual((writable as { error: string[] }).error.slice(0, 4), [
+  assert.deepEqual(problems(writable).slice(0, 4), [
     'a containment has no cgroup.kill',
     `the execution account can write ${join(options.containmentParent, `self-check-${process.pid}`, 'cgroup.procs')}`,
     `the execution account can write ${join(options.containmentParent, 'cgroup.procs')}`,
     `the execution account can write ${join(options.home, 'cgroup.procs')}`,
   ]);
-  assert.match((writable as { error: string[] }).error.at(-1)!, /cannot be removed/);
+  assert.match(problems(writable).at(-1)!, /cannot be removed/);
 });
