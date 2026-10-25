@@ -12,6 +12,7 @@
   "dependencies": {
     "@taskelith/execution": "0.0.0",
     "@taskelith/kernel": "0.0.0",
+    "@taskelith/observability": "0.0.0",
     "@taskelith/scheduling": "0.0.0",
     "@taskelith/sdlc": "0.0.0",
     "node-pg-migrate": "9.0.0",

@@ -1,13 +1,18 @@
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, rm, unlink, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { recordExecutionEvidence } from '@taskelith/execution';
 import { MIGRATIONS_DIRECTORY, migrate } from '@taskelith/postgres';
+import { value } from '@taskelith/testing';
+import { authorizedUnder, placedTask } from './capacity-fixtures.ts';
+import { AT, assignment } from './fixtures.ts';
 import { SERVER_URL, createTestDatabase, databaseUrl, query } from './test-database.ts';
 
 const INITIAL = '1792929600000_initial-state';
 const RESOURCE_ADMISSION = '1792930000000_resource-admission';
+const OBSERVABILITY_SIGNALS = '1792930400000_observability-signals';
 
 async function copiedMigrations(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'taskelith-migrations-'));
@@ -18,10 +23,10 @@ async function copiedMigrations(): Promise<string> {
 
 test('migrations apply once, record their checksums, and create the schema', async () => {
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
-  assert.deepEqual(await migrate(url), { ok: true, value: [INITIAL, RESOURCE_ADMISSION] });
+  assert.deepEqual(await migrate(url), { ok: true, value: [INITIAL, RESOURCE_ADMISSION, OBSERVABILITY_SIGNALS] });
   assert.deepEqual(await migrate(url), { ok: true, value: [] });
   const checksums = await query<{ name: string; sha256: string }>(url, 'SELECT name, sha256 FROM schema_migration_checksums');
-  assert.deepEqual(checksums.map((row) => row.name).sort(), [INITIAL, RESOURCE_ADMISSION]);
+  assert.deepEqual(checksums.map((row) => row.name).sort(), [INITIAL, RESOURCE_ADMISSION, OBSERVABILITY_SIGNALS]);
   assert.match(checksums[0]!.sha256, /^[0-9a-f]{64}$/);
   const tables = await query<{ table_name: string }>(
     url, "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name",
@@ -30,6 +35,36 @@ test('migrations apply once, record their checksums, and create the schema', asy
     'admissions', 'assignments', 'capacity_charges', 'capacity_quotas', 'delegations', 'gates', 'inbox', 'installation', 'outbox',
     'schema_migration_checksums', 'schema_migrations', 'task_lineage', 'tasks', 'workers', 'workflow_runs',
   ]);
+});
+
+test('the signals migration copies the state, change time, and unknown executions of stored records', async () => {
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  const directory = await copiedMigrations();
+  const signals = join(directory, `${OBSERVABILITY_SIGNALS}.sql`);
+  const content = await readFile(signals, 'utf8');
+  await unlink(signals);
+  assert.equal((await migrate(url, directory)).ok, true);
+  const offered = assignment('assignment-1');
+  await query(url, `INSERT INTO assignments (id, attempt_id, worker_id, reservation_state, generation, record, project_id, run_id,
+    task_id, root_task_id, cpu_millicores, memory_mebibytes) VALUES ($1, $2, $3, 'held', 1, $4, 'p', 'r', 't', 't', 500, 512)`,
+  [offered.id, offered.attemptId, offered.workerId, JSON.stringify(offered)]);
+  const placed = placedTask('task-1', 'attempt-1');
+  const authorized = authorizedUnder(placed, offered.id, offered.workerId);
+  const report = { workerId: offered.workerId, executionId: authorized.attempts[0]!.executions[0]!.id };
+  const uncertain = value(recordExecutionEvidence(authorized, { ...report, kind: 'uncertain' }, AT)).task;
+  // jsonb rejects the escapes of a lone surrogate and NUL, which a stored
+  // reference may hold; an escaped backslash before `u` is no escape.
+  const probe = 'spec\uD800.md \u0000 \\ud800';
+  for (const task of [placed, uncertain]) {
+    await query(url, 'INSERT INTO tasks (id, admission_id, generation, record) VALUES ($1, $2, 1, $3)',
+      [`${task.id}-${task.generation}`, task.admissionId, JSON.stringify({ ...task, probe })]);
+  }
+  await writeFile(signals, content);
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: [OBSERVABILITY_SIGNALS] });
+  const [row] = await query<{ state: string; changed_at: Date }>(url, 'SELECT state, changed_at FROM assignments');
+  assert.deepEqual([row!.state, row!.changed_at.toISOString()], ['offered', AT]);
+  const tasks = await query<{ unknown_executions: number }>(url, 'SELECT unknown_executions FROM tasks ORDER BY unknown_executions');
+  assert.deepEqual(tasks.map((task) => task.unknown_executions), [0, 1]);
 });
 
 test('a later migration file is applied after the applied ones', async () => {

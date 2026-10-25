@@ -3,6 +3,7 @@
   "references": [
     { "path": "../../kernel" },
     { "path": "../../modules/execution" },
+    { "path": "../../modules/observability" },
     { "path": "../../modules/scheduling" },
     { "path": "../../modules/sdlc" },
     { "path": "../../testing" }

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { after, beforeEach, test } from 'node:test';
 import { err, failure, parseIdentifier } from '@taskelith/kernel';
-import { CrashPoints, SimulatedCrash, value } from '@taskelith/testing';
+import { InMemoryLogSink, Logger } from '@taskelith/observability';
+import { CrashPoints, SimulatedCrash, SimulatedHost, value } from '@taskelith/testing';
 import { PostgresDatabase, PostgresOutboxRelay, SERIALIZATION_ATTEMPTS, type PostgresDatabaseOptions } from '@taskelith/postgres';
 import { endAssignment } from '@taskelith/scheduling';
 import { nextGeneration } from '@taskelith/sdlc';
@@ -113,11 +114,16 @@ test('a lost serialization race reruns the whole transaction and then commits', 
 
 test('retries stop after the configured attempts with unavailable', async () => {
   assert.equal(SERIALIZATION_ATTEMPTS, 5);
-  const results = await skewedWriters(open({ serializationAttempts: 1 })).results();
+  const sink = new InMemoryLogSink();
+  const logger = new Logger(sink, new SimulatedHost(AT).wallClock);
+  const results = await skewedWriters(open({ serializationAttempts: 1, logger })).results();
   const failed = results.filter((result) => !result.ok);
   assert.equal(failed.length, 1);
   assert.equal(!failed[0]!.ok && failed[0]!.error.code, 'unavailable');
   assert.equal(!failed[0]!.ok && failed[0]!.error.details.attempts, '1');
+  assert.deepEqual(sink.records.map(({ event, fields }) => ({ event, fields })), [
+    { event: 'postgres.serialization.exhausted', fields: { attempts: 1 } },
+  ]);
   assert.deepEqual(await counts(), { assignments: 1, outbox: 1, inbox: 0 });
 });
 
