@@ -6,6 +6,7 @@
 
 - Add `build:` and `ci:` to the no-release row of the commit table in `docs/releases.md`.
 - Modify the `automated-releases` requirement "Automatic semantic versions" so its non-release scenario names build and ci commits.
+- Add `test:`, `build:`, and `ci:` messages to the release classification cases in `test/release.test.ts`, which run the analyzer with `release.config.js` on the table's rows.
 
 ## Capabilities
 
@@ -16,4 +17,4 @@
 
 ## Impact
 
-Documentation and specification only; the release configuration is unchanged.
+Documentation, specification, and test cases only; the release configuration is unchanged.
