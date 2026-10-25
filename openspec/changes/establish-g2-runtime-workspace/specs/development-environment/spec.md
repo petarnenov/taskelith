@@ -9,7 +9,7 @@ The integration services SHALL be PostgreSQL and NATS in Docker Compose, pinned 
 
 #### Scenario: Docker unavailable
 - **WHEN** the Docker daemon cannot be reached
-- **THEN** `make services-up`, and therefore `make test` and `make verify`, fail before running tests and say that Docker is needed
+- **THEN** `make services-up`, `make test`, and therefore `make verify`, fail before running tests and say that Docker is needed
 
 ### Requirement: Integration tests in verification
 `make verify` SHALL run `npm test` through `make test`, which starts the services in its own Compose project named from the worktree path, passes their URLs, and stops only that project, also when tests fail. Integration tests SHALL be named `*.integration.test.ts` in a package's `test/`, run under the coverage gate, and fail with a remedy when the URLs are unset or a service is unreachable.

@@ -17,7 +17,7 @@ The boundary checker SHALL treat as worker-only `apps/worker`, each `packages/ad
 
 #### Scenario: Types and tests
 - **WHEN** control-plane source imports a worker-only package with `import type` or with only inline `type` bindings, or a control-plane test imports `node:child_process`
-- **THEN** the boundary checker accepts it, because neither enters a bundle
+- **THEN** the boundary checker accepts it, because neither enters a bundle while no TypeScript configuration enables `verbatimModuleSyntax`, which would keep an inline-type-only import as a side-effect import
 
 ## MODIFIED Requirements
 

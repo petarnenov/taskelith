@@ -27,6 +27,8 @@ macOS (Darwin 25.6.0), Node v24.22.1, npm 12.2.1, Docker 29.5.2 with Docker Comp
 - After the isolation fix, from a state without `coverage/`, `make verify` passed: 302 tests, 0 failed; coverage 99.63% lines, 95.74% branches, 99.28% functions; inventory 695 paths; strict OpenSpec validation 36 passed; archive dry run and package verification passed; no `taskelith-` container remained.
 - Pass 1 fixes: `scripts/services.sh run taskelith-sig-verify sleep 300`, sent `SIGTERM` after the services were healthy, exited 143, removed its project, and left no `sleep` process; `run ... sh -c 'exit 7'` exited 7; `services.sh` without arguments printed the usage and exited 2; with an unreachable `DOCKER_HOST`, `run` failed with the Docker message.
 - After the pass 1 fixes, on the merge of `origin/dev` (`ac55cb5`), from a state without `coverage/`: `make doctor` reported every check passed, including Docker; `make verify` passed with 303 tests, 0 failed; coverage 99.63% lines, 95.74% branches, 99.28% functions; inventory 695 paths, 21 reviewed gaps; strict OpenSpec validation 38 passed; archive dry run and package verification passed; no `taskelith-` container remained.
+- Pass 2 fixes: `run taskelith-sig2-verify` with a command that takes 3 seconds to stop on `TERM` received `TERM`, then `INT` and `TERM` again; the command printed its stop message before the containers stopped, the project was removed, and the run exited 143. `run` without a command printed the usage and exited 2; `run ... sh -c 'exit 7'` exited 7.
+- After the pass 2 fixes, from a state without `coverage/`: `make verify` passed with 303 tests, 0 failed; coverage 99.63% lines, 95.74% branches, 99.28% functions; inventory 695 paths, 21 reviewed gaps; strict OpenSpec validation 38 passed; archive dry run and package verification passed; no `taskelith-` container remained.
 
 ## Independent review
 
@@ -45,11 +47,20 @@ Assigned reviewer: Claude Fable 5.1, medium effort, read-only, run by the coordi
   10. Low: the "Application boundaries" requirement duplicated the existing boundary requirement. It is removed; a MODIFIED "Automated hexagonal boundary and TypeScript checks" carries the full text with an added scenario.
   11. Low: design decision labels clashed with the owner's D1–D14. Renamed to Decision 1 to 5.
   12. Low: a test name did not describe its assertion. Renamed to "the repository declares the control plane and worker apps as workspace packages that follow the contract".
+- **Pass 2** (session `fd868aad-db75-4b51-865a-b5ab2fd88920`; model confirmed, snapshots equal). All 12 pass-1 findings confirmed resolved. Findings: 0 Critical, 0 High, 1 Medium, 7 Low. All accepted and resolved; the resolutions await the next pass:
+  1. Medium: a second signal could interrupt the teardown. The teardown and the command stop ignore `INT`, `TERM`, and `HUP`.
+  2. Low: a failed `up` inside `run` tore down twice. `up()` no longer cleans up; the `up` action calls `up || { down; exit 1; }`, and `run` relies on its exit trap.
+  3. Low: `run` without a command was accepted. It prints the usage and exits 2.
+  4. Low: teardown could start while the tests still ran. On a signal, `run` kills the command and waits for it before exiting.
+  5. Low: the inline-type rule silently assumed no `verbatimModuleSyntax`. Recorded in design Decision 5 and the "Types and tests" scenario, with the reason for not enforcing it in the package contract.
+  6. Low: integration-flow still named `npm test` in `make verify`. A MODIFIED "Single definition of the checks" (430 characters) names `make test`, with the scenario "Tests run through make test".
+  7. Low: the Docker scenario implied that `make test` fails because of `make services-up`. Reworded.
+  8. Low: `make test` used the shell's Node.js. It runs through `with-pinned-node.sh use`, which does not switch again under `make verify`.
 
 ## Limitations
 
 - Checked on macOS only; Linux CI with Docker is not yet observed for the services.
-- Only a run killed with `SIGKILL` leaves its project until the next `make test` in that worktree (design, Risks).
+- Only a run killed with `SIGKILL` leaves its project until the next `make test` in that worktree; repeated signals during teardown are ignored (design, Risks).
 - The images' package inventories and scans remain open, as the dependency register states.
 
 ## Remaining gates

@@ -21,7 +21,8 @@ None.
 
 - `workspace-packages`: `apps/*` are workspaces; inventory links may target any declared workspace package directory.
 - `trust-and-operational-foundation`: worker-only code and application boundary rules.
-- `development-environment`: integration services and integration tests in `make verify`.
+- `development-environment`: integration services, integration tests in `make verify`, and the Docker check of `make doctor`.
+- `integration-flow`: `make verify` runs the tests through `make test`.
 
 ## Impact
 
