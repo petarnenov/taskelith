@@ -391,3 +391,25 @@ test('only tests, scripts, and the harness itself import the test harness packag
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('the harness manifest may depend on no workspace package but the kernel', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-boundaries-harness-manifest-'));
+  try {
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ workspaces: ['packages/testing'] }));
+    mkdirSync(join(root, 'packages/testing'), { recursive: true });
+    const manifest = (devDependencies: Record<string, string>) => writeFileSync(join(root, 'packages/testing/package.json'), JSON.stringify({
+      name: '@taskelith/testing',
+      dependencies: { '@taskelith/kernel': '0.0.0' },
+      devDependencies,
+    }));
+    manifest({ pg: '8.23.1' });
+    assert.deepEqual(checkWorkspaceBoundaries(root), []);
+
+    manifest({ '@taskelith/sdlc': '0.0.0', pg: '8.23.1' });
+    assert.deepEqual(checkWorkspaceBoundaries(root), [
+      'packages/testing/package.json: the test harness may depend on no workspace package but the kernel, not "@taskelith/sdlc" (R03)',
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
