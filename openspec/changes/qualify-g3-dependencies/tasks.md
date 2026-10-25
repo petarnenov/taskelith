@@ -7,5 +7,5 @@
 
 ## 2. Verification and review
 
-- [ ] 2.1 Run strict validation, `make verify`, and the evidence check.
-- [ ] 2.2 Obtain independent review (Claude Code with `claude-fable-5-1`, medium effort, as assigned) and record the results.
+- [x] 2.1 Run strict validation, `make verify`, and the evidence check.
+- [x] 2.2 Obtain independent review (Claude Code with `claude-fable-5-1`, medium effort, as assigned) and record the results.
