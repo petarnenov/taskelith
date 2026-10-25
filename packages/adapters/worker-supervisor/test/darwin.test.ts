@@ -161,6 +161,19 @@ test('the boot identity is read once it succeeds, and again after a failure', ()
   assert.equal(failing.clock.read().ok, false);
 });
 
+test('a native call that throws fails like one that reports an error', () => {
+  const thrower = () => {
+    throw new Error('boom');
+  };
+  const koffi = { load: () => ({ func: () => thrower }), struct: () => ({}), out: () => ({}), pointer: () => ({}), errno: () => 0 };
+  const native = loadDarwinNative('/any/library', () => koffi as never);
+  assert.ok(native.ok);
+  for (const result of [native.value.sysctl([1, 14, 0], undefined), native.value.continuousTime(), native.value.timebase()]) {
+    assert.equal(result.ok, false);
+    assert.match((result as { error: { message: string } }).error.message, /threw: boom/);
+  }
+});
+
 test('without the native calls every read fails, so the supervisor seals', () => {
   const missing = loadDarwinNative('/nonexistent/libSystem.dylib');
   assert.equal(missing.ok, false);

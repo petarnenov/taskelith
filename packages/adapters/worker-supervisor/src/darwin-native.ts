@@ -4,18 +4,22 @@ import type { DarwinNative, SysctlOutcome, Timebase } from './darwin.js';
 
 const LIBSYSTEM = '/usr/lib/libSystem.B.dylib';
 
+type Koffi = typeof import('koffi');
+
+const requireKoffi = (): Koffi => createRequire(import.meta.url)('koffi') as Koffi;
+
 // The only module that loads koffi. It loads on first use, so a host that
 // cannot load it fails closed instead of failing at import.
-export function loadDarwinNative(library = LIBSYSTEM): Result<DarwinNative> {
+export function loadDarwinNative(library = LIBSYSTEM, loadKoffi: () => Koffi = requireKoffi): Result<DarwinNative> {
   try {
-    const koffi = createRequire(import.meta.url)('koffi') as typeof import('koffi');
+    const koffi = loadKoffi();
     return ok(bind(koffi, koffi.load(library)));
   } catch (error) {
     return err(failure('unavailable', `cannot load the macOS native calls: ${(error as Error).message}`));
   }
 }
 
-function bind(koffi: typeof import('koffi'), lib: ReturnType<typeof import('koffi').load>): DarwinNative {
+function bind(koffi: Koffi, lib: ReturnType<Koffi['load']>): DarwinNative {
   const sysctl = lib.func('int sysctl(int *name, unsigned int namelen, void *oldp, _Inout_ size_t *oldlenp, void *newp, size_t newlen)');
   // Anonymous: a named type is global to koffi and could not load twice.
   const timebaseInfo = koffi.struct({ numer: 'uint32_t', denom: 'uint32_t' });

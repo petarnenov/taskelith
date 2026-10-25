@@ -50,15 +50,17 @@ test('a package for one platform is recorded from the lockfile, installed or not
       path: 'node_modules/@scope/tool-any', name: '@scope/tool-any', version: '1.0.0', integrity: null,
       development: false, bundled: false, optional: true, declaration: null, declarationField: null,
       manifestSha256: null, licenseFiles: [], platform: { os: ['linux'], cpu: [] }, inspected: false,
-      gaps: ['missing-license-declaration'],
+      gaps: ['missing-license-declaration', 'license-text-not-inspected'],
     });
     assert.deepEqual(result.map(pkg => [pkg.name, pkg.version, pkg.declaration, pkg.gaps]), [
-      ['@scope/tool-any', '1.0.0', null, ['missing-license-declaration']],
-      ['@scope/tool-darwin-arm64', '1.0.0', 'MIT', []],
-      ['@scope/tool-linux-x64', '1.0.0', 'MIT', []],
+      ['@scope/tool-any', '1.0.0', null, ['missing-license-declaration', 'license-text-not-inspected']],
+      ['@scope/tool-darwin-arm64', '1.0.0', 'MIT', ['license-text-not-inspected']],
+      ['@scope/tool-linux-x64', '1.0.0', 'MIT', ['license-text-not-inspected']],
     ]);
     const review = { path: 'node_modules/@scope/tool-any', version: '1.0.0', manifestSha256: 'lockfile', status: 'declaration-only' as const, finding: 'f', evidence: ['e'] };
-    assert.doesNotThrow(() => checkLicenseReviews(result, [review]));
+    const reviews = result.map(pkg => ({ ...review, path: pkg.path }));
+    assert.doesNotThrow(() => checkLicenseReviews(result, reviews));
+    assert.throws(() => checkLicenseReviews(result, reviews.slice(1)), /unreviewed/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

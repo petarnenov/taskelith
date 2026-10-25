@@ -8,13 +8,13 @@
     "package.json": "6dbaf3fa3b38cf2bc5a8c1ef35126fefc38b0a26a247ca1efb4de159b6af4240",
     "package-lock.json": "882bd66ddefd2eec987d87c42c1ab4767fadda32335d9e074a1affb373a64f4c",
     ".nvmrc": "d9f318747a126ce2247661af67852b185def7789492eabfad7bba322be087c33",
-    "scripts/dependency-inventory.ts": "4bbac75cb91717f5a47f4ebb69dbf303b3701eef8410703aef7bacceb5b9a7e9",
+    "scripts/dependency-inventory.ts": "0901ee7cc6d1e69888723ee259925f8deae87083e60951d8395665855c77ad38",
     "scripts/inventory-dependencies.ts": "f6be1728d7706b65a25a3fb0d561ec8eee0527f7a9665fe519769caabe339594",
     "scripts/inventory-provenance.ts": "7146327bc8a111a0d61115b720f43705a0e44c3bb7bee2228a993bf5c07c26b7"
   },
   "scope": "Locked npm installation paths; top-level license/notice files only; global binaries and nested vendored code excluded",
   "packageCount": 731,
-  "packagesWithGaps": 21,
+  "packagesWithGaps": 41,
   "packages": [
     {
       "path": "node_modules/@actions/core",
@@ -665,7 +665,9 @@
         ]
       },
       "inspected": false,
-      "gaps": []
+      "gaps": [
+        "license-text-not-inspected"
+      ]
     },
     {
       "path": "node_modules/@koromix/koffi-android-x64",
@@ -688,7 +690,9 @@
         ]
       },
       "inspected": false,
-      "gaps": []
+      "gaps": [
+        "license-text-not-inspected"
+      ]
     },
     {
       "path": "node_modules/@koromix/koffi-darwin-arm64",
@@ -711,7 +715,9 @@
         ]
       },
       "inspected": false,
-      "gaps": []
+      "gaps": [
+        "license-text-not-inspected"
+      ]
     },
     {
       "path": "node_modules/@koromix/koffi-darwin-x64",
@@ -734,7 +740,9 @@
         ]
       },
       "inspected": false,
-      "gaps": []
+      "gaps": [
+        "license-text-not-inspected"
+      ]
     },
     {
       "path": "node_modules/@koromix/koffi-freebsd-arm64",
@@ -757,7 +765,9 @@
         ]
       },
       "inspected": false,
-      "gaps": []
+      "gaps": [
+        "license-text-not-inspected"
+      ]
     },
     {
       "path": "node_modules/@koromix/koffi-freebsd-ia32",
@@ -780,7 +790,9 @@
         ]
       },
       "inspected": false,
-      "gaps": []
+      "gaps": [
+        "license-text-not-inspected"
+      ]
     },
     {
       "path": "node_modules/@koromix/koffi-freebsd-x64",
@@ -803,7 +815,9 @@
         ]
       },
       "inspected": false,
-      "gaps": []
+      "gaps": [
+        "license-text-not-inspected"
+      ]
     },
     {
       "path": "node_modules/@koromix/koffi-linux-arm",
@@ -826,7 +840,9 @@
         ]
       },
       "inspected": false,
-      "gaps": []
+      "gaps": [
+        "license-text-not-inspected"
+      ]
     },
     {
       "path": "node_modules/@koromix/koffi-linux-arm64",
@@ -849,7 +865,9 @@
         ]
       },
       "inspected": false,
-      "gaps": []
+      "gaps": [
+        "license-text-not-inspected"
+      ]
     },
     {
       "path": "node_modules/@koromix/koffi-linux-ia32",
@@ -872,7 +890,9 @@
         ]
       },
       "inspected": false,
-      "gaps": []
+      "gaps": [
+        "license-text-not-inspected"
+      ]
     },
     {
       "path": "node_modules/@koromix/koffi-linux-loong64",
@@ -895,7 +915,9 @@
         ]
       },
       "inspected": false,
-      "gaps": []
+      "gaps": [
+        "license-text-not-inspected"
+      ]
     },
     {
       "path": "node_modules/@koromix/koffi-linux-ppc64",
@@ -918,7 +940,9 @@
         ]
       },
       "inspected": false,
-      "gaps": []
+      "gaps": [
+        "license-text-not-inspected"
+      ]
     },
     {
       "path": "node_modules/@koromix/koffi-linux-riscv64",
@@ -941,7 +965,9 @@
         ]
       },
       "inspected": false,
-      "gaps": []
+      "gaps": [
+        "license-text-not-inspected"
+      ]
     },
     {
       "path": "node_modules/@koromix/koffi-linux-x64",
@@ -964,7 +990,9 @@
         ]
       },
       "inspected": false,
-      "gaps": []
+      "gaps": [
+        "license-text-not-inspected"
+      ]
     },
     {
       "path": "node_modules/@koromix/koffi-openbsd-arm64",
@@ -987,7 +1015,9 @@
         ]
       },
       "inspected": false,
-      "gaps": []
+      "gaps": [
+        "license-text-not-inspected"
+      ]
     },
     {
       "path": "node_modules/@koromix/koffi-openbsd-ia32",
@@ -1010,7 +1040,9 @@
         ]
       },
       "inspected": false,
-      "gaps": []
+      "gaps": [
+        "license-text-not-inspected"
+      ]
     },
     {
       "path": "node_modules/@koromix/koffi-openbsd-x64",
@@ -1033,7 +1065,9 @@
         ]
       },
       "inspected": false,
-      "gaps": []
+      "gaps": [
+        "license-text-not-inspected"
+      ]
     },
     {
       "path": "node_modules/@koromix/koffi-win32-arm64",
@@ -1056,7 +1090,9 @@
         ]
       },
       "inspected": false,
-      "gaps": []
+      "gaps": [
+        "license-text-not-inspected"
+      ]
     },
     {
       "path": "node_modules/@koromix/koffi-win32-ia32",
@@ -1079,7 +1115,9 @@
         ]
       },
       "inspected": false,
-      "gaps": []
+      "gaps": [
+        "license-text-not-inspected"
+      ]
     },
     {
       "path": "node_modules/@koromix/koffi-win32-x64",
@@ -1102,7 +1140,9 @@
         ]
       },
       "inspected": false,
-      "gaps": []
+      "gaps": [
+        "license-text-not-inspected"
+      ]
     },
     {
       "path": "node_modules/@nats-io/jetstream",

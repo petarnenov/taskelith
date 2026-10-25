@@ -91,7 +91,7 @@ function lockedOnly(path: string, locked: LockedPackage) {
     declaration, declarationField: declaration === null ? null : 'license',
     manifestSha256: null, licenseFiles: [],
     platform: { os: locked.os ?? [], cpu: locked.cpu ?? [] }, inspected: false,
-    gaps: declaration === null ? ['missing-license-declaration'] : [],
+    gaps: [...(declaration === null ? ['missing-license-declaration'] : []), 'license-text-not-inspected'],
   };
 }
 

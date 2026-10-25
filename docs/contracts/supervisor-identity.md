@@ -185,7 +185,7 @@ The control plane decides the attempt's outcome from these facts; this contract 
 - **Item 5:** the launch intent with `executionId` is journaled before the authorization request, and the record's existence is journaled before the supervisor starts (CP3); the durable write rule covers the record's files and directory entries; the execution directory is part of the `worker/` subtree and outlives workspaces.
 - **Item 6:** an execution that is `uncertain`, has a `termination-unproven` set, or is being drained keeps its capacity reservation; the per-execution supervisor's memory counts toward the execution's reservation, not toward the worker daemon's overhead target.
 - **Item 7:** the execution states of section 2, with `uncertain` and `termination-unproven` as observations that keep ownership, and termination observed apart from cancellation requested.
-- **Item 15:** the supervisor and the adopting supervisor, the per-OS readers of section 10, the Linux containment with the mechanism that denies the process set any cgroup write access and the self-check that proves it, the namespace incarnation and the proof of an old namespace's end, the single-instant process listing on macOS, and the crash points of section 4.
+- **Item 15:** the supervisor and the adopting supervisor, the per-OS readers of section 10, the Linux containment with the mechanism that denies the process set any cgroup write access and the self-check that proves it, the namespace incarnation and the proof of an old namespace's end, the macOS process listing and its two-listing proof with the residual risk of section 8, and the crash points of section 4.
 - **G3 harness qualification:** a harness supported on macOS keeps its processes in its process group.
 
 ## 13. Required tests
