@@ -14,14 +14,29 @@ macOS on arm64, Node.js 24.22.1.
 - Worker step 8 stays the normal point for `/clear`.
 - The spec requirement is under 500 characters. All content is English.
 
+## Evidence check
+
+The change adds no external link or external fact; its only source is the owner's instruction above. The check therefore has nothing to verify.
+
 ## Checks
+
+Run on the committed tree `e4160a5` (base `c84ca71` plus this change) and again on the final revision after the unreviewed fixes:
 
 - `npm run openspec -- validate add-context-size-warning --strict`: passed.
 - `make verify`: passed.
 
 ## Independent review
 
-Pending.
+Reviewer: Codex CLI by rotation, invoked as `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`.
+
+### Pass 1
+
+Session `01a17412-54d4-7933-8d62-20cbeb3f4c78`. The output header reports model `gpt-6.1-sol`, reasoning effort `medium`, and a read-only sandbox. Pass 1 ran at `e4160a5`, and the SHA-256 snapshots before and after were equal (`a7da7cda…b532`).
+
+Findings: Critical 0, High 0, Medium 0, Low 2. This was a Low-only pass, so the findings are fixed without another review and recorded as unreviewed fixes:
+
+1. The evidence check was missing. Fixed under Evidence check.
+2. The checks did not name the revision they ran on. Fixed under Checks.
 
 ## Remaining gates
 
