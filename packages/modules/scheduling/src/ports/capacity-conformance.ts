@@ -171,6 +171,10 @@ export const CAPACITY_LEDGER_CONFORMANCE: readonly ConformanceCase<CapacityLedge
       expectSame(problems, 'run', await ledger.waitingParentsInRun(RUN), 1);
       expectSame(problems, 'other run', await ledger.waitingParentsInRun(CHILD_RUN), 0);
       expectSame(problems, 'slots', await ledger.waitingParentSlots(), 1);
+      expectSuccess(problems, 'close', await ledger.closeDelegation(CHILD, AT));
+      expectCode(problems, 'close again', await ledger.closeDelegation(CHILD, AT), 'not-found');
+      expectSame(problems, 'no longer waiting', await ledger.isWaitingParent(parent.attemptId), false);
+      expectSame(problems, 'no waiting slots', await ledger.waitingParentSlots(), 0);
       return problems;
     },
   },

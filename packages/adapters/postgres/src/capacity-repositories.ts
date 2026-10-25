@@ -211,6 +211,15 @@ export class PostgresCapacityLedger implements CapacityLedger {
     return err(failure('conflict', `task ${delegation.childTaskId} is already a delegated child`, { task: delegation.childTaskId }));
   }
 
+  async closeDelegation(childTaskId: TaskId, at: Instant): Promise<Result<void>> {
+    const closed = await this.#session.query(
+      'UPDATE delegations SET closed_at = $2 WHERE child_task_id = $1 AND closed_at IS NULL',
+      [childTaskId, at],
+    );
+    if (closed.rowCount === 1) return ok(undefined);
+    return err(failure('not-found', `task ${childTaskId} is not an open delegated child`, { task: childTaskId }));
+  }
+
   async isWaitingParent(attemptId: AttemptId): Promise<boolean> {
     return (await this.#count('SELECT count(*) FROM delegations WHERE closed_at IS NULL AND parent_attempt_id = $1', [attemptId])) > 0;
   }

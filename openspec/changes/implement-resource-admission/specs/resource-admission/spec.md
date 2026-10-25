@@ -1,0 +1,59 @@
+## Purpose
+
+Define the scheduler side of the capacity reservation contract: placement decided and persisted in one SERIALIZABLE transaction, quotas and consumption budgets, justified release, bounded supersession and retries, and delegation admission.
+
+## ADDED Requirements
+
+### Requirement: Placement in one transaction
+`ResourceAdmissionService.reserve` SHALL, in one SERIALIZABLE transaction, read the installation, the attempt, the worker, the quotas, and the charges, decide with the first failed check of contract section 4, and either insert the held reservation with its assignment, the attempt's first charge, and the assignment command, or write nothing and return the waiting or rejecting reason.
+
+#### Scenario: Placement
+- **WHEN** an active attempt is placed on an eligible worker with room in every budget
+- **THEN** one assignment with a held reservation, one charge, and one assignment command exist
+
+#### Scenario: Crash before commit
+- **WHEN** the placement transaction crashes before its commit
+- **THEN** no reservation, assignment, charge, or command exists
+
+### Requirement: Replica races
+Concurrent placements SHALL commit only what a serial order allows: of two replicas placing one attempt, one places it and the other returns `attempt-already-reserved`; of two placing different attempts into the last worker slot or the last project unit, one places its attempt and the other waits.
+
+#### Scenario: Last worker slot
+- **WHEN** two replicas concurrently place two attempts on a worker with one free slot
+- **THEN** one is placed and the other waits with `worker-capacity-exhausted`
+
+#### Scenario: Same attempt
+- **WHEN** two replicas concurrently place the same attempt
+- **THEN** one assignment and one held reservation exist
+
+### Requirement: Quotas and budgets
+Placement SHALL charge the project quota, the attempt's run quota, and its root's run quota, wait on an exhausted quota, reject a placement beyond 8 attempts in a task tree or beyond 2 automatic retries, and give an automatic retry of an attempt that has not ended no allowance; a later reservation of an attempt SHALL charge nothing.
+
+#### Scenario: Exhausted quota
+- **WHEN** a run quota of 1 is held and another attempt of the run is placed
+- **THEN** it waits with `run-quota-exhausted`
+
+#### Scenario: Placed again
+- **WHEN** a cancelled assignment's attempt is placed again
+- **THEN** the new reservation is held and the attempt's charge is not repeated
+
+### Requirement: Justified release
+Cancelling an assignment SHALL end it and release its reservation with an assignment-ended command when no execution under it can run, and otherwise keep the reservation, request the attempt's cancellation, and write a cancellation command; `releaseAfterTerminalFact` SHALL release only once nothing under the assignment can run, and every release SHALL revoke the grants of a non-terminal owning execution under it with `capacity-not-reserved`.
+
+#### Scenario: Cancellation with a running execution
+- **WHEN** an assignment with an authorized execution is cancelled, and that execution is later recorded as not started
+- **THEN** the reservation stays held until `releaseAfterTerminalFact` releases it with `execution-terminal`
+
+### Requirement: Bounded supersession and retries
+`supersede` SHALL end and release an assignment without a grant whose worker is unknown, revoked, draining, or unreachable, or that exceeded the 2 minute acknowledgement or 10 minute admission pressure bound, and SHALL otherwise fail with `precondition-failed`; `reserveWithRetry` SHALL retry an `unavailable` placement at most 5 times in all with delays within 5 to 60 seconds.
+
+#### Scenario: Unreachable worker
+- **WHEN** the worker of an ungranted assignment becomes unreachable and the assignment is superseded
+- **THEN** it ends as superseded, its reservation is released, and the worker gets an assignment-ended command
+
+### Requirement: Delegation admission
+`admitDelegation` SHALL run in the transaction that creates the child, reject a child deeper than 3 with `delegation-depth-exceeded` and a chain larger than a quota it charges with `delegation-chain-exceeds-quota`, make a delegation wait with `delegation-awaiting-capacity` when waiting parents would hold every unit of a quota it charges or every eligible fleet slot, reject it with that reason after 10 minutes, and otherwise write the child's lineage link and an open delegation.
+
+#### Scenario: Waiting parent on the last slot
+- **WHEN** the only eligible slot is held by a waiting parent and a further child is delegated
+- **THEN** the delegation waits, and after the bound it is rejected

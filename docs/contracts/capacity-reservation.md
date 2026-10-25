@@ -224,3 +224,20 @@ Items 18, 20, and 24 implement these as tests through the deterministic test har
 - Cancelling an acknowledged assignment with no grant on a healthy, reachable worker ends it, releases its reservation, and sends the worker an assignment-ended command; cancelling one with a started execution releases only at that execution's terminal fact.
 - One project's retry loop or approval-blocked attempts do not stop another project from receiving capacity.
 - An exhausted provider credential limit makes the next attempt that needs it wait.
+
+## 13. Values and writers fixed by G2 item 18
+
+G2 item 18 (`implement-resource-admission`) implements the scheduler side in the `Scheduling` module and `@taskelith/postgres`, and fixes what this contract left to it, as provisional values recorded in the [operational targets](../operational-targets.md) section 1:
+
+- **Fair order.** Round-robin across projects, oldest waiting task first within each (`fairPlacementOrder`).
+- **Backoff.** A base doubling from `5s` to `60s`, each delay within `[5s, 60s]` with jitter; a transiently failed placement is tried at most `5` times.
+- **Delegation wait.** A delegation waits with `delegation-awaiting-capacity` for at most `10 min`, then is rejected with that reason.
+- **Supersession.** An assignment without a grant is superseded after `2 min` unacknowledged, after `10 min` under admission pressure, and at once when its worker is unreachable, draining, or revoked.
+- **Unknown installation.** An installation without its record admits nothing, as one in quarantine.
+
+The reservation transaction reads tables that other items write, and each of those writers runs at `SERIALIZABLE` (section 4):
+
+- `workers` (enrollment, revocation, drain, capacity declarations, controls, reachability, admission pressure) and `installation` (quarantine): created by item 18 with the columns placement reads; item 13 owns and extends them, and items 13, 20, and 21 write them.
+- `capacity_quotas`: installation settings; a missing row is the operational targets' default.
+- `task_lineage`: written once per task when it is created, by the item that creates tasks (a root link with depth `0`, or a child link through delegation admission).
+- `delegations`: opened by delegation admission; the transaction that records a child's terminal outcome (item 21) closes it, which ends its parent's waiting.

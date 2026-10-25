@@ -36,6 +36,8 @@ export interface CapacityLedger {
   // Fails with `conflict` for an attempt already charged.
   recordCharge(charge: CapacityCharge): Promise<Result<void>>;
   openDelegation(delegation: OpenDelegation): Promise<Result<void>>;
+  // Ends the parent's waiting when its child reaches a terminal outcome.
+  closeDelegation(childTaskId: TaskId, at: Instant): Promise<Result<void>>;
   isWaitingParent(attemptId: AttemptId): Promise<boolean>;
   // Units that held reservations of waiting parents occupy.
   waitingParentsInProject(projectId: ProjectId): Promise<number>;

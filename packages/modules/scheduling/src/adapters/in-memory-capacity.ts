@@ -135,6 +135,13 @@ export class InMemoryCapacityLedger implements CapacityLedger {
     return ok(undefined);
   }
 
+  async closeDelegation(childTaskId: TaskId): Promise<Result<void>> {
+    if (!this.#delegations.delete(childTaskId)) {
+      return err(failure('not-found', `task ${childTaskId} is not an open delegated child`, { task: childTaskId }));
+    }
+    return ok(undefined);
+  }
+
   async isWaitingParent(attemptId: AttemptId): Promise<boolean> {
     return [...this.#delegations.values()].some((delegation) => delegation.parentAttemptId === attemptId);
   }
