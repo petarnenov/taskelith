@@ -133,6 +133,17 @@ It ran from the worktree. The prompt and log were kept in the session's scratch 
   - a Medium finding on the fixes is fixed and recorded as unreviewed;
   - a High finding on the fixes holds the change for the owner.
 
+### Pass 4 (exception)
+
+- Session `01a17463-319d-73e1-be15-ba1f74fc24af`, 2026-10-25 20:47 to 20:48, on `c0384ce`, limited to `git diff cf67e53 645355b`.
+- Snapshot `814149c4…e826e38edb` before and after: unchanged.
+- Result: Critical 0, High 0, Medium 0, Low 1. H12 and M13 were confirmed resolved. The reviewer found nothing else in the allowed diff.
+- Under the governance rule, the Low finding is fixed without another review, so its fix is unreviewed.
+
+| # | Finding | Disposition (unreviewed fix) |
+| --- | --- | --- |
+| L14 | Design decision 2 still gave the old order and the signature `waiting(limit)`, contradicting decision 10. | Fixed: decision 2 names `waiting(limit, excluding, after)` and the cursor order. |
+
 | # | Finding | Disposition |
 | --- | --- | --- |
 | H12 | There is still no rotation across projects between passes. With a batch of 100, a 5-second pass, and a 60-second maximum backoff, 1200 older blocked projects can fill every pass. The reviewer reproduced it in memory. | Fixed in `645355b`: a project rotation cursor kept between passes, applied before the limit in both adapters, so each project with a waiting task that is not backing off is read within ⌈P/limit⌉ passes. A test with 1200 blocked projects covers it. |
@@ -146,7 +157,5 @@ It ran from the worktree. The prompt and log were kept in the session's scratch 
 
 ## Remaining gates
 
-- Review pass 4, the exception, on the fixes of H12 and M13.
-- Independent review.
 - Integration into `dev` and archiving, by the coordinator.
 - No deployment validation is claimed.
