@@ -8,4 +8,4 @@
 ## 2. Verification and review
 
 - [x] 2.1 Run strict validation and `make verify`.
-- [ ] 2.2 Obtain independent review (Claude Code with `claude-fable-5-1`, medium effort, as assigned), with every quoted clause checked against its source, and record the results. Pass 3 left one Medium finding for the owner.
+- [x] 2.2 Obtain independent review (Claude Code with `claude-fable-5-1`, medium effort, as assigned), with every quoted clause checked against its source, and record the results.

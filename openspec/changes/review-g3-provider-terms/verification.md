@@ -69,7 +69,7 @@ Pass 3 (Claude Code), the last pass the cap allows:
 - Snapshot: worktree `9904b0e14eac81e675e13dbb701afb318fa47335505cad0f49c24f29fb88b262` and evidence directory `fd5a6dd6f104b9c7ba3a96e7c8987494dbea99f10f3c312ea5ef73778ddfa187`, both unchanged after the pass.
 - Quotes checked: all 205 quoted strings matched their live or archived sources; all 13 pass-2 findings were confirmed resolved.
 - Findings: 0 Critical, 0 High, 1 Medium, 4 Low.
-  1. Medium, **open**: in the Usage Policy effective 2026-11-12, "or create multiple accounts, to avoid detection, circumvent product guardrails" stands as a prohibition of its own, not tied to malicious activity, while the record (`claude-code.md:54,57`) says the clause is tied to malicious activity and describes the later version only as an addition. By the review process, a Medium finding left after the third pass goes to the owner: fix it without review, accept it as a known risk, or defer it. It is not fixed in this change until the owner decides.
+  1. Medium: in the Usage Policy effective 2026-11-12, "or create multiple accounts, to avoid detection, circumvent product guardrails" stands as a prohibition of its own, not tied to malicious activity, while the record (`claude-code.md:54,57`) says the clause is tied to malicious activity and describes the later version only as an addition. By the review process, a Medium finding left after the third pass goes to the owner: fix it without review, accept it as a known risk, or defer it. Resolution: on 2026-10-25, with the owner away, the owner's delegated Claude Fable 5.1 consul, not the owner, chose to fix it without another review (as for items 11, 16, and 18); the coordinator relayed the decision with the condition that the fix stay a quote correction. The full 2026-11-12 sentence is quoted, "tied to malicious activity" is limited to the 2025-09-15 version, the multi-subscription question is added to "Ambiguous", and the consequences and option (b) state only that the newer version is a prohibition of its own; no option or conclusion changed otherwise. **Unreviewed fix.**
   2. Low: the Consumer Terms and Commercial Terms clauses on reselling the Services are quoted, within their competing-products context. **Unreviewed fix.**
   3. Low: GitHub's "One person or legal entity may maintain no more than one free Account" is quoted and applied to the reviewer identity. **Unreviewed fix.**
   4. Low: the pass-1 resolution list states that its line numbers are as of `44b0d68`. **Unreviewed fix.**
@@ -77,8 +77,8 @@ Pass 3 (Claude Code), the last pass the cap allows:
 
 ## Limitations
 
-This is a record of what the terms say on 2026-10-25, not legal advice. Pages blocked to automated clients or varying by region were read from dated Wayback Machine snapshots. Neither Anthropic nor OpenAI was contacted. The Medium finding of pass 3 is open until the owner decides.
+This is a record of what the terms say on 2026-10-25, not legal advice. Pages blocked to automated clients or varying by region were read from dated Wayback Machine snapshots. Neither Anthropic nor OpenAI was contacted. The Medium finding of pass 3 was fixed without review on the delegated consul's decision.
 
 ## Remaining gates
 
-The owner's decision on the open Medium finding of pass 3; integration by the coordinator and archival; the owner's decision D15.
+Integration by the coordinator and archival; the owner's decision D15.
