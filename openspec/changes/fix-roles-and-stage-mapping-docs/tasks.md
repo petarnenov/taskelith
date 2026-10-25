@@ -1,7 +1,7 @@
 ## 1. Record
 
 - [x] 1.1 Name `project-viewer` in the G3 plan's starting point.
-- [x] 1.2 Add the dated note on the frozen port's stage graphs to `docs/sdlc-framework-mapping.md`.
+- [x] 1.2 Add the dated note on the frozen port's stage graphs to `docs/sdlc-framework-mapping.md`, point the two affected table cells to it, and narrow the gap sentence.
 
 ## 2. Verify
 

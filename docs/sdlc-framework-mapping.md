@@ -67,7 +67,7 @@ The stages come from [governance "Lifecycle and records"](governance.md#lifecycl
 
 | Stage | OpenSpec 1.14.3 | SpecKit 1.2.3 |
 | --- | --- | --- |
-| Propose and inspect | `proposal.md` via `new change`; capabilities declared up front. | No separate proposal artifact **(gap as observed; in the frozen port the native `specify` stage covers intake, see the note below)**: `specify` turns the description into `spec.md`, whose header records the input; the constitution is a project-level prerequisite. |
+| Propose and inspect | `proposal.md` via `new change`; capabilities declared up front. | No separate proposal artifact **(gap)** as observed; in the frozen port the native `specify` stage covers intake, see the note below: `specify` turns the description into `spec.md`, whose header records the input; the constitution is a project-level prerequisite. |
 | Specify and design | Delta `specs/` and `design.md`, both after `proposal`; `validate --strict` checks structure. | `spec.md` (+ `clarify` loop), `plan.md` with `research.md`, `data-model.md`, `quickstart.md`, `contracts/`; `checklists/`; gates `review-spec` and `review-plan` in the workflow. |
 | Implement | `tasks.md` checkboxes, tracked by the `apply` phase (in the frozen port, writing `tasks.md` is a specification stage and only `apply` implements, see the note below). | `tasks.md` (`T<NNN>`, `[P]`, `[US<n>]`), executed and checked off by `implement`; `converge` appends missing work. |
 | Verify | No native artifact **(gap)**. This repository adds `verification.md` by convention (governance policy); `validate` covers artifact structure only. | No native verification record **(gap)**. `converge` reports whether code satisfies the artifacts by agent judgment; test tasks in `tasks.md` are optional. |
@@ -75,7 +75,7 @@ The stages come from [governance "Lifecycle and records"](governance.md#lifecycl
 | Accept and integrate | No native operation **(gap)**; integration happens through SCM. | No native operation **(gap)**; the `git` extension offers branch creation (`before_specify`) and optional auto-commit hooks (`after_specify`, `after_plan`, …), not acceptance. |
 | Close | `archive`: moves the change and applies its deltas to the living specs. | No archive or closure operation **(gap)**; `spec.md` keeps `Status: Draft`, and feature specs are not merged into a living specification. |
 
-Every **(gap)** row that the note below does not supersede needs an explicit platform-managed gate or closure record, shown in the UI as platform-managed rather than native (architecture section 6).
+Every **(gap)** cell that the note below does not supersede needs an explicit platform-managed gate or closure record, shown in the UI as platform-managed rather than native (architecture section 6).
 
 Note of 2026-10-25: the table places native artifacts by lifecycle stage as observed before G1. The frozen port's stage graphs differ from it for both frameworks; the OpenSpec plugin's stage graph and the SpecKit mapping fixture, which the test-only normaliser passes today and the G4 SpecKit adapter will implement ([ADR 0010](decisions/0010-g1-closure.md)), are authoritative ([ADR 0009](decisions/0009-frozen-sdlc-framework-port.md)):
 

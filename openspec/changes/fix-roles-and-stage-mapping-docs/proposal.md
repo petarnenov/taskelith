@@ -5,7 +5,7 @@ A review of the Mantine UI proof of concept against the implemented backend, don
 ## What Changes
 
 - `docs/g3-plan.md`: the starting point listed only three of the trust contract's four roles. It now names `project-viewer` as well (`docs/trust-model.md` section 3).
-- `docs/sdlc-framework-mapping.md`: the dated stage table places OpenSpec `tasks.md` under "Implement" and calls SpecKit's "Propose and inspect" a gap, while the frozen port's stage graphs put `tasks` under specification and give SpecKit's `specify` the intake obligation. A dated note under the table states the differences and names the OpenSpec plugin's stage graph and the SpecKit mapping fixture as authoritative; the historical table stays as it was observed.
+- `docs/sdlc-framework-mapping.md`: the dated stage table places OpenSpec `tasks.md` under "Implement" and calls SpecKit's "Propose and inspect" a gap, while the frozen port's stage graphs put `tasks` under specification and give SpecKit's `specify` the intake obligation. A dated note under the table states the differences and names the OpenSpec plugin's stage graph and the SpecKit mapping fixture as authoritative; the two affected table cells point to the note, and the gap sentence excludes what the note supersedes, while the observations stay as recorded.
 
 ## Capabilities
 

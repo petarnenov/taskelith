@@ -8,7 +8,7 @@ Make both records agree with the code and the trust contract. Do not rewrite the
 
 ## Decisions
 
-- The mapping table records what was observed upstream before G1, so it is kept and a dated note names the port's differences, the same way the document's section "Remaining after the port froze" already does.
+- The mapping table records what was observed upstream before G1, so it is kept, with two cells pointing to a dated note that names the port's differences, the same way the document's section "Remaining after the port froze" already does.
 - The role list is corrected in place, because it summarizes the trust contract and has no history of its own.
 
 ## Risks / Trade-offs
