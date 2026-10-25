@@ -76,6 +76,7 @@ export {
 export { planJournalRecovery, type RecoveryAction } from './domain/journal-recovery.js';
 export {
   authorizeLaunch,
+  checkLaunchPreconditions,
   rejectUnknownAssignment,
   replayLaunchOperation,
   type GrantIssue,

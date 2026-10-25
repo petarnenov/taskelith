@@ -170,9 +170,14 @@ test('concurrent rejections of one operation with other values answer one record
   const { request } = await placed();
   const stale = { ...request, ownershipGeneration: (request.ownershipGeneration + 1) as never };
   const epoch = { ...request, recoveryEpoch: 2 as never };
-  const answers = await Promise.all([authority.authorize(PRINCIPAL, stale), authority.authorize(PRINCIPAL, epoch)]);
-  const kinds = answers.map(kindOf).sort();
+  // The loser reruns as a replay, or answers `unavailable` and repeats.
+  const answer = async (values: typeof request) => {
+    const first = await authority.authorize(PRINCIPAL, values);
+    return first.ok || first.error.code !== 'unavailable' ? first : authority.authorize(PRINCIPAL, values);
+  };
+  const kinds = (await Promise.all([answer(stale), answer(epoch)])).map(kindOf).sort();
   assert.ok(kinds.includes('rejected:operation-mismatch'), kinds.join());
+  assert.ok(!kinds.includes('granted'));
   assert.equal((await rows('SELECT 1 FROM launch_rejections')).length, 1);
 });
 
@@ -230,6 +235,25 @@ test('every predicate reaches the revocation and the cancellation through the wr
     assert.equal(kindOf(await authority.authorize(PRINCIPAL, launched.request)), 'revoked:artifact-revision-changed', name);
   }
   assert.equal((await rows(`SELECT 1 FROM outbox WHERE event_type = 'execution.cancellation.request'`)).length, cases.length);
+});
+
+test('a predecessor credential within its grace window authenticates but launches nothing', async () => {
+  const { request } = await placed();
+  const next = { ...WORKER.credentials.current, generation: 2, controlPlaneHash: 'cp-next' as never, brokerUserKey: 'U-next' };
+  value(await fleet.rotate(WORKER.workerId, 1, next, '2100-01-01T00:00:00.000Z' as never, WORKER.enrolledAt));
+  assert.equal(kindOf(await authority.authorize(PRINCIPAL, request)), 'rejected:worker-not-authorized');
+  const current = { ...request, operationId: id('OperationId', 'operation-2') as never };
+  assert.equal(kindOf(await authority.authorize({ ...PRINCIPAL, generation: 2 }, current)), 'granted');
+});
+
+test('a grant whose assignment row is gone is still revoked, with no command to address', async () => {
+  const { request } = await placed();
+  grantOf(await authority.authorize(PRINCIPAL, request));
+  await sql(url, 'DELETE FROM assignments');
+  const correlationId = id('CorrelationId', 'c-gone');
+  assert.equal(value(await database.transaction((tx) => invalidateLaunches(tx, { predicate: { kind: 'all' }, reason: 'quarantined', correlationId }))), 1);
+  assert.deepEqual(await rows('SELECT live FROM launch_authorizations'), [{ live: false }]);
+  assert.equal((await rows(`SELECT 1 FROM outbox WHERE event_type = 'execution.cancellation.request'`)).length, 0);
 });
 
 test('a worker revoked before its first authorization is rejected, and nothing is cancelled', async () => {

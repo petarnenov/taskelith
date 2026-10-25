@@ -141,6 +141,15 @@ export function replayLaunchOperation(
   return Object.freeze({ kind: 'granted', grant: recorded });
 }
 
+// The installation and worker checks, which come before every other one;
+// the authority runs them before it reads the rest of the context.
+export function checkLaunchPreconditions(
+  request: LaunchRequest,
+  context: Pick<LaunchContext, 'installation' | 'workerAuthorized'>,
+): LaunchRejection | undefined {
+  return checkInstallation(request, context);
+}
+
 // The rejection of a request whose assignment, and so whose task, is not
 // found: the installation and worker checks come before the assignment's.
 export function rejectUnknownAssignment(

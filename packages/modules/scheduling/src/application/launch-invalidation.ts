@@ -76,7 +76,8 @@ async function revokeAttempt(
     if (!followed.ok) return followed;
   }
   const assignment = await tx.assignments.get(launch.assignmentId);
-  if (!assignment.ok) return assignment;
+  // A grant whose assignment row is gone has no worker command to address.
+  if (!assignment.ok) return assignment.error.code === 'not-found' ? ok(undefined) : assignment;
   // Derived from the grant, so a rerun of the writer sends the same command.
   const commandId = parseIdentifier('EventId', `${launch.launchAuthId}.revoked`);
   if (!commandId.ok) return commandId;

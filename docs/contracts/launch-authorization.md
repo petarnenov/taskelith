@@ -22,7 +22,7 @@ The request names the immutable set of expected values: the assignment, its atte
 | Worker | The authenticated worker principal, never a request field | Enrolled, unrevoked, at its current credential generation |
 | Assignment and attempt | `assignmentId`, `attemptId`, `ownershipGeneration` from the journaled assignment command | The assignment exists, is active, is held by this worker at this generation, and its attempt is not cancelled or terminal |
 | Execution | `executionId`, created and journaled by the worker before the request (item 4) | The attempt's execution ownership (section 4) allows this execution |
-| Admission | The task's admission (`admissionId` and generation), named by the assignment | The admission belongs to this task and is in state `used`, as the task's dispatch left it ([`sdlc-task-admission`](../../openspec/specs/sdlc-task-admission/spec.md)) |
+| Admission | The task's admission (`admissionId` and generation), named by the assignment | The admission belongs to this task, is bound to the assignment's run, and is in state `used`, as the task's dispatch left it ([`sdlc-task-admission`](../../openspec/specs/sdlc-task-admission/spec.md)) |
 | Gates and artifact revisions | The artifact revisions bound in the admission, and the **relied-on gates**, by admission kind as G1 admission checked them: for an implementation admission, the gates of the prerequisite stages of its stage in the run's workflow definition version; for a planning admission, none. G1 admission records do not store gate identities, so the authority derives this set deterministically and records it in the grant | For an implementation admission, every prerequisite stage still has at least one gate, since G1 treats a stage without gates as not passed; every relied-on gate is still `passed`, and each artifact revision in its own subject is bound in the admission with the same artifact identifier and digest; each bound revision is still the artifact's current revision, compared by identifier and digest as G1 does |
 | Policy revision | `admission.policyRevision` | The run's current policy revision |
 | Capacity reservation | The reservation the assignment holds (item 6) | Still held for this attempt on this worker |
@@ -74,7 +74,7 @@ Revocation after authorization is a cancellation request, not proof that no proc
 The worker journals `operationId` and `executionId` before its first request (item 5), and also keeps, in memory, the monotonic clock reading taken before that first request (section 7).
 
 - **Granted:** `launchAuthId`, `issuedAt`, `ttl`, `skew`, and the bound values.
-- **Rejected:** a reason from section 9. A rejection is final for that `operationId`.
+- **Rejected:** a reason from section 9. A non-retryable rejection is final for that `operationId`. A retryable one is not recorded; the worker retries under a new `operationId`, and a repeat of the same one is decided again.
 - **Transport retry:** the worker repeats the request with the same `operationId`. The authority looks the `operationId` up only among the authenticated worker's own operations, so another worker's operation is unknown to it. It does not run a new authorization; it checks the current quarantine state, recovery epoch, worker credential, and the recorded authorization's state, and returns the recorded grant only while it is `granted`, not expired by `issuedAt` and `ttl`, and its execution is not terminal. Otherwise it returns `revoked` with its reason, `expired`, or the rejection the current state requires. A retry never extends the worker's deadline (section 7).
 - **Changed request:** a repeat with the same `operationId` but different expected values is rejected with `operation-mismatch`.
 - **Re-authorization:** after expiry, a retryable rejection, or a restart, the worker journals a new `operationId` and runs the whole check again, within the ownership rule of section 4.
@@ -108,7 +108,7 @@ Each check of sections 2 to 4 maps to one reason. The scheduler acts on the reas
 | Assignment missing, ended, or held by another worker | `assignment-not-active` | no | None; the current owner decides |
 | Ownership generation not current | `stale-ownership-generation` | no | None; the current owner decides |
 | Attempt cancelled or terminal | `attempt-not-launchable` | no | None |
-| Admission missing, of another task, not `used`, or at another generation than the expected one | `admission-not-current` | no | Re-admit the task |
+| Admission missing, of another task, not `used`, at another generation than the expected one, or bound to another run than the assignment's | `admission-not-current` | no | Re-admit the task |
 | A relied-on gate not `passed`, or `passed` for another subject than the bound revisions | `gate-not-passed` | no | Re-admit after the gate passes |
 | A bound artifact has a newer revision | `artifact-revision-changed` | no | Re-admit against the new revision |
 | Admission policy revision differs from the run's | `policy-revision-changed` | no | Re-admit under the current policy |

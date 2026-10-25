@@ -40,7 +40,9 @@ These are coordinator decisions, taken as the worker recommended. The coordinato
 - **A decision is final, or none is reached.**
   - The run comes from the assignment, so a missing admission is `admission-not-current`, and so is an admission bound to another run.
   - A run that is not stored, or whose workflow left the registry, reaches no decision: `unavailable`, which is a 503.
-  - A concurrent decision of the same operation makes the loser's transaction a serialization failure, which reruns as a replay. A unique conflict is answered `unavailable`, so the worker's repeat replays the recorded decision.
+  - A concurrent decision of the same operation makes the loser's transaction a serialization failure, which reruns as a replay.
+  - Any failure that reaches no decision, a unique conflict or a missing record included, is answered `unavailable`, a 503, so the worker's repeat replays a recorded decision. The contract declares no 500.
+  - The installation and worker checks run before the rest of the context is read, so a quarantined installation rejects without reading the assignment or the task.
 - **The worker check is the contract's.** "Enrolled, unrevoked, at its current credential generation" (section 2) is read in the transaction, so a revocation is ordered against the authorization. The principal's generation must be the current one. A predecessor within its grace window authenticates, and is then rejected here.
 - **An unknown assignment has no task.** `rejectUnknownAssignment` keeps the order of section 9: the installation and worker checks come first, then `assignment-not-active`.
 - **The index follows the record.**
@@ -50,7 +52,8 @@ These are coordinator decisions, taken as the worker recommended. The coordinato
   - The gate predicate takes a set of gates. A writer that adds, removes, or decides a gate names every gate of the stage, so a gate added to a prerequisite stage finds the grants that relied on that stage, and two admissions relying on other gates stay apart.
   - The migration backfills the rows of stored tasks, and `current_revisions` from the used admissions. Admission identities are hashes, so which admission seeds an artifact of a run is arbitrary but fixed; a task bound to another digest fails closed with `artifact-revision-changed`.
   - The backfill masks the escapes of NUL and of surrogates, pairs included, which `jsonb` may reject. Identifiers are printable ASCII and never hold such an escape, so they are kept. Launches compare revisions by identifier and digest only, so a masked `nativeReference` changes no decision.
-  - A backfilled grant whose assignment row is missing keeps a null run, so the run predicate cannot find it. Every other predicate can, and no G2 path stores a grant without its assignment.
+  - A backfilled grant whose assignment row is missing keeps a null run, so the run predicate cannot find it. Every other predicate can, and the helper revokes such a grant without a command, since no assignment addresses its worker. No G2 path stores a grant without its assignment.
+  - A revocation's command identity is `<launchAuthId>.revoked`. The authority's identifiers are 37 characters. A longer stored one, near the 128 an identifier allows, would make the writer fail and roll back, which fails closed; no G2 path stores one.
 - **Crash points.** The transaction reaches `LaunchAuthorizationCommit` when its task repository inserted a new grant row. A crash after the commit is the lost-response case, and its retry replays the grant.
 - **Invalidation.**
   - `invalidateLaunches` reads the predicate's live grants, revokes each attempt's grants with `revokeLaunch`, and writes one cancellation command per attempt. The command's identity derives from the first grant, so a rerun sends the same command.

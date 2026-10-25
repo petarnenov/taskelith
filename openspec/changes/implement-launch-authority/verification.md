@@ -68,6 +68,7 @@ Recorded before pass 1.
 - After the pass-1 fixes and the merge of `dev` at `c84ca71` (item 19), at `102d03b`: 990 tests passed, 0 failed; coverage 99.22% lines, 91.71% branches, 98.96% functions; every other check passes.
 
 - After the pass-2 fixes: 992 tests passed, 0 failed; coverage 99.23% lines, 91.73% branches, 98.96% functions; every other check passes.
+- After the pass-3 fixes: 994 tests passed, 0 failed; coverage 99.24% lines, 91.76% branches, 98.96% functions; every other check passes.
 
 The merge of `dev` touched code, so the second pass reviews it too (protocol step 9). The conflicts were additive: the store port, the route table, the API services, the composition, the PostgreSQL transaction and committing adapters, and the tests gained both items' members. My migration `1792932000000` stays later than item 19's `1792931700000`.
 
@@ -138,3 +139,30 @@ The reviewer is OpenCode with model `opencode/deepseek-v4.1-flash` and variant `
 | F11 | The B8 follow-up was described too broadly. | Fixed: the follow-up names the exact mismatch. |
 | F12 | The mask's comment was narrower than the mask, and it depended on `standard_conforming_strings`. | Fixed: `E''` strings, and the comment says that pairs are masked too. |
 | F13 | The trust model and a fleet comment spoke of active attempts. | Fixed: trust model section 4 says which executions become uncertain, and the comment names item 17's registry. |
+
+### Pass 3
+
+- Session `ses_e8be4e7f0ffep6AiuPz6GfVVOO`, 2026-10-25 19:28 to 19:43, on `b996d89`.
+- Snapshot `ef98d02b…16cc5` before and after: unchanged.
+- The agent ran 23 shell commands, and 1 was refused.
+- Result: Critical 0, High 0, Medium 0, Low 7.
+- It found every pass-2 finding resolved, and F9 justified as recorded. It found no way to grant a launch outside the checks.
+- Under the governance rule, these Low findings are fixed without another review. The fixes below are therefore unreviewed.
+
+| # | Finding | Disposition (unreviewed fix) |
+| --- | --- | --- |
+| L1 | Undeclared failure codes could still be a 500. The installation check ran after the context was read. | Fixed: every failure that reaches no decision is `unavailable`. `checkLaunchPreconditions` runs the installation and worker checks before the rest of the context is read. |
+| L2 | A grant without its assignment row was found but could not be revoked. | Fixed: it is revoked without a command, with a test. |
+| L3 | Contract section 6 called every rejection final. | Fixed: a non-retryable one is final; a retryable one is not recorded. |
+| L4 | The admission bound to another run was not in contract sections 2 and 9. | Fixed in both. |
+| L5 | The concurrent rejection test assumed the serialization retry. | Fixed: a loser that answers `unavailable` repeats, and the test checks that no grant results. |
+| L6 | A long stored `launchAuthId` would make the command identity too long. | Not changed, recorded in the design: the authority's identifiers are 37 characters, no G2 path stores a longer one, and the writer fails closed. |
+| L7 | No test of a predecessor credential at the authority. | Fixed: after a rotation, the predecessor is rejected with `worker-not-authorized`, and the current generation is granted. |
+
+## Remaining gates
+
+- Coordinator integration into `dev`, which reviews the merge.
+- Follow-ups outside this scope:
+  - B8: item 18's attempt cancellation and command reason;
+  - G3: a writer of artifact revisions that extends `CurrentRevisions`, and writers of gates and policy revisions that call `invalidateLaunches`;
+  - G6: the restore quarantine's entry, likewise.

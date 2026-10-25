@@ -1,5 +1,6 @@
 import {
   authorizeLaunch,
+  checkLaunchPreconditions,
   launchRejection,
   parseRecoveryEpoch,
   rejectUnknownAssignment,
@@ -58,12 +59,15 @@ export class LaunchAuthority {
       if (rejected.value !== undefined) return ok(repeatedRejection(rejected.value, request));
       return this.#decide(tx, request, checked);
     });
-    // A concurrent decision of the same operation won; a repeat replays it.
-    if (!decided.ok && decided.error.code === 'conflict') return err(failure('unavailable', decided.error.message));
+    // No decision was reached, for instance a concurrent one of the same
+    // operation won: the worker repeats it, which replays a recorded one.
+    if (!decided.ok && decided.error.code !== 'unavailable') return err(failure('unavailable', decided.error.message));
     return decided;
   }
 
   async #decide(tx: ControlPlaneTransaction, request: LaunchRequest, checked: Checked): Promise<Result<LaunchOutcome>> {
+    const precondition = checkLaunchPreconditions(request, checked);
+    if (precondition !== undefined) return recordRejection(tx, request, precondition);
     const assignment = await optional(tx.assignments.get(request.assignmentId));
     if (!assignment.ok) return assignment;
     if (assignment.value === undefined) return recordRejection(tx, request, rejectUnknownAssignment(request, checked));
