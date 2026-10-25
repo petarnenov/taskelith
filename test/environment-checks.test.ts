@@ -58,14 +58,15 @@ test('with the pinned Node.js active, a wrong npm is fixed by setup', () => {
   assert.match(formatReport(checkEnvironment({ ...healthy, npmVersion: '11.19.0' }, pins)), /FAIL npm 12\.2\.1 \(CI pin\): 11\.19\.0\n {5}Run make setup\./);
 });
 
-test('the checks tell a shell on another Node.js to run nvm use for direct commands, and stay quiet otherwise', () => {
-  assert.equal(shellNodeNotice({ shell: 'v24.22.1', checks: 'v24.22.1' }), undefined);
+test('the checks tell a shell on another Node.js how to select the pin for direct commands, and stay quiet otherwise', () => {
+  const pinned = { checks: 'v24.22.1', checksDirectory: '/home/dev/.nvm/versions/node/v24.22.1/bin' };
+  assert.equal(shellNodeNotice({ ...pinned, shell: 'v24.22.1' }), undefined);
   assert.equal(
-    shellNodeNotice({ shell: 'v24.21.0', checks: 'v24.22.1' }),
-    "These checks ran under Node.js v24.22.1, which make doctor and make verify select on their own; your shell uses v24.21.0, so run 'nvm use' before running npm or node directly."
+    shellNodeNotice({ ...pinned, shell: 'v24.21.0' }),
+    "These checks ran under Node.js v24.22.1, which make doctor and make verify select on their own; your shell uses v24.21.0. To run npm or node directly, run 'nvm use' and check that 'node -v' prints v24.22.1; if it does not, another Node.js comes first in PATH, so run: export PATH=\"/home/dev/.nvm/versions/node/v24.22.1/bin:$PATH\""
   );
-  assert.match(shellNodeNotice({ shell: undefined, checks: 'v24.22.1' }) ?? '', /your shell uses none,/);
-  assert.match(shellNodeNotice({ shell: '', checks: 'v24.22.1' }) ?? '', /your shell uses none,/);
+  assert.match(shellNodeNotice({ ...pinned, shell: undefined }) ?? '', /your shell uses none\./);
+  assert.match(shellNodeNotice({ ...pinned, shell: '' }) ?? '', /your shell uses none\./);
 });
 
 test('setup installs npm before the dependencies and reinstalls them with the new npm', () => {
