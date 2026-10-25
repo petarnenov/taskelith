@@ -29,6 +29,10 @@ export async function migrate(url: URL, directory: string = MIGRATIONS_DIRECTORY
   try {
     await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK]);
     await client.query(`CREATE TABLE IF NOT EXISTS ${CHECKSUMS_TABLE} (name text PRIMARY KEY, sha256 text NOT NULL)`);
+    const unsupported = await unsupportedFiles(directory);
+    if (unsupported.length > 0) {
+      return err(failure('precondition-failed', `only .sql migrations are supported, not: ${unsupported.join(', ')}`, { files: unsupported.join(',') }));
+    }
     const files = await migrationFiles(directory);
     const changed = await changedAppliedFiles(client, files);
     if (changed.length > 0) {
@@ -45,6 +49,12 @@ export async function migrate(url: URL, directory: string = MIGRATIONS_DIRECTORY
   } finally {
     await client.end().catch(() => undefined);
   }
+}
+
+// node-pg-migrate would also run JavaScript and TypeScript files, which the
+// checksums do not cover; dotfiles are ignored, as node-pg-migrate does.
+async function unsupportedFiles(directory: string): Promise<readonly string[]> {
+  return (await readdir(directory)).filter((name) => !name.startsWith('.') && !name.endsWith('.sql')).sort();
 }
 
 async function migrationFiles(directory: string): Promise<readonly MigrationFile[]> {

@@ -87,6 +87,16 @@ test('an applied migration without a checksum stops the run', async () => {
   assert.equal(!unchecked.ok && unchecked.error.code, 'precondition-failed');
 });
 
+test('a migration file other than SQL stops the run before anything is applied', async () => {
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  const directory = await copiedMigrations();
+  await writeFile(join(directory, '1792929700000_script.js'), 'export const up = (pgm) => pgm.sql("CREATE TABLE script (id int)");\n');
+  const rejected = await migrate(url, directory);
+  assert.equal(!rejected.ok && rejected.error.code, 'precondition-failed');
+  assert.equal(!rejected.ok && rejected.error.details.files, '1792929700000_script.js');
+  assert.deepEqual(await query(url, "SELECT 1 FROM information_schema.tables WHERE table_name IN ('admissions', 'script')"), []);
+});
+
 test('a failing migration is reported, and an unreachable server is unavailable', async () => {
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   const directory = await copiedMigrations();

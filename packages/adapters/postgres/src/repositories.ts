@@ -244,10 +244,12 @@ export class PostgresInbox implements Inbox {
     return this.#accepted;
   }
 
+  // The consumer is stored as JSON text: UTF-8 cannot hold NUL or keep two
+  // unpaired surrogates apart, and their escapes can.
   async accept(consumer: string, messageId: EventId): Promise<Result<InboxOutcome>> {
     const inserted = await this.#session.query(
       'INSERT INTO inbox (consumer, message_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-      [consumer, messageId],
+      [JSON.stringify(consumer), messageId],
     );
     if (inserted.rowCount === 0) return ok('duplicate');
     this.#accepted = true;

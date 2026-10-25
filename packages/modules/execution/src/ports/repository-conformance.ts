@@ -177,6 +177,9 @@ export const INBOX_CONFORMANCE: readonly ConformanceCase<Inbox>[] = Object.freez
       expectSame(problems, 'outcomes', outcomes, [
         { ok: true, value: 'accepted' }, { ok: true, value: 'duplicate' }, { ok: true, value: 'accepted' },
       ]);
+      const unusual = ['nul \u0000', 'unpaired \uD800', 'unpaired \uD801'];
+      const accepted = await Promise.all(unusual.map((consumer) => inbox.accept(consumer, message)));
+      expectSame(problems, 'distinct unusual consumers', accepted, unusual.map(() => ({ ok: true, value: 'accepted' })));
       return problems;
     },
   },

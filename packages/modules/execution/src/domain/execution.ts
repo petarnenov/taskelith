@@ -34,7 +34,8 @@ const SIGNAL_NAME = /^SIG[A-Z0-9]{1,16}$/;
 export function parseExitStatus(input: ExitStatusInput): Result<ExitStatus> {
   const { kind, code, signal } = input;
   if (kind === 'code' && code !== undefined && Number.isSafeInteger(code) && code >= 0 && code <= 255) {
-    return ok(Object.freeze({ kind, code }));
+    // `+ 0` turns -0 into 0, so a stored exit code round-trips through JSON.
+    return ok(Object.freeze({ kind, code: code + 0 }));
   }
   if (kind === 'signal' && signal !== undefined && SIGNAL_NAME.test(signal)) return ok(Object.freeze({ kind, signal }));
   if (kind === 'unknown') return ok(Object.freeze({ kind }));
