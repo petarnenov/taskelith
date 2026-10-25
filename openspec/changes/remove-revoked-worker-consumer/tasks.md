@@ -15,5 +15,5 @@
 
 ## 4. Verification and review
 
-- [ ] 4.1 Run `make verify`.
+- [x] 4.1 Run `make verify`.
 - [ ] 4.2 Run the independent review and record it in `verification.md`.
