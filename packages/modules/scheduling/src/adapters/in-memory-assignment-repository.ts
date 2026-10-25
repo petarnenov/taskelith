@@ -27,6 +27,8 @@ export class InMemoryAssignmentRepository implements AssignmentRepository {
     }
     const held = this.#heldReservationConflict(assignment);
     if (!held.ok) return held;
+    const offer = this.#offerConflict(assignment);
+    if (!offer.ok) return offer;
     this.#assignments.set(assignment.id, assignment);
     return ok(undefined);
   }
@@ -52,6 +54,14 @@ export class InMemoryAssignmentRepository implements AssignmentRepository {
     const offered = this.all().find((assignment) => assignment.offerCommandId === commandId);
     if (offered === undefined) return err(failure('not-found', `no assignment was offered by ${commandId}`, { command: commandId }));
     return ok(offered);
+  }
+
+  // An offer's command offers one assignment, as the database's unique
+  // column requires.
+  #offerConflict(assignment: Assignment): Result<void> {
+    const { offerCommandId } = assignment;
+    if (offerCommandId === undefined || !this.all().some((other) => other.offerCommandId === offerCommandId)) return ok(undefined);
+    return err(failure('conflict', `command ${offerCommandId} already offered another assignment`, { command: offerCommandId }));
   }
 
   #heldReservationConflict(assignment: Assignment): Result<void> {

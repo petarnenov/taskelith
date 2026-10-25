@@ -4,24 +4,30 @@ import type { WorkerPlacementRecord } from '../ports/placement-workers.js';
 import type { CapacityDeclaration, WorkerReports } from '../ports/worker-reports.js';
 import type { InMemoryPlacementWorkers } from './in-memory-capacity.js';
 
-interface ReportSequences {
-  readonly capacity: number;
-  readonly pressure: number;
+type ReportFence = 'capacity' | 'pressure' | 'refusal' | 'protocol';
+
+type FenceSequences = Readonly<Record<ReportFence, number>>;
+
+const NO_SEQUENCES: FenceSequences = Object.freeze({ capacity: 0, pressure: 0, refusal: 0, protocol: 0 });
+
+interface FencedWrite {
+  readonly fence: ReportFence;
+  readonly sequence: Sequence;
 }
 
 type WorkerChange = (worker: WorkerPlacementRecord) => WorkerPlacementRecord;
 
-// Writes the records of an in-memory worker store, keeping the last applied
-// sequence of each kind beside them, as the database adapter's columns do.
+// Writes an in-memory worker store and each fence's last sequence beside it;
+// each write reads, checks, and writes without awaiting, so it is atomic.
 export class InMemoryWorkerReports implements WorkerReports {
   readonly #workers: InMemoryPlacementWorkers;
-  readonly #sequences = new Map<WorkerId, ReportSequences>();
+  readonly #sequences = new Map<WorkerId, FenceSequences>();
 
   constructor(workers: InMemoryPlacementWorkers) {
     this.#workers = workers;
   }
 
-  recordContact(workerId: WorkerId, at: Instant): Promise<Result<void>> {
+  async recordContact(workerId: WorkerId, at: Instant): Promise<Result<void>> {
     return this.#change(workerId, (worker) => {
       const last = worker.lastContactAt;
       const lastContactAt = last !== undefined && Date.parse(last) >= Date.parse(at) ? last : at;
@@ -30,46 +36,46 @@ export class InMemoryWorkerReports implements WorkerReports {
   }
 
   async declareCapacity(workerId: WorkerId, declaration: CapacityDeclaration, sequence: Sequence): Promise<Result<void>> {
-    if (!this.#advance(workerId, 'capacity', sequence)) return this.#change(workerId, (worker) => worker);
-    return this.#change(workerId, ({ capacityRefusedSince: _cleared, protocolVersion: _replaced, ...worker }) => ({
-      ...worker, ...declaration, controls: Object.freeze([...declaration.controls]),
-    }));
+    return this.#change(workerId, (worker) => ({ ...worker, ...declaration, controls: Object.freeze([...declaration.controls]) }), {
+      fence: 'capacity', sequence,
+    });
   }
 
   async enterPressure(workerId: WorkerId, sequence: Sequence, at: Instant): Promise<Result<void>> {
-    if (!this.#advance(workerId, 'pressure', sequence)) return this.#change(workerId, (worker) => worker);
-    return this.#change(workerId, (worker) => ({ ...worker, admissionPressureSince: worker.admissionPressureSince ?? at }));
+    return this.#change(workerId, (worker) => ({ ...worker, admissionPressureSince: worker.admissionPressureSince ?? at }), {
+      fence: 'pressure', sequence,
+    });
   }
 
   async leavePressure(workerId: WorkerId, sequence: Sequence): Promise<Result<void>> {
-    if (!this.#advance(workerId, 'pressure', sequence)) return this.#change(workerId, (worker) => worker);
-    return this.#change(workerId, ({ admissionPressureSince: _cleared, ...worker }) => worker);
+    return this.#change(workerId, ({ admissionPressureSince: _cleared, ...worker }) => worker, { fence: 'pressure', sequence });
   }
 
-  markCapacityRefused(workerId: WorkerId, at: Instant): Promise<Result<void>> {
-    return this.#change(workerId, (worker) => ({ ...worker, capacityRefusedSince: worker.capacityRefusedSince ?? at }));
+  async markCapacityRefused(workerId: WorkerId, sequence: Sequence, at: Instant): Promise<Result<void>> {
+    return this.#change(workerId, (worker) => ({ ...worker, capacityRefusedSince: worker.capacityRefusedSince ?? at }), {
+      fence: 'refusal', sequence,
+    });
   }
 
-  clearCapacityRefusal(workerId: WorkerId): Promise<Result<void>> {
-    return this.#change(workerId, ({ capacityRefusedSince: _cleared, ...worker }) => worker);
+  async clearCapacityRefusal(workerId: WorkerId, sequence: Sequence): Promise<Result<void>> {
+    return this.#change(workerId, ({ capacityRefusedSince: _cleared, ...worker }) => worker, { fence: 'refusal', sequence });
   }
 
-  setProtocolVersion(workerId: WorkerId, protocolVersion: number | undefined): Promise<Result<void>> {
+  async setProtocolVersion(workerId: WorkerId, protocolVersion: number | undefined, sequence: Sequence): Promise<Result<void>> {
     return this.#change(workerId, ({ protocolVersion: _replaced, ...worker }) => (
-      protocolVersion === undefined ? worker : { ...worker, protocolVersion }));
+      protocolVersion === undefined ? worker : { ...worker, protocolVersion }), { fence: 'protocol', sequence });
   }
 
-  // Whether the sequence is above the last one of its kind, which it becomes.
-  #advance(workerId: WorkerId, kind: keyof ReportSequences, sequence: Sequence): boolean {
-    const sequences = this.#sequences.get(workerId) ?? { capacity: 0, pressure: 0 };
-    if (sequence <= sequences[kind]) return false;
-    this.#sequences.set(workerId, { ...sequences, [kind]: sequence });
-    return true;
-  }
-
-  async #change(workerId: WorkerId, change: WorkerChange): Promise<Result<void>> {
-    const worker = await this.#workers.get(workerId);
+  // A fenced write at or below its fence's sequence succeeds unapplied; the
+  // fence advances only with a write that applies.
+  #change(workerId: WorkerId, change: WorkerChange, fenced?: FencedWrite): Result<void> {
+    const worker = this.#workers.current(workerId);
     if (worker === undefined) return err(failure('not-found', `worker ${workerId} has no record`, { worker: workerId }));
+    if (fenced !== undefined) {
+      const sequences = this.#sequences.get(workerId) ?? NO_SEQUENCES;
+      if (fenced.sequence <= sequences[fenced.fence]) return ok(undefined);
+      this.#sequences.set(workerId, { ...sequences, [fenced.fence]: fenced.sequence });
+    }
     this.#workers.replace(change(worker));
     return ok(undefined);
   }

@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 import { SUPPORTED_PROTOCOL_VERSIONS, commonProtocolVersion, type MessageSchemas } from '@taskelith/contracts';
 import {
   endAttempt,
-  executionsUnderAssignment,
   openAttempt,
   parseExitStatus,
   recordExit,
@@ -18,11 +17,12 @@ import { err, failure, ok, type EventId, type Instant, type Result } from '@task
 import {
   acceptAssignment,
   automaticRetryOf,
-  refuseAssignment,
+  refuseInTransaction,
   releaseInTransaction,
   type Assignment,
   type HardControl,
   type Refusal,
+  type ReleaseRequest,
 } from '@taskelith/scheduling';
 import { nextAttemptIdOf } from './attempt-identities.js';
 import type { ControlPlaneTransaction } from './control-plane-store.js';
@@ -34,11 +34,6 @@ import { closeDelegationOf } from './task-ending.js';
 export type ObservationEffect = (tx: ControlPlaneTransaction, observation: Observation, at: Instant) => Promise<Result<void>>;
 
 type Payload<Name extends keyof MessageSchemas> = MessageSchemas[Name];
-
-interface HeldAssignment {
-  readonly assignment: Assignment;
-  readonly task: Task;
-}
 
 // A fact about one execution, and the end of its attempt that it implies
 // beyond the fact itself, if any.
@@ -52,18 +47,18 @@ const OFFER = 'execution.assignment.offer';
 
 async function acceptance(tx: ControlPlaneTransaction, observation: Observation, at: Instant): Promise<Result<void>> {
   const { assignmentId } = observation.payload as Payload<'AssignmentAcceptedPayload'>;
-  const held = await currentAssignment(tx, observation, assignmentId as AssignmentId);
-  if (!held.ok) return held;
-  const { assignment } = held.value;
+  const current = await currentAssignment(tx, observation, assignmentId as AssignmentId);
+  if (!current.ok) return current;
+  const assignment = current.value;
   const accepted = acceptAssignment(assignment, assignment.generation, observation.position.workerId, at);
   return accepted.ok ? tx.assignments.replace(accepted.value, assignment.generation) : accepted;
 }
 
 async function refusal(tx: ControlPlaneTransaction, observation: Observation, at: Instant): Promise<Result<void>> {
   const payload = observation.payload as Payload<'AssignmentRefusedPayload'>;
-  const held = await currentAssignment(tx, observation, payload.assignmentId as AssignmentId);
-  if (!held.ok) return held;
-  const refused = await refuse(tx, held.value, { workerId: observation.position.workerId, reason: payload.reason }, at);
+  const current = await currentAssignment(tx, observation, payload.assignmentId as AssignmentId);
+  if (!current.ok) return current;
+  const refused = await refuse(tx, observation, current.value, payload.reason);
   return refused.ok ? recordRefusalCause(tx, observation, payload.reason, at) : refused;
 }
 
@@ -71,26 +66,24 @@ async function refusal(tx: ControlPlaneTransaction, observation: Observation, at
 // the worker ineligible, and one for pressure records its pressure.
 function recordRefusalCause(tx: ControlPlaneTransaction, observation: Observation, reason: Refusal['reason'], at: Instant): Promise<Result<void>> {
   const { workerId, sequence } = observation.position;
-  if (reason === 'worker-slots-exhausted' || reason === 'worker-capacity-exhausted') return tx.reports.markCapacityRefused(workerId, at);
+  if (reason === 'worker-slots-exhausted' || reason === 'worker-capacity-exhausted') return tx.reports.markCapacityRefused(workerId, sequence, at);
   if (reason === 'worker-admission-pressure') return tx.reports.enterPressure(workerId, sequence, at);
   return Promise.resolve(ok(undefined));
 }
 
 // Wire contracts section 3: an offer the worker cannot read refuses its
 // assignment, and the worker keeps only a version both windows share.
-async function commandRejection(tx: ControlPlaneTransaction, observation: Observation, at: Instant): Promise<Result<void>> {
+async function commandRejection(tx: ControlPlaneTransaction, observation: Observation): Promise<Result<void>> {
   const payload = observation.payload as Payload<'CommandRejectedPayload'>;
   if (payload.commandType !== OFFER || payload.reason !== 'protocol-not-supported') {
     return err(failure('precondition-failed', `a rejection of ${payload.commandType} for ${payload.reason} changes nothing`));
   }
   const offered = await tx.assignments.byOfferCommand(payload.commandId as EventId);
   if (!offered.ok) return offered;
-  const task = await tx.tasks.get(offered.value.reservation.scope.taskId);
-  if (!task.ok) return task;
-  const { workerId } = observation.position;
-  const refused = await refuse(tx, { assignment: offered.value, task: task.value }, { workerId, reason: 'protocol-not-supported' }, at);
+  const refused = await refuse(tx, observation, offered.value, 'protocol-not-supported');
   if (!refused.ok) return refused;
-  return tx.reports.setProtocolVersion(workerId, commonProtocolVersion(payload.supportedProtocolVersions, SUPPORTED_PROTOCOL_VERSIONS));
+  const { workerId, sequence } = observation.position;
+  return tx.reports.setProtocolVersion(workerId, commonProtocolVersion(payload.supportedProtocolVersions, SUPPORTED_PROTOCOL_VERSIONS), sequence);
 }
 
 // The owner's decision for 21b: every exit ends its attempt.
@@ -115,15 +108,18 @@ function notStarted(tx: ControlPlaneTransaction, observation: Observation, at: I
   });
 }
 
-function capacityDeclaration(tx: ControlPlaneTransaction, observation: Observation): Promise<Result<void>> {
+// Decision 13: the capacity, the protocol version, and the end of a
+// capacity refusal, each under its own sequence fence.
+async function capacityDeclaration(tx: ControlPlaneTransaction, observation: Observation): Promise<Result<void>> {
   const { capacity, protocolVersions } = observation.payload as Payload<'CapacityDeclaredPayload'>;
-  const protocolVersion = commonProtocolVersion(protocolVersions, SUPPORTED_PROTOCOL_VERSIONS);
   const { slots, cpuMillicores, memoryMebibytes, enforceableControls } = capacity;
-  const declaration = {
+  const { workerId, sequence } = observation.position;
+  const declared = await tx.reports.declareCapacity(workerId, {
     slots, cpuMillicores, memoryMebibytes, controls: enforceableControls as HardControl[],
-    ...(protocolVersion === undefined ? {} : { protocolVersion }),
-  };
-  return tx.reports.declareCapacity(observation.position.workerId, declaration, observation.position.sequence);
+  }, sequence);
+  if (!declared.ok) return declared;
+  const versioned = await tx.reports.setProtocolVersion(workerId, commonProtocolVersion(protocolVersions, SUPPORTED_PROTOCOL_VERSIONS), sequence);
+  return versioned.ok ? tx.reports.clearCapacityRefusal(workerId, sequence) : versioned;
 }
 
 function pressureChange(tx: ControlPlaneTransaction, observation: Observation, at: Instant): Promise<Result<void>> {
@@ -144,7 +140,7 @@ export const OBSERVATION_EFFECTS: Readonly<Record<string, ObservationEffect>> = 
 
 // The assignment the payload names, of the observed attempt, at the
 // observed generation, which is also its task's (decision 5).
-async function currentAssignment(tx: ControlPlaneTransaction, observation: Observation, assignmentId: AssignmentId): Promise<Result<HeldAssignment>> {
+async function currentAssignment(tx: ControlPlaneTransaction, observation: Observation, assignmentId: AssignmentId): Promise<Result<Assignment>> {
   const assignment = await tx.assignments.get(assignmentId);
   if (!assignment.ok) return assignment;
   if (assignment.value.attemptId !== observation.attemptId) {
@@ -155,7 +151,7 @@ async function currentAssignment(tx: ControlPlaneTransaction, observation: Obser
   const task = await tx.tasks.get(assignment.value.reservation.scope.taskId);
   if (!task.ok) return task;
   const current = checkGeneration(task.value.ownershipGeneration, observation);
-  return current.ok ? ok({ assignment: assignment.value, task: task.value }) : current;
+  return current.ok ? assignment : current;
 }
 
 // The task of the observed attempt, found through its assignments.
@@ -175,10 +171,17 @@ function checkGeneration(current: number, observation: Observation): Result<void
   }));
 }
 
-async function refuse(tx: ControlPlaneTransaction, held: HeldAssignment, refused: Refusal, at: Instant): Promise<Result<void>> {
-  const { assignment, task } = held;
-  const ended = refuseAssignment(assignment, assignment.generation, refused, executionsUnderAssignment(task, assignment.id), at);
-  return ended.ok ? tx.assignments.replace(ended.value, assignment.generation) : ended;
+// Decision 10: the refusal ends the assignment as Scheduling decides.
+async function refuse(tx: ControlPlaneTransaction, observation: Observation, assignment: Assignment, reason: Refusal['reason']): Promise<Result<void>> {
+  const refusal = { workerId: observation.position.workerId, reason };
+  const refused = await refuseInTransaction(tx, commandIdentity(observation, assignment.id), refusal);
+  return refused.ok ? ok(undefined) : refused;
+}
+
+// A command the observation sends about one assignment: unique per pair.
+function commandIdentity(observation: Observation, assignmentId: AssignmentId): ReleaseRequest {
+  const commandId = `e${createHash('sha256').update(JSON.stringify([observation.messageId, assignmentId])).digest('hex')}` as EventId;
+  return { assignmentId, commandId, correlationId: observation.correlationId };
 }
 
 function executionReport(observation: Observation, executionId: string): ExecutionReport {
@@ -199,7 +202,8 @@ async function recordTerminalFact(tx: ControlPlaneTransaction, observation: Obse
   if (!recorded.ok || recorded.value.effect === 'duplicate') return recorded.ok ? ok(undefined) : recorded;
   const next = await storeChanges(tx, task, [() => ok(recorded.value.task), fact.end]);
   if (!next.ok) return next;
-  const cleared = await tx.reports.clearCapacityRefusal(observation.position.workerId);
+  const { workerId, sequence } = observation.position;
+  const cleared = await tx.reports.clearCapacityRefusal(workerId, sequence);
   if (!cleared.ok) return cleared;
   const released = await releaseAssignments(tx, observation, next.value);
   if (!released.ok) return released;
@@ -227,8 +231,7 @@ async function releaseAssignments(tx: ControlPlaneTransaction, observation: Obse
   const attemptEnded = hasEnded(task, attemptId);
   for (const assignment of await tx.assignments.listByAttempt(attemptId)) {
     if (assignment.reservation.state !== 'held' || !(attemptEnded || assignment.state === 'ended')) continue;
-    const commandId = `e${createHash('sha256').update(JSON.stringify([observation.messageId, assignment.id])).digest('hex')}` as EventId;
-    const released = await releaseInTransaction(tx, { assignmentId: assignment.id, commandId, correlationId: observation.correlationId });
+    const released = await releaseInTransaction(tx, commandIdentity(observation, assignment.id));
     if (!released.ok) return released;
   }
   return ok(undefined);

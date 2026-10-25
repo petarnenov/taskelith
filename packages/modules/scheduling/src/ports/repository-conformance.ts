@@ -154,6 +154,18 @@ export const ASSIGNMENT_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Assignm
       return problems;
     },
   },
+  {
+    name: 'a second assignment of one offer command conflicts and leaves the first unchanged',
+    async check(repository: AssignmentRepository) {
+      const problems: string[] = [];
+      const first = offered('assignment-1', 'attempt-1', 'offer-1');
+      expectSuccess(problems, 'add', await repository.add(first));
+      expectCode(problems, 'same offer', await repository.add(offered('assignment-2', 'attempt-2', 'offer-1')), 'conflict');
+      expectCode(problems, 'not stored', await repository.get(must(parseIdentifier('AssignmentId', 'assignment-2'))), 'not-found');
+      expectRead(problems, 'first', await repository.byOfferCommand(must(parseIdentifier('EventId', 'offer-1'))), first);
+      return problems;
+    },
+  },
 ]);
 
 function delegationInput(text: string, child: JsonObject = { taskId: 'task-child', kind: 'planning', stageId: 'specs' }): DelegationInput {

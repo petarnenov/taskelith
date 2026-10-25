@@ -2,29 +2,28 @@ import type { Instant, Result } from '@taskelith/kernel';
 import type { Sequence, WorkerId } from '@taskelith/execution';
 import type { HardControl } from '../domain/capacity-reservation.js';
 
-// What a worker declares about itself; the protocol version is the one its
-// window shares with the control plane, if any.
+// What a worker declares about its capacity.
 export interface CapacityDeclaration {
   readonly slots: number;
   readonly cpuMillicores: number;
   readonly memoryMebibytes: number;
   readonly controls: readonly HardControl[];
-  readonly protocolVersion?: number;
 }
 
-// Writes the worker record placement reads; a declaration or a pressure
-// change applies only above its kind's last sequence (decision 13 of 21b).
+// Writes the worker record placement reads. Each fenced write applies only
+// above its fence's last sequence, which it advances (21b decision 13).
 export interface WorkerReports {
   // Reachable, with the last contact moved to `at` but never backward; each
   // write is `not-found` for a worker without a record.
   recordContact(workerId: WorkerId, at: Instant): Promise<Result<void>>;
-  // Also clears a capacity refusal.
+  // The capacity fence.
   declareCapacity(workerId: WorkerId, declaration: CapacityDeclaration, sequence: Sequence): Promise<Result<void>>;
-  // Under pressure since `at`, or since the earlier start it already had.
+  // The pressure fence; under pressure since `at`, or an earlier start.
   enterPressure(workerId: WorkerId, sequence: Sequence, at: Instant): Promise<Result<void>>;
   leavePressure(workerId: WorkerId, sequence: Sequence): Promise<Result<void>>;
-  // Refused for capacity since `at`, or since an earlier refusal it keeps.
-  markCapacityRefused(workerId: WorkerId, at: Instant): Promise<Result<void>>;
-  clearCapacityRefusal(workerId: WorkerId): Promise<Result<void>>;
-  setProtocolVersion(workerId: WorkerId, protocolVersion: number | undefined): Promise<Result<void>>;
+  // The refusal fence; refused for capacity since `at`, or an earlier mark.
+  markCapacityRefused(workerId: WorkerId, sequence: Sequence, at: Instant): Promise<Result<void>>;
+  clearCapacityRefusal(workerId: WorkerId, sequence: Sequence): Promise<Result<void>>;
+  // The protocol fence; `undefined` is no version both windows share.
+  setProtocolVersion(workerId: WorkerId, protocolVersion: number | undefined, sequence: Sequence): Promise<Result<void>>;
 }

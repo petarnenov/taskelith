@@ -60,10 +60,9 @@ export class PostgresWorkerReports implements WorkerReports {
   }
 
   declareCapacity(workerId: WorkerId, declaration: CapacityDeclaration, sequence: Sequence): Promise<Result<void>> {
-    const { slots, cpuMillicores, memoryMebibytes, controls, protocolVersion } = declaration;
-    return this.#update(workerId, `capacity_sequence = $2, slots = $3, cpu_millicores = $4, memory_mebibytes = $5,
-      controls = $6, protocol_version = $7, capacity_refused_since = NULL`,
-    [sequence, slots, cpuMillicores, memoryMebibytes, [...controls], protocolVersion ?? null], 'capacity_sequence < $2');
+    const { slots, cpuMillicores, memoryMebibytes, controls } = declaration;
+    return this.#update(workerId, `capacity_sequence = $2, slots = $3, cpu_millicores = $4, memory_mebibytes = $5, controls = $6`,
+      [sequence, slots, cpuMillicores, memoryMebibytes, [...controls]], 'capacity_sequence < $2');
   }
 
   enterPressure(workerId: WorkerId, sequence: Sequence, at: Instant): Promise<Result<void>> {
@@ -75,16 +74,17 @@ export class PostgresWorkerReports implements WorkerReports {
     return this.#update(workerId, 'pressure_sequence = $2, admission_pressure_since = NULL', [sequence], 'pressure_sequence < $2');
   }
 
-  markCapacityRefused(workerId: WorkerId, at: Instant): Promise<Result<void>> {
-    return this.#update(workerId, 'capacity_refused_since = coalesce(capacity_refused_since, $2)', [at]);
+  markCapacityRefused(workerId: WorkerId, sequence: Sequence, at: Instant): Promise<Result<void>> {
+    return this.#update(workerId, 'capacity_refusal_sequence = $2, capacity_refused_since = coalesce(capacity_refused_since, $3)',
+      [sequence, at], 'capacity_refusal_sequence < $2');
   }
 
-  clearCapacityRefusal(workerId: WorkerId): Promise<Result<void>> {
-    return this.#update(workerId, 'capacity_refused_since = NULL', []);
+  clearCapacityRefusal(workerId: WorkerId, sequence: Sequence): Promise<Result<void>> {
+    return this.#update(workerId, 'capacity_refusal_sequence = $2, capacity_refused_since = NULL', [sequence], 'capacity_refusal_sequence < $2');
   }
 
-  setProtocolVersion(workerId: WorkerId, protocolVersion: number | undefined): Promise<Result<void>> {
-    return this.#update(workerId, 'protocol_version = $2', [protocolVersion ?? null]);
+  setProtocolVersion(workerId: WorkerId, protocolVersion: number | undefined, sequence: Sequence): Promise<Result<void>> {
+    return this.#update(workerId, 'protocol_sequence = $2, protocol_version = $3', [sequence, protocolVersion ?? null], 'protocol_sequence < $2');
   }
 
   // An update its condition skips still succeeds; only a missing worker fails.

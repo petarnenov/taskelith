@@ -145,7 +145,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   const placement = new PlacementService(database, { now: Date.now, draw: Math.random });
   const placementPass = settings.placementMilliseconds ?? PLACEMENT_PASS_MILLISECONDS;
   const observations = observationConsumer(broker.value.js, address.value, OBSERVATION_CONSUMER,
-    observationHandler(new ObservationService(database, logger), address.value), { limits, logger, metrics });
+    observationHandler(new ObservationService(database, { newConfirmationId: () => `o${randomUUID()}`, logger }), address.value), { limits, logger, metrics });
   let outcome: 'stopped' | 'failed' = 'stopped';
   let settle!: (value: 'stopped' | 'failed') => void;
   const stopped = new Promise<'stopped' | 'failed'>((resolve) => { settle = resolve; });

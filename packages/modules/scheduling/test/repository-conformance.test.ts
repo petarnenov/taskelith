@@ -63,7 +63,7 @@ runSuite('in-memory placement queue', PLACEMENT_QUEUE_CONFORMANCE, () => {
 runSuite('in-memory delegation requests', DELEGATION_REQUESTS_CONFORMANCE, () => new InMemoryDelegationRequests());
 runSuite('in-memory worker reports', WORKER_REPORTS_CONFORMANCE, () => {
   const workers = new InMemoryPlacementWorkers([REPORTING_WORKER_FIXTURE]);
-  return { reports: new InMemoryWorkerReports(workers), workers };
+  return { reports: new InMemoryWorkerReports(workers), workers, addWorker: async (worker) => workers.replace(worker) };
 });
 
 test('workers without assignments are candidates in identity order', async () => {

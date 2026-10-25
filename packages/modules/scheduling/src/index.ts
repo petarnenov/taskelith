@@ -85,6 +85,7 @@ export { admitDelegation, type DelegationRequest } from './application/delegatio
 export {
   cancelInTransaction,
   placeInTransaction,
+  refuseInTransaction,
   releaseInTransaction,
   supersedeInTransaction,
   type PlacementOutcome,

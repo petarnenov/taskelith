@@ -185,23 +185,32 @@ test('the observation migration finds each offered assignment\'s command in the 
   const content = await readFile(held, 'utf8');
   await unlink(held);
   assert.equal((await migrate(url, directory)).ok, true);
-  for (const offered of [assignment('assignment-1'), assignment('assignment-2')]) {
+  // A backslash, the text of an escape that jsonb rejects, and quotes; the
+  // last assignment's offer left the outbox.
+  const ids = ['assignment\\1', 'assignment\\u0000', 'assignment"2"', 'assignment-3'];
+  for (const offered of ids.map((id) => assignment(id))) {
     await query(url, `INSERT INTO assignments (id, attempt_id, worker_id, reservation_state, generation, record, project_id, run_id,
       task_id, root_task_id, cpu_millicores, memory_mebibytes, state, changed_at) VALUES ($1, $2, $3, 'held', 1, $4, 'p', 'r', 't', 't', 500, 512, 'offered', $5)`,
     [offered.id, `${offered.attemptId}-${offered.id}`, offered.workerId, JSON.stringify(offered), AT]);
   }
-  // An offer whose payload holds an escape that jsonb rejects; the other
-  // assignment's offer left the outbox.
-  const offer = { metadata: { eventId: 'offer-1' }, subject: 'workers.worker-1.commands', payload: { metadata: { note: '\u0000' }, payload: { assignmentId: 'assignment-1' } } };
-  await query(url, "INSERT INTO outbox (event_id, event_type, message) VALUES ('offer-1', 'execution.assignment.offer', $1)", [JSON.stringify(offer)]);
+  // Each offer's payload also holds escapes that jsonb rejects.
+  for (const [index, assignmentId] of ids.slice(0, 3).entries()) {
+    const offer = { metadata: { eventId: `offer-${index}` }, payload: { metadata: { note: '\u0000 \uD800' }, payload: { assignmentId } } };
+    await query(url, "INSERT INTO outbox (event_id, event_type, message) VALUES ($1, 'execution.assignment.offer', $2)", [`offer-${index}`, JSON.stringify(offer)]);
+  }
   await query(url, `INSERT INTO workers (worker_id, enrolled, revoked, draining, reachable, slots, cpu_millicores, memory_mebibytes, controls)
     VALUES ('worker-1', true, false, false, false, 2, 1000, 1024, '{}')`);
   await writeFile(held, content);
   assert.deepEqual(await migrate(url, directory), { ok: true, value: [OBSERVATION_CONSUMPTION] });
-  const rows = await query<{ id: string; offer_command_id: string | null }>(url, 'SELECT id, offer_command_id FROM assignments ORDER BY id');
-  assert.deepEqual(rows.map((row) => [row.id, row.offer_command_id]), [['assignment-1', 'offer-1'], ['assignment-2', null]]);
-  const [worker] = await query(url, 'SELECT last_contact_at, capacity_sequence, pressure_sequence, capacity_refused_since FROM workers');
-  assert.deepEqual(worker, { last_contact_at: null, capacity_sequence: '0', pressure_sequence: '0', capacity_refused_since: null });
+  const rows = await query<{ id: string; offer_command_id: string | null }>(url, 'SELECT id, offer_command_id FROM assignments');
+  assert.deepEqual(new Map(rows.map((row) => [row.id, row.offer_command_id])), new Map([
+    ['assignment\\1', 'offer-0'], ['assignment\\u0000', 'offer-1'], ['assignment"2"', 'offer-2'], ['assignment-3', null],
+  ]));
+  const [worker] = await query(url, `SELECT last_contact_at, capacity_sequence, pressure_sequence, capacity_refused_since,
+    capacity_refusal_sequence, protocol_sequence FROM workers`);
+  assert.deepEqual(worker, {
+    last_contact_at: null, capacity_sequence: '0', pressure_sequence: '0', capacity_refused_since: null, capacity_refusal_sequence: '0', protocol_sequence: '0',
+  });
 });
 
 test('a later migration file is applied after the applied ones', async () => {

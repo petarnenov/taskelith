@@ -28,7 +28,12 @@ export class InMemoryPlacementWorkers implements PlacementWorkers {
     return this.#workers.get(workerId);
   }
 
-  // For InMemoryWorkerReports, which writes the records placement reads.
+  // For InMemoryWorkerReports, which writes the records placement reads
+  // and reads them without awaiting.
+  current(workerId: WorkerId): WorkerPlacementRecord | undefined {
+    return this.#workers.get(workerId);
+  }
+
   replace(worker: WorkerPlacementRecord): void {
     this.#workers.set(worker.workerId, Object.freeze({ ...worker }));
   }

@@ -17,15 +17,23 @@ const CONFIRMATION = 'execution.observations.confirmed';
 const DOMAIN_REFUSALS = new Set(['conflict', 'precondition-failed', 'forbidden', 'not-found']);
 const NO_EFFECT: ObservationEffect = async () => ok(undefined);
 
+export interface ObservationServiceOptions {
+  // A new outbox event identity for each confirmation sent again.
+  readonly newConfirmationId: () => string;
+  readonly logger?: Logger;
+}
+
 // Item 21b: each observation in one SERIALIZABLE transaction; an `Err` makes
 // the consumer deliver it again, and one not consumed reaches quarantine.
 export class ObservationService {
   readonly #store: ControlPlaneStore;
+  readonly #newConfirmationId: () => string;
   readonly #logger: Logger;
 
-  constructor(store: ControlPlaneStore, logger: Logger = SILENT_LOGGER) {
+  constructor(store: ControlPlaneStore, options: ObservationServiceOptions) {
     this.#store = store;
-    this.#logger = logger;
+    this.#newConfirmationId = options.newConfirmationId;
+    this.#logger = options.logger ?? SILENT_LOGGER;
   }
 
   // A refused effect rolls back and is recorded again without it, so that
@@ -36,12 +44,47 @@ export class ObservationService {
     const observation = parsed.value;
     const effect = OBSERVATION_EFFECTS[observation.type];
     if (effect === undefined) return this.#leaveUnconsumed(observation);
-    const applied = await this.#store.transaction((tx) => recordObservation(tx, observation, effect, 'applied'));
+    const applied = await this.#store.transaction((tx) => this.#record(tx, observation, effect, 'applied'));
     if (applied.ok) return applied;
     if (isNotConsumed(applied.error)) return this.#leaveUnconsumed(observation);
     if (!DOMAIN_REFUSALS.has(applied.error.code)) return applied;
     this.#logRejection(observation, applied.error);
-    return this.#store.transaction((tx) => recordObservation(tx, observation, NO_EFFECT, 'rejected'));
+    return this.#store.transaction((tx) => this.#record(tx, observation, NO_EFFECT, 'rejected'));
+  }
+
+  // Decision 1: authentication, the inbox, the sequence, first contact, the
+  // effect, the cursor, and a confirmation when its prefix grew.
+  async #record(
+    tx: ControlPlaneTransaction, observation: Observation, effect: ObservationEffect, outcome: 'applied' | 'rejected',
+  ): Promise<Result<ObservationOutcome>> {
+    const authentic = await authenticate(tx, observation);
+    if (!authentic.ok) return authentic;
+    const inbox = await tx.inbox.accept(OBSERVATION_CONSUMER, observation.messageId);
+    if (!inbox.ok) return inbox;
+    if (inbox.value === 'duplicate') return this.#confirmAgain(tx, observation);
+    const { workerId, journalId } = observation.position;
+    const cursor = await tx.cursors.get(workerId, journalId);
+    // The inbox ran first, so an applied sequence here has a new identity.
+    const sequenceClass = classifyObservation(cursor, observation.position);
+    if (!sequenceClass.ok) return sequenceClass;
+    if (sequenceClass.value !== 'new') return notConsumed(`its sequence is a ${sequenceClass.value}`);
+    const at = await tx.now();
+    const contact = await tx.reports.recordContact(workerId, at);
+    if (!contact.ok) return contact;
+    const effected = await effect(tx, observation, at);
+    if (!effected.ok) return effected;
+    const advanced = await advanceCursor(tx, observation, cursor, at);
+    return advanced.ok ? ok(outcome) : advanced;
+  }
+
+  // Decision 7: a duplicate within the confirmed prefix means that the
+  // worker may have lost its confirmation, so the prefix is sent again.
+  async #confirmAgain(tx: ControlPlaneTransaction, observation: Observation): Promise<Result<ObservationOutcome>> {
+    const { workerId, journalId, sequence } = observation.position;
+    const cursor = await tx.cursors.get(workerId, journalId);
+    if (sequence > cursor.confirmedThrough) return ok('duplicate');
+    const sent = await appendConfirmation(tx, observation, cursor, { eventId: this.#newConfirmationId(), at: await tx.now() });
+    return sent.ok ? ok('duplicate') : sent;
   }
 
   // Decision 3: an authenticated one still counts as first contact, which
@@ -57,30 +100,6 @@ export class ObservationService {
       type: observation.type, code: error.code, reason: error.details.reason ?? error.code, message: error.message,
     });
   }
-}
-
-// Decision 1: authentication, the inbox, the sequence, first contact, the
-// effect, the cursor, and a confirmation when its prefix grew.
-async function recordObservation(
-  tx: ControlPlaneTransaction, observation: Observation, effect: ObservationEffect, outcome: 'applied' | 'rejected',
-): Promise<Result<ObservationOutcome>> {
-  const authentic = await authenticate(tx, observation);
-  if (!authentic.ok) return authentic;
-  const inbox = await tx.inbox.accept(OBSERVATION_CONSUMER, observation.messageId);
-  if (!inbox.ok || inbox.value === 'duplicate') return inbox.ok ? ok('duplicate') : inbox;
-  const { workerId, journalId } = observation.position;
-  const cursor = await tx.cursors.get(workerId, journalId);
-  // The inbox ran first, so an applied sequence here has a new identity.
-  const sequenceClass = classifyObservation(cursor, observation.position);
-  if (!sequenceClass.ok) return sequenceClass;
-  if (sequenceClass.value !== 'new') return notConsumed(`its sequence is a ${sequenceClass.value}`);
-  const at = await tx.now();
-  const contact = await tx.reports.recordContact(workerId, at);
-  if (!contact.ok) return contact;
-  const effected = await effect(tx, observation, at);
-  if (!effected.ok) return effected;
-  const advanced = await advanceCursor(tx, observation, cursor, at);
-  return advanced.ok ? ok(outcome) : advanced;
 }
 
 async function recordContactOf(tx: ControlPlaneTransaction, observation: Observation): Promise<Result<void>> {
@@ -105,14 +124,25 @@ async function advanceCursor(tx: ControlPlaneTransaction, observation: Observati
   if (!next.ok) return next;
   const saved = await tx.cursors.save(next.value);
   if (!saved.ok) return saved;
-  return next.value.confirmedThrough > cursor.confirmedThrough ? appendConfirmation(tx, observation, next.value, at) : ok(undefined);
+  if (next.value.confirmedThrough <= cursor.confirmedThrough) return ok(undefined);
+  return appendConfirmation(tx, observation, next.value, { eventId: firstConfirmationId(next.value), at });
 }
 
-// Decision 7: unique by worker, journal, and value, which only grows. A
-// worker without a common version gets this build's own.
-async function appendConfirmation(tx: ControlPlaneTransaction, observation: Observation, cursor: ProducerCursor, at: Instant): Promise<Result<void>> {
+// Decision 7: unique by worker, journal, and value, which only grows.
+function firstConfirmationId({ workerId, journalId, confirmedThrough }: ProducerCursor): string {
+  return `o${createHash('sha256').update(JSON.stringify([workerId, journalId, confirmedThrough])).digest('hex')}`;
+}
+
+interface ConfirmationEvent {
+  readonly eventId: string;
+  readonly at: Instant;
+}
+
+// A worker without a common version gets this build's own.
+async function appendConfirmation(
+  tx: ControlPlaneTransaction, observation: Observation, cursor: ProducerCursor, { eventId, at }: ConfirmationEvent,
+): Promise<Result<void>> {
   const { workerId, journalId, confirmedThrough } = cursor;
-  const eventId = `o${createHash('sha256').update(JSON.stringify([workerId, journalId, confirmedThrough])).digest('hex')}`;
   const metadata = parseEventMetadata({ eventId, eventType: CONFIRMATION, schemaVersion: 1, occurredAt: at, correlationId: observation.correlationId });
   if (!metadata.ok) return metadata;
   const protocolVersion = (await tx.workers.get(workerId))?.protocolVersion ?? EXECUTION_PROTOCOL_VERSION;

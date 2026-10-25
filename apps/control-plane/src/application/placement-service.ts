@@ -1,4 +1,5 @@
 import {
+  activeAttempt,
   claimOwnership,
   endAttempt,
   openAttempt,
@@ -12,6 +13,7 @@ import {
   DEFAULT_ATTEMPT_REQUEST,
   fairPlacementOrder,
   placeInTransaction,
+  placementBackoff,
   triesNextCandidate,
   type PlacementOutcome,
   type PlacementQueue,
@@ -36,13 +38,17 @@ export interface PlacementPass {
 // waiting task and reserves it on the first candidate that accepts it.
 export class PlacementService {
   readonly #store: ControlPlaneStore;
+  readonly #timing: BackoffTiming;
   readonly #tasks: RetrySchedule<TaskId>;
   readonly #passes: RetrySchedule<typeof PASS>;
+  // The due time of each task's unplaced retry, fixed by one jitter draw.
+  readonly #retries = new Map<TaskId, { readonly attemptId: AttemptId; readonly dueAt: number }>();
   // The last project read; the next read starts after it.
   #after: ProjectId | undefined;
 
   constructor(store: ControlPlaneStore, timing: BackoffTiming) {
     this.#store = store;
+    this.#timing = timing;
     this.#tasks = new RetrySchedule(timing);
     this.#passes = new RetrySchedule(timing);
   }
@@ -72,18 +78,41 @@ export class PlacementService {
     this.#after = waiting.at(-1)?.projectId ?? this.#after;
     let placed = 0;
     for (const taskId of fairPlacementOrder(waiting)) {
-      const outcome = anyCandidate ? await this.#store.transaction((tx) => placeTask(tx, taskId)) : NO_CANDIDATE;
+      const outcome = anyCandidate ? await this.#store.transaction((tx) => placeTask(tx, taskId, this.#retryBackoff)) : NO_CANDIDATE;
       if (!outcome.ok && isOutage(outcome.error.code)) return outcome;
-      if (outcome.ok && outcome.value === 'placed') placed++;
-      if (outcome.ok || noLongerWaits(outcome.error)) this.#tasks.forget(taskId);
-      else this.#tasks.failed(taskId);
+      if (outcome.ok && outcome.value.kind === 'placed') placed++;
+      this.#settle(taskId, outcome);
     }
     return ok({ waiting: waiting.length, placed });
   }
 
+  // A retry that backs off is not read until due; a task placed or no
+  // longer waiting keeps no delay; any other one backs off once more.
+  #settle(taskId: TaskId, outcome: Result<TaskPlacement>): void {
+    if (outcome.ok && outcome.value.kind === 'backing-off') this.#tasks.delayUntil(taskId, outcome.value.dueAt);
+    else if (outcome.ok || noLongerWaits(outcome.error)) this.#forget(taskId);
+    else this.#tasks.failed(taskId);
+  }
+
+  // Capacity reservation section 5: from the retried attempt's end, the
+  // retry backs off by `placementBackoff` of its number.
+  readonly #retryBackoff: RetryBackoff = (taskId, retry) => {
+    const known = this.#retries.get(taskId);
+    const dueAt = known?.attemptId === retry.attemptId
+      ? known.dueAt
+      : retry.retriedEndedAt + placementBackoff(retry.retryNumber, this.#timing.draw());
+    this.#retries.set(taskId, { attemptId: retry.attemptId, dueAt });
+    return this.#timing.now() < dueAt ? dueAt : undefined;
+  };
+
   #forgetUnless(checked: readonly TaskId[], stillWaiting: readonly TaskId[]): void {
     const waits = new Set(stillWaiting);
-    for (const taskId of checked) if (!waits.has(taskId)) this.#tasks.forget(taskId);
+    for (const taskId of checked) if (!waits.has(taskId)) this.#forget(taskId);
+  }
+
+  #forget(taskId: TaskId): void {
+    this.#tasks.forget(taskId);
+    this.#retries.delete(taskId);
   }
 }
 
@@ -100,21 +129,40 @@ const PASS = 'pass';
 const NOT_WAITING = 'not-waiting';
 const NO_CANDIDATE: Result<never> = err(failure('precondition-failed', 'no candidate worker exists', { reason: 'no-candidate' }));
 
-// What a placement transaction committed: an assignment, or the end of an
-// attempt that a rejecting reason refused.
-type TaskPlacement = 'placed' | 'ended';
+// What a placement transaction committed: an assignment, the end of an
+// attempt that a rejecting reason refused, or nothing while a retry waits.
+type TaskPlacement =
+  | { readonly kind: 'placed' | 'ended' }
+  | { readonly kind: 'backing-off'; readonly dueAt: number };
+
+const PLACED: TaskPlacement = Object.freeze({ kind: 'placed' });
+const ENDED: TaskPlacement = Object.freeze({ kind: 'ended' });
+
+// An active attempt that retries an ended one and was never placed.
+interface UnplacedRetry {
+  readonly attemptId: AttemptId;
+  readonly retriedEndedAt: number;
+  // The task's attempts that retry another, this one included.
+  readonly retryNumber: number;
+}
+
+// The retry's due time in epoch milliseconds while it still backs off.
+type RetryBackoff = (taskId: TaskId, retry: UnplacedRetry) => number | undefined;
 
 // Reads the candidates in the task's transaction, so that each placement,
 // and each rerun of it, sees the reservations held before it.
-async function placeTask(tx: ControlPlaneTransaction, taskId: TaskId): Promise<Result<TaskPlacement>> {
+async function placeTask(tx: ControlPlaneTransaction, taskId: TaskId, retryBackoff: RetryBackoff): Promise<Result<TaskPlacement>> {
   const task = await tx.tasks.get(taskId);
   if (!task.ok) return task;
+  const retry = await unplacedRetryOf(tx, task.value);
+  const dueAt = retry && retryBackoff(task.value.id, retry);
+  if (dueAt !== undefined) return ok({ kind: 'backing-off', dueAt });
   const claimed = await claimPlacement(tx, task.value);
   if (!claimed.ok) return claimed;
   const reserved = await reserveOnCandidate(tx, claimed.value, await tx.workers.candidates());
   if (!reserved.ok) return reserved;
   const last = reserved.value;
-  if (last?.kind === 'placed') return ok('placed');
+  if (last?.kind === 'placed') return ok(PLACED);
   if (last?.kind === 'rejected') return endRejectedAttempt(tx, claimed.value);
   const reason = last?.reason ?? 'no-candidate';
   return err(failure('precondition-failed', `no candidate accepted task ${taskId}`, { task: taskId, reason }));
@@ -165,7 +213,16 @@ async function endRejectedAttempt(tx: ControlPlaneTransaction, task: Task): Prom
   const stored = await tx.tasks.replace(ended.value, task.generation);
   if (!stored.ok) return stored;
   const closed = await closeDelegationOf(tx, task.id, at);
-  return closed.ok ? ok('ended') : closed;
+  return closed.ok ? ok(ENDED) : closed;
+}
+
+async function unplacedRetryOf(tx: ControlPlaneTransaction, task: Task): Promise<UnplacedRetry | undefined> {
+  const attempt = activeAttempt(task);
+  const retried = task.attempts.find(({ id }) => id === attempt?.retryOf)?.outcome;
+  if (attempt === undefined || retried === undefined) return undefined;
+  if ((await tx.assignments.listByAttempt(attempt.id)).length > 0) return undefined;
+  const retryNumber = task.attempts.filter(({ retryOf }) => retryOf !== undefined).length;
+  return { attemptId: attempt.id, retriedEndedAt: Date.parse(retried.endedAt), retryNumber };
 }
 
 // A retry attempt is placed as an automatic retry of the one it retries.

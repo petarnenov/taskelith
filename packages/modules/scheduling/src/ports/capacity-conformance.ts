@@ -376,10 +376,15 @@ export const REPORTING_WORKER_FIXTURE: WorkerPlacementRecord = worker('worker-re
 export interface WorkerReportsConformanceTarget {
   readonly reports: WorkerReports;
   readonly workers: PlacementWorkers;
+  // Stores a worker record with the adapter's own means.
+  addWorker(worker: WorkerPlacementRecord): Promise<void>;
 }
 
 const second = (seconds: number): Instant => must(parseInstant(`2026-10-25T09:00:${String(seconds).padStart(2, '0')}.000Z`));
 const sequence = (value: number) => must(parseSequence(value));
+const UNKNOWN_WORKER = id('WorkerId', 'worker-x') as WorkerId;
+const DECLARED = Object.freeze({ slots: 4, cpuMillicores: 8000, memoryMebibytes: 16384, controls: Object.freeze(['cpu-limit' as const]) });
+const OLDER_DECLARED = Object.freeze({ slots: 1, cpuMillicores: 1000, memoryMebibytes: 1024, controls: Object.freeze([]) });
 
 export const WORKER_REPORTS_CONFORMANCE: readonly ConformanceCase<WorkerReportsConformanceTarget>[] = Object.freeze([
   {
@@ -391,29 +396,54 @@ export const WORKER_REPORTS_CONFORMANCE: readonly ConformanceCase<WorkerReportsC
       expectSuccess(problems, 'older contact', await reports.recordContact(workerId, second(10)));
       expectSame(problems, 'reachable', await workers.get(workerId), { ...REPORTING_WORKER_FIXTURE, reachable: true, lastContactAt: second(20) });
       expectSame(problems, 'candidates', await workers.candidates(), [workerId]);
-      expectCode(problems, 'unknown worker', await reports.recordContact(id('WorkerId', 'worker-x') as WorkerId, AT), 'not-found');
+      expectCode(problems, 'unknown worker', await reports.recordContact(UNKNOWN_WORKER, AT), 'not-found');
       return problems;
     },
   },
   {
-    name: 'a declaration applies only above the last one and clears a capacity refusal',
+    name: 'a declaration applies only above the last one',
     async check({ reports, workers }: WorkerReportsConformanceTarget) {
       const problems: string[] = [];
       const { workerId } = REPORTING_WORKER_FIXTURE;
-      expectSuccess(problems, 'refuse', await reports.markCapacityRefused(workerId, second(1)));
-      expectSuccess(problems, 'refuse again', await reports.markCapacityRefused(workerId, second(2)));
-      expectSame(problems, 'refused', (await workers.get(workerId))?.capacityRefusedSince, second(1));
-      const declared = { slots: 4, cpuMillicores: 8000, memoryMebibytes: 16384, controls: ['cpu-limit' as const], protocolVersion: 1 };
-      expectSuccess(problems, 'declare 5', await reports.declareCapacity(workerId, declared, sequence(5)));
-      expectSuccess(problems, 'refuse after', await reports.markCapacityRefused(workerId, second(3)));
-      const older = { slots: 1, cpuMillicores: 1000, memoryMebibytes: 1024, controls: [] };
-      expectSuccess(problems, 'declare 3', await reports.declareCapacity(workerId, older, sequence(3)));
-      const expected = { ...REPORTING_WORKER_FIXTURE, ...declared, capacityRefusedSince: second(3) };
-      expectSame(problems, 'kept the newer', await workers.get(workerId), expected);
-      expectSuccess(problems, 'declare 6', await reports.declareCapacity(workerId, older, sequence(6)));
-      const { protocolVersion: _none, ...withoutProtocol } = REPORTING_WORKER_FIXTURE;
-      expectSame(problems, 'newer', await workers.get(workerId), { ...withoutProtocol, ...older });
-      expectCode(problems, 'unknown worker', await reports.declareCapacity(id('WorkerId', 'worker-x') as WorkerId, older, sequence(1)), 'not-found');
+      expectSuccess(problems, 'declare 5', await reports.declareCapacity(workerId, DECLARED, sequence(5)));
+      expectSuccess(problems, 'declare 3', await reports.declareCapacity(workerId, OLDER_DECLARED, sequence(3)));
+      expectSame(problems, 'kept the newer', await workers.get(workerId), { ...REPORTING_WORKER_FIXTURE, ...DECLARED });
+      expectSuccess(problems, 'declare 6', await reports.declareCapacity(workerId, OLDER_DECLARED, sequence(6)));
+      expectSame(problems, 'newer', await workers.get(workerId), { ...REPORTING_WORKER_FIXTURE, ...OLDER_DECLARED });
+      return problems;
+    },
+  },
+  {
+    name: 'concurrent declarations keep the values of the higher sequence',
+    async check({ reports, workers }: WorkerReportsConformanceTarget) {
+      const problems: string[] = [];
+      const { workerId } = REPORTING_WORKER_FIXTURE;
+      const declared = await Promise.all([
+        reports.declareCapacity(workerId, DECLARED, sequence(5)), reports.declareCapacity(workerId, OLDER_DECLARED, sequence(3)),
+      ]);
+      for (const [index, outcome] of declared.entries()) expectSuccess(problems, `declaration ${index}`, outcome);
+      expectSame(problems, 'values of 5', await workers.get(workerId), { ...REPORTING_WORKER_FIXTURE, ...DECLARED });
+      return problems;
+    },
+  },
+  {
+    name: 'a write for a worker without a record fails and advances no sequence',
+    async check({ reports, workers, addWorker }: WorkerReportsConformanceTarget) {
+      const problems: string[] = [];
+      const late = worker('worker-late', { reachable: false });
+      const writes = [
+        ['declare', () => reports.declareCapacity(late.workerId, DECLARED, sequence(5))],
+        ['enter', () => reports.enterPressure(late.workerId, sequence(5), AT)],
+        ['refuse', () => reports.markCapacityRefused(late.workerId, sequence(5), AT)],
+        ['protocol', () => reports.setProtocolVersion(late.workerId, undefined, sequence(5))],
+      ] as const;
+      for (const [label, write] of writes) expectCode(problems, `missing ${label}`, await write(), 'not-found');
+      await addWorker(late);
+      for (const [label, write] of writes) expectSuccess(problems, `stored ${label}`, await write());
+      const { protocolVersion: _none, ...withoutProtocol } = late;
+      expectSame(problems, 'applied', await workers.get(late.workerId), {
+        ...withoutProtocol, ...DECLARED, admissionPressureSince: AT, capacityRefusedSince: AT,
+      });
       return problems;
     },
   },
@@ -432,30 +462,46 @@ export const WORKER_REPORTS_CONFORMANCE: readonly ConformanceCase<WorkerReportsC
       expectSame(problems, 'left', await since(), undefined);
       expectSuccess(problems, 'enter 4 again', await reports.enterPressure(workerId, sequence(4), second(5)));
       expectSame(problems, 'repeated sequence ignored', await since(), undefined);
-      expectCode(problems, 'unknown worker', await reports.leavePressure(id('WorkerId', 'worker-x') as WorkerId, sequence(9)), 'not-found');
+      expectCode(problems, 'unknown worker', await reports.leavePressure(UNKNOWN_WORKER, sequence(9)), 'not-found');
       return problems;
     },
   },
   {
-    name: 'a capacity refusal clears, and the protocol version is set or removed',
+    name: 'a capacity refusal is marked and cleared only above the last of either',
     async check({ reports, workers }: WorkerReportsConformanceTarget) {
       const problems: string[] = [];
       const { workerId } = REPORTING_WORKER_FIXTURE;
+      const since = async () => (await workers.get(workerId))?.capacityRefusedSince;
       expectSuccess(problems, 'contact', await reports.recordContact(workerId, AT));
-      expectSuccess(problems, 'refuse', await reports.markCapacityRefused(workerId, AT));
+      expectSuccess(problems, 'refuse 3', await reports.markCapacityRefused(workerId, sequence(3), second(1)));
+      expectSuccess(problems, 'refuse 4', await reports.markCapacityRefused(workerId, sequence(4), second(2)));
+      expectSame(problems, 'earlier mark', await since(), second(1));
       expectSame(problems, 'refused worker', await workers.candidates(), []);
-      expectSuccess(problems, 'clear', await reports.clearCapacityRefusal(workerId));
+      expectSuccess(problems, 'older clear', await reports.clearCapacityRefusal(workerId, sequence(2)));
+      expectSame(problems, 'still refused', await since(), second(1));
+      expectSuccess(problems, 'clear 6', await reports.clearCapacityRefusal(workerId, sequence(6)));
       expectSame(problems, 'eligible again', await workers.candidates(), [workerId]);
-      expectSuccess(problems, 'no common version', await reports.setProtocolVersion(workerId, undefined));
-      expectSame(problems, 'without protocol', (await workers.get(workerId))?.protocolVersion, undefined);
+      expectSuccess(problems, 'late refusal', await reports.markCapacityRefused(workerId, sequence(5), second(3)));
+      expectSame(problems, 'late refusal ignored', await since(), undefined);
+      expectCode(problems, 'unknown worker', await reports.clearCapacityRefusal(UNKNOWN_WORKER, sequence(9)), 'not-found');
+      return problems;
+    },
+  },
+  {
+    name: 'the protocol version is set or removed only above the last one',
+    async check({ reports, workers }: WorkerReportsConformanceTarget) {
+      const problems: string[] = [];
+      const { workerId } = REPORTING_WORKER_FIXTURE;
+      const version = async () => (await workers.get(workerId))?.protocolVersion;
+      expectSuccess(problems, 'contact', await reports.recordContact(workerId, AT));
+      expectSuccess(problems, 'no common version', await reports.setProtocolVersion(workerId, undefined, sequence(3)));
+      expectSame(problems, 'without protocol', await version(), undefined);
       expectSame(problems, 'ineligible', await workers.candidates(), []);
-      expectSuccess(problems, 'version 1', await reports.setProtocolVersion(workerId, 1));
-      expectSame(problems, 'with protocol', (await workers.get(workerId))?.protocolVersion, 1);
-      const unknown = id('WorkerId', 'worker-x') as WorkerId;
-      for (const [label, write] of [
-        ['refuse', reports.markCapacityRefused(unknown, AT)], ['clear', reports.clearCapacityRefusal(unknown)],
-        ['protocol', reports.setProtocolVersion(unknown, 1)], ['enter', reports.enterPressure(unknown, sequence(1), AT)],
-      ] as const) expectCode(problems, `unknown worker ${label}`, await write, 'not-found');
+      expectSuccess(problems, 'older version', await reports.setProtocolVersion(workerId, 1, sequence(2)));
+      expectSame(problems, 'older ignored', await version(), undefined);
+      expectSuccess(problems, 'version 1', await reports.setProtocolVersion(workerId, 1, sequence(4)));
+      expectSame(problems, 'with protocol', await version(), 1);
+      expectCode(problems, 'unknown worker', await reports.setProtocolVersion(UNKNOWN_WORKER, 1, sequence(9)), 'not-found');
       return problems;
     },
   },
