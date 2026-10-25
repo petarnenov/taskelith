@@ -1,4 +1,14 @@
-export { darwinPlatform, DarwinDeadlineClock, DarwinProcessInspector } from './darwin.js';
+export {
+  darwinPlatform,
+  DarwinDeadlineClock,
+  DarwinProcessInspector,
+  decodeKinfoProc,
+  KINFO_PROC,
+  type DarwinNative,
+  type SysctlOutcome,
+  type Timebase,
+} from './darwin.js';
+export { loadDarwinNative } from './darwin-native.js';
 export { encodeEvent, parseEvents } from './event-log.js';
 export { SqliteExecutionLock } from './execution-lock.js';
 export { FileRecordStore } from './file-record-store.js';

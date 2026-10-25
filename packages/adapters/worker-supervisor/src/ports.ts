@@ -18,7 +18,7 @@ export interface ProcessInspector {
   bootId(): Result<string>;
   // The identity of a running process, or undefined if none has the ID.
   identity(pid: number): Result<ProcessIdentity | undefined>;
-  // Every process in one kernel listing taken at a single instant.
+  // Every process in one kernel listing, whose IDs are taken at one instant.
   listing(): Result<readonly ProcessEntry[]>;
 }
 

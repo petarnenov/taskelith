@@ -2,33 +2,21 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
 import { ScenarioProcess } from '@taskelith/testing';
 import {
   FileRecordStore,
   hostPlatform,
-  parseLaunch,
   parseProgramArguments,
   prepareRecord,
   recoverExecution,
   removeRecord,
   runSupervisorProgram,
   SqliteExecutionLock,
-  startDetachedSupervisor,
   supervisorCommand,
   supervisorMain,
 } from '@taskelith/worker-supervisor';
 import { intent, rig } from './fakes.ts';
-
-async function eventually<T>(read: () => Promise<T | undefined>): Promise<T> {
-  for (let attempt = 0; attempt < 200; attempt += 1) {
-    const value = await read();
-    if (value !== undefined) return value;
-    await delay(50);
-  }
-  throw new Error('the value never appeared');
-}
 
 function scratch(t: { after: (fn: () => void) => void }): string {
   const root = mkdtempSync(join(tmpdir(), 'taskelith-supervisor-'));
@@ -145,22 +133,3 @@ test('a usage error or an unsupported platform starts no supervisor', async () =
   if (process.platform === 'linux') assert.equal((await runSupervisorProgram(['launch', '/nonexistent'])).ok, false);
 });
 
-test('on macOS the supervisor program seals every launch, also as a detached process', { skip: process.platform !== 'darwin' }, async (t) => {
-  const root = scratch(t);
-  const inProcess = join(root, 'execution-1');
-  const setup = rig();
-  const store = new FileRecordStore(inProcess);
-  assert.ok((await prepareRecord({ ...setup.worker, store }, intent())).ok);
-  const outcome = await runSupervisorProgram(['launch', inProcess]);
-  assert.deepEqual(outcome, { ok: true, value: { kind: 'sealed', reason: 'identity-unreadable' } });
-
-  const detached = join(root, 'execution-2');
-  const second = new FileRecordStore(detached);
-  assert.ok((await prepareRecord({ ...setup.worker, store: second }, intent({ executionId: 'execution-2' }))).ok);
-  assert.ok((await startDetachedSupervisor({ mode: 'launch', directory: detached })).ok);
-  const launch = await eventually(async () => {
-    const text = await second.read('launch');
-    return text.ok ? text.value : undefined;
-  });
-  assert.deepEqual(parseLaunch(launch), { ok: true, value: { kind: 'seal', by: 'supervisor', reason: 'identity-unreadable' } });
-});

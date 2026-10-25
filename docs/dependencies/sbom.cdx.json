@@ -1185,6 +1185,566 @@
       ]
     },
     {
+      "bom-ref": "@koromix/koffi-android-arm64@3.3.3",
+      "type": "library",
+      "name": "@koromix/koffi-android-arm64",
+      "version": "3.3.3",
+      "scope": "optional",
+      "purl": "pkg:npm/%40koromix/koffi-android-arm64@3.3.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@koromix/koffi-android-arm64/-/koffi-android-arm64-3.3.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "73c883abf98f5e48109ab999e92a6a588545dd99c91298d542cc332b36eb09276bebca66498fdc363d6de2abefdf64fc9cd8d6ef5fe107e13c46ad7ebd5a6642"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@koromix/koffi-android-x64@3.3.3",
+      "type": "library",
+      "name": "@koromix/koffi-android-x64",
+      "version": "3.3.3",
+      "scope": "optional",
+      "purl": "pkg:npm/%40koromix/koffi-android-x64@3.3.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@koromix/koffi-android-x64/-/koffi-android-x64-3.3.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "c8016ee285faae9042aabe07886a37169cb0991375d4b39275ee3e18966f7e41729aa577c19b71e938157bcad9e28809673f41f28d6d0de2ac67aa6a7a81f8d2"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@koromix/koffi-darwin-arm64@3.3.3",
+      "type": "library",
+      "name": "@koromix/koffi-darwin-arm64",
+      "version": "3.3.3",
+      "scope": "optional",
+      "purl": "pkg:npm/%40koromix/koffi-darwin-arm64@3.3.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@koromix/koffi-darwin-arm64/-/koffi-darwin-arm64-3.3.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "685608dd831d41638098795503e19f0652594e9bdf6d4bff368781064a9b95637b071b98d366e458cca892c50497e9a7c7b49ca0ca279e3cd728990d417991df"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@koromix/koffi-darwin-x64@3.3.3",
+      "type": "library",
+      "name": "@koromix/koffi-darwin-x64",
+      "version": "3.3.3",
+      "scope": "optional",
+      "purl": "pkg:npm/%40koromix/koffi-darwin-x64@3.3.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@koromix/koffi-darwin-x64/-/koffi-darwin-x64-3.3.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "e90f3f0c38550033cc9b79459d91494444c9b5fe3ce6364ace7d4aa205de03d19fcedbff5cc16208e2b8684a2e15cdb9ea1f6e5b30baf661a29ad7157302be5b"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@koromix/koffi-freebsd-arm64@3.3.3",
+      "type": "library",
+      "name": "@koromix/koffi-freebsd-arm64",
+      "version": "3.3.3",
+      "scope": "optional",
+      "purl": "pkg:npm/%40koromix/koffi-freebsd-arm64@3.3.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@koromix/koffi-freebsd-arm64/-/koffi-freebsd-arm64-3.3.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "2329c40cc314f69a7b11556a4305d553dc74247ecea63f0a074c1b70a81834485133d786cc9e1a8bb8b01bccbcb5d0ff63c9e2495ad54e3e562cd082bd459723"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@koromix/koffi-freebsd-ia32@3.3.3",
+      "type": "library",
+      "name": "@koromix/koffi-freebsd-ia32",
+      "version": "3.3.3",
+      "scope": "optional",
+      "purl": "pkg:npm/%40koromix/koffi-freebsd-ia32@3.3.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@koromix/koffi-freebsd-ia32/-/koffi-freebsd-ia32-3.3.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "e5be16f635fec267d69fdbc6ec3bca22b361851a4f0c0c7b6105798bd7a9511d0e831cf8b386b700fcff6de2c2be01ede1685a491adacf1198433d6814e95fa3"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@koromix/koffi-freebsd-x64@3.3.3",
+      "type": "library",
+      "name": "@koromix/koffi-freebsd-x64",
+      "version": "3.3.3",
+      "scope": "optional",
+      "purl": "pkg:npm/%40koromix/koffi-freebsd-x64@3.3.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@koromix/koffi-freebsd-x64/-/koffi-freebsd-x64-3.3.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "f8d98cae9de38b534de0f4da2da5c308a31a279165fb4fa7ac2966b6cbbfef08be7e30ab09218cac96549932093e6d6777c6797cc46359eb2256f422cbf1130e"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@koromix/koffi-linux-arm@3.3.3",
+      "type": "library",
+      "name": "@koromix/koffi-linux-arm",
+      "version": "3.3.3",
+      "scope": "optional",
+      "purl": "pkg:npm/%40koromix/koffi-linux-arm@3.3.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@koromix/koffi-linux-arm/-/koffi-linux-arm-3.3.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "2be3453b8fd2885e003424b5ca47a6dfac1b1237c124ab1a6a42ca67ee8b6da2eac8b8c71c6932e1f108822a5a73ff9726d0f86578e17b13c8563c3390efab31"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@koromix/koffi-linux-arm64@3.3.3",
+      "type": "library",
+      "name": "@koromix/koffi-linux-arm64",
+      "version": "3.3.3",
+      "scope": "optional",
+      "purl": "pkg:npm/%40koromix/koffi-linux-arm64@3.3.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@koromix/koffi-linux-arm64/-/koffi-linux-arm64-3.3.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "cbb5078f038a6e3d888c8a56b47988f0b10a5dc86276de3b93ad390c2bf9f9840c2034dbce1cff8b7cd3235911a7a11804b4c1c11911d57d4f1addee522fab29"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@koromix/koffi-linux-ia32@3.3.3",
+      "type": "library",
+      "name": "@koromix/koffi-linux-ia32",
+      "version": "3.3.3",
+      "scope": "optional",
+      "purl": "pkg:npm/%40koromix/koffi-linux-ia32@3.3.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@koromix/koffi-linux-ia32/-/koffi-linux-ia32-3.3.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "75b7297bb22b5abd7c0006c829afd1bc9f29335944a5210b5985bac2c101218c3f4532df5ea589e9df586b43562601d35be37befcdca550695e5cd52af738d0d"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@koromix/koffi-linux-loong64@3.3.3",
+      "type": "library",
+      "name": "@koromix/koffi-linux-loong64",
+      "version": "3.3.3",
+      "scope": "optional",
+      "purl": "pkg:npm/%40koromix/koffi-linux-loong64@3.3.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@koromix/koffi-linux-loong64/-/koffi-linux-loong64-3.3.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "91b2459964a80c71998318038489eebc38bc333ac769f05f43b8963793fe9c7bf6f7b6de417ac779c15f08d040a671bd776c2b844a18f841ff4dd213baf692c1"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@koromix/koffi-linux-ppc64@3.3.3",
+      "type": "library",
+      "name": "@koromix/koffi-linux-ppc64",
+      "version": "3.3.3",
+      "scope": "optional",
+      "purl": "pkg:npm/%40koromix/koffi-linux-ppc64@3.3.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@koromix/koffi-linux-ppc64/-/koffi-linux-ppc64-3.3.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "6301b18ee7581ec88367aa87e169846b01d7993699ce3899e3176371bcec547a8dbe0677373ed61b4dcfc9b79c27e0551f6bea04e9ed199d95b06fec2f4598d6"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@koromix/koffi-linux-riscv64@3.3.3",
+      "type": "library",
+      "name": "@koromix/koffi-linux-riscv64",
+      "version": "3.3.3",
+      "scope": "optional",
+      "purl": "pkg:npm/%40koromix/koffi-linux-riscv64@3.3.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@koromix/koffi-linux-riscv64/-/koffi-linux-riscv64-3.3.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "93fb71a54b0e3bf2f84dec5a8501f1a9d15198110613e83efa7a7d33978d72c1d635799acde581aeb7c1f6c8e5e9c6403faf4a6453b4b683fe64c7c35031e69d"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@koromix/koffi-linux-x64@3.3.3",
+      "type": "library",
+      "name": "@koromix/koffi-linux-x64",
+      "version": "3.3.3",
+      "scope": "optional",
+      "purl": "pkg:npm/%40koromix/koffi-linux-x64@3.3.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@koromix/koffi-linux-x64/-/koffi-linux-x64-3.3.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "008e2470d3567869b3433b0d6f44be64bfe1b781ccb437109799d816492e5543b6835ff629dbcd7a4930356869a7cd399836cb483a1166d962a07c87feff29a1"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@koromix/koffi-openbsd-arm64@3.3.3",
+      "type": "library",
+      "name": "@koromix/koffi-openbsd-arm64",
+      "version": "3.3.3",
+      "scope": "optional",
+      "purl": "pkg:npm/%40koromix/koffi-openbsd-arm64@3.3.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@koromix/koffi-openbsd-arm64/-/koffi-openbsd-arm64-3.3.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "3446d032b8b16c05929960a1e17c875ae86012a80ee2d7a05b21e825e8fb4373e6c88960c4a1d371166c8c027d0b7b1f8010cd22a3d64e3332dca3b69aa129d6"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@koromix/koffi-openbsd-ia32@3.3.3",
+      "type": "library",
+      "name": "@koromix/koffi-openbsd-ia32",
+      "version": "3.3.3",
+      "scope": "optional",
+      "purl": "pkg:npm/%40koromix/koffi-openbsd-ia32@3.3.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@koromix/koffi-openbsd-ia32/-/koffi-openbsd-ia32-3.3.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "cc6157d0ac191a6ad5ec0658d3ea28cc1a4cb90653ef24046373420d26f4ac4a8ac8ead82c13625e25c0e53f0d498de2a5a5b46fbd4be42bb428b29a6dd2d8d0"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@koromix/koffi-openbsd-x64@3.3.3",
+      "type": "library",
+      "name": "@koromix/koffi-openbsd-x64",
+      "version": "3.3.3",
+      "scope": "optional",
+      "purl": "pkg:npm/%40koromix/koffi-openbsd-x64@3.3.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@koromix/koffi-openbsd-x64/-/koffi-openbsd-x64-3.3.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "7351cc5a464f0192907ac2a3d87a80e9993560472fec3a1ce8953d6097a95c6f0aa4ae176662342f9bc44927f24a689d99ab26d39403c8b01cc039cd4afb5f44"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@koromix/koffi-win32-arm64@3.3.3",
+      "type": "library",
+      "name": "@koromix/koffi-win32-arm64",
+      "version": "3.3.3",
+      "scope": "optional",
+      "purl": "pkg:npm/%40koromix/koffi-win32-arm64@3.3.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@koromix/koffi-win32-arm64/-/koffi-win32-arm64-3.3.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "78bee05b80f6d8e05bddf8b4e2ce44973ccd93e8241846a169334c076f540cb0de3917bed2a22485c7013e8bd75b7fc846976df16ee8f17da6c940d79534980d"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@koromix/koffi-win32-ia32@3.3.3",
+      "type": "library",
+      "name": "@koromix/koffi-win32-ia32",
+      "version": "3.3.3",
+      "scope": "optional",
+      "purl": "pkg:npm/%40koromix/koffi-win32-ia32@3.3.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@koromix/koffi-win32-ia32/-/koffi-win32-ia32-3.3.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "decc3dbef42aae8e322ac3967ca79bcdf4dc74f291c0cae87465d66dfc244ec2fad4440a770b0c34a03fd1d0ded3fb9b000674c8f82cb57f3f82cf784afcdf83"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@koromix/koffi-win32-x64@3.3.3",
+      "type": "library",
+      "name": "@koromix/koffi-win32-x64",
+      "version": "3.3.3",
+      "scope": "optional",
+      "purl": "pkg:npm/%40koromix/koffi-win32-x64@3.3.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@koromix/koffi-win32-x64/-/koffi-win32-x64-3.3.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "b4b4c5d7bc25e020b03a5a354edd0d6ddbb051db83bcce9cf094b279aadc2eeea1a4d1d0a38e11177aca3768bb524c700aa5f28ae7592b4952e36d420bf4cf64"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
       "bom-ref": "@nats-io/jetstream@3.4.0",
       "type": "library",
       "name": "@nats-io/jetstream",
@@ -11847,6 +12407,34 @@
       ]
     },
     {
+      "bom-ref": "koffi@3.3.3",
+      "type": "library",
+      "name": "koffi",
+      "version": "3.3.3",
+      "scope": "required",
+      "purl": "pkg:npm/koffi@3.3.3",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/koffi/-/koffi-3.3.3.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "5d6348e1ecb1249cd1d8c6a43d9cd1dd0799d3a24e9252dbc609629f4747871fea21009bcbc96a1ecf4072ae10ec2a422a73ab0528fee9bf49e72ebdc1faf664"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
       "bom-ref": "leven@3.1.0",
       "type": "library",
       "name": "leven",
@@ -21219,6 +21807,86 @@
       ]
     },
     {
+      "ref": "@koromix/koffi-android-arm64@3.3.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "@koromix/koffi-android-x64@3.3.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "@koromix/koffi-darwin-arm64@3.3.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "@koromix/koffi-darwin-x64@3.3.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "@koromix/koffi-freebsd-arm64@3.3.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "@koromix/koffi-freebsd-ia32@3.3.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "@koromix/koffi-freebsd-x64@3.3.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "@koromix/koffi-linux-arm@3.3.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "@koromix/koffi-linux-arm64@3.3.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "@koromix/koffi-linux-ia32@3.3.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "@koromix/koffi-linux-loong64@3.3.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "@koromix/koffi-linux-ppc64@3.3.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "@koromix/koffi-linux-riscv64@3.3.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "@koromix/koffi-linux-x64@3.3.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "@koromix/koffi-openbsd-arm64@3.3.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "@koromix/koffi-openbsd-ia32@3.3.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "@koromix/koffi-openbsd-x64@3.3.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "@koromix/koffi-win32-arm64@3.3.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "@koromix/koffi-win32-ia32@3.3.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "@koromix/koffi-win32-x64@3.3.3",
+      "dependsOn": []
+    },
+    {
       "ref": "@nats-io/jetstream@3.4.0",
       "dependsOn": [
         "@nats-io/nats-core@3.4.0"
@@ -21951,10 +22619,15 @@
     {
       "ref": "@taskelith/worker-supervisor@0.0.0",
       "dependsOn": [
+        "@koromix/koffi-darwin-arm64@3.3.3",
+        "@koromix/koffi-darwin-x64@3.3.3",
+        "@koromix/koffi-linux-arm64@3.3.3",
+        "@koromix/koffi-linux-x64@3.3.3",
         "@taskelith/execution@0.0.0",
         "@taskelith/kernel@0.0.0",
         "@taskelith/testing@0.0.0",
-        "@taskelith/worker-journal@0.0.0"
+        "@taskelith/worker-journal@0.0.0",
+        "koffi@3.3.3"
       ]
     },
     {
@@ -23495,6 +24168,31 @@
     {
       "ref": "just-diff@6.0.2",
       "dependsOn": []
+    },
+    {
+      "ref": "koffi@3.3.3",
+      "dependsOn": [
+        "@koromix/koffi-android-arm64@3.3.3",
+        "@koromix/koffi-android-x64@3.3.3",
+        "@koromix/koffi-darwin-arm64@3.3.3",
+        "@koromix/koffi-darwin-x64@3.3.3",
+        "@koromix/koffi-freebsd-arm64@3.3.3",
+        "@koromix/koffi-freebsd-ia32@3.3.3",
+        "@koromix/koffi-freebsd-x64@3.3.3",
+        "@koromix/koffi-linux-arm64@3.3.3",
+        "@koromix/koffi-linux-arm@3.3.3",
+        "@koromix/koffi-linux-ia32@3.3.3",
+        "@koromix/koffi-linux-loong64@3.3.3",
+        "@koromix/koffi-linux-ppc64@3.3.3",
+        "@koromix/koffi-linux-riscv64@3.3.3",
+        "@koromix/koffi-linux-x64@3.3.3",
+        "@koromix/koffi-openbsd-arm64@3.3.3",
+        "@koromix/koffi-openbsd-ia32@3.3.3",
+        "@koromix/koffi-openbsd-x64@3.3.3",
+        "@koromix/koffi-win32-arm64@3.3.3",
+        "@koromix/koffi-win32-ia32@3.3.3",
+        "@koromix/koffi-win32-x64@3.3.3"
+      ]
     },
     {
       "ref": "leven@3.1.0",

@@ -174,6 +174,29 @@ test('an escaped descendant keeps the set unproven until it is gone', async () =
   assert.equal(outcome.kind, 'exited');
 });
 
+test('termination is proven only by two consecutive listings without the group', async () => {
+  const setup = await prepared();
+  const run = superviseLaunch(setup.supervisor);
+  await until(() => file(setup, 'handle') !== undefined);
+  let raced = false;
+  setup.fake.afterListing = () => {
+    if (raced || setup.fake.processes.some((entry) => entry.processGroupId === 500)) return;
+    raced = true;
+    // A member the empty listing missed: forked while its parent was reaped.
+    setup.fake.run({ identity: identity(502), parentPid: 1, processGroupId: 500 });
+  };
+  setup.spawner.exit(0);
+  await until(() => events(setup).length === 1);
+  assert.equal(file(setup, 'exit'), undefined);
+  setup.fake.end(502);
+  const listingsBefore = setup.fake.listings;
+  const outcome = await run;
+
+  assert.deepEqual(events(setup), [{ kind: 'survivors', processes: [identity(502)] }]);
+  assert.equal(outcome.kind, 'exited');
+  assert.ok(setup.fake.listings - listingsBefore >= 2);
+});
+
 test('a durable write that fails after the spawn is retried while the child runs', async () => {
   const setup = await prepared();
   setup.store.failing.add('handle');
