@@ -24,6 +24,7 @@ import {
   type GateState,
   type Generation,
 } from '@taskelith/sdlc';
+import { value } from '@taskelith/testing';
 
 function instant(text: string): Instant {
   const result = parseInstant(text);
@@ -75,11 +76,6 @@ function validation(verdict: string): GateEvidence {
 function platformRecord(verdict: string): GateEvidence {
   const result = parsePlatformRecord({ recorder: 'platform', verdict, subject: SUBJECT, recordedAt: LATER, reference: 'checkbox' });
   assert.ok(result.ok);
-  return result.value;
-}
-
-function value(result: ReturnType<typeof openGate>): Gate {
-  assert.ok(result.ok, !result.ok ? result.error.message : '');
   return result.value;
 }
 

@@ -23,6 +23,7 @@ import {
   type RunContext,
   type TaskAdmission,
 } from '@taskelith/sdlc';
+import { value } from '@taskelith/testing';
 
 function instant(text: string): Instant {
   const result = parseInstant(text);
@@ -96,11 +97,6 @@ function passedSpecsGate(subject: ArtifactRevision): Gate {
 
 function implementationRequest(id: string) {
   return { id, taskId: `task-${id}`, stageId: 'apply', workItem: WORK_ITEM };
-}
-
-function value<T>(result: Result<T>): T {
-  assert.ok(result.ok, result.ok ? '' : result.error.message);
-  return result.value;
 }
 
 function code<T>(result: Result<T>): string {
