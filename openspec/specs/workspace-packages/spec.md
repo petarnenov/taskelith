@@ -6,7 +6,7 @@ Define the npm workspace layout for Taskelith's product packages and how verific
 ## Requirements
 
 ### Requirement: Workspace package layout
-The root manifest SHALL declare the architecture's `packages/` paths as npm workspaces, each workspace package SHALL be private and keep its sources in `src/`, its build output in `dist/`, and its tests in `test/`, and `make verify` SHALL build and test every workspace package that exists and succeed when none exists.
+The root manifest SHALL declare the architecture's `packages/` paths and `apps/*` as npm workspaces, each workspace package SHALL be private and keep its sources in `src/`, its build output in `dist/`, and its tests in `test/`, and `make verify` SHALL build and test every workspace package that exists and succeed when none exists.
 
 #### Scenario: No workspace package exists
 - **WHEN** no directory matching a workspace pattern contains a `package.json`
@@ -19,6 +19,10 @@ The root manifest SHALL declare the architecture's `packages/` paths as npm work
 #### Scenario: A package depends on another package
 - **WHEN** a workspace package depends on another workspace package and no build output exists
 - **THEN** the build compiles the dependency first and the dependent package resolves its types
+
+#### Scenario: Runtime applications
+- **WHEN** `make verify` runs on the repository
+- **THEN** it builds, typechecks, tests, and measures the coverage of `apps/control-plane` (`@taskelith/control-plane`) and `apps/worker` (`@taskelith/worker`) like every other workspace package
 
 ### Requirement: Workspace package contract
 Before building, `make verify` SHALL check that each workspace package is private, is named `@taskelith/<directory name>`, has `type: module`, exposes one root export with types and, only for a module, an optional `./port`, declares no `imports` aliases, has a `tsconfig.json` that extends the shared `tsconfig.package.json` without overriding its layout, and references exactly the workspace packages it depends on in any dependency section, and it SHALL fail on any deviation.
@@ -36,10 +40,10 @@ Before building, `make verify` SHALL check that each workspace package is privat
 - **THEN** the contract accepts the module's entry and requires both port outputs, and fails for the other package
 
 ### Requirement: Workspace packages in the dependency inventory
-The dependency inventory SHALL treat workspace packages as first-party code: it SHALL skip their link and directory entries, reject links to anything other than a relative path under `packages/`, and still inventory packages installed inside a workspace package.
+The dependency inventory SHALL treat workspace packages as first-party code: it SHALL skip their link and directory entries, reject links to anything other than a declared workspace package directory, and still inventory packages installed inside a workspace package.
 
 #### Scenario: Workspace link in the lockfile
-- **WHEN** the lockfile links `node_modules/@taskelith/<name>` to a directory under `packages/`
+- **WHEN** the lockfile links `node_modules/@taskelith/<name>` to a declared workspace package directory under `packages/` or `apps/`
 - **THEN** the inventory omits the link and the package directory, and inventories the third-party packages installed under that directory's `node_modules`
 
 #### Scenario: Link outside the workspace
