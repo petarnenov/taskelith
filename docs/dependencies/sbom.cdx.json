@@ -4117,6 +4117,36 @@
       "externalReferences": []
     },
     {
+      "bom-ref": "@taskelith/node-observability@0.0.0",
+      "type": "library",
+      "name": "@taskelith/node-observability",
+      "version": "0.0.0",
+      "scope": "required",
+      "purl": "pkg:npm/%40taskelith/node-observability@0.0.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:private",
+          "value": "true"
+        }
+      ],
+      "externalReferences": []
+    },
+    {
+      "bom-ref": "@taskelith/observability@0.0.0",
+      "type": "library",
+      "name": "@taskelith/observability",
+      "version": "0.0.0",
+      "scope": "required",
+      "purl": "pkg:npm/%40taskelith/observability@0.0.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:private",
+          "value": "true"
+        }
+      ],
+      "externalReferences": []
+    },
+    {
       "bom-ref": "@taskelith/plugin-sdk@0.0.0",
       "type": "library",
       "name": "@taskelith/plugin-sdk",
@@ -22662,6 +22692,24 @@
         "@taskelith/execution@0.0.0",
         "@taskelith/fleet@0.0.0",
         "@taskelith/kernel@0.0.0",
+        "@taskelith/observability@0.0.0",
+        "@taskelith/sdlc@0.0.0",
+        "@taskelith/testing@0.0.0"
+      ]
+    },
+    {
+      "ref": "@taskelith/node-observability@0.0.0",
+      "dependsOn": [
+        "@taskelith/kernel@0.0.0",
+        "@taskelith/observability@0.0.0",
+        "@taskelith/sdlc@0.0.0",
+        "@taskelith/testing@0.0.0"
+      ]
+    },
+    {
+      "ref": "@taskelith/observability@0.0.0",
+      "dependsOn": [
+        "@taskelith/kernel@0.0.0",
         "@taskelith/sdlc@0.0.0",
         "@taskelith/testing@0.0.0"
       ]
@@ -22681,6 +22729,7 @@
         "@taskelith/execution@0.0.0",
         "@taskelith/fleet@0.0.0",
         "@taskelith/kernel@0.0.0",
+        "@taskelith/observability@0.0.0",
         "@taskelith/scheduling@0.0.0",
         "@taskelith/sdlc@0.0.0",
         "@taskelith/testing@0.0.0",
@@ -25835,6 +25884,8 @@
         "@taskelith/fleet@0.0.0",
         "@taskelith/kernel@0.0.0",
         "@taskelith/nats@0.0.0",
+        "@taskelith/node-observability@0.0.0",
+        "@taskelith/observability@0.0.0",
         "@taskelith/plugin-sdk@0.0.0",
         "@taskelith/postgres@0.0.0",
         "@taskelith/scheduling@0.0.0",

@@ -20,6 +20,7 @@ import {
 } from './attempt.js';
 import {
   isTerminalExecution,
+  isUnknownExecution,
   moveExecution,
   withEvidence,
   withRevokedGrants,
@@ -258,6 +259,10 @@ export function canResendAssignment(task: Task, attemptId: AttemptId): boolean {
 export function executionsUnderAssignment(task: Task, assignmentId: AssignmentId): AssignmentExecutions {
   const under = task.attempts.flatMap((attempt) => attempt.executions).filter((execution) => execution.assignmentId === assignmentId);
   return Object.freeze({ granted: under.length > 0, nonTerminal: under.some((execution) => !isTerminalExecution(execution)) });
+}
+
+export function unknownExecutionCount(task: Task): number {
+  return task.attempts.flatMap((attempt) => attempt.executions).filter(isUnknownExecution).length;
 }
 
 export function taskOutcomeFact(task: Task, attemptId: AttemptId): Result<TaskOutcomeFact> {

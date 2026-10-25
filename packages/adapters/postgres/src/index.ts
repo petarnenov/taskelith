@@ -10,6 +10,7 @@ export {
   CommittingTaskRepository,
   CommittingWorkflowRunRepository,
 } from './committing-repositories.js';
+export { PostgresControlPlaneSignals } from './control-plane-signals.js';
 export { StatementError } from './database-errors.js';
 export { PostgresFleetRegistry, PostgresInstallationTable, PostgresOperatorCredentials } from './fleet-repositories.js';
 export { NO_CRASH_POINTS, type CrashPointHook, type PostgresCrashPoint } from './crash-points.js';
@@ -20,7 +21,6 @@ export {
   SERIALIZATION_ATTEMPTS,
   SERIALIZATION_BACKOFF_MILLISECONDS,
   type PostgresDatabaseOptions,
-  type TransactionIsolation,
   type TransactionWork,
 } from './postgres-database.js';
 export { PostgresTransaction } from './postgres-transaction.js';

@@ -207,7 +207,7 @@ export class CommittingFleetRegistry implements FleetRegistry {
   }
 
   publishRevocations(push: (revocations: readonly BrokerRevocation[]) => Promise<Result<void>>): Promise<Result<number>> {
-    return this.#database.transaction((tx) => tx.fleet.publishRevocations(push), 'read-committed');
+    return this.#database.readCommitted((tx) => tx.fleet.publishRevocations(push));
   }
 }
 

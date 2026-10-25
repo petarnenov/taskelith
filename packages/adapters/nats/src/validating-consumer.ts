@@ -1,6 +1,8 @@
 import type { Consumer, JetStreamClient, JsMsg } from '@nats-io/jetstream';
 import { err, failure, type Result } from '@taskelith/kernel';
+import { measurement, NO_METRICS, SILENT_LOGGER, type Logger, type Metrics } from '@taskelith/observability';
 import { abortableDelay } from './abortable-delay.js';
+import { correlationOf } from './message-correlation.js';
 import type { TransportAddress } from './transport-address.js';
 import { retryDelayMilliseconds, TRANSPORT_LIMITS, type TransportLimits } from './transport-limits.js';
 import {
@@ -24,6 +26,9 @@ type MessageReader = (data: Uint8Array) => Result<WireMessage, Malformed>;
 export interface ConsumerOptions {
   readonly limits?: TransportLimits;
   readonly fetchExpiresMilliseconds?: number;
+  readonly metrics?: Metrics;
+  readonly logger?: Logger;
+  readonly now?: () => number;
 }
 
 const DEFAULT_FETCH_EXPIRES_MILLISECONDS = 5000;
@@ -55,6 +60,10 @@ export class ValidatingConsumer {
     return this.#options.limits ?? TRANSPORT_LIMITS;
   }
 
+  get #logger(): Logger {
+    return this.#options.logger ?? SILENT_LOGGER;
+  }
+
   // Looks the consumer up once, and again only after a failed pull.
   async run(signal: AbortSignal): Promise<void> {
     let failedPulls = 0;
@@ -64,10 +73,11 @@ export class ValidatingConsumer {
         consumer ??= await this.#js.consumers.get(this.#stream, this.#durable);
         await this.#pull(consumer, signal);
         failedPulls = 0;
-      } catch {
+      } catch (error) {
         // A lost connection or a denied pull; the next pull retries.
         consumer = undefined;
         failedPulls += 1;
+        this.#logger.warn('nats.pull.failed', { stream: this.#stream, consumer: this.#durable, failedPulls, cause: causeOf(error) });
         await abortableDelay(retryDelayMilliseconds(failedPulls, this.#limits), signal);
       }
     }
@@ -96,14 +106,32 @@ export class ValidatingConsumer {
   async #settle(message: JsMsg): Promise<void> {
     const read = this.#read(message.data);
     if (!read.ok) {
+      this.#logger.warn('nats.message.quarantined', { subject: message.subject, reason: read.error });
       message.term(read.error);
       return;
     }
     const deliveryCount = message.info.deliveryCount;
     const delivered = { ...read.value, subject: message.subject, deliveryCount };
     const handled = await whileWorking(message, this.#limits, () => this.#handleSafely(delivered));
-    if (handled.ok) message.ack();
-    else message.nak(retryDelayMilliseconds(deliveryCount, this.#limits));
+    if (handled.ok) {
+      message.ack();
+      this.#recordLag(message);
+      return;
+    }
+    const delay = retryDelayMilliseconds(deliveryCount, this.#limits);
+    this.#logger.with(correlationOf(delivered)).warn('nats.message.redelivered', {
+      subject: message.subject, type: delivered.type, deliveryCount, delayMilliseconds: delay,
+      code: handled.error.code, message: handled.error.message,
+    });
+    message.nak(delay);
+  }
+
+  // From the stream's append to the receiver's commit, in seconds.
+  #recordLag(message: JsMsg): void {
+    const appendedAt = Number(message.timestampNanos / 1_000_000n);
+    const now = (this.#options.now ?? Date.now)();
+    const labels = { stream: this.#stream, consumer: this.#durable };
+    (this.#options.metrics ?? NO_METRICS).record(measurement('inbox.lag', Math.max(0, now - appendedAt) / 1000, labels));
   }
 
   // A handler that throws has not committed, like one that returns an error.
@@ -111,8 +139,7 @@ export class ValidatingConsumer {
     try {
       return await this.#handle(message);
     } catch (error) {
-      const cause = error instanceof Error ? error.message : String(error);
-      return err(failure('internal', 'the message handler threw', { cause }));
+      return err(failure('internal', 'the message handler threw', { cause: causeOf(error) }));
     }
   }
 }
@@ -148,4 +175,8 @@ async function whileWorking<T>(message: JsMsg, limits: TransportLimits, work: ()
   } finally {
     clearInterval(heartbeat);
   }
+}
+
+function causeOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

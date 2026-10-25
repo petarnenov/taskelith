@@ -48,3 +48,17 @@ These provisional objectives govern the progressive validation gates in `docs/ar
 | **1000 machines** (G7 scale) | 1000 enrolled workers across partitioned pools, up to 1000 concurrent active attempts, 2,500 events/s aggregate, throttled reconnect storm after 30-minute partition. | Command dispatch `p95 <= 5s`; launch authorization `p95 <= 1s`; reconnect-storm stabilization and outbox drain within `<= 15m` without exhausting DB connections or event-loop lag (`p99 <= 200ms`). | **RPO:** `<= 5m`. **RTO:** `<= 30m` for partitioned pool reconciliation and projection catch-up. |
 
 Neo4j Community Edition and local embedding services remain advisory to task execution at all stages: an outage or rebuild of the graph must degrade context enrichment gracefully within the `2s` retrieval timeout without blocking SDLC gates, launch authorization, or task completion (`Invariant 9`, `R10`).
+
+## 4. Observability signals
+
+Provisional, G2 item 22: the signals of `docs/architecture.md` section 12 that G2 produces, each with the target above that it watches. A sampler reads the control-plane signals and the event-loop delay every `15s`; the event-loop histogram resolves `20ms`. Logs are JSON lines with command and attempt correlation; field names that may hold a secret, and credentials inside text, are redacted. Dashboards, alerting, and an exporter are later work, and G6 verifies the values.
+
+| Signal | Unit and source | Target it watches |
+| --- | --- | --- |
+| `outbox.lag`, `outbox.pending` | Seconds since the oldest unpublished row was appended, and the count of unpublished rows (PostgreSQL) | Outbox drain within `15 min` at 1000 machines; a full worker subject keeps rows in the outbox (section 2). |
+| `inbox.lag` | Seconds from the JetStream append to the receiver's commit, per stream and consumer (each receiver) | Command dispatch-to-worker inbox `p95 <= 2s / 3s / 5s` (section 3). |
+| `assignment.age`, `assignment.offered` | Seconds since the oldest assignment still offered was offered, and the count (PostgreSQL) | Supersession after `2 min` unacknowledged, `10 min` under admission pressure (section 1). |
+| `execution.unknown` | Executions not terminal that carry uncertain, termination-unproven, or local-history-lost evidence (PostgreSQL) | Uncertain attempts keep their slots until reconciled; `0` automatic retries for them (section 1). |
+| `worker.capacity.slots`, `worker.capacity.held` | Slots of the workers eligible for placement, and held reservations (PostgreSQL) | Worker concurrent active attempts, `default: 2` (section 1). |
+| `event-loop.lag` | p99 event-loop delay of each process over the sample window | `p99 > 200ms` pauses new launch authorizations on a worker (section 1); `p99 <= 200ms` during the 1000-machine drain (section 3). |
+| `database.latency` | Seconds of each transaction attempt, its connection checkout included | Launch authorization `p95 <= 500ms` at 10 machines (section 3). |

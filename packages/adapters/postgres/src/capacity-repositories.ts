@@ -39,7 +39,7 @@ interface WorkerRow {
 
 // The columns placement reads; item 13 may add others to the table.
 const WORKER_COLUMNS = 'worker_id, enrolled, revoked, draining, reachable, admission_pressure_since, slots, cpu_millicores, memory_mebibytes, controls';
-const ELIGIBLE = 'enrolled AND NOT revoked AND NOT draining AND reachable AND admission_pressure_since IS NULL';
+export const ELIGIBLE = 'enrolled AND NOT revoked AND NOT draining AND reachable AND admission_pressure_since IS NULL';
 
 export class PostgresPlacementWorkers implements PlacementWorkers {
   readonly #session: Session;
