@@ -23,7 +23,7 @@ macOS (Darwin 25.6.0, x86_64), Node v24.22.1 through `nvm use`, npm 12.2.1; inst
 
 ## Checks
 
-In the worktree, Node v24.22.1, npm 12.2.1, on the working tree committed as the change's first commit: `npm run openspec -- validate align-protocol-commit-types --strict` passed; `make verify` passed (572 tests passed, 0 failed; coverage 99.18% lines, 94.35% branches, 99.24% functions; strict OpenSpec validation 46 passed; archive dry run, dependency inventory check, and package verification passed). After the pass-1 fixes, `make verify` passed again with 572 tests, and again after the pass-2 fixes.
+In the worktree, Node v24.22.1, npm 12.2.1, on the working tree committed as the change's first commit: `npm run openspec -- validate align-protocol-commit-types --strict` passed; `make verify` passed (572 tests passed, 0 failed; coverage 99.18% lines, 94.35% branches, 99.24% functions; strict OpenSpec validation 46 passed; archive dry run, dependency inventory check, and package verification passed). After the pass-1 fixes, `make verify` passed again with 572 tests, and again after the pass-2 and pass-3 fixes.
 
 ## Independent review
 
@@ -31,9 +31,12 @@ Assigned reviewer: Codex CLI, `codex exec -m gpt-6.1-sol -c model_reasoning_effo
 
 - **Pass 1 — session `01a170ef-cc59-7ae0-9f6d-a7db188b9832`**, at `5a06a5f`. The output header reports model `gpt-6.1-sol`, reasoning effort medium, and sandbox read-only. Snapshot before and after: `d953f6ebcfe1ed9c4e7f3ddf6d3022b0edc60e894d4239a86d7e00c95d3d4282`, unchanged. The reviewer found `skip_specs` justified. Findings: 0 Critical, 0 High, 1 Medium, 1 Low.
   1. Medium: the revert row was unconditional, but the analyzer first drops a revert together with the commit it reverts when both are in range. `docs/releases.md` now states the pair filtering below the table, the protocol says these types "can" trigger a release, and the design describes the filter. Pass 2 found this description still too broad (see below).
+  2. Low: the design described the revert pattern as exactly two header forms; it now describes the case-insensitive pattern, and the table gives the forms as examples.
 - **Pass 2 — session `01a170f1-ffe5-7563-8e24-851b46d1af13`**, at `f41a07a`. The output header reports model `gpt-6.1-sol`, reasoning effort medium, and sandbox read-only. Snapshot before and after: `dd8bd1490ce81197371d24f9cdd57edcab9c0ab0f07c2ef1911b97b1c3e51db2`, unchanged. The reviewer confirmed the pass-1 Low as resolved and the Medium as partly resolved. Findings: 0 Critical, 0 High, 1 Medium, 0 Low.
   1. Medium: being in the same range does not suffice: the filter drops the pair only when the revert's extracted header and hash match the reverted commit's exactly, so a `revert: add project creation` does not cancel `feat: add project creation`. `docs/releases.md`, the design, and this record now state that condition, as `git revert` writes it.
-  2. Low: the design described the revert pattern as exactly two header forms; it now describes the case-insensitive pattern, and the table gives the forms as examples.
+- **Pass 3 — session `01a170f4-0501-7743-9ec8-9b306a19a71f`**, at `41284c1`, the last pass the process allows. The output header reports model `gpt-6.1-sol`, reasoning effort medium, and sandbox read-only. Snapshot before and after: `a6b2ed9c7cff16487b0cdb67f6823b3a0dd57c78ae48506d0ce2cee010fc4867`, unchanged. The reviewer confirmed the pass-2 finding as resolved. Findings: 0 Critical, 0 High, 1 Medium, 1 Low.
+  1. Medium, **unreviewed fix**: `docs/releases.md` said any other revert counts as a patch, but a recognized revert that also carries a `BREAKING CHANGE:` footer is major, because the analyzer takes the highest matching rule. The sentence now says any remaining recognized revert triggers at least a patch and a breaking change takes precedence. Because a Medium finding remained after the third pass, the coordinator (Niki) obtained a decision from a Fable 5.1 medium subagent acting under the owner's delegation of 2026-10-25, which chose this fix without another review (option A). This is a **delegated decision**, not the owner's own.
+  2. Low, **unreviewed fix**: the pass-1 Low was recorded under pass 2; it now sits under pass 1.
 
 ## Limitations
 
@@ -41,4 +44,4 @@ The `perf:` and revert rows are confirmed by the scratch run, not by the reposit
 
 ## Remaining gates
 
-Independent review; integration by the coordinating session (pull request into `dev`, merge); archival.
+Integration by the coordinating session (pull request into `dev`, merge); archival.
