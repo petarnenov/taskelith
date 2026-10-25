@@ -41,7 +41,7 @@ function readTsconfig(path: string): Record<string, any> {
   return config;
 }
 
-function workspaceDependencies(manifest: Record<string, any>): string[] {
+export function workspaceDependencies(manifest: Record<string, any>): string[] {
   const names = [manifest.dependencies, manifest.devDependencies, manifest.peerDependencies, manifest.optionalDependencies]
     .flatMap((group) => Object.keys(group ?? {}))
     .filter((name) => name.startsWith(PACKAGE_SCOPE));

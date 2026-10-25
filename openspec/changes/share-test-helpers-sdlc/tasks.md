@@ -6,5 +6,5 @@
 
 ## 2. Verification and review
 
-- [ ] 2.1 Run `make verify` and the OpenSpec strict validation.
-- [ ] 2.2 Obtain independent review (assigned Claude Fable 5.1 medium by rotation) and record results.
+- [x] 2.1 Run `make verify` and the OpenSpec strict validation.
+- [x] 2.2 Obtain independent review (assigned Claude Fable 5.1 medium by rotation) and record results.
