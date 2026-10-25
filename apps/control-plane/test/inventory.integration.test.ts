@@ -378,6 +378,31 @@ describe('pending snapshots and their rollback check', () => {
     assert.deepEqual([await pendingParts(), (await offersOf(at)).length], [['report-4.1'], 1]);
   });
 
+  test('a report whose parts disagree is deleted without effect and logged', async () => {
+    await readyWorker();
+    const at = await placed('task-1');
+    value(await report({ reportId: 'report-1', snapshot: 1, throughSequence: 1, parts: 2 }));
+    assert.equal(value(await report({ reportId: 'report-1', snapshot: 1, throughSequence: 1, parts: 3, part: 2 })), 'applied');
+    assert.deepEqual([await pendingParts(), (await offersOf(at)).length], [[], 1]);
+    assert.deepEqual(warnings('execution.inventory.refused'), [
+      { workerId: WORKER, journalId: JOURNAL, reportId: 'report-1', reason: 'inconsistent-parts' },
+    ]);
+  });
+
+  test('incomplete answers to repeated requests keep only the current one and the newest that is not fresh', async () => {
+    await enroll();
+    for (let snapshot = 1; snapshot <= 10; snapshot += 1) {
+      await inventory.requestAll([WORKER as WorkerId]);
+      const requestId = (await currentRequest())!.request_id;
+      value(await report({ reportId: `report-${snapshot}`, snapshot, throughSequence: 0, parts: 2, requestId }));
+    }
+    assert.deepEqual(await pendingParts(), ['report-10.1']);
+    await inventory.requestAll([WORKER as WorkerId]);
+    assert.deepEqual(await pendingParts(), ['report-10.1'], 'no longer fresh, but the newest');
+    value(await report({ reportId: 'report-11', snapshot: 11, throughSequence: 0, parts: 2 }));
+    assert.deepEqual(await pendingParts(), ['report-11.1']);
+  });
+
   test('a fresh snapshot below its bound retires the journal and is not applied', async () => {
     await readyWorker();
     const at = await placed('task-1');
@@ -521,6 +546,28 @@ describe('journal incarnations', () => {
     const task = await stored(granted.taskId);
     assert.deepEqual([executionOf(task).state, executionOf(task).evidence.map(({ kind }) => kind)], ['authorized', ['local-history-lost']]);
     assert.deepEqual([(await assignmentOf(granted)).reservation.state, (await workerRow()).reachable], ['held', true]);
+  });
+
+  test('an acceptance derived again under a new incarnation fills its sequence, so a snapshot through it applies', async () => {
+    await readyWorker();
+    const at = await placed('task-1');
+    const acceptance = (journalId: string, sequence: number) => observe('execution.assignment.accepted', {
+      sequence, journalId, observationId: 'acceptance-1', ...attemptOf(at),
+    }, { commandId: at.assignment.offerCommandId, assignmentId: at.assignment.id });
+    value(await acceptance(JOURNAL, 2));
+    value(await declare(1, NEW_JOURNAL));
+    assert.equal((await offersOf(at)).length, 2, 'the offer is sent again');
+    assert.equal(value(await acceptance(NEW_JOURNAL, 2)), 'duplicate');
+    value(await pressure(3, { journalId: NEW_JOURNAL }));
+    const [cursor] = await sql<{ confirmed_through: string; applied_above: unknown }>(
+      'SELECT confirmed_through, applied_above FROM producer_cursors WHERE journal_id = $1', [NEW_JOURNAL]);
+    assert.deepEqual([Number(cursor!.confirmed_through), cursor!.applied_above], [3, []]);
+    const confirmed = (await outbox('execution.observations.confirmed')).map((row) => JSON.parse(row.message).payload);
+    assert.deepEqual(confirmed.filter((payload) => payload.journalId === NEW_JOURNAL).map((payload) => payload.confirmedThrough), [1, 2, 3]);
+    value(await report({ reportId: 'report-1', snapshot: 1, throughSequence: 3, journalId: NEW_JOURNAL }));
+    assert.deepEqual([await pendingParts(), (await offersOf(at)).length], [[], 3], 'applied: the omitted offer is sent again');
+    assert.equal(value(await acceptance(NEW_JOURNAL, 2)), 'duplicate');
+    assert.equal((await outbox('execution.observations.confirmed')).length, confirmed.length + 1, 'a true repeat confirms again');
   });
 
   test('the first declaration of a new incarnation applies below the previous journal\'s fences', async () => {

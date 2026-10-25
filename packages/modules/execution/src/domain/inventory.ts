@@ -69,12 +69,17 @@ export interface InventoryRequest {
 // worker had not received yet.
 export type OmissionClass = 'lost-local-history' | 'unclassified';
 
-// The snapshot once every part from 1 to `parts` is present, else undefined.
-export function assembleSnapshot(parts: readonly InventoryPart[]): InventorySnapshot | undefined {
+// `inconsistent`: its parts disagree on a field every part repeats, or one
+// lies outside 1 to `parts`; such a report can never be applied.
+export type SnapshotAssembly = InventorySnapshot | 'incomplete' | 'inconsistent';
+
+// The snapshot once every part from 1 to `parts` is present.
+export function assembleSnapshot(parts: readonly InventoryPart[]): SnapshotAssembly {
   const [first] = parts;
-  if (first === undefined) return undefined;
-  const numbers = new Set(parts.map((each) => each.part));
-  for (let part = 1; part <= first.parts; part += 1) if (!numbers.has(part)) return undefined;
+  if (first === undefined) return 'incomplete';
+  const common = commonFieldsOf(first);
+  if (parts.some((each) => commonFieldsOf(each) !== common || each.part < 1 || each.part > first.parts)) return 'inconsistent';
+  if (new Set(parts.map((each) => each.part)).size < first.parts) return 'incomplete';
   return Object.freeze({
     reportId: first.reportId,
     workerId: first.workerId,
@@ -84,6 +89,41 @@ export function assembleSnapshot(parts: readonly InventoryPart[]): InventorySnap
     throughSequence: first.throughSequence,
     assignmentIds: new Set(parts.flatMap((each) => each.assignments.map((assignment) => assignment.assignmentId))),
   });
+}
+
+function commonFieldsOf({ reportId, parts, workerId, journalId, requestId, snapshot, throughSequence }: InventoryPart): string {
+  return JSON.stringify([reportId, parts, workerId, journalId, requestId ?? null, snapshot, throughSequence]);
+}
+
+// What decides which pending reports survive: the current request, the
+// journal's highest received `snapshot`, and the report that wins a tie.
+export interface ReportFreshness {
+  readonly requestId: string | undefined;
+  readonly reportedSnapshot: number;
+  readonly preferred?: string;
+}
+
+// Of the reports that are not fresh, only the newest survives, and only
+// while it is not below the journal's highest received `snapshot`.
+export function supersededReports(pending: readonly InventoryPart[], freshness: ReportFreshness): ReadonlySet<string> {
+  const stale = new Map<string, number>();
+  for (const part of pending) if (!isFreshReport(part, freshness.requestId)) stale.set(part.reportId, part.snapshot);
+  const newest = newestReport(stale, freshness.preferred);
+  const superseded = [...stale].filter(([reportId, snapshot]) => reportId !== newest || snapshot < freshness.reportedSnapshot);
+  return new Set(superseded.map(([reportId]) => reportId));
+}
+
+// A report is fresh when it answers the worker's current request.
+export function isFreshReport(report: { readonly requestId?: string }, currentRequestId: string | undefined): boolean {
+  return report.requestId !== undefined && report.requestId === currentRequestId;
+}
+
+// The highest `snapshot`; a tie goes to `preferred`, else the last report.
+function newestReport(snapshots: ReadonlyMap<string, number>, preferred: string | undefined): string | undefined {
+  const preference = (reportId: string) => (reportId === preferred ? 1 : 0);
+  const ranked = [...snapshots].sort(([leftId, left], [rightId, right]) =>
+    left - right || preference(leftId) - preference(rightId) || (leftId < rightId ? -1 : 1));
+  return ranked.at(-1)?.[0];
 }
 
 // The larger of the confirmed prefix and the highest sequence above it.

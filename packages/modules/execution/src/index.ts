@@ -89,7 +89,9 @@ export {
   assembleSnapshot,
   classifyOmission,
   highestAppliedSequence,
+  isFreshReport,
   isRolledBack,
+  supersededReports,
   type AcceptanceProvenance,
   type InventoryPart,
   type InventoryRequest,
@@ -98,6 +100,8 @@ export {
   type OmissionClass,
   type ReportedAssignment,
   type ReportedExecution,
+  type ReportFreshness,
+  type SnapshotAssembly,
 } from './domain/inventory.js';
 export { planJournalRecovery, type RecoveryAction } from './domain/journal-recovery.js';
 export {

@@ -4,10 +4,12 @@ import {
   assembleSnapshot,
   classifyOmission,
   highestAppliedSequence,
+  isFreshReport,
   isRolledBack,
   parseSequence,
   recordAppliedSequence,
   startProducerCursor,
+  supersededReports,
   type AssignmentId,
   type InventoryPart,
   type InventorySnapshot,
@@ -34,15 +36,49 @@ function snapshot(throughSequence: number, assignmentIds: string[] = []): Invent
 }
 
 test('a snapshot is assembled only once every part is present', () => {
-  assert.equal(assembleSnapshot([]), undefined);
-  assert.equal(assembleSnapshot([part(2, ['assignment-2'])]), undefined);
+  assert.equal(assembleSnapshot([]), 'incomplete');
+  assert.equal(assembleSnapshot([part(2, ['assignment-2'])]), 'incomplete');
   const assembled = assembleSnapshot([part(2, ['assignment-2']), part(1, ['assignment-1'])]);
   assert.deepEqual(assembled, {
     reportId: 'report-1', workerId: WORKER, journalId: JOURNAL, requestId: 'request-1', snapshot: 3, throughSequence: 6,
     assignmentIds: new Set(['assignment-2', 'assignment-1']),
   });
   const { requestId: _none, ...unsolicited } = part(1, [], 1);
-  assert.equal(assembleSnapshot([unsolicited])?.requestId, undefined);
+  assert.equal((assembleSnapshot([unsolicited]) as InventorySnapshot).requestId, undefined);
+});
+
+test('parts that disagree on a common field, or lie outside their count, are inconsistent', () => {
+  assert.equal(assembleSnapshot([part(1, []), part(2, [], 3)]), 'inconsistent', 'a third part is missing');
+  assert.equal(assembleSnapshot([part(1, []), part(3, [])]), 'inconsistent');
+  assert.equal(assembleSnapshot([part(0, [], 1)]), 'inconsistent');
+  const changes: Partial<InventoryPart>[] = [
+    { journalId: EARLIER }, { snapshot: 4 }, { throughSequence: 7 }, { requestId: 'request-2' }, { workerId: 'worker-2' as WorkerId },
+  ];
+  for (const change of changes) assert.equal(assembleSnapshot([part(1, []), { ...part(2, []), ...change }]), 'inconsistent', JSON.stringify(change));
+  const { requestId: _none, ...unsolicited } = part(2, []);
+  assert.equal(assembleSnapshot([part(1, []), unsolicited]), 'inconsistent', 'one part without the request');
+});
+
+function report(reportId: string, snapshot: number, requestId?: string): InventoryPart {
+  const { requestId: _none, ...unsolicited } = { ...part(1, [], 1), reportId, snapshot };
+  return requestId === undefined ? unsolicited : { ...unsolicited, requestId };
+}
+
+test('of the reports that are not fresh only the newest survives, while not below the highest snapshot', () => {
+  const pending = [report('report-a', 2), report('report-b', 3), report('report-c', 1, 'request-1'), report('report-d', 5, 'request-2')];
+  assert.deepEqual(supersededReports(pending, { requestId: 'request-2', reportedSnapshot: 5 }), new Set(['report-a', 'report-b', 'report-c']));
+  assert.deepEqual(supersededReports(pending, { requestId: 'request-1', reportedSnapshot: 5 }), new Set(['report-a', 'report-b']));
+  assert.deepEqual(supersededReports(pending.slice(0, 2), { requestId: undefined, reportedSnapshot: 3 }), new Set(['report-a']));
+  const tied = [report('report-a', 3), report('report-b', 3)];
+  assert.deepEqual(supersededReports(tied, { requestId: undefined, reportedSnapshot: 3 }), new Set(['report-a']), 'the last wins a tie');
+  assert.deepEqual(supersededReports(tied, { requestId: undefined, reportedSnapshot: 3, preferred: 'report-a' }), new Set(['report-b']));
+  assert.deepEqual(supersededReports([], { requestId: undefined, reportedSnapshot: 0 }), new Set());
+});
+
+test('a report is fresh only when it answers the current request', () => {
+  assert.equal(isFreshReport({ requestId: 'request-1' }, 'request-1'), true);
+  assert.equal(isFreshReport({ requestId: 'request-1' }, 'request-2'), false);
+  assert.equal(isFreshReport({}, undefined), false);
 });
 
 test('the highest applied sequence counts the sequences above a gap', () => {

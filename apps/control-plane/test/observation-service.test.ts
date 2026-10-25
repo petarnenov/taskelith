@@ -125,6 +125,42 @@ test('a duplicate within the confirmed prefix confirms it again under a new iden
   assert.deepEqual(await transaction.cursors.get(WORKER, JOURNAL as never), cursor);
 });
 
+test('a known identity at a new journal\'s next sequence advances its cursor without its effect', async () => {
+  const { service, transaction, outbox } = await fixture();
+  value(await service.apply(message('worker.capacity.declared', 1, DECLARATION)));
+  value(await service.apply(message('worker.admission-pressure.changed', 2, { causes: [] }, { observationId: 'pressure-x' })));
+  value(await service.apply(message('worker.admission-pressure.changed', 1, { causes: ['disk-floor'] }, { journalId: 'journal-2' })));
+  const again = message('worker.admission-pressure.changed', 2, { causes: [] }, { observationId: 'pressure-x', journalId: 'journal-2' });
+  assert.equal(value(await service.apply(again)), 'duplicate');
+  assert.deepEqual(await transaction.workers.candidates(), [], 'its effect is not applied again');
+  assert.deepEqual(await transaction.cursors.get(WORKER, 'journal-2' as never), {
+    workerId: WORKER, journalId: 'journal-2', confirmedThrough: 2, appliedAbove: [],
+  });
+  assert.deepEqual(confirmed(outbox), [1, 2, 1, 2]);
+  assert.equal(value(await service.apply(again)), 'duplicate');
+  assert.deepEqual(confirmed(outbox), [1, 2, 1, 2, 2], 'a true repeat confirms the prefix again');
+});
+
+test('a journal replaced between finding a rollback and retiring it keeps the new incarnation reachable', async () => {
+  const logs = new InMemoryLogSink();
+  const { service: plain, store, transaction } = await fixture();
+  const service = new ObservationService(store, { newConfirmationId: () => 'confirmation-y', newRequestId: () => 'request-y', logger: new Logger(logs, { now: () => AT }) });
+  value(await service.apply(message('worker.capacity.declared', 1, DECLARATION)));
+  const open = store.transaction;
+  let opened = 0;
+  (store as { transaction: ControlPlaneStore['transaction'] }).transaction = async (work) => {
+    opened++;
+    if (opened === 2) value(await plain.apply(message('worker.capacity.declared', 1, DECLARATION, { journalId: 'journal-2' })));
+    return open(work);
+  };
+  assert.equal(failed(await service.apply(message('worker.capacity.declared', 1, DECLARATION))).details.reason, 'not-consumed');
+  assert.equal(opened, 3, 'the rollback, the replacement, and the retirement');
+  assert.equal((await transaction.workers.get(WORKER))?.reachable, true);
+  assert.equal(value(await transaction.fleet.worker(WORKER))?.journalId, 'journal-2');
+  assert.equal((await transaction.cursors.listByWorker(WORKER)).find(({ cursor }) => cursor.journalId === JOURNAL)?.retiredAt, AT);
+  assert.deepEqual(logs.records.filter((record) => record.event === 'execution.journal.retired'), []);
+});
+
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 
 interface PlacedAttempt {

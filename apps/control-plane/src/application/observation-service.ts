@@ -74,7 +74,7 @@ export class ObservationService {
     if (!authentic.ok) return authentic;
     const inbox = await tx.inbox.accept(OBSERVATION_CONSUMER, observation.messageId);
     if (!inbox.ok) return inbox;
-    if (inbox.value === 'duplicate') return this.#confirmAgain(tx, observation);
+    if (inbox.value === 'duplicate') return this.#recordKnown(tx, context, observation);
     const { workerId, journalId } = observation.position;
     const cursor = await tx.cursors.get(workerId, journalId);
     // The inbox ran first, so an applied sequence here has a new identity.
@@ -82,24 +82,27 @@ export class ObservationService {
     if (!sequenceClass.ok) return sequenceClass;
     if (sequenceClass.value === 'rollback') return err(failure('conflict', 'the sequence is a rollback', { reason: ROLLBACK_FOUND }));
     if (sequenceClass.value !== 'new') return notConsumed(`its sequence is a ${sequenceClass.value}`);
-    const at = await tx.now();
-    const contact = await tx.reports.recordContact(workerId, at);
-    if (!contact.ok) return contact;
-    const effected = await effect(tx, observation, at, context.log);
-    if (!effected.ok) return effected;
-    const advanced = await advanceCursor(tx, observation, cursor, at);
-    if (!advanced.ok) return advanced;
-    if (!advanced.value) return ok(outcome);
-    const evaluated = await evaluateSnapshots(tx, workerId, journalId, context);
-    return evaluated.ok ? ok(outcome) : evaluated;
+    const recorded = await recordPosition(tx, context, observation, cursor, effect);
+    return recorded.ok ? ok(outcome) : recorded;
+  }
+
+  // 21c decision 2: a known identity at a sequence new to its journal is a
+  // fact derived again, whose position is recorded without its effect.
+  async #recordKnown(tx: ControlPlaneTransaction, context: ReconciliationContext, observation: Observation): Promise<Result<ObservationOutcome>> {
+    const { workerId, journalId, observationId } = observation.position;
+    const cursor = await tx.cursors.get(workerId, journalId);
+    // No identity is kept per sequence, so a known one there is a repeat.
+    const sequenceClass = classifyObservation(cursor, observation.position, observationId);
+    if (!sequenceClass.ok) return sequenceClass;
+    if (sequenceClass.value === 'duplicate') return this.#confirmAgain(tx, observation, cursor);
+    const recorded = await recordPosition(tx, context, observation, cursor, NO_EFFECT);
+    return recorded.ok ? ok('duplicate') : recorded;
   }
 
   // Decision 7: a duplicate within the confirmed prefix means that the
   // worker may have lost its confirmation, so the prefix is sent again.
-  async #confirmAgain(tx: ControlPlaneTransaction, observation: Observation): Promise<Result<ObservationOutcome>> {
-    const { workerId, journalId, sequence } = observation.position;
-    const cursor = await tx.cursors.get(workerId, journalId);
-    if (sequence > cursor.confirmedThrough) return ok('duplicate');
+  async #confirmAgain(tx: ControlPlaneTransaction, observation: Observation, cursor: ProducerCursor): Promise<Result<ObservationOutcome>> {
+    if (observation.position.sequence > cursor.confirmedThrough) return ok('duplicate');
     const sent = await appendConfirmation(tx, observation, cursor, { eventId: this.#newConfirmationId(), at: await tx.now() });
     return sent.ok ? ok('duplicate') : sent;
   }
@@ -114,8 +117,7 @@ export class ObservationService {
   // 21c decision 3: the retirement commits on its own, and the observation
   // is not consumed.
   async #retire(observation: Observation): Promise<Result<never>> {
-    const { workerId, journalId } = observation.position;
-    const retired = await this.#transaction('committed', (tx, context) => retireJournal(tx, workerId, journalId, 'sequence-rollback', context));
+    const retired = await this.#transaction('committed', (tx, context) => retireRolledBack(tx, observation, context));
     return retired.ok ? notConsumed('its sequence is a rollback, which retired its journal') : retired;
   }
 
@@ -144,6 +146,34 @@ export class ObservationService {
 async function recordContactOf(tx: ControlPlaneTransaction, context: ReconciliationContext, observation: Observation): Promise<Result<void>> {
   const authentic = await authenticateProducer(tx, producerOf(observation), context);
   return authentic.ok ? tx.reports.recordContact(observation.position.workerId, await tx.now()) : authentic;
+}
+
+// A replacement committed since the rollback was found already retired the
+// journal; the new incarnation's reachability is left alone.
+async function retireRolledBack(tx: ControlPlaneTransaction, observation: Observation, context: ReconciliationContext): Promise<Result<void>> {
+  const { workerId, journalId } = observation.position;
+  const worker = await tx.fleet.worker(workerId);
+  if (!worker.ok) return worker;
+  if (worker.value?.journalId !== journalId) return ok(undefined);
+  const sequenceClass = classifyObservation(await tx.cursors.get(workerId, journalId), observation.position);
+  if (!sequenceClass.ok) return sequenceClass;
+  return sequenceClass.value === 'rollback' ? retireJournal(tx, workerId, journalId, 'sequence-rollback', context) : ok(undefined);
+}
+
+// First contact, the effect, and the cursor; then the pending snapshots,
+// once the confirmed prefix grew.
+async function recordPosition(
+  tx: ControlPlaneTransaction, context: ReconciliationContext, observation: Observation, cursor: ProducerCursor, effect: ObservationEffect,
+): Promise<Result<void>> {
+  const { workerId, journalId } = observation.position;
+  const at = await tx.now();
+  const contact = await tx.reports.recordContact(workerId, at);
+  if (!contact.ok) return contact;
+  const effected = await effect(tx, observation, at, context.log);
+  if (!effected.ok) return effected;
+  const advanced = await advanceCursor(tx, observation, cursor, at);
+  if (!advanced.ok) return advanced;
+  return advanced.value ? evaluateSnapshots(tx, workerId, journalId, context) : ok(undefined);
 }
 
 function producerOf(observation: Observation) {
