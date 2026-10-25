@@ -61,17 +61,31 @@ export interface Delivery {
   readonly streamSequence: number;
   readonly deliveryCount: number;
   readonly redelivered: boolean;
-  readonly elapsedMs: number;
+  readonly receivedAt: number;
 }
 
-export function toDelivery(message: JsMsg, startedAt: number): Delivery {
+export function toDelivery(message: JsMsg): Delivery {
   return {
     body: message.string(),
     streamSequence: message.seq,
     deliveryCount: message.info.deliveryCount,
     redelivered: message.info.redelivered,
-    elapsedMs: Math.round(performance.now() - startedAt),
+    receivedAt: performance.now(),
   };
+}
+
+export function millisecondsSince(start: number, end = performance.now()): number {
+  return Math.round(end - start);
+}
+
+// Polls until a condition holds, so a server-side timer needs no fixed sleep.
+export async function waitFor(condition: () => Promise<boolean>, timeoutMs: number): Promise<number> {
+  const startedAt = performance.now();
+  while (!(await condition())) {
+    if (performance.now() - startedAt > timeoutMs) throw new Error(`condition not met within ${timeoutMs} ms`);
+    await delay(50);
+  }
+  return millisecondsSince(startedAt);
 }
 
 // Collects the asynchronous permission errors that the server reports.

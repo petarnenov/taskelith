@@ -13,7 +13,7 @@ macOS (Darwin 25.6.0, x86_64), Node v24.22.1 through `nvm use`, npm 12.2.1, Dock
 ## Evidence
 
 - Before item 9 merged, the author ran exploratory probes and the draft tests from a scratch directory against the item 9 Compose file under a separate Compose project, and against the same image with the draft configuration; nothing in the repository changed. The draft suite passed twice in a row.
-- After the merge, the suite runs inside `make verify` against the per-run services of item 9; its diagnostics report server 2.15.1, JetStream API level 5, `max_payload` 1048576, Node v24.22.1, redelivery after 1000 ms with `ack_wait` 1000 ms, and redelivery 702 ms after `nak(700)`.
+- After the merge, the suite runs inside `make verify` against the per-run services of item 9; its diagnostics report server 2.15.1, JetStream API level 5, `max_payload` 1048576, Node v24.22.1, redelivery 1001–1002 ms and 2004–2005 ms after the first delivery with `ack_wait` 1000 ms, redelivery 702–703 ms after `nak(700)`, and expiry 1251–1261 ms after publication with `max_age` 1000 ms. After the pass-1 fixes the spike passed three runs in a row against `make services-up` and inside `make verify`.
 - `tsc -p tsconfig.check.json` type-checks the spike against the installed client declarations without errors, which supports the record's statement about the `types` field.
 
 ## Author self-check before review
@@ -26,13 +26,20 @@ macOS (Darwin 25.6.0, x86_64), Node v24.22.1 through `nvm use`, npm 12.2.1, Dock
 
 ## Checks
 
-In the worktree, Node v24.22.1, npm 12.2.1: `npm run openspec -- validate spike-jetstream-transport --strict` passed; `make dependency-inventory` generated 701 package paths, 21 with reviewed license coverage gaps; `make verify` passed (323 tests passed, 0 failed; coverage 99.63% lines, 95.74% branches, 99.28% functions; strict OpenSpec validation 39 passed; archive dry run, dependency inventory check, and package verification passed).
+In the worktree, Node v24.22.1, npm 12.2.1: `npm run openspec -- validate spike-jetstream-transport --strict` passed; `make dependency-inventory` generated 701 package paths, 21 with reviewed license coverage gaps; `make verify` passed (323 tests passed, 0 failed; coverage 99.63% lines, 95.74% branches, 99.28% functions; strict OpenSpec validation 39 passed; archive dry run, dependency inventory check, and package verification passed). After the pass-1 fixes, `make verify` passed with 326 tests and the same coverage and validation results.
 
 ## Independent review
 
 Assigned reviewer: Codex CLI, `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, run from the worktree without network access. SHA-256 snapshots of `git ls-files -co --exclude-standard | xargs shasum -a 256 | shasum -a 256` are taken before and after each pass; prompts, outputs, and snapshots are kept outside the worktree.
 
-Pending.
+- **Pass 1 — session `01a17075-97c6-7582-a5ac-c8c102d94222`**, at `d6c131a`. The output header reports model `gpt-6.1-sol`, reasoning effort medium, and sandbox read-only. Snapshot before and after: `9cbb42e30f0f0a12ce4af42cb0f78b2c50d64d010c2b8447f1504173288f2c7b`, unchanged. The reviewer also checked the six added package paths against the lockfile, license inventory, and SBOM (no mismatch). Findings: 0 Critical, 0 High, 4 Medium, 3 Low. All accepted and fixed:
+  1. Medium: redelivery intervals were measured from the next pull, not from the first delivery or the negative acknowledgement. Deliveries now record their receipt time, and intervals are taken from the first delivery and from the `nak`.
+  2. Medium: the redelivery test stopped at the first redelivery, so it neither excluded a redelivery of the acknowledged command nor asserted the third delivery the record stated. It now asserts both first deliveries and collects every redelivery for 2.6 s.
+  3. Medium: the redrive used the original command, not the quarantine record. The test now writes the record with diagnostic headers, reads it back, checks it, and redrives from it.
+  4. Medium: one test mixed `discard: old` with a one-second `max_age` and a fixed sleep. They are now separate tests; expiry is polled with a bounded timeout and reported as a diagnostic.
+  5. Low: `ack()` and the pull-expiry floor were stated without a test. Both are now asserted.
+  6. Low: the loss of advisories without a subscriber was stated without a test. A termination before the capture stream exists is now asserted as not recorded.
+  7. Low: the compatibility wording overstated item 1's evidence. It now says the pinned sources neither state support nor show a CI result.
 
 ## Limitations
 

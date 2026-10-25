@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
+import { headers } from '@nats-io/nats-core';
 import type { NatsConnection } from '@nats-io/nats-core';
 import { DiscardPolicy, jetstream, JetStreamApiError, jetstreamManager } from '@nats-io/jetstream';
 import type { JetStreamClient, JetStreamManager } from '@nats-io/jetstream';
@@ -11,6 +12,7 @@ import {
   connectAsIntegration,
   connectAsWorker,
   delay,
+  millisecondsSince,
   observationSubject,
   OBSERVATION_STREAM,
   QUARANTINE_STREAM,
@@ -19,6 +21,7 @@ import {
   SECOND_NS,
   toDelivery,
   type Delivery,
+  waitFor,
 } from './jetstream-spike-fixture.ts';
 
 // Measurements for docs/g2-jetstream-spike.md (G2 item 2).
@@ -39,10 +42,9 @@ after(async () => {
 });
 
 async function fetchDeliveries(stream: string, consumer: string, maxMessages: number, expiresMs: number): Promise<Delivery[]> {
-  const startedAt = performance.now();
   const messages = await (await js.consumers.get(stream, consumer)).fetch({ max_messages: maxMessages, expires: expiresMs });
   const deliveries: Delivery[] = [];
-  for await (const message of messages) deliveries.push(toDelivery(message, startedAt));
+  for await (const message of messages) deliveries.push(toDelivery(message));
   return deliveries;
 }
 
@@ -53,6 +55,12 @@ test('nats.js 3.4.0 works against the pinned nats-server 2.15.1', async (t) => {
   assert.equal(nc.info?.version, '2.15.1');
   assert.equal(nc.info?.jetstream, true);
   assert.equal(nc.info?.max_payload, 1024 * 1024);
+});
+
+test('the client refuses a pull expiry below 1000 ms', async () => {
+  await recreateCommandTopology(nc);
+  const consumer = await js.consumers.get(COMMAND_STREAM, 'worker-a');
+  await assert.rejects(consumer.fetch({ expires: 999 }), /'expires' must be at least 1000ms/);
 });
 
 test('each worker consumer receives only the commands addressed to it', async () => {
@@ -68,21 +76,38 @@ test('each worker consumer receives only the commands addressed to it', async ()
   assert.deepEqual(forB.map((d) => d.body), ['b-1']);
 });
 
+test('a plain acknowledgement settles a command', async () => {
+  await recreateCommandTopology(nc);
+  await js.publish(commandSubject('worker-a'), 'settled');
+  const message = await (await js.consumers.get(COMMAND_STREAM, 'worker-a')).next({ expires: 1000 });
+
+  message?.ack();
+  await nc.flush();
+
+  const info = await (await jetstreamManager(nc)).consumers.info(COMMAND_STREAM, 'worker-a');
+  assert.deepEqual([info.num_ack_pending, info.num_pending, info.ack_floor.stream_seq], [0, 0, message?.seq]);
+});
+
 describe('explicit acknowledgement and redelivery', () => {
-  test('an unacknowledged command returns after ack_wait; an acked one does not', async (t) => {
+  test('an unacknowledged command returns every ack_wait; an acked one does not', async (t) => {
     await recreateCommandTopology(nc, {}, { ack_wait: SECOND_NS });
     await js.publish(commandSubject('worker-a'), 'unacked');
     await js.publish(commandSubject('worker-a'), 'acked');
     const consumer = await js.consumers.get(COMMAND_STREAM, 'worker-a');
+    const first: Delivery[] = [];
     for await (const message of await consumer.fetch({ max_messages: 2, expires: 1000 })) {
+      first.push(toDelivery(message));
       if (message.string() === 'acked') assert.equal(await message.ackAck(), true);
     }
 
-    const redelivered = await fetchDeliveries(COMMAND_STREAM, 'worker-a', 1, 2500);
+    const again: Delivery[] = [];
+    for await (const message of await consumer.fetch({ max_messages: 10, expires: 2600 })) again.push(toDelivery(message));
 
-    t.diagnostic(`redelivered after ${redelivered[0]?.elapsedMs} ms (ack_wait 1000 ms)`);
-    assert.deepEqual(redelivered.map((d) => [d.body, d.deliveryCount, d.redelivered]), [['unacked', 2, true]]);
-    assert.ok((redelivered[0]?.elapsedMs ?? 0) >= 400);
+    assert.deepEqual(first.map((d) => [d.body, d.deliveryCount]), [['unacked', 1], ['acked', 1]]);
+    assert.deepEqual(again.map((d) => [d.body, d.deliveryCount, d.redelivered]), [['unacked', 2, true], ['unacked', 3, true]]);
+    const intervals = again.map((d) => millisecondsSince(first[0]?.receivedAt ?? 0, d.receivedAt));
+    t.diagnostic(`redelivered ${intervals.join(' and ')} ms after the first delivery (ack_wait 1000 ms)`);
+    assert.ok((intervals[0] ?? 0) >= 900 && (intervals[1] ?? 0) >= 1900);
   });
 
   test('a negative acknowledgement with a delay redelivers after that delay', async (t) => {
@@ -90,13 +115,15 @@ describe('explicit acknowledgement and redelivery', () => {
     await js.publish(commandSubject('worker-a'), 'retry-later');
     const consumer = await js.consumers.get(COMMAND_STREAM, 'worker-a');
     const first = await consumer.next({ expires: 1000 });
+    const nakAt = performance.now();
     first?.nak(700);
 
-    const [again] = await fetchDeliveries(COMMAND_STREAM, 'worker-a', 1, 2000);
+    const again = await consumer.next({ expires: 2000 });
 
-    t.diagnostic(`redelivered ${again?.elapsedMs} ms after nak(700)`);
-    assert.equal(again?.deliveryCount, 2);
-    assert.ok((again?.elapsedMs ?? 0) >= 600);
+    const interval = millisecondsSince(nakAt);
+    t.diagnostic(`redelivered ${interval} ms after nak(700)`);
+    assert.equal(again?.info.deliveryCount, 2);
+    assert.ok(interval >= 650);
   });
 });
 
@@ -176,25 +203,37 @@ describe('retention limits', () => {
     assert.equal((await js.publish('spike.limits.worker-b', '1')).duplicate, false);
   });
 
-  test('discard old drops the oldest message and max_age expires the rest', async () => {
-    await recreateStream(jsm, { name: 'SPIKE_LIMITS', subjects: ['spike.limits.*'], max_msgs: 2, max_age: SECOND_NS });
+  test('discard old drops the oldest message over max_msgs', async () => {
+    await recreateStream(jsm, { name: 'SPIKE_LIMITS', subjects: ['spike.limits.*'], max_msgs: 2 });
     for (const body of ['1', '2', '3']) await js.publish('spike.limits.x', body);
 
     const kept = (await jsm.streams.info('SPIKE_LIMITS')).state;
-    await delay(1500);
-    const expired = (await jsm.streams.info('SPIKE_LIMITS')).state;
 
     assert.deepEqual([kept.messages, kept.first_seq, kept.last_seq], [2, 2, 3]);
-    assert.equal(expired.messages, 0);
+  });
+
+  test('max_age expires stored messages', async (t) => {
+    await recreateStream(jsm, { name: 'SPIKE_LIMITS', subjects: ['spike.limits.*'], max_age: SECOND_NS });
+    const publishedAt = performance.now();
+    await js.publish('spike.limits.x', '1');
+
+    await waitFor(async () => (await jsm.streams.info('SPIKE_LIMITS')).state.messages === 0, 5000);
+
+    const interval = millisecondsSince(publishedAt);
+    t.diagnostic(`expired ${interval} ms after publication (max_age 1000 ms)`);
+    assert.ok(interval >= 900);
   });
 });
 
 describe('poison-message quarantine', () => {
   const MAX_DELIVER = 3;
   let jsm: JetStreamManager;
+  let uncapturedSeq: number;
 
   before(async () => {
     jsm = await recreateCommandTopology(nc, { duplicate_window: 60 * SECOND_NS }, { max_deliver: MAX_DELIVER, ack_wait: 30 * SECOND_NS });
+    await recreateStream(jsm, { name: QUARANTINE_STREAM, subjects: ['spike.quarantine.*'] });
+    uncapturedSeq = await terminateBeforeCapture();
     await recreateStream(jsm, {
       name: ADVISORY_STREAM,
       subjects: [
@@ -202,8 +241,15 @@ describe('poison-message quarantine', () => {
         `$JS.EVENT.ADVISORY.CONSUMER.MSG_TERMINATED.${COMMAND_STREAM}.*`,
       ],
     });
-    await recreateStream(jsm, { name: QUARANTINE_STREAM, subjects: ['spike.quarantine.*'] });
   });
+
+  async function terminateBeforeCapture(): Promise<number> {
+    const published = await js.publish(commandSubject('worker-a'), 'uncaptured');
+    const message = await (await js.consumers.get(COMMAND_STREAM, 'worker-a')).next({ expires: 1000 });
+    message?.term('before-capture');
+    await nc.flush();
+    return published.seq;
+  }
 
   async function rejectEveryDelivery(): Promise<void> {
     const consumer = await js.consumers.get(COMMAND_STREAM, 'worker-a');
@@ -215,42 +261,64 @@ describe('poison-message quarantine', () => {
     }
   }
 
-  async function advisories(): Promise<Array<{ type: string; stream_seq: number; deliveries: number; reason?: string }>> {
-    const stored = [];
-    const state = (await jsm.streams.info(ADVISORY_STREAM)).state;
-    for (let seq = state.first_seq; seq <= state.last_seq && state.messages > 0; seq++) {
+  interface Advisory {
+    readonly type: string;
+    readonly stream_seq: number;
+    readonly deliveries: number;
+    readonly reason?: string;
+  }
+
+  async function advisories(): Promise<Advisory[]> {
+    const { first_seq, last_seq, messages } = (await jsm.streams.info(ADVISORY_STREAM)).state;
+    if (messages === 0) return [];
+    const stored: Advisory[] = [];
+    for (let seq = first_seq; seq <= last_seq; seq++) {
       const message = await jsm.streams.getMessage(ADVISORY_STREAM, { seq });
-      if (message) stored.push(message.json<{ type: string; stream_seq: number; deliveries: number; reason?: string }>());
+      if (message) stored.push(message.json<Advisory>());
     }
     return stored;
   }
 
-  test('the server records max-deliveries and termination advisories in a stream', async () => {
+  // Copies the original command with its diagnostics into the quarantine.
+  async function quarantine(advisory: Advisory): Promise<void> {
+    const original = await jsm.streams.getMessage(COMMAND_STREAM, { seq: advisory.stream_seq });
+    assert.ok(original);
+    const diagnostics = headers();
+    diagnostics.set('Spike-Original-Stream-Seq', String(original.seq));
+    diagnostics.set('Spike-Original-Msg-Id', original.header.get('Nats-Msg-Id'));
+    diagnostics.set('Spike-Reason', advisory.type);
+    await js.publish('spike.quarantine.worker-a', original.data, { headers: diagnostics });
+  }
+
+  test('a stream records only the advisories published after it exists', async () => {
     const malformed = await js.publish(commandSubject('worker-a'), 'malformed', { msgID: 'command-malformed' });
     const failing = await js.publish(commandSubject('worker-a'), 'failing', { msgID: 'command-failing' });
 
     await rejectEveryDelivery();
-    await delay(200);
+    await waitFor(async () => (await advisories()).length >= 2, 2000);
 
     const recorded = (await advisories()).map((a) => [a.type.split('.').pop(), a.stream_seq, a.deliveries, a.reason]);
     assert.deepEqual(recorded, [
       ['terminated', malformed.seq, 1, 'schema-invalid'],
       ['max_deliver', failing.seq, MAX_DELIVER, undefined],
     ]);
+    assert.ok(!(await advisories()).some((a) => a.stream_seq === uncapturedSeq));
     const consumer = await jsm.consumers.info(COMMAND_STREAM, 'worker-a');
     assert.deepEqual([consumer.num_pending, consumer.num_ack_pending], [0, 0]);
-    assert.equal((await jsm.streams.info(COMMAND_STREAM)).state.messages, 2);
+    assert.equal((await jsm.streams.info(COMMAND_STREAM)).state.messages, 3);
   });
 
-  test('a quarantined command is redriven only under a new message ID', async () => {
-    const [, maxDeliver] = await advisories();
+  test('a quarantined command is redriven from its record only under a new message ID', async () => {
+    const maxDeliver = (await advisories()).find((a) => a.type.endsWith('max_deliver'));
     assert.ok(maxDeliver);
-    const original = await jsm.streams.getMessage(COMMAND_STREAM, { seq: maxDeliver.stream_seq });
-    assert.ok(original);
-    await js.publish(`spike.quarantine.worker-a`, original.data, { msgID: `quarantine-${original.seq}` });
+    await quarantine(maxDeliver);
 
-    const sameId = await js.publish(commandSubject('worker-a'), original.data, { msgID: 'command-failing' });
-    const newId = await js.publish(commandSubject('worker-a'), original.data, { msgID: 'command-failing.redrive-1' });
+    const record = await jsm.streams.getMessage(QUARANTINE_STREAM, { last_by_subj: 'spike.quarantine.worker-a' });
+    assert.ok(record);
+    const originalMsgId = record.header.get('Spike-Original-Msg-Id');
+    assert.deepEqual([record.string(), originalMsgId, record.header.get('Spike-Original-Stream-Seq')], ['failing', 'command-failing', String(maxDeliver.stream_seq)]);
+    const sameId = await js.publish(commandSubject('worker-a'), record.data, { msgID: originalMsgId });
+    const newId = await js.publish(commandSubject('worker-a'), record.data, { msgID: `${originalMsgId}.redrive-1` });
     const [redriven] = await fetchDeliveries(COMMAND_STREAM, 'worker-a', 1, 1000);
 
     assert.equal(sameId.duplicate, true);
