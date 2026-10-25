@@ -52,6 +52,7 @@ export function createJournalDatabase(path: string, binding: JournalBinding, cre
 // caller compares the stored binding with the worker identity.
 export function openJournalDatabase(path: string): Result<DatabaseSync> {
   if (!existsSync(path)) return err(rootFailure('journal-loss', `the journal ${path} is missing`, { path }));
+  if (existsSync(`${path}-shm`)) return err(sharedMemoryFailure(path));
   return guard(path, (database) => {
     database.exec('PRAGMA locking_mode = EXCLUSIVE');
     const header = verifyHeader(database);
@@ -71,7 +72,7 @@ function configure(database: DatabaseSync, path: string): Result<void> {
       return err(failure('internal', `PRAGMA ${pragma} is ${String(actual)}, expected ${String(expected)}`, { pragma }));
     }
   }
-  if (existsSync(`${path}-shm`)) return err(failure('internal', 'a -shm file exists although WAL runs in exclusive mode'));
+  if (existsSync(`${path}-shm`)) return err(sharedMemoryFailure(path));
   return ok(undefined);
 }
 
@@ -91,6 +92,12 @@ function quickCheck(database: DatabaseSync): Result<void> {
   const check = database.prepare('PRAGMA quick_check').all().map((row) => row.quick_check);
   if (check.length !== 1 || check[0] !== 'ok') return err(rootFailure('corrupt', `quick_check failed: ${check.join('; ')}`));
   return ok(undefined);
+}
+
+// Another connection opened the journal without exclusive locking, for
+// example an inspection tool while the worker was stopped.
+function sharedMemoryFailure(path: string): Failure {
+  return rootFailure('foreign-access', `${path}-shm exists, so another process opened the journal`, { path });
 }
 
 // Opens the file for `use`, which closes it on a failed result; a thrown

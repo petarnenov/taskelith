@@ -192,6 +192,15 @@ test('a valid SQLite database of another application is refused untouched', () =
   assert.equal(existsSync(`${paths.journal}-wal`), false);
 });
 
+test('a -shm file left by another process fails startup and a new incarnation moves it aside', () => {
+  const { paths } = enroll();
+  opened.splice(0).forEach((root) => root.close());
+  writeFileSync(`${paths.journal}-shm`, '');
+  assert.equal(reasonOf(openWorkerRoot(rootOptions(dataRoot))), 'foreign-access');
+  opened.push(value(startNewIncarnation(rootOptions(dataRoot), id('JournalId', 'journal-2'), BINDING.recoveryEpoch)));
+  assert.equal(existsSync(`${paths.journal}-shm`), false);
+});
+
 test('the open journal refuses a second connection, which the root lock alone would not stop', () => {
   const { paths } = enroll();
   const second = new DatabaseSync(paths.journal, { timeout: 0 });

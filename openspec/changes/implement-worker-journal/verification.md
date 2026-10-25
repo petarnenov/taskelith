@@ -17,6 +17,8 @@ macOS (Darwin 25.6.0, x86_64, APFS), Node v24.22.1 through `nvm use` with SQLite
 
 ## Author self-check before review
 
+- Evidence check: the new and changed documents cite no external links; their claims are measurements of this change or references to repository documents.
+
 - No new npm dependency; `@taskelith/testing` is a workspace development dependency of the adapter, and `better-sqlite3` is not installed.
 - No product code in the published package; the adapter is worker-only under the item 9 boundary rule, which `make verify` checks.
 - The macOS gate is stated as open; no durability on macOS is claimed.
@@ -25,7 +27,7 @@ macOS (Darwin 25.6.0, x86_64, APFS), Node v24.22.1 through `nvm use` with SQLite
 
 ## Checks
 
-In the worktree, Node v24.22.1, npm 12.2.1: `npm run openspec -- validate implement-worker-journal --strict` passed; `make dependency-inventory` regenerated the inventory for the new workspace links; `make verify` passed (486 tests passed, 0 failed; coverage 99.25% lines, 94.22% branches, 99.20% functions; strict OpenSpec validation 43 passed; archive dry run, dependency inventory check, and package verification passed). After the pass-1 fixes, `make dependency-inventory` ran again for the moved `@taskelith/sdlc` dependency, and `make verify` passed with 491 tests and coverage of 99.17% lines, 93.97% branches, and 99.20% functions.
+In the worktree, Node v24.22.1, npm 12.2.1: `npm run openspec -- validate implement-worker-journal --strict` passed; `make dependency-inventory` regenerated the inventory for the new workspace links; `make verify` passed (486 tests passed, 0 failed; coverage 99.25% lines, 94.22% branches, 99.20% functions; strict OpenSpec validation 43 passed; archive dry run, dependency inventory check, and package verification passed). After the pass-1 fixes, `make dependency-inventory` ran again for the moved `@taskelith/sdlc` dependency, and `make verify` passed with 491 tests and coverage of 99.17% lines, 93.97% branches, and 99.20% functions. After the pass-2 fixes, `make verify` passed with 496 tests and coverage of 99.16% lines, 94.06% branches, and 99.20% functions.
 
 ## Independent review
 
@@ -41,11 +43,26 @@ Assigned reviewer: Claude Code, `claude -p <prompt> --model claude-fable-5-1 --e
   7. Medium: the macOS mount point was found by device number, which firmlinks could defeat. It now comes from `df -P`; Apple silicon is listed as not measured.
   8. Low: `SQLITE_CANTOPEN`, `SQLITE_READONLY`, and `SQLITE_PROTOCOL` now stop the journal like an I/O error.
   9. Low: the evidence directory of a new incarnation is named from the injected clock.
-  10. Low: enrollment no longer runs the checkout and volume checks twice.
+  10. Low: enrollment no longer runs the volume check twice; the checkout check still ran twice, which pass 2 found.
   11. Low: `@taskelith/sdlc` moved to the adapter's development dependencies.
   12. Low: a failed enrollment removes the subtree it created; recorded as untested.
   13. Low: the section 13 items not covered here (workspace removal, recovery epoch changes, a cancellation crash test) are listed with their owners; a duplicate cancellation is unit-tested.
   14. Low: a test no longer passes an unneeded `--experimental-strip-types` flag.
+- **Pass 2 — session `01c0e4b7-1361-4d09-9eb7-83ef8e8ba74f`**, at `1cdc786`. The JSON `modelUsage` reports `claude-fable-5-1`. Snapshot before and after: `88d9d96cb0dbb2965be87bef7764ce43b67ae982d2124ab9555df839f25cdeb3`, unchanged. The reviewer confirmed pass-1 findings 1 to 9 and 11 to 14 as resolved and finding 10 as partly resolved. Findings: 0 Critical, 0 High, 3 Medium, 11 Low. All accepted and fixed:
+  1. Medium: a late grant could move a `started` execution back to `authorized`. A pending operation now resolves only while its execution has no state or is `authorized`; tested.
+  2. Medium: after a grant, a retryable rejection of a re-authorization left the launch intent without a way forward, and the planner asked for a retry the adapter refused. The adapter now allows the retry when the launch record reports not started, and the planner seals a granted execution without W4 and relaunches; both tested.
+  3. Medium: an exception inside the root lock skipped its release and the cleanup of a failed enrollment. Both now run in `finally`.
+  4. Low: the checkout check still ran twice during enrollment; it now runs once.
+  5. Low: a recorded fault was always reported as `flush-failure`; its recorded reason now decides.
+  6. Low: a stale `-shm` file failed startup without a reason and survived a new incarnation. It now fails with `foreign-access` before any access, and a new incarnation moves it aside; tested.
+  7. Low: two incarnations at the same clock time collided; the evidence directory name now has a random suffix.
+  8. Low: a journal closed by a device fault while its binding was read was closed again; the close is now guarded.
+  9. Low: the crash scenario printed its acknowledgement asynchronously; it now writes synchronously.
+  10. Low: `recordUncertain` accepted an execution without W4; it now requires W4, and the tests changed accordingly.
+  11. Low: injected `fsync` and checkpoint errors and the create-once crash of section 13 are now listed as not tested.
+  12. Low: this record lacked the evidence check; it is added.
+  13. Low: a start with `worker/` but no identity creates the lock file first; this is now documented.
+  14. Low: the owner lookup and the start prologue are each extracted into one function.
 
 ## Limitations
 

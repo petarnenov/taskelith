@@ -191,8 +191,9 @@ export class SqliteWorkerJournal implements WorkerJournal {
 
   recordUncertain(executionId: ExecutionId): Result<void> {
     return this.#connection.transact((database) => {
-      const execution = executionRow(database, executionId);
-      if (execution === undefined) return err(unknownExecution(executionId));
+      const written = writtenExecution(database, executionId);
+      if (!written.ok) return written;
+      const execution = written.value;
       if (execution.state === 'exited' || execution.state === 'not-started') {
         return err(notInState(executionId, 'not terminal'));
       }
@@ -304,7 +305,7 @@ export class SqliteWorkerJournal implements WorkerJournal {
     const pending = database.prepare(`SELECT request.execution_id, request.outcome, execution.state
       FROM authorization_request AS request JOIN execution USING (execution_id)
       WHERE request.operation_id = ?`).get(operationId);
-    const open = pending?.state !== 'exited' && pending?.state !== 'not-started';
+    const open = pending?.state === null || pending?.state === 'authorized';
     if (pending?.outcome !== 'pending' || !open || (executionId !== undefined && pending.execution_id !== executionId)) {
       return err(failure('precondition-failed', `operation ${operationId} has no pending request`));
     }
@@ -325,11 +326,12 @@ export class SqliteWorkerJournal implements WorkerJournal {
   }
 }
 
-// A retryable rejection is retried for the same execution; a granted one
-// only while the supervisor's launch record says it has not started.
+// Before a grant only a retryable rejection is retried for the execution;
+// after one, only while its launch record says it has not started.
 function mayAuthorizeAgain(execution: Row, last: Row | undefined, request: LaunchRequest): boolean {
-  if (last?.outcome === 'rejected-retryable') return execution.state === null;
-  return last?.outcome === 'granted' && execution.state === 'authorized' && request.reportsNotStarted;
+  if (execution.state === null) return last?.outcome === 'rejected-retryable';
+  const settled = last?.outcome === 'granted' || last?.outcome === 'rejected-retryable';
+  return execution.state === 'authorized' && settled && request.reportsNotStarted;
 }
 
 function executionRow(database: JournalDatabase, executionId: ExecutionId): Row | undefined {

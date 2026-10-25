@@ -63,6 +63,10 @@ test('a retryable rejection is retried for the same execution, a final one is no
   assert.deepEqual(plan([execution(['rejected-retryable', 'rejected-final'])]), []);
 });
 
+test('a granted execution whose re-authorization was rejected is sealed and relaunched', () => {
+  assert.deepEqual(plan([execution(['granted', 'rejected-retryable'], 'authorized')]), [seal, continueLaunch]);
+});
+
 test('W4 or W5s without a terminal fact goes to the execution record recovery', () => {
   const recover: RecoveryAction = { kind: 'recover-execution-record', executionId: EXECUTION };
   assert.deepEqual(plan([execution(['granted'], 'authorized', true)]), [recover]);

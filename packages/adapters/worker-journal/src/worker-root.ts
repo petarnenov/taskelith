@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { err, failure, ok, type Failure, type Result } from '@taskelith/kernel';
@@ -30,10 +31,9 @@ export interface WorkerRoot {
 // The start of a worker: checks the subtree, takes the root lock, and runs
 // the start checks of contract section 8 before anything else.
 export function openWorkerRoot(options: WorkerRootOptions): Result<WorkerRoot> {
-  const paths = workerPaths(options.dataRoot);
-  if (!existsSync(paths.worker)) return err(rootFailure('not-enrolled', `${paths.worker} does not exist`));
-  const located = checkLocation(paths.worker, options);
-  if (!located.ok) return located;
+  const enrolled = enrolledPaths(options);
+  if (!enrolled.ok) return enrolled;
+  const paths = enrolled.value;
   return withRootLock(paths, (lock) => {
     const identity = readIdentity(paths.identity);
     if (!identity.ok) return identity;
@@ -52,21 +52,32 @@ export function enrollWorkerRoot(options: WorkerRootOptions, binding: JournalBin
   if (existsSync(paths.worker)) return err(failure('conflict', `${paths.worker} already exists`));
   const prepared = prepareDataRoot(paths, options);
   if (!prepared.ok) return prepared;
-  const enrolled = withRootLock(paths, (lock) => {
-    for (const directory of [paths.journalDirectory, paths.executions, paths.logs, paths.workspaces]) {
-      const created = createPrivateDirectory(directory);
-      if (!created.ok) return created;
-    }
-    const created = createJournalDatabase(paths.journal, binding, options.clock.now());
+  let enrolled: Result<WorkerRoot> | undefined;
+  try {
+    enrolled = withRootLock(paths, (lock) => createJournalThenIdentity(paths, options, binding, lock));
+    return enrolled;
+  } finally {
+    // A failed enrollment leaves no partial subtree that blocks a retry.
+    if (!enrolled?.ok) rmSync(paths.worker, { recursive: true, force: true });
+  }
+}
+
+function createJournalThenIdentity(
+  paths: WorkerPaths,
+  options: WorkerRootOptions,
+  binding: JournalBinding,
+  lock: ExclusiveFileLock,
+): Result<WorkerRoot> {
+  for (const directory of [paths.journalDirectory, paths.executions, paths.logs, paths.workspaces]) {
+    const created = createPrivateDirectory(directory);
     if (!created.ok) return created;
-    created.value.close();
-    const identity = createOnce(paths.identity, serializeIdentity(binding));
-    if (!identity.ok) return identity;
-    return openJournal(paths, options, binding, lock);
-  });
-  // A failed enrollment leaves no partial subtree that blocks a retry.
-  if (!enrolled.ok) rmSync(paths.worker, { recursive: true, force: true });
-  return enrolled;
+  }
+  const created = createJournalDatabase(paths.journal, binding, options.clock.now());
+  if (!created.ok) return created;
+  created.value.close();
+  const identity = createOnce(paths.identity, serializeIdentity(binding));
+  if (!identity.ok) return identity;
+  return openJournal(paths, options, binding, lock);
 }
 
 // The operator's explicit recovery from a journal loss or corruption: the
@@ -76,10 +87,9 @@ export function startNewIncarnation(
   journalId: JournalId,
   recoveryEpoch: RecoveryEpoch,
 ): Result<WorkerRoot> {
-  const paths = workerPaths(options.dataRoot);
-  if (!existsSync(paths.worker)) return err(rootFailure('not-enrolled', `${paths.worker} does not exist`));
-  const located = checkLocation(paths.worker, options);
-  if (!located.ok) return located;
+  const enrolled = enrolledPaths(options);
+  if (!enrolled.ok) return enrolled;
+  const paths = enrolled.value;
   return withRootLock(paths, (lock) => {
     const identity = readIdentity(paths.identity);
     if (!identity.ok) return identity;
@@ -105,30 +115,43 @@ function prepareDataRoot(paths: WorkerPaths, options: WorkerRootOptions): Result
     const synced = syncPath(dirname(paths.dataRoot));
     if (!synced.ok) return synced;
   }
-  const located = checkLocation(paths.dataRoot, options);
-  return located.ok ? createPrivateDirectory(paths.worker) : located;
+  const volume = checkVolume(paths.dataRoot, options.probe ?? probeVolume);
+  return volume.ok ? createPrivateDirectory(paths.worker) : volume;
 }
 
-// Outside any checkout, and on a volume that can hold the journal.
-function checkLocation(path: string, options: WorkerRootOptions): Result<void> {
-  const outside = refuseCheckout(path);
-  return outside.ok ? checkVolume(path, options.probe ?? probeVolume) : outside;
+// The paths of an enrolled root that lies outside any checkout, on a volume
+// that can hold the journal.
+function enrolledPaths(options: WorkerRootOptions): Result<WorkerPaths> {
+  const paths = workerPaths(options.dataRoot);
+  if (!existsSync(paths.worker)) return err(rootFailure('not-enrolled', `${paths.worker} does not exist`));
+  const outside = refuseCheckout(paths.worker);
+  if (!outside.ok) return outside;
+  const volume = checkVolume(paths.worker, options.probe ?? probeVolume);
+  return volume.ok ? ok(paths) : volume;
+}
+
+function ownerUid(): number {
+  return process.getuid?.() ?? -1;
 }
 
 // Takes the root lock, checks the control records, then runs `use`; the
 // lock is released again when `use` fails.
 function withRootLock(paths: WorkerPaths, use: (lock: ExclusiveFileLock) => Result<WorkerRoot>): Result<WorkerRoot> {
-  const safe = checkControlPath(paths.dataRoot, paths.lock, process.getuid?.() ?? -1);
+  const safe = checkControlPath(paths.dataRoot, paths.lock, ownerUid());
   if (!safe.ok) return safe;
   const lock = ExclusiveFileLock.acquire(paths.lock);
   if (!lock.ok) return lock;
-  const opened = checkRecordsThen(paths, () => use(lock.value));
-  if (!opened.ok) lock.value.release();
-  return opened;
+  let opened: Result<WorkerRoot> | undefined;
+  try {
+    opened = checkRecordsThen(paths, () => use(lock.value));
+    return opened;
+  } finally {
+    if (!opened?.ok) lock.value.release();
+  }
 }
 
 function checkRecordsThen(paths: WorkerPaths, use: () => Result<WorkerRoot>): Result<WorkerRoot> {
-  const uid = process.getuid?.() ?? -1;
+  const uid = ownerUid();
   for (const record of [paths.identity, paths.fault, paths.journal, `${paths.journal}-wal`, paths.executions, paths.logs]) {
     const safe = checkControlPath(paths.dataRoot, record, uid);
     if (!safe.ok) return safe;
@@ -150,7 +173,7 @@ function openJournal(
     onStop: (fault) => keepStopped(paths, fault),
   });
   if (!journal.ok) {
-    database.value.close();
+    if (database.value.isOpen) database.value.close();
     return journal;
   }
   const { binding } = journal.value;
@@ -175,12 +198,13 @@ function keepStopped(paths: WorkerPaths, fault: Failure): Result<void> {
 }
 
 function moveJournalAside(paths: WorkerPaths, oldJournalId: JournalId, clock: JournalClock): Result<void> {
-  const evidence = join(paths.journalDirectory, `evidence-${oldJournalId}-${clock.now().replaceAll(':', '-')}`);
+  const suffix = `${clock.now().replaceAll(':', '-')}-${randomBytes(4).toString('hex')}`;
+  const evidence = join(paths.journalDirectory, `evidence-${oldJournalId}-${suffix}`);
   const created = createPrivateDirectory(evidence);
   if (!created.ok) return created;
-  for (const suffix of ['', '-wal']) {
-    const file = `${paths.journal}${suffix}`;
-    if (existsSync(file)) renameSync(file, join(evidence, `journal.sqlite${suffix}`));
+  for (const fileSuffix of ['', '-wal', '-shm']) {
+    const file = `${paths.journal}${fileSuffix}`;
+    if (existsSync(file)) renameSync(file, join(evidence, `journal.sqlite${fileSuffix}`));
   }
   const synced = syncPath(evidence);
   return synced.ok ? syncPath(paths.journalDirectory) : synced;

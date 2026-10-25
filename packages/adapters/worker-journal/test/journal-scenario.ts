@@ -1,3 +1,4 @@
+import { writeSync } from 'node:fs';
 import { crashPointsFromEnvironment } from '@taskelith/testing';
 import { openWorkerRoot } from '@taskelith/worker-journal';
 import { assignment, grantFor, id, launchRequest, rootOptions, value } from './fixtures.ts';
@@ -13,7 +14,8 @@ const execution = id('ExecutionId', 'execution-1');
 const request = launchRequest(execution, id('OperationId', 'operation-1'));
 
 value(journal.recordCommand(command));
-console.log(`acknowledged ${command.commandId}`);
+// A synchronous write, so the line is out before a kill at the next point.
+writeSync(1, `acknowledged ${command.commandId}\n`);
 value(journal.beginAuthorization(request));
 value(journal.recordGrant(grantFor(request)));
 if (scenario === 'seal') {

@@ -30,14 +30,15 @@ export function recordJournalFault(path: string, fault: Failure, bootId: string)
 // Refuses to start in the boot that saw the fault; a later boot clears it.
 export function checkJournalFault(path: string, bootId: string): Result<void> {
   if (!existsSync(path)) return ok(undefined);
-  let stored: { bootId?: unknown; message?: unknown };
+  let stored: { bootId?: unknown; reason?: unknown; message?: unknown };
   try {
     stored = JSON.parse(readFileSync(path, 'utf8')) as typeof stored;
   } catch {
     stored = { bootId };
   }
   if (stored.bootId === bootId) {
-    return err(rootFailure('flush-failure', `the journal stopped after a flush failure in this boot: ${String(stored.message)}`));
+    const reason = stored.reason === 'corrupt' ? 'corrupt' : 'flush-failure';
+    return err(rootFailure(reason, `the journal stopped in this boot: ${String(stored.message)}`));
   }
   return clearJournalFault(path);
 }

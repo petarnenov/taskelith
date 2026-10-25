@@ -132,18 +132,47 @@ test('a retryable rejection allows a new operation for the execution; a final on
   assert.equal(failed(journal.recordLaunchRejection(retry, { reason: 'unavailable', retryable: true, message: '' })).code, 'precondition-failed');
 });
 
-test('W6 reports not-started once, and uncertain evidence gets a new identity each time', () => {
+test('W6 reports not-started once', () => {
   value(journal.recordCommand(assignment()));
   value(journal.beginAuthorization(launchRequest(EXECUTION, OPERATION)));
-  value(journal.recordUncertain(EXECUTION));
-  value(journal.recordUncertain(EXECUTION));
-  value(journal.recordNotStarted(EXECUTION));
-  value(journal.recordNotStarted(EXECUTION));
   assert.equal(failed(journal.recordUncertain(EXECUTION)).code, 'precondition-failed');
+  value(journal.recordNotStarted(EXECUTION));
+  value(journal.recordNotStarted(EXECUTION));
   assert.equal(failed(journal.recordNotStarted(id('ExecutionId', 'unknown'))).code, 'not-found');
+  assert.deepEqual(factKinds(), ['execution-not-started']);
+});
+
+test('uncertain evidence after W4 gets a new identity each time, until a terminal fact', () => {
+  value(journal.recordCommand(assignment()));
+  launchUntilWritten();
+  value(journal.recordUncertain(EXECUTION));
+  value(journal.recordUncertain(EXECUTION));
+  value(journal.recordExit(EXECUTION, { kind: 'unknown' }));
+  assert.equal(failed(journal.recordUncertain(EXECUTION)).code, 'precondition-failed');
   const entries = value(journal.dueForPublication(T0));
-  assert.deepEqual(entries.map((entry) => entry.fact.kind), ['execution-uncertain', 'execution-uncertain', 'execution-not-started']);
+  assert.deepEqual(entries.map((entry) => entry.fact.kind), ['execution-uncertain', 'execution-uncertain', 'execution-exited']);
   assert.equal(new Set(entries.map((entry) => entry.position.observationId)).size, 3);
+});
+
+test('a late grant cannot move a started execution back to authorized', () => {
+  value(journal.recordCommand(assignment()));
+  launchUntilWritten();
+  const again = launchRequest(EXECUTION, id('OperationId', 'operation-2'));
+  value(journal.beginAuthorization({ ...again, reportsNotStarted: true }));
+  value(journal.recordStart(EXECUTION, id('LaunchAuthId', 'launch-auth-1')));
+  assert.equal(failed(journal.recordGrant(grantFor(again, 'launch-auth-2'))).code, 'precondition-failed');
+  assert.equal(value(journal.snapshot()).executions[0]?.state, 'started');
+});
+
+test('after a grant, a retryable rejection of a re-authorization can be retried', () => {
+  value(journal.recordCommand(assignment()));
+  const first = launchRequest(EXECUTION, OPERATION);
+  value(journal.beginAuthorization(first));
+  value(journal.recordGrant(grantFor(first)));
+  const second = id('OperationId', 'operation-2');
+  value(journal.beginAuthorization({ ...launchRequest(EXECUTION, second), reportsNotStarted: true }));
+  value(journal.recordLaunchRejection(second, { reason: 'unavailable', retryable: true, message: '' }));
+  value(journal.beginAuthorization({ ...launchRequest(EXECUTION, id('OperationId', 'operation-3')), reportsNotStarted: true }));
 });
 
 test('a grant or rejection arriving after W6 is refused and reports nothing', () => {

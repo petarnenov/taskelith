@@ -40,19 +40,17 @@ function recoverExecution(execution: JournaledExecution, cancelled: boolean): Re
   const { executionId } = execution;
   if (execution.state === 'exited' || execution.state === 'not-started') return [];
   if (execution.recordWritten) return [{ kind: 'recover-execution-record', executionId }];
-  const outcome = lastOutcome(execution);
-  if (outcome === 'pending' || outcome === 'granted') return [{ kind: 'seal-execution', executionId }];
-  if (outcome === 'rejected-retryable' && !cancelled) return [{ kind: 'retry-authorization', executionId }];
+  if (endsWithoutProcess(execution)) return [{ kind: 'seal-execution', executionId }];
+  if (lastOutcome(execution) === 'rejected-retryable' && !cancelled) return [{ kind: 'retry-authorization', executionId }];
   return [];
 }
 
-// True when the execution ends as `not-started`, now or once sealed, so the
-// launch intent needs a new execution (contract section 5).
+// True when the execution ends as `not-started`, now or once sealed: a
+// journaled grant without W4, or W2 without an outcome (section 5).
 function endsWithoutProcess(execution: JournaledExecution): boolean {
   if (execution.state === 'not-started') return true;
   if (execution.state === 'exited' || execution.recordWritten) return false;
-  const outcome = lastOutcome(execution);
-  return outcome === 'pending' || outcome === 'granted';
+  return execution.state === 'authorized' || lastOutcome(execution) === 'pending';
 }
 
 function lastOutcome(execution: JournaledExecution): AuthorizationOutcome | undefined {
