@@ -30,6 +30,17 @@ The control plane SHALL place each waiting task in its own SERIALIZABLE transact
 - **WHEN** the loop runs again over a task whose attempt is placed
 - **THEN** no second assignment is created
 
+### Requirement: Placement backoff
+A task that no candidate accepts SHALL wait before its next try, and a pass after a store outage SHALL wait before the next pass, backing off exponentially from 5 seconds to at most 60 seconds with jitter (capacity reservation section 5); a success SHALL reset the wait.
+
+#### Scenario: Repeated waiting
+- **WHEN** a task is not placed in two consecutive tries
+- **THEN** the second wait is longer than the first, and neither is below 5 nor above 60 seconds
+
+#### Scenario: Placed after waiting
+- **WHEN** a task that waited is placed
+- **THEN** its wait is cleared
+
 ### Requirement: Candidate order
 The candidates SHALL be the workers eligible for placement, fewest held reservations first. A reason about the worker SHALL move the try to the next candidate, and any other reason SHALL end it.
 
@@ -61,6 +72,10 @@ The control plane SHALL admit the child through SDLC admission and the delegatio
 
 ### Requirement: Delegation repeat
 A repeat with the same `delegationId` and the same values SHALL return the stored state, or decide again while the delegation waits for capacity; a repeat with other values SHALL be refused with 409.
+
+#### Scenario: Taken child identity
+- **WHEN** a new delegation names a child task identity that already exists
+- **THEN** the answer is 409, whether or not capacity is free, and nothing is stored
 
 #### Scenario: Conflicting repeat
 - **WHEN** a delegation is repeated with the same `delegationId` and another child

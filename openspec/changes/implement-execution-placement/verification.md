@@ -80,7 +80,30 @@ Recorded before pass 1.
 
 ## Independent review
 
-Pending.
+The reviewer is Codex CLI with model `gpt-6.1-sol` and reasoning effort `medium`, both set in the invocation, in a read-only sandbox:
+
+`codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`
+
+It ran from the worktree. The prompt and log were kept in the session's scratch directory. The output header confirms the model, the reasoning effort, the read-only sandbox, and the session ID. A SHA-256 snapshot of every tracked and untracked file was taken before and after each pass.
+
+### Pass 1
+
+- Session `01a1743d-4923-7852-82c1-df463b693d8b`, 2026-10-25 20:05 to 20:09, on `cdb85ad`.
+- Snapshot `e2880c68…cd7a645` before and after: unchanged.
+- Result: Critical 0, High 1, Medium 6, Low 2.
+- The fixes are in `a488ee9` and `17eed84`, and the spec delta gained scenarios for the backoff and the taken child.
+
+| # | Finding | Disposition |
+| --- | --- | --- |
+| H1 | The batch limit came before the fair order, so 100 blocked tasks of one project kept every other project out of the pass. | Fixed: the queue ranks tasks within their project before the limit, in both adapters. A conformance case covers it, and a regression test places project B's task behind 101 blocked tasks of A. |
+| M2 | The candidates were read once per pass, so their order was stale after the first placement. | Fixed: they are read in each task's transaction. A test spreads two tasks over two workers. |
+| M3 | There was no exponential backoff with jitter (contract section 5). | Fixed: `RetrySchedule` keeps the backoff in memory, per task and per pass after an outage, with an injected clock and jitter (design decision 10). |
+| M4 | A taken child identity could answer 200 when the delegation waited or was rejected. | Fixed: a taken task or lineage link answers 409 before admission and the capacity decision, tested with and without free capacity. |
+| M5 | The route returned 500 and 503, which the contract did not declare. | Fixed: `execution.openapi.json` 0.3.1 declares them, with no breaking change. An HTTP test covers 503. |
+| M6 | The in-memory delegation record shared the caller's nested values. | Fixed: a deep-frozen copy, with a conformance case. |
+| L7 | `listByAttempt` ordered differently in the two adapters. | Fixed: the port leaves the order unspecified, and the suite compares without order. |
+| M8 | There were no tests of concurrent passes, of the rollback of a failed re-placement, or of the current revisions of a delegated child. | Fixed: PostgreSQL tests for each. |
+| L9 | The proposal named an old contract version. | Fixed. |
 
 ## Limitations
 
