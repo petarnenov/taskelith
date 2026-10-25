@@ -25,6 +25,9 @@ const cases: ReadonlyArray<readonly [string, string | null]> = [
   ['fix: change output\n\nBREAKING CHANGE: output format changed', 'major'],
   ['docs: clarify setup', null],
   ['chore: maintain dependencies', null],
+  ['test: cover the release table', null],
+  ['build: regenerate the dependency inventory', null],
+  ['ci: run make verify', null],
 ];
 for (const [message, expected] of cases) {
   test(`release classification: ${message.split('\n')[0]}`, async () => {
