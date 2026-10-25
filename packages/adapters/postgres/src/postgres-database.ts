@@ -19,6 +19,9 @@ const UNIQUE_VIOLATION = '23505';
 // checks nor makes them fail.
 const READ_WRITE = 'BEGIN ISOLATION LEVEL SERIALIZABLE';
 const READ_ONLY = 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY';
+// Each statement sees what is committed when it starts, for work that
+// serializes itself with a lock it takes first.
+const READ_COMMITTED = 'BEGIN ISOLATION LEVEL READ COMMITTED';
 
 // The server answers COMMIT with ROLLBACK when the work went on after a
 // failed statement, which it caught instead of returning an `Err`.
@@ -71,6 +74,12 @@ export class PostgresDatabase {
   // inside it is a defect and throws.
   readOnly<Value>(work: TransactionWork<Value>): Promise<Result<Value>> {
     return this.#run(work, READ_ONLY);
+  }
+
+  // For work that takes a lock before it reads, such as the revocation
+  // publication: a SERIALIZABLE snapshot would predate the lock's grant.
+  readCommitted<Value>(work: TransactionWork<Value>): Promise<Result<Value>> {
+    return this.#run(work, READ_COMMITTED);
   }
 
   async close(): Promise<void> {

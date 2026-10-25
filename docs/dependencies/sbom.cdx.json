@@ -3982,12 +3982,42 @@
       ]
     },
     {
+      "bom-ref": "@taskelith/access@0.0.0",
+      "type": "library",
+      "name": "@taskelith/access",
+      "version": "0.0.0",
+      "scope": "required",
+      "purl": "pkg:npm/%40taskelith/access@0.0.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:private",
+          "value": "true"
+        }
+      ],
+      "externalReferences": []
+    },
+    {
       "bom-ref": "@taskelith/contracts@0.0.0",
       "type": "library",
       "name": "@taskelith/contracts",
       "version": "0.0.0",
       "scope": "required",
       "purl": "pkg:npm/%40taskelith/contracts@0.0.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:private",
+          "value": "true"
+        }
+      ],
+      "externalReferences": []
+    },
+    {
+      "bom-ref": "@taskelith/control-plane-store@0.0.0",
+      "type": "library",
+      "name": "@taskelith/control-plane-store",
+      "version": "0.0.0",
+      "scope": "required",
+      "purl": "pkg:npm/%40taskelith/control-plane-store@0.0.0",
       "properties": [
         {
           "name": "cdx:npm:package:private",
@@ -4012,12 +4042,42 @@
       "externalReferences": []
     },
     {
+      "bom-ref": "@taskelith/data-root@0.0.0",
+      "type": "library",
+      "name": "@taskelith/data-root",
+      "version": "0.0.0",
+      "scope": "required",
+      "purl": "pkg:npm/%40taskelith/data-root@0.0.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:private",
+          "value": "true"
+        }
+      ],
+      "externalReferences": []
+    },
+    {
       "bom-ref": "@taskelith/execution@0.0.0",
       "type": "library",
       "name": "@taskelith/execution",
       "version": "0.0.0",
       "scope": "required",
       "purl": "pkg:npm/%40taskelith/execution@0.0.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:private",
+          "value": "true"
+        }
+      ],
+      "externalReferences": []
+    },
+    {
+      "bom-ref": "@taskelith/fleet@0.0.0",
+      "type": "library",
+      "name": "@taskelith/fleet",
+      "version": "0.0.0",
+      "scope": "required",
+      "purl": "pkg:npm/%40taskelith/fleet@0.0.0",
       "properties": [
         {
           "name": "cdx:npm:package:private",
@@ -4168,6 +4228,21 @@
       "version": "0.0.0",
       "scope": "required",
       "purl": "pkg:npm/%40taskelith/sdlc@0.0.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:private",
+          "value": "true"
+        }
+      ],
+      "externalReferences": []
+    },
+    {
+      "bom-ref": "@taskelith/secrets@0.0.0",
+      "type": "library",
+      "name": "@taskelith/secrets",
+      "version": "0.0.0",
+      "scope": "required",
+      "purl": "pkg:npm/%40taskelith/secrets@0.0.0",
       "properties": [
         {
           "name": "cdx:npm:package:private",
@@ -22532,6 +22607,14 @@
       ]
     },
     {
+      "ref": "@taskelith/access@0.0.0",
+      "dependsOn": [
+        "@taskelith/kernel@0.0.0",
+        "@taskelith/sdlc@0.0.0",
+        "@taskelith/testing@0.0.0"
+      ]
+    },
+    {
       "ref": "@taskelith/contracts@0.0.0",
       "dependsOn": [
         "@taskelith/kernel@0.0.0",
@@ -22539,20 +22622,57 @@
       ]
     },
     {
+      "ref": "@taskelith/control-plane-store@0.0.0",
+      "dependsOn": [
+        "@taskelith/data-root@0.0.0",
+        "@taskelith/fleet@0.0.0",
+        "@taskelith/kernel@0.0.0",
+        "@taskelith/testing@0.0.0"
+      ]
+    },
+    {
       "ref": "@taskelith/control-plane@0.0.0",
       "dependsOn": [
         "@nats-io/jetstream@3.4.0",
         "@nats-io/nats-core@3.4.0",
+        "@nats-io/nkeys@2.0.3",
         "@nats-io/transport-node@3.4.0",
+        "@taskelith/access@0.0.0",
+        "@taskelith/contracts@0.0.0",
+        "@taskelith/control-plane-store@0.0.0",
+        "@taskelith/data-root@0.0.0",
+        "@taskelith/execution@0.0.0",
+        "@taskelith/fleet@0.0.0",
         "@taskelith/kernel@0.0.0",
+        "@taskelith/nats@0.0.0",
+        "@taskelith/postgres@0.0.0",
+        "@taskelith/secrets@0.0.0",
+        "@taskelith/testing@0.0.0",
         "@types/pg@8.23.1",
         "pg@8.23.1"
+      ]
+    },
+    {
+      "ref": "@taskelith/data-root@0.0.0",
+      "dependsOn": [
+        "@taskelith/kernel@0.0.0"
       ]
     },
     {
       "ref": "@taskelith/execution@0.0.0",
       "dependsOn": [
         "@taskelith/kernel@0.0.0",
+        "@taskelith/sdlc@0.0.0",
+        "@taskelith/testing@0.0.0"
+      ]
+    },
+    {
+      "ref": "@taskelith/fleet@0.0.0",
+      "dependsOn": [
+        "@taskelith/access@0.0.0",
+        "@taskelith/execution@0.0.0",
+        "@taskelith/kernel@0.0.0",
+        "@taskelith/scheduling@0.0.0",
         "@taskelith/sdlc@0.0.0",
         "@taskelith/testing@0.0.0"
       ]
@@ -22566,9 +22686,11 @@
       "dependsOn": [
         "@nats-io/jetstream@3.4.0",
         "@nats-io/nats-core@3.4.0",
+        "@nats-io/nkeys@2.0.3",
         "@nats-io/transport-node@3.4.0",
         "@taskelith/contracts@0.0.0",
         "@taskelith/execution@0.0.0",
+        "@taskelith/fleet@0.0.0",
         "@taskelith/kernel@0.0.0",
         "@taskelith/observability@0.0.0",
         "@taskelith/sdlc@0.0.0",
@@ -22603,7 +22725,9 @@
     {
       "ref": "@taskelith/postgres@0.0.0",
       "dependsOn": [
+        "@taskelith/access@0.0.0",
         "@taskelith/execution@0.0.0",
+        "@taskelith/fleet@0.0.0",
         "@taskelith/kernel@0.0.0",
         "@taskelith/observability@0.0.0",
         "@taskelith/scheduling@0.0.0",
@@ -22647,6 +22771,16 @@
       ]
     },
     {
+      "ref": "@taskelith/secrets@0.0.0",
+      "dependsOn": [
+        "@nats-io/nkeys@2.0.3",
+        "@taskelith/access@0.0.0",
+        "@taskelith/fleet@0.0.0",
+        "@taskelith/kernel@0.0.0",
+        "@taskelith/testing@0.0.0"
+      ]
+    },
+    {
       "ref": "@taskelith/testing@0.0.0",
       "dependsOn": [
         "@taskelith/kernel@0.0.0",
@@ -22657,6 +22791,7 @@
     {
       "ref": "@taskelith/worker-journal@0.0.0",
       "dependsOn": [
+        "@taskelith/data-root@0.0.0",
         "@taskelith/execution@0.0.0",
         "@taskelith/kernel@0.0.0",
         "@taskelith/sdlc@0.0.0",
@@ -25740,9 +25875,13 @@
         "@semantic-release/github@12.0.10",
         "@semantic-release/npm@13.2.0",
         "@semantic-release/release-notes-generator@14.1.1",
+        "@taskelith/access@0.0.0",
         "@taskelith/contracts@0.0.0",
+        "@taskelith/control-plane-store@0.0.0",
         "@taskelith/control-plane@0.0.0",
+        "@taskelith/data-root@0.0.0",
         "@taskelith/execution@0.0.0",
+        "@taskelith/fleet@0.0.0",
         "@taskelith/kernel@0.0.0",
         "@taskelith/nats@0.0.0",
         "@taskelith/node-observability@0.0.0",
@@ -25753,6 +25892,7 @@
         "@taskelith/sdlc-openspec@0.0.0",
         "@taskelith/sdlc-speckit@0.0.0",
         "@taskelith/sdlc@0.0.0",
+        "@taskelith/secrets@0.0.0",
         "@taskelith/testing@0.0.0",
         "@taskelith/worker-journal@0.0.0",
         "@taskelith/worker-supervisor@0.0.0",
