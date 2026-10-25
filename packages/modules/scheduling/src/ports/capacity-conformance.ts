@@ -401,6 +401,21 @@ export const WORKER_REPORTS_CONFORMANCE: readonly ConformanceCase<WorkerReportsC
     },
   },
   {
+    name: 'a journal loss makes the worker unreachable until its next contact',
+    async check({ reports, workers }: WorkerReportsConformanceTarget) {
+      const problems: string[] = [];
+      const { workerId } = REPORTING_WORKER_FIXTURE;
+      expectSuccess(problems, 'contact', await reports.recordContact(workerId, second(20)));
+      expectSuccess(problems, 'loss', await reports.recordJournalLoss(workerId));
+      expectSame(problems, 'unreachable', await workers.get(workerId), { ...REPORTING_WORKER_FIXTURE, reachable: false, lastContactAt: second(20) });
+      expectSame(problems, 'no candidate', await workers.candidates(), []);
+      expectSuccess(problems, 'contact again', await reports.recordContact(workerId, second(30)));
+      expectSame(problems, 'candidate again', await workers.candidates(), [workerId]);
+      expectCode(problems, 'unknown worker', await reports.recordJournalLoss(UNKNOWN_WORKER), 'not-found');
+      return problems;
+    },
+  },
+  {
     name: 'a declaration applies only above the last one',
     async check({ reports, workers }: WorkerReportsConformanceTarget) {
       const problems: string[] = [];
@@ -410,6 +425,25 @@ export const WORKER_REPORTS_CONFORMANCE: readonly ConformanceCase<WorkerReportsC
       expectSame(problems, 'kept the newer', await workers.get(workerId), { ...REPORTING_WORKER_FIXTURE, ...DECLARED });
       expectSuccess(problems, 'declare 6', await reports.declareCapacity(workerId, OLDER_DECLARED, sequence(6)));
       expectSame(problems, 'newer', await workers.get(workerId), { ...REPORTING_WORKER_FIXTURE, ...OLDER_DECLARED });
+      return problems;
+    },
+  },
+  {
+    name: 'restarted fences apply the first report of a new journal',
+    async check({ reports, workers }: WorkerReportsConformanceTarget) {
+      const problems: string[] = [];
+      const { workerId } = REPORTING_WORKER_FIXTURE;
+      expectSuccess(problems, 'declare 5', await reports.declareCapacity(workerId, DECLARED, sequence(5)));
+      expectSuccess(problems, 'enter 5', await reports.enterPressure(workerId, sequence(5), AT));
+      expectSuccess(problems, 'refuse 5', await reports.markCapacityRefused(workerId, sequence(5), AT));
+      expectSuccess(problems, 'protocol 5', await reports.setProtocolVersion(workerId, undefined, sequence(5)));
+      expectSuccess(problems, 'restart', await reports.restartFences(workerId));
+      expectSuccess(problems, 'declare 1', await reports.declareCapacity(workerId, OLDER_DECLARED, sequence(1)));
+      expectSuccess(problems, 'leave 1', await reports.leavePressure(workerId, sequence(1)));
+      expectSuccess(problems, 'clear 1', await reports.clearCapacityRefusal(workerId, sequence(1)));
+      expectSuccess(problems, 'protocol 1', await reports.setProtocolVersion(workerId, 1, sequence(1)));
+      expectSame(problems, 'applied', await workers.get(workerId), { ...REPORTING_WORKER_FIXTURE, ...OLDER_DECLARED, protocolVersion: 1 });
+      expectCode(problems, 'unknown worker', await reports.restartFences(UNKNOWN_WORKER), 'not-found');
       return problems;
     },
   },

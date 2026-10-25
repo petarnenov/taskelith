@@ -4,10 +4,12 @@ import {
   type JournalId,
   type ProducerCursor,
   type ProducerCursors,
+  type ProducerJournal,
   type Sequence,
   type WorkerId,
 } from '@taskelith/execution';
 import type { CapacityDeclaration, WorkerReports } from '@taskelith/scheduling';
+import { instant } from './capacity-repositories.js';
 import type { Session } from './session.js';
 
 // What the observation transaction writes: Execution's producer cursors and
@@ -16,6 +18,12 @@ import type { Session } from './session.js';
 interface CursorRow {
   readonly confirmed_through: string;
   readonly applied_above: string[];
+}
+
+interface JournalRow extends CursorRow {
+  readonly journal_id: string;
+  readonly retired_at: Date | null;
+  readonly reported_snapshot: string;
 }
 
 export class PostgresProducerCursors implements ProducerCursors {
@@ -31,9 +39,7 @@ export class PostgresProducerCursors implements ProducerCursors {
       [workerId, journalId],
     );
     const row = rows[0];
-    if (row === undefined) return startProducerCursor(workerId, journalId);
-    const appliedAbove = Object.freeze(row.applied_above.map((sequence) => Number(sequence) as Sequence));
-    return Object.freeze({ workerId, journalId, confirmedThrough: Number(row.confirmed_through), appliedAbove });
+    return row === undefined ? startProducerCursor(workerId, journalId) : cursorOf(workerId, journalId, row);
   }
 
   async save(cursor: ProducerCursor): Promise<Result<void>> {
@@ -44,6 +50,42 @@ export class PostgresProducerCursors implements ProducerCursors {
     );
     return ok(undefined);
   }
+
+  async listByWorker(workerId: WorkerId): Promise<readonly ProducerJournal[]> {
+    const { rows } = await this.#session.query<JournalRow>(
+      `SELECT journal_id, confirmed_through, applied_above, retired_at, reported_snapshot FROM producer_cursors
+       WHERE worker_id = $1 ORDER BY journal_id COLLATE "C"`,
+      [workerId],
+    );
+    return rows.map((row) => Object.freeze({
+      cursor: cursorOf(workerId, row.journal_id as JournalId, row),
+      ...(row.retired_at === null ? {} : { retiredAt: instant(row.retired_at) }),
+      reportedSnapshot: Number(row.reported_snapshot),
+    }));
+  }
+
+  async retire(workerId: WorkerId, journalId: JournalId, at: Instant): Promise<Result<void>> {
+    return this.#upsert(workerId, journalId, 'retired_at', at, 'coalesce(producer_cursors.retired_at, excluded.retired_at)');
+  }
+
+  async recordReportedSnapshot(workerId: WorkerId, journalId: JournalId, snapshot: number): Promise<Result<void>> {
+    return this.#upsert(workerId, journalId, 'reported_snapshot', snapshot, 'greatest(producer_cursors.reported_snapshot, excluded.reported_snapshot)');
+  }
+
+  // A journal without a row is stored with an empty cursor first.
+  async #upsert(workerId: WorkerId, journalId: JournalId, column: string, value: unknown, kept: string): Promise<Result<void>> {
+    await this.#session.query(
+      `INSERT INTO producer_cursors (worker_id, journal_id, confirmed_through, applied_above, ${column}) VALUES ($1, $2, 0, '{}', $3)
+       ON CONFLICT (worker_id, journal_id) DO UPDATE SET ${column} = ${kept}`,
+      [workerId, journalId, value],
+    );
+    return ok(undefined);
+  }
+}
+
+function cursorOf(workerId: WorkerId, journalId: JournalId, row: CursorRow): ProducerCursor {
+  const appliedAbove = Object.freeze(row.applied_above.map((sequence) => Number(sequence) as Sequence));
+  return Object.freeze({ workerId, journalId, confirmedThrough: Number(row.confirmed_through), appliedAbove });
 }
 
 // Each write runs at the transaction's SERIALIZABLE isolation, as every
@@ -57,6 +99,14 @@ export class PostgresWorkerReports implements WorkerReports {
 
   recordContact(workerId: WorkerId, at: Instant): Promise<Result<void>> {
     return this.#update(workerId, 'reachable = true, last_contact_at = greatest(last_contact_at, $2::timestamptz)', [at]);
+  }
+
+  recordJournalLoss(workerId: WorkerId): Promise<Result<void>> {
+    return this.#update(workerId, 'reachable = false', []);
+  }
+
+  restartFences(workerId: WorkerId): Promise<Result<void>> {
+    return this.#update(workerId, 'capacity_sequence = 0, pressure_sequence = 0, capacity_refusal_sequence = 0, protocol_sequence = 0', []);
   }
 
   declareCapacity(workerId: WorkerId, declaration: CapacityDeclaration, sequence: Sequence): Promise<Result<void>> {

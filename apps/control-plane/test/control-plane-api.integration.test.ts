@@ -444,7 +444,7 @@ describe('enrollment and quarantine', () => {
     }
   });
 
-  test('a restart ensures the command consumer of every active worker', async () => {
+  test('a restart ensures the consumer and requests the inventory of every active worker', async () => {
     const { workerId } = await enrolledWorker('journal-consumer-repair');
     const broker = value(await connectTransport({ server: NATS, address, creds: authority.user('repair-test', Math.floor(Date.now() / 1000)).creds }));
     const stream = address.streamName('commands');
@@ -455,6 +455,7 @@ describe('enrollment and quarantine', () => {
       running = value(await startControlPlane(SETTINGS));
       assert.equal((await broker.jsm.consumers.info(stream, workerId)).name, workerId);
       assert.ok(logs.records.some((record) => record.event === 'fleet.command-consumers.repaired'));
+      assert.ok(logs.records.some((record) => record.event === 'execution.inventory-requests.sent'));
     } finally {
       await broker.close();
     }

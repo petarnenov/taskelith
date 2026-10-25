@@ -1,4 +1,4 @@
-import type { EventMetadata, Result } from '@taskelith/kernel';
+import type { EventId, EventMetadata, Result } from '@taskelith/kernel';
 import type { JsonObject } from '@taskelith/sdlc';
 
 // A command written in the transaction of the placement that requires it; a
@@ -13,4 +13,10 @@ export interface OutboxMessage {
 // and with `invalid` for a payload that JSON cannot carry unchanged.
 export interface Outbox {
   append(message: OutboxMessage): Promise<Result<void>>;
+}
+
+// Reads a stored outbox message by its event identity, such as an offer
+// that is sent again unchanged.
+export interface OutboxLookup {
+  byEventId(eventId: EventId): Promise<OutboxMessage | undefined>;
 }

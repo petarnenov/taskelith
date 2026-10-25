@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { ConformanceCase } from '@taskelith/sdlc';
 import { InMemoryTaskRepository } from '@taskelith/execution';
+import { InMemoryOutbox } from '@taskelith/sdlc';
 import {
   ASSIGNMENT_REPOSITORY_CONFORMANCE,
   CANDIDATE_WORKER_FIXTURES,
@@ -11,6 +12,8 @@ import {
   InMemoryCapacityLedger,
   InMemoryDelegationRequests,
   InMemoryInstallationGuard,
+  InMemoryOutboxLookup,
+  OUTBOX_LOOKUP_CONFORMANCE,
   InMemoryPlacementQueue,
   InMemoryPlacementWorkers,
   InMemoryQuotaSettings,
@@ -59,6 +62,10 @@ runSuite('in-memory placement queue', PLACEMENT_QUEUE_CONFORMANCE, () => {
   const lineage = new InMemoryTaskLineage();
   const assignments = new InMemoryAssignmentRepository();
   return { queue: new InMemoryPlacementQueue(() => tasks.all(), lineage, () => assignments.all()), tasks, lineage, assignments };
+});
+runSuite('in-memory outbox lookup', OUTBOX_LOOKUP_CONFORMANCE, () => {
+  const outbox = new InMemoryOutbox();
+  return { outbox, lookup: new InMemoryOutboxLookup(() => outbox.messages) };
 });
 runSuite('in-memory delegation requests', DELEGATION_REQUESTS_CONFORMANCE, () => new InMemoryDelegationRequests());
 runSuite('in-memory worker reports', WORKER_REPORTS_CONFORMANCE, () => {

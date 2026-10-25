@@ -8,6 +8,7 @@ import {
   ensureAdvisoryConsumer,
   ensureObservationConsumer,
   ensureStreams,
+  INVENTORY_REPORTED,
   JetStreamPublisher,
   NatsCommandConsumers,
   observationConsumer,
@@ -31,12 +32,14 @@ import { ControlPlaneApi } from '../api/control-plane-api.js';
 import { DelegationService } from '../application/delegation-service.js';
 import { EvidenceService } from '../application/evidence-service.js';
 import { LaunchAuthority } from '../application/launch-authority.js';
+import { InventoryService } from '../application/inventory-service.js';
 import { OBSERVATION_CONSUMER, ObservationService } from '../application/observation-service.js';
 import { PlacementService } from '../application/placement-service.js';
 import { RunService } from '../application/run-service.js';
 import { TaskService } from '../application/task-service.js';
 import { WorkflowRegistry, type KnownWorkflow } from '../application/workflow-registry.js';
 import { repairCommandConsumers } from './command-consumer-repair.js';
+import { requestStartInventories } from './start-inventory-requests.js';
 import { InstallationPublicationFence } from './installation-publication-fence.js';
 
 // Provisional G2 values in docs/operational-targets.md, which G6 verifies.
@@ -114,7 +117,8 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   if (!enrollment.ok) return enrollment;
   cleanup.push(() => enrollment.value.close());
   const database = admin.value.database;
-  await repairCommandConsumers(new CommittingFleetRegistry(database), commandConsumers, logger);
+  const registry = new CommittingFleetRegistry(database);
+  await repairCommandConsumers(registry, commandConsumers, logger);
   const volume = LocalEvidenceVolume.open({ dataRoot: settings.dataRoot, ownerUid: settings.ownerUid });
   if (!volume.ok) return volume;
   const fence = new InstallationPublicationFence(database);
@@ -148,8 +152,14 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   const sweep = settings.sweepMilliseconds ?? GRACE_WINDOW_SWEEP_MILLISECONDS;
   const placement = new PlacementService(database, { now: Date.now, draw: Math.random });
   const placementPass = settings.placementMilliseconds ?? PLACEMENT_PASS_MILLISECONDS;
+  const newRequestId = () => randomUUID();
+  const services = {
+    observations: new ObservationService(database, { newConfirmationId: () => `o${randomUUID()}`, newRequestId, logger }),
+    inventory: new InventoryService(database, { newRequestId, logger }),
+  };
+  await requestStartInventories(registry, services.inventory, logger);
   const observations = observationConsumer(broker.value.js, address.value, OBSERVATION_CONSUMER,
-    observationHandler(new ObservationService(database, { newConfirmationId: () => `o${randomUUID()}`, logger }), address.value), { limits, logger, metrics });
+    observationHandler(services, address.value), { limits, logger, metrics });
   let outcome: 'stopped' | 'failed' = 'stopped';
   let settle!: (value: 'stopped' | 'failed') => void;
   const stopped = new Promise<'stopped' | 'failed'>((resolve) => { settle = resolve; });
@@ -232,11 +242,18 @@ async function prepareTopology(broker: ControlPlaneConnection, address: Transpor
   return observations.ok ? ensureAdvisoryConsumer(broker.jsm, address, limits) : observations;
 }
 
-// The worker that the subject names authenticates the observation.
-function observationHandler(service: ObservationService, address: TransportAddress) {
-  return (message: DeliveredMessage) => service.apply({
-    subjectWorkerId: address.workerOfObservationSubject(message.subject), type: message.type, body: message.body,
-  });
+interface ObservationServices {
+  readonly observations: ObservationService;
+  readonly inventory: InventoryService;
+}
+
+// The worker that the subject names authenticates the observation; an
+// inventory report goes to its own service (21c decision 11).
+function observationHandler(services: ObservationServices, address: TransportAddress) {
+  return (message: DeliveredMessage) => {
+    const observation = { subjectWorkerId: address.workerOfObservationSubject(message.subject), type: message.type, body: message.body };
+    return message.type === INVENTORY_REPORTED ? services.inventory.apply(observation) : services.observations.apply(observation);
+  };
 }
 
 function listen(server: Server, endpoint: ApiEndpoint): Promise<Result<ApiEndpoint>> {

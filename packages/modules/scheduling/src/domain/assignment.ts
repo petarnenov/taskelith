@@ -1,5 +1,6 @@
 import { err, failure, ok, type EventId, type Instant, type Result } from '@taskelith/kernel';
 import type {
+  AcceptanceProvenance,
   AssignmentExecutions,
   AssignmentId,
   AttemptId,
@@ -66,6 +67,8 @@ export interface Assignment {
   readonly ownershipGeneration: OwnershipGeneration;
   // The command that offered it, which a protocol rejection names.
   readonly offerCommandId?: EventId;
+  // Where the applied acceptance came from; none before it was recorded.
+  readonly acceptance?: AcceptanceProvenance;
   readonly state: AssignmentState;
   readonly end?: AssignmentEnd;
   readonly reservation: CapacityReservation;
@@ -102,12 +105,19 @@ export function createAssignment(input: AssignmentInput, at: Instant): Assignmen
   });
 }
 
-export function acceptAssignment(assignment: Assignment, expectedGeneration: Generation, workerId: WorkerId, at: Instant): Result<Assignment> {
+export function acceptAssignment(
+  assignment: Assignment,
+  expectedGeneration: Generation,
+  workerId: WorkerId,
+  at: Instant,
+  acceptance?: AcceptanceProvenance,
+): Result<Assignment> {
   const allowed = checkTransition(assignment, expectedGeneration, 'accepted');
   if (!allowed.ok) return allowed;
   const worker = checkWorker(assignment, workerId);
   if (!worker.ok) return worker;
-  return ok(changedAssignment(assignment, { state: 'accepted' }, at));
+  const provenance = acceptance === undefined ? {} : { acceptance: Object.freeze({ ...acceptance }) };
+  return ok(changedAssignment(assignment, { state: 'accepted', ...provenance }, at));
 }
 
 // A refusal ends the assignment and releases unless an execution under it can
@@ -226,7 +236,7 @@ function assignmentFailure(assignment: Assignment, message: string, details: Rea
   return err(failure('precondition-failed', `assignment ${assignment.id} ${message}`, { assignment: assignment.id, ...details }));
 }
 
-type AssignmentChange = Pick<Assignment, 'state'> & Partial<Pick<Assignment, 'end' | 'reservation'>>;
+type AssignmentChange = Pick<Assignment, 'state'> & Partial<Pick<Assignment, 'end' | 'reservation' | 'acceptance'>>;
 
 function changedAssignment(assignment: Assignment, change: AssignmentChange, at: Instant): Assignment {
   return Object.freeze({ ...assignment, ...change, generation: nextGeneration(assignment.generation), changedAt: at });

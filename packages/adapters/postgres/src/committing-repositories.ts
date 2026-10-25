@@ -18,7 +18,7 @@ import type {
 } from '@taskelith/execution';
 import type { Assignment, AssignmentRepository } from '@taskelith/scheduling';
 import type { AuditEvent, OperatorCredential, OperatorCredentials, SecretHash } from '@taskelith/access';
-import type { WorkerId } from '@taskelith/execution';
+import type { JournalId, WorkerId } from '@taskelith/execution';
 import type {
   BrokerRevocation,
   CredentialGeneration,
@@ -171,6 +171,10 @@ export class CommittingAssignmentRepository implements AssignmentRepository {
     return listed(this.#database.transaction(async (tx) => ok(await tx.assignments.listByAttempt(attemptId))));
   }
 
+  listUnfinishedByWorker(workerId: WorkerId): Promise<readonly Assignment[]> {
+    return listed(this.#database.transaction(async (tx) => ok(await tx.assignments.listUnfinishedByWorker(workerId))));
+  }
+
   byOfferCommand(commandId: EventId): Promise<Result<Assignment>> {
     return this.#database.transaction((tx) => tx.assignments.byOfferCommand(commandId));
   }
@@ -221,6 +225,10 @@ export class CommittingFleetRegistry implements FleetRegistry {
 
   worker(workerId: WorkerId): Promise<Result<EnrolledWorker | undefined>> {
     return this.#database.transaction((tx) => tx.fleet.worker(workerId));
+  }
+
+  replaceJournal(workerId: WorkerId, previous: JournalId, journalId: JournalId): Promise<Result<void>> {
+    return this.#database.transaction((tx) => tx.fleet.replaceJournal(workerId, previous, journalId));
   }
 
   activeWorkerIds(): Promise<Result<readonly WorkerId[]>> {

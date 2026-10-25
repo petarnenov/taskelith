@@ -21,6 +21,7 @@ import {
   PostgresWorkflowRunRepository,
 } from './repositories.js';
 import { PostgresCurrentRevisions, PostgresLaunchRecords } from './launch-repositories.js';
+import { PostgresInventoryReports, PostgresInventoryRequests } from './inventory-repositories.js';
 import { PostgresFleetRegistry, PostgresInstallationTable, PostgresOperatorCredentials } from './fleet-repositories.js';
 import { PostgresProducerCursors, PostgresWorkerReports } from './observation-repositories.js';
 import { PostgresRunCatalog } from './run-catalog.js';
@@ -54,6 +55,10 @@ export class PostgresTransaction {
   readonly revisions: PostgresCurrentRevisions;
   readonly cursors: PostgresProducerCursors;
   readonly reports: PostgresWorkerReports;
+  readonly inventoryRequests: PostgresInventoryRequests;
+  readonly inventoryReports: PostgresInventoryReports;
+  // The outbox reads its stored messages back, such as an offer sent again.
+  readonly outboxLookup: PostgresOutbox;
   readonly #session: Session;
 
   constructor(session: Session) {
@@ -83,6 +88,9 @@ export class PostgresTransaction {
     this.revisions = new PostgresCurrentRevisions(session);
     this.cursors = new PostgresProducerCursors(session);
     this.reports = new PostgresWorkerReports(session);
+    this.inventoryRequests = new PostgresInventoryRequests(session);
+    this.inventoryReports = new PostgresInventoryReports(session);
+    this.outboxLookup = this.outbox;
   }
 
   now(): Promise<Instant> {
