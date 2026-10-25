@@ -6,7 +6,7 @@ Started on 2026-10-25 by the UI worker (Desi) on the owner's request, to be hand
 
 Source: the owner asked for a review of the Mantine proof of concept with a focus on the backend already implemented in the project. Three read-only subagent reviews compared it with `dev` at `69e5bd2` (SDLC domain and plugins; execution, scheduling, and workers; control plane, contracts, and persistence). The owner then asked for three follow-ups: (1) rework the proof of concept to the backend's model, (2) fix the `product-ui` scenario that contradicts the supervisor identity contract, and (3) fix two backend docs, which is the separate change `fix-roles-and-stage-mapping-docs`. This change covers (1) and (2).
 
-Outside the repository: the rebuilt proof of concept is published as the private artifact `M8VnvLLCrAMiBPrkKezGzk`; version 4 matched head `dcb91d6`, and version 5 matches the pass-1 fixes.
+Outside the repository: the rebuilt proof of concept is published as the private artifact `M8VnvLLCrAMiBPrkKezGzk`; version 4 matched head `dcb91d6`, version 5 the pass-1 fixes, and version 6 matches the pass-2 fixes.
 
 ## Author self-check before review
 
@@ -14,12 +14,12 @@ Outside the repository: the rebuilt proof of concept is published as the private
 - Gate states, evidence kinds, stage states, admission kinds, waiting reasons, admission pressure causes, attempt outcomes, roles, the plugin API version, the OpenSpec manifest, and the registration failure codes use the names in `packages/modules/sdlc`, `packages/modules/scheduling`, `packages/modules/execution`, `packages/plugin-sdk`, `docs/contracts/`, and `docs/trust-model.md`.
 - The delta removes "Harness activity indicator" and adds "Session activity indicator" with the four unchanged scenarios and two new ones; the pinned OpenSpec rejects both a MODIFIED block that drops a scenario and a requirement both removed and added under one name.
 - In a browser (Playwright on the local build, 1440 × 900 and 390 × 844): all ten screens render without console errors; no page scrolls horizontally at 390 px; the run drawer shows stages and gates; reconciling the uncertain attempt ends it as operator-resolved; the inbox's first spec approval shows the conflict and the second is confirmed by the simulated server; the viewer persona sees runtime approval and drain disabled and no "New task" or "Enroll worker" button.
-- `tsc -p .` on the reference source passed in the scratch build directory. Version 4 was 919,319 bytes with SHA-256 `a2f88738ae1001c4aa83a710089bd6876b7dc54917bf33509adae81c90cd8d00`; after the pass-1 fixes, version 5 is 920,277 bytes with SHA-256 `55023064efef85afe8478d93f310998e8cfd4aaa679ae46eef2947fc58d30021`.
+- `tsc -p .` on the reference source passed in the scratch build directory. Version 4 was 919,319 bytes with SHA-256 `a2f88738ae1001c4aa83a710089bd6876b7dc54917bf33509adae81c90cd8d00`; after the pass-1 fixes, version 5 is 920,277 bytes with SHA-256 `55023064efef85afe8478d93f310998e8cfd4aaa679ae46eef2947fc58d30021`; after the pass-2 fixes, version 6 is 920,512 bytes with SHA-256 `8791c89f4997a5a1afcb9354a03a8a7f4606cf0fd16f2011c693062f75310282`, and all ten screens render without console errors.
 - Evidence check: no new external link; the artifact link in the README stays marked as an unversioned private page.
 
 ## Checks
 
-Environment: macOS 26 (Darwin 25.6.0, x86_64), Node.js v24.22.1 and npm 12.2.1 selected by `nvm use` from `.nvmrc`; `make verify` pins the same Node through `scripts/with-pinned-node.sh`. Before pass 1: `npm run openspec -- validate align-ui-poc-with-backend --strict` passed; `make verify` passed (strict OpenSpec validation 51 passed, 0 failed; every active change, including the stacked `record-mantine-ui-poc`, archives into strictly valid specs; package verification passed). After the pass-1 fixes: the same checks passed again (51 strict validations, archive dry run, package verification).
+Environment: macOS 26 (Darwin 25.6.0, x86_64), Node.js v24.22.1 and npm 12.2.1 selected by `nvm use` from `.nvmrc`; `make verify` pins the same Node through `scripts/with-pinned-node.sh`. Before pass 1: `npm run openspec -- validate align-ui-poc-with-backend --strict` passed; `make verify` passed (strict OpenSpec validation 51 passed, 0 failed; every active change, including the stacked `record-mantine-ui-poc`, archives into strictly valid specs; package verification passed). After the pass-1 fixes and again after the pass-2 fixes: the same checks passed (51 strict validations, archive dry run, package verification).
 
 ## Independent review
 
@@ -45,6 +45,15 @@ Reviewer: Claude Code with `claude-fable-5-1`, effort medium, run from the workt
   17. Low: silent defaults invented facts. A missing waiting reason shows "Queued" and a missing outcome "Ended · outcome unknown".
   18. Low: two timers had no cleanup. The turn confirmation and the task creation run in effects that clear them.
   19. Low: the drawer hard-coded the attempt and the inbox ID, and the inbox kept two states for one conflict. The drawer uses the run's attempt and inbox ID, and the inbox has one conflict state.
+
+- **Pass 2 — session `ac61e5f5-8f05-4026-9b9e-ba28b2910783`, head `6b79a5d`.** The JSON `modelUsage` again listed `claude-fable-5-1` and the CLI's internal `claude-opus-5-5`. The snapshot was `79f92c7624e8eede964f2d3efb22b3455b175f330486acd270fb03e4f3d3c0f2` before and after the pass. The reviewer confirmed all 19 pass-1 resolutions and the whole change against the backend again. Findings: 0 Critical, 0 High, 0 Medium, 7 Low. Because the pass found only Low findings, they were fixed without another review pass, as the review process allows; these fixes are unreviewed:
+  1. Two session labels still said "killed" and "exit 0". They use the outcome wording: "exited, signal · cancelled" and "exited, code 0".
+  2. The turn history still had a "Verify" turn. It is "Local checks before push".
+  3. The waiting reasons missed `delegation-awaiting-capacity`. Added.
+  4. The OpenSpec workflow digest was invented. It is the fixture's `sha256:b6f2…88f2`, like the SpecKit one.
+  5. Two inbox sessions lacked the attempt and ownership generation that the board shows. Added.
+  6. mac-01 counted the finished review as an active attempt. It shows 1 of 2 slots with matching CPU and memory, and the Claude Code pool 7 of 16.
+  7. Native approval requests had no later-gate marker. The inbox item and the drawer are marked with G3 items 4, 13, and 18.
 
 ## Limitations
 

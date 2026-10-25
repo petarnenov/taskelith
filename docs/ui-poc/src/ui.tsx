@@ -23,7 +23,8 @@ export type WaitingReason =
   | 'project-quota-exhausted'
   | 'run-quota-exhausted'
   | 'provider-concurrency-exhausted'
-  | 'control-not-enforceable';
+  | 'control-not-enforceable'
+  | 'delegation-awaiting-capacity';
 
 const WAITING_TEXT: Record<WaitingReason, string> = {
   quarantined: 'installation in restore quarantine',
@@ -33,6 +34,7 @@ const WAITING_TEXT: Record<WaitingReason, string> = {
   'run-quota-exhausted': 'run concurrency quota full',
   'provider-concurrency-exhausted': 'no account slot free',
   'control-not-enforceable': 'a required resource control cannot be enforced',
+  'delegation-awaiting-capacity': 'delegation waits for capacity',
 };
 
 // Execution facts behind a session; the badge is derived from them and never

@@ -60,7 +60,7 @@ Both can be met with Mantine's own theme settings, for example component default
 
 ## Published build
 
-The build is published as a private claude.ai artifact, <https://claude.ai/artifact/M8VnvLLCrAMiBPrkKezGzk> (unversioned private page; version 5 matches this source), as one HTML file of 920,277 bytes with SHA-256 `55023064efef85afe8478d93f310998e8cfd4aaa679ae46eef2947fc58d30021`. All code and Mantine's styles are inlined; only the IBM Plex fonts load from Google Fonts, so a viewer's browser contacts Google, and offline the page falls back to the system fonts. The owner shares the artifact from its Share menu. The earlier design canvas, <https://claude.ai/artifact/Q84QABcHZZ1ow9B7UcZdNS> (unversioned private page), which [ADR 0008](../decisions/0008-product-ui-and-integration-authority.md) was decided on, is marked as superseded.
+The build is published as a private claude.ai artifact, <https://claude.ai/artifact/M8VnvLLCrAMiBPrkKezGzk> (unversioned private page; version 6 matches this source), as one HTML file of 920,512 bytes with SHA-256 `8791c89f4997a5a1afcb9354a03a8a7f4606cf0fd16f2011c693062f75310282`. All code and Mantine's styles are inlined; only the IBM Plex fonts load from Google Fonts, so a viewer's browser contacts Google, and offline the page falls back to the system fonts. The owner shares the artifact from its Share menu. The earlier design canvas, <https://claude.ai/artifact/Q84QABcHZZ1ow9B7UcZdNS> (unversioned private page), which [ADR 0008](../decisions/0008-product-ui-and-integration-authority.md) was decided on, is marked as superseded.
 
 ## Rebuilding
 

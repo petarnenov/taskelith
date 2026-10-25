@@ -492,7 +492,7 @@ export function conflictFiles(run: Run): string[] {
 }
 
 export const BINDINGS: Record<Framework, { plugin: string; tool: string; digest: string }> = {
-  OpenSpec: { plugin: 'sdlc-openspec 0.0.0', tool: '1.14.3', digest: 'sha256:4f1c…9a2e' },
+  OpenSpec: { plugin: 'sdlc-openspec 0.0.0', tool: '1.14.3', digest: 'sha256:b6f2…88f2' },
   SpecKit: { plugin: 'sdlc-speckit (fixture only, adapter in G4)', tool: '1.2.3', digest: 'sha256:1777…fbc' },
 };
 

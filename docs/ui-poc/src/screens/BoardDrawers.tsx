@@ -229,6 +229,7 @@ function RuntimeApproval({ run }: { run: BoardRun }) {
   return (
     <Alert variant="light" color="orange" title="Native approval request">
       <Stack gap="xs">
+        <LaterGate>native requests · G3 items 4, 13, 18</LaterGate>
         <Code>nvm use &amp;&amp; make verify</Code>
         <Text size="xs" c="dimmed">
           Request req-7f2c for attempt #{run.session.attempt ?? 1} · provider generation 3. Runtime approval

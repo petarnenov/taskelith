@@ -62,12 +62,12 @@ const WORKERS: Worker[] = [
     packaging: 'native',
     reachable: true,
     harness: 'Claude Code · candidate',
-    slots: [2, 2],
-    cpu: [4000, 8000],
-    memory: [8192, 16384],
+    slots: [1, 2],
+    cpu: [2000, 8000],
+    memory: [4096, 16384],
     lastContact: '3 s ago',
     credentialGeneration: 2,
-    note: 'Active attempts: Task admission, Account pool scheduler review',
+    note: 'Active attempt: Task admission',
   },
   {
     workerId: 'wkr-81c2',
@@ -129,13 +129,13 @@ interface Account {
 const POOLS: { harness: string; used: number; total: number; accounts: Account[]; note?: string }[] = [
   {
     harness: 'Claude Code',
-    used: 9,
+    used: 7,
     total: 16,
     accounts: [
       {
         name: 'claude-acct-1',
-        state: '3 of 4 attempts',
-        detail: 'mac-01 · includes the Fable 5.1 review of Account pool scheduler',
+        state: '1 of 4 attempts',
+        detail: 'mac-01 · Task admission',
       },
       { name: 'claude-acct-2', state: '2 of 4 attempts', detail: 'linux-01' },
       {

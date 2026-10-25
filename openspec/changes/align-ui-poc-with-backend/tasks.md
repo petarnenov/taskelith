@@ -14,4 +14,4 @@
 ## 3. Verify
 
 - [x] 3.1 Run `npm run openspec -- validate align-ui-poc-with-backend --strict` and `make verify`.
-- [ ] 3.2 Independent review and record it in `verification.md`.
+- [x] 3.2 Independent review and record it in `verification.md`.

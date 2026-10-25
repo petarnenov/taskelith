@@ -40,7 +40,13 @@ const NOW: InboxItem[] = [
     kind: 'Native approval',
     title: 'Task admission · Claude Code on mac-01',
     age: '6 min',
-    session: { phase: 'running', reachability: 'reachable', turn: 'awaiting-approval' },
+    session: {
+      phase: 'running',
+      reachability: 'reachable',
+      turn: 'awaiting-approval',
+      attempt: 2,
+      ownershipGeneration: 3,
+    },
     harness: 'Claude Code · mac-01',
     why: 'The harness asks to run a command that the project policy does not pre-authorize.',
     code: 'nvm use && make verify',
@@ -103,6 +109,7 @@ const RECONCILE: { title: string; session: ExecutionView; harness: string; statu
     reachability: 'unknown',
     lastContact: '6 min ago',
     evidence: 'uncertain',
+    attempt: 1,
     ownershipGeneration: 4,
   },
   harness: 'Claude Code · linux-03',
@@ -185,6 +192,9 @@ export function InboxScreen() {
                   <Badge variant="light" color="orange">
                     {item.kind}
                   </Badge>
+                  {item.id === 'kernel-approval' ? (
+                    <LaterGate>native requests · G3 items 4, 13, 18</LaterGate>
+                  ) : null}
                   <Title order={3} size="h5" flex={1}>
                     {item.title}
                   </Title>

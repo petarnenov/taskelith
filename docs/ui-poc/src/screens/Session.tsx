@@ -215,12 +215,15 @@ function status(step: Step, stopping: boolean, stopped: boolean): { label: strin
   }
   if (stopped) {
     return {
-      label: 'Ended · killed after stop, confirmed by mac-01',
+      label: 'Ended · exited, signal · cancelled, confirmed by mac-01',
       view: { ...running, phase: 'ended', outcome: 'exited-signal', cancelled: true },
     };
   }
   if (step.done)
-    return { label: 'Ended · exit 0 · merged', view: { ...running, phase: 'ended', outcome: 'exited-0' } };
+    return {
+      label: 'Ended · exited, code 0 · merged',
+      view: { ...running, phase: 'ended', outcome: 'exited-0' },
+    };
   return { label: 'Session live', view: running };
 }
 
@@ -380,7 +383,7 @@ export function SessionScreen() {
   const turns = [
     { n: 1, label: 'Implement', outcome: '34 min · 12 tool calls' },
     { n: 2, label: 'Implement', outcome: '18 min · 7 tool calls' },
-    { n: 3, label: 'Verify', outcome: '3 min · 1 tool call' },
+    { n: 3, label: 'Local checks before push', outcome: '3 min · 1 tool call' },
     { n: 4, label: 'Review fixes', outcome: '9 min · 4 tool calls' },
     { n: 5, label: 'Merge conflict resolution', outcome: st.label },
   ];
