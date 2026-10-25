@@ -1,8 +1,16 @@
 import type { Instant, Result } from '@taskelith/kernel';
-import type { AttemptId, EvidenceRecords, TaskRepository, WorkerId } from '@taskelith/execution';
+import type { AttemptId, EvidenceRecords, LaunchRecords, TaskRepository, WorkerId } from '@taskelith/execution';
 import type { EnrolledWorker } from '@taskelith/fleet';
-import type { TaskLineage } from '@taskelith/scheduling';
-import type { AdmissionRepository, GateRepository, Outbox, OwnershipGeneration, RunCatalog, WorkflowRunRepository } from '@taskelith/sdlc';
+import type { AssignmentRepository, InstallationGuard, TaskLineage } from '@taskelith/scheduling';
+import type {
+  AdmissionRepository,
+  CurrentRevisions,
+  GateRepository,
+  Outbox,
+  OwnershipGeneration,
+  RunCatalog,
+  WorkflowRunRepository,
+} from '@taskelith/sdlc';
 
 // What the API's use cases read and write in one SERIALIZABLE transaction;
 // `now` is the database clock. PostgresTransaction provides it.
@@ -17,6 +25,10 @@ export interface ControlPlaneTransaction {
   readonly evidence: EvidenceRecords;
   readonly producers: EvidenceProducers;
   readonly fleet: WorkerDirectory;
+  readonly revisions: CurrentRevisions;
+  readonly assignments: AssignmentRepository;
+  readonly installation: InstallationGuard;
+  readonly launches: LaunchRecords;
   now(): Promise<Instant>;
 }
 

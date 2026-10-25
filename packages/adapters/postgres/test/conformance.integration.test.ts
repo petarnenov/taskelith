@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
-import { EVIDENCE_RECORDS_CONFORMANCE, INBOX_CONFORMANCE, TASK_REPOSITORY_CONFORMANCE } from '@taskelith/execution';
+import { EVIDENCE_RECORDS_CONFORMANCE, INBOX_CONFORMANCE, LAUNCH_RECORDS_CONFORMANCE, TASK_REPOSITORY_CONFORMANCE } from '@taskelith/execution';
 import {
   CommittingAdmissionRepository,
   CommittingAssignmentRepository,
+  CommittingCurrentRevisions,
   CommittingEvidenceRecords,
   CommittingGateRepository,
   CommittingInbox,
+  CommittingLaunchRecords,
   CommittingOutbox,
   CommittingRunCatalog,
   CommittingTaskRepository,
@@ -17,6 +19,7 @@ import {
 import { ASSIGNMENT_REPOSITORY_CONFORMANCE } from '@taskelith/scheduling';
 import {
   ADMISSION_REPOSITORY_CONFORMANCE,
+  CURRENT_REVISIONS_CONFORMANCE,
   GATE_REPOSITORY_CONFORMANCE,
   OUTBOX_CONFORMANCE,
   RUN_CATALOG_CONFORMANCE,
@@ -46,8 +49,14 @@ runSuite('run catalog', RUN_CATALOG_CONFORMANCE, () => ({
   admissions: new CommittingAdmissionRepository(database),
   catalog: new CommittingRunCatalog(database),
 }));
+runSuite('current revisions', CURRENT_REVISIONS_CONFORMANCE, () => ({
+  runs: new CommittingWorkflowRunRepository(database), revisions: new CommittingCurrentRevisions(database),
+}));
 runSuite('gates', GATE_REPOSITORY_CONFORMANCE, () => new CommittingGateRepository(database));
 runSuite('tasks', TASK_REPOSITORY_CONFORMANCE, () => new CommittingTaskRepository(database));
+runSuite('launch records', LAUNCH_RECORDS_CONFORMANCE, () => ({
+  tasks: new CommittingTaskRepository(database), launches: new CommittingLaunchRecords(database),
+}));
 runSuite('assignments', ASSIGNMENT_REPOSITORY_CONFORMANCE, () => new CommittingAssignmentRepository(database));
 runSuite('evidence', EVIDENCE_RECORDS_CONFORMANCE, () => new CommittingEvidenceRecords(database));
 runSuite('inbox', INBOX_CONFORMANCE, () => new CommittingInbox(database));

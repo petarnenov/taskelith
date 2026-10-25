@@ -11,6 +11,7 @@ import {
   nextGeneration,
   openGate,
   parseArtifactRevision,
+  parseGeneration,
   parseSemanticApproval,
   parseWorkItem,
   parseWorkflowDefinition,
@@ -27,7 +28,10 @@ import { authorizeLaunch } from '../domain/launch-authorization.js';
 import { parseLaunchParameters } from '../domain/launch-grant.js';
 import { parseRecoveryEpoch } from '../domain/identifiers.js';
 import { claimOwnership, openAttempt, openTask, type Task } from '../domain/task.js';
+import { launchRejection } from '../domain/launch-rejection.js';
+import { revokeLaunch } from '../domain/task.js';
 import type { Inbox } from './inbox.js';
+import type { LaunchRecords, RecordedLaunch } from './launch-records.js';
 import type { TaskRepository } from './task-repository.js';
 
 // Shared suites that the in-memory and the database adapters of the
@@ -86,18 +90,19 @@ function openedTask(taskId: string): Task {
   return must(openTask(admission(`admission-${taskId}`, taskId), AT));
 }
 
-// A task whose attempt holds an authorized execution with its launch grant.
-function authorizedTask(taskId: string): Task {
+// A task whose attempt holds an authorized execution with its launch grant,
+// which `launch` and `worker` name.
+function authorizedTask(taskId: string, launch = '1', worker = 'worker-1'): Task {
   const used = admission(`admission-${taskId}`, taskId);
   const task = must(openTask(used, AT));
   const attemptId = id('AttemptId', 'attempt-1');
   const attempted = must(openAttempt(task, task.ownershipGeneration, { id: attemptId }, AT));
   const placed = must(claimOwnership(attempted, attempted.ownershipGeneration, attemptId, AT));
-  const workerId = id('WorkerId', 'worker-1');
-  const assignmentId = id('AssignmentId', 'assignment-1');
+  const workerId = id('WorkerId', worker);
+  const assignmentId = id('AssignmentId', `assignment-${launch}`);
   const recoveryEpoch = must(parseRecoveryEpoch(1));
   const authorization = must(authorizeLaunch(placed, {
-    operationId: id('OperationId', 'operation-1'), workerId, recoveryEpoch, assignmentId, attemptId,
+    operationId: id('OperationId', `operation-${launch}`), workerId, recoveryEpoch, assignmentId, attemptId,
     ownershipGeneration: placed.ownershipGeneration, executionId: id('ExecutionId', 'execution-1'),
     admissionId: placed.admissionId, admissionGeneration: used.generation, reportsNotStarted: false,
   }, {
@@ -111,7 +116,7 @@ function authorizedTask(taskId: string): Task {
     currentRevisions: [SPEC],
     policyRevision: run().binding.policyRevision,
   }, {
-    launchAuthId: id('LaunchAuthId', 'launch-1'),
+    launchAuthId: id('LaunchAuthId', `launch-${launch}`),
     issuedAt: LATER,
     parameters: must(parseLaunchParameters({ ttlMilliseconds: 30_000, skewMilliseconds: 5_000 })),
   }));
@@ -180,6 +185,77 @@ export const INBOX_CONFORMANCE: readonly ConformanceCase<Inbox>[] = Object.freez
       const unusual = ['nul \u0000', 'unpaired \uD800', 'unpaired \uD801'];
       const accepted = await Promise.all(unusual.map((consumer) => inbox.accept(consumer, message)));
       expectSame(problems, 'distinct unusual consumers', accepted, unusual.map(() => ({ ok: true, value: 'accepted' })));
+      return problems;
+    },
+  },
+]);
+
+// The grant index is kept by the task repository, so the two are one target.
+export interface LaunchRecordsConformanceTarget {
+  readonly tasks: TaskRepository;
+  readonly launches: LaunchRecords;
+}
+
+function recordedLaunch(task: Task): RecordedLaunch {
+  const grant = task.attempts[0]!.executions[0]!.grants[0]!;
+  return {
+    launchAuthId: grant.launchAuthId, taskId: task.id, attemptId: grant.attemptId, assignmentId: grant.assignmentId,
+    executionId: grant.executionId, workerId: grant.workerId,
+  };
+}
+
+export const LAUNCH_RECORDS_CONFORMANCE: readonly ConformanceCase<LaunchRecordsConformanceTarget>[] = Object.freeze([
+  {
+    name: 'a stored grant is found by its operation for its worker only, and by its identity',
+    async check({ tasks, launches }) {
+      const problems: string[] = [];
+      const stored = authorizedTask('task-1');
+      must(await tasks.add(stored));
+      const recorded = recordedLaunch(stored);
+      expectRead(problems, 'by operation', await launches.byOperation(recorded.workerId, id('OperationId', 'operation-1')), recorded);
+      expectRead(problems, 'other worker', await launches.byOperation(id('WorkerId', 'worker-2'), id('OperationId', 'operation-1')), undefined);
+      expectRead(problems, 'by identity', await launches.byLaunchAuthId(recorded.launchAuthId), recorded);
+      expectRead(problems, 'unknown', await launches.byLaunchAuthId(id('LaunchAuthId', 'launch-9')), undefined);
+      return problems;
+    },
+  },
+  {
+    name: 'live grants are read by worker, assignment, artifact, gates, and all, until revoked',
+    async check({ tasks, launches }) {
+      const problems: string[] = [];
+      const first = authorizedTask('task-1', '1', 'worker-1');
+      const second = authorizedTask('task-2', '2', 'worker-2');
+      must(await tasks.add(first));
+      must(await tasks.add(second));
+      const ids = (result: Result<readonly RecordedLaunch[]>) => (result.ok ? result.value.map((launch) => launch.launchAuthId) : result.error);
+      expectSame(problems, 'worker', ids(await launches.liveGrants({ kind: 'worker', workerId: id('WorkerId', 'worker-2') })), ['launch-2']);
+      expectSame(problems, 'assignment', ids(await launches.liveGrants({ kind: 'assignment', assignmentId: id('AssignmentId', 'assignment-1') })), ['launch-1']);
+      expectSame(problems, 'artifact', ids(await launches.liveGrants({ kind: 'artifact', artifactId: SPEC.artifactId })), ['launch-1', 'launch-2']);
+      expectSame(problems, 'gates', ids(await launches.liveGrants({ kind: 'gates', gateIds: [passedGate().id] })), ['launch-1', 'launch-2']);
+      expectSame(problems, 'no gates', ids(await launches.liveGrants({ kind: 'gates', gateIds: [] })), []);
+      const revoked = must(revokeLaunch(first, first.attempts[0]!.id, 'gate-not-passed', LATER));
+      must(await tasks.replace(revoked, first.generation));
+      expectSame(problems, 'all', ids(await launches.liveGrants({ kind: 'all' })), ['launch-2']);
+      expectRead(problems, 'revoked still found', await launches.byLaunchAuthId(id('LaunchAuthId', 'launch-1')), recordedLaunch(first));
+      return problems;
+    },
+  },
+  {
+    name: 'a rejection is recorded once for its worker and operation, with its request',
+    async check({ launches }) {
+      const problems: string[] = [];
+      const request = {
+        operationId: id('OperationId', 'operation-1'), workerId: id('WorkerId', 'worker-1'), recoveryEpoch: must(parseRecoveryEpoch(1)),
+        assignmentId: id('AssignmentId', 'assignment-1'), attemptId: id('AttemptId', 'attempt-1'), ownershipGeneration: FIRST_OWNERSHIP_GENERATION,
+        executionId: id('ExecutionId', 'execution-1'), admissionId: id('AdmissionId', 'admission-1'),
+        admissionGeneration: must(parseGeneration(1)), reportsNotStarted: false,
+      };
+      const recorded = { request, rejection: launchRejection('gate-not-passed', 'gate g has not passed') };
+      expectRead(problems, 'none', await launches.rejection(request.workerId, request.operationId), undefined);
+      expectSuccess(problems, 'record', await launches.recordRejection(recorded));
+      expectCode(problems, 'again', await launches.recordRejection(recorded), 'conflict');
+      expectRead(problems, 'read', await launches.rejection(request.workerId, request.operationId), recorded);
+      expectRead(problems, 'other worker', await launches.rejection(id('WorkerId', 'worker-2'), request.operationId), undefined);
       return problems;
     },
   },

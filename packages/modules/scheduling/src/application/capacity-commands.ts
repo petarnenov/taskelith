@@ -74,9 +74,10 @@ export function endPayload(assignment: Assignment, reason: AssignmentEndReason):
   return ({ protocolVersion }) => ({ protocolVersion, assignmentId: assignment.id, reason });
 }
 
-// The cancellation that follows an ended assignment whose launch was revoked.
-export function cancellationPayload(): CommandPayload {
-  return ({ protocolVersion }) => ({ protocolVersion, reason: 'assignment-ended' });
+// `assignment-ended` follows an ended assignment whose launch was revoked;
+// `launch-revoked` follows any other invalidating writer.
+export function cancellationPayload(reason: 'assignment-ended' | 'launch-revoked'): CommandPayload {
+  return ({ protocolVersion }) => ({ protocolVersion, reason });
 }
 
 interface CommandContext {
