@@ -1,5 +1,5 @@
 import type { HttpSchemas } from '@taskelith/contracts';
-import type { Enrollment, EnrollmentRequest } from '@taskelith/fleet';
+import type { Enrollment, EnrollmentRequest, WorkerPrincipal } from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import type { QuarantineRecord } from '@taskelith/nats';
 import type { RunService } from '../application/run-service.js';
@@ -16,7 +16,10 @@ export interface ApiServices {
   readonly runs: RunService;
   readonly tasks: TaskService;
   readonly operator: { authenticate(secret: string): Promise<Result<void>> };
-  readonly enrollment: { enroll(tokenSecret: string, request: EnrollmentRequest): Promise<Result<Enrollment>> };
+  readonly enrollment: {
+    enroll(tokenSecret: string, request: EnrollmentRequest): Promise<Result<Enrollment>>;
+    authenticateWorkerBearer(secret: string): Promise<Result<WorkerPrincipal>>;
+  };
   readonly quarantine: {
     records(fromSequence?: number, limit?: number): Promise<Result<readonly QuarantineRecord[]>>;
     redrive(sequence: number): Promise<Result<string | null>>;
@@ -34,6 +37,10 @@ export class ControlPlaneApi implements ApiHandlers {
 
   authenticateOperator(secret: string): Promise<Result<void>> {
     return this.#services.operator.authenticate(secret);
+  }
+
+  authenticateWorker(secret: string): Promise<Result<WorkerPrincipal>> {
+    return this.#services.enrollment.authenticateWorkerBearer(secret);
   }
 
   async handle(operationId: string, request: ApiRequest, bearer: string): Promise<Result<unknown>> {
