@@ -78,6 +78,7 @@ Recorded before pass 1.
 - At `dc49bcd`, after the merge: 1025 tests passed, 0 failed. Coverage 99.25% lines, 91.61% branches, 99.01% functions. The comment, boundary, coverage-scope, dependency-inventory, contract-compatibility, OpenSpec, and package checks pass.
 - At `d0958be`, before pass 1: 1025 tests passed, 0 failed. Coverage 99.25% lines, 91.61% branches, 99.01% functions. Every other check passes.
 - At `e749b8d`, after the pass-1 fixes and the new spec scenarios: 1042 tests passed, 0 failed. Coverage 99.26% lines, 91.66% branches, 99.01% functions. Every other check passes.
+- At `b330696`, after the pass-2 fix: 1046 tests passed, 0 failed. Coverage 99.27% lines, 91.68% branches, 99.02% functions. Every other check passes.
 
 ## Independent review
 
