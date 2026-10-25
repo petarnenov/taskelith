@@ -39,7 +39,15 @@ Enrollment SHALL return a control-plane bearer secret and a NATS `.creds` file o
 
 #### Scenario: Due row without a predecessor
 - **WHEN** the expiry sweep meets a worker that is due by its stored expiry time but whose record holds no previous credential
-- **THEN** the sweep skips that worker without failing, records no revocation for it, expires every other due predecessor, and counts only the predecessors it expired
+- **THEN** the sweep records no revocation for it, clears its stored expiry time so that a later sweep does not meet it again, expires every other due predecessor, and counts only the predecessors it expired
+
+#### Scenario: Due row without an enrollment record
+- **WHEN** a worker row is due by its stored expiry time but holds no enrollment record
+- **THEN** the sweep does not select it and expires every other due predecessor
+
+#### Scenario: Predecessor still in its grace window
+- **WHEN** a worker is due by its stored expiry time but its record's previous credential is valid until a later time
+- **THEN** the sweep keeps the previous credential, records no revocation, sets the stored expiry time back to the record's, and expires it only when that time has passed
 
 ### Requirement: Broker permissions and revocation
 A worker's broker user SHALL publish only to its own consumer API, acknowledgements, and observation subject, and subscribe only under its own inbox prefix. A revocation SHALL reach the server through the system account without a reload, and SHALL disconnect the user.
