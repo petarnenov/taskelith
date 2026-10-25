@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { dirname } from 'node:path';
 import {
   checkEnvironment, collectFacts, formatReport, readPins, shellNodeNotice, type CommandRunner
 } from './environment-checks.ts';
@@ -13,6 +14,8 @@ const run: CommandRunner = (command, args) => {
 
 const results = checkEnvironment(collectFacts(run, process.version), readPins(process.env));
 console.log(formatReport(results));
-const notice = shellNodeNotice({ shell: process.env.INVOKING_NODE, checks: process.version });
+const notice = shellNodeNotice({
+  shell: process.env.INVOKING_NODE, checks: process.version, checksDirectory: dirname(process.execPath)
+});
 if (notice) console.log(notice);
 if (results.some((result) => !result.ok)) process.exit(1);

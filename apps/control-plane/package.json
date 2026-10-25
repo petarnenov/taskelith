@@ -14,6 +14,7 @@
     "@taskelith/contracts": "0.0.0",
     "@taskelith/control-plane-store": "0.0.0",
     "@taskelith/data-root": "0.0.0",
+    "@taskelith/evidence-volume": "0.0.0",
     "@taskelith/execution": "0.0.0",
     "@taskelith/fleet": "0.0.0",
     "@taskelith/kernel": "0.0.0",

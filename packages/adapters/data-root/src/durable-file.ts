@@ -17,7 +17,7 @@ import { dataRootFailure } from './data-root-failure.js';
 
 // The durable file rule of the worker journal contract, section 4. On macOS
 // Node's fsync uses F_FULLFSYNC first, as section 3 describes.
-const TEMPORARY_MARKER = '.tmp-';
+export const TEMPORARY_MARKER = '.tmp-';
 const PRIVATE_FILE = 0o600;
 const PRIVATE_DIRECTORY = 0o700;
 

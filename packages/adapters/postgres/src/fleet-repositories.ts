@@ -134,13 +134,17 @@ export class PostgresFleetRegistry implements FleetRegistry {
       'SELECT enrollment FROM workers WHERE predecessor_valid_until <= $1 ORDER BY worker_id FOR UPDATE',
       [now],
     );
+    let expired = 0;
     for (const row of rows) {
       const worker = decodeRecord<EnrolledWorker>(row.enrollment);
-      const previous = worker.credentials.previous!;
+      const previous = worker.credentials.previous;
+      // A row whose record holds no predecessor has nothing to revoke.
+      if (previous === undefined) continue;
       await this.#record(worker.workerId, [revocationOf(previous, previous.validUntil)]);
       await this.#write(worker.workerId, { ...worker, credentials: { current: worker.credentials.current } });
+      expired += 1;
     }
-    return ok(rows.length);
+    return ok(expired);
   }
 
   // Run it in its own READ COMMITTED transaction: the advisory lock makes

@@ -18,11 +18,13 @@ import {
   type TransportLimits,
 } from '@taskelith/nats';
 import { EventLoopLagMonitor, JsonLinesLogSink, runPeriodically, SYSTEM_CLOCK } from '@taskelith/node-observability';
+import { LocalEvidenceVolume } from '@taskelith/evidence-volume';
 import { InMemoryMetrics, Logger, sampleControlPlane, type LogSink } from '@taskelith/observability';
 import { PostgresControlPlaneSignals, PostgresOutboxRelay } from '@taskelith/postgres';
 import { Administration, type AdministrationSettings } from '../admin/administration.js';
 import { createApiServer } from '../api/api-server.js';
 import { ControlPlaneApi } from '../api/control-plane-api.js';
+import { EvidenceService } from '../application/evidence-service.js';
 import { LaunchAuthority } from '../application/launch-authority.js';
 import { RunService } from '../application/run-service.js';
 import { TaskService } from '../application/task-service.js';
@@ -101,6 +103,8 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   if (!enrollment.ok) return enrollment;
   cleanup.push(() => enrollment.value.close());
   const database = admin.value.database;
+  const volume = LocalEvidenceVolume.open({ dataRoot: settings.dataRoot, ownerUid: settings.ownerUid });
+  if (!volume.ok) return volume;
   const fence = new InstallationPublicationFence(database);
   const quarantine = new Quarantine(broker.value.jsm, broker.value.js, address.value, limits);
   const parameters = parseLaunchParameters(settings.launchParameters ?? LAUNCH_PARAMETERS);
@@ -110,6 +114,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   const api = createApiServer(new ControlPlaneApi({
     runs: new RunService(database, workflows),
     tasks: new TaskService(database),
+    evidence: new EvidenceService(database, volume.value),
     operator: admin.value.operator,
     enrollment: enrollment.value.service,
     launches,

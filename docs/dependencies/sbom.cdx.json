@@ -4057,6 +4057,21 @@
       "externalReferences": []
     },
     {
+      "bom-ref": "@taskelith/evidence-volume@0.0.0",
+      "type": "library",
+      "name": "@taskelith/evidence-volume",
+      "version": "0.0.0",
+      "scope": "required",
+      "purl": "pkg:npm/%40taskelith/evidence-volume@0.0.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:private",
+          "value": "true"
+        }
+      ],
+      "externalReferences": []
+    },
+    {
       "bom-ref": "@taskelith/execution@0.0.0",
       "type": "library",
       "name": "@taskelith/execution",
@@ -22656,6 +22671,7 @@
         "@taskelith/contracts@0.0.0",
         "@taskelith/control-plane-store@0.0.0",
         "@taskelith/data-root@0.0.0",
+        "@taskelith/evidence-volume@0.0.0",
         "@taskelith/execution@0.0.0",
         "@taskelith/fleet@0.0.0",
         "@taskelith/kernel@0.0.0",
@@ -22675,6 +22691,17 @@
       "ref": "@taskelith/data-root@0.0.0",
       "dependsOn": [
         "@taskelith/kernel@0.0.0"
+      ]
+    },
+    {
+      "ref": "@taskelith/evidence-volume@0.0.0",
+      "dependsOn": [
+        "@taskelith/control-plane-store@0.0.0",
+        "@taskelith/data-root@0.0.0",
+        "@taskelith/execution@0.0.0",
+        "@taskelith/kernel@0.0.0",
+        "@taskelith/sdlc@0.0.0",
+        "@taskelith/testing@0.0.0"
       ]
     },
     {
@@ -25910,6 +25937,7 @@
         "@taskelith/control-plane-store@0.0.0",
         "@taskelith/control-plane@0.0.0",
         "@taskelith/data-root@0.0.0",
+        "@taskelith/evidence-volume@0.0.0",
         "@taskelith/execution@0.0.0",
         "@taskelith/fleet@0.0.0",
         "@taskelith/kernel@0.0.0",

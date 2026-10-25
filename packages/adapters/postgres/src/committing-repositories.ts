@@ -1,6 +1,9 @@
 import { ok, type EventId, type Instant, type Result } from '@taskelith/kernel';
 import type {
   AssignmentId,
+  EvidenceId,
+  EvidenceRecord,
+  EvidenceRecords,
   Inbox,
   InboxOutcome,
   LaunchAuthId,
@@ -30,6 +33,7 @@ import type {
   ArtifactId,
   ArtifactRevision,
   CurrentRevisions,
+  ContentDigest,
   Gate,
   GateId,
   GateRepository,
@@ -289,6 +293,38 @@ export class CommittingRunCatalog implements RunCatalog {
 
   runOfAdmission(admissionId: AdmissionId): Promise<Result<WorkflowRunId | undefined>> {
     return this.#database.transaction((tx) => tx.catalog.runOfAdmission(admissionId));
+  }
+}
+
+export class CommittingEvidenceRecords implements EvidenceRecords {
+  readonly #database: PostgresDatabase;
+
+  constructor(database: PostgresDatabase) {
+    this.#database = database;
+  }
+
+  get(id: EvidenceId): Promise<Result<EvidenceRecord | undefined>> {
+    return this.#database.transaction((tx) => tx.evidence.get(id));
+  }
+
+  add(record: EvidenceRecord): Promise<Result<void>> {
+    return this.#database.transaction((tx) => tx.evidence.add(record));
+  }
+
+  listByTask(taskId: TaskId): Promise<Result<readonly EvidenceRecord[]>> {
+    return this.#database.transaction((tx) => tx.evidence.listByTask(taskId));
+  }
+
+  countByDigest(digest: ContentDigest): Promise<Result<number>> {
+    return this.#database.transaction((tx) => tx.evidence.countByDigest(digest));
+  }
+
+  remove(id: EvidenceId): Promise<Result<void>> {
+    return this.#database.transaction((tx) => tx.evidence.remove(id));
+  }
+
+  lockDigest(digest: ContentDigest): Promise<Result<void>> {
+    return this.#database.transaction((tx) => tx.evidence.lockDigest(digest));
   }
 }
 

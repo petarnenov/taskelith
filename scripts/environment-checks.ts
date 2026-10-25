@@ -174,14 +174,21 @@ export function stepCommand(step: SetupStep, pins: Pins): { command: string; arg
 
 // make setup, make doctor, and make verify run under the pinned Node.js, which
 // they cannot activate in the calling shell.
-export interface NodeVersions {
+export interface NodeSelection {
   readonly shell: string | undefined;
   readonly checks: string;
+  readonly checksDirectory: string;
 }
 
-export function shellNodeNotice({ shell, checks }: NodeVersions): string | undefined {
+// nvm use leaves a Node.js that comes earlier in PATH first, so the notice
+// also names the PATH line that the make targets use.
+export function shellNodeNotice({ shell, checks, checksDirectory }: NodeSelection): string | undefined {
   if (shell === checks) return undefined;
-  return `These checks ran under Node.js ${checks}, which make doctor and make verify select on their own; your shell uses ${shell || 'none'}, so run 'nvm use' before running npm or node directly.`;
+  return `These checks ran under Node.js ${checks}, which make doctor and make verify select on their own; your shell uses ${shell || 'none'}. To run npm or node directly, run 'nvm use' and check that 'node -v' prints ${checks}; if it does not, run: export PATH=${singleQuoted(checksDirectory)}:"$PATH"`;
+}
+
+function singleQuoted(text: string): string {
+  return `'${text.replaceAll("'", "'\\''")}'`;
 }
 
 export function formatReport(results: readonly CheckResult[]): string {

@@ -8,6 +8,7 @@ import {
   databaseNow,
 } from './capacity-repositories.js';
 import { PostgresSignalReadings } from './control-plane-signals.js';
+import { PostgresEvidenceProducers, PostgresEvidenceRecords } from './evidence-records.js';
 import {
   PostgresAdmissionRepository,
   PostgresAssignmentRepository,
@@ -42,6 +43,8 @@ export class PostgresTransaction {
   readonly installationTable: PostgresInstallationTable;
   readonly operatorCredentials: PostgresOperatorCredentials;
   readonly signals: PostgresSignalReadings;
+  readonly evidence: PostgresEvidenceRecords;
+  readonly producers: PostgresEvidenceProducers;
   readonly launches: PostgresLaunchRecords;
   readonly revisions: PostgresCurrentRevisions;
   readonly #session: Session;
@@ -65,6 +68,8 @@ export class PostgresTransaction {
     this.installationTable = new PostgresInstallationTable(session);
     this.operatorCredentials = new PostgresOperatorCredentials(session);
     this.signals = new PostgresSignalReadings(session);
+    this.evidence = new PostgresEvidenceRecords(session);
+    this.producers = new PostgresEvidenceProducers(session);
     this.launches = new PostgresLaunchRecords(session);
     this.revisions = new PostgresCurrentRevisions(session);
   }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { RunService, WorkflowRegistry, type ControlPlaneStore, type ControlPlaneTransaction } from '@taskelith/control-plane';
-import { InMemoryTaskRepository } from '@taskelith/execution';
+import { InMemoryEvidenceRecords, InMemoryTaskRepository } from '@taskelith/execution';
 import { InMemoryTaskLineage } from '@taskelith/scheduling';
 import {
   InMemoryAdmissionRepository,
@@ -32,12 +32,14 @@ function store(): ControlPlaneStore {
   const transaction: ControlPlaneTransaction = {
     runs: new InMemoryWorkflowRunRepository(), catalog: new InMemoryRunCatalog(), admissions: new InMemoryAdmissionRepository(),
     gates: new InMemoryGateRepository(), tasks: new InMemoryTaskRepository(), lineage: new InMemoryTaskLineage(), outbox: new InMemoryOutbox(),
+    evidence: new InMemoryEvidenceRecords(), producers: { heldGenerations: async () => ({ ok: true, value: [] }) },
+    fleet: { worker: async () => ({ ok: true, value: undefined }) },
     revisions: new InMemoryCurrentRevisions(),
     // Only the launch authority reads these.
-    assignments: undefined as never, installation: undefined as never, fleet: undefined as never, launches: undefined as never,
+    assignments: undefined as never, installation: undefined as never, launches: undefined as never,
     now: async () => '2026-10-25T09:00:00.000Z' as never,
   };
-  return { transaction: (work) => work(transaction) };
+  return { transaction: (work) => work(transaction), readCommitted: (work) => work(transaction) };
 }
 
 test('a stored run answers a repeat after its workflow left the registry', async () => {

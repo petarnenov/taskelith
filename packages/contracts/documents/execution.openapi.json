@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Taskelith execution API",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "description": "Worker enrollment, launch authorization (G2 decision D12 (a)), delegation, task results, and evidence. Worker operations use the per-worker credential and operator operations the installation bootstrap credential (G2 decision D10 (a))."
   },
   "paths": {
@@ -439,6 +439,26 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "The content or its record could not be stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The credential store, the database, or the evidence volume is not available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
           }
         }
       }
@@ -474,6 +494,16 @@
               }
             }
           },
+          "400": {
+            "description": "The path is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
           "401": {
             "description": "The operator credential is invalid.",
             "content": {
@@ -486,6 +516,26 @@
           },
           "404": {
             "description": "The evidence record does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The record could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The credential store or the database is not available.",
             "content": {
               "application/json": {
                 "schema": {
@@ -529,6 +579,16 @@
               }
             }
           },
+          "400": {
+            "description": "The path is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
           "401": {
             "description": "The operator credential is invalid.",
             "content": {
@@ -551,6 +611,16 @@
           },
           "500": {
             "description": "The stored content is missing or does not match its digest, so it is not served.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The credential store, the database, or the evidence volume is not available.",
             "content": {
               "application/json": {
                 "schema": {
