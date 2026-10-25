@@ -132,7 +132,9 @@ class RecordedHistogram implements LoopDelayHistogram {
 
 // The histogram keeps three significant digits, so a recorded interval reads
 // back within 0.1 % of itself.
-const HDR_TOLERANCE_SECONDS = 1e-4;
+function hdrTolerance(intervalSeconds: number): number {
+  return intervalSeconds * 0.001;
+}
 
 test('an idle window reads below the resolution', () => {
   const histogram = new RecordedHistogram();
@@ -144,7 +146,7 @@ test('an idle window reads below the resolution', () => {
   monitor.stop();
   const lag = metrics.series('event-loop.lag')!.last;
   assert.ok(lag >= 0 && lag < 0.01, `idle lag ${lag}s should stay below the 10 ms resolution`);
-  assert.ok(Math.abs(lag - 0.0006) < HDR_TOLERANCE_SECONDS, 'the p99 interval less the resolution');
+  assert.ok(Math.abs(lag - 0.0006) < hdrTolerance(0.0106), 'the p99 interval less the resolution');
   assert.ok(!histogram.enabled, 'stop disables the histogram');
 });
 
@@ -154,7 +156,7 @@ test('each sample covers only the window since the previous one', () => {
   const metrics = new InMemoryMetrics();
   histogram.record(10, 10, 75);
   monitor.sample(metrics);
-  assert.ok(Math.abs(metrics.series('event-loop.lag')!.last - 0.065) < HDR_TOLERANCE_SECONDS);
+  assert.ok(Math.abs(metrics.series('event-loop.lag')!.last - 0.065) < hdrTolerance(0.075));
   histogram.record(10, 10.2);
   monitor.sample(metrics);
   monitor.stop();

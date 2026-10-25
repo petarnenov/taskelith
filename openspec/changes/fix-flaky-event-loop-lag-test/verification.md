@@ -31,7 +31,7 @@ Conclusion: the monitor reads the delay correctly. With eight or nine intervals,
 
 ## Checks
 
-Under the same load after the first fix, the full test file with coverage: 0 failures in 200 runs and 0 in a further 600 runs (0 in 800). After the pass-1 fixes: 0 failures in 400 runs. The file runs 12 tests, all passing. `npm run verify:comments` passed. `npm run openspec -- validate fix-flaky-event-loop-lag-test --strict` passed. Before pass 1, `make verify` passed: 915 tests, 0 failures; coverage 99.15 % lines, 91.90 % branches, 98.88 % functions; strict OpenSpec validation 53 passed, 0 failed; archive dry run and package verification passed. After the pass-1 fixes, `make verify` passed again: 915 tests, 0 failures; coverage 99.15 % lines, 91.89 % branches, 98.88 % functions; 53 strict validations.
+Under the same load after the first fix, the full test file with coverage: 0 failures in 200 runs and 0 in a further 600 runs (0 in 800). After the pass-1 fixes: 0 failures in 400 runs. After the pass-2 fix: 0 failures in 200 runs. In total, 0 failures in 1,400 runs after the fix, against 3 in 300 before it under the same load. The file runs 12 tests, all passing. `npm run verify:comments` passed. `npm run openspec -- validate fix-flaky-event-loop-lag-test --strict` passed. Before pass 1, `make verify` passed: 915 tests, 0 failures; coverage 99.15 % lines, 91.90 % branches, 98.88 % functions; strict OpenSpec validation 53 passed, 0 failed; archive dry run and package verification passed. After the pass-1 fixes, `make verify` passed again: 915 tests, 0 failures; coverage 99.15 % lines, 91.89 % branches, 98.88 % functions; 53 strict validations.
 
 ## Independent review
 
@@ -41,6 +41,8 @@ Reviewer: Codex (`gpt-6.1-sol`), reasoning effort medium, read-only sandbox, run
   1. Medium: the test's own histogram returned exact values, while Node's HDR histogram rounds to bucket boundaries, so the exact assertions did not match Node. The test now records the intervals into Node's `createHistogram()` and asserts within its 0.1 % precision.
   2. Medium: the blocked-loop test's upper bound of 5 s could fail on a long process pause with a correct monitor. It is now a finiteness check, and the proposal and design say so.
   3. Low: no self-check, evidence check, or commands before pass 1. They are recorded above.
+- **Pass 2 — session `01a173d1-47c5-71f0-867e-652e46e5180f`, head `e9d5f68`.** The header confirmed Codex v0.164.0, the model, reasoning effort medium, and the read-only sandbox; the snapshot was `b80ac4b84b15ff6b9a810e53751bf0e374978c591404f8a276cfcfcae03e50d1` before and after the pass. The reviewer confirmed the three pass-1 resolutions and reviewed the whole change again. Findings: 0 Critical, 0 High, 0 Medium, 1 Low. Because the pass found only a Low finding, it was fixed without another review pass, as the review process allows; this fix is unreviewed:
+  1. Low: the shared tolerance of 100 µs was looser than the stated 0.1 % precision. The tolerance is now 0.1 % of each asserted interval (10.6 µs for the idle window's 10.6 ms, 75 µs for the blocked window's 75 ms); the reviewer measured Node's deviations at 0.447 µs and 38.719 µs.
 
 ## Limitations
 

@@ -11,4 +11,4 @@
 
 - [x] 3.1 Run the test file many times under load and record the counts.
 - [x] 3.2 Run `npm run openspec -- validate fix-flaky-event-loop-lag-test --strict` and `make verify`.
-- [ ] 3.3 Independent review and record it in `verification.md`.
+- [x] 3.3 Independent review and record it in `verification.md`.
