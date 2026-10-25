@@ -4,8 +4,10 @@ import { err, failure, ok, type Result } from '@taskelith/kernel';
 // so only these characters may form a subject token or a stream name.
 const SUBJECT_TOKEN = /^[A-Za-z0-9_-]{1,64}$/;
 const OUTBOX_COMMAND_SUBJECT = /^workers\.([^.]+)\.commands$/;
+// The SDLC events of the control plane (coordinator decision Q2 of item 16).
+const OUTBOX_SDLC_SUBJECT = 'sdlc.events';
 
-export type StreamKind = 'commands' | 'observations' | 'quarantine' | 'advisories';
+export type StreamKind = 'commands' | 'observations' | 'quarantine' | 'advisories' | 'sdlc';
 
 // Where one installation's messages live: the subjects of the execution
 // contract and the streams that hold them.
@@ -29,13 +31,19 @@ export class TransportAddress {
     return this.#workerSubject(workerId, 'observations');
   }
 
-  // An outbox row names `workers.<workerId>.commands` without the prefix.
+  // An outbox row names `workers.<workerId>.commands` or `sdlc.events`
+  // without the installation's prefix.
   subjectOfOutboxRow(subject: string): Result<string> {
+    if (subject === OUTBOX_SDLC_SUBJECT) return ok(this.sdlcEventsSubject());
     const workerId = OUTBOX_COMMAND_SUBJECT.exec(subject)?.[1];
     if (workerId === undefined) {
-      return err(failure('invalid', 'an outbox subject must be workers.<workerId>.commands', { subject }));
+      return err(failure('invalid', 'an outbox subject must be workers.<workerId>.commands or sdlc.events', { subject }));
     }
     return this.commandSubject(workerId);
+  }
+
+  sdlcEventsSubject(): string {
+    return `${this.#prefix}.sdlc.events`;
   }
 
   allWorkerSubjects(kind: 'commands' | 'observations'): string {
