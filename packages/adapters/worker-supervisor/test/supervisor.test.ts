@@ -1,0 +1,249 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { CrashPoints, SimulatedCrash } from '@taskelith/testing';
+import {
+  adoptExecution,
+  encodeRecord,
+  parseEvents,
+  parseExit,
+  parseHandle,
+  parseLaunch,
+  prepareRecord,
+  recoverExecution,
+  requestCancellation,
+  superviseLaunch,
+  type SupervisorOutcome,
+} from '@taskelith/worker-supervisor';
+import { identity, intent, rig, until, type Rig } from './fakes.ts';
+
+async function prepared(platform: 'linux' | 'darwin' = 'darwin', crashPoint?: (point: string) => void): Promise<Rig> {
+  const setup = rig(platform, crashPoint);
+  assert.ok((await prepareRecord(setup.worker, intent())).ok);
+  return setup;
+}
+
+function file(setup: Rig, name: string): string | undefined {
+  return setup.store.files.get(name);
+}
+
+function events(setup: Rig) {
+  const parsed = parseEvents(file(setup, 'events') ?? '');
+  assert.ok(parsed.ok);
+  return parsed.value;
+}
+
+async function finish(setup: Rig, run: Promise<SupervisorOutcome>, code: number | null, signal: string | null = null) {
+  await until(() => file(setup, 'handle') !== undefined || file(setup, 'exit') !== undefined);
+  setup.spawner.exit(code, signal);
+  return run;
+}
+
+test('the first supervisor claims, spawns once, and records the exit when the group is gone', async () => {
+  const setup = await prepared();
+  const outcome = await finish(setup, superviseLaunch(setup.supervisor), 0);
+
+  assert.deepEqual(outcome, { kind: 'exited', exit: { status: { kind: 'code', code: 0 }, startProven: true, termination: 'process-group-empty' } });
+  assert.deepEqual(setup.points, ['CP2', 'CP5', 'CP6', 'CP7', 'CP8', 'CP9', 'CP11']);
+  assert.deepEqual(parseLaunch(file(setup, 'launch')!), { ok: true, value: { kind: 'claim', launchAuthId: 'launch-1', supervisor: 1 } });
+  assert.deepEqual(parseHandle(file(setup, 'handle')!), { ok: true, value: { kind: 'spawned', process: identity(500), processGroupId: 500 } });
+  assert.equal(setup.spawner.spawned.length, 1);
+  assert.equal(setup.lock.held, false);
+  assert.ok(file(setup, 'supervisor.1'));
+});
+
+test('on Linux the child is born in its containment, and cancellation kills the containment', async () => {
+  const setup = await prepared('linux');
+  setup.fake.containmentPopulated = true;
+  const run = superviseLaunch(setup.supervisor);
+  await until(() => file(setup, 'handle') !== undefined);
+  assert.ok((await requestCancellation(setup.worker, 'requested')).ok);
+  await until(() => setup.fake.containmentLog.includes('kill'));
+  setup.spawner.exit(null, 'SIGKILL');
+  const outcome = await run;
+
+  assert.deepEqual(outcome, { kind: 'exited', exit: { status: { kind: 'signal', signal: 'SIGKILL' }, startProven: true, termination: 'containment-empty' } });
+  assert.deepEqual(setup.fake.containmentLog, ['create', 'admit 100', 'release 100', 'kill', 'remove']);
+  assert.deepEqual(parseLaunch(file(setup, 'launch')!), {
+    ok: true,
+    value: { kind: 'claim', launchAuthId: 'launch-1', supervisor: 1, containment: '/sys/fs/cgroup/executions/execution-1' },
+  });
+  assert.deepEqual(events(setup), [{ kind: 'cancellation', step: 'containment-killed' }]);
+});
+
+test('a supervisor seals instead of spawning when its checks fail', async () => {
+  for (const [change, reason] of [
+    [(setup: Rig) => void (setup.fake.bootId = 'boot-2'), 'boot-changed'],
+    [(setup: Rig) => void (setup.fake.clockReadable = false), 'deadline-unreadable'],
+    [(setup: Rig) => setup.fake.host.suspend(30_000), 'deadline-passed'],
+  ] as const) {
+    const setup = await prepared();
+    change(setup);
+    assert.deepEqual(await superviseLaunch(setup.supervisor), { kind: 'sealed', reason });
+    assert.deepEqual(parseLaunch(file(setup, 'launch')!), { ok: true, value: { kind: 'seal', by: 'supervisor', reason } });
+    assert.equal(setup.spawner.spawned.length, 0);
+  }
+});
+
+test('a supervisor that cannot take the lock, is not the first, or finds a launch record does not spawn', async () => {
+  const busy = await prepared();
+  busy.lock.held = true;
+  assert.deepEqual(await superviseLaunch(busy.supervisor), { kind: 'lock-busy' });
+
+  const late = await prepared();
+  late.store.files.set('supervisor.1', encodeRecord({ serial: 1, process: identity(99) }));
+  assert.deepEqual(await superviseLaunch(late.supervisor), { kind: 'not-first' });
+  assert.ok(late.store.files.has('supervisor.2'));
+
+  const sealed = await prepared();
+  sealed.store.files.set('launch', encodeRecord({ kind: 'seal', by: 'worker', reason: 'recovery' }));
+  assert.deepEqual(await superviseLaunch(sealed.supervisor), {
+    kind: 'launch-exists',
+    launch: { kind: 'seal', by: 'worker', reason: 'recovery' },
+  });
+
+  const missing = rig();
+  await missing.store.createDirectory();
+  assert.equal((await superviseLaunch(missing.supervisor)).kind, 'record-unusable');
+  for (const setup of [busy, late, sealed, missing]) assert.equal(setup.spawner.spawned.length, 0);
+});
+
+test('a failed spawn ends with the failure and never spawns again', async () => {
+  const setup = await prepared();
+  setup.spawner.failure = 'spawn scripted-process ENOENT';
+
+  assert.deepEqual(await superviseLaunch(setup.supervisor), {
+    kind: 'exited',
+    exit: { status: { kind: 'unknown' }, startProven: false, spawnFailure: 'spawn scripted-process ENOENT', termination: 'never-spawned' },
+  });
+  assert.deepEqual(parseHandle(file(setup, 'handle')!), { ok: true, value: { kind: 'spawn-failed', failure: 'spawn scripted-process ENOENT' } });
+  const recovered = await recoverExecution(setup.worker, 'record');
+  assert.ok(recovered.ok && recovered.value.fact === 'exited');
+  assert.deepEqual(recovered.value.exit, (parseExit(file(setup, 'exit')!) as { value: unknown }).value);
+  assert.equal(setup.spawner.spawned.length, 1);
+});
+
+test('a suspend that outlasts the deadline after the claim ends without a spawn', async () => {
+  const setup = await prepared('darwin', (point) => {
+    if (point === 'CP7') setup.fake.host.suspend(60_000);
+  });
+
+  const outcome = await superviseLaunch(setup.supervisor);
+  assert.equal(outcome.kind, 'exited');
+  assert.equal(setup.spawner.spawned.length, 0);
+  assert.equal((parseHandle(file(setup, 'handle')!) as { value: { kind: string } }).value.kind, 'spawn-failed');
+});
+
+test('macOS cancellation signals the group while the child is unreaped', async () => {
+  const setup = await prepared();
+  const run = superviseLaunch(setup.supervisor);
+  await until(() => file(setup, 'handle') !== undefined);
+  await requestCancellation(setup.worker, 'requested');
+  await until(() => setup.spawner.signals.length === 2);
+  setup.spawner.exit(null, 'SIGKILL');
+  await run;
+
+  assert.deepEqual(setup.spawner.signals, ['SIGTERM 500', 'SIGKILL 500']);
+  assert.deepEqual(events(setup), [
+    { kind: 'cancellation', step: 'terminate-sent' },
+    { kind: 'cancellation', step: 'kill-sent' },
+  ]);
+});
+
+test('an escaped descendant keeps the set unproven until it is gone', async () => {
+  const setup = await prepared();
+  const run = superviseLaunch(setup.supervisor);
+  await until(() => file(setup, 'handle') !== undefined);
+  setup.fake.run({ identity: identity(501), parentPid: 500, processGroupId: 501 });
+  await until(() => events(setup).length === 1);
+  setup.spawner.exit(0);
+  await until(() => events(setup).length === 2);
+  assert.equal(file(setup, 'exit'), undefined);
+  setup.fake.end(501);
+  const outcome = await run;
+
+  assert.deepEqual(events(setup), [
+    { kind: 'descendant', process: identity(501) },
+    { kind: 'survivors', processes: [identity(501)] },
+  ]);
+  assert.equal(outcome.kind, 'exited');
+});
+
+test('a durable write that fails after the spawn is retried while the child runs', async () => {
+  const setup = await prepared();
+  setup.store.failing.add('handle');
+  const run = superviseLaunch(setup.supervisor);
+  await until(() => setup.spawner.spawned.length === 1);
+  for (let tick = 0; tick < 20; tick += 1) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(file(setup, 'handle'), undefined);
+  setup.store.failing.delete('handle');
+  await finish(setup, run, 0);
+
+  assert.ok(file(setup, 'handle'));
+  assert.equal(setup.spawner.spawned.length, 1);
+});
+
+const CRASH_RESULTS = {
+  darwin: { CP5: 'not-started', CP6: 'not-started', CP7: 'uncertain', CP8: 'uncertain', CP9: 'adopted', CP11: 'exited' },
+  linux: { CP5: 'not-started', CP6: 'not-started', CP7: 'exited', CP8: 'adopted', CP9: 'adopted', CP11: 'exited' },
+} as const;
+
+for (const platform of ['darwin', 'linux'] as const) {
+  for (const [point, fact] of Object.entries(CRASH_RESULTS[platform])) {
+    test(`a ${platform} supervisor crash at ${point} recovers as section 6 assigns, without a second spawn`, async () => {
+      const crashes = new CrashPoints({ point, occurrence: 1, action: 'throw' });
+      const setup = await prepared(platform, (reached) => crashes.reach(reached));
+      // The containment holds the child from CP8 until the child exits.
+      setup.fake.containmentPopulated = point === 'CP8' || point === 'CP9';
+      const run = superviseLaunch(setup.supervisor);
+      if (point === 'CP11') await finish(setup, run, 0).catch(() => undefined);
+      await assert.rejects(run, SimulatedCrash);
+
+      const recovered = await recoverExecution(setup.worker, 'record');
+      assert.ok(recovered.ok);
+      assert.equal(recovered.value.fact, fact);
+      assert.ok(setup.spawner.spawned.length <= 1);
+    });
+  }
+}
+
+test('an adopting Linux supervisor watches the containment and records an unknown exit', async () => {
+  const setup = await prepared('linux');
+  setup.store.files.set('launch', encodeRecord({ kind: 'claim', launchAuthId: 'launch-1', supervisor: 1, containment: '/sys/fs/cgroup/executions/execution-1' }));
+  setup.store.files.set('handle', encodeRecord({ kind: 'spawned', process: identity(500), processGroupId: 500 }));
+  setup.fake.containmentPopulated = true;
+  const run = adoptExecution(setup.supervisor);
+  await until(() => setup.store.files.has('supervisor.1'));
+  await requestCancellation(setup.worker, 'requested');
+  const outcome = await run;
+
+  assert.deepEqual(outcome, { kind: 'exited', exit: { status: { kind: 'unknown' }, startProven: true, termination: 'containment-empty' } });
+  assert.ok(setup.fake.containmentLog.includes('kill'));
+});
+
+test('an adopting macOS supervisor only observes, and records a cancellation as not applied', async () => {
+  const setup = await prepared();
+  setup.store.files.set('launch', encodeRecord({ kind: 'claim', launchAuthId: 'launch-1', supervisor: 1 }));
+  setup.store.files.set('handle', encodeRecord({ kind: 'spawned', process: identity(500), processGroupId: 500 }));
+  setup.fake.run({ identity: identity(500), parentPid: 1, processGroupId: 500 });
+  const run = adoptExecution(setup.supervisor);
+  await requestCancellation(setup.worker, 'requested');
+  await until(() => events(setup).length === 1);
+  setup.fake.end(500);
+
+  assert.deepEqual(await run, { kind: 'child-gone' });
+  assert.deepEqual(events(setup), [{ kind: 'cancellation', step: 'not-applied' }]);
+  assert.deepEqual(setup.spawner.signals, []);
+});
+
+test('an adopter without a readable claim or a matching containment adopts nothing', async () => {
+  const unclaimed = await prepared();
+  assert.equal((await adoptExecution(unclaimed.supervisor)).kind, 'record-unusable');
+
+  const elsewhere = await prepared('linux');
+  elsewhere.store.files.set('launch', encodeRecord({ kind: 'claim', launchAuthId: 'launch-1', supervisor: 1, containment: '/elsewhere' }));
+  assert.equal((await adoptExecution(elsewhere.supervisor)).kind, 'record-unusable');
+
+  const handleless = await prepared();
+  handleless.store.files.set('launch', encodeRecord({ kind: 'claim', launchAuthId: 'launch-1', supervisor: 1 }));
+  assert.equal((await adoptExecution(handleless.supervisor)).kind, 'record-unusable');
+});
