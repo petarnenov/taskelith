@@ -118,3 +118,17 @@ test('audit events cannot be changed or removed', { concurrency: false }, async 
   await assert.rejects(query(url, "UPDATE audit_events SET reason = 'changed'"), /audit events are immutable/);
   await assert.rejects(query(url, 'DELETE FROM audit_events'), /audit events are immutable/);
 });
+
+test('a hash column refuses a second worker, and a row without a record is no worker', { concurrency: false }, async () => {
+  await truncateAll(url);
+  const registry = new CommittingFleetRegistry(database);
+  value(await registry.addToken(fleetToken('t1')));
+  const worker = fleetWorker('w1', 'j1');
+  value(await registry.enroll(fleetToken('t1').hash, worker));
+  const hash = worker.credentials.current.controlPlaneHash;
+  await assert.rejects(query(url, `INSERT INTO workers (worker_id, enrolled, revoked, draining, reachable, slots, cpu_millicores,
+    memory_mebibytes, controls, control_plane_hash) VALUES ('w2', true, false, false, false, 1, 1, 1, '{}', $1)`, [hash]), /unique/);
+  await query(url, `INSERT INTO workers (worker_id, enrolled, revoked, draining, reachable, slots, cpu_millicores,
+    memory_mebibytes, controls, control_plane_hash) VALUES ('w3', true, false, false, false, 1, 1, 1, '{}', 'cp-orphan')`);
+  assert.equal(value(await registry.workerByCredentialHash('cp-orphan' as never)), undefined);
+});

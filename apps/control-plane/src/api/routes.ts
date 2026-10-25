@@ -1,7 +1,7 @@
 import type { HttpSchemas } from '@taskelith/contracts';
 import type { FailureCode } from '@taskelith/kernel';
 
-export type SecurityScheme = 'operatorToken' | 'enrollmentToken';
+export type SecurityScheme = 'operatorToken' | 'enrollmentToken' | 'workerCredential';
 
 // One operation of the OpenAPI documents: how a request reaches it and how
 // its failures map to the statuses the document declares.
