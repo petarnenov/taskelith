@@ -48,6 +48,24 @@ export {
   type WorkerReachability,
 } from './domain/reachability.js';
 export { InMemoryAssignmentRepository } from './adapters/in-memory-assignment-repository.js';
+export {
+  InMemoryCapacityLedger,
+  InMemoryInstallationGuard,
+  InMemoryPlacementWorkers,
+  InMemoryQuotaSettings,
+  InMemoryTaskLineage,
+} from './adapters/in-memory-capacity.js';
+export {
+  CAPACITY_LEDGER_CONFORMANCE,
+  CHILD_LINK,
+  PLACEMENT_WORKERS_CONFORMANCE,
+  PLACEMENT_WORKER_FIXTURES,
+  QUOTA_FIXTURES,
+  QUOTA_SETTINGS_CONFORMANCE,
+  ROOT_LINK,
+  TASK_LINEAGE_CONFORMANCE,
+  type CapacityLedgerConformanceTarget,
+} from './ports/capacity-conformance.js';
 export type { AssignmentRepository } from './ports/assignment-repository.js';
 export type { Outbox, OutboxMessage } from './ports/outbox.js';
 // The outbox ports are structurally identical, so they share one suite.
