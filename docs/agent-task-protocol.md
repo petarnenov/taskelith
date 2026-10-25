@@ -37,6 +37,15 @@ Questions that belong to the owner (see Roles) go to the coordinator with option
 4. **Clean up.** Update the main clone with `git pull --ff-only`. Remove the coordinator's worktrees and local branches for both, and delete both remote branches from the main clone ([releases](releases.md#parallel-work-with-worktrees)). Remove a worker's worktree only on the worker's own machine, by the worker (worker step 8).
 5. **Release the worker.** Tell the worker that its task is merged, so that it cleans up and clears its context, and assign the next task.
 
+## Context size
+
+The owner set this rule on 2026-10-25. When a session's context approaches 150,000 tokens, the session tells the owner and recommends `/compact` or `/clear`, because only the owner can run them in the session's window. It warns before the limit, not after.
+
+- **Record first.** Before it warns, the session records what a reset would lose. A worker commits its work and notes its state and open questions in the change's `tasks.md` or `verification.md`; the coordinator updates its notes on assignments and pending integrations.
+- **Recommend one.** It recommends `/compact` while a task is in progress or decisions are not yet recorded, and `/clear` when everything needed is recorded. A worker in the middle of a task recommends only `/compact`; `/clear` stays at worker step 8.
+- **Worker.** A worker also tells the coordinator, which sends it no work until the worker reports that it is ready again.
+- **Coordinator.** The coordinator also says whether any handoff is waiting for integration.
+
 ## Reviewer invocations
 
 Run each reviewer from the task's worktree, read-only, with the model and effort set in the invocation ([governance](governance.md#independent-review-process)). Keep prompt files, logs, and snapshot files outside the worktree, for example in a scratch directory, so that they do not change the snapshot.
