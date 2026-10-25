@@ -18,7 +18,16 @@ import {
 import { usePoc } from '../store';
 import { PageHeader } from '../ui';
 
-type View = 'first-run' | 'empty' | 'loading' | 'error' | 'reconnecting' | 'no-workers' | 'viewer';
+type View =
+  | 'first-run'
+  | 'empty'
+  | 'loading'
+  | 'error'
+  | 'reconnecting'
+  | 'resync'
+  | 'no-workers'
+  | 'quarantine'
+  | 'viewer';
 
 const VIEWS: { value: View; label: string }[] = [
   { value: 'first-run', label: 'First run' },
@@ -26,11 +35,19 @@ const VIEWS: { value: View; label: string }[] = [
   { value: 'loading', label: 'Loading' },
   { value: 'error', label: 'Load error' },
   { value: 'reconnecting', label: 'Live updates lost' },
+  { value: 'resync', label: 'Cursor expired' },
   { value: 'no-workers', label: 'No workers' },
+  { value: 'quarantine', label: 'Restore quarantine' },
   { value: 'viewer', label: 'Read-only' },
 ];
 
 const SETUP = [
+  {
+    title: 'Claim the installation',
+    detail:
+      'Sign in with the bootstrap credential of the installation to create the first installation-owner (G3 item 10).',
+    action: 'Claim installation',
+  },
   {
     title: 'Connect source control',
     detail: 'Install the GitHub App on the repositories Taskelith may work on. Tokens are issued per run.',
@@ -45,13 +62,13 @@ const SETUP = [
   {
     title: 'Add a harness account',
     detail:
-      'Sign in a Claude Code or Codex subscription into the account pool. Subscription auth only; no API keys.',
+      'Sign in a Claude Code subscription into the account pool (Codex comes in G4). Subscription auth only; no API keys.',
     action: 'Add account',
   },
   {
     title: 'Create a project',
     detail:
-      'Pick the repository and branches. SDLC framework: OpenSpec by default, SpecKit selectable. Auto-merge is on by default.',
+      'Pick the repository and branches. SDLC framework: OpenSpec (selecting another comes in G4). Auto-merge is on by default.',
     action: 'Create project',
   },
 ];
@@ -105,14 +122,21 @@ function bannerFor(view: View, retried: boolean): Banner | null {
         role: 'status',
         color: 'orange',
         title: 'Live updates paused · reconnecting',
-        text: 'The event stream dropped 40 s ago. The board shows the state as of 14:02; gates and actions are rechecked by the server, so stale buttons cannot pass anything.',
+        text: 'The event stream dropped 40 s ago. The board shows the state as of 14:02, cursor 4182. Actions stay enabled: each carries the generation it was read at, and the server refuses a stale one with conflict.',
+      };
+    case 'resync':
+      return {
+        role: 'status',
+        color: 'indigo',
+        title: 'Resynchronizing · full reload',
+        text: 'The server no longer holds events after cursor 4182, so the board reloads a snapshot instead of catching up. Changes made meanwhile appear when the reload ends.',
       };
     case 'no-workers':
       return {
         role: 'status',
         color: 'orange',
-        title: 'No worker online',
-        text: 'Admitted tasks wait for capacity; nothing is reassigned or lost. Enroll a worker or bring one back online.',
+        title: 'No reachable worker',
+        text: 'Admitted tasks wait for capacity and nothing is lost. An assignment that has not launched yet is placed on another worker when one is eligible; a launched attempt keeps its capacity until a terminal fact or a reconciliation.',
         action: 'Open workers',
       };
     case 'viewer':
@@ -120,7 +144,14 @@ function bannerFor(view: View, retried: boolean): Banner | null {
         role: 'status',
         color: 'gray',
         title: 'Read-only',
-        text: 'You are a viewer on this project. Approvals, settings and merges need a project-maintainer.',
+        text: 'You are a project-viewer. Answering runtime requests, sending turns and stopping sessions need a project-operator; gate approvals, settings and standing rules need a project-maintainer.',
+      };
+    case 'quarantine':
+      return {
+        role: 'alert',
+        color: 'red',
+        title: 'Restore quarantine · recovery epoch 4',
+        text: 'The installation was restored from a backup. Until an installation-owner ends the quarantine, nothing is dispatched, no command is published and no launch is authorized.',
       };
     default:
       return null;
@@ -139,7 +170,7 @@ function previewCount(loading: boolean, populated: boolean, count: number): stri
 
 function PreviewBoard({ view }: { view: View }) {
   const loading = view === 'loading';
-  const populated = ['reconnecting', 'no-workers', 'viewer'].includes(view);
+  const populated = ['reconnecting', 'resync', 'no-workers', 'quarantine', 'viewer'].includes(view);
   return (
     <ScrollArea type="auto" offsetScrollbars>
       <Group gap={12} wrap="nowrap" align="flex-start" aria-busy={loading}>
@@ -191,8 +222,8 @@ function FirstRun({ done, onStep }: { done: number; onStep: () => void }) {
             Set up Taskelith
           </Title>
           <Text size="sm" c="dimmed">
-            {done} of 4 done. The board appears once a project exists; agents start once a worker and a
-            harness account are ready.
+            {done} of {SETUP.length} done. The board appears once a project exists; agents start once a worker
+            and a harness account are ready.
           </Text>
         </Stack>
         <Stepper active={done} orientation="vertical" size="sm">

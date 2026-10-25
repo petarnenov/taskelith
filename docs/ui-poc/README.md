@@ -10,7 +10,7 @@ Ten screens in one Mantine `AppShell`, with static sample data and simulated liv
 
 | Screen | Source | Main Mantine components |
 | --- | --- | --- |
-| Project board (landing) | `src/screens/Board.tsx`, `BoardDrawers.tsx`, `board-data.ts`, `board-model.ts` | `ScrollArea`, `Card`, `SegmentedControl`, `Drawer`, `Timeline`, `Switch`, `Notification` |
+| Project board (landing) | `src/screens/Board.tsx`, `BoardDrawers.tsx`, `board-data.ts`, `board-model.ts`, `LiveStatus.tsx` | `ScrollArea`, `Card`, `SegmentedControl`, `Drawer`, `Table`, `Switch`, `Notification` |
 | Agent session | `src/screens/Session.tsx` | `Grid`, `Code`, `Timeline`, `TextInput`, `Loader` |
 | Reviews | `src/screens/Reviews.tsx` | `Paper`, `DataList`, `Alert` |
 | Workers and account pools | `src/screens/Workers.tsx` | `SimpleGrid`, `Progress`, `Collapse`, `List` |
@@ -21,11 +21,27 @@ Ten screens in one Mantine `AppShell`, with static sample data and simulated liv
 | Plugins | `src/screens/Plugins.tsx` | `SimpleGrid`, `Card`, `List` |
 | Board states | `src/screens/States.tsx` | `Stepper`, `EmptyState`, `Skeleton`, `Alert` |
 
-Shared parts: `src/main.tsx` (theme, shell, navigation, the account menu, and the sign-in screen), `src/store.tsx` (screen, sign-in, and "Needs you" state shared by the screens), `src/ui.tsx` (harness activity badge, gate colors, page header, diff block, facts list), and `src/icons.tsx`.
+Shared parts: `src/main.tsx` (theme, shell, navigation, the session check, the account menu, and the sign-in screen), `src/store.tsx` (screen, sign-in, persona and role capabilities, server-confirmed answers, and the event cursor), `src/ui.tsx` (the session status derived from execution facts, the role-aware button, the later-gate marker, gate colors, page header, diff block, facts list), and `src/icons.tsx`.
 
-The account menu behind the operator's avatar names the signed-in operator and their roles and offers account settings, a password change, and "Sign out". Signing out shows the sign-in screen of G3 decision D2 (a), password login with a server-side session; agents and merges keep running. In the proof of concept "Sign out" and "Sign in" work and accept any input; "Account settings" and "Change password" are inert and belong to G3 item 10 `implement-operator-login-and-roles`.
+The account menu behind the operator's avatar names the signed-in operator and their roles, switches the proof of concept between three personas (installation-owner and project-maintainer, project-operator, project-viewer), and offers account settings, a password change, and "Sign out". Signing out shows the sign-in screen of G3 decision D2 (a), password login with a server-side session; agents and merges keep running. In the proof of concept "Sign out" and "Sign in" work and accept any input; "Account settings" and "Change password" are inert and belong to G3 item 10 `implement-operator-login-and-roles`.
 
-The theme is Mantine's default with `primaryColor: 'indigo'`, `defaultRadius: 'md'`, and IBM Plex Sans and Mono. Dark is the default color scheme and light is supported, both through Mantine's color scheme manager. Below Mantine's `xl` breakpoint the navigation moves into the `AppShell` navbar behind a `Burger`.
+The theme is Mantine's default with `primaryColor: 'indigo'`, `defaultRadius: 'md'`, and IBM Plex Sans and Mono. Dark is the default color scheme and light is supported, both through Mantine's color scheme manager. The theme sets `respectReducedMotion`, so no indicator spins when the system asks for reduced motion. Below Mantine's `xl` breakpoint the navigation moves into the `AppShell` navbar behind a `Burger`.
+
+## Alignment with the implemented backend
+
+On 2026-10-25 the proof of concept was reviewed against the backend on `dev` at `69e5bd2` and aligned with it (change `align-ui-poc-with-backend`):
+
+- **Board.** A card is a workflow run bound to a native work item (`openspec:<change>`, `speckit:<feature>`). Its stages come from the OpenSpec plugin's stage graph and the SpecKit mapping fixture; each stage has its own gates with a required evidence kind (structural validation, semantic approval, platform record), a state, a generation, and a decision. The column is the UI's placement of a stage by its lifecycle obligation, the card shows the worst gate of its current stage, and merge is a platform-added step after Review, not a framework stage.
+- **Admission and binding.** The run detail shows the admission of the current stage (kind, state, invalidating revision) or that a platform-managed stage admits none, the artifact revision as artifact, digest, and native reference, and the run binding with the workflow IDs `openspec/spec-driven` and `speckit/speckit`.
+- **Session status.** The badge is derived from execution facts (attempt phase, reachability, native evidence, cancellation, turn state, outcome) and never stored. An unreachable worker and an uncertain process are separate states, ownership stays with the worker at its generation, and an uncertain attempt offers an audited reconciliation. Stop requests wait for proof, can stay pending while the worker is unreachable, and attempts end with an outcome.
+- **Roles.** Actions follow the trust model: runtime requests, turns, stop, and task submission need `project-operator`; gate approvals, settings, standing rules, and reconciliation need `project-maintainer`; worker enrollment, drain, and revocation need `installation-owner`; `project-viewer` reads only. A disabled action names the role it needs.
+- **Requests.** A runtime approval names its request, attempt, and provider generation, is answered once, and shows "sending" until the server confirms. A spec decision is a semantic verdict, approved or rejected; the first answer in the inbox meets a newer revision and shows the server's conflict. New task generates its `runId` and `taskId` once per draft, and turns carry a client turn key.
+- **Workers and capacity.** Workers show reachability, draining, revocation, and admission pressure with its cause; capacity is declared and reserved slots, CPU, and memory; slots count active attempts. Quotas are concurrency, delegation, and retry budgets; usage is accounted, not reserved.
+- **Plugins.** Plugin API `0.2.0`, `sdlc-openspec 0.0.0` with range `^0.2.0` and capabilities `validate-structure` and `finalize`, registration outcomes (`admitted`, `invalid`, `not-found`, `precondition-failed`) separate from the dependency register status, and the ports `AgentHarness` and `SourceControlProvider` as planned.
+- **Later gates.** What the backend does not have yet is marked with the gate or plan item that adds it: SpecKit runs, framework selection, and Codex in G4; Knowledge in G5; imports other than GitHub issues beyond G3 (D9); sessions and turns, account pools, traceability, delegated spec approval, standing rules, the review runtime, and the composition root in their G3 items. The live cursor and the session check stand for G3 items 14, 9, and 10.
+- **Board states.** Added a cursor-expired resynchronization, a restore quarantine, and a first step that claims the installation with the bootstrap credential.
+
+Open for item 28: the trust model names no role for reconciling an uncertain attempt; the proof of concept gives it to `project-maintainer`.
 
 ## Departures from "only Mantine"
 
@@ -44,7 +60,7 @@ Both can be met with Mantine's own theme settings, for example component default
 
 ## Published build
 
-The build is published as a private claude.ai artifact, <https://claude.ai/artifact/M8VnvLLCrAMiBPrkKezGzk> (unversioned private page; version 3 matches this source), as one HTML file of 901,814 bytes with SHA-256 `732f02e9690bfaf9113476958b88b3750b238899f5fce2be333ab1e09f566ca1`. All code and Mantine's styles are inlined; only the IBM Plex fonts load from Google Fonts, so a viewer's browser contacts Google, and offline the page falls back to the system fonts. The owner shares the artifact from its Share menu. The earlier design canvas, <https://claude.ai/artifact/Q84QABcHZZ1ow9B7UcZdNS> (unversioned private page), which [ADR 0008](../decisions/0008-product-ui-and-integration-authority.md) was decided on, is marked as superseded.
+The build is published as a private claude.ai artifact, <https://claude.ai/artifact/M8VnvLLCrAMiBPrkKezGzk> (unversioned private page; version 4 matches this source), as one HTML file of 919,319 bytes with SHA-256 `a2f88738ae1001c4aa83a710089bd6876b7dc54917bf33509adae81c90cd8d00`. All code and Mantine's styles are inlined; only the IBM Plex fonts load from Google Fonts, so a viewer's browser contacts Google, and offline the page falls back to the system fonts. The owner shares the artifact from its Share menu. The earlier design canvas, <https://claude.ai/artifact/Q84QABcHZZ1ow9B7UcZdNS> (unversioned private page), which [ADR 0008](../decisions/0008-product-ui-and-integration-authority.md) was decided on, is marked as superseded.
 
 ## Rebuilding
 

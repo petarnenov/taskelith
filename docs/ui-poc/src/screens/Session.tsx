@@ -3,7 +3,6 @@ import {
   Avatar,
   Badge,
   Breadcrumbs,
-  Button,
   Code,
   Grid,
   Group,
@@ -17,10 +16,20 @@ import {
   Title,
   type MantineColor,
 } from '@mantine/core';
-import { DiffBlock, PageHeader, ScreenLink, SessionBadge, type SessionState } from '../ui';
+import {
+  DiffBlock,
+  LaterGate,
+  PageHeader,
+  RoleButton,
+  ScreenLink,
+  SessionBadge,
+  type ExecutionView,
+} from '../ui';
+import { LiveStatus } from './LiveStatus';
 
 type Entry =
-  | { kind: 'system' | 'agent' | 'user'; text: string }
+  | { kind: 'system' | 'agent'; text: string }
+  | { kind: 'user'; text: string; turnKey: string; confirmed: boolean }
   | { kind: 'tool'; command: string; output: string }
   | { kind: 'edit'; file: string; diff: string };
 
@@ -184,6 +193,7 @@ const SCRIPT: Step[] = [
 const FILES = ['docs/architecture.md', 'openspec/specs/harness-account-pools/spec.md'];
 const TICK = 2600;
 const STOP_DELAY = 2500;
+const TURN_CONFIRM_DELAY = 700;
 
 const GATE_RUN: Record<GateRun, { label: string; color: MantineColor }> = {
   old: { label: 'Passed (old head)', color: 'teal' },
@@ -192,11 +202,28 @@ const GATE_RUN: Record<GateRun, { label: string; color: MantineColor }> = {
   passed: { label: 'Passed', color: 'teal' },
 };
 
-function status(step: Step, stopping: boolean, stopped: boolean): { label: string; state: SessionState } {
-  if (stopping) return { label: 'Stopping · awaiting proof from mac-01', state: 'stopping' };
-  if (stopped) return { label: 'Stopped by PP · confirmed by mac-01', state: 'stopped' };
-  if (step.done) return { label: 'Merged · session stopped', state: 'stopped' };
-  return { label: 'Session live', state: 'live' };
+function status(step: Step, stopping: boolean, stopped: boolean): { label: string; view: ExecutionView } {
+  const running: ExecutionView = {
+    phase: 'running',
+    reachability: 'reachable',
+    turn: 'working',
+    ownershipGeneration: 2,
+  };
+  if (stopping) {
+    return {
+      label: 'Stopping · awaiting proof from mac-01',
+      view: { ...running, cancellation: 'requested' },
+    };
+  }
+  if (stopped) {
+    return {
+      label: 'Ended · killed after stop, confirmed by mac-01',
+      view: { ...running, phase: 'ended', outcome: 'killed' },
+    };
+  }
+  if (step.done)
+    return { label: 'Ended · exit 0 · merged', view: { ...running, phase: 'ended', outcome: 'exited-0' } };
+  return { label: 'Session live', view: running };
 }
 
 function gateRows(step: Step) {
@@ -260,7 +287,8 @@ function EntryView({ entry }: { entry: Entry }) {
             <Text size="sm">{entry.text}</Text>
           </Paper>
           <Text size="xs" c="dimmed">
-            PP · delivered at the next turn boundary
+            {entry.confirmed ? 'PP · accepted, delivered at the next turn boundary' : 'PP · sending'} · turn
+            key {entry.turnKey}
           </Text>
         </Stack>
       );
@@ -335,8 +363,16 @@ export function SessionScreen() {
   const send = () => {
     const text = draft.trim();
     if (!text) return;
-    setMessages([...messages, { kind: 'user', text }]);
+    const turnKey = 'tk-' + Math.random().toString(16).slice(2, 8);
+    setMessages((m) => [...m, { kind: 'user', text, turnKey, confirmed: false }]);
     setDraft('');
+    window.setTimeout(
+      () =>
+        setMessages((m) =>
+          m.map((e) => (e.kind === 'user' && e.turnKey === turnKey ? { ...e, confirmed: true } : e)),
+        ),
+      TURN_CONFIRM_DELAY,
+    );
   };
 
   const entries = [...SCRIPT.slice(0, step + 1).flatMap((s) => s.entries), ...messages];
@@ -369,15 +405,18 @@ export function SessionScreen() {
               Claude Code · mac-01
             </Text>
             <Badge variant="default">Turn 5</Badge>
+            <Badge variant="default">Attempt #2 · ownership generation 2</Badge>
+            <LaterGate>sessions and turns · G3 items 4, 13, 31</LaterGate>
           </Group>
         }
         aside={
           <Group gap="sm">
-            <SessionBadge state={st.state} label={st.label} />
+            <LiveStatus />
+            <SessionBadge view={st.view} label={st.label} />
             {!stopped && !stopping && !current.done ? (
-              <Button color="red" variant="light" onClick={stop}>
+              <RoleButton capability="stop-or-retry" color="red" variant="light" onClick={stop}>
                 Stop session
-              </Button>
+              </RoleButton>
             ) : null}
           </Group>
         }
@@ -411,7 +450,9 @@ export function SessionScreen() {
                     if (event.key === 'Enter') send();
                   }}
                 />
-                <Button onClick={send}>Send</Button>
+                <RoleButton capability="send-turn" onClick={send}>
+                  Send
+                </RoleButton>
               </Group>
             </Stack>
           </Paper>

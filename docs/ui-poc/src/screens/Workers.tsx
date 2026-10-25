@@ -17,157 +17,198 @@ import {
   Title,
   type MantineColor,
 } from '@mantine/core';
-import { PageHeader } from '../ui';
+import { usePoc } from '../store';
+import { LaterGate, PageHeader, RoleButton } from '../ui';
+
+type PressureCause =
+  | 'disk-floor'
+  | 'journal-backlog'
+  | 'daemon-memory'
+  | 'event-loop-lag'
+  | 'unmeasurable-limit';
+
+const PRESSURE_TEXT: Record<PressureCause, string> = {
+  'disk-floor': 'free disk below the floor (5 GiB or 10 %)',
+  'journal-backlog': 'journal backlog',
+  'daemon-memory': 'daemon memory',
+  'event-loop-lag': 'event loop lag',
+  'unmeasurable-limit': 'a limit cannot be measured',
+};
 
 interface Worker {
-  id: string;
-  platform: string;
-  status: 'online' | 'lost';
+  workerId: string;
+  hostname: string;
+  platform: 'linux' | 'darwin';
+  architecture: 'x64' | 'arm64';
+  packaging: string;
+  reachable: boolean;
+  revoked?: boolean;
+  pressure?: PressureCause;
   harness: string;
   slots: [number, number];
-  cpu: number;
-  disk: number;
-  heartbeat: string;
-  enrollment: string;
+  cpu: [number, number];
+  memory: [number, number];
+  lastContact: string;
+  credentialGeneration: number;
   note: string;
 }
 
 const WORKERS: Worker[] = [
   {
-    id: 'mac-01',
-    platform: 'macOS 26 · Intel x86_64 · native',
-    status: 'online',
-    harness: 'Claude Code · candidate · implementer and Fable 5.1 reviewer',
-    slots: [2, 4],
-    cpu: 46,
-    disk: 38,
-    heartbeat: 'heartbeat 3 s ago',
-    enrollment: 'renews in 21 d',
-    note: '2 sessions: Task admission, Account pool scheduler',
+    workerId: 'wkr-3f9a',
+    hostname: 'mac-01',
+    platform: 'darwin',
+    architecture: 'x64',
+    packaging: 'native',
+    reachable: true,
+    harness: 'Claude Code · candidate',
+    slots: [2, 2],
+    cpu: [4000, 8000],
+    memory: [8192, 16384],
+    lastContact: '3 s ago',
+    credentialGeneration: 2,
+    note: 'Active attempts: Task admission, Account pool scheduler review',
   },
   {
-    id: 'linux-01',
-    platform: 'Ubuntu 24.04 · x86_64 · worker image',
-    status: 'online',
+    workerId: 'wkr-81c2',
+    hostname: 'linux-01',
+    platform: 'linux',
+    architecture: 'x64',
+    packaging: 'worker image',
+    reachable: true,
     harness: 'Claude Code · not qualified on Linux',
-    slots: [3, 4],
-    cpu: 61,
-    disk: 52,
-    heartbeat: 'heartbeat 2 s ago',
-    enrollment: 'renews in 18 d',
-    note: '3 sessions: OpenAPI contracts, Gate and transition rules, Container Compose baseline',
+    slots: [2, 2],
+    cpu: [4000, 8000],
+    memory: [8192, 32768],
+    lastContact: '2 s ago',
+    credentialGeneration: 1,
+    note: 'Active attempts: OpenAPI contracts, Gate and transition rules',
   },
   {
-    id: 'linux-02',
-    platform: 'Ubuntu 24.04 · arm64 · worker image',
-    status: 'online',
+    workerId: 'wkr-5d07',
+    hostname: 'linux-02',
+    platform: 'linux',
+    architecture: 'arm64',
+    packaging: 'worker image',
+    reachable: true,
+    pressure: 'disk-floor',
     harness: 'Codex · not qualified on Linux',
-    slots: [4, 4],
-    cpu: 78,
-    disk: 81,
-    heartbeat: 'heartbeat 4 s ago',
-    enrollment: 'renews in 9 d',
-    note: 'Disk at 81%: new work is admitted with output truncation for non-essential logs',
+    slots: [2, 2],
+    cpu: [4000, 8000],
+    memory: [8192, 16384],
+    lastContact: '4 s ago',
+    credentialGeneration: 1,
+    note: 'Admission pressure: no new launches until free disk is above the floor; running attempts continue and nonessential logs are truncated.',
   },
   {
-    id: 'linux-03',
-    platform: 'Ubuntu 24.04 · x86_64 · worker image',
-    status: 'lost',
+    workerId: 'wkr-c4e1',
+    hostname: 'linux-03',
+    platform: 'linux',
+    architecture: 'x64',
+    packaging: 'worker image',
+    reachable: false,
     harness: 'Claude Code · not qualified on Linux',
-    slots: [1, 4],
-    cpu: 0,
-    disk: 0,
-    heartbeat: 'last heartbeat 6 min ago',
-    enrollment: 'renews in 30 d',
-    note: 'Evidence store adapter: state unknown. Not reassigned automatically; its capacity stays reserved until ownership is reconciled.',
+    slots: [1, 2],
+    cpu: [2000, 8000],
+    memory: [4096, 16384],
+    lastContact: '6 min ago',
+    credentialGeneration: 1,
+    note: 'Evidence store adapter: process state uncertain. The attempt keeps its owner and its reserved capacity until a terminal fact arrives or a maintainer reconciles it.',
   },
 ];
+
+const PLATFORM: Record<Worker['platform'], string> = { linux: 'Linux (Ubuntu 24.04)', darwin: 'macOS 26' };
 
 interface Account {
   name: string;
   state: string;
   detail: string;
-  limited?: boolean;
+  cooldown?: boolean;
 }
 
-const POOLS: {
-  harness: string;
-  role: string;
-  used: number;
-  total: number;
-  accounts: Account[];
-  warning?: string;
-}[] = [
+const POOLS: { harness: string; used: number; total: number; accounts: Account[]; note?: string }[] = [
   {
     harness: 'Claude Code',
-    role: 'implementer',
-    used: 6,
-    total: 8,
+    used: 9,
+    total: 16,
     accounts: [
-      { name: 'claude-acct-1', state: '2 of 2 sessions', detail: 'mac-01' },
-      { name: 'claude-acct-2', state: '2 of 2 sessions', detail: 'linux-01' },
+      {
+        name: 'claude-acct-1',
+        state: '3 of 4 attempts',
+        detail: 'mac-01 · includes the Fable 5.1 review of Account pool scheduler',
+      },
+      { name: 'claude-acct-2', state: '2 of 4 attempts', detail: 'linux-01' },
       {
         name: 'claude-acct-3',
-        state: '2 of 2 sessions',
-        detail: 'linux-01 · linux-03 session held while contact is lost',
+        state: '4 of 4 attempts',
+        detail: 'linux-01 · linux-03 attempt held while its process state is uncertain',
       },
       {
         name: 'claude-acct-4',
-        state: 'Rate limited',
+        state: 'Cooldown · 38 min',
         detail:
-          'Usage window resets in 38 min · its session waits for the reset or an operator reconciles it; it is never moved to another slot',
-        limited: true,
+          'Its session waits for the cooldown to end or for an operator; it is never moved to another slot',
+        cooldown: true,
       },
     ],
+    note: 'Reviewer sessions use the same slots as implementers; slots carry allowed projects, not roles.',
   },
   {
     harness: 'Codex',
-    role: 'implementer',
     used: 4,
-    total: 4,
+    total: 8,
     accounts: [
-      { name: 'codex-acct-1', state: '2 of 2 sessions', detail: 'linux-02' },
-      { name: 'codex-acct-2', state: '2 of 2 sessions', detail: 'linux-02' },
+      { name: 'codex-acct-1', state: '2 of 4 attempts', detail: 'linux-02' },
+      { name: 'codex-acct-2', state: '2 of 4 attempts', detail: 'linux-02' },
     ],
+  },
+];
+
+const QUOTAS = [
+  {
+    scope: 'Project taskelith',
+    kind: 'concurrent attempts',
+    held: 4,
+    quota: 4,
+    note: 'Full: new attempts wait for capacity and retry with backoff.',
   },
   {
-    harness: 'Claude Code',
-    role: 'reviewer slots · claude-fable-5-1',
-    used: 2,
-    total: 2,
-    accounts: [
-      { name: 'claude-acct-5', state: '1 of 1 review', detail: 'Reviewing Account pool scheduler' },
-      {
-        name: 'claude-acct-6',
-        state: '1 of 1 review',
-        detail: 'Reviewing a task in another project · pools are shared',
-      },
-    ],
-    warning:
-      'Reviewer slots full. Container Compose baseline waits for a reviewer: attempt 2 of 3, then it escalates to you.',
+    scope: 'Run · Task admission',
+    kind: 'concurrent attempts',
+    held: 1,
+    quota: 2,
+    note: 'Reserved at offer, released by a terminal fact or a reconciliation.',
+  },
+  {
+    scope: 'Delegation tree · Task admission',
+    kind: 'child attempts',
+    held: 3,
+    quota: 8,
+    note: 'Consumed, not released; depth limit 3.',
+  },
+  {
+    scope: 'Retries · Lint tooling',
+    kind: 'automatic retries',
+    held: 1,
+    quota: 2,
+    note: 'Only after a proven-safe failure; an uncertain attempt gets none.',
   },
 ];
 
-const BUDGETS = [
-  { scope: 'Project taskelith', limit: 'weekly agent time', confirmed: 55, estimated: 62 },
-  { scope: 'Run · Task admission', limit: '4 h per run', confirmed: 50, estimated: 54 },
-  { scope: 'Run · Lint tooling', limit: '2 h per run', confirmed: 78, estimated: 86 },
-];
-
-function noteColorOf(worker: Worker): MantineColor {
-  if (worker.status === 'lost') return 'red';
-  return worker.disk >= 80 ? 'orange' : 'dimmed';
+function statusOf(worker: Worker, draining: boolean): { label: string; color: MantineColor }[] {
+  const badges: { label: string; color: MantineColor }[] = [];
+  if (worker.revoked) badges.push({ label: 'Revoked', color: 'red' });
+  badges.push(
+    worker.reachable ? { label: 'Reachable', color: 'teal' } : { label: 'Unreachable', color: 'red' },
+  );
+  if (draining) badges.push({ label: 'Draining', color: 'orange' });
+  if (worker.pressure) badges.push({ label: 'Admission pressure', color: 'orange' });
+  return badges;
 }
 
-function accountColor(account: Account, revoked: boolean): MantineColor {
-  if (revoked) return 'dimmed';
-  return account.limited ? 'red' : 'orange';
-}
-
-function meterColor(percent: number): MantineColor {
-  if (percent >= 80) return 'red';
-  if (percent >= 60) return 'orange';
-  return 'teal';
+function noteColor(worker: Worker): MantineColor {
+  if (!worker.reachable) return 'red';
+  return worker.pressure ? 'orange' : 'dimmed';
 }
 
 function Meter({
@@ -183,11 +224,11 @@ function Meter({
 }) {
   return (
     <Group gap="sm" wrap="nowrap">
-      <Text size="xs" c="dimmed" w={60}>
+      <Text size="xs" c="dimmed" w={70}>
         {label}
       </Text>
       <Progress value={percent} color={color} flex={1} aria-label={label + ' ' + value} />
-      <Text size="xs" w={64} ta="right">
+      <Text size="xs" w={110} ta="right">
         {value}
       </Text>
     </Group>
@@ -203,74 +244,80 @@ function WorkerCard({
   draining: boolean;
   onToggleDrain: () => void;
 }) {
-  const lost = worker.status === 'lost';
-  const status = lost
-    ? { label: 'Lost contact', color: 'red' }
-    : draining
-      ? { label: 'Draining', color: 'orange' }
-      : { label: 'Online', color: 'teal' };
   const [used, total] = worker.slots;
-  const note = draining ? 'Draining: running sessions finish, no new work is admitted.' : worker.note;
-  const noteColor = noteColorOf(worker);
   return (
     <Card
       withBorder
       radius="md"
       padding="md"
-      bd={lost ? '1px solid var(--mantine-color-red-light-color)' : undefined}
+      bd={worker.reachable ? undefined : '1px solid var(--mantine-color-red-light-color)'}
     >
       <Stack gap="sm">
         <Group justify="space-between" align="flex-start">
           <Stack gap={0}>
             <Title order={3} size="h5" ff="monospace">
-              {worker.id}
+              {worker.hostname}
             </Title>
             <Text size="xs" c="dimmed">
-              {worker.platform}
+              {PLATFORM[worker.platform]} · {worker.architecture} · {worker.packaging} · {worker.workerId}
             </Text>
           </Stack>
-          <Badge variant="light" color={status.color}>
-            {status.label}
-          </Badge>
+          <Group gap={4}>
+            {statusOf(worker, draining).map((b) => (
+              <Badge key={b.label} variant="light" color={b.color}>
+                {b.label}
+              </Badge>
+            ))}
+          </Group>
         </Group>
-        <Badge variant="default" size="sm" fullWidth={false}>
+        <Badge variant="default" size="sm" tt="none">
           {worker.harness}
         </Badge>
-        {lost ? (
+        <Stack gap={6}>
           <Meter
-            label="Sessions"
-            value={used + '/' + total + ' held'}
+            label="Slots"
+            value={used + ' / ' + total + (worker.reachable ? ' active' : ' held')}
             percent={(used / total) * 100}
-            color="gray"
+            color={worker.reachable ? 'indigo' : 'gray'}
           />
-        ) : (
-          <Stack gap={6}>
-            <Meter
-              label="Sessions"
-              value={used + '/' + total}
-              percent={(used / total) * 100}
-              color="indigo"
-            />
-            <Meter label="CPU" value={worker.cpu + '%'} percent={worker.cpu} color={meterColor(worker.cpu)} />
-            <Meter
-              label="Disk"
-              value={worker.disk + '%'}
-              percent={worker.disk}
-              color={meterColor(worker.disk)}
-            />
-          </Stack>
-        )}
-        <Text size="xs" c={noteColor}>
-          {note}
+          <Meter
+            label="CPU"
+            value={worker.cpu[0] + ' / ' + worker.cpu[1] + ' m'}
+            percent={(worker.cpu[0] / worker.cpu[1]) * 100}
+            color="indigo"
+          />
+          <Meter
+            label="Memory"
+            value={worker.memory[0] / 1024 + ' / ' + worker.memory[1] / 1024 + ' GiB'}
+            percent={(worker.memory[0] / worker.memory[1]) * 100}
+            color="indigo"
+          />
+          <Text size="xs" c="dimmed">
+            Reserved of declared capacity.
+          </Text>
+        </Stack>
+        {worker.pressure ? (
+          <Text size="xs" c="orange">
+            Cause: {PRESSURE_TEXT[worker.pressure]}
+          </Text>
+        ) : null}
+        <Text size="xs" c={noteColor(worker)}>
+          {draining ? 'Draining: running attempts finish, no new work is placed here.' : worker.note}
         </Text>
         <Group gap="xs">
           <Text size="xs" c="dimmed">
-            {worker.heartbeat} · enrollment {worker.enrollment}
+            Last contact {worker.lastContact} · credential generation {worker.credentialGeneration}
           </Text>
-          {!lost ? (
-            <Button size="xs" variant="default" ml="auto" onClick={onToggleDrain}>
+          {worker.reachable ? (
+            <RoleButton
+              capability="manage-workers"
+              size="xs"
+              variant="default"
+              ml="auto"
+              onClick={onToggleDrain}
+            >
               {draining ? 'Resume' : 'Drain'}
-            </Button>
+            </RoleButton>
           ) : null}
         </Group>
       </Stack>
@@ -279,10 +326,11 @@ function WorkerCard({
 }
 
 export function WorkersScreen() {
+  const { can } = usePoc();
   const [enroll, setEnroll] = useState(false);
   const [draining, setDraining] = useState<string[]>([]);
   const [revoked, setRevoked] = useState<string[]>([]);
-  const online = WORKERS.filter((w) => w.status === 'online' && !draining.includes(w.id)).length;
+  const reachable = WORKERS.filter((w) => w.reachable && !draining.includes(w.workerId)).length;
   const toggleDrain = (id: string) =>
     setDraining(draining.includes(id) ? draining.filter((d) => d !== id) : [...draining, id]);
 
@@ -290,44 +338,48 @@ export function WorkersScreen() {
     <Stack gap="lg">
       <PageHeader
         title="Workers"
-        description="Machines that run agent sessions, and the subscription accounts each harness draws from."
+        description="Machines that run agent attempts, and the subscription accounts each harness draws from."
         aside={
           <Group gap="xs">
             <Badge variant="dot" color="teal">
-              {online} online
+              {reachable} reachable
             </Badge>
             <Badge variant="dot" color="orange">
-              {draining.length} draining
+              {draining.length} draining · 1 under admission pressure
             </Badge>
             <Badge variant="dot" color="red">
-              1 lost contact
+              1 unreachable
             </Badge>
-            <Badge variant="dot" color="teal">
-              Recovery epoch 3 · normal operation
-            </Badge>
-            <Button aria-expanded={enroll} onClick={() => setEnroll(!enroll)}>
-              Enroll worker
-            </Button>
+            {can('manage-workers') ? (
+              <Button aria-expanded={enroll} onClick={() => setEnroll(!enroll)}>
+                Enroll worker
+              </Button>
+            ) : null}
           </Group>
         }
       />
       <Collapse expanded={enroll}>
         <Paper withBorder p="md" radius="md" component="section" aria-label="Enroll a worker">
-          <Title order={2} size="h5" mb="sm">
-            Enroll a worker
-          </Title>
+          <Group gap="xs" mb="sm">
+            <Title order={2} size="h5">
+              Enroll a worker
+            </Title>
+            <LaterGate>G2 item 13 · self-check G3 item 27</LaterGate>
+          </Group>
           <List type="ordered" size="sm" spacing={6} mb="sm">
             <List.Item>
-              Install the worker: on Linux, the worker image on Ubuntu 24.04 LTS (x86_64 or arm64); on macOS
-              26, natively on Apple Silicon or Intel. Native acceptance of each platform is still pending.
+              Install the worker: the worker image on Ubuntu 24.04 LTS (x86_64 or arm64), or natively on macOS
+              26 (Apple Silicon or Intel).
             </List.Item>
-            <List.Item>Run the command below. The token works once and expires in 15 min.</List.Item>
+            <List.Item>Run the command below with a short-lived, single-use enrollment token.</List.Item>
             <List.Item>
-              Taskelith verifies the token and runs the worker self-check: harness versions, network-egress
-              test, free disk. When it passes, the worker is admitted automatically.
+              Taskelith checks the token and a common protocol version, then the worker runs its self-check:
+              process containment (on Linux, cgroup v2 and cgroup.kill), harness versions, network egress, and
+              free disk. When it passes, the worker is admitted automatically.
             </List.Item>
             <List.Item>
-              A failed self-check keeps the worker out of scheduling and shows the reason here.
+              A failed self-check or no common protocol version keeps the worker out of placement and shows
+              the reason here.
             </List.Item>
           </List>
           <Code block>taskelith worker enroll --server [YOUR SERVER URL] --token [ONE-TIME TOKEN]</Code>
@@ -340,10 +392,10 @@ export function WorkersScreen() {
         <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }}>
           {WORKERS.map((worker) => (
             <WorkerCard
-              key={worker.id}
+              key={worker.workerId}
               worker={worker}
-              draining={draining.includes(worker.id)}
-              onToggleDrain={() => toggleDrain(worker.id)}
+              draining={draining.includes(worker.workerId)}
+              onToggleDrain={() => toggleDrain(worker.workerId)}
             />
           ))}
         </SimpleGrid>
@@ -354,116 +406,111 @@ export function WorkersScreen() {
             Account pools
           </Title>
           <Text size="sm" c="dimmed">
-            Subscription sign-in only · new sessions go to the least-loaded account
+            Subscription sign-in only · new sessions go to the least-loaded slot
           </Text>
+          <LaterGate>G3 items 5, 12, 33</LaterGate>
         </Group>
-        <SimpleGrid cols={{ base: 1, md: 3 }}>
-          {POOLS.map((pool) => {
-            const full = pool.used >= pool.total;
-            return (
-              <Card key={pool.role + pool.harness} withBorder radius="md" padding="md">
-                <Stack gap="sm">
-                  <Group justify="space-between">
-                    <Stack gap={0}>
-                      <Title order={3} size="h5">
-                        {pool.harness}
-                      </Title>
-                      <Text size="xs" c="dimmed">
-                        {pool.role}
-                      </Text>
-                    </Stack>
-                    <Badge variant="light" color={full ? 'orange' : 'teal'}>
-                      {pool.used} of {pool.total} in use
-                    </Badge>
-                  </Group>
-                  <Stack gap={8}>
-                    {pool.accounts.map((account) => {
-                      const off = revoked.includes(account.name);
-                      return (
-                        <Stack key={account.name} gap={2}>
-                          <Group gap="xs" wrap="nowrap">
-                            <Text size="sm" ff="monospace">
-                              {account.name}
-                            </Text>
-                            <Text size="xs" fw={600} c={accountColor(account, off)}>
-                              {off ? 'Revoked' : account.state}
-                            </Text>
-                            {!off ? (
-                              <Button
-                                size="compact-xs"
-                                variant="subtle"
-                                color="red"
-                                ml="auto"
-                                onClick={() => setRevoked([...revoked, account.name])}
-                              >
-                                Revoke
-                              </Button>
-                            ) : null}
-                          </Group>
-                          <Text size="xs" c="dimmed">
-                            {off ? 'Running sessions finish; no new sessions' : account.detail}
+        <SimpleGrid cols={{ base: 1, md: 2 }}>
+          {POOLS.map((pool) => (
+            <Card key={pool.harness} withBorder radius="md" padding="md">
+              <Stack gap="sm">
+                <Group justify="space-between">
+                  <Title order={3} size="h5">
+                    {pool.harness}
+                  </Title>
+                  <Badge variant="light" color={pool.used >= pool.total ? 'orange' : 'teal'}>
+                    {pool.used} of {pool.total} attempts
+                  </Badge>
+                </Group>
+                <Stack gap={8}>
+                  {pool.accounts.map((account) => {
+                    const off = revoked.includes(account.name);
+                    return (
+                      <Stack key={account.name} gap={2}>
+                        <Group gap="xs" wrap="nowrap">
+                          <Text size="sm" ff="monospace">
+                            {account.name}
                           </Text>
-                        </Stack>
-                      );
-                    })}
-                  </Stack>
-                  <Anchor href="#" size="sm" onClick={(event) => event.preventDefault()}>
-                    Add account
-                  </Anchor>
-                  {pool.warning ? (
-                    <Alert variant="light" color="orange" p="xs">
-                      <Text size="xs">{pool.warning}</Text>
-                    </Alert>
-                  ) : null}
+                          <Text size="xs" fw={600} c={off ? 'dimmed' : account.cooldown ? 'orange' : 'teal'}>
+                            {off ? 'Revoked' : account.state}
+                          </Text>
+                          {!off ? (
+                            <RoleButton
+                              capability="manage-workers"
+                              size="compact-xs"
+                              variant="subtle"
+                              color="red"
+                              ml="auto"
+                              onClick={() => setRevoked([...revoked, account.name])}
+                            >
+                              Revoke
+                            </RoleButton>
+                          ) : null}
+                        </Group>
+                        <Text size="xs" c="dimmed">
+                          {off ? 'Running attempts finish; no new sessions' : account.detail}
+                        </Text>
+                      </Stack>
+                    );
+                  })}
                 </Stack>
-              </Card>
-            );
-          })}
+                {pool.note ? (
+                  <Text size="xs" c="dimmed">
+                    {pool.note}
+                  </Text>
+                ) : null}
+                <Anchor href="#" size="sm" onClick={(event) => event.preventDefault()}>
+                  Add account
+                </Anchor>
+              </Stack>
+            </Card>
+          ))}
         </SimpleGrid>
       </Stack>
-      <Stack gap="sm" component="section" aria-label="Budgets">
+      <Stack gap="sm" component="section" aria-label="Capacity quotas">
         <Group gap="sm">
           <Title order={2} size="h4">
-            Budgets
+            Capacity quotas
           </Title>
           <Text size="sm" c="dimmed">
-            Estimated usage is reserved before a launch and released only when usage is confirmed
+            Concurrency is reserved before a launch; token and cost usage is only accounted, never reserved
           </Text>
         </Group>
-        <SimpleGrid cols={{ base: 1, md: 3 }}>
-          {BUDGETS.map((budget) => {
-            const near = budget.estimated >= 80;
+        <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }}>
+          {QUOTAS.map((quota) => {
+            const full = quota.held >= quota.quota;
             return (
-              <Card key={budget.scope} withBorder radius="md" padding="md">
+              <Card key={quota.scope} withBorder radius="md" padding="md">
                 <Stack gap="xs">
                   <Group justify="space-between">
                     <Title order={3} size="h6">
-                      {budget.scope}
+                      {quota.scope}
                     </Title>
                     <Text size="xs" c="dimmed">
-                      {budget.limit}
+                      {quota.kind}
                     </Text>
                   </Group>
-                  <Progress.Root size="lg" aria-label={budget.scope + ' budget'}>
-                    <Progress.Section value={budget.confirmed} color={near ? 'orange' : 'indigo'} />
-                    <Progress.Section
-                      value={budget.estimated - budget.confirmed}
-                      color={near ? 'orange.3' : 'indigo.3'}
-                    />
-                  </Progress.Root>
+                  <Progress
+                    value={(quota.held / quota.quota) * 100}
+                    color={full ? 'orange' : 'indigo'}
+                    size="lg"
+                    aria-label={quota.scope + ' quota'}
+                  />
                   <Text size="sm">
-                    {budget.confirmed}% confirmed · {budget.estimated}% estimated
+                    {quota.held} of {quota.quota}
                   </Text>
-                  <Text size="xs" c={near ? 'orange' : 'dimmed'}>
-                    {near
-                      ? 'Near the limit: new attempts for this run wait for a maintainer.'
-                      : 'Reserved until usage is confirmed.'}
+                  <Text size="xs" c={full ? 'orange' : 'dimmed'}>
+                    {quota.note}
                   </Text>
                 </Stack>
               </Card>
             );
           })}
         </SimpleGrid>
+        <Alert variant="light" color="gray">
+          Usage this week: 41 h agent time estimated, 37 h confirmed. Shown for information; no spend limit is
+          enforced.
+        </Alert>
       </Stack>
     </Stack>
   );

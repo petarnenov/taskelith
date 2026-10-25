@@ -1,5 +1,14 @@
-import type { InboxDecision, InboxId } from '../store';
-import { TASKS, mergeSteps, type Framework, type Task } from './board-data';
+import type { DecisionState, InboxId } from '../store';
+import type { ExecutionView, GateState } from '../ui';
+import {
+  RUNS,
+  WORKFLOWS,
+  mergeSteps,
+  type GateDef,
+  type GateView,
+  type Run,
+  type StageDef,
+} from './board-data';
 
 export interface BoardProgress {
   merged: string[];
@@ -7,7 +16,7 @@ export interface BoardProgress {
   mergeFlow: Record<string, number>;
   stopping: string[];
   stopped: string[];
-  migrated: Record<string, Framework>;
+  reconciled: string[];
 }
 
 export const NO_PROGRESS: BoardProgress = {
@@ -16,151 +25,164 @@ export const NO_PROGRESS: BoardProgress = {
   mergeFlow: {},
   stopping: [],
   stopped: [],
-  migrated: {},
+  reconciled: [],
 };
 
-export interface BoardTask extends Task {
+export interface BoardRun extends Run {
   mergeStep?: number;
   returnedFromMerge?: boolean;
   justArchived?: boolean;
 }
 
-type Decisions = Partial<Record<InboxId, InboxDecision>>;
+type Decisions = Partial<Record<InboxId, DecisionState>>;
 
-function afterDecision(task: BoardTask, decision: InboxDecision | undefined): BoardTask {
-  if (!decision || !task.inboxId) return task;
-  if (task.awaitsOwner) {
-    return decision === 'changes'
-      ? { ...task, awaitsOwner: false, note: 'Changes requested by you · back to the harness' }
-      : { ...task, awaitsOwner: false, gate: 'passed', note: 'Spec approved by you' };
-  }
-  if (decision === 'denied') {
-    return { ...task, approval: false, session: 'instructions', note: 'Denied make verify' };
-  }
-  return { ...task, approval: false, session: 'live', note: 'Approved make verify' };
+export type StageState = 'not-started' | 'in-progress' | 'completed';
+
+export interface GateRow extends GateDef, GateView {}
+
+export interface StageRow extends StageDef {
+  state: StageState;
+  gates: GateRow[];
+  passed: boolean;
 }
 
-function withProgress(task: Task, progress: BoardProgress, decisions: Decisions): BoardTask {
-  const { merged, returned, mergeFlow, stopping, stopped, migrated } = progress;
-  const base: BoardTask =
-    task.id in migrated
-      ? {
-          ...task,
-          framework: migrated[task.id],
-          native: 'migrated · new binding recorded',
-          gate: 'stale',
-          note: 'Migrated to ' + migrated[task.id] + ' · gates re-run',
-        }
-      : task;
-  if (stopping.includes(task.id)) return { ...base, approval: false, session: 'stopping' };
-  if (merged.includes(task.id)) {
-    return {
-      ...base,
-      stage: 5,
-      gate: 'passed',
-      note: 'Closed · merged ' + task.pr,
-      session: 'stopped',
-      justArchived: true,
-    };
+function withSession(run: BoardRun, session: Partial<ExecutionView>): BoardRun {
+  return { ...run, session: { ...run.session, ...session } };
+}
+
+function withGate(run: BoardRun, gateId: string, gate: Partial<GateView>): BoardRun {
+  return { ...run, gates: { ...run.gates, [gateId]: { ...run.gates?.[gateId], ...gate } } };
+}
+
+function afterDecision(run: BoardRun, state: DecisionState | undefined): BoardRun {
+  if (!state?.confirmed) return run;
+  switch (state.decision) {
+    case 'approved':
+      return {
+        ...withGate(run, 'specs-approval', { state: 'passed', verdict: 'approved by PP' }),
+        note: 'Spec approved by you',
+      };
+    case 'rejected':
+      return {
+        ...withGate(run, 'specs-approval', { state: 'failed', verdict: 'rejected by PP' }),
+        note: 'Rejected · reopens on the reworked revision',
+      };
+    case 'approve-once':
+      return { ...withSession(run, { turn: 'working' }), note: 'Approved once · make verify runs' };
+    case 'deny':
+      return { ...withSession(run, { turn: 'idle' }), note: 'Denied · waits for instructions' };
   }
-  if (returned.includes(task.id)) {
-    return {
-      ...base,
-      stage: 1,
-      gate: 'pending',
-      note: 'Reconciling spec with dev',
-      session: 'live',
-      returnedFromMerge: true,
-    };
-  }
-  if (task.id in mergeFlow) {
-    return {
-      ...base,
-      gate: 'stale',
-      note: 'New head: verify and review re-run',
-      session: 'live',
-      mergeStep: mergeFlow[task.id],
-    };
-  }
-  const decided = afterDecision(base, task.inboxId ? decisions[task.inboxId] : undefined);
-  return stopped.includes(task.id) ? { ...decided, approval: false, session: 'stopped' } : decided;
 }
 
-export function currentTasks(progress: BoardProgress, decisions: Decisions): BoardTask[] {
-  return TASKS.map((task) => withProgress(task, progress, decisions));
-}
-
-export function isMergeReady(task: BoardTask): boolean {
-  return task.stage === 4 && task.gate === 'passed';
-}
-
-export function mergeStepOf(task: BoardTask) {
-  return task.mergeStep === undefined ? undefined : mergeSteps(task)[task.mergeStep];
-}
-
-export function sessionLog(task: BoardTask, conflictCount: number): string {
-  const step = mergeStepOf(task);
-  if (step) return '▸ git merge origin/dev\n✗ CONFLICT in ' + conflictCount + ' files\n▸ ' + step.detail;
-  if (task.returnedFromMerge)
-    return '▸ returned from merge: spec conflict with dev\n▸ reconciling spec with the new contract on dev';
-  const logs: Partial<Record<BoardTask['session'], string>> = {
-    live: '▸ read openspec/changes/' + task.change + '/tasks.md\n▸ edit 3 files\n▸ run tests: 42 passed',
-    approval: '▸ task 4 of 9 complete\n▸ request: run nvm use && make verify\n⏸ waiting for approval',
-    instructions: '▸ request denied: nvm use && make verify\n⏸ waiting for instructions',
-    idle: '▸ last turn finished\n▸ waiting for the next stage admission',
-    stopping: '■ stop requested\n⏸ waiting for the worker to confirm the process ended',
-    stopped: '■ session stopped',
-    uncertain: '? last event from linux-03 6 min ago\n▸ reconciling ownership · not reassigned',
+function merged(run: Run): BoardRun {
+  const archive = run.framework === 'OpenSpec' ? 'archive' : 'close';
+  return {
+    ...run,
+    at: archive,
+    gates: { [archive + '-record']: { state: 'passed', verdict: 'satisfied' } },
+    note: 'Closed · merged ' + run.pr,
+    justArchived: true,
   };
-  return logs[task.session] ?? '';
+}
+
+function returnedToSpecify(run: Run): BoardRun {
+  return {
+    ...withSession(run, { phase: 'running', turn: 'working', outcome: undefined }),
+    at: run.framework === 'OpenSpec' ? 'specs' : 'specify',
+    gates: {},
+    note: 'Reconciling spec with dev',
+    returnedFromMerge: true,
+  };
+}
+
+function resolvingConflict(run: Run, step: number): BoardRun {
+  return {
+    ...withSession(run, { phase: 'running', turn: 'working', outcome: undefined }),
+    gates: { 'review-approval': { state: 'stale', verdict: 'approved (superseded by the new head)' } },
+    note: 'New head: verify and review run again',
+    mergeStep: step,
+  };
+}
+
+function withProgress(run: Run, progress: BoardProgress, decisions: Decisions): BoardRun {
+  if (progress.reconciled.includes(run.runId)) {
+    return {
+      ...withSession(run, { phase: 'ended', outcome: 'operator-resolved', evidence: undefined }),
+      note: 'Reconciled by PP · capacity released · a new attempt can be admitted',
+      whyNotMoving: undefined,
+    };
+  }
+  if (progress.stopping.includes(run.runId)) return withSession(run, { cancellation: 'requested' });
+  if (progress.stopped.includes(run.runId)) {
+    return withSession(run, { phase: 'ended', outcome: 'killed', cancellation: undefined });
+  }
+  if (progress.merged.includes(run.runId)) return merged(run);
+  if (progress.returned.includes(run.runId)) return returnedToSpecify(run);
+  if (run.runId in progress.mergeFlow) return resolvingConflict(run, progress.mergeFlow[run.runId]);
+  return afterDecision(run, run.inboxId ? decisions[run.inboxId] : undefined);
+}
+
+export function currentRuns(progress: BoardProgress, decisions: Decisions): BoardRun[] {
+  return RUNS.map((run) => withProgress(run, progress, decisions));
+}
+
+function stageAt(run: BoardRun): StageDef {
+  const stages = WORKFLOWS[run.framework].stages;
+  return stages.find((stage) => stage.id === run.at) ?? stages[0];
+}
+
+export function columnOf(run: BoardRun): number {
+  return stageAt(run).column;
+}
+
+function gateRow(gate: GateDef, state: GateState, view: Partial<GateView> | undefined): GateRow {
+  return { ...gate, state, generation: 1, ...view };
+}
+
+export function stageRows(run: BoardRun): StageRow[] {
+  const stages = WORKFLOWS[run.framework].stages;
+  const current = stages.findIndex((stage) => stage.id === run.at);
+  return stages.map((stage, i): StageRow => {
+    if (i < current) {
+      const gates = stage.gates.map((gate) => gateRow(gate, 'passed', { verdict: 'recorded' }));
+      return { ...stage, state: 'completed', gates, passed: true };
+    }
+    if (i > current) {
+      const gates = stage.gates.map((gate) => gateRow(gate, 'pending', undefined));
+      return { ...stage, state: 'not-started', gates, passed: false };
+    }
+    const gates = stage.gates.map((gate) => gateRow(gate, 'pending', run.gates?.[gate.id]));
+    const passed = gates.every((gate) => gate.state === 'passed');
+    return { ...stage, state: passed ? 'completed' : 'in-progress', gates, passed };
+  });
+}
+
+// The card shows the worst gate state of the current stage.
+const WORST_FIRST: GateState[] = ['failed', 'blocked', 'stale', 'pending', 'passed'];
+
+export function cardGate(run: BoardRun): GateState {
+  const gates = stageRows(run).find((stage) => stage.id === run.at)?.gates ?? [];
+  return WORST_FIRST.find((state) => gates.some((gate) => gate.state === state)) ?? 'pending';
+}
+
+export function isMergeReady(run: BoardRun): boolean {
+  return columnOf(run) === 4 && cardGate(run) === 'passed' && run.mergeStep === undefined;
+}
+
+export function mergeStepOf(run: BoardRun) {
+  return run.mergeStep === undefined ? undefined : mergeSteps(run)[run.mergeStep];
+}
+
+export function admissionKind(stage: StageDef): 'planning' | 'implementation' | undefined {
+  if (stage.obligations.includes('implementation')) return 'implementation';
+  if (stage.obligations.includes('intake') || stage.obligations.includes('specification')) return 'planning';
+  return undefined;
 }
 
 export type GroupBy = 'none' | 'framework' | 'harness';
 
-export function laneKey(task: BoardTask, groupBy: GroupBy): string {
-  if (groupBy === 'framework') return task.framework;
-  if (groupBy === 'harness') return task.harness ? task.harness.split(' · ')[0] : 'Unassigned';
-  return 'All tasks';
-}
-
-type VerifyState = 'stale' | 'fresh' | 'running' | 'none';
-
-function verifyStateOf(task: BoardTask, resolving: boolean): VerifyState {
-  if (task.gate === 'stale' && resolving) return 'stale';
-  if (task.stage >= 4 || (task.stage === 3 && task.gate === 'passed')) return 'fresh';
-  if (task.stage === 3) return 'running';
-  return 'none';
-}
-
-const VERIFY_COLOR: Record<VerifyState, string> = {
-  stale: 'orange',
-  fresh: 'teal',
-  running: 'dimmed',
-  none: 'dimmed',
-};
-
-function reviewStateOf(task: BoardTask, reviewed: boolean): string {
-  if (reviewed) return 'review passed';
-  return task.stage === 4 ? 'in review' : 'not reviewed';
-}
-
-export function traceFor(task: BoardTask) {
-  if (task.stage === 0) return [];
-  const resolving = task.mergeStep !== undefined;
-  const verifyState = verifyStateOf(task, resolving);
-  const reviewed = task.stage === 5 || (isMergeReady(task) && !resolving);
-  const review = reviewStateOf(task, reviewed);
-  const verify = {
-    stale: 'evidence stale (new head)',
-    fresh: 'verify fresh',
-    running: 'verify running',
-    none: 'not verified',
-  }[verifyState];
-  const color = VERIFY_COLOR[verifyState];
-  return ['R1', 'R2'].map((req, i) => ({
-    req,
-    path: task.stage >= 2 ? 'task ' + (i + 1) + '.1 → attempt #' + (i + 1) : 'tasks not planned yet',
-    state: verify + ' · ' + review,
-    color,
-  }));
+export function laneKey(run: BoardRun, groupBy: GroupBy): string {
+  if (groupBy === 'framework') return run.framework;
+  if (groupBy === 'harness') return run.harness ? run.harness.split(' · ')[0] : 'Unassigned';
+  return 'All runs';
 }

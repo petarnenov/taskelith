@@ -13,24 +13,29 @@ import {
   Title,
   type MantineColor,
 } from '@mantine/core';
-import { Facts, PageHeader } from '../ui';
+import { Facts, LaterGate, PageHeader } from '../ui';
 
 type Port = 'sdlc' | 'harness' | 'scm';
-type PluginStatus = 'registered' | 'candidate' | 'planned' | 'rejected';
+type RegisterStatus = 'candidate' | 'accepted' | 'rejected' | 'replacement-required' | 'not assessed';
+type Registration =
+  | { result: 'admitted' }
+  | { result: 'rejected'; code: 'invalid' | 'not-found' | 'precondition-failed'; message: string }
+  | { result: 'not-installed' };
 
 interface Plugin {
   port: Port;
   name: string;
   id: string;
   version: string;
-  status: PluginStatus;
-  statusText?: string;
-  api: string;
+  register: RegisterStatus;
+  registration: Registration;
+  range?: string;
+  declaredPort?: string;
   upstream: string;
-  runs: string;
-  subscription?: string;
   capabilities: string[];
+  obligations?: string[];
   note: string;
+  later?: string;
 }
 
 const PLUGINS: Plugin[] = [
@@ -38,101 +43,73 @@ const PLUGINS: Plugin[] = [
     port: 'sdlc',
     name: 'OpenSpec',
     id: 'sdlc-openspec',
-    version: '0.1.0',
-    status: 'registered',
-    api: '^1',
+    version: '0.0.0',
+    register: 'candidate',
+    registration: { result: 'admitted' },
+    range: '^0.2.0',
     upstream: 'OpenSpec 1.14.3 · Node CLI',
-    runs: '10 runs bound',
-    capabilities: ['Structural validation', 'Delta specs', 'Native archive'],
+    capabilities: ['validate-structure', 'finalize'],
+    obligations: ['intake', 'specification', 'implementation', 'closure'],
     note: 'Default framework for every project, Taskelith included. Passes the conformance suite on the feature, fix and docs fixtures.',
   },
   {
     port: 'sdlc',
     name: 'SpecKit',
     id: 'sdlc-speckit',
-    version: '0.1.0',
-    status: 'candidate',
-    statusText: 'Candidate · adapter in G4',
-    api: '^1',
-    upstream: 'SpecKit 1.2.3 · Python 3.11 + uv',
-    runs: '2 runs bound',
-    capabilities: ['Agent steps', 'Clarification markers', 'Spec and plan gates'],
-    note: 'Selectable per project or task once its adapter is complete (G4). Propose, verify, implementation review, accept and integrate, and close are platform-managed.',
+    version: '—',
+    register: 'candidate',
+    registration: { result: 'not-installed' },
+    upstream: 'SpecKit 1.2.3 · Python 3.11 (pip, hash-locked)',
+    capabilities: [],
+    obligations: ['intake', 'specification', 'implementation'],
+    note: 'Fixture only: the mapping passes through a test normaliser. The adapter, its agent steps and clarification markers come in G4.',
+    later: 'G4',
   },
   {
     port: 'harness',
     name: 'Claude Code',
     id: 'harness-claude-code',
-    version: '0.1.0',
-    status: 'candidate',
-    api: '^1',
+    version: '—',
+    register: 'candidate',
+    registration: { result: 'not-installed' },
     upstream: 'CLI 2.1.308 · SDK 0.3.308',
-    runs: '8 slots',
-    subscription: 'Claude subscription sign-in',
-    capabilities: ['Account pool', 'Native approvals', 'Session resume'],
-    note: 'Candidate: qualified on macOS x86_64; Linux in the worker image starts in G2. Also hosts the Fable 5.1 reviewer slots.',
+    capabilities: [],
+    note: 'Qualified on macOS x86_64. Its plugin comes with the AgentHarness port in G3.',
+    later: 'AgentHarness port · G3 items 3, 19',
   },
   {
     port: 'harness',
     name: 'Codex',
     id: 'harness-codex',
-    version: '0.1.0',
-    status: 'candidate',
-    api: '^1',
-    upstream: 'codex-cli 0.164.0 · app-server (experimental)',
-    runs: '4 slots',
-    subscription: 'ChatGPT subscription sign-in',
-    capabilities: ['Account pool', 'Native approvals'],
-    note: 'Candidate: qualified on macOS x86_64; arm64 and Linux in the worker image are open.',
-  },
-  {
-    port: 'harness',
-    name: 'Antigravity CLI',
-    id: 'harness-antigravity',
     version: '—',
-    status: 'planned',
-    api: '^1',
-    upstream: 'agy',
-    runs: 'Not installed',
-    subscription: 'Google sign-in',
-    capabilities: ['External approvals to find'],
-    note: 'Selected third harness (ADR 0003). Its plugin must first find an external-approval mechanism.',
-  },
-  {
-    port: 'harness',
-    name: 'OpenCode',
-    id: 'harness-opencode',
-    version: '—',
-    status: 'planned',
-    api: '^1',
-    upstream: 'opencode',
-    runs: 'Not installed',
-    subscription: 'Provider sign-in',
-    capabilities: ['Open source'],
-    note: 'Selected fourth harness (ADR 0003), after Antigravity CLI.',
+    register: 'candidate',
+    registration: { result: 'not-installed' },
+    upstream: 'codex-cli 0.164.0',
+    capabilities: [],
+    note: 'Qualified on macOS x86_64. Second harness, in G4.',
+    later: 'G4',
   },
   {
     port: 'scm',
     name: 'GitHub.com',
     id: 'scm-github',
-    version: '0.1.0',
-    status: 'candidate',
-    api: '^1',
+    version: '—',
+    register: 'candidate',
+    registration: { result: 'not-installed' },
     upstream: 'REST API 2022-11-28 · GitHub App',
-    runs: '1 project',
-    capabilities: ['Per-run tokens', 'Merge blocking', 'Signed webhooks'],
-    note: 'Candidate: admission in G3 after the terms review. Details in Integrations.',
+    capabilities: [],
+    note: 'Qualification recorded; admission after the terms review. Details in Integrations.',
+    later: 'SourceControlProvider port · G3 items 7, 20',
   },
   {
     port: 'scm',
     name: 'Forgejo',
     id: 'scm-forgejo',
     version: '—',
-    status: 'planned',
-    api: '^1',
+    register: 'candidate',
+    registration: { result: 'not-installed' },
     upstream: 'Self-hosted',
-    runs: 'Not installed',
-    capabilities: ['Same SCM port'],
+    capabilities: [],
     note: 'Second SCM, after the GitHub integration is proven (ADR 0006).',
   },
   {
@@ -140,32 +117,75 @@ const PLUGINS: Plugin[] = [
     name: 'Custom flow',
     id: 'sdlc-custom-flow',
     version: '2.0.0',
-    status: 'rejected',
-    api: '^2',
+    register: 'not assessed',
+    registration: {
+      result: 'rejected',
+      code: 'precondition-failed',
+      message: 'pluginApiRange ^1.0.0 does not include plugin API 0.2.0',
+    },
+    range: '^1.0.0',
     upstream: 'Vendor package',
-    runs: 'Never bound',
-    capabilities: ['SdlcFramework'],
-    note: 'Rejected at startup: it needs plugin API ^2 and this kernel provides 1.4. No task was admitted with it.',
+    capabilities: [],
+    note: 'No run was bound to it.',
+  },
+  {
+    port: 'sdlc',
+    name: 'Ticket bridge',
+    id: 'bridge-tickets',
+    version: '0.3.0',
+    register: 'not assessed',
+    registration: { result: 'rejected', code: 'not-found', message: 'port TicketBridge is not a known port' },
+    range: '^0.2.0',
+    declaredPort: 'TicketBridge',
+    upstream: 'Vendor package',
+    capabilities: [],
+    note: 'Declares a port the kernel does not have.',
   },
 ];
 
-const STATUS: Record<PluginStatus, { label: string; color: MantineColor }> = {
-  registered: { label: 'Registered', color: 'teal' },
-  candidate: { label: 'Candidate', color: 'orange' },
-  planned: { label: 'Selected · planned', color: 'gray' },
-  rejected: { label: 'Rejected · incompatible', color: 'red' },
+const REGISTER_COLOR: Record<RegisterStatus, MantineColor> = {
+  candidate: 'orange',
+  accepted: 'teal',
+  rejected: 'red',
+  'replacement-required': 'red',
+  'not assessed': 'gray',
 };
 
-const PORT_LABEL: Record<Port, string> = { sdlc: 'SdlcFramework', harness: 'Harness', scm: 'Scm' };
+const PORT_LABEL: Record<Port, string> = {
+  sdlc: 'SdlcFramework',
+  harness: 'AgentHarness',
+  scm: 'SourceControlProvider',
+};
+
+function RegistrationBadge({ registration }: { registration: Registration }) {
+  if (registration.result === 'admitted')
+    return (
+      <Badge variant="light" color="teal">
+        Registration: admitted
+      </Badge>
+    );
+  if (registration.result === 'not-installed')
+    return (
+      <Badge variant="light" color="gray">
+        Not installed
+      </Badge>
+    );
+  return (
+    <Badge variant="light" color="red" tt="none">
+      Registration: {registration.code}
+    </Badge>
+  );
+}
 
 function PluginCard({ plugin }: { plugin: Plugin }) {
-  const st = STATUS[plugin.status];
-  const rejected = plugin.status === 'rejected';
+  const rejected = plugin.registration.result === 'rejected';
   const manifest = [
-    { label: 'Port', value: PORT_LABEL[plugin.port] },
-    { label: 'Plugin API range', value: plugin.api },
+    { label: 'Port', value: plugin.declaredPort ?? PORT_LABEL[plugin.port] },
+    { label: 'Plugin API range', value: plugin.range ?? '—' },
+    { label: 'Dependency register', value: plugin.register },
   ];
-  if (plugin.subscription) manifest.push({ label: 'Subscription', value: plugin.subscription });
+  if (plugin.obligations)
+    manifest.push({ label: 'Native obligations', value: plugin.obligations.join(', ') });
   return (
     <Card
       withBorder
@@ -183,24 +203,35 @@ function PluginCard({ plugin }: { plugin: Plugin }) {
               {plugin.id} {plugin.version}
             </Text>
           </Stack>
-          <Badge variant="light" color={st.color}>
-            {plugin.statusText ?? st.label}
-          </Badge>
+          <Stack gap={4} align="flex-end">
+            <RegistrationBadge registration={plugin.registration} />
+            <Badge variant="outline" color={REGISTER_COLOR[plugin.register]}>
+              {plugin.register}
+            </Badge>
+          </Stack>
         </Group>
         <Facts items={manifest} />
-        <Group gap={6}>
-          {plugin.capabilities.map((c) => (
-            <Badge key={c} variant="default" tt="none">
-              {c}
-            </Badge>
-          ))}
-        </Group>
+        {plugin.capabilities.length ? (
+          <Group gap={6}>
+            {plugin.capabilities.map((c) => (
+              <Badge key={c} variant="default" tt="none" ff="monospace">
+                {c}
+              </Badge>
+            ))}
+          </Group>
+        ) : null}
         <Text size="xs" c="dimmed">
-          {plugin.upstream} · {plugin.runs}
+          {plugin.upstream}
         </Text>
-        <Text size="sm" c={rejected ? 'red' : 'dimmed'}>
+        {plugin.registration.result === 'rejected' ? (
+          <Text size="sm" c="red">
+            {plugin.registration.message}
+          </Text>
+        ) : null}
+        <Text size="sm" c="dimmed">
           {plugin.note}
         </Text>
+        {plugin.later ? <LaterGate>{plugin.later}</LaterGate> : null}
       </Stack>
     </Card>
   );
@@ -211,14 +242,12 @@ export function PluginsScreen() {
   const visible = PLUGINS.filter((p) => filter === 'all' || p.port === filter);
   const count = (f: 'all' | Port) =>
     f === 'all' ? PLUGINS.length : PLUGINS.filter((p) => p.port === f).length;
-  const registered = PLUGINS.filter((p) => p.status !== 'planned' && p.status !== 'rejected').length;
-  const startup = PLUGINS.filter((p) => p.status !== 'planned');
 
   return (
     <Stack gap="md">
       <PageHeader
         title="Plugins"
-        description="Harnesses, SCM providers and SDLC frameworks are plugins on the microkernel. Each package carries a manifest and is registered at startup; an incompatible plugin is rejected before any task is admitted with it."
+        description="SDLC frameworks, harnesses and SCM providers are plugins on the microkernel. Registration checks each manifest against the schema, the known ports, and the plugin API range, in that order; the dependency register status is a separate record."
       />
       <Group gap="sm">
         <Text size="sm" c="dimmed" id="kind-label">
@@ -245,16 +274,18 @@ export function PluginsScreen() {
           </SimpleGrid>
         </Grid.Col>
         <Grid.Col span={{ base: 12, lg: 4 }}>
-          <Stack gap="md" component="aside" aria-label="Kernel and registration">
+          <Stack gap="md" component="aside" aria-label="Plugin SDK and registration">
             <Paper withBorder p="md" radius="md">
               <Title order={2} size="h5" mb="sm">
-                Kernel
+                Plugin SDK
               </Title>
               <Facts
                 items={[
-                  { label: 'Plugin API', value: '1.4 · accepts ^1' },
-                  { label: 'Manifest schema', value: 'v1 · validated on registration' },
-                  { label: 'Registered at startup', value: registered + ' plugins · 1 rejected' },
+                  {
+                    label: 'Plugin API',
+                    value: '0.2.0 (plugin SDK); 1.0.0 comes with versioned manifests in G4',
+                  },
+                  { label: 'Manifest schema', value: 'G1 subset, unversioned' },
                   {
                     label: 'Kernel rule',
                     value: 'No kernel code names a provider; modules never import plugins',
@@ -263,32 +294,51 @@ export function PluginsScreen() {
               />
             </Paper>
             <Paper withBorder p="md" radius="md">
-              <Title order={2} size="h5" mb="xs">
-                Startup registration
-              </Title>
+              <Group gap="xs" mb="xs">
+                <Title order={2} size="h5">
+                  Registration at startup
+                </Title>
+                <LaterGate>composition root · G3 item 37</LaterGate>
+              </Group>
               <Text size="sm" c="dimmed" mb="sm">
-                The composition root registers its pinned plugin packages at startup and checks each manifest:
-                schema, plugin API range, port and capabilities. There is no upload, hot reload or
-                marketplace; adding a plugin changes its package and the pinned list.
+                Registration is a library function today; no composition root registers plugins yet and no
+                registry keeps the result. The target: the composition root registers its pinned packages at
+                startup and the screen reads the outcome.
               </Text>
-              <List type="ordered" spacing={4} size="sm">
-                {startup.map((p) => (
-                  <List.Item key={p.id}>
-                    <Text span ff="monospace" size="xs">
-                      {p.id} {p.version}
-                    </Text>{' '}
-                    <Text span size="xs" c={p.status === 'rejected' ? 'red' : 'teal'}>
-                      {p.status === 'rejected'
-                        ? 'Rejected · plugin API ' + p.api + ' unsupported'
-                        : 'Registered'}
-                    </Text>
-                  </List.Item>
-                ))}
+              <List spacing={4} size="sm">
+                <List.Item>
+                  <Text span size="xs" c="teal">
+                    admitted
+                  </Text>{' '}
+                  <Text span size="xs">
+                    manifest valid, port known, range includes the API
+                  </Text>
+                </List.Item>
+                <List.Item>
+                  <Text span size="xs" c="red">
+                    invalid
+                  </Text>{' '}
+                  <Text span size="xs">
+                    schema errors, each with its location
+                  </Text>
+                </List.Item>
+                <List.Item>
+                  <Text span size="xs" c="red">
+                    not-found
+                  </Text>{' '}
+                  <Text span size="xs">
+                    unknown port
+                  </Text>
+                </List.Item>
+                <List.Item>
+                  <Text span size="xs" c="red">
+                    precondition-failed
+                  </Text>{' '}
+                  <Text span size="xs">
+                    the range excludes the plugin API
+                  </Text>
+                </List.Item>
               </List>
-              <Text size="xs" c="dimmed" mt="sm">
-                Last startup 08:14 · running tasks keep the plugin version they were bound to. Each plugin's
-                conformance suite runs in its own package tests, not at startup.
-              </Text>
             </Paper>
           </Stack>
         </Grid.Col>
