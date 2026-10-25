@@ -129,6 +129,8 @@ After pass 5 the branch merged `origin/dev` at `69e5bd2` (merge commit `0aa39ed`
   - the signals test still proves its backfill;
   - the lockfile is the exact union of both parents, and the inventory keeps every component.
 
+- A second merge, `6bdeec4`, of `origin/dev` at `6332456` brought only the Mantine UI proof of concept record (documents and OpenSpec), with no conflict and no change to this change's files, so it needed no review. `make verify` at `6bdeec4`: 883 tests passed, 0 failed. The pre-push run just before it failed once in item 22's timing test `an idle window reads below the resolution` (event-loop lag of an idle window); this change does not touch that code, and the rerun passed.
+
 ## Remaining gates
 
 - Integration into `dev` by the coordinator, then archiving the change.
