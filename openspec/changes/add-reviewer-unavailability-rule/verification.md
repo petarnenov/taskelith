@@ -23,6 +23,8 @@ Node v24.22.1, in the worktree:
 
 - `npm run openspec -- validate add-reviewer-unavailability-rule --strict` passed.
 - `make verify` passed at `46a28ed` before pass 1: 728 tests passed, 0 failed.
+- After the pass 1 fixes, `make verify` passed on the staged tree that was committed as `cf8c09a`: 728 tests passed, 0 failed. Strict validation passed.
+- After the pass 2 fix, `make verify` passed again at the handoff head, and the `pre-push` hook ran it once more.
 
 ## Independent review
 
@@ -40,6 +42,14 @@ Findings: Critical 0, High 0, Medium 4, Low 1.
 4. Medium: there was no `verification.md` before the pass. Fixed with this record.
 5. Low: the rule list's date note said 2026-10-24 for every rule. Fixed.
 
+### Pass 2
+
+Session `01a172a5-6140-7941-92a3-1fe2ade54ba1`, model `gpt-6.1-sol` confirmed in the output header, at `cf8c09a`. The SHA-256 snapshots before and after were equal. All five pass 1 findings were confirmed resolved.
+
+Findings: Critical 0, High 0, Medium 1, Low 0.
+
+1. Medium: the record did not show a `make verify` run after the pass 1 fixes. That run had passed but was not recorded. Fixed: the record now lists it, together with the run after this fix.
+
 ## Remaining gates
 
-Pass 2 confirms the pass 1 fixes. Then integration into `dev` and the archive by the coordinator. Promotion to `main` is a separate owner decision.
+Pass 3 confirms the pass 2 fix. Then integration into `dev` and the archive by the coordinator. Promotion to `main` is a separate owner decision.
