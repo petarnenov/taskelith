@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
-import { INBOX_CONFORMANCE, TASK_REPOSITORY_CONFORMANCE } from '@taskelith/execution';
+import { INBOX_CONFORMANCE, LAUNCH_RECORDS_CONFORMANCE, TASK_REPOSITORY_CONFORMANCE } from '@taskelith/execution';
 import {
   CommittingAdmissionRepository,
   CommittingAssignmentRepository,
   CommittingCurrentRevisions,
   CommittingGateRepository,
   CommittingInbox,
+  CommittingLaunchRecords,
   CommittingOutbox,
   CommittingRunCatalog,
   CommittingTaskRepository,
@@ -52,6 +53,9 @@ runSuite('current revisions', CURRENT_REVISIONS_CONFORMANCE, () => ({
 }));
 runSuite('gates', GATE_REPOSITORY_CONFORMANCE, () => new CommittingGateRepository(database));
 runSuite('tasks', TASK_REPOSITORY_CONFORMANCE, () => new CommittingTaskRepository(database));
+runSuite('launch records', LAUNCH_RECORDS_CONFORMANCE, () => ({
+  tasks: new CommittingTaskRepository(database), launches: new CommittingLaunchRecords(database),
+}));
 runSuite('assignments', ASSIGNMENT_REPOSITORY_CONFORMANCE, () => new CommittingAssignmentRepository(database));
 runSuite('inbox', INBOX_CONFORMANCE, () => new CommittingInbox(database));
 runSuite('outbox', OUTBOX_CONFORMANCE, () => {

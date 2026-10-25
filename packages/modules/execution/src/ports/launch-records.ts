@@ -14,13 +14,14 @@ export interface RecordedLaunch {
   readonly workerId: WorkerId;
 }
 
-// The read of each invalidating writer (launch authorization section 5).
+// The read of each invalidating writer (launch authorization section 5); a
+// gate writer names every gate of the stage, so an added gate is found too.
 export type LaunchPredicate =
   | { readonly kind: 'worker'; readonly workerId: WorkerId }
   | { readonly kind: 'assignment'; readonly assignmentId: AssignmentId }
   | { readonly kind: 'run'; readonly runId: WorkflowRunId }
   | { readonly kind: 'artifact'; readonly artifactId: ArtifactId }
-  | { readonly kind: 'gate'; readonly gateId: GateId }
+  | { readonly kind: 'gates'; readonly gateIds: readonly GateId[] }
   | { readonly kind: 'all' };
 
 // A final rejection with the values its operation was requested with.

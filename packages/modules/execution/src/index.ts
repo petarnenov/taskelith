@@ -150,6 +150,11 @@ export type { LaunchPredicate, LaunchRecords, RecordedLaunch, RecordedRejection 
 export type { Outbox, OutboxMessage } from './ports/outbox.js';
 // The outbox ports are structurally identical, so they share one suite.
 export { OUTBOX_CONFORMANCE } from '@taskelith/sdlc';
-export { INBOX_CONFORMANCE, TASK_REPOSITORY_CONFORMANCE } from './ports/repository-conformance.js';
+export {
+  INBOX_CONFORMANCE,
+  LAUNCH_RECORDS_CONFORMANCE,
+  TASK_REPOSITORY_CONFORMANCE,
+  type LaunchRecordsConformanceTarget,
+} from './ports/repository-conformance.js';
 export type { TaskRepository } from './ports/task-repository.js';
 export type { WorkerJournal } from './ports/worker-journal.js';

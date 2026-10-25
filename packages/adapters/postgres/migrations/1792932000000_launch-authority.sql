@@ -1,8 +1,7 @@
 -- Up Migration
 
--- Item 17. One row per launch grant, which the task repository keeps in
--- step with the task's record; `live` is an unrevoked grant whose execution
--- is not terminal. Lookups and invalidating writers read these indexes.
+-- Item 17: one row per grant, kept in step by the task repository; `live` is
+-- an unrevoked grant whose execution is not terminal.
 CREATE TABLE launch_authorizations (
   launch_auth_id text PRIMARY KEY,
   worker_id text NOT NULL,
@@ -42,17 +41,19 @@ CREATE TABLE current_revisions (
   PRIMARY KEY (run_id, artifact_id)
 );
 
--- The backfill reads only identifiers and states, so masking every escape,
--- which jsonb may reject, changes nothing it copies.
+-- jsonb rejects only the escapes of NUL and of surrogates, which free text
+-- may hold; identifiers are printable ASCII, so masking those keeps them.
 CREATE FUNCTION pg_temp.launch_record(record text) RETURNS jsonb
   LANGUAGE sql IMMUTABLE
-  AS $$ SELECT regexp_replace(regexp_replace(record, '\\\\', '_', 'g'), '\\u[0-9a-fA-F]{4}', '_', 'g')::jsonb $$;
+  AS $$ SELECT replace(regexp_replace(replace(record, '\\', chr(1)), '\\u(0000|[dD][89a-fA-F][0-9a-fA-F]{2})', '_', 'g'),
+    chr(1), '\\')::jsonb $$;
 
+-- A grant's run is its assignment's, which every grant has.
 INSERT INTO launch_authorizations (launch_auth_id, worker_id, operation_id, task_id, attempt_id, assignment_id, execution_id,
   run_id, relied_on_gates, artifact_ids, live)
 SELECT
   grant_record ->> 'launchAuthId', grant_record ->> 'workerId', grant_record ->> 'operationId', tasks.id,
-  grant_record ->> 'attemptId', grant_record ->> 'assignmentId', grant_record ->> 'executionId', admissions.run_id,
+  grant_record ->> 'attemptId', grant_record ->> 'assignmentId', grant_record ->> 'executionId', assignments.run_id,
   ARRAY(SELECT jsonb_array_elements_text(grant_record -> 'reliedOnGates')),
   ARRAY(SELECT artifact ->> 'artifactId' FROM jsonb_array_elements(grant_record -> 'artifacts') AS artifact),
   grant_record ->> 'state' = 'granted' AND execution ->> 'state' NOT IN ('exited', 'not-started')
@@ -60,7 +61,16 @@ FROM tasks
   CROSS JOIN LATERAL jsonb_array_elements(pg_temp.launch_record(tasks.record) -> 'attempts') AS attempt
   CROSS JOIN LATERAL jsonb_array_elements(attempt -> 'executions') AS execution
   CROSS JOIN LATERAL jsonb_array_elements(execution -> 'grants') AS grant_record
-  LEFT JOIN admissions ON admissions.id = tasks.admission_id;
+  LEFT JOIN assignments ON assignments.id = grant_record ->> 'assignmentId';
+
+-- The tasks submitted before this migration seed their runs' revisions as
+-- submitTask does: the first used admission, in identity order, wins.
+INSERT INTO current_revisions (run_id, artifact_id, revision)
+SELECT DISTINCT ON (admissions.run_id, artifact ->> 'artifactId') admissions.run_id, artifact ->> 'artifactId', artifact::text
+FROM admissions
+  CROSS JOIN LATERAL jsonb_array_elements(pg_temp.launch_record(admissions.record) -> 'artifacts') AS artifact
+WHERE admissions.run_id IS NOT NULL AND admissions.state = 'used'
+ORDER BY admissions.run_id, artifact ->> 'artifactId', admissions.id;
 
 -- Down Migration
 

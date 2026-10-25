@@ -42,12 +42,14 @@ export class LaunchAuthority {
 
   // A store that reaches no decision answers `unavailable`, and the worker
   // repeats the same operation (coordinator decision B6).
-  authorize(principal: WorkerPrincipal, values: LaunchAuthorizationRequest): Promise<Result<LaunchOutcome>> {
+  async authorize(principal: WorkerPrincipal, values: LaunchAuthorizationRequest): Promise<Result<LaunchOutcome>> {
     const request: LaunchRequest = Object.freeze({ ...values, workerId: principal.workerId });
-    return this.#store.transaction(async (tx) => {
+    const decided = await this.#store.transaction(async (tx) => {
       const installation = await installationState(tx);
       if (!installation.ok) return installation;
-      const checked = { installation: installation.value, workerAuthorized: await isCurrentWorker(tx, principal) };
+      const workerAuthorized = await isCurrentWorker(tx, principal);
+      if (!workerAuthorized.ok) return workerAuthorized;
+      const checked = { installation: installation.value, workerAuthorized: workerAuthorized.value };
       const recorded = await tx.launches.byOperation(request.workerId, request.operationId);
       if (!recorded.ok) return recorded;
       if (recorded.value !== undefined) return replay(tx, recorded.value, request, checked);
@@ -56,6 +58,9 @@ export class LaunchAuthority {
       if (rejected.value !== undefined) return ok(repeatedRejection(rejected.value, request));
       return this.#decide(tx, request, checked);
     });
+    // A concurrent decision of the same operation won; a repeat replays it.
+    if (!decided.ok && decided.error.code === 'conflict') return err(failure('unavailable', decided.error.message));
+    return decided;
   }
 
   async #decide(tx: ControlPlaneTransaction, request: LaunchRequest, checked: Checked): Promise<Result<LaunchOutcome>> {
@@ -79,13 +84,11 @@ export class LaunchAuthority {
   async #context(tx: ControlPlaneTransaction, assignment: Assignment, task: Task, checked: Checked): Promise<Result<LaunchContext>> {
     const admission = await optional(tx.admissions.get(task.admissionId));
     if (!admission.ok) return admission;
-    const runId = await tx.catalog.runOfAdmission(task.admissionId);
-    if (!runId.ok) return runId;
-    if (runId.value === undefined) return err(failure('internal', `admission ${task.admissionId} is bound to no run`));
-    const run = await tx.runs.get(runId.value);
-    if (!run.ok) return run;
+    // The assignment names its run, so a missing admission is a rejection.
+    const run = await tx.runs.get(assignment.reservation.scope.runId);
+    if (!run.ok) return run.error.code === 'not-found' ? noDecision(run.error.message) : run;
     const definition = this.#settings.workflows.resolve(run.value.binding);
-    if (!definition.ok) return err(failure('internal', definition.error.message));
+    if (!definition.ok) return noDecision(definition.error.message);
     const currentRevisions = await tx.revisions.current(run.value.id, artifactIdsOf(admission.value));
     if (!currentRevisions.ok) return currentRevisions;
     return ok({
@@ -138,10 +141,17 @@ function isSameOperation(recorded: LaunchRequest, request: LaunchRequest): boole
 
 // The worker as the deciding transaction reads it: enrolled, unrevoked, and
 // at its current generation (contract section 2), not a predecessor's.
-async function isCurrentWorker(tx: ControlPlaneTransaction, principal: WorkerPrincipal): Promise<boolean> {
+async function isCurrentWorker(tx: ControlPlaneTransaction, principal: WorkerPrincipal): Promise<Result<boolean>> {
   const worker = await tx.fleet.worker(principal.workerId);
-  if (!worker.ok || worker.value === undefined) return false;
-  return worker.value.revokedAt === undefined && worker.value.credentials.current.generation === principal.generation;
+  if (!worker.ok) return worker;
+  if (worker.value === undefined) return ok(false);
+  return ok(worker.value.revokedAt === undefined && worker.value.credentials.current.generation === principal.generation);
+}
+
+// A stored run without its workflow reaches no decision; the worker retries
+// until its deadline (contract section 7).
+function noDecision(message: string): Result<never> {
+  return err(failure('unavailable', message));
 }
 
 async function installationState(tx: ControlPlaneTransaction): Promise<Result<InstallationState>> {

@@ -6,6 +6,7 @@ export {
   CommittingGateRepository,
   CommittingInbox,
   CommittingInstallationTable,
+  CommittingLaunchRecords,
   CommittingOperatorCredentials,
   CommittingOutbox,
   CommittingRunCatalog,

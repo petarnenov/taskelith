@@ -7,7 +7,7 @@ import { recordExecutionEvidence } from '@taskelith/execution';
 import { fleetWorker } from '@taskelith/fleet';
 import { MIGRATIONS_DIRECTORY, migrate } from '@taskelith/postgres';
 import { value } from '@taskelith/testing';
-import { authorizedUnder, placedTask } from './capacity-fixtures.ts';
+import { authorizedUnder, placedTask, usedAdmission } from './capacity-fixtures.ts';
 import { AT, assignment } from './fixtures.ts';
 import { SERVER_URL, createTestDatabase, databaseUrl, query } from './test-database.ts';
 
@@ -111,8 +111,18 @@ test('the launch migration indexes the grants of stored task records', async () 
   const offered = assignment('assignment-1');
   const authorized = authorizedUnder(placedTask('task-1', 'attempt-1'), offered.id, offered.workerId);
   const grant = authorized.attempts[0]!.executions[0]!.grants[0]!;
+  // An identifier may hold a backslash or a quote, which the mask keeps.
+  const artifact = { artifactId: 'spec\\"1', digest: `sha256:${'aa'.repeat(32)}`, nativeReference: 'spec\uD800.md' };
+  const stored = JSON.parse(JSON.stringify(authorized));
+  stored.attempts[0].executions[0].grants[0].artifacts = [artifact];
   await query(url, 'INSERT INTO tasks (id, admission_id, generation, record) VALUES ($1, $2, 1, $3)',
-    [authorized.id, authorized.admissionId, JSON.stringify({ ...authorized, probe: 'spec\uD800.md \u0000 \\ud800' })]);
+    [authorized.id, authorized.admissionId, JSON.stringify({ ...stored, probe: 'spec\uD800.md \u0000 \\ud800' })]);
+  const used = { ...JSON.parse(JSON.stringify(usedAdmission('task-1'))), artifacts: [artifact, { ...artifact, artifactId: 'design' }] };
+  const later = { ...used, id: 'admission-z-later', artifacts: [{ ...artifact, digest: `sha256:${'bb'.repeat(32)}` }] };
+  for (const admission of [used, later]) {
+    await query(url, `INSERT INTO admissions (id, generation, state, artifact_ids, record, run_id) VALUES ($1, 1, 'used', '{}', $2, 'run-1')`,
+      [admission.id, JSON.stringify(admission)]);
+  }
   await writeFile(held, content);
   assert.deepEqual(await migrate(url, directory), { ok: true, value: [LAUNCH_AUTHORITY] });
   const rows = await query(url, `SELECT launch_auth_id, worker_id, operation_id, task_id, attempt_id, assignment_id, execution_id,
@@ -120,8 +130,12 @@ test('the launch migration indexes the grants of stored task records', async () 
   assert.deepEqual(rows, [{
     launch_auth_id: grant.launchAuthId, worker_id: grant.workerId, operation_id: grant.operationId, task_id: authorized.id,
     attempt_id: grant.attemptId, assignment_id: grant.assignmentId, execution_id: grant.executionId, run_id: null,
-    relied_on_gates: [...grant.reliedOnGates], artifact_ids: grant.artifacts.map((artifact) => artifact.artifactId), live: true,
+    relied_on_gates: [...grant.reliedOnGates], artifact_ids: [artifact.artifactId], live: true,
   }]);
+  const revisions = await query<{ artifact_id: string; revision: string }>(url, 'SELECT artifact_id, revision FROM current_revisions ORDER BY artifact_id');
+  assert.deepEqual(revisions.map((row) => [row.artifact_id, JSON.parse(row.revision).digest]), [
+    ['design', artifact.digest], [artifact.artifactId, artifact.digest],
+  ], 'the first used admission of the run seeds each artifact');
 });
 
 test('a later migration file is applied after the applied ones', async () => {

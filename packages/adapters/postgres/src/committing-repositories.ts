@@ -1,5 +1,17 @@
 import { ok, type EventId, type Instant, type Result } from '@taskelith/kernel';
-import type { AssignmentId, Inbox, InboxOutcome, Task, TaskRepository } from '@taskelith/execution';
+import type {
+  AssignmentId,
+  Inbox,
+  InboxOutcome,
+  LaunchAuthId,
+  LaunchPredicate,
+  LaunchRecords,
+  OperationId,
+  RecordedLaunch,
+  RecordedRejection,
+  Task,
+  TaskRepository,
+} from '@taskelith/execution';
 import type { Assignment, AssignmentRepository } from '@taskelith/scheduling';
 import type { AuditEvent, OperatorCredential, OperatorCredentials, SecretHash } from '@taskelith/access';
 import type { WorkerId } from '@taskelith/execution';
@@ -293,5 +305,33 @@ export class CommittingCurrentRevisions implements CurrentRevisions {
 
   current(runId: WorkflowRunId, artifactIds: readonly ArtifactId[]): Promise<Result<readonly ArtifactRevision[]>> {
     return this.#database.transaction((tx) => tx.revisions.current(runId, artifactIds));
+  }
+}
+
+export class CommittingLaunchRecords implements LaunchRecords {
+  readonly #database: PostgresDatabase;
+
+  constructor(database: PostgresDatabase) {
+    this.#database = database;
+  }
+
+  byOperation(workerId: WorkerId, operationId: OperationId): Promise<Result<RecordedLaunch | undefined>> {
+    return this.#database.transaction((tx) => tx.launches.byOperation(workerId, operationId));
+  }
+
+  byLaunchAuthId(launchAuthId: LaunchAuthId): Promise<Result<RecordedLaunch | undefined>> {
+    return this.#database.transaction((tx) => tx.launches.byLaunchAuthId(launchAuthId));
+  }
+
+  liveGrants(predicate: LaunchPredicate): Promise<Result<readonly RecordedLaunch[]>> {
+    return this.#database.transaction((tx) => tx.launches.liveGrants(predicate));
+  }
+
+  rejection(workerId: WorkerId, operationId: OperationId): Promise<Result<RecordedRejection | undefined>> {
+    return this.#database.transaction((tx) => tx.launches.rejection(workerId, operationId));
+  }
+
+  recordRejection(recorded: RecordedRejection): Promise<Result<void>> {
+    return this.#database.transaction((tx) => tx.launches.recordRejection(recorded));
   }
 }

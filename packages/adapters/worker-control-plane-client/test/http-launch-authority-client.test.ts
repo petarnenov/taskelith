@@ -65,6 +65,13 @@ test('a request carries the bearer and the contract body, and a grant comes back
   assert.ok(checkHttpSchema('LaunchAuthorizationRequest', request.body).ok);
 });
 
+test('a base without a trailing slash keeps its path', async () => {
+  answer = { status: 200, body: { outcome: 'expired' } };
+  const bare = new URL(baseUrl.href.replace(/\/$/, ''));
+  value(await new HttpLaunchAuthorityClient({ baseUrl: bare, credential: CREDENTIAL, timeoutMilliseconds: 2000 }).authorize(REQUEST));
+  assert.equal(seen.at(-1)!.path, '/api/launch-authorizations');
+});
+
 test('a rejection, a revoked grant, and an expired one come back as decided', async () => {
   const rejection = { reason: 'gate-not-passed', retryable: false, message: 'gate gate-1 has not passed' };
   answer = { status: 200, body: { outcome: 'rejected', rejection } };
@@ -83,7 +90,7 @@ test('only a 503, a timeout, or no connection is undecided', async () => {
   assert.equal(failed(await client(50).authorize(REQUEST)).code, 'unavailable');
   const closed = new HttpLaunchAuthorityClient({ baseUrl: new URL('http://127.0.0.1:1/'), credential: CREDENTIAL, timeoutMilliseconds: 500 });
   assert.equal(failed(await closed.authorize(REQUEST)).code, 'unavailable');
-  for (const [status, code] of [[401, 'forbidden'], [400, 'invalid'], [500, 'internal']] as const) {
+  for (const [status, code] of [[502, 'unavailable'], [504, 'unavailable'], [401, 'forbidden'], [400, 'invalid'], [500, 'internal']] as const) {
     answer = { status, body: { ...failure, code } };
     assert.equal(failed(await client().authorize(REQUEST)).code, code, String(status));
   }
@@ -94,6 +101,10 @@ test('an answer that breaks its schema or its values is internal, never a grant'
   assert.equal(failed(await client().authorize(REQUEST)).code, 'internal');
   answer = { status: 200, body: { outcome: 'granted', grant: { ...GRANT, skewMilliseconds: 30_000 } } };
   assert.equal(failed(await client().authorize(REQUEST)).code, 'internal', 'a skew not shorter than the ttl');
-  answer = { status: 502, body: 'not json' };
+  answer = { status: 200, body: { outcome: 'granted', grant: { ...GRANT, executionId: 'execution-2' } } };
+  assert.equal(failed(await client().authorize(REQUEST)).code, 'internal', 'a grant for another execution');
+  answer = { status: 200, body: { outcome: 'granted', grant: { ...GRANT, operationId: 'operation-2' } } };
+  assert.equal(failed(await client().authorize(REQUEST)).code, 'internal', 'a grant for another operation');
+  answer = { status: 500, body: 'not json' };
   assert.equal(failed(await client().authorize(REQUEST)).code, 'internal');
 });

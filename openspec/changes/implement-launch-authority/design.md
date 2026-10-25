@@ -37,25 +37,36 @@ These are coordinator decisions, taken as the worker recommended. The coordinato
   - A recorded rejection is returned when the values are the same, and is `operation-mismatch` otherwise.
   - Otherwise the domain decides on a context that is read entirely in the transaction: the assignment and reservation, the admission, the run's definition from the workflow registry, its gates, the current revisions, and the policy revision.
   - The grant is written with the task's record. A non-retryable rejection is recorded and commits, because the transaction's work returns it as a value.
+- **A decision is final, or none is reached.**
+  - The run comes from the assignment, so a missing admission is `admission-not-current`.
+  - A run that is not stored, or whose workflow left the registry, reaches no decision: `unavailable`, which is a 503.
+  - A concurrent decision of the same operation makes the loser's transaction a serialization failure, which reruns as a replay. A unique conflict is answered `unavailable`, so the worker's repeat replays the recorded decision.
 - **The worker check is the contract's.** "Enrolled, unrevoked, at its current credential generation" (section 2) is read in the transaction, so a revocation is ordered against the authorization. The principal's generation must be the current one. A predecessor within its grace window authenticates, and is then rejected here.
 - **An unknown assignment has no task.** `rejectUnknownAssignment` keeps the order of section 9: the installation and worker checks come first, then `assignment-not-active`.
 - **The index follows the record.**
   - `indexLaunchGrants` upserts one row per grant after every task write. A row's identity and values never change, only `live`: an unrevoked grant whose execution is not terminal.
   - The predicates read partial indexes on live rows, GIN indexes for the artifacts and relied-on gates, so a writer's read is an index read that serializable conflict detection covers.
-  - The migration backfills the rows of stored tasks, masking escapes as the signals migration does.
+  - A grant's run is its assignment's, which every grant has.
+  - The gate predicate takes a set of gates. A writer that adds, removes, or decides a gate names every gate of the stage, so a gate added to a prerequisite stage finds the grants that relied on that stage, and two admissions relying on other gates stay apart.
+  - The migration backfills the rows of stored tasks, and `current_revisions` from the used admissions in identity order, as `submitTask` would have seeded them. It masks only the escapes that `jsonb` rejects, those of NUL and surrogates. Identifiers are printable ASCII and never hold such an escape, so they are kept. A bound revision whose free text holds one becomes a different current revision, so its launch fails closed with `artifact-revision-changed`.
 - **Crash points.** The transaction reaches `LaunchAuthorizationCommit` when its task repository inserted a new grant row. A crash after the commit is the lost-response case, and its retry replays the grant.
 - **Invalidation.**
   - `invalidateLaunches` reads the predicate's live grants, revokes each attempt's grants with `revokeLaunch`, and writes one cancellation command per attempt. The command's identity derives from the first grant, so a rerun sends the same command.
   - `invalidateWorkerLaunches` also records `uncertain` evidence, as its own write, since each change is one generation.
   - `LaunchRevokingFleetRegistry` runs the fleet revocation and the invalidation in one transaction for the administration's `revoke-worker`.
-- **The wire mapping.** `launch-wire.ts` parses the request into domain identifiers and flattens a grant's parameters into `ttlMilliseconds` and `skewMilliseconds`. The client parses them back, and an answer that breaks its schema or values is `internal`, never a grant.
+- **The wire mapping.** `launch-wire.ts` parses the request into domain identifiers, `reportsNotStarted` included, and flattens a grant's parameters into `ttlMilliseconds` and `skewMilliseconds`.
+  - The client parses them back.
+  - An answer that breaks its schema or values, or a grant that binds other values than the request, is `internal`, never a grant.
+  - A 502, 503, or 504 is `unavailable`, and so are a timeout and a lost connection.
 - **Provisional parameters.** The ttl of 30 s and the skew of 5 s come from `docs/operational-targets.md`, and `ControlPlaneSettings.launchParameters` overrides them in tests.
 
 ## Risks / Trade-offs
 
-- **No in-memory `LaunchRecords`.** The index is a projection of task records, so it is tested against PostgreSQL, as are the authority and the writers. The port keeps the use cases independent of the database.
+- **No in-memory `LaunchRecords`.** The index is a projection of task records. `LAUNCH_RECORDS_CONFORMANCE` is the port's suite, and it runs against PostgreSQL, as do the authority's and the writers' tests. An in-memory adapter would have to follow the task repository's writes; no use case needs one in G2. The client has one adapter, whose tests are its contract.
+- **The race tests are not a proof.** Both sequential orders are tested deterministically: a revocation before the authorization rejects it, and one after revokes and cancels the grant. The concurrent rounds check that the invariant holds whichever side lands first, and the mix of outcomes depends on timing. Which transaction PostgreSQL makes the serialization victim is not forced. An empty read racing an authorization changes no compared value, so its order cannot be observed; it is the same index read as a non-empty one.
+- **Uncertainty covers executions.** A revoked worker's executions with a live grant become `uncertain` (B3). An active attempt without a grant has no execution that could run; item 21's reconciliation decides about the attempt.
 - **Seeded current revisions.**
   - The first submission that binds an artifact fixes its current revision for the run. A later submission with another digest of that artifact is rejected with `artifact-revision-changed` at launch.
   - The contract keeps this fail-closed until G3's writer.
-- **Writers of G3 and G6.** Gate, artifact, policy, and quarantine writers must call `invalidateLaunches` in their transactions. The contract's section 11 states it, and the helper's tests cover every predicate, including an empty read.
+- **Writers of G3 and G6.** Gate, artifact, policy, and quarantine writers must call `invalidateLaunches` in their transactions. The contract's section 11 states it. The helper is tested through the run, assignment, artifact, worker, and all predicates, including an empty read. The gate predicate is tested as a read. G3 extends `CurrentRevisions` with an update for its writer of revisions.
 - **Latency.** The p95 targets of the operational targets are not measured here. Item 24 and G6 measure them.

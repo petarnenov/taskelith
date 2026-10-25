@@ -156,8 +156,11 @@ test('a launch is granted once, recorded with its values, and its replay never e
   assert.equal(kindOf(await authority.authorize(PRINCIPAL, { ...request, executionId: id('ExecutionId', 'other') as never })), 'rejected:operation-mismatch');
   assert.equal((await rows('SELECT 1 FROM launch_rejections')).length, 0, 'a mismatch is not recorded');
   assert.equal(grantOf(await authority.authorize(PRINCIPAL, request)).launchAuthId, grant.launchAuthId);
-  const stranger = { workerId: id('WorkerId', 'worker-2') as WorkerId, generation: 1 };
-  assert.equal(kindOf(await authority.authorize(stranger, request)), 'rejected:worker-not-authorized', "another worker's replay gets nothing");
+  const other = fleetWorker('worker-2', 'journal-2');
+  value(await fleet.addToken(fleetToken('token-2')));
+  value(await fleet.enroll(fleetToken('token-2').hash, other));
+  const stranger = { workerId: other.workerId, generation: 1 };
+  assert.equal(kindOf(await authority.authorize(stranger, request)), 'rejected:assignment-not-active', "another enrolled worker's replay gets nothing");
   assert.equal(grantOf(await authority.authorize(PRINCIPAL, request)).launchAuthId, grant.launchAuthId, "and changes nothing of A's");
   await sql(url, 'UPDATE installation SET quarantined = true');
   assert.equal(kindOf(await authority.authorize(PRINCIPAL, request)), 'rejected:quarantined', 'no grant is handed out in quarantine');
@@ -203,6 +206,29 @@ test('each check rejects with its reason in the contract order', async () => {
   await sql(url, `UPDATE current_revisions SET revision = replace(revision, 'aaaa', 'bbbb')`);
   assert.equal(kindOf(await authority.authorize(PRINCIPAL, { ...request, operationId: op('o-artifact') })), 'rejected:artifact-revision-changed');
   assert.equal((await rows('SELECT 1 FROM launch_rejections')).length, 5);
+  const several = { ...request, operationId: op('o-several'), recoveryEpoch: 2 as never, assignmentId: id('AssignmentId', 'unknown') as never };
+  assert.equal(kindOf(await authority.authorize({ ...PRINCIPAL, generation: 2 }, several)), 'rejected:stale-recovery-epoch', 'the first failed check');
+});
+
+test('a missing admission is a rejection, and a missing run reaches no decision', async () => {
+  const { request } = await placed();
+  await sql(url, 'DELETE FROM admissions');
+  assert.equal(kindOf(await authority.authorize(PRINCIPAL, request)), 'rejected:admission-not-current');
+  const second = await placed('task-2');
+  await sql(url, 'DELETE FROM workflow_runs');
+  const undecided = await authority.authorize(PRINCIPAL, second.request);
+  assert.equal(undecided.ok ? 'decided' : undecided.error.code, 'unavailable');
+  assert.equal((await rows(`SELECT 1 FROM launch_rejections WHERE operation_id = '${second.request.operationId}'`)).length, 0);
+});
+
+test('concurrent rejections of one operation with other values answer one recorded decision', async () => {
+  const { request } = await placed();
+  const stale = { ...request, ownershipGeneration: (request.ownershipGeneration + 1) as never };
+  const epoch = { ...request, recoveryEpoch: 2 as never };
+  const answers = await Promise.all([authority.authorize(PRINCIPAL, stale), authority.authorize(PRINCIPAL, epoch)]);
+  const kinds = answers.map(kindOf).sort();
+  assert.ok(kinds.includes('rejected:operation-mismatch'), kinds.join());
+  assert.equal((await rows('SELECT 1 FROM launch_rejections')).length, 1);
 });
 
 test('only an unspawned authorized execution is authorized again, and no other execution while it owns the attempt', async () => {
@@ -225,21 +251,40 @@ test('a replay after the deadline is expired, and expiry changes nothing stored'
   assert.equal((await rows('SELECT 1 FROM launch_authorizations WHERE live')).length, 1);
 });
 
-test('an invalidating writer revokes the grants its predicate reads and cancels each attempt once', async () => {
-  const { request } = await placed();
-  await placed('task-2');
-  grantOf(await authority.authorize(PRINCIPAL, request));
+test('a bulk writer revokes every grant its predicate reads and cancels each attempt once', async () => {
+  const launched = [await placed(), await placed('task-2')];
+  for (const { request } of launched) grantOf(await authority.authorize(PRINCIPAL, request));
   const correlationId = id('CorrelationId', 'c-policy');
-  const cancelled = value(await database.transaction((tx) => invalidateLaunches(tx, { predicate: { kind: 'run', runId: id('WorkflowRunId', 'run-1') as never }, reason: 'policy-revision-changed', correlationId })));
-  assert.equal(cancelled, 1);
-  assert.equal(kindOf(await authority.authorize(PRINCIPAL, request)), 'revoked:policy-revision-changed');
-  const again = value(await database.transaction((tx) => invalidateLaunches(tx, { predicate: { kind: 'all' }, reason: 'quarantined', correlationId })));
-  assert.equal(again, 0, 'an empty read revokes nothing');
+  const invalidate = (predicate: Parameters<typeof invalidateLaunches>[1]['predicate']) =>
+    database.transaction((tx) => invalidateLaunches(tx, { predicate, reason: 'policy-revision-changed', correlationId }));
+  assert.equal(value(await invalidate({ kind: 'run', runId: id('WorkflowRunId', 'run-1') as never })), 2);
+  for (const { request } of launched) assert.equal(kindOf(await authority.authorize(PRINCIPAL, request)), 'revoked:policy-revision-changed');
+  assert.equal(value(await invalidate({ kind: 'all' })), 0, 'an empty read revokes nothing');
   const commands = await rows(`SELECT message FROM outbox WHERE event_type = 'execution.cancellation.request'`);
-  assert.equal(commands.length, 1);
-  const wire = JSON.parse(commands[0]!.message as string).payload;
-  assert.deepEqual(wire.payload, { protocolVersion: 1, reason: 'launch-revoked' });
-  assert.ok(checkMessageSchema('CancellationCommand', wire).ok, JSON.stringify(checkMessageSchema('CancellationCommand', wire)));
+  assert.equal(commands.length, 2);
+  for (const command of commands) {
+    const wire = JSON.parse(command.message as string).payload;
+    assert.deepEqual(wire.payload, { protocolVersion: 1, reason: 'launch-revoked' });
+    assert.ok(checkMessageSchema('CancellationCommand', wire).ok);
+  }
+});
+
+test('every predicate reaches the revocation and the cancellation through the writer helper', async () => {
+  const cases: [string, (placed: Placed) => Parameters<typeof invalidateLaunches>[1]['predicate']][] = [
+    ['assignment', (launched) => ({ kind: 'assignment', assignmentId: launched.request.assignmentId })],
+    ['artifact', () => ({ kind: 'artifact', artifactId: id('ArtifactId', 'spec') as never })],
+    ['worker', () => ({ kind: 'worker', workerId: WORKER.workerId })],
+  ];
+  await sql(url, `INSERT INTO capacity_quotas (scope, scope_id, quota) VALUES ('project', 'project-1', 16), ('run', 'run-1', 16)`);
+  await sql(url, 'UPDATE workers SET slots = 8');
+  for (const [name, predicateOf] of cases) {
+    const launched = await placed(`task-${name}`);
+    grantOf(await authority.authorize(PRINCIPAL, launched.request));
+    const correlationId = id('CorrelationId', `c-${name}`);
+    assert.equal(value(await database.transaction((tx) => invalidateLaunches(tx, { predicate: predicateOf(launched), reason: 'artifact-revision-changed', correlationId }))), 1, name);
+    assert.equal(kindOf(await authority.authorize(PRINCIPAL, launched.request)), 'revoked:artifact-revision-changed', name);
+  }
+  assert.equal((await rows(`SELECT 1 FROM outbox WHERE event_type = 'execution.cancellation.request'`)).length, cases.length);
 });
 
 test('a worker revocation revokes its grants, cancels them, and leaves the executions uncertain', async () => {

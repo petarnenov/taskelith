@@ -1,6 +1,6 @@
 import type { HttpSchemas } from '@taskelith/contracts';
 import { parseRecoveryEpoch, type LaunchAuthorizationRequest, type LaunchOutcome } from '@taskelith/execution';
-import { ok, parseIdentifier, type Result } from '@taskelith/kernel';
+import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import { parseGeneration, parseOwnershipGeneration } from '@taskelith/sdlc';
 
 // The `authorizeLaunch` shapes of execution.openapi.json and the domain's.
@@ -21,6 +21,8 @@ export function parseLaunchAuthorizationRequest(body: HttpSchemas['LaunchAuthori
     if (!result.ok) return result;
     values[field] = result.value;
   }
+  // The domain re-authorizes an execution on this flag, so it is checked too.
+  if (typeof body.reportsNotStarted !== 'boolean') return err(failure('invalid', 'reportsNotStarted must be a boolean'));
   return ok(Object.freeze({ ...values, reportsNotStarted: body.reportsNotStarted }) as LaunchAuthorizationRequest);
 }
 

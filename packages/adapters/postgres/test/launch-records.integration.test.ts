@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { after, beforeEach, test } from 'node:test';
-import { launchRejection, revokeLaunch, type LaunchPredicate, type LaunchRequest, type WorkerId } from '@taskelith/execution';
+import { revokeLaunch, type LaunchPredicate } from '@taskelith/execution';
 import { PostgresDatabase } from '@taskelith/postgres';
 import { id, value } from '@taskelith/testing';
-import { authorizedUnder, placedTask, usedAdmission } from './capacity-fixtures.ts';
+import { authorizedUnder, placedTask } from './capacity-fixtures.ts';
 import { AT, assignment } from './fixtures.ts';
 import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
 
@@ -25,29 +25,20 @@ async function liveOf(predicate: LaunchPredicate): Promise<string[]> {
   return launches.map((launch) => launch.launchAuthId);
 }
 
-test('the task repository indexes each grant with its run, and keeps whether it is live', async () => {
+test('the task repository indexes each grant with its assignment\'s run, and keeps whether it is live', async () => {
   const offered = assignment('assignment-1');
   const authorized = authorizedUnder(placedTask('task-1', 'attempt-1'), offered.id, offered.workerId);
   value(await database.transaction(async (tx) => {
-    const admitted = await tx.admissions.add(usedAdmission('task-1'));
-    if (!admitted.ok) return admitted;
-    const bound = await tx.catalog.bindAdmission(usedAdmission('task-1').id, id('WorkflowRunId', 'run-1') as never);
-    return bound.ok ? tx.tasks.add(authorized) : bound;
+    const assigned = await tx.assignments.add(offered);
+    return assigned.ok ? tx.tasks.add(authorized) : assigned;
   }));
   const grant = authorized.attempts[0]!.executions[0]!.grants[0]!;
-  const recorded = value(await database.transaction((tx) => tx.launches.byOperation(grant.workerId, grant.operationId)));
-  assert.deepEqual(recorded, {
-    launchAuthId: grant.launchAuthId, taskId: authorized.id, attemptId: grant.attemptId, assignmentId: grant.assignmentId,
-    executionId: grant.executionId, workerId: grant.workerId,
-  });
-  assert.deepEqual(value(await database.transaction((tx) => tx.launches.byLaunchAuthId(grant.launchAuthId))), recorded);
-  assert.equal(value(await database.transaction((tx) => tx.launches.byOperation(id('WorkerId', 'worker-2') as WorkerId, grant.operationId))), undefined);
-  assert.deepEqual(await liveOf({ kind: 'run', runId: id('WorkflowRunId', 'run-1') as never }), [grant.launchAuthId]);
-
+  const runId = offered.reservation.scope.runId as never;
+  assert.deepEqual(await liveOf({ kind: 'run', runId }), [grant.launchAuthId]);
   const revoked = value(revokeLaunch(authorized, grant.attemptId, 'gate-not-passed', AT));
   value(await database.transaction((tx) => tx.tasks.replace(revoked, authorized.generation)));
-  assert.deepEqual(await liveOf({ kind: 'all' }), []);
-  assert.equal(value(await database.transaction((tx) => tx.launches.byLaunchAuthId(grant.launchAuthId)))?.launchAuthId, grant.launchAuthId);
+  assert.deepEqual(await liveOf({ kind: 'run', runId }), []);
+  assert.equal(value(await database.transaction((tx) => tx.launches.byOperation(grant.workerId, grant.operationId)))?.launchAuthId, grant.launchAuthId);
 });
 
 test('each predicate reads only its live grants', async () => {
@@ -59,22 +50,9 @@ test('each predicate reads only its live grants', async () => {
   assert.deepEqual(await liveOf({ kind: 'assignment', assignmentId: id('AssignmentId', 'launch-b-assignment') as never }), ['launch-b']);
   assert.deepEqual(await liveOf({ kind: 'run', runId: id('WorkflowRunId', 'run-1') as never }), ['launch-a', 'launch-b']);
   assert.deepEqual(await liveOf({ kind: 'artifact', artifactId: id('ArtifactId', 'design') as never }), ['launch-b', 'launch-c']);
-  assert.deepEqual(await liveOf({ kind: 'gate', gateId: id('GateId', 'gate-1') as never }), ['launch-a']);
+  assert.deepEqual(await liveOf({ kind: 'gates', gateIds: [id('GateId', 'gate-1') as never] }), ['launch-a']);
+  assert.deepEqual(await liveOf({ kind: 'gates', gateIds: [id('GateId', 'gate-9') as never, id('GateId', 'gate-2') as never] }), ['launch-c']);
+  assert.deepEqual(await liveOf({ kind: 'gates', gateIds: [] }), []);
   assert.deepEqual(await liveOf({ kind: 'all' }), ['launch-a', 'launch-b', 'launch-c']);
   assert.deepEqual(await liveOf({ kind: 'worker', workerId: id('WorkerId', 'worker-9') as never }), []);
-});
-
-test('a rejection is recorded once per operation of a worker, with its request', async () => {
-  const request = {
-    operationId: id('OperationId', 'operation-1'), workerId: id('WorkerId', 'worker-1'), recoveryEpoch: 1, assignmentId: id('AssignmentId', 'a'),
-    attemptId: id('AttemptId', 'attempt-1'), ownershipGeneration: 1, executionId: id('ExecutionId', 'e'), admissionId: id('AdmissionId', 'ad'),
-    admissionGeneration: 1, reportsNotStarted: false,
-  } as unknown as LaunchRequest;
-  const rejection = launchRejection('gate-not-passed', 'gate g has not passed');
-  value(await database.transaction((tx) => tx.launches.recordRejection({ request, rejection })));
-  const again = await database.transaction((tx) => tx.launches.recordRejection({ request, rejection }));
-  assert.equal(again.ok ? 'ok' : again.error.code, 'conflict');
-  assert.deepEqual(value(await database.transaction((tx) => tx.launches.rejection(request.workerId, request.operationId))), { request, rejection });
-  const other = id('WorkerId', 'worker-2') as WorkerId;
-  assert.equal(value(await database.transaction((tx) => tx.launches.rejection(other, request.operationId))), undefined);
 });

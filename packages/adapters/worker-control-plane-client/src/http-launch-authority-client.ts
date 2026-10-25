@@ -38,13 +38,17 @@ export class HttpLaunchAuthorityClient implements LaunchAuthorityClient {
     const checked = checkHttpSchema('LaunchAuthorizationOutcome', body);
     if (!checked.ok) return err(failure('internal', 'the launch outcome violates its schema', { violation: checked.error[0] ?? '' }));
     const outcome = parseOutcome(body as HttpSchemas['LaunchAuthorizationOutcome']);
-    return outcome.ok ? outcome : err(failure('internal', `the launch outcome is not valid: ${outcome.error.message}`));
+    if (!outcome.ok) return err(failure('internal', `the launch outcome is not valid: ${outcome.error.message}`));
+    if (outcome.value.kind === 'granted' && !bindsRequest(outcome.value.grant, request)) {
+      return err(failure('internal', 'the grant binds other values than the request'));
+    }
+    return outcome;
   }
 
   async #post(request: LaunchAuthorizationRequest): Promise<Result<{ status: number; body: unknown }>> {
     const { baseUrl, credential, timeoutMilliseconds } = this.#settings;
     try {
-      const response = await this.#fetch(new URL('launch-authorizations', baseUrl), {
+      const response = await this.#fetch(new URL('launch-authorizations', withTrailingSlash(baseUrl)), {
         method: 'POST',
         headers: { authorization: `Bearer ${credential}`, 'content-type': 'application/json' },
         body: JSON.stringify(request),
@@ -59,11 +63,26 @@ export class HttpLaunchAuthorityClient implements LaunchAuthorityClient {
   }
 }
 
-// Only a 503 means "retry the same operation"; every other status ends it.
+// A 503, or a proxy's timeout or bad gateway, reached no decision, so the
+// same operation is retried; every other status ends it.
+const UNDECIDED_STATUSES = new Set([502, 503, 504]);
+
 function statusFailure(status: number, body: unknown) {
   const message = typeof (body as { message?: unknown })?.message === 'string' ? (body as { message: string }).message : '';
-  const code = status === 503 ? 'unavailable' : status === 401 ? 'forbidden' : status === 400 ? 'invalid' : 'internal';
+  const code = UNDECIDED_STATUSES.has(status) ? 'unavailable' : status === 401 ? 'forbidden' : status === 400 ? 'invalid' : 'internal';
   return failure(code, `authorizeLaunch answered ${status}${message === '' ? '' : `: ${message}`}`, { status: String(status) });
+}
+
+// A grant for another operation or execution is never used (section 6).
+function bindsRequest(grant: LaunchGrant, request: LaunchAuthorizationRequest): boolean {
+  const bound = ['operationId', 'recoveryEpoch', 'assignmentId', 'attemptId', 'ownershipGeneration', 'executionId', 'admissionId',
+    'admissionGeneration'] as const;
+  return bound.every((field) => grant[field] === request[field]);
+}
+
+// A base without a trailing slash would drop its last path segment.
+function withTrailingSlash(base: URL): URL {
+  return base.pathname.endsWith('/') ? base : new URL(`${base.pathname}/${base.search}`, base);
 }
 
 function parseOutcome(body: HttpSchemas['LaunchAuthorizationOutcome']): Result<LaunchOutcome> {

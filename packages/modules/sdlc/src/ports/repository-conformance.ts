@@ -333,7 +333,7 @@ export const RUN_CATALOG_CONFORMANCE: readonly ConformanceCase<RunCatalogConform
   },
 ]);
 
-// A database adapter keys revisions by run, so its runs must be stored.
+// Its cases store their runs first, as a run's revisions belong to it.
 export interface CurrentRevisionsConformanceTarget {
   readonly runs: WorkflowRunRepository;
   readonly revisions: CurrentRevisions;

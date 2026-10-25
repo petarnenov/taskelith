@@ -36,11 +36,11 @@ export async function indexLaunchGrants(session: Session, task: Task): Promise<b
         const { rows } = await session.query<{ inserted: boolean }>(
           `INSERT INTO launch_authorizations (launch_auth_id, worker_id, operation_id, task_id, attempt_id, assignment_id,
              execution_id, run_id, relied_on_gates, artifact_ids, live)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, (SELECT run_id FROM admissions WHERE id = $8), $9, $10, $11)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, (SELECT run_id FROM assignments WHERE id = $6), $8, $9, $10)
            ON CONFLICT (launch_auth_id) DO UPDATE SET live = EXCLUDED.live
            RETURNING xmax = 0 AS inserted`,
           [grant.launchAuthId, grant.workerId, grant.operationId, task.id, grant.attemptId, grant.assignmentId, grant.executionId,
-            task.admissionId, [...grant.reliedOnGates], grant.artifacts.map((artifact) => artifact.artifactId),
+            [...grant.reliedOnGates], grant.artifacts.map((artifact) => artifact.artifactId),
             runnable && grant.state === 'granted'],
         );
         recorded ||= rows[0]?.inserted === true;
@@ -119,8 +119,8 @@ function predicateCondition(predicate: LaunchPredicate): [string, unknown[]] {
       return ['run_id = $1', [predicate.runId]];
     case 'artifact':
       return ['artifact_ids @> ARRAY[$1::text]', [predicate.artifactId]];
-    case 'gate':
-      return ['relied_on_gates @> ARRAY[$1::text]', [predicate.gateId]];
+    case 'gates':
+      return ['relied_on_gates && $1::text[]', [[...predicate.gateIds]]];
     case 'all':
       return ['true', []];
   }
