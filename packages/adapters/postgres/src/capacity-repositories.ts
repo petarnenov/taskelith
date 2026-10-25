@@ -35,11 +35,12 @@ interface WorkerRow {
   readonly cpu_millicores: number;
   readonly memory_mebibytes: number;
   readonly controls: string[];
+  readonly protocol_version: number | null;
 }
 
 // The columns placement reads; item 13 may add others to the table.
-const WORKER_COLUMNS = 'worker_id, enrolled, revoked, draining, reachable, admission_pressure_since, slots, cpu_millicores, memory_mebibytes, controls';
-export const ELIGIBLE = 'enrolled AND NOT revoked AND NOT draining AND reachable AND admission_pressure_since IS NULL';
+const WORKER_COLUMNS = 'worker_id, enrolled, revoked, draining, reachable, admission_pressure_since, slots, cpu_millicores, memory_mebibytes, controls, protocol_version';
+export const ELIGIBLE = 'enrolled AND NOT revoked AND NOT draining AND reachable AND admission_pressure_since IS NULL AND protocol_version IS NOT NULL';
 
 export class PostgresPlacementWorkers implements PlacementWorkers {
   readonly #session: Session;
@@ -72,6 +73,7 @@ function workerRecord(row: WorkerRow): WorkerPlacementRecord {
     cpuMillicores: row.cpu_millicores,
     memoryMebibytes: row.memory_mebibytes,
     controls: Object.freeze(row.controls as HardControl[]),
+    ...(row.protocol_version === null ? {} : { protocolVersion: row.protocol_version }),
   });
 }
 
@@ -86,6 +88,11 @@ export class PostgresInstallationGuard implements InstallationGuard {
   async quarantined(): Promise<boolean> {
     const { rows } = await this.#session.query<{ quarantined: boolean }>('SELECT quarantined FROM installation');
     return rows[0]?.quarantined ?? true;
+  }
+
+  async recoveryEpoch(): Promise<number | undefined> {
+    const { rows } = await this.#session.query<{ recovery_epoch: number | null }>('SELECT recovery_epoch FROM installation');
+    return rows[0]?.recovery_epoch ?? undefined;
   }
 }
 

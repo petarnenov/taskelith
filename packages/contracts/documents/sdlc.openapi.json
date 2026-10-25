@@ -2,14 +2,19 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Taskelith SDLC API",
-    "version": "0.2.0",
-    "description": "Creates SDLC workflow runs, submits tasks for admission, and reads admissions. Authentication is defined with enrollment in G2."
+    "version": "0.3.0",
+    "description": "Creates SDLC workflow runs, submits tasks for admission, and reads admissions. Every operation requires the installation-owner credential (decision D10 (a))."
   },
   "paths": {
     "/runs": {
       "post": {
         "operationId": "createRun",
         "summary": "Create a workflow run bound to a framework workflow and policy revision",
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -41,6 +46,16 @@
               }
             }
           },
+          "401": {
+            "description": "The operator credential is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
           "409": {
             "description": "A run with this identifier already exists with another binding.",
             "content": {
@@ -58,6 +73,11 @@
       "post": {
         "operationId": "submitTask",
         "summary": "Submit a task to a stage of a run for admission",
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ],
         "parameters": [
           {
             "name": "runId",
@@ -92,6 +112,16 @@
           },
           "400": {
             "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The operator credential is invalid.",
             "content": {
               "application/json": {
                 "schema": {
@@ -137,6 +167,11 @@
       "get": {
         "operationId": "readAdmission",
         "summary": "Read an admission of a run",
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ],
         "parameters": [
           {
             "name": "runId",
@@ -164,6 +199,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Admission"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The operator credential is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
                 }
               }
             }
@@ -500,6 +545,13 @@
             }
           }
         }
+      }
+    },
+    "securitySchemes": {
+      "operatorToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The installation bootstrap credential."
       }
     }
   }
