@@ -166,6 +166,15 @@ It runs from the worktree, with the prompt and log in the session's scratch dire
 | M5 | The rest of M3: an arriving part raised `reported_snapshot` and pruned other reports before the consistency check. A refused report with the snapshots 1 and 100 left the watermark at 100, so a later valid fresh snapshot 2 was deleted without handling its omissions. | Fixed in `2a443a9`: an arriving part is assembled with its stored siblings first, and an inconsistent one refuses its report on receipt without touching the watermark, other reports, or requests. `reported_snapshot` rises only when a part completes its report. The lower-snapshot filter uses the highest received snapshot, the greater of `reported_snapshot` and every pending part's `snapshot`, so wire contracts line 76 still holds for every part that is not refused. Covered by a PostgreSQL regression test. |
 | M6 | The rest of M4: every report answering the current request was exempt from pruning, so several incomplete answers to one request grew without bound. The worker answers a redelivered request with a new report. | Fixed in `2a443a9`: per journal, only the newest fresh report and the newest one that is not fresh survive. Newest means the highest `snapshot`, and the arriving report wins a tie. The surviving fresh report is checked against the bound once it is complete. The bound per worker is one fresh and one non-fresh report. Covered by unit and PostgreSQL tests. |
 
+### Pass 3
+
+- **Session:** `01a1752e-9578-7ea3-97a6-998e2dedd522`, 2026-10-26 00:29 to 00:31, on `e69286a`. The output header confirms `gpt-6.1-sol`, reasoning effort `medium`, and the `read-only` sandbox.
+- **Snapshot:** `1f093fd5…6f64ea03`, unchanged.
+- **Reviewer's own checks:** it ran the comment check and 103 unit and conformance tests, all passing.
+- **Earlier findings:** the reviewer confirmed H1, M2, M3, M4, M5, and M6 resolved, with evidence.
+- **Wire contracts:** the reviewer found the amended text of section 6 consistent with the approved behavior for a fresh snapshot and the re-sent offer.
+- **Result:** Critical 0, High 0, Medium 0, Low 0. The whole-change review found no further defect.
+
 ## Limitations
 
 - **Revoked workers.** Their observations stay unconsumed until 21d. Their inventory reports are refused.
@@ -175,6 +184,5 @@ It runs from the worktree, with the prompt and log in the session's scratch dire
 
 ## Remaining gates
 
-- Independent review.
 - Integration into `dev` and archiving, by the coordinator.
 - No deployment validation is claimed.
