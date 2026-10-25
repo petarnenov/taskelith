@@ -16,5 +16,5 @@
 - [x] 3.1 Run qualification steps 1 to 6 of the `koffi` proposal and record the results.
 - [x] 3.2 Add the `koffi` row to the dependency register with the owner's governance acceptance.
 - [x] 3.3 Amend the supervisor identity contract sections 4, 8, and 10.
-- [ ] 3.4 Run `make verify` and record the results.
+- [x] 3.4 Run `make verify` and record the results.
 - [ ] 3.5 Obtain independent review (Claude Code, `claude-fable-5-1`, medium) and record results.
