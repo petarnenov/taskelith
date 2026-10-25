@@ -73,6 +73,7 @@ The coordinator took the author's recommendations. These are coordinator decisio
   - A copy's own identity includes the consumer, because independent observation readers each terminate the same message.
   - An original that expired before the capture is recorded without a body and cannot be redriven.
   - Each advisory is settled on its own. One that is not an advisory of a transport stream is terminated; one whose original cannot be read, or whose copy fails, is redelivered.
+  - A redriven observation reaches every reader of the subject again, not only the one that terminated it; the others stop it through their inbox, by the identity in the body.
   - Redrive publishes the body on the original subject under `<root>.redrive.<n+1>` and removes the record. `<root>` and `n` come from the quarantined identity, so a message quarantined again after a redrive gets the next number. No state is needed.
 - **Bounds.** `TRANSPORT_LIMITS` holds the provisional values. Every function takes them as an optional argument, so tests run with timers of milliseconds and with smaller streams for the tmpfs test server.
   - All streams use limits retention with `discard: new`. A full stream rejects to the publisher, whose message stays in the outbox, or in the worker journal for observations.
@@ -87,5 +88,6 @@ The coordinator took the author's recommendations. These are coordinator decisio
 - **A permanently failing row blocks its subject:** a row whose subject cannot be mapped, or whose payload exceeds the limit, keeps its worker's later commands waiting. That is the order guarantee at work. Item 16 builds only valid commands, and item 22 adds the outbox lag signal that makes such a row visible.
 - **A large quarantine copy:** the original's body plus the diagnostic headers can exceed the server's `max_payload` for a body near 1 MiB. That copy fails, and its advisory is redelivered with backoff until the original expires.
 - **Head-of-line in a batch:** a round reads the oldest 100 rows. More than 100 waiting rows of backed-off subjects keep the others out of the round until they publish.
+- **A capture repeated after the window:** a keeper that copied an advisory and stopped before its acknowledgement copies it again when it returns after the quarantine stream's 2-minute duplicate window, leaving two records of one original. Redriving both delivers it twice, and the receiver's inbox stops the second.
 - **Redrive after a lost removal:** if removing the record fails after the publication, a second redrive publishes under the same `.redrive.<n>`. After the broker window that is a second delivery, which the receiver's inbox stops.
 - **Not measured:** a silent partition (a black hole, detected only by the client's ping interval), a server restart, and `consume()`. Item 24 covers the partition scenarios.

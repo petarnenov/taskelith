@@ -19,8 +19,8 @@ export const TRANSPORT_LIMITS = Object.freeze({
 
 export type TransportLimits = { readonly [Name in keyof typeof TRANSPORT_LIMITS]: number };
 
-// Doubles from the initial delay up to the maximum, with up to a quarter of
-// jitter below it, so redeliveries of many messages spread out.
+// Doubles from the initial delay up to the maximum, each up to a quarter
+// shorter by jitter, so that redeliveries of many messages spread out.
 export function retryDelayMilliseconds(
   attempt: number,
   limits: TransportLimits = TRANSPORT_LIMITS,
@@ -28,6 +28,5 @@ export function retryDelayMilliseconds(
 ): number {
   const doubled = limits.retryInitialMilliseconds * 2 ** Math.max(0, attempt - 1);
   const capped = Math.min(doubled, limits.retryMaxMilliseconds);
-  const jittered = Math.round(capped * (1 - random() / 4));
-  return Math.max(limits.retryInitialMilliseconds, jittered);
+  return Math.round(capped * (1 - random() / 4));
 }

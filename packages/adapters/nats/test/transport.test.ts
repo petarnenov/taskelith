@@ -65,13 +65,13 @@ test('streams carry the provisional bounds of the operational targets', () => {
   assert.ok(advisories?.subjects?.includes('$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.TASKELITH_install-1_COMMANDS.*'));
 });
 
-test('retry delays double from the initial delay to the maximum, with jitter below it', () => {
+test('retry delays double from the initial delay to the maximum, each up to a quarter shorter', () => {
   const noJitter = () => 0;
   assert.equal(retryDelayMilliseconds(1, TRANSPORT_LIMITS, noJitter), 5000);
   assert.equal(retryDelayMilliseconds(2, TRANSPORT_LIMITS, noJitter), 10_000);
   assert.equal(retryDelayMilliseconds(9, TRANSPORT_LIMITS, noJitter), 60_000);
   assert.equal(retryDelayMilliseconds(9, TRANSPORT_LIMITS, () => 1), 45_000);
-  assert.equal(retryDelayMilliseconds(1, TRANSPORT_LIMITS, () => 1), 5000);
+  assert.equal(retryDelayMilliseconds(1, TRANSPORT_LIMITS, () => 1), 3750);
 });
 
 test('a redrive counts from the first message identity', () => {

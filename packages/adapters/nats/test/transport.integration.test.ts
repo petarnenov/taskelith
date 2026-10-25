@@ -114,10 +114,11 @@ describe('worker command consumer', () => {
     running((signal) => workerCommandConsumer(transport.js, address, 'worker-1', handler.handle, { limits: TEST_LIMITS }).run(signal));
 
     await waitFor(() => handler.deliveries.length === 3);
-    assert.deepEqual(handler.deliveries.map((d) => [d.identity ?? d.type, d.deliveryCount]), [
-      ['command-1', 1],
-      ['execution.observations.confirmed', 1],
-      ['command-1', 2],
+    const seen = handler.deliveries.map((d) => `${d.identity ?? d.type}@${d.deliveryCount}`);
+    // The redelivery of the failed commit may precede or follow the notice.
+    assert.deepEqual([seen[0], [...seen.slice(1)].sort()], [
+      'command-1@1',
+      ['command-1@2', 'execution.observations.confirmed@1'],
     ]);
     const [record] = await quarantined(new Quarantine(transport.jsm, transport.js, address, TEST_LIMITS), 1);
     assert.deepEqual(
@@ -209,6 +210,21 @@ describe('worker command consumer', () => {
 });
 
 describe('quarantine keeper', () => {
+  test('an original that expired before the capture is recorded without a body and cannot be redriven', async () => {
+    const { address, transport } = await installation(['worker-1']);
+    const subject = expectOk(address.commandSubject('worker-1'));
+    const stored = await transport.js.publish(subject, encodeJson({ junk: true }), { msgID: 'command-bad' });
+    running((signal) => workerCommandConsumer(transport.js, address, 'worker-1', recordingHandler().handle, { limits: TEST_LIMITS }).run(signal));
+    await waitFor(async () => (await transport.jsm.streams.info(address.streamName('advisories'))).state.messages === 1);
+    await transport.jsm.streams.deleteMessage(address.streamName('commands'), stored.seq);
+    const quarantine = new Quarantine(transport.jsm, transport.js, address, TEST_LIMITS);
+
+    const [record] = await quarantined(quarantine, 1);
+    assert.deepEqual([record?.body, record?.originalStreamSequence], [null, stored.seq]);
+    const redriven = await quarantine.redrive(record!.sequence);
+    assert.equal(!redriven.ok && redriven.error.code, 'precondition-failed');
+  });
+
   test('an advisory that cannot be captured is terminated and does not hold back the others', async () => {
     const { address, transport } = await installation(['worker-1']);
     const advisorySubject = `$JS.EVENT.ADVISORY.CONSUMER.MSG_TERMINATED.${address.streamName('commands')}.worker-1`;
