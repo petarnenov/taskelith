@@ -56,7 +56,7 @@ Attempts with the `reviewer` agent and `kimi-k3`, from the OpenCode database. Ti
 | `ses_e8cc1ded3ffeuEHKfJbqCjB4Ea` | 15:26 to 15:32 | qualification review | report: Low 4 only |
 | `ses_e8cbc2464ffeIZ3c0BkKWYsFGO`, `ses_e8cb0fbc5ffevszct1h75T3zS5`, `ses_e8cab5f2dffesp47O3gyFLIlzZ`, `ses_e8caaa916ffe1ooRnzMXOIrTOL` | 15:35 to 16:00 | permission probes | as described above and in pass 3 below |
 
-The pings and probes diagnosed the tool and reviewed no change, so the coordinator did not treat them as review attempts under "Unavailable reviewer". The 14:44 ping falls inside the 30 minutes after the 14:20 and 14:31 attempts. That departs from the rule's no-retry clause, and it is recorded here as a departure. An owner's investigation in their own OpenCode session confirmed the cause in OpenCode's source: `packages/cli/src/run/run.ts` reads stdin to its end whenever stdin is not a terminal, even when a message argument is given. It also found that retries on rate limits are silent, and that the 162 s step was long generation of 13,279 reasoning tokens.
+The pings, probes, and qualification reviews of an already merged change diagnosed the tool and reviewed no task, so the coordinator did not treat them as review attempts under "Unavailable reviewer". The 14:44 ping falls inside the 30 minutes after the 14:20 and 14:31 attempts. That departs from the rule's no-retry clause, and it is recorded here as a departure. An owner's investigation in their own OpenCode session confirmed the cause in OpenCode's source: `packages/cli/src/run/run.ts` reads stdin to its end whenever stdin is not a terminal, even when a message argument is given. It also found that retries on rate limits are silent, and that the 162 s step was long generation of 13,279 reasoning tokens.
 
 ## Trial findings and their resolution
 
@@ -156,11 +156,30 @@ Findings: Critical 0, High 0, Medium 3, Low 8. This is the third pass, so the re
 10. Low: `--standalone` was justified by a misattributed cause. Fixed.
 11. Low: OpenCode's first official pass is delayed by a rotation round. Recorded under Limitations.
 
-These fixes are not independently reviewed unless the owner allows another pass.
+The owner allowed an exceptional pass 4, limited to these fixes.
+
+### Pass 4
+
+Session `fc97e322-3170-45bd-be97-03258e9896b0`, model `claude-fable-5-1` confirmed in the JSON `modelUsage`, on `git diff 7edeef8 c1103e1` and the configuration. The SHA-256 snapshots before and after were equal. All pass 3 findings were confirmed resolved, except as listed.
+
+Findings: Critical 0, High 1, Medium 1, Low 3.
+
+1. High: the git and `ls` allow rules had been re-added after the deny rules, and OpenCode applies the last matching rule. So `git diff > file`, `--output=`, and `ls > file` would have been allowed. Fixed: the shell rules are rebuilt as a default deny, then every allow rule, then every deny rule.
+2. Medium: shell reads outside the worktree still had bypasses: `cat </etc/hosts`, `$HOME`, `--contents=/…`, and `-f/…`. Fixed: `<`, `$`, `=/`, and common absolute roots are denied. The documents now say these are pattern rules that cannot be relied on for secrecy.
+3. Low: the design overstated `external_directory`. Fixed.
+4. Low: "one round later" was imprecise. Fixed.
+5. Low: the departure note covered only the 14:44 ping. Fixed: it covers the qualification reviews too.
+
+Probe `ses_e8c9cafe5ffe3qR85hcuq1YDfx`, on the rebuilt configuration:
+- denied: `git diff > …`, `git diff --output=…`, `ls > …`, `git log --ext-diff`, `cat </etc/hosts`, `cat $HOME/.zshrc`, `git blame --contents=/etc/hosts`, and `grep -f/etc/hosts`;
+- allowed: `git diff HEAD~1 --stat` and `ls docs`;
+- no file was created. A 15 minute limit stopped the run before its last command.
+
+The pass 4 fixes are not independently reviewed. The owner decides on the remaining gate.
 
 ## Limitations
 
-Documentation only. The checks ran on macOS arm64. The OpenCode configuration is the user's local file, outside the repository. No change has yet had an official pass by OpenCode; the qualification run reviewed an already merged change. Because this change was assigned to Claude Code by exception, the next change goes to Codex, and OpenCode's first official pass comes one round later.
+Documentation only. The checks ran on macOS arm64. The OpenCode configuration is the user's local file, outside the repository. No change has yet had an official pass by OpenCode; the qualification run reviewed an already merged change. Because this change was assigned to Claude Code by exception, the next change goes to Codex, and OpenCode's first official pass comes with the change after it.
 
 ## Remaining gates
 
