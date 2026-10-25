@@ -140,12 +140,12 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
 
   const rotated = await admin(['rotate-worker', enrolled.workerId], { TASKELITH_OPERATOR_TOKEN: operatorSecret });
   assert.equal((rotated.output as { credentialGeneration: number }).credentialGeneration, 2);
-  assert.equal(value(await enrollment.service.authenticate(enrolled.workerId, enrolled.credentials.controlPlane)), 1, 'grace window');
+  assert.equal(value(await enrollment.service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).generation, 1, 'grace window');
 
   const revoked = await admin(['revoke-worker', enrolled.workerId], { TASKELITH_OPERATOR_TOKEN: operatorSecret });
   assert.deepEqual(revoked.output, { revoked: enrolled.workerId });
   await waitFor(() => seen.includes('error:User Authentication Revoked'));
-  assert.equal((await enrollment.service.authenticate(enrolled.workerId, enrolled.credentials.controlPlane)).ok, false);
+  assert.equal((await enrollment.service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).ok, false);
 
   const reset = await admin(['reset-operator-credential', ...ADMIN]);
   const newSecret = (reset.output as { operatorSecret: string }).operatorSecret;

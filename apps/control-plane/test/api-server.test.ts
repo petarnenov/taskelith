@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { after, before, test } from 'node:test';
-import { ControlPlaneApi, createApiServer, type ApiHandlers } from '@taskelith/control-plane';
+import { ControlPlaneApi, ROUTES, createApiServer, type ApiHandlers, type ApiRequest, type RouteDefinition } from '@taskelith/control-plane';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 
@@ -16,6 +16,7 @@ const handlers: ApiHandlers = {
     if (storeDown) return err(failure('unavailable', 'the credential store is down'));
     return secret === OPERATOR ? ok(undefined) : err(failure('forbidden', 'not the operator'));
   },
+  authenticateWorker: async () => err(failure('forbidden', 'no worker in these tests')),
   handle: async (operationId) => (answers[operationId] ?? (() => err(failure('internal', 'unset'))))(),
 };
 const server = createApiServer(handlers, { logger: new Logger(sink, { now: () => '2026-10-25T09:00:00.000Z' as never }) });
@@ -97,4 +98,65 @@ test('a redrive sequence that is not a positive safe integer is 400 before the b
   }
   assert.equal(redriven, 0);
   assert.deepEqual(await api.handle('redriveQuarantined', { parameters: ['7'], body: undefined, query: new URLSearchParams(), correlationId: 'c' as never }, ''), ok({ sequence: 7 }));
+});
+
+test('a worker route reaches its operation with the principal of a valid worker bearer only', async () => {
+  const WORKER = `tkwk_${'B'.repeat(43)}`;
+  const probe: RouteDefinition = {
+    operationId: 'probeWorker', method: 'GET', pattern: /^\/probe$/, security: 'workerCredential', response: 'TaskResult', success: 200,
+    statuses: { forbidden: 401, unavailable: 503 },
+  };
+  const seen: ApiRequest[] = [];
+  let workerStoreDown = false;
+  const workerServer = createApiServer({
+    ...handlers,
+    authenticateWorker: async (secret) => {
+      if (workerStoreDown) return err(failure('unavailable', 'the fleet store is down'));
+      if (secret !== WORKER) return err(failure('forbidden', 'the worker credential is not valid', { reason: 'worker-not-authorized' }));
+      return ok({ workerId: 'worker-1' as never, generation: 2 });
+    },
+    handle: async (_operationId, request) => {
+      seen.push(request);
+      return ok({ state: 'pending', runId: 'r', taskId: 't' });
+    },
+  }, { routes: [...ROUTES, probe] });
+  await new Promise<void>((resolve) => workerServer.listen(0, '127.0.0.1', () => resolve()));
+  after(() => new Promise<void>((resolve) => workerServer.close(() => resolve())));
+  const url = `http://127.0.0.1:${(workerServer.address() as AddressInfo).port}/probe`;
+  const probeWith = async (bearer: string) => {
+    const response = await fetch(url, { headers: { authorization: `Bearer ${bearer}` } });
+    return { status: response.status, text: await response.text() };
+  };
+
+  assert.equal((await probeWith(WORKER)).status, 200);
+  assert.deepEqual(seen.map((request) => request.worker), [{ workerId: 'worker-1', generation: 2 }]);
+  for (const bearer of [OPERATOR, `tkwk_${'C'.repeat(43)}`]) {
+    const refused = await probeWith(bearer);
+    assert.equal(refused.status, 401);
+    assert.deepEqual(JSON.parse(refused.text), { code: 'forbidden', message: 'the worker credential is not valid', details: { reason: 'worker-not-authorized' } });
+  }
+  workerStoreDown = true;
+  assert.equal((await probeWith(WORKER)).status, 503);
+  assert.equal(seen.length, 1, 'no refused or unchecked request reaches the operation');
+});
+
+test('an operator route carries no worker principal', async () => {
+  const requests: ApiRequest[] = [];
+  answers = { readTaskResult: () => ok({ state: 'pending', runId: 'r', taskId: 't' }) };
+  const recording = createApiServer({ ...handlers, handle: async (operationId, request, bearer) => (requests.push(request), handlers.handle(operationId, request, bearer)) });
+  await new Promise<void>((resolve) => recording.listen(0, '127.0.0.1', () => resolve()));
+  after(() => new Promise<void>((resolve) => recording.close(() => resolve())));
+  const origin = `http://127.0.0.1:${(recording.address() as AddressInfo).port}`;
+  assert.equal((await fetch(`${origin}/runs/r/tasks/t/result`, { headers: { authorization: `Bearer ${OPERATOR}` } })).status, 200);
+  assert.deepEqual(requests.map((request) => 'worker' in request), [false]);
+});
+
+test('the API authenticates a worker bearer through enrollment', async () => {
+  const principal = { workerId: 'worker-1' as never, generation: 1 };
+  const api = new ControlPlaneApi({
+    runs: undefined as never, tasks: undefined as never, operator: undefined as never, quarantine: undefined as never,
+    enrollment: { enroll: undefined as never, authenticateWorkerBearer: async (secret) => (secret === 'tkwk_x' ? ok(principal) : err(failure('forbidden', 'no'))) },
+  });
+  assert.deepEqual(await api.authenticateWorker('tkwk_x'), ok(principal));
+  assert.equal((await api.authenticateWorker('tkwk_y')).ok, false);
 });

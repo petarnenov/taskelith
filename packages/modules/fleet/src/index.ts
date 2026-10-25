@@ -31,6 +31,7 @@ export {
   type WorkerCapacity,
   type WorkerCredentials,
   type WorkerHost,
+  type WorkerPrincipal,
 } from './domain/enrollment.js';
 export { FLEET_LIMITS, type FleetLimits } from './domain/fleet-limits.js';
 export {

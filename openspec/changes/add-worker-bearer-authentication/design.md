@@ -1,0 +1,44 @@
+## Context
+
+A worker presents its control-plane secret as an HTTP bearer, without its worker identifier (`execution.openapi.json`, scheme `workerCredential`). Item 13 stores each generation's hash in the worker's enrollment record, which is JSON text, so the only lookup was by worker identifier. Secrets are 256 random bits, and their stored form is a plain SHA-256 (D10 a), so the hash of a presented secret is a lookup key.
+
+## Coordinator decisions (2026-10-25)
+
+These are coordinator decisions, taken as the worker recommended.
+
+- **A1 (a): a predecessor within its grace window authenticates.** This matches the trust model's grace window and item 13's rotation. The principal carries the generation it authenticated with, so a later operation can apply a stricter rule.
+- **A2 (a): hash columns on `workers`.** The columns are `control_plane_hash` and `previous_control_plane_hash`, both unique. All four writers maintain them, and the migration backfills them from the enrollment record.
+- **A3: one redacted refusal.** An unknown credential, a revoked worker, and a credential past the grace window are all 401 `forbidden`, with reason `worker-not-authorized` and no detail about which case applied.
+- **A4: the server authenticates.** `authenticateWorker(bearer)` answers a `Result<WorkerPrincipal>` before the operation runs, as `operatorToken` does, and the principal travels on `ApiRequest`.
+
+## Goals / Non-Goals
+
+**Goals:**
+- the lookup by hash;
+- the bearer authentication with the grace-window and revocation rules;
+- the scheme branch in the server.
+
+**Non-Goals:**
+- `authorizeLaunch`, with its in-transaction re-check of the worker (item 17);
+- `publishEvidence` (item 19);
+- a worker-side client (item 17).
+
+## Decisions
+
+- **The registry returns the record, and the service decides.**
+  - `workerByCredentialHash` returns a revoked worker, and a predecessor whose grace window has passed but which the sweep has not dropped yet.
+  - The service applies `validGenerations` at its clock's `now` and then compares in constant time with `Secrets.matches`.
+  - So the rules stay in one place, the same as for rotation.
+- **The columns follow the record.**
+  - `#write`, which rotation, revocation, and predecessor expiry all use, sets both columns from the record it writes. Enrollment sets the current one.
+  - A dropped predecessor's hash leaves the index.
+  - A revoked worker keeps its hashes; revocation is decided from the record.
+- **The backfill masks escapes before `jsonb`.** A stored record may hold escapes that `json` and `jsonb` reject, such as a lone surrogate or NUL in a host name. As in the signals migration, the backfill masks every escape first. A hash is hexadecimal, so the mask leaves it intact. The migration test stores such a record.
+- **A read-only lookup.** The lookup runs in its own REPEATABLE READ transaction, so the read on every worker request does not take part in serializable conflict detection with writers. The answer is a point-in-time check. An operation that must be ordered against a revocation re-reads the worker in its own transaction, which item 17 does for `authorizeLaunch`.
+- **Unique columns.** A collision of two random 256-bit secrets is not expected. If one occurred, the unique constraint would refuse the second write rather than authenticate as the wrong worker.
+- **A replaceable route table.** `ApiServerOptions.routes` defaults to `ROUTES`. The test serves a probe route with the scheme, since no operation of the documents uses it before items 17 and 19.
+
+## Risks / Trade-offs
+
+- The bearer is checked before the body is read. A refused credential costs one indexed read, the same as the operator check.
+- The fleet test fixture's control-plane hash now names its worker (`cp-<worker>-<generation>`), so two workers in one conformance case do not collide on the unique columns.

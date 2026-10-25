@@ -12,6 +12,7 @@ import {
   type EnrollmentRequest,
   type HostConstraints,
   type ProtocolWindow,
+  type WorkerPrincipal,
 } from '../domain/enrollment.js';
 import { FLEET_LIMITS, type FleetLimits } from '../domain/fleet-limits.js';
 import { parseWorkerId, type InstallationIdentity } from '../domain/installation.js';
@@ -137,14 +138,16 @@ export class EnrollmentService {
     return this.#deps.registry.publishRevocations((revocations) => this.#deps.broker.publishRevocations(revocations));
   }
 
-  // The generation a presented control-plane secret belongs to; a revoked
-  // worker, or one past the grace window, is `forbidden`.
-  async authenticate(workerId: WorkerId, secret: string): Promise<Result<number>> {
-    const worker = await this.#activeWorker(workerId);
-    if (!worker.ok) return worker.error.code === 'not-found' ? err(notAuthorized()) : worker;
+  // The worker and generation a presented control-plane bearer belongs to;
+  // unknown, revoked, or past the grace window are alike `forbidden`.
+  async authenticateWorkerBearer(secret: string): Promise<Result<WorkerPrincipal>> {
+    const worker = await this.#deps.registry.workerByCredentialHash(this.#deps.secrets.hashOf(secret));
+    if (!worker.ok) return worker;
+    if (worker.value === undefined || worker.value.revokedAt !== undefined) return err(notAuthorized());
     const generations = validGenerations(worker.value.credentials, this.#deps.clock.now());
     const matched = generations.find((generation) => this.#deps.secrets.matches(secret, generation.controlPlaneHash));
-    return matched === undefined ? err(notAuthorized()) : ok(matched.generation);
+    if (matched === undefined) return err(notAuthorized());
+    return ok(Object.freeze({ workerId: worker.value.workerId, generation: matched.generation }));
   }
 
   // A thrown failure counts as an unpublished one: the entries stay recorded.

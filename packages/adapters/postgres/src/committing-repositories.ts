@@ -196,6 +196,11 @@ export class CommittingFleetRegistry implements FleetRegistry {
     return this.#database.transaction((tx) => tx.fleet.worker(workerId));
   }
 
+  // Read-only, so the lookup on every worker request never aborts a writer.
+  workerByCredentialHash(hash: SecretHash): Promise<Result<EnrolledWorker | undefined>> {
+    return this.#database.readOnly((tx) => tx.fleet.workerByCredentialHash(hash));
+  }
+
   rotate(workerId: WorkerId, expectedGeneration: number, next: CredentialGeneration, validUntil: Instant, at: Instant): Promise<Result<void>> {
     return this.#database.transaction((tx) => tx.fleet.rotate(workerId, expectedGeneration, next, validUntil, at));
   }

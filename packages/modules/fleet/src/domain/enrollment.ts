@@ -131,6 +131,12 @@ export function revocationOf(generation: CredentialGeneration, at: Instant): Bro
   return Object.freeze({ userKey: generation.brokerUserKey, revokedAt });
 }
 
+// Who a valid control-plane bearer belongs to, and the generation it is of.
+export interface WorkerPrincipal {
+  readonly workerId: WorkerId;
+  readonly generation: number;
+}
+
 // The generations a presented secret may still use at `now`.
 export function validGenerations(credentials: WorkerCredentials, now: Instant): readonly CredentialGeneration[] {
   const previous = credentials.previous;
