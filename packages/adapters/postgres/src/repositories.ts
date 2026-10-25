@@ -211,8 +211,13 @@ export class PostgresAssignmentRepository implements AssignmentRepository {
     return this.#store.get(id);
   }
 
+  // The offer's command is written once: a record stored before it was kept
+  // has none, and the migration found its command in the outbox.
   add(assignment: Assignment): Promise<Result<void>> {
-    return this.#store.add(assignment, { uniqueConflict: () => this.#heldReservationConflict(assignment) });
+    return this.#store.add(assignment, {
+      insertOnly: { offer_command_id: assignment.offerCommandId ?? null },
+      uniqueConflict: () => this.#heldReservationConflict(assignment),
+    });
   }
 
   replace(assignment: Assignment, expectedGeneration: Generation): Promise<Result<void>> {
@@ -222,6 +227,12 @@ export class PostgresAssignmentRepository implements AssignmentRepository {
 
   listByAttempt(attemptId: AttemptId): Promise<readonly Assignment[]> {
     return this.#store.list('attempt_id = $1', [attemptId]);
+  }
+
+  async byOfferCommand(commandId: EventId): Promise<Result<Assignment>> {
+    const [offered] = await this.#store.list('offer_command_id = $1', [commandId]);
+    if (offered === undefined) return err(failure('not-found', `no assignment was offered by ${commandId}`, { command: commandId }));
+    return ok(offered);
   }
 
   async #heldReservationConflict(assignment: Assignment): Promise<Result<void>> {

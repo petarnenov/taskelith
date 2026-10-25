@@ -12,7 +12,7 @@ const TABLES = [
   'workflow_runs', 'gates', 'admissions', 'tasks', 'assignments', 'outbox', 'inbox',
   'task_lineage', 'capacity_charges', 'delegations', 'capacity_quotas', 'workers', 'installation',
   'operator_credentials', 'audit_events', 'enrollment_tokens', 'broker_revocations', 'evidence', 'launch_authorizations',
-  'launch_rejections', 'current_revisions', 'delegation_requests',
+  'launch_rejections', 'current_revisions', 'delegation_requests', 'producer_cursors',
 ];
 let created = 0;
 

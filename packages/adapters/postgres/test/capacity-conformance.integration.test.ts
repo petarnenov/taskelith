@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
+import { PRODUCER_CURSORS_CONFORMANCE } from '@taskelith/execution';
 import { PostgresDatabase, type PostgresTransaction } from '@taskelith/postgres';
 import {
   CANDIDATE_WORKER_FIXTURES,
@@ -11,7 +12,9 @@ import {
   PLACEMENT_WORKER_FIXTURES,
   QUOTA_FIXTURES,
   QUOTA_SETTINGS_CONFORMANCE,
+  REPORTING_WORKER_FIXTURE,
   TASK_LINEAGE_CONFORMANCE,
+  WORKER_REPORTS_CONFORMANCE,
 } from '@taskelith/scheduling';
 import type { ConformanceCase } from '@taskelith/sdlc';
 import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
@@ -48,6 +51,8 @@ runSuite('candidates', PLACEMENT_CANDIDATES_CONFORMANCE, (tx) => ({ workers: tx.
 });
 runSuite('placement queue', PLACEMENT_QUEUE_CONFORMANCE, (tx) => ({ queue: tx.placements, tasks: tx.tasks, lineage: tx.lineage, assignments: tx.assignments }));
 runSuite('delegation requests', DELEGATION_REQUESTS_CONFORMANCE, (tx) => tx.delegations);
+runSuite('worker reports', WORKER_REPORTS_CONFORMANCE, (tx) => ({ reports: tx.reports, workers: tx.workers }), () => seedWorker(url, REPORTING_WORKER_FIXTURE));
+runSuite('producer cursors', PRODUCER_CURSORS_CONFORMANCE, (tx) => tx.cursors);
 
 test('an installation without its record is treated as quarantined', async () => {
   await truncateAll(url);
