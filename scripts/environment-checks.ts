@@ -13,9 +13,10 @@ export interface EnvironmentFacts {
   readonly dependenciesInstalled: boolean;
   readonly hooksPath: string | undefined;
   readonly inventoryMergeDriver: string | undefined;
+  readonly dockerAvailable: boolean;
 }
 
-export type CheckId = 'git' | 'node' | 'npm' | 'dependencies' | 'hooks' | 'merge-driver';
+export type CheckId = 'git' | 'node' | 'npm' | 'dependencies' | 'hooks' | 'merge-driver' | 'docker';
 
 export interface CheckResult {
   readonly id: CheckId;
@@ -60,7 +61,8 @@ export function collectFacts(run: CommandRunner, nodeVersion: string): Environme
     npmVersion: npm.status === 0 ? npm.stdout.trim() : undefined,
     dependenciesInstalled: npm.status === 0 && run('npm', ['ls', '--all']).status === 0,
     hooksPath: hooks.status === 0 ? hooks.stdout.trim() : undefined,
-    inventoryMergeDriver: mergeDriver.status === 0 ? mergeDriver.stdout.trim() : undefined
+    inventoryMergeDriver: mergeDriver.status === 0 ? mergeDriver.stdout.trim() : undefined,
+    dockerAvailable: run('docker', ['info']).status === 0 && run('docker', ['compose', 'version']).status === 0
   };
 }
 
@@ -107,6 +109,13 @@ export function checkEnvironment(facts: EnvironmentFacts, pins: Pins): CheckResu
       ok: facts.inventoryMergeDriver === INVENTORY_MERGE_DRIVER,
       detail: facts.inventoryMergeDriver ?? 'not configured',
       remedy: gitRemedy(facts)
+    },
+    {
+      id: 'docker',
+      label: 'Docker daemon and Compose reachable',
+      ok: facts.dockerAvailable,
+      detail: facts.dockerAvailable ? 'available' : 'not reachable',
+      remedy: 'Install Docker with the Compose plugin and start it; make verify runs containers.'
     }
   ];
 }

@@ -44,7 +44,7 @@ Evidence at this inventory change: 487 installation paths, 143 bundled entries, 
 
 ## License coverage review
 
-Fourteen paths have declarations but no top-level license text in the installed directory. Their published npm tarballs were listed and contain no such file either. Each path is reviewed in [license-reviews.json](dependencies/license-reviews.json), keyed by path, version, and installed manifest hash. Both generation and check mode fail when a gap has no matching review or a review no longer matches a gap, so a changed manifest requires a renewed review.
+Twenty-one paths have declarations but no top-level license text in the installed directory. Their published npm tarballs were listed and contain no such file either. Each path is reviewed in [license-reviews.json](dependencies/license-reviews.json), keyed by path, version, and installed manifest hash. Both generation and check mode fail when a gap has no matching review or a review no longer matches a gap, so a changed manifest requires a renewed review.
 
 | Status | Packages (paths) | Located evidence |
 | --- | --- | --- |
@@ -52,7 +52,7 @@ Fourteen paths have declarations but no top-level license text in the installed 
 | `notice-only` | `array-ify@1.0.0`, `spdx-exceptions@2.5.0` (top-level and bundled), `spdx-license-ids@3.0.24` and bundled `3.0.23` (5) | README copyright or license statements; bundled copies rely on the upstream README at the registry gitHead. |
 | `declaration-only` | bundled `@npmcli/agent@4.0.2`, `nerf-dart@1.0.0`, `proxy-agent-negotiate@1.1.0` (3) | Manifest declaration only; upstream source at the published version has no license text. The nerf-dart README says its code was taken from npm/npm; the license of that origin was not assessed. |
 
-All fourteen are development or release tooling and are not redistributed in the Taskelith npm package. The review records located evidence; it is not legal interpretation and does not admit the packages. On 2026-10-24 the owner accepted `notice-only` and `declaration-only` evidence as sufficient for development and release tooling ([ADR 0003](decisions/0003-first-integrations-and-plugin-kernel.md)); this does not extend to shipped runtime dependencies. Global Node/npm binary notices, CI action sources, native third-party tools, nested vendored code, and model artifacts are outside this npm installation inventory.
+All twenty-one are development, test, or release tooling and are not redistributed in the Taskelith npm package. The review records located evidence; it is not legal interpretation and does not admit the packages. On 2026-10-24 the owner accepted `notice-only` and `declaration-only` evidence as sufficient for development and release tooling ([ADR 0003](decisions/0003-first-integrations-and-plugin-kernel.md)); this does not extend to shipped runtime dependencies. Global Node/npm binary notices, CI action sources, native third-party tools, nested vendored code, and model artifacts are outside this npm installation inventory.
 
 ## Security remediation assessment
 
