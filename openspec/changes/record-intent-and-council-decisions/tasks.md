@@ -13,4 +13,4 @@
 ## 3. Verification and review
 
 - [x] 3.1 Run `make verify` and record the result in `verification.md`.
-- [ ] 3.2 Obtain independent review by rotation and record each pass, its findings, and their resolution.
+- [x] 3.2 Obtain independent review by rotation and record each pass, its findings, and their resolution.

@@ -38,6 +38,7 @@ Run on the working tree at base `166a910` plus this change:
   - package verification: packed allowlist and installed CLI passed.
 - `make verify` was run again after the first review pass's fixes were applied and passed with 1088 tests, 0 failed, coverage 99.24% lines, 91.80% branches, 98.96% functions, 58 strict OpenSpec items, 731 package paths, and the same archive and package results.
 - `make verify` was run a third time after the second review pass's fixes and passed with 1088 tests, 0 failed, coverage 99.24% lines, 91.79% branches, 98.96% functions, 58 strict OpenSpec items, 731 package paths, and the same archive and package results.
+- `make verify` was run a fourth time after the owner-approved fix to the pass 3 findings and passed with the same results: 1088 tests, 0 failed, coverage 99.24% lines, 91.79% branches, 98.96% functions, 58 strict OpenSpec items, 731 package paths, and the same archive and package results.
 
 ## Independent review
 
@@ -58,7 +59,11 @@ Reviewer assigned by rotation: Codex CLI (`gpt-6.1-sol`), reasoning effort mediu
   2. High — the revised hold rule lost contained children and contradicted its own sibling clause. ADR 0013 decision 6 now defines one blocked set: the held node, every node it contains, and every node that transitively depends on either. A prerequisite and an unrelated sibling are never blocked; a dependent sibling waits because of its dependency; a change inside a held campaign is blocked by containment. The hold is rejected when any node in that set was already requested or queued, naming it. The architecture invariant 16, the campaign subsection, and the design carry the same rule.
   3. Medium — `integrated` excluded standalone changes and let an intent be integrated before promotion. ADR 0013 decision 5 now defines a change against its integration target, the intent branch or the project's integration branch for a standalone change, and separates promotion-ready from integrated for an intent, which is integrated only after its promotion merge completes; the architecture subsection agrees.
   4. Low — the Risks section stated the tie-break unconditionally. ADR 0014 now qualifies it with the owner-approved default order and the appointment-set ranks.
-- Pass 3 is pending and will confirm these four resolutions and review the whole change once more; it is the last pass under the three-pass rule.
+- **Pass 3 — same reviewer and session `01a174bc-67d6-75e0-80c7-cffcb62c494f`, head `512e5e4`.** Invocation as in pass 2. The prompt confirmed that the standing-approval mode is a separate owner decision from the same conversation, asked for each pass 2 finding to be confirmed, and stated that this is the last pass under the three-pass rule. The snapshot was `947c12f301562e9330863b4fb7d5a884224ef4f87ce667a4a8d395aedf87b8bb` before and after the pass, and the reviewer reported it equal. Pass 2 status: 3 resolved (1, 3, 4), 1 partially resolved (2). Findings: 0 Critical, 0 High, 1 Medium, 1 Low.
+  1. Medium — the blocked set of a hold was not closed under combined containment and dependency propagation. With campaign `B` depending on campaign `A` and containing change `b`, `hold(A)` reached `B` but not `b`, so a hold that blocks an already requested `b` could pass the rejection check. The fix is to define the blocked set as the least fixed point containing the held node and closed under both containment descendants and dependency dependents, and to use exactly that set for rejection and for dispatch readiness.
+  2. Low — the design still said a held campaign never blocks its sibling without the ADR's qualifier "merely because they share an intent"; a dependent sibling may wait through its dependency.
+- The owner chose to apply the reviewer's prescribed fix without a fourth pass on 2026-10-25. The fix, recorded as an unreviewed fix: ADR 0013 decisions 5 and 6 now define the blocked set of a hold as the least set containing the held node and closed under containment and dependency, so a change contained in a dependent campaign is blocked too; the hold rejection and the dispatch check use that same set. Architecture invariant 16, the campaign subsection, the design, and the proposal carry the same definition. The Low finding is fixed in the same edit: the design now says a held campaign never blocks its sibling merely because they share an intent.
+- The owner's decision closes the review; no Critical or High finding remains. The unreviewed fix is labelled as such because no fourth pass confirmed it, which is the owner's recorded choice under the three-pass rule.
 
 ## Limitations
 
@@ -68,6 +73,5 @@ Reviewer assigned by rotation: Codex CLI (`gpt-6.1-sol`), reasoning effort mediu
 
 ## Remaining gates
 
-- Independent review and its recorded findings.
 - Coordinator integration into `dev`.
 - The owner's explicit authorization before any implementation of ADR 0013 or ADR 0014 starts.
