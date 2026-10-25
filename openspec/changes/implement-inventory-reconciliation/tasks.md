@@ -14,7 +14,7 @@
 - [x] 2.3 Extend `ObservationService`: new journal incarnations, journal retirement after a sequence rollback, the effects of the four newly consumed observation types, acceptance provenance, and the evaluation of pending snapshots after each cursor advance.
 - [x] 2.4 Re-send offers unchanged from the stored outbox row, and reconcile assignments that lost their local history.
 - [x] 2.5 Route inventory reports to `InventoryService` in the composition root, and add `InventoryService.requestAll`, which requests the inventory of the active workers it is given once at start.
-- [ ] 2.6 (after merging dev) Wire the start requests in the composition root to the active workers from `FleetRegistry.activeWorkerIds()`.
+- [x] 2.6 (after merging dev) Wire the start requests in the composition root to the active workers from `FleetRegistry.activeWorkerIds()`.
 
 ## 3. Documents
 

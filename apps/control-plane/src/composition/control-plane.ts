@@ -39,6 +39,7 @@ import { RunService } from '../application/run-service.js';
 import { TaskService } from '../application/task-service.js';
 import { WorkflowRegistry, type KnownWorkflow } from '../application/workflow-registry.js';
 import { repairCommandConsumers } from './command-consumer-repair.js';
+import { requestStartInventories } from './start-inventory-requests.js';
 import { InstallationPublicationFence } from './installation-publication-fence.js';
 
 // Provisional G2 values in docs/operational-targets.md, which G6 verifies.
@@ -116,7 +117,8 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   if (!enrollment.ok) return enrollment;
   cleanup.push(() => enrollment.value.close());
   const database = admin.value.database;
-  await repairCommandConsumers(new CommittingFleetRegistry(database), commandConsumers, logger);
+  const registry = new CommittingFleetRegistry(database);
+  await repairCommandConsumers(registry, commandConsumers, logger);
   const volume = LocalEvidenceVolume.open({ dataRoot: settings.dataRoot, ownerUid: settings.ownerUid });
   if (!volume.ok) return volume;
   const fence = new InstallationPublicationFence(database);
@@ -155,6 +157,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     observations: new ObservationService(database, { newConfirmationId: () => `o${randomUUID()}`, newRequestId, logger }),
     inventory: new InventoryService(database, { newRequestId, logger }),
   };
+  await requestStartInventories(registry, services.inventory, logger);
   const observations = observationConsumer(broker.value.js, address.value, OBSERVATION_CONSUMER,
     observationHandler(services, address.value), { limits, logger, metrics });
   let outcome: 'stopped' | 'failed' = 'stopped';
