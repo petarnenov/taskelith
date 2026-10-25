@@ -71,6 +71,7 @@ export {
   hostPlatform,
   parseProgramArguments,
   runSupervisorProgram,
+  startDetachedProcess,
   startDetachedSupervisor,
   SUPERVISOR_MAIN,
   SUPERVISOR_TIMING,

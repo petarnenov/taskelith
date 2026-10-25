@@ -252,3 +252,106 @@ test('an adopter without a readable claim or a matching containment adopts nothi
   handleless.store.files.set('launch', encodeRecord({ kind: 'claim', launchAuthId: 'launch-1', supervisor: 1 }));
   assert.equal((await adoptExecution(handleless.supervisor)).kind, 'record-unusable');
 });
+
+test('a child is never spawned outside its containment, and the supervisor leaves it before watching', async () => {
+  const refused = await prepared('linux');
+  refused.fake.failures.set('admit', 1);
+  const outcome = await superviseLaunch(refused.supervisor);
+  assert.equal(outcome.kind, 'exited');
+  assert.match(outcome.kind === 'exited' ? outcome.exit.spawnFailure ?? '' : '', /cannot enter the containment/);
+  assert.equal(refused.spawner.spawned.length, 0);
+  assert.ok(refused.fake.containmentLog.includes('remove'));
+
+  const stuck = await prepared('linux');
+  stuck.fake.failures.set('release', 3);
+  stuck.fake.containmentPopulated = false;
+  const run = superviseLaunch(stuck.supervisor);
+  await until(() => file(stuck, 'handle') !== undefined);
+  stuck.spawner.exit(0);
+  await run;
+  assert.deepEqual(stuck.fake.containmentLog.slice(0, 3), ['create', 'admit 100', 'release 100']);
+});
+
+test('a containment kill that fails is retried and recorded only once it succeeds', async () => {
+  const setup = await prepared('linux');
+  setup.fake.containmentPopulated = true;
+  setup.fake.failures.set('kill', 2);
+  const run = superviseLaunch(setup.supervisor);
+  await until(() => file(setup, 'handle') !== undefined);
+  await requestCancellation(setup.worker, 'requested');
+  await until(() => setup.fake.containmentLog.includes('kill'));
+  setup.spawner.exit(null, 'SIGKILL');
+  await run;
+
+  assert.deepEqual(events(setup), [{ kind: 'cancellation', step: 'containment-killed' }]);
+});
+
+test('a containment that stays unreadable ends the wait without an exit', async () => {
+  const launched = await prepared('linux');
+  launched.fake.containmentPopulated = true;
+  const run = superviseLaunch(launched.supervisor);
+  await until(() => file(launched, 'handle') !== undefined);
+  launched.fake.containmentPopulated = undefined;
+  launched.spawner.exit(0);
+  assert.deepEqual(await run, { kind: 'containment-unreadable' });
+  assert.equal(file(launched, 'exit'), undefined);
+
+  const adopted = await prepared('linux');
+  adopted.store.files.set('launch', encodeRecord({ kind: 'claim', launchAuthId: 'launch-1', supervisor: 1, containment: '/sys/fs/cgroup/executions/execution-1' }));
+  assert.deepEqual(await adoptExecution(adopted.supervisor), { kind: 'containment-unreadable' });
+  assert.equal(adopted.lock.held, false);
+});
+
+test('a failed write before the spawn is reported as such and spawns nothing', async () => {
+  const claim = await prepared();
+  claim.store.failing.add('launch');
+  assert.deepEqual(await superviseLaunch(claim.supervisor), { kind: 'write-failed', file: 'launch' });
+
+  const sealing = await prepared();
+  sealing.fake.bootId = 'boot-2';
+  sealing.store.failing.add('launch');
+  assert.deepEqual(await superviseLaunch(sealing.supervisor), { kind: 'write-failed', file: 'launch' });
+
+  const record = await prepared();
+  record.store.failing.add('supervisor.1');
+  assert.deepEqual(await superviseLaunch(record.supervisor), { kind: 'write-failed', file: 'supervisor record' });
+  for (const setup of [claim, sealing, record]) assert.equal(setup.spawner.spawned.length, 0);
+});
+
+test('a lost claim removes the containment it created', async () => {
+  const setup = await prepared('linux');
+  const createOnce = setup.store.createOnce.bind(setup.store);
+  setup.store.createOnce = async (name, text) => {
+    if (name === 'launch') setup.store.files.set('launch', encodeRecord({ kind: 'seal', by: 'worker', reason: 'recovery' }));
+    return createOnce(name, text);
+  };
+
+  assert.equal((await superviseLaunch(setup.supervisor)).kind, 'launch-exists');
+  assert.deepEqual(setup.fake.containmentLog, ['create', 'remove']);
+});
+
+test('macOS cancellation signals nothing once the child is reaped', async () => {
+  const after = await prepared();
+  const run = superviseLaunch(after.supervisor);
+  await until(() => file(after, 'handle') !== undefined);
+  after.spawner.exit(0);
+  await run;
+  await requestCancellation(after.worker, 'requested');
+  assert.deepEqual(after.spawner.signals, []);
+
+  // The grace period ends only when the test lets it, after the child exited.
+  const during = await prepared();
+  let endGrace: () => void = () => undefined;
+  const graceOver = new Promise<void>((resolve) => (endGrace = resolve));
+  const sleep = (milliseconds: number) => (milliseconds === 7 ? graceOver : during.supervisor.sleep(milliseconds));
+  const timing = { ...during.supervisor.timing, graceMilliseconds: 7 };
+  const graced = superviseLaunch({ ...during.supervisor, sleep, timing });
+  await until(() => file(during, 'handle') !== undefined);
+  await requestCancellation(during.worker, 'requested');
+  await until(() => during.spawner.signals.length === 1);
+  during.spawner.exit(null, 'SIGTERM');
+  await new Promise((resolve) => setImmediate(resolve));
+  endGrace();
+  await graced;
+  assert.deepEqual(during.spawner.signals, ['SIGTERM 500']);
+});

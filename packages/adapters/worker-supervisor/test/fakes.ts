@@ -38,6 +38,7 @@ export function intent(overrides: Partial<IntentRecord> = {}): IntentRecord {
     ownershipGeneration: 2,
     launchAuthId: 'launch-1',
     deadline: { bootId: BOOT, milliseconds: 25_000 },
+    namespaceIncarnation: 'pid:[1]',
     supervisorVersion: '0.0.0',
     command: { executable: 'scripted-process', arguments: ['--exit', '0'] },
     ...overrides,
@@ -119,6 +120,8 @@ export class FakeHost {
   listingAvailable = true;
   containmentPopulated: boolean | undefined = undefined;
   readonly containmentLog: string[] = [];
+  // How many more times a containment step, such as 'admit', fails.
+  readonly failures = new Map<string, number>();
   namespace = 'pid:[1]';
 
   readonly name: 'linux' | 'darwin';
@@ -143,8 +146,9 @@ export class FakeHost {
       release: (pid) => this.#logged(`release ${pid}`),
       populated: () => (this.containmentPopulated === undefined ? err(failure('unavailable', 'unreadable')) : ok(this.containmentPopulated)),
       kill: () => {
-        this.containmentPopulated = false;
-        return this.#logged('kill');
+        const killed = this.#logged('kill');
+        if (killed.ok) this.containmentPopulated = false;
+        return killed;
       },
       remove: () => this.#logged('remove'),
     });
@@ -164,6 +168,12 @@ export class FakeHost {
   }
 
   #logged(step: string): Result<void> {
+    const name = step.split(' ')[0]!;
+    const remaining = this.failures.get(name) ?? 0;
+    if (remaining > 0) {
+      this.failures.set(name, remaining - 1);
+      return err(failure('unavailable', `${name} failed`));
+    }
     this.containmentLog.push(step);
     return ok(undefined);
   }
@@ -235,7 +245,7 @@ export function rig(platform: 'linux' | 'darwin' = 'darwin', crashPoint: (point:
     platform: fake.platform(),
     spawner,
     selfPid: SUPERVISOR_PID,
-    timing: { pollMilliseconds: 1, graceMilliseconds: 1, retryMilliseconds: 1 },
+    timing: { pollMilliseconds: 1, graceMilliseconds: 1, retryMilliseconds: 1, unreadablePolls: 5 },
     sleep,
     crashPoint: reach,
   };
@@ -243,7 +253,7 @@ export function rig(platform: 'linux' | 'darwin' = 'darwin', crashPoint: (point:
     store,
     lock,
     platform: fake.platform(),
-    startSupervisor: (mode) => {
+    startSupervisor: async (mode) => {
       started.push(mode);
       return ok(undefined);
     },

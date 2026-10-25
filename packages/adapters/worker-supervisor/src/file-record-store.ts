@@ -4,6 +4,9 @@ import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { createOnce, createPrivateDirectory, replaceFile, syncBeforeUse, syncPath } from '@taskelith/worker-journal';
 import type { CreateOutcome, RecordStore } from './ports.js';
 
+// The marker of the journal adapter's temporary files.
+const TEMPORARY = '.tmp-';
+
 // One execution directory under the durable file rule of the worker journal
 // contract (section 4), through the helpers of the journal adapter.
 export class FileRecordStore implements RecordStore {
@@ -80,8 +83,12 @@ export class FileRecordStore implements RecordStore {
     }
   }
 
+  // Temporary files of an interrupted write go too, or the directory stays.
   async removeDirectory(): Promise<Result<void>> {
     try {
+      for (const name of readdirSync(this.directory).filter((entry) => entry.startsWith('.') && entry.includes(TEMPORARY))) {
+        unlinkSync(join(this.directory, name));
+      }
       rmdirSync(this.directory);
     } catch (error) {
       return err(failure('unavailable', `cannot remove ${this.directory}: ${(error as Error).message}`));

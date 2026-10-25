@@ -25,6 +25,8 @@ export function checkLinuxContainment(options: LinuxSelfCheckOptions): Result<vo
   if (!existsSync(join(options.cgroupRoot, 'cgroup.controllers'))) return err(['cgroup v2 is not mounted']);
   const probe = join(options.containmentParent, `self-check-${process.pid}`);
   try {
+    // A probe left by an earlier check of a reused process ID is replaced.
+    if (existsSync(probe)) rmdirSync(probe);
     mkdirSync(probe);
   } catch (error) {
     return err([`the containment parent is not delegated: ${(error as Error).message}`]);

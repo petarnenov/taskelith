@@ -33,25 +33,27 @@ export interface WorkerSupervisionDependencies {
   readonly lock: ExecutionLock;
   readonly platform: Platform;
   // Starts a supervisor as a detached process in a new session (CP4).
-  readonly startSupervisor: (mode: SupervisorMode) => Result<void>;
+  readonly startSupervisor: (mode: SupervisorMode) => Promise<Result<void>>;
   readonly crashPoint: (point: string) => void;
 }
 
 // CP2: the worker creates the directory and writes `intent`, which it may
-// replace only while no launch record exists.
+// replace only while no supervisor has started and no launch record exists.
 export async function prepareRecord(dependencies: WorkerSupervisionDependencies, intent: IntentRecord): Promise<Result<void>> {
   const directory = await dependencies.store.createDirectory();
   if (!directory.ok) return directory;
-  const launch = await dependencies.store.read(RECORD_FILES.launch);
-  if (!launch.ok) return launch;
-  if (launch.value !== undefined) return err(failure('conflict', 'the launch record exists, so intent is final'));
+  const names = await dependencies.store.list();
+  if (!names.ok) return names;
+  if (names.value.includes(RECORD_FILES.launch) || highestSupervisor(names.value) > 0) {
+    return err(failure('conflict', 'a supervisor started or a launch record exists, so intent is final'));
+  }
   const written = await dependencies.store.replace(RECORD_FILES.intent, encodeRecord(intent));
   if (written.ok) dependencies.crashPoint('CP2');
   return written;
 }
 
-export function startSupervisor(dependencies: WorkerSupervisionDependencies): Result<void> {
-  const started = dependencies.startSupervisor('launch');
+export async function startSupervisor(dependencies: WorkerSupervisionDependencies): Promise<Result<void>> {
+  const started = await dependencies.startSupervisor('launch');
   if (started.ok) dependencies.crashPoint('CP4');
   return started;
 }
@@ -101,18 +103,19 @@ export async function recoverExecution(
 ): Promise<Result<RecoveryResult>> {
   const evidence = await gatherEvidence(dependencies, journaled, livenessRetriesExhausted);
   if (!evidence.ok) return evidence;
-  return applyDecision(dependencies, decideRecovery(evidence.value), journaled);
+  return applyDecision(dependencies, decideRecovery(evidence.value), journaled, livenessRetriesExhausted);
 }
 
 async function applyDecision(
   dependencies: WorkerSupervisionDependencies,
   decision: RecoveryDecision,
   journaled: 'intent' | 'record',
+  livenessRetriesExhausted: boolean,
 ): Promise<Result<RecoveryResult>> {
   switch (decision.action) {
     case 'complete-and-seal':
     case 'seal':
-      return sealAndDecide(dependencies, decision.action, journaled);
+      return sealAndDecide(dependencies, decision.action, journaled, livenessRetriesExhausted);
     case 'report-not-started':
       return ok({ fact: 'not-started' });
     case 'report-exit':
@@ -125,7 +128,7 @@ async function applyDecision(
       return ok({ fact: 'adopted' });
     case 'adopt-containment':
     case 'adopt-child': {
-      const started = dependencies.startSupervisor('adopt');
+      const started = await dependencies.startSupervisor('adopt');
       return started.ok ? ok({ fact: 'adopted' }) : started;
     }
     case 'retry-liveness':
@@ -141,6 +144,7 @@ async function sealAndDecide(
   dependencies: WorkerSupervisionDependencies,
   action: 'complete-and-seal' | 'seal',
   journaled: 'intent' | 'record',
+  livenessRetriesExhausted: boolean,
 ): Promise<Result<RecoveryResult>> {
   if (action === 'complete-and-seal') {
     const directory = await dependencies.store.createDirectory();
@@ -149,7 +153,7 @@ async function sealAndDecide(
   const winner = await sealLaunch(dependencies);
   if (!winner.ok) return winner;
   if (winner.value.kind === 'seal') return ok({ fact: 'not-started' });
-  return recoverExecution(dependencies, journaled === 'intent' ? 'record' : journaled);
+  return recoverExecution(dependencies, 'record', livenessRetriesExhausted);
 }
 
 async function writeExit(dependencies: WorkerSupervisionDependencies, exit: ExitRecord): Promise<Result<RecoveryResult>> {
@@ -231,8 +235,9 @@ function nativeEvidence(platform: Platform, record: RecordSnapshot | undefined):
     return ok({ platform: 'darwin', bootChanged, childAlive: child !== undefined && isAlive(platform, child) });
   }
   const incarnation = platform.namespaceIncarnation();
-  const namespaceCurrent = record?.intent?.namespaceIncarnation === undefined
-    || (incarnation?.ok === true && incarnation.value === record.intent.namespaceIncarnation);
+  // A Linux intent without its incarnation proves no namespace current.
+  const recorded = record?.intent?.namespaceIncarnation;
+  const namespaceCurrent = recorded !== undefined && incarnation?.ok === true && incarnation.value === recorded;
   const containment = record?.intent === undefined ? undefined : platform.containment(record.intent.executionId);
   const populated = containment?.ok ? containment.value.populated() : undefined;
   return ok({
@@ -246,7 +251,7 @@ function nativeEvidence(platform: Platform, record: RecordSnapshot | undefined):
 }
 
 // Only after the terminal fact is recorded, and only while the worker holds
-// `lock` itself; the launch record goes last (contract section 3).
+// `lock` itself; `intent`, then `lock`, then the launch record go last.
 export async function removeRecord(dependencies: WorkerSupervisionDependencies): Promise<Result<void>> {
   const held = dependencies.lock.tryAcquire();
   if (!held.ok) return held;
@@ -254,8 +259,7 @@ export async function removeRecord(dependencies: WorkerSupervisionDependencies):
   try {
     const names = await dependencies.store.list();
     if (!names.ok) return names;
-    const others = names.value.filter((name) => name !== RECORD_FILES.launch);
-    const ordered = names.value.includes(RECORD_FILES.launch) ? [...others, RECORD_FILES.launch] : others;
+    const ordered = [...names.value].sort((left, right) => removalRank(left) - removalRank(right));
     for (const name of ordered) {
       const removed = await dependencies.store.remove(name);
       if (!removed.ok) return removed;
@@ -264,4 +268,12 @@ export async function removeRecord(dependencies: WorkerSupervisionDependencies):
   } finally {
     held.value.release();
   }
+}
+
+// Last come intent, so a waking supervisor exits, then lock and launch; a
+// lock taken meanwhile leaves a file, so removal fails and is retried.
+function removalRank(name: string): number {
+  if (name === RECORD_FILES.launch) return 3;
+  if (name === RECORD_FILES.lock || name.startsWith(`${RECORD_FILES.lock}-`)) return 2;
+  return name === RECORD_FILES.intent ? 1 : 0;
 }

@@ -4,7 +4,7 @@ Date: 2026-10-25. Author verification and independent review are recorded below.
 
 ## Scope and source
 
-[G2 work plan](../../../docs/g2-plan.md) item 15, assigned by the coordinating session (Niki) to the worker session Pepi under decision D14 (a). Base revision: `78362da` on `dev`. Item 14 is not yet merged; the parts that need it are open tasks.
+[G2 work plan](../../../docs/g2-plan.md) item 15, assigned by the coordinating session (Niki) to the worker session Pepi under decision D14 (a). Base revision: `78362da` on `dev`, with `origin/dev` at `a286c5b` merged after item 14 (`implement-worker-journal`) landed, so the file store and the lock use item 14's helpers.
 
 ## Decisions
 
@@ -13,6 +13,8 @@ On 2026-10-25 a Claude Fable 5.1 (medium) subagent of the coordinator decided th
 - D-A: deferred to the owner, with the macOS adapter failing closed in the meantime.
 - D-B (a), D-C (a), and D-C2 (a), as the design records.
 - The Linux cgroup test runs from an opt-in target outside `make verify`.
+
+Commit types: by the coordinator's rules for this item, every commit uses `chore`, `test`, `build`, or `docs`. The package is private and not part of the published `taskelith` package, so no release follows from it (pass-1 finding L8).
 
 ## Evidence
 

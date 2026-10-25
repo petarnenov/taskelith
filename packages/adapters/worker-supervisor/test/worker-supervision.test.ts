@@ -9,6 +9,7 @@ import {
   recoverExecution,
   removeRecord,
   sealLaunch,
+  startDetachedProcess,
   startSupervisor,
   superviseLaunch,
 } from '@taskelith/worker-supervisor';
@@ -40,7 +41,7 @@ test('intent can be replaced only while no launch record exists', async () => {
 
 test('starting the supervisor is crash point CP4', async () => {
   const setup = await prepared();
-  assert.ok(startSupervisor(setup.worker).ok);
+  assert.ok((await startSupervisor(setup.worker)).ok);
   assert.deepEqual(setup.started, ['launch']);
   assert.deepEqual(setup.points, ['CP2', 'CP4']);
 });
@@ -147,6 +148,17 @@ test('the record is removed only while the worker holds the lock, the launch rec
   };
   assert.ok((await removeRecord(setup.worker)).ok);
   assert.deepEqual(removed, ['intent', 'launch']);
+
+  const ordered = await prepared();
+  for (const name of ['launch', 'lock', 'lock-journal', 'supervisor.1', 'handle', 'exit']) ordered.store.files.set(name, '{}');
+  const order: string[] = [];
+  const removeOrdered = ordered.store.remove.bind(ordered.store);
+  ordered.store.remove = async (name) => {
+    order.push(name);
+    return removeOrdered(name);
+  };
+  assert.ok((await removeRecord(ordered.worker)).ok);
+  assert.deepEqual(order.slice(-4), ['intent', 'lock', 'lock-journal', 'launch']);
   assert.equal(setup.store.directory, false);
   assert.equal(setup.lock.held, false);
 });
@@ -184,4 +196,24 @@ test('the Node spawner starts a detached child, reports its exit, and reports a 
 
   const missing = await spawner.spawn({ executable: '/nonexistent/scripted-process', arguments: [] }, undefined);
   assert.equal(missing.kind, 'failed');
+});
+
+test('intent is final once a supervisor record exists', async () => {
+  const setup = await prepared();
+  setup.store.files.set('supervisor.1', encodeRecord({ serial: 1, process: identity(SUPERVISOR_PID) }));
+  assert.equal((await prepareRecord(setup.worker, intent({ launchAuthId: 'launch-9' }))).ok, false);
+});
+
+test('a Linux intent without its namespace incarnation proves no namespace current', async () => {
+  const setup = rig('linux');
+  const { namespaceIncarnation: _incarnation, ...withoutIncarnation } = intent();
+  assert.ok((await prepareRecord(setup.worker, withoutIncarnation)).ok);
+  setup.store.files.set('launch', CLAIM);
+  setup.fake.containmentPopulated = false;
+
+  assert.equal((await fact(setup)).fact, 'uncertain');
+});
+
+test('a failed detached start is reported, not thrown', async () => {
+  assert.equal((await startDetachedProcess({ executable: '/nonexistent/supervisor', arguments: [] })).ok, false);
 });

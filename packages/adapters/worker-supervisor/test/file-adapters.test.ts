@@ -57,7 +57,7 @@ test('the file store creates once, replaces, appends, lists records only, and re
   assert.deepEqual([...listed.value].sort(), ['events', 'intent', 'launch']);
 
   assert.equal((await store.removeDirectory()).ok, false);
-  for (const name of ['events', 'intent', 'launch', '.intent.tmp-0001', 'missing']) assert.ok((await store.remove(name)).ok);
+  for (const name of ['events', 'intent', 'launch', 'missing']) assert.ok((await store.remove(name)).ok);
   assert.ok((await store.removeDirectory()).ok);
   assert.deepEqual(await store.exists(), { ok: true, value: false });
 });
@@ -141,7 +141,7 @@ test('on macOS the supervisor program seals every launch, also as a detached pro
   const detached = join(root, 'execution-2');
   const second = new FileRecordStore(detached);
   assert.ok((await prepareRecord({ ...setup.worker, store: second }, intent({ executionId: 'execution-2' }))).ok);
-  assert.ok(startDetachedSupervisor({ mode: 'launch', directory: detached }).ok);
+  assert.ok((await startDetachedSupervisor({ mode: 'launch', directory: detached })).ok);
   const launch = await eventually(async () => {
     const text = await second.read('launch');
     return text.ok ? text.value : undefined;

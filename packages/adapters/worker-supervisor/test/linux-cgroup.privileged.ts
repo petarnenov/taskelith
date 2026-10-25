@@ -56,13 +56,15 @@ async function prepare(executionId: string, body: string): Promise<Execution> {
     store,
     lock,
     platform,
-    startSupervisor: () => ({ ok: true, value: undefined }),
+    startSupervisor: async () => ({ ok: true, value: undefined }),
     crashPoint: () => undefined,
   };
   const now = platform.clock.read();
-  assert.ok(now.ok);
+  const incarnation = platform.namespaceIncarnation();
+  assert.ok(now.ok && incarnation?.ok);
   const record = intent({
     executionId,
+    namespaceIncarnation: incarnation.value,
     deadline: { bootId: now.value.bootId, milliseconds: now.value.milliseconds + 30_000 },
     command: { executable: process.execPath, arguments: ['-e', childScript(spawns, body)] },
     executionAccount: ACCOUNT,

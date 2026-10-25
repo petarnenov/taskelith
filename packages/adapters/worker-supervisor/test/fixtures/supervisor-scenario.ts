@@ -7,6 +7,6 @@ import { runSupervisorProgram } from '@taskelith/worker-supervisor';
 const points = crashPointsFromEnvironment();
 const outcome = await runSupervisorProgram(process.argv.slice(2), {
   crashPoint: (point) => points.reach(point),
-  timing: { pollMilliseconds: 50, graceMilliseconds: 200, retryMilliseconds: 50 },
+  timing: { pollMilliseconds: 50, graceMilliseconds: 200, retryMilliseconds: 50, unreadablePolls: 20 },
 });
 writeSync(1, `${JSON.stringify(outcome)}\n`);

@@ -22,7 +22,12 @@ export interface ProgramArguments {
 // The module the worker starts as the detached supervisor process.
 export const SUPERVISOR_MAIN = fileURLToPath(new URL('./supervisor-main.js', import.meta.url));
 
-export const SUPERVISOR_TIMING: SupervisorTiming = Object.freeze({ pollMilliseconds: 200, graceMilliseconds: 5_000, retryMilliseconds: 1_000 });
+export const SUPERVISOR_TIMING: SupervisorTiming = Object.freeze({
+  pollMilliseconds: 200,
+  graceMilliseconds: 5_000,
+  retryMilliseconds: 1_000,
+  unreadablePolls: 50,
+});
 
 const CONTAINMENT_PARENT = '--containment-parent';
 
@@ -41,15 +46,21 @@ export function supervisorCommand(program: ProgramArguments): Command {
   return { executable: process.execPath, arguments: [SUPERVISOR_MAIN, program.mode, program.directory, ...parent] };
 }
 
-// CP4: a detached process in a new session, which outlives the worker.
-export function startDetachedSupervisor(program: ProgramArguments): Result<void> {
-  const command = supervisorCommand(program);
-  try {
-    spawn(command.executable, [...command.arguments], { detached: true, stdio: 'ignore' }).unref();
-    return ok(undefined);
-  } catch (error) {
-    return err(failure('unavailable', `cannot start the supervisor: ${(error as Error).message}`));
-  }
+// CP4: a detached process in a new session, which outlives the worker. A
+// spawn error arrives as an event, so the result waits for spawn or error.
+export function startDetachedSupervisor(program: ProgramArguments): Promise<Result<void>> {
+  return startDetachedProcess(supervisorCommand(program));
+}
+
+export function startDetachedProcess(command: Command): Promise<Result<void>> {
+  return new Promise((resolve) => {
+    const child = spawn(command.executable, [...command.arguments], { detached: true, stdio: 'ignore' });
+    child.once('spawn', () => {
+      child.unref();
+      resolve(ok(undefined));
+    });
+    child.once('error', (error) => resolve(err(failure('unavailable', `cannot start the supervisor: ${error.message}`))));
+  });
 }
 
 export function hostPlatform(containmentParent: string | undefined, host: NodeJS.Platform = process.platform): Result<Platform> {

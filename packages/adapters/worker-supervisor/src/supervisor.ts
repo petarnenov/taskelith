@@ -24,6 +24,8 @@ export interface SupervisorTiming {
   readonly pollMilliseconds: number;
   readonly graceMilliseconds: number;
   readonly retryMilliseconds: number;
+  // Polls of an unreadable containment before the supervisor gives up.
+  readonly unreadablePolls: number;
 }
 
 export interface SupervisorDependencies {
@@ -44,6 +46,8 @@ export type SupervisorOutcome =
   | { readonly kind: 'not-first' }
   | { readonly kind: 'sealed'; readonly reason: SealReason }
   | { readonly kind: 'launch-exists'; readonly launch: LaunchRecord | undefined }
+  | { readonly kind: 'write-failed'; readonly file: string }
+  | { readonly kind: 'containment-unreadable' }
   | { readonly kind: 'exited'; readonly exit: ExitRecord }
   | { readonly kind: 'child-gone' };
 
@@ -51,7 +55,8 @@ export type SupervisorOutcome =
 export async function superviseLaunch(dependencies: SupervisorDependencies): Promise<SupervisorOutcome> {
   return withLock(dependencies, async (session) => {
     // Without its own identity no supervisor record proves who claims.
-    if (session.serial === undefined) return seal(dependencies, 'identity-unreadable');
+    if (session.serial === 'identity-unreadable') return seal(dependencies, 'identity-unreadable');
+    if (session.serial === 'write-failed') return { kind: 'write-failed', file: 'supervisor record' };
     if (session.serial !== 1) return { kind: 'not-first' };
     const refusal = checkLaunchable(dependencies, session.intent);
     if (refusal !== undefined) return seal(dependencies, refusal);
@@ -60,7 +65,10 @@ export async function superviseLaunch(dependencies: SupervisorDependencies): Pro
     if (containment === 'unavailable') return seal(dependencies, 'containment-unavailable');
     dependencies.crashPoint('CP6');
     const claim = await claimLaunch(dependencies, session.intent, containment);
-    if (claim !== undefined) return claim;
+    if (claim !== undefined) {
+      containment?.remove();
+      return claim;
+    }
     dependencies.crashPoint('CP7');
     return runChild(dependencies, session.intent, containment);
   });
@@ -70,7 +78,7 @@ export async function superviseLaunch(dependencies: SupervisorDependencies): Pro
 // the child's parent, so it never learns the child's exit status.
 export async function adoptExecution(dependencies: SupervisorDependencies): Promise<SupervisorOutcome> {
   return withLock(dependencies, async (session) => {
-    if (session.serial === undefined) return { kind: 'record-unusable', reason: 'the supervisor record cannot be written' };
+    if (typeof session.serial !== 'number') return { kind: 'record-unusable', reason: 'the supervisor record cannot be written' };
     const launch = await readParsed(dependencies.store, RECORD_FILES.launch, parseLaunch);
     const handle = await readParsed(dependencies.store, RECORD_FILES.handle, parseHandle);
     if (!launch.ok || !handle.ok || launch.value?.kind !== 'claim') return { kind: 'record-unusable', reason: 'no readable claim' };
@@ -81,7 +89,7 @@ export async function adoptExecution(dependencies: SupervisorDependencies): Prom
 }
 
 interface Session {
-  readonly serial: number | undefined;
+  readonly serial: number | 'identity-unreadable' | 'write-failed';
   readonly intent: IntentRecord;
 }
 
@@ -101,14 +109,15 @@ async function withLock(
   }
 }
 
-async function writeSupervisorRecord(dependencies: SupervisorDependencies): Promise<number | undefined> {
+async function writeSupervisorRecord(dependencies: SupervisorDependencies): Promise<Session['serial']> {
   const self = dependencies.platform.inspector.identity(dependencies.selfPid);
+  if (!self.ok || self.value === undefined) return 'identity-unreadable';
   const names = await dependencies.store.list();
-  if (!self.ok || self.value === undefined || !names.ok) return undefined;
+  if (!names.ok) return 'write-failed';
   let serial = highestSupervisor(names.value) + 1;
   for (;;) {
     const created = await dependencies.store.createOnce(supervisorFile(serial), encodeRecord({ serial, process: self.value }));
-    if (!created.ok) return undefined;
+    if (!created.ok) return 'write-failed';
     if (created.value === 'created') return serial;
     serial += 1;
   }
@@ -138,7 +147,8 @@ function deadlineRefusal(dependencies: SupervisorDependencies, intent: IntentRec
 
 async function seal(dependencies: SupervisorDependencies, reason: SealReason): Promise<SupervisorOutcome> {
   const created = await dependencies.store.createOnce(RECORD_FILES.launch, encodeRecord({ kind: 'seal', by: 'supervisor', reason }));
-  if (created.ok && created.value === 'created') return { kind: 'sealed', reason };
+  if (!created.ok) return { kind: 'write-failed', file: RECORD_FILES.launch };
+  if (created.value === 'created') return { kind: 'sealed', reason };
   return { kind: 'launch-exists', launch: await readLaunch(dependencies.store) };
 }
 
@@ -156,7 +166,8 @@ async function claimLaunch(
 ): Promise<SupervisorOutcome | undefined> {
   const claim = { kind: 'claim', launchAuthId: intent.launchAuthId, supervisor: 1, ...(containment ? { containment: containment.path } : {}) };
   const created = await dependencies.store.createOnce(RECORD_FILES.launch, encodeRecord(claim));
-  if (created.ok && created.value === 'created') return undefined;
+  if (!created.ok) return { kind: 'write-failed', file: RECORD_FILES.launch };
+  if (created.value === 'created') return undefined;
   return { kind: 'launch-exists', launch: await readLaunch(dependencies.store) };
 }
 
@@ -168,17 +179,21 @@ async function runChild(
   containment: Containment | undefined,
 ): Promise<SupervisorOutcome> {
   if (deadlineRefusal(dependencies, intent) !== undefined) {
-    return finishSpawnFailure(dependencies, 'the deadline passed before the spawn');
+    return finishSpawnFailure(dependencies, 'the deadline passed before the spawn', containment);
   }
-  containment?.admit(dependencies.selfPid);
+  const admitted = containment?.admit(dependencies.selfPid);
+  if (admitted !== undefined && !admitted.ok) {
+    return finishSpawnFailure(dependencies, `cannot enter the containment: ${admitted.error.message}`, containment);
+  }
   const spawned = await dependencies.spawner.spawn(intent.command, intent.executionAccount);
-  containment?.release(dependencies.selfPid);
+  if (containment !== undefined) await persist(dependencies, async () => containment.release(dependencies.selfPid));
   dependencies.crashPoint('CP8');
-  if (spawned.kind === 'failed') return finishSpawnFailure(dependencies, spawned.failure);
+  if (spawned.kind === 'failed') return finishSpawnFailure(dependencies, spawned.failure, containment);
   const handle = await recordHandle(dependencies, spawned.pid);
   dependencies.crashPoint('CP9');
   const status = await watchChild(dependencies, spawned.exited, handle, containment);
   const termination = await proveTermination(dependencies, handle, containment);
+  if (termination === undefined) return { kind: 'containment-unreadable' };
   const exit: ExitRecord = { status, startProven: true, termination };
   await persist(dependencies, () => dependencies.store.createOnce(RECORD_FILES.exit, encodeRecord(exit)));
   dependencies.crashPoint('CP11');
@@ -186,12 +201,17 @@ async function runChild(
   return { kind: 'exited', exit };
 }
 
-async function finishSpawnFailure(dependencies: SupervisorDependencies, failure: string): Promise<SupervisorOutcome> {
+async function finishSpawnFailure(
+  dependencies: SupervisorDependencies,
+  failure: string,
+  containment: Containment | undefined,
+): Promise<SupervisorOutcome> {
   await persist(dependencies, () => dependencies.store.createOnce(RECORD_FILES.handle, encodeRecord({ kind: 'spawn-failed', failure })));
   dependencies.crashPoint('CP9');
   const exit: ExitRecord = { status: { kind: 'unknown' }, startProven: false, spawnFailure: failure, termination: 'never-spawned' };
   await persist(dependencies, () => dependencies.store.createOnce(RECORD_FILES.exit, encodeRecord(exit)));
   dependencies.crashPoint('CP11');
+  containment?.remove();
   return { kind: 'exited', exit };
 }
 
@@ -220,8 +240,7 @@ async function watchChild(
   while (result === undefined) {
     if (handle?.kind === 'spawned' && containment === undefined) await recordDescendants(dependencies, handle, seen);
     if (!cancelled && (await cancellationRequested(dependencies.store))) {
-      cancelled = true;
-      await cancel(dependencies, handle, containment, () => result !== undefined);
+      cancelled = await cancel(dependencies, handle, containment, () => result !== undefined);
     }
     await Promise.race([exited, dependencies.sleep(dependencies.timing.pollMilliseconds)]);
   }
@@ -235,32 +254,47 @@ async function cancel(
   handle: HandleRecord | undefined,
   containment: Containment | undefined,
   reaped: () => boolean,
-): Promise<void> {
-  if (containment !== undefined) {
-    containment.kill();
-    await appendEvent(dependencies, { kind: 'cancellation', step: 'containment-killed' });
-    return;
-  }
-  if (handle?.kind !== 'spawned' || reaped()) return;
+): Promise<boolean> {
+  if (containment !== undefined) return killContainment(dependencies, containment);
+  if (handle?.kind !== 'spawned' || reaped()) return true;
   dependencies.spawner.signalGroup(handle.processGroupId, 'SIGTERM');
   await appendEvent(dependencies, { kind: 'cancellation', step: 'terminate-sent' });
   await dependencies.sleep(dependencies.timing.graceMilliseconds);
-  if (reaped()) return;
+  if (reaped()) return true;
   dependencies.spawner.signalGroup(handle.processGroupId, 'SIGKILL');
   await appendEvent(dependencies, { kind: 'cancellation', step: 'kill-sent' });
+  return true;
+}
+
+// A kill that failed is not evidence; the caller tries again next poll.
+async function killContainment(dependencies: SupervisorDependencies, containment: Containment): Promise<boolean> {
+  if (!containment.kill().ok) return false;
+  await appendEvent(dependencies, { kind: 'cancellation', step: 'containment-killed' });
+  return true;
+}
+
+// Waits until the containment empties, killing it on a cancellation. One
+// that stays unreadable ends the wait without proof, so recovery decides.
+async function awaitEmptyContainment(dependencies: SupervisorDependencies, containment: Containment): Promise<'empty' | 'unreadable'> {
+  let cancelled = false;
+  for (let unreadable = 0; ; await dependencies.sleep(dependencies.timing.pollMilliseconds)) {
+    const populated = containment.populated();
+    if (populated.ok && !populated.value) return 'empty';
+    unreadable = populated.ok ? 0 : unreadable + 1;
+    if (unreadable >= dependencies.timing.unreadablePolls) return 'unreadable';
+    if (!cancelled && (await cancellationRequested(dependencies.store))) cancelled = await killContainment(dependencies, containment);
+  }
 }
 
 async function proveTermination(
   dependencies: SupervisorDependencies,
   handle: HandleRecord | undefined,
   containment: Containment | undefined,
-): Promise<ExitRecord['termination']> {
+): Promise<ExitRecord['termination'] | undefined> {
+  if (containment !== undefined) {
+    return (await awaitEmptyContainment(dependencies, containment)) === 'empty' ? 'containment-empty' : undefined;
+  }
   for (let reported = false; ; await dependencies.sleep(dependencies.timing.pollMilliseconds)) {
-    if (containment !== undefined) {
-      const populated = containment.populated();
-      if (populated.ok && !populated.value) return 'containment-empty';
-      continue;
-    }
     const proof = await darwinProof(dependencies, handle);
     if (proof.proven) return 'process-group-empty';
     if (!reported) await appendEvent(dependencies, { kind: 'survivors', processes: proof.survivors });
@@ -307,14 +341,7 @@ async function adoptContainment(
   if (containment === undefined || !containment.ok || containment.value.path !== launch.containment) {
     return { kind: 'record-unusable', reason: 'the claimed containment is not available' };
   }
-  for (let cancelled = false; ; await dependencies.sleep(dependencies.timing.pollMilliseconds)) {
-    const populated = containment.value.populated();
-    if (populated.ok && !populated.value) break;
-    if (!cancelled && (await cancellationRequested(dependencies.store))) {
-      cancelled = true;
-      await cancel(dependencies, undefined, containment.value, () => false);
-    }
-  }
+  if ((await awaitEmptyContainment(dependencies, containment.value)) === 'unreadable') return { kind: 'containment-unreadable' };
   const exit: ExitRecord = { status: { kind: 'unknown' }, startProven, termination: 'containment-empty' };
   await persist(dependencies, () => dependencies.store.createOnce(RECORD_FILES.exit, encodeRecord(exit)));
   containment.value.remove();

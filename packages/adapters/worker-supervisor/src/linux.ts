@@ -75,29 +75,37 @@ export class LinuxProcessInspector implements ProcessInspector {
   }
 
   identity(pid: number): Result<ProcessIdentity | undefined> {
-    const entry = this.#entry(pid);
+    const boot = this.bootId();
+    if (!boot.ok) return boot;
+    const entry = this.#entry(pid, boot.value);
     return entry.ok ? ok(entry.value?.identity) : entry;
   }
 
   // Not one instant on Linux: termination evidence there is the containment.
   listing(): Result<readonly ProcessEntry[]> {
+    const boot = this.bootId();
+    if (!boot.ok) return boot;
+    let names: string[];
+    try {
+      names = readdirSync(this.#proc).filter((entry) => /^\d+$/.test(entry));
+    } catch (error) {
+      return err(failure('unavailable', `cannot list ${this.#proc}: ${(error as Error).message}`));
+    }
     const entries: ProcessEntry[] = [];
-    for (const name of readdirSync(this.#proc).filter((entry) => /^\d+$/.test(entry))) {
-      const entry = this.#entry(Number(name));
+    for (const name of names) {
+      const entry = this.#entry(Number(name), boot.value);
       if (!entry.ok) return entry;
       if (entry.value !== undefined) entries.push(entry.value);
     }
     return ok(entries);
   }
 
-  #entry(pid: number): Result<ProcessEntry | undefined> {
-    const boot = this.bootId();
-    if (!boot.ok) return boot;
+  #entry(pid: number, bootId: string): Result<ProcessEntry | undefined> {
     const text = readText(join(this.#proc, String(pid), 'stat'));
     if (!text.ok || text.value === undefined) return text.ok ? ok(undefined) : text;
     const stat = parseProcStat(text.value);
     if (!stat.ok) return stat;
-    const identity = { bootId: boot.value, pid: stat.value.pid, startTime: stat.value.startTime };
+    const identity = { bootId, pid: stat.value.pid, startTime: stat.value.startTime };
     return ok({ identity, parentPid: stat.value.parentPid, processGroupId: stat.value.processGroupId });
   }
 }

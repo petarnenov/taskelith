@@ -114,6 +114,7 @@ test('the Linux self-check fails without cgroup v2, delegation, a kill control, 
 
   mkdirSync(options.containmentParent);
   mkdirSync(options.home);
+  mkdirSync(join(options.containmentParent, `self-check-${process.pid}`));
   const writable = checkLinuxContainment(options);
   assert.equal(writable.ok, false);
   assert.deepEqual(problems(writable).slice(0, 4), [
