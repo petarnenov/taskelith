@@ -51,6 +51,7 @@ export interface LaunchingDependencies {
   readonly draw: () => number;
   readonly newId: () => string;
   readonly pollMilliseconds?: number;
+  readonly onFailure?: (error: unknown) => void;
 }
 
 export interface LaunchHost {
@@ -161,10 +162,10 @@ function launchOrchestrator(
   if (launch === undefined || launching === undefined) return ok(undefined);
   const host = launching.host(launch, root.paths.executions);
   if (!host.ok) return host;
-  const { sleep, draw, newId, pollMilliseconds } = launching;
+  const { sleep, draw, newId, pollMilliseconds, onFailure } = launching;
   return ok(new LaunchOrchestrator({
     journal: root.journal, authority: launching.authority(credential), supervision: host.value.supervision, clock: host.value.clock,
-    sleep, draw, newId, ...(pollMilliseconds === undefined ? {} : { pollMilliseconds }),
+    sleep, draw, newId, ...(pollMilliseconds === undefined ? {} : { pollMilliseconds }), ...(onFailure === undefined ? {} : { onFailure }),
   }));
 }
 

@@ -33,25 +33,34 @@ export function productionDependencies(settings: WorkerSettings): WorkerDependen
 
 // The supervisor ships in the worker's build, so the worker's package
 // version names the supervisor program.
-const SUPERVISOR_VERSION = (JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }).version;
+function supervisorVersion(): string {
+  return (JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }).version;
+}
 
 function productionLaunching(settings: WorkerSettings): LaunchingDependencies {
   const endpoint = { baseUrl: settings.controlPlaneUrl, timeoutMilliseconds: CONTROL_PLANE_TIMEOUT_MILLISECONDS };
   return {
     authority: (credential) => new HttpLaunchAuthorityClient({ ...endpoint, credential }),
-    host: launchHost,
+    host: (launch, executions) => launchHost(launch, executions, supervisorVersion()),
     sleep: (milliseconds, signal) => delay(milliseconds, undefined, { signal }).catch(() => undefined),
     draw: Math.random,
     newId: randomUUID,
+    onFailure: reportLaunchFailure,
   };
 }
 
-function launchHost(launch: LaunchSettings, executions: string): Result<LaunchHost> {
+// The worker has no logger yet (20d), so a failed launch goes to stderr.
+function reportLaunchFailure(error: unknown): void {
+  const message = redactSecrets(`a launch failed: ${String(error)}`);
+  process.stderr.write(`${JSON.stringify({ error: { code: 'internal', message } })}\n`);
+}
+
+function launchHost(launch: LaunchSettings, executions: string, version: string): Result<LaunchHost> {
   const platform = hostPlatform(launch.containmentParent);
   if (!platform.ok) return platform;
   const { command, containmentParent, executionAccount } = launch;
   const program = {
-    command, supervisorVersion: SUPERVISOR_VERSION,
+    command, supervisorVersion: version,
     ...(containmentParent === undefined ? {} : { containmentParent }),
     ...(executionAccount === undefined ? {} : { executionAccount }),
   };

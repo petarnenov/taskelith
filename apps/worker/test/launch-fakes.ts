@@ -164,13 +164,14 @@ export class FakeSupervision implements ExecutionSupervision {
 // Every execution's fake, created on first use.
 export class FakeSupervisions {
   readonly byExecution = new Map<string, FakeSupervision>();
-  prepare: (supervision: FakeSupervision) => void = () => undefined;
+  // Scripts each new execution's fake when it is first used.
+  onCreated: (supervision: FakeSupervision) => void = () => undefined;
 
   readonly factory = (executionId: ExecutionId): FakeSupervision => {
     let supervision = this.byExecution.get(executionId);
     if (supervision === undefined) {
       supervision = new FakeSupervision();
-      this.prepare(supervision);
+      this.onCreated(supervision);
       this.byExecution.set(executionId, supervision);
     }
     return supervision;

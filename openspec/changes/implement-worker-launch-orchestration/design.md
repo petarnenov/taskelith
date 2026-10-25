@@ -64,11 +64,11 @@ An intent whose executions all end `not-started` is launched again under D2 (jou
 
 ### D5: cancellation forwarding
 
-`forward-cancellation` names a journaled cancellation without evidence. For its target, attempt or execution:
+`forward-cancellation` names a journaled cancellation without evidence. Its target, an attempt or any execution of an intent, cancels the whole intent, as `planJournalRecovery` reads it (review pass 1, M1):
 
 - a launch still in D2 stops; an execution with a pending W2 or an unused grant is abandoned as in D3;
 - an execution whose record is journaled gets the `cancel` file through `requestCancellation`, which every supervisor of the execution acts on (supervisor identity section 8);
-- the cancellation's evidence is recorded (`recordCancellationEvidence`) once every execution of the target is terminal, `exited` or `not-started`, or immediately when the target has none.
+- the cancellation's evidence is recorded (`recordCancellationEvidence`) once no launch of the intent is live and every execution of the intent is terminal, `exited` or `not-started`, or immediately when it has none.
 
 A cancellation is never reported as termination: only the exit or the seal is.
 

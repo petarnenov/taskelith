@@ -49,9 +49,31 @@ Date: 2026-10-26. Author verification is recorded below; the independent review 
 
 An earlier run failed one test only because the build had preceded the fix that keeps an unsettled execution from being launched again; the run above includes it.
 
-## Review passes
+## Review pass 1
 
-Not yet run. Reviewer: Claude Fable 5.1 (medium), with the protocol invocation; the prompt forbids writing any file in the worktree.
+- Reviewer: Claude Code, `claude -p "<prompt>" --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json`, run by the coordinator in the worktree at `0918727`; the prompt forbade writing any file in the worktree, and the prompt and output are outside it.
+- Model confirmation: Claude Fable 5.1 (`claude-fable-5-1`), medium effort, as the coordinator reported. Session ID: `3b52a249-1c99-40f9-ab57-33d6e54db3fb`.
+- Snapshot: `f75486ec…` before and after; unchanged.
+- Findings: 0 Critical, 0 High, 1 Medium, 7 Low.
+
+| Finding | Resolution |
+| --- | --- |
+| M1: a cancellation of a superseded execution neither stopped the launch nor waited for it before its evidence | Fixed: any target resolves to its intent from the snapshot and stops that intent's launch; the evidence waits until no launch of the intent is live and every execution of it is terminal (design D5). Test "cancellation names a superseded execution". |
+| L1: the observation slept on the stop signal, so a cancel file came up to one poll late | Fixed: until it forwards, the observation sleeps on the stop or cancel signal and forwards right after waking. |
+| L2: a seal lost to a claim before W4 ended the launch without a fact | Fixed: the record a claim proves is journaled (W4, which a grant allows) and reported `uncertain`, with a test. |
+| L3: an exception in a launch or a pass became an unhandled rejection | Fixed: both are caught and reported through `onFailure`, which the production worker writes to stderr redacted; the worker keeps running. Test with a throwing client. |
+| L4: unbounded wait loops, an unawaited pass, and a negative proven by a fixed delay | Fixed: a bounded `until` helper, the cancellation pass awaited, and the worker-start check after ten poll intervals. |
+| L5: `FakeSupervisions.prepare` collided with the CP2 term | Fixed: renamed `onCreated`. |
+| L6: the supervisor version was read from `package.json` at import | Fixed: read lazily when a launch host is built. |
+| L7: a five-clause condition in the cancellation forwarding | Fixed: the named predicates `isTerminal` and `needsCancelFile`; the authorization loop stays in `Launch`, since splitting it would not shorten it. |
+
+A test also covers a cancellation of an execution that a stopped launch left open: its `cancel` file is written once.
+
+After the fixes, `make verify` ran with every file tracked: exit 0. 1250 tests, 1250 passed, 0 failed; coverage 99.18% lines, 91.64% branches, 98.61% functions; 0 breaking changes in each document; `openspec validate --all --strict` 60 passed; `verify:archive`, `verify:dependencies`, and `verify:package` passed.
+
+## Review pass 2
+
+Not yet run.
 
 ## Limitations
 

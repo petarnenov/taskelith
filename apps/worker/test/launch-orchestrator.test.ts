@@ -65,6 +65,12 @@ async function launchOnce(): Promise<void> {
   await orchestrator.settled();
 }
 
+// Waits a bounded number of turns of the event loop for the condition.
+async function until(condition: () => boolean): Promise<void> {
+  for (let turn = 0; !condition() && turn < 1_000; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(condition(), 'the condition never held');
+}
+
 function stopAfterRequests(count: number): void {
   authority.onRequest = () => {
     if (authority.requests.length >= count) controller.abort();
@@ -86,7 +92,7 @@ function executions() {
 test('a grant is journaled, the record written, and the supervisor started; its facts reach the outbox', async () => {
   value(journal.recordCommand(offer()));
   authority.answers = [granted()];
-  supervisions.prepare = (supervision) => {
+  supervisions.onCreated = (supervision) => {
     supervision.facts = [{ problems: [] }, { problems: [], process: PROCESS }, { problems: [], process: PROCESS, exit: CLEAN_EXIT }];
   };
   await launchOnce();
@@ -106,7 +112,7 @@ test('a grant is journaled, the record written, and the supervisor started; its 
 test('a request without a decision is repeated with the same operation, backing off within [5 s, 60 s]', async () => {
   value(journal.recordCommand(offer()));
   authority.answers = [unavailable(), unavailable(), granted()];
-  supervisions.prepare = (supervision) => {
+  supervisions.onCreated = (supervision) => {
     supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
   };
   await launchOnce();
@@ -140,7 +146,7 @@ test('offline, nothing starts: past the deadline the execution is sealed, report
 test('a retryable rejection is retried under a new operation for the same execution', async () => {
   value(journal.recordCommand(offer()));
   authority.answers = [ok({ kind: 'rejected', rejection: launchRejection('quarantined', 'restore') }), granted()];
-  supervisions.prepare = (supervision) => {
+  supervisions.onCreated = (supervision) => {
     supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
   };
   await launchOnce();
@@ -177,7 +183,7 @@ test('a revocation answered to a retry is a rejection with its reason', async ()
 test('an expired answer abandons the execution for a new one', async () => {
   value(journal.recordCommand(offer()));
   authority.answers = [ok({ kind: 'expired' }), granted()];
-  supervisions.prepare = (supervision) => {
+  supervisions.onCreated = (supervision) => {
     supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
   };
   await launchOnce();
@@ -226,7 +232,7 @@ test('a supervisor that seals reports not-started, and the intent is launched ag
   value(journal.recordCommand(offer()));
   authority.answers = [granted()];
   let launches = 0;
-  supervisions.prepare = (supervision) => {
+  supervisions.onCreated = (supervision) => {
     launches += 1;
     supervision.facts = launches === 1
       ? [{ problems: [], launch: { kind: 'seal', by: 'supervisor', reason: 'deadline-passed' } }]
@@ -240,7 +246,7 @@ test('a supervisor that cannot start is recovered from its record', async () => 
   value(journal.recordCommand(offer()));
   authority.answers = [granted()];
   let launches = 0;
-  supervisions.prepare = (supervision) => {
+  supervisions.onCreated = (supervision) => {
     launches += 1;
     if (launches === 1) supervision.startResult = err(failure('unavailable', 'no spawn'));
     supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
@@ -255,7 +261,7 @@ test('a recovered exit is reported, and a recovery that adopts keeps observing',
   value(journal.recordCommand(offer(2)));
   authority.answers = [granted()];
   let launches = 0;
-  supervisions.prepare = (supervision) => {
+  supervisions.onCreated = (supervision) => {
     launches += 1;
     supervision.startResult = err(failure('unavailable', 'no spawn'));
     supervision.recovery = launches === 1 ? { fact: 'exited', exit: { ...CLEAN_EXIT, startProven: false } } : { fact: 'observe' };
@@ -268,7 +274,7 @@ test('a recovered exit is reported, and a recovery that adopts keeps observing',
 test('a corrupt record is reported uncertain once, and the launch stops', async () => {
   value(journal.recordCommand(offer()));
   authority.answers = [granted()];
-  supervisions.prepare = (supervision) => {
+  supervisions.onCreated = (supervision) => {
     supervision.facts = [{ problems: [{ file: 'handle', kind: 'corrupt', detail: 'bad json' }] }];
   };
   await launchOnce();
@@ -281,7 +287,7 @@ test('a failed record write abandons the execution before W4', async () => {
   value(journal.recordCommand(offer()));
   authority.answers = [granted()];
   let launches = 0;
-  supervisions.prepare = (supervision) => {
+  supervisions.onCreated = (supervision) => {
     launches += 1;
     if (launches === 1) supervision.prepareResult = err(failure('unavailable', 'disk'));
     supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
@@ -293,13 +299,15 @@ test('a failed record write abandons the execution before W4', async () => {
 test('a cancellation during authorization stops the launch, seals it, and then records its evidence', async () => {
   value(journal.recordCommand(offer()));
   authority.answers = [unavailable()];
+  let cancelling: Promise<void> = Promise.resolve();
   authority.onRequest = () => {
     if (authority.requests.length === 1) {
       value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));
-      void orchestrator.pass(controller.signal);
+      cancelling = orchestrator.pass(controller.signal);
     }
   };
   await launchOnce();
+  await cancelling;
   assert.equal(authority.requests.length, 1);
   assert.equal(executions()[0]?.state, 'not-started');
   assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, false);
@@ -316,18 +324,18 @@ test('a cancellation after W4 writes the cancel file; evidence waits for the exi
   const exited = new Promise<void>((resolve) => {
     release = resolve;
   });
-  supervisions.prepare = (supervision) => {
+  supervisions.onCreated = (supervision) => {
     supervision.facts = [{ problems: [], process: PROCESS }];
     void exited.then(() => {
       supervision.facts = [{ problems: [], process: PROCESS, exit: { ...CLEAN_EXIT, status: { kind: 'signal', signal: 'SIGTERM' } } }];
     });
   };
   await orchestrator.pass(controller.signal);
-  while (executions()[0]?.state !== 'started') await new Promise((resolve) => setImmediate(resolve));
+  await until(() => executions()[0]?.state === 'started');
 
   value(journal.recordCommand(cancellation(1, { executionId: executions()[0]?.executionId ?? '' })));
   await orchestrator.pass(controller.signal);
-  while (supervisions.all[0]?.cancelled === undefined) await new Promise((resolve) => setImmediate(resolve));
+  await until(() => supervisions.all[0]?.cancelled !== undefined);
   assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, false);
 
   release();
@@ -335,6 +343,71 @@ test('a cancellation after W4 writes the cancel file; evidence waits for the exi
   await orchestrator.pass(controller.signal);
   assert.equal(executions()[0]?.state, 'exited');
   assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
+});
+
+test('cancellation names a superseded execution: the launch stops before evidence is recorded', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [ok({ kind: 'expired' }), unavailable()];
+  await orchestrator.pass(controller.signal);
+  await until(() => authority.requests.length >= 2);
+  const [superseded, current] = executions();
+  assert.equal(superseded?.state, 'not-started');
+  assert.notEqual(current?.executionId, superseded?.executionId);
+
+  value(journal.recordCommand(cancellation(1, { executionId: superseded?.executionId ?? '' })));
+  await orchestrator.pass(controller.signal);
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, false);
+  await orchestrator.settled();
+  assert.equal(executions()[1]?.state, 'not-started');
+  await orchestrator.pass(controller.signal);
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
+  assert.equal(executions().length, 2);
+});
+
+test('a cancellation names an execution a stopped launch left open: its cancel file is written', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS }];
+  };
+  await orchestrator.pass(controller.signal);
+  await until(() => executions()[0]?.state === 'started');
+  controller.abort();
+  await orchestrator.settled();
+
+  controller = new AbortController();
+  value(journal.recordCommand(cancellation(1, { executionId: executions()[0]?.executionId ?? '' })));
+  await orchestrator.pass(controller.signal);
+  await orchestrator.pass(controller.signal);
+  assert.equal(supervisions.all[0]?.calls.filter((call) => call === 'cancel').length, 1);
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, false);
+});
+
+test('a seal lost to a claim before W4 is reported uncertain', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.prepareResult = err(failure('unavailable', 'disk'));
+    supervision.launch = { kind: 'claim', launchAuthId: 'unknown', supervisor: 1 };
+  };
+  await launchOnce();
+  assert.deepEqual(factKinds(), ['execution-uncertain']);
+  assert.equal(executions()[0]?.recordWritten, true);
+});
+
+test('a launch that throws is reported and ends; the orchestrator keeps running', async () => {
+  const failures: unknown[] = [];
+  let ids = 0;
+  orchestrator = new LaunchOrchestrator({
+    journal, authority, supervision: supervisions.factory, clock, draw: () => 0, newId: () => `id-${(ids += 1)}`,
+    sleep: async () => new Promise((resolve) => setImmediate(resolve)), onFailure: (error) => failures.push(error),
+  });
+  value(journal.recordCommand(offer()));
+  authority.authorize = async () => {
+    throw new Error('broken client');
+  };
+  await launchOnce();
+  assert.equal(failures.length, 1);
 });
 
 test('a cancellation journaled before any launch records its evidence and launches nothing', async () => {

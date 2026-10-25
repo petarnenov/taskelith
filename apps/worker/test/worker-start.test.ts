@@ -291,7 +291,8 @@ test('a worker without a launch command accepts an assignment and never launches
   const launching = new RecordingLaunching();
   const worker = await start(settings, launching.dependencies);
   value(worker.root.journal.recordCommand(offer()));
-  await delay(100);
+  // Several poll intervals pass: a running orchestrator would have asked.
+  await delay((launching.dependencies.pollMilliseconds ?? 0) * 10);
   assert.deepEqual([launching.credentials, launching.hosts, launching.authority.requests], [[], [], []]);
   assert.equal(value(worker.root.journal.snapshot()).intents.length, 1);
   assert.deepEqual(value(worker.root.journal.snapshot()).executions, []);
