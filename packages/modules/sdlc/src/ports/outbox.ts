@@ -19,16 +19,23 @@ export interface Outbox {
   append(message: OutboxMessage): Promise<Result<void>>;
 }
 
-// Plain objects and arrays of strings, booleans, null, and finite numbers.
+// Plain objects and dense arrays of strings, booleans, null, and finite
+// numbers other than -0, without cycles: what JSON round-trips unchanged.
 export function isJsonObject(value: unknown): value is JsonObject {
-  return isPlainObject(value) && Object.values(value).every(isJsonValue);
+  return isPlainObject(value) && isJsonValue(value, new Set());
 }
 
-function isJsonValue(value: unknown): boolean {
+function isJsonValue(value: unknown, ancestors: Set<object>): boolean {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
-  if (typeof value === 'number') return Number.isFinite(value);
-  if (Array.isArray(value)) return value.every(isJsonValue);
-  return isJsonObject(value);
+  if (typeof value === 'number') return Number.isFinite(value) && !Object.is(value, -0);
+  if (typeof value !== 'object' || ancestors.has(value)) return false;
+  if (!Array.isArray(value) && !isPlainObject(value)) return false;
+  ancestors.add(value);
+  const valid = Array.isArray(value)
+    ? Array.from({ length: value.length }, (_, index) => index in value && isJsonValue(value[index], ancestors)).every(Boolean)
+    : Object.values(value).every((field) => isJsonValue(field, ancestors));
+  ancestors.delete(value);
+  return valid;
 }
 
 function isPlainObject(value: unknown): value is Readonly<Record<string, unknown>> {

@@ -26,13 +26,15 @@ export function expectRead(problems: string[], label: string, result: Result<unk
   else expectSame(problems, label, result.value, expected);
 }
 
-// Of concurrent writers exactly one wins, and every other one is a conflict.
-export function expectOneWinner(problems: string[], label: string, results: readonly Result<unknown>[]): void {
-  const winners = results.filter((result) => result.ok).length;
-  if (winners !== 1) problems.push(`${label}: expected one success, got ${winners}`);
+// Of concurrent writers exactly one wins, and every other one is a conflict;
+// returns the winner's index, or undefined when there is not exactly one.
+export function expectOneWinner(problems: string[], label: string, results: readonly Result<unknown>[]): number | undefined {
+  const winners = results.flatMap((result, index) => (result.ok ? [index] : []));
+  if (winners.length !== 1) problems.push(`${label}: expected one success, got ${winners.length}`);
   results.forEach((result, index) => {
     if (!result.ok) expectCode(problems, `${label} loser ${index + 1}`, result, 'conflict');
   });
+  return winners.length === 1 ? winners[0] : undefined;
 }
 
 // Equal as data: a field set to undefined counts as absent, as an optional
@@ -41,7 +43,8 @@ export function isSameData(actual: unknown, expected: unknown): boolean {
   if (typeof actual === 'number' || typeof expected === 'number') return Object.is(actual, expected);
   if (Array.isArray(actual) || Array.isArray(expected)) {
     return Array.isArray(actual) && Array.isArray(expected) && actual.length === expected.length
-      && actual.every((item, index) => isSameData(item, expected[index]));
+      && Array.from({ length: actual.length }, (_, index) =>
+        index in actual === index in expected && isSameData(actual[index], expected[index])).every(Boolean);
   }
   if (!isObject(actual) || !isObject(expected)) return actual === expected;
   const keys = definedKeys(actual);
@@ -59,4 +62,17 @@ function definedKeys(value: Readonly<Record<string, unknown>>): string[] {
 
 function describe(value: unknown): string {
   return JSON.stringify(value, (_, field: unknown) => (typeof field === 'number' && !Number.isFinite(field) ? String(field) : field));
+}
+
+// Distinct candidates at one generation race; the stored record must be the
+// winner's, so a loser's write cannot hide behind an identical winner.
+export async function expectRaceWinnerStored<Stored>(
+  problems: string[],
+  label: string,
+  candidates: readonly Stored[],
+  write: (candidate: Stored) => Promise<Result<unknown>>,
+  read: () => Promise<Result<unknown>>,
+): Promise<void> {
+  const winner = expectOneWinner(problems, label, await Promise.all(candidates.map(write)));
+  if (winner !== undefined) expectRead(problems, `${label} stored`, await read(), candidates[winner]);
 }

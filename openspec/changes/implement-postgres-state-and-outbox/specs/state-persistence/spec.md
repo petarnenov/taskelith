@@ -33,8 +33,15 @@ The assignment repository SHALL reject, with `conflict`, storing an assignment w
 - **WHEN** a second assignment of an attempt with a held reservation is added
 - **THEN** the add fails with `conflict`, and after the first assignment's reservation is released the add succeeds
 
-### Requirement: Outbox and inbox ports
-Each module that writes messages SHALL declare its own `Outbox` port, structurally identical across modules, whose `append` stores a message with event metadata, subject, and a JSON object payload, and fails with `conflict` for a known event identity and with `invalid` for a payload JSON cannot carry unchanged; the consuming module SHALL own an `Inbox` whose `accept` returns `accepted` once per consumer and message identity and `duplicate` afterwards.
+### Requirement: Outbox ports
+Each module that writes messages SHALL declare its own `Outbox` port, structurally identical across modules, whose `append` stores a message with event metadata, subject, and a JSON object payload, and fails with `conflict` for a known event identity and with `invalid` for a payload JSON cannot carry unchanged.
+
+#### Scenario: Payload JSON cannot carry
+- **WHEN** a message whose payload holds `NaN`, `-0`, an array with holes, or a cycle is appended
+- **THEN** the append fails with `invalid` and nothing is stored
+
+### Requirement: Inbox port
+The consuming module SHALL own an `Inbox` whose `accept` returns `accepted` once per consumer and message identity and `duplicate` afterwards.
 
 #### Scenario: Repeated delivery
 - **WHEN** one consumer accepts the same message identity twice and another consumer accepts it once

@@ -139,8 +139,8 @@ export class PostgresTaskRepository implements TaskRepository {
   }
 }
 
-// One held reservation per attempt is checked first, so a transaction gets a
-// `conflict` result; the partial unique index guards concurrent writers.
+// One held reservation per attempt is checked before writing, so a transaction
+// gets a `conflict` result; the partial unique index guards concurrent writers.
 export class PostgresAssignmentRepository implements AssignmentRepository {
   readonly #session: Session;
   readonly #store: AggregateStore<Assignment>;
@@ -169,12 +169,9 @@ export class PostgresAssignmentRepository implements AssignmentRepository {
     return this.#store.add(assignment, { uniqueConflict: () => this.#heldReservationConflict(assignment) });
   }
 
-  async replace(assignment: Assignment, expectedGeneration: Generation): Promise<Result<void>> {
-    if (assignment.reservation.state === 'held') {
-      const held = await this.#heldReservationConflict(assignment);
-      if (!held.ok) return held;
-    }
-    return this.#store.replace(assignment, expectedGeneration);
+  replace(assignment: Assignment, expectedGeneration: Generation): Promise<Result<void>> {
+    const held = assignment.reservation.state === 'held' ? () => this.#heldReservationConflict(assignment) : undefined;
+    return this.#store.replace(assignment, expectedGeneration, held);
   }
 
   async #heldReservationConflict(assignment: Assignment): Promise<Result<void>> {
@@ -207,15 +204,15 @@ export class PostgresOutbox implements Outbox {
     const { eventId, eventType } = message.metadata;
     if (!isJsonObject(message.payload)) return err(failure('invalid', `outbox message ${eventId} has a payload that is not JSON`, { event: eventId }));
     const inserted = await this.#session.query(
-      'INSERT INTO outbox (event_id, event_type, subject, message) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING',
-      [eventId, eventType, message.subject, encodeRecord(message)],
+      'INSERT INTO outbox (event_id, event_type, message) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+      [eventId, eventType, encodeRecord(message)],
     );
     if (inserted.rowCount === 0) return err(failure('conflict', `outbox message ${eventId} already exists`, { event: eventId }));
     this.#appended = true;
     return ok(undefined);
   }
 
-  // The oldest messages not yet published, in commit order.
+  // The oldest messages not yet published, in append order.
   async unpublished(limit: number): Promise<readonly OutboxMessage[]> {
     const { rows } = await this.#session.query<{ message: unknown }>(
       'SELECT message FROM outbox WHERE published_at IS NULL ORDER BY position LIMIT $1',

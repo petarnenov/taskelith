@@ -66,16 +66,21 @@ export class AggregateStore<Stored> {
     return conflict.ok ? err(failure('conflict', `${this.#mapping.entity} ${id} conflicts with a stored record`)) : conflict;
   }
 
-  // Checks the stored generation first, as the in-memory adapters do, and
-  // only then that the replacement carries the next one.
-  async replace(record: Stored, expectedGeneration: Generation): Promise<Result<void>> {
+  // Checks, in the in-memory adapters' order, existence, the stored and the
+  // next generation, then `beforeWrite`, and writes only at that generation.
+  async replace(record: Stored, expectedGeneration: Generation, beforeWrite?: () => Promise<Result<void>>): Promise<Result<void>> {
     const id = this.#mapping.idOf(record);
-    const next = checkNextGeneration(`${this.#mapping.entity} ${id}`, this.#mapping.generationOf(record), expectedGeneration);
-    if (next.ok && await this.#update(record, expectedGeneration)) return ok(undefined);
+    const entity = `${this.#mapping.entity} ${id}`;
     const { rows } = await this.#session.query<{ generation: string }>(`SELECT generation FROM ${this.#mapping.table} WHERE id = $1`, [id]);
     if (rows[0] === undefined) return this.#notFound(id);
-    const stored = checkGeneration(`${this.#mapping.entity} ${id}`, Number(rows[0].generation) as Generation, expectedGeneration);
-    return stored.ok ? next : stored;
+    const stored = checkGeneration(entity, Number(rows[0].generation) as Generation, expectedGeneration);
+    if (!stored.ok) return stored;
+    const next = checkNextGeneration(entity, this.#mapping.generationOf(record), expectedGeneration);
+    if (!next.ok) return next;
+    const allowed = (await beforeWrite?.()) ?? ok(undefined);
+    if (!allowed.ok) return allowed;
+    if (await this.#update(record, expectedGeneration)) return ok(undefined);
+    return err(failure('conflict', `${entity} changed while it was being replaced`, { [this.#mapping.entity]: id }));
   }
 
   async #update(record: Stored, expectedGeneration: Generation): Promise<boolean> {

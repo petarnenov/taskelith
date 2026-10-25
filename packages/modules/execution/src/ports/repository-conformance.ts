@@ -4,7 +4,7 @@ import {
   admitImplementationTask,
   beginWorkflowProgress,
   expectCode,
-  expectOneWinner,
+  expectRaceWinnerStored,
   expectRead,
   expectSame,
   expectSuccess,
@@ -153,9 +153,9 @@ export const TASK_REPOSITORY_CONFORMANCE: readonly ConformanceCase<TaskRepositor
       expectCode(problems, 'unchanged generation', await repository.replace(attempted, attempted.generation), 'invalid');
       expectRead(problems, 'after rejected writes', await repository.get(opened.id), attempted);
       expectCode(problems, 'replace unknown', await repository.replace(advanced(openedTask('task-x')), opened.generation), 'not-found');
-      const next = advanced(attempted);
-      expectOneWinner(problems, 'concurrent replace', await Promise.all([1, 2].map(() => repository.replace(next, attempted.generation))));
-      expectRead(problems, 'after the race', await repository.get(opened.id), next);
+      const candidates = [AT, LATER].map((changedAt) => ({ ...advanced(attempted), changedAt }));
+      await expectRaceWinnerStored(problems, 'concurrent replace', candidates,
+        (candidate) => repository.replace(candidate, attempted.generation), () => repository.get(opened.id));
       return problems;
     },
   },

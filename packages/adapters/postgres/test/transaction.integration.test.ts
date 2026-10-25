@@ -4,6 +4,7 @@ import { err, failure, parseIdentifier } from '@taskelith/kernel';
 import { CrashPoints, SimulatedCrash } from '@taskelith/testing';
 import { PostgresDatabase, PostgresOutboxRelay, SERIALIZATION_ATTEMPTS, type PostgresDatabaseOptions } from '@taskelith/postgres';
 import { endAssignment } from '@taskelith/scheduling';
+import { nextGeneration } from '@taskelith/sdlc';
 import { AT, assignment, command, value } from './fixtures.ts';
 import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
 
@@ -137,14 +138,19 @@ test('work that catches a failed statement and returns Ok commits nothing and is
   assert.deepEqual(await counts(), { assignments: 1, outbox: 0, inbox: 0 });
 });
 
-test('a unique constraint is a conflict, and a defect in the work is rethrown', async () => {
+test('a second held reservation is a conflict inside the transaction, and a defect is rethrown', async () => {
   const database = open();
   assert.ok((await database.transaction((tx) => tx.assignments.add(assignment('assignment-1')))).ok);
   const offered = assignment('assignment-2');
   const released = value(endAssignment(offered, offered.generation, 'cancelled', { granted: false, nonTerminal: false }, AT));
   assert.ok((await database.transaction((tx) => tx.assignments.add(released))).ok);
-  const reheld = await database.transaction((tx) => tx.assignments.replace(offered, released.generation));
-  assert.equal(!reheld.ok && reheld.error.code, 'conflict');
+  const reheldRecord = { ...released, generation: nextGeneration(released.generation), reservation: offered.reservation };
+  const reheld = await database.transaction(async (tx) => {
+    const replaced = await tx.assignments.replace(reheldRecord, released.generation);
+    assert.equal(!replaced.ok && replaced.error.code, 'conflict');
+    return tx.assignments.get(released.id);
+  });
+  assert.deepEqual(reheld, { ok: true, value: released });
   await assert.rejects(database.transaction(async (tx) => {
     await tx.assignments.add(assignment('assignment-3', 'attempt-3'));
     throw new RangeError('defect');

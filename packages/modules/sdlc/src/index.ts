@@ -168,6 +168,7 @@ export type { AdmissionRepository } from './ports/admission-repository.js';
 export {
   expectCode,
   expectOneWinner,
+  expectRaceWinnerStored,
   expectRead,
   expectSame,
   expectSuccess,

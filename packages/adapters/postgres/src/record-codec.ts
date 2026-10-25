@@ -1,19 +1,19 @@
 import { parseLaunchParameters, type Task } from '@taskelith/execution';
 
-// Records are stored as JSON and read back as frozen plain data, the form
-// the domain creates. Rows are written only by this adapter.
+// Records are stored as JSON text, which escapes every string, and read back
+// as frozen plain data, the form the domain creates.
 export function encodeRecord(record: object): string {
   return JSON.stringify(record);
 }
 
-export function decodeRecord<Record>(json: unknown): Record {
-  return deepFreeze(json) as Record;
+export function decodeRecord<Record>(text: unknown): Record {
+  return deepFreeze(JSON.parse(text as string)) as Record;
 }
 
 // Launch parameters are the one class in the records: a grant must carry a
 // parsed instance, which JSON cannot hold.
-export function decodeTask(json: unknown): Task {
-  const task = json as { attempts: { executions: { grants: { parameters: { ttlMilliseconds: number; skewMilliseconds: number } }[] }[] }[] };
+export function decodeTask(text: unknown): Task {
+  const task = JSON.parse(text as string) as { attempts: { executions: { grants: { parameters: { ttlMilliseconds: number; skewMilliseconds: number } }[] }[] }[] };
   for (const attempt of task.attempts) {
     for (const execution of attempt.executions) {
       for (const grant of execution.grants) {
@@ -23,7 +23,7 @@ export function decodeTask(json: unknown): Task {
       }
     }
   }
-  return decodeRecord<Task>(task);
+  return deepFreeze(task) as Task;
 }
 
 function deepFreeze(value: unknown): unknown {

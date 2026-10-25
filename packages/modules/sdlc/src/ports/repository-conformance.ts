@@ -11,7 +11,7 @@ import { parseWorkflowDefinition } from '../domain/workflow-definition.js';
 import { beginWorkflowRun, type WorkflowRun } from '../domain/workflow-run.js';
 import { parseWorkflowRunBinding } from '../domain/workflow-run-binding.js';
 import type { AdmissionRepository } from './admission-repository.js';
-import { expectCode, expectOneWinner, expectRead, expectSame, expectSuccess, type ConformanceCase } from './conformance-case.js';
+import { expectCode, expectRaceWinnerStored, expectRead, expectSame, expectSuccess, type ConformanceCase } from './conformance-case.js';
 import type { GateRepository } from './gate-repository.js';
 import type { Outbox, OutboxMessage } from './outbox.js';
 import type { WorkflowRunRepository } from './workflow-run-repository.js';
@@ -37,7 +37,7 @@ const DEFINITION = must(parseWorkflowDefinition({
   ],
 }));
 
-const BINDING = must(parseWorkflowRunBinding({
+const plainBinding = {
   pluginId: 'conformance-plugin',
   pluginVersion: '1.0.0',
   upstreamToolVersion: '2.0.0',
@@ -46,7 +46,8 @@ const BINDING = must(parseWorkflowRunBinding({
   workflowDigest: `sha256:${'ee'.repeat(32)}`,
   configurationRevision: 'config-1',
   policyRevision: 'policy-1',
-}));
+};
+const BINDING = must(parseWorkflowRunBinding(plainBinding));
 
 function run(id: string): WorkflowRun {
   return must(beginWorkflowRun({ id, binding: BINDING, definition: DEFINITION }, AT));
@@ -85,6 +86,13 @@ function advancedRun(stored: WorkflowRun): WorkflowRun {
   return { ...stored, progress: { ...stored.progress, generation: nextGeneration(stored.progress.generation) } };
 }
 
+const MOMENTS: readonly Instant[] = ['2026-10-25T09:10:00.000Z', '2026-10-25T09:11:00.000Z'].map((text) => must(parseInstant(text)));
+
+// Two records at one generation that a store must tell apart.
+function rivals<Stored extends { readonly changedAt: Instant }>(record: Stored): readonly Stored[] {
+  return MOMENTS.map((changedAt) => ({ ...record, changedAt }));
+}
+
 // Beyond 32 bits, so a store must keep the domain's safe-integer range.
 const LARGE_GENERATION = must(parseGeneration(2 ** 31 + 7));
 
@@ -107,6 +115,10 @@ export const ADMISSION_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Admissio
       const large = { ...admission('admission-2', []), generation: LARGE_GENERATION };
       expectSuccess(problems, 'add large generation', await repository.add(large));
       expectRead(problems, 'get large generation', await repository.get(large.id), large);
+      const unpaired = must(parseArtifactRevision({ artifactId: 'spec', digest: `sha256:${'dd'.repeat(32)}`, nativeReference: 'spec\uD800.md' }));
+      const odd = admission('admission-3', [unpaired]);
+      expectSuccess(problems, 'add unpaired surrogate', await repository.add(odd));
+      expectRead(problems, 'get unpaired surrogate', await repository.get(odd.id), odd);
       return problems;
     },
   },
@@ -143,9 +155,8 @@ export const ADMISSION_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Admissio
       const problems: string[] = [];
       const admitted = admission('admission-1', []);
       expectSuccess(problems, 'add', await repository.add(admitted));
-      const used = dispatched(admitted);
-      expectOneWinner(problems, 'concurrent replace', await Promise.all([1, 2].map(() => repository.replace(used, admitted.generation))));
-      expectRead(problems, 'after the race', await repository.get(admitted.id), used);
+      await expectRaceWinnerStored(problems, 'concurrent replace', rivals(dispatched(admitted)),
+        (candidate) => repository.replace(candidate, admitted.generation), () => repository.get(admitted.id));
       return problems;
     },
   },
@@ -190,9 +201,12 @@ export const WORKFLOW_RUN_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Workf
       expectCode(problems, 'unchanged generation', await repository.replace(moved, progress.generation), 'invalid');
       expectRead(problems, 'after rejected writes', await repository.get(started.id), moved);
       expectCode(problems, 'replace unknown', await repository.replace(advancedRun(run('run-x')), started.progress.generation), 'not-found');
-      const next = advancedRun(moved);
-      expectOneWinner(problems, 'concurrent replace', await Promise.all([1, 2].map(() => repository.replace(next, progress.generation))));
-      expectRead(problems, 'after the race', await repository.get(started.id), next);
+      const candidates = ['policy-2', 'policy-3'].map((policy) => {
+        const next = advancedRun(moved);
+        return { ...next, binding: { ...next.binding, policyRevision: must(parseWorkflowRunBinding({ ...plainBinding, policyRevision: policy })).policyRevision } };
+      });
+      await expectRaceWinnerStored(problems, 'concurrent replace', candidates,
+        (candidate) => repository.replace(candidate, progress.generation), () => repository.get(started.id));
       return problems;
     },
   },
@@ -228,9 +242,8 @@ export const GATE_REPOSITORY_CONFORMANCE: readonly ConformanceCase<GateRepositor
       expectCode(problems, 'unchanged generation', await repository.replace(decided, decided.generation), 'invalid');
       expectCode(problems, 'replace unknown', await repository.replace(advanced(gate('gate-x')), pending.generation), 'not-found');
       expectSame(problems, 'listed', await repository.listByRun(run('run-1').id), [decided]);
-      const next = advanced(decided);
-      expectOneWinner(problems, 'concurrent replace', await Promise.all([1, 2].map(() => repository.replace(next, decided.generation))));
-      expectRead(problems, 'after the race', await repository.get(decided.id), next);
+      await expectRaceWinnerStored(problems, 'concurrent replace', rivals(advanced(decided)),
+        (candidate) => repository.replace(candidate, decided.generation), () => repository.get(decided.id));
       return problems;
     },
   },
@@ -248,7 +261,8 @@ export const OUTBOX_CONFORMANCE: readonly ConformanceCase<OutboxConformanceTarge
     name: 'messages are stored under their event identity, once, in append order',
     async check({ outbox, stored }: OutboxConformanceTarget) {
       const problems: string[] = [];
-      const [first, second] = [message('event-1'), message('event-2')];
+      const [first, plain] = [message('event-1'), message('event-2')];
+      const second = { ...plain, payload: { text: 'nul \u0000 and unpaired \uD800', zero: 0 } };
       expectSuccess(problems, 'first append', await outbox.append(first));
       expectSuccess(problems, 'second append', await outbox.append(second));
       expectCode(problems, 'repeated append', await outbox.append(first), 'conflict');
@@ -261,7 +275,12 @@ export const OUTBOX_CONFORMANCE: readonly ConformanceCase<OutboxConformanceTarge
     async check({ outbox, stored }: OutboxConformanceTarget) {
       const problems: string[] = [];
       const base = message('event-1');
-      const payloads: unknown[] = [{ count: Number.NaN }, { missing: undefined }, { at: new Date(0) }, { list: [Number.POSITIVE_INFINITY] }];
+      const cycle: Record<string, unknown> = {};
+      cycle.self = cycle;
+      const payloads: unknown[] = [
+        { count: Number.NaN }, { missing: undefined }, { at: new Date(0) }, { list: [Number.POSITIVE_INFINITY] },
+        { zero: -0 }, { list: new Array(1) }, cycle,
+      ];
       for (const [index, payload] of payloads.entries()) {
         const invalid = { ...base, payload } as unknown as OutboxMessage;
         expectCode(problems, `payload ${index + 1}`, await outbox.append(invalid), 'invalid');

@@ -16,7 +16,7 @@ The adapter SHALL apply SQL migration files through node-pg-migrate, one transac
 - **THEN** the run fails with `precondition-failed` naming that migration, and a pending migration is not applied
 
 ### Requirement: Conformant repositories
-The adapter SHALL implement every repository, outbox, and inbox port of the SDLC, Execution, and Scheduling modules over one table per aggregate, and its committing facades SHALL pass every shared conformance suite against PostgreSQL 18.6.
+The adapter SHALL implement every repository, outbox, and inbox port of the SDLC, Execution, and Scheduling modules over one table per aggregate that keeps the record as JSON text, so that every string the domain accepts round-trips, and its committing facades SHALL pass every shared conformance suite against PostgreSQL 18.6.
 
 #### Scenario: Conformance against PostgreSQL
 - **WHEN** the integration tests run each suite against a migrated database

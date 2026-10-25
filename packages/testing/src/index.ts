@@ -13,4 +13,4 @@ export { SEED_VARIABLE, SeededRandom, rerunHint, seedFromEnvironment } from './s
 export { SimulatedHost, type MonotonicClock, type WallClock } from './simulated-host.js';
 export { Toxiproxy, ToxiproxyProxy } from './toxiproxy.js';
 export { SERVICES_REMEDY, integrationEndpoint } from './integration-endpoint.js';
-export { acquireProcessLock, type ReleaseLock } from './process-lock.js';
+export { acquireProcessLock, lockPort, type ReleaseLock } from './process-lock.js';

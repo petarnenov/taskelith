@@ -3,6 +3,7 @@ import type { AssignmentExecutions } from '@taskelith/execution';
 import {
   expectCode,
   expectOneWinner,
+  expectRaceWinnerStored,
   expectRead,
   expectSuccess,
   nextGeneration,
@@ -79,9 +80,9 @@ export const ASSIGNMENT_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Assignm
       expectCode(problems, 'unchanged generation', await repository.replace(acceptance, acceptance.generation), 'invalid');
       expectRead(problems, 'after rejected writes', await repository.get(first.id), acceptance);
       expectCode(problems, 'replace unknown', await repository.replace(advanced(offered('assignment-x', 'attempt-x')), first.generation), 'not-found');
-      const next = advanced(acceptance);
-      expectOneWinner(problems, 'concurrent replace', await Promise.all([1, 2].map(() => repository.replace(next, acceptance.generation))));
-      expectRead(problems, 'after the race', await repository.get(first.id), next);
+      const candidates = [AT, LATER].map((changedAt) => ({ ...advanced(acceptance), changedAt }));
+      await expectRaceWinnerStored(problems, 'concurrent replace', candidates,
+        (candidate) => repository.replace(candidate, acceptance.generation), () => repository.get(first.id));
       return problems;
     },
   },
@@ -98,9 +99,16 @@ export const ASSIGNMENT_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Assignm
       expectSuccess(problems, 'after release', await repository.add(second));
       const reheld = { ...advanced(ended(first)), reservation: first.reservation };
       expectCode(problems, 'replace holding again', await repository.replace(reheld, ended(first).generation), 'conflict');
+      expectCode(problems, 'stale and holding again', await repository.replace(reheld, first.generation), 'conflict');
+      expectCode(problems, 'unchanged and holding again', await repository.replace({ ...reheld, generation: ended(first).generation }, ended(first).generation), 'invalid');
+      expectCode(problems, 'unknown and holding', await repository.replace(advanced(offered('assignment-y', 'attempt-1')), first.generation), 'not-found');
       expectRead(problems, 'released kept', await repository.get(first.id), ended(first));
       const racers = [offered('assignment-4', 'attempt-3'), offered('assignment-5', 'attempt-3')];
-      expectOneWinner(problems, 'concurrent holders', await Promise.all(racers.map((assignment) => repository.add(assignment))));
+      const winner = expectOneWinner(problems, 'concurrent holders', await Promise.all(racers.map((assignment) => repository.add(assignment))));
+      if (winner !== undefined) {
+        expectRead(problems, 'winning holder', await repository.get(racers[winner]!.id), racers[winner]);
+        expectCode(problems, 'losing holder', await repository.get(racers[1 - winner]!.id), 'not-found');
+      }
       return problems;
     },
   },

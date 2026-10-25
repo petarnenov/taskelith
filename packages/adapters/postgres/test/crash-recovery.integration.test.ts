@@ -12,8 +12,13 @@ async function placeWithCrashAt(point: string): Promise<{ signal: string | null;
   const child = await ScenarioProcess.start(process.execPath, ['--experimental-strip-types', PLACEMENT, url.href], {
     env: { ...process.env, ...crashEnvironment(point) },
   });
-  const timer = setTimeout(() => child.kill(), 30_000);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    child.kill();
+  }, 30_000);
   const exit = await child.exited.finally(() => clearTimeout(timer));
+  assert.equal(timedOut, false, `the placement process did not end within 30 s (crash point ${point})`);
   assert.equal(child.stderr, '', `the placement process wrote to stderr (exit ${exit.code})`);
   return { signal: exit.signal, stdout: child.stdout };
 }
