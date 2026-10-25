@@ -217,13 +217,25 @@ test('a pending migration older than an applied one stops the run before anythin
   assert.deepEqual(await query(url, "SELECT 1 FROM information_schema.tables WHERE table_name IN ('older', 'note')"), []);
 });
 
-test('a pending migration is ordered by its numeric prefix, not by its name', async () => {
-  const url = databaseUrl(SERVER_URL, await createTestDatabase());
-  const directory = await copiedMigrations();
-  assert.equal((await migrate(url, directory)).ok, true);
-  await writeFile(join(directory, '9_older.sql'), '-- Up Migration\nCREATE TABLE older (id int);\n');
-  const refused = await migrate(url, directory);
-  assert.equal(!refused.ok && refused.error.details.migrations, '9_older');
+test('a pending migration is ordered as node-pg-migrate runs the files', async (t) => {
+  const cases = [
+    { applied: '1_step10', pending: ['1_step2'] },
+    { applied: '1_a', pending: ['1_a-b'] },
+    { applied: '1792929600000_applied', pending: ['20200101000000000_older'] },
+    { applied: '12_applied', pending: ['10_older', '9_older'], first: '9_older' },
+  ];
+  for (const { applied, pending, first = pending[0] } of cases) {
+    await t.test(`${pending.join(', ')} after ${applied}`, async () => {
+      const url = databaseUrl(SERVER_URL, await createTestDatabase());
+      const directory = await mkdtemp(join(tmpdir(), 'taskelith-migrations-'));
+      t.after(() => rm(directory, { recursive: true, force: true }));
+      await writeFile(join(directory, `${applied}.sql`), '-- Up Migration\nSELECT 1;\n');
+      assert.equal((await migrate(url, directory)).ok, true);
+      for (const name of pending) await writeFile(join(directory, `${name}.sql`), '-- Up Migration\nSELECT 1;\n');
+      const refused = await migrate(url, directory);
+      assert.equal(!refused.ok && refused.error.details.migrations, first);
+    });
+  }
 });
 
 test('an applied migration without its file stops the run and is named', async () => {
