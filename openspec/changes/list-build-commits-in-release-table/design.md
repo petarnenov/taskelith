@@ -12,7 +12,7 @@
 
 ## Decisions
 
-- **Evidence.** The default rules release only breaking changes (major), reverts (patch), and the types `feat` (minor), `fix` (patch), and `perf` (patch), plus rules for other conventions' fields (emoji, tags, the `component` field of the Express convention) that the `conventionalcommits` parser does not produce; `load-release-rules.js` loads only configured rules, never preset rules. A `build:` or `ci:` commit without a breaking change therefore matches no rule and publishes no release.
+- **Evidence.** The default rules release breaking changes (major), reverts (patch), and the types `feat` (minor), `fix` (patch), and `perf` (patch), and the upper-case types `FEAT` and `FIX` of the JSHint convention; the remaining rules match the `emoji`, `tag`, and `component` fields of other conventions, which the `conventionalcommits` parser does not produce; `load-release-rules.js` loads only configured rules, never preset rules. A `build:` or `ci:` commit without a breaking change therefore matches no rule and publishes no release.
 - **Requirement.** The matching requirement, "Automatic semantic versions", keeps its full text and its first scenario; only the non-release scenario names the two added types.
 
 ## Risks / Trade-offs
