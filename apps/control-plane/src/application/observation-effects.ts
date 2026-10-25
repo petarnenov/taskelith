@@ -4,10 +4,12 @@ import {
   endAttempt,
   openAttempt,
   parseExitStatus,
+  recordExecutionEvidence,
   recordExit,
   recordNotStarted,
   type AssignmentId,
   type AttemptId,
+  type ExecutionEvidenceKind,
   type ExecutionId,
   type ExecutionReport,
   type ObservationResult,
@@ -27,11 +29,12 @@ import {
 import { nextAttemptIdOf } from './attempt-identities.js';
 import type { ControlPlaneTransaction } from './control-plane-store.js';
 import type { Observation } from './observation.js';
+import type { PendingLog } from './pending-log.js';
 import { closeDelegationOf } from './task-ending.js';
 
 // What each consumed observation type changes, inside the transaction that
 // records it; a domain refusal makes the observation `rejected`.
-export type ObservationEffect = (tx: ControlPlaneTransaction, observation: Observation, at: Instant) => Promise<Result<void>>;
+export type ObservationEffect = (tx: ControlPlaneTransaction, observation: Observation, at: Instant, log: PendingLog) => Promise<Result<void>>;
 
 type Payload<Name extends keyof MessageSchemas> = MessageSchemas[Name];
 
@@ -50,7 +53,8 @@ async function acceptance(tx: ControlPlaneTransaction, observation: Observation,
   const current = await currentAssignment(tx, observation, assignmentId as AssignmentId);
   if (!current.ok) return current;
   const assignment = current.value;
-  const accepted = acceptAssignment(assignment, assignment.generation, observation.position.workerId, at);
+  const { workerId, journalId, sequence } = observation.position;
+  const accepted = acceptAssignment(assignment, assignment.generation, workerId, at, { journalId, sequence });
   return accepted.ok ? tx.assignments.replace(accepted.value, assignment.generation) : accepted;
 }
 
@@ -128,7 +132,37 @@ function pressureChange(tx: ControlPlaneTransaction, observation: Observation, a
   return causes.length === 0 ? tx.reports.leavePressure(workerId, sequence) : tx.reports.enterPressure(workerId, sequence, at);
 }
 
+// 21c decisions 14 and 15: the evidence beside the execution's state; the
+// domain refuses it for a terminal execution.
+function executionEvidence(kind: ExecutionEvidenceKind): ObservationEffect {
+  return async (tx, observation, at) => {
+    const { executionId } = observation.payload as { readonly executionId: string };
+    const loaded = await attemptTask(tx, observation);
+    if (!loaded.ok) return loaded;
+    const task = loaded.value;
+    if (!holdsExecution(task, observation.attemptId!, executionId as ExecutionId)) {
+      return err(failure('not-found', `attempt ${observation.attemptId} has no execution ${executionId}`, { execution: executionId }));
+    }
+    const recorded = recordExecutionEvidence(task, { ...executionReport(observation, executionId), kind }, at);
+    return recorded.ok ? tx.tasks.replace(recorded.value.task, task.generation) : recorded;
+  };
+}
+
+// 21c decision 13: no domain effect, and never current work.
+async function unrecordedProcess(_tx: ControlPlaneTransaction, observation: Observation, _at: Instant, log: PendingLog): Promise<Result<void>> {
+  const { containment, processes } = observation.payload as Payload<'UnrecordedProcessPayload'>;
+  const { workerId, observationId } = observation.position;
+  log.warn({ workerId, observationId, correlationId: observation.correlationId }, 'execution.unrecorded-process', {
+    containment, processCount: processes.length,
+  });
+  return ok(undefined);
+}
+
 export const OBSERVATION_EFFECTS: Readonly<Record<string, ObservationEffect>> = Object.freeze({
+  'execution.uncertain': executionEvidence('uncertain'),
+  'execution.termination-unproven': executionEvidence('termination-unproven'),
+  'execution.cancellation.not-applied': executionEvidence('cancellation-not-applied'),
+  'execution.unrecorded-process': unrecordedProcess,
   'execution.assignment.accepted': acceptance,
   'execution.assignment.refused': refusal,
   'execution.command.rejected': commandRejection,

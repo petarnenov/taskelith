@@ -37,9 +37,10 @@ export const OBSERVATION_SCHEMAS: Readonly<Record<string, SchemaName>> = Object.
 });
 
 export const INVENTORY_REPORTED = 'worker.inventory.reported';
+export const WORKER_HEARTBEAT = 'worker.heartbeat';
 
 // A received message that passed its schema. `identity` is the body field the
-// receiver deduplicates by; confirmations and inventory requests have none.
+// receiver deduplicates by; confirmations, requests, heartbeats have none.
 export interface WireMessage {
   readonly type: string;
   readonly identity: string | undefined;
@@ -81,6 +82,11 @@ export function readObservationSubjectMessage(data: Uint8Array): Result<WireMess
   const schema = type === undefined ? undefined : OBSERVATION_SCHEMAS[type];
   if (schema === undefined) return err(`unknown observation type ${String(type)}`);
   return validated(body.value, schema, type!, String(metadata!['observationId']));
+}
+
+export function readHeartbeatSubjectMessage(data: Uint8Array): Result<WireMessage, Malformed> {
+  const body = parseObject(data);
+  return body.ok ? validated(body.value, 'WorkerHeartbeat', WORKER_HEARTBEAT, undefined) : body;
 }
 
 function noticeType(body: Readonly<Record<string, unknown>>): string | undefined {

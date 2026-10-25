@@ -39,6 +39,12 @@ export interface RotatedCredentials {
   readonly revocationsPublished: boolean;
 }
 
+// `commandConsumerRemoved` false: the consumer is left, and a start retries
+// while the worker is among the latest revoked (operational targets).
+export interface WorkerRevocation {
+  readonly commandConsumerRemoved: boolean;
+}
+
 export interface EnrollmentServiceDependencies {
   readonly installation: InstallationIdentity;
   readonly serverProtocolVersions: ProtocolWindow;
@@ -123,11 +129,13 @@ export class EnrollmentService {
 
   // Denies every credential of the worker at once; with item 17's registry
   // its executions holding a live grant also become uncertain, never dead.
-  async revoke(workerId: WorkerId): Promise<Result<void>> {
+  async revoke(workerId: WorkerId): Promise<Result<WorkerRevocation>> {
     const revoked = await this.#deps.registry.revoke(workerId, this.#deps.clock.now());
     if (!revoked.ok) return revoked;
+    // After the commit, which decides; a consumer left over does no harm.
+    const removed = await this.#deps.commandConsumers.remove(workerId);
     const published = await this.publishRevocations();
-    return published.ok ? ok(undefined) : published;
+    return published.ok ? ok(Object.freeze({ commandConsumerRemoved: removed.ok })) : published;
   }
 
   // Ends the grace windows that have passed; the control plane runs it

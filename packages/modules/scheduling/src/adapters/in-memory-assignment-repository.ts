@@ -1,5 +1,5 @@
 import { err, failure, ok, type EventId, type Result } from '@taskelith/kernel';
-import type { AssignmentId, AttemptId } from '@taskelith/execution';
+import type { AssignmentId, AttemptId, WorkerId } from '@taskelith/execution';
 import { checkGeneration, checkNextGeneration, type Generation } from '@taskelith/sdlc';
 import type { Assignment } from '../domain/assignment.js';
 import type { AssignmentRepository } from '../ports/assignment-repository.js';
@@ -50,6 +50,12 @@ export class InMemoryAssignmentRepository implements AssignmentRepository {
 
   async listByAttempt(attemptId: AttemptId): Promise<readonly Assignment[]> {
     return this.all().filter((assignment) => assignment.attemptId === attemptId).sort((left, right) => byCodeUnits(left.id, right.id));
+  }
+
+  async listUnfinishedByWorker(workerId: WorkerId): Promise<readonly Assignment[]> {
+    return this.all()
+      .filter((assignment) => assignment.workerId === workerId && assignment.state !== 'ended')
+      .sort((left, right) => byCodeUnits(left.id, right.id));
   }
 
   async byOfferCommand(commandId: EventId): Promise<Result<Assignment>> {

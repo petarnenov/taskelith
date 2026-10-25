@@ -6,6 +6,14 @@ export { StatusAnswer, createApiServer, type ApiHandlers, type ApiRequest, type 
 export { ControlPlaneApi, type ApiServices } from './api/control-plane-api.js';
 export { DelegationService, type DelegationAnswer, type DelegationRequestBody } from './application/delegation-service.js';
 export { EvidenceService, type EvidenceDownload, type Publication } from './application/evidence-service.js';
+export { HEARTBEAT_QUEUE, HeartbeatService, type HeartbeatMessage } from './application/heartbeat-service.js';
+export { LOST_CONTACT_BATCH, LostContactCheck, type LostContactCheckOptions } from './application/lost-contact-check.js';
+export {
+  InventoryService,
+  type InventoryOutcome,
+  type InventoryRequestSummary,
+  type InventoryServiceOptions,
+} from './application/inventory-service.js';
 export { OBSERVATION_CONSUMER, ObservationService, type ObservationOutcome, type ObservationServiceOptions } from './application/observation-service.js';
 export type { ObservationMessage } from './application/observation.js';
 export { PLACEMENT_BATCH, PlacementService, type PlacementPass } from './application/placement-service.js';
@@ -26,7 +34,8 @@ export {
   type ControlPlaneSettings,
   type RunningControlPlane,
 } from './composition/control-plane.js';
-export { repairCommandConsumers } from './composition/command-consumer-repair.js';
+export { repairCommandConsumers, REVOKED_CONSUMER_REMOVALS_PER_START } from './composition/command-consumer-repair.js';
+export { requestStartInventories } from './composition/start-inventory-requests.js';
 export { InstallationPublicationFence } from './composition/installation-publication-fence.js';
 export { LaunchRevokingFleetRegistry } from './composition/launch-revoking-fleet-registry.js';
 export { DEFAULT_API_HOST, DEFAULT_API_PORT, readControlPlaneSettings } from './composition/settings.js';

@@ -61,7 +61,7 @@ Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-
 
 - **`credentials.controlPlane`:** `tkwk_` followed by 256 random bits, the bearer secret of the `workerCredential` scheme. Only its hash is stored, per generation.
 - **`credentials.broker`:** the text of a NATS `.creds` file. It holds a user JWT signed by the installation account, and the user's NKey seed. The user may:
-  - publish `$JS.API.CONSUMER.INFO.<commands stream>.<workerId>`, `$JS.API.CONSUMER.MSG.NEXT.<commands stream>.<workerId>`, `$JS.ACK.<commands stream>.<workerId>.>`, and its own observation subject;
+  - publish `$JS.API.CONSUMER.INFO.<commands stream>.<workerId>`, `$JS.API.CONSUMER.MSG.NEXT.<commands stream>.<workerId>`, `$JS.ACK.<commands stream>.<workerId>.>`, its own observation subject, and its own heartbeat subject `taskelith.<installationId>.workers.<workerId>.heartbeats`;
   - subscribe to `_INBOX.<installationId>.<workerId>.>`.
 
   It has no other JetStream API, so a worker connects with `connectWorkerTransport`, and only the control plane manages streams. The broker URL and CA are configured on the worker.

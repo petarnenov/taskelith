@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import type { JetStreamClient } from '@nats-io/jetstream';
-import { InMemoryInbox } from '@taskelith/execution';
+import { JetStreamApiCodes, JetStreamApiError, type JetStreamClient, type JetStreamManager } from '@nats-io/jetstream';
+import type { NatsConnection } from '@nats-io/nats-core';
+import { InMemoryInbox, type WorkerId } from '@taskelith/execution';
 import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { SimulatedHost, value } from '@taskelith/testing';
@@ -11,20 +12,24 @@ import {
   COMMAND_SCHEMAS,
   COMMAND_SUBJECT_NOTICES,
   encodeJson,
+  HeartbeatReceiver,
   INVENTORY_REPORTED,
   JetStreamPublisher,
+  NatsCommandConsumers,
   OBSERVATION_SCHEMAS,
   OutboxPublisher,
   readCommandSubjectMessage,
+  readHeartbeatSubjectMessage,
   readObservationSubjectMessage,
   redriveMessageId,
   retryDelayMilliseconds,
   streamConfigs,
   TRANSPORT_LIMITS,
   TransportAddress,
+  WORKER_HEARTBEAT,
 } from '@taskelith/nats';
 import { FakeOutbox, outboxRow } from './fakes.ts';
-import { capacityDeclared, confirmation, inventoryPart, inventoryRequest, offer } from './messages.ts';
+import { capacityDeclared, confirmation, heartbeat, inventoryPart, inventoryRequest, offer } from './messages.ts';
 
 const ADDRESS = TransportAddress.of('install-1');
 assert.ok(ADDRESS.ok);
@@ -54,6 +59,12 @@ test('subjects follow the execution contract and refuse tokens NATS would parse'
   assert.equal(address.subjectOfOutboxRow('tasks.1.events').ok, false);
   assert.deepEqual(address.subjectOfOutboxRow('sdlc.events'), ok('taskelith.install-1.sdlc.events'));
   assert.equal(address.workerOfObservationSubject('taskelith.install-1.workers.worker-1.observations'), 'worker-1');
+  assert.deepEqual(address.heartbeatSubject('worker-1'), ok('taskelith.install-1.workers.worker-1.heartbeats'));
+  assert.equal(address.workerOfHeartbeatSubject('taskelith.install-1.workers.worker-1.heartbeats'), 'worker-1');
+  assert.equal(address.workerOfHeartbeatSubject('taskelith.install-1.workers.worker-1.observations'), undefined);
+  assert.equal(address.workerOfObservationSubject('taskelith.install-1.workers.worker-1.heartbeats'), undefined);
+  assert.equal(address.heartbeatSubject('a.b').ok, false);
+  assert.ok(value(address.workerPermissions('worker-1')).publish.includes('taskelith.install-1.workers.worker-1.heartbeats'));
   for (const subject of [
     'taskelith.install-1.workers.worker-1.commands', 'taskelith.other.workers.worker-1.observations',
     'taskelith.install-1.workers.a.b.observations', 'taskelith.install-1.workers..observations',
@@ -142,6 +153,17 @@ test('the schema tables cover every message of the execution channels', () => {
       .sort();
   assert.deepEqual(schemaOf('workerCommands'), [...Object.values(COMMAND_SCHEMAS), ...Object.values(COMMAND_SUBJECT_NOTICES)].sort());
   assert.deepEqual(schemaOf('workerObservations'), [...Object.values(OBSERVATION_SCHEMAS), 'InventoryReported'].sort());
+  assert.deepEqual(schemaOf('workerHeartbeats'), ['WorkerHeartbeat']);
+  assert.equal(document.channels.workerHeartbeats.address.replace('{installationId}', 'install-1').replace('{workerId}', 'worker-1'),
+    value(address.heartbeatSubject('worker-1')));
+});
+
+test('a heartbeat subject message passes only the heartbeat schema and has no identity', () => {
+  const read = readHeartbeatSubjectMessage(bytes(heartbeat('worker-1')));
+  assert.ok(read.ok);
+  assert.deepEqual([read.value.type, read.value.identity], [WORKER_HEARTBEAT, undefined]);
+  assert.match(rejection(readHeartbeatSubjectMessage(bytes({ ...heartbeat('worker-1'), slots: 2 }))), /^violates WorkerHeartbeat: /);
+  assert.equal(rejection(readHeartbeatSubjectMessage(new Uint8Array([0xff]))), 'not UTF-8 JSON');
 });
 
 test('a message is applied once per consumer by its body identity', async () => {
@@ -211,14 +233,15 @@ test('the outbox publisher keeps the order of a subject and lets other subjects 
   assert.equal((await publisher.publishPending()).ok, false);
 });
 
-test('a confirmation is published without a message identity, a command with its own', async () => {
+test('a confirmation and an inventory request are published without a message identity, a command with its own', async () => {
   const confirmation = { ...outboxRow('o1', 'workers.w1.commands'), metadata: { eventId: 'o1', eventType: 'execution.observations.confirmed' } };
-  const outbox = new FakeOutbox([outboxRow('e1', 'workers.w1.commands'), confirmation as never]);
+  const request = { ...outboxRow('i1', 'workers.w1.commands'), metadata: { eventId: 'i1', eventType: 'worker.inventory.requested' } };
+  const outbox = new FakeOutbox([outboxRow('e1', 'workers.w1.commands'), confirmation as never, request as never]);
   const sent: Array<[string, string | undefined]> = [];
   const publisher = new OutboxPublisher(outbox, new JetStreamPublisher(fakeBroker(new Set(), sent)), address);
-  assert.deepEqual(await publisher.publishPending(), ok({ published: 2, deferred: 0 }));
-  assert.deepEqual(sent.map(([, id]) => id), ['e1', undefined]);
-  assert.deepEqual(outbox.published, ['e1', 'o1']);
+  assert.deepEqual(await publisher.publishPending(), ok({ published: 3, deferred: 0 }));
+  assert.deepEqual(sent.map(([, id]) => id), ['e1', undefined, undefined]);
+  assert.deepEqual(outbox.published, ['e1', 'o1', 'i1']);
 });
 
 test('a failed publication is logged with its event identity and backoff', async () => {
@@ -253,4 +276,130 @@ test('a broker failure is unavailable and names the subject', async () => {
   assert.deepEqual(sent.error.details, { cause: 'timeout' });
   assert.deepEqual(await publisher.publish({ subject: 's', body: bytes({}), messageId: 'y' }), ok('stored'));
   assert.deepEqual(await publisher.publish({ subject: 's', body: bytes({}), messageId: 'y' }), ok('duplicate'));
+});
+
+function deletingConsumers(failure?: Error): { deleted: string[]; jsm: JetStreamManager } {
+  const deleted: string[] = [];
+  const consumers = {
+    delete: async (stream: string, name: string) => {
+      if (failure !== undefined) throw failure;
+      deleted.push(`${stream}/${name}`);
+      return true;
+    },
+  };
+  return { deleted, jsm: { consumers } as unknown as JetStreamManager };
+}
+
+const WORKER = 'worker-1' as WorkerId;
+const apiError = (code: number) => new JetStreamApiError({ code: 404, err_code: code, description: 'not found' });
+
+test('removing a worker command consumer deletes it, and one already gone counts as removed', async () => {
+  const removed = deletingConsumers();
+  value(await new NatsCommandConsumers(removed.jsm, ADDRESS.value).remove(WORKER));
+  assert.deepEqual(removed.deleted, [`${ADDRESS.value.streamName('commands')}/worker-1`]);
+  for (const code of [JetStreamApiCodes.ConsumerNotFound, JetStreamApiCodes.StreamNotFound]) {
+    value(await new NatsCommandConsumers(deletingConsumers(apiError(code)).jsm, ADDRESS.value).remove(WORKER));
+  }
+  const refused = await new NatsCommandConsumers(deletingConsumers(new Error('timeout')).jsm, ADDRESS.value).remove(WORKER);
+  assert.equal(refused.ok, false);
+});
+
+// A subscription whose test delivers each message and closes it.
+function heartbeatConnection() {
+  const subscribed: Array<{ subject: string; queue: string | undefined }> = [];
+  let callback: ((error: Error | null, message: { subject: string; data: Uint8Array }) => void) | undefined;
+  let closed = false;
+  let close!: (cause?: Error) => void;
+  const closing = new Promise<void | Error>((resolve) => { close = (cause) => { closed = true; resolve(cause); }; });
+  const connection = {
+    subscribe(subject: string, options: { queue?: string; callback: typeof callback }) {
+      subscribed.push({ subject, queue: options.queue });
+      callback = options.callback;
+      return { closed: closing, isClosed: () => closed, unsubscribe: () => close() };
+    },
+  };
+  return {
+    connection: connection as unknown as NatsConnection,
+    subscribed,
+    close,
+    deliver: (worker: string, body: unknown) => callback!(null, { subject: value(address.heartbeatSubject(worker)), data: bytes(body) }),
+    fail: (error: Error) => callback!(error, undefined as never),
+  };
+}
+
+function heartbeatLogger() {
+  const sink = new InMemoryLogSink();
+  return { sink, logger: new Logger(sink, new SimulatedHost(value(parseInstant('2026-10-25T10:00:00.000Z'))).wallClock) };
+}
+
+test('the heartbeat receiver handles valid heartbeats and logs what it drops or cannot record', async () => {
+  const { sink, logger } = heartbeatLogger();
+  const fake = heartbeatConnection();
+  const subject = (worker: string) => value(address.heartbeatSubject(worker));
+  const handled: string[] = [];
+  const controller = new AbortController();
+  const receiver = new HeartbeatReceiver({ connection: fake.connection, address, queue: 'control-plane' }, async (received) => {
+    handled.push(received.subject);
+    if (received.subject === subject('worker-3')) return err(failure('forbidden', 'not authenticated'));
+    if (received.subject !== subject('worker-4')) return ok(undefined);
+    controller.abort();
+    throw new Error('defect');
+  }, { logger });
+
+  const running = receiver.run(controller.signal);
+  fake.fail(new Error('permissions violation'));
+  fake.deliver('worker-1', heartbeat('worker-1'));
+  fake.deliver('worker-2', { ...heartbeat('worker-2'), sentAt: 'soon' });
+  fake.deliver('worker-3', heartbeat('worker-3'));
+  fake.deliver('worker-4', heartbeat('worker-4'));
+  await running;
+  assert.deepEqual(fake.subscribed, [{ subject: 'taskelith.install-1.workers.*.heartbeats', queue: 'control-plane' }]);
+  assert.deepEqual(handled, [subject('worker-1'), subject('worker-3'), subject('worker-4')]);
+  assert.deepEqual(sink.records.map((record) => [record.event, record.fields['reason'] ?? record.fields['cause']]), [
+    ['nats.heartbeat.subscription-failed', 'permissions violation'],
+    ['nats.heartbeat.dropped', sink.records[1]!.fields['reason']],
+    ['nats.heartbeat.unrecorded', 'forbidden: not authenticated'],
+    ['nats.heartbeat.unrecorded', 'defect'],
+  ]);
+  assert.match(String(sink.records[1]!.fields['reason']), /^violates WorkerHeartbeat: /);
+});
+
+test('the heartbeat receiver drops arrivals beyond its bound while a handler waits, and a stop handles no more', async () => {
+  const { sink, logger } = heartbeatLogger();
+  const fake = heartbeatConnection();
+  let release!: () => void;
+  const blocked = new Promise<void>((resolve) => { release = resolve; });
+  const handled: unknown[] = [];
+  const receiver = new HeartbeatReceiver({ connection: fake.connection, address, queue: 'q' }, async (received) => {
+    handled.push(received.body['workerId']);
+    await blocked;
+    return ok(undefined);
+  }, { logger, maxPending: 2 });
+  const controller = new AbortController();
+
+  const running = receiver.run(controller.signal);
+  fake.deliver('worker-1', heartbeat('worker-1'));
+  await new Promise((resolve) => setImmediate(resolve));
+  for (const worker of ['worker-2', 'worker-3', 'worker-4']) fake.deliver(worker, heartbeat(worker));
+  controller.abort();
+  release();
+  await running;
+  assert.deepEqual(handled, ['worker-1']);
+  assert.deepEqual(sink.records.map((record) => [record.event, record.fields['subject'], record.fields['reason']]), [
+    ['nats.heartbeat.dropped', value(address.heartbeatSubject('worker-4')), 'too many pending'],
+  ]);
+
+  const stopped = new AbortController();
+  stopped.abort();
+  await receiver.run(stopped.signal);
+  assert.equal(fake.subscribed.length, 1);
+});
+
+test('a heartbeat subscription that closes without a stop fails the receiver with its cause', async () => {
+  const fake = heartbeatConnection();
+  const running = new HeartbeatReceiver({ connection: fake.connection, address, queue: 'q' }, async () => ok(undefined))
+    .run(new AbortController().signal);
+  fake.fail(new Error('permissions violation'));
+  fake.close(new Error('permissions violation'));
+  await assert.rejects(running, /^Error: the heartbeat subscription closed: permissions violation$/);
 });

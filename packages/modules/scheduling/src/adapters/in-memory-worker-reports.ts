@@ -2,7 +2,7 @@ import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import type { Sequence, WorkerId } from '@taskelith/execution';
 import type { WorkerPlacementRecord } from '../ports/placement-workers.js';
 import type { CapacityDeclaration, WorkerReports } from '../ports/worker-reports.js';
-import type { InMemoryPlacementWorkers } from './in-memory-capacity.js';
+import { byCodeUnits, type InMemoryPlacementWorkers } from './in-memory-capacity.js';
 
 type ReportFence = 'capacity' | 'pressure' | 'refusal' | 'protocol';
 
@@ -33,6 +33,23 @@ export class InMemoryWorkerReports implements WorkerReports {
       const lastContactAt = last !== undefined && Date.parse(last) >= Date.parse(at) ? last : at;
       return { ...worker, reachable: true, lastContactAt };
     });
+  }
+
+  async markContactLost(before: Instant, limit: number): Promise<Result<readonly WorkerId[]>> {
+    const lost = this.#workers.records().filter((worker) => worker.reachable && contactedBefore(worker, before))
+      .sort(byLastContact).slice(0, limit);
+    for (const worker of lost) this.#workers.replace({ ...worker, reachable: false });
+    return ok(Object.freeze(lost.map((worker) => worker.workerId).sort(byCodeUnits)));
+  }
+
+  async recordJournalLoss(workerId: WorkerId): Promise<Result<void>> {
+    return this.#change(workerId, (worker) => ({ ...worker, reachable: false }));
+  }
+
+  async restartFences(workerId: WorkerId): Promise<Result<void>> {
+    if (this.#workers.current(workerId) === undefined) return err(failure('not-found', `worker ${workerId} has no record`, { worker: workerId }));
+    this.#sequences.delete(workerId);
+    return ok(undefined);
   }
 
   async declareCapacity(workerId: WorkerId, declaration: CapacityDeclaration, sequence: Sequence): Promise<Result<void>> {
@@ -79,4 +96,12 @@ export class InMemoryWorkerReports implements WorkerReports {
     this.#workers.replace(change(worker));
     return ok(undefined);
   }
+}
+
+function contactedBefore(worker: WorkerPlacementRecord, before: Instant): boolean {
+  return worker.lastContactAt !== undefined && Date.parse(worker.lastContactAt) < Date.parse(before);
+}
+
+function byLastContact(left: WorkerPlacementRecord, right: WorkerPlacementRecord): number {
+  return Date.parse(left.lastContactAt ?? '') - Date.parse(right.lastContactAt ?? '') || byCodeUnits(left.workerId, right.workerId);
 }

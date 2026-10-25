@@ -15,7 +15,6 @@ import {
   InMemoryAdmissionRepository,
   InMemoryCurrentRevisions,
   InMemoryGateRepository,
-  InMemoryOutbox,
   InMemoryRunCatalog,
   InMemoryWorkflowRunRepository,
   parseOwnershipGeneration,
@@ -71,10 +70,10 @@ async function fixture(): Promise<Fixture> {
   const lineage = new InMemoryTaskLineage();
   const transaction: ControlPlaneTransaction = {
     runs: new InMemoryWorkflowRunRepository(), catalog: new InMemoryRunCatalog(), admissions: new InMemoryAdmissionRepository(),
-    gates: new InMemoryGateRepository(), tasks: taskStore, lineage, outbox: new InMemoryOutbox(), ...inMemoryCapacity(taskStore, lineage),
+    gates: new InMemoryGateRepository(), tasks: taskStore, lineage, ...inMemoryCapacity(taskStore, lineage),
     evidence: new InMemoryEvidenceRecords(),
     producers: { heldGenerations: async (workerId, attemptId) => ok(held.get(`${workerId}/${attemptId}`) ?? []) },
-    fleet: { worker: async (workerId) => ok(workers.get(workerId) as never) },
+    fleet: { worker: async (workerId) => ok(workers.get(workerId) as never), replaceJournal: undefined as never },
     revisions: new InMemoryCurrentRevisions(),
     // Only the launch authority reads these.
     assignments: undefined as never, installation: undefined as never, launches: undefined as never,

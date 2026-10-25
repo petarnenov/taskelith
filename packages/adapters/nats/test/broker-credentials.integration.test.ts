@@ -17,7 +17,7 @@ import { failed, integrationSecret, value } from '@taskelith/testing';
 import { parseInstant } from '@taskelith/kernel';
 
 const nowInstant = () => value(parseInstant(new Date().toISOString()));
-import { offer } from './messages.ts';
+import { heartbeat, offer } from './messages.ts';
 import { expectOk, installation, NATS_URL, recordingHandler, running, TEST_LIMITS, waitFor } from './nats-fixtures.ts';
 
 // An account of this file's own: a published revocation list replaces the
@@ -68,6 +68,25 @@ test('a worker user reads only its own commands and publishes only its own obser
   const other = await connectWorkerTransport({ server: NATS_URL, address, workerId: 'worker-2', creds: issued.creds });
   assert.ok(other.ok, 'connecting succeeds; the prefix of another worker only denies its replies');
   await other.value.close();
+});
+
+test('a worker user publishes heartbeats only on its own heartbeat subject', async () => {
+  const { address, transport, issued } = await workerSetup('worker-1');
+  const received: string[] = [];
+  const subscription = transport.connection.subscribe(address.allWorkerSubjects('heartbeats'), {
+    callback: (_error, message) => { received.push(message.subject); },
+  });
+  after(() => subscription.unsubscribe());
+  await transport.connection.flush();
+  const worker = expectOk(await connectWorkerTransport({ server: NATS_URL, address, workerId: 'worker-1', creds: issued.creds }));
+  after(() => worker.close());
+  const seen = statuses(worker.connection);
+
+  worker.connection.publish(expectOk(address.heartbeatSubject('worker-1')), encodeJson(heartbeat('worker-1')));
+  worker.connection.publish(expectOk(address.heartbeatSubject('worker-2')), encodeJson(heartbeat('worker-2')));
+  await worker.connection.flush();
+  await waitFor(() => received.length === 1 && seen.some((status) => status.startsWith('error:Permissions Violation for Publish')));
+  assert.deepEqual(received, [expectOk(address.heartbeatSubject('worker-1'))]);
 });
 
 test('a revoked worker is disconnected at once and cannot connect again, without a server reload', async () => {
