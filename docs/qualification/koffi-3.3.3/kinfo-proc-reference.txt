@@ -1,0 +1,18 @@
+== arm64
+sizeof_kinfo_proc=648
+p_starttime=0
+p_pid=40
+e_ppid=560
+e_pgid=564
+sizeof_timeval=16
+sizeof_timebase=8
+CTL_KERN=1 KERN_PROC=14 KERN_PROC_PID=1 KERN_PROC_ALL=0 ENOMEM=12
+== x86_64
+sizeof_kinfo_proc=648
+p_starttime=0
+p_pid=40
+e_ppid=560
+e_pgid=564
+sizeof_timeval=16
+sizeof_timebase=8
+CTL_KERN=1 KERN_PROC=14 KERN_PROC_PID=1 KERN_PROC_ALL=0 ENOMEM=12

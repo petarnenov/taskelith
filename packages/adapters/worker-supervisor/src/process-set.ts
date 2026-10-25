@@ -4,7 +4,7 @@ import { sameProcess, type ProcessIdentity } from './process-identity.js';
 import type { Containment, RecordStore } from './ports.js';
 import { RECORD_FILES, type EventEntry } from './record.js';
 import { cancellationRequested, persist, type SupervisorDependencies } from './supervisor-session.js';
-import { proveDarwinTermination } from './termination.js';
+import { proveDarwinTermination, type TerminationProof } from './termination.js';
 
 // The child leads its own process group, so its process ID is the group ID.
 export interface Child {
@@ -86,22 +86,41 @@ export async function awaitEmptyContainment(dependencies: SupervisorDependencies
   }
 }
 
-// macOS: after the reap, the set is empty only by one listing and the
-// recorded descendants; without both readable, nothing is proven.
+// The kernel copies each entry after it took the process IDs, so a member
+// can fork and be reaped unseen; a second listing narrows that race.
+const EMPTY_LISTINGS = 2;
+
+// macOS: after the reap, the set is empty only by consecutive listings and
+// the recorded descendants; without both readable, nothing is proven.
 export async function awaitDarwinTermination(dependencies: SupervisorDependencies, child: Child): Promise<'proven' | 'unprovable'> {
   let reported = false;
   for (let unreadable = 0; ; await dependencies.sleep(dependencies.timing.pollMilliseconds)) {
-    const listing = dependencies.platform.inspector.listing();
-    const descendants = await recordedDescendants(dependencies.store);
-    if (!listing.ok || !descendants.ok) {
+    const proof = await proveByConsecutiveListings(dependencies, child);
+    if (proof?.proven === true) return 'proven';
+    if (proof === undefined) {
       unreadable += 1;
       if (unreadable >= dependencies.timing.unreadablePolls) return 'unprovable';
       continue;
     }
     unreadable = 0;
-    const proof = proveDarwinTermination({ processGroupId: child.pid, listing: listing.value, recordedDescendants: descendants.value });
-    if (proof.proven) return 'proven';
     if (!reported) await appendEvent(dependencies, { kind: 'survivors', processes: proof.survivors });
     reported = true;
   }
+}
+
+// Proven only when EMPTY_LISTINGS listings in a row prove it; otherwise the
+// first one that does not.
+async function proveByConsecutiveListings(dependencies: SupervisorDependencies, child: Child): Promise<TerminationProof | undefined> {
+  for (let listings = 1; ; listings += 1) {
+    const proof = await proveFromListing(dependencies, child);
+    if (proof?.proven !== true || listings === EMPTY_LISTINGS) return proof;
+  }
+}
+
+// Undefined when the listing or the recorded descendants cannot be read.
+async function proveFromListing(dependencies: SupervisorDependencies, child: Child): Promise<TerminationProof | undefined> {
+  const listing = dependencies.platform.inspector.listing();
+  const descendants = await recordedDescendants(dependencies.store);
+  if (!listing.ok || !descendants.ok) return undefined;
+  return proveDarwinTermination({ processGroupId: child.pid, listing: listing.value, recordedDescendants: descendants.value });
 }

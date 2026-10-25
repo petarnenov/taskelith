@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   darwinPlatform,
   encodeRecord,
+  loadDarwinNative,
   NodeSpawner,
   prepareRecord,
   readReportedFacts,
@@ -163,20 +164,11 @@ test('the record is removed only while the worker holds the lock, the launch rec
   assert.equal(setup.lock.held, false);
 });
 
-test('the macOS platform fails closed: no deadline clock, identity, or listing', () => {
-  const platform = darwinPlatform();
-  assert.equal(platform.clock.read().ok, false);
-  assert.equal(platform.inspector.identity(1).ok, false);
-  assert.equal(platform.inspector.listing().ok, false);
-  assert.equal(platform.containment('execution-1'), undefined);
-  assert.equal(platform.namespaceIncarnation(), undefined);
-  assert.equal(typeof platform.inspector.bootId().ok, 'boolean');
-});
-
-test('a supervisor on the macOS platform seals every launch', async () => {
+test('a supervisor whose macOS native calls cannot load seals every launch', async () => {
   const setup = rig();
   assert.ok((await prepareRecord(setup.worker, intent())).ok);
-  const outcome = await superviseLaunch({ ...setup.supervisor, platform: darwinPlatform() });
+  const platform = darwinPlatform(loadDarwinNative('/nonexistent/libSystem.dylib'));
+  const outcome = await superviseLaunch({ ...setup.supervisor, platform });
 
   assert.deepEqual(outcome, { kind: 'sealed', reason: 'identity-unreadable' });
   assert.equal(setup.spawner.spawned.length, 0);
