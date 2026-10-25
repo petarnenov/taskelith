@@ -27,7 +27,7 @@ export function fleetToken(hash: string, constraints: EnrollmentToken['constrain
 }
 
 function generation(number: number, workerId = 'w1'): CredentialGeneration {
-  return Object.freeze({ generation: number, controlPlaneHash: `cp-${number}` as SecretHash, brokerUserKey: `U-${workerId}-${number}` });
+  return Object.freeze({ generation: number, controlPlaneHash: `cp-${number}` as SecretHash, brokerUserKey: `U-${workerId}-${number}`, brokerIssuedAt: AT });
 }
 
 export function fleetWorker(workerId: string, journalId: string, overrides: Partial<EnrolledWorker> = {}): EnrolledWorker {
@@ -138,6 +138,23 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
       expectRead(problems, 'published', await registry.publishRevocations(push), 2);
       expectSame(problems, 'pushed', pushes, [['U-w1-1', 'U-w1-2']]);
       expectCode(problems, 'unknown', await registry.revoke(fleetWorker('w9', 'j9').workerId, AT), 'not-found');
+      return problems;
+    },
+  },
+  {
+    name: 'a revocation is never earlier than the JWT it revokes',
+    async check(registry) {
+      const problems: string[] = [];
+      const worker = await enrolled(registry);
+      must(await registry.rotate(worker.workerId, 1, { ...generation(2), brokerIssuedAt: LATER }, FAR_AHEAD, AT));
+      must(await registry.revoke(worker.workerId, AT));
+      let pushed: readonly BrokerRevocation[] = [];
+      must(await registry.publishRevocations(async (revocations) => {
+        pushed = revocations;
+        return ok(undefined);
+      }));
+      const times = Object.fromEntries(pushed.map((revocation) => [revocation.userKey, revocation.revokedAt]));
+      expectSame(problems, 'times', times, { 'U-w1-1': AT, 'U-w1-2': LATER });
       return problems;
     },
   },

@@ -32,13 +32,13 @@ export const TEST_LIMITS: TransportLimits = {
 
 // Each test gets an installation of its own, since test files share the
 // server; its streams are deleted when the file ends.
-export async function installation(workers: readonly string[], server = NATS_URL): Promise<{
+export async function installation(workers: readonly string[], server = NATS_URL, creds = integrationSecret('integration.creds')): Promise<{
   address: TransportAddress;
   transport: ControlPlaneConnection;
 }> {
   const address = TransportAddress.of(`it${randomUUID().replaceAll('-', '').slice(0, 12)}`);
   assert.ok(address.ok);
-  const transport = await connected(server, address.value);
+  const transport = await connected(server, address.value, creds);
   after(async () => {
     for (const kind of ['commands', 'observations', 'quarantine', 'advisories'] as const) {
       await transport.jsm.streams.delete(address.value.streamName(kind)).catch(() => false);
@@ -51,8 +51,8 @@ export async function installation(workers: readonly string[], server = NATS_URL
   return { address: address.value, transport };
 }
 
-export async function connected(server: URL, address: TransportAddress): Promise<ControlPlaneConnection> {
-  const transport = await connectTransport({ server, address, creds: integrationSecret('integration.creds') });
+export async function connected(server: URL, address: TransportAddress, creds = integrationSecret('integration.creds')): Promise<ControlPlaneConnection> {
+  const transport = await connectTransport({ server, address, creds });
   assert.ok(transport.ok, transport.ok ? '' : transport.error.message);
   return transport.value;
 }

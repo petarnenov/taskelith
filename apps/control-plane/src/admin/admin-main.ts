@@ -45,7 +45,7 @@ async function runCommand(command: Command, io: AdminIo): Promise<number> {
     const outcome = await run(opened.value, command, io.environment);
     if (!outcome.ok) return fail(io, outcome.error);
     io.write(JSON.stringify(outcome.value));
-    return 0;
+    return isPartial(outcome.value) ? 1 : 0;
   } finally {
     await opened.value.close();
   }
@@ -107,12 +107,20 @@ async function run(admin: Administration, command: Command, environment: Environ
     case 'issue-enrollment-token':
       return mapped(await admin.issueEnrollmentToken(operator, constraints(command.values)), (enrollmentToken) => ({ enrollmentToken }));
     case 'rotate-worker':
-      return admin.rotateWorker(operator, command.worker!);
+      return mapped(await admin.rotateWorker(operator, command.worker!), (rotated) => rotated.revocationsPublished
+        ? rotated
+        : { ...rotated, retry: 'run expire-grace-windows to publish the pending revocation' });
     case 'revoke-worker':
       return mapped(await admin.revokeWorker(operator, command.worker!), () => ({ revoked: command.worker }));
     default:
       return mapped(await admin.expireGraceWindows(operator), (expired) => ({ expired }));
   }
+}
+
+// A committed rotation whose dropped broker user the broker does not know
+// yet: its secrets are printed, and the status asks for a retry.
+function isPartial(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && (value as { revocationsPublished?: unknown }).revocationsPublished === false;
 }
 
 function constraints(values: Command['values']): HostConstraints {

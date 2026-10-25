@@ -1,6 +1,6 @@
 import type { NatsConnection } from '@nats-io/nats-core';
 import type { BrokerCredentials, BrokerRevocation, InstallationIdentity, IssuedBrokerCredential } from '@taskelith/fleet';
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { err, failure, instantFromEpochMilliseconds, ok, type Result } from '@taskelith/kernel';
 import { brokerFailure } from './broker-failure.js';
 import type { BrokerAuthority } from './broker-authority.js';
 import type { ClaimTime } from './broker-jwt.js';
@@ -31,7 +31,10 @@ export class NatsBrokerCredentials implements BrokerCredentials {
     if (!address.ok) return address;
     const permissions = address.value.workerPermissions(workerId);
     if (!permissions.ok) return permissions;
-    return ok(this.#authority.user(`${workerId}.${generation}`, this.#now(), permissions.value));
+    const issuedAt = this.#now();
+    const instant = instantFromEpochMilliseconds(issuedAt * 1000);
+    if (!instant.ok) return instant;
+    return ok({ ...this.#authority.user(`${workerId}.${generation}`, issuedAt, permissions.value), issuedAt: instant.value });
   }
 
   // The list replaces the account's, so the registry keeps every entry and

@@ -35,6 +35,13 @@ test('the namespace is private, and a document is created once and read back', (
   assert.ok(value(ControlPlaneNamespace.open({ dataRoot: root, ownerUid })), 'an existing namespace opens again');
 });
 
+test('a default root on a fresh account gets its missing parents, owner-only', () => {
+  dataRoot();
+  const root = join(base, 'home', '.local', 'share', 'taskelith');
+  const namespace = value(ControlPlaneNamespace.open({ dataRoot: root, ownerUid }));
+  assert.deepEqual([join(base, 'home'), join(base, 'home', '.local'), root, namespace.directory].map(mode), [0o700, 0o700, 0o700, 0o700]);
+});
+
 test('a document of another format or not JSON is refused', () => {
   const namespace = value(ControlPlaneNamespace.open({ dataRoot: dataRoot(), ownerUid }));
   writeFileSync(join(namespace.directory, 'newer'), JSON.stringify({ format: 2 }), { mode: 0o600 });

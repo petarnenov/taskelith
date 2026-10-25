@@ -7,13 +7,17 @@ import pg from 'pg';
 import { Administration, adminMain, type AdminIo } from '@taskelith/control-plane';
 import { ControlPlaneNamespace } from '@taskelith/control-plane-store';
 import { parseIdentifier } from '@taskelith/kernel';
+import { createAccount } from '@nats-io/nkeys';
 import {
+  BrokerAuthority,
+  connectSystemAccount,
   connectTransport,
   connectWorkerTransport,
   encodeJson,
   ensureStreams,
   ensureWorkerConsumer,
   JetStreamPublisher,
+  NatsBrokerCredentials,
   TRANSPORT_LIMITS,
   TransportAddress,
 } from '@taskelith/nats';
@@ -42,7 +46,14 @@ database.pathname = `/${databaseName}`;
 const base = mkdtempSync(join(tmpdir(), 'taskelith-admin-'));
 const dataRoot = join(base, 'root');
 const namespace = value(ControlPlaneNamespace.open({ dataRoot, ownerUid }));
-value(namespace.create('broker-authority', JSON.parse(integrationSecret('authority.json'))));
+// An account of this file's own on the test server: a published revocation
+// list replaces the account's, so files that publish one must not share it.
+const authorityKeys = { ...JSON.parse(integrationSecret('authority.json')), accountSeed: new TextDecoder().decode(createAccount().getSeed()) };
+value(namespace.create('broker-authority', authorityKeys));
+const authority = value(BrokerAuthority.fromKeys(authorityKeys));
+const system = value(await connectSystemAccount({ server: NATS, creds: integrationSecret('system.creds') }));
+value(await new NatsBrokerCredentials(authority, system.connection).publishRevocations([]));
+await system.close();
 after(async () => {
   rmSync(base, { recursive: true, force: true });
   await sql(POSTGRES, `DROP DATABASE IF EXISTS ${databaseName} WITH (FORCE)`);
@@ -106,7 +117,8 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
   assert.equal(enrolled.installationId, identity.installationId);
 
   const address = value(TransportAddress.of(identity.installationId));
-  const controlPlane = value(await connectTransport({ server: NATS, address, creds: integrationSecret('integration.creds') }));
+  const creds = authority.user('control-plane', Math.floor(Date.now() / 1000)).creds;
+  const controlPlane = value(await connectTransport({ server: NATS, address, creds }));
   after(async () => {
     for (const kind of ['commands', 'observations', 'quarantine', 'advisories'] as const) {
       await controlPlane.jsm.streams.delete(address.streamName(kind)).catch(() => false);
@@ -145,7 +157,7 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
   rmSync(authorityPath);
   const lost = await admin(['init', ...ADMIN]);
   assert.equal((lost.output.error as { code: string }).code, 'precondition-failed', 'no new authority for an existing installation');
-  value(namespace.create('broker-authority', JSON.parse(integrationSecret('authority.json'))));
+  value(namespace.create('broker-authority', authorityKeys));
 
   await sql(database, 'UPDATE installation SET recovery_epoch = 2');
   const closed = await administration.enrollmentService();

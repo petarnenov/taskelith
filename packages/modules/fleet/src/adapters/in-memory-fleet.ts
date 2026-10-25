@@ -2,8 +2,9 @@ import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import type { SecretHash } from '@taskelith/access';
 import type { WorkerId } from '@taskelith/execution';
 import {
-  brokerUserKeys,
+  credentialGenerations,
   isExpired,
+  revocationOf,
   rotateCredentials,
   type BrokerRevocation,
   type CredentialGeneration,
@@ -64,7 +65,7 @@ export class InMemoryFleetRegistry implements FleetRegistry {
       return settle(err(failure('conflict', `the current generation is ${worker.credentials.current.generation}`)));
     }
     const rotation = rotateCredentials(worker.credentials, next, validUntil);
-    if (rotation.dropped !== undefined) this.#record([rotation.dropped], at);
+    if (rotation.dropped !== undefined) this.#record([revocationOf(rotation.dropped, at)]);
     this.#workers.set(workerId, Object.freeze({ ...worker, credentials: rotation.credentials }));
     return settle(ok(undefined));
   }
@@ -73,7 +74,7 @@ export class InMemoryFleetRegistry implements FleetRegistry {
     const worker = this.#workers.get(workerId);
     if (worker === undefined) return settle(err(failure('not-found', `no worker ${workerId} is enrolled`)));
     if (worker.revokedAt !== undefined) return settle(ok(undefined));
-    this.#record(brokerUserKeys(worker.credentials), at);
+    this.#record(credentialGenerations(worker.credentials).map((generation) => revocationOf(generation, at)));
     this.#workers.set(workerId, Object.freeze({ ...worker, revokedAt: at }));
     return settle(ok(undefined));
   }
@@ -83,7 +84,7 @@ export class InMemoryFleetRegistry implements FleetRegistry {
     for (const worker of this.#workers.values()) {
       const previous = worker.credentials.previous;
       if (previous === undefined || Date.parse(previous.validUntil) > Date.parse(now)) continue;
-      this.#record([previous.brokerUserKey], previous.validUntil);
+      this.#record([revocationOf(previous, previous.validUntil)]);
       this.#workers.set(worker.workerId, Object.freeze({ ...worker, credentials: Object.freeze({ current: worker.credentials.current }) }));
       expired += 1;
     }
@@ -105,9 +106,9 @@ export class InMemoryFleetRegistry implements FleetRegistry {
     return ok(unpublished.length);
   }
 
-  #record(userKeys: readonly string[], at: Instant): void {
-    for (const userKey of userKeys) {
-      if (!this.#revocations.has(userKey)) this.#revocations.set(userKey, { revocation: Object.freeze({ userKey, revokedAt: at }), published: false });
+  #record(revocations: readonly BrokerRevocation[]): void {
+    for (const revocation of revocations) {
+      if (!this.#revocations.has(revocation.userKey)) this.#revocations.set(revocation.userKey, { revocation, published: false });
     }
   }
 }

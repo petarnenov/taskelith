@@ -2,8 +2,9 @@ import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import type { AuditEvent, OperatorCredential, OperatorCredentials, SecretHash } from '@taskelith/access';
 import type { WorkerId } from '@taskelith/execution';
 import {
-  brokerUserKeys,
+  credentialGenerations,
   installationIdentity,
+  revocationOf,
   rotateCredentials,
   type BrokerRevocation,
   type CredentialGeneration,
@@ -64,8 +65,9 @@ export class PostgresFleetRegistry implements FleetRegistry {
 
   async enroll(tokenHash: SecretHash, worker: EnrolledWorker): Promise<Result<void>> {
     const { rows } = await this.#session.query<{ expired: boolean }>(
-      `UPDATE enrollment_tokens SET used_at = now() WHERE secret_hash = $1 AND used_at IS NULL
-       RETURNING expires_at <= now() AS expired`,
+      // clock_timestamp() is read after the row lock, unlike now().
+      `UPDATE enrollment_tokens SET used_at = clock_timestamp() WHERE secret_hash = $1 AND used_at IS NULL
+       RETURNING expires_at <= clock_timestamp() AS expired`,
       [tokenHash],
     );
     if (rows[0] === undefined) return err(failure('conflict', 'the enrollment token was used', { reason: 'token-used' }));
@@ -100,7 +102,7 @@ export class PostgresFleetRegistry implements FleetRegistry {
       return err(failure('conflict', `the current generation is ${worker.credentials.current.generation}`));
     }
     const rotation = rotateCredentials(worker.credentials, next, validUntil);
-    if (rotation.dropped !== undefined) await this.#record(workerId, [rotation.dropped], at);
+    if (rotation.dropped !== undefined) await this.#record(workerId, [revocationOf(rotation.dropped, at)]);
     await this.#write(workerId, { ...worker, credentials: rotation.credentials });
     return ok(undefined);
   }
@@ -109,7 +111,7 @@ export class PostgresFleetRegistry implements FleetRegistry {
     const worker = await this.#read(workerId, 'FOR UPDATE');
     if (worker === undefined) return err(failure('not-found', `no worker ${workerId} is enrolled`));
     if (worker.revokedAt !== undefined) return ok(undefined);
-    await this.#record(workerId, brokerUserKeys(worker.credentials), at);
+    await this.#record(workerId, credentialGenerations(worker.credentials).map((generation) => revocationOf(generation, at)));
     await this.#session.query('UPDATE workers SET revoked = true WHERE worker_id = $1', [workerId]);
     await this.#write(workerId, { ...worker, revokedAt: at });
     return ok(undefined);
@@ -123,7 +125,7 @@ export class PostgresFleetRegistry implements FleetRegistry {
     for (const row of rows) {
       const worker = decodeRecord<EnrolledWorker>(row.enrollment);
       const previous = worker.credentials.previous!;
-      await this.#record(worker.workerId, [previous.brokerUserKey], previous.validUntil);
+      await this.#record(worker.workerId, [revocationOf(previous, previous.validUntil)]);
       await this.#write(worker.workerId, { ...worker, credentials: { current: worker.credentials.current } });
     }
     return ok(rows.length);
@@ -144,11 +146,11 @@ export class PostgresFleetRegistry implements FleetRegistry {
     return ok(unpublished);
   }
 
-  async #record(workerId: WorkerId, userKeys: readonly string[], at: Instant): Promise<void> {
-    for (const userKey of userKeys) {
+  async #record(workerId: WorkerId, revocations: readonly BrokerRevocation[]): Promise<void> {
+    for (const { userKey, revokedAt } of revocations) {
       await this.#session.query(
         'INSERT INTO broker_revocations (user_key, worker_id, revoked_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
-        [userKey, workerId, at],
+        [userKey, workerId, revokedAt],
       );
     }
   }

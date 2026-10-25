@@ -29,7 +29,7 @@ Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-
 ## 3. The `control-plane/` namespace
 
 - `dataRoot` resolves as in the [storage contract](../storage.md): explicit configuration, then `TASKELITH_DATA_DIR`, then the OS default.
-- `dataRoot` and `dataRoot/control-plane` are directories owned by the running account and created with mode `0700`. No component from `dataRoot` down may be a symbolic link, owned by another account, or writable by group or others. `control-plane/` and every file in it must give group and others no access at all, since the subtree holds signing seeds. A data root inside a Git working tree is refused. A colocated worker keeps its own `worker/` subtree.
+- `dataRoot` and `dataRoot/control-plane` are directories owned by the running account and created with mode `0700`, as is every missing parent of `dataRoot`, such as `~/.local/share` on a fresh account. No component from `dataRoot` down may be a symbolic link, owned by another account, or writable by group or others. `control-plane/` and every file in it must give group and others no access at all, since the subtree holds signing seeds. A data root inside a Git working tree is refused. A colocated worker keeps its own `worker/` subtree.
 - Every file is a regular file of mode `0600`, written by the durable file rule of the [worker journal](worker-journal.md) section 4. A document carries `format: 1`, and another format is refused.
 
 | File | Content | Written |
@@ -52,7 +52,7 @@ Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-
   2. A host that the constraints do not allow is `precondition-failed` with reason `host-mismatch` (422).
   3. A worker whose protocol window shares no version with the server's is `precondition-failed` with reason `protocol-not-supported` (422).
   4. A journal that is already enrolled is `conflict` with reason `journal-enrolled` (409).
-- **Atomicity.** One transaction uses the token and adds the worker, so concurrent redemptions have one winner.
+- **Atomicity.** One transaction uses the token and adds the worker, so concurrent redemptions have one winner. Expiry is checked at the moment of use, after the token's row lock (`clock_timestamp()`), so a use that waited past the expiry fails with `token-invalid`.
 - **Placement.** The new `workers` row is enrolled, not revoked, not draining, and not reachable until its first contact (item 21), with the declared capacity.
 - **Response.** `credentialGeneration` 1, the installation's `recoveryEpoch`, the server's protocol window, and the two credentials of section 6.
 
@@ -71,8 +71,9 @@ Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-
   - Authentication returns the generation a secret belongs to. An unknown, revoked, or expired one is `forbidden` with reason `worker-not-authorized`.
 - **Revocation.** `revoke-worker` marks the worker revoked in the same row placement reads. In the same transaction it records every broker user of the worker in `broker_revocations`. The server disconnects such a user at once and refuses it afterwards.
   - **Durable list.** Every broker user to revoke is recorded in the transaction that stops its validity: a revocation, a rotation that drops a predecessor, or the end of a grace window. It stays recorded after its publication.
-  - **Publication.** A publication sends the broker the complete list in the account JWT, each user void for JWTs issued up to its time. Publishers take turns under a PostgreSQL advisory lock, across processes, and an entry counts as published only after the broker accepted the list.
-  - **Retry.** A publication that fails leaves the entries unpublished. `revoke-worker` then reports `unavailable`, and its rerun or the next `expire-grace-windows` publishes them.
+  - **Time.** Each user is void for JWTs issued up to its revocation time, and that time is never earlier than its own JWT's issue time, which its generation records. So a revocation that raced a rotation still voids the new user.
+  - **Publication.** A publication sends the broker the complete list in the account JWT. Publishers take turns under a PostgreSQL advisory lock, across processes, and an entry counts as published only after the broker accepted the list.
+  - **Retry.** A publication that fails leaves the entries unpublished. `revoke-worker` then reports `unavailable`. A rotation is already committed, so it returns its new secrets with `revocationsPublished: false`, and the administrative entry prints them with a retry hint and exits with status 1. The rerun, or the next `expire-grace-windows`, publishes the entries.
   - The active attempts of a revoked worker become uncertain through reconciliation (item 21), never dead.
 - **Workers get no database credential.** The control plane connects to NATS as a user of the installation account without subject limits.
 

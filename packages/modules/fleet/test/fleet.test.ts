@@ -70,7 +70,7 @@ class RecordingBroker implements BrokerCredentials {
   async issue(_installation: unknown, workerId: string, generation: number) {
     const userKey = `U-${workerId}-${generation}`;
     this.issued.push(userKey);
-    return ok({ creds: `creds-${userKey}`, userKey });
+    return ok({ creds: `creds-${userKey}`, userKey, issuedAt: value(parseInstant('2026-10-25T08:00:00.000Z')) });
   }
 
   async publishRevocations(revocations: readonly BrokerRevocation[]) {
@@ -182,7 +182,7 @@ test('rotation keeps the old generation for the grace window, then revokes its b
   const enrolled = value(await service.enroll(value(await service.issueToken({})), request()));
   const rotated = value(await service.rotate(enrolled.workerId));
 
-  assert.equal(rotated.credentialGeneration, 2);
+  assert.deepEqual([rotated.credentialGeneration, rotated.revocationsPublished], [2, true]);
   assert.deepEqual(value(await service.authenticate(enrolled.workerId, rotated.credentials.controlPlane)), 2);
   assert.deepEqual(value(await service.authenticate(enrolled.workerId, enrolled.credentials.controlPlane)), 1);
   assert.deepEqual(value(await service.expireGraceWindows()), 0);
@@ -200,14 +200,17 @@ test('a revocation the broker missed stays recorded and is published by the next
   const { broker, service } = enrollment();
   const enrolled = value(await service.enroll(value(await service.issueToken({})), request()));
   value(await service.rotate(enrolled.workerId));
+  value(await service.rotate(enrolled.workerId));
   broker.down = true;
+  const partial = value(await service.rotate(enrolled.workerId));
+  assert.deepEqual([partial.credentialGeneration, partial.revocationsPublished], [4, false], 'a committed rotation keeps its secrets');
   assert.equal(failed(await service.revoke(enrolled.workerId)).code, 'unavailable');
   assert.equal(failed(await service.authenticate(enrolled.workerId, enrolled.credentials.controlPlane)).code, 'forbidden');
   assert.equal(failed(await service.rotate(enrolled.workerId)).details.reason, 'worker-not-authorized', 'a revoked worker gets no new generation');
 
   broker.down = false;
   assert.deepEqual(value(await service.expireGraceWindows()), 0);
-  assert.deepEqual(broker.revoked.sort(), ['U-worker-1-1', 'U-worker-1-2']);
+  assert.deepEqual(broker.revoked.sort(), ['U-worker-1-1', 'U-worker-1-2', 'U-worker-1-3', 'U-worker-1-4']);
 });
 
 test('revocation denies every credential of the worker at once', async () => {

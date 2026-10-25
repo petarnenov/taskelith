@@ -1,5 +1,5 @@
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import {
   checkControlPath,
   createOnce,
@@ -32,11 +32,14 @@ export class ControlPlaneNamespace {
     this.directory = join(options.dataRoot, CONTROL_PLANE_DIRECTORY);
   }
 
-  // Creates the data root and the subtree if missing, after checking them.
+  // Creates the data root, its missing parents, and the subtree, privately,
+  // after checking them.
   static open(options: NamespaceOptions): Result<ControlPlaneNamespace> {
     const namespace = new ControlPlaneNamespace(options);
     const outside = refuseCheckout(options.dataRoot);
     if (!outside.ok) return outside;
+    const parents = createMissingParents(options.dataRoot);
+    if (!parents.ok) return parents;
     for (const directory of [options.dataRoot, namespace.directory]) {
       const safe = checkControlPath(options.dataRoot, directory, options.ownerUid);
       if (!safe.ok) return safe;
@@ -98,6 +101,20 @@ function checkPrivate(path: string, kind: 'directory' | 'file'): Result<void> {
   if (!isKind) return err(dataRootFailure('unsafe-path', `${path} is not a ${kind}`, { path }));
   if ((status.mode & GROUP_OR_OTHER_ACCESS) !== 0) {
     return err(dataRootFailure('unsafe-path', `${path} is accessible to group or others`, { path }));
+  }
+  return ok(undefined);
+}
+
+// A default root such as `~/.local/share/taskelith` may lack its parents on a
+// fresh account; each missing one is created owner-only, from the top.
+function createMissingParents(dataRoot: string): Result<void> {
+  const missing: string[] = [];
+  for (let parent = dirname(dataRoot); !existsSync(parent) && dirname(parent) !== parent; parent = dirname(parent)) {
+    missing.unshift(parent);
+  }
+  for (const directory of missing) {
+    const created = createPrivateDirectory(directory);
+    if (!created.ok) return created;
   }
   return ok(undefined);
 }

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
+import { createAccount } from '@nats-io/nkeys';
 import type { NatsConnection } from '@nats-io/nats-core';
 import { connect, credsAuthenticator } from '@nats-io/transport-node';
 import { installationIdentity, parseWorkerId } from '@taskelith/fleet';
@@ -19,13 +20,19 @@ const nowInstant = () => value(parseInstant(new Date().toISOString()));
 import { offer } from './messages.ts';
 import { expectOk, installation, NATS_URL, recordingHandler, running, TEST_LIMITS, waitFor } from './nats-fixtures.ts';
 
-const authority = value(BrokerAuthority.fromKeys(JSON.parse(integrationSecret('authority.json')) as BrokerAuthorityKeys));
+// An account of this file's own: a published revocation list replaces the
+// account's, so files that publish one must not share an account.
+const testKeys = JSON.parse(integrationSecret('authority.json')) as BrokerAuthorityKeys;
+const accountSeed = new TextDecoder().decode(createAccount().getSeed());
+const authority = value(BrokerAuthority.fromKeys({ ...testKeys, accountSeed }));
 const system = await connect({
   servers: NATS_URL.href, tls: null,
   authenticator: credsAuthenticator(new TextEncoder().encode(integrationSecret('system.creds'))),
 });
 after(() => system.close());
 const broker = new NatsBrokerCredentials(authority, system);
+expectOk(await broker.publishRevocations([]));
+const controlPlaneCreds = authority.user('control-plane', Math.floor(Date.now() / 1000)).creds;
 
 function statuses(connection: NatsConnection): string[] {
   const seen: string[] = [];
@@ -36,7 +43,7 @@ function statuses(connection: NatsConnection): string[] {
 }
 
 async function workerSetup(workerId: string) {
-  const { address, transport } = await installation([workerId]);
+  const { address, transport } = await installation([workerId], NATS_URL, controlPlaneCreds);
   const identity = value(installationIdentity(address.installationId, 1));
   const issued = expectOk(await broker.issue(identity, value(parseWorkerId(workerId)), 1));
   return { address, transport, issued };

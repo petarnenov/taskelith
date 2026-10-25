@@ -11,10 +11,11 @@ export {
   type InstallationServiceDependencies,
 } from './application/installation-service.js';
 export {
-  brokerUserKeys,
   commonProtocolVersion,
+  credentialGenerations,
   hostMismatch,
   isExpired,
+  revocationOf,
   rotateCredentials,
   validGenerations,
   type BrokerRevocation,

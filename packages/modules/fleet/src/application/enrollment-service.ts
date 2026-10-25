@@ -29,9 +29,12 @@ export interface Enrollment {
   readonly credentials: { readonly controlPlane: string; readonly broker: string };
 }
 
+// `revocationsPublished` false means the dropped predecessor is recorded but
+// the broker does not know yet; the next publication retries it.
 export interface RotatedCredentials {
   readonly credentialGeneration: number;
   readonly credentials: { readonly controlPlane: string; readonly broker: string };
+  readonly revocationsPublished: boolean;
 }
 
 export interface EnrollmentServiceDependencies {
@@ -105,9 +108,11 @@ export class EnrollmentService {
     const validUntil = this.#after(now, this.#limits.rotationGraceMilliseconds);
     const rotated = await this.#deps.registry.rotate(workerId, current.generation, issued.value.generation, validUntil, now);
     if (!rotated.ok) return rotated.error.code === 'forbidden' ? err(notAuthorized()) : rotated;
-    // A dropped predecessor stays recorded until a later publication succeeds.
-    await this.publishRevocations();
-    return ok({ credentialGeneration: issued.value.generation.generation, credentials: issued.value.secrets });
+    // The rotation is committed, so its new secrets are returned in any case.
+    const published = await this.publishRevocations();
+    return ok({
+      credentialGeneration: issued.value.generation.generation, credentials: issued.value.secrets, revocationsPublished: published.ok,
+    });
   }
 
   // Denies every credential of the worker at once; its active attempts
@@ -159,7 +164,9 @@ export class EnrollmentService {
     if (!broker.ok) return broker;
     const controlPlane = this.#deps.secrets.issue('worker');
     return ok({
-      generation: Object.freeze({ generation, controlPlaneHash: controlPlane.hash, brokerUserKey: broker.value.userKey }),
+      generation: Object.freeze({
+        generation, controlPlaneHash: controlPlane.hash, brokerUserKey: broker.value.userKey, brokerIssuedAt: broker.value.issuedAt,
+      }),
       secrets: Object.freeze({ controlPlane: controlPlane.secret, broker: broker.value.creds }),
     });
   }

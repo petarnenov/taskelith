@@ -1,4 +1,4 @@
-import type { Result } from '@taskelith/kernel';
+import type { Instant, Result } from '@taskelith/kernel';
 import type { WorkerId } from '@taskelith/execution';
 import type { BrokerRevocation } from '../domain/enrollment.js';
 import type { InstallationIdentity } from '../domain/installation.js';
@@ -8,6 +8,7 @@ import type { InstallationIdentity } from '../domain/installation.js';
 export interface IssuedBrokerCredential {
   readonly creds: string;
   readonly userKey: string;
+  readonly issuedAt: Instant;
 }
 
 // Issues per-worker broker users limited to the worker's own subjects, and

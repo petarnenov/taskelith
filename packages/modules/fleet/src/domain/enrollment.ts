@@ -53,6 +53,8 @@ export interface CredentialGeneration {
   readonly generation: number;
   readonly controlPlaneHash: SecretHash;
   readonly brokerUserKey: string;
+  // When the broker user's JWT was issued; a revocation must not be earlier.
+  readonly brokerIssuedAt: Instant;
 }
 
 // The predecessor stays valid until `validUntil`, the end of the rotation's
@@ -99,22 +101,31 @@ export interface BrokerRevocation {
 
 export interface Rotation {
   readonly credentials: WorkerCredentials;
-  // The predecessor's broker user, which the rotation drops at once.
-  readonly dropped?: string;
+  // The predecessor, whose broker user the rotation drops at once.
+  readonly dropped?: CredentialGeneration;
 }
 
 // A rotation keeps the current generation as the predecessor until the end
 // of the grace window; an older predecessor is dropped.
 export function rotateCredentials(credentials: WorkerCredentials, next: CredentialGeneration, validUntil: Instant): Rotation {
   const rotated = Object.freeze({ current: next, previous: Object.freeze({ ...credentials.current, validUntil }) });
-  const dropped = credentials.previous?.brokerUserKey;
-  return dropped === undefined ? { credentials: rotated } : { credentials: rotated, dropped };
+  const previous = credentials.previous;
+  if (previous === undefined) return { credentials: rotated };
+  const { validUntil: _ended, ...dropped } = previous;
+  return { credentials: rotated, dropped };
 }
 
-// Every broker user of the worker, current and predecessor.
-export function brokerUserKeys(credentials: WorkerCredentials): readonly string[] {
+// Every generation of the worker, current and predecessor.
+export function credentialGenerations(credentials: WorkerCredentials): readonly CredentialGeneration[] {
   const { current, previous } = credentials;
-  return previous === undefined ? [current.brokerUserKey] : [current.brokerUserKey, previous.brokerUserKey];
+  return previous === undefined ? [current] : [current, previous];
+}
+
+// A revocation from `at`, but never before the user's JWT was issued, since
+// NATS voids only the JWTs issued up to the revocation time.
+export function revocationOf(generation: CredentialGeneration, at: Instant): BrokerRevocation {
+  const revokedAt = Date.parse(at) >= Date.parse(generation.brokerIssuedAt) ? at : generation.brokerIssuedAt;
+  return Object.freeze({ userKey: generation.brokerUserKey, revokedAt });
 }
 
 // The generations a presented secret may still use at `now`.

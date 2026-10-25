@@ -9,7 +9,9 @@ import {
   PostgresDatabase,
 } from '@taskelith/postgres';
 import type { ConformanceCase } from '@taskelith/sdlc';
+import { parseInstant } from '@taskelith/kernel';
 import { value } from '@taskelith/testing';
+import pg from 'pg';
 import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
 
 const url = await createMigratedDatabase();
@@ -43,6 +45,23 @@ test('an enrolled worker is placeable once reachable, and a revoked one is not',
   });
   value(await registry.revoke(worker.workerId, worker.enrolledAt));
   assert.equal(value(await placement())?.revoked, true);
+});
+
+test('a token that expires while its use waits for the row lock enrolls nothing', { concurrency: false }, async () => {
+  await truncateAll(url);
+  const registry = new CommittingFleetRegistry(database);
+  const expiresAt = value(parseInstant(new Date(Date.now() + 1000).toISOString()));
+  value(await registry.addToken(fleetToken('t1', {}, expiresAt)));
+  const holder = new pg.Client({ connectionString: url.href });
+  await holder.connect();
+  await holder.query('BEGIN');
+  await holder.query("SELECT 1 FROM enrollment_tokens WHERE secret_hash = 't1' FOR UPDATE");
+  const enrolling = registry.enroll(fleetToken('t1').hash, fleetWorker('w1', 'j1'));
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  await holder.query('COMMIT');
+  await holder.end();
+  const enrolled = await enrolling;
+  assert.equal(!enrolled.ok && enrolled.error.details.reason, 'token-expired');
 });
 
 test('the initialized installation is not quarantined', { concurrency: false }, async () => {
