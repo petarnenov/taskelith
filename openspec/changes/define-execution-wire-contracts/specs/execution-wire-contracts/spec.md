@@ -30,10 +30,14 @@ Each execution command SHALL use the shared command envelope, SHALL require its 
 - **THEN** validation fails at the metadata command type
 
 ### Requirement: Observation envelope
-Every observation SHALL carry a deterministic `observationId`, its fixed type, schema and protocol versions, `workerId`, `journalId`, and a positive `sequence`, and MAY carry its attempt and ownership generation.
+Every observation SHALL carry a deterministic `observationId`, its fixed type, schema and protocol versions, `workerId`, `journalId`, and a positive `sequence`. Every observation about an attempt SHALL also carry the attempt and its ownership generation; only unrecorded processes, capacity, and admission pressure are about no attempt.
 
 #### Scenario: Observation without journal
 - **WHEN** an observation omits `journalId`
+- **THEN** validation fails and names the field
+
+#### Scenario: Assignment observation without generation
+- **WHEN** an assignment acceptance omits `metadata.ownershipGeneration`
 - **THEN** validation fails and names the field
 
 #### Scenario: Sequence zero

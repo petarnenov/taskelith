@@ -135,17 +135,22 @@ test('the protocol windows of a worker and the control plane give the version to
   assert.equal(supportsProtocolVersion({ minimum: 2, maximum: 2 }, 1), false);
 });
 
-test('an observation names its producer journal and a gapless sequence', () => {
-  const accepted = observation('execution.assignment.accepted', { commandId: 'command-1', assignmentId: 'assignment-1', attemptId: 'attempt-1', ownershipGeneration: 2 });
+test('an observation names its producer journal, a gapless sequence, and its attempt', () => {
+  const accepted = observation('execution.assignment.accepted', { commandId: 'command-1', assignmentId: 'assignment-1' });
   const { journalId: _journalId, ...withoutJournal } = accepted.metadata;
+  const { ownershipGeneration: _generation, ...withoutGeneration } = accepted.metadata;
 
   assert.ok(checkMessageSchema('AssignmentAcceptedObservation', accepted).ok);
   assert.ok(violations(checkMessageSchema('AssignmentAcceptedObservation', { ...accepted, metadata: withoutJournal })).some((text) => text.includes('journalId')));
   assert.ok(violations(checkMessageSchema('AssignmentAcceptedObservation', { ...accepted, metadata: { ...accepted.metadata, sequence: 0 } })).some((text) => text.includes('/metadata/sequence')));
+  assert.ok(violations(checkMessageSchema('AssignmentAcceptedObservation', { ...accepted, metadata: withoutGeneration })).some((text) => text.includes('ownershipGeneration')));
+  const unrecorded = observation('execution.unrecorded-process', { containment: 'taskelith/unknown', processes: [PROCESS] });
+  const { attemptId: _attemptId, ownershipGeneration: _ownership, ...unattributed } = unrecorded.metadata;
+  assert.ok(checkMessageSchema('UnrecordedProcessObservation', { ...unrecorded, metadata: unattributed }).ok);
 });
 
 test('a refusal under admission pressure names its causes', () => {
-  const refusal = { commandId: 'command-1', assignmentId: 'assignment-1', attemptId: 'attempt-1', ownershipGeneration: 2, reason: 'worker-admission-pressure', retryable: true, pressureCauses: ['disk-floor', 'journal-backlog'] };
+  const refusal = { commandId: 'command-1', assignmentId: 'assignment-1', reason: 'worker-admission-pressure', retryable: true, pressureCauses: ['disk-floor', 'journal-backlog'] };
 
   assert.ok(checkMessageSchema('AssignmentRefusedObservation', observation('execution.assignment.refused', refusal)).ok);
   assert.ok(!checkMessageSchema('AssignmentRefusedPayload', { ...refusal, pressureCauses: [] }).ok);

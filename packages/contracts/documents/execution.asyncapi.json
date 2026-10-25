@@ -571,7 +571,7 @@
       "ObservationMetadata": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Fields every observation carries. The producer is the pair of workerId and journalId; observationId is deterministic from the observation source.",
+        "description": "Fields every observation carries. The producer is the pair of workerId and journalId; observationId is deterministic from the observation source. Observations about an attempt require attemptId and ownershipGeneration.",
         "required": [
           "observationId",
           "observationType",
@@ -1007,9 +1007,7 @@
         "additionalProperties": false,
         "required": [
           "commandId",
-          "assignmentId",
-          "attemptId",
-          "ownershipGeneration"
+          "assignmentId"
         ],
         "properties": {
           "commandId": {
@@ -1017,12 +1015,6 @@
           },
           "assignmentId": {
             "$ref": "#/components/schemas/Identifier"
-          },
-          "attemptId": {
-            "$ref": "#/components/schemas/Identifier"
-          },
-          "ownershipGeneration": {
-            "$ref": "#/components/schemas/Generation"
           }
         }
       },
@@ -1042,10 +1034,20 @@
               },
               {
                 "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
                 "properties": {
                   "observationType": {
                     "type": "string",
                     "const": "execution.assignment.accepted"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
                   }
                 }
               }
@@ -1062,8 +1064,6 @@
         "required": [
           "commandId",
           "assignmentId",
-          "attemptId",
-          "ownershipGeneration",
           "reason",
           "retryable"
         ],
@@ -1073,12 +1073,6 @@
           },
           "assignmentId": {
             "$ref": "#/components/schemas/Identifier"
-          },
-          "attemptId": {
-            "$ref": "#/components/schemas/Identifier"
-          },
-          "ownershipGeneration": {
-            "$ref": "#/components/schemas/Generation"
           },
           "reason": {
             "$ref": "#/components/schemas/RefusalReason"
@@ -1115,10 +1109,20 @@
               },
               {
                 "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
                 "properties": {
                   "observationType": {
                     "type": "string",
                     "const": "execution.assignment.refused"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
                   }
                 }
               }
@@ -1173,10 +1177,20 @@
               },
               {
                 "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
                 "properties": {
                   "observationType": {
                     "type": "string",
                     "const": "execution.command.rejected"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
                   }
                 }
               }
@@ -1227,10 +1241,20 @@
               },
               {
                 "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
                 "properties": {
                   "observationType": {
                     "type": "string",
                     "const": "execution.launch.rejected"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
                   }
                 }
               }
@@ -1285,10 +1309,20 @@
               },
               {
                 "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
                 "properties": {
                   "observationType": {
                     "type": "string",
                     "const": "execution.started"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
                   }
                 }
               }
@@ -1353,10 +1387,20 @@
               },
               {
                 "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
                 "properties": {
                   "observationType": {
                     "type": "string",
                     "const": "execution.exited"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
                   }
                 }
               }
@@ -1395,10 +1439,20 @@
               },
               {
                 "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
                 "properties": {
                   "observationType": {
                     "type": "string",
                     "const": "execution.not-started"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
                   }
                 }
               }
@@ -1437,10 +1491,20 @@
               },
               {
                 "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
                 "properties": {
                   "observationType": {
                     "type": "string",
                     "const": "execution.uncertain"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
                   }
                 }
               }
@@ -1487,10 +1551,20 @@
               },
               {
                 "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
                 "properties": {
                   "observationType": {
                     "type": "string",
                     "const": "execution.termination-unproven"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
                   }
                 }
               }
@@ -1590,10 +1664,20 @@
               },
               {
                 "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
                 "properties": {
                   "observationType": {
                     "type": "string",
                     "const": "execution.cancellation.not-applied"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
                   }
                 }
               }
