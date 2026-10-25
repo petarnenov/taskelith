@@ -1,4 +1,4 @@
-import { parseIdentifier, parseInstant, type Instant, type Result } from '@taskelith/kernel';
+import { parseIdentifier, parseInstant, type EventId, type Instant, type Result } from '@taskelith/kernel';
 import type { AssignmentExecutions } from '@taskelith/execution';
 import {
   expectCode,
@@ -36,13 +36,14 @@ const AT: Instant = must(parseInstant('2026-10-25T09:00:00.000Z'));
 const LATER: Instant = must(parseInstant('2026-10-25T09:00:10.000Z'));
 const NO_EXECUTION: AssignmentExecutions = { granted: false, nonTerminal: false };
 
-function offered(id: string, attempt: string): Assignment {
+function offered(id: string, attempt: string, offerCommand?: string): Assignment {
   const taskId = must(parseIdentifier('TaskId', 'task-1'));
   return createAssignment({
     id: must(parseIdentifier('AssignmentId', id)),
     attemptId: must(parseIdentifier('AttemptId', attempt)),
     workerId: must(parseIdentifier('WorkerId', 'worker-1')),
     ownershipGeneration: must(parseOwnershipGeneration(2)),
+    ...(offerCommand === undefined ? {} : { offerCommandId: must(parseIdentifier('EventId', offerCommand)) }),
     reservation: {
       id: must(parseIdentifier('ReservationId', `reservation-${id}`)),
       scope: {
@@ -63,6 +64,31 @@ function ended(assignment: Assignment): Assignment {
 
 function advanced(assignment: Assignment): Assignment {
   return { ...assignment, generation: nextGeneration(assignment.generation) };
+}
+
+function offerCommand(text: string): EventId {
+  return must(parseIdentifier('EventId', text));
+}
+
+function reoffered(assignment: Assignment, command: string | undefined): Assignment {
+  const { offerCommandId: _offerCommandId, ...rest } = advanced(assignment);
+  return command === undefined ? rest : { ...rest, offerCommandId: offerCommand(command) };
+}
+
+// Adds two offered assignments, expects `conflict` for the replace, and
+// expects both assignments unchanged under their offers' commands.
+async function expectOfferKept(repository: AssignmentRepository, label: string, command: string | undefined): Promise<string[]> {
+  const problems: string[] = [];
+  const first = offered('assignment-1', 'attempt-1', 'offer-1');
+  const second = offered('assignment-2', 'attempt-2', 'offer-2');
+  expectSuccess(problems, 'add first', await repository.add(first));
+  expectSuccess(problems, 'add second', await repository.add(second));
+  expectCode(problems, label, await repository.replace(reoffered(first, command), first.generation), 'conflict');
+  expectRead(problems, 'get first', await repository.get(first.id), first);
+  expectRead(problems, 'first by its offer', await repository.byOfferCommand(offerCommand('offer-1')), first);
+  expectRead(problems, 'second by its offer', await repository.byOfferCommand(offerCommand('offer-2')), second);
+  expectCode(problems, 'no new offer', await repository.byOfferCommand(offerCommand('offer-3')), 'not-found');
+  return problems;
 }
 
 export const ASSIGNMENT_REPOSITORY_CONFORMANCE: readonly ConformanceCase<AssignmentRepository>[] = Object.freeze([
@@ -135,6 +161,57 @@ export const ASSIGNMENT_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Assignm
       const listed = [...await repository.listByAttempt(first.attemptId)].sort((left, right) => (left.id < right.id ? -1 : 1));
       expectSame(problems, 'listed', listed, [second, ended(first)]);
       expectSame(problems, 'unknown attempt', await repository.listByAttempt(must(parseIdentifier('AttemptId', 'attempt-x'))), []);
+      return problems;
+    },
+  },
+  {
+    name: 'an assignment is found by the command that offered it, also once ended',
+    async check(repository: AssignmentRepository) {
+      const problems: string[] = [];
+      const first = offered('assignment-1', 'attempt-1', 'offer-1');
+      expectSuccess(problems, 'add', await repository.add(first));
+      expectSuccess(problems, 'add without an offer', await repository.add(offered('assignment-2', 'attempt-2')));
+      const command = (text: string) => must(parseIdentifier('EventId', text));
+      expectRead(problems, 'offered', await repository.byOfferCommand(command('offer-1')), first);
+      expectSuccess(problems, 'end', await repository.replace(ended(first), first.generation));
+      expectRead(problems, 'ended', await repository.byOfferCommand(command('offer-1')), ended(first));
+      expectCode(problems, 'unknown command', await repository.byOfferCommand(command('offer-x')), 'not-found');
+      return problems;
+    },
+  },
+  {
+    name: 'a second assignment of one offer command conflicts and leaves the first unchanged',
+    async check(repository: AssignmentRepository) {
+      const problems: string[] = [];
+      const first = offered('assignment-1', 'attempt-1', 'offer-1');
+      expectSuccess(problems, 'add', await repository.add(first));
+      expectCode(problems, 'same offer', await repository.add(offered('assignment-2', 'attempt-2', 'offer-1')), 'conflict');
+      expectCode(problems, 'not stored', await repository.get(must(parseIdentifier('AssignmentId', 'assignment-2'))), 'not-found');
+      expectRead(problems, 'first', await repository.byOfferCommand(must(parseIdentifier('EventId', 'offer-1'))), first);
+      return problems;
+    },
+  },
+  {
+    name: 'a replace that changes the offer command conflicts and changes nothing',
+    check: (repository: AssignmentRepository) => expectOfferKept(repository, 'changed offer', 'offer-3'),
+  },
+  {
+    name: 'a replace that clears the offer command conflicts and changes nothing',
+    check: (repository: AssignmentRepository) => expectOfferKept(repository, 'cleared offer', undefined),
+  },
+  {
+    name: 'a replace that takes another assignment\'s offer command conflicts and changes nothing',
+    check: (repository: AssignmentRepository) => expectOfferKept(repository, 'duplicated offer', 'offer-2'),
+  },
+  {
+    name: 'a replace cannot give an assignment an offer command it was added without',
+    async check(repository: AssignmentRepository) {
+      const problems: string[] = [];
+      const unoffered = offered('assignment-1', 'attempt-1');
+      expectSuccess(problems, 'add', await repository.add(unoffered));
+      expectCode(problems, 'set offer', await repository.replace(reoffered(unoffered, 'offer-1'), unoffered.generation), 'conflict');
+      expectRead(problems, 'get', await repository.get(unoffered.id), unoffered);
+      expectCode(problems, 'no offer', await repository.byOfferCommand(offerCommand('offer-1')), 'not-found');
       return problems;
     },
   },

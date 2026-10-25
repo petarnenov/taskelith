@@ -53,7 +53,7 @@ const PRINCIPAL: WorkerPrincipal = { workerId: WORKER.workerId, generation: 1 };
 beforeEach(async () => {
   await sql(url, `TRUNCATE workflow_runs, gates, admissions, tasks, assignments, outbox, inbox, task_lineage, capacity_charges,
     delegations, capacity_quotas, workers, installation, enrollment_tokens, broker_revocations, launch_authorizations,
-    launch_rejections, current_revisions`);
+    launch_rejections, current_revisions, producer_cursors`);
   await sql(url, 'INSERT INTO installation (quarantined, recovery_epoch) VALUES (false, 1)');
   value(await fleet.addToken(fleetToken('token-1')));
   value(await fleet.enroll(fleetToken('token-1').hash, WORKER));

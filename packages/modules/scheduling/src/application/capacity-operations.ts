@@ -4,13 +4,22 @@ import {
   checkOwnership,
   executionsUnderAssignment,
   revokeLaunch,
+  type AssignmentExecutions,
   type AssignmentId,
   type AttemptId,
   type Task,
   type WorkerId,
 } from '@taskelith/execution';
 import type { OwnershipGeneration, TaskId } from '@taskelith/sdlc';
-import { createAssignment, endAssignment, releaseAfterTerminalFact, supersedeAssignment, type Assignment } from '../domain/assignment.js';
+import {
+  createAssignment,
+  endAssignment,
+  refuseAssignment,
+  releaseAfterTerminalFact,
+  supersedeAssignment,
+  type Assignment,
+  type Refusal,
+} from '../domain/assignment.js';
 import { DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY } from '../domain/capacity-limits.js';
 import { reasonOutcome, type CapacityReason } from '../domain/capacity-reasons.js';
 import type { ProjectId, ProviderCredentialId, ReservationId, ResourceRequest } from '../domain/capacity-reservation.js';
@@ -79,14 +88,38 @@ export async function cancelInTransaction(tx: CapacityTransaction, request: Rele
   return follow.ok ? ok(ended.value) : follow;
 }
 
-// For the transaction recording an attempt's end or an ended assignment's
-// last terminal fact; any other call is `precondition-failed`.
-export async function releaseInTransaction(tx: CapacityTransaction, request: ReleaseRequest): Promise<Result<Assignment>> {
+// A refusal ends the assignment and releases it, unless an execution under
+// it can run; then it keeps capacity and invalidates as a cancellation does.
+export async function refuseInTransaction(tx: CapacityTransaction, request: ReleaseRequest, refusal: Refusal): Promise<Result<Assignment>> {
   const loaded = await loadAssignment(tx, request.assignmentId);
   if (!loaded.ok) return loaded;
   const { assignment, task } = loaded.value;
   const at = await tx.now();
+  const refused = refuseAssignment(assignment, assignment.generation, refusal, executionsUnderAssignment(task, assignment.id), at);
+  if (!refused.ok) return refused;
+  const stored = await tx.assignments.replace(refused.value, assignment.generation);
+  if (!stored.ok) return stored;
+  if (refused.value.reservation.state === 'released') return ok(refused.value);
+  const revoked = await revokeRunningLaunch(tx, refused.value, task, request, at);
+  return revoked.ok ? ok(refused.value) : revoked;
+}
+
+// A release ends the assignment or frees its reservation; `kept` is an
+// ended assignment whose execution can still run, so capacity stays held.
+export interface ReleaseOutcome {
+  readonly outcome: 'released' | 'kept';
+  readonly assignment: Assignment;
+}
+
+// For the transaction recording an attempt's end or an ended assignment's
+// last terminal fact; any other call is `precondition-failed`.
+export async function releaseInTransaction(tx: CapacityTransaction, request: ReleaseRequest): Promise<Result<ReleaseOutcome>> {
+  const loaded = await loadAssignment(tx, request.assignmentId);
+  if (!loaded.ok) return loaded;
+  const { assignment, task } = loaded.value;
   const executions = executionsUnderAssignment(task, assignment.id);
+  if (isKeptForExecution(assignment, executions)) return ok(releaseOutcome(assignment));
+  const at = await tx.now();
   const attemptEnded = assignment.state !== 'ended' && hasEnded(task, assignment.attemptId);
   const released = attemptEnded
     ? endAssignment(assignment, assignment.generation, 'attempt-ended', executions, at)
@@ -94,9 +127,9 @@ export async function releaseInTransaction(tx: CapacityTransaction, request: Rel
   if (!released.ok) return released;
   const stored = await tx.assignments.replace(released.value, assignment.generation);
   if (!stored.ok) return stored;
-  if (!attemptEnded) return ok(released.value);
+  if (!attemptEnded) return ok(releaseOutcome(released.value));
   const ended = await appendWorkerCommand(tx, request, 'execution.assignment.end', released.value, at, endPayload(released.value, 'attempt-ended'));
-  return ended.ok ? ok(released.value) : ended;
+  return ended.ok ? ok(releaseOutcome(released.value)) : ended;
 }
 
 // Bounded supersession (contract section 6) of an assignment without a
@@ -155,6 +188,7 @@ async function insertPlacement(
     attemptId: request.attemptId,
     workerId: request.workerId,
     ownershipGeneration: task.ownershipGeneration,
+    offerCommandId: request.commandId,
     reservation: {
       id: request.reservationId,
       scope: { projectId: lineage.projectId, runId: lineage.runId, taskId: request.taskId, rootTaskId: lineage.rootTaskId },
@@ -187,6 +221,14 @@ function checkPlacementClaim(task: Task, request: PlacementRequest): Result<void
   return err(failure('precondition-failed', `attempt ${request.attemptId} does not retry ${request.automaticRetryOf}`, {
     attempt: request.attemptId, retryOf: request.automaticRetryOf,
   }));
+}
+
+function isKeptForExecution(assignment: Assignment, executions: AssignmentExecutions): boolean {
+  return assignment.state === 'ended' && assignment.reservation.state === 'held' && executions.nonTerminal;
+}
+
+function releaseOutcome(assignment: Assignment): ReleaseOutcome {
+  return Object.freeze({ outcome: assignment.reservation.state === 'released' ? 'released' : 'kept', assignment });
 }
 
 function hasEnded(task: Task, attemptId: AttemptId): boolean {
@@ -229,8 +271,8 @@ async function loadAssignment(tx: CapacityTransaction, assignmentId: AssignmentI
   return ok({ assignment: assignment.value, task: task.value });
 }
 
-// A cancellation is an invalidating writer (launch authorization section 5):
-// it revokes the running execution's grants and sends its cancellation.
+// A cancellation or refusal invalidates (launch authorization section 5):
+// it revokes the execution's grants and sends its cancellation.
 async function revokeRunningLaunch(tx: CapacityTransaction, assignment: Assignment, task: Task, request: ReleaseRequest, at: Instant): Promise<Result<void>> {
   const revoked = revokeLaunch(task, assignment.attemptId, 'attempt-not-launchable', at);
   if (!revoked.ok) return revoked;

@@ -292,8 +292,8 @@ async function enrolledWorker(journalId: string): Promise<{ bearer: string; work
   return { bearer: (enrolled.body.credentials as { controlPlane: string }).controlPlane, workerId: enrolled.body.workerId as WorkerId };
 }
 
-// Enrolled workers are unreachable until item 21b, so the placement loop
-// places nothing and a test places the task itself.
+// Enrolled workers are unreachable until their first observation, so the
+// placement loop places nothing and a test places the task itself.
 async function placedWorker(journalId: string, taskId = 'task-1'): Promise<{ bearer: string; workerId: string; attemptId: string; generation: number }> {
   const { bearer, workerId } = await enrolledWorker(journalId);
   const attemptId = `attempt-${journalId}` as AttemptId;
@@ -502,6 +502,32 @@ describe('enrollment and quarantine', () => {
     assert.equal((replayed.body.rejection as { reason: string }).reason, 'operation-mismatch');
     assert.equal((await call('POST', '/launch-authorizations', { bearer: operator, body })).status, 401, 'the operator is no worker');
     assert.equal((await call('POST', '/launch-authorizations', { bearer: workerBearer, body: { ...body, recoveryEpoch: 0 } })).status, 400);
+  });
+
+  test('an observation on the stream is applied, and its confirmation reaches the worker without a message ID', async () => {
+    const { workerId } = await enrolledWorker('journal-observed');
+    const broker = value(await connectTransport({ server: NATS, address, creds: authority.user('observer', Math.floor(Date.now() / 1000)).creds }));
+    try {
+      const declared = {
+        metadata: {
+          observationId: 'declared-observed-1', observationType: 'worker.capacity.declared', schemaVersion: 1, protocolVersion: 1,
+          occurredAt: '2026-10-25T09:00:00.000Z', correlationId: 'corr-observed', workerId, journalId: 'journal-observed', sequence: 1,
+        },
+        payload: { capacity: { slots: 1, cpuMillicores: 1000, memoryMebibytes: 1024, enforceableControls: [] }, protocolVersions: { minimum: 1, maximum: 1 } },
+      };
+      assert.ok(checkMessageSchema('CapacityDeclaredObservation', declared).ok);
+      await broker.js.publish(value(address.observationSubject(workerId)), encodeJson(declared), { msgID: 'declared-observed-1' });
+      const published = async () => (await sql<{ published: boolean }>(database,
+        "SELECT published_at IS NOT NULL AS published FROM outbox WHERE event_type = 'execution.observations.confirmed'"))[0]?.published === true;
+      await waitFor(published);
+      const [worker] = await sql<{ reachable: boolean }>(database, 'SELECT reachable FROM workers WHERE worker_id = $1', [workerId]);
+      assert.equal(worker?.reachable, true);
+      const stored = await broker.jsm.streams.getMessage(address.streamName('commands'), { last_by_subj: value(address.commandSubject(workerId)) });
+      assert.ok(stored);
+      assert.deepEqual([stored.json<{ confirmedThrough: number }>().confirmedThrough, stored.header?.get('Nats-Msg-Id') ?? ''], [1, '']);
+    } finally {
+      await broker.close();
+    }
   });
 
   test('the quarantine is listed, and redriving an unknown record is 404', async () => {

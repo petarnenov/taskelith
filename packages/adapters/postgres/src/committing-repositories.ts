@@ -170,6 +170,10 @@ export class CommittingAssignmentRepository implements AssignmentRepository {
   listByAttempt(attemptId: AttemptId): Promise<readonly Assignment[]> {
     return listed(this.#database.transaction(async (tx) => ok(await tx.assignments.listByAttempt(attemptId))));
   }
+
+  byOfferCommand(commandId: EventId): Promise<Result<Assignment>> {
+    return this.#database.transaction((tx) => tx.assignments.byOfferCommand(commandId));
+  }
 }
 
 export class CommittingOutbox implements Outbox {

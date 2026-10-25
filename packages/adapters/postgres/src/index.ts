@@ -21,6 +21,7 @@ export { PostgresFleetRegistry, PostgresInstallationTable, PostgresOperatorCrede
 export { NO_CRASH_POINTS, type CrashPointHook, type PostgresCrashPoint } from './crash-points.js';
 export { PostgresCurrentRevisions, PostgresLaunchRecords } from './launch-repositories.js';
 export { MIGRATIONS_DIRECTORY, migrate } from './migrations.js';
+export { PostgresProducerCursors, PostgresWorkerReports } from './observation-repositories.js';
 export { PostgresOutboxRelay } from './outbox-relay.js';
 export {
   PostgresDatabase,

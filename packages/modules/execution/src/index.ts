@@ -174,6 +174,7 @@ export {
 } from './domain/task.js';
 export { InMemoryEvidenceRecords } from './adapters/in-memory-evidence.js';
 export { InMemoryInbox } from './adapters/in-memory-inbox.js';
+export { InMemoryProducerCursors } from './adapters/in-memory-producer-cursors.js';
 export { InMemoryTaskRepository } from './adapters/in-memory-task-repository.js';
 export { EVIDENCE_RECORDS_CONFORMANCE, EVIDENCE_STORE_CONFORMANCE } from './ports/evidence-conformance.js';
 export type { EvidenceRecords } from './ports/evidence-records.js';
@@ -182,11 +183,13 @@ export type { Inbox, InboxOutcome } from './ports/inbox.js';
 export type { LaunchAuthorityClient, LaunchAuthorizationRequest } from './ports/launch-authority-client.js';
 export type { LaunchPredicate, LaunchRecords, RecordedLaunch, RecordedRejection } from './ports/launch-records.js';
 export type { Outbox, OutboxMessage } from './ports/outbox.js';
+export type { ProducerCursors } from './ports/producer-cursors.js';
 // The outbox ports are structurally identical, so they share one suite.
 export { OUTBOX_CONFORMANCE } from '@taskelith/sdlc';
 export {
   INBOX_CONFORMANCE,
   LAUNCH_RECORDS_CONFORMANCE,
+  PRODUCER_CURSORS_CONFORMANCE,
   TASK_REPOSITORY_CONFORMANCE,
   type LaunchRecordsConformanceTarget,
 } from './ports/repository-conformance.js';

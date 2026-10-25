@@ -6,9 +6,11 @@ import { err, failure, ok, type Result } from '@taskelith/kernel';
 import {
   connectTransport,
   ensureAdvisoryConsumer,
-  NatsCommandConsumers,
+  ensureObservationConsumer,
   ensureStreams,
   JetStreamPublisher,
+  NatsCommandConsumers,
+  observationConsumer,
   OutboxPublisher,
   Quarantine,
   runOutboxPublisher,
@@ -16,6 +18,7 @@ import {
   TransportAddress,
   TRANSPORT_LIMITS,
   type ControlPlaneConnection,
+  type DeliveredMessage,
   type TransportLimits,
 } from '@taskelith/nats';
 import { EventLoopLagMonitor, JsonLinesLogSink, runPeriodically, SYSTEM_CLOCK } from '@taskelith/node-observability';
@@ -28,6 +31,7 @@ import { ControlPlaneApi } from '../api/control-plane-api.js';
 import { DelegationService } from '../application/delegation-service.js';
 import { EvidenceService } from '../application/evidence-service.js';
 import { LaunchAuthority } from '../application/launch-authority.js';
+import { OBSERVATION_CONSUMER, ObservationService } from '../application/observation-service.js';
 import { PlacementService } from '../application/placement-service.js';
 import { RunService } from '../application/run-service.js';
 import { TaskService } from '../application/task-service.js';
@@ -144,6 +148,8 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   const sweep = settings.sweepMilliseconds ?? GRACE_WINDOW_SWEEP_MILLISECONDS;
   const placement = new PlacementService(database, { now: Date.now, draw: Math.random });
   const placementPass = settings.placementMilliseconds ?? PLACEMENT_PASS_MILLISECONDS;
+  const observations = observationConsumer(broker.value.js, address.value, OBSERVATION_CONSUMER,
+    observationHandler(new ObservationService(database, { newConfirmationId: () => `o${randomUUID()}`, logger }), address.value), { limits, logger, metrics });
   let outcome: 'stopped' | 'failed' = 'stopped';
   let settle!: (value: 'stopped' | 'failed') => void;
   const stopped = new Promise<'stopped' | 'failed'>((resolve) => { settle = resolve; });
@@ -179,6 +185,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     supervise('outbox', runOutboxPublisher(publisher, controller.signal, limits)),
     supervise('quarantine', runQuarantineKeeper(quarantine, controller.signal, limits)),
     supervise('grace-windows', runPeriodically(async () => logFailure(logger, 'fleet.grace-windows.failed', await enrollment.value.service.expireGraceWindows()), controller.signal, sweep)),
+    supervise('observations', observations.run(controller.signal)),
     supervise('placement', runPeriodically(async () => logFailure(logger, 'execution.placement.failed', await placement.placeWaiting()), controller.signal, placementPass)),
     supervise('sampler', runPeriodically(() => sampleControlPlane(new PostgresControlPlaneSignals(database), metrics, logger), controller.signal)),
     supervise('event-loop', runPeriodically(() => lag.sample(metrics), controller.signal)),
@@ -220,7 +227,16 @@ function once(work: () => Promise<void>): () => Promise<void> {
 
 async function prepareTopology(broker: ControlPlaneConnection, address: TransportAddress, limits: TransportLimits): Promise<Result<void>> {
   const streams = await ensureStreams(broker.jsm, address, limits);
-  return streams.ok ? ensureAdvisoryConsumer(broker.jsm, address, limits) : streams;
+  if (!streams.ok) return streams;
+  const observations = await ensureObservationConsumer(broker.jsm, address, OBSERVATION_CONSUMER, limits);
+  return observations.ok ? ensureAdvisoryConsumer(broker.jsm, address, limits) : observations;
+}
+
+// The worker that the subject names authenticates the observation.
+function observationHandler(service: ObservationService, address: TransportAddress) {
+  return (message: DeliveredMessage) => service.apply({
+    subjectWorkerId: address.workerOfObservationSubject(message.subject), type: message.type, body: message.body,
+  });
 }
 
 function listen(server: Server, endpoint: ApiEndpoint): Promise<Result<ApiEndpoint>> {

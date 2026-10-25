@@ -32,7 +32,9 @@ interface WorkerRow {
   readonly revoked: boolean;
   readonly draining: boolean;
   readonly reachable: boolean;
+  readonly last_contact_at: Date | null;
   readonly admission_pressure_since: Date | null;
+  readonly capacity_refused_since: Date | null;
   readonly slots: number;
   readonly cpu_millicores: number;
   readonly memory_mebibytes: number;
@@ -41,8 +43,10 @@ interface WorkerRow {
 }
 
 // The columns placement reads; item 13 may add others to the table.
-const WORKER_COLUMNS = 'worker_id, enrolled, revoked, draining, reachable, admission_pressure_since, slots, cpu_millicores, memory_mebibytes, controls, protocol_version';
-export const ELIGIBLE = 'enrolled AND NOT revoked AND NOT draining AND reachable AND admission_pressure_since IS NULL AND protocol_version IS NOT NULL';
+const WORKER_COLUMNS = `worker_id, enrolled, revoked, draining, reachable, last_contact_at, admission_pressure_since, capacity_refused_since,
+  slots, cpu_millicores, memory_mebibytes, controls, protocol_version`;
+export const ELIGIBLE = `enrolled AND NOT revoked AND NOT draining AND reachable AND admission_pressure_since IS NULL
+  AND capacity_refused_since IS NULL AND protocol_version IS NOT NULL`;
 
 const HELD = "reservation_state = 'held'";
 
@@ -73,14 +77,15 @@ export class PostgresPlacementWorkers implements PlacementWorkers {
 }
 
 function workerRecord(row: WorkerRow): WorkerPlacementRecord {
-  const since = row.admission_pressure_since === null ? undefined : instant(row.admission_pressure_since);
   return Object.freeze({
     workerId: row.worker_id as WorkerId,
     enrolled: row.enrolled,
     revoked: row.revoked,
     draining: row.draining,
     reachable: row.reachable,
-    ...(since === undefined ? {} : { admissionPressureSince: since }),
+    ...(row.last_contact_at === null ? {} : { lastContactAt: instant(row.last_contact_at) }),
+    ...(row.admission_pressure_since === null ? {} : { admissionPressureSince: instant(row.admission_pressure_since) }),
+    ...(row.capacity_refused_since === null ? {} : { capacityRefusedSince: instant(row.capacity_refused_since) }),
     slots: row.slots,
     cpuMillicores: row.cpu_millicores,
     memoryMebibytes: row.memory_mebibytes,
