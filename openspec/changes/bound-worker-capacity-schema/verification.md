@@ -27,6 +27,8 @@ Ubuntu 24.04.5 LTS, Linux 6.8.0-147-generic, x86_64; Node.js v24.22.1 and npm 12
 
 Reviewer: Codex (`gpt-6.1-sol`), reasoning effort medium, read-only sandbox, as assigned by the coordinator, run from the worktree as `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, with the prompt and log outside the worktree.
 
+- **Pass 1 — session `01a17410-7d33-7df1-9df2-948b5ebe8278`, head `9b311bb`.** The header confirmed the model, reasoning effort medium, and the read-only sandbox; the snapshot (`git ls-files -co --exclude-standard | xargs shasum -a 256 | shasum -a 256`) was `05798b23…2b2` before and after the pass. The reviewer confirmed the bound against the three `integer` columns and the capacity contract, that the HTTP schema validation precedes the token's use and that `MAX_CAPACITY_VALUE` has no remaining reference, that the NATS observation validation enforces the AsyncAPI bound before handling, the version bumps, the full `MODIFIED` copy, and the scope; with the maximums removed in memory, the new test failed as expected. Findings: 0 Critical, 0 High, 0 Medium, 0 Low. Only this record entry and task 2.3 changed after the pass; `make verify` ran again in the `pre-push` hook of the handoff push.
+
 ## Limitations
 
 - `ResourceRequest` keeps CPU and memory without a maximum, although the reservation columns are also `integer`; it is outside this scope and reported to the coordinator.
