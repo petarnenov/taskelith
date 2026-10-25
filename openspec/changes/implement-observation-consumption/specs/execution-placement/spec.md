@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Placement transaction
-The control plane SHALL place each waiting task in its own SERIALIZABLE transaction. The transaction SHALL open the first attempt, or claim the ownership for a new placement of the active attempt, and SHALL reserve the default attempt request on a candidate, as an automatic retry of the earlier attempt when the active attempt retries one. When no candidate accepts and the last reason waits or stands, the transaction SHALL roll back, so that the task keeps waiting unchanged. When the last reason rejects, the transaction SHALL instead end the attempt with the outcome `not-started`, close the task's delegation, and open no retry.
+The control plane SHALL place each waiting task in its own SERIALIZABLE transaction, which SHALL open the first attempt or claim the ownership for a new placement of the active attempt, and SHALL reserve the default attempt request on a candidate, as an automatic retry when the attempt retries another. When no candidate accepts, the transaction SHALL roll back if the last reason waits or stands, and otherwise SHALL end the attempt `not-started`, close the task's delegation, and open no retry.
 
 #### Scenario: First placement
 - **WHEN** a waiting task without an attempt is placed and a reachable eligible worker has capacity
