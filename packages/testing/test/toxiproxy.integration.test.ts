@@ -2,19 +2,11 @@ import assert from 'node:assert/strict';
 import { connect } from 'node:net';
 import { afterEach, test } from 'node:test';
 import pg from 'pg';
-import { Toxiproxy } from '@taskelith/testing';
+import { Toxiproxy, integrationEndpoint } from '@taskelith/testing';
 
-const REMEDY = 'run make test or make verify, or export the URLs that make services-up prints';
-
-function endpoint(name: string): URL {
-  const value = process.env[name];
-  if (!value || !URL.canParse(value)) throw new Error(`${name} is not set to a URL; ${REMEDY}`);
-  return new URL(value);
-}
-
-const toxiproxy = new Toxiproxy(endpoint('TASKELITH_TOXIPROXY_URL'));
-const postgresRoute = endpoint('TASKELITH_POSTGRES_PROXY_URL');
-const natsRoute = endpoint('TASKELITH_NATS_PROXY_URL');
+const toxiproxy = new Toxiproxy(integrationEndpoint('TASKELITH_TOXIPROXY_URL'));
+const postgresRoute = integrationEndpoint('TASKELITH_POSTGRES_PROXY_URL');
+const natsRoute = integrationEndpoint('TASKELITH_NATS_PROXY_URL');
 
 afterEach(() => toxiproxy.reset());
 

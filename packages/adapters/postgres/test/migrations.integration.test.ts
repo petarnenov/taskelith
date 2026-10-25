@@ -1,0 +1,67 @@
+import assert from 'node:assert/strict';
+import { cp, mkdtemp, rm, unlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import test from 'node:test';
+import { MIGRATIONS_DIRECTORY, migrate } from '@taskelith/postgres';
+import { SERVER_URL, createTestDatabase, databaseUrl, query } from './test-database.ts';
+
+const INITIAL = '1792929600000_initial-state';
+
+async function copiedMigrations(): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), 'taskelith-migrations-'));
+  await cp(MIGRATIONS_DIRECTORY, directory, { recursive: true });
+  test.after(() => rm(directory, { recursive: true, force: true }));
+  return directory;
+}
+
+test('migrations apply once, record their checksums, and create the schema', async () => {
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  assert.deepEqual(await migrate(url), { ok: true, value: [INITIAL] });
+  assert.deepEqual(await migrate(url), { ok: true, value: [] });
+  const checksums = await query<{ name: string; sha256: string }>(url, 'SELECT name, sha256 FROM schema_migration_checksums');
+  assert.deepEqual(checksums.map((row) => row.name), [INITIAL]);
+  assert.match(checksums[0]!.sha256, /^[0-9a-f]{64}$/);
+  const tables = await query<{ table_name: string }>(
+    url, "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name",
+  );
+  assert.deepEqual(tables.map((row) => row.table_name), [
+    'admissions', 'assignments', 'gates', 'inbox', 'outbox', 'schema_migration_checksums', 'schema_migrations', 'tasks', 'workflow_runs',
+  ]);
+});
+
+test('a later migration file is applied after the applied ones', async () => {
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  const directory = await copiedMigrations();
+  assert.equal((await migrate(url, directory)).ok, true);
+  await writeFile(join(directory, '1792929700000_add-note.sql'), '-- Up Migration\nCREATE TABLE note (id int);\n-- Down Migration\nDROP TABLE note;\n');
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: ['1792929700000_add-note'] });
+});
+
+test('an edited or deleted applied migration stops the run before anything is applied', async () => {
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  const directory = await copiedMigrations();
+  assert.equal((await migrate(url, directory)).ok, true);
+  const file = join(directory, `${INITIAL}.sql`);
+  await writeFile(file, '-- Up Migration\nSELECT 1;\n');
+  await writeFile(join(directory, '1792929700000_add-note.sql'), '-- Up Migration\nCREATE TABLE note (id int);\n');
+  const edited = await migrate(url, directory);
+  assert.equal(!edited.ok && edited.error.code, 'precondition-failed');
+  assert.equal(!edited.ok && edited.error.details.migrations, INITIAL);
+  await unlink(file);
+  const deleted = await migrate(url, directory);
+  assert.equal(!deleted.ok && deleted.error.code, 'precondition-failed');
+  assert.deepEqual(await query(url, "SELECT 1 FROM information_schema.tables WHERE table_name = 'note'"), []);
+});
+
+test('a failing migration is reported, and an unreachable server is unavailable', async () => {
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  const directory = await copiedMigrations();
+  await writeFile(join(directory, '1792929700000_broken.sql'), '-- Up Migration\nCREATE TABLE broken (;\n');
+  const broken = await migrate(url, directory);
+  assert.equal(!broken.ok && broken.error.code, 'internal');
+  const unreachable = new URL(url);
+  unreachable.port = '1';
+  const refused = await migrate(unreachable);
+  assert.equal(!refused.ok && refused.error.code, 'unavailable');
+});

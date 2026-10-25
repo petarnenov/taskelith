@@ -12,3 +12,4 @@ export { ScenarioProcess, type ProcessExit, type ScenarioProcessOptions } from '
 export { SEED_VARIABLE, SeededRandom, rerunHint, seedFromEnvironment } from './seeded-random.js';
 export { SimulatedHost, type MonotonicClock, type WallClock } from './simulated-host.js';
 export { Toxiproxy, ToxiproxyProxy } from './toxiproxy.js';
+export { SERVICES_REMEDY, integrationEndpoint } from './integration-endpoint.js';

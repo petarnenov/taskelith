@@ -10,12 +10,15 @@
     }
   },
   "dependencies": {
+    "@taskelith/execution": "0.0.0",
     "@taskelith/kernel": "0.0.0",
+    "@taskelith/scheduling": "0.0.0",
     "@taskelith/sdlc": "0.0.0",
     "node-pg-migrate": "9.0.0",
     "pg": "8.23.1"
   },
   "devDependencies": {
+    "@taskelith/testing": "0.0.0",
     "@types/pg": "8.23.1"
   }
 }
