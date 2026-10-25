@@ -490,7 +490,8 @@ describe('outcomes', () => {
       value(await exit(sequence++, at, await seedExecution(at), 1));
       const task = await stored(at.taskId);
       assert.deepEqual([task.attempts.length, task.attempts.at(-1)!.retryOf], [retry + 2, at.attemptId]);
-      assert.equal((await result(at.taskId)).state, 'pending', 'a retry is active');
+      const answer = await result(at.taskId);
+      assert.deepEqual([answer.state, answer.state === 'ended' && answer.attemptId], ['ended', at.attemptId], 'the last ended attempt');
       clock.skew = 0;
       assert.deepEqual(value(await placement.placeWaiting()), { waiting: 1, placed: 0 }, 'within its backoff');
       clock.skew = 60_000;
@@ -585,7 +586,8 @@ describe('placement after outcomes', () => {
       const retry = openAttempt(task.value, task.value.ownershipGeneration, { id: retryId, retryOf: at.attemptId }, await tx.now());
       return retry.ok ? tx.tasks.replace(retry.value, task.value.generation) : retry;
     }));
-    assert.equal((await result(at.taskId)).state, 'pending');
+    const failed = await result(at.taskId);
+    assert.deepEqual([failed.state, failed.state === 'ended' && failed.attemptId], ['ended', at.attemptId]);
     clock.skew = 60_000;
     assert.deepEqual(value(await placement.placeWaiting()), { waiting: 1, placed: 0 });
     const task = await stored(at.taskId);

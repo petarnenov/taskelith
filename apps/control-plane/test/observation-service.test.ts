@@ -168,7 +168,8 @@ test('a placed attempt is accepted, retried after a failed exit, and ends with a
     commandId: first.assignment.offerCommandId, assignmentId: first.assignment.id,
   }, { attemptId: first.attemptId, ownershipGeneration: first.generation }))), 'applied');
   assert.equal(value(await exitWith(placedFixture, first, { sequence: 3, code: 1 })), 'applied');
-  assert.equal(value(await tasks.readTaskResult('run-1', 'task-1')).state, 'pending');
+  const failed = value(await tasks.readTaskResult('run-1', 'task-1'));
+  assert.deepEqual([failed.state, failed.state === 'ended' && failed.attemptId], ['ended', first.attemptId]);
   assert.equal(value(await placement.placeWaiting()).placed, 1);
   const retry = await lastAttempt(placedFixture);
   assert.equal(retry.assignment.reservation.retryOf, first.attemptId);

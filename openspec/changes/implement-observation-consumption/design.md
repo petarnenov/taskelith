@@ -83,6 +83,7 @@ Item 12 delivered the observation stream, a validating durable consumer (`observ
     - `worker-admission-pressure` records the refusal's causes as the worker's pressure, under the pressure fence of decision 13.
 11. **Command rejection.** A rejection of an `execution.assignment.offer` for `protocol-not-supported` refuses its assignment with `protocol-not-supported` through `refuseInTransaction` (wire contracts section 3), so decision 10 applies, a grant included. The refusal is unconditional. The assignment is found by `AssignmentRepository.byOfferCommand(commandId)`, from the new `assignments.offer_command_id` column.
     - The column is unique, and both adapters reject a second assignment of one offer command with `conflict`.
+    - A replace keeps the offer command: one that changes, sets, or clears it fails with `conflict` and changes nothing. A record stored before the command was kept lacks it; the PostgreSQL adapter reads the column's command into every record it returns, and a replace that omits it keeps the column.
     - The migration backfills that column from the outbox rows of offers. It parses each row as the placement migration does: an escaped backslash becomes `\u005c` first, and only then are the escapes that jsonb rejects (`\u0000` and lone surrogates) masked, so identifiers with backslashes, quotes, or escape-like text stay exact.
     - The worker's protocol version becomes `commonProtocolVersion` of the rejection's window, or none, which makes it ineligible. It is written under the protocol fence of decision 13.
     - Any other rejection is `rejected`.
@@ -93,7 +94,7 @@ Item 12 delivered the observation stream, a validating durable consumer (`observ
     - **Release.** For each assignment of the attempt that holds its reservation, `releaseInTransaction` releases it when nothing under it can run. When it ends an assignment, it appends `execution.assignment.end` with `attempt-ended`. The command identity is `e` followed by the SHA-256 of the observation and the assignment.
     - **Refusal mark.** A terminal fact clears the worker's `capacity_refused_since` under the refusal fence of decision 13.
     - **After the end.** When the attempt ended, the transaction either opens an automatic retry (decision 14), or treats the task as terminal and closes its delegation with `closeDelegation`. A task without a delegation reports `not-found`, which is ignored.
-    - **Result.** The outcome fact is the ended attempt's outcome in the task record. `readTaskResult` reads it, and is pending while the task has an active attempt.
+    - **Result.** The outcome fact is the ended attempt's outcome in the task record. `readTaskResult` reports the outcome of the task's last ended attempt, as the published wire contract states, also while a retry is active.
 13. **Capacity and pressure.**
     - `worker.capacity.declared` writes the slots, CPU, memory, and controls. It sets the protocol version to `commonProtocolVersion` of its window, and clears `capacity_refused_since`.
     - `worker.admission-pressure.changed` sets `admission_pressure_since` for a non-empty cause list, keeping an earlier start, and clears it for an empty one.

@@ -44,7 +44,6 @@ Obligations left to the later changes. An observation of these types is not appl
   - `ObservationService` applies each observation in one SERIALIZABLE transaction: authentication, inbox, cursor, the effect, and the confirmation. A duplicate within the confirmed prefix sends the confirmation again.
   - The composition root runs the observation consumer.
   - `PlacementService` ends the attempt on a rejecting reason and places a retry as automatic once its backoff has passed.
-  - `readTaskResult` is pending while the task has an active attempt.
 
 ## Capabilities
 

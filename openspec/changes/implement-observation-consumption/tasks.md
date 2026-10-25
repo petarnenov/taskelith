@@ -9,7 +9,7 @@
 
 - [x] 2.1 Publish confirmations without a `Nats-Msg-Id` header.
 - [x] 2.2 Add `ObservationService` and run the observation consumer in the composition root.
-- [x] 2.3 End rejected placements, place retries as automatic, and keep `readTaskResult` pending while an attempt is active.
+- [x] 2.3 End rejected placements and place retries as automatic.
 
 ## 3. Verification and review
 
