@@ -30,6 +30,7 @@ Environment: macOS (Darwin 25.6.0, arm64), Node v24.22.1, npm 12.2.1 (through `m
 - Before the merge of item 9, `npm test` passed 315 tests with 98.54% line coverage; the harness modules other than `toxiproxy.js` had 100% line coverage.
 - After the merge and the services work, on `7183ebd`: `make verify` passed: comment rule, the workspace package contract and boundary checks, 332 tests (including the five Toxiproxy integration tests and item 9's two service tests against a Compose project of their own), coverage 99.66% lines, 96.06% branches, 99.42% functions over all compiled product modules, `toxiproxy.js` at 100%, contract compatibility, dependency inventory, strict OpenSpec validation (39 items), the archive dry run, and package verification. A first run failed in the archive dry run because the modified `development-environment` requirement exceeded 500 characters; it was shortened in `7183ebd`.
 - After the pass 1 fixes, on `51a1c5e`: `make verify` passed again with 332 tests and 99.66% lines, 96.07% branches, 99.42% functions.
+- After the pass 2 fixes, on `af67338`: `make verify` passed with 332 tests and 99.66% lines, 96.07% branches, 99.42% functions; every harness module has 100% line and function coverage.
 
 ## Independent review
 
@@ -48,6 +49,16 @@ Assigned reviewer: Claude Code 2.1.310 with `claude -p --model claude-fable-5-1 
   10. Low: data other than INFO was labeled `closed`. It is labeled `unexpected`.
   11. Low: `"types": ["node"]` repeated the root setting. The package `tsconfig.json` no longer overrides it.
   12. Low: a file owned by no package and not development code would be reported as product code. The rule now ignores such files.
+- **Pass 2 — session `f499f7af-7add-4ea1-bd34-efdb47258ea6`, reviewed `58e2005` (diff `9fb1c00...HEAD`).** `modelUsage` lists `claude-fable-5-1` (with `claude-opus-5-5` for auxiliary calls). Snapshots before and after were equal (`1f3d9f48…cf5ee`). The prompt named pass 1's session and asked for each resolution first. The reviewer confirmed findings 1 to 8 and 10 to 12 as resolved and accepted the deferral of finding 9, reran strict validation, the comment check, the type check of tests, the harness unit tests three times and the boundary tests, and recomputed the Mulberry32 reference sequence for seed 0. Findings: 0 Critical, 0 High, 0 Medium, 9 Low. As the review process allows for a Low-only pass, all were fixed in `af67338` without another pass; **these fixes have not been independently reviewed**:
+  1. `exited` waits for stdio, which a descendant holding stdout keeps open. Documented in the class comment; resolving on `exit` instead would let output arrive after `exited`.
+  2. The one-second polling limit could fail on a loaded runner. It is five seconds; the loop still ends at the first success.
+  3. An exported `TASKELITH_CRASH_POINT` in the developer's shell would arm the unarmed child. The test clears it before applying the scenario's environment.
+  4. A non-null assertion and an unreachable `throw` after `SIGKILL` hid the invariant. The armed crash is looked up as a value, and `crash` switches on the action.
+  5. Toxic names from the server entered the path unencoded. They are encoded.
+  6. API calls had no timeout. Each has a five-second `AbortSignal.timeout`.
+  7. The runtime dependency rule of the harness had no automatic check. The boundary check now rejects runtime imports from `packages/testing/src/` other than the kernel and Node built-ins (type-only and relative imports are allowed), with a test and a scenario.
+  8. The scenario listed fewer product locations than the rule rejects. It now names `src/` of any workspace package or application and the root `src/`.
+  9. The follow-up of pass 1 finding 9 had no home. It is recorded under remaining gates.
 
 ## Limitations
 
@@ -57,4 +68,4 @@ Assigned reviewer: Claude Code 2.1.310 with `claude -p --model claude-fable-5-1 
 
 ## Remaining gates
 
-Further review passes as needed; integration into `dev` and archive by the coordinator; promotion to `main`.
+Follow-up for a later item (11 or 12, the next to add integration tests): move the service endpoint reading, the remedy text, and the NATS greeting helper of `apps/control-plane/test/integration-services.ts` and `packages/testing/test/toxiproxy.integration.test.ts` into `@taskelith/testing`. Integration into `dev` and archive by the coordinator; promotion to `main`.
