@@ -6,6 +6,7 @@ const SUBJECT_TOKEN = /^[A-Za-z0-9_-]{1,64}$/;
 const OUTBOX_COMMAND_SUBJECT = /^workers\.([^.]+)\.commands$/;
 // The SDLC events of the control plane (coordinator decision Q2 of item 16).
 const OUTBOX_SDLC_SUBJECT = 'sdlc.events';
+const OBSERVATIONS_SUFFIX = '.observations';
 
 export type StreamKind = 'commands' | 'observations' | 'quarantine' | 'advisories' | 'sdlc';
 
@@ -40,6 +41,14 @@ export class TransportAddress {
       return err(failure('invalid', 'an outbox subject must be workers.<workerId>.commands or sdlc.events', { subject }));
     }
     return this.commandSubject(workerId);
+  }
+
+  // The worker whose observation subject this is, if it is one.
+  workerOfObservationSubject(subject: string): string | undefined {
+    const prefix = `${this.#prefix}.workers.`;
+    if (!subject.startsWith(prefix) || !subject.endsWith(OBSERVATIONS_SUFFIX)) return undefined;
+    const workerId = subject.slice(prefix.length, -OBSERVATIONS_SUFFIX.length);
+    return SUBJECT_TOKEN.test(workerId) ? workerId : undefined;
   }
 
   sdlcEventsSubject(): string {

@@ -33,6 +33,10 @@ export interface OutboxPublisherOptions {
 
 export const OUTBOX_BATCH = 100;
 
+// Wire contracts section 2: a confirmation is cumulative and has no
+// identity, so it is sent without a `Nats-Msg-Id`.
+const CONFIRMATION = 'execution.observations.confirmed';
+
 interface SubjectBackoff {
   readonly failures: number;
   readonly retryAt: number;
@@ -102,11 +106,10 @@ export class OutboxPublisher {
   async #publishRow(row: OutboxMessage): Promise<Result<void>> {
     const subject = this.#address.subjectOfOutboxRow(row.subject);
     if (!subject.ok) return subject;
-    const sent = await this.#publisher.publish({
-      subject: subject.value,
-      body: encodeJson(row.payload),
-      messageId: row.metadata.eventId,
-    });
+    const body = encodeJson(row.payload);
+    const sent = await this.#publisher.publish(row.metadata.eventType === CONFIRMATION
+      ? { subject: subject.value, body }
+      : { subject: subject.value, body, messageId: row.metadata.eventId });
     if (!sent.ok) return sent;
     return this.#source.markPublished(row.metadata.eventId);
   }
