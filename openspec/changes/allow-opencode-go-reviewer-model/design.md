@@ -4,5 +4,5 @@ The reviewer model is part of the reviewer's authorization in the governance pol
 
 ## Decisions
 
-- Add the OpenCode Go identifier as an alternative, not a replacement: hosts that reach `opencode/deepseek-v4.1-flash` keep using it.
+- Replace the identifier everywhere, as the owner set it as the correct configuration; the old route is no longer available.
 - Keep the `high` variant and every other rule of the OpenCode invocation unchanged.

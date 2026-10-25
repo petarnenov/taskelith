@@ -1,6 +1,6 @@
 ## 1. Model
 
-- [x] 1.1 Add the OpenCode Go model to the governance policy and the reviewer invocation.
+- [x] 1.1 Replace the OpenCode model in the governance policy and the reviewer invocation.
 
 ## 2. Verification and review
 
