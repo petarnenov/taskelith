@@ -58,6 +58,11 @@ export class InMemoryFleetRegistry implements FleetRegistry {
     return settle(ok(this.#workers.get(workerId)));
   }
 
+  activeWorkerIds(): Promise<Result<readonly WorkerId[]>> {
+    const active = [...this.#workers.values()].filter((worker) => worker.revokedAt === undefined).map((worker) => worker.workerId);
+    return settle(ok(Object.freeze(active.sort())));
+  }
+
   workerByCredentialHash(hash: SecretHash): Promise<Result<EnrolledWorker | undefined>> {
     const holds = (worker: EnrolledWorker) => credentialGenerations(worker.credentials).some((generation) => generation.controlPlaneHash === hash);
     const holders = [...this.#workers.values()].filter(holds);

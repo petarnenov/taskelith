@@ -8,7 +8,9 @@ import type {
   CommandId,
   CommandRecording,
   JournalBinding,
+  DeclaredCapacity,
   JournaledCommand,
+  JournalInventory,
   JournalSnapshot,
   OutboxEntry,
 } from '../domain/journal-records.js';
@@ -34,7 +36,11 @@ export interface WorkerJournal {
   recordNotStarted(executionId: ExecutionId): Result<void>;
   recordUncertain(executionId: ExecutionId): Result<void>;
   recordCancellationEvidence(commandId: CommandId): Result<void>;
+  // Journals a declaration only when it differs from the last one.
+  recordCapacity(capacity: DeclaredCapacity): Result<void>;
   snapshot(): Result<JournalSnapshot>;
+  // Takes the next inventory snapshot; each call gets a higher number.
+  takeInventory(): Result<JournalInventory>;
   // Entries to publish now: never published in this process, or not
   // confirmed within the republication bound.
   dueForPublication(now: Instant): Result<readonly OutboxEntry[]>;

@@ -2,6 +2,7 @@ export { applyOnce } from './deduplication.js';
 export { BrokerAuthority, type BrokerAuthorityKeys, type IssuedUser } from './broker-authority.js';
 export { accountJwt, credsFile, operatorJwt, userJwt, type ClaimTime, type UserPermissions } from './broker-jwt.js';
 export { NatsBrokerCredentials } from './nats-broker-credentials.js';
+export { NatsCommandConsumers } from './nats-command-consumers.js';
 export {
   connectSystemAccount,
   connectTransport,
@@ -14,7 +15,7 @@ export {
   type WorkerTransportEndpoint,
 } from './connection.js';
 export { encodeJson, JetStreamPublisher, type Publication, type PublishOutcome } from './jetstream-publisher.js';
-export { OUTBOX_BATCH, OutboxPublisher, runOutboxPublisher, type OutboxSource,
+export { OUTBOX_BATCH, OutboxPublisher, runOutboxPublisher, runPublicationLoop, type OutboxSource,
   type PublicationFence, type PublishRound } from './outbox-publisher.js';
 export {
   MAX_DELIVERIES_REASON,

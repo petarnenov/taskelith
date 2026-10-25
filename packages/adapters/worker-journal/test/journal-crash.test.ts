@@ -26,19 +26,19 @@ interface Expectation {
 
 const EXPECTATIONS: readonly Expectation[] = [
   { scenario: 'exit', point: 'W1.before', acknowledged: false, recovery: [], facts: [] },
-  { scenario: 'exit', point: 'W1.after', acknowledged: false, recovery: [CONTINUE], facts: [] },
-  { scenario: 'exit', point: 'W2.before', acknowledged: true, recovery: [CONTINUE], facts: [] },
-  { scenario: 'exit', point: 'W2.after', acknowledged: true, recovery: SEAL_AND_CONTINUE, facts: [] },
-  { scenario: 'exit', point: 'W3.before', acknowledged: true, recovery: SEAL_AND_CONTINUE, facts: [] },
-  { scenario: 'exit', point: 'W3.after', acknowledged: true, recovery: SEAL_AND_CONTINUE, facts: [] },
-  { scenario: 'exit', point: 'W4.before', acknowledged: true, recovery: SEAL_AND_CONTINUE, facts: [] },
-  { scenario: 'exit', point: 'W4.after', acknowledged: true, recovery: RECOVER_RECORD, facts: [] },
-  { scenario: 'exit', point: 'W5s.before', acknowledged: true, recovery: RECOVER_RECORD, facts: [] },
-  { scenario: 'exit', point: 'W5s.after', acknowledged: true, recovery: RECOVER_RECORD, facts: ['execution-started'] },
-  { scenario: 'exit', point: 'W5e.before', acknowledged: true, recovery: RECOVER_RECORD, facts: ['execution-started'] },
-  { scenario: 'exit', point: 'W5e.after', acknowledged: true, recovery: [], facts: ['execution-started', 'execution-exited'] },
-  { scenario: 'seal', point: 'W6.before', acknowledged: true, recovery: SEAL_AND_CONTINUE, facts: [] },
-  { scenario: 'seal', point: 'W6.after', acknowledged: true, recovery: [CONTINUE], facts: ['execution-not-started'] },
+  { scenario: 'exit', point: 'W1.after', acknowledged: false, recovery: [CONTINUE], facts: ['assignment-accepted'] },
+  { scenario: 'exit', point: 'W2.before', acknowledged: true, recovery: [CONTINUE], facts: ['assignment-accepted'] },
+  { scenario: 'exit', point: 'W2.after', acknowledged: true, recovery: SEAL_AND_CONTINUE, facts: ['assignment-accepted'] },
+  { scenario: 'exit', point: 'W3.before', acknowledged: true, recovery: SEAL_AND_CONTINUE, facts: ['assignment-accepted'] },
+  { scenario: 'exit', point: 'W3.after', acknowledged: true, recovery: SEAL_AND_CONTINUE, facts: ['assignment-accepted'] },
+  { scenario: 'exit', point: 'W4.before', acknowledged: true, recovery: SEAL_AND_CONTINUE, facts: ['assignment-accepted'] },
+  { scenario: 'exit', point: 'W4.after', acknowledged: true, recovery: RECOVER_RECORD, facts: ['assignment-accepted'] },
+  { scenario: 'exit', point: 'W5s.before', acknowledged: true, recovery: RECOVER_RECORD, facts: ['assignment-accepted'] },
+  { scenario: 'exit', point: 'W5s.after', acknowledged: true, recovery: RECOVER_RECORD, facts: ['assignment-accepted', 'execution-started'] },
+  { scenario: 'exit', point: 'W5e.before', acknowledged: true, recovery: RECOVER_RECORD, facts: ['assignment-accepted', 'execution-started'] },
+  { scenario: 'exit', point: 'W5e.after', acknowledged: true, recovery: [], facts: ['assignment-accepted', 'execution-started', 'execution-exited'] },
+  { scenario: 'seal', point: 'W6.before', acknowledged: true, recovery: SEAL_AND_CONTINUE, facts: ['assignment-accepted'] },
+  { scenario: 'seal', point: 'W6.after', acknowledged: true, recovery: [CONTINUE], facts: ['assignment-accepted', 'execution-not-started'] },
 ];
 
 const cleanups: (() => void)[] = [];

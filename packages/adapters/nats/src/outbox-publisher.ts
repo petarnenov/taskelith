@@ -122,17 +122,30 @@ function rowCorrelation({ metadata }: OutboxMessage): LogCorrelation {
 
 // Publishes until the signal aborts: at once while rows flow, after a pause
 // when none did, and with a growing pause while the outbox is unavailable.
-export async function runOutboxPublisher(
+export function runOutboxPublisher(
   publisher: OutboxPublisher,
+  signal: AbortSignal,
+  limits: TransportLimits = TRANSPORT_LIMITS,
+): Promise<void> {
+  return runPublicationLoop(async () => {
+    const round = await publisher.publishPending();
+    return round.ok ? ok(round.value.published) : round;
+  }, signal, limits);
+}
+
+// Runs publication rounds until the signal aborts: again at once after one
+// that published, after a pause when none did, and with backoff on failure.
+export async function runPublicationLoop(
+  round: () => Promise<Result<number>>,
   signal: AbortSignal,
   limits: TransportLimits = TRANSPORT_LIMITS,
 ): Promise<void> {
   let failedRounds = 0;
   while (!signal.aborted) {
-    const round = await publisher.publishPending();
-    failedRounds = round.ok ? 0 : failedRounds + 1;
-    if (round.ok && round.value.published > 0) continue;
-    const pause = round.ok ? limits.idlePollMilliseconds : retryDelayMilliseconds(failedRounds, limits);
+    const published = await round();
+    failedRounds = published.ok ? 0 : failedRounds + 1;
+    if (published.ok && published.value > 0) continue;
+    const pause = published.ok ? limits.idlePollMilliseconds : retryDelayMilliseconds(failedRounds, limits);
     await abortableDelay(pause, signal);
   }
 }

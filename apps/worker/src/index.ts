@@ -8,5 +8,7 @@ export {
   type HostFacts,
   type WorkerSettings,
 } from './settings.js';
+export { CommandIntake, type CommandIntakeOptions } from './command-intake.js';
+export { publishDueObservations, runObservationPublisher, type ObservationPublisherOptions } from './observation-publisher.js';
 export { startWorker, type RunningWorker, type WorkerDependencies } from './worker-start.js';
 export { productionDependencies, serveUntilStopped, workerMain, type ServiceProcess } from './main.js';
