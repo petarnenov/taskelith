@@ -1,7 +1,27 @@
+import type { ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
-  ActionIcon, AppShell, Avatar, Burger, Button, Group, MantineProvider,
-  NavLink, Text, Tooltip, createTheme, useComputedColorScheme, useMantineColorScheme,
+  ActionIcon,
+  AppShell,
+  Avatar,
+  Burger,
+  Button,
+  Center,
+  Group,
+  MantineProvider,
+  Menu,
+  NavLink,
+  Paper,
+  PasswordInput,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+  Tooltip,
+  UnstyledButton,
+  createTheme,
+  useComputedColorScheme,
+  useMantineColorScheme,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { PocProvider, usePoc, type Screen } from './store';
@@ -36,7 +56,7 @@ const NAV: { screen: Screen; label: string }[] = [
   { screen: 'states', label: 'Board states' },
 ];
 
-const SCREENS: Record<Screen, () => React.ReactNode> = {
+const SCREENS: Record<Screen, () => ReactNode> = {
   board: BoardScreen,
   session: SessionScreen,
   reviews: ReviewsScreen,
@@ -59,8 +79,12 @@ function ColorSchemeToggle() {
   const next = scheme === 'dark' ? 'light' : 'dark';
   return (
     <Tooltip label={'Switch to ' + next + ' theme'}>
-      <ActionIcon variant="default" size={44} aria-label={'Switch to ' + next + ' theme'}
-        onClick={() => setColorScheme(next)}>
+      <ActionIcon
+        variant="default"
+        size={44}
+        aria-label={'Switch to ' + next + ' theme'}
+        onClick={() => setColorScheme(next)}
+      >
         {scheme === 'dark' ? <SunIcon /> : <MoonIcon />}
       </ActionIcon>
     </Tooltip>
@@ -70,55 +94,155 @@ function ColorSchemeToggle() {
 function NeedsYouButton() {
   const { screen, go, needsYouCount } = usePoc();
   return (
-    <Button variant={screen === 'inbox' ? 'filled' : 'light'} color={needsYouCount ? 'orange' : 'teal'}
-      h={44} leftSection={<InboxIcon />} aria-current={screen === 'inbox' ? 'page' : undefined}
-      aria-label={'Needs you: ' + needsYouCount + ' items'} onClick={() => go('inbox')}>
-      <Text span visibleFrom="sm" inherit>Needs you ·&nbsp;</Text>{needsYouCount}
+    <Button
+      variant={screen === 'inbox' ? 'filled' : 'light'}
+      color={needsYouCount ? 'orange' : 'teal'}
+      h={44}
+      leftSection={<InboxIcon />}
+      aria-current={screen === 'inbox' ? 'page' : undefined}
+      aria-label={'Needs you: ' + needsYouCount + ' items'}
+      onClick={() => go('inbox')}
+    >
+      <Text span visibleFrom="sm" inherit>
+        Needs you ·&nbsp;
+      </Text>
+      {needsYouCount}
     </Button>
   );
 }
 
+function AccountMenu() {
+  const { signOut } = usePoc();
+  return (
+    <Menu position="bottom-end" width={280} withArrow>
+      <Menu.Target>
+        <UnstyledButton aria-label="Account menu">
+          <Avatar size={44} radius="xl" color="initials" name="P P">
+            PP
+          </Avatar>
+        </UnstyledButton>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Label>Signed in as PP</Menu.Label>
+        <Text size="xs" c="dimmed" px="sm" pb="xs">
+          installation-owner · project-maintainer of taskelith
+        </Text>
+        <Menu.Divider />
+        <Menu.Item>Account settings</Menu.Item>
+        <Menu.Item>Change password</Menu.Item>
+        <Menu.Divider />
+        <Menu.Item color="red" onClick={signOut}>
+          Sign out
+        </Menu.Item>
+      </Menu.Dropdown>
+    </Menu>
+  );
+}
+
+function SignInScreen() {
+  const { signIn } = usePoc();
+  return (
+    <Center mih="100vh" p="md">
+      <Paper
+        withBorder
+        p="xl"
+        radius="md"
+        w="100%"
+        maw={400}
+        component="form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          signIn();
+        }}
+      >
+        <Stack gap="md">
+          <Group gap={8}>
+            <LogoIcon />
+            <Title order={1} size="h3">
+              Sign in to Taskelith
+            </Title>
+          </Group>
+          <Text size="sm" c="dimmed">
+            You are signed out. Agents and merges keep running; only this browser session ended.
+          </Text>
+          <TextInput label="Username" defaultValue="pp" autoComplete="username" />
+          <PasswordInput label="Password" defaultValue="poc-password" autoComplete="current-password" />
+          <Button type="submit" h={44}>
+            Sign in
+          </Button>
+        </Stack>
+      </Paper>
+    </Center>
+  );
+}
+
 function Shell() {
-  const { screen, go } = usePoc();
+  const { screen, go, signedIn } = usePoc();
   const [opened, { toggle, close }] = useDisclosure(false);
   const Current = SCREENS[screen];
-  const navigate = (to: Screen) => { go(to); close(); };
+  const navigate = (to: Screen) => {
+    go(to);
+    close();
+  };
+  if (!signedIn) return <SignInScreen />;
 
   return (
-    <AppShell header={{ height: 68 }} padding="lg"
-      navbar={{ width: 260, breakpoint: 'xl', collapsed: { mobile: !opened, desktop: true } }}>
+    <AppShell
+      header={{ height: 68 }}
+      padding="lg"
+      navbar={{ width: 260, breakpoint: 'xl', collapsed: { mobile: !opened, desktop: true } }}
+    >
       <AppShell.Header px="md">
         <Group h="100%" gap="sm" wrap="nowrap">
           <Burger opened={opened} onClick={toggle} hiddenFrom="xl" size="sm" aria-label="Toggle navigation" />
           <Group gap={8} wrap="nowrap">
             <LogoIcon />
-            <Text fw={700} size="lg" visibleFrom="xs">Taskelith</Text>
+            <Text fw={700} size="lg" visibleFrom="xs">
+              Taskelith
+            </Text>
           </Group>
           <Button variant="default" h={44} rightSection={<ChevronIcon />} visibleFrom="sm">
-            <Text span c="dimmed" size="sm" mr={6}>Project</Text>
-            <Text span ff="monospace" size="sm">taskelith</Text>
+            <Text span c="dimmed" size="sm" mr={6}>
+              Project
+            </Text>
+            <Text span ff="monospace" size="sm">
+              taskelith
+            </Text>
           </Button>
           <Group gap={2} visibleFrom="xl" wrap="nowrap" component="nav" aria-label="Main">
             {NAV.map((item) => (
-              <Button key={item.screen} h={44} px="sm"
+              <Button
+                key={item.screen}
+                h={44}
+                px="sm"
                 variant={activeNav(screen) === item.screen ? 'light' : 'subtle'}
                 color={activeNav(screen) === item.screen ? undefined : 'gray'}
                 aria-current={activeNav(screen) === item.screen ? 'page' : undefined}
-                onClick={() => go(item.screen)}>{item.label}</Button>
+                onClick={() => go(item.screen)}
+              >
+                {item.label}
+              </Button>
             ))}
           </Group>
           <Group gap="sm" ml="auto" wrap="nowrap">
             <NeedsYouButton />
             <ColorSchemeToggle />
-            <Avatar size={44} radius="xl" color="initials" name="P P" aria-label="Account">PP</Avatar>
+            <AccountMenu />
           </Group>
         </Group>
       </AppShell.Header>
       <AppShell.Navbar p="sm" component="nav" aria-label="Main">
         {NAV.map((item) => (
-          <NavLink key={item.screen} label={item.label} active={activeNav(screen) === item.screen}
+          <NavLink
+            key={item.screen}
+            label={item.label}
+            active={activeNav(screen) === item.screen}
             href={'#' + item.screen}
-            onClick={(event) => { event.preventDefault(); navigate(item.screen); }} />
+            onClick={(event) => {
+              event.preventDefault();
+              navigate(item.screen);
+            }}
+          />
         ))}
       </AppShell.Navbar>
       <AppShell.Main>

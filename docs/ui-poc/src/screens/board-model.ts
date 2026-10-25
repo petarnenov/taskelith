@@ -11,7 +11,12 @@ export interface BoardProgress {
 }
 
 export const NO_PROGRESS: BoardProgress = {
-  merged: [], returned: [], mergeFlow: {}, stopping: [], stopped: [], migrated: {},
+  merged: [],
+  returned: [],
+  mergeFlow: {},
+  stopping: [],
+  stopped: [],
+  migrated: {},
 };
 
 export interface BoardTask extends Task {
@@ -37,18 +42,45 @@ function afterDecision(task: BoardTask, decision: InboxDecision | undefined): Bo
 
 function withProgress(task: Task, progress: BoardProgress, decisions: Decisions): BoardTask {
   const { merged, returned, mergeFlow, stopping, stopped, migrated } = progress;
-  const base: BoardTask = task.id in migrated
-    ? { ...task, framework: migrated[task.id], native: 'migrated · new binding recorded', gate: 'stale', note: 'Migrated to ' + migrated[task.id] + ' · gates re-run' }
-    : task;
+  const base: BoardTask =
+    task.id in migrated
+      ? {
+          ...task,
+          framework: migrated[task.id],
+          native: 'migrated · new binding recorded',
+          gate: 'stale',
+          note: 'Migrated to ' + migrated[task.id] + ' · gates re-run',
+        }
+      : task;
   if (stopping.includes(task.id)) return { ...base, approval: false, session: 'stopping' };
   if (merged.includes(task.id)) {
-    return { ...base, stage: 5, gate: 'passed', note: 'Closed · merged ' + task.pr, session: 'stopped', justArchived: true };
+    return {
+      ...base,
+      stage: 5,
+      gate: 'passed',
+      note: 'Closed · merged ' + task.pr,
+      session: 'stopped',
+      justArchived: true,
+    };
   }
   if (returned.includes(task.id)) {
-    return { ...base, stage: 1, gate: 'pending', note: 'Reconciling spec with dev', session: 'live', returnedFromMerge: true };
+    return {
+      ...base,
+      stage: 1,
+      gate: 'pending',
+      note: 'Reconciling spec with dev',
+      session: 'live',
+      returnedFromMerge: true,
+    };
   }
   if (task.id in mergeFlow) {
-    return { ...base, gate: 'stale', note: 'New head: verify and review re-run', session: 'live', mergeStep: mergeFlow[task.id] };
+    return {
+      ...base,
+      gate: 'stale',
+      note: 'New head: verify and review re-run',
+      session: 'live',
+      mergeStep: mergeFlow[task.id],
+    };
   }
   const decided = afterDecision(base, task.inboxId ? decisions[task.inboxId] : undefined);
   return stopped.includes(task.id) ? { ...decided, approval: false, session: 'stopped' } : decided;
@@ -69,7 +101,8 @@ export function mergeStepOf(task: BoardTask) {
 export function sessionLog(task: BoardTask, conflictCount: number): string {
   const step = mergeStepOf(task);
   if (step) return '▸ git merge origin/dev\n✗ CONFLICT in ' + conflictCount + ' files\n▸ ' + step.detail;
-  if (task.returnedFromMerge) return '▸ returned from merge: spec conflict with dev\n▸ reconciling spec with the new contract on dev';
+  if (task.returnedFromMerge)
+    return '▸ returned from merge: spec conflict with dev\n▸ reconciling spec with the new contract on dev';
   const logs: Partial<Record<BoardTask['session'], string>> = {
     live: '▸ read openspec/changes/' + task.change + '/tasks.md\n▸ edit 3 files\n▸ run tests: 42 passed',
     approval: '▸ task 4 of 9 complete\n▸ request: run nvm use && make verify\n⏸ waiting for approval',
@@ -90,15 +123,27 @@ export function laneKey(task: BoardTask, groupBy: GroupBy): string {
   return 'All tasks';
 }
 
+type VerifyState = 'stale' | 'fresh' | 'running' | 'none';
+
+function verifyStateOf(task: BoardTask, resolving: boolean): VerifyState {
+  if (task.gate === 'stale' && resolving) return 'stale';
+  if (task.stage >= 4 || (task.stage === 3 && task.gate === 'passed')) return 'fresh';
+  if (task.stage === 3) return 'running';
+  return 'none';
+}
+
 export function traceFor(task: BoardTask) {
   if (task.stage === 0) return [];
   const resolving = task.mergeStep !== undefined;
-  const verifyState = task.gate === 'stale' && resolving ? 'stale'
-    : task.stage >= 4 || (task.stage === 3 && task.gate === 'passed') ? 'fresh'
-      : task.stage === 3 ? 'running' : 'none';
+  const verifyState = verifyStateOf(task, resolving);
   const reviewed = task.stage === 5 || (isMergeReady(task) && !resolving);
   const review = reviewed ? 'review passed' : task.stage === 4 ? 'in review' : 'not reviewed';
-  const verify = { stale: 'evidence stale (new head)', fresh: 'verify fresh', running: 'verify running', none: 'not verified' }[verifyState];
+  const verify = {
+    stale: 'evidence stale (new head)',
+    fresh: 'verify fresh',
+    running: 'verify running',
+    none: 'not verified',
+  }[verifyState];
   const color = verifyState === 'stale' ? 'orange' : verifyState === 'fresh' ? 'teal' : 'dimmed';
   return ['R1', 'R2'].map((req, i) => ({
     req,

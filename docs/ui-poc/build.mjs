@@ -1,6 +1,15 @@
 import { build } from 'esbuild';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-const result = await build({ entryPoints: ['src/main.tsx'], bundle: true, minify: true, format: 'iife', write: false, jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'none' });
+const result = await build({
+  entryPoints: ['src/main.tsx'],
+  bundle: true,
+  minify: true,
+  format: 'iife',
+  write: false,
+  jsx: 'automatic',
+  define: { 'process.env.NODE_ENV': '"production"' },
+  legalComments: 'eof',
+});
 const js = result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
 const css = readFileSync('node_modules/@mantine/core/styles.css', 'utf8');
 const html = `<!doctype html>

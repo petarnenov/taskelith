@@ -1,8 +1,18 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
-export type Screen =
-  | 'board' | 'session' | 'reviews' | 'workers' | 'new-task'
-  | 'knowledge' | 'inbox' | 'integrations' | 'plugins' | 'states';
+const SCREENS = [
+  'board',
+  'session',
+  'reviews',
+  'workers',
+  'new-task',
+  'knowledge',
+  'inbox',
+  'integrations',
+  'plugins',
+  'states',
+] as const;
+export type Screen = (typeof SCREENS)[number];
 
 export type InboxDecision = 'approved' | 'denied' | 'changes';
 
@@ -15,23 +25,22 @@ interface PocState {
   decisions: Partial<Record<InboxId, InboxDecision>>;
   decide: (id: InboxId, decision: InboxDecision) => void;
   needsYouCount: number;
+  signedIn: boolean;
+  signIn: () => void;
+  signOut: () => void;
 }
 
 const PocContext = createContext<PocState | null>(null);
 
-const SCREENS: Screen[] = [
-  'board', 'session', 'reviews', 'workers', 'new-task',
-  'knowledge', 'inbox', 'integrations', 'plugins', 'states',
-];
-
 function screenFromHash(): Screen {
   const name = window.location.hash.replace('#', '') as Screen;
-  return SCREENS.includes(name) ? name : 'board';
+  return (SCREENS as readonly string[]).includes(name) ? name : 'board';
 }
 
 export function PocProvider({ children }: { children: ReactNode }) {
   const [screen, setScreen] = useState<Screen>(screenFromHash);
   const [decisions, setDecisions] = useState<PocState['decisions']>({});
+  const [signedIn, setSignedIn] = useState(true);
 
   useEffect(() => {
     const onHash = () => setScreen(screenFromHash());
@@ -49,7 +58,18 @@ export function PocProvider({ children }: { children: ReactNode }) {
   const needsYouCount = INBOX_IDS.filter((id) => !decisions[id]).length;
 
   return (
-    <PocContext.Provider value={{ screen, go, decisions, decide, needsYouCount }}>
+    <PocContext.Provider
+      value={{
+        screen,
+        go,
+        decisions,
+        decide,
+        needsYouCount,
+        signedIn,
+        signIn: () => setSignedIn(true),
+        signOut: () => setSignedIn(false),
+      }}
+    >
       {children}
     </PocContext.Provider>
   );

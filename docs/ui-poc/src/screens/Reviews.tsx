@@ -1,6 +1,16 @@
 import { useState } from 'react';
 import {
-  Alert, Anchor, Badge, Button, Grid, Group, Paper, Stack, Text, Title, UnstyledButton,
+  Alert,
+  Anchor,
+  Badge,
+  Button,
+  Grid,
+  Group,
+  Paper,
+  Stack,
+  Text,
+  Title,
+  UnstyledButton,
   type MantineColor,
 } from '@mantine/core';
 import { usePoc } from '../store';
@@ -10,12 +20,21 @@ type ReviewState = 'passed' | 'running' | 'blocked' | 'changes';
 type Severity = 'High' | 'Medium' | 'Low';
 
 interface Review {
-  id: string; title: string; change: string; kind: string; state: ReviewState;
-  session: SessionState; sessionLabel: string; reviewer: string; pass: string; scope?: string;
+  id: string;
+  title: string;
+  change: string;
+  kind: string;
+  state: ReviewState;
+  session: SessionState;
+  sessionLabel: string;
+  reviewer: string;
+  pass: string;
+  scope?: string;
   facts: { label: string; value: string }[];
   diffs: { file: string; diff: string }[];
   findings: { severity: Severity; text: string; where: string; outcome: string }[];
-  blockedText?: string; verdict: string;
+  blockedText?: string;
+  verdict: string;
 }
 
 const STATES: Record<ReviewState, { label: string; color: MantineColor }> = {
@@ -29,7 +48,15 @@ const SEVERITY: Record<Severity, MantineColor> = { High: 'red', Medium: 'orange'
 
 const REVIEWS: Review[] = [
   {
-    id: 'pools', title: 'Account pool scheduler', change: 'add-account-pool-scheduler', kind: 'Conflict resolution review', state: 'passed', session: 'stopped', sessionLabel: 'Reviewer session stopped', reviewer: 'Claude Code · Fable 5.1', pass: 'Pass 1 of 3',
+    id: 'pools',
+    title: 'Account pool scheduler',
+    change: 'add-account-pool-scheduler',
+    kind: 'Conflict resolution review',
+    state: 'passed',
+    session: 'stopped',
+    sessionLabel: 'Reviewer session stopped',
+    reviewer: 'Claude Code · Fable 5.1',
+    pass: 'Pass 1 of 3',
     scope: 'only the resolved conflicts (7e2d1b0 + origin/dev → a41c9e2)',
     facts: [
       { label: 'Implementer', value: 'Claude Code · mac-01' },
@@ -38,26 +65,57 @@ const REVIEWS: Review[] = [
       { label: 'Evidence', value: 'sha256:9c1e…4ab0' },
     ],
     diffs: [
-      { file: 'docs/architecture.md', diff: '@@ -212,9 +212,10 @@\n ### Branch protection\n `main` requires a PR and the verify check.\n+\n ### Harness account pools\n Each harness draws from a pool of subscriptions.' },
-      { file: 'openspec/specs/harness-account-pools/spec.md', diff: '@@ -18,7 +18,5 @@\n-### Requirement: Account selection\n ### Requirement: Least-loaded account selection\n #### Scenario: All accounts busy' },
+      {
+        file: 'docs/architecture.md',
+        diff: '@@ -212,9 +212,10 @@\n ### Branch protection\n `main` requires a PR and the verify check.\n+\n ### Harness account pools\n Each harness draws from a pool of subscriptions.',
+      },
+      {
+        file: 'openspec/specs/harness-account-pools/spec.md',
+        diff: '@@ -18,7 +18,5 @@\n-### Requirement: Account selection\n ### Requirement: Least-loaded account selection\n #### Scenario: All accounts busy',
+      },
     ],
-    findings: [{ severity: 'Low', text: 'Two blank lines remain between the merged sections.', where: 'docs/architecture.md:217', outcome: 'Fixed by the implementer · no new pass' }],
+    findings: [
+      {
+        severity: 'Low',
+        text: 'Two blank lines remain between the merged sections.',
+        where: 'docs/architecture.md:217',
+        outcome: 'Fixed by the implementer · no new pass',
+      },
+    ],
     verdict: 'Passed with 1 Low finding. Verify re-ran on a41c9e2, then auto-merge merged PR #61.',
   },
   {
-    id: 'compose', title: 'Container Compose baseline', change: 'container-compose-baseline', kind: 'Implementation review', state: 'blocked', session: 'none', sessionLabel: 'No reviewer session · waiting for a slot', reviewer: 'Claude Code · Fable 5.1 (slots busy)', pass: 'Pass 1 of 3',
-    blockedText: 'All Claude Code reviewer slots are busy (2 of 2). The gate never falls back to the implementer or another harness. Attempt 2 of 3 to get a reviewer failed; the last attempt is in 4 min. If it fails too, the task escalates to you as “Needs you”.',
+    id: 'compose',
+    title: 'Container Compose baseline',
+    change: 'container-compose-baseline',
+    kind: 'Implementation review',
+    state: 'blocked',
+    session: 'none',
+    sessionLabel: 'No reviewer session · waiting for a slot',
+    reviewer: 'Claude Code · Fable 5.1 (slots busy)',
+    pass: 'Pass 1 of 3',
+    blockedText:
+      'All Claude Code reviewer slots are busy (2 of 2). The gate never falls back to the implementer or another harness. Attempt 2 of 3 to get a reviewer failed; the last attempt is in 4 min. If it fails too, the task escalates to you as “Needs you”.',
     facts: [
       { label: 'Implementer', value: 'Claude Code · linux-01' },
       { label: 'Reviewer', value: 'Claude Code · claude-fable-5-1 · queued' },
       { label: 'Attempts', value: '2 of 3 · then escalate' },
       { label: 'Waiting', value: '1 h 12 min' },
     ],
-    diffs: [], findings: [],
+    diffs: [],
+    findings: [],
     verdict: 'No verdict yet. The task stays in Review; nothing downstream is admitted.',
   },
   {
-    id: 'openapi', title: 'OpenAPI contracts for the control plane', change: '003-openapi-contracts', kind: 'Spec review', state: 'changes', session: 'stopped', sessionLabel: 'Reviewer session stopped', reviewer: 'Codex', pass: 'Pass 1 of 3',
+    id: 'openapi',
+    title: 'OpenAPI contracts for the control plane',
+    change: '003-openapi-contracts',
+    kind: 'Spec review',
+    state: 'changes',
+    session: 'stopped',
+    sessionLabel: 'Reviewer session stopped',
+    reviewer: 'Codex',
+    pass: 'Pass 1 of 3',
     scope: 'spec and plan (SpecKit)',
     facts: [
       { label: 'Implementer', value: 'Claude Code · linux-01' },
@@ -67,13 +125,32 @@ const REVIEWS: Review[] = [
     ],
     diffs: [],
     findings: [
-      { severity: 'High', text: 'Task submission has no idempotency key, so a retried request can create two tasks.', where: 'specs/003-openapi-contracts/spec.md · POST /tasks', outcome: 'Open · sent back to the implementer' },
-      { severity: 'Medium', text: 'SSE cursor format is not specified for catch-up after reconnect.', where: 'specs/003-openapi-contracts/spec.md · GET /events', outcome: 'Open' },
+      {
+        severity: 'High',
+        text: 'Task submission has no idempotency key, so a retried request can create two tasks.',
+        where: 'specs/003-openapi-contracts/spec.md · POST /tasks',
+        outcome: 'Open · sent back to the implementer',
+      },
+      {
+        severity: 'Medium',
+        text: 'SSE cursor format is not specified for catch-up after reconnect.',
+        where: 'specs/003-openapi-contracts/spec.md · GET /events',
+        outcome: 'Open',
+      },
     ],
-    verdict: 'Changes requested. The implementer fixes the findings automatically; pass 2 of 3 starts on the new revision.',
+    verdict:
+      'Changes requested. The implementer fixes the findings automatically; pass 2 of 3 starts on the new revision.',
   },
   {
-    id: 'protect', title: 'Shared kernel', change: 'add-shared-kernel', kind: 'Implementation review', state: 'passed', session: 'stopped', sessionLabel: 'Reviewer session stopped', reviewer: 'Codex', pass: 'Pass 2 of 3',
+    id: 'protect',
+    title: 'Shared kernel',
+    change: 'add-shared-kernel',
+    kind: 'Implementation review',
+    state: 'passed',
+    session: 'stopped',
+    sessionLabel: 'Reviewer session stopped',
+    reviewer: 'Codex',
+    pass: 'Pass 2 of 3',
     scope: 'full change',
     facts: [
       { label: 'Implementer', value: 'Claude Code · mac-01' },
@@ -82,7 +159,14 @@ const REVIEWS: Review[] = [
       { label: 'Evidence', value: 'sha256:0f3a…71c9' },
     ],
     diffs: [],
-    findings: [{ severity: 'Medium', text: 'Required check name did not match the CI job.', where: 'docs/releases.md', outcome: 'Fixed in pass 2' }],
+    findings: [
+      {
+        severity: 'Medium',
+        text: 'Required check name did not match the CI job.',
+        where: 'docs/releases.md',
+        outcome: 'Fixed in pass 2',
+      },
+    ],
     verdict: 'Passed in pass 2. Merged PR #46; the change is archived.',
   },
 ];
@@ -91,14 +175,27 @@ function QueueItem({ review, selected, onPick }: { review: Review; selected: boo
   const st = STATES[review.state];
   return (
     <UnstyledButton onClick={onPick} aria-pressed={selected}>
-      <Paper withBorder p="sm" radius="md" bd={selected ? '2px solid var(--mantine-primary-color-filled)' : undefined}>
+      <Paper
+        withBorder
+        p="sm"
+        radius="md"
+        bd={selected ? '2px solid var(--mantine-primary-color-filled)' : undefined}
+      >
         <Stack gap={6}>
           <Group justify="space-between" wrap="nowrap" align="flex-start">
-            <Text fw={600} size="sm">{review.title}</Text>
-            <Badge size="sm" variant="light" color={st.color}>{st.label}</Badge>
+            <Text fw={600} size="sm">
+              {review.title}
+            </Text>
+            <Badge size="sm" variant="light" color={st.color}>
+              {st.label}
+            </Badge>
           </Group>
-          <Text size="xs" ff="monospace" c="dimmed">{review.change}</Text>
-          <Text size="xs" c="dimmed">{review.kind} · {review.reviewer} · {review.pass}</Text>
+          <Text size="xs" ff="monospace" c="dimmed">
+            {review.change}
+          </Text>
+          <Text size="xs" c="dimmed">
+            {review.kind} · {review.reviewer} · {review.pass}
+          </Text>
           <SessionBadge state={review.session} label={review.sessionLabel} />
         </Stack>
       </Paper>
@@ -114,43 +211,73 @@ function ReviewDetail({ review }: { review: Review }) {
       <Stack gap="md">
         <Group justify="space-between" align="flex-start">
           <Stack gap={4}>
-            <Text size="xs" tt="uppercase" fw={600} c="dimmed">{review.kind}</Text>
-            <Title order={2} size="h3">{review.title}</Title>
-            <Text size="sm" ff="monospace" c="dimmed">{review.change}</Text>
+            <Text size="xs" tt="uppercase" fw={600} c="dimmed">
+              {review.kind}
+            </Text>
+            <Title order={2} size="h3">
+              {review.title}
+            </Title>
+            <Text size="sm" ff="monospace" c="dimmed">
+              {review.change}
+            </Text>
           </Stack>
-          <Badge size="lg" variant="light" color={st.color}>{st.label}</Badge>
+          <Badge size="lg" variant="light" color={st.color}>
+            {st.label}
+          </Badge>
         </Group>
         <SessionBadge state={review.session} label={review.sessionLabel} harness={review.reviewer} />
         <Facts items={review.facts} />
-        {review.blockedText ? <Alert color="orange" variant="light" title="Gate stays pending">{review.blockedText}</Alert> : null}
+        {review.blockedText ? (
+          <Alert color="orange" variant="light" title="Gate stays pending">
+            {review.blockedText}
+          </Alert>
+        ) : null}
         {review.diffs.length ? (
           <Stack gap="xs">
-            <Title order={3} size="h6">Under review: {review.scope}</Title>
-            {review.diffs.map((d) => <DiffBlock key={d.file} file={d.file} diff={d.diff} />)}
+            <Title order={3} size="h6">
+              Under review: {review.scope}
+            </Title>
+            {review.diffs.map((d) => (
+              <DiffBlock key={d.file} file={d.file} diff={d.diff} />
+            ))}
           </Stack>
         ) : null}
         {review.findings.length ? (
           <Stack gap="xs">
-            <Title order={3} size="h6">Findings</Title>
+            <Title order={3} size="h6">
+              Findings
+            </Title>
             {review.findings.map((finding) => (
               <Paper key={finding.text} withBorder p="sm" radius="md">
                 <Group align="flex-start" wrap="nowrap" gap="sm">
-                  <Badge color={SEVERITY[finding.severity]} variant="light">{finding.severity}</Badge>
+                  <Badge color={SEVERITY[finding.severity]} variant="light">
+                    {finding.severity}
+                  </Badge>
                   <Stack gap={2} flex={1}>
                     <Text size="sm">{finding.text}</Text>
-                    <Text size="xs" ff="monospace" c="dimmed">{finding.where}</Text>
+                    <Text size="xs" ff="monospace" c="dimmed">
+                      {finding.where}
+                    </Text>
                   </Stack>
-                  <Text size="xs" c="dimmed" maw={200}>{finding.outcome}</Text>
+                  <Text size="xs" c="dimmed" maw={200}>
+                    {finding.outcome}
+                  </Text>
                 </Group>
               </Paper>
             ))}
           </Stack>
         ) : null}
         <Group justify="space-between" gap="sm">
-          <Text size="sm" fw={500}>{review.verdict}</Text>
+          <Text size="sm" fw={500}>
+            {review.verdict}
+          </Text>
           <Group gap="sm">
-            <Anchor href="#" size="sm" onClick={(event) => event.preventDefault()}>View evidence</Anchor>
-            <Button size="xs" variant="light" onClick={() => go('session')}>Open session</Button>
+            <Anchor href="#" size="sm" onClick={(event) => event.preventDefault()}>
+              View evidence
+            </Anchor>
+            <Button size="xs" variant="light" onClick={() => go('session')}>
+              Open session
+            </Button>
           </Group>
         </Group>
       </Stack>
@@ -163,25 +290,33 @@ export function ReviewsScreen() {
   const selected = REVIEWS.find((review) => review.id === selectedId)!;
   return (
     <Stack gap="md">
-      <PageHeader title="Reviews"
+      <PageHeader
+        title="Reviews"
         description="Independent review gates. Reviewers are read-only and never the identity that implemented the change."
-        aside={(
+        aside={
           <Group gap="xs">
             <Badge variant="default">One reviewer per task</Badge>
             <Badge variant="default">At most 3 passes</Badge>
             <Badge variant="default">Low-only: fixed without another pass</Badge>
           </Group>
-        )} />
+        }
+      />
       <Grid gap="md">
         <Grid.Col span={{ base: 12, md: 4 }}>
           <Stack gap="sm" component="section" aria-label="Review queue">
             {REVIEWS.map((review) => (
-              <QueueItem key={review.id} review={review} selected={review.id === selectedId}
-                onPick={() => setSelectedId(review.id)} />
+              <QueueItem
+                key={review.id}
+                review={review}
+                selected={review.id === selectedId}
+                onPick={() => setSelectedId(review.id)}
+              />
             ))}
           </Stack>
         </Grid.Col>
-        <Grid.Col span={{ base: 12, md: 8 }}><ReviewDetail review={selected} /></Grid.Col>
+        <Grid.Col span={{ base: 12, md: 8 }}>
+          <ReviewDetail review={selected} />
+        </Grid.Col>
       </Grid>
     </Stack>
   );
