@@ -10,6 +10,7 @@ import {
   removeRecord,
   sealLaunch,
   startSupervisor,
+  superviseLaunch,
 } from '@taskelith/worker-supervisor';
 import { identity, intent, rig, SUPERVISOR_PID, type Rig } from './fakes.ts';
 
@@ -158,6 +159,15 @@ test('the macOS platform fails closed: no deadline clock, identity, or listing',
   assert.equal(platform.containment('execution-1'), undefined);
   assert.equal(platform.namespaceIncarnation(), undefined);
   assert.equal(typeof platform.inspector.bootId().ok, 'boolean');
+});
+
+test('a supervisor on the macOS platform seals every launch', async () => {
+  const setup = rig();
+  assert.ok((await prepareRecord(setup.worker, intent())).ok);
+  const outcome = await superviseLaunch({ ...setup.supervisor, platform: darwinPlatform() });
+
+  assert.deepEqual(outcome, { kind: 'sealed', reason: 'identity-unreadable' });
+  assert.equal(setup.spawner.spawned.length, 0);
 });
 
 test('the Node spawner starts a detached child, reports its exit, and reports a failed spawn', async () => {

@@ -1,6 +1,6 @@
 # Supervisor identity contract
 
-Date: 2026-10-25. Status: proposed protocol contract for G2 ([G2 work plan](../g2-plan.md) item 4), under independent review; once reviewed and merged it resolves the pre-G2 contract "supervisor identity and adoption" of [architecture section 15](../architecture.md#15-decisions-still-requiring-evidence-or-owner-scope-confirmation). It serves invariant 8 and R06 of the [architecture](../architecture.md). No code implements it yet: G2 items 7 (execution domain model), 8 (wire contracts), 14 (worker journal), and 15 (process supervisor) build on it, and items 24 and 25 run its failure scenarios and native acceptance.
+Date: 2026-10-25. Status: proposed protocol contract for G2 ([G2 work plan](../g2-plan.md) item 4), under independent review; once reviewed and merged it resolves the pre-G2 contract "supervisor identity and adoption" of [architecture section 15](../architecture.md#15-decisions-still-requiring-evidence-or-owner-scope-confirmation). It serves invariant 8 and R06 of the [architecture](../architecture.md). G2 items 7 (execution domain model), 8 (wire contracts), and 14 (worker journal) build on it; item 15 implements it in `packages/adapters/worker-supervisor` and amended sections 2, 3, 4, 6, 8, and 10 with the decisions it needed; items 24 and 25 run its failure scenarios and native acceptance.
 
 ## 1. Purpose and parties
 
@@ -18,7 +18,7 @@ The supervisor reports only through files in its execution record (section 3). T
 - **Execution identity (`executionId`):** the stable execution identity. The worker creates it as a random 128-bit identifier and journals it with the launch intent (item 5) before it asks for a launch authorization (item 3). It names at most one spawn and is never reused. The architecture's phrase "stable launch identity" (section 9, failure behavior) means this identity.
 - **Process identity:** the triple of boot identity, process ID, and process start time, read from the operating system (section 10). A process ID alone never identifies a process, because the kernel reuses process IDs. Two observations name the same process only if all three values are equal.
 - **Boot identity:** the identifier the kernel assigns to the current boot (section 10).
-- **Namespace incarnation (Linux):** the identity of the worker container's PID namespace, recorded in `intent`. A replaced container has a new incarnation, and its cgroup view may no longer show the old containments. The old namespace's end is proven only by evidence that its PID 1 died, because the kernel then ends every process of the namespace; the candidate is a lock on the data root held by that PID 1 for its whole life, which item 15 qualifies. Without that proof a missing containment proves nothing.
+- **Namespace incarnation (Linux):** the identity of the worker container's PID namespace, recorded in `intent`. A replaced container has a new incarnation, and its cgroup view may no longer show the old containments. The old namespace's end is proven only by evidence that its PID 1 died, because the kernel then ends every process of the namespace; the candidate is a lock on the data root held by that PID 1 for its whole life. By decision D-C2 (a) of item 15, the worker container's init is Docker's built-in init, which holds no such lock, so in G2 no old namespace's end is proven. Without that proof a missing containment proves nothing.
 - **Supervisor identity:** the process identity of a supervisor, recorded in a numbered supervisor record (section 3) together with the execution it serves.
 - **Containment:** on Linux, a cgroup v2 directory per execution, named from its `executionId` under the worker's cgroup, that the child and every descendant belong to from their creation and cannot leave, because the process set has no write access to any cgroup of the worker (section 8). macOS offers no equivalent; there the child's process group, while the supervisor still holds the unreaped child, is the closest boundary (section 8).
 
@@ -30,13 +30,14 @@ Every execution has a directory `worker/executions/<executionId>/` under the wor
 
 | File | Written by | When | Content |
 | --- | --- | --- | --- |
-| `intent` | Worker | Before it starts the supervisor; replaced only while no launch record exists | `executionId`, `attemptId`, `ownershipGeneration`, the current `launchAuthId`, the spawn deadline in the deadline clock (section 4) with the boot identity it is valid in, the namespace incarnation on Linux, and the supervisor program version |
-| `lock` | Every supervisor | For its whole life | An exclusive `flock` (section 6) |
+| `intent` | Worker | Before it starts the supervisor; replaced only while no launch record exists | `executionId`, `attemptId`, `ownershipGeneration`, the current `launchAuthId`, the spawn deadline in the deadline clock (section 4) with the boot identity it is valid in, the namespace incarnation on Linux, the supervisor program version, the command the child runs, and on Linux the execution account the child runs as (section 8) |
+| `lock` | Every supervisor | For its whole life | An exclusive lock (section 6) |
 | `supervisor.<n>` | Each supervisor, once | Right after it takes `lock` | Its supervisor identity; `n` is one more than the highest existing number, created exclusively |
 | `launch` | The first supervisor, or the worker | Created once, exclusively | The **launch record**: either a **claim** (the `launchAuthId` it spawns under, `supervisor.1`, and the containment) or a **seal** |
 | `handle` | The first supervisor | Right after a spawn returns | The child's process identity and process group ID, or the spawn failure (section 4) |
 | `events` | Every supervisor | Append only | Descendant identities observed, cancellation steps, and termination evidence (section 8) |
 | `exit` | A supervisor | When the process set is proven empty | The child's exit code or signal, or an unknown status, and the termination evidence |
+| `cancel` | Worker | Created once, when cancellation is requested | The cancellation reason; every supervisor of the execution acts on it as section 8 states |
 
 The worker removes the directory only after the execution's terminal fact is recorded by the control plane and in its journal, and only while it holds `lock` itself, taken without waiting, so that no supervisor of the execution can hold it; it removes every file, the launch record last, and then the directory, before it releases `lock`. A supervisor takes `lock` without waiting and exits if it cannot, exits if the directory or `intent` is missing, and never creates the directory, so a supervisor that resumes after the cleanup cannot claim a launch record that a seal once occupied. An unreadable, corrupt, or newer-format file, or a combination the launch sequence cannot produce (for example a `handle` without a claim), is never guessed around: the execution becomes `uncertain` (section 7).
 
@@ -57,7 +58,7 @@ The worker and supervisor run these steps in order. Each step is a named crash p
 11. **CP11** The child exits; the supervisor completes the termination evidence of section 8 and writes `exit`.
 12. **CP12** The worker reads `exit` and puts the exit observation in its outbox.
 
-The **deadline clock** must count time the system spends asleep and be shared by every process of one boot: `CLOCK_BOOTTIME` on Linux and `mach_continuous_time` on macOS. The worker and the supervisor both use it, so the deadline the worker derives under item 3 holds across a suspend. Reading it from TypeScript is an item 15 qualification; a supervisor that cannot read it fails closed and seals. Item 3 states the worker's side of the same rule.
+The **deadline clock** must count time the system spends asleep and be shared by every process of one boot: `CLOCK_BOOTTIME` on Linux and `mach_continuous_time` on macOS. The worker and the supervisor both use it, so the deadline the worker derives under item 3 holds across a suspend. Reading it from TypeScript is an item 15 qualification; a supervisor that cannot read it fails closed and seals. On Linux, item 15 reads the first field of `/proc/uptime`, which the kernel takes from `CLOCK_BOOTTIME`. On macOS, `mach_continuous_time` needs a native mechanism that awaits the owner's decision D-A of item 15, so until then a macOS supervisor seals every launch. Item 3 states the worker's side of the same rule.
 
 A supervisor whose durable writes fail (a flush failure or a full disk) before CP8 does not spawn. After CP8 it keeps the child running and retries the write, and recovery treats the missing file as the crash windows of section 6 do.
 
@@ -74,7 +75,12 @@ When a creation fails because the launch record already exists, the creator read
 
 When the worker service starts, it reads its journal and every execution directory and decides from them and from native evidence, never from a process ID alone.
 
-**Supervisor liveness.** A supervisor holds `lock` for its whole life and opens it close-on-exec. The lock may still be held briefly after the supervisor's death by a child that was forked and has not yet executed its program, because a forked process keeps the descriptor until it executes. The worker therefore treats a supervisor as live only if `lock` is held and the identity in the highest `supervisor.<n>` is alive. If `lock` is held and that identity is dead, the worker retries for a bounded time and then reports `uncertain`.
+**Supervisor liveness.** A supervisor holds `lock` for its whole life. Node offers no `flock`, so by decision D-B (a) of item 15 the lock is the exclusive SQLite lock that the worker journal contract uses for `worker/lock` (section 9 there): an exclusive-locking-mode transaction, which takes a POSIX record lock on the file and which the kernel releases when the process dies. Two constraints follow:
+
+- **Only the lock module opens `lock`.** Closing any descriptor of the file in the holding process releases a record lock, so no other code of the supervisor or the worker opens it.
+- **Children never inherit it.** Record locks are not inherited across `fork`, and the descriptor is opened close-on-exec, so a child that has not yet executed its program holds no lock.
+
+The worker treats a supervisor as live only if `lock` is held and the identity in the highest `supervisor.<n>` is alive. If `lock` is held and that identity is dead, the worker retries for a bounded time and then reports `uncertain`. The worker probes `lock` only during recovery, never while it starts a supervisor of the same execution, because a supervisor that finds `lock` taken exits.
 
 **Adoption.** To adopt, the worker starts an adopting supervisor. It takes `lock` (only one process can), writes the next `supervisor.<n>`, and continues the execution's observation and cancellation. It is not the child's parent, so it cannot read the child's exit status. A crash between taking `lock` and writing its record leaves the lock free and the record absent, and the next recovery adopts again.
 
@@ -108,7 +114,7 @@ An exit with an unknown status ends the execution: no process of it can run. The
 
 `exit` is written, and `exited` reported, only when the whole process set is proven empty, not merely when the child exits. If the child exits and the set is not proven empty, the execution stays `started` and the worker reports the surviving processes.
 
-**Linux.** The containment holds the whole process set, whatever sessions or forks it creates, only if no process of the set can migrate itself or another process: migrating a process needs write access to the destination's `cgroup.procs` and to that of the common ancestor, and the supervisor has that access to move itself. The process set must therefore have no write access to any cgroup of the worker, which the supervisor ensures before the spawn, for example by running the child under a separate execution account or by giving it a read-only view of the cgroup filesystem; the mechanism is an item 15 qualification. A Linux worker is admitted only if its self-check proves that a child can neither leave its containment nor change another one, and that the containment has a kill control; the container runtime settings that provide this are an item 15 and item 25 qualification.
+**Linux.** The containment holds the whole process set, whatever sessions or forks it creates, only if no process of the set can migrate itself or another process: migrating a process needs write access to the destination's `cgroup.procs` and to that of the common ancestor, and the supervisor has that access to move itself. The process set must therefore have no write access to any cgroup of the worker, which the supervisor ensures before the spawn: by decision D-C (a) of item 15, the child runs under a separate execution account (its own user and group IDs) that owns no cgroup of the worker. A Linux worker is admitted only if its self-check proves that a child can neither leave its containment nor change another one, and that the containment has a kill control; the container runtime settings that provide this are an item 15 and item 25 qualification.
 
 - The set is empty when the containment reports itself unpopulated, which also covers descendant cgroups.
 - Cancellation writes to the containment's kill control, which kills every member, including members created by concurrent forks, without naming a process ID, so no reuse race exists.
@@ -151,7 +157,7 @@ The worker reads the record format of the current and the previous supervisor ve
 | Parent links | Field 4 of `/proc/<pid>/stat` | `e_ppid` of `kinfo_proc` |
 | Process set membership and emptiness | The containment's `cgroup.procs` and its `populated` event | Group members and recorded descendants (section 8) |
 | Kill without a reuse race | The containment's `cgroup.kill` | A group signal while the child is unreaped |
-| Supervisor liveness | `flock` on `lock`, with the supervisor identity alive | The same |
+| Supervisor liveness | The exclusive SQLite lock on `lock`, with the supervisor identity alive | The same |
 | Exit status | The supervisor reaps its child | The same |
 | Deadline clock | `CLOCK_BOOTTIME` | `mach_continuous_time` |
 

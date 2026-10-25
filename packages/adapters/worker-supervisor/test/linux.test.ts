@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { LinuxContainment, linuxPlatform, parseCgroup, parseProcStat, parseUptime } from '@taskelith/worker-supervisor';
+import { checkLinuxContainment, LinuxContainment, linuxPlatform, parseCgroup, parseProcStat, parseUptime } from '@taskelith/worker-supervisor';
 
 // A stat line whose command holds spaces and a parenthesis.
 const STAT = '4242 (my (odd) cmd) S 7 4242 4242 0 -1 4194560 100 0 0 0 1 2 0 0 20 0 1 0 912345 1000 50 18446744073709551615';
@@ -92,4 +92,29 @@ test('a containment writes the cgroup v2 controls of its own directory', (t) => 
   assert.ok(containment.remove().ok);
   assert.equal(new LinuxContainment(join(root, 'absent'), 'x', root).create().ok, false);
   assert.equal(new LinuxContainment(join(root, 'absent'), 'x', root).admit(1).ok, false);
+});
+
+test('the Linux self-check fails without cgroup v2, delegation, a kill control, or denied writes', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-selfcheck-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const account = { uid: process.getuid!(), gid: process.getgid!() };
+  const options = { cgroupRoot: root, containmentParent: join(root, 'executions'), home: join(root, 'home'), account };
+
+  assert.deepEqual(checkLinuxContainment(options), { ok: false, error: ['cgroup v2 is not mounted'] });
+  writeFileSync(join(root, 'cgroup.controllers'), 'cpu memory\n');
+  const undelegated = checkLinuxContainment(options);
+  assert.equal(undelegated.ok, false);
+  assert.match((undelegated as { error: string[] }).error[0]!, /not delegated/);
+
+  mkdirSync(options.containmentParent);
+  mkdirSync(options.home);
+  const writable = checkLinuxContainment(options);
+  assert.equal(writable.ok, false);
+  assert.deepEqual((writable as { error: string[] }).error.slice(0, 4), [
+    'a containment has no cgroup.kill',
+    `the execution account can write ${join(options.containmentParent, `self-check-${process.pid}`, 'cgroup.procs')}`,
+    `the execution account can write ${join(options.containmentParent, 'cgroup.procs')}`,
+    `the execution account can write ${join(options.home, 'cgroup.procs')}`,
+  ]);
+  assert.match((writable as { error: string[] }).error.at(-1)!, /cannot be removed/);
 });

@@ -11,6 +11,7 @@ export {
   type LinuxPlatformOptions,
   type ProcStat,
 } from './linux.js';
+export { checkLinuxContainment, type LinuxSelfCheckOptions } from './linux-self-check.js';
 export { NodeSpawner } from './node-spawner.js';
 export type {
   ChildExit,

@@ -50,6 +50,8 @@ export type SupervisorOutcome =
 // The first supervisor of an execution: steps CP5 to CP11 of the contract.
 export async function superviseLaunch(dependencies: SupervisorDependencies): Promise<SupervisorOutcome> {
   return withLock(dependencies, async (session) => {
+    // Without its own identity no supervisor record proves who claims.
+    if (session.serial === undefined) return seal(dependencies, 'identity-unreadable');
     if (session.serial !== 1) return { kind: 'not-first' };
     const refusal = checkLaunchable(dependencies, session.intent);
     if (refusal !== undefined) return seal(dependencies, refusal);
@@ -67,7 +69,8 @@ export async function superviseLaunch(dependencies: SupervisorDependencies): Pro
 // An adopting supervisor continues observation and cancellation; it is not
 // the child's parent, so it never learns the child's exit status.
 export async function adoptExecution(dependencies: SupervisorDependencies): Promise<SupervisorOutcome> {
-  return withLock(dependencies, async () => {
+  return withLock(dependencies, async (session) => {
+    if (session.serial === undefined) return { kind: 'record-unusable', reason: 'the supervisor record cannot be written' };
     const launch = await readParsed(dependencies.store, RECORD_FILES.launch, parseLaunch);
     const handle = await readParsed(dependencies.store, RECORD_FILES.handle, parseHandle);
     if (!launch.ok || !handle.ok || launch.value?.kind !== 'claim') return { kind: 'record-unusable', reason: 'no readable claim' };
@@ -78,7 +81,7 @@ export async function adoptExecution(dependencies: SupervisorDependencies): Prom
 }
 
 interface Session {
-  readonly serial: number;
+  readonly serial: number | undefined;
   readonly intent: IntentRecord;
 }
 
@@ -92,9 +95,7 @@ async function withLock(
   try {
     const intent = await readParsed(dependencies.store, RECORD_FILES.intent, parseIntent);
     if (!intent.ok || intent.value === undefined) return { kind: 'record-unusable', reason: 'intent is missing or unreadable' };
-    const serial = await writeSupervisorRecord(dependencies);
-    if (serial === undefined) return { kind: 'record-unusable', reason: 'the supervisor record cannot be written' };
-    return await body({ serial, intent: intent.value });
+    return await body({ serial: await writeSupervisorRecord(dependencies), intent: intent.value });
   } finally {
     held.release();
   }

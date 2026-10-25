@@ -60,6 +60,7 @@ export const SEAL_REASONS = Object.freeze([
   'deadline-unreadable',
   'deadline-passed',
   'containment-unavailable',
+  'identity-unreadable',
   'recovery',
 ] as const);
 

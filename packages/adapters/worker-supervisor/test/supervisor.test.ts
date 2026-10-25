@@ -101,10 +101,15 @@ test('a supervisor that cannot take the lock, is not the first, or finds a launc
     launch: { kind: 'seal', by: 'worker', reason: 'recovery' },
   });
 
+  const nameless = await prepared();
+  nameless.fake.end(100);
+  assert.deepEqual(await superviseLaunch(nameless.supervisor), { kind: 'sealed', reason: 'identity-unreadable' });
+  assert.equal((await adoptExecution(nameless.supervisor)).kind, 'record-unusable');
+
   const missing = rig();
   await missing.store.createDirectory();
   assert.equal((await superviseLaunch(missing.supervisor)).kind, 'record-unusable');
-  for (const setup of [busy, late, sealed, missing]) assert.equal(setup.spawner.spawned.length, 0);
+  for (const setup of [busy, late, sealed, nameless, missing]) assert.equal(setup.spawner.spawned.length, 0);
 });
 
 test('a failed spawn ends with the failure and never spawns again', async () => {
