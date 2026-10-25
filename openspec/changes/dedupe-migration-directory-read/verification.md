@@ -25,7 +25,9 @@ In the worktree, Node v24.22.1, npm 12.2.1, on the working tree committed as the
 
 Assigned reviewer: Codex CLI, `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, run from the worktree without network access. SHA-256 snapshots of `git ls-files -co --exclude-standard | xargs shasum -a 256 | shasum -a 256` are taken before and after each pass; prompts, outputs, and snapshots are kept outside the worktree.
 
-Pending.
+- **Pass 1 — session `01a170e8-8749-7b31-bec6-8f23ef6f312f`**, at `64c0ee4`. The output header reports model `gpt-6.1-sol`, reasoning effort medium, and sandbox read-only. Snapshot before and after: `0db98f2ceee8f407d992a106b6a33070bcf03e79990adfc5ad2ef8c3625673c3`, unchanged. The reviewer found behavior unchanged for an unchanging directory and no test needed. Findings: 0 Critical, 0 High, 0 Medium, 2 Low, fixed as **unreviewed fixes** as the review process requires for a Low-only pass:
+  1. Low: the design said the advisory lock gave both old reads the same listing, but a PostgreSQL lock does not freeze the filesystem. It now says the equivalence holds for an unchanging directory.
+  2. Low: the proposal named the `state-persistence` specification; the migration requirement is "Migrations with checksums" of `postgres-state`. Corrected.
 
 ## Limitations
 
@@ -33,4 +35,4 @@ None beyond the refactor's scope.
 
 ## Remaining gates
 
-Independent review; integration by the coordinating session (pull request into `dev`, merge); archival.
+Integration by the coordinating session (pull request into `dev`, merge); archival.

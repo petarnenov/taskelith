@@ -14,4 +14,4 @@ G2 item 11 (`implement-postgres-state-and-outbox`) recorded a follow-up in its v
 
 ## Impact
 
-Private workspace code only (`@taskelith/postgres`); no behavior or requirement changes, so `.openspec.yaml` sets `skip_specs: true` under the existing `state-persistence` requirements. The existing migration tests cover the behavior; no test is added.
+Private workspace code only (`@taskelith/postgres`); no behavior or requirement changes, so `.openspec.yaml` sets `skip_specs: true` under the existing `postgres-state` requirement "Migrations with checksums". The existing migration tests cover the behavior; no test is added.

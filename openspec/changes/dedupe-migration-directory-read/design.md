@@ -17,4 +17,4 @@
 
 ## Risks / Trade-offs
 
-- None beyond the refactor itself; both helpers now see the same listing, which a second read under the same lock already gave.
+- The advisory lock does not freeze the directory, so the old two reads could differ if a file changed between them; for an unchanging directory both versions give the same result, and the new one checks and checksums one consistent listing.
