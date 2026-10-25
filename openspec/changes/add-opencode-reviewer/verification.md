@@ -27,7 +27,18 @@ The coordinator developed this change itself, following the worker steps. Base r
   - A second probe denied `cat … >`, `>>`, `git diff --output=`, `| tee`, and `sed -i`, and allowed `git log` and `grep | head`. No file was created.
   - The probe sessions were `ses_e8d17ac14ffeg0GBZopG88YbhX`, `ses_e8d177766ffer5qUld6Ope3GFg`, and `ses_e8d16e6bfffefvOuaiXpLerqsz`, at 13:53, 13:53, and 13:54 local time. They ran the documented invocation without `--title`: `opencode run --standalone --agent reviewer -m 'opencode/deepseek-v4.1-flash#high' --format json`. Each completed, and its JSON events carried the `sessionID`. So `-m` with the `#high` variant was accepted.
   - After review pass 1, `sed -n` and `git grep` were removed from the allowlist, and `--pre`, `--ext-diff`, and `--textconv` were denied.
-  - A qualification run of the full documented invocation started at about 14:20 local time. It produced no output in 10 minutes, and the snapshot stayed equal. Two pings at about 14:31, with and without `-m`, also produced no output in 2 minutes. Under "Unavailable reviewer", OpenCode is unavailable for 30 minutes from those attempts. The cause, the service or the network, is not established.
+  - **Root cause of the stalls.** `opencode run` waited for the end of stdin, which the coordinator's shell kept open. The OpenCode database held no message for the stalled runs. With `< /dev/null`, five pings in a row (`stdin-test-1` to `-5`) succeeded in 4 to 6 seconds. Two runs that did submit their prompt stalled in the provider, for 38 and 162 seconds in one step.
+  - **Model.** The owner then chose `opencode/kimi-k3`.
+  - **Qualification with kimi-k3.** Session `ses_e8cc1ded3ffeuEHKfJbqCjB4Ea`, 15:26:53 to 15:32:22 local time.
+    - The documented invocation with `< /dev/null` reviewed the same target as the trial.
+    - The SHA-256 snapshots before and after were equal.
+    - 32 tool calls ran, and 10 commands outside the allowlist were denied.
+    - It reported Critical 0, High 0, Medium 0, Low 4.
+  - **Final probe.** Session `ses_e8cbc2464ffeIZ3c0BkKWYsFGO`, on the final configuration.
+    - Denied: `cat … >`, `| tee`, process substitution, and `rg --pre`.
+    - Allowed: `git log --pretty=oneline` and `grep -c`.
+    - No file was created.
+  - Earlier stalls, recorded for history: a qualification run of the full documented invocation started at about 14:20 local time. It produced no output in 10 minutes, and the snapshot stayed equal. Two pings at about 14:31, with and without `-m`, also produced no output in 2 minutes. Under "Unavailable reviewer", OpenCode is unavailable for 30 minutes from those attempts. The cause, the service or the network, is not established.
 
 ## Trial findings and their resolution
 
@@ -52,7 +63,7 @@ The coordinator developed this change itself, following the worker steps. Base r
 - The owner's rule is quoted as the owner's, and the derived mechanics are marked as the coordinator's.
 - The one-reviewer rule, the ban on cross-review, and the three-pass cap are unchanged.
 - The governance policy, the protocol, the skill, `AGENTS.md`, and the spec agree.
-- Each requirement is under 500 characters: 430, 216, and 220.
+- Each requirement is under 500 characters: 430, 216, and 359.
 - The change adds no external link. All content is English.
 
 ## Checks
@@ -61,7 +72,8 @@ Node v24.22.1, in the worktree:
 
 - `npm run openspec -- validate add-opencode-reviewer --strict` passed.
 - `make verify` passed at `5c74e1b` before pass 1: 728 tests passed, 0 failed, and the comment check passed.
-- After the pass 1 fixes, `make verify` passed at the head reviewed by pass 2, which this record names.
+- After the pass 1 fixes, `make verify` passed on the staged tree committed as `a6c354c`, the head reviewed by pass 2.
+- After the pass 2 fixes and a merge of `dev` at `9e6febd`, `make verify` passed at the head reviewed by pass 3.
 
 ## Independent review
 
@@ -71,7 +83,7 @@ The rotation would give this change to OpenCode: Codex was the most recently ass
 
 ### Pass 1
 
-Session `9cec1f01-c535-4a5f-81da-315bd8982503`, model `claude-fable-5-1` confirmed in the JSON `modelUsage`, at `5c74e1b`. The SHA-256 snapshots before and after were equal.
+Session `9cec1f01-c535-4a5f-81da-315bd8982503`, started at about 14:05 local time, before OpenCode's first failed attempt; model `claude-fable-5-1` confirmed in the JSON `modelUsage`, at `5c74e1b`. The SHA-256 snapshots before and after were equal.
 
 Findings: Critical 0, High 0, Medium 4, Low 7.
 
@@ -87,9 +99,30 @@ Findings: Critical 0, High 0, Medium 4, Low 7.
 10. Low: the protocol and the skill omitted the case where the coordinator develops the task itself. Fixed.
 11. Low: the probes had no sessions, and the backup had no name. Fixed under the configuration.
 
+### Pass 2
+
+Session `5adafc4d-36a9-47ba-98c2-cd16e27cdc28`, model `claude-fable-5-1` confirmed in the JSON `modelUsage`, at `a6c354c`. The SHA-256 snapshots before and after were equal. All pass 1 findings were confirmed resolved.
+
+Findings: Critical 0, High 0, Medium 3, Low 11.
+
+1. Medium: a pause could never end, because a paused reviewer is never run. Fixed: a pause ends at its listed time, and a successful run only ends it early. The scenario was updated to match.
+2. Medium: "Rotation order" omitted the exception for a change that needs a particular reviewer. Fixed.
+3. Medium: the documented invocation had never reached a report with the `reviewer` agent. Fixed: the root cause was found, `< /dev/null`, and the qualification run with `kimi-k3` reached a report.
+4. Low: an outdated requirement length. Fixed.
+5. Low: an unnamed head. Fixed.
+6. Low: two blank lines in a row. Fixed.
+7. Low: the design omitted the requirements skip. Fixed.
+8. Low: the protocol and skill wording was narrower than governance. Fixed.
+9. Low: rotation did not wrap around. Fixed.
+10. Low: the agent configuration was attributed to the owner. Fixed: it is marked as the coordinator's.
+11. Low: `--pre` also blocked `--pretty`. Fixed with `--pre ` and `--pre=`, and process substitution is denied.
+12. Low: the agent cannot read external evidence. Fixed with a note in the protocol.
+13. Low: the qualification target and the post-edit probe were missing. Fixed.
+14. Low: the time of pass 1 was missing. Fixed.
+
 ## Limitations
 
-Documentation only. The checks ran on macOS arm64. The OpenCode configuration is the user's local file, outside the repository.
+Documentation only. The checks ran on macOS arm64. The OpenCode configuration is the user's local file, outside the repository. No change has yet had an official pass by OpenCode; the qualification run reviewed an already merged change.
 
 ## Remaining gates
 

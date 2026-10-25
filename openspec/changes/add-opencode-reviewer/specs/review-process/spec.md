@@ -20,7 +20,7 @@ A reviewer whose review attempt does not run to a report SHALL NOT be used for a
 - **THEN** the replacement is a reviewer with network access
 
 #### Scenario: Exclusion ends
-- **WHEN** 30 minutes have passed since the failed attempt and no longer pause is listed
+- **WHEN** 30 minutes have passed since the failed attempt and no listed pause of that reviewer has an end time still in the future
 - **THEN** the reviewer may be assigned again
 
 ## ADDED Requirements
@@ -33,7 +33,7 @@ A change's `verification.md` SHALL record each failed review attempt with its ti
 - **THEN** `verification.md` lists each failed attempt with its time, and the pass numbering continues
 
 ### Requirement: Rotation order
-Rotation SHALL follow the order of the authorized reviewer list in the governance policy, skipping a reviewer that is unavailable, paused, or unable to meet the change's review requirements. A new change SHALL go to the reviewer after the one most recently assigned, for whatever reason it was assigned.
+Rotation SHALL follow the order of the authorized reviewer list in the governance policy, returning to the first after the last, and skip a reviewer that is unavailable, paused, or unable to meet the change's review requirements. Unless a change needs a particular reviewer, a new change SHALL go to the reviewer after the one most recently assigned.
 
 #### Scenario: Reviewer after a replacement
 - **WHEN** a replacement reviewer was the most recently assigned

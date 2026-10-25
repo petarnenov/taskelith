@@ -4,7 +4,7 @@ On 2026-10-25 the owner asked to try OpenCode as a reviewer. A trial run reviewe
 
 ## What Changes
 
-- Add OpenCode CLI to the authorized reviewers in `docs/governance.md`: model `opencode/deepseek-v4.1-flash`, variant `high`, and agent `reviewer`. Add its invocation to the reviewer invocations in `docs/agent-task-protocol.md`.
+- Add OpenCode CLI to the authorized reviewers in `docs/governance.md`: model `opencode/kimi-k3`, which the owner chose after the trial, and agent `reviewer`. Add its invocation to the reviewer invocations in `docs/agent-task-protocol.md`.
 - Fix the trial's findings on the "Unavailable reviewer" rule:
   - the replacement must meet the task's review requirements, such as network access;
   - the 30 minutes run from the failed attempt;
