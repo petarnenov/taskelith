@@ -163,6 +163,19 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
     },
   },
   {
+    name: 'a control-plane hash that two workers hold authenticates neither',
+    async check(registry) {
+      const problems: string[] = [];
+      const first = await enrolled(registry, 'w1', 'j1');
+      must(await registry.rotate(first.workerId, 1, generation(2), LATER, AT));
+      must(await registry.addToken(fleetToken('t-w2')));
+      const shared = { ...generation(1, 'w2'), controlPlaneHash: 'cp-w1-1' as SecretHash };
+      must(await registry.enroll('t-w2' as SecretHash, fleetWorker('w2', 'j2', { credentials: { current: shared } })));
+      expectCode(problems, 'shared', await registry.workerByCredentialHash('cp-w1-1' as SecretHash), 'internal');
+      return problems;
+    },
+  },
+  {
     name: 'a revocation is never earlier than the JWT it revokes',
     async check(registry) {
       const problems: string[] = [];

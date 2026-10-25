@@ -100,11 +100,11 @@ test('a redrive sequence that is not a positive safe integer is 400 before the b
   assert.deepEqual(await api.handle('redriveQuarantined', { parameters: ['7'], body: undefined, query: new URLSearchParams(), correlationId: 'c' as never }, ''), ok({ sequence: 7 }));
 });
 
-test('a worker route reaches its operation with the principal of a valid worker bearer only', async () => {
+test('a worker route reaches its operation with the principal of a valid worker bearer only, whatever it declares', async () => {
   const WORKER = `tkwk_${'B'.repeat(43)}`;
   const probe: RouteDefinition = {
     operationId: 'probeWorker', method: 'GET', pattern: /^\/probe$/, security: 'workerCredential', response: 'TaskResult', success: 200,
-    statuses: { forbidden: 401, unavailable: 503 },
+    statuses: {},
   };
   const seen: ApiRequest[] = [];
   let workerStoreDown = false;

@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { performance } from 'node:perf_hooks';
 import { checkHttpSchema, type HttpSchemas } from '@taskelith/contracts';
 import type { WorkerPrincipal } from '@taskelith/fleet';
-import { err, failure, ok, parseIdentifier, type CorrelationId, type Result } from '@taskelith/kernel';
+import { err, failure, ok, parseIdentifier, type CorrelationId, type FailureCode, type Result } from '@taskelith/kernel';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import { redactSecrets } from '@taskelith/secrets';
 import { bearerToken, failureResponse, readJsonBody, writeJson, type JsonResponse } from './http-exchange.js';
@@ -85,8 +85,7 @@ async function answerRoute(
   const bearer = bearerToken(request);
   if (bearer === undefined) return failureResponse(401, failure('forbidden', 'the request has no bearer credential'));
   const principal = await authenticated(handlers, route.security, bearer);
-  // Only a refused credential is 401; a store that is down is not.
-  if (!principal.ok) return failureResponse(route.statuses[principal.error.code] ?? 500, principal.error);
+  if (!principal.ok) return failureResponse(AUTHENTICATION_STATUSES[principal.error.code] ?? 500, principal.error);
   const body = route.body === undefined ? { ok: true as const, value: undefined } : await validatedBody(request, route.body);
   if (!body.ok) return failureResponse(400, body.error);
   const validated = { parameters, body: body.value, query: url.searchParams, correlationId, ...principal.value };
@@ -97,6 +96,10 @@ async function answerRoute(
   if (checked.ok) return { status: route.success, body: outcome.value };
   return failureResponse(500, failure('internal', `the ${route.operationId} response violates ${route.response}`, { violation: checked.error[0] ?? '' }));
 }
+
+// Only a refused credential is 401, whatever a route declares; a store that
+// is down is 503.
+const AUTHENTICATION_STATUSES: Partial<Record<FailureCode, number>> = { forbidden: 401, unavailable: 503 };
 
 // The enrollment token is checked by its operation, which consumes it.
 async function authenticated(

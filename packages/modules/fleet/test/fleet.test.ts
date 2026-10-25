@@ -240,7 +240,7 @@ test('revocation denies every credential of the worker at once', async () => {
 });
 
 test('a worker bearer names its own worker and generation, and nothing else authenticates', async () => {
-  const { registry, service } = enrollment();
+  const { clock, registry, service } = enrollment();
   const first = value(await service.enroll(value(await service.issueToken({})), request()));
   const second = value(await service.enroll(value(await service.issueToken({})), request('journal-2')));
 
@@ -249,6 +249,12 @@ test('a worker bearer names its own worker and generation, and nothing else auth
   for (const secret of ['enrollment-1', 'operator-1', '']) {
     assert.equal(failed(await service.authenticateWorkerBearer(secret)).details.reason, 'worker-not-authorized', secret);
   }
+  const unknown = failed(await service.authenticateWorkerBearer('worker-99'));
+  const rotated = value(await service.rotate(first.workerId));
+  clock.advance(FLEET_LIMITS.rotationGraceMilliseconds);
+  assert.deepEqual(failed(await service.authenticateWorkerBearer(first.credentials.controlPlane)), unknown, 'past the grace window');
+  value(await service.revoke(first.workerId));
+  assert.deepEqual(failed(await service.authenticateWorkerBearer(rotated.credentials.controlPlane)), unknown, 'revoked, current generation');
   registry.workerByCredentialHash = async () => err(failure('unavailable', 'the store is down'));
-  assert.equal(failed(await service.authenticateWorkerBearer(first.credentials.controlPlane)).code, 'unavailable');
+  assert.equal(failed(await service.authenticateWorkerBearer(second.credentials.controlPlane)).code, 'unavailable');
 });

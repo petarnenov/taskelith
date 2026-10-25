@@ -12,13 +12,14 @@ Item 16 left worker authentication to item 17, as a lookup by credential hash in
 - **PostgreSQL.**
   - A migration adds the unique columns `workers.control_plane_hash` and `previous_control_plane_hash`, and backfills them from the enrollment record.
   - Every writer of the record keeps the columns in step: enrollment, rotation, revocation, and predecessor expiry.
-  - The lookup reads in a read-only transaction.
+  - The lookup reads in a read-only transaction. A hash that two workers hold fails closed.
 - **Control plane.**
   - The `workerCredential` security scheme in the route table.
   - `ApiHandlers.authenticateWorker`, which the server calls before a worker route's operation.
   - The worker principal on `ApiRequest`.
   - A replaceable route table for the server.
-  - No operation uses the scheme yet: items 17 and 19 add `authorizeLaunch` and `publishEvidence`.
+  - Fixed statuses for authentication failures, whatever a route declares.
+  - No route of the server's table uses the scheme yet. The contract declares it for `authorizeLaunch` (item 17), `publishEvidence` (item 19), and `requestDelegation` (items 20 and 21).
 
 ## Capabilities
 

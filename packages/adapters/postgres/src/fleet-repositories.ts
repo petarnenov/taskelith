@@ -91,9 +91,11 @@ export class PostgresFleetRegistry implements FleetRegistry {
 
   async workerByCredentialHash(hash: SecretHash): Promise<Result<EnrolledWorker | undefined>> {
     const { rows } = await this.#session.query<{ enrollment: string }>(
-      'SELECT enrollment FROM workers WHERE control_plane_hash = $1 OR previous_control_plane_hash = $1',
+      `SELECT enrollment FROM workers WHERE (control_plane_hash = $1 OR previous_control_plane_hash = $1)
+       AND enrollment IS NOT NULL LIMIT 2`,
       [hash],
     );
+    if (rows.length > 1) return err(sharedHash());
     return ok(rows[0] === undefined ? undefined : decodeRecord<EnrolledWorker>(rows[0].enrollment));
   }
 
@@ -182,6 +184,12 @@ export class PostgresFleetRegistry implements FleetRegistry {
     );
     return rows[0] === undefined ? undefined : decodeRecord<EnrolledWorker>(rows[0].enrollment);
   }
+}
+
+// Each column is unique, but one hash may still be current for one worker
+// and predecessor for another; it then authenticates neither.
+function sharedHash() {
+  return failure('internal', 'a control-plane hash belongs to two workers');
 }
 
 // The row the scheduling guard reads gets the identity at initialization,

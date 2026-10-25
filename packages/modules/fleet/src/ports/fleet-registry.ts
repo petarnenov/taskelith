@@ -13,8 +13,8 @@ export interface FleetRegistry {
   // else `conflict`: `token-used`, `token-expired`, or `journal-enrolled`.
   enroll(tokenHash: SecretHash, worker: EnrolledWorker): Promise<Result<void>>;
   worker(workerId: WorkerId): Promise<Result<EnrolledWorker | undefined>>;
-  // The worker, revoked or not, that has this control-plane hash in its
-  // current or predecessor generation, for bearer authentication.
+  // The worker, revoked or not, with this control-plane hash in its current
+  // or predecessor generation; `internal` if two workers hold it.
   workerByCredentialHash(hash: SecretHash): Promise<Result<EnrolledWorker | undefined>>;
   // `next` becomes current, the current one predecessor until `validUntil`; a
   // dropped one is recorded. `forbidden` if revoked, `conflict` if stale.

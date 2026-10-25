@@ -80,20 +80,24 @@ test('the bearer migration copies the control-plane hashes of enrolled workers',
   const content = await readFile(held, 'utf8');
   await unlink(held);
   assert.equal((await migrate(url, directory)).ok, true);
-  const current = fleetWorker('w1', 'j1', { host: { platform: 'linux', architecture: 'x64', hostname: 'build\uD800 \u0000' } });
+  const current = fleetWorker('w1', 'j1', { host: { platform: 'linux', architecture: 'x64', hostname: 'build\uD800 \u0000 " \\u0041' } });
   const previous = { ...current.credentials.current, generation: 1, controlPlaneHash: 'cp-old', validUntil: AT };
   const rotated = { ...fleetWorker('w2', 'j2'), credentials: { current: { ...current.credentials.current, controlPlaneHash: 'cp-new' }, previous } };
-  for (const worker of [current, rotated]) {
+  const revoked = { ...fleetWorker('w3', 'j3'), revokedAt: AT };
+  for (const worker of [current, rotated, revoked]) {
     await query(url, `INSERT INTO workers (worker_id, enrolled, revoked, draining, reachable, slots, cpu_millicores, memory_mebibytes,
-      controls, journal_id, enrollment) VALUES ($1, true, false, false, false, 1, 1, 1, '{}', $2, $3)`,
-    [worker.workerId, worker.journalId, JSON.stringify(worker)]);
+      controls, journal_id, enrollment, predecessor_valid_until) VALUES ($1, true, false, false, false, 1, 1, 1, '{}', $2, $3, $4)`,
+    [worker.workerId, worker.journalId, JSON.stringify(worker), worker.credentials.previous?.validUntil ?? null]);
   }
   await writeFile(held, content);
   assert.deepEqual(await migrate(url, directory), { ok: true, value: [WORKER_BEARER] });
-  const rows = await query<{ control_plane_hash: string; previous_control_plane_hash: string | null }>(
-    url, 'SELECT control_plane_hash, previous_control_plane_hash FROM workers ORDER BY worker_id',
+  const rows = await query<{ control_plane_hash: string; previous_control_plane_hash: string | null; enrollment: string }>(
+    url, 'SELECT control_plane_hash, previous_control_plane_hash, enrollment FROM workers ORDER BY worker_id',
   );
-  assert.deepEqual(rows.map((row) => [row.control_plane_hash, row.previous_control_plane_hash]), [['cp-w1-1', null], ['cp-new', 'cp-old']]);
+  assert.deepEqual(rows.map((row) => [row.control_plane_hash, row.previous_control_plane_hash]), [
+    ['cp-w1-1', null], ['cp-new', 'cp-old'], ['cp-w3-1', null],
+  ]);
+  assert.equal(rows[0]!.enrollment, JSON.stringify(current), 'the record itself is unchanged');
 });
 
 test('a later migration file is applied after the applied ones', async () => {

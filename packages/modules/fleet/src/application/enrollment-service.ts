@@ -50,7 +50,7 @@ export interface EnrollmentServiceDependencies {
 }
 
 // Enrollment, rotation, revocation, and authentication (trust model sec. 4).
-// A failure's `reason` maps to 401, 409, or 422 of `enrollWorker` (item 16).
+// A failure's `reason` maps to 401, 409, or 422 of the API.
 export class EnrollmentService {
   readonly #deps: EnrollmentServiceDependencies;
   readonly #limits: FleetLimits;

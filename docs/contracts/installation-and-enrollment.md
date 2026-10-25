@@ -68,7 +68,7 @@ Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-
   - `rotate-worker` issues the next generation. The previous one stays valid for the grace window.
   - `expire-grace-windows`, which the control plane runs periodically, drops the previous generation after the window and records its broker user for revocation. A further rotation drops an older predecessor at once in the same way.
   - A revoked worker gets no new generation: the rotation fails inside the transaction that would store it.
-  - Authentication returns the generation a secret belongs to. An unknown, revoked, or expired one is `forbidden` with reason `worker-not-authorized`.
+  - Authentication takes the bearer alone and returns the worker and the generation it belongs to, found by the hash of the secret (change `add-worker-bearer-authentication`). An unknown, revoked, or expired one is `forbidden` with reason `worker-not-authorized`. The check is point in time: an operation that writes re-reads the worker in its own transaction.
 - **Revocation.** `revoke-worker` marks the worker revoked in the same row placement reads. In the same transaction it records every broker user of the worker in `broker_revocations`. The server disconnects such a user at once and refuses it afterwards.
   - **Durable list.** Every broker user to revoke is recorded in the transaction that stops its validity: a revocation, a rotation that drops a predecessor, or the end of a grace window. It stays recorded after its publication.
   - **Time.** Each user is void for JWTs issued up to its revocation time, and that time is never earlier than its own JWT's issue time, which its generation records. So a revocation that raced a rotation still voids the new user.
