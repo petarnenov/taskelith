@@ -11,7 +11,9 @@ export interface AggregateTable<Stored> {
   idOf(record: Stored): string;
   generationOf(record: Stored): Generation;
   columnsOf(record: Stored): Readonly<Record<string, unknown>>;
-  decode(json: unknown): Stored;
+  // Columns read beside the record, which `decode` receives by name.
+  readonly readColumns?: readonly string[];
+  decode(json: unknown, columns: Readonly<Record<string, unknown>>): Stored;
 }
 
 // `insertOnly` columns are written once, such as the run a gate belongs to.
@@ -20,7 +22,7 @@ export interface AddOptions {
   uniqueConflict?(): Promise<Result<void>>;
 }
 
-interface RecordRow {
+interface RecordRow extends Readonly<Record<string, unknown>> {
   readonly record: unknown;
 }
 
@@ -36,14 +38,14 @@ export class AggregateStore<Stored> {
   }
 
   async get(id: string): Promise<Result<Stored>> {
-    const { rows } = await this.#session.query<RecordRow>(`SELECT record FROM ${this.#mapping.table} WHERE id = $1`, [id]);
+    const { rows } = await this.#session.query<RecordRow>(`SELECT ${this.#selected()} FROM ${this.#mapping.table} WHERE id = $1`, [id]);
     if (rows[0] === undefined) return this.#notFound(id);
-    return ok(this.#mapping.decode(rows[0].record));
+    return ok(this.#mapping.decode(rows[0].record, rows[0]));
   }
 
   async list(where: string, values: readonly unknown[]): Promise<readonly Stored[]> {
-    const { rows } = await this.#session.query<RecordRow>(`SELECT record FROM ${this.#mapping.table} WHERE ${where} ORDER BY id`, values);
-    return rows.map((row) => this.#mapping.decode(row.record));
+    const { rows } = await this.#session.query<RecordRow>(`SELECT ${this.#selected()} FROM ${this.#mapping.table} WHERE ${where} ORDER BY id`, values);
+    return rows.map((row) => this.#mapping.decode(row.record, row));
   }
 
   // Returns `conflict` for an existing id; `uniqueConflict` explains any
@@ -92,6 +94,10 @@ export class AggregateStore<Stored> {
       [this.#mapping.idOf(record), expectedGeneration, ...names.map((name) => columns[name])],
     );
     return updated.rowCount === 1;
+  }
+
+  #selected(): string {
+    return ['record', ...(this.#mapping.readColumns ?? [])].join(', ');
   }
 
   #columns(record: Stored): Readonly<Record<string, unknown>> {

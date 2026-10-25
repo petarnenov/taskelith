@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
+import { parseIdentifier } from '@taskelith/kernel';
 import { EVIDENCE_RECORDS_CONFORMANCE, INBOX_CONFORMANCE, LAUNCH_RECORDS_CONFORMANCE, TASK_REPOSITORY_CONFORMANCE } from '@taskelith/execution';
 import {
   CommittingAdmissionRepository,
@@ -24,9 +25,12 @@ import {
   OUTBOX_CONFORMANCE,
   RUN_CATALOG_CONFORMANCE,
   WORKFLOW_RUN_REPOSITORY_CONFORMANCE,
+  nextGeneration,
   type ConformanceCase,
 } from '@taskelith/sdlc';
-import { createMigratedDatabase, truncateAll } from './test-database.ts';
+import { value } from '@taskelith/testing';
+import { assignment } from './fixtures.ts';
+import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
 
 const url = await createMigratedDatabase();
 const database = new PostgresDatabase(url);
@@ -70,4 +74,27 @@ runSuite('outbox', OUTBOX_CONFORMANCE, () => {
       return pending.value;
     },
   };
+});
+
+test('PostgreSQL assignments: a backfilled offer command is read and kept through replace', { concurrency: false }, async () => {
+  await truncateAll(url);
+  const repository = new CommittingAssignmentRepository(database);
+  const legacy = assignment('assignment-1');
+  assert.deepEqual(await repository.add(legacy), { ok: true, value: undefined });
+  // The migration wrote the column; the stored record lacks the command.
+  await query(url, "UPDATE assignments SET offer_command_id = 'offer-1' WHERE id = $1", [legacy.id]);
+  const offerCommandId = value(parseIdentifier('EventId', 'offer-1'));
+  const backfilled = { ...legacy, offerCommandId };
+  assert.deepEqual(await repository.get(legacy.id), { ok: true, value: backfilled });
+  assert.deepEqual(await repository.byOfferCommand(offerCommandId), { ok: true, value: backfilled });
+  assert.deepEqual(await repository.listByAttempt(legacy.attemptId), [backfilled]);
+  const omitted = { ...legacy, generation: nextGeneration(legacy.generation) };
+  assert.deepEqual(await repository.replace(omitted, legacy.generation), { ok: true, value: undefined });
+  assert.deepEqual(await repository.get(legacy.id), { ok: true, value: { ...omitted, offerCommandId } });
+  const carried = { ...omitted, offerCommandId, generation: nextGeneration(omitted.generation) };
+  assert.deepEqual(await repository.replace(carried, omitted.generation), { ok: true, value: undefined });
+  const changed = { ...carried, offerCommandId: value(parseIdentifier('EventId', 'offer-2')), generation: nextGeneration(carried.generation) };
+  const refused = await repository.replace(changed, carried.generation);
+  assert.equal(refused.ok ? 'replaced' : refused.error.code, 'conflict');
+  assert.deepEqual(await repository.byOfferCommand(offerCommandId), { ok: true, value: carried });
 });

@@ -40,6 +40,8 @@ export class InMemoryAssignmentRepository implements AssignmentRepository {
     if (!generation.ok) return generation;
     const next = checkNextGeneration(`assignment ${assignment.id}`, assignment.generation, expectedGeneration);
     if (!next.ok) return next;
+    const offer = offerIdentityConflict(stored, assignment);
+    if (!offer.ok) return offer;
     const held = this.#heldReservationConflict(assignment);
     if (!held.ok) return held;
     this.#assignments.set(assignment.id, assignment);
@@ -73,4 +75,11 @@ export class InMemoryAssignmentRepository implements AssignmentRepository {
       attempt: assignment.attemptId, assignment: holder.id,
     }));
   }
+}
+
+// The command that offered an assignment is its lookup key, so a replace
+// keeps it exactly: it can neither change it, set it, nor clear it.
+function offerIdentityConflict(stored: Assignment, assignment: Assignment): Result<void> {
+  if (stored.offerCommandId === assignment.offerCommandId) return ok(undefined);
+  return err(failure('conflict', `assignment ${assignment.id} keeps the command that offered it`, { assignment: assignment.id }));
 }

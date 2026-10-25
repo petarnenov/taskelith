@@ -176,6 +176,15 @@ function placementColumns(task: Task): Readonly<Record<string, unknown>> {
   };
 }
 
+// A record stored before its offer's command was kept lacks it; every read
+// carries the command the migration wrote to the column.
+function decodeAssignment(json: unknown, columns: Readonly<Record<string, unknown>>): Assignment {
+  const assignment = decodeRecord<Assignment>(json);
+  const column = columns['offer_command_id'];
+  if (typeof column !== 'string' || assignment.offerCommandId !== undefined) return assignment;
+  return Object.freeze({ ...assignment, offerCommandId: column as EventId });
+}
+
 // One held reservation per attempt is checked before writing, so a transaction
 // gets a `conflict` result; the partial unique index guards concurrent writers.
 export class PostgresAssignmentRepository implements AssignmentRepository {
@@ -203,7 +212,8 @@ export class PostgresAssignmentRepository implements AssignmentRepository {
         memory_mebibytes: reservation.requested.memoryMebibytes,
         provider_credentials: [...reservation.providerCredentials],
       }),
-      decode: decodeRecord,
+      readColumns: ['offer_command_id'],
+      decode: decodeAssignment,
     });
   }
 
@@ -221,8 +231,11 @@ export class PostgresAssignmentRepository implements AssignmentRepository {
   }
 
   replace(assignment: Assignment, expectedGeneration: Generation): Promise<Result<void>> {
-    const held = assignment.reservation.state === 'held' ? () => this.#heldReservationConflict(assignment) : undefined;
-    return this.#store.replace(assignment, expectedGeneration, held);
+    return this.#store.replace(assignment, expectedGeneration, async () => {
+      const offer = await this.#offerIdentityConflict(assignment);
+      if (!offer.ok || assignment.reservation.state !== 'held') return offer;
+      return this.#heldReservationConflict(assignment);
+    });
   }
 
   listByAttempt(attemptId: AttemptId): Promise<readonly Assignment[]> {
@@ -233,6 +246,21 @@ export class PostgresAssignmentRepository implements AssignmentRepository {
     const [offered] = await this.#store.list('offer_command_id = $1', [commandId]);
     if (offered === undefined) return err(failure('not-found', `no assignment was offered by ${commandId}`, { command: commandId }));
     return ok(offered);
+  }
+
+  // A replace keeps the offer's command; omitting it keeps the column's
+  // command of a record stored before the command was kept.
+  async #offerIdentityConflict(assignment: Assignment): Promise<Result<void>> {
+    const { rows: [stored] } = await this.#session.query<{ offer_command_id: string | null; record: unknown }>(
+      'SELECT offer_command_id, record FROM assignments WHERE id = $1',
+      [assignment.id],
+    );
+    const recorded = stored === undefined ? undefined : decodeRecord<Assignment>(stored.record).offerCommandId;
+    const kept = assignment.offerCommandId === undefined
+      ? recorded === undefined
+      : assignment.offerCommandId === stored?.offer_command_id;
+    if (kept) return ok(undefined);
+    return err(failure('conflict', `assignment ${assignment.id} keeps the command that offered it`, { assignment: assignment.id }));
   }
 
   async #heldReservationConflict(assignment: Assignment): Promise<Result<void>> {
