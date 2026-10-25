@@ -14,10 +14,12 @@ import {
   type MantineColor,
 } from '@mantine/core';
 import { usePoc } from '../store';
-import { DiffBlock, Facts, PageHeader, SessionBadge, type SessionState } from '../ui';
+import { DiffBlock, Facts, LaterGate, PageHeader, SessionBadge, type ExecutionView } from '../ui';
 
-type ReviewState = 'passed' | 'running' | 'blocked' | 'changes';
-type Severity = 'High' | 'Medium' | 'Low';
+// Review gate states as the backend records them; the reason says why a
+// pending gate waits.
+type ReviewState = 'passed' | 'pending' | 'failed' | 'stale';
+type Severity = 'Critical' | 'High' | 'Medium' | 'Low';
 
 interface Review {
   id: string;
@@ -25,7 +27,7 @@ interface Review {
   change: string;
   kind: string;
   state: ReviewState;
-  session: SessionState;
+  session: ExecutionView;
   sessionLabel: string;
   reviewer: string;
   pass: string;
@@ -33,18 +35,23 @@ interface Review {
   facts: { label: string; value: string }[];
   diffs: { file: string; diff: string }[];
   findings: { severity: Severity; text: string; where: string; outcome: string }[];
-  blockedText?: string;
+  pendingReason?: string;
   verdict: string;
 }
 
 const STATES: Record<ReviewState, { label: string; color: MantineColor }> = {
   passed: { label: 'Passed', color: 'teal' },
-  running: { label: 'In review', color: 'indigo' },
-  blocked: { label: 'Waiting for reviewer', color: 'orange' },
-  changes: { label: 'Changes requested', color: 'red' },
+  pending: { label: 'Pending · no reviewer slot', color: 'orange' },
+  failed: { label: 'Failed · rejected', color: 'red' },
+  stale: { label: 'Stale', color: 'orange' },
 };
 
-const SEVERITY: Record<Severity, MantineColor> = { High: 'red', Medium: 'orange', Low: 'gray' };
+const SEVERITY: Record<Severity, MantineColor> = {
+  Critical: 'red',
+  High: 'red',
+  Medium: 'orange',
+  Low: 'gray',
+};
 
 const REVIEWS: Review[] = [
   {
@@ -53,7 +60,7 @@ const REVIEWS: Review[] = [
     change: 'add-account-pool-scheduler',
     kind: 'Conflict resolution review',
     state: 'passed',
-    session: 'stopped',
+    session: { phase: 'ended', outcome: 'exited-0', reachability: 'reachable' },
     sessionLabel: 'Reviewer session stopped',
     reviewer: 'Claude Code · Fable 5.1',
     pass: 'Pass 1 of 3',
@@ -61,7 +68,7 @@ const REVIEWS: Review[] = [
     facts: [
       { label: 'Implementer', value: 'Claude Code · mac-01' },
       { label: 'Reviewer', value: 'Claude Code · claude-fable-5-1 · read-only' },
-      { label: 'Head', value: 'a41c9e2' },
+      { label: 'Head', value: 'a41c9e2 (code-head identity, G3 item 17)' },
       { label: 'Evidence', value: 'sha256:9c1e…4ab0' },
     ],
     diffs: [
@@ -89,17 +96,17 @@ const REVIEWS: Review[] = [
     title: 'Container Compose baseline',
     change: 'container-compose-baseline',
     kind: 'Implementation review',
-    state: 'blocked',
-    session: 'none',
+    state: 'pending',
+    session: { phase: 'none', reachability: 'reachable' },
     sessionLabel: 'No reviewer session · waiting for a slot',
     reviewer: 'Claude Code · Fable 5.1 (slots busy)',
     pass: 'Pass 1 of 3',
-    blockedText:
-      'All Claude Code reviewer slots are busy (2 of 2). The gate never falls back to the implementer or another harness. Attempt 2 of 3 to get a reviewer failed; the last attempt is in 4 min. If it fails too, the task escalates to you as “Needs you”.',
+    pendingReason:
+      'All Claude Code reviewer slots are busy (2 of 2). The gate never falls back to the implementer; if this reviewer becomes unavailable, the next authorized reviewer in the rotation takes over and the pass count carries over. Try 2 of 3 to get a reviewer failed; the last attempt is in 4 min. If it fails too, the task escalates to you as “Needs you”.',
     facts: [
       { label: 'Implementer', value: 'Claude Code · linux-01' },
       { label: 'Reviewer', value: 'Claude Code · claude-fable-5-1 · queued' },
-      { label: 'Attempts', value: '2 of 3 · then escalate' },
+      { label: 'Tries', value: '2 of 3 · then it needs you' },
       { label: 'Waiting', value: '1 h 12 min' },
     ],
     diffs: [],
@@ -111,8 +118,8 @@ const REVIEWS: Review[] = [
     title: 'OpenAPI contracts for the control plane',
     change: '003-openapi-contracts',
     kind: 'Spec review',
-    state: 'changes',
-    session: 'stopped',
+    state: 'failed',
+    session: { phase: 'ended', outcome: 'exited-0', reachability: 'reachable' },
     sessionLabel: 'Reviewer session stopped',
     reviewer: 'Codex',
     pass: 'Pass 1 of 3',
@@ -127,8 +134,8 @@ const REVIEWS: Review[] = [
     findings: [
       {
         severity: 'High',
-        text: 'Task submission has no idempotency key, so a retried request can create two tasks.',
-        where: 'specs/003-openapi-contracts/spec.md · POST /tasks',
+        text: 'A retried turn creates a new turn instead of reusing its client turn key, so one message can run twice.',
+        where: 'specs/003-openapi-contracts/spec.md · POST /sessions/{id}/turns',
         outcome: 'Open · sent back to the implementer',
       },
       {
@@ -147,7 +154,7 @@ const REVIEWS: Review[] = [
     change: 'add-shared-kernel',
     kind: 'Implementation review',
     state: 'passed',
-    session: 'stopped',
+    session: { phase: 'ended', outcome: 'exited-0', reachability: 'reachable' },
     sessionLabel: 'Reviewer session stopped',
     reviewer: 'Codex',
     pass: 'Pass 2 of 3',
@@ -195,8 +202,9 @@ function QueueItem({ review, selected, onPick }: { review: Review; selected: boo
           </Text>
           <Text size="xs" c="dimmed">
             {review.kind} · {review.reviewer} · {review.pass}
+            {review.reviewer.startsWith('Codex') ? ' · Codex reviews in G4' : ''}
           </Text>
-          <SessionBadge state={review.session} label={review.sessionLabel} />
+          <SessionBadge view={review.session} label={review.sessionLabel} />
         </Stack>
       </Paper>
     </UnstyledButton>
@@ -225,11 +233,11 @@ function ReviewDetail({ review }: { review: Review }) {
             {st.label}
           </Badge>
         </Group>
-        <SessionBadge state={review.session} label={review.sessionLabel} harness={review.reviewer} />
+        <SessionBadge view={review.session} label={review.sessionLabel} harness={review.reviewer} />
         <Facts items={review.facts} />
-        {review.blockedText ? (
+        {review.pendingReason ? (
           <Alert color="orange" variant="light" title="Gate stays pending">
-            {review.blockedText}
+            {review.pendingReason}
           </Alert>
         ) : null}
         {review.diffs.length ? (
@@ -298,6 +306,8 @@ export function ReviewsScreen() {
             <Badge variant="default">One reviewer per task</Badge>
             <Badge variant="default">At most 3 passes</Badge>
             <Badge variant="default">Low-only: fixed without another pass</Badge>
+            <Badge variant="default">After pass 3 the owner decides open Critical, High, Medium</Badge>
+            <LaterGate>review runtime · G3 item 21</LaterGate>
           </Group>
         }
       />

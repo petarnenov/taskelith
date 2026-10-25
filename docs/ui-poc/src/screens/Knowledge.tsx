@@ -14,7 +14,7 @@ import {
   Title,
   UnstyledButton,
 } from '@mantine/core';
-import { Facts, PageHeader } from '../ui';
+import { Facts, LaterGate, PageHeader } from '../ui';
 
 type LessonStatus = 'active' | 'retired';
 
@@ -181,6 +181,7 @@ export function KnowledgeScreen() {
             <Badge variant="dot" color="gray">
               This project only
             </Badge>
+            <LaterGate>Knowledge · G5 (D10)</LaterGate>
           </Group>
         }
       />

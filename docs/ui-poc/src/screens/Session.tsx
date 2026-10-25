@@ -3,7 +3,6 @@ import {
   Avatar,
   Badge,
   Breadcrumbs,
-  Button,
   Code,
   Grid,
   Group,
@@ -17,10 +16,20 @@ import {
   Title,
   type MantineColor,
 } from '@mantine/core';
-import { DiffBlock, PageHeader, ScreenLink, SessionBadge, type SessionState } from '../ui';
+import {
+  DiffBlock,
+  LaterGate,
+  PageHeader,
+  RoleButton,
+  ScreenLink,
+  SessionBadge,
+  type ExecutionView,
+} from '../ui';
+import { LiveStatus } from './LiveStatus';
 
 type Entry =
-  | { kind: 'system' | 'agent' | 'user'; text: string }
+  | { kind: 'system' | 'agent'; text: string }
+  | { kind: 'user'; text: string; turnKey: string; confirmed: boolean }
   | { kind: 'tool'; command: string; output: string }
   | { kind: 'edit'; file: string; diff: string };
 
@@ -146,10 +155,8 @@ const SCRIPT: Step[] = [
   {
     entries: [
       {
-        kind: 'tool',
-        command: 'nvm use && make verify',
-        output:
-          'typecheck ✓\ndependency boundaries ✓\nopenspec validate ✓\ntests ✓ 42 passed\ncoverage ✓ 81% lines · 77% branches · 84% functions',
+        kind: 'system',
+        text: 'Platform verify on a41c9e2 (not an agent step): make verify and CI passed: typecheck, dependency boundaries, openspec validate, 42 tests, coverage 81% lines · 77% branches · 84% functions.',
       },
     ],
     resolved: 2,
@@ -184,6 +191,7 @@ const SCRIPT: Step[] = [
 const FILES = ['docs/architecture.md', 'openspec/specs/harness-account-pools/spec.md'];
 const TICK = 2600;
 const STOP_DELAY = 2500;
+const TURN_CONFIRM_DELAY = 700;
 
 const GATE_RUN: Record<GateRun, { label: string; color: MantineColor }> = {
   old: { label: 'Passed (old head)', color: 'teal' },
@@ -192,11 +200,31 @@ const GATE_RUN: Record<GateRun, { label: string; color: MantineColor }> = {
   passed: { label: 'Passed', color: 'teal' },
 };
 
-function status(step: Step, stopping: boolean, stopped: boolean): { label: string; state: SessionState } {
-  if (stopping) return { label: 'Stopping · awaiting proof from mac-01', state: 'stopping' };
-  if (stopped) return { label: 'Stopped by PP · confirmed by mac-01', state: 'stopped' };
-  if (step.done) return { label: 'Merged · session stopped', state: 'stopped' };
-  return { label: 'Session live', state: 'live' };
+function status(step: Step, stopping: boolean, stopped: boolean): { label: string; view: ExecutionView } {
+  const running: ExecutionView = {
+    phase: 'running',
+    reachability: 'reachable',
+    turn: 'working',
+    ownershipGeneration: 2,
+  };
+  if (stopping) {
+    return {
+      label: 'Stopping · awaiting proof from mac-01',
+      view: { ...running, cancellation: 'requested' },
+    };
+  }
+  if (stopped) {
+    return {
+      label: 'Ended · exited, signal · cancelled, confirmed by mac-01',
+      view: { ...running, phase: 'ended', outcome: 'exited-signal', cancelled: true },
+    };
+  }
+  if (step.done)
+    return {
+      label: 'Ended · exited, code 0 · merged',
+      view: { ...running, phase: 'ended', outcome: 'exited-0' },
+    };
+  return { label: 'Session live', view: running };
 }
 
 function gateRows(step: Step) {
@@ -260,7 +288,8 @@ function EntryView({ entry }: { entry: Entry }) {
             <Text size="sm">{entry.text}</Text>
           </Paper>
           <Text size="xs" c="dimmed">
-            PP · delivered at the next turn boundary
+            {entry.confirmed ? 'PP · accepted, delivered at the next turn boundary' : 'PP · sending'} · turn
+            key {entry.turnKey}
           </Text>
         </Stack>
       );
@@ -335,9 +364,18 @@ export function SessionScreen() {
   const send = () => {
     const text = draft.trim();
     if (!text) return;
-    setMessages([...messages, { kind: 'user', text }]);
+    const turnKey = 'tk-' + Math.random().toString(16).slice(2, 8);
+    setMessages((m) => [...m, { kind: 'user', text, turnKey, confirmed: false }]);
     setDraft('');
   };
+
+  const unconfirmed = messages.some((e) => e.kind === 'user' && !e.confirmed);
+  useEffect(() => {
+    if (!unconfirmed) return undefined;
+    const confirm = (e: Entry): Entry => (e.kind === 'user' ? { ...e, confirmed: true } : e);
+    const timer = window.setTimeout(() => setMessages((m) => m.map(confirm)), TURN_CONFIRM_DELAY);
+    return () => clearTimeout(timer);
+  }, [unconfirmed]);
 
   const entries = [...SCRIPT.slice(0, step + 1).flatMap((s) => s.entries), ...messages];
   const terminal = terminalLines(entries);
@@ -345,7 +383,7 @@ export function SessionScreen() {
   const turns = [
     { n: 1, label: 'Implement', outcome: '34 min · 12 tool calls' },
     { n: 2, label: 'Implement', outcome: '18 min · 7 tool calls' },
-    { n: 3, label: 'Verify', outcome: '3 min · 1 tool call' },
+    { n: 3, label: 'Local checks before push', outcome: '3 min · 1 tool call' },
     { n: 4, label: 'Review fixes', outcome: '9 min · 4 tool calls' },
     { n: 5, label: 'Merge conflict resolution', outcome: st.label },
   ];
@@ -369,15 +407,18 @@ export function SessionScreen() {
               Claude Code · mac-01
             </Text>
             <Badge variant="default">Turn 5</Badge>
+            <Badge variant="default">Attempt #2 · ownership generation 2</Badge>
+            <LaterGate>sessions and turns · G3 items 4, 13, 31</LaterGate>
           </Group>
         }
         aside={
           <Group gap="sm">
-            <SessionBadge state={st.state} label={st.label} />
+            <LiveStatus />
+            <SessionBadge view={st.view} label={st.label} />
             {!stopped && !stopping && !current.done ? (
-              <Button color="red" variant="light" onClick={stop}>
+              <RoleButton capability="stop-or-retry" color="red" variant="light" onClick={stop}>
                 Stop session
-              </Button>
+              </RoleButton>
             ) : null}
           </Group>
         }
@@ -411,7 +452,9 @@ export function SessionScreen() {
                     if (event.key === 'Enter') send();
                   }}
                 />
-                <Button onClick={send}>Send</Button>
+                <RoleButton capability="send-turn" onClick={send}>
+                  Send
+                </RoleButton>
               </Group>
             </Stack>
           </Paper>
