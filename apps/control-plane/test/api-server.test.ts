@@ -304,7 +304,7 @@ test('authorizeLaunch maps every outcome to its contract shape, and needs a work
   let next = 0;
   const api = new ControlPlaneApi({
     runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, enrollment: undefined as never,
-    quarantine: undefined as never,
+    quarantine: undefined as never, delegations: undefined as never,
     launches: { authorize: async () => ok(outcomes[next++]!) },
   });
   const body = {
