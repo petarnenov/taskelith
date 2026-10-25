@@ -11,6 +11,7 @@ import {
   type StartContext,
   type StartObservation,
 } from '@taskelith/execution';
+import { failed, value } from '@taskelith/testing';
 import {
   EPOCH,
   EXECUTION,
@@ -22,14 +23,12 @@ import {
   authorized,
   epoch,
   executionId,
-  failureOf,
   grantIssue,
   launchAuthId,
   launchContext,
   launchRequest,
   operationId,
   placedTask,
-  value,
 } from './fixtures.ts';
 
 const INSTALLATION = { recoveryEpoch: EPOCH, quarantined: false };
@@ -112,7 +111,7 @@ test('a start under an unknown grant, another execution\'s grant, or after not-s
 
 test('a start of an execution the task does not hold is not recorded on it', () => {
   const task = value(endAttempt(placedTask(), placedTask().attempts[0]!.id, T2));
-  assert.equal(failureOf(recordStartObservation(task, observation(), { installation: INSTALLATION }, T2)).code, 'not-found');
+  assert.equal(failed(recordStartObservation(task, observation(), { installation: INSTALLATION }, T2)).code, 'not-found');
 });
 
 test('a start of an exited execution under an unknown or foreign-bound grant is unauthorized', () => {
@@ -151,7 +150,7 @@ test('an unauthorized report does not block the valid start that follows it', ()
 });
 
 test('only parsed launch parameters can be issued', () => {
-  assert.equal(failureOf(parseLaunchParameters({ ttlMilliseconds: Number.POSITIVE_INFINITY, skewMilliseconds: 1 })).code, 'invalid');
-  assert.equal(failureOf(parseLaunchParameters({ ttlMilliseconds: 30_000, skewMilliseconds: -1 })).code, 'invalid');
-  assert.equal(failureOf(parseLaunchParameters({ ttlMilliseconds: 30_000, skewMilliseconds: 30_000 })).code, 'invalid');
+  assert.equal(failed(parseLaunchParameters({ ttlMilliseconds: Number.POSITIVE_INFINITY, skewMilliseconds: 1 })).code, 'invalid');
+  assert.equal(failed(parseLaunchParameters({ ttlMilliseconds: 30_000, skewMilliseconds: -1 })).code, 'invalid');
+  assert.equal(failed(parseLaunchParameters({ ttlMilliseconds: 30_000, skewMilliseconds: 30_000 })).code, 'invalid');
 });

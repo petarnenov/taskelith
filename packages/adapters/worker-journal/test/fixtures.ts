@@ -1,9 +1,8 @@
-import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parseIdentifier, parseInstant, type Instant, type Result } from '@taskelith/kernel';
+import { parseInstant, type Instant } from '@taskelith/kernel';
 import { parseGeneration, parseOwnershipGeneration } from '@taskelith/sdlc';
 import {
   parseLaunchParameters,
@@ -16,19 +15,8 @@ import {
   type LaunchRequest,
   type OperationId,
 } from '@taskelith/execution';
+import { id, value } from '@taskelith/testing';
 import type { JournalClock, VolumeProbe, WorkerRootOptions } from '@taskelith/worker-journal';
-
-export function value<T, E>(result: Result<T, E>): T {
-  assert.ok(result.ok, `expected success, got ${JSON.stringify(result.ok ? undefined : result.error)}`);
-  return result.value;
-}
-
-export function failed<T, E>(result: Result<T, E>): E {
-  assert.ok(!result.ok, 'expected a failure');
-  return result.error;
-}
-
-export const id = <Kind extends string>(kind: Kind, text: string) => value(parseIdentifier(kind, text));
 
 export const T0: Instant = value(parseInstant('2026-10-25T09:00:00.000Z'));
 export const CLOCK: JournalClock = { now: () => T0 };

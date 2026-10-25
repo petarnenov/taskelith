@@ -10,3 +10,9 @@ export function value<T, E>(result: Result<T, E>): T {
 export function id<Kind extends string>(kind: Kind, text: string): Identifier<Kind> {
   return value(parseIdentifier(kind, text));
 }
+
+// The error of a result that a test expects to fail; a success fails it.
+export function failed<T, E>(result: Result<T, E>): E {
+  assert.ok(!result.ok, 'expected a failure');
+  return result.error;
+}

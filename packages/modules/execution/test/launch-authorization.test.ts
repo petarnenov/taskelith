@@ -19,6 +19,7 @@ import {
   type LaunchRequest,
   type Task,
 } from '@taskelith/execution';
+import { failed, value } from '@taskelith/testing';
 import {
   ASSIGNMENT,
   ATTEMPT,
@@ -38,7 +39,6 @@ import {
   authorized,
   epoch,
   executionId,
-  failureOf,
   grantIssue,
   implementationAdmission,
   launchContext,
@@ -49,12 +49,11 @@ import {
   pendingGate,
   placedTask,
   planningAdmission,
-  value,
 } from './fixtures.ts';
 
 function rejectionOf(task: Task, request: Partial<LaunchRequest>, context: Partial<LaunchContext>): LaunchRejectionReason {
   const result = authorizeLaunch(task, launchRequest(task, request), launchContext(task, context), grantIssue());
-  return failureOf(result).reason;
+  return failed(result).reason;
 }
 
 test('a granted launch authorizes one execution and moves the attempt to launch-authorized', () => {
@@ -127,9 +126,9 @@ test('relied-on gates with different subjects are granted when every subject is 
 test('only an unspawned, authorized execution is authorized again, never a second identity', () => {
   const first = authorized();
   const other = { executionId: executionId('execution-2'), operationId: operationId('operation-2') };
-  assert.equal(failureOf(authorizeLaunch(first.task, launchRequest(first.task, other), launchContext(first.task), grantIssue('launch-2'))).reason, 'execution-conflict');
+  assert.equal(failed(authorizeLaunch(first.task, launchRequest(first.task, other), launchContext(first.task), grantIssue('launch-2'))).reason, 'execution-conflict');
   const unproven = { operationId: operationId('operation-2') };
-  assert.equal(failureOf(authorizeLaunch(first.task, launchRequest(first.task, unproven), launchContext(first.task), grantIssue('launch-2'))).reason, 'execution-conflict');
+  assert.equal(failed(authorizeLaunch(first.task, launchRequest(first.task, unproven), launchContext(first.task), grantIssue('launch-2'))).reason, 'execution-conflict');
   const again = value(authorizeLaunch(first.task, launchRequest(first.task, { ...unproven, reportsNotStarted: true }), launchContext(first.task), grantIssue('launch-2', T4)));
   assert.equal(again.task.attempts[0]!.executions[0]!.grants.length, 2);
 });
@@ -138,7 +137,7 @@ test('after not-started, a new identity is authorized against the same reservati
   const first = authorized();
   const sealed = value(recordNotStarted(first.task, { workerId: WORKER, executionId: EXECUTION }, T3)).task;
   const reused = { operationId: operationId('operation-2'), reportsNotStarted: true };
-  assert.equal(failureOf(authorizeLaunch(sealed, launchRequest(sealed, reused), launchContext(sealed), grantIssue('launch-2'))).reason, 'execution-conflict');
+  assert.equal(failed(authorizeLaunch(sealed, launchRequest(sealed, reused), launchContext(sealed), grantIssue('launch-2'))).reason, 'execution-conflict');
   const fresh = { operationId: operationId('operation-3'), executionId: executionId('execution-2') };
   const second = value(authorizeLaunch(sealed, launchRequest(sealed, fresh), launchContext(sealed), grantIssue('launch-3')));
   assert.deepEqual(second.task.attempts[0]!.executions.map((execution) => execution.state), ['not-started', 'authorized']);
@@ -152,15 +151,15 @@ test('expiry is computed from issuedAt and ttl and changes no state', () => {
 });
 
 test('launch parameters need a skew shorter than the ttl', () => {
-  assert.equal(failureOf(parseLaunchParameters({ ttlMilliseconds: 5_000, skewMilliseconds: 5_000 })).code, 'invalid');
-  assert.equal(failureOf(parseLaunchParameters({ ttlMilliseconds: 0, skewMilliseconds: 1 })).code, 'invalid');
-  assert.equal(failureOf(parseLaunchParameters({ ttlMilliseconds: 1.5, skewMilliseconds: 1 })).code, 'invalid');
+  assert.equal(failed(parseLaunchParameters({ ttlMilliseconds: 5_000, skewMilliseconds: 5_000 })).code, 'invalid');
+  assert.equal(failed(parseLaunchParameters({ ttlMilliseconds: 0, skewMilliseconds: 1 })).code, 'invalid');
+  assert.equal(failed(parseLaunchParameters({ ttlMilliseconds: 1.5, skewMilliseconds: 1 })).code, 'invalid');
 });
 
 test('only quarantine and transient failures are retryable', () => {
   assert.deepEqual(RETRYABLE_LAUNCH_REJECTIONS, ['quarantined', 'unavailable']);
   assert.equal(new Set(LAUNCH_REJECTION_REASONS).size, LAUNCH_REJECTION_REASONS.length);
-  assert.equal(failureOf(authorizeLaunch(placedTask(), launchRequest(placedTask()), launchContext(placedTask(), { workerAuthorized: false }), grantIssue())).retryable, false);
+  assert.equal(failed(authorizeLaunch(placedTask(), launchRequest(placedTask()), launchContext(placedTask(), { workerAuthorized: false }), grantIssue())).retryable, false);
 });
 
 test('a transport retry returns the recorded grant without extending it', () => {
@@ -214,5 +213,5 @@ test('an invalidating writer with an empty predicate affects nothing', () => {
   const task = placedTask();
   assert.equal(isLaunchAffected(task, ATTEMPT), false);
   assert.equal(isLaunchAffected(task, attemptId('attempt-9')), false);
-  assert.equal(failureOf(revokeLaunch(task, ATTEMPT, 'policy-revision-changed', T1)).code, 'precondition-failed');
+  assert.equal(failed(revokeLaunch(task, ATTEMPT, 'policy-revision-changed', T1)).code, 'precondition-failed');
 });

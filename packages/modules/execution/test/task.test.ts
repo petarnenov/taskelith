@@ -23,6 +23,7 @@ import {
   type ExitReport,
   type Task,
 } from '@taskelith/execution';
+import { failed, value } from '@taskelith/testing';
 import {
   ASSIGNMENT,
   ATTEMPT,
@@ -41,11 +42,9 @@ import {
   authorized,
   evidence,
   executionId,
-  failureOf,
   implementationAdmission,
   ownership,
   placedTask,
-  value,
 } from './fixtures.ts';
 
 const REPORT = { workerId: WORKER, executionId: EXECUTION };
@@ -68,9 +67,9 @@ test('a task starts at the ownership generation its admission was dispatched at'
 
 test('an admission dispatched without an ownership generation opens no task', () => {
   const admitted = admittedImplementation();
-  assert.equal(failureOf(openTask(admitted, T0)).code, 'precondition-failed');
+  assert.equal(failed(openTask(admitted, T0)).code, 'precondition-failed');
   const unfenced = value(useAdmission(admitted, admitted.generation, T0));
-  assert.equal(failureOf(openTask(unfenced, T0)).code, 'precondition-failed');
+  assert.equal(failed(openTask(unfenced, T0)).code, 'precondition-failed');
 });
 
 test('a task has at most one active attempt, and every owner change raises the ownership generation', () => {
@@ -78,7 +77,7 @@ test('a task has at most one active attempt, and every owner change raises the o
   const attempted = value(openAttempt(task, ownership(1), { id: ATTEMPT }, T0));
   assert.equal(attempted.ownershipGeneration, 2);
   assert.equal(activeAttempt(attempted)?.id, ATTEMPT);
-  const second = failureOf(openAttempt(attempted, ownership(2), { id: attemptId('attempt-2') }, T0));
+  const second = failed(openAttempt(attempted, ownership(2), { id: attemptId('attempt-2') }, T0));
   assert.equal(second.code, 'precondition-failed');
   const placed = value(claimOwnership(attempted, ownership(2), ATTEMPT, T0));
   assert.equal(placed.ownershipGeneration, 3);
@@ -86,24 +85,24 @@ test('a task has at most one active attempt, and every owner change raises the o
 
 test('a stale ownership generation is rejected with its reason before anything else', () => {
   const task = placedTask();
-  const stale = failureOf(claimOwnership(task, ownership(2), ATTEMPT, T1));
+  const stale = failed(claimOwnership(task, ownership(2), ATTEMPT, T1));
   assert.equal(stale.code, 'conflict');
   assert.equal(stale.details.reason, 'stale-ownership-generation');
-  assert.equal(failureOf(openAttempt(task, ownership(2), { id: attemptId('attempt-2') }, T1)).details.reason, 'stale-ownership-generation');
+  assert.equal(failed(openAttempt(task, ownership(2), { id: attemptId('attempt-2') }, T1)).details.reason, 'stale-ownership-generation');
 });
 
 test('ownership does not move while an execution of the attempt can run', () => {
   const { task } = authorized();
-  assert.equal(failureOf(claimOwnership(task, task.ownershipGeneration, ATTEMPT, T2)).code, 'precondition-failed');
+  assert.equal(failed(claimOwnership(task, task.ownershipGeneration, ATTEMPT, T2)).code, 'precondition-failed');
   const cancelled = value(requestCancellation(placedTask(), ATTEMPT, 'requested', T1));
-  assert.equal(failureOf(claimOwnership(cancelled, cancelled.ownershipGeneration, ATTEMPT, T1)).code, 'precondition-failed');
+  assert.equal(failed(claimOwnership(cancelled, cancelled.ownershipGeneration, ATTEMPT, T1)).code, 'precondition-failed');
 });
 
 test('a retry names an ended attempt of the task, and attempt identities are unique', () => {
   const task = value(endAttempt(placedTask(), ATTEMPT, T1));
-  assert.equal(failureOf(openAttempt(task, task.ownershipGeneration, { id: ATTEMPT }, T1)).code, 'conflict');
+  assert.equal(failed(openAttempt(task, task.ownershipGeneration, { id: ATTEMPT }, T1)).code, 'conflict');
   const unknown = { id: attemptId('attempt-2'), retryOf: attemptId('attempt-9') };
-  assert.equal(failureOf(openAttempt(task, task.ownershipGeneration, unknown, T1)).code, 'not-found');
+  assert.equal(failed(openAttempt(task, task.ownershipGeneration, unknown, T1)).code, 'not-found');
   const retried = value(openAttempt(task, task.ownershipGeneration, { id: attemptId('attempt-2'), retryOf: ATTEMPT }, T1));
   assert.equal(retried.attempts[1]!.retryOf, ATTEMPT);
 });
@@ -113,12 +112,12 @@ test('re-admission binds an admission dispatched at the next ownership generatio
   const readmitted = value(rebindAdmission(task, implementationAdmission('admission-2', ownership(2)), T1));
   assert.equal(readmitted.admissionId, 'admission-2');
   assert.equal(readmitted.ownershipGeneration, 2);
-  assert.equal(failureOf(rebindAdmission(task, implementationAdmission('admission-2', ownership(3)), T1)).details.reason, 'stale-ownership-generation');
+  assert.equal(failed(rebindAdmission(task, implementationAdmission('admission-2', ownership(3)), T1)).details.reason, 'stale-ownership-generation');
   const placed = placedTask();
-  assert.equal(failureOf(rebindAdmission(placed, implementationAdmission('admission-2', ownership(4)), T1)).code, 'precondition-failed');
+  assert.equal(failed(rebindAdmission(placed, implementationAdmission('admission-2', ownership(4)), T1)).code, 'precondition-failed');
   const otherAdmission = admittedImplementation('admission-2', 'task-9');
   const otherTask = value(useAdmission(otherAdmission, otherAdmission.generation, T1, ownership(2)));
-  assert.equal(failureOf(rebindAdmission(task, otherTask, T1)).code, 'precondition-failed');
+  assert.equal(failed(rebindAdmission(task, otherTask, T1)).code, 'precondition-failed');
 });
 
 test('assignment acceptance, start, exit, and the task outcome are distinct facts', () => {
@@ -126,12 +125,12 @@ test('assignment acceptance, start, exit, and the task outcome are distinct fact
   assert.equal(attemptPhase(running.attempts[0]!), 'running');
   const exited = value(recordExit(running, CLEAN_EXIT, T3)).task;
   assert.equal(attemptPhase(exited.attempts[0]!), 'awaiting-launch');
-  assert.equal(failureOf(taskOutcomeFact(exited, ATTEMPT)).code, 'precondition-failed');
+  assert.equal(failed(taskOutcomeFact(exited, ATTEMPT)).code, 'precondition-failed');
   const ended = value(endAttempt(exited, ATTEMPT, T4));
   const fact = value(taskOutcomeFact(ended, ATTEMPT));
   assert.deepEqual(fact.outcome, { kind: 'exited', executionId: EXECUTION, status: { kind: 'code', code: 0 }, startProven: true, cancelled: false, ownershipGeneration: 3, endedAt: T4 });
   assert.equal(fact.taskId, 'task-1');
-  assert.equal(failureOf(taskOutcomeFact(ended, attemptId('attempt-9'))).code, 'not-found');
+  assert.equal(failed(taskOutcomeFact(ended, attemptId('attempt-9'))).code, 'not-found');
 });
 
 test('an outcome fact keeps the ownership generation its attempt ended in', () => {
@@ -157,15 +156,15 @@ test('a recorded exit keeps its status when the reported one changes later', () 
 test('an attempt without an exit ends as not-started', () => {
   const ended = value(endAttempt(placedTask(), ATTEMPT, T1));
   assert.deepEqual(ended.attempts[0]!.outcome, { kind: 'not-started', cancelled: false, ownershipGeneration: 3, endedAt: T1 });
-  assert.equal(failureOf(endAttempt(ended, ATTEMPT, T1)).code, 'precondition-failed');
-  assert.equal(failureOf(endAttempt(started(), ATTEMPT, T3)).code, 'precondition-failed');
+  assert.equal(failed(endAttempt(ended, ATTEMPT, T1)).code, 'precondition-failed');
+  assert.equal(failed(endAttempt(started(), ATTEMPT, T3)).code, 'precondition-failed');
 });
 
 test('a cancellation request is not termination: the attempt ends only once nothing can run', () => {
   const running = started();
   const requested = value(requestCancellation(running, ATTEMPT, 'requested', T3));
   assert.equal(attemptPhase(requested.attempts[0]!), 'running');
-  assert.equal(failureOf(requestCancellation(requested, ATTEMPT, 'requested', T3)).code, 'precondition-failed');
+  assert.equal(failed(requestCancellation(requested, ATTEMPT, 'requested', T3)).code, 'precondition-failed');
   const terminated = value(recordExit(requested, { ...CLEAN_EXIT, status: { kind: 'signal', signal: 'SIGTERM' } }, T4)).task;
   const outcome = terminated.attempts[0]!.outcome;
   assert.equal(outcome?.kind, 'exited');
@@ -187,11 +186,11 @@ test('execution facts are accepted by version: duplicates change nothing and ter
   const repeated = value(recordExit(exited.task, { ...CLEAN_EXIT, status: { kind: 'unknown' } }, T4));
   assert.equal(repeated.effect, 'duplicate');
   assert.equal(repeated.task, exited.task);
-  assert.equal(failureOf(recordNotStarted(exited.task, REPORT, T4)).code, 'precondition-failed');
+  assert.equal(failed(recordNotStarted(exited.task, REPORT, T4)).code, 'precondition-failed');
   const sealed = value(recordNotStarted(authorized().task, REPORT, T3)).task;
   assert.equal(value(recordNotStarted(sealed, REPORT, T4)).effect, 'duplicate');
-  assert.equal(failureOf(recordExit(sealed, CLEAN_EXIT, T4)).code, 'precondition-failed');
-  assert.equal(failureOf(recordNotStarted(running, REPORT, T3)).code, 'precondition-failed');
+  assert.equal(failed(recordExit(sealed, CLEAN_EXIT, T4)).code, 'precondition-failed');
+  assert.equal(failed(recordNotStarted(running, REPORT, T3)).code, 'precondition-failed');
 });
 
 test('an exit before its start is recorded, with the start unproven, and the late start stays history', () => {
@@ -207,8 +206,8 @@ test('an exit before its start is recorded, with the start unproven, and the lat
 
 test('only the execution\'s worker reports its facts, and an unknown execution is not found', () => {
   const { task } = authorized();
-  assert.equal(failureOf(recordExit(task, { ...CLEAN_EXIT, workerId: OTHER_WORKER }, T2)).code, 'forbidden');
-  assert.equal(failureOf(recordNotStarted(task, { ...REPORT, executionId: executionId('execution-9') }, T2)).code, 'not-found');
+  assert.equal(failed(recordExit(task, { ...CLEAN_EXIT, workerId: OTHER_WORKER }, T2)).code, 'forbidden');
+  assert.equal(failed(recordNotStarted(task, { ...REPORT, executionId: executionId('execution-9') }, T2)).code, 'not-found');
 });
 
 test('uncertainty and an unproven termination are kept beside the state, which they leave unchanged', () => {
@@ -218,9 +217,9 @@ test('uncertainty and an unproven termination are kept beside the state, which t
   const execution = unproven.attempts[0]!.executions[0]!;
   assert.equal(execution.state, 'started');
   assert.deepEqual(execution.evidence.map((item) => item.kind), ['uncertain', 'termination-unproven']);
-  assert.equal(failureOf(endAttempt(unproven, ATTEMPT, T4)).code, 'precondition-failed');
+  assert.equal(failed(endAttempt(unproven, ATTEMPT, T4)).code, 'precondition-failed');
   const exited = value(recordExit(running, CLEAN_EXIT, T3)).task;
-  assert.equal(failureOf(recordExecutionEvidence(exited, { ...REPORT, kind: 'uncertain' }, T4)).code, 'precondition-failed');
+  assert.equal(failed(recordExecutionEvidence(exited, { ...REPORT, kind: 'uncertain' }, T4)).code, 'precondition-failed');
 });
 
 test('an operator reconciliation ends an uncertain execution with an unknown status and the attempt', () => {
@@ -233,7 +232,7 @@ test('an operator reconciliation ends an uncertain execution with an unknown sta
   assert.equal(execution.exit?.startProven, true);
   assert.equal(execution.grants[0]!.state, 'revoked');
   assert.deepEqual(attempt.outcome, { kind: 'operator-resolved', executionId: EXECUTION, evidence: 'incident-7', cancelled: false, ownershipGeneration: 3, endedAt: T4 });
-  assert.equal(failureOf(resolveByOperator(placedTask(), ATTEMPT, evidence('incident-7'), T4)).code, 'precondition-failed');
+  assert.equal(failed(resolveByOperator(placedTask(), ATTEMPT, evidence('incident-7'), T4)).code, 'precondition-failed');
 });
 
 test('the scheduler reads whether an assignment ever had a grant and whether an execution can run', () => {
@@ -257,8 +256,8 @@ test('the attempt phase table lists exactly the phase changes, and an ended atte
   assert.deepEqual(Object.keys(ATTEMPT_PHASE_TRANSITIONS), [...ATTEMPT_PHASES]);
   assert.deepEqual(ATTEMPT_PHASE_TRANSITIONS.ended, []);
   const ended = value(endAttempt(placedTask(), ATTEMPT, T1));
-  assert.equal(failureOf(requestCancellation(ended, ATTEMPT, 'requested', T1)).code, 'precondition-failed');
-  assert.equal(failureOf(claimOwnership(ended, ended.ownershipGeneration, ATTEMPT, T1)).code, 'precondition-failed');
+  assert.equal(failed(requestCancellation(ended, ATTEMPT, 'requested', T1)).code, 'precondition-failed');
+  assert.equal(failed(claimOwnership(ended, ended.ownershipGeneration, ATTEMPT, T1)).code, 'precondition-failed');
 });
 
 test('transitions are deterministic for the same input', () => {

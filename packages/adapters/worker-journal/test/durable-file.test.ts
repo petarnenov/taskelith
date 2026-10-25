@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { closeSync, mkdirSync, openSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
-import { ScenarioProcess } from '@taskelith/testing';
+import { ScenarioProcess, failed, value } from '@taskelith/testing';
 import { ExclusiveFileLock, createOnce, failureReason, replaceFile, syncBeforeUse, syncPath } from '@taskelith/worker-journal';
-import { failed, temporaryDataRoot, value } from './fixtures.ts';
+import { temporaryDataRoot } from './fixtures.ts';
 
 let directory: string;
 let remove: () => void;

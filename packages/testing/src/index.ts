@@ -14,4 +14,4 @@ export { SimulatedHost, type MonotonicClock, type WallClock } from './simulated-
 export { Toxiproxy, ToxiproxyProxy } from './toxiproxy.js';
 export { SERVICES_REMEDY, integrationEndpoint } from './integration-endpoint.js';
 export { acquireProcessLock, lockPort, type ReleaseLock } from './process-lock.js';
-export { id, value } from './results.js';
+export { failed, id, value } from './results.js';

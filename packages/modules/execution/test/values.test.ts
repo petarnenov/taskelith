@@ -18,7 +18,8 @@ import {
   type ProducerCursor,
   type Sequence,
 } from '@taskelith/execution';
-import { OTHER_WORKER, PARAMETERS, T3, WORKER, authorized, failureOf, grantIssue, value } from './fixtures.ts';
+import { failed, value } from '@taskelith/testing';
+import { OTHER_WORKER, PARAMETERS, T3, WORKER, authorized, grantIssue } from './fixtures.ts';
 
 const JOURNAL = value(parseIdentifier('JournalId', 'journal-1'));
 const NEW_JOURNAL = value(parseIdentifier('JournalId', 'journal-2'));
@@ -61,16 +62,16 @@ test('exit statuses are a code, a signal name, or unknown', () => {
   assert.deepEqual(value(parseExitStatus({ kind: 'signal', signal: 'SIGKILL' })), { kind: 'signal', signal: 'SIGKILL' });
   assert.deepEqual(value(parseExitStatus({ kind: 'unknown' })), { kind: 'unknown' });
   for (const input of [{ kind: 'code', code: 256 }, { kind: 'code' }, { kind: 'signal', signal: 'kill' }, { kind: 'lost' }]) {
-    assert.equal(failureOf(parseExitStatus(input)).code, 'invalid');
+    assert.equal(failed(parseExitStatus(input)).code, 'invalid');
   }
 });
 
 test('recovery epochs and sequences are positive integers', () => {
   assert.equal(value(parseRecoveryEpoch(2)), 2);
-  assert.equal(failureOf(parseRecoveryEpoch(0)).code, 'invalid');
+  assert.equal(failed(parseRecoveryEpoch(0)).code, 'invalid');
   assert.equal(value(parseSequence(1)), 1);
   for (const invalid of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
-    assert.equal(failureOf(parseSequence(invalid)).code, 'invalid');
+    assert.equal(failed(parseSequence(invalid)).code, 'invalid');
   }
 });
 
@@ -81,7 +82,7 @@ test('the contiguous prefix is confirmed, and a gap holds later sequences until 
   const closed = value(recordAppliedSequence(gapped, sequence(3)));
   assert.equal(closed.confirmedThrough, 5);
   assert.deepEqual(closed.appliedAbove, []);
-  assert.equal(failureOf(recordAppliedSequence(closed, sequence(4))).code, 'conflict');
+  assert.equal(failed(recordAppliedSequence(closed, sequence(4))).code, 'conflict');
 });
 
 test('a repeated publication is a duplicate, and a reused sequence with another identity is a rollback', () => {
@@ -95,7 +96,7 @@ test('a repeated publication is a duplicate, and a reused sequence with another 
 
 test('an observation of another worker is not classified in this worker\'s cursor', () => {
   const foreign = { ...position(1), workerId: OTHER_WORKER };
-  assert.equal(failureOf(classifyObservation(applied(), foreign)).code, 'forbidden');
+  assert.equal(failed(classifyObservation(applied(), foreign)).code, 'forbidden');
 });
 
 test('an exit code of -0 is recorded as 0, so it round-trips through JSON', () => {
