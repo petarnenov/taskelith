@@ -1,6 +1,6 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type { ArtifactId } from '../domain/artifact-revision.js';
-import { checkGeneration, type Generation } from '../domain/generation.js';
+import { checkGeneration, checkNextGeneration, type Generation } from '../domain/generation.js';
 import type { AdmissionId, TaskAdmission } from '../domain/task-admission.js';
 import type { AdmissionRepository } from '../ports/admission-repository.js';
 
@@ -23,11 +23,15 @@ export class InMemoryAdmissionRepository implements AdmissionRepository {
     return ok(undefined);
   }
 
+  // Checks and writes without awaiting, so concurrent replaces cannot both
+  // pass the generation check.
   async replace(admission: TaskAdmission, expectedGeneration: Generation): Promise<Result<void>> {
-    const stored = await this.get(admission.id);
-    if (!stored.ok) return stored;
-    const generation = checkGeneration(`admission ${admission.id}`, stored.value.generation, expectedGeneration);
+    const stored = this.#admissions.get(admission.id);
+    if (stored === undefined) return err(failure('not-found', `admission ${admission.id} does not exist`, { admission: admission.id }));
+    const generation = checkGeneration(`admission ${admission.id}`, stored.generation, expectedGeneration);
     if (!generation.ok) return generation;
+    const next = checkNextGeneration(`admission ${admission.id}`, admission.generation, expectedGeneration);
+    if (!next.ok) return next;
     this.#admissions.set(admission.id, admission);
     return ok(undefined);
   }
