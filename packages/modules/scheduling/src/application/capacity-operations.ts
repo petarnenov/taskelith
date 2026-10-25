@@ -1,6 +1,15 @@
 import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
-import { activeAttempt, executionsUnderAssignment, revokeLaunch, type AssignmentId, type AttemptId, type Task, type WorkerId } from '@taskelith/execution';
-import type { TaskId } from '@taskelith/sdlc';
+import {
+  activeAttempt,
+  checkOwnership,
+  executionsUnderAssignment,
+  revokeLaunch,
+  type AssignmentId,
+  type AttemptId,
+  type Task,
+  type WorkerId,
+} from '@taskelith/execution';
+import type { OwnershipGeneration, TaskId } from '@taskelith/sdlc';
 import { createAssignment, endAssignment, releaseAfterTerminalFact, supersedeAssignment, type Assignment } from '../domain/assignment.js';
 import {
   ADMISSION_PRESSURE_SUPERSESSION_BOUND_MILLISECONDS,
@@ -25,6 +34,8 @@ export interface PlacementRequest extends CommandIdentity {
   readonly reservationId: ReservationId;
   readonly taskId: TaskId;
   readonly attemptId: AttemptId;
+  // The ownership the scheduler claimed for this placement; a stale one fails.
+  readonly ownershipGeneration: OwnershipGeneration;
   readonly workerId: WorkerId;
   readonly requested: ResourceRequest;
   readonly providerCredentials: readonly ProviderCredentialId[];
@@ -46,6 +57,8 @@ export async function placeInTransaction(tx: CapacityTransaction, request: Place
   const lineage = await tx.lineage.get(request.taskId);
   const root = lineage && await tx.lineage.get(lineage.rootTaskId);
   if (!task.ok || lineage === undefined || root === undefined) return outcome('attempt-not-reservable');
+  const fenced = checkPlacementClaim(task.value, request);
+  if (!fenced.ok) return fenced;
   const charged = await tx.ledger.isCharged(request.attemptId);
   const decision = decidePlacement({
     quarantined: await tx.installation.quarantined(),
@@ -83,21 +96,29 @@ export async function cancelInTransaction(tx: CapacityTransaction, request: Rele
   const stored = await tx.assignments.replace(ended.value, assignment.generation);
   if (!stored.ok) return stored;
   const follow = ended.value.reservation.state === 'released'
-    ? await appendWorkerCommand(tx, request, 'scheduling.assignment.ended', assignment.workerId, at, endedPayload(ended.value))
+    ? await appendWorkerCommand(tx, request, 'scheduling.assignment.ended', assignment.workerId, at, endedPayload(ended.value, 'cancelled'))
     : await revokeRunningLaunch(tx, ended.value, task, request, at);
   return follow.ok ? ok(ended.value) : follow;
 }
 
-// Releases an ended assignment once nothing under it can run, in the
-// transaction that records the execution's terminal fact.
+// In the transaction that records a terminal fact: an active assignment of
+// an ended attempt ends and releases; an ended one releases once idle.
 export async function releaseInTransaction(tx: CapacityTransaction, request: ReleaseRequest): Promise<Result<Assignment>> {
   const loaded = await loadAssignment(tx, request.assignmentId);
   if (!loaded.ok) return loaded;
   const { assignment, task } = loaded.value;
-  const released = releaseAfterTerminalFact(assignment, assignment.generation, executionsUnderAssignment(task, assignment.id), await tx.now());
+  const at = await tx.now();
+  const executions = executionsUnderAssignment(task, assignment.id);
+  const attemptEnded = assignment.state !== 'ended' && hasEnded(task, assignment.attemptId);
+  const released = attemptEnded
+    ? endAssignment(assignment, assignment.generation, 'attempt-ended', executions, at)
+    : releaseAfterTerminalFact(assignment, assignment.generation, executions, at);
   if (!released.ok) return released;
   const stored = await tx.assignments.replace(released.value, assignment.generation);
-  return stored.ok ? ok(released.value) : stored;
+  if (!stored.ok) return stored;
+  if (!attemptEnded) return ok(released.value);
+  const ended = await appendWorkerCommand(tx, request, 'scheduling.assignment.ended', assignment.workerId, at, endedPayload(released.value, 'attempt-ended'));
+  return ended.ok ? ok(released.value) : ended;
 }
 
 // Bounded supersession (contract section 6) of an assignment without a
@@ -114,7 +135,7 @@ export async function supersedeInTransaction(tx: CapacityTransaction, request: R
   if (!superseded.ok) return superseded;
   const stored = await tx.assignments.replace(superseded.value, assignment.generation);
   if (!stored.ok) return stored;
-  const ended = await appendWorkerCommand(tx, request, 'scheduling.assignment.ended', assignment.workerId, at, endedPayload(superseded.value));
+  const ended = await appendWorkerCommand(tx, request, 'scheduling.assignment.ended', assignment.workerId, at, endedPayload(superseded.value, 'superseded'));
   return ended.ok ? ok(superseded.value) : ended;
 }
 
@@ -144,7 +165,7 @@ async function insertPlacement(
   // A concurrent placement of the attempt that won the held-reservation
   // index leaves this one where a serial order would: already reserved.
   const added = await tx.assignments.add(assignment);
-  if (!added.ok) return added.error.code === 'conflict' ? outcome('attempt-already-reserved') : added;
+  if (!added.ok) return added.error.details.attempt === undefined ? added : outcome('attempt-already-reserved');
   if (!charged) {
     const charge = await tx.ledger.recordCharge({
       attemptId: request.attemptId, taskId: request.taskId, rootTaskId: lineage.rootTaskId, automaticRetry: request.automaticRetryOf !== undefined,
@@ -155,6 +176,22 @@ async function insertPlacement(
   return command.ok ? ok(Object.freeze({ kind: 'placed', assignment })) : command;
 }
 
+// The placement names the ownership the task holds, and an automatic retry
+// names the earlier attempt the active one retries.
+function checkPlacementClaim(task: Task, request: PlacementRequest): Result<void> {
+  const fenced = checkOwnership(task, request.ownershipGeneration);
+  if (!fenced.ok) return fenced;
+  const retryOf = activeAttempt(task)?.retryOf;
+  if (request.automaticRetryOf === undefined || request.automaticRetryOf === retryOf) return ok(undefined);
+  return err(failure('precondition-failed', `attempt ${request.attemptId} does not retry ${request.automaticRetryOf}`, {
+    attempt: request.attemptId, retryOf: request.automaticRetryOf,
+  }));
+}
+
+function hasEnded(task: Task, attemptId: AttemptId): boolean {
+  return task.attempts.some((attempt) => attempt.id === attemptId && attempt.outcome !== undefined);
+}
+
 function isReservable(task: Task, attemptId: AttemptId): boolean {
   const attempt = activeAttempt(task);
   return attempt !== undefined && attempt.id === attemptId && attempt.cancellation === undefined;
@@ -163,8 +200,8 @@ function isReservable(task: Task, attemptId: AttemptId): boolean {
 // Contract section 5: an automatic retry follows only an earlier attempt of
 // the task that ended without uncertainty and released its reservation.
 async function isSafeToRetry(tx: CapacityTransaction, task: Task, earlier: AttemptId): Promise<boolean> {
-  const outcome = task.attempts.find((attempt) => attempt.id === earlier)?.outcome;
-  const certain = outcome?.kind === 'not-started' || (outcome?.kind === 'exited' && outcome.startProven);
+  const earlierOutcome = task.attempts.find((attempt) => attempt.id === earlier)?.outcome;
+  const certain = earlierOutcome?.kind === 'not-started' || (earlierOutcome?.kind === 'exited' && earlierOutcome.startProven);
   return certain && !(await tx.ledger.heldForAttempt(earlier));
 }
 

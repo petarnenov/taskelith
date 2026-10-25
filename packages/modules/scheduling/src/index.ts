@@ -82,7 +82,7 @@ export {
   type ReleaseRequest,
 } from './application/capacity-operations.js';
 export type { CommandIdentity } from './application/capacity-commands.js';
-export { ResourceAdmissionService } from './application/resource-admission-service.js';
+export { ResourceAdmissionService, type RetryTiming } from './application/resource-admission-service.js';
 export {
   ADMISSION_PRESSURE_SUPERSESSION_BOUND_MILLISECONDS,
   DEFAULT_PROJECT_QUOTA,
@@ -112,6 +112,7 @@ export {
   decideDelegation,
   type DelegationDecision,
   type DelegationSnapshot,
+  type RunCapacity,
   type TaskLineageLink,
   type WaitingParentUnits,
 } from './domain/delegation-admission.js';

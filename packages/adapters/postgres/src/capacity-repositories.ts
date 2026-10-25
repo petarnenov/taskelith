@@ -188,7 +188,7 @@ export class PostgresCapacityLedger implements CapacityLedger {
   }
 
   heldForCredential(credentialId: ProviderCredentialId): Promise<number> {
-    return this.#count(`SELECT count(*) FROM assignments WHERE ${HELD} AND $1 = ANY (provider_credentials)`, [credentialId]);
+    return this.#count(`SELECT count(*) FROM assignments WHERE ${HELD} AND provider_credentials @> ARRAY[$1::text]`, [credentialId]);
   }
 
   async isCharged(attemptId: AttemptId): Promise<boolean> {

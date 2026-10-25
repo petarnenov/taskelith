@@ -232,10 +232,10 @@ G2 item 18 (`implement-resource-admission`) implements the scheduler side in the
 - **Fair order.** Round-robin across projects, oldest waiting task first within each (`fairPlacementOrder`).
 - **Backoff.** A base doubling from `5s` to `60s`, each delay within `[5s, 60s]` with jitter; a transiently failed placement is tried at most `5` times.
 - **Delegation wait.** A delegation waits with `delegation-awaiting-capacity` for at most `10 min`, then is rejected with that reason.
-- **Supersession.** An assignment without a grant is superseded after `2 min` unacknowledged, after `10 min` under admission pressure, and at once when its worker is unreachable, draining, or revoked.
+- **Supersession.** An assignment without a grant is superseded after `2 min` unacknowledged, after `10 min` under admission pressure, and at once when its worker is unknown, unreachable, draining, or revoked.
 - **Unknown installation.** An installation without its record admits nothing, as one in quarantine.
 - **Check order.** Step 4's request checks that no worker can satisfy, a hard spend limit and a size above the per-attempt ceiling, are made before the worker checks of step 3, so such a request is rejected instead of waiting for a worker.
-- **Automatic retries.** A retry is automatic only after an earlier attempt of the task that ended `not-started` or `exited` with a proven start and whose reservation is released; any other earlier attempt is uncertain and gets `retry-budget-exhausted`.
+- **Automatic retries.** A retry is automatic only after an earlier attempt of the task that ended `not-started` or `exited` with a proven start and whose reservation is released; any other earlier attempt is uncertain and gets `retry-budget-exhausted`, including an `exited` one whose spawn failed without a proven start, which is conservative. The retry must name the earlier attempt that the active attempt retries.
 - **Provider credentials.** Each credential a reservation holds is checked against the default concurrency of `4`; G2 reserves none.
 - **Cancellation with a running execution.** The cancelling transaction revokes the owning execution's grants with `attempt-not-launchable` and writes its cancellation command (launch authorization section 5); the reservation is released by the transaction that records the terminal fact.
 

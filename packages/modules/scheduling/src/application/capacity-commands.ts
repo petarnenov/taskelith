@@ -1,7 +1,7 @@
 import { parseEventMetadata, type CorrelationId, type EventId, type Instant, type Result } from '@taskelith/kernel';
 import type { WorkerId } from '@taskelith/execution';
 import type { JsonObject } from '@taskelith/sdlc';
-import type { Assignment } from '../domain/assignment.js';
+import type { Assignment, AssignmentEndReason } from '../domain/assignment.js';
 import type { CapacityTransaction } from '../ports/capacity-store.js';
 
 export interface CommandIdentity {
@@ -35,8 +35,8 @@ export function offeredPayload(assignment: Assignment): JsonObject {
   };
 }
 
-export function endedPayload(assignment: Assignment): JsonObject {
-  return { provisional: true, assignmentId: assignment.id, attemptId: assignment.attemptId, reason: assignment.end?.reason ?? 'released' };
+export function endedPayload(assignment: Assignment, reason: AssignmentEndReason): JsonObject {
+  return { provisional: true, assignmentId: assignment.id, attemptId: assignment.attemptId, reason };
 }
 
 export function cancelPayload(assignment: Assignment): JsonObject {

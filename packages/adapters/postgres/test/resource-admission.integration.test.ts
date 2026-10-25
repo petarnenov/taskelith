@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, beforeEach, test } from 'node:test';
 import { parseIdentifier, type Result } from '@taskelith/kernel';
-import { recordNotStarted, type AssignmentId, type AttemptId, type Task, type WorkerId } from '@taskelith/execution';
+import { endAttempt, recordNotStarted, type AssignmentId, type AttemptId, type Task, type WorkerId } from '@taskelith/execution';
 import { PostgresDatabase } from '@taskelith/postgres';
 import { releaseInTransaction } from '@taskelith/scheduling';
 import {
@@ -16,10 +16,10 @@ import {
   type RunId,
   type TaskLineageLink,
 } from '@taskelith/scheduling';
-import type { TaskId } from '@taskelith/sdlc';
+import { parseOwnershipGeneration, type TaskId } from '@taskelith/sdlc';
 import { CrashPoints, SimulatedCrash } from '@taskelith/testing';
 import { authorizedUnder, placedTask, retriedTask, seedWorker } from './capacity-fixtures.ts';
-import { AT } from './fixtures.ts';
+import { AT, assignment } from './fixtures.ts';
 import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
 
 const url = await createMigratedDatabase();
@@ -33,7 +33,8 @@ function open(crashPoints?: CrashPoints): PostgresDatabase {
 }
 
 const database = open();
-const service = new ResourceAdmissionService(database);
+const NO_WAIT = { pause: async () => {}, draw: () => 0 };
+const service = new ResourceAdmissionService(database, NO_WAIT);
 
 function value<T>(result: Result<T>): T {
   assert.ok(result.ok, result.ok ? '' : result.error.message);
@@ -76,6 +77,7 @@ function placement(task: Task, name: string, overrides: Partial<PlacementRequest
     correlationId: id('CorrelationId', `correlation-${name}`),
     taskId: task.id,
     attemptId: task.attempts.at(-1)!.id,
+    ownershipGeneration: task.ownershipGeneration,
     workerId: WORKER,
     requested: REQUESTED,
     providerCredentials: [],
@@ -160,15 +162,15 @@ test('quarantine, ineligible workers, and unenforceable controls make the attemp
   assert.deepEqual(await counts(), { held: 0, assignments: 0, charges: 0, outbox: 0 });
 });
 
-test('the ninth attempt of a tree and a retry of uncertain execution are rejected', async () => {
+test('the ninth attempt of a tree is rejected, and so is a retry the attempt does not make', async () => {
   const task = await rootTask('task-1');
   for (let index = 0; index < 8; index++) {
     await query(url, 'INSERT INTO capacity_charges (attempt_id, task_id, root_task_id, automatic_retry) VALUES ($1, $2, $2, false)', [`old-${index}`, task.id]);
   }
   assert.equal(kind(await service.reserve(placement(task, 'a'))), 'rejected:delegation-budget-exhausted');
   await query(url, 'DELETE FROM capacity_charges');
-  const unended = task.attempts.at(-1)!.id;
-  assert.equal(kind(await service.reserve(placement(task, 'b', { automaticRetryOf: unended }))), 'rejected:retry-budget-exhausted');
+  const itself = await service.reserve(placement(task, 'b', { automaticRetryOf: task.attempts.at(-1)!.id }));
+  assert.equal(!itself.ok && itself.error.code, 'precondition-failed');
   assert.equal(kind(await service.reserve(placement(task, 'c', { taskId: id('TaskId', 'task-unknown') as TaskId }))), 'rejected:attempt-not-reservable');
 });
 
@@ -179,7 +181,12 @@ test('an automatic retry needs a certain, released earlier attempt and stays wit
     ['retry-old-1', task.id, 'retry-old-2']);
   assert.equal(kind(await service.reserve(retry('a'))), 'rejected:retry-budget-exhausted');
   await query(url, "DELETE FROM capacity_charges WHERE attempt_id = 'retry-old-2'");
-  assert.equal(kind(await service.reserve(placement(task, 'b', { automaticRetryOf: id('AttemptId', 'attempt-9') as AttemptId }))), 'rejected:retry-budget-exhausted');
+  const unrelated = await service.reserve(placement(task, 'b', { automaticRetryOf: id('AttemptId', 'attempt-9') as AttemptId }));
+  assert.equal(!unrelated.ok && unrelated.error.code, 'precondition-failed');
+  // An earlier attempt that still holds its reservation is not yet safe.
+  value(await database.transaction((tx) => tx.assignments.add(assignment('assignment-earlier', 'attempt-1'))));
+  assert.equal(kind(await service.reserve(retry('d'))), 'rejected:retry-budget-exhausted');
+  await query(url, "DELETE FROM assignments WHERE id = 'assignment-earlier'");
   assert.equal(kind(await service.reserve(retry('c'))), 'placed');
   assert.deepEqual((await query<{ count: number }>(url, 'SELECT count(*)::int AS count FROM capacity_charges WHERE automatic_retry'))[0], { count: 2 });
 });
@@ -266,7 +273,7 @@ test('a granted assignment is not superseded', async () => {
 
 test('a crash before the placement commits leaves no reservation, assignment, charge, or command', async () => {
   const task = await rootTask('task-1');
-  const crashing = new ResourceAdmissionService(open(new CrashPoints({ point: 'OutboxCommit.before', occurrence: 1, action: 'throw' })));
+  const crashing = new ResourceAdmissionService(open(new CrashPoints({ point: 'OutboxCommit.before', occurrence: 1, action: 'throw' })), NO_WAIT);
   await assert.rejects(crashing.reserve(placement(task, 'a')), SimulatedCrash);
   assert.deepEqual(await counts(), { held: 0, assignments: 0, charges: 0, outbox: 0 });
 });
@@ -274,11 +281,18 @@ test('a crash before the placement commits leaves no reservation, assignment, ch
 // Owner decisions D-A and D-C at task creation, in the creator's transaction.
 test('delegations are admitted, fail closed on chains, and wait for a free unit up to the bound', async () => {
   const parent = await rootTask('task-root', 'attempt-root');
+  const unreserved = await database.transaction((tx) => admitDelegation(tx, {
+    parentTaskId: parent.id, parentAttemptId: parent.attempts.at(-1)!.id as AttemptId,
+    childTaskId: id('TaskId', 'task-early') as TaskId, childRunId: ROOT_LINK.runId, waitingSince: AT,
+  }));
+  assert.equal(!unreserved.ok && unreserved.error.code, 'precondition-failed');
   assert.equal(kind(await service.reserve(placement(parent, 'root'))), 'placed');
+  // Waits are measured on the database clock, so they start from its now.
+  const now = value(await database.transaction(async (tx) => ({ ok: true, value: await tx.now() })));
   const delegate = (child: string, overrides: Partial<Parameters<typeof admitDelegation>[1]> = {}) => database.transaction((tx) =>
     admitDelegation(tx, {
       parentTaskId: parent.id, parentAttemptId: parent.attempts.at(-1)!.id as AttemptId,
-      childTaskId: id('TaskId', child) as TaskId, childRunId: id('RunId', 'run-child') as RunId, waitingSince: AT, ...overrides,
+      childTaskId: id('TaskId', child) as TaskId, childRunId: id('RunId', 'run-child') as RunId, waitingSince: now, ...overrides,
     }));
   const admitted = value(await delegate('task-child'));
   assert.equal(admitted.outcome, 'admitted');
@@ -291,8 +305,7 @@ test('delegations are admitted, fail closed on chains, and wait for a free unit 
   await query(url, "UPDATE capacity_quotas SET quota = 2 WHERE scope = 'project'");
   assert.equal(value(await delegate('task-room')).outcome, 'admitted');
   await query(url, 'UPDATE workers SET slots = 1');
-  const now = value(await database.transaction(async (tx) => ({ ok: true, value: await tx.now() })));
-  assert.deepEqual(value(await delegate('task-waiting', { waitingSince: now })), { outcome: 'waiting', reason: 'delegation-awaiting-capacity' });
+  assert.deepEqual(value(await delegate('task-waiting')), { outcome: 'waiting', reason: 'delegation-awaiting-capacity' });
   const longAgo = new Date(Date.parse(now) - DELEGATION_CAPACITY_WAIT_BOUND_MILLISECONDS).toISOString() as typeof now;
   assert.deepEqual(value(await delegate('task-late', { waitingSince: longAgo })), { outcome: 'rejected', reason: 'delegation-awaiting-capacity' });
   const unknown = await delegate('task-orphan', { parentTaskId: id('TaskId', 'task-none') as TaskId });
@@ -311,6 +324,8 @@ test('a fourth level of delegation is rejected at creation', async () => {
     rootTaskId: root.id, depth: index + 1, projectId: PROJECT as ProjectId,
   }));
   for (const link of links) value(await database.transaction((tx) => tx.lineage.add(link)));
+  await query(url, "INSERT INTO capacity_quotas (scope, scope_id, quota) VALUES ('project', $1, 10)", [PROJECT]);
+  assert.equal(kind(await service.reserve(placement(deepest, 'c'))), 'placed');
   const decision = value(await database.transaction((tx) => admitDelegation(tx, {
     parentTaskId: links[2]!.taskId, parentAttemptId: id('AttemptId', 'attempt-c') as AttemptId,
     childTaskId: id('TaskId', 'task-d') as TaskId, childRunId: ROOT_LINK.runId, waitingSince: AT,
@@ -325,4 +340,28 @@ test('releases of an unknown assignment are not found and write nothing', async 
     assert.equal(!result.ok && result.error.code, 'not-found');
   }
   assert.deepEqual(await counts(), { held: 0, assignments: 0, charges: 0, outbox: 0 });
+});
+
+test('a placement under a stale ownership generation fails and writes nothing', async () => {
+  const task = await rootTask('task-1');
+  const stale = await service.reserve(placement(task, 'a', { ownershipGeneration: value(parseOwnershipGeneration(task.ownershipGeneration + 1)) }));
+  assert.equal(!stale.ok && stale.error.code, 'conflict');
+  assert.deepEqual(await counts(), { held: 0, assignments: 0, charges: 0, outbox: 0 });
+});
+
+test('the transaction recording an attempt\'s end also ends its active assignment and releases', async () => {
+  const task = await rootTask('task-1');
+  const placed = value(await service.reserve(placement(task, 'a')));
+  assert.ok(placed.kind === 'placed');
+  const request = { assignmentId: placed.assignment.id, commandId: id('EventId', 'end-a'), correlationId: id('CorrelationId', 'correlation-a') };
+  const released = value(await database.transaction(async (tx) => {
+    const ended = endAttempt(task, task.attempts.at(-1)!.id, AT);
+    if (!ended.ok) return ended;
+    const stored = await tx.tasks.replace(ended.value, task.generation);
+    return stored.ok ? releaseInTransaction(tx, request) : stored;
+  }));
+  assert.deepEqual([released.end?.reason, released.reservation.state], ['attempt-ended', 'released']);
+  assert.deepEqual(await eventTypes(), ['scheduling.assignment.offered', 'scheduling.assignment.ended']);
+  const active = await service.releaseAfterTerminalFact(request);
+  assert.equal(!active.ok && active.error.code, 'precondition-failed');
 });

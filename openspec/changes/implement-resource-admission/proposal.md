@@ -9,7 +9,7 @@ G2 work item 18 ([docs/g2-plan.md](../../../docs/g2-plan.md)): the scheduler sid
   - `decideDelegation`: depth, runnable chains (D-C), and the free-unit rule with its wait bound (D-A);
   - `fairPlacementOrder` (round-robin across projects, oldest first) and `placementBackoff` (within `[5s, 60s]`);
   - named constants for the operational targets' limits and the new provisional values.
-- Scheduling ports, each with an in-memory adapter and a conformance suite: `PlacementWorkers`, `InstallationGuard`, `QuotaSettings`, `TaskLineage`, `CapacityLedger`, and the unit of work `CapacityStore`, which `PostgresDatabase` implements.
+- Scheduling ports, each with an in-memory adapter and, except the one-flag `InstallationGuard`, which tests cover directly, a conformance suite: `PlacementWorkers`, `InstallationGuard`, `QuotaSettings`, `TaskLineage`, `CapacityLedger`, and the unit of work `CapacityStore`, which `PostgresDatabase` implements.
 - Scheduling application:
   - `ResourceAdmissionService`: `reserve` (reservation, assignment, charge, and assignment command in one transaction), `reserveWithRetry` (bounded retry with backoff), `cancelAssignment` (D-B), `releaseAfterTerminalFact`, and `supersede` (bounded supersession); every release reads the executions under the assignment in its transaction, the invalidating read of the launch authorization contract section 5, and releases only when none can run;
   - `admitDelegation`, run in the caller's transaction.

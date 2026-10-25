@@ -16,21 +16,28 @@ export interface TaskLineageLink {
 }
 
 // What a delegation transaction read: the parent's chain from the root, the
-// quotas the child charges, and the units waiting parents hold afterwards.
+// runs the child charges with their quotas, and waiting parents' units.
 export interface DelegationSnapshot {
-  readonly chain: readonly TaskLineageLink[];
+  readonly chain: readonly [TaskLineageLink, ...TaskLineageLink[]];
   readonly childRunId: RunId;
   readonly projectQuota: number;
-  readonly runQuota: (runId: RunId) => number;
+  readonly runs: readonly RunCapacity[];
   readonly waitingAfter: WaitingParentUnits;
   readonly fleetSlots: number;
   readonly waitingSince: Instant;
   readonly now: Instant;
 }
 
+// One run the child charges (`chargedRuns`), with the units that waiting
+// parents would hold in it once the delegation is admitted.
+export interface RunCapacity {
+  readonly runId: RunId;
+  readonly quota: number;
+  readonly waitingAfter: number;
+}
+
 export interface WaitingParentUnits {
   readonly project: number;
-  readonly run: (runId: RunId) => number;
   readonly slots: number;
 }
 
@@ -41,13 +48,12 @@ export type DelegationDecision =
 // Depth and runnable chains are checked first and reject at once (D-C); the
 // free-unit rule (D-A) makes the delegation wait, up to the bound.
 export function decideDelegation(snapshot: DelegationSnapshot): DelegationDecision {
-  const parent = snapshot.chain.at(-1)!;
-  const root = snapshot.chain[0]!;
+  const root = snapshot.chain[0];
+  const parent = snapshot.chain[snapshot.chain.length - 1] ?? root;
   const depth = parent.depth + 1;
   if (depth > MAX_DELEGATION_DEPTH) return rejected('delegation-depth-exceeded');
-  const runs = chargedRuns(snapshot.childRunId, root.runId);
-  if (!chainFits(snapshot, runs)) return rejected('delegation-chain-exceeds-quota');
-  if (!leavesFreeUnits(snapshot, runs)) {
+  if (!chainFits(snapshot)) return rejected('delegation-chain-exceeds-quota');
+  if (!leavesFreeUnits(snapshot)) {
     const waited = Date.parse(snapshot.now) - Date.parse(snapshot.waitingSince);
     const reason = 'delegation-awaiting-capacity';
     return waited >= DELEGATION_CAPACITY_WAIT_BOUND_MILLISECONDS ? rejected(reason) : Object.freeze({ outcome: 'waiting', reason });
@@ -64,17 +70,15 @@ export function chargedRuns(childRunId: RunId, rootRunId: RunId): readonly RunId
 
 // While its ancestors wait, the chain holds one unit per member in each quota
 // that member charges, plus the child's own.
-function chainFits(snapshot: DelegationSnapshot, runs: readonly RunId[]): boolean {
-  const members = [...snapshot.chain.map((link) => link.runId), snapshot.childRunId];
-  const rootRunId = snapshot.chain[0]!.runId;
-  if (members.length > snapshot.projectQuota) return false;
-  return runs.every((runId) => members.filter((memberRun) => memberRun === runId || rootRunId === runId).length <= snapshot.runQuota(runId));
+function chainFits({ chain, childRunId, projectQuota, runs }: DelegationSnapshot): boolean {
+  const members = [...chain.map((link) => link.runId), childRunId];
+  const rootRunId = chain[0].runId;
+  if (members.length > projectQuota) return false;
+  return runs.every((run) => members.filter((memberRun) => memberRun === run.runId || rootRunId === run.runId).length <= run.quota);
 }
 
-function leavesFreeUnits({ waitingAfter, projectQuota, runQuota, fleetSlots }: DelegationSnapshot, runs: readonly RunId[]): boolean {
-  return waitingAfter.project < projectQuota
-    && runs.every((runId) => waitingAfter.run(runId) < runQuota(runId))
-    && waitingAfter.slots < fleetSlots;
+function leavesFreeUnits({ waitingAfter, projectQuota, runs, fleetSlots }: DelegationSnapshot): boolean {
+  return waitingAfter.project < projectQuota && runs.every((run) => run.waitingAfter < run.quota) && waitingAfter.slots < fleetSlots;
 }
 
 function rejected(reason: CapacityReason): DelegationDecision {

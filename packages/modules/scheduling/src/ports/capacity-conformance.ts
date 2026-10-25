@@ -86,7 +86,7 @@ export const TASK_LINEAGE_CONFORMANCE: readonly ConformanceCase<TaskLineage>[] =
       const problems: string[] = [];
       expectSuccess(problems, 'add root', await lineage.add(ROOT_LINK));
       expectSuccess(problems, 'add child', await lineage.add(CHILD_LINK));
-      expectCode(problems, 'second add', await lineage.add({ ...ROOT_LINK, depth: 1 }), 'conflict');
+      expectCode(problems, 'second add', await lineage.add({ ...ROOT_LINK, runId: CHILD_RUN }), 'conflict');
       expectSame(problems, 'root', await lineage.get(ROOT), ROOT_LINK);
       expectSame(problems, 'child', await lineage.get(CHILD), CHILD_LINK);
       expectSame(problems, 'unknown', await lineage.get(id('TaskId', 'task-x') as TaskId), undefined);

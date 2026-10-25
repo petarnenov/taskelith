@@ -75,7 +75,7 @@ export function retriedTask(taskId: string, first: string, second: string): Task
   const placed = placedTask(taskId, first);
   const ended = value(endAttempt(placed, placed.attempts[0]!.id, AT));
   const secondId = value(parseIdentifier('AttemptId', second)) as AttemptId;
-  const attempted = value(openAttempt(ended, ended.ownershipGeneration, { id: secondId }, AT));
+  const attempted = value(openAttempt(ended, ended.ownershipGeneration, { id: secondId, retryOf: placed.attempts[0]!.id }, AT));
   return value(claimOwnership(attempted, attempted.ownershipGeneration, secondId, AT));
 }
 

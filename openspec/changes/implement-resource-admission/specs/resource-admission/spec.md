@@ -5,7 +5,7 @@ Define the scheduler side of the capacity reservation contract: placement decide
 ## ADDED Requirements
 
 ### Requirement: Placement in one transaction
-`ResourceAdmissionService.reserve` SHALL, in one SERIALIZABLE transaction, read the installation, the attempt, the worker, the quotas, and the charges, decide with the first failed check of contract section 4, and either insert the held reservation with its assignment, the attempt's first charge, and the assignment command, or write nothing and return the waiting or rejecting reason.
+`ResourceAdmissionService.reserve` SHALL, in one SERIALIZABLE transaction, read the installation, the attempt and its ownership, the lineage, the worker, the quotas, the provider credentials, and the charges, decide with the first failed check of contract section 4, and either insert the held reservation with its assignment, the attempt's first charge, and the assignment command, or write nothing and return the waiting or rejecting reason.
 
 #### Scenario: Placement
 - **WHEN** an active attempt is placed on an eligible worker with room in every budget

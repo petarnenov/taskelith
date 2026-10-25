@@ -90,6 +90,8 @@ test('waiting reasons leave a task queued, rejecting reasons end it', () => {
   assert.equal(isWaitingReason('retry-budget-exhausted'), false);
 });
 
+type Chain = DelegationSnapshot['chain'];
+
 const PROJECT = id('ProjectId', 'project-1') as ProjectId;
 const RUN = id('RunId', 'run-1') as RunId;
 const OTHER_RUN = id('RunId', 'run-2') as RunId;
@@ -105,13 +107,18 @@ function link(task: string, depth: number, runId: RunId = RUN, parent?: string):
   };
 }
 
+// The runs the child charges, with quotas and waiting units per run.
+function runs(quota: (runId: RunId) => number, waiting: (runId: RunId) => number = () => 1, childRunId: RunId = OTHER_RUN) {
+  return (childRunId === RUN ? [RUN] : [childRunId, RUN]).map((runId) => ({ runId, quota: quota(runId), waitingAfter: waiting(runId) }));
+}
+
 function delegation(overrides: Partial<DelegationSnapshot> = {}): DelegationSnapshot {
   return {
     chain: [link('root', 0)],
     childRunId: OTHER_RUN,
     projectQuota: 4,
-    runQuota: () => 4,
-    waitingAfter: { project: 1, run: () => 1, slots: 1 },
+    runs: runs(() => 4),
+    waitingAfter: { project: 1, slots: 1 },
     fleetSlots: 4,
     waitingSince: at('2026-10-25T09:00:00.000Z'),
     now: at('2026-10-25T09:00:00.000Z'),
@@ -127,24 +134,24 @@ test('an admitted delegation links the child below its parent in the root projec
 });
 
 test('depth above three and chains larger than a quota are rejected at once', () => {
-  const deep = [link('root', 0), link('a', 1, RUN, 'root'), link('b', 2, RUN, 'a'), link('c', 3, RUN, 'b')];
+  const deep: Chain = [link('root', 0), link('a', 1, RUN, 'root'), link('b', 2, RUN, 'a'), link('c', 3, RUN, 'b')];
   assert.deepEqual(decideDelegation(delegation({ chain: deep })), { outcome: 'rejected', reason: 'delegation-depth-exceeded' });
   // Default run quota 2: a depth-2 child in the root's run never runs.
-  const chain = [link('root', 0), link('a', 1, RUN, 'root')];
-  const defaults = delegation({ chain, childRunId: RUN, runQuota: () => 2 });
+  const chain: Chain = [link('root', 0), link('a', 1, RUN, 'root')];
+  const defaults = delegation({ chain, childRunId: RUN, runs: runs(() => 2, () => 1, RUN) });
   assert.deepEqual(decideDelegation(defaults), { outcome: 'rejected', reason: 'delegation-chain-exceeds-quota' });
-  assert.equal(decideDelegation({ ...defaults, runQuota: () => 4 }).outcome, 'admitted');
+  assert.equal(decideDelegation({ ...defaults, runs: runs(() => 4, () => 1, RUN) }).outcome, 'admitted');
   assert.deepEqual(decideDelegation(delegation({ chain, projectQuota: 2 })), { outcome: 'rejected', reason: 'delegation-chain-exceeds-quota' });
   // Another run is charged once; the root's run once per chain member.
-  assert.equal(decideDelegation(delegation({ chain, runQuota: (runId) => (runId === RUN ? 3 : 2) })).outcome, 'admitted');
-  assert.equal(decideDelegation(delegation({ chain, runQuota: (runId) => (runId === RUN ? 2 : 4) })).outcome, 'rejected');
+  assert.equal(decideDelegation(delegation({ chain, runs: runs((runId) => (runId === RUN ? 3 : 2)) })).outcome, 'admitted');
+  assert.equal(decideDelegation(delegation({ chain, runs: runs((runId) => (runId === RUN ? 2 : 4)) })).outcome, 'rejected');
 });
 
 test('a delegation that would leave no free unit waits up to the bound, then is rejected', () => {
   const full = [
-    delegation({ waitingAfter: { project: 4, run: () => 1, slots: 1 } }),
-    delegation({ waitingAfter: { project: 1, run: (runId) => (runId === RUN ? 4 : 1), slots: 1 } }),
-    delegation({ waitingAfter: { project: 1, run: () => 1, slots: 4 } }),
+    delegation({ waitingAfter: { project: 4, slots: 1 } }),
+    delegation({ runs: runs(() => 4, (runId) => (runId === RUN ? 4 : 1)) }),
+    delegation({ waitingAfter: { project: 1, slots: 4 } }),
   ];
   for (const snapshotWithoutRoom of full) {
     assert.deepEqual(decideDelegation(snapshotWithoutRoom), { outcome: 'waiting', reason: 'delegation-awaiting-capacity' });
@@ -174,16 +181,21 @@ test('a transiently failing placement is retried with backoff up to the attempt 
   let calls = 0;
   const store: CapacityStore = { transaction: async () => { calls += 1; return unavailable; } };
   const pauses: number[] = [];
-  const service = new ResourceAdmissionService(store);
-  const result = await service.reserveWithRetry({} as PlacementRequest, async (milliseconds) => { pauses.push(milliseconds); }, () => 0);
+  const timing = { pause: async (milliseconds: number) => { pauses.push(milliseconds); }, draw: () => 0 };
+  const service = new ResourceAdmissionService(store, timing);
+  const result = await service.reserveWithRetry({} as PlacementRequest);
   assert.deepEqual(result, unavailable);
   assert.equal(calls, PLACEMENT_RETRY_ATTEMPTS);
   assert.deepEqual(pauses, [5000, 10000, 20000, 40000]);
   let attempts = 0;
   const recovering: CapacityStore = { transaction: async () => (++attempts < 3 ? unavailable : ok({ kind: 'waiting', reason: 'quarantined' }) as never) };
-  assert.deepEqual(await new ResourceAdmissionService(recovering).reserveWithRetry({} as PlacementRequest, async () => {}, () => 0), {
+  assert.deepEqual(await new ResourceAdmissionService(recovering, timing).reserveWithRetry({} as PlacementRequest), {
     ok: true, value: { kind: 'waiting', reason: 'quarantined' },
   });
+  const silent = { pause: async () => assert.fail('no pause expected'), draw: () => 0 };
   const rejected: CapacityStore = { transaction: async () => err(failure('conflict', 'raced')) };
-  assert.equal((await new ResourceAdmissionService(rejected).reserveWithRetry({} as PlacementRequest, async () => assert.fail(), () => 0)).ok, false);
+  assert.equal((await new ResourceAdmissionService(rejected, silent).reserveWithRetry({} as PlacementRequest)).ok, false);
+  // A commit whose outcome is unknown may have placed the attempt already.
+  const unknown: CapacityStore = { transaction: async () => err(failure('unavailable', 'lost commit', { outcome: 'unknown' })) };
+  assert.equal((await new ResourceAdmissionService(unknown, silent).reserveWithRetry({} as PlacementRequest)).ok, false);
 });
