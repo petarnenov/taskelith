@@ -10,6 +10,7 @@ import {
   supersedeInTransaction,
   type PlacementOutcome,
   type PlacementRequest,
+  type ReleaseOutcome,
   type ReleaseRequest,
 } from './capacity-operations.js';
 
@@ -53,7 +54,7 @@ export class ResourceAdmissionService {
     return this.#store.transaction((tx) => supersedeInTransaction(tx, request));
   }
 
-  releaseAfterTerminalFact(request: ReleaseRequest): Promise<Result<Assignment>> {
+  releaseAfterTerminalFact(request: ReleaseRequest): Promise<Result<ReleaseOutcome>> {
     return this.#store.transaction((tx) => releaseInTransaction(tx, request));
   }
 }

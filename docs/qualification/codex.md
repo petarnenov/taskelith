@@ -21,7 +21,7 @@ These are the records ADR 0003 decision 2 requires before admission. License evi
 | Item | Record |
 | --- | --- |
 | License | Apache-2.0 ([LICENSE](https://github.com/openai/codex/blob/rust-v0.164.0/LICENSE)) |
-| Data-handling terms | Recorded on 2026-10-25 in [Provider terms review](#provider-terms-review); the owner's decision D15 is pending. OpenAI's terms, privacy, and help pages returned HTTP 403 to an automated client on 2026-10-24 and again on 2026-10-25, so the review used Wayback Machine snapshots of them |
+| Data-handling terms | Recorded on 2026-10-25 in [Provider terms review](#provider-terms-review); the owner decided D15 on 2026-10-25: (a), accept the remaining risk ([G3 plan](../g3-plan.md#owner-decisions)). OpenAI's terms, privacy, and help pages returned HTTP 403 to an automated client on 2026-10-24 and again on 2026-10-25, so the review used Wayback Machine snapshots of them |
 | Provider dependency | This qualification used the owner's ChatGPT subscription; inference ran over a WebSocket to `chatgpt.com/backend-api/codex/responses`. Other providers were not tested |
 | Credentials used | The owner signed in once with ChatGPT using the pinned binary and a dedicated `CODEX_HOME`, configured with `cli_auth_credentials_store = "file"`. The credential is the file `auth.json` (mode 600) in that directory; no Codex Keychain entry exists. The probe passed no credential and logged none |
 | Credential scope | Per [ADR 0005](../decisions/0005-harness-subscription-account-pools.md), a subscription slot is injected per run. A file-based `CODEX_HOME` per slot fits that model; whether an agent's own commands can read it was not tested |
@@ -177,7 +177,7 @@ The findings agree with the Claude Code qualification, so the harness-neutral po
 
 ## Remaining before admission
 
-- The review of OpenAI's data-handling terms, and of whether its terms allow pooled subscriptions for automated use (ADR 0005), is recorded on 2026-10-25 in [Provider terms review](#provider-terms-review), from Wayback Machine snapshots because the live pages returned HTTP 403; the owner's decision D15 on the remaining risk is pending before admission in G3 ([ADR 0007](../decisions/0007-g0-closure.md)).
+- The review of OpenAI's data-handling terms, and of whether its terms allow pooled subscriptions for automated use (ADR 0005), is recorded on 2026-10-25 in [Provider terms review](#provider-terms-review), from Wayback Machine snapshots because the live pages returned HTTP 403; the owner decided D15 on 2026-10-25: (a), accept the remaining risk ([G3 plan](../g3-plan.md#owner-decisions)); admission remains subject to the other qualification gates in G4 ([ADR 0007](../decisions/0007-g0-closure.md)).
 - Linux x64 and arm64 in the planned worker container image (G2, [ADR 0007](../decisions/0007-g0-closure.md)), and macOS arm64.
 - Non-permission input requests, and repeated runs.
 - The cause of the temporary-directory fallback after a crash.

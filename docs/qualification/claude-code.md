@@ -25,7 +25,7 @@ These are the records ADR 0003 decision 2 requires before a closed harness is ad
 | Credential scope | Device authentication binds the login to a worker host's configuration directory, not to a workspace. The [trust model](../trust-model.md) then required provider credentials scoped per workspace or project, so this was an open owner decision. It now scopes harness provider credentials to a subscription slot and its allowed projects. The owner has since chosen subscription account pools per harness ([ADR 0005](../decisions/0005-harness-subscription-account-pools.md)), which scope each credential to a slot and its allowed projects |
 | Security reporting | HackerOne ([SECURITY.md](https://github.com/anthropics/claude-code/blob/v2.1.308/SECURITY.md)) |
 | Maintenance | Frequent releases (see above). No vendor stability statement for the SDK was found |
-| Terms review | Recorded on 2026-10-25 in [Provider terms review](#provider-terms-review); the owner's decision D15 is pending |
+| Terms review | Recorded on 2026-10-25 in [Provider terms review](#provider-terms-review); the owner decided D15 on 2026-10-25: (a), accept the remaining risk ([G3 plan](../g3-plan.md#owner-decisions)) |
 
 ## Provider terms review
 
@@ -171,7 +171,7 @@ Proposal for the port design, not yet decided: each plugin manifest declares its
 - The subscription mechanism for account slots (a long-lived subscription token or a per-slot device login), its load, limit, and reset signals, and whether an agent can read an injected credential ([ADR 0005](../decisions/0005-harness-subscription-account-pools.md)).
 - An alternative provider or gateway path, if the owner wants one, authenticated only through a subscription (ADR 0005).
 - The automatic interrupted-turn re-run, and repeated runs to check stability.
-- The review of Anthropic's terms, including whether they allow pooled subscriptions for automated use (ADR 0005), is recorded on 2026-10-25 in [Provider terms review](#provider-terms-review); the owner's decision D15 on the remaining risk is pending before admission in G3 ([ADR 0007](../decisions/0007-g0-closure.md)).
+- The review of Anthropic's terms, including whether they allow pooled subscriptions for automated use (ADR 0005), is recorded on 2026-10-25 in [Provider terms review](#provider-terms-review); the owner decided D15 on 2026-10-25: (a), accept the remaining risk ([G3 plan](../g3-plan.md#owner-decisions)); admission follows in G3 ([ADR 0007](../decisions/0007-g0-closure.md)).
 - Independent adoption evidence for the pinned version.
 - A host side-effect check with before-and-after listings, which the `harness-qualification` spec now requires; this record does not yet meet it.
 - A versioned conformance suite in the repository, run through `make`, once the agent port exists (G3).

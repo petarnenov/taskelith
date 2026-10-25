@@ -1,7 +1,7 @@
 import type { Result } from '@taskelith/kernel';
-import type { AttemptId, EvidenceRecords, LaunchRecords, WorkerId } from '@taskelith/execution';
+import type { AttemptId, EvidenceRecords, Inbox, LaunchRecords, ProducerCursors, WorkerId } from '@taskelith/execution';
 import type { EnrolledWorker } from '@taskelith/fleet';
-import type { CapacityTransaction, DelegationRequests, PlacementQueue } from '@taskelith/scheduling';
+import type { CapacityTransaction, DelegationRequests, PlacementQueue, WorkerReports } from '@taskelith/scheduling';
 import type {
   CurrentRevisions,
   GateRepository,
@@ -23,6 +23,9 @@ export interface ControlPlaneTransaction extends CapacityTransaction {
   readonly launches: LaunchRecords;
   readonly placements: PlacementQueue;
   readonly delegations: DelegationRequests;
+  readonly inbox: Inbox;
+  readonly cursors: ProducerCursors;
+  readonly reports: WorkerReports;
 }
 
 // An enrolled worker as the transaction reads it, revoked or not.

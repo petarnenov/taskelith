@@ -35,6 +35,11 @@ export class RetrySchedule<Key> {
     this.#delays.set(key, { tries, dueAt: this.#timing.now() + placementBackoff(tries, this.#timing.draw()) });
   }
 
+  // Delays the key's next try to `dueAt` without counting a failure.
+  delayUntil(key: Key, dueAt: number): void {
+    this.#delays.set(key, { tries: this.#delays.get(key)?.tries ?? 0, dueAt });
+  }
+
   // Keys whose next try has passed without a new failure.
   pastDue(): readonly Key[] {
     return [...this.#delays.keys()].filter((key) => this.due(key));
