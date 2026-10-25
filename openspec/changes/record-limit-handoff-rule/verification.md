@@ -19,7 +19,7 @@ Branch `record-limit-handoff-rule` from `origin/dev` at `ba24952`. macOS x86_64,
 | Check | Result |
 | --- | --- |
 | `npm run openspec -- validate record-limit-handoff-rule --strict` | Passed before review |
-| `make verify` | Passed at `25083cc` before pass 1, but recorded only after it; passed again before pass 2; the `pre-push` hook runs it on the final head |
+| `make verify` | Passed at `25083cc` before pass 1, but recorded only after it; passed again at `807bc4b` before pass 2; the `pre-push` hook runs it on the final head |
 
 ## Review
 
@@ -32,10 +32,18 @@ Pass 1 (Codex CLI):
   2. Medium: `make verify` was recorded as pending before pass 1. It had passed at `25083cc` before the pass but was not recorded; the table now says so.
   3. Low: the delta's last sentence could be read with the slot as the subject. Resolution: the session is the subject.
 
+Pass 2 (Codex CLI):
+- Invocation as in pass 1, at head `807bc4b`; the prompt named pass 1's session and asked the reviewer to confirm each resolution and review the whole change again.
+- Model confirmation: `model: gpt-6.1-sol`, `reasoning effort: medium`, `sandbox: read-only` in the output header. Session ID `01a174f0-04e1-72b0-a6d0-9f5b04d89dbc`.
+- Snapshot: `f87c240b95a22c811937c3d7e5951cbcc8858b53a08781a3c00fccc64002e27c` before and after the pass.
+- Findings: 0 Critical, 0 High, 0 Medium, 0 Low. All three pass-1 resolutions were confirmed, and the "After the wait" reading was judged sound again.
+
+After pass 2, only this file and `tasks.md` changed, to record the pass; that change is not reviewed.
+
 ## Limitations
 
 Documentation only; nothing is implemented. The handoff's format is left to G3 items 4 and 18.
 
 ## Remaining gates
 
-`make verify` on the final head, independent review, handoff, integration, and archive.
+Handoff, integration, and archive.
