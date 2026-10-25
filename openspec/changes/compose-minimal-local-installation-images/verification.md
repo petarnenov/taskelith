@@ -6,7 +6,7 @@ Obligations of earlier items addressed here: the `make` targets that run the adm
 
 ## Revision and environment
 
-- Base: `origin/dev` at `4968758`. Branch `compose-minimal-local-installation-images`; first review of `152c35b`, fixes in `e00debc`.
+- Base: `origin/dev` at `4968758`. Branch `compose-minimal-local-installation-images`; first review of `152c35b`, fixes in `e00debc` and the record in `bb2af6b`; second review of `bb2af6b`, fixes in `69c0046`.
 - Host: Ubuntu 24.04.5 LTS, kernel 6.8.0-147-generic, x86_64; Docker 27.3.1 with Compose v2.29.7; Node.js 24.22.1 from `.nvmrc`.
 
 ## Author self-check and evidence check
@@ -25,8 +25,10 @@ Obligations of earlier items addressed here: the `make` targets that run the adm
 | `make verify-installation` at `152c35b` | passed: built, bootstrapped, started, enrolled, restarted |
 | `make verify` after the first-review fixes (`e00debc`) | passed; 1096 tests, 1081 passed, 15 skipped, 0 failed; coverage 99.07 % lines, 91.66 % branches, 98.65 % functions |
 | `make verify-installation` after the first-review fixes | passed on 2026-10-25 with the same steps; containers, volumes, images, and the sentinel file were removed afterwards. Two earlier attempts during the fixes failed in the script's own clean-up (an unbound variable in the EXIT trap, then volumes left behind by it); the check now removes the project before and after. |
+| `make verify-installation` after the second-review fixes (`69c0046`) | passed on 2026-10-25: built, bootstrapped, started, enrolled, restarted, removed; no container, volume, image, or sentinel file left |
+| `make verify` after the second-review fixes (`69c0046`) | passed; 1096 tests, 1081 passed, 15 skipped, 0 failed; coverage 99.06 % lines, 91.65 % branches, 98.65 % functions |
 
-`make verify-installation` builds both images from a `git archive` of the tracked files, checks that they run as `taskelith`, have an empty data root, and lack an untracked sentinel file, then bootstraps with a random database password, repeats the broker configuration step, starts the composition, enrolls the Linux worker container until it stores its identity, stops and starts the composition, and checks that PostgreSQL, NATS, the control plane, and the worker run. Docker reused cached layers from the earlier runs. Docker reports two `InvalidDefaultArgInFrom` warnings, because `BASE` has no default; the build always passes it.
+`make verify-installation` builds both images from a `git archive` of the tracked files, checks that they run as `taskelith`, have an empty data root, and lack an untracked sentinel file, then bootstraps with a random database password, repeats the broker configuration step, starts the composition, enrolls the Linux worker container until it stores its identity, stops and starts the composition, which recreates the enrolled worker without its token, checks that PostgreSQL, NATS, the control plane, and the worker run, and fails unless it then removes the project, its volumes, and its images. Docker reused cached layers from the earlier runs. Docker reports two `InvalidDefaultArgInFrom` warnings, because `BASE` has no default; the build always passes it.
 
 ## Independent review
 
@@ -51,6 +53,21 @@ Reviewer assigned by the coordinator: Codex CLI, `gpt-6.1-sol`, reasoning effort
 | 7 | Medium | No `verification.md` before the first pass, while the dependency record cited one. | This record; the dependency record now cites it with the date. |
 | 8 | Low | The dependency record still called the Ubuntu base test infrastructure only. | The row names both uses: item 15 test infrastructure and the runtime base of the installation images. |
 
+### Pass 2
+
+- Invocation and prompt as in pass 1, plus the pass 1 session and findings, asking the reviewer to confirm each resolution (`152c35b..HEAD`) and then review `4968758...bb2af6b` again.
+- Confirmation: model `gpt-6.1-sol`, reasoning effort medium, sandbox read-only, session `01a174ae-fe31-7231-8ddc-5de801f27423`.
+- Snapshot: `1f780ef579c000ae553a70ae995fe36bc91f8d1029d25cda950afb2205560783` before and after; unchanged.
+- The reviewer confirmed all eight pass 1 findings resolved. It again could not run Docker or the Node.js tests in its sandbox.
+- New findings: Critical 0, High 0, Medium 2, Low 2.
+
+| # | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| 1 | Medium | `installation-start` ran `compose start worker`, so a rebuilt worker image was not used. | An existing worker is brought up with `compose up --no-deps --wait`, which recreates it from the current image and keeps its volume; a never-enrolled worker is still not created. |
+| 2 | Medium | The opt-in check reported success even when removing the throwaway project failed. | Removal before the run and in the EXIT trap stays best effort; the final removal must succeed, or the check fails. |
+| 3 | Low | `check_image` accepted a failed `find` or a Docker error as proof. | The `find` result is assigned, so a failure stops the script; the sentinel check runs `test ! -e` and requires success. |
+| 4 | Low | The volume test accepted anonymous volumes. | The test requires the expected volume name as the mount source, its top-level declaration, and the admin entry's `control-plane-data` mount. |
+
 ## Limitations
 
 - Only linux/amd64 was built and run. The linux/arm64 path (the `node-arm64` stage and checksum) is not built or run yet.
@@ -62,5 +79,5 @@ Reviewer assigned by the coordinator: Codex CLI, `gpt-6.1-sol`, reasoning effort
 
 ## Remaining gates
 
-- The review passes after the fixes, and the coordinator's integration and archive.
+- The third and last review pass, and the coordinator's integration and archive.
 - Item 23b.
