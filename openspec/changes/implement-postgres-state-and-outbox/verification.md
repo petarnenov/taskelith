@@ -77,6 +77,10 @@ Assigned reviewer: Codex CLI 0.164.0 with `codex exec -m gpt-6.1-sol -c model_re
 - Checks ran on macOS arm64 only; Linux runs in CI.
 - Failover, pool sizing under load, and expand/contract migrations are not tested.
 
+## Decision on the pass 3 findings
+
+On 2026-10-25 the coordinator reported the decision on the findings left after the third pass, made not by the owner but by a Fable 5.1 (medium) subagent acting on the owner's delegation of that day: option (b), accept the fixes in `d684860` as they are, without a fourth pass, and merge. The delegate read the diff and found the three fixes local, each with a test, and the inbox `consumer` encoding internal to the adapter. The fixes in `d684860` remain **not independently reviewed**.
+
 ## Remaining gates
 
-The owner's decision on the pass 3 findings and their unreviewed fixes (governance: findings left after the third pass); integration into `dev` and archive by the coordinator; promotion to `main`.
+Follow-up for a later item: `migrations.ts` reads the migration directory twice (`unsupportedFiles` and `migrationFiles`); one read should serve both. Integration into `dev` and archive by the coordinator; promotion to `main`.
