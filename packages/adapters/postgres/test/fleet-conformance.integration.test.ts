@@ -104,6 +104,20 @@ async function waitForWaitingLock(client: pg.Client): Promise<void> {
   throw new Error('the publisher never waited for the advisory lock');
 }
 
+test('a due row whose record holds no predecessor expires nothing', { concurrency: false }, async () => {
+  await truncateAll(url);
+  const registry = new CommittingFleetRegistry(database);
+  const worker = fleetWorker('w1', 'j1');
+  value(await registry.addToken(fleetToken('t1')));
+  value(await registry.enroll(fleetToken('t1').hash, worker));
+  await query(url, "UPDATE workers SET predecessor_valid_until = '2020-01-01T00:00:00Z'");
+  const enrollment = await query(url, 'SELECT enrollment FROM workers');
+
+  assert.equal(value(await registry.expirePredecessors(worker.enrolledAt)), 0);
+  assert.deepEqual(await query(url, 'SELECT enrollment FROM workers'), enrollment, 'the record is unchanged');
+  assert.deepEqual(await query(url, 'SELECT user_key FROM broker_revocations'), [], 'nothing is revoked');
+});
+
 test('the initialized installation is not quarantined', { concurrency: false }, async () => {
   await truncateAll(url);
   const guard = () => database.transaction(async (tx) => ({ ok: true as const, value: await tx.installation.quarantined() }));
