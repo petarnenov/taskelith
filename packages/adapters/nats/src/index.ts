@@ -3,8 +3,10 @@ export { BrokerAuthority, type BrokerAuthorityKeys, type IssuedUser } from './br
 export { accountJwt, credsFile, operatorJwt, userJwt, type ClaimTime, type UserPermissions } from './broker-jwt.js';
 export { NatsBrokerCredentials } from './nats-broker-credentials.js';
 export {
+  connectSystemAccount,
   connectTransport,
   connectWorkerTransport,
+  type BrokerEndpoint,
   type ControlPlaneConnection,
   type TransportConnection,
   type TransportEndpoint,

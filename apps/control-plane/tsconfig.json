@@ -1,4 +1,16 @@
 {
   "extends": "../../tsconfig.package.json",
-  "references": [{ "path": "../../packages/kernel" }, { "path": "../../packages/testing" }]
+  "references": [
+    { "path": "../../packages/kernel" },
+    { "path": "../../packages/contracts" },
+    { "path": "../../packages/testing" },
+    { "path": "../../packages/modules/access" },
+    { "path": "../../packages/modules/execution" },
+    { "path": "../../packages/modules/fleet" },
+    { "path": "../../packages/adapters/control-plane-store" },
+    { "path": "../../packages/adapters/data-root" },
+    { "path": "../../packages/adapters/nats" },
+    { "path": "../../packages/adapters/postgres" },
+    { "path": "../../packages/adapters/secrets" }
+  ]
 }

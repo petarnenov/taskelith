@@ -14,11 +14,14 @@ export interface TransportTls {
 }
 
 // `creds` is the text of a NATS `.creds` file (decision D9 (a)).
-export interface TransportEndpoint {
+export interface BrokerEndpoint {
   readonly server: URL;
-  readonly address: TransportAddress;
   readonly creds: string;
   readonly tls?: TransportTls;
+}
+
+export interface TransportEndpoint extends BrokerEndpoint {
+  readonly address: TransportAddress;
 }
 
 // A worker connection takes the worker's own inbox prefix.
@@ -54,9 +57,14 @@ export async function connectWorkerTransport(endpoint: WorkerTransportEndpoint):
   return inboxPrefix.ok ? open(endpoint, inboxPrefix.value) : inboxPrefix;
 }
 
+// The system account's connection, for claims updates and lookups only.
+export function connectSystemAccount(endpoint: BrokerEndpoint): Promise<Result<TransportConnection>> {
+  return open(endpoint, undefined);
+}
+
 // Reconnects without a limit, so a broker outage delays messages rather than
 // ending the process; unconfirmed publications are retried by their callers.
-async function open(endpoint: TransportEndpoint, inboxPrefix: string | undefined): Promise<Result<TransportConnection>> {
+async function open(endpoint: BrokerEndpoint, inboxPrefix: string | undefined): Promise<Result<TransportConnection>> {
   try {
     const connection = await connect({
       servers: endpoint.server.href,
