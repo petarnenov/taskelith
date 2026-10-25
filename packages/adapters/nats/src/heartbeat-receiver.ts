@@ -47,8 +47,8 @@ export class HeartbeatReceiver {
     this.#maxPending = options.maxPending ?? HEARTBEAT_PENDING_LIMIT;
   }
 
-  // Ends when stopped or when the subscription closes; a stop handles
-  // nothing that is still waiting.
+  // Ends when stopped, handling nothing still waiting; a subscription that
+  // closes without a stop is a failure that stops the service.
   async run(signal: AbortSignal): Promise<void> {
     if (signal.aborted) return;
     const waiting = new WaitingHeartbeats(this.#maxPending);
@@ -65,6 +65,9 @@ export class HeartbeatReceiver {
       signal.removeEventListener('abort', stop);
       subscription.unsubscribe();
     }
+    if (signal.aborted) return;
+    const cause = await subscription.closed;
+    throw new Error(`the heartbeat subscription closed${cause instanceof Error ? `: ${cause.message}` : ''}`);
   }
 
   async #drain(waiting: WaitingHeartbeats, subscription: Subscription, signal: AbortSignal): Promise<void> {

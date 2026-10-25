@@ -308,13 +308,13 @@ function heartbeatConnection() {
   const subscribed: Array<{ subject: string; queue: string | undefined }> = [];
   let callback: ((error: Error | null, message: { subject: string; data: Uint8Array }) => void) | undefined;
   let closed = false;
-  let close!: () => void;
-  const closing = new Promise<void>((resolve) => { close = () => { closed = true; resolve(); }; });
+  let close!: (cause?: Error) => void;
+  const closing = new Promise<void | Error>((resolve) => { close = (cause) => { closed = true; resolve(cause); }; });
   const connection = {
     subscribe(subject: string, options: { queue?: string; callback: typeof callback }) {
       subscribed.push({ subject, queue: options.queue });
       callback = options.callback;
-      return { closed: closing, isClosed: () => closed, unsubscribe: close };
+      return { closed: closing, isClosed: () => closed, unsubscribe: () => close() };
     },
   };
   return {
@@ -336,15 +336,16 @@ test('the heartbeat receiver handles valid heartbeats and logs what it drops or 
   const fake = heartbeatConnection();
   const subject = (worker: string) => value(address.heartbeatSubject(worker));
   const handled: string[] = [];
+  const controller = new AbortController();
   const receiver = new HeartbeatReceiver({ connection: fake.connection, address, queue: 'control-plane' }, async (received) => {
     handled.push(received.subject);
     if (received.subject === subject('worker-3')) return err(failure('forbidden', 'not authenticated'));
     if (received.subject !== subject('worker-4')) return ok(undefined);
-    fake.close();
+    controller.abort();
     throw new Error('defect');
   }, { logger });
 
-  const running = receiver.run(new AbortController().signal);
+  const running = receiver.run(controller.signal);
   fake.fail(new Error('permissions violation'));
   fake.deliver('worker-1', heartbeat('worker-1'));
   fake.deliver('worker-2', { ...heartbeat('worker-2'), sentAt: 'soon' });
@@ -391,4 +392,13 @@ test('the heartbeat receiver drops arrivals beyond its bound while a handler wai
   stopped.abort();
   await receiver.run(stopped.signal);
   assert.equal(fake.subscribed.length, 1);
+});
+
+test('a heartbeat subscription that closes without a stop fails the receiver with its cause', async () => {
+  const fake = heartbeatConnection();
+  const running = new HeartbeatReceiver({ connection: fake.connection, address, queue: 'q' }, async () => ok(undefined))
+    .run(new AbortController().signal);
+  fake.fail(new Error('permissions violation'));
+  fake.close(new Error('permissions violation'));
+  await assert.rejects(running, /^Error: the heartbeat subscription closed: permissions violation$/);
 });
