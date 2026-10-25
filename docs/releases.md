@@ -48,12 +48,12 @@ Because the `verify` check must run on a branch that is up to date with `main`, 
 | --- | --- |
 | `fix: correct CLI output` | Patch |
 | `perf: speed up CLI output` | Patch |
-| A revert, `revert:` or `Revert "…"`, whose body says `This reverts commit <hash>.` | Patch |
+| A revert, such as `revert: …` or `Revert "…"` followed by `This reverts commit <hash>.` | Patch |
 | `feat: add project creation` | Minor |
 | `feat!: replace CLI invocation` or a `BREAKING CHANGE:` footer | Major |
 | `docs:`, `test:`, `chore:`, `build:`, `ci:` without breaking changes | No release |
 
-The largest increment since the last release wins. These rules also apply before 1.0; a breaking change advances the major version. One promotion may bundle several changes; their commits are analyzed together, and the largest increment among them wins. Promotions use a merge commit or a rebase, never a squash, so that semantic-release sees each Conventional Commit and its breaking-change footer.
+Before these rules apply, the analyzer drops a revert together with the commit it reverts when both are in the analyzed range, so such a pair releases nothing. The largest increment since the last release wins. These rules also apply before 1.0; a breaking change advances the major version. One promotion may bundle several changes; their commits are analyzed together, and the largest increment among them wins. Promotions use a merge commit or a rebase, never a squash, so that semantic-release sees each Conventional Commit and its breaking-change footer.
 
 ## Version source of truth
 
