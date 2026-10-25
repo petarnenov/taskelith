@@ -22,9 +22,10 @@ export class InMemoryPlacementQueue implements PlacementQueue {
     this.#assignments = assignments;
   }
 
-  async waiting(limit: number): Promise<readonly WaitingPlacement<TaskId>[]> {
+  async waiting(limit: number, excluding: readonly TaskId[]): Promise<readonly WaitingPlacement<TaskId>[]> {
+    const excluded = new Set(excluding);
     const waiting: WaitingPlacement<TaskId>[] = [];
-    for (const task of this.#tasks().filter((candidate) => this.#waits(candidate))) {
+    for (const task of this.#tasks().filter((candidate) => !excluded.has(candidate.id) && this.#waits(candidate))) {
       const link = await this.#lineage.get(task.id);
       if (link !== undefined) waiting.push(Object.freeze({ projectId: link.projectId, waitingSince: task.changedAt, item: task.id }));
     }

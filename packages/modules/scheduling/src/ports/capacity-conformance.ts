@@ -290,8 +290,8 @@ export const PLACEMENT_QUEUE_CONFORMANCE: readonly ConformanceCase<PlacementQueu
       expectSuccess(problems, 'add held', await assignments.add(assignment('assignment-c', 'attempt-c', reserved.id, RUN, 100)));
       const entry = (task: Task, project: string) => ({ projectId: project, waitingSince: task.changedAt, item: task.id });
       const all = [entry(released, 'project-2'), entry(fresh, 'project-1'), entry(later, 'project-1')];
-      expectSame(problems, 'waiting', await queue.waiting(10), all);
-      expectSame(problems, 'limited', await queue.waiting(2), all.slice(0, 2));
+      expectSame(problems, 'waiting', await queue.waiting(10, []), all);
+      expectSame(problems, 'limited', await queue.waiting(2, []), all.slice(0, 2));
       return problems;
     },
   },
@@ -306,8 +306,24 @@ export const PLACEMENT_QUEUE_CONFORMANCE: readonly ConformanceCase<PlacementQueu
       expectSuccess(problems, `link ${newer.id}`, await lineage.add(rootLink(newer.id, 'project-b')));
       const entry = (task: Task, project: string) => ({ projectId: project, waitingSince: task.changedAt, item: task.id });
       const first = [entry(older[0]!, 'project-a'), entry(newer, 'project-b')];
-      expectSame(problems, 'limited', await queue.waiting(2), first);
-      expectSame(problems, 'all', await queue.waiting(10), [...first, entry(older[1]!, 'project-a'), entry(older[2]!, 'project-a')]);
+      expectSame(problems, 'limited', await queue.waiting(2, []), first);
+      expectSame(problems, 'all', await queue.waiting(10, []), [...first, entry(older[1]!, 'project-a'), entry(older[2]!, 'project-a')]);
+      return problems;
+    },
+  },
+  {
+    name: 'excluded tasks are left out before the limit, so the next tasks are read',
+    async check({ queue, tasks, lineage }: PlacementQueueConformanceTarget) {
+      const problems: string[] = [];
+      const backingOff = [queuedTask('task-a', at(0)), queuedTask('task-b', at(1))];
+      const next = queuedTask('task-c', at(2));
+      for (const [task, project] of [[backingOff[0]!, 'project-a'], [backingOff[1]!, 'project-b'], [next, 'project-c']] as const) {
+        expectSuccess(problems, `add ${task.id}`, await tasks.add(task));
+        expectSuccess(problems, `link ${task.id}`, await lineage.add(rootLink(task.id, project)));
+      }
+      const excluding = backingOff.map((task) => task.id);
+      const read = await queue.waiting(2, excluding);
+      expectSame(problems, 'excluded', read, [{ projectId: 'project-c', waitingSince: next.changedAt, item: next.id }]);
       return problems;
     },
   },

@@ -31,11 +31,15 @@ The control plane SHALL place each waiting task in its own SERIALIZABLE transact
 - **THEN** no second assignment is created
 
 ### Requirement: Placement backoff
-A task that no candidate accepts SHALL wait before its next try, and a pass after a store outage SHALL wait before the next pass, backing off exponentially from 5 seconds to at most 60 seconds with jitter (capacity reservation section 5); a success SHALL reset the wait.
+A task that no candidate accepts SHALL wait before its next try, and a pass after a store outage SHALL wait before the next pass, backing off exponentially from 5 seconds to at most 60 seconds with jitter (capacity reservation section 5); a success SHALL reset the wait. A task that waits before its next try SHALL NOT be read as waiting, so that a pass reaches the tasks after it.
 
 #### Scenario: Repeated waiting
 - **WHEN** a task is not placed in two consecutive tries
 - **THEN** the second wait is longer than the first, and neither is below 5 nor above 60 seconds
+
+#### Scenario: Blocked batch
+- **WHEN** every task of a full batch waits before its next try and another task is placeable
+- **THEN** a later pass reads and places that task
 
 #### Scenario: Placed after waiting
 - **WHEN** a task that waited is placed

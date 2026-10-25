@@ -143,7 +143,7 @@ interface WaitingRow {
 }
 
 // Reads the query columns the task repository writes; the partial index on
-// waiting tasks keeps the scan to them. Ranks within a project before LIMIT.
+// waiting tasks keeps the scan to them. Excludes, then ranks, before LIMIT.
 export class PostgresPlacementQueue implements PlacementQueue {
   readonly #session: Session;
 
@@ -151,19 +151,20 @@ export class PostgresPlacementQueue implements PlacementQueue {
     this.#session = session;
   }
 
-  async waiting(limit: number): Promise<readonly WaitingPlacement<TaskId>[]> {
+  async waiting(limit: number, excluding: readonly TaskId[]): Promise<readonly WaitingPlacement<TaskId>[]> {
     const { rows } = await this.#session.query<WaitingRow>(
       `SELECT id, project_id, placement_waiting_since FROM (
          SELECT tasks.id, task_lineage.project_id, tasks.placement_waiting_since,
            row_number() OVER (PARTITION BY task_lineage.project_id
              ORDER BY tasks.placement_waiting_since, tasks.id COLLATE "C") AS project_rank
          FROM tasks JOIN task_lineage ON task_lineage.task_id = tasks.id
-         WHERE tasks.awaits_placement AND NOT EXISTS (SELECT 1 FROM assignments
+         WHERE tasks.awaits_placement AND tasks.id <> ALL($2::text[])
+           AND NOT EXISTS (SELECT 1 FROM assignments
            WHERE assignments.attempt_id = tasks.active_attempt_id AND ${HELD})
        ) AS waiting
        ORDER BY project_rank, placement_waiting_since, project_id COLLATE "C", id COLLATE "C"
        LIMIT $1`,
-      [limit],
+      [limit, excluding],
     );
     return Object.freeze(rows.map((row) => Object.freeze({
       projectId: row.project_id as ProjectId,

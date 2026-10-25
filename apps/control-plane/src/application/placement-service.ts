@@ -42,8 +42,8 @@ export class PlacementService {
     this.#passes = new RetrySchedule(timing);
   }
 
-  // A pass that backs off after an outage reads nothing. A task that is not
-  // placed backs off on its own, and one placed or no longer read is reset.
+  // A pass that backs off after an outage reads nothing. A task not placed
+  // is not read again until due, and a placed one is reset.
   async placeWaiting(): Promise<Result<PlacementPass>> {
     if (!this.#passes.due(PASS)) return ok({ waiting: 0, placed: 0 });
     const pass = await this.#placeDue();
@@ -55,16 +55,16 @@ export class PlacementService {
   // Each task in its own transaction, in fair order across projects; one
   // that no candidate accepts rolls back and keeps waiting unchanged.
   async #placeDue(): Promise<Result<PlacementPass>> {
+    this.#tasks.forgetStale();
+    const backingOff = this.#tasks.notDue();
     const read = await this.#store.readCommitted(async (tx) => ok({
       anyCandidate: (await tx.workers.candidates()).length > 0,
-      waiting: await tx.placements.waiting(PLACEMENT_BATCH),
+      waiting: await tx.placements.waiting(PLACEMENT_BATCH, backingOff),
     }));
     if (!read.ok) return read;
     const { anyCandidate, waiting } = read.value;
-    this.#tasks.retainOnly(waiting.map((entry) => entry.item));
-    const due = fairPlacementOrder(waiting).filter((taskId) => this.#tasks.due(taskId));
     let placed = 0;
-    for (const taskId of due) {
+    for (const taskId of fairPlacementOrder(waiting)) {
       const outcome = anyCandidate ? await this.#store.transaction((tx) => placeTask(tx, taskId)) : NO_CANDIDATE;
       if (outcome.ok) {
         this.#tasks.succeeded(taskId);

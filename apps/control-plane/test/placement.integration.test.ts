@@ -155,7 +155,8 @@ describe('placement', () => {
     assert.deepEqual(value(await placement.placeWaiting()), { waiting: 1, placed: 0 });
     assert.deepEqual(await stored('task-1'), before);
     assert.deepEqual([await assignmentsOf('task-1'), await offers()], [[], []]);
-    assert.deepEqual(value(await placement.placeWaiting()), { waiting: 1, placed: 0 });
+    assert.deepEqual(value(await placement.placeWaiting()), { waiting: 0, placed: 0 }, 'it backs off');
+    assert.deepEqual(value(await new PlacementService(database, TIMING).placeWaiting()), { waiting: 1, placed: 0 });
   });
 
   test('without a candidate no placement transaction is opened', async () => {
@@ -242,6 +243,26 @@ describe('placement', () => {
     await submit('task-b', 'run-2');
     assert.deepEqual(value(await placement.placeWaiting()), { waiting: PLACEMENT_BATCH, placed: 1 });
     assert.equal((await assignmentsOf('task-b')).length, 1);
+  });
+
+  test('a later pass reaches the next project once a full batch of blocked tasks backs off', async () => {
+    await enroll('worker-a');
+    const runs = new RunService(database, new WorkflowRegistry([{ definition, digest: DIGEST }]));
+    const projects = Array.from({ length: PLACEMENT_BATCH + 1 }, (_, index) => String(index + 1).padStart(3, '0'));
+    for (const project of projects) {
+      value(await runs.createRun({ runId: `run-${project}`, projectId: `project-${project}`, binding }));
+      await submit(`task-${project}`, `run-${project}`);
+    }
+    for (const project of projects.slice(0, PLACEMENT_BATCH)) {
+      await sql("INSERT INTO capacity_quotas (scope, scope_id, quota) VALUES ('project', $1, 0)", [`project-${project}`]);
+    }
+    const clock = { at: Date.now() };
+    const advancing = new PlacementService(database, { now: () => clock.at, draw: () => 0 });
+    assert.deepEqual(value(await advancing.placeWaiting()), { waiting: PLACEMENT_BATCH, placed: 0 });
+    clock.at += 1_000;
+    assert.deepEqual(value(await advancing.placeWaiting()), { waiting: 1, placed: 1 });
+    const placed = await sql<{ task_id: string }>('SELECT task_id FROM assignments');
+    assert.deepEqual(placed.map((row) => row.task_id), [`task-${projects.at(-1)}`]);
   });
 
   test('each placement reads the candidates again, so two tasks go to two workers', async () => {
