@@ -28,7 +28,7 @@ These are coordinator decisions for item 21, recorded in each of its changes.
 ## Decisions
 
 1. **What waits.** `placementNeed(task)` in the execution domain returns `open-attempt` for a task without attempts, `place` with the attempt for an active attempt that is not cancelled and owns no execution that can still run, and nothing otherwise. A task whose attempts have all ended does not wait: an automatic retry is 21b's.
-2. **Query columns.** The task repository writes `awaits_placement`, `active_attempt_id`, and `placement_waiting_since` (the task's `changedAt` while it waits) from `placementNeed`. The migration backfills them from the stored records, as the observability migration did. `PlacementQueue.waiting(limit)` reads the waiting tasks whose active attempt holds no reservation, with the project from `task_lineage`, in a READ COMMITTED read. The service orders them with `fairPlacementOrder`.
+2. **Query columns.** The task repository writes `awaits_placement`, `active_attempt_id`, and `placement_waiting_since` (the task's `changedAt` while it waits) from `placementNeed`. The migration backfills them from the stored records, as the observability migration did. `PlacementQueue.waiting(limit)` reads the waiting tasks whose active attempt holds no reservation, with the project from `task_lineage`, in a READ COMMITTED read. It selects the batch fairly before the limit: each task is ranked within its project by `placement_waiting_since` (`row_number()` partitioned by project), and the batch is ordered by that rank, then the waiting time, the project, and the task. One project's older tasks thus cannot fill the batch and hide another project's task. The in-memory adapter ranks the same way. The service orders the batch with `fairPlacementOrder`.
 3. **One transaction per task, all or nothing.** The transaction reloads the task and checks `placementNeed` again.
    - For `open-attempt`, it opens the first attempt.
    - For `place`, it claims the ownership when an assignment of the attempt already exists at the current ownership generation. Each placement thus carries its own generation.
@@ -37,7 +37,8 @@ These are coordinator decisions for item 21, recorded in each of its changes.
 5. **Candidates.** `PlacementWorkers.candidates()` returns the eligible workers, fewest held reservations first, then by `workerId`.
    - `worker-not-eligible`, `worker-capacity-exhausted`, and `control-not-enforceable` move to the next candidate.
    - Any other reason ends the try.
-   - When no candidate exists, no transaction is opened.
+   - Each task's transaction reads the candidates itself, so that a placement, and a serialization rerun of it, sees the reservations held before it.
+   - A cheap read before the tasks checks that any candidate exists; when none does, no transaction is opened.
    - A rejecting reason leaves the task waiting. Ending the attempt on it needs the outcome facts of 21b.
 6. **Default request.** `DEFAULT_ATTEMPT_REQUEST` is 1000 millicores, 2048 MiB, and no hard controls. There are no provider credentials in G2 (capacity reservation section 2).
 7. **Delegation.**
@@ -45,12 +46,18 @@ These are coordinator decisions for item 21, recorded in each of its changes.
    - **Order.** The child's run must exist and belong to the root's project. The child is admitted by SDLC admission like a submitted task, with its admission identity derived from the run and the child, and then by `admitDelegation`, starting from the stored start of the wait or from the database time.
    - **Admitted.** The service creates the child's admission and task and appends `sdlc.admission.used`, sharing these steps with `TaskService`; `admitDelegation` writes the lineage link.
    - **Record.** `DelegationRequests` stores the request's values, the worker, the state, the outcome, and `waitingSince`, with a generation for compare-and-set.
+   - **Taken child.** For a new `delegationId`, a child task identity already taken by a task or a lineage link is `conflict` (409). The check runs in the same transaction, before SDLC admission and the capacity decision, so that no waiting or rejected outcome hides it.
    - **Repeat.** A repeat with other values is `conflict` (409). A repeat of an admitted or rejected delegation returns the stored outcome.
-8. **Routes.** `requestDelegation` uses the worker credential, answers 200 with `DelegationOutcome`, and maps `forbidden` to 403 and the reason `worker-not-authorized` to 401, as `publishEvidence` does. It maps `conflict` to 409, and `precondition-failed` and `not-found` to 422.
+8. **Routes.** `requestDelegation` uses the worker credential, answers 200 with `DelegationOutcome`, and maps `forbidden` to 403 and the reason `worker-not-authorized` to 401, as `publishEvidence` does. It maps `conflict` to 409, and `precondition-failed` and `not-found` to 422. A store that is down is 503, and an internal failure 500, as on every route; `execution.openapi.json` 0.3.1 declares both for `requestDelegation`, a compatible addition.
 9. **Loop.** The composition root runs one placement pass every 5 seconds, a provisional value recorded in the operational targets. A pass handles at most 100 waiting tasks.
+10. **Backoff.** `PlacementService` applies the backoff of capacity reservation section 5 (exponential from 5 s to 60 s with jitter, through `placementBackoff`) in memory, because the per-task transaction rolls back and has nowhere durable to keep it.
+    - **Per task.** It counts each task's consecutive tries that placed nothing and skips the task until its next try. It forgets the task when it is placed, or when the task is absent from the latest waiting read, which also bounds the state.
+    - **Per pass.** After a pass ends in an outage (`unavailable` or `internal`), the next passes back off the same way; a successful pass resets them.
+    - **Timing.** The clock and the jitter draw are injected, as `RetryTiming` injects the draw; the composition root wires `Date.now` and `Math.random`.
+    - **Restart.** A restart forgets the backoff, so each waiting task is tried at the next pass. That is acceptable for the single control-plane instance of G2.
 
 ## Risks / Trade-offs
 
 - **No reachable worker yet.** First contact comes in 21b. Until then, only tests that seed reachable workers place anything.
 - **One control-plane instance.** As for item 16's loops: the SERIALIZABLE transaction and the held-reservation index keep several instances correct, but they would each run the loop.
-- **A task rejected for capacity keeps waiting.** It is placed again on each pass until 21b ends the attempt on a rejecting reason.
+- **A task rejected for capacity keeps waiting.** It is tried again after its backoff until 21b ends the attempt on a rejecting reason.

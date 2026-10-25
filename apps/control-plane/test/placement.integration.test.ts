@@ -4,6 +4,7 @@ import pg from 'pg';
 import { checkHttpSchema } from '@taskelith/contracts';
 import {
   DelegationService,
+  PLACEMENT_BATCH,
   PlacementService,
   RunService,
   TaskService,
@@ -59,14 +60,17 @@ const binding = {
 };
 const TABLES = [
   'workflow_runs', 'gates', 'admissions', 'tasks', 'assignments', 'outbox', 'task_lineage', 'capacity_charges', 'delegations',
-  'capacity_quotas', 'workers', 'installation', 'enrollment_tokens', 'delegation_requests',
+  'capacity_quotas', 'workers', 'installation', 'enrollment_tokens', 'delegation_requests', 'current_revisions',
 ];
 const CORRELATION = 'correlation-1' as CorrelationId;
 const tasks = new TaskService(database);
-const placement = new PlacementService(database);
 const delegations = new DelegationService(database);
+// No jitter; each test starts with a service that holds no backoff.
+const TIMING = { now: Date.now, draw: () => 0 };
+let placement: PlacementService;
 
 beforeEach(async () => {
+  placement = new PlacementService(database, TIMING);
   await sql(`TRUNCATE ${TABLES.join(', ')}`);
   await sql('INSERT INTO installation (quarantined, recovery_epoch) VALUES (false, 1)');
   const runs = new RunService(database, new WorkflowRegistry([{ definition, digest: DIGEST }]));
@@ -85,8 +89,12 @@ async function enroll(workerId: string, capacity: Partial<EnrolledWorker['capaci
   await sql('UPDATE workers SET reachable = true WHERE worker_id = $1', [workerId]);
 }
 
-async function submit(taskId: string): Promise<void> {
-  value(await tasks.submitTask('run-1', { taskId, kind: 'planning', stageId: 'specs' }, CORRELATION));
+async function submit(taskId: string, runId = 'run-1'): Promise<void> {
+  value(await tasks.submitTask(runId, { taskId, kind: 'planning', stageId: 'specs' }, CORRELATION));
+}
+
+async function createSecondRun(): Promise<void> {
+  value(await new RunService(database, new WorkflowRegistry([{ definition, digest: DIGEST }])).createRun({ runId: 'run-2', projectId: 'project-2', binding }));
 }
 
 async function stored(taskId: string): Promise<Task> {
@@ -153,7 +161,7 @@ describe('placement', () => {
   test('without a candidate no placement transaction is opened', async () => {
     await submit('task-1');
     const asked: string[] = [];
-    assert.deepEqual(value(await new PlacementService(spyingStore(asked)).placeWaiting()), { waiting: 1, placed: 0 });
+    assert.deepEqual(value(await new PlacementService(spyingStore(asked), TIMING).placeWaiting()), { waiting: 1, placed: 0 });
     assert.deepEqual(asked, []);
   });
 
@@ -162,7 +170,7 @@ describe('placement', () => {
     await enroll('worker-b');
     await submit('task-1');
     const asked: string[] = [];
-    assert.deepEqual(value(await new PlacementService(spyingStore(asked)).placeWaiting()), { waiting: 1, placed: 1 });
+    assert.deepEqual(value(await new PlacementService(spyingStore(asked), TIMING).placeWaiting()), { waiting: 1, placed: 1 });
     assert.deepEqual([...new Set(asked)], ['worker-a', 'worker-b']);
     assert.equal((await assignmentsOf('task-1'))[0]?.worker_id, 'worker-b');
   });
@@ -175,7 +183,7 @@ describe('placement', () => {
     await sql("INSERT INTO capacity_quotas (scope, scope_id, quota) VALUES ('project', 'project-1', 1)");
     await submit('task-2');
     const asked: string[] = [];
-    assert.deepEqual(value(await new PlacementService(spyingStore(asked)).placeWaiting()), { waiting: 1, placed: 0 });
+    assert.deepEqual(value(await new PlacementService(spyingStore(asked), TIMING).placeWaiting()), { waiting: 1, placed: 0 });
     assert.deepEqual([...new Set(asked)], ['worker-b'], 'worker-b holds fewer reservations');
     assert.deepEqual([(await stored('task-2')).attempts, await assignmentsOf('task-2')], [[], []]);
   });
@@ -215,13 +223,64 @@ describe('placement', () => {
 
   test('tasks are placed in fair order across projects', async () => {
     await enroll('worker-a', { slots: 2 });
-    value(await new RunService(database, new WorkflowRegistry([{ definition, digest: DIGEST }])).createRun({ runId: 'run-2', projectId: 'project-2', binding }));
+    await createSecondRun();
     await submit('task-1');
     await submit('task-2');
-    value(await tasks.submitTask('run-2', { taskId: 'task-3', kind: 'planning', stageId: 'specs' }, CORRELATION));
+    await submit('task-3', 'run-2');
     assert.deepEqual(value(await placement.placeWaiting()), { waiting: 3, placed: 2 });
     const placed = await sql<{ task_id: string }>('SELECT task_id FROM assignments ORDER BY task_id');
     assert.deepEqual(placed.map((row) => row.task_id), ['task-1', 'task-3'], 'project-2 is served before project-1 again');
+  });
+
+  test('a full batch of one project\'s older blocked tasks does not hide another project\'s task', async () => {
+    await enroll('worker-a', { slots: 4 });
+    await submit('task-a0');
+    value(await placement.placeWaiting());
+    await sql("INSERT INTO capacity_quotas (scope, scope_id, quota) VALUES ('project', 'project-1', 1)");
+    for (let index = 1; index <= PLACEMENT_BATCH + 1; index++) await submit(`task-a${index}`);
+    await createSecondRun();
+    await submit('task-b', 'run-2');
+    assert.deepEqual(value(await placement.placeWaiting()), { waiting: PLACEMENT_BATCH, placed: 1 });
+    assert.equal((await assignmentsOf('task-b')).length, 1);
+  });
+
+  test('each placement reads the candidates again, so two tasks go to two workers', async () => {
+    await enroll('worker-a');
+    await enroll('worker-b');
+    await submit('task-1');
+    await submit('task-2');
+    assert.deepEqual(value(await placement.placeWaiting()), { waiting: 2, placed: 2 });
+    const rows = await sql<{ worker_id: string }>('SELECT worker_id FROM assignments ORDER BY worker_id');
+    assert.deepEqual(rows.map((row) => row.worker_id), ['worker-a', 'worker-b']);
+  });
+
+  test('two concurrent passes over one task place it once, with one charge and one offer', async () => {
+    await enroll('worker-a');
+    await submit('task-1');
+    const passes = await Promise.all([placement.placeWaiting(), new PlacementService(database, TIMING).placeWaiting()]);
+    assert.equal(passes.reduce((sum, pass) => sum + value(pass).placed, 0), 1);
+    assert.equal((await assignmentsOf('task-1')).length, 1);
+    assert.equal((await sql('SELECT attempt_id FROM capacity_charges')).length, 1);
+    assert.equal((await offers()).length, 1);
+    assert.equal((await stored('task-1')).ownershipGeneration, 2);
+  });
+
+  test('a new placement that no candidate reserves rolls its ownership claim back', async () => {
+    await enroll('worker-a');
+    await submit('task-1');
+    value(await placement.placeWaiting());
+    const attemptId = (await stored('task-1')).attempts[0]!.id;
+    value(await database.transaction(async (tx) => {
+      const [held] = await tx.assignments.listByAttempt(attemptId);
+      const ended = endAssignment(held!, held!.generation, 'cancelled', { granted: false, nonTerminal: false }, await tx.now());
+      return ended.ok ? tx.assignments.replace(ended.value, held!.generation) : ended;
+    }));
+    await sql("INSERT INTO capacity_quotas (scope, scope_id, quota) VALUES ('project', 'project-1', 0)");
+    const before = await stored('task-1');
+    assert.deepEqual(value(await placement.placeWaiting()), { waiting: 1, placed: 0 });
+    assert.deepEqual(await stored('task-1'), before);
+    assert.equal(before.ownershipGeneration, 2);
+    assert.deepEqual((await assignmentsOf('task-1')).map((row) => row.reservation_state), ['released']);
   });
 });
 
@@ -299,10 +358,29 @@ describe('delegation', () => {
     assert.deepEqual([row?.state, Number(row?.generation)], ['admitted', 2]);
   });
 
+  for (const [slots, capacity] of [[2, 'free'], [1, 'not free']] as const) {
+    test(`a child identity already taken is a conflict while capacity is ${capacity}`, async () => {
+      const parent = await placedParent(slots);
+      await submit('task-taken');
+      const taken = request(parent, { child: { taskId: 'task-taken', kind: 'planning', stageId: 'specs' } });
+      assert.equal(failed(await delegations.requestDelegation(PRINCIPAL, taken, CORRELATION)).code, 'conflict');
+      assert.deepEqual(await sql('SELECT id FROM delegation_requests'), []);
+    });
+  }
+
+  test('an admitted child with artifacts seeds the current revisions of its run', async () => {
+    const parent = await placedParent();
+    const artifact = { artifactId: 'spec', digest: `sha256:${'cd'.repeat(32)}`, nativeReference: 'spec.md' };
+    const child = { taskId: 'task-child', kind: 'planning' as const, stageId: 'specs', artifacts: [artifact] };
+    assert.equal(value(await delegations.requestDelegation(PRINCIPAL, request(parent, { child }), CORRELATION)).state, 'admitted');
+    const rows = await sql<{ run_id: string; artifact_id: string; revision: string }>('SELECT run_id, artifact_id, revision FROM current_revisions');
+    assert.deepEqual(rows.map((row) => [row.run_id, row.artifact_id, JSON.parse(row.revision)]), [['run-1', 'spec', artifact]]);
+  });
+
   test('a child of an unknown run, of another project, or refused by SDLC admission stores nothing', async () => {
     const parent = await placedParent();
     assert.equal(failed(await delegations.requestDelegation(PRINCIPAL, request(parent, { runId: 'run-9' }), CORRELATION)).code, 'not-found');
-    value(await new RunService(database, new WorkflowRegistry([{ definition, digest: DIGEST }])).createRun({ runId: 'run-2', projectId: 'project-2', binding }));
+    await createSecondRun();
     assert.equal(failed(await delegations.requestDelegation(PRINCIPAL, request(parent, { runId: 'run-2' }), CORRELATION)).code, 'precondition-failed');
     const gated = request(parent, { child: { taskId: 'task-child', kind: 'implementation', stageId: 'apply', workItem: { id: 'w', nativeReference: 'r' } } });
     assert.equal(failed(await delegations.requestDelegation(PRINCIPAL, gated, CORRELATION)).code, 'precondition-failed');

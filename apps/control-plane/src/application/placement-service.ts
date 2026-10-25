@@ -19,6 +19,7 @@ import {
 } from '@taskelith/scheduling';
 import type { TaskId } from '@taskelith/sdlc';
 import type { ControlPlaneStore, ControlPlaneTransaction } from './control-plane-store.js';
+import { RetrySchedule, type BackoffTiming } from './retry-schedule.js';
 
 // Provisional (docs/operational-targets.md): the waiting tasks one pass reads.
 export const PLACEMENT_BATCH = 100;
@@ -32,37 +33,60 @@ export interface PlacementPass {
 // waiting task and reserves it on the first candidate that accepts it.
 export class PlacementService {
   readonly #store: ControlPlaneStore;
+  readonly #tasks: RetrySchedule<TaskId>;
+  readonly #passes: RetrySchedule<typeof PASS>;
 
-  constructor(store: ControlPlaneStore) {
+  constructor(store: ControlPlaneStore, timing: BackoffTiming) {
     this.#store = store;
+    this.#tasks = new RetrySchedule(timing);
+    this.#passes = new RetrySchedule(timing);
+  }
+
+  // A pass that backs off after an outage reads nothing. A task that is not
+  // placed backs off on its own, and one placed or no longer read is reset.
+  async placeWaiting(): Promise<Result<PlacementPass>> {
+    if (!this.#passes.due(PASS)) return ok({ waiting: 0, placed: 0 });
+    const pass = await this.#placeDue();
+    if (pass.ok) this.#passes.succeeded(PASS);
+    else if (isOutage(pass.error.code)) this.#passes.failed(PASS);
+    return pass;
   }
 
   // Each task in its own transaction, in fair order across projects; one
   // that no candidate accepts rolls back and keeps waiting unchanged.
-  async placeWaiting(): Promise<Result<PlacementPass>> {
+  async #placeDue(): Promise<Result<PlacementPass>> {
     const read = await this.#store.readCommitted(async (tx) => ok({
-      candidates: await tx.workers.candidates(),
+      anyCandidate: (await tx.workers.candidates()).length > 0,
       waiting: await tx.placements.waiting(PLACEMENT_BATCH),
     }));
     if (!read.ok) return read;
-    const { candidates, waiting } = read.value;
-    if (candidates.length === 0) return ok({ waiting: waiting.length, placed: 0 });
+    const { anyCandidate, waiting } = read.value;
+    this.#tasks.retainOnly(waiting.map((entry) => entry.item));
+    const due = fairPlacementOrder(waiting).filter((taskId) => this.#tasks.due(taskId));
     let placed = 0;
-    for (const taskId of fairPlacementOrder(waiting)) {
-      const outcome = await this.#store.transaction((tx) => placeTask(tx, taskId, candidates));
-      if (outcome.ok) placed++;
-      else if (isOutage(outcome.error.code)) return outcome;
+    for (const taskId of due) {
+      const outcome = anyCandidate ? await this.#store.transaction((tx) => placeTask(tx, taskId)) : NO_CANDIDATE;
+      if (outcome.ok) {
+        this.#tasks.succeeded(taskId);
+        placed++;
+      } else if (isOutage(outcome.error.code)) return outcome;
+      else this.#tasks.failed(taskId);
     }
     return ok({ waiting: waiting.length, placed });
   }
 }
 
-async function placeTask(tx: ControlPlaneTransaction, taskId: TaskId, candidates: readonly WorkerId[]): Promise<Result<Assignment>> {
+const PASS = 'pass';
+const NO_CANDIDATE: Result<never> = err(failure('precondition-failed', 'no candidate worker exists', { reason: 'no-candidate' }));
+
+// Reads the candidates in the task's transaction, so that each placement,
+// and each rerun of it, sees the reservations held before it.
+async function placeTask(tx: ControlPlaneTransaction, taskId: TaskId): Promise<Result<Assignment>> {
   const task = await tx.tasks.get(taskId);
   if (!task.ok) return task;
   const claimed = await claimPlacement(tx, task.value);
   if (!claimed.ok) return claimed;
-  return reserveOnCandidate(tx, claimed.value, candidates);
+  return reserveOnCandidate(tx, claimed.value, await tx.workers.candidates());
 }
 
 // Opens the first attempt, or claims the ownership when the active attempt

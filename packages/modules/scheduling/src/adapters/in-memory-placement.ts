@@ -28,7 +28,7 @@ export class InMemoryPlacementQueue implements PlacementQueue {
       const link = await this.#lineage.get(task.id);
       if (link !== undefined) waiting.push(Object.freeze({ projectId: link.projectId, waitingSince: task.changedAt, item: task.id }));
     }
-    return Object.freeze(waiting.sort(byWaitingSince).slice(0, limit));
+    return Object.freeze(rankedByProject(waiting).slice(0, limit));
   }
 
   #waits(task: Task): boolean {
@@ -38,8 +38,22 @@ export class InMemoryPlacementQueue implements PlacementQueue {
   }
 }
 
+// As the database queue: each task's rank within its project, oldest first,
+// orders the batch before the limit, so no project fills it alone.
+function rankedByProject(waiting: readonly WaitingPlacement<TaskId>[]): WaitingPlacement<TaskId>[] {
+  const ranks = new Map<WaitingPlacement<TaskId>, number>();
+  const counts = new Map<string, number>();
+  for (const entry of [...waiting].sort(byWaitingSince)) {
+    const rank = (counts.get(entry.projectId) ?? 0) + 1;
+    counts.set(entry.projectId, rank);
+    ranks.set(entry, rank);
+  }
+  return [...waiting].sort((left, right) => ranks.get(left)! - ranks.get(right)! || byWaitingSince(left, right));
+}
+
 function byWaitingSince(left: WaitingPlacement<TaskId>, right: WaitingPlacement<TaskId>): number {
-  return Date.parse(left.waitingSince) - Date.parse(right.waitingSince) || byCodeUnits(left.item, right.item);
+  return Date.parse(left.waitingSince) - Date.parse(right.waitingSince)
+    || byCodeUnits(left.projectId, right.projectId) || byCodeUnits(left.item, right.item);
 }
 
 // Checks and writes without awaiting, so concurrent writers cannot both

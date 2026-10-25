@@ -10,10 +10,17 @@ import {
   nextGeneration,
   parseOwnershipGeneration,
   type ConformanceCase,
+  type JsonObject,
 } from '@taskelith/sdlc';
 import { acceptAssignment, createAssignment, endAssignment, type Assignment } from '../domain/assignment.js';
 import { parseResourceRequest, type RunId } from '../domain/capacity-reservation.js';
-import { recordDelegation, redecideDelegation, type DelegationId, type DelegationRecord } from '../domain/delegation-request.js';
+import {
+  recordDelegation,
+  redecideDelegation,
+  type DelegationId,
+  type DelegationInput,
+  type DelegationRecord,
+} from '../domain/delegation-request.js';
 import type { AssignmentRepository } from './assignment-repository.js';
 import type { DelegationRequests } from './delegation-requests.js';
 
@@ -116,7 +123,7 @@ export const ASSIGNMENT_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Assignm
     },
   },
   {
-    name: 'the assignments of an attempt are listed by identity, held or not',
+    name: 'the assignments of an attempt are listed, held or not, in any order',
     async check(repository: AssignmentRepository) {
       const problems: string[] = [];
       const first = offered('assignment-2', 'attempt-1');
@@ -125,25 +132,30 @@ export const ASSIGNMENT_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Assignm
       expectSuccess(problems, 'release first', await repository.replace(ended(first), first.generation));
       expectSuccess(problems, 'add second', await repository.add(second));
       expectSuccess(problems, 'add other attempt', await repository.add(offered('assignment-3', 'attempt-2')));
-      expectSame(problems, 'listed', await repository.listByAttempt(first.attemptId), [second, ended(first)]);
+      const listed = [...await repository.listByAttempt(first.attemptId)].sort((left, right) => (left.id < right.id ? -1 : 1));
+      expectSame(problems, 'listed', listed, [second, ended(first)]);
       expectSame(problems, 'unknown attempt', await repository.listByAttempt(must(parseIdentifier('AttemptId', 'attempt-x'))), []);
       return problems;
     },
   },
 ]);
 
-function delegation(text: string): DelegationRecord {
-  return recordDelegation({
+function delegationInput(text: string, child: JsonObject = { taskId: 'task-child', kind: 'planning', stageId: 'specs' }): DelegationInput {
+  return {
     delegationId: must(parseIdentifier('DelegationId', text)) as DelegationId,
     workerId: must(parseIdentifier('WorkerId', 'worker-1')),
     values: {
       attemptId: must(parseIdentifier('AttemptId', 'attempt-1')),
       ownershipGeneration: must(parseOwnershipGeneration(2)),
       runId: must(parseIdentifier('RunId', 'run-1')) as RunId,
-      child: { taskId: 'task-child', kind: 'planning', stageId: 'specs' },
+      child,
     },
     waitingSince: AT,
-  }, { state: 'awaiting-capacity' });
+  };
+}
+
+function delegation(text: string): DelegationRecord {
+  return recordDelegation(delegationInput(text), { state: 'awaiting-capacity' });
 }
 
 export const DELEGATION_REQUESTS_CONFORMANCE: readonly ConformanceCase<DelegationRequests>[] = Object.freeze([
@@ -162,6 +174,21 @@ export const DELEGATION_REQUESTS_CONFORMANCE: readonly ConformanceCase<Delegatio
       expectCode(problems, 'unchanged generation', await requests.replace(rejected, rejected.generation), 'invalid');
       expectCode(problems, 'replace unknown', await requests.replace(redecideDelegation(delegation('delegation-x'), { state: 'awaiting-capacity' }), waiting.generation), 'not-found');
       expectRead(problems, 'after rejected writes', await requests.get(waiting.delegationId), rejected);
+      return problems;
+    },
+  },
+  {
+    name: 'a delegation does not change when the caller mutates its nested input after add',
+    async check(requests: DelegationRequests) {
+      const problems: string[] = [];
+      const child = { taskId: 'task-child', kind: 'planning', stageId: 'specs', workItem: { id: 'w', nativeReference: 'r' } };
+      const stored = recordDelegation(delegationInput('delegation-1', child), { state: 'awaiting-capacity' });
+      expectSuccess(problems, 'add', await requests.add(stored));
+      child.taskId = 'task-mutated';
+      child.workItem.id = 'w-mutated';
+      const read = await requests.get(stored.delegationId);
+      const readChild = read.ok ? read.value.values.child : undefined;
+      expectSame(problems, 'child', readChild, { taskId: 'task-child', kind: 'planning', stageId: 'specs', workItem: { id: 'w', nativeReference: 'r' } });
       return problems;
     },
   },

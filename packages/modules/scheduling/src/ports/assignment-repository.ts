@@ -9,6 +9,6 @@ export interface AssignmentRepository {
   get(id: AssignmentId): Promise<Result<Assignment>>;
   add(assignment: Assignment): Promise<Result<void>>;
   replace(assignment: Assignment, expectedGeneration: Generation): Promise<Result<void>>;
-  // Every assignment of the attempt, held or not, by identity.
+  // Every assignment of the attempt, held or not, in no specified order.
   listByAttempt(attemptId: AttemptId): Promise<readonly Assignment[]>;
 }

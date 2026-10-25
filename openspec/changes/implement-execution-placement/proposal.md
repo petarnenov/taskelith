@@ -26,10 +26,11 @@ Obligations left to the later changes. The coordinator moved first contact from 
   - The default request of an attempt: 1 vCPU and 2 GiB, as capacity reservation section 2 fixes.
 - **PostgreSQL.** A migration with the placement query columns of `tasks`, their backfill, and the `delegation_requests` table, with the adapters of the new ports.
 - **Control plane.**
-  - `PlacementService` places each waiting task in its own SERIALIZABLE transaction, in fair order across projects. The transaction opens or claims the attempt and reserves on the first candidate that accepts it. When no candidate accepts it, the transaction rolls back.
+  - `PlacementService` places each waiting task in its own SERIALIZABLE transaction, in fair order across projects. The transaction opens or claims the attempt and reserves on the first candidate that accepts it. When no candidate accepts it, the transaction rolls back. A task that is not placed, and the passes after a store outage, back off as capacity reservation section 5 requires.
   - `DelegationService` serves `requestDelegation`: it authenticates the worker, derives the parent from the attempt the worker holds, admits the child through SDLC admission and `admitDelegation`, and stores the outcome. A repeat returns the stored state.
   - The composition root runs the placement loop on a provisional interval.
-- **Documents.** The provisional placement interval in the operational targets.
+- **Contracts.** `execution.openapi.json` 0.3.1 declares the 500 and 503 failures of `requestDelegation`, a compatible addition.
+- **Documents.** The provisional placement interval in the operational targets, and the contract version in the execution wire contracts.
 
 ## Capabilities
 
@@ -41,4 +42,4 @@ None.
 
 ## Impact
 
-`packages/modules/execution`, `packages/modules/scheduling`, `packages/adapters/postgres`, `apps/control-plane`, and the operational targets. No new dependency and no contract change: `requestDelegation` is already in `execution.openapi.json` 0.2.1.
+`packages/modules/execution`, `packages/modules/scheduling`, `packages/adapters/postgres`, `packages/contracts`, `apps/control-plane`, the operational targets, and the execution wire contracts. No new dependency. A compatible contract change: `requestDelegation`, already in `execution.openapi.json`, gains its 500 and 503 failures in version 0.3.1.

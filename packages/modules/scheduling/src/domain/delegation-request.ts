@@ -50,7 +50,8 @@ export interface DelegationInput {
 }
 
 export function recordDelegation(input: DelegationInput, outcome: DelegationOutcome): DelegationRecord {
-  return Object.freeze({ ...input, outcome: Object.freeze({ ...outcome }), generation: FIRST_GENERATION });
+  const values = frozenCopy(input.values);
+  return Object.freeze({ ...input, values, outcome: Object.freeze({ ...outcome }), generation: FIRST_GENERATION });
 }
 
 export function redecideDelegation(record: DelegationRecord, outcome: DelegationOutcome): DelegationRecord {
@@ -72,4 +73,16 @@ function canonical(value: unknown): string {
     if (field === null || typeof field !== 'object' || Array.isArray(field)) return field;
     return Object.fromEntries(Object.entries(field).sort(([left], [right]) => (left < right ? -1 : 1)));
   });
+}
+
+// Independent of the caller and frozen at every depth, so that no reference
+// the caller keeps can change a stored record.
+function frozenCopy<Value>(value: Value): Value {
+  return deepFreeze(structuredClone(value));
+}
+
+function deepFreeze<Value>(value: Value): Value {
+  if (value === null || typeof value !== 'object') return value;
+  for (const field of Object.values(value)) deepFreeze(field);
+  return Object.freeze(value);
 }

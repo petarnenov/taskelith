@@ -295,4 +295,20 @@ export const PLACEMENT_QUEUE_CONFORMANCE: readonly ConformanceCase<PlacementQueu
       return problems;
     },
   },
+  {
+    name: 'the limit takes each project\'s oldest task before any project\'s next',
+    async check({ queue, tasks, lineage }: PlacementQueueConformanceTarget) {
+      const problems: string[] = [];
+      const older = [queuedTask('task-a1', at(0)), queuedTask('task-a2', at(1)), queuedTask('task-a3', at(2))];
+      const newer = queuedTask('task-b1', at(3));
+      for (const task of [...older, newer]) expectSuccess(problems, `add ${task.id}`, await tasks.add(task));
+      for (const task of older) expectSuccess(problems, `link ${task.id}`, await lineage.add(rootLink(task.id, 'project-a')));
+      expectSuccess(problems, `link ${newer.id}`, await lineage.add(rootLink(newer.id, 'project-b')));
+      const entry = (task: Task, project: string) => ({ projectId: project, waitingSince: task.changedAt, item: task.id });
+      const first = [entry(older[0]!, 'project-a'), entry(newer, 'project-b')];
+      expectSame(problems, 'limited', await queue.waiting(2), first);
+      expectSame(problems, 'all', await queue.waiting(10), [...first, entry(older[1]!, 'project-a'), entry(older[2]!, 'project-a')]);
+      return problems;
+    },
+  },
 ]);

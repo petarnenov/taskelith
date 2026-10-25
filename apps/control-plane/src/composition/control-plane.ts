@@ -138,7 +138,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   cleanup.push(async () => lag.stop());
   const publisher = new OutboxPublisher(new PostgresOutboxRelay(database), new JetStreamPublisher(broker.value.js), address.value, { logger, limits, fence });
   const sweep = settings.sweepMilliseconds ?? GRACE_WINDOW_SWEEP_MILLISECONDS;
-  const placement = new PlacementService(database);
+  const placement = new PlacementService(database, { now: Date.now, draw: Math.random });
   const placementPass = settings.placementMilliseconds ?? PLACEMENT_PASS_MILLISECONDS;
   let outcome: 'stopped' | 'failed' = 'stopped';
   let settle!: (value: 'stopped' | 'failed') => void;

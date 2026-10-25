@@ -7,6 +7,7 @@ export { ControlPlaneApi, type ApiServices } from './api/control-plane-api.js';
 export { DelegationService, type DelegationAnswer, type DelegationRequestBody } from './application/delegation-service.js';
 export { EvidenceService, type EvidenceDownload, type Publication } from './application/evidence-service.js';
 export { PLACEMENT_BATCH, PlacementService, type PlacementPass } from './application/placement-service.js';
+export { RetrySchedule, type BackoffTiming } from './application/retry-schedule.js';
 export type { EvidenceView } from './application/evidence-view.js';
 export { LaunchAuthority, type LaunchAuthoritySettings } from './application/launch-authority.js';
 export { RunService } from './application/run-service.js';

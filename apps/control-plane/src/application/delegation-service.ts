@@ -52,6 +52,8 @@ export class DelegationService {
       if (stored.error.code !== 'not-found') return stored;
       const parent = await heldParent(tx, delegation.value);
       if (!parent.ok) return parent;
+      const free = await checkChildFree(tx, delegation.value.childTaskId);
+      if (!free.ok) return free;
       const waitingSince = await tx.now();
       const outcome = await decide(tx, delegation.value, parent.value, waitingSince);
       if (!outcome.ok) return outcome;
@@ -94,6 +96,17 @@ async function heldParent(tx: ControlPlaneTransaction, delegation: Delegation): 
   return err(failure('forbidden', `the worker does not hold attempt ${attemptId} at ownership generation ${ownershipGeneration}`, {
     attempt: attemptId,
   }));
+}
+
+// A child identity already taken by a task or a lineage link is `conflict`,
+// found before admission, so that no capacity outcome hides it.
+async function checkChildFree(tx: ControlPlaneTransaction, childTaskId: TaskId): Promise<Result<void>> {
+  const task = await tx.tasks.get(childTaskId);
+  if (!task.ok && task.error.code !== 'not-found') return task;
+  if (task.ok || (await tx.lineage.get(childTaskId)) !== undefined) {
+    return err(failure('conflict', `task ${childTaskId} already exists`, { task: childTaskId }));
+  }
+  return ok(undefined);
 }
 
 // Another request under the same identity is `conflict`; a decided one is
