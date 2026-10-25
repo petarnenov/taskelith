@@ -311,6 +311,28 @@ test('enrollment presents the journal, host, protocol window, and capacity', () 
   assert.ok(violations(checkHttpSchema('EnrollmentRequest', { ...request, workerId: 'worker-1' })).some((text) => text.includes('workerId')));
 });
 
+test('declared capacity values fit a PostgreSQL integer at enrollment and in observations', () => {
+  const largestInteger = 2_147_483_647;
+  const capacity = { slots: 2, cpuMillicores: 4000, memoryMebibytes: 8192, enforceableControls: [] };
+  const enrollment = (declared: object) => ({
+    journalId: 'journal-1',
+    host: { platform: 'linux', architecture: 'x64', hostname: 'build-host' },
+    protocolVersions: SUPPORTED_PROTOCOL_VERSIONS,
+    capacity: declared,
+  });
+  const declaration = (declared: object) =>
+    observation('worker.capacity.declared', { capacity: declared, protocolVersions: SUPPORTED_PROTOCOL_VERSIONS });
+
+  for (const field of ['slots', 'cpuMillicores', 'memoryMebibytes']) {
+    const largest = { ...capacity, [field]: largestInteger };
+    const tooLarge = { ...capacity, [field]: largestInteger + 1 };
+    assert.ok(checkHttpSchema('EnrollmentRequest', enrollment(largest)).ok, field);
+    assert.ok(violations(checkHttpSchema('EnrollmentRequest', enrollment(tooLarge))).some((text) => text.includes(field)), field);
+    assert.ok(checkMessageSchema('CapacityDeclaredObservation', declaration(largest)).ok, field);
+    assert.ok(violations(checkMessageSchema('CapacityDeclaredObservation', declaration(tooLarge))).some((text) => text.includes(field)), field);
+  }
+});
+
 test('a launch authorization names the expected values and returns a decision', () => {
   const request = {
     operationId: 'operation-1',

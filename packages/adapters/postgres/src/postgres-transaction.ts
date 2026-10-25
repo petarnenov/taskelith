@@ -20,6 +20,7 @@ import {
   PostgresTaskRepository,
   PostgresWorkflowRunRepository,
 } from './repositories.js';
+import { PostgresCurrentRevisions, PostgresLaunchRecords } from './launch-repositories.js';
 import { PostgresFleetRegistry, PostgresInstallationTable, PostgresOperatorCredentials } from './fleet-repositories.js';
 import { PostgresRunCatalog } from './run-catalog.js';
 import type { Session } from './session.js';
@@ -48,6 +49,8 @@ export class PostgresTransaction {
   readonly signals: PostgresSignalReadings;
   readonly evidence: PostgresEvidenceRecords;
   readonly producers: PostgresEvidenceProducers;
+  readonly launches: PostgresLaunchRecords;
+  readonly revisions: PostgresCurrentRevisions;
   readonly #session: Session;
 
   constructor(session: Session) {
@@ -73,6 +76,8 @@ export class PostgresTransaction {
     this.signals = new PostgresSignalReadings(session);
     this.evidence = new PostgresEvidenceRecords(session);
     this.producers = new PostgresEvidenceProducers(session);
+    this.launches = new PostgresLaunchRecords(session);
+    this.revisions = new PostgresCurrentRevisions(session);
   }
 
   now(): Promise<Instant> {

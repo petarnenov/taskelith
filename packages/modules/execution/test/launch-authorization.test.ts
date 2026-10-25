@@ -9,6 +9,8 @@ import {
   authorizeLaunch,
   isGrantExpired,
   isLaunchAffected,
+  rejectUnknownAssignment,
+  workerLaunchDeadline,
   parseLaunchParameters,
   recordNotStarted,
   replayLaunchOperation,
@@ -148,6 +150,20 @@ test('expiry is computed from issuedAt and ttl and changes no state', () => {
   assert.equal(isGrantExpired(grant, T2), false);
   assert.equal(isGrantExpired(grant, T3), true);
   assert.equal(grant.state, 'granted');
+});
+
+test("the worker's deadline is its first reading plus ttl less skew, whatever its wall clock", () => {
+  const parameters = value(parseLaunchParameters({ ttlMilliseconds: 30_000, skewMilliseconds: 5_000 }));
+  assert.equal(workerLaunchDeadline(1_000, parameters), 26_000);
+});
+
+test('an unknown assignment is rejected after the installation and worker checks', () => {
+  const { task } = authorized();
+  const request = launchRequest(task);
+  const context = launchContext(task);
+  assert.equal(rejectUnknownAssignment(request, context).reason, 'assignment-not-active');
+  assert.equal(rejectUnknownAssignment(request, { ...context, workerAuthorized: false }).reason, 'worker-not-authorized');
+  assert.equal(rejectUnknownAssignment(request, { ...context, installation: { ...context.installation, quarantined: true } }).reason, 'quarantined');
 });
 
 test('launch parameters need a skew shorter than the ttl', () => {

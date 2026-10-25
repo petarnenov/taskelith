@@ -15,13 +15,13 @@ import { err, failure, instantFromEpochMilliseconds, ok, type Instant, type Resu
 import { connectSystemAccount, NatsBrokerCredentials, type BrokerAuthority, type TransportTls } from '@taskelith/nats';
 import type { Logger, Metrics } from '@taskelith/observability';
 import {
-  CommittingFleetRegistry,
   CommittingInstallationTable,
   CommittingOperatorCredentials,
   migrate,
   PostgresDatabase,
 } from '@taskelith/postgres';
 import { NodeSecrets, RandomIdentifiers } from '@taskelith/secrets';
+import { LaunchRevokingFleetRegistry } from '../composition/launch-revoking-fleet-registry.js';
 import { ensureBrokerTrust, readBrokerAuthority } from './broker-trust.js';
 
 export interface AdministrationSettings {
@@ -136,7 +136,7 @@ export class Administration {
     const service = new EnrollmentService({
       installation: identity.value,
       serverProtocolVersions: SUPPORTED_PROTOCOL_VERSIONS,
-      registry: new CommittingFleetRegistry(this.#database),
+      registry: new LaunchRevokingFleetRegistry(this.#database),
       secrets: this.#secrets,
       ids: new RandomIdentifiers(),
       broker: new NatsBrokerCredentials(authority.value, system.value.connection),

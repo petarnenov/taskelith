@@ -88,6 +88,12 @@ export {
   type ReleaseRequest,
 } from './application/capacity-operations.js';
 export type { CommandIdentity, WorkerCommandType } from './application/capacity-commands.js';
+export {
+  invalidateLaunches,
+  invalidateWorkerLaunches,
+  type Invalidation,
+  type InvalidationTransaction,
+} from './application/launch-invalidation.js';
 export { ResourceAdmissionService, type RetryTiming } from './application/resource-admission-service.js';
 export {
   ADMISSION_PRESSURE_SUPERSESSION_BOUND_MILLISECONDS,

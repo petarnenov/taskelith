@@ -13,6 +13,7 @@ import { ok, type Instant } from '@taskelith/kernel';
 import { InMemoryTaskLineage } from '@taskelith/scheduling';
 import {
   InMemoryAdmissionRepository,
+  InMemoryCurrentRevisions,
   InMemoryGateRepository,
   InMemoryOutbox,
   InMemoryRunCatalog,
@@ -74,6 +75,9 @@ async function fixture(): Promise<Fixture> {
     evidence: new InMemoryEvidenceRecords(),
     producers: { heldGenerations: async (workerId, attemptId) => ok(held.get(`${workerId}/${attemptId}`) ?? []) },
     fleet: { worker: async (workerId) => ok(workers.get(workerId) as never) },
+    revisions: new InMemoryCurrentRevisions(),
+    // Only the launch authority reads these.
+    assignments: undefined as never, installation: undefined as never, launches: undefined as never,
     now: async () => clock.now,
   };
   const store: ControlPlaneStore = { transaction: (work) => work(transaction), readCommitted: (work) => work(transaction) };

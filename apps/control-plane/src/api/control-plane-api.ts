@@ -1,4 +1,5 @@
 import type { HttpSchemas } from '@taskelith/contracts';
+import type { LaunchAuthorizationRequest, LaunchOutcome } from '@taskelith/execution';
 import type { Enrollment, EnrollmentRequest, WorkerPrincipal } from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import type { QuarantineRecord } from '@taskelith/nats';
@@ -7,10 +8,9 @@ import type { EvidenceService } from '../application/evidence-service.js';
 import type { RunService } from '../application/run-service.js';
 import type { TaskService } from '../application/task-service.js';
 import { StatusAnswer, type ApiHandlers, type ApiRequest, type Upload } from './api-server.js';
+import { launchOutcomeBody, parseLaunchAuthorizationRequest } from './launch-wire.js';
 
 export const QUARANTINE_PAGE = 100;
-// The capacity columns are PostgreSQL integers.
-export const MAX_CAPACITY_VALUE = 2_147_483_647;
 export const QUARANTINE_REASON_LENGTH = 512;
 
 // The operations the API reaches beyond the run and task use cases.
@@ -23,6 +23,9 @@ export interface ApiServices {
   readonly enrollment: {
     enroll(tokenSecret: string, request: EnrollmentRequest): Promise<Result<Enrollment>>;
     authenticateWorkerBearer(secret: string): Promise<Result<WorkerPrincipal>>;
+  };
+  readonly launches: {
+    authorize(principal: WorkerPrincipal, request: LaunchAuthorizationRequest): Promise<Result<LaunchOutcome>>;
   };
   readonly quarantine: {
     records(fromSequence?: number, limit?: number): Promise<Result<readonly QuarantineRecord[]>>;
@@ -68,6 +71,8 @@ export class ControlPlaneApi implements ApiHandlers {
         return this.#download(first);
       case 'enrollWorker':
         return this.#enroll(bearer, request.body as HttpSchemas['EnrollmentRequest']);
+      case 'authorizeLaunch':
+        return this.#authorizeLaunch(request);
       case 'listQuarantine':
         return this.#listQuarantine(request.query);
       case 'redriveQuarantined':
@@ -81,10 +86,6 @@ export class ControlPlaneApi implements ApiHandlers {
     const journalId = parseIdentifier('JournalId', body.journalId);
     if (!journalId.ok) return journalId;
     const { slots, cpuMillicores, memoryMebibytes, enforceableControls } = body.capacity;
-    // Checked before the token is presented, so a refusal consumes nothing.
-    if ([slots, cpuMillicores, memoryMebibytes].some((amount) => amount > MAX_CAPACITY_VALUE)) {
-      return err(failure('invalid', `a capacity value exceeds ${MAX_CAPACITY_VALUE}`));
-    }
     const enrolled = await this.#services.enrollment.enroll(tokenSecret, {
       journalId: journalId.value,
       host: body.host,
@@ -94,6 +95,14 @@ export class ControlPlaneApi implements ApiHandlers {
     if (!enrolled.ok) return enrolled;
     const { installationId, workerId, credentialGeneration, recoveryEpoch, protocolVersions, credentials } = enrolled.value;
     return ok({ installationId, workerId, credentialGeneration, recoveryEpoch, protocolVersions, credentials });
+  }
+
+  async #authorizeLaunch(request: ApiRequest): Promise<Result<HttpSchemas['LaunchAuthorizationOutcome']>> {
+    if (request.worker === undefined) return err(failure('internal', 'a worker operation has no principal'));
+    const values = parseLaunchAuthorizationRequest(request.body as HttpSchemas['LaunchAuthorizationRequest']);
+    if (!values.ok) return values;
+    const outcome = await this.#services.launches.authorize(request.worker, values.value);
+    return outcome.ok ? ok(launchOutcomeBody(outcome.value)) : outcome;
   }
 
   async #publish({ worker, body }: ApiRequest): Promise<Result<StatusAnswer>> {

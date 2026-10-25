@@ -88,6 +88,8 @@ export async function openAdmittedTask(
     () => tx.admissions.add(admitted),
     () => tx.admissions.replace(used.value, admitted.generation),
     () => tx.catalog.bindAdmission(used.value.id, run.id),
+    // Until a G3 writer exists, the first bound revision is the current one.
+    () => tx.revisions.seed(run.id, used.value.artifacts),
     () => tx.tasks.add(task.value),
   ];
   for (const step of steps) {

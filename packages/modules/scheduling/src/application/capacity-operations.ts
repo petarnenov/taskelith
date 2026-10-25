@@ -236,5 +236,5 @@ async function revokeRunningLaunch(tx: CapacityTransaction, assignment: Assignme
   if (!revoked.ok) return revoked;
   const stored = await tx.tasks.replace(revoked.value, task.generation);
   if (!stored.ok) return stored;
-  return appendWorkerCommand(tx, request, 'execution.cancellation.request', assignment, at, cancellationPayload());
+  return appendWorkerCommand(tx, request, 'execution.cancellation.request', assignment, at, cancellationPayload('assignment-ended'));
 }

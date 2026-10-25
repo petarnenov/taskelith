@@ -76,6 +76,8 @@ export {
 export { planJournalRecovery, type RecoveryAction } from './domain/journal-recovery.js';
 export {
   authorizeLaunch,
+  checkLaunchPreconditions,
+  rejectUnknownAssignment,
   replayLaunchOperation,
   type GrantIssue,
   type LaunchAssignment,
@@ -83,11 +85,13 @@ export {
   type LaunchContext,
   type LaunchRequest,
   type LaunchReservation,
+  type LaunchOutcome,
   type ReplayOutcome,
 } from './domain/launch-authorization.js';
 export {
   GRANT_STATES,
   isGrantExpired,
+  workerLaunchDeadline,
   parseLaunchParameters,
   type GrantState,
   type LaunchGrant,
@@ -99,6 +103,7 @@ export {
   LAUNCH_REJECTION_REASONS,
   RETRYABLE_LAUNCH_REJECTIONS,
   REVOCATION_REASONS,
+  launchRejection,
   type LaunchRejection,
   type LaunchRejectionReason,
   type RevocationReason,
@@ -162,9 +167,16 @@ export { EVIDENCE_RECORDS_CONFORMANCE, EVIDENCE_STORE_CONFORMANCE } from './port
 export type { EvidenceRecords } from './ports/evidence-records.js';
 export type { EvidenceStore } from './ports/evidence-store.js';
 export type { Inbox, InboxOutcome } from './ports/inbox.js';
+export type { LaunchAuthorityClient, LaunchAuthorizationRequest } from './ports/launch-authority-client.js';
+export type { LaunchPredicate, LaunchRecords, RecordedLaunch, RecordedRejection } from './ports/launch-records.js';
 export type { Outbox, OutboxMessage } from './ports/outbox.js';
 // The outbox ports are structurally identical, so they share one suite.
 export { OUTBOX_CONFORMANCE } from '@taskelith/sdlc';
-export { INBOX_CONFORMANCE, TASK_REPOSITORY_CONFORMANCE } from './ports/repository-conformance.js';
+export {
+  INBOX_CONFORMANCE,
+  LAUNCH_RECORDS_CONFORMANCE,
+  TASK_REPOSITORY_CONFORMANCE,
+  type LaunchRecordsConformanceTarget,
+} from './ports/repository-conformance.js';
 export type { TaskRepository } from './ports/task-repository.js';
 export type { WorkerJournal } from './ports/worker-journal.js';

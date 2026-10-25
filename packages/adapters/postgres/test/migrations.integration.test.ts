@@ -18,6 +18,7 @@ const ENROLLMENT = '1792930800000_installation-and-enrollment';
 const CONTROL_PLANE_API = '1792931200000_control-plane-api';
 const WORKER_BEARER = '1792931600000_worker-bearer-authentication';
 const EVIDENCE_STORE = '1792931700000_evidence-store';
+const LAUNCH_AUTHORITY = '1792932000000_launch-authority';
 const EXECUTION_PLACEMENT = '1792932100000_execution-placement';
 
 async function copiedMigrations(): Promise<string> {
@@ -29,18 +30,19 @@ async function copiedMigrations(): Promise<string> {
 
 test('migrations apply once, record their checksums, and create the schema', async () => {
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
-  assert.deepEqual(await migrate(url), { ok: true, value: [INITIAL, RESOURCE_ADMISSION, OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE, EXECUTION_PLACEMENT] });
+  assert.deepEqual(await migrate(url), { ok: true, value: [INITIAL, RESOURCE_ADMISSION, OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE, LAUNCH_AUTHORITY, EXECUTION_PLACEMENT] });
   assert.deepEqual(await migrate(url), { ok: true, value: [] });
   const checksums = await query<{ name: string; sha256: string }>(url, 'SELECT name, sha256 FROM schema_migration_checksums');
-  assert.deepEqual(checksums.map((row) => row.name).sort(), [INITIAL, RESOURCE_ADMISSION, OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE, EXECUTION_PLACEMENT]);
+  assert.deepEqual(checksums.map((row) => row.name).sort(), [INITIAL, RESOURCE_ADMISSION, OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE, LAUNCH_AUTHORITY, EXECUTION_PLACEMENT]);
   assert.match(checksums[0]!.sha256, /^[0-9a-f]{64}$/);
   const tables = await query<{ table_name: string }>(
     url, "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name",
   );
   assert.deepEqual(tables.map((row) => row.table_name), [
-    'admissions', 'assignments', 'audit_events', 'broker_revocations', 'capacity_charges', 'capacity_quotas', 'delegation_requests', 'delegations', 'enrollment_tokens', 'evidence', 'gates',
-    'inbox', 'installation', 'operator_credentials', 'outbox', 'schema_migration_checksums', 'schema_migrations', 'task_lineage',
-    'tasks', 'workers', 'workflow_runs',
+    'admissions', 'assignments', 'audit_events', 'broker_revocations', 'capacity_charges', 'capacity_quotas', 'current_revisions',
+    'delegation_requests', 'delegations', 'enrollment_tokens', 'evidence', 'gates', 'inbox', 'installation', 'launch_authorizations',
+    'launch_rejections', 'operator_credentials', 'outbox', 'schema_migration_checksums', 'schema_migrations', 'task_lineage', 'tasks',
+    'workers', 'workflow_runs',
   ]);
 });
 
@@ -48,7 +50,7 @@ test('the signals migration copies the state, change time, and unknown execution
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   const directory = await copiedMigrations();
   // The signals migration and every later one wait, so they apply in order.
-  const held = [OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE, EXECUTION_PLACEMENT].map((name) => join(directory, `${name}.sql`));
+  const held = [OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE, LAUNCH_AUTHORITY, EXECUTION_PLACEMENT].map((name) => join(directory, `${name}.sql`));
   const contents = await Promise.all(held.map((path) => readFile(path, 'utf8')));
   await Promise.all(held.map((path) => unlink(path)));
   assert.equal((await migrate(url, directory)).ok, true);
@@ -68,7 +70,7 @@ test('the signals migration copies the state, change time, and unknown execution
       [`${task.id}-${task.generation}`, task.admissionId, JSON.stringify({ ...task, probe })]);
   }
   await Promise.all(held.map((path, index) => writeFile(path, contents[index]!)));
-  assert.deepEqual(await migrate(url, directory), { ok: true, value: [OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE, EXECUTION_PLACEMENT] });
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: [OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE, LAUNCH_AUTHORITY, EXECUTION_PLACEMENT] });
   const [row] = await query<{ state: string; changed_at: Date }>(url, 'SELECT state, changed_at FROM assignments');
   assert.deepEqual([row!.state, row!.changed_at.toISOString()], ['offered', AT]);
   const tasks = await query<{ unknown_executions: number }>(url, 'SELECT unknown_executions FROM tasks ORDER BY unknown_executions');
@@ -79,7 +81,7 @@ test('the bearer migration copies the control-plane hashes of enrolled workers',
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   const directory = await copiedMigrations();
   // The bearer migration and every later one wait, so they apply in order.
-  const held = [WORKER_BEARER, EVIDENCE_STORE, EXECUTION_PLACEMENT].map((name) => join(directory, `${name}.sql`));
+  const held = [WORKER_BEARER, EVIDENCE_STORE, LAUNCH_AUTHORITY, EXECUTION_PLACEMENT].map((name) => join(directory, `${name}.sql`));
   const contents = await Promise.all(held.map((path) => readFile(path, 'utf8')));
   await Promise.all(held.map((path) => unlink(path)));
   assert.equal((await migrate(url, directory)).ok, true);
@@ -93,7 +95,7 @@ test('the bearer migration copies the control-plane hashes of enrolled workers',
     [worker.workerId, 'revokedAt' in worker, worker.journalId, JSON.stringify(worker), worker.credentials.previous?.validUntil ?? null]);
   }
   await Promise.all(held.map((path, index) => writeFile(path, contents[index]!)));
-  assert.deepEqual(await migrate(url, directory), { ok: true, value: [WORKER_BEARER, EVIDENCE_STORE, EXECUTION_PLACEMENT] });
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: [WORKER_BEARER, EVIDENCE_STORE, LAUNCH_AUTHORITY, EXECUTION_PLACEMENT] });
   const rows = await query<{ control_plane_hash: string; previous_control_plane_hash: string | null; enrollment: string }>(
     url, 'SELECT control_plane_hash, previous_control_plane_hash, enrollment FROM workers ORDER BY worker_id',
   );
@@ -101,6 +103,44 @@ test('the bearer migration copies the control-plane hashes of enrolled workers',
     ['cp-w1-1', null], ['cp-new', 'cp-old'], ['cp-w3-1', null],
   ]);
   assert.equal(rows[0]!.enrollment, JSON.stringify(current), 'the record itself is unchanged');
+});
+
+test('the launch migration indexes the grants of stored task records', async () => {
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  const directory = await copiedMigrations();
+  // The placement migration waits too, so they apply in order.
+  const held = [LAUNCH_AUTHORITY, EXECUTION_PLACEMENT].map((name) => join(directory, `${name}.sql`));
+  const contents = await Promise.all(held.map((path) => readFile(path, 'utf8')));
+  await Promise.all(held.map((path) => unlink(path)));
+  assert.equal((await migrate(url, directory)).ok, true);
+  const offered = assignment('assignment-1');
+  const authorized = authorizedUnder(placedTask('task-1', 'attempt-1'), offered.id, offered.workerId);
+  const grant = authorized.attempts[0]!.executions[0]!.grants[0]!;
+  // An identifier may hold a backslash or a quote, which the mask keeps.
+  const artifact = { artifactId: 'spec\\"1', digest: `sha256:${'aa'.repeat(32)}`, nativeReference: 'spec\uD800.md' };
+  const stored = JSON.parse(JSON.stringify(authorized));
+  stored.attempts[0].executions[0].grants[0].artifacts = [artifact];
+  await query(url, 'INSERT INTO tasks (id, admission_id, generation, record) VALUES ($1, $2, 1, $3)',
+    [authorized.id, authorized.admissionId, JSON.stringify({ ...stored, probe: 'spec\uD800.md \u0000 \\ud800' })]);
+  const used = { ...JSON.parse(JSON.stringify(usedAdmission('task-1'))), artifacts: [artifact, { ...artifact, artifactId: 'design' }] };
+  const later = { ...used, id: 'admission-z-later', artifacts: [{ ...artifact, digest: `sha256:${'bb'.repeat(32)}` }] };
+  for (const admission of [used, later]) {
+    await query(url, `INSERT INTO admissions (id, generation, state, artifact_ids, record, run_id) VALUES ($1, 1, 'used', '{}', $2, 'run-1')`,
+      [admission.id, JSON.stringify(admission)]);
+  }
+  await Promise.all(held.map((path, index) => writeFile(path, contents[index]!)));
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: [LAUNCH_AUTHORITY, EXECUTION_PLACEMENT] });
+  const rows = await query(url, `SELECT launch_auth_id, worker_id, operation_id, task_id, attempt_id, assignment_id, execution_id,
+    run_id, relied_on_gates, artifact_ids, live FROM launch_authorizations`);
+  assert.deepEqual(rows, [{
+    launch_auth_id: grant.launchAuthId, worker_id: grant.workerId, operation_id: grant.operationId, task_id: authorized.id,
+    attempt_id: grant.attemptId, assignment_id: grant.assignmentId, execution_id: grant.executionId, run_id: null,
+    relied_on_gates: [...grant.reliedOnGates], artifact_ids: [artifact.artifactId], live: true,
+  }]);
+  const revisions = await query<{ artifact_id: string; revision: string }>(url, 'SELECT artifact_id, revision FROM current_revisions ORDER BY artifact_id');
+  assert.deepEqual(revisions.map((row) => [row.artifact_id, JSON.parse(row.revision).digest]), [
+    ['design', artifact.digest], [artifact.artifactId, artifact.digest],
+  ], 'the first used admission of the run seeds each artifact');
 });
 
 test('the placement migration derives the queue columns of stored tasks', async () => {

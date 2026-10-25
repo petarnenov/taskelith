@@ -1,8 +1,14 @@
 import type { Result } from '@taskelith/kernel';
-import type { AttemptId, EvidenceRecords, WorkerId } from '@taskelith/execution';
+import type { AttemptId, EvidenceRecords, LaunchRecords, WorkerId } from '@taskelith/execution';
 import type { EnrolledWorker } from '@taskelith/fleet';
 import type { CapacityTransaction, DelegationRequests, PlacementQueue } from '@taskelith/scheduling';
-import type { GateRepository, OwnershipGeneration, RunCatalog, WorkflowRunRepository } from '@taskelith/sdlc';
+import type {
+  CurrentRevisions,
+  GateRepository,
+  OwnershipGeneration,
+  RunCatalog,
+  WorkflowRunRepository,
+} from '@taskelith/sdlc';
 
 // What the use cases read and write in one SERIALIZABLE transaction, the
 // reservation's included. PostgresTransaction provides it.
@@ -13,6 +19,8 @@ export interface ControlPlaneTransaction extends CapacityTransaction {
   readonly evidence: EvidenceRecords;
   readonly producers: EvidenceProducers;
   readonly fleet: WorkerDirectory;
+  readonly revisions: CurrentRevisions;
+  readonly launches: LaunchRecords;
   readonly placements: PlacementQueue;
   readonly delegations: DelegationRequests;
 }

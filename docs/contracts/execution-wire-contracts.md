@@ -6,8 +6,8 @@ Date: 2026-10-25. Status: proposed wire contract for G2 ([G2 work plan](../g2-pl
 
 | Document | Version | Content |
 | --- | --- | --- |
-| [`execution.asyncapi.json`](../../packages/contracts/documents/execution.asyncapi.json) | 0.1.0 | Commands to a worker and observations from it, over NATS JetStream |
-| [`execution.openapi.json`](../../packages/contracts/documents/execution.openapi.json) | 0.2.1 | Enrollment, launch authorization, delegation, task results, evidence with its 400, 500, and 503 failures (item 19), and the quarantine with its redrive (item 16), over HTTPS; G2 serves it as plain HTTP on loopback, and TLS is G3 item 26 (D11) |
+| [`execution.asyncapi.json`](../../packages/contracts/documents/execution.asyncapi.json) | 0.2.0 | Commands to a worker and observations from it, over NATS JetStream |
+| [`execution.openapi.json`](../../packages/contracts/documents/execution.openapi.json) | 0.3.0 | Enrollment, launch authorization, delegation, task results, evidence with its 400, 500, and 503 failures (item 19), and the quarantine with its redrive (item 16), over HTTPS; G2 serves it as plain HTTP on loopback, and TLS is G3 item 26 (D11) |
 
 Both live in `@taskelith/contracts` beside the SDLC documents. The package generates one type and one validator per schema name from all four documents, so a name that several documents define must name the same schema; the build and the package tests fail otherwise. The execution documents reuse `CommandMetadata`, the identifiers, `ArtifactRevision`, and `Admission` of the SDLC documents. `Admission` gains the optional `ownershipGeneration` that a used admission carries ([`sdlc-task-admission`](../../openspec/specs/sdlc-task-admission/spec.md)), which the SDLC documents declare with version 0.2.0.
 
@@ -59,7 +59,7 @@ Each observation is an `ObservationMetadata` envelope with a fixed `observationT
 | Launch rejected | `execution.launch.rejected` | A non-retryable launch rejection (launch authorization section 9) |
 | Started, exited, not started, uncertain, termination unproven, unrecorded process | `execution.started`, `execution.exited`, `execution.not-started`, `execution.uncertain`, `execution.termination-unproven`, `execution.unrecorded-process` | The facts of supervisor identity section 11 |
 | Cancellation not applied | `execution.cancellation.not-applied` | An adopting supervisor on macOS (supervisor identity section 8) |
-| Capacity declared | `worker.capacity.declared` | At enrollment and whenever the slot count, CPU, memory, enforceable controls, or protocol window change |
+| Capacity declared | `worker.capacity.declared` | At enrollment and whenever the slot count, CPU, memory, enforceable controls, or protocol window change; each of the slot count, CPU, and memory is at most `2147483647`, the largest PostgreSQL `integer` |
 | Admission pressure changed | `worker.admission-pressure.changed` | The causes of admission pressure changed; an empty list clears it |
 
 The schemas also fix the dependencies between fields:
@@ -87,7 +87,7 @@ The schemas also fix the dependencies between fields:
 
 | Operation | Credential | Rules |
 | --- | --- | --- |
-| `enrollWorker` | Single-use enrollment token | The worker presents its new `journalId`, host, protocol window, and capacity; the response holds the `workerId`, the credential generation, the recovery epoch, the control plane's protocol window, and both credentials, whose content item 13 defines. |
+| `enrollWorker` | Single-use enrollment token | The worker presents its new `journalId`, host, protocol window, and capacity, with each capacity value at most `2147483647`; the response holds the `workerId`, the credential generation, the recovery epoch, the control plane's protocol window, and both credentials, whose content item 13 defines. |
 | `authorizeLaunch` | Worker credential | Status 200 carries the decision recorded for the `operationId`: a grant, a rejection, or, on a transport retry, `revoked` or `expired`. Status 503 means no decision was reached; the worker retries with the same `operationId` until its deadline. A rejection is `retryable` exactly for `quarantined` and `unavailable`, and a retry after it uses a new `operationId`. `skewMilliseconds` is less than `ttlMilliseconds`. The worker computes its deadline from its own suspend-inclusive clock (launch authorization section 7); `issuedAt` is never compared with the worker's clock. |
 | `requestDelegation` | Worker credential | The worker names the delegating attempt at its ownership generation and the child task; the control plane derives the parent and root, and admits, holds, or rejects the child with the reasons of capacity reservation section 7. A repeat with the same `delegationId` returns the current state. |
 | `readTaskResult` | Operator credential | `pending` until an attempt of the task ends; then the outcome of its last ended attempt, which does not accept the task's work, and the evidence records of the task. |

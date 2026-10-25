@@ -137,6 +137,13 @@ export interface WorkerPrincipal {
   readonly generation: number;
 }
 
+// The predecessor whose grace window has ended by `now`, if any; every
+// registry's sweep expires exactly this one.
+export function expiredPredecessor(credentials: WorkerCredentials, now: Instant): WorkerCredentials['previous'] {
+  const previous = credentials.previous;
+  return previous !== undefined && Date.parse(previous.validUntil) <= Date.parse(now) ? previous : undefined;
+}
+
 // The generations a presented secret may still use at `now`.
 export function validGenerations(credentials: WorkerCredentials, now: Instant): readonly CredentialGeneration[] {
   const previous = credentials.previous;

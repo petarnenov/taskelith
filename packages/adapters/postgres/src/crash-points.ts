@@ -3,7 +3,8 @@
 export type PostgresCrashPoint =
   | 'OutboxCommit.before' | 'OutboxCommit.after'
   | 'InboxCommit.before' | 'InboxCommit.after'
-  | 'OutboxPublish.before' | 'OutboxPublish.after';
+  | 'OutboxPublish.before' | 'OutboxPublish.after'
+  | 'LaunchAuthorizationCommit.before' | 'LaunchAuthorizationCommit.after';
 
 export interface CrashPointHook {
   reach(point: PostgresCrashPoint): void;

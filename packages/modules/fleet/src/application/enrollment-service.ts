@@ -115,8 +115,8 @@ export class EnrollmentService {
     return ok({ credentialGeneration: issued.value.generation.generation, credentials: issued.value.secrets, revocationsPublished });
   }
 
-  // Denies every credential of the worker at once; its active attempts
-  // become uncertain through reconciliation (item 21), never dead.
+  // Denies every credential of the worker at once; with item 17's registry
+  // its executions holding a live grant also become uncertain, never dead.
   async revoke(workerId: WorkerId): Promise<Result<void>> {
     const revoked = await this.#deps.registry.revoke(workerId, this.#deps.clock.now());
     if (!revoked.ok) return revoked;
