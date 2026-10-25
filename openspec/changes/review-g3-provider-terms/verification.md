@@ -28,7 +28,7 @@ Pass 1 (Claude Code):
 - Snapshot: worktree `57a41a08f7b5bd1f9e7bf51bc7d99e3de800c4d30ae888f9944e84da8997da66` and evidence directory `12342d515e5a5cfb59d226f5c4620fbc3fc7edf5c5ccc13d922b9118b84af03a`, both unchanged after the pass.
 - Quotes checked: all 29 GitHub, 27 Anthropic, and 33 OpenAI quotes matched their sources verbatim; dates and snapshots were correct.
 - Findings: 0 Critical, 4 High, 7 Medium, 11 Low. The High findings: a Usage Policy quote taken from the version effective 2026-11-12 instead of the version in force, with a wrong claim that the earlier version could not be read; and three omitted clauses more direct than those quoted (OpenAI's statement that app-server authentication was never permitted for commercial or hosted services; Anthropic's conditions that each end user authenticate with their own credentials and that customers may not intermediate Claude usage; the non-commercial clause of Anthropic's EEA consumer terms). The Medium findings: an overstated OpenAI written-permission route, omitted clauses (SIWC local-runtime rules, the open-source program, the Usage Policies intermediary clause, Anthropic's OAuth purpose clause, GitHub's meaningless pull requests and reviews and API suspension clauses), and this file missing before the pass. The Low findings concern quote context, source attribution, the records' source sentences, and the D15 row of the plan.
-- Resolutions, at head `44b0d68`, as pass 2 confirmed them:
+- Resolutions, at head `44b0d68`, as pass 2 confirmed them (line numbers as of `44b0d68`; later commits shift them):
   1. High, Usage Policy version: the quote comes from the 2025-09-15 version and the 2026-11-12 addition is noted (`claude-code.md:41,54`).
   2. High, app-server authentication never permitted for commercial or hosted services: quoted (`codex.md:66,70,89`).
   3. High, end users' own credentials, no intermediation, enforcement without prior notice: quoted (`claude-code.md:54,61,82`).
@@ -62,3 +62,23 @@ Pass 2 (Claude Code):
   11. Low: the SIWC section 4 lead-in "You must not enable or encourage:" quoted.
   12. Low: task 2.1 checked.
   13. Low: resolutions listed per finding in this file.
+
+Pass 3 (Claude Code), the last pass the cap allows:
+- Invocation as in pass 1, at head `8649dcb`; the prompt named both earlier sessions and asked the reviewer to confirm each pass-2 resolution, verify every quote changed since `44b0d68`, and spot-check the rest.
+- Model confirmation: `claude-fable-5-1` only. Session ID `6419c40e-0410-4439-b4c6-99348199248c`.
+- Snapshot: worktree `9904b0e14eac81e675e13dbb701afb318fa47335505cad0f49c24f29fb88b262` and evidence directory `fd5a6dd6f104b9c7ba3a96e7c8987494dbea99f10f3c312ea5ef73778ddfa187`, both unchanged after the pass.
+- Quotes checked: all 205 quoted strings matched their live or archived sources; all 13 pass-2 findings were confirmed resolved.
+- Findings: 0 Critical, 0 High, 1 Medium, 4 Low.
+  1. Medium, **open**: in the Usage Policy effective 2026-11-12, "or create multiple accounts, to avoid detection, circumvent product guardrails" stands as a prohibition of its own, not tied to malicious activity, while the record (`claude-code.md:54,57`) says the clause is tied to malicious activity and describes the later version only as an addition. By the review process, a Medium finding left after the third pass goes to the owner: fix it without review, accept it as a known risk, or defer it. It is not fixed in this change until the owner decides.
+  2. Low: the Consumer Terms and Commercial Terms clauses on reselling the Services are quoted, within their competing-products context. **Unreviewed fix.**
+  3. Low: GitHub's "One person or legal entity may maintain no more than one free Account" is quoted and applied to the reviewer identity. **Unreviewed fix.**
+  4. Low: the pass-1 resolution list states that its line numbers are as of `44b0d68`. **Unreviewed fix.**
+  5. Low: `design.md` records why the `scm-qualification` delta has no remaining-risk scenario. **Unreviewed fix.**
+
+## Limitations
+
+This is a record of what the terms say on 2026-10-25, not legal advice. Pages blocked to automated clients or varying by region were read from dated Wayback Machine snapshots. Neither Anthropic nor OpenAI was contacted. The Medium finding of pass 3 is open until the owner decides.
+
+## Remaining gates
+
+The owner's decision on the open Medium finding of pass 3; integration by the coordinator and archival; the owner's decision D15.

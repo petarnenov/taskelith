@@ -16,6 +16,7 @@ ADR 0005 pools many subscriptions per harness and project, selects the least-loa
 
 - **Placement.** Each provider's review goes into its existing qualification record, next to its terms table, because admission gates already live there; the D15 options stay here, so the records hold only findings.
 - **Spec delta.** The `harness-qualification` and `scm-qualification` capabilities gain a terms review requirement, because no existing requirement asks for quoted clauses, access dates, and an ambiguity statement; `skip_specs` would leave the gate unspecified.
+- **SCM scenario.** The `scm-qualification` requirement has no remaining-risk scenario, deliberately: no SCM option comparable to D15 is open, and its requirement text already leaves remaining risk to the owner.
 - **Evidence.** Research passes saved raw copies of every quoted page with SHA-256 hashes outside the repository; the quotes in the records were checked against them. Pages that blocked automated clients or varied by region were taken from dated Wayback Machine snapshots, and the records say so.
 
 ## Options for D15

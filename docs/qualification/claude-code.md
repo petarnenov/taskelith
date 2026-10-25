@@ -67,7 +67,9 @@ Legal and compliance, "Authentication and credential use": "OAuth authentication
 
 Legal and compliance, "License": the Consumer Terms apply "for Free, Pro, and Max users"; "Can customers offer Claude Code in their products?" requires the Commercial Terms for "running Claude Code in your products or services (e.g. in hosted sandboxes or other agent infrastructure)". Consumer Terms (EEA): "You are a consumer if you are acting wholly or mainly outside your trade, business, craft or profession"; section 11, "Disclaimer of warranties, limitations of liability, and indemnity", under "Non-commercial use only.": "You agree that you will not use our Services for any commercial or business purposes". No equivalent clause was found in the US variant.
 
-- The text says: a Pro or Max login is governed by the Consumer Terms and the Usage Policy; the SDK license points to the same legal page; in the EEA variant the user agrees not to use the Services for commercial or business purposes.
+Consumer Terms (EEA), section 3, among the prohibited uses: "To develop any products or services that compete with our Services, including to develop or train any artificial intelligence or machine learning algorithms or models or resell the Services." Commercial Terms, D.4 "Use Restrictions": "resell the Services except as expressly approved by Anthropic", within the clause on building a competing product.
+
+- The text says: a Pro or Max login is governed by the Consumer Terms and the Usage Policy; both sets of terms name reselling the Services, within their clauses on competing products; the SDK license points to the same legal page; in the EEA variant the user agrees not to use the Services for commercial or business purposes.
 - Ambiguous: whether Taskelith is "agent infrastructure" that requires the Commercial Terms while each login stays under the Consumer Terms; which terms govern an EEA subscriber whose work is professional; and whether the non-commercial clause, placed in the liability section, restricts use or only frames the liability exclusion in the same sentence.
 
 ### Data use for training
