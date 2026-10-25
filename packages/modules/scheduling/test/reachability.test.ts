@@ -1,12 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseIdentifier, parseInstant, type Instant, type Result } from '@taskelith/kernel';
+import { parseIdentifier, parseInstant, type Instant } from '@taskelith/kernel';
 import { firstContact, recordContact, recordContactLost } from '@taskelith/scheduling';
-
-function value<T>(result: Result<T>): T {
-  assert.ok(result.ok);
-  return result.value;
-}
+import { value } from '@taskelith/testing';
 
 function instant(text: string): Instant {
   return value(parseInstant(text));
