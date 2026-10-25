@@ -1,4 +1,4 @@
-import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type EventId, type Instant, type Result } from '@taskelith/kernel';
 import type {
   AssignmentExecutions,
   AssignmentId,
@@ -64,6 +64,8 @@ export interface Assignment {
   readonly attemptId: AttemptId;
   readonly workerId: WorkerId;
   readonly ownershipGeneration: OwnershipGeneration;
+  // The command that offered it, which a protocol rejection names.
+  readonly offerCommandId?: EventId;
   readonly state: AssignmentState;
   readonly end?: AssignmentEnd;
   readonly reservation: CapacityReservation;
@@ -76,6 +78,7 @@ export interface AssignmentInput {
   readonly attemptId: AttemptId;
   readonly workerId: WorkerId;
   readonly ownershipGeneration: OwnershipGeneration;
+  readonly offerCommandId?: EventId;
   readonly reservation: Omit<ReservationValues, 'createdAt'>;
 }
 
@@ -91,6 +94,7 @@ export function createAssignment(input: AssignmentInput, at: Instant): Assignmen
     attemptId: input.attemptId,
     workerId: input.workerId,
     ownershipGeneration: input.ownershipGeneration,
+    ...(input.offerCommandId === undefined ? {} : { offerCommandId: input.offerCommandId }),
     state: 'offered',
     reservation: heldReservation({ ...input.reservation, createdAt: at }),
     generation: FIRST_GENERATION,

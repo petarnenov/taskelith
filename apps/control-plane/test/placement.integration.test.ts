@@ -60,7 +60,7 @@ const binding = {
 };
 const TABLES = [
   'workflow_runs', 'gates', 'admissions', 'tasks', 'assignments', 'outbox', 'task_lineage', 'capacity_charges', 'delegations',
-  'capacity_quotas', 'workers', 'installation', 'enrollment_tokens', 'delegation_requests', 'current_revisions',
+  'capacity_quotas', 'workers', 'installation', 'enrollment_tokens', 'delegation_requests', 'current_revisions', 'producer_cursors',
 ];
 const CORRELATION = 'correlation-1' as CorrelationId;
 const tasks = new TaskService(database);
@@ -77,7 +77,8 @@ beforeEach(async () => {
   value(await runs.createRun({ runId: 'run-1', projectId: 'project-1', binding }));
 });
 
-// Enrolled and reachable; first contact is item 21b's, so it is set here.
+// Enrolled and reachable; these tests send no observation, the first
+// contact, so it is set here.
 async function enroll(workerId: string, capacity: Partial<EnrolledWorker['capacity']> = {}): Promise<void> {
   const worker = fleetWorker(workerId, `journal-${workerId}`, {
     capacity: { slots: 2, cpuMillicores: 4000, memoryMebibytes: 8192, controls: [], ...capacity },

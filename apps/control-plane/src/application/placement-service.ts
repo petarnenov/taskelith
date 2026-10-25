@@ -1,27 +1,30 @@
-import { createHash } from 'node:crypto';
 import {
+  activeAttempt,
   claimOwnership,
+  endAttempt,
   openAttempt,
   placementNeed,
   type AttemptId,
   type Task,
   type WorkerId,
 } from '@taskelith/execution';
-import { err, failure, ok, type Failure, type Identifier, type Instant, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Failure, type Instant, type Result } from '@taskelith/kernel';
 import {
   DEFAULT_ATTEMPT_REQUEST,
   fairPlacementOrder,
   placeInTransaction,
+  placementBackoff,
   triesNextCandidate,
-  type Assignment,
-  type CapacityReason,
+  type PlacementOutcome,
   type PlacementQueue,
   type PlacementRequest,
   type ProjectId,
 } from '@taskelith/scheduling';
 import type { TaskId } from '@taskelith/sdlc';
+import { derivedId, nextAttemptIdOf } from './attempt-identities.js';
 import type { ControlPlaneStore, ControlPlaneTransaction } from './control-plane-store.js';
 import { RetrySchedule, type BackoffTiming } from './retry-schedule.js';
+import { closeDelegationOf } from './task-ending.js';
 
 // Provisional (docs/operational-targets.md): the waiting tasks one pass reads.
 export const PLACEMENT_BATCH = 100;
@@ -35,13 +38,17 @@ export interface PlacementPass {
 // waiting task and reserves it on the first candidate that accepts it.
 export class PlacementService {
   readonly #store: ControlPlaneStore;
+  readonly #timing: BackoffTiming;
   readonly #tasks: RetrySchedule<TaskId>;
   readonly #passes: RetrySchedule<typeof PASS>;
+  // The due time of each task's unplaced retry, fixed by one jitter draw.
+  readonly #retries = new Map<TaskId, { readonly attemptId: AttemptId; readonly dueAt: number }>();
   // The last project read; the next read starts after it.
   #after: ProjectId | undefined;
 
   constructor(store: ControlPlaneStore, timing: BackoffTiming) {
     this.#store = store;
+    this.#timing = timing;
     this.#tasks = new RetrySchedule(timing);
     this.#passes = new RetrySchedule(timing);
   }
@@ -71,18 +78,41 @@ export class PlacementService {
     this.#after = waiting.at(-1)?.projectId ?? this.#after;
     let placed = 0;
     for (const taskId of fairPlacementOrder(waiting)) {
-      const outcome = anyCandidate ? await this.#store.transaction((tx) => placeTask(tx, taskId)) : NO_CANDIDATE;
+      const outcome = anyCandidate ? await this.#store.transaction((tx) => placeTask(tx, taskId, this.#retryBackoff)) : NO_CANDIDATE;
       if (!outcome.ok && isOutage(outcome.error.code)) return outcome;
-      if (outcome.ok) placed++;
-      if (outcome.ok || noLongerWaits(outcome.error)) this.#tasks.forget(taskId);
-      else this.#tasks.failed(taskId);
+      if (outcome.ok && outcome.value.kind === 'placed') placed++;
+      this.#settle(taskId, outcome);
     }
     return ok({ waiting: waiting.length, placed });
   }
 
+  // A retry that backs off is not read until due; a task placed or no
+  // longer waiting keeps no delay; any other one backs off once more.
+  #settle(taskId: TaskId, outcome: Result<TaskPlacement>): void {
+    if (outcome.ok && outcome.value.kind === 'backing-off') this.#tasks.delayUntil(taskId, outcome.value.dueAt);
+    else if (outcome.ok || noLongerWaits(outcome.error)) this.#forget(taskId);
+    else this.#tasks.failed(taskId);
+  }
+
+  // Capacity reservation section 5: from the retried attempt's end, the
+  // retry backs off by `placementBackoff` of its number.
+  readonly #retryBackoff: RetryBackoff = (taskId, retry) => {
+    const known = this.#retries.get(taskId);
+    const dueAt = known?.attemptId === retry.attemptId
+      ? known.dueAt
+      : retry.retriedEndedAt + placementBackoff(retry.retryNumber, this.#timing.draw());
+    this.#retries.set(taskId, { attemptId: retry.attemptId, dueAt });
+    return this.#timing.now() < dueAt ? dueAt : undefined;
+  };
+
   #forgetUnless(checked: readonly TaskId[], stillWaiting: readonly TaskId[]): void {
     const waits = new Set(stillWaiting);
-    for (const taskId of checked) if (!waits.has(taskId)) this.#tasks.forget(taskId);
+    for (const taskId of checked) if (!waits.has(taskId)) this.#forget(taskId);
+  }
+
+  #forget(taskId: TaskId): void {
+    this.#tasks.forget(taskId);
+    this.#retries.delete(taskId);
   }
 }
 
@@ -99,14 +129,43 @@ const PASS = 'pass';
 const NOT_WAITING = 'not-waiting';
 const NO_CANDIDATE: Result<never> = err(failure('precondition-failed', 'no candidate worker exists', { reason: 'no-candidate' }));
 
+// What a placement transaction committed: an assignment, the end of an
+// attempt that a rejecting reason refused, or nothing while a retry waits.
+type TaskPlacement =
+  | { readonly kind: 'placed' | 'ended' }
+  | { readonly kind: 'backing-off'; readonly dueAt: number };
+
+const PLACED: TaskPlacement = Object.freeze({ kind: 'placed' });
+const ENDED: TaskPlacement = Object.freeze({ kind: 'ended' });
+
+// An active attempt that retries an ended one and was never placed.
+interface UnplacedRetry {
+  readonly attemptId: AttemptId;
+  readonly retriedEndedAt: number;
+  // The task's attempts that retry another, this one included.
+  readonly retryNumber: number;
+}
+
+// The retry's due time in epoch milliseconds while it still backs off.
+type RetryBackoff = (taskId: TaskId, retry: UnplacedRetry) => number | undefined;
+
 // Reads the candidates in the task's transaction, so that each placement,
 // and each rerun of it, sees the reservations held before it.
-async function placeTask(tx: ControlPlaneTransaction, taskId: TaskId): Promise<Result<Assignment>> {
+async function placeTask(tx: ControlPlaneTransaction, taskId: TaskId, retryBackoff: RetryBackoff): Promise<Result<TaskPlacement>> {
   const task = await tx.tasks.get(taskId);
   if (!task.ok) return task;
+  const retry = await unplacedRetryOf(tx, task.value);
+  const dueAt = retry && retryBackoff(task.value.id, retry);
+  if (dueAt !== undefined) return ok({ kind: 'backing-off', dueAt });
   const claimed = await claimPlacement(tx, task.value);
   if (!claimed.ok) return claimed;
-  return reserveOnCandidate(tx, claimed.value, await tx.workers.candidates());
+  const reserved = await reserveOnCandidate(tx, claimed.value, await tx.workers.candidates());
+  if (!reserved.ok) return reserved;
+  const last = reserved.value;
+  if (last?.kind === 'placed') return ok(PLACED);
+  if (last?.kind === 'rejected') return endRejectedAttempt(tx, claimed.value);
+  const reason = last?.reason ?? 'no-candidate';
+  return err(failure('precondition-failed', `no candidate accepted task ${taskId}`, { task: taskId, reason }));
 }
 
 // Opens the first attempt, or claims the ownership when the active attempt
@@ -116,7 +175,7 @@ async function claimPlacement(tx: ControlPlaneTransaction, task: Task): Promise<
   if (need === undefined) return err(failure('precondition-failed', `task ${task.id} does not wait for placement`, { task: task.id, reason: NOT_WAITING }));
   const at = await tx.now();
   const next = need.kind === 'open-attempt'
-    ? openAttempt(task, task.ownershipGeneration, { id: attemptIdOf(task) }, at)
+    ? openAttempt(task, task.ownershipGeneration, { id: nextAttemptIdOf(task) }, at)
     : await claimPlacedAttempt(tx, task, need.attemptId, at);
   if (!next.ok || next.value === task) return next;
   const stored = await tx.tasks.replace(next.value, task.generation);
@@ -130,23 +189,46 @@ async function claimPlacedAttempt(tx: ControlPlaneTransaction, task: Task, attem
 }
 
 // Contract section 5: a reason about one worker tries the next candidate,
-// and any other one ends the try, as no candidate would accept it.
-async function reserveOnCandidate(tx: ControlPlaneTransaction, task: Task, candidates: readonly WorkerId[]): Promise<Result<Assignment>> {
+// and any other one ends the try; the last outcome, none without candidates.
+async function reserveOnCandidate(
+  tx: ControlPlaneTransaction, task: Task, candidates: readonly WorkerId[],
+): Promise<Result<PlacementOutcome | undefined>> {
   const request = placementRequest(task);
-  let reason: CapacityReason | undefined;
+  let last: PlacementOutcome | undefined;
   for (const workerId of candidates) {
     const placed = await placeInTransaction(tx, { ...request, workerId });
     if (!placed.ok) return placed;
-    if (placed.value.kind === 'placed') return ok(placed.value.assignment);
-    reason = placed.value.reason;
-    if (!triesNextCandidate(reason)) break;
+    last = placed.value;
+    if (last.kind === 'placed' || !triesNextCandidate(last.reason)) break;
   }
-  return err(failure('precondition-failed', `no candidate accepted task ${task.id}`, { task: task.id, reason: reason ?? 'no-candidate' }));
+  return ok(last);
 }
 
+// The attempt owns no execution, so it ends `not-started`; the task's
+// delegation closes, and no retry follows (capacity contract section 11).
+async function endRejectedAttempt(tx: ControlPlaneTransaction, task: Task): Promise<Result<TaskPlacement>> {
+  const at = await tx.now();
+  const ended = endAttempt(task, task.attempts.at(-1)!.id, at);
+  if (!ended.ok) return ended;
+  const stored = await tx.tasks.replace(ended.value, task.generation);
+  if (!stored.ok) return stored;
+  const closed = await closeDelegationOf(tx, task.id, at);
+  return closed.ok ? ok(ENDED) : closed;
+}
+
+async function unplacedRetryOf(tx: ControlPlaneTransaction, task: Task): Promise<UnplacedRetry | undefined> {
+  const attempt = activeAttempt(task);
+  const retried = task.attempts.find(({ id }) => id === attempt?.retryOf)?.outcome;
+  if (attempt === undefined || retried === undefined) return undefined;
+  if ((await tx.assignments.listByAttempt(attempt.id)).length > 0) return undefined;
+  const retryNumber = task.attempts.filter(({ retryOf }) => retryOf !== undefined).length;
+  return { attemptId: attempt.id, retriedEndedAt: Date.parse(retried.endedAt), retryNumber };
+}
+
+// A retry attempt is placed as an automatic retry of the one it retries.
 function placementRequest(task: Task): Omit<PlacementRequest, 'workerId'> {
   const number = task.attempts.length;
-  const attemptId = task.attempts[number - 1]!.id;
+  const { id: attemptId, retryOf } = task.attempts[number - 1]!;
   const derived = <Kind extends string>(prefix: string) => derivedId<Kind>(prefix, task.id, number, task.ownershipGeneration);
   return {
     commandId: derived('c'),
@@ -158,17 +240,8 @@ function placementRequest(task: Task): Omit<PlacementRequest, 'workerId'> {
     ownershipGeneration: task.ownershipGeneration,
     requested: DEFAULT_ATTEMPT_REQUEST,
     providerCredentials: [],
+    ...(retryOf === undefined ? {} : { automaticRetryOf: retryOf }),
   };
-}
-
-function attemptIdOf(task: Task): AttemptId {
-  return derivedId('t', task.id, task.attempts.length + 1, task.ownershipGeneration);
-}
-
-// A one-letter prefix and the SHA-256 of the task, the attempt number, and
-// the ownership generation, so that a rerun transaction reuses them.
-function derivedId<Kind extends string>(prefix: string, taskId: TaskId, attemptNumber: number, generation: number): Identifier<Kind> {
-  return `${prefix}${createHash('sha256').update(JSON.stringify([taskId, attemptNumber, generation])).digest('hex')}` as Identifier<Kind>;
 }
 
 function noLongerWaits(error: Failure): boolean {

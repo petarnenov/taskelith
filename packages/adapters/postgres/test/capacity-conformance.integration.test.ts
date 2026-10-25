@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
+import { PRODUCER_CURSORS_CONFORMANCE } from '@taskelith/execution';
+import { ok, type Result } from '@taskelith/kernel';
 import { PostgresDatabase, type PostgresTransaction } from '@taskelith/postgres';
 import {
   CANDIDATE_WORKER_FIXTURES,
@@ -11,7 +13,12 @@ import {
   PLACEMENT_WORKER_FIXTURES,
   QUOTA_FIXTURES,
   QUOTA_SETTINGS_CONFORMANCE,
+  REPORTING_WORKER_FIXTURE,
   TASK_LINEAGE_CONFORMANCE,
+  WORKER_REPORTS_CONFORMANCE,
+  type PlacementWorkers,
+  type WorkerReports,
+  type WorkerReportsConformanceTarget,
 } from '@taskelith/scheduling';
 import type { ConformanceCase } from '@taskelith/sdlc';
 import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
@@ -48,6 +55,43 @@ runSuite('candidates', PLACEMENT_CANDIDATES_CONFORMANCE, (tx) => ({ workers: tx.
 });
 runSuite('placement queue', PLACEMENT_QUEUE_CONFORMANCE, (tx) => ({ queue: tx.placements, tasks: tx.tasks, lineage: tx.lineage, assignments: tx.assignments }));
 runSuite('delegation requests', DELEGATION_REQUESTS_CONFORMANCE, (tx) => tx.delegations);
+runSuite('producer cursors', PRODUCER_CURSORS_CONFORMANCE, (tx) => tx.cursors);
+
+// Each report commits on its own, as each observation's transaction does,
+// so a case can add a worker or race two reports.
+function committingReports(): WorkerReportsConformanceTarget {
+  const write = (work: (reports: WorkerReports) => Promise<Result<void>>) => database.transaction((tx) => work(tx.reports));
+  const read = async <Value>(work: (workers: PlacementWorkers) => Promise<Value>): Promise<Value> => {
+    const outcome = await database.readCommitted(async (tx) => ok(await work(tx.workers)));
+    if (!outcome.ok) throw new Error(outcome.error.message);
+    return outcome.value;
+  };
+  return {
+    reports: {
+      recordContact: (...args) => write((reports) => reports.recordContact(...args)),
+      declareCapacity: (...args) => write((reports) => reports.declareCapacity(...args)),
+      enterPressure: (...args) => write((reports) => reports.enterPressure(...args)),
+      leavePressure: (...args) => write((reports) => reports.leavePressure(...args)),
+      markCapacityRefused: (...args) => write((reports) => reports.markCapacityRefused(...args)),
+      clearCapacityRefusal: (...args) => write((reports) => reports.clearCapacityRefusal(...args)),
+      setProtocolVersion: (...args) => write((reports) => reports.setProtocolVersion(...args)),
+    },
+    workers: {
+      get: (workerId) => read((workers) => workers.get(workerId)),
+      eligibleSlots: () => read((workers) => workers.eligibleSlots()),
+      candidates: () => read((workers) => workers.candidates()),
+    },
+    addWorker: (worker) => seedWorker(url, worker),
+  };
+}
+
+for (const conformance of WORKER_REPORTS_CONFORMANCE) {
+  test(`PostgreSQL worker reports: ${conformance.name}`, async () => {
+    await truncateAll(url);
+    await seedWorker(url, REPORTING_WORKER_FIXTURE);
+    assert.deepEqual(await conformance.check(committingReports()), []);
+  });
+}
 
 test('an installation without its record is treated as quarantined', async () => {
   await truncateAll(url);
