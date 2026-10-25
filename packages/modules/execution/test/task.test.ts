@@ -20,6 +20,7 @@ import {
   requestCancellation,
   resolveByOperator,
   taskOutcomeFact,
+  unknownExecutionCount,
   type ExitReport,
   type Task,
 } from '@taskelith/execution';
@@ -242,6 +243,15 @@ test('the scheduler reads whether an assignment ever had a grant and whether an 
   const sealed = value(recordNotStarted(authorized().task, REPORT, T3)).task;
   assert.deepEqual(executionsUnderAssignment(sealed, ASSIGNMENT), { granted: true, nonTerminal: false });
   assert.deepEqual(executionsUnderAssignment(sealed, assignmentId('assignment-2')), { granted: false, nonTerminal: false });
+});
+
+test('an execution is unknown while it is not terminal and carries evidence', () => {
+  const running = started();
+  assert.equal(unknownExecutionCount(running), 0);
+  const uncertain = value(recordExecutionEvidence(running, { ...REPORT, kind: 'uncertain' }, T3)).task;
+  assert.equal(unknownExecutionCount(uncertain), 1);
+  const resolved = value(resolveByOperator(uncertain, ATTEMPT, evidence('incident-7'), T4));
+  assert.equal(unknownExecutionCount(resolved), 0);
 });
 
 test('after lost local history a command is sent again only while no grant was recorded', () => {

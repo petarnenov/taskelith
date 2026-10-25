@@ -1,4 +1,5 @@
 import { ok, type EventId, type Result } from '@taskelith/kernel';
+import { SILENT_LOGGER, type LogCorrelation, type Logger } from '@taskelith/observability';
 import type { OutboxMessage } from '@taskelith/sdlc';
 import { abortableDelay } from './abortable-delay.js';
 import { encodeJson, type JetStreamPublisher } from './jetstream-publisher.js';
@@ -20,6 +21,7 @@ export interface PublishRound {
 export interface OutboxPublisherOptions {
   readonly limits?: TransportLimits;
   readonly now?: () => number;
+  readonly logger?: Logger;
 }
 
 export const OUTBOX_BATCH = 100;
@@ -37,6 +39,7 @@ export class OutboxPublisher {
   readonly #address: TransportAddress;
   readonly #limits: TransportLimits;
   readonly #now: () => number;
+  readonly #logger: Logger;
   readonly #backoff = new Map<string, SubjectBackoff>();
 
   constructor(source: OutboxSource, publisher: JetStreamPublisher, address: TransportAddress, options: OutboxPublisherOptions = {}) {
@@ -45,6 +48,7 @@ export class OutboxPublisher {
     this.#address = address;
     this.#limits = options.limits ?? TRANSPORT_LIMITS;
     this.#now = options.now ?? Date.now;
+    this.#logger = options.logger ?? SILENT_LOGGER;
   }
 
   async publishPending(limit = OUTBOX_BATCH): Promise<Result<PublishRound>> {
@@ -55,12 +59,15 @@ export class OutboxPublisher {
     for (const row of rows.value) {
       if (blocked.has(row.subject) || this.#backingOff(row.subject)) {
         blocked.add(row.subject);
-      } else if (await this.#publishRow(row)) {
-        this.#backoff.delete(row.subject);
-        published += 1;
       } else {
-        blocked.add(row.subject);
-        this.#recordFailure(row.subject);
+        const sent = await this.#publishRow(row);
+        if (sent.ok) {
+          this.#backoff.delete(row.subject);
+          published += 1;
+        } else {
+          blocked.add(row.subject);
+          this.#recordFailure(row, sent.error.message);
+        }
       }
     }
     return ok({ published, deferred: rows.value.length - published });
@@ -70,22 +77,31 @@ export class OutboxPublisher {
     return (this.#backoff.get(subject)?.retryAt ?? 0) > this.#now();
   }
 
-  #recordFailure(subject: string): void {
-    const failures = (this.#backoff.get(subject)?.failures ?? 0) + 1;
-    this.#backoff.set(subject, { failures, retryAt: this.#now() + retryDelayMilliseconds(failures, this.#limits) });
+  #recordFailure(row: OutboxMessage, cause: string): void {
+    const failures = (this.#backoff.get(row.subject)?.failures ?? 0) + 1;
+    const delay = retryDelayMilliseconds(failures, this.#limits);
+    this.#backoff.set(row.subject, { failures, retryAt: this.#now() + delay });
+    this.#logger.with(rowCorrelation(row)).warn('nats.outbox.publish-failed', {
+      subject: row.subject, failures, delayMilliseconds: delay, cause,
+    });
   }
 
-  async #publishRow(row: OutboxMessage): Promise<boolean> {
+  async #publishRow(row: OutboxMessage): Promise<Result<void>> {
     const subject = this.#address.subjectOfOutboxRow(row.subject);
-    if (!subject.ok) return false;
+    if (!subject.ok) return subject;
     const sent = await this.#publisher.publish({
       subject: subject.value,
       body: encodeJson(row.payload),
       messageId: row.metadata.eventId,
     });
-    if (!sent.ok) return false;
-    return (await this.#source.markPublished(row.metadata.eventId)).ok;
+    if (!sent.ok) return sent;
+    return this.#source.markPublished(row.metadata.eventId);
   }
+}
+
+function rowCorrelation({ metadata }: OutboxMessage): LogCorrelation {
+  const { eventId, correlationId, causationId } = metadata;
+  return causationId === undefined ? { eventId, correlationId } : { eventId, correlationId, causationId };
 }
 
 // Publishes until the signal aborts: at once while rows flow, after a pause

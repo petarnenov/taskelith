@@ -7,6 +7,7 @@ import {
   PostgresTaskLineage,
   databaseNow,
 } from './capacity-repositories.js';
+import { PostgresSignalReadings } from './control-plane-signals.js';
 import {
   PostgresAdmissionRepository,
   PostgresAssignmentRepository,
@@ -33,6 +34,7 @@ export class PostgresTransaction {
   readonly quotas: PostgresQuotaSettings;
   readonly lineage: PostgresTaskLineage;
   readonly ledger: PostgresCapacityLedger;
+  readonly signals: PostgresSignalReadings;
   readonly #session: Session;
 
   constructor(session: Session) {
@@ -49,6 +51,7 @@ export class PostgresTransaction {
     this.quotas = new PostgresQuotaSettings(session);
     this.lineage = new PostgresTaskLineage(session);
     this.ledger = new PostgresCapacityLedger(session);
+    this.signals = new PostgresSignalReadings(session);
   }
 
   now(): Promise<Instant> {

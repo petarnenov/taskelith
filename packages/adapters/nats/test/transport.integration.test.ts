@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { InMemoryInbox } from '@taskelith/execution';
-import { err, failure, ok } from '@taskelith/kernel';
+import { err, failure, ok, parseInstant } from '@taskelith/kernel';
+import { InMemoryLogSink, InMemoryMetrics, Logger } from '@taskelith/observability';
+import { SimulatedHost, value } from '@taskelith/testing';
 import {
   applyOnce,
   encodeJson,
@@ -206,6 +208,49 @@ describe('worker command consumer', () => {
 
     await waitFor(() => deliveries.length === 2);
     assert.deepEqual(deliveries, [1, 2]);
+  });
+});
+
+describe('consumer observability', () => {
+  function observed() {
+    const sink = new InMemoryLogSink();
+    const metrics = new InMemoryMetrics();
+    const logger = new Logger(sink, new SimulatedHost(value(parseInstant('2026-10-25T10:00:00.000Z'))).wallClock);
+    return { sink, metrics, options: { limits: TEST_LIMITS, logger, metrics } };
+  }
+
+  test('a commit records the inbox lag, and a failure and a quarantine are logged with correlation', async () => {
+    const { address, transport } = await installation(['worker-1']);
+    const subject = expectOk(address.commandSubject('worker-1'));
+    const publisher = new JetStreamPublisher(transport.js);
+    expectOk(await publisher.publish({ subject, body: encodeJson(offer('command-1')), messageId: 'command-1' }));
+    expectOk(await publisher.publish({ subject, body: new TextEncoder().encode('{'), messageId: 'command-bad' }));
+    const { sink, metrics, options } = observed();
+    const handler = recordingHandler([err(failure('unavailable', 'commit failed at postgres://u:secret@db'))]);
+    running((signal) => workerCommandConsumer(transport.js, address, 'worker-1', handler.handle, options).run(signal));
+
+    await waitFor(() => handler.deliveries.length === 2 && sink.records.length === 2);
+    const labels = { stream: address.streamName('commands'), consumer: 'worker-1' };
+    await waitFor(() => metrics.series('inbox.lag', labels)?.count === 1);
+    const lag = metrics.series('inbox.lag', labels)!;
+    assert.ok(lag.last >= 0 && lag.last < 30, String(lag.last));
+    const events = Object.fromEntries(sink.records.map((record) => [record.event, record]));
+    assert.deepEqual(events['nats.message.quarantined']?.fields, { subject, reason: 'not UTF-8 JSON' });
+    const redelivered = events['nats.message.redelivered']!;
+    assert.deepEqual(redelivered.correlation, { correlationId: 'correlation-1', commandId: 'command-1', attemptId: 'attempt-1', taskId: 'task-1', workerId: 'worker-1' });
+    assert.deepEqual({ ...redelivered.fields, delayMilliseconds: 0 }, {
+      subject, type: 'execution.assignment.offer', deliveryCount: 1, delayMilliseconds: 0, code: 'unavailable', message: 'commit failed at postgres://[redacted]@db',
+    });
+  });
+
+  test('a pull that fails is logged with its stream and consumer', async () => {
+    const { address, transport } = await installation(['worker-1']);
+    const { sink, options } = observed();
+    running((signal) => workerCommandConsumer(transport.js, address, 'worker-9', recordingHandler().handle, options).run(signal));
+
+    await waitFor(() => sink.records.length > 0);
+    assert.equal(sink.records[0]?.event, 'nats.pull.failed');
+    assert.deepEqual({ ...sink.records[0]?.fields, cause: '' }, { stream: address.streamName('commands'), consumer: 'worker-9', failedPulls: 1, cause: '' });
   });
 });
 
