@@ -3,6 +3,7 @@ import { after, beforeEach, test } from 'node:test';
 import { parseIdentifier, type Result } from '@taskelith/kernel';
 import { recordNotStarted, type AssignmentId, type AttemptId, type Task, type WorkerId } from '@taskelith/execution';
 import { PostgresDatabase } from '@taskelith/postgres';
+import { releaseInTransaction } from '@taskelith/scheduling';
 import {
   DELEGATION_CAPACITY_WAIT_BOUND_MILLISECONDS,
   ROOT_LINK,
@@ -17,7 +18,7 @@ import {
 } from '@taskelith/scheduling';
 import type { TaskId } from '@taskelith/sdlc';
 import { CrashPoints, SimulatedCrash } from '@taskelith/testing';
-import { authorizedUnder, placedTask, seedWorker } from './capacity-fixtures.ts';
+import { authorizedUnder, placedTask, retriedTask, seedWorker } from './capacity-fixtures.ts';
 import { AT } from './fixtures.ts';
 import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
 
@@ -58,8 +59,7 @@ beforeEach(async () => {
 });
 
 // Stores the task with an active attempt and a root lineage link in run-1.
-async function rootTask(task: string, attempt = `${task}-attempt`, runId = ROOT_LINK.runId): Promise<Task> {
-  const stored = placedTask(task, attempt);
+async function rootTask(task: string, attempt = `${task}-attempt`, runId = ROOT_LINK.runId, stored = placedTask(task, attempt)): Promise<Task> {
   const link: TaskLineageLink = { ...ROOT_LINK, taskId: stored.id, rootTaskId: stored.id, runId };
   value(await database.transaction(async (tx) => {
     const added = await tx.tasks.add(stored);
@@ -172,6 +172,32 @@ test('the ninth attempt of a tree and a retry of uncertain execution are rejecte
   assert.equal(kind(await service.reserve(placement(task, 'c', { taskId: id('TaskId', 'task-unknown') as TaskId }))), 'rejected:attempt-not-reservable');
 });
 
+test('an automatic retry needs a certain, released earlier attempt and stays within two retries', async () => {
+  const task = await rootTask('task-1', 'unused', ROOT_LINK.runId, retriedTask('task-1', 'attempt-1', 'attempt-2'));
+  const retry = (name: string) => placement(task, name, { automaticRetryOf: id('AttemptId', 'attempt-1') as AttemptId });
+  await query(url, 'INSERT INTO capacity_charges (attempt_id, task_id, root_task_id, automatic_retry) VALUES ($1, $2, $2, true), ($3, $2, $2, true)',
+    ['retry-old-1', task.id, 'retry-old-2']);
+  assert.equal(kind(await service.reserve(retry('a'))), 'rejected:retry-budget-exhausted');
+  await query(url, "DELETE FROM capacity_charges WHERE attempt_id = 'retry-old-2'");
+  assert.equal(kind(await service.reserve(placement(task, 'b', { automaticRetryOf: id('AttemptId', 'attempt-9') as AttemptId }))), 'rejected:retry-budget-exhausted');
+  assert.equal(kind(await service.reserve(retry('c'))), 'placed');
+  assert.deepEqual((await query<{ count: number }>(url, 'SELECT count(*)::int AS count FROM capacity_charges WHERE automatic_retry'))[0], { count: 2 });
+});
+
+test('a provider credential at its concurrency limit makes the attempt wait', async () => {
+  const credential = id('ProviderCredentialId', 'credential-1');
+  const others = await Promise.all(['task-2', 'task-3', 'task-4', 'task-5'].map((name) => rootTask(name)));
+  const workers = ['worker-2', 'worker-3'].map((name) => id('WorkerId', name) as WorkerId);
+  for (const extra of workers) await seedWorker(url, worker(extra));
+  await query(url, "INSERT INTO capacity_quotas (scope, scope_id, quota) VALUES ('project', $1, 10), ('run', $2, 10)", [PROJECT, ROOT_LINK.runId]);
+  for (const [index, other] of others.entries()) {
+    const target = [WORKER, ...workers][Math.floor(index / 2)]!;
+    assert.equal(kind(await service.reserve(placement(other, `credential-${index}`, { workerId: target, providerCredentials: [credential] }))), 'placed');
+  }
+  const task = await rootTask('task-1');
+  assert.equal(kind(await service.reserve(placement(task, 'a', { workerId: workers[1]!, providerCredentials: [credential] }))), 'waiting:provider-concurrency-exhausted');
+});
+
 test('cancelling an assignment without a grant ends it, releases, and tells the worker; a new placement charges nothing', async () => {
   const task = await rootTask('task-1');
   const placed = value(await service.reserve(placement(task, 'a')));
@@ -200,10 +226,16 @@ test('cancelling an assignment with a running execution keeps the reservation un
   const early = await service.releaseAfterTerminalFact({ ...request, commandId: id('EventId', 'release-early') });
   assert.equal(!early.ok && early.error.code, 'precondition-failed');
   const cancelled = value(await database.transaction((tx) => tx.tasks.get(task.id)));
-  assert.equal(cancelled.attempts.at(-1)!.cancellation?.reason, 'assignment-ended');
-  const sealed = value(recordNotStarted(cancelled, { workerId: WORKER, executionId: id('ExecutionId', 'execution-1') }, AT)).task;
-  value(await database.transaction((tx) => tx.tasks.replace(sealed, cancelled.generation)));
-  const released = value(await service.releaseAfterTerminalFact({ ...request, commandId: id('EventId', 'release-a') }));
+  const attempt = cancelled.attempts.at(-1)!;
+  assert.equal(attempt.cancellation?.reason, 'launch-revoked');
+  assert.deepEqual(attempt.executions[0]!.grants.map((grant) => grant.state === 'revoked' && grant.revokedFor), ['attempt-not-launchable']);
+  // The terminal fact and the release commit in one transaction (item 21).
+  const released = value(await database.transaction(async (tx) => {
+    const sealed = recordNotStarted(cancelled, { workerId: WORKER, executionId: id('ExecutionId', 'execution-1') }, AT);
+    if (!sealed.ok) return sealed;
+    const stored = await tx.tasks.replace(sealed.value.task, cancelled.generation);
+    return stored.ok ? releaseInTransaction(tx, { ...request, commandId: id('EventId', 'release-a') }) : stored;
+  }));
   assert.equal(released.reservation.state === 'released' && released.reservation.releasedBy, 'execution-terminal');
   assert.deepEqual(await counts(), { held: 0, assignments: 1, charges: 1, outbox: 2 });
 });
@@ -265,11 +297,15 @@ test('delegations are admitted, fail closed on chains, and wait for a free unit 
   assert.deepEqual(value(await delegate('task-late', { waitingSince: longAgo })), { outcome: 'rejected', reason: 'delegation-awaiting-capacity' });
   const unknown = await delegate('task-orphan', { parentTaskId: id('TaskId', 'task-none') as TaskId });
   assert.equal(!unknown.ok && unknown.error.code, 'not-found');
+  const foreign = await delegate('task-foreign', { parentAttemptId: id('AttemptId', 'attempt-other') as AttemptId });
+  assert.equal(!foreign.ok && foreign.error.code, 'precondition-failed');
   assert.deepEqual(value(await delegate('task-child')).outcome, 'waiting');
 });
 
 test('a fourth level of delegation is rejected at creation', async () => {
   const root = await rootTask('task-root');
+  const deepest = placedTask('task-c', 'attempt-c');
+  value(await database.transaction((tx) => tx.tasks.add(deepest)));
   const links: TaskLineageLink[] = ['a', 'b', 'c'].map((name, index) => ({
     ...ROOT_LINK, taskId: id('TaskId', `task-${name}`) as TaskId, parentTaskId: index === 0 ? root.id : id('TaskId', `task-${'abc'[index - 1]}`) as TaskId,
     rootTaskId: root.id, depth: index + 1, projectId: PROJECT as ProjectId,

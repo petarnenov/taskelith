@@ -3,6 +3,7 @@ import { parseIdentifier, type Result } from '@taskelith/kernel';
 import {
   authorizeLaunch,
   claimOwnership,
+  endAttempt,
   openAttempt,
   openTask,
   parseLaunchParameters,
@@ -66,6 +67,16 @@ export function placedTask(taskId: string, attempt: string): Task {
   const attemptId = value(parseIdentifier('AttemptId', attempt)) as AttemptId;
   const attempted = value(openAttempt(task, task.ownershipGeneration, { id: attemptId }, AT));
   return value(claimOwnership(attempted, attempted.ownershipGeneration, attemptId, AT));
+}
+
+// The task after its first attempt ended unlaunched and a second one took
+// over the placement, for an automatic retry.
+export function retriedTask(taskId: string, first: string, second: string): Task {
+  const placed = placedTask(taskId, first);
+  const ended = value(endAttempt(placed, placed.attempts[0]!.id, AT));
+  const secondId = value(parseIdentifier('AttemptId', second)) as AttemptId;
+  const attempted = value(openAttempt(ended, ended.ownershipGeneration, { id: secondId }, AT));
+  return value(claimOwnership(attempted, attempted.ownershipGeneration, secondId, AT));
 }
 
 // The task with an execution authorized under the assignment.

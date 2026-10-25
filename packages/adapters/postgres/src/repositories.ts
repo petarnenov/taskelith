@@ -162,6 +162,7 @@ export class PostgresAssignmentRepository implements AssignmentRepository {
         root_task_id: reservation.scope.rootTaskId,
         cpu_millicores: reservation.requested.cpuMillicores,
         memory_mebibytes: reservation.requested.memoryMebibytes,
+        provider_credentials: [...reservation.providerCredentials],
       }),
       decode: decodeRecord,
     });

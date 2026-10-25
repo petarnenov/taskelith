@@ -1,7 +1,7 @@
 import type { Instant, Result } from '@taskelith/kernel';
 import type { AttemptId, WorkerId } from '@taskelith/execution';
 import type { TaskId } from '@taskelith/sdlc';
-import type { ProjectId, RunId } from '../domain/capacity-reservation.js';
+import type { ProjectId, ProviderCredentialId, RunId } from '../domain/capacity-reservation.js';
 
 export interface WorkerOccupancy {
   readonly slots: number;
@@ -30,6 +30,7 @@ export interface CapacityLedger {
   heldInProject(projectId: ProjectId): Promise<number>;
   // Held reservations that charge the run: their own run or their root's.
   heldInRun(runId: RunId): Promise<number>;
+  heldForCredential(credentialId: ProviderCredentialId): Promise<number>;
   isCharged(attemptId: AttemptId): Promise<boolean>;
   treeAttempts(rootTaskId: TaskId): Promise<number>;
   automaticRetries(taskId: TaskId): Promise<number>;

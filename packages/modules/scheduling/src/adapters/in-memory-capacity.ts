@@ -2,7 +2,7 @@ import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type { AttemptId, WorkerId } from '@taskelith/execution';
 import type { TaskId } from '@taskelith/sdlc';
 import { DEFAULT_PROJECT_QUOTA, DEFAULT_RUN_QUOTA } from '../domain/capacity-limits.js';
-import type { ProjectId, RunId } from '../domain/capacity-reservation.js';
+import type { ProjectId, ProviderCredentialId, RunId } from '../domain/capacity-reservation.js';
 import type { Assignment } from '../domain/assignment.js';
 import type { TaskLineageLink } from '../domain/delegation-admission.js';
 import type { CapacityCharge, CapacityLedger, OpenDelegation, WorkerOccupancy } from '../ports/capacity-ledger.js';
@@ -79,11 +79,11 @@ export class InMemoryTaskLineage implements TaskLineage {
 // runs of a lineage store, as the database ledger does with its queries.
 export class InMemoryCapacityLedger implements CapacityLedger {
   readonly #assignments: () => readonly Assignment[];
-  readonly #lineage: InMemoryTaskLineage;
+  readonly #lineage: TaskLineage;
   readonly #charges = new Map<AttemptId, CapacityCharge>();
-  readonly #delegations = new Map<TaskId, OpenDelegation>();
+  readonly #delegations = new Map<TaskId, OpenDelegation & { closed: boolean }>();
 
-  constructor(assignments: () => readonly Assignment[], lineage: InMemoryTaskLineage) {
+  constructor(assignments: () => readonly Assignment[], lineage: TaskLineage) {
     this.#assignments = assignments;
     this.#lineage = lineage;
   }
@@ -109,6 +109,10 @@ export class InMemoryCapacityLedger implements CapacityLedger {
     return (await this.#chargingRun(this.#held(), runId)).length;
   }
 
+  async heldForCredential(credentialId: ProviderCredentialId): Promise<number> {
+    return this.#held().filter((assignment) => assignment.reservation.providerCredentials.includes(credentialId)).length;
+  }
+
   async isCharged(attemptId: AttemptId): Promise<boolean> {
     return this.#charges.has(attemptId);
   }
@@ -131,19 +135,22 @@ export class InMemoryCapacityLedger implements CapacityLedger {
     if (this.#delegations.has(delegation.childTaskId)) {
       return err(failure('conflict', `task ${delegation.childTaskId} is already a delegated child`, { task: delegation.childTaskId }));
     }
-    this.#delegations.set(delegation.childTaskId, Object.freeze({ ...delegation }));
+    this.#delegations.set(delegation.childTaskId, { ...delegation, closed: false });
     return ok(undefined);
   }
 
+  // A closed delegation stays recorded, so the child is never delegated again.
   async closeDelegation(childTaskId: TaskId): Promise<Result<void>> {
-    if (!this.#delegations.delete(childTaskId)) {
+    const delegation = this.#delegations.get(childTaskId);
+    if (delegation === undefined || delegation.closed) {
       return err(failure('not-found', `task ${childTaskId} is not an open delegated child`, { task: childTaskId }));
     }
+    delegation.closed = true;
     return ok(undefined);
   }
 
   async isWaitingParent(attemptId: AttemptId): Promise<boolean> {
-    return [...this.#delegations.values()].some((delegation) => delegation.parentAttemptId === attemptId);
+    return this.#open().some((delegation) => delegation.parentAttemptId === attemptId);
   }
 
   async waitingParentsInProject(projectId: ProjectId): Promise<number> {
@@ -158,12 +165,16 @@ export class InMemoryCapacityLedger implements CapacityLedger {
     return this.#waitingParents().length;
   }
 
+  #open(): readonly OpenDelegation[] {
+    return [...this.#delegations.values()].filter((delegation) => !delegation.closed);
+  }
+
   #held(): readonly Assignment[] {
     return this.#assignments().filter((assignment) => assignment.reservation.state === 'held');
   }
 
   #waitingParents(): readonly Assignment[] {
-    const parents = new Set([...this.#delegations.values()].map((delegation) => delegation.parentAttemptId));
+    const parents = new Set(this.#open().map((delegation) => delegation.parentAttemptId));
     return this.#held().filter((assignment) => parents.has(assignment.attemptId));
   }
 

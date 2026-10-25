@@ -1,6 +1,6 @@
 # Capacity reservation contract
 
-Date: 2026-10-25. Status: proposed protocol contract for G2 ([G2 work plan](../g2-plan.md) item 6), under independent review; once reviewed and merged it resolves the pre-G2 contract "capacity reservations" of [architecture section 15](../architecture.md#15-decisions-still-requiring-evidence-or-owner-scope-confirmation). It serves F22 and R32. No code implements it yet: G2 items 7 (execution domain model), 18 (resource admission), and 20 (worker agent runtime) build on it, and item 24 runs its failure scenarios.
+Date: 2026-10-25. Status: proposed protocol contract for G2 ([G2 work plan](../g2-plan.md) item 6), under independent review; once reviewed and merged it resolves the pre-G2 contract "capacity reservations" of [architecture section 15](../architecture.md#15-decisions-still-requiring-evidence-or-owner-scope-confirmation). It serves F22 and R32. G2 item 7 (execution domain model) modeled its records and item 18 (resource admission) implements the scheduler side (section 13); item 20 (worker agent runtime) builds the worker side, and item 24 runs its failure scenarios.
 
 ## 1. Purpose and parties
 
@@ -234,6 +234,10 @@ G2 item 18 (`implement-resource-admission`) implements the scheduler side in the
 - **Delegation wait.** A delegation waits with `delegation-awaiting-capacity` for at most `10 min`, then is rejected with that reason.
 - **Supersession.** An assignment without a grant is superseded after `2 min` unacknowledged, after `10 min` under admission pressure, and at once when its worker is unreachable, draining, or revoked.
 - **Unknown installation.** An installation without its record admits nothing, as one in quarantine.
+- **Check order.** Step 4's request checks that no worker can satisfy, a hard spend limit and a size above the per-attempt ceiling, are made before the worker checks of step 3, so such a request is rejected instead of waiting for a worker.
+- **Automatic retries.** A retry is automatic only after an earlier attempt of the task that ended `not-started` or `exited` with a proven start and whose reservation is released; any other earlier attempt is uncertain and gets `retry-budget-exhausted`.
+- **Provider credentials.** Each credential a reservation holds is checked against the default concurrency of `4`; G2 reserves none.
+- **Cancellation with a running execution.** The cancelling transaction revokes the owning execution's grants with `attempt-not-launchable` and writes its cancellation command (launch authorization section 5); the reservation is released by the transaction that records the terminal fact.
 
 The reservation transaction reads tables that other items write, and each of those writers runs at `SERIALIZABLE` (section 4):
 

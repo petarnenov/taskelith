@@ -27,7 +27,7 @@ Concurrent placements SHALL commit only what a serial order allows: of two repli
 - **THEN** one assignment and one held reservation exist
 
 ### Requirement: Quotas and budgets
-Placement SHALL charge the project quota, the attempt's run quota, and its root's run quota, wait on an exhausted quota, reject a placement beyond 8 attempts in a task tree or beyond 2 automatic retries, and give an automatic retry of an attempt that has not ended no allowance; a later reservation of an attempt SHALL charge nothing.
+Placement SHALL charge the project quota, the attempt's run quota, its root's run quota, and each provider credential it holds, wait on an exhausted quota or credential, reject a placement beyond 8 attempts in a task tree or beyond 2 automatic retries, and give an automatic retry no allowance unless the earlier attempt ended `not-started` or `exited` with a proven start and released its reservation; a later reservation of an attempt SHALL charge nothing.
 
 #### Scenario: Exhausted quota
 - **WHEN** a run quota of 1 is held and another attempt of the run is placed
@@ -38,11 +38,11 @@ Placement SHALL charge the project quota, the attempt's run quota, and its root'
 - **THEN** the new reservation is held and the attempt's charge is not repeated
 
 ### Requirement: Justified release
-Cancelling an assignment SHALL end it and release its reservation with an assignment-ended command when no execution under it can run, and otherwise keep the reservation, request the attempt's cancellation, and write a cancellation command; `releaseAfterTerminalFact` SHALL release only once nothing under the assignment can run, and every release SHALL read the executions under the assignment in its own transaction and release only when none of them can run.
+Cancelling an assignment SHALL end it and release its reservation with an assignment-ended command when no execution under it can run, and otherwise keep the reservation, revoke the running execution's grants, and write a cancellation command; releasing after a terminal fact SHALL run in the transaction that records the fact and only once nothing under the assignment can run.
 
 #### Scenario: Cancellation with a running execution
 - **WHEN** an assignment with an authorized execution is cancelled, and that execution is later recorded as not started
-- **THEN** the reservation stays held until `releaseAfterTerminalFact` releases it with `execution-terminal`
+- **THEN** the execution's grant is revoked, and the reservation stays held until the transaction recording the fact releases it with `execution-terminal`
 
 ### Requirement: Bounded supersession and retries
 `supersede` SHALL end and release an assignment without a grant whose worker is unknown, revoked, draining, or unreachable, or that exceeded the 2 minute acknowledgement or 10 minute admission pressure bound, and SHALL otherwise fail with `precondition-failed`; `reserveWithRetry` SHALL retry an `unavailable` placement at most 5 times in all with delays within 5 to 60 seconds.
@@ -52,7 +52,14 @@ Cancelling an assignment SHALL end it and release its reservation with an assign
 - **THEN** it ends as superseded, its reservation is released, and the worker gets an assignment-ended command
 
 ### Requirement: Delegation admission
-`admitDelegation` SHALL run in the transaction that creates the child, reject a child deeper than 3 with `delegation-depth-exceeded` and a chain larger than a quota it charges with `delegation-chain-exceeds-quota`, make a delegation wait with `delegation-awaiting-capacity` when waiting parents would hold every unit of a quota it charges or every eligible fleet slot, reject it with that reason after 10 minutes, and otherwise write the child's lineage link and an open delegation.
+`admitDelegation` SHALL run in the transaction that creates the child, fail with `precondition-failed` unless the delegating attempt is the parent task's active attempt, reject a child deeper than 3 with `delegation-depth-exceeded` and a chain larger than a quota it charges with `delegation-chain-exceeds-quota`, and otherwise write the child's lineage link and an open delegation.
+
+#### Scenario: Foreign attempt
+- **WHEN** a delegation names an attempt that is not the parent task's active attempt
+- **THEN** it fails with `precondition-failed` and writes nothing
+
+### Requirement: Free units for waiting parents
+A delegation SHALL wait with `delegation-awaiting-capacity` while waiting parents would hold every unit of a quota it charges or every eligible fleet slot, and SHALL be rejected with that reason once 10 minutes passed since it started waiting.
 
 #### Scenario: Waiting parent on the last slot
 - **WHEN** the only eligible slot is held by a waiting parent and a further child is delegated

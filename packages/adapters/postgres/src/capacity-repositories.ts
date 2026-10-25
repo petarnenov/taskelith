@@ -10,6 +10,7 @@ import {
   type OpenDelegation,
   type PlacementWorkers,
   type ProjectId,
+  type ProviderCredentialId,
   type QuotaSettings,
   type RunId,
   type TaskLineage,
@@ -36,6 +37,8 @@ interface WorkerRow {
   readonly controls: string[];
 }
 
+// The columns placement reads; item 13 may add others to the table.
+const WORKER_COLUMNS = 'worker_id, enrolled, revoked, draining, reachable, admission_pressure_since, slots, cpu_millicores, memory_mebibytes, controls';
 const ELIGIBLE = 'enrolled AND NOT revoked AND NOT draining AND reachable AND admission_pressure_since IS NULL';
 
 export class PostgresPlacementWorkers implements PlacementWorkers {
@@ -46,7 +49,7 @@ export class PostgresPlacementWorkers implements PlacementWorkers {
   }
 
   async get(workerId: WorkerId): Promise<WorkerPlacementRecord | undefined> {
-    const { rows } = await this.#session.query<WorkerRow>('SELECT * FROM workers WHERE worker_id = $1', [workerId]);
+    const { rows } = await this.#session.query<WorkerRow>(`SELECT ${WORKER_COLUMNS} FROM workers WHERE worker_id = $1`, [workerId]);
     return rows[0] === undefined ? undefined : workerRecord(rows[0]);
   }
 
@@ -124,7 +127,10 @@ export class PostgresTaskLineage implements TaskLineage {
   }
 
   async get(taskId: TaskId): Promise<TaskLineageLink | undefined> {
-    const { rows } = await this.#session.query<LineageRow>('SELECT * FROM task_lineage WHERE task_id = $1', [taskId]);
+    const { rows } = await this.#session.query<LineageRow>(
+      'SELECT task_id, parent_task_id, root_task_id, depth, project_id, run_id FROM task_lineage WHERE task_id = $1',
+      [taskId],
+    );
     const row = rows[0];
     if (row === undefined) return undefined;
     return Object.freeze({
@@ -179,6 +185,10 @@ export class PostgresCapacityLedger implements CapacityLedger {
 
   heldInRun(runId: RunId): Promise<number> {
     return this.#count(`SELECT count(*) FROM assignments WHERE ${HELD} AND ${CHARGES_RUN}`, [runId]);
+  }
+
+  heldForCredential(credentialId: ProviderCredentialId): Promise<number> {
+    return this.#count(`SELECT count(*) FROM assignments WHERE ${HELD} AND $1 = ANY (provider_credentials)`, [credentialId]);
   }
 
   async isCharged(attemptId: AttemptId): Promise<boolean> {

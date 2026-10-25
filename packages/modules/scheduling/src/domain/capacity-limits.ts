@@ -7,6 +7,7 @@ export const MAX_ATTEMPT_MEMORY_MEBIBYTES = 4_096;
 export const MAX_DELEGATION_DEPTH = 3;
 export const MAX_TREE_ATTEMPTS = 8;
 export const MAX_AUTOMATIC_RETRIES = 2;
+export const DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY = 4;
 
 // Author's provisional values that item 18 fixes (operational targets): how
 // long a delegation may wait for a free unit before it is rejected.

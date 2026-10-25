@@ -8,14 +8,16 @@ ALTER TABLE assignments
   ADD COLUMN task_id text,
   ADD COLUMN root_task_id text,
   ADD COLUMN cpu_millicores integer,
-  ADD COLUMN memory_mebibytes integer;
+  ADD COLUMN memory_mebibytes integer,
+  ADD COLUMN provider_credentials text[] NOT NULL DEFAULT '{}';
 UPDATE assignments SET
   project_id = record::jsonb #>> '{reservation,scope,projectId}',
   run_id = record::jsonb #>> '{reservation,scope,runId}',
   task_id = record::jsonb #>> '{reservation,scope,taskId}',
   root_task_id = record::jsonb #>> '{reservation,scope,rootTaskId}',
   cpu_millicores = (record::jsonb #>> '{reservation,requested,cpuMillicores}')::integer,
-  memory_mebibytes = (record::jsonb #>> '{reservation,requested,memoryMebibytes}')::integer;
+  memory_mebibytes = (record::jsonb #>> '{reservation,requested,memoryMebibytes}')::integer,
+  provider_credentials = ARRAY(SELECT jsonb_array_elements_text(record::jsonb #> '{reservation,providerCredentials}'));
 ALTER TABLE assignments
   ALTER COLUMN project_id SET NOT NULL,
   ALTER COLUMN run_id SET NOT NULL,
@@ -26,6 +28,7 @@ ALTER TABLE assignments
 CREATE INDEX assignments_held_by_project ON assignments (project_id) WHERE reservation_state = 'held';
 CREATE INDEX assignments_held_by_run ON assignments (run_id) WHERE reservation_state = 'held';
 CREATE INDEX assignments_held_by_root ON assignments (root_task_id) WHERE reservation_state = 'held';
+CREATE INDEX assignments_held_by_credential ON assignments USING gin (provider_credentials) WHERE reservation_state = 'held';
 
 -- Scheduling's own tables: parent links, consumption charges, and the
 -- delegations whose parents wait for their children.
@@ -38,6 +41,7 @@ CREATE TABLE task_lineage (
   run_id text NOT NULL
 );
 CREATE INDEX task_lineage_by_root ON task_lineage (root_task_id);
+CREATE INDEX task_lineage_by_run ON task_lineage (run_id);
 
 CREATE TABLE capacity_charges (
   attempt_id text PRIMARY KEY,
@@ -92,10 +96,12 @@ DROP TABLE capacity_quotas;
 DROP TABLE delegations;
 DROP TABLE capacity_charges;
 DROP TABLE task_lineage;
+DROP INDEX assignments_held_by_credential;
 DROP INDEX assignments_held_by_root;
 DROP INDEX assignments_held_by_run;
 DROP INDEX assignments_held_by_project;
 ALTER TABLE assignments
+  DROP COLUMN provider_credentials,
   DROP COLUMN memory_mebibytes,
   DROP COLUMN cpu_millicores,
   DROP COLUMN root_task_id,

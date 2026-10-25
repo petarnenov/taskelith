@@ -56,8 +56,9 @@ export function decideDelegation(snapshot: DelegationSnapshot): DelegationDecisi
   return Object.freeze({ outcome: 'admitted', link: Object.freeze(link) });
 }
 
-// A child charges its own run and its root's run, once when they are one.
-function chargedRuns(childRunId: RunId, rootRunId: RunId): readonly RunId[] {
+// A reservation charges its own run and its root's run, once when they are
+// one (contract section 7).
+export function chargedRuns(childRunId: RunId, rootRunId: RunId): readonly RunId[] {
   return childRunId === rootRunId ? [childRunId] : [childRunId, rootRunId];
 }
 

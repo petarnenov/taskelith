@@ -2,7 +2,7 @@ import { parseIdentifier, parseInstant, type Instant, type Result } from '@taske
 import type { AttemptId, WorkerId } from '@taskelith/execution';
 import { expectCode, expectSame, expectSuccess, parseOwnershipGeneration, type ConformanceCase, type TaskId } from '@taskelith/sdlc';
 import { createAssignment, endAssignment, type Assignment } from '../domain/assignment.js';
-import { parseResourceRequest, type ProjectId, type RunId } from '../domain/capacity-reservation.js';
+import { parseResourceRequest, type ProjectId, type ProviderCredentialId, type RunId } from '../domain/capacity-reservation.js';
 import type { TaskLineageLink } from '../domain/delegation-admission.js';
 import type { AssignmentRepository } from './assignment-repository.js';
 import type { CapacityLedger } from './capacity-ledger.js';
@@ -25,6 +25,7 @@ const RUN = id('RunId', 'run-1') as RunId;
 const CHILD_RUN = id('RunId', 'run-2') as RunId;
 const ROOT = id('TaskId', 'task-root') as TaskId;
 const CHILD = id('TaskId', 'task-child') as TaskId;
+const CREDENTIAL = id('ProviderCredentialId', 'credential-1') as ProviderCredentialId;
 
 export const ROOT_LINK: TaskLineageLink = Object.freeze({ taskId: ROOT, rootTaskId: ROOT, depth: 0, projectId: PROJECT, runId: RUN });
 export const CHILD_LINK: TaskLineageLink = Object.freeze({
@@ -100,7 +101,9 @@ export interface CapacityLedgerConformanceTarget {
   readonly lineage: TaskLineage;
 }
 
-function assignment(text: string, attempt: string, taskId: TaskId, runId: RunId, cpuMillicores: number): Assignment {
+function assignment(
+  text: string, attempt: string, taskId: TaskId, runId: RunId, cpuMillicores: number, providerCredentials: readonly ProviderCredentialId[] = [],
+): Assignment {
   return createAssignment({
     id: id('AssignmentId', text),
     attemptId: id('AttemptId', attempt) as AttemptId,
@@ -110,7 +113,7 @@ function assignment(text: string, attempt: string, taskId: TaskId, runId: RunId,
       id: id('ReservationId', `reservation-${text}`),
       scope: { projectId: PROJECT, runId, taskId, rootTaskId: ROOT },
       requested: must(parseResourceRequest({ cpuMillicores, memoryMebibytes: cpuMillicores * 2, hardControls: [] })),
-      providerCredentials: [],
+      providerCredentials,
     },
   }, AT);
 }
@@ -121,7 +124,7 @@ export const CAPACITY_LEDGER_CONFORMANCE: readonly ConformanceCase<CapacityLedge
     async check({ ledger, assignments, lineage }: CapacityLedgerConformanceTarget) {
       const problems: string[] = [];
       for (const link of [ROOT_LINK, CHILD_LINK]) expectSuccess(problems, `link ${link.taskId}`, await lineage.add(link));
-      const root = assignment('assignment-root', 'attempt-root', ROOT, RUN, 1000);
+      const root = assignment('assignment-root', 'attempt-root', ROOT, RUN, 1000, [CREDENTIAL]);
       const child = assignment('assignment-child', 'attempt-child', CHILD, CHILD_RUN, 500);
       const ended = assignment('assignment-ended', 'attempt-ended', ROOT, RUN, 700);
       for (const stored of [root, child, ended]) expectSuccess(problems, `add ${stored.id}`, await assignments.add(stored));
@@ -134,6 +137,8 @@ export const CAPACITY_LEDGER_CONFORMANCE: readonly ConformanceCase<CapacityLedge
       expectSame(problems, 'project', await ledger.heldInProject(PROJECT), 2);
       expectSame(problems, 'root run, charged by the child too', await ledger.heldInRun(RUN), 2);
       expectSame(problems, 'child run', await ledger.heldInRun(CHILD_RUN), 1);
+      expectSame(problems, 'credential', await ledger.heldForCredential(CREDENTIAL), 1);
+      expectSame(problems, 'unused credential', await ledger.heldForCredential(id('ProviderCredentialId', 'credential-x') as ProviderCredentialId), 0);
       return problems;
     },
   },
@@ -173,6 +178,7 @@ export const CAPACITY_LEDGER_CONFORMANCE: readonly ConformanceCase<CapacityLedge
       expectSame(problems, 'slots', await ledger.waitingParentSlots(), 1);
       expectSuccess(problems, 'close', await ledger.closeDelegation(CHILD, AT));
       expectCode(problems, 'close again', await ledger.closeDelegation(CHILD, AT), 'not-found');
+      expectCode(problems, 'reopen', await ledger.openDelegation(delegation), 'conflict');
       expectSame(problems, 'no longer waiting', await ledger.isWaitingParent(parent.attemptId), false);
       expectSame(problems, 'no waiting slots', await ledger.waitingParentSlots(), 0);
       return problems;

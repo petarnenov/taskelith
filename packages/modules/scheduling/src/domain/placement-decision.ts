@@ -15,7 +15,14 @@ export interface PlacementSnapshot {
   readonly worker: WorkerStanding | undefined;
   readonly request: ResourceRequest;
   readonly quotas: readonly QuotaStanding[];
+  // One standing per provider credential the request holds; none in G2.
+  readonly credentials: readonly CredentialStanding[];
   readonly charge: ChargeStanding;
+}
+
+export interface CredentialStanding {
+  readonly limit: number;
+  readonly held: number;
 }
 
 export interface AttemptStanding {
@@ -50,10 +57,12 @@ export type PlacementDecision = { readonly fits: true } | { readonly fits: false
 
 const FITS: PlacementDecision = Object.freeze({ fits: true });
 
-// The checks of contract section 4 in its order; the first failed one decides.
+// The checks of contract section 4; a request no worker can honor (a hard
+// spend limit, a size above the ceiling) is rejected before worker checks.
 export function decidePlacement(snapshot: PlacementSnapshot): PlacementDecision {
   const reason = installationReason(snapshot) ?? attemptReason(snapshot) ?? requestReason(snapshot.request)
-    ?? workerReason(snapshot) ?? quotaReason(snapshot.quotas) ?? chargeReason(snapshot.charge);
+    ?? workerReason(snapshot) ?? quotaReason(snapshot.quotas) ?? credentialReason(snapshot.credentials)
+    ?? chargeReason(snapshot.charge);
   return reason === undefined ? FITS : Object.freeze({ fits: false, reason });
 }
 
@@ -89,6 +98,10 @@ function quotaReason(quotas: readonly QuotaStanding[]): Reason {
   const full = quotas.find((quota) => quota.held + 1 > quota.limit);
   if (full === undefined) return undefined;
   return full.kind === 'project' ? 'project-quota-exhausted' : 'run-quota-exhausted';
+}
+
+function credentialReason(credentials: readonly CredentialStanding[]): Reason {
+  return credentials.some((credential) => credential.held + 1 > credential.limit) ? 'provider-concurrency-exhausted' : undefined;
 }
 
 function chargeReason(charge: ChargeStanding): Reason {

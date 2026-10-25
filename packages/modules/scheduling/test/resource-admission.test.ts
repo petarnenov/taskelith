@@ -40,6 +40,7 @@ function snapshot(overrides: Partial<PlacementSnapshot> = {}): PlacementSnapshot
     },
     request: REQUEST,
     quotas: [{ kind: 'project', limit: 4, held: 0 }, { kind: 'run', limit: 2, held: 0 }],
+    credentials: [],
     charge: { alreadyCharged: false, treeAttempts: 0 },
     ...overrides,
   };
@@ -72,6 +73,8 @@ test('each failed check gives its reason, the first in contract order', () => {
     [{ worker: { ...worker, held: { slots: 0, cpuMillicores: 0, memoryMebibytes: 6000 } } }, 'worker-capacity-exhausted'],
     [{ quotas: [{ kind: 'project', limit: 4, held: 4 }] }, 'project-quota-exhausted'],
     [{ quotas: [{ kind: 'project', limit: 4, held: 3 }, { kind: 'run', limit: 2, held: 2 }] }, 'run-quota-exhausted'],
+    [{ credentials: [{ limit: 4, held: 3 }, { limit: 4, held: 4 }] }, 'provider-concurrency-exhausted'],
+    [{ credentials: [{ limit: 4, held: 3 }] }, 'fits'],
     [{ charge: { alreadyCharged: false, treeAttempts: 8 } }, 'delegation-budget-exhausted'],
     [{ charge: { alreadyCharged: false, treeAttempts: 1, retry: { uncertain: true, automaticRetriesUsed: 0 } } }, 'retry-budget-exhausted'],
     [{ charge: { alreadyCharged: false, treeAttempts: 1, retry: { uncertain: false, automaticRetriesUsed: 2 } } }, 'retry-budget-exhausted'],

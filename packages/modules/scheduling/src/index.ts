@@ -73,14 +73,20 @@ export { OUTBOX_CONFORMANCE } from '@taskelith/sdlc';
 export { ASSIGNMENT_REPOSITORY_CONFORMANCE } from './ports/repository-conformance.js';
 export { admitDelegation, type DelegationRequest } from './application/delegation-admission.js';
 export {
-  ResourceAdmissionService,
+  cancelInTransaction,
+  placeInTransaction,
+  releaseInTransaction,
+  supersedeInTransaction,
   type PlacementOutcome,
   type PlacementRequest,
   type ReleaseRequest,
-} from './application/resource-admission-service.js';
+} from './application/capacity-operations.js';
+export type { CommandIdentity } from './application/capacity-commands.js';
+export { ResourceAdmissionService } from './application/resource-admission-service.js';
 export {
   ADMISSION_PRESSURE_SUPERSESSION_BOUND_MILLISECONDS,
   DEFAULT_PROJECT_QUOTA,
+  DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY,
   DEFAULT_RUN_QUOTA,
   DELEGATION_CAPACITY_WAIT_BOUND_MILLISECONDS,
   MAX_ATTEMPT_CPU_MILLICORES,
@@ -102,6 +108,7 @@ export {
   type WaitingReason,
 } from './domain/capacity-reasons.js';
 export {
+  chargedRuns,
   decideDelegation,
   type DelegationDecision,
   type DelegationSnapshot,
@@ -114,6 +121,7 @@ export {
   decidePlacement,
   type AttemptStanding,
   type ChargeStanding,
+  type CredentialStanding,
   type PlacementDecision,
   type PlacementSnapshot,
   type QuotaStanding,
