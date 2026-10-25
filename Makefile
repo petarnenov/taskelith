@@ -8,9 +8,15 @@ SERVICES_ID := $(shell printf '%s' '$(CURDIR)' | cksum | cut -d ' ' -f 1)
 VERIFY_SERVICES := taskelith-$(SERVICES_ID)-verify
 DEV_SERVICES := taskelith-$(SERVICES_ID)-dev
 
-LINUX_CGROUP_IMAGE := taskelith-linux-cgroup:test
-LINUX_CGROUP_BASE := ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
+UBUNTU_BASE := ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
 NODE_LINUX_X64_SHA256 := eb6728e77c576a35162c122c45ccadf224d89ff00abc8dae46cc2897c6002d7c
+NODE_LINUX_ARM64_SHA256 := 33c37be234ba8bee041961047b19160f4d7d0f164e8e246f78bdd10feff148b3
+LINUX_CGROUP_IMAGE := taskelith-linux-cgroup:test
+
+# The minimal local installation is one Compose project per worktree.
+INSTALLATION := taskelith-$(SERVICES_ID)-installation
+INSTALLATION_PINS := TASKELITH_UBUNTU_BASE=$(UBUNTU_BASE) TASKELITH_NODE_VERSION=$(NODE_PIN) \
+	TASKELITH_NODE_SHA256_AMD64=$(NODE_LINUX_X64_SHA256) TASKELITH_NODE_SHA256_ARM64=$(NODE_LINUX_ARM64_SHA256)
 
 SPECKIT_IMAGE := taskelith-speckit:1.2.3
 SPECKIT_BASE := python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962
@@ -18,7 +24,8 @@ SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
 .PHONY: verify verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility \
-	test services-up services-down verify-linux-cgroup
+	test services-up services-down verify-linux-cgroup installation-build installation-bootstrap installation-start \
+	installation-stop installation-enroll installation-enrollment-token verify-installation
 
 # Uses the .nvmrc Node.js when nvm has it, so no 'nvm use' is needed first.
 verify:
@@ -81,9 +88,40 @@ verify-linux-cgroup:
 		exit 1; \
 	fi
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run build
-	docker build --quiet --build-arg BASE=$(LINUX_CGROUP_BASE) --build-arg NODE_VERSION=$(NODE_PIN) \
+	docker build --quiet --build-arg BASE=$(UBUNTU_BASE) --build-arg NODE_VERSION=$(NODE_PIN) \
 		--build-arg NODE_SHA256=$(NODE_LINUX_X64_SHA256) --tag $(LINUX_CGROUP_IMAGE) tools/linux-cgroup
 	docker run --rm --privileged --cgroupns=private --network none --volume "$(CURDIR):/repo:ro" $(LINUX_CGROUP_IMAGE)
+
+# Minimal local installation (docs/local-installation.md); every target needs
+# TASKELITH_POSTGRES_PASSWORD. Builds the control-plane and worker images.
+installation-build:
+	@$(INSTALLATION_PINS) bash scripts/installation.sh build $(INSTALLATION)
+
+# Migrates and initializes once; prints the operator secret only this once.
+installation-bootstrap:
+	@$(INSTALLATION_PINS) TASKELITH_ACTOR='$(ACTOR)' TASKELITH_REASON='$(REASON)' \
+		bash scripts/installation.sh bootstrap $(INSTALLATION)
+
+installation-start:
+	@$(INSTALLATION_PINS) bash scripts/installation.sh start $(INSTALLATION)
+
+# Stops the containers and keeps their volumes.
+installation-stop:
+	@$(INSTALLATION_PINS) bash scripts/installation.sh stop $(INSTALLATION)
+
+# Enrolls the Linux worker container; needs TASKELITH_OPERATOR_TOKEN.
+installation-enroll:
+	@$(INSTALLATION_PINS) bash scripts/installation.sh enroll $(INSTALLATION)
+
+# Prints a token for a native worker, for example a macOS one.
+installation-enrollment-token:
+	@$(INSTALLATION_PINS) TASKELITH_WORKER_PLATFORM='$(PLATFORM)' TASKELITH_WORKER_ARCHITECTURE='$(ARCHITECTURE)' \
+		TASKELITH_WORKER_HOSTNAME='$(WORKER_HOSTNAME)' bash scripts/installation.sh enrollment-token $(INSTALLATION)
+
+# Opt-in image build and bring-up on a throwaway project; kept out of
+# make verify, like verify-linux-cgroup.
+verify-installation:
+	@$(INSTALLATION_PINS) bash scripts/installation.sh verify $(INSTALLATION)-verify
 
 # SpecKit runs only in its digest-pinned container (G1 decision D5); see
 # docs/qualification/speckit.md.
