@@ -71,6 +71,7 @@ Recorded before pass 1.
 
 - At `c513957`, before pass 1, with every file tracked: 819 tests passed, 0 failed; coverage 99.18% lines, 92.33% branches, 99.07% functions. The comment, boundary, coverage-scope, dependency-inventory, OpenSpec (50 of 50), and package checks pass.
 - At `c46cb1a`, after the pass-1 fixes: 831 tests passed, 0 failed; coverage 99.18% lines, 92.58% branches, 99.09% functions; every other check passes.
+- At `40f2aea`, after the pass-2 fixes: 835 tests passed, 0 failed; coverage 99.18% lines, 92.54% branches, 99.09% functions; every other check passes.
 - `npm run openspec -- validate implement-installation-bootstrap-and-enrollment --strict` passed at each of these revisions.
 
 ## Independent review
@@ -90,6 +91,13 @@ Assigned reviewer: Codex CLI, with `codex exec -m gpt-6.1-sol -c model_reasoning
   8. Medium: a failed rerun of `init` could replace the broker trust. `init` now reads the installation record first, keeps the authority and server fragment of an existing installation, and fails closed when an existing installation lost its authority; the end-to-end test covers it.
   9. Medium: an invalid Compose project name could steer `rm -rf` outside the secrets directory. `services.sh` now accepts only lowercase letters, digits, `_`, and `-`, starting with a letter or digit.
   10. Medium: the test certificates expired after two days. They are now valid for ten years, as test infrastructure only.
+
+- **Pass 2 — session `01a172ff-7358-7b12-bdd0-ca2516f1c641`,** reviewed `git diff 19ab8bd 432ff89` for the resolutions, then `git diff 5878679 432ff89` as a whole. The header reports `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`. Snapshot before and after: `7efff574…6edb`, equal. The reviewer confirmed pass-1 findings 2, 3, and 4, and 6 to 10, fully resolved, and findings 1 and 5 in part; the gaps are findings 1 and 3 below. Findings: 0 Critical, 2 High, 3 Medium, 0 Low, all resolved at `40f2aea`:
+  1. High: a revocation timed before a racing rotation's JWT left the new user valid, since NATS voids only JWTs issued up to the revocation time. A generation now records its JWT's issue time (`brokerIssuedAt`), and a revocation is never earlier than it. A conformance case revokes a generation issued after the revocation time.
+  2. High: a rotation reported success after a failed publication of its dropped predecessor. It now returns its committed secrets with `revocationsPublished: false`. The administrative entry prints them with a retry hint and exits with status 1, and the entry stays recorded; a unit test covers it.
+  3. Medium: PostgreSQL's `now()` is the transaction's start, so a use waiting for the token's row lock could pass an expired token. The use now compares with `clock_timestamp()` after the lock. A PostgreSQL test holds the row past the expiry.
+  4. Medium: two test files published revocation lists for the same account, and a list replaces the account's, so one could undo the other. Each such file now creates and registers an account of its own with the test operator.
+  5. Medium: a default data root on a fresh account lacked its parents. The namespace now creates each missing parent owner-only; a test opens `home/.local/share/taskelith` under an empty directory.
 
 ## Remaining gates
 
