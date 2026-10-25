@@ -41,6 +41,24 @@ export {
   type WorkerId,
 } from './domain/identifiers.js';
 export {
+  AUTHORIZATION_OUTCOMES,
+  type AuthorizationOutcome,
+  type CancellationTarget,
+  type CommandId,
+  type CommandRecording,
+  type InstallationId,
+  type JournalBinding,
+  type JournaledAuthorization,
+  type JournaledCancellation,
+  type JournaledCommand,
+  type JournaledExecution,
+  type JournalSnapshot,
+  type LaunchIntent,
+  type ObservationFact,
+  type OutboxEntry,
+} from './domain/journal-records.js';
+export { planJournalRecovery, type RecoveryAction } from './domain/journal-recovery.js';
+export {
   authorizeLaunch,
   replayLaunchOperation,
   type GrantIssue,
@@ -117,3 +135,4 @@ export {
   type Task,
   type TaskOutcomeFact,
 } from './domain/task.js';
+export type { WorkerJournal } from './ports/worker-journal.js';

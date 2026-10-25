@@ -1,0 +1,4 @@
+{
+  "extends": "../../../tsconfig.package.json",
+  "references": [{ "path": "../../modules/execution" }, { "path": "../../kernel" }, { "path": "../../modules/sdlc" }]
+}
