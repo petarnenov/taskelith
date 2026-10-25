@@ -77,11 +77,17 @@ published_address() {
 }
 
 export_endpoint_urls() {
-  local postgres nats
+  local postgres nats toxiproxy postgres_route nats_route
   postgres="$(published_address postgres 5432)"
   nats="$(published_address nats 4222)"
+  toxiproxy="$(published_address toxiproxy 8474)"
+  postgres_route="$(published_address toxiproxy 15432)"
+  nats_route="$(published_address toxiproxy 14222)"
   export TASKELITH_POSTGRES_URL="postgres://taskelith:taskelith@$postgres/taskelith"
   export TASKELITH_NATS_URL="nats://$nats"
+  export TASKELITH_TOXIPROXY_URL="http://$toxiproxy"
+  export TASKELITH_POSTGRES_PROXY_URL="postgres://taskelith:taskelith@$postgres_route/taskelith"
+  export TASKELITH_NATS_PROXY_URL="nats://$nats_route"
 }
 
 case "$action" in
@@ -92,6 +98,9 @@ case "$action" in
     echo "Integration services of project $project are up; export:"
     echo "export TASKELITH_POSTGRES_URL=$TASKELITH_POSTGRES_URL"
     echo "export TASKELITH_NATS_URL=$TASKELITH_NATS_URL"
+    echo "export TASKELITH_TOXIPROXY_URL=$TASKELITH_TOXIPROXY_URL"
+    echo "export TASKELITH_POSTGRES_PROXY_URL=$TASKELITH_POSTGRES_PROXY_URL"
+    echo "export TASKELITH_NATS_PROXY_URL=$TASKELITH_NATS_PROXY_URL"
     ;;
   down)
     down
