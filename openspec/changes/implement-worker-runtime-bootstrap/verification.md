@@ -39,7 +39,8 @@ Recorded before pass 1.
 `make verify` ran in the worktree with every file tracked:
 
 - Before pass 1, at `41f2de5`: 1016 tests passed, 0 failed; coverage 99.23% lines, 91.79% branches, 98.89% functions. The comment, boundary, coverage-scope, dependency-inventory, contract-compatibility, OpenSpec, archive, and package checks pass.
-- After the pass-1 fixes: 1019 tests passed, 0 failed; coverage 99.20% lines, 91.78% branches, 98.89% functions; every other check passes.
+- After the pass-1 fixes, at `ddbf560`: 1019 tests passed, 0 failed; coverage 99.20% lines, 91.78% branches, 98.89% functions; every other check passes.
+- After the pass-2 fixes: 1021 tests passed, 0 failed; coverage 99.21% lines, 91.81% branches, 98.85% functions; every other check passes.
 
 ## Independent review
 
@@ -60,3 +61,19 @@ The reviewer is Claude Code with model `claude-fable-5-1` and effort `medium`, s
 | L3 | The contract said a later start never reads the token, while the settings read it. | Fixed: "never redeems the token". |
 | L4 | The `EnrollmentRequest` description in `execution.openapi.json` says the worker created its journal first. | Not changed: the wire contracts change only with the coordinator's approval. Recorded in the design and reported to the coordinator. |
 | L5 | Task 4.1 was unchecked. | Fixed. |
+
+### Pass 2
+
+- Session `7cde2738-b1ef-4d35-88a8-49ee420b1d0e`, 2026-10-25, on `ddbf560`; `claude-fable-5-1` in `modelUsage`.
+- Snapshot `c31638fd…d9b2` before and after: unchanged. The reviewer ran only `npm run verify:comments`, which writes nothing.
+- It confirmed the resolutions of H1, M1, L1, L2, L3, and L5 of pass 1, and accepted L4 as deferred.
+- Result: Critical 0, High 0, Medium 1, Low 5.
+
+| # | Finding | Disposition |
+| --- | --- | --- |
+| M1 | An error thrown between the claim and its completion, by the enrollment client or a file operation, left `worker/` and the lock behind, so every later start failed with `conflict`. | Fixed: `complete` abandons the claim in a `finally` unless it succeeded, and the worker abandons the claim when the request throws. Tests throw from the client and from a credential write. |
+| L1 | The documents said the worker claims the root and then draws the `journalId`, while the code drew it first. | Fixed: the code claims first. |
+| L2 | A `worker/` left without an identity gave a `conflict` with no hint for the operator. | Fixed: the message says that an operator removes it, and section 10 of the contract says so too. |
+| L3 | The credential read took the owner's uid from the worker's dependencies, while the root checks used the running account's. | Fixed: both use `ownerUid()` of the adapter, and the dependency is gone. |
+| L4 | A failed close at shutdown was silent and exited with status 0. | Fixed: it is written, redacted, and sets the exit status to 1; the test checks both. |
+| L5 | A failure after `prepareDataRoot` created `worker/` left it behind. | Fixed: the claim removes it, except for a concurrent claim's `conflict`. |

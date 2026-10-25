@@ -77,7 +77,7 @@ afterEach(async () => {
 function dependencies(): WorkerDependencies {
   return {
     enrollment, connect: broker.connect, newJournalId: () => 'c'.repeat(32), clock: { now: () => T0 },
-    ownerUid: process.getuid?.() ?? -1, probe: TEST_VOLUME,
+    probe: TEST_VOLUME,
   };
 }
 
@@ -142,6 +142,16 @@ test('a root that cannot be created never spends the token', async () => {
   assert.equal(enrollment.calls.length, 0);
 });
 
+test('an error thrown during enrollment abandons the claim', async () => {
+  enrollment.enroll = async () => {
+    throw new Error('adapter defect');
+  };
+  await assert.rejects(startWorker(settings, dependencies()), /adapter defect/);
+  assert.equal(existsSync(workerPaths(settings.dataRoot).worker), false);
+  enrollment = new FakeEnrollment();
+  await start();
+});
+
 test('a journal fault stops the start before any request or connection', async () => {
   const first = await start();
   await first.stop();
@@ -168,7 +178,7 @@ test('stop closes the connection and the root once, and a signal stops a served 
     on: (signal, listener) => listeners.set(signal, listener),
     off: (signal) => listeners.delete(signal),
   };
-  const served = serveUntilStopped(worker, host);
+  const served = serveUntilStopped(worker, host, () => assert.fail('a clean stop writes nothing'));
   listeners.get('SIGTERM')?.();
   await served;
   await worker.stop();
@@ -184,9 +194,15 @@ test('a close that fails still stops a served worker without a rejection', async
   } };
   const worker = value(await startWorker(settings, failing));
   const listeners = new Map<string, () => void>();
-  const served = serveUntilStopped(worker, { on: (signal, listener) => listeners.set(signal, listener), off: () => undefined });
+  const host: ServiceProcess = { on: (signal, listener) => listeners.set(signal, listener), off: () => undefined };
+  const lines: string[] = [];
+  const served = serveUntilStopped(worker, host, (line) => lines.push(line));
   listeners.get('SIGINT')?.();
+  listeners.get('SIGTERM')?.();
   await served;
+  assert.equal(host.exitCode, 1);
+  assert.match(lines.join('\n'), /stopping the worker failed: Error: close failed/);
+  assert.equal(lines.length, 1);
   await assert.rejects(worker.stop(), /close failed/);
   assert.equal((await start()).identity.workerId, ENROLLMENT.workerId);
 });

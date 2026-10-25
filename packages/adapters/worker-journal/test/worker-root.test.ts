@@ -97,7 +97,7 @@ test('enrollment creates the journal before the identity, with private modes', (
   });
   assert.deepEqual(root.journal.binding, BINDING);
   assert.deepEqual(root.identity.credentials, credentialReferencesOf(1));
-  assert.deepEqual(value(readWorkerCredentials(paths, root.identity, process.getuid?.() ?? -1)), ENROLLMENT.credentials);
+  assert.deepEqual(value(readWorkerCredentials(paths, root.identity)), ENROLLMENT.credentials);
   assert.equal(failed(enrollWorkerRoot(rootOptions(dataRoot), ENROLLMENT)).code, 'conflict');
 });
 
@@ -116,18 +116,25 @@ test('a claim holds the root lock until it completes or is abandoned', () => {
   assert.equal(existsSync(paths.identity), true);
 });
 
+test('an error thrown while completing a claim removes the subtree and releases the lock', () => {
+  const claim = value(claimWorkerRoot(rootOptions(dataRoot)));
+  const poisoned = { ...ENROLLMENT, credentials: { controlPlane: 'x', get broker(): string { throw new Error('defect'); } } };
+  assert.throws(() => claim.complete(poisoned), /defect/);
+  assert.equal(existsSync(claim.paths.worker), false);
+  opened.push(value(enrollWorkerRoot(rootOptions(dataRoot), ENROLLMENT)));
+});
+
 test('the credentials are read only while present, nonempty, and safe', () => {
   const { paths, identity } = enroll();
-  const uid = process.getuid?.() ?? -1;
   const broker = join(paths.credentials, 'broker.1.creds');
   writeFileSync(broker, '');
-  assert.equal(reasonOf(readWorkerCredentials(paths, identity, uid)), 'corrupt');
+  assert.equal(reasonOf(readWorkerCredentials(paths, identity)), 'corrupt');
   rmSync(broker);
-  assert.equal(reasonOf(readWorkerCredentials(paths, identity, uid)), 'corrupt');
+  assert.equal(reasonOf(readWorkerCredentials(paths, identity)), 'corrupt');
   symlinkSync(paths.identity, broker);
-  assert.equal(reasonOf(readWorkerCredentials(paths, identity, uid)), 'unsafe-path');
+  assert.equal(reasonOf(readWorkerCredentials(paths, identity)), 'unsafe-path');
   rmSync(join(paths.credentials, 'control-plane.1'));
-  assert.equal(reasonOf(readWorkerCredentials(paths, identity, uid)), 'corrupt');
+  assert.equal(reasonOf(readWorkerCredentials(paths, identity)), 'corrupt');
 });
 
 test('a group-writable credentials directory fails startup', () => {

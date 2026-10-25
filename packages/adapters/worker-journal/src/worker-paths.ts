@@ -17,6 +17,11 @@ export interface WorkerPaths {
 
 export const JOURNAL_FILE = 'journal.sqlite';
 
+// The account every control record must belong to: the running one.
+export function ownerUid(): number {
+  return process.getuid?.() ?? -1;
+}
+
 export function workerPaths(dataRoot: string): WorkerPaths {
   const worker = join(dataRoot, 'worker');
   const journalDirectory = join(worker, 'journal');

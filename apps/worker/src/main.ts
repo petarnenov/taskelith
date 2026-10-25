@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { connectWorkerTransport } from '@taskelith/nats';
-import { redactFailure } from '@taskelith/secrets';
+import { redactFailure, redactSecrets } from '@taskelith/secrets';
 import { HttpEnrollmentClient } from '@taskelith/worker-control-plane-client';
 import { CONTROL_PLANE_TIMEOUT_MILLISECONDS, currentHost, readWorkerSettings, type Environment, type WorkerSettings } from './settings.js';
 import { startWorker, type RunningWorker, type WorkerDependencies } from './worker-start.js';
@@ -15,7 +15,6 @@ export function productionDependencies(settings: WorkerSettings): WorkerDependen
     connect: connectWorkerTransport,
     newJournalId: () => randomBytes(JOURNAL_ID_BYTES).toString('hex'),
     clock: SYSTEM_CLOCK,
-    ownerUid: process.getuid?.() ?? -1,
   };
 }
 
@@ -37,18 +36,27 @@ export async function workerMain(
 export interface ServiceProcess {
   on(signal: 'SIGTERM' | 'SIGINT', listener: () => void): unknown;
   off(signal: 'SIGTERM' | 'SIGINT', listener: () => void): unknown;
+  exitCode?: number | string | null | undefined;
 }
 
-// A failed close still settles `stopped`; it is not rethrown at shutdown.
-export async function serveUntilStopped(worker: RunningWorker, host: ServiceProcess): Promise<void> {
-  const shutdown = () => void worker.stop().catch(() => undefined);
+// A failed close still settles `stopped`; it is reported and makes the
+// exit status 1 instead of becoming an unhandled rejection.
+export async function serveUntilStopped(worker: RunningWorker, host: ServiceProcess, write: (line: string) => void): Promise<void> {
+  let stopping: Promise<void> | undefined;
+  const shutdown = () => {
+    stopping ??= worker.stop().catch((error: unknown) => {
+      write(JSON.stringify({ error: { code: 'internal', message: redactSecrets(`stopping the worker failed: ${String(error)}`) } }));
+      host.exitCode = 1;
+    });
+  };
   for (const signal of ['SIGTERM', 'SIGINT'] as const) host.on(signal, shutdown);
   await worker.stopped;
+  await stopping;
   for (const signal of ['SIGTERM', 'SIGINT'] as const) host.off(signal, shutdown);
 }
 
 if (import.meta.main) {
   const worker = await workerMain(process.env, (line) => process.stderr.write(`${line}\n`));
   if (worker === undefined) process.exitCode = 1;
-  else await serveUntilStopped(worker, process);
+  else await serveUntilStopped(worker, process, (line) => process.stderr.write(`${line}\n`));
 }

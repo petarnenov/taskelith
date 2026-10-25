@@ -5,7 +5,7 @@ import type { JournalBinding } from '@taskelith/execution';
 import { checkControlPath, createOnce, createPrivateDirectory, syncBeforeUse } from '@taskelith/data-root';
 import { rootFailure } from './journal-failure.js';
 import type { CredentialReferences, WorkerIdentity } from './worker-identity.js';
-import type { WorkerPaths } from './worker-paths.js';
+import { ownerUid, type WorkerPaths } from './worker-paths.js';
 
 // The secrets of one credential generation (installation and enrollment
 // contract, section 6): the bearer secret and the `.creds` file's text.
@@ -40,16 +40,16 @@ export function writeCredentials(paths: WorkerPaths, enrollment: WorkerEnrollmen
 }
 
 // The identity's credentials, read only through safe control-record paths.
-export function readWorkerCredentials(paths: WorkerPaths, identity: WorkerIdentity, ownerUid: number): Result<WorkerCredentials> {
-  const controlPlane = readCredential(paths, identity.credentials.controlPlane, ownerUid);
+export function readWorkerCredentials(paths: WorkerPaths, identity: WorkerIdentity): Result<WorkerCredentials> {
+  const controlPlane = readCredential(paths, identity.credentials.controlPlane);
   if (!controlPlane.ok) return controlPlane;
-  const broker = readCredential(paths, identity.credentials.broker, ownerUid);
+  const broker = readCredential(paths, identity.credentials.broker);
   return broker.ok ? ok(Object.freeze({ controlPlane: controlPlane.value, broker: broker.value })) : broker;
 }
 
-function readCredential(paths: WorkerPaths, reference: string, ownerUid: number): Result<string> {
+function readCredential(paths: WorkerPaths, reference: string): Result<string> {
   const path = join(paths.worker, reference);
-  const safe = checkControlPath(paths.dataRoot, path, ownerUid);
+  const safe = checkControlPath(paths.dataRoot, path, ownerUid());
   if (!safe.ok) return safe;
   if (!existsSync(path)) return err(rootFailure('corrupt', `the credential ${reference} the identity names is missing`, { path }));
   const synced = syncBeforeUse(path);

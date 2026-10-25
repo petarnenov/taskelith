@@ -20,7 +20,7 @@ import { SqliteWorkerJournal, type CommitPointHook, type JournalClock } from './
 import { checkVolume, probeVolume, type VolumeProbe } from './volume.js';
 import { writeCredentials, type WorkerEnrollment } from './worker-credentials.js';
 import { readIdentity, serializeIdentity, type WorkerIdentity } from './worker-identity.js';
-import { workerPaths, type WorkerPaths } from './worker-paths.js';
+import { ownerUid, workerPaths, type WorkerPaths } from './worker-paths.js';
 
 export interface WorkerRootOptions {
   readonly dataRoot: string;
@@ -66,9 +66,15 @@ export interface RootClaim {
 // root that cannot be created never spends a token (item 20).
 export function claimWorkerRoot(options: WorkerRootOptions): Result<RootClaim> {
   const paths = workerPaths(options.dataRoot);
-  if (existsSync(paths.worker)) return err(failure('conflict', `${paths.worker} already exists`));
+  if (existsSync(paths.worker)) {
+    return err(failure('conflict', `${paths.worker} already exists; without an identity, an operator removes it to enroll again`));
+  }
   const prepared = prepareDataRoot(paths, options);
-  if (!prepared.ok) return prepared;
+  if (!prepared.ok) {
+    // A concurrent claim's `worker/` is a conflict and stays.
+    if (prepared.error.code !== 'conflict' && existsSync(paths.worker)) removeSubtree(paths);
+    return prepared;
+  }
   const safe = checkControlPath(paths.dataRoot, paths.lock, ownerUid());
   const lock = safe.ok ? ExclusiveFileLock.acquire(paths.lock) : safe;
   if (!lock.ok) {
@@ -97,10 +103,15 @@ function rootClaim(paths: WorkerPaths, options: WorkerRootOptions, lock: Exclusi
   };
   const complete = (enrollment: WorkerEnrollment): Result<WorkerRoot> => {
     if (settled) return err(failure('conflict', `the claim of ${paths.worker} is settled`));
-    const enrolled = checkRecordsThen(paths, () => createJournalThenIdentity(paths, options, enrollment, lock));
-    if (enrolled.ok) settled = true;
-    else abandon();
-    return enrolled;
+    let enrolled: Result<WorkerRoot> | undefined;
+    try {
+      enrolled = checkRecordsThen(paths, () => createJournalThenIdentity(paths, options, enrollment, lock));
+      return enrolled;
+    } finally {
+      // A thrown error abandons the claim too.
+      if (enrolled?.ok) settled = true;
+      else abandon();
+    }
   };
   return Object.freeze({ paths, complete, abandon });
 }
@@ -184,10 +195,6 @@ function enrolledPaths(options: WorkerRootOptions): Result<WorkerPaths> {
   if (!outside.ok) return outside;
   const volume = checkVolume(paths.worker, options.probe ?? probeVolume);
   return volume.ok ? ok(paths) : volume;
-}
-
-function ownerUid(): number {
-  return process.getuid?.() ?? -1;
 }
 
 // Takes the root lock, checks the control records, then runs `use`; the

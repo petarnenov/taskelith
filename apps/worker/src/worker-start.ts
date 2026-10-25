@@ -22,7 +22,6 @@ export interface WorkerDependencies {
   readonly connect: (endpoint: WorkerTransportEndpoint) => Promise<Result<TransportConnection>>;
   readonly newJournalId: () => string;
   readonly clock: JournalClock;
-  readonly ownerUid: number;
   readonly probe?: VolumeProbe;
 }
 
@@ -63,19 +62,25 @@ async function enroll(settings: WorkerSettings, dependencies: WorkerDependencies
       reason: 'not-enrolled', variable: 'TASKELITH_ENROLLMENT_TOKEN',
     }));
   }
-  const journalId = parseIdentifier('JournalId', dependencies.newJournalId());
-  if (!journalId.ok) return journalId;
   const claim = claimWorkerRoot(options);
   if (!claim.ok) return claim;
-  const enrolled = await dependencies.enrollment.enroll(enrollmentToken, {
+  try {
+    const binding = await requestEnrollment(enrollmentToken, settings, dependencies);
+    if (!binding.ok) claim.value.abandon();
+    return binding.ok ? claim.value.complete(binding.value) : binding;
+  } catch (error) {
+    claim.value.abandon();
+    throw error;
+  }
+}
+
+async function requestEnrollment(token: string, settings: WorkerSettings, dependencies: WorkerDependencies): Promise<Result<WorkerEnrollment>> {
+  const journalId = parseIdentifier('JournalId', dependencies.newJournalId());
+  if (!journalId.ok) return journalId;
+  const enrolled = await dependencies.enrollment.enroll(token, {
     journalId: journalId.value, host: settings.host, protocolVersions: SUPPORTED_PROTOCOL_VERSIONS, capacity: settings.capacity,
   });
-  const binding = enrolled.ok ? rootEnrollment(enrolled.value, journalId.value) : enrolled;
-  if (!binding.ok) {
-    claim.value.abandon();
-    return binding;
-  }
-  return claim.value.complete(binding.value);
+  return enrolled.ok ? rootEnrollment(enrolled.value, journalId.value) : enrolled;
 }
 
 // The installation identifier becomes a subject token, so it is checked
@@ -89,7 +94,7 @@ function rootEnrollment(enrollment: Enrollment, journalId: JournalId): Result<Wo
 
 async function connectBroker(settings: WorkerSettings, dependencies: WorkerDependencies, root: WorkerRoot): Promise<Result<RunningWorker>> {
   const { identity } = root;
-  const credentials = readWorkerCredentials(root.paths, identity, dependencies.ownerUid);
+  const credentials = readWorkerCredentials(root.paths, identity);
   if (!credentials.ok) return credentials;
   const address = TransportAddress.of(identity.installationId);
   if (!address.ok) return address;
