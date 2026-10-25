@@ -50,6 +50,12 @@ Findings: Critical 0, High 0, Medium 1, Low 0.
 
 1. Medium: the record did not show a `make verify` run after the pass 1 fixes. That run had passed but was not recorded. Fixed: the record now lists it, together with the run after this fix.
 
+### Pass 3
+
+Session `01a172a7-ea4a-7491-8672-ec2fb082e1c7`, model `gpt-6.1-sol`, at `70838be`. The SHA-256 snapshots before and after were equal. The pass 2 finding was confirmed resolved.
+
+Findings: Critical 0, High 0, Medium 0, Low 0.
+
 ## Remaining gates
 
-Pass 3 confirms the pass 2 fix. Then integration into `dev` and the archive by the coordinator. Promotion to `main` is a separate owner decision.
+Integration into `dev` and integration into `dev` and the archive by the coordinator. Promotion to `main` is a separate owner decision.
