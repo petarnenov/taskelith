@@ -3,10 +3,12 @@
 # project of the integration services; usage: services.sh ACTION PROJECT [CMD]
 set -euo pipefail
 
-if [ "$#" -lt 2 ]; then
-  echo "usage: services.sh up|down|run PROJECT [COMMAND...]" >&2
+usage() {
+  echo "usage: services.sh up|down PROJECT, or services.sh run PROJECT COMMAND..." >&2
   exit 2
-fi
+}
+
+if [ "$#" -lt 2 ]; then usage; fi
 compose_file="$(dirname "$0")/../infra/services/compose.yaml"
 action="$1"
 project="$2"
@@ -24,11 +26,27 @@ require_docker() {
 }
 
 up() {
-  compose up --detach --wait --wait-timeout 120 || { compose down --volumes; exit 1; }
+  compose up --detach --wait --wait-timeout 120
 }
 
 down() {
   compose down --volumes --remove-orphans
+}
+
+# Teardown and the stop of the command ignore further signals, so a second
+# Ctrl-C cannot cut the removal of the project short.
+teardown() {
+  trap '' INT TERM HUP
+  down
+}
+
+stop_command() {
+  trap '' INT TERM HUP
+  if [ -n "${command_pid:-}" ]; then
+    kill "$command_pid" 2>/dev/null || true
+    wait "$command_pid" 2>/dev/null || true
+  fi
+  exit "$1"
 }
 
 # Prints the host address of a service port; host ports are ephemeral.
@@ -53,7 +71,7 @@ export_endpoint_urls() {
 case "$action" in
   up)
     require_docker
-    up
+    up || { down; exit 1; }
     export_endpoint_urls
     echo "Integration services of project $project are up; export:"
     echo "export TASKELITH_POSTGRES_URL=$TASKELITH_POSTGRES_URL"
@@ -63,18 +81,17 @@ case "$action" in
     down
     ;;
   run)
+    if [ "$#" -lt 1 ]; then usage; fi
     require_docker
-    trap down EXIT
-    # Turns signals into exits, so the EXIT trap removes the project.
-    trap 'exit 130' INT
-    trap 'exit 143' TERM HUP
+    trap teardown EXIT
+    # Signals become exits, after the command stops, so the EXIT trap runs.
+    trap 'stop_command 130' INT
+    trap 'stop_command 143' TERM HUP
     up
     export_endpoint_urls
     # In the background, so that a signal interrupts the wait at once.
     "$@" &
     command_pid=$!
-    trap 'kill "$command_pid" 2>/dev/null; exit 130' INT
-    trap 'kill "$command_pid" 2>/dev/null; exit 143' TERM HUP
     wait "$command_pid"
     ;;
   *)

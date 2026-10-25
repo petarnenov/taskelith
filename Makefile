@@ -50,10 +50,10 @@ hooks:
 dependency-inventory:
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use sh -c 'npm ci --ignore-scripts && npm run inventory:dependencies'
 
-# Runs npm test against its own services, which stop also when tests fail;
-# fails closed without Docker.
+# Runs npm test with the .nvmrc Node.js against its own services, which stop
+# also when tests fail; fails closed without Docker.
 test:
-	@bash scripts/services.sh run $(VERIFY_SERVICES) npm test
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use bash scripts/services.sh run $(VERIFY_SERVICES) npm test
 
 # Starts PostgreSQL and NATS for manual integration test runs and prints
 # the URLs to export.
