@@ -24,7 +24,7 @@ import {
   type RecoveryEvidence,
   type SupervisorLiveness,
 } from './recovery.js';
-import { highestSupervisor } from './supervisor.js';
+import { highestSupervisor } from './supervisor-session.js';
 
 export type SupervisorMode = 'launch' | 'adopt';
 

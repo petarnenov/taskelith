@@ -9,7 +9,9 @@ import { linuxPlatform } from './linux.js';
 import { NodeSpawner } from './node-spawner.js';
 import type { Platform } from './ports.js';
 import type { Command } from './record.js';
-import { adoptExecution, superviseLaunch, type SupervisorOutcome, type SupervisorTiming } from './supervisor.js';
+import { adoptExecution } from './adoption.js';
+import { superviseLaunch } from './supervisor.js';
+import type { SupervisorOutcome, SupervisorTiming } from './supervisor-session.js';
 import type { SupervisorMode } from './worker-supervision.js';
 
 export interface ProgramArguments {

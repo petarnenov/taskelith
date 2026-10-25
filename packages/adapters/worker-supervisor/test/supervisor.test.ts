@@ -3,6 +3,7 @@ import test from 'node:test';
 import { CrashPoints, SimulatedCrash } from '@taskelith/testing';
 import {
   adoptExecution,
+  encodeEvent,
   encodeRecord,
   parseEvents,
   parseExit,
@@ -354,4 +355,66 @@ test('macOS cancellation signals nothing once the child is reaped', async () => 
   endGrace();
   await graced;
   assert.deepEqual(during.spawner.signals, ['SIGTERM 500']);
+});
+
+test('a damaged event log proves nothing: the supervisor ends without an exit', async () => {
+  const setup = await prepared();
+  const run = superviseLaunch(setup.supervisor);
+  await until(() => file(setup, 'handle') !== undefined);
+  setup.store.files.set('events', '12:00000000:{"broken":tru}\nnext\n');
+  setup.spawner.exit(0);
+
+  assert.deepEqual(await run, { kind: 'termination-unprovable' });
+  assert.equal(file(setup, 'exit'), undefined);
+  assert.equal(setup.lock.held, false);
+});
+
+test('without a readable child identity the supervisor still cancels its group and ends without an exit', async () => {
+  const setup = await prepared();
+  const identityOf = setup.supervisor.platform.inspector.identity;
+  const platform = {
+    ...setup.supervisor.platform,
+    inspector: { ...setup.supervisor.platform.inspector, identity: (pid: number) => (pid === 500 ? identityOf(9999) : identityOf(pid)) },
+  };
+  const run = superviseLaunch({ ...setup.supervisor, platform });
+  await until(() => setup.spawner.spawned.length === 1);
+  await requestCancellation(setup.worker, 'requested');
+  await until(() => setup.spawner.signals.length === 2);
+  setup.spawner.exit(null, 'SIGKILL');
+  await run;
+
+  assert.equal(file(setup, 'handle'), undefined);
+  assert.deepEqual(setup.spawner.signals, ['SIGTERM 500', 'SIGKILL 500']);
+});
+
+test('a supervisor that cannot leave the containment gives up without a fact', async () => {
+  const setup = await prepared('linux');
+  setup.fake.failures.set('release', 99);
+
+  assert.deepEqual(await superviseLaunch(setup.supervisor), { kind: 'containment-unusable' });
+  assert.equal(file(setup, 'exit'), undefined);
+  assert.equal(setup.spawner.spawned.length, 1);
+});
+
+test('a torn event entry is cut off before the next one is written', async () => {
+  const setup = await prepared('linux');
+  setup.store.files.set('events', `${encodeEvent({ kind: 'cancellation', step: 'terminate-sent' })}17:abc`);
+  setup.fake.containmentPopulated = true;
+  const run = superviseLaunch(setup.supervisor);
+  await until(() => file(setup, 'handle') !== undefined);
+  await requestCancellation(setup.worker, 'requested');
+  await until(() => setup.fake.containmentLog.includes('kill'));
+  setup.spawner.exit(null, 'SIGKILL');
+  await run;
+
+  assert.deepEqual(events(setup), [
+    { kind: 'cancellation', step: 'terminate-sent' },
+    { kind: 'cancellation', step: 'containment-killed' },
+  ]);
+});
+
+test('a lock that cannot be opened is reported apart from a busy one', async () => {
+  const setup = await prepared();
+  const lock = { tryAcquire: () => ({ ok: false as const, error: { code: 'internal' as const, message: 'not a lock', details: {} } }) };
+  assert.deepEqual(await superviseLaunch({ ...setup.supervisor, lock }), { kind: 'lock-unusable', reason: 'not a lock' });
 });

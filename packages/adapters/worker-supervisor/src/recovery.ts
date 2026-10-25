@@ -18,7 +18,7 @@ export interface RecordSnapshot {
 }
 
 // `lock-held-by-dead`: the lock is held, but the highest supervisor record
-// names a dead process, as a forked child may briefly keep it (section 6).
+// names a dead process, as between taking the lock and writing the record.
 export type SupervisorLiveness = 'live' | 'none' | 'lock-held-by-dead' | 'lock-held-by-dead-after-retries';
 
 export type NativeEvidence =

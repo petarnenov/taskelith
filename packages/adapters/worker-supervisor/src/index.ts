@@ -79,14 +79,14 @@ export {
   type ProgramArguments,
   type ProgramOptions,
 } from './supervisor-program.js';
+export { adoptExecution } from './adoption.js';
+export { superviseLaunch } from './supervisor.js';
 export {
-  adoptExecution,
   highestSupervisor,
-  superviseLaunch,
   type SupervisorDependencies,
   type SupervisorOutcome,
   type SupervisorTiming,
-} from './supervisor.js';
+} from './supervisor-session.js';
 export { proveDarwinTermination, type DarwinTerminationInput, type TerminationProof } from './termination.js';
 export {
   gatherEvidence,
