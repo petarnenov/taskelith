@@ -1,6 +1,6 @@
 ## Why
 
-Every recorded run of `make doctor`, `make setup`, and `make verify` so far was on macOS arm64. The Docker integration services (PostgreSQL, NATS, and Toxiproxy through `scripts/services.sh` and isolated Compose projects), the Linux-specific tests, and the opt-in target `make verify-linux-cgroup` had not been observed on a Linux host. The coordinator (Niki) assigned this observation on 2026-10-25.
+Every recorded run of `make doctor`, `make setup`, and `make verify` so far was on macOS. The Docker integration services (PostgreSQL, NATS, and Toxiproxy through `scripts/services.sh` and isolated Compose projects), the Linux-specific tests, and the opt-in target `make verify-linux-cgroup` had not been observed on a Linux host. The coordinator (Niki) assigned this observation on 2026-10-25.
 
 ## What Changes
 

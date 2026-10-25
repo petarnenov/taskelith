@@ -49,9 +49,37 @@ $ NODE_PIN=24.22.1 bash scripts/with-pinned-node.sh use sh -c 'command -v node; 
 v24.22.0
 ```
 
-As a result, `make setup` installs the pinned version and sets the nvm default but then fails. `make doctor` reports the Node.js and npm checks as failed with the remedy `make setup`, which does not help. `make verify` stops at its toolchain check, and so does the `pre-push` hook. This contradicts the `development-environment` scenario "Shell on another Node.js after setup", which expects the pinned version when nvm has it installed. The cause is the host's `PATH`, not Linux itself. The workaround used for the runs above was to put `~/.nvm/versions/node/v24.22.1/bin` first in `PATH` for these commands. No fix is part of this change; the coordinator assigns one separately.
+The first `make setup` installed the pinned version and set the nvm default, then failed in its doctor step:
 
-F2. **The event-loop lag test failed once under a full run.** The test "an idle window reads below the resolution" (`packages/adapters/node-observability/test/node-observability.test.ts:96`) samples the event-loop lag over a 100 ms idle window and asserts that the p99 is below 10 ms. In one of five `make verify` runs it failed, while the other 867 tests passed:
+```text
+Now using node v24.22.1 (npm v11.19.1)
+default -> 24.22.1 (-> v24.22.1)
+ok   git: available
+FAIL Node.js 24.22.1 (.nvmrc): v24.22.0
+     With nvm, run make setup to install Node.js 24.22.1; without nvm, install Node.js 24.22.1 yourself.
+FAIL npm 12.2.1 (CI pin): 11.19.1
+     Fix the Node.js check first; npm is checked under Node.js 24.22.1.
+FAIL Dependency tree complete (npm ls --all): missing or out of date
+     Run make setup.
+FAIL pre-push and post-merge hooks enabled: not configured
+     Run make setup.
+FAIL dependency inventory merge driver configured: not configured
+     Run make setup.
+ok   Docker daemon and Compose reachable: available
+5 of 7 checks failed.
+make: *** [Makefile:115: setup] Error 1
+```
+
+`make doctor` in the fresh worktree printed the same seven lines and remedies and exited with `make: *** [Makefile:110: doctor] Error 1`. After the successful setup, `make doctor` under the host's own `PATH` still reports the Node.js check as failed with the remedy to run `make setup`, which does not help, and the npm check as failed with "Fix the Node.js check first". `make verify` under the host's own `PATH` stops at its toolchain check, and the `pre-push` hook runs the same target:
+
+```text
+make verify: Node v24.22.0 does not match .nvmrc (v24.22.1). With nvm, run make setup to install Node.js 24.22.1; without nvm, install Node.js 24.22.1 yourself.
+make[1]: *** [Makefile:37: toolchain] Error 1
+make: *** [Makefile:25: verify] Error 2
+```
+ This contradicts the `development-environment` scenario "Shell on another Node.js after setup", which expects the pinned version when nvm has it installed. The cause is the host's `PATH`, not Linux itself. The workaround used for the runs above was to put `~/.nvm/versions/node/v24.22.1/bin` first in `PATH` for these commands. No fix is part of this change; the coordinator assigns one separately.
+
+F2. **The event-loop lag test failed once under a full run.** The test "an idle window reads below the resolution" (`packages/adapters/node-observability/test/node-observability.test.ts:96`) samples the event loop over a 100 ms idle window with a 10 ms resolution. `EventLoopLagMonitor.sample` records `event-loop.lag` as the histogram's p99 minus the resolution, at least zero, and the test asserts that this lag is below 10 ms. In one of five `make verify` runs it failed, while the other 867 tests passed:
 
 ```text
 test at packages/adapters/node-observability/test/node-observability.test.ts:96:1
