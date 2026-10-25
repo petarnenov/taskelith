@@ -6,6 +6,7 @@ import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import type { ControlPlaneStore, ControlPlaneTransaction } from './control-plane-store.js';
 import { OBSERVATION_EFFECTS, type ObservationEffect } from './observation-effects.js';
 import { NOT_CONSUMED, notConsumed, parseObservation, type Observation, type ObservationMessage } from './observation.js';
+import { isAuthenticProducer } from './producer-authentication.js';
 
 // The durable consumer of every worker's observations, and its inbox.
 export const OBSERVATION_CONSUMER = 'control-plane-observations';
@@ -107,16 +108,12 @@ async function recordContactOf(tx: ControlPlaneTransaction, observation: Observa
   return authentic.ok ? tx.reports.recordContact(observation.position.workerId, await tx.now()) : authentic;
 }
 
-// Decision 2: the subject's worker, enrolled and not revoked, under its
-// enrolled journal; a revoked worker is 21d's, another journal 21c's.
+// Decision 2; a revoked worker is 21d's, another journal 21c's.
 async function authenticate(tx: ControlPlaneTransaction, observation: Observation): Promise<Result<void>> {
   const { workerId, journalId } = observation.position;
-  const worker = await tx.fleet.worker(workerId);
-  if (!worker.ok) return worker;
-  const enrolled = worker.value;
-  const authentic = observation.subjectWorkerId === workerId && enrolled !== undefined
-    && enrolled.revokedAt === undefined && enrolled.journalId === journalId;
-  return authentic ? ok(undefined) : notConsumed(`its producer ${workerId} is not authenticated`);
+  const authentic = await isAuthenticProducer(tx, { subjectWorkerId: observation.subjectWorkerId, workerId, journalId });
+  if (!authentic.ok) return authentic;
+  return authentic.value ? ok(undefined) : notConsumed(`its producer ${workerId} is not authenticated`);
 }
 
 async function advanceCursor(tx: ControlPlaneTransaction, observation: Observation, cursor: ProducerCursor, at: Instant): Promise<Result<void>> {

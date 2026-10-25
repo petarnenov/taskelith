@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { JetStreamApiCodes, JetStreamApiError, type JetStreamClient, type JetStreamManager } from '@nats-io/jetstream';
+import type { NatsConnection } from '@nats-io/nats-core';
 import { InMemoryInbox, type WorkerId } from '@taskelith/execution';
 import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
@@ -11,21 +12,24 @@ import {
   COMMAND_SCHEMAS,
   COMMAND_SUBJECT_NOTICES,
   encodeJson,
+  HeartbeatReceiver,
   INVENTORY_REPORTED,
   JetStreamPublisher,
   NatsCommandConsumers,
   OBSERVATION_SCHEMAS,
   OutboxPublisher,
   readCommandSubjectMessage,
+  readHeartbeatSubjectMessage,
   readObservationSubjectMessage,
   redriveMessageId,
   retryDelayMilliseconds,
   streamConfigs,
   TRANSPORT_LIMITS,
   TransportAddress,
+  WORKER_HEARTBEAT,
 } from '@taskelith/nats';
 import { FakeOutbox, outboxRow } from './fakes.ts';
-import { capacityDeclared, confirmation, inventoryPart, inventoryRequest, offer } from './messages.ts';
+import { capacityDeclared, confirmation, heartbeat, inventoryPart, inventoryRequest, offer } from './messages.ts';
 
 const ADDRESS = TransportAddress.of('install-1');
 assert.ok(ADDRESS.ok);
@@ -55,6 +59,12 @@ test('subjects follow the execution contract and refuse tokens NATS would parse'
   assert.equal(address.subjectOfOutboxRow('tasks.1.events').ok, false);
   assert.deepEqual(address.subjectOfOutboxRow('sdlc.events'), ok('taskelith.install-1.sdlc.events'));
   assert.equal(address.workerOfObservationSubject('taskelith.install-1.workers.worker-1.observations'), 'worker-1');
+  assert.deepEqual(address.heartbeatSubject('worker-1'), ok('taskelith.install-1.workers.worker-1.heartbeats'));
+  assert.equal(address.workerOfHeartbeatSubject('taskelith.install-1.workers.worker-1.heartbeats'), 'worker-1');
+  assert.equal(address.workerOfHeartbeatSubject('taskelith.install-1.workers.worker-1.observations'), undefined);
+  assert.equal(address.workerOfObservationSubject('taskelith.install-1.workers.worker-1.heartbeats'), undefined);
+  assert.equal(address.heartbeatSubject('a.b').ok, false);
+  assert.ok(value(address.workerPermissions('worker-1')).publish.includes('taskelith.install-1.workers.worker-1.heartbeats'));
   for (const subject of [
     'taskelith.install-1.workers.worker-1.commands', 'taskelith.other.workers.worker-1.observations',
     'taskelith.install-1.workers.a.b.observations', 'taskelith.install-1.workers..observations',
@@ -143,6 +153,17 @@ test('the schema tables cover every message of the execution channels', () => {
       .sort();
   assert.deepEqual(schemaOf('workerCommands'), [...Object.values(COMMAND_SCHEMAS), ...Object.values(COMMAND_SUBJECT_NOTICES)].sort());
   assert.deepEqual(schemaOf('workerObservations'), [...Object.values(OBSERVATION_SCHEMAS), 'InventoryReported'].sort());
+  assert.deepEqual(schemaOf('workerHeartbeats'), ['WorkerHeartbeat']);
+  assert.equal(document.channels.workerHeartbeats.address.replace('{installationId}', 'install-1').replace('{workerId}', 'worker-1'),
+    value(address.heartbeatSubject('worker-1')));
+});
+
+test('a heartbeat subject message passes only the heartbeat schema and has no identity', () => {
+  const read = readHeartbeatSubjectMessage(bytes(heartbeat('worker-1')));
+  assert.ok(read.ok);
+  assert.deepEqual([read.value.type, read.value.identity], [WORKER_HEARTBEAT, undefined]);
+  assert.match(rejection(readHeartbeatSubjectMessage(bytes({ ...heartbeat('worker-1'), slots: 2 }))), /^violates WorkerHeartbeat: /);
+  assert.equal(rejection(readHeartbeatSubjectMessage(new Uint8Array([0xff]))), 'not UTF-8 JSON');
 });
 
 test('a message is applied once per consumer by its body identity', async () => {
@@ -280,4 +301,65 @@ test('removing a worker command consumer deletes it, and one already gone counts
   }
   const refused = await new NatsCommandConsumers(deletingConsumers(new Error('timeout')).jsm, ADDRESS.value).remove(WORKER);
   assert.equal(refused.ok, false);
+});
+
+// A subscription that yields the given messages, as many pending as stated.
+function heartbeatConnection(messages: Array<{ subject: string; data: Uint8Array }>, pending = () => 0) {
+  const subscribed: Array<{ subject: string; queue: string | undefined }> = [];
+  const connection = {
+    subscribe(subject: string, options: { queue?: string }) {
+      subscribed.push({ subject, queue: options.queue });
+      return { getPending: pending, unsubscribe() {}, async *[Symbol.asyncIterator]() { yield* messages; } };
+    },
+  };
+  return { connection: connection as unknown as NatsConnection, subscribed };
+}
+
+test('the heartbeat receiver handles valid heartbeats and logs what it drops or cannot record', async () => {
+  const sink = new InMemoryLogSink();
+  const subject = (worker: string) => value(address.heartbeatSubject(worker));
+  const { connection, subscribed } = heartbeatConnection([
+    { subject: subject('worker-1'), data: bytes(heartbeat('worker-1')) },
+    { subject: subject('worker-2'), data: bytes({ ...heartbeat('worker-2'), sentAt: 'soon' }) },
+    { subject: subject('worker-3'), data: bytes(heartbeat('worker-3')) },
+    { subject: subject('worker-4'), data: bytes(heartbeat('worker-4')) },
+  ]);
+  const handled: string[] = [];
+  const receiver = new HeartbeatReceiver({ connection, address, queue: 'control-plane' }, async (received) => {
+    handled.push(received.subject);
+    if (received.subject === subject('worker-3')) return err(failure('forbidden', 'not authenticated'));
+    if (received.subject === subject('worker-4')) throw new Error('defect');
+    return ok(undefined);
+  }, { logger: new Logger(sink, new SimulatedHost(value(parseInstant('2026-10-25T10:00:00.000Z'))).wallClock) });
+
+  await receiver.run(new AbortController().signal);
+  assert.deepEqual(subscribed, [{ subject: 'taskelith.install-1.workers.*.heartbeats', queue: 'control-plane' }]);
+  assert.deepEqual(handled, [subject('worker-1'), subject('worker-3'), subject('worker-4')]);
+  assert.deepEqual(sink.records.map((record) => [record.event, record.fields['subject']]), [
+    ['nats.heartbeat.dropped', subject('worker-2')],
+    ['nats.heartbeat.unrecorded', subject('worker-3')],
+    ['nats.heartbeat.unrecorded', subject('worker-4')],
+  ]);
+  assert.match(String(sink.records[0]!.fields['reason']), /^violates WorkerHeartbeat: /);
+  assert.deepEqual(sink.records.slice(1).map((record) => record.fields['reason']), ['forbidden: not authenticated', 'defect']);
+});
+
+test('the heartbeat receiver drops heartbeats beyond its pending bound and does not subscribe once stopped', async () => {
+  const sink = new InMemoryLogSink();
+  let pending = 3;
+  const { connection, subscribed } = heartbeatConnection(
+    [1, 2, 3].map(() => ({ subject: value(address.heartbeatSubject('worker-1')), data: bytes(heartbeat('worker-1')) })),
+    () => --pending,
+  );
+  let handled = 0;
+  const receiver = new HeartbeatReceiver({ connection, address, queue: 'q' }, async () => ok(++handled), {
+    logger: new Logger(sink, new SimulatedHost(value(parseInstant('2026-10-25T10:00:00.000Z'))).wallClock), maxPending: 1,
+  });
+  await receiver.run(new AbortController().signal);
+  assert.equal(handled, 2);
+  assert.deepEqual(sink.records.map((record) => record.fields['reason']), ['too many pending']);
+  const stopped = new AbortController();
+  stopped.abort();
+  await receiver.run(stopped.signal);
+  assert.equal(subscribed.length, 1);
 });

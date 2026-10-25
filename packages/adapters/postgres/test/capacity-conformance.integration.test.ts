@@ -60,7 +60,7 @@ runSuite('producer cursors', PRODUCER_CURSORS_CONFORMANCE, (tx) => tx.cursors);
 // Each report commits on its own, as each observation's transaction does,
 // so a case can add a worker or race two reports.
 function committingReports(): WorkerReportsConformanceTarget {
-  const write = (work: (reports: WorkerReports) => Promise<Result<void>>) => database.transaction((tx) => work(tx.reports));
+  const write = <Value>(work: (reports: WorkerReports) => Promise<Result<Value>>) => database.transaction((tx) => work(tx.reports));
   const read = async <Value>(work: (workers: PlacementWorkers) => Promise<Value>): Promise<Value> => {
     const outcome = await database.readCommitted(async (tx) => ok(await work(tx.workers)));
     if (!outcome.ok) throw new Error(outcome.error.message);
@@ -69,6 +69,7 @@ function committingReports(): WorkerReportsConformanceTarget {
   return {
     reports: {
       recordContact: (...args) => write((reports) => reports.recordContact(...args)),
+      markContactLost: (...args) => write((reports) => reports.markContactLost(...args)),
       declareCapacity: (...args) => write((reports) => reports.declareCapacity(...args)),
       enterPressure: (...args) => write((reports) => reports.enterPressure(...args)),
       leavePressure: (...args) => write((reports) => reports.leavePressure(...args)),

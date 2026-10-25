@@ -2,8 +2,8 @@
   "asyncapi": "3.0.0",
   "info": {
     "title": "Taskelith execution messages",
-    "version": "0.3.0",
-    "description": "Commands to workers and observations from workers over NATS JetStream (G2 decision D3 (a)). Operations are described from the control plane. Each command, observation, and report is first published with the Nats-Msg-Id header set to its commandId, its observationId, or its reportId and part, and a redrive sets a new one; the identity in the body never changes. A confirmation is idempotent and has no header. Every message has a JSON encoding of at most 1 MiB. A worker reads the command metadata and payload.protocolVersion first, which keep their meaning across protocol versions, and rejects a command whose version it does not support."
+    "version": "0.4.0",
+    "description": "Commands to workers and observations from workers over NATS JetStream (G2 decision D3 (a)), and worker heartbeats over core NATS outside any stream. Operations are described from the control plane. Each command, observation, and report is first published with the Nats-Msg-Id header set to its commandId, its observationId, or its reportId and part, and a redrive sets a new one; the identity in the body never changes. A confirmation and a heartbeat are idempotent and have no header. Every message has a JSON encoding of at most 1 MiB. A worker reads the command metadata and payload.protocolVersion first, which keep their meaning across protocol versions, and rejects a command whose version it does not support."
   },
   "defaultContentType": "application/json",
   "channels": {
@@ -91,6 +91,23 @@
           "$ref": "#/components/messages/inventoryReported"
         }
       }
+    },
+    "workerHeartbeats": {
+      "address": "taskelith.{installationId}.workers.{workerId}.heartbeats",
+      "description": "Heartbeats of one worker, which only that worker can publish. Core NATS without a stream: a lost heartbeat is replaced by the next one.",
+      "parameters": {
+        "installationId": {
+          "description": "The installation that binds the subjects."
+        },
+        "workerId": {
+          "description": "The worker that sends the heartbeat."
+        }
+      },
+      "messages": {
+        "workerHeartbeat": {
+          "$ref": "#/components/messages/workerHeartbeat"
+        }
+      }
     }
   },
   "operations": {
@@ -164,6 +181,17 @@
         },
         {
           "$ref": "#/channels/workerObservations/messages/inventoryReported"
+        }
+      ]
+    },
+    "receiveWorkerHeartbeat": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/workerHeartbeats"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/workerHeartbeats/messages/workerHeartbeat"
         }
       ]
     }
@@ -1926,6 +1954,41 @@
             "$ref": "#/components/schemas/AdmissionPressureChangedPayload"
           }
         }
+      },
+      "WorkerHeartbeat": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Sent at a fixed interval to show that the worker is in contact, outside the journal sequence; it is never confirmed or deduplicated.",
+        "required": [
+          "messageType",
+          "schemaVersion",
+          "protocolVersion",
+          "workerId",
+          "journalId",
+          "sentAt"
+        ],
+        "properties": {
+          "messageType": {
+            "type": "string",
+            "const": "worker.heartbeat"
+          },
+          "schemaVersion": {
+            "$ref": "#/components/schemas/SchemaVersion"
+          },
+          "protocolVersion": {
+            "$ref": "#/components/schemas/ProtocolVersion"
+          },
+          "workerId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "journalId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "sentAt": {
+            "$ref": "#/components/schemas/Instant",
+            "description": "The worker clock; informational only."
+          }
+        }
       }
     },
     "messages": {
@@ -2060,6 +2123,13 @@
         "title": "worker.inventory.reported",
         "payload": {
           "$ref": "#/components/schemas/InventoryReported"
+        }
+      },
+      "workerHeartbeat": {
+        "name": "workerHeartbeat",
+        "title": "worker.heartbeat",
+        "payload": {
+          "$ref": "#/components/schemas/WorkerHeartbeat"
         }
       }
     }

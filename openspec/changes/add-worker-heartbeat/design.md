@@ -1,0 +1,23 @@
+## Context
+
+Item 21b records contact: every authenticated observation sets `workers.reachable` and moves `workers.last_contact_at` to the database time, never backward (`WorkerReports.recordContact`). Placement reads `reachable` (`ELIGIBLE`), and `isSupersessionDue` treats an unreachable worker's ungranted assignment as supersedable, though nothing calls it yet. The scheduling domain's `recordContactLost` states the rule but runs nowhere. Inventory reports share the observation subject; 21c consumes them.
+
+## Decisions
+
+1. **Core NATS, no stream.** The heartbeat subject belongs to no JetStream stream. A heartbeat has no identity, needs no acknowledgement, and the next one supersedes it, so storing it would only grow a stream. A heartbeat sent while no control plane listens is lost, which the timeout already tolerates. Because no stream holds the subject, the observation stream's subject filter (`workers.*.observations`) and its consumers are unchanged.
+2. **Its own subject.** Coordinator decision Q1 (a). A heartbeat on the observation subject would pass through the durable observation consumer and its quarantine. The worker's broker user gets one more publish permission, its own heartbeat subject, which `workerPermissions` adds and enrollment and rotation issue.
+3. **Message fields.** `WorkerHeartbeat` has `messageType`, `schemaVersion`, and `protocolVersion`, which every non-command message carries (contract section 3), and `workerId`, `journalId`, and `sentAt`. `sentAt` is the worker's clock and only informational; contact uses the database time.
+4. **Version 0.4.0.** The compatibility check counts the new message and schema as unclassified changes, which need a new minor version while the major is 0.
+5. **Queue group.** The control plane subscribes to `taskelith.<installationId>.workers.*.heartbeats` in the queue group `control-plane-heartbeats`, so that more control-plane instances share the heartbeats instead of each recording every one. A duplicate would be harmless anyway, because contact never moves backward.
+6. **Receiver bound and failures.** The receiver handles one heartbeat at a time. It drops, and logs as `nats.heartbeat.dropped`, a heartbeat that fails its schema or that arrives while more than `1,000` wait, because core NATS would otherwise queue them in memory without limit. A handler failure or throw is logged as `nats.heartbeat.unrecorded` and not retried; the next heartbeat replaces it.
+7. **Authentication.** The same check as an observation's (21b decision 2): the subject's worker is the body's `workerId`, enrolled, not revoked, and under its enrolled `journalId`. It moves from `ObservationService` into `isAuthenticProducer`, which both services call; the observation outcome (`not-consumed`) is unchanged. A refused heartbeat is `forbidden` and changes nothing.
+8. **Lost contact in one statement.** `WorkerReports.markContactLost(before, limit)` sets `reachable = false` for at most `limit` reachable workers whose `last_contact_at` is before `before`, the oldest first. The condition is the domain's `recordContactLost` rule: a contact committed after the cutoff was read keeps the worker, because SERIALIZABLE makes the check run again. It returns the workers it marked, so the check can log them.
+9. **Database time.** The cutoff is the transaction's `now()` minus the timeout, the same clock that records contact. Tests inject the clock through the store's `now`.
+10. **Bounded check.** `LostContactCheck` runs every `10s` and marks at most `100` workers per run (`LOST_CONTACT_BATCH`), like the placement pass; the next run continues from the oldest. It logs `fleet.worker.contact-lost` per worker and a failed run as `fleet.lost-contact.failed`. Detection takes at most the timeout plus one interval, `40s`.
+11. **Restart.** After a control-plane outage longer than the timeout, the first check marks every worker unreachable until its next heartbeat, at most `10s` later. That only delays placement, and it is the safe answer, because the control plane had no contact meanwhile.
+12. **Placement only.** Unreachable changes no attempt, assignment, or reservation (architecture section 5, invariant 4). No running code supersedes or reconciles on it; reconciling a lost worker's attempts is out of scope.
+
+## Risks / Trade-offs
+
+- **Credentials issued before this change** lack the heartbeat permission until the next rotation. No worker sends heartbeats before 20d, so this matters only once 20d ships; 20d can rotate, or an operator re-enrolls.
+- **A busy worker without heartbeats.** Until 20d, only observations count as contact, so a worker that observes nothing for `30s` becomes unreachable. Before 20d no worker publishes observations either, so this affects only tests.

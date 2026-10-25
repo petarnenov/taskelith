@@ -34,6 +34,10 @@ export class InMemoryPlacementWorkers implements PlacementWorkers {
     return this.#workers.get(workerId);
   }
 
+  records(): readonly WorkerPlacementRecord[] {
+    return [...this.#workers.values()];
+  }
+
   replace(worker: WorkerPlacementRecord): void {
     this.#workers.set(worker.workerId, Object.freeze({ ...worker }));
   }

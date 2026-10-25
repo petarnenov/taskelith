@@ -212,6 +212,17 @@ test('a non-retryable launch rejection is an observation, a retryable one is not
   assert.ok(!checkMessageSchema('LaunchRejectedPayload', { ...rejected, reason: 'unavailable' }).ok);
 });
 
+test('a heartbeat names only the worker, its journal, and the time it was sent', () => {
+  const heartbeat = { messageType: 'worker.heartbeat', schemaVersion: 1, protocolVersion: 1, workerId: 'worker-1', journalId: 'journal-1', sentAt: AT };
+
+  assert.ok(checkMessageSchema('WorkerHeartbeat', heartbeat).ok);
+  assert.ok(!checkMessageSchema('WorkerHeartbeat', { ...heartbeat, slots: 2 }).ok);
+  assert.ok(!checkMessageSchema('WorkerHeartbeat', { ...heartbeat, messageType: 'worker.inventory.reported' }).ok);
+  for (const field of ['workerId', 'journalId', 'sentAt'] as const) {
+    assert.ok(!checkMessageSchema('WorkerHeartbeat', { ...heartbeat, [field]: undefined }).ok, field);
+  }
+});
+
 test('the control plane confirms a journal prefix and the worker reports its inventory', () => {
   const confirmation = { messageType: 'execution.observations.confirmed', schemaVersion: 1, protocolVersion: 1, issuedAt: AT, workerId: 'worker-1', journalId: 'journal-1', confirmedThrough: 7 };
   const inventory = {

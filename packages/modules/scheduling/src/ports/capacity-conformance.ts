@@ -401,6 +401,25 @@ export const WORKER_REPORTS_CONFORMANCE: readonly ConformanceCase<WorkerReportsC
     },
   },
   {
+    name: 'contact is lost for reachable workers silent since before the cutoff, oldest first, until a new contact',
+    async check({ reports, workers, addWorker }: WorkerReportsConformanceTarget) {
+      const problems: string[] = [];
+      const [older, old, recent, unreachable] = [
+        worker('worker-older', { lastContactAt: second(5) }), worker('worker-old', { lastContactAt: second(10) }),
+        worker('worker-recent', { lastContactAt: second(30) }), worker('worker-unreachable', { reachable: false, lastContactAt: second(1) }),
+      ];
+      for (const record of [older, old, recent, unreachable]) await addWorker(record);
+      const reachable = async (record: WorkerPlacementRecord) => (await workers.get(record.workerId))?.reachable;
+      expectSame(problems, 'oldest within the limit', await reports.markContactLost(second(20), 1), { ok: true, value: [older.workerId] });
+      expectSame(problems, 'the rest', await reports.markContactLost(second(20), 10), { ok: true, value: [old.workerId] });
+      expectSame(problems, 'none left', await reports.markContactLost(second(20), 10), { ok: true, value: [] });
+      expectSame(problems, 'kept', [await reachable(recent), await reachable(unreachable)], [true, false]);
+      expectSuccess(problems, 'contact again', await reports.recordContact(older.workerId, second(40)));
+      expectSame(problems, 'reachable again', await workers.get(older.workerId), { ...older, lastContactAt: second(40) });
+      return problems;
+    },
+  },
+  {
     name: 'a declaration applies only above the last one',
     async check({ reports, workers }: WorkerReportsConformanceTarget) {
       const problems: string[] = [];

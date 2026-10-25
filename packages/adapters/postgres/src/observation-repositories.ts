@@ -59,6 +59,18 @@ export class PostgresWorkerReports implements WorkerReports {
     return this.#update(workerId, 'reachable = true, last_contact_at = greatest(last_contact_at, $2::timestamptz)', [at]);
   }
 
+  // A contact that commits meanwhile is a serialization conflict, and the
+  // transaction runs again and keeps that worker reachable.
+  async markContactLost(before: Instant, limit: number): Promise<Result<readonly WorkerId[]>> {
+    const { rows } = await this.#session.query<{ worker_id: WorkerId }>(
+      `UPDATE workers SET reachable = false WHERE worker_id IN (
+         SELECT worker_id FROM workers WHERE reachable AND last_contact_at < $1 ORDER BY last_contact_at, worker_id LIMIT $2)
+       RETURNING worker_id`,
+      [before, limit],
+    );
+    return ok(Object.freeze(rows.map((row) => row.worker_id).sort()));
+  }
+
   declareCapacity(workerId: WorkerId, declaration: CapacityDeclaration, sequence: Sequence): Promise<Result<void>> {
     const { slots, cpuMillicores, memoryMebibytes, controls } = declaration;
     return this.#update(workerId, `capacity_sequence = $2, slots = $3, cpu_millicores = $4, memory_mebibytes = $5, controls = $6`,

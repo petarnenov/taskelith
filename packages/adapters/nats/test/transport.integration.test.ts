@@ -10,6 +10,7 @@ import {
   ensureObservationConsumer,
   ensureStreams,
   ensureWorkerConsumer,
+  HeartbeatReceiver,
   JetStreamPublisher,
   MAX_DELIVERIES_REASON,
   observationConsumer,
@@ -19,9 +20,10 @@ import {
   workerCommandConsumer,
   TRANSPORT_LIMITS,
   type QuarantineRecord,
+  type ReceivedHeartbeat,
 } from '@taskelith/nats';
 import { FakeOutbox, outboxRow } from './fakes.ts';
-import { capacityDeclared, confirmation, inventoryPart, offer } from './messages.ts';
+import { capacityDeclared, confirmation, heartbeat, inventoryPart, offer } from './messages.ts';
 import {
   expectOk,
   installation,
@@ -321,5 +323,34 @@ describe('observation consumers', () => {
     const [first] = expectOk(await quarantine.records(1, 1));
     const rest = expectOk(await quarantine.records(first!.sequence + 1));
     assert.deepEqual([first, ...rest].map((r) => r.sequence), records.map((r) => r.sequence));
+  });
+});
+
+describe('heartbeat receiver', () => {
+  test('receivers in one queue group share every worker heartbeat, which no stream keeps', async () => {
+    const { address, transport } = await installation([]);
+    const received: ReceivedHeartbeat[][] = [[], []];
+    for (const heartbeats of received) {
+      const receiver = new HeartbeatReceiver({ connection: transport.connection, address, queue: 'control-plane' }, async (heartbeat) => {
+        heartbeats.push(heartbeat);
+        return ok(undefined);
+      });
+      running((signal) => receiver.run(signal));
+    }
+    await transport.connection.flush();
+    const workers = ['worker-1', 'worker-2', 'worker-3', 'worker-4'];
+    for (const worker of workers) transport.connection.publish(expectOk(address.heartbeatSubject(worker)), encodeJson(heartbeat(worker)));
+
+    await waitFor(() => received.flat().length === workers.length);
+    assert.deepEqual(received.flat().map((h) => h.body['workerId']).sort(), workers);
+    await assert.rejects(transport.jsm.streams.find(expectOk(address.heartbeatSubject('worker-1'))), /no stream matches subject/);
+  });
+
+  test('a stop ends the receiver', async () => {
+    const { address, transport } = await installation([]);
+    const controller = new AbortController();
+    const run = new HeartbeatReceiver({ connection: transport.connection, address, queue: 'control-plane' }, async () => ok(undefined)).run(controller.signal);
+    controller.abort();
+    await run;
   });
 });

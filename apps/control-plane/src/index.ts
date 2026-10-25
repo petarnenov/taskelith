@@ -6,6 +6,8 @@ export { StatusAnswer, createApiServer, type ApiHandlers, type ApiRequest, type 
 export { ControlPlaneApi, type ApiServices } from './api/control-plane-api.js';
 export { DelegationService, type DelegationAnswer, type DelegationRequestBody } from './application/delegation-service.js';
 export { EvidenceService, type EvidenceDownload, type Publication } from './application/evidence-service.js';
+export { HEARTBEAT_QUEUE, HeartbeatService, type HeartbeatMessage } from './application/heartbeat-service.js';
+export { LOST_CONTACT_BATCH, LostContactCheck, type LostContactCheckOptions } from './application/lost-contact-check.js';
 export { OBSERVATION_CONSUMER, ObservationService, type ObservationOutcome, type ObservationServiceOptions } from './application/observation-service.js';
 export type { ObservationMessage } from './application/observation.js';
 export { PLACEMENT_BATCH, PlacementService, type PlacementPass } from './application/placement-service.js';
