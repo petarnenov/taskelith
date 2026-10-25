@@ -158,7 +158,7 @@ function textAt(revision: string, path: string): string | undefined {
 async function checkDocuments(): Promise<string[]> {
   const base = mergeBase();
   const problems: string[] = [];
-  for (const [kind, path] of Object.entries(CONTRACT_DOCUMENTS)) {
+  for (const { kind, path } of CONTRACT_DOCUMENTS) {
     const headText = readFileSync(path, 'utf8');
     const head = JSON.parse(headText);
     const invalid = [...versionProblems(path, head.info.version), ...(kind === 'asyncapi' ? reservedKeyProblems(path, head) : [])];

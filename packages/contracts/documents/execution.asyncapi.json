@@ -1,0 +1,2062 @@
+{
+  "asyncapi": "3.0.0",
+  "info": {
+    "title": "Taskelith execution messages",
+    "version": "0.1.0",
+    "description": "Commands to workers and observations from workers over NATS JetStream (G2 decision D3 (a)). Operations are described from the control plane. Each command, observation, and report is first published with the Nats-Msg-Id header set to its commandId, its observationId, or its reportId and part, and a redrive sets a new one; the identity in the body never changes. A confirmation is idempotent and has no header. Every message has a JSON encoding of at most 1 MiB. A worker reads the command metadata and payload.protocolVersion first, which keep their meaning across protocol versions, and rejects a command whose version it does not support."
+  },
+  "defaultContentType": "application/json",
+  "channels": {
+    "workerCommands": {
+      "address": "taskelith.{installationId}.workers.{workerId}.commands",
+      "description": "Commands addressed to one worker, which only that worker can read, through its own durable pull consumer.",
+      "parameters": {
+        "installationId": {
+          "description": "The installation that binds the subjects."
+        },
+        "workerId": {
+          "description": "The addressed worker."
+        }
+      },
+      "messages": {
+        "assignmentOffer": {
+          "$ref": "#/components/messages/assignmentOffer"
+        },
+        "cancellation": {
+          "$ref": "#/components/messages/cancellation"
+        },
+        "assignmentEnd": {
+          "$ref": "#/components/messages/assignmentEnd"
+        },
+        "observationsConfirmed": {
+          "$ref": "#/components/messages/observationsConfirmed"
+        },
+        "inventoryRequested": {
+          "$ref": "#/components/messages/inventoryRequested"
+        }
+      }
+    },
+    "workerObservations": {
+      "address": "taskelith.{installationId}.workers.{workerId}.observations",
+      "description": "Observations and reports of one worker, which only that worker can publish.",
+      "parameters": {
+        "installationId": {
+          "description": "The installation that binds the subjects."
+        },
+        "workerId": {
+          "description": "The addressed worker."
+        }
+      },
+      "messages": {
+        "assignmentAccepted": {
+          "$ref": "#/components/messages/assignmentAccepted"
+        },
+        "assignmentRefused": {
+          "$ref": "#/components/messages/assignmentRefused"
+        },
+        "commandRejected": {
+          "$ref": "#/components/messages/commandRejected"
+        },
+        "launchRejected": {
+          "$ref": "#/components/messages/launchRejected"
+        },
+        "executionStarted": {
+          "$ref": "#/components/messages/executionStarted"
+        },
+        "executionExited": {
+          "$ref": "#/components/messages/executionExited"
+        },
+        "executionNotStarted": {
+          "$ref": "#/components/messages/executionNotStarted"
+        },
+        "executionUncertain": {
+          "$ref": "#/components/messages/executionUncertain"
+        },
+        "terminationUnproven": {
+          "$ref": "#/components/messages/terminationUnproven"
+        },
+        "unrecordedProcess": {
+          "$ref": "#/components/messages/unrecordedProcess"
+        },
+        "cancellationNotApplied": {
+          "$ref": "#/components/messages/cancellationNotApplied"
+        },
+        "capacityDeclared": {
+          "$ref": "#/components/messages/capacityDeclared"
+        },
+        "admissionPressureChanged": {
+          "$ref": "#/components/messages/admissionPressureChanged"
+        },
+        "inventoryReported": {
+          "$ref": "#/components/messages/inventoryReported"
+        }
+      }
+    }
+  },
+  "operations": {
+    "sendWorkerCommand": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/workerCommands"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/workerCommands/messages/assignmentOffer"
+        },
+        {
+          "$ref": "#/channels/workerCommands/messages/cancellation"
+        },
+        {
+          "$ref": "#/channels/workerCommands/messages/assignmentEnd"
+        },
+        {
+          "$ref": "#/channels/workerCommands/messages/observationsConfirmed"
+        },
+        {
+          "$ref": "#/channels/workerCommands/messages/inventoryRequested"
+        }
+      ]
+    },
+    "receiveWorkerObservation": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/workerObservations"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/workerObservations/messages/assignmentAccepted"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/assignmentRefused"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/commandRejected"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/launchRejected"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/executionStarted"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/executionExited"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/executionNotStarted"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/executionUncertain"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/terminationUnproven"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/unrecordedProcess"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/cancellationNotApplied"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/capacityDeclared"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/admissionPressureChanged"
+        },
+        {
+          "$ref": "#/channels/workerObservations/messages/inventoryReported"
+        }
+      ]
+    }
+  },
+  "components": {
+    "schemas": {
+      "Identifier": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[\\x21-\\x7e]+$",
+        "description": "An opaque identifier of 1-128 printable ASCII characters without whitespace."
+      },
+      "Instant": {
+        "type": "string",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$",
+        "description": "A UTC time in the form YYYY-MM-DDTHH:mm:ss.sssZ."
+      },
+      "ContentDigest": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$",
+        "description": "sha256: followed by 64 lowercase hexadecimal characters."
+      },
+      "Generation": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "A compare-and-set generation that starts at 1."
+      },
+      "DisplayText": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024,
+        "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+        "description": "Text shown to people and never interpreted, without control characters."
+      },
+      "ArtifactRevision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "artifactId",
+          "digest",
+          "nativeReference"
+        ],
+        "description": "An immutable revision of a workflow artifact, identified by artifact and digest.",
+        "properties": {
+          "artifactId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "digest": {
+            "$ref": "#/components/schemas/ContentDigest"
+          },
+          "nativeReference": {
+            "$ref": "#/components/schemas/DisplayText"
+          }
+        }
+      },
+      "MessageType": {
+        "type": "string",
+        "maxLength": 128,
+        "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:\\.[a-z][a-z0-9]*(?:-[a-z0-9]+)*)+$",
+        "description": "Dot-separated lowercase segments, such as sdlc.gate.passed."
+      },
+      "SchemaVersion": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "CommandMetadata": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Fields every command carries (architecture section 9). Attempt, worker, and ownership generation are set once an assignment exists (G2); expiry where meaningful.",
+        "required": [
+          "commandId",
+          "commandType",
+          "schemaVersion",
+          "issuedAt",
+          "correlationId",
+          "projectId",
+          "taskId",
+          "sdlc"
+        ],
+        "properties": {
+          "commandId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "commandType": {
+            "$ref": "#/components/schemas/MessageType"
+          },
+          "schemaVersion": {
+            "$ref": "#/components/schemas/SchemaVersion"
+          },
+          "issuedAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "expiresAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "correlationId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "causationId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "projectId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "taskId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "attemptId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "workerId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "ownershipGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "sdlc": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "runId",
+              "stageId",
+              "admissionId",
+              "admissionGeneration"
+            ],
+            "properties": {
+              "runId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "stageId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "admissionId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "admissionGeneration": {
+                "$ref": "#/components/schemas/Generation"
+              }
+            }
+          }
+        }
+      },
+      "ProtocolVersion": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "The execution protocol version. A worker executes a command only if it supports the version the command names; the current version is 1."
+      },
+      "ProtocolVersionWindow": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The inclusive range of execution protocol versions a party supports; minimum is at most maximum.",
+        "required": [
+          "minimum",
+          "maximum"
+        ],
+        "properties": {
+          "minimum": {
+            "$ref": "#/components/schemas/ProtocolVersion"
+          },
+          "maximum": {
+            "$ref": "#/components/schemas/ProtocolVersion"
+          }
+        }
+      },
+      "RecoveryEpoch": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "The installation recovery epoch, which starts at 1 and changes when PostgreSQL is restored."
+      },
+      "HardControl": {
+        "type": "string",
+        "description": "A resource control a task policy can require as hard.",
+        "enum": [
+          "cpu-limit",
+          "memory-limit",
+          "disk-limit",
+          "spend-limit"
+        ]
+      },
+      "Platform": {
+        "type": "string",
+        "description": "The worker operating system.",
+        "enum": [
+          "linux",
+          "darwin"
+        ]
+      },
+      "WorkerCapacity": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Capacity a worker declares at enrollment and whenever it changes.",
+        "required": [
+          "slots",
+          "cpuMillicores",
+          "memoryMebibytes",
+          "enforceableControls"
+        ],
+        "properties": {
+          "slots": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Concurrent active attempts."
+          },
+          "cpuMillicores": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "memoryMebibytes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "enforceableControls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HardControl"
+            },
+            "maxItems": 4,
+            "uniqueItems": true
+          }
+        }
+      },
+      "ExitStatus": {
+        "description": "An exit code, a terminating signal, or an unknown status.",
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "code"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "code"
+              },
+              "code": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "signal"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "signal"
+              },
+              "signal": {
+                "type": "string",
+                "pattern": "^SIG[A-Z0-9]{1,16}$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "unknown"
+              }
+            }
+          }
+        ]
+      },
+      "VersionedCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The part of every execution command that keeps its meaning across protocol versions; a worker validates it first and rejects an unsupported version.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "$ref": "#/components/schemas/CommandMetadata"
+          },
+          "payload": {
+            "type": "object",
+            "required": [
+              "protocolVersion"
+            ],
+            "properties": {
+              "protocolVersion": {
+                "$ref": "#/components/schemas/ProtocolVersion"
+              }
+            }
+          }
+        }
+      },
+      "Sequence": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991,
+        "description": "A gapless position in one worker journal, starting at 1."
+      },
+      "ResourceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The CPU, memory, and hard controls reserved for one attempt.",
+        "required": [
+          "cpuMillicores",
+          "memoryMebibytes",
+          "hardControls"
+        ],
+        "properties": {
+          "cpuMillicores": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "memoryMebibytes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "hardControls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HardControl"
+            },
+            "maxItems": 4,
+            "uniqueItems": true
+          }
+        }
+      },
+      "RefusalReason": {
+        "type": "string",
+        "description": "Worker-side refusal reasons of the capacity reservation contract. An offer in an unsupported protocol version is rejected as a command instead.",
+        "enum": [
+          "worker-slots-exhausted",
+          "worker-capacity-exhausted",
+          "resource-ceiling-exceeded",
+          "control-not-enforceable",
+          "worker-admission-pressure"
+        ]
+      },
+      "AdmissionPressureCause": {
+        "type": "string",
+        "enum": [
+          "disk-floor",
+          "journal-backlog",
+          "daemon-memory",
+          "event-loop-lag",
+          "unmeasurable-limit"
+        ]
+      },
+      "LaunchRejectionReason": {
+        "type": "string",
+        "description": "The non-retryable launch rejection reasons.",
+        "enum": [
+          "stale-recovery-epoch",
+          "worker-not-authorized",
+          "assignment-not-active",
+          "stale-ownership-generation",
+          "attempt-not-launchable",
+          "admission-not-current",
+          "gate-not-passed",
+          "artifact-revision-changed",
+          "policy-revision-changed",
+          "capacity-not-reserved",
+          "execution-conflict",
+          "operation-mismatch"
+        ]
+      },
+      "ProcessIdentity": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A process, identified by boot, process ID, and start time.",
+        "required": [
+          "platform",
+          "bootId",
+          "pid",
+          "startTime",
+          "processGroupId"
+        ],
+        "properties": {
+          "platform": {
+            "$ref": "#/components/schemas/Platform"
+          },
+          "bootId": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "Linux /proc/sys/kernel/random/boot_id or macOS kern.bootsessionuuid."
+          },
+          "pid": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "startTime": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Linux clock ticks after boot, or macOS microseconds."
+          },
+          "processGroupId": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "ObservationMetadata": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Fields every observation carries. The producer is the pair of workerId and journalId; observationId is deterministic from the observation source. Observations about an attempt require attemptId and ownershipGeneration; a command rejection, an unrecorded process, capacity, and admission pressure are about none.",
+        "required": [
+          "observationId",
+          "observationType",
+          "schemaVersion",
+          "protocolVersion",
+          "occurredAt",
+          "correlationId",
+          "workerId",
+          "journalId",
+          "sequence"
+        ],
+        "properties": {
+          "observationId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "observationType": {
+            "$ref": "#/components/schemas/MessageType"
+          },
+          "schemaVersion": {
+            "$ref": "#/components/schemas/SchemaVersion"
+          },
+          "protocolVersion": {
+            "$ref": "#/components/schemas/ProtocolVersion"
+          },
+          "occurredAt": {
+            "$ref": "#/components/schemas/Instant",
+            "description": "The worker clock; informational only."
+          },
+          "correlationId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "causationId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "workerId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "journalId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "sequence": {
+            "$ref": "#/components/schemas/Sequence"
+          },
+          "attemptId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "ownershipGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          }
+        }
+      },
+      "ObservationsConfirmed": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The control plane applied every observation of the journal through confirmedThrough. It is not a command and is not journaled.",
+        "required": [
+          "messageType",
+          "schemaVersion",
+          "protocolVersion",
+          "issuedAt",
+          "workerId",
+          "journalId",
+          "confirmedThrough"
+        ],
+        "properties": {
+          "messageType": {
+            "type": "string",
+            "const": "execution.observations.confirmed"
+          },
+          "schemaVersion": {
+            "$ref": "#/components/schemas/SchemaVersion"
+          },
+          "protocolVersion": {
+            "$ref": "#/components/schemas/ProtocolVersion"
+          },
+          "issuedAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "workerId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "journalId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "confirmedThrough": {
+            "$ref": "#/components/schemas/Sequence"
+          }
+        }
+      },
+      "InventoryRequested": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Asks the worker for a fresh snapshot of its journal. It is not a command and is not journaled; only the latest request of a worker is current.",
+        "required": [
+          "messageType",
+          "schemaVersion",
+          "protocolVersion",
+          "issuedAt",
+          "workerId",
+          "requestId"
+        ],
+        "properties": {
+          "messageType": {
+            "type": "string",
+            "const": "worker.inventory.requested"
+          },
+          "schemaVersion": {
+            "$ref": "#/components/schemas/SchemaVersion"
+          },
+          "protocolVersion": {
+            "$ref": "#/components/schemas/ProtocolVersion"
+          },
+          "issuedAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "workerId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "requestId": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "A fresh random value for every request, which the snapshot answering it returns."
+          }
+        }
+      },
+      "InventoryReported": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Sent on every reconnect: the assignments the worker holds and their executions, in parts that together form one snapshot outside the journal sequence.",
+        "required": [
+          "messageType",
+          "schemaVersion",
+          "protocolVersion",
+          "reportId",
+          "snapshot",
+          "part",
+          "parts",
+          "reportedAt",
+          "workerId",
+          "journalId",
+          "throughSequence",
+          "assignments",
+          "executions"
+        ],
+        "properties": {
+          "messageType": {
+            "type": "string",
+            "const": "worker.inventory.reported"
+          },
+          "schemaVersion": {
+            "$ref": "#/components/schemas/SchemaVersion"
+          },
+          "protocolVersion": {
+            "$ref": "#/components/schemas/ProtocolVersion"
+          },
+          "reportId": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The same for every part of one snapshot."
+          },
+          "requestId": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The inventory request this snapshot answers, taken after the request arrived."
+          },
+          "snapshot": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991,
+            "description": "Increases with every snapshot of the journal, so that a later one replaces an earlier one."
+          },
+          "part": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4096,
+            "description": "This part, from 1 to parts."
+          },
+          "parts": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4096
+          },
+          "reportedAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "workerId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "journalId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "throughSequence": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "The last journal sequence the snapshot reflects."
+          },
+          "assignments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventoryAssignment"
+            },
+            "maxItems": 256
+          },
+          "executions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventoryExecution"
+            },
+            "maxItems": 256
+          }
+        }
+      },
+      "InventoryAssignment": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "commandId",
+          "assignmentId",
+          "attemptId",
+          "ownershipGeneration",
+          "state"
+        ],
+        "properties": {
+          "commandId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "assignmentId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "attemptId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "ownershipGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "ended"
+            ]
+          }
+        }
+      },
+      "InventoryExecution": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "An execution in the worker journal; uncertainty is evidence beside its state.",
+        "required": [
+          "executionId",
+          "assignmentId",
+          "state",
+          "uncertain"
+        ],
+        "properties": {
+          "executionId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "assignmentId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "state": {
+            "type": "string",
+            "description": "launch-intended until the first grant is journaled.",
+            "enum": [
+              "launch-intended",
+              "authorized",
+              "started",
+              "exited",
+              "not-started"
+            ]
+          },
+          "uncertain": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AssignmentOfferPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "assignmentId",
+          "recoveryEpoch",
+          "reservation"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "$ref": "#/components/schemas/ProtocolVersion"
+          },
+          "assignmentId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
+          },
+          "reservation": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "The capacity reservation the assignment holds.",
+            "required": [
+              "reservationId",
+              "requested"
+            ],
+            "properties": {
+              "reservationId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "requested": {
+                "$ref": "#/components/schemas/ResourceRequest"
+              }
+            }
+          },
+          "retryOf": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The attempt this attempt retries."
+          }
+        }
+      },
+      "AssignmentOfferCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Offers an attempt to the addressed worker under the capacity reservation it holds.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CommandMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "workerId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "commandType": {
+                    "type": "string",
+                    "const": "execution.assignment.offer"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "workerId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/AssignmentOfferPayload"
+          }
+        }
+      },
+      "CancellationPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "reason"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "$ref": "#/components/schemas/ProtocolVersion"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "requested",
+              "launch-revoked",
+              "assignment-ended"
+            ]
+          },
+          "executionId": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "Set to cancel one execution only, such as an unauthorized start."
+          }
+        }
+      },
+      "CancellationCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Requests cancellation of the attempt named by the metadata, or of one execution of it. A request is not proof of termination.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CommandMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "workerId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "commandType": {
+                    "type": "string",
+                    "const": "execution.cancellation.request"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "workerId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/CancellationPayload"
+          }
+        }
+      },
+      "AssignmentEndPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocolVersion",
+          "assignmentId",
+          "reason"
+        ],
+        "properties": {
+          "protocolVersion": {
+            "$ref": "#/components/schemas/ProtocolVersion"
+          },
+          "assignmentId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "refused",
+              "superseded",
+              "cancelled",
+              "attempt-ended",
+              "operator-reconciled"
+            ]
+          }
+        }
+      },
+      "AssignmentEndCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Ends an assignment, so that the worker stops counting it.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CommandMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "workerId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "commandType": {
+                    "type": "string",
+                    "const": "execution.assignment.end"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "workerId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/AssignmentEndPayload"
+          }
+        }
+      },
+      "AssignmentAcceptedPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "commandId",
+          "assignmentId"
+        ],
+        "properties": {
+          "commandId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "assignmentId": {
+            "$ref": "#/components/schemas/Identifier"
+          }
+        }
+      },
+      "AssignmentAcceptedObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The worker journaled the offer and accepted the assignment.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "execution.assignment.accepted"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/AssignmentAcceptedPayload"
+          }
+        }
+      },
+      "AssignmentRefusedPayload": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Admission pressure, the only retryable refusal, with its causes.",
+            "required": [
+              "commandId",
+              "assignmentId",
+              "reason",
+              "retryable",
+              "pressureCauses"
+            ],
+            "properties": {
+              "commandId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "assignmentId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "reason": {
+                "type": "string",
+                "const": "worker-admission-pressure"
+              },
+              "retryable": {
+                "type": "boolean",
+                "const": true
+              },
+              "pressureCauses": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AdmissionPressureCause"
+                },
+                "maxItems": 5,
+                "uniqueItems": true,
+                "minItems": 1
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "commandId",
+              "assignmentId",
+              "reason",
+              "retryable"
+            ],
+            "properties": {
+              "commandId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "assignmentId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "reason": {
+                "type": "string",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RefusalReason"
+                  }
+                ],
+                "not": {
+                  "const": "worker-admission-pressure"
+                }
+              },
+              "retryable": {
+                "type": "boolean",
+                "const": false
+              }
+            }
+          }
+        ]
+      },
+      "AssignmentRefusedObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The worker refused an offer it has not acknowledged; the refusal ends the assignment.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "execution.assignment.refused"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/AssignmentRefusedPayload"
+          }
+        }
+      },
+      "CommandRejectedPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "commandId",
+          "commandType",
+          "reason",
+          "supportedProtocolVersions"
+        ],
+        "properties": {
+          "commandId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "commandType": {
+            "$ref": "#/components/schemas/MessageType"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "protocol-not-supported",
+              "addressed-to-another-worker"
+            ]
+          },
+          "supportedProtocolVersions": {
+            "$ref": "#/components/schemas/ProtocolVersionWindow"
+          }
+        }
+      },
+      "CommandRejectedObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The worker executes nothing of a command it cannot execute, an offer included. It names the command only by its commandId and type, so that no field of an unknown payload is needed.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "execution.command.rejected"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/CommandRejectedPayload"
+          }
+        }
+      },
+      "LaunchRejectedPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "executionId",
+          "assignmentId",
+          "operationId",
+          "reason"
+        ],
+        "properties": {
+          "executionId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "assignmentId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "operationId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/LaunchRejectionReason"
+          }
+        }
+      },
+      "LaunchRejectedObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The launch authority returned a non-retryable rejection for an execution.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "execution.launch.rejected"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/LaunchRejectedPayload"
+          }
+        }
+      },
+      "ExecutionStartedPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "executionId",
+          "assignmentId",
+          "launchAuthId",
+          "recoveryEpoch",
+          "process"
+        ],
+        "properties": {
+          "executionId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "assignmentId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "launchAuthId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
+          },
+          "process": {
+            "$ref": "#/components/schemas/ProcessIdentity"
+          }
+        }
+      },
+      "ExecutionStartedObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A spawn happened under the claimed launch authorization.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "execution.started"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ExecutionStartedPayload"
+          }
+        }
+      },
+      "ExecutionExitedPayload": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "The spawn failed, so no process of the execution ever ran.",
+            "required": [
+              "executionId",
+              "status",
+              "startProven",
+              "spawnFailed",
+              "spawnFailure",
+              "terminationEvidence"
+            ],
+            "properties": {
+              "executionId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "status": {
+                "$ref": "#/components/schemas/ExitStatus"
+              },
+              "startProven": {
+                "type": "boolean",
+                "const": false
+              },
+              "spawnFailed": {
+                "type": "boolean",
+                "const": true
+              },
+              "spawnFailure": {
+                "$ref": "#/components/schemas/DisplayText"
+              },
+              "terminationEvidence": {
+                "type": "string",
+                "const": "never-spawned"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "executionId",
+              "status",
+              "startProven",
+              "spawnFailed",
+              "terminationEvidence"
+            ],
+            "properties": {
+              "executionId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "status": {
+                "$ref": "#/components/schemas/ExitStatus"
+              },
+              "startProven": {
+                "type": "boolean"
+              },
+              "spawnFailed": {
+                "type": "boolean",
+                "const": false
+              },
+              "terminationEvidence": {
+                "type": "string",
+                "description": "containment-empty on Linux, process-group-empty on macOS.",
+                "enum": [
+                  "containment-empty",
+                  "process-group-empty"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "ExecutionExitedObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The whole process set of the execution is proven empty.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "execution.exited"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ExecutionExitedPayload"
+          }
+        }
+      },
+      "ExecutionNotStartedPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "executionId"
+        ],
+        "properties": {
+          "executionId": {
+            "$ref": "#/components/schemas/Identifier"
+          }
+        }
+      },
+      "ExecutionNotStartedObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The launch record is sealed: no spawn happened and none can follow.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "execution.not-started"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ExecutionNotStartedPayload"
+          }
+        }
+      },
+      "ExecutionUncertainPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "executionId"
+        ],
+        "properties": {
+          "executionId": {
+            "$ref": "#/components/schemas/Identifier"
+          }
+        }
+      },
+      "ExecutionUncertainObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Neither presence nor absence of the process set can be proven.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "execution.uncertain"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ExecutionUncertainPayload"
+          }
+        }
+      },
+      "TerminationUnprovenPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "executionId",
+          "survivors"
+        ],
+        "properties": {
+          "executionId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "survivors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProcessIdentity"
+            },
+            "maxItems": 256
+          }
+        }
+      },
+      "TerminationUnprovenObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The child exited or was cancelled, but processes of the set survive or cannot be ruled out.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "execution.termination-unproven"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/TerminationUnprovenPayload"
+          }
+        }
+      },
+      "UnrecordedProcessPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "containment",
+          "processes"
+        ],
+        "properties": {
+          "containment": {
+            "$ref": "#/components/schemas/DisplayText"
+          },
+          "processes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProcessIdentity"
+            },
+            "maxItems": 256
+          }
+        }
+      },
+      "UnrecordedProcessObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A populated containment of this worker has no execution record (Linux, after data loss).",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "execution.unrecorded-process"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/UnrecordedProcessPayload"
+          }
+        }
+      },
+      "CancellationNotAppliedPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "commandId",
+          "executionId",
+          "reason"
+        ],
+        "properties": {
+          "commandId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "executionId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "adopting-supervisor"
+            ]
+          }
+        }
+      },
+      "CancellationNotAppliedObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "An adopting supervisor cannot signal safely; the execution stays started for reconciliation.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "attemptId",
+                  "ownershipGeneration"
+                ],
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "execution.cancellation.not-applied"
+                  },
+                  "attemptId": {
+                    "$ref": "#/components/schemas/Identifier"
+                  },
+                  "ownershipGeneration": {
+                    "$ref": "#/components/schemas/Generation"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/CancellationNotAppliedPayload"
+          }
+        }
+      },
+      "CapacityDeclaredPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "capacity",
+          "protocolVersions"
+        ],
+        "properties": {
+          "capacity": {
+            "$ref": "#/components/schemas/WorkerCapacity"
+          },
+          "protocolVersions": {
+            "$ref": "#/components/schemas/ProtocolVersionWindow"
+          }
+        }
+      },
+      "CapacityDeclaredObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The capacity and protocol versions the worker declares.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "worker.capacity.declared"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/CapacityDeclaredPayload"
+          }
+        }
+      },
+      "AdmissionPressureChangedPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "causes"
+        ],
+        "properties": {
+          "causes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdmissionPressureCause"
+            },
+            "maxItems": 5,
+            "uniqueItems": true
+          }
+        }
+      },
+      "AdmissionPressureChangedObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The current causes of admission pressure; an empty list clears it.",
+        "required": [
+          "metadata",
+          "payload"
+        ],
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObservationMetadata"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "observationType": {
+                    "type": "string",
+                    "const": "worker.admission-pressure.changed"
+                  }
+                }
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/AdmissionPressureChangedPayload"
+          }
+        }
+      }
+    },
+    "messages": {
+      "assignmentOffer": {
+        "name": "assignmentOfferCommand",
+        "title": "execution.assignment.offer",
+        "payload": {
+          "$ref": "#/components/schemas/AssignmentOfferCommand"
+        }
+      },
+      "cancellation": {
+        "name": "cancellationCommand",
+        "title": "execution.cancellation.request",
+        "payload": {
+          "$ref": "#/components/schemas/CancellationCommand"
+        }
+      },
+      "assignmentEnd": {
+        "name": "assignmentEndCommand",
+        "title": "execution.assignment.end",
+        "payload": {
+          "$ref": "#/components/schemas/AssignmentEndCommand"
+        }
+      },
+      "observationsConfirmed": {
+        "name": "observationsConfirmed",
+        "title": "execution.observations.confirmed",
+        "payload": {
+          "$ref": "#/components/schemas/ObservationsConfirmed"
+        }
+      },
+      "inventoryRequested": {
+        "name": "inventoryRequested",
+        "title": "worker.inventory.requested",
+        "payload": {
+          "$ref": "#/components/schemas/InventoryRequested"
+        }
+      },
+      "assignmentAccepted": {
+        "name": "assignmentAcceptedObservation",
+        "title": "execution.assignment.accepted",
+        "payload": {
+          "$ref": "#/components/schemas/AssignmentAcceptedObservation"
+        }
+      },
+      "assignmentRefused": {
+        "name": "assignmentRefusedObservation",
+        "title": "execution.assignment.refused",
+        "payload": {
+          "$ref": "#/components/schemas/AssignmentRefusedObservation"
+        }
+      },
+      "commandRejected": {
+        "name": "commandRejectedObservation",
+        "title": "execution.command.rejected",
+        "payload": {
+          "$ref": "#/components/schemas/CommandRejectedObservation"
+        }
+      },
+      "launchRejected": {
+        "name": "launchRejectedObservation",
+        "title": "execution.launch.rejected",
+        "payload": {
+          "$ref": "#/components/schemas/LaunchRejectedObservation"
+        }
+      },
+      "executionStarted": {
+        "name": "executionStartedObservation",
+        "title": "execution.started",
+        "payload": {
+          "$ref": "#/components/schemas/ExecutionStartedObservation"
+        }
+      },
+      "executionExited": {
+        "name": "executionExitedObservation",
+        "title": "execution.exited",
+        "payload": {
+          "$ref": "#/components/schemas/ExecutionExitedObservation"
+        }
+      },
+      "executionNotStarted": {
+        "name": "executionNotStartedObservation",
+        "title": "execution.not-started",
+        "payload": {
+          "$ref": "#/components/schemas/ExecutionNotStartedObservation"
+        }
+      },
+      "executionUncertain": {
+        "name": "executionUncertainObservation",
+        "title": "execution.uncertain",
+        "payload": {
+          "$ref": "#/components/schemas/ExecutionUncertainObservation"
+        }
+      },
+      "terminationUnproven": {
+        "name": "terminationUnprovenObservation",
+        "title": "execution.termination-unproven",
+        "payload": {
+          "$ref": "#/components/schemas/TerminationUnprovenObservation"
+        }
+      },
+      "unrecordedProcess": {
+        "name": "unrecordedProcessObservation",
+        "title": "execution.unrecorded-process",
+        "payload": {
+          "$ref": "#/components/schemas/UnrecordedProcessObservation"
+        }
+      },
+      "cancellationNotApplied": {
+        "name": "cancellationNotAppliedObservation",
+        "title": "execution.cancellation.not-applied",
+        "payload": {
+          "$ref": "#/components/schemas/CancellationNotAppliedObservation"
+        }
+      },
+      "capacityDeclared": {
+        "name": "capacityDeclaredObservation",
+        "title": "worker.capacity.declared",
+        "payload": {
+          "$ref": "#/components/schemas/CapacityDeclaredObservation"
+        }
+      },
+      "admissionPressureChanged": {
+        "name": "admissionPressureChangedObservation",
+        "title": "worker.admission-pressure.changed",
+        "payload": {
+          "$ref": "#/components/schemas/AdmissionPressureChangedObservation"
+        }
+      },
+      "inventoryReported": {
+        "name": "inventoryReported",
+        "title": "worker.inventory.reported",
+        "payload": {
+          "$ref": "#/components/schemas/InventoryReported"
+        }
+      }
+    }
+  }
+}
