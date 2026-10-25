@@ -8,6 +8,7 @@ import {
   openGate,
   parseArtifactRevision,
   parseGeneration,
+  parseOwnershipGeneration,
   parseSemanticApproval,
   parseWorkItem,
   parseWorkflowDefinition,
@@ -106,6 +107,14 @@ function code<T>(result: Result<T>): string {
   assert.equal(result.ok, false);
   return result.ok ? '' : result.error.code;
 }
+
+test('the service binds the ownership generation of a fenced dispatch', async () => {
+  const service = new TaskAdmissionService(new InMemoryAdmissionRepository(), FIXED_CLOCK);
+  const planning = value(await service.admitPlanningTask({ id: 'plan', taskId: 'task-plan', stageId: 'specs' }, RUN, []));
+  const ownership = value(parseOwnershipGeneration(1));
+  const dispatched = value(await service.useAdmission(planning.id, planning.generation, ownership));
+  assert.equal(dispatched.ownershipGeneration, 1);
+});
 
 test('a planning task creates the missing specification, and implementation is admitted only when bound to it', async () => {
   const repository = new InMemoryAdmissionRepository();
