@@ -16,17 +16,18 @@ G2 work item 22 ([docs/g2-plan.md](../../../docs/g2-plan.md)): structured logs w
   - In-memory adapters `InMemoryLogSink` and `InMemoryMetrics`; the second summarizes each series for tests and drills.
 - New private adapter `@taskelith/node-observability` (`packages/adapters/node-observability`), on Node built-ins only:
   - `JsonLinesLogSink`;
-  - `EventLoopLagMonitor` over `perf_hooks.monitorEventLoopDelay`;
+  - `EventLoopLagMonitor` over `perf_hooks.monitorEventLoopDelay`, less its resolution;
   - `runPeriodically`;
   - `SYSTEM_CLOCK`.
 - `@taskelith/execution` gains `isUnknownExecution` and `unknownExecutionCount`. An unknown execution is one that is not terminal and carries evidence beside its state.
 - `@taskelith/postgres`:
   - A migration adds the query columns `assignments.state` and `assignments.changed_at`, and `tasks.unknown_executions`. It backfills them from the stored records and indexes the waiting rows. The repositories keep the columns up to date.
-  - `PostgresControlPlaneSignals` reads outbox lag and backlog, the oldest offered assignment, unknown executions, and eligible and held slots in one statement, with ages taken on the database clock.
+  - `PostgresControlPlaneSignals` reads outbox lag and backlog, the oldest offered assignment, unknown executions, and eligible and held slots in one statement of a read-only `REPEATABLE READ` snapshot, which `PostgresDatabase.readOnly` provides, with ages taken on the database clock.
   - `PostgresDatabase` takes optional `metrics` and `logger`. It times each transaction attempt as `database.latency`. It logs a broken idle connection, a commit with an unknown outcome, and exhausted serialization retries.
 - `@taskelith/nats`:
   - `ValidatingConsumer` takes optional `metrics`, `logger`, and `now`. It records `inbox.lag` from the JetStream append to the commit. It logs a quarantined message, a redelivery after a failed commit with the message's correlation, and a failed pull.
   - `OutboxPublisher` logs a failed publication with its event identity and backoff.
+- `docs/architecture.md` section 6 lists the observability module and the Node adapter.
 - `docs/operational-targets.md` gains a provisional section 4. It maps each signal to the target it watches, with a `15s` sample interval and a `20ms` event-loop resolution.
 
 ## Capabilities

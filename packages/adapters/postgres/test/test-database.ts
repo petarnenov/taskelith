@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { after } from 'node:test';
 import pg from 'pg';
 import { integrationEndpoint } from '@taskelith/testing';
@@ -42,6 +43,12 @@ export async function query<Row extends pg.QueryResultRow>(url: URL, text: strin
   } finally {
     await client.end();
   }
+}
+
+// The test password is also the user and database name, so it is looked
+// for in the forms a URL or a libpq string would give it.
+export function assertNoPassword(text: string, password: string): void {
+  for (const form of [`:${password}@`, `password=${password}`]) assert.ok(!text.includes(form), `${form} was logged`);
 }
 
 export async function truncateAll(url: URL): Promise<void> {

@@ -9,7 +9,7 @@ import { acceptAssignment } from '@taskelith/scheduling';
 import { SimulatedHost, id, value } from '@taskelith/testing';
 import { authorizedUnder, placedTask, seedWorker } from './capacity-fixtures.ts';
 import { AT, assignment, command } from './fixtures.ts';
-import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
+import { assertNoPassword, createMigratedDatabase, query, truncateAll } from './test-database.ts';
 
 const url = await createMigratedDatabase();
 const metrics = new InMemoryMetrics();
@@ -79,6 +79,11 @@ test('a clock that stamped a row in the future never reads as a negative age', a
   assert.equal(value(await signals.read()).outboxLagSeconds, 0);
 });
 
+test('the snapshot reads in a read-only transaction, where a write is a defect', async () => {
+  await assert.rejects(database.readOnly((tx) => tx.outbox.append(command('offer-1'))), /read-only transaction/);
+  assert.deepEqual(await signals.read(), ok(EMPTY));
+});
+
 test('each transaction attempt is timed as database latency', async () => {
   const before = metrics.series('database.latency')?.count ?? 0;
   await signals.read();
@@ -96,6 +101,6 @@ test('an idle connection that breaks is logged without the credentials', async (
   }
   const lost = sink.records.find((record) => record.event === 'postgres.connection.lost');
   assert.equal(lost?.level, 'warn');
-  assert.doesNotMatch(JSON.stringify(sink.records), new RegExp(`:${url.password}@`));
+  assertNoPassword(JSON.stringify(sink.records), url.password);
   assert.ok((await signals.read()).ok);
 });

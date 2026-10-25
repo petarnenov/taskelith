@@ -215,6 +215,7 @@ The diagram's implements edges are dependency relationships, not network traffic
 | Knowledge | Lessons, evidence, feedback, context policy, versioning | Cypher and embedding transport live outside the module. |
 | Access | Principal identity, project authorization, capability decisions | Infrastructure authentication feeds application authorization. |
 | SCM / Tracker integrations | Normalized external facts and integration use cases | External SDK DTOs never become core entities. |
+| Observability | Structured log records, redaction, the signal catalogue, log and metrics ports | Sinks, exporters, and signal readers are adapters; no logging or metrics library enters the module. |
 
 Each module has `domain/`, `application/`, `ports/`, and an explicit public export surface. Modules do not import another module's internals or read its tables directly. Use synchronous application calls for local consistency requirements; publish durable events for asynchronous propagation. Do not force every in-process interaction through NATS.
 
@@ -244,9 +245,11 @@ packages/
     knowledge/
     access/
     integrations/
+    observability/
   adapters/
     postgres/
     nats/
+    node-observability/
     neo4j/
     embeddings-local/
     http/

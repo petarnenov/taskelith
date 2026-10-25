@@ -44,6 +44,18 @@ test('the monitor reports the p99 event-loop delay of its window', async () => {
   assert.ok(lag.last < 5);
 });
 
+test('an idle window reads below the resolution', async () => {
+  const monitor = new EventLoopLagMonitor(10);
+  const metrics = new InMemoryMetrics();
+  try {
+    await delay(100);
+    monitor.sample(metrics);
+  } finally {
+    monitor.stop();
+  }
+  assert.ok(metrics.series('event-loop.lag')!.last < 0.01);
+});
+
 test('a window without a measured delay reports zero', () => {
   const monitor = new EventLoopLagMonitor();
   const metrics = new InMemoryMetrics();

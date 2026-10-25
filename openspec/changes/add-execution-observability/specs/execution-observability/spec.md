@@ -43,7 +43,7 @@ The observability module SHALL define the G2 signals `outbox.lag`, `outbox.pendi
 
 ### Requirement: Control-plane snapshot from PostgreSQL
 
-The PostgreSQL adapter SHALL read, in one transaction and on the database clock, the age of the oldest unpublished outbox row and the unpublished count, the age of the oldest assignment still offered and their count, the number of unknown executions, the slots of the workers eligible for placement, and the held reservations. An age SHALL be zero when nothing waits or when a row was stamped in the future.
+The PostgreSQL adapter SHALL read, in one read-only snapshot that takes no part in the writers' serialization checks and on the database clock, the age of the oldest unpublished outbox row and the unpublished count, the age of the oldest assignment still offered and their count, the number of unknown executions, the slots of the workers eligible for placement, and the held reservations. An age SHALL be zero when nothing waits or when a row was stamped in the future.
 
 #### Scenario: A snapshot of waiting work
 
@@ -104,12 +104,17 @@ The NATS consumer SHALL record `inbox.lag` from the stream append to the receive
 
 ### Requirement: Event-loop lag and JSON lines
 
-The Node adapter SHALL report the p99 event-loop delay of each sample window with Node's built-in histogram, and SHALL write log records as one JSON object per line. A sink that cannot write SHALL drop the record without throwing.
+The Node adapter SHALL report the p99 event-loop delay of each sample window with Node's built-in histogram, less the histogram's resolution, and SHALL write log records as one JSON object per line. A sink that cannot write SHALL drop the record without throwing.
 
 #### Scenario: A blocked event loop
 
 - **WHEN** the event loop is blocked for 60 ms within a sample window
 - **THEN** that window's `event-loop.lag` reads at least 30 ms
+
+#### Scenario: An idle event loop
+
+- **WHEN** the event loop idles through a sample window
+- **THEN** that window's `event-loop.lag` reads below the resolution
 
 #### Scenario: A closed output
 

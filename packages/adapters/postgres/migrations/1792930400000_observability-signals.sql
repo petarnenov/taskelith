@@ -13,15 +13,16 @@ ALTER TABLE assignments
   ALTER COLUMN changed_at SET NOT NULL;
 CREATE INDEX assignments_offered ON assignments (changed_at) WHERE state = 'offered';
 
--- An unknown execution is not terminal and carries evidence beside its state.
+-- An unknown execution is not terminal and carries evidence beside its state;
+-- the terminal states are those of EXECUTION_TRANSITIONS.
 ALTER TABLE tasks ADD COLUMN unknown_executions integer NOT NULL DEFAULT 0 CHECK (unknown_executions >= 0);
 UPDATE tasks SET unknown_executions = (
   SELECT count(*) FROM jsonb_path_query(
     record::jsonb,
-    '$.attempts[*].executions[*] ? ((@.state == "authorized" || @.state == "started") && exists(@.evidence[*]))'
+    '$.attempts[*].executions[*] ? (@.state != "exited" && @.state != "not-started" && exists(@.evidence[*]))'
   )
 );
-CREATE INDEX tasks_with_unknown_executions ON tasks (id) WHERE unknown_executions > 0;
+CREATE INDEX tasks_with_unknown_executions ON tasks (unknown_executions) WHERE unknown_executions > 0;
 
 -- Down Migration
 

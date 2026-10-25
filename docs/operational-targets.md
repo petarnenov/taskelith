@@ -56,7 +56,7 @@ Provisional, G2 item 22: the signals of `docs/architecture.md` section 12 that G
 | --- | --- | --- |
 | `outbox.lag`, `outbox.pending` | Seconds since the oldest unpublished row was appended, and the count of unpublished rows (PostgreSQL) | Outbox drain within `15 min` at 1000 machines; a full worker subject keeps rows in the outbox (section 2). |
 | `inbox.lag` | Seconds from the JetStream append to the receiver's commit, per stream and consumer (each receiver) | Command dispatch-to-worker inbox `p95 <= 2s / 3s / 5s` (section 3). |
-| `assignment.age`, `assignment.offered` | Seconds since the oldest assignment still offered was created, and the count (PostgreSQL) | Supersession after `2 min` unacknowledged, `10 min` under admission pressure (section 1). |
+| `assignment.age`, `assignment.offered` | Seconds since the oldest assignment still offered was offered, and the count (PostgreSQL) | Supersession after `2 min` unacknowledged, `10 min` under admission pressure (section 1). |
 | `execution.unknown` | Executions not terminal that carry uncertain, termination-unproven, or local-history-lost evidence (PostgreSQL) | Uncertain attempts keep their slots until reconciled; `0` automatic retries for them (section 1). |
 | `worker.capacity.slots`, `worker.capacity.held` | Slots of the workers eligible for placement, and held reservations (PostgreSQL) | Worker concurrent active attempts, `default: 2` (section 1). |
 | `event-loop.lag` | p99 event-loop delay of each process over the sample window | `p99 > 200ms` pauses new launch authorizations on a worker (section 1); `p99 <= 200ms` during the 1000-machine drain (section 3). |

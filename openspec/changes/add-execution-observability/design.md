@@ -30,8 +30,8 @@ Neither adapter logged. Each swallowed connection, pull, and publication errors,
   - `ControlPlaneSignals.read()` returns a `Result`, because a database read can fail.
   - Components that take a logger or metrics default to `SILENT_LOGGER` and `NO_METRICS`, in the null-object style of `NO_CRASH_POINTS`.
 - **Redaction in the logger, not in the sink.** Every record passes the same rules before any sink sees it:
-  - A field whose name matches a secret pattern (password, secret, token, credential, authorization, cookie, private key, API key) is replaced by `[redacted]`.
-  - URL user information and bearer tokens inside text are removed. This covers a failure message that quotes a connection URL.
+  - A field name is split into its camelCase, `_`, and `-` segments. A name with a secret segment (password, secret, token, credential, authorization, cookie, private key, API key) has its value replaced by `[redacted]`. Whole segments keep counts such as `promptTokens` and words such as `passedChecks` readable.
+  - URL user information, bearer tokens, and `password=`-style pairs inside text are removed. This covers a failure message that quotes a connection URL or a libpq string.
   - A correlation keeps only the known identifier keys with string values, so a received body cannot add other fields.
   - Message bodies and payloads are never logged.
 - **Signals.** The catalogue fixes each name, kind, and unit.
@@ -44,17 +44,20 @@ Neither adapter logged. Each swallowed connection, pull, and publication errors,
 - **Unknown execution.** It is an execution that is not terminal and has evidence (`uncertain`, `termination-unproven`, `local-history-lost`) beside its state. This is the set that keeps ownership and capacity until reconciled.
   - The domain function `unknownExecutionCount` in `@taskelith/execution` defines it once.
   - The PostgreSQL column stores its result.
+- **A read-only snapshot.** The sampler reads every 15 s. A `SERIALIZABLE` read would take predicate locks on four tables and could abort the writers, so `PostgresDatabase.readOnly` reads in `REPEATABLE READ READ ONLY`. That is one consistent snapshot without serialization checks. Its own statements count in `database.latency`.
 - **Ages on the database clock.** Assignments are stamped by `tx.now()`, and the outbox by `now()`. The snapshot therefore subtracts on the database clock, and a row stamped in the future reads as age zero.
 - **Database latency** is each transaction attempt, its connection checkout included, so retries and pool waits are visible.
+- **Event-loop lag less the resolution.** `monitorEventLoopDelay` records whole timer intervals, so an idle process reads about the resolution. The monitor subtracts it, and an idle loop reads near zero against the 200 ms target.
 - **Logged events.**
   - `postgres.connection.lost`, `postgres.commit.unknown`, and `postgres.serialization.exhausted`.
   - `nats.message.quarantined`, `nats.message.redelivered`, `nats.pull.failed`, and `nats.outbox.publish-failed`.
   - `observability.sample.failed`.
+  - The PostgreSQL records carry no command or attempt correlation, because `transaction()` does not know the work's command. The composition in item 16 logs around each command with its correlation.
 - **Node built-ins only.** `perf_hooks.monitorEventLoopDelay` gives the event-loop p99, `performance.now()` the durations, and a writable stream the JSON lines. Neither pino nor OpenTelemetry is needed for G2, so the owner has no dependency to approve.
 
 ## Risks / Trade-offs
 
-- A denylist of field names can miss a secret under an unusual name. Callers log only identifiers, counts, codes, and failure messages, never bodies. The text rules catch the credential form that failure messages quote.
+- A denylist of name segments can miss a secret under an unusual name, and it redacts a harmless `tokenCount`, which fails closed. Callers log only identifiers, counts, codes, and failure messages, never bodies. The text rules catch the credential form that failure messages quote.
 - The snapshot runs one statement with several subqueries. Each subquery reads a partial index or a small table, but the 1000-machine cost is measured in G6.
 - `worker.capacity.slots` and `worker.capacity.held` are fleet totals. Per-worker series would grow with the fleet; they can come with an exporter.
 - The in-memory registry is the only metrics store until an exporter is chosen.

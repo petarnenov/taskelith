@@ -2,20 +2,29 @@ import type { LogCorrelation, LogFields, LogValue } from './log-record.js';
 
 export const REDACTED = '[redacted]';
 
-// Field names that may hold a secret value (architecture section 11); the
-// value is dropped whatever it is.
-const SECRET_FIELD = /pass(word|phrase)?|secret|token|credential|authori[sz]ation|cookie|private.?key|api.?key/i;
+// Name segments that may hold a secret value (architecture section 11);
+// `promptTokens` is a count, but `accessToken` and `api_key` are dropped.
+const SECRET_SEGMENTS = new Set([
+  'pass', 'password', 'passwd', 'passphrase', 'pwd', 'secret', 'token', 'credential', 'credentials',
+  'authorization', 'cookie', 'privatekey', 'apikey',
+]);
 
 // Secrets that can hide inside free text, such as a failure message.
-const URL_USERINFO = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#@]+@/gi;
+const URL_USERINFO = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#]+@/gi;
 const BEARER = /\bbearer\s+[A-Za-z0-9._~+/-]+=*/gi;
+const KEY_VALUE = /\b(password|passwd|pwd|secret|token|api[_-]?key)=\S+/gi;
 
 export function isSecretFieldName(name: string): boolean {
-  return SECRET_FIELD.test(name);
+  const segments = name.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/);
+  const pairs = segments.slice(1).map((segment, index) => `${segments[index]}${segment}`);
+  return [...segments, ...pairs].some((segment) => SECRET_SEGMENTS.has(segment));
 }
 
 export function redactText(text: string): string {
-  return text.replace(URL_USERINFO, `$1${REDACTED}@`).replace(BEARER, `Bearer ${REDACTED}`);
+  return text
+    .replace(URL_USERINFO, `$1${REDACTED}@`)
+    .replace(BEARER, `Bearer ${REDACTED}`)
+    .replace(KEY_VALUE, `$1=${REDACTED}`);
 }
 
 export function redactFields(fields: LogFields): LogFields {

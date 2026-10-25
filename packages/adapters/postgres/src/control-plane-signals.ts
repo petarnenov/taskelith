@@ -50,7 +50,7 @@ export class PostgresControlPlaneSignals implements ControlPlaneSignals {
   }
 
   read(): Promise<Result<ControlPlaneSnapshot>> {
-    return this.#database.transaction(async (tx) => ok(await tx.signals.snapshot()));
+    return this.#database.readOnly(async (tx) => ok(await tx.signals.snapshot()));
   }
 }
 

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   InMemoryLogSink,
+  isSecretFieldName,
   Logger,
   NO_LOGS,
   pickCorrelation,
@@ -62,6 +63,18 @@ test('credentials inside text are redacted in fields and correlation', () => {
   assert.equal(record.fields['cause'], `connect postgres://${REDACTED}@localhost:5432/db failed; Bearer ${REDACTED}`);
   assert.equal(record.correlation.correlationId, `postgres://${REDACTED}@db/x`);
   assert.doesNotMatch(JSON.stringify(record), /taskelith:taskelith|pw@|abc\.def/);
+});
+
+test('a name redacts only by whole segments', () => {
+  const secret = ['password', 'apiKey', 'api_key', 'privateKey', 'x-auth-token', 'Cookie', 'accessToken', 'providerCredential'];
+  const plain = ['promptTokens', 'passedChecks', 'compass', 'bypassed', 'keyId', 'authority'];
+  assert.deepEqual(secret.filter((name) => !isSecretFieldName(name)), []);
+  assert.deepEqual(plain.filter(isSecretFieldName), []);
+});
+
+test('a key-value secret and a password containing @ are redacted', () => {
+  assert.equal(redactText('password=hunter2 host=db token=abc'), `password=${REDACTED} host=db token=${REDACTED}`);
+  assert.equal(redactText('postgres://user:p@ss@db/x'), `postgres://${REDACTED}@db/x`);
 });
 
 test('text without credentials is unchanged', () => {
