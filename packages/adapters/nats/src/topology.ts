@@ -47,15 +47,21 @@ export async function ensureWorkerConsumer(
   });
 }
 
-// Deletes a revoked worker's consumer; one that is already gone counts.
+// Deletes a revoked worker's consumer; one already gone, with or without
+// its stream, counts as removed.
 export async function removeWorkerConsumer(jsm: JetStreamManager, address: TransportAddress, workerId: string): Promise<Result<void>> {
   try {
     await jsm.consumers.delete(address.streamName('commands'), workerId);
     return ok(undefined);
   } catch (error) {
-    if (error instanceof JetStreamApiError && error.code === JetStreamApiCodes.ConsumerNotFound) return ok(undefined);
+    if (isAbsent(error)) return ok(undefined);
     return brokerFailure(`remove consumer ${workerId}`, error);
   }
+}
+
+function isAbsent(error: unknown): boolean {
+  const absent: number[] = [JetStreamApiCodes.ConsumerNotFound, JetStreamApiCodes.StreamNotFound];
+  return error instanceof JetStreamApiError && absent.includes(error.code);
 }
 
 // One independent consumer per reader of every worker's observations.

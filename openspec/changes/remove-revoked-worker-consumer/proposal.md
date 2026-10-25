@@ -7,7 +7,7 @@ The worker command intake change (20b of the [G2 work plan](../../../docs/g2-pla
 - `WorkerCommandConsumers` gains `remove`, which is idempotent: a missing consumer is a success. The NATS adapter deletes the worker's durable consumer on the commands stream.
 - `EnrollmentService.revoke` removes the worker's command consumer after the revocation commits. The database revocation decides; a failed removal does not fail the revocation, and the result reports it as `commandConsumerRemoved: false`. The administration tool's `revoke-worker` connects to the broker as the control plane for the removal and prints that field with a retry note when the removal failed.
 - `FleetRegistry` gains `recentlyRevokedWorkerIds(limit)`: at most `limit` revoked workers, the latest revocation first.
-- A control-plane start also removes the consumers of the `100` latest revoked workers, logs each failure, and logs a summary, so a removal that failed heals at the next start.
+- A control-plane start also removes the consumers of the `100` latest revoked workers, logs each failure, and logs a summary, so a start retries a removal that failed while the worker is among the `100` latest revoked.
 
 ## Exclusions
 

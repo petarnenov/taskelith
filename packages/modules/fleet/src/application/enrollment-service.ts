@@ -39,8 +39,8 @@ export interface RotatedCredentials {
   readonly revocationsPublished: boolean;
 }
 
-// `commandConsumerRemoved` false means the revoked worker's consumer is
-// left; the next control-plane start removes it.
+// `commandConsumerRemoved` false: the consumer is left, and a start retries
+// while the worker is among the latest revoked (operational targets).
 export interface WorkerRevocation {
   readonly commandConsumerRemoved: boolean;
 }

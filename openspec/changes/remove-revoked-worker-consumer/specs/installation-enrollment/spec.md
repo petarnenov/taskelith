@@ -9,7 +9,7 @@ A revocation SHALL remove the worker's command consumer after the revocation com
 
 #### Scenario: Consumer that cannot be removed at revocation
 - **WHEN** the broker refuses the removal of a revoked worker's consumer
-- **THEN** the worker stays revoked, the revocation reports the consumer as not removed, and the next start removes it
+- **THEN** the worker stays revoked, the revocation reports the consumer as not removed, and the next start that reaches the broker removes it while the worker is among the most recently revoked
 
 #### Scenario: Consumer already removed
 - **WHEN** the consumer of a revoked worker is removed again
