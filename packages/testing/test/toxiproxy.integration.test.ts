@@ -18,10 +18,10 @@ const natsRoute = endpoint('TASKELITH_NATS_PROXY_URL');
 
 afterEach(() => toxiproxy.reset());
 
-type Greeting = 'info' | 'closed' | 'silent';
+type Greeting = 'info' | 'unexpected' | 'closed' | 'silent';
 
-// What a client sees of the NATS greeting within the wait: the INFO line, a
-// closed connection, or nothing.
+// What a client sees of the NATS greeting within the wait: the INFO line,
+// other data, a closed connection, or nothing.
 function natsGreeting(url: URL, waitMilliseconds = 1000): Promise<Greeting> {
   return new Promise((resolve) => {
     const socket = connect({ host: url.hostname, port: Number(url.port) });
@@ -30,7 +30,7 @@ function natsGreeting(url: URL, waitMilliseconds = 1000): Promise<Greeting> {
       resolve(greeting);
     };
     socket.setTimeout(waitMilliseconds, () => settle('silent'));
-    socket.on('data', (chunk) => settle(chunk.toString('utf8').startsWith('INFO ') ? 'info' : 'closed'));
+    socket.on('data', (chunk) => settle(chunk.toString('utf8').startsWith('INFO ') ? 'info' : 'unexpected'));
     socket.on('close', () => settle('closed'));
     socket.on('error', () => settle('closed'));
   });
@@ -104,5 +104,5 @@ test('a disconnected PostgreSQL route refuses new sessions until it is healed', 
 });
 
 test('a failed API call names the method, the path, and the status', async () => {
-  await assert.rejects(toxiproxy.proxy('missing').disconnect(), /Toxiproxy POST \/proxies\/missing failed with 404/);
+  await assert.rejects(toxiproxy.proxy('missing').disconnect(), /Toxiproxy POST \/proxies\/missing failed with 404: .*proxy not found/);
 });

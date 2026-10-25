@@ -149,7 +149,8 @@ const TEST_HARNESS_PACKAGE = '@taskelith/testing';
 // The test harness serves tests only; product code takes the real adapters.
 function checkTestHarnessImport({ rel, spec }: ImportEdge): string[] {
   if (packageName(spec) !== TEST_HARNESS_PACKAGE || isDevelopmentCode(rel)) return [];
-  if (owningPackage(rel) === 'packages/testing') return [];
+  const owner = owningPackage(rel);
+  if (owner === null || owner === 'packages/testing') return [];
   return [`${rel}: product code cannot import the test harness "${spec}" (R03)`];
 }
 

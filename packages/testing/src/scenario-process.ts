@@ -46,6 +46,7 @@ export class ScenarioProcess {
     return this.#stderr;
   }
 
+  // Throws ESRCH once the whole group is gone, so a test sees a late signal.
   kill(signal: NodeJS.Signals = 'SIGKILL'): void {
     process.kill(-this.pid, signal);
   }

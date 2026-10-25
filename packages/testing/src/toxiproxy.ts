@@ -1,5 +1,7 @@
 const STREAMS = ['upstream', 'downstream'] as const;
 
+type ToxiproxyRequest = (method: string, path: string, body?: object) => Promise<unknown>;
+
 // Toxiproxy's JSON API over fetch. The API has no authentication, so it must
 // be reachable only from the test network (docs/g2-infrastructure.md).
 export class Toxiproxy {
@@ -12,16 +14,18 @@ export class Toxiproxy {
   // A route the server configuration defines, such as `postgres` or `nats`
   // in infra/services/toxiproxy-routes.json.
   proxy(name: string): ToxiproxyProxy {
-    return new ToxiproxyProxy(this, name);
+    return new ToxiproxyProxy((method, path, body) => this.#request(method, path, body), name);
   }
 
   // Enables every proxy and removes every toxic, for a clean next scenario.
   async reset(): Promise<void> {
-    await this.request('POST', '/reset');
+    await this.#request('POST', '/reset');
   }
 
-  async request(method: string, path: string, body?: object): Promise<unknown> {
-    const response = await fetch(new URL(path, this.#api), {
+  async #request(method: string, path: string, body?: object): Promise<unknown> {
+    const url = new URL(this.#api);
+    url.pathname = `${url.pathname.replace(/\/$/, '')}${path}`;
+    const response = await fetch(url, {
       method,
       headers: body === undefined ? undefined : { 'content-type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -34,10 +38,10 @@ export class Toxiproxy {
 
 export class ToxiproxyProxy {
   readonly name: string;
-  readonly #toxiproxy: Toxiproxy;
+  readonly #request: ToxiproxyRequest;
 
-  constructor(toxiproxy: Toxiproxy, name: string) {
-    this.#toxiproxy = toxiproxy;
+  constructor(request: ToxiproxyRequest, name: string) {
+    this.#request = request;
     this.name = name;
   }
 
@@ -46,18 +50,19 @@ export class ToxiproxyProxy {
     await this.#update({ enabled: false });
   }
 
-  // Keeps connections open but drops data both ways, like a silent partition.
+  // Keeps connections open but drops data both ways, like a silent partition;
+  // heal first to black-hole again, as the server rejects a duplicate toxic.
   async blackhole(): Promise<void> {
     for (const stream of STREAMS) {
-      await this.#toxiproxy.request('POST', `${this.#path}/toxics`, {
+      await this.#request('POST', `${this.#path}/toxics`, {
         name: `blackhole-${stream}`, type: 'timeout', stream, toxicity: 1, attributes: { timeout: 0 },
       });
     }
   }
 
   async heal(): Promise<void> {
-    const toxics = await this.#toxiproxy.request('GET', `${this.#path}/toxics`) as { name: string }[];
-    for (const toxic of toxics) await this.#toxiproxy.request('DELETE', `${this.#path}/toxics/${toxic.name}`);
+    const toxics = await this.#request('GET', `${this.#path}/toxics`) as { name: string }[];
+    for (const toxic of toxics) await this.#request('DELETE', `${this.#path}/toxics/${toxic.name}`);
     await this.#update({ enabled: true });
   }
 
@@ -66,6 +71,6 @@ export class ToxiproxyProxy {
   }
 
   async #update(fields: object): Promise<void> {
-    await this.#toxiproxy.request('POST', this.#path, fields);
+    await this.#request('POST', this.#path, fields);
   }
 }

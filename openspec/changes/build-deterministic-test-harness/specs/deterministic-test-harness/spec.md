@@ -8,11 +8,11 @@ Define the deterministic test harness, `@taskelith/testing`: simulated clocks, i
 The harness SHALL be the private workspace package `@taskelith/testing` in `packages/testing`, depending at runtime only on the kernel and Node built-ins, and the boundary check SHALL reject an import of it from any file under `src/` of another package or of an application, while tests and scripts MAY import it.
 
 #### Scenario: Product source imports the harness
-- **WHEN** a file under `packages/adapters/<name>/src/`, `packages/modules/<name>/src/`, or `apps/<name>/src/` imports `@taskelith/testing`
+- **WHEN** a file under the root `src/`, `packages/kernel/src/`, `packages/adapters/<name>/src/`, `packages/modules/<name>/src/`, or `apps/<name>/src/` imports `@taskelith/testing`
 - **THEN** the boundary check reports that product code cannot import the test harness
 
-#### Scenario: A test imports the harness
-- **WHEN** a file under a package's `test/` directory or the root `test/` directory imports `@taskelith/testing`
+#### Scenario: A test or script imports the harness
+- **WHEN** a file under the `test/` directory of a package or application, the root `test/` directory, or `scripts/` imports `@taskelith/testing`
 - **THEN** the boundary check reports no violation for that import
 
 ### Requirement: Simulated host clocks
