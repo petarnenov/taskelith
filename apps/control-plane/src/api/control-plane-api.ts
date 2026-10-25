@@ -7,6 +7,8 @@ import type { TaskService } from '../application/task-service.js';
 import type { ApiHandlers, ApiRequest } from './api-server.js';
 
 export const QUARANTINE_PAGE = 100;
+// The capacity columns are PostgreSQL integers.
+export const MAX_CAPACITY_VALUE = 2_147_483_647;
 export const QUARANTINE_REASON_LENGTH = 512;
 
 // The operations the API reaches beyond the run and task use cases.
@@ -60,6 +62,10 @@ export class ControlPlaneApi implements ApiHandlers {
     const journalId = parseIdentifier('JournalId', body.journalId);
     if (!journalId.ok) return journalId;
     const { slots, cpuMillicores, memoryMebibytes, enforceableControls } = body.capacity;
+    // Checked before the token is presented, so a refusal consumes nothing.
+    if ([slots, cpuMillicores, memoryMebibytes].some((amount) => amount > MAX_CAPACITY_VALUE)) {
+      return err(failure('invalid', `a capacity value exceeds ${MAX_CAPACITY_VALUE}`));
+    }
     const enrolled = await this.#services.enrollment.enroll(tokenSecret, {
       journalId: journalId.value,
       host: body.host,

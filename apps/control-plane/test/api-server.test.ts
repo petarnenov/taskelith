@@ -10,8 +10,12 @@ const sink = new InMemoryLogSink();
 let answers: Record<string, () => Result<unknown>> = {};
 
 // Handlers that answer what each test sets, behind the real server.
+let storeDown = false;
 const handlers: ApiHandlers = {
-  authenticateOperator: async (secret) => (secret === OPERATOR ? ok(undefined) : err(failure('forbidden', 'not the operator'))),
+  authenticateOperator: async (secret) => {
+    if (storeDown) return err(failure('unavailable', 'the credential store is down'));
+    return secret === OPERATOR ? ok(undefined) : err(failure('forbidden', 'not the operator'));
+  },
   handle: async (operationId) => (answers[operationId] ?? (() => err(failure('internal', 'unset'))))(),
 };
 const server = createApiServer(handlers, { logger: new Logger(sink, { now: () => '2026-10-25T09:00:00.000Z' as never }) });
@@ -27,6 +31,16 @@ async function call(method: string, path: string, headers: Record<string, string
   const response = await fetch(`${base}${path}`, { method, headers: { authorization: `Bearer ${OPERATOR}`, ...headers }, ...(body === undefined ? {} : { body }) });
   return { status: response.status, body: await response.json() as Record<string, unknown>, correlationId: response.headers.get('x-correlation-id') };
 }
+
+test('a credential store that is down is 503, not a refused credential', async () => {
+  storeDown = true;
+  try {
+    const answered = await call('GET', '/runs/r/tasks/t/result');
+    assert.deepEqual([answered.status, answered.body.code], [503, 'unavailable']);
+  } finally {
+    storeDown = false;
+  }
+});
 
 test('a malformed percent-encoding is 400, and the server stays up', async () => {
   assert.equal((await call('GET', '/runs/%ZZ/tasks/t/result')).status, 400);

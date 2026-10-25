@@ -11,4 +11,4 @@ export type { ControlPlaneStore, ControlPlaneTransaction } from './application/c
 export { GRACE_WINDOW_SWEEP_MILLISECONDS, startControlPlane, type ControlPlaneSettings, type RunningControlPlane } from './composition/control-plane.js';
 export { InstallationPublicationFence } from './composition/installation-publication-fence.js';
 export { DEFAULT_API_HOST, DEFAULT_API_PORT, readControlPlaneSettings } from './composition/settings.js';
-export { controlPlaneMain } from './main.js';
+export { controlPlaneMain, serveUntilStopped, type ServiceProcess } from './main.js';

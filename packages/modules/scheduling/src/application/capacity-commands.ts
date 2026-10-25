@@ -11,10 +11,11 @@ export interface CommandIdentity {
 // The command types of the execution wire contract (item 8), section 4.
 export type WorkerCommandType = 'execution.assignment.offer' | 'execution.assignment.end' | 'execution.cancellation.request';
 
-// What a command's payload needs from the installation and the worker.
+// What a command's payload needs from the installation and the worker; only
+// an offer carries the recovery epoch.
 export interface CommandSetting {
   readonly protocolVersion: number;
-  readonly recoveryEpoch: number;
+  readonly recoveryEpoch: number | undefined;
 }
 
 export type CommandPayload = (setting: CommandSetting) => JsonObject;
@@ -29,8 +30,11 @@ export async function appendWorkerCommand(
   at: Instant,
   payload: CommandPayload,
 ): Promise<Result<void>> {
-  const context = await commandContext(tx, assignment);
+  const context = await commandContext(tx, commandType, assignment);
   if (!context.ok) return context;
+  // An end or cancellation for a worker without a record has no reader, and
+  // must not keep its assignment from ending (capacity contract section 6).
+  if (context.value === undefined) return ok(undefined);
   const event = parseEventMetadata({ eventId: identity.commandId, eventType: commandType, schemaVersion: 1, occurredAt: at, correlationId: identity.correlationId });
   if (!event.ok) return event;
   const { scope } = assignment.reservation;
@@ -56,7 +60,8 @@ export function offerPayload(assignment: Assignment): CommandPayload {
   return ({ protocolVersion, recoveryEpoch }) => ({
     protocolVersion,
     assignmentId: assignment.id,
-    recoveryEpoch,
+    // commandContext refuses an offer without an epoch.
+    recoveryEpoch: recoveryEpoch!,
     reservation: {
       reservationId: id,
       requested: { cpuMillicores: requested.cpuMillicores, memoryMebibytes: requested.memoryMebibytes, hardControls: [...requested.hardControls] },
@@ -74,19 +79,29 @@ export function cancellationPayload(): CommandPayload {
   return ({ protocolVersion }) => ({ protocolVersion, reason: 'assignment-ended' });
 }
 
+interface CommandContext {
+  readonly admission: { readonly id: string; readonly stageId: string; readonly generation: number };
+  readonly setting: CommandSetting;
+}
+
+// Undefined when no command is due: an end or cancellation for a worker
+// without a protocol version. An offer always needs both settings.
 async function commandContext(
   tx: CapacityTransaction,
+  commandType: WorkerCommandType,
   assignment: Assignment,
-): Promise<Result<{ admission: { id: string; stageId: string; generation: number }; setting: CommandSetting }>> {
+): Promise<Result<CommandContext | undefined>> {
+  const offer = commandType === 'execution.assignment.offer';
+  const protocolVersion = (await tx.workers.get(assignment.workerId))?.protocolVersion;
+  const recoveryEpoch = offer ? await tx.installation.recoveryEpoch() : undefined;
+  if (protocolVersion === undefined && !offer) return ok(undefined);
+  if (protocolVersion === undefined || (offer && recoveryEpoch === undefined)) {
+    return err(failure('precondition-failed', 'an offer needs the worker\'s protocol version and the recovery epoch', { worker: assignment.workerId }));
+  }
   const task = await tx.tasks.get(assignment.reservation.scope.taskId);
   if (!task.ok) return task;
   const admission = await tx.admissions.get(task.value.admissionId);
   if (!admission.ok) return admission;
-  const protocolVersion = (await tx.workers.get(assignment.workerId))?.protocolVersion;
-  const recoveryEpoch = await tx.installation.recoveryEpoch();
-  if (protocolVersion === undefined || recoveryEpoch === undefined) {
-    return err(failure('precondition-failed', 'a command needs the worker\'s protocol version and the recovery epoch', { worker: assignment.workerId }));
-  }
   const { id, stageId, generation } = admission.value;
   return ok({ admission: { id, stageId, generation }, setting: { protocolVersion, recoveryEpoch } });
 }

@@ -248,6 +248,12 @@ describe('enrollment and quarantine', () => {
     assert.equal(worker?.protocol_version, 1);
     const reused = await call('POST', '/workers/enrollments', { bearer: issued.enrollmentToken as string, body: { ...body, journalId: 'journal-2' } });
     assert.equal(reused.status, 401);
+
+    const fresh = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operator });
+    const huge = { ...body, journalId: 'journal-3', capacity: { ...body.capacity, slots: 2_147_483_648 } };
+    assert.equal((await call('POST', '/workers/enrollments', { bearer: fresh.enrollmentToken as string, body: huge })).status, 400);
+    const kept = await call('POST', '/workers/enrollments', { bearer: fresh.enrollmentToken as string, body: { ...body, journalId: 'journal-3' } });
+    assert.equal(kept.status, 201, 'a refused capacity does not consume the token');
   });
 
   test('the quarantine is listed, and redriving an unknown record is 404', async () => {
@@ -256,6 +262,12 @@ describe('enrollment and quarantine', () => {
     assert.ok(checkHttpSchema('QuarantinePage', listed.body).ok);
     assert.equal((await call('GET', '/quarantine?from=0', { bearer: operator })).status, 400);
     assert.equal((await call('POST', '/quarantine/999/redrive', { bearer: operator })).status, 404);
+  });
+
+  test('the running service reports a stop that was asked for', async () => {
+    const outcome = running.stopped;
+    await running.stop();
+    assert.equal(await outcome, 'stopped');
   });
 
   test('every request is logged with its correlation and no secret', async () => {

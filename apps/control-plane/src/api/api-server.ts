@@ -74,7 +74,8 @@ async function answerRoute(
   if (bearer === undefined) return failureResponse(401, failure('forbidden', 'the request has no bearer credential'));
   if (route.security === 'operatorToken') {
     const authenticated = await handlers.authenticateOperator(bearer);
-    if (!authenticated.ok) return failureResponse(401, authenticated.error);
+    // Only a refused credential is 401; a store that is down is not.
+    if (!authenticated.ok) return failureResponse(route.statuses[authenticated.error.code] ?? 500, authenticated.error);
   }
   const body = route.body === undefined ? { ok: true as const, value: undefined } : await validatedBody(request, route.body);
   if (!body.ok) return failureResponse(400, body.error);

@@ -9,6 +9,7 @@ import {
   DEFAULT_API_HOST,
   DEFAULT_API_PORT,
   readControlPlaneSettings,
+  serveUntilStopped,
   WorkflowRegistry,
 } from '@taskelith/control-plane';
 import { parseWorkflowDefinition, parseWorkflowRunBinding } from '@taskelith/sdlc';
@@ -69,4 +70,50 @@ test('the service entry reports a missing setting by name and does not start', a
   const lines: string[] = [];
   assert.equal(await controlPlaneMain({}, (line) => lines.push(line)), undefined);
   assert.match(lines[0]!, /TASKELITH_POSTGRES_URL is not set/);
+});
+
+// A process stand-in that records its listeners and can deliver a signal.
+function fakeProcess() {
+  const listeners = new Map<string, Set<() => void>>();
+  const host = {
+    exitCode: undefined as number | string | null | undefined,
+    on: (signal: string, listener: () => void) => listeners.set(signal, new Set([...(listeners.get(signal) ?? []), listener])),
+    off: (signal: string, listener: () => void) => listeners.get(signal)?.delete(listener),
+    emit: (signal: string) => [...(listeners.get(signal) ?? [])].forEach((listener) => listener()),
+    count: (signal: string) => listeners.get(signal)?.size ?? 0,
+  };
+  return host;
+}
+
+function fakeRunning(outcome: 'stopped' | 'failed') {
+  let stops = 0;
+  let finish!: (value: 'stopped' | 'failed') => void;
+  const stopped = new Promise<'stopped' | 'failed'>((resolve) => { finish = resolve; });
+  return {
+    running: { api: { host: '127.0.0.1', port: 0 }, metrics: undefined as never, stopped, stop: async () => { stops += 1; } },
+    stops: () => stops,
+    finish: () => finish(outcome),
+  };
+}
+
+test('a repeated signal joins the one stop, and the handlers stay until it ends', async () => {
+  const host = fakeProcess();
+  const service = fakeRunning('stopped');
+  const served = serveUntilStopped(service.running, host);
+  host.emit('SIGTERM');
+  host.emit('SIGTERM');
+  host.emit('SIGINT');
+  assert.equal(host.count('SIGTERM'), 1, 'a second SIGTERM still reaches the handler');
+  service.finish();
+  await served;
+  assert.deepEqual([service.stops(), host.count('SIGTERM'), host.exitCode], [3, 0, undefined]);
+});
+
+test('a stop after a loop defect exits non-zero', async () => {
+  const host = fakeProcess();
+  const service = fakeRunning('failed');
+  const served = serveUntilStopped(service.running, host);
+  service.finish();
+  await served;
+  assert.equal(host.exitCode, 1);
 });

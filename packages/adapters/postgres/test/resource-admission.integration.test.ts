@@ -282,6 +282,16 @@ test('an assignment without a grant is superseded once its worker is gone, never
   assert.deepEqual(await eventTypes(), ['execution.assignment.offer', 'execution.assignment.end']);
 });
 
+test('an assignment whose worker has no record is superseded and released without a command', async () => {
+  const task = await rootTask('task-1');
+  const placed = value(await service.reserve(placement(task, 'a')));
+  assert.ok(placed.kind === 'placed');
+  await query(url, 'DELETE FROM workers');
+  const superseded = value(await service.supersede({ assignmentId: placed.assignment.id, commandId: id('EventId', 's'), correlationId: id('CorrelationId', 'c') }));
+  assert.deepEqual([superseded.end?.reason, superseded.reservation.state], ['superseded', 'released']);
+  assert.deepEqual(await eventTypes(), ['execution.assignment.offer']);
+});
+
 test('a granted assignment is not superseded', async () => {
   const task = await rootTask('task-1');
   const placed = value(await service.reserve(placement(task, 'a')));

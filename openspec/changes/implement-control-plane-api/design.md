@@ -45,7 +45,7 @@ These are coordinator decisions; the coordinator reports Q1, Q4, and Q11 to the 
   - The HTTP adapter lives in `apps/control-plane/src/api/`, built on `node:http` and `checkHttpSchema`, because the app is its only consumer. A later item can extract it.
 - **HTTP.**
   - A route table names each operation, its method and path pattern, its security scheme, its body schema, and how its failure codes map to the statuses the document declares.
-  - Bearer authentication runs before the body is read. The body is limited to 1 MiB, parsed, and validated against its schema; the first violations go into a 400.
+  - Bearer authentication runs before the body is read. Only a refused credential is 401; a credential store that is unavailable is 503. The body is limited to 1 MiB, parsed, and validated against its schema; the first violations go into a 400.
   - A caller's `x-correlation-id` is kept when it is a valid identifier that carries no secret, otherwise one is made. It is echoed in the response and passed to the use case.
   - URL parsing and percent-decoding run inside the error boundary: a malformed encoding is 400, and every other failure is answered, never an unhandled rejection.
   - Every success body is validated against its response schema before it leaves; a violation is a defect and answered 500. The operations declare 500 and 503 beside their other statuses.
@@ -63,7 +63,9 @@ These are coordinator decisions; the coordinator reports Q1, Q4, and Q11 to the 
   - The admission identity is `a` and the SHA-256 of the run and task identities, which always fits the 128 characters of an identifier.
   - The encoded event must fit the broker's payload limit, less room for headers. Otherwise the submission fails with 400 and writes nothing, since a refused event would stay in the outbox and hold back the later ones on its subject.
 - **Create run.** A stored run answers a repeat before the registry is consulted, so a repeat stays idempotent after the registry changes, and a conflicting repeat is 409.
-- **Wire commands.** `appendWorkerCommand` reads the task's admission, the worker's protocol version, and the recovery epoch inside the capacity transaction. It writes the outbox row whose payload is the wire command itself, since the publisher sends a row's payload as the body. A command without a protocol version or an epoch fails with `precondition-failed`, so the transaction writes nothing.
+- **Wire commands.** `appendWorkerCommand` reads the task's admission and the worker's protocol version inside the capacity transaction, and for an offer also the recovery epoch. It writes the outbox row whose payload is the wire command itself, since the publisher sends a row's payload as the body.
+  - An offer without a protocol version or an epoch fails with `precondition-failed`, so the placement writes nothing.
+  - An end or a cancellation for a worker without a record writes no command, since no worker reads that subject. The assignment still ends and releases its reservation, as capacity contract section 6 requires for a worker that is gone.
 - **Protocol version.** Enrollment computes the version the worker and the control plane share and stores it in `workers.protocol_version`. Scheduling stays free of the contracts package, and the eligibility rule requires a version.
 - **Publication fence.** `InstallationPublicationFence` runs each publisher round, and each redrive, while a READ COMMITTED transaction holds the installation record `FOR SHARE`.
   - A writer entering quarantine therefore waits for the round in flight, and the next round sees the flag and publishes nothing.
@@ -76,7 +78,8 @@ These are coordinator decisions; the coordinator reports Q1, Q4, and Q11 to the 
   - It then starts the API and five loops under one abort signal: the publisher, the quarantine keeper, the grace-window sweep, the sampler, and the lag monitor.
   - Each acquired resource is pushed onto a cleanup stack at once. A start that fails or throws releases everything acquired so far, newest first.
   - The loops are supervised from the start: a loop that fails is logged and stops the whole service.
-  - `stop` is idempotent: it aborts the signal, waits for the loops, and releases the stack. The service entry stops it on SIGTERM or SIGINT, and a second signal waits for the same shutdown.
+  - `stop` is idempotent: it aborts the signal, waits for the loops, and releases the stack. `stopped` settles afterwards with `failed` after a loop defect.
+  - The service entry keeps its SIGTERM and SIGINT handlers until the stop ends, so a repeated signal joins the same shutdown, and it exits with 1 after a loop defect so that a supervisor restarts it.
 
 ## Risks / Trade-offs
 
@@ -84,4 +87,5 @@ These are coordinator decisions; the coordinator reports Q1, Q4, and Q11 to the 
 - **One control-plane instance.** The loops assume one instance, as G2 runs; several instances would each sweep and publish.
 - **Workflow registry.** It is a configured file, not a framework resolution. A wrong digest in it would admit runs of an unverified definition. Projects and working copies replace it in G3.
 - **What a repeat compares.** A repeat is compared by kind, stage, work item, and, for a planning task, its artifacts. An implementation task's artifacts come from its gates, so a repeat after a gate changed returns the admission stored first.
+- **Capacity bounds.** The contract's `WorkerCapacity` has no maximum, while the columns are PostgreSQL integers. The enrollment handler refuses a value above 2,147,483,647 with 400 before it presents the token; bounding the schema is left to the next version of the execution documents.
 - **Plain HTTP.** The operator token travels in clear text on any interface other than loopback until G3 item 26.

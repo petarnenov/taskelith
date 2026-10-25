@@ -47,6 +47,8 @@ export interface ControlPlaneSettings extends Omit<AdministrationSettings, 'logg
 export interface RunningControlPlane {
   readonly api: ApiEndpoint;
   readonly metrics: InMemoryMetrics;
+  // Settles when the service has stopped: `failed` after a loop defect.
+  readonly stopped: Promise<'stopped' | 'failed'>;
   stop(): Promise<void>;
 }
 
@@ -107,14 +109,19 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   cleanup.push(async () => lag.stop());
   const publisher = new OutboxPublisher(new PostgresOutboxRelay(database), new JetStreamPublisher(broker.value.js), address.value, { logger, limits, fence });
   const sweep = settings.sweepMilliseconds ?? GRACE_WINDOW_SWEEP_MILLISECONDS;
+  let outcome: 'stopped' | 'failed' = 'stopped';
+  let settle!: (value: 'stopped' | 'failed') => void;
+  const stopped = new Promise<'stopped' | 'failed'>((resolve) => { settle = resolve; });
   const stop = once(async () => {
     controller.abort();
     await Promise.allSettled(loops);
     await cleanup.run();
+    settle(outcome);
   });
   // A loop that fails is a defect: it is logged and stops the whole service.
   const supervise = (name: string, loop: Promise<void>) => loop.catch((error: unknown) => {
     logger.error('control-plane.loop.failed', { loop: name, message: error instanceof Error ? error.message : String(error) });
+    outcome = 'failed';
     void stop();
   });
   const loops = [
@@ -125,7 +132,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     supervise('event-loop', runPeriodically(() => lag.sample(metrics), controller.signal)),
   ];
   logger.info('control-plane.started', { host: listening.value.host, port: listening.value.port });
-  return ok({ api: listening.value, metrics, stop });
+  return ok({ api: listening.value, metrics, stopped, stop });
 }
 
 // Releases what was acquired, newest first; a release that fails does not

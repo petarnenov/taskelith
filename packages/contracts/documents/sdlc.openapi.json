@@ -253,6 +253,16 @@
               }
             }
           },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
           "401": {
             "description": "The operator credential is invalid.",
             "content": {
