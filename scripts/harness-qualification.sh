@@ -58,7 +58,15 @@ qualify() {
   docker diff "$container" | { grep -v ' /var/lib/taskelith/qualify-home/schema/' || :; } > "$result/changes.txt"
   diff "$result/before.txt" "$result/after.txt" > "$result/listing-changes.txt" || :
   docker rm "$container" >/dev/null
+  find_credentials "$platform" "$image" > "$result/credential-files.txt" || status=1
+  if [ -s "$result/credential-files.txt" ]; then status=1; fi
   return "$status"
+}
+
+# Searches the whole image as root for the harnesses' credential files.
+find_credentials() {
+  docker run --rm --platform "$1" --network none --user root --entrypoint find "$2" \
+    / -xdev \( -name auth.json -o -name .credentials.json \) -print
 }
 
 # A failed platform is recorded in error.txt, and the others still run.

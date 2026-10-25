@@ -40,7 +40,6 @@ observe platform 0 uname -sm
 observe os 0 sh -c '. /etc/os-release && echo "$PRETTY_NAME"'
 observe node 0 node --version
 observe user 0 id -un
-observe credential-files-absent 0 sh -c '! find / -xdev \( -name auth.json -o -name .credentials.json \) -print | grep .'
 observe claude-path 0 echo "${claude#"$modules/"}"
 observe claude-sha256 0 sh -c "sha256sum '$claude' | cut -d' ' -f1"
 observe claude-version 0 "$claude" --version
