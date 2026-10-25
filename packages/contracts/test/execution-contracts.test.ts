@@ -88,7 +88,9 @@ test('the wire enumerations are the domain vocabularies', () => {
 
   assert.deepEqual([...MESSAGES.RefusalReason!.enum!, 'protocol-not-supported'], [...REFUSAL_REASONS]);
   assert.deepEqual(MESSAGES.LaunchRejectionReason!.enum, nonRetryable);
-  assert.deepEqual(new Set(HTTP.LaunchRejection!.properties!.reason!.enum), new Set(LAUNCH_REJECTION_REASONS));
+  assert.deepEqual(HTTP.LaunchRejectionReason, MESSAGES.LaunchRejectionReason);
+  const retryable = (HTTP.LaunchRejection as { oneOf: { properties: { reason: { enum: string[] } } }[] }).oneOf[0]!.properties.reason.enum;
+  assert.deepEqual(retryable, [...RETRYABLE_LAUNCH_REJECTIONS]);
   assert.deepEqual(HTTP.RevocationReason!.enum, [...REVOCATION_REASONS]);
   assert.deepEqual(MESSAGES.HardControl!.enum, [...HARD_CONTROLS]);
   assert.deepEqual(MESSAGES.CancellationPayload!.properties!.reason!.enum, [...CANCELLATION_REASONS]);
@@ -162,6 +164,11 @@ test('a refusal under admission pressure names its causes', () => {
   assert.ok(checkMessageSchema('AssignmentRefusedObservation', observation('execution.assignment.refused', refusal)).ok);
   assert.ok(!checkMessageSchema('AssignmentRefusedPayload', { ...refusal, pressureCauses: [] }).ok);
   assert.ok(!checkMessageSchema('AssignmentRefusedPayload', { ...refusal, pressureCauses: ['disk-floor', 'disk-floor'] }).ok);
+  const { pressureCauses: _causes, ...withoutCauses } = refusal;
+  assert.ok(!checkMessageSchema('AssignmentRefusedPayload', withoutCauses).ok);
+  assert.ok(!checkMessageSchema('AssignmentRefusedPayload', { ...refusal, retryable: false }).ok);
+  assert.ok(checkMessageSchema('AssignmentRefusedPayload', { commandId: 'command-1', assignmentId: 'assignment-1', reason: 'worker-slots-exhausted', retryable: false }).ok);
+  assert.ok(!checkMessageSchema('AssignmentRefusedPayload', { commandId: 'command-1', assignmentId: 'assignment-1', reason: 'worker-slots-exhausted', retryable: true }).ok);
 });
 
 test('execution facts carry the identities the launch authority checks', () => {
@@ -176,6 +183,11 @@ test('execution facts carry the identities the launch authority checks', () => {
   assert.ok(!checkMessageSchema('ExecutionStartedPayload', { ...started, launchAuthId: undefined }).ok);
   assert.ok(!checkMessageSchema('ExecutionExitedPayload', { ...exited, status: { kind: 'code', code: 256 } }).ok);
   assert.ok(!checkMessageSchema('ExitStatus', { kind: 'code', signal: 'SIGTERM' }).ok);
+  const spawnFailure = { executionId: 'execution-1', status: { kind: 'unknown' }, startProven: false, spawnFailed: true, spawnFailure: 'executable not found', terminationEvidence: 'never-spawned' };
+  assert.ok(checkMessageSchema('ExecutionExitedPayload', spawnFailure).ok);
+  assert.ok(!checkMessageSchema('ExecutionExitedPayload', { ...spawnFailure, startProven: true }).ok);
+  assert.ok(!checkMessageSchema('ExecutionExitedPayload', { ...spawnFailure, terminationEvidence: 'containment-empty' }).ok);
+  assert.ok(!checkMessageSchema('ExecutionExitedPayload', { ...exited, terminationEvidence: 'never-spawned' }).ok);
 });
 
 test('a non-retryable launch rejection is an observation, a retryable one is not', () => {
@@ -192,6 +204,7 @@ test('the control plane confirms a journal prefix and the worker reports its inv
     schemaVersion: 1,
     protocolVersion: 1,
     reportId: 'report-1',
+    snapshot: 3,
     part: 1,
     parts: 1,
     reportedAt: AT,
@@ -218,6 +231,7 @@ test('the largest valid inventory part fits the broker payload limit', () => {
     schemaVersion: Number.MAX_SAFE_INTEGER,
     protocolVersion: Number.MAX_SAFE_INTEGER,
     reportId: longest,
+    snapshot: Number.MAX_SAFE_INTEGER,
     part: 4096,
     parts: 4096,
     reportedAt: AT,
@@ -292,6 +306,8 @@ test('a launch authorization names the expected values and returns a decision', 
   assert.ok(checkHttpSchema('LaunchAuthorizationOutcome', { outcome: 'revoked', reason: 'capacity-not-reserved' }).ok);
   assert.ok(checkHttpSchema('LaunchAuthorizationOutcome', { outcome: 'expired' }).ok);
   assert.ok(!checkHttpSchema('LaunchAuthorizationOutcome', { outcome: 'revoked', reason: 'operation-mismatch' }).ok);
+  assert.ok(!checkHttpSchema('LaunchRejection', { reason: 'gate-not-passed', retryable: true, message: 'gate pending' }).ok);
+  assert.ok(!checkHttpSchema('LaunchRejection', { reason: 'unavailable', retryable: false, message: 'busy' }).ok);
 });
 
 test('a task result is pending or the outcome fact of its last ended attempt', () => {
@@ -300,6 +316,9 @@ test('a task result is pending or the outcome fact of its last ended attempt', (
   assert.ok(checkHttpSchema('TaskResult', { state: 'pending', runId: 'run-1', taskId: 'task-1' }).ok);
   assert.ok(checkHttpSchema('TaskResult', { state: 'ended', runId: 'run-1', taskId: 'task-1', attemptId: 'attempt-1', ownershipGeneration: 3, outcome, evidence: [] }).ok);
   assert.ok(checkHttpSchema('AttemptOutcome', { kind: 'not-started', cancelled: true, ownershipGeneration: 3, endedAt: AT }).ok);
+  const resolved = { kind: 'operator-resolved', executionId: 'execution-1', evidence: 'ticket-7', cancelled: false, ownershipGeneration: 3, endedAt: AT };
+  assert.ok(checkHttpSchema('AttemptOutcome', resolved).ok);
+  assert.ok(!checkHttpSchema('AttemptOutcome', { ...resolved, evidence: '\n' }).ok);
   assert.ok(!checkHttpSchema('TaskResult', { state: 'pending', runId: 'run-1', taskId: 'task-1', outcome }).ok);
 });
 
@@ -310,6 +329,7 @@ test('an evidence record is content addressed and names its producer', () => {
     runId: 'run-1',
     taskId: 'task-1',
     attemptId: 'attempt-1',
+    ownershipGeneration: 2,
     kind: 'execution-log',
     inputArtifacts: [],
     codeRevision: 'commit-1',
@@ -322,7 +342,9 @@ test('an evidence record is content addressed and names its producer', () => {
   };
 
   assert.ok(checkHttpSchema('EvidencePublication', publication).ok);
-  assert.ok(checkHttpSchema('EvidenceRecord', { ...publication, producer: { kind: 'worker', workerId: 'worker-1' }, publishedAt: AT }).ok);
+  assert.ok(checkHttpSchema('EvidenceRecord', { ...publication, producer: { kind: 'worker', workerId: 'worker-1' }, ownershipCurrent: false, publishedAt: AT }).ok);
+  const { ownershipGeneration: _generation, ...withoutGeneration } = publication;
+  assert.ok(violations(checkHttpSchema('EvidencePublication', withoutGeneration)).some((text) => text.includes('ownershipGeneration')));
   assert.ok(!checkHttpSchema('EvidencePublication', { ...publication, contentDigest: 'md5:00' }).ok);
   const { validator: _validator, ...withoutValidator } = publication;
   assert.ok(violations(checkHttpSchema('EvidencePublication', withoutValidator)).some((text) => text.includes('validator')));

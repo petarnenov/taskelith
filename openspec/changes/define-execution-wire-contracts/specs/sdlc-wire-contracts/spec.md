@@ -1,5 +1,20 @@
 ## MODIFIED Requirements
 
+### Requirement: Admission and gate events
+The AsyncAPI document SHALL define the admission events `sdlc.admission.admitted`, `sdlc.admission.used`, and `sdlc.admission.invalidated` with the run identifier and the admission record, and the gate events `sdlc.gate.opened`, `sdlc.gate.decided`, `sdlc.gate.blocked`, `sdlc.gate.stale`, and `sdlc.gate.reopened` with the run identifier and the gate. Each event message SHALL fix its event type, and the wire records SHALL accept those the SDLC domain produces.
+
+#### Scenario: Domain admission on the wire
+- **WHEN** an admission record of the SDLC domain is serialized as JSON
+- **THEN** it is valid against the admission schema of both documents
+
+#### Scenario: Event type of another event
+- **WHEN** an admitted-event body is validated as an invalidated event
+- **THEN** validation fails at the metadata event type
+
+#### Scenario: Used admission on the wire
+- **WHEN** a used admission with its ownership generation is serialized as JSON
+- **THEN** it is valid against the admission schema of every document that defines it
+
 ### Requirement: Contracts package and documents
 The private workspace package `@taskelith/contracts` SHALL hold `documents/sdlc.openapi.json` (OpenAPI 3.1.0), `documents/sdlc.asyncapi.json` (AsyncAPI 3.0.0), and the execution documents, each with a semantic `info.version`. Each document SHALL be self-contained, and every schema that several documents define under the same component name SHALL be identical.
 

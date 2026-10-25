@@ -30,7 +30,7 @@ Each execution command SHALL use the shared command envelope, SHALL require its 
 - **THEN** validation fails at the metadata command type
 
 ### Requirement: Observation envelope
-Every observation SHALL carry a deterministic `observationId`, its fixed type, schema and protocol versions, `workerId`, `journalId`, and a positive `sequence`. Every observation about an attempt SHALL also carry the attempt and its ownership generation; only unrecorded processes, capacity, and admission pressure are about no attempt.
+Every observation SHALL carry a deterministic `observationId`, its fixed type, schema and protocol versions, `workerId`, `journalId`, and a positive `sequence`. Every observation about an attempt SHALL also carry the attempt and its ownership generation; only command rejections, unrecorded processes, capacity, and admission pressure are about no attempt.
 
 #### Scenario: Observation without journal
 - **WHEN** an observation omits `journalId`
@@ -51,6 +51,14 @@ The AsyncAPI document SHALL define observations for assignment acceptance and re
 - **WHEN** an assignment refusal names `protocol-not-supported`
 - **THEN** validation fails, because the worker rejects such an offer as a command
 
+#### Scenario: Pressure refusal not retryable
+- **WHEN** a refusal for admission pressure is not retryable or names no cause
+- **THEN** validation fails
+
+#### Scenario: Spawn failure with a proven start
+- **WHEN** an exit reports a failed spawn and a proven start
+- **THEN** validation fails
+
 #### Scenario: Retryable launch rejection
 - **WHEN** a launch rejection observation names `unavailable`
 - **THEN** validation fails
@@ -60,7 +68,7 @@ The AsyncAPI document SHALL define observations for assignment acceptance and re
 - **THEN** validation fails
 
 ### Requirement: Confirmation and inventory
-The AsyncAPI document SHALL define a cumulative confirmation of a positive `confirmedThrough` per worker and journal. It SHALL also define an inventory report of the held assignments and their executions' journal states with uncertainty beside them, sent in numbered parts of one report identity, each with the last journal sequence the report reflects and small enough for the broker's `1 MiB` payload limit.
+The AsyncAPI document SHALL define a cumulative confirmation of a positive `confirmedThrough` per worker and journal. It SHALL also define an inventory report of the held assignments and their executions' journal states with uncertainty beside them, sent in numbered parts of one report identity and an increasing snapshot number, each with the last journal sequence the report reflects and small enough for the broker's `1 MiB` payload limit.
 
 #### Scenario: Uncertainty as a state
 - **WHEN** an inventory execution has the state `uncertain`
@@ -95,12 +103,16 @@ The OpenAPI document SHALL define `enrollWorker`, `authorizeLaunch`, `requestDel
 ### Requirement: Launch authorization outcome
 `authorizeLaunch` SHALL return the decision recorded for its `operationId` with status 200. The decision is a grant with its bound values, `ttlMilliseconds`, and `skewMilliseconds`, a rejection with its reason and retryability, a revoked grant with its revocation reason, or an expired grant. Status 503 SHALL mean that no decision was reached.
 
+#### Scenario: Retryable gate rejection
+- **WHEN** a rejection names `gate-not-passed` as retryable
+- **THEN** validation fails
+
 #### Scenario: Revocation for a non-revocation reason
 - **WHEN** a revoked outcome names `operation-mismatch`
 - **THEN** validation fails
 
 ### Requirement: Task result and evidence
-`readTaskResult` SHALL return a pending result, or the outcome fact of the task's last ended attempt with the task's evidence records. An evidence record SHALL require the fields of architecture section 8, a SHA-256 content digest, and its producer.
+`readTaskResult` SHALL return a pending result, or the outcome fact of the task's last ended attempt with the task's evidence records. An evidence record SHALL require the fields of architecture section 8, the ownership generation it was produced at, a SHA-256 content digest, and its producer, and SHALL state whether that generation was current.
 
 #### Scenario: Evidence without validator
 - **WHEN** an evidence publication omits its validator

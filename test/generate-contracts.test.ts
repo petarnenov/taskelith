@@ -37,8 +37,8 @@ test('documents may share a schema name only for the same schema', () => {
     Run: { type: 'object' },
   });
   assert.throws(
-    () => mergeSchemas([{ path: 'a.json', schemas: { Identifier: identifier } }, { path: 'b.json', schemas: { Identifier: { type: 'string' } } }]),
-    /The schema Identifier of b.json differs from the one of a.json/,
+    () => mergeSchemas([{ path: 'a.openapi.json', schemas: { Identifier: identifier } }, { path: 'b.asyncapi.json', schemas: { Identifier: { type: 'string' } } }]),
+    /The schema Identifier of b.asyncapi.json differs from the one of a.openapi.json/,
   );
 });
 

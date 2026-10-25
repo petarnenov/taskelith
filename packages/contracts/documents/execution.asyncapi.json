@@ -570,7 +570,7 @@
       "ObservationMetadata": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Fields every observation carries. The producer is the pair of workerId and journalId; observationId is deterministic from the observation source. Observations about an attempt require attemptId and ownershipGeneration.",
+        "description": "Fields every observation carries. The producer is the pair of workerId and journalId; observationId is deterministic from the observation source. Observations about an attempt require attemptId and ownershipGeneration; a command rejection, an unrecorded process, capacity, and admission pressure are about none.",
         "required": [
           "observationId",
           "observationType",
@@ -669,6 +669,7 @@
           "schemaVersion",
           "protocolVersion",
           "reportId",
+          "snapshot",
           "part",
           "parts",
           "reportedAt",
@@ -692,6 +693,12 @@
           "reportId": {
             "$ref": "#/components/schemas/Identifier",
             "description": "The same for every part of one snapshot."
+          },
+          "snapshot": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991,
+            "description": "Increases with every snapshot of the journal, so that a later one replaces an earlier one."
           },
           "part": {
             "type": "integer",
@@ -1083,39 +1090,78 @@
         }
       },
       "AssignmentRefusedPayload": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "commandId",
-          "assignmentId",
-          "reason",
-          "retryable"
-        ],
-        "properties": {
-          "commandId": {
-            "$ref": "#/components/schemas/Identifier"
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Admission pressure, the only retryable refusal, with its causes.",
+            "required": [
+              "commandId",
+              "assignmentId",
+              "reason",
+              "retryable",
+              "pressureCauses"
+            ],
+            "properties": {
+              "commandId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "assignmentId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "reason": {
+                "type": "string",
+                "const": "worker-admission-pressure"
+              },
+              "retryable": {
+                "type": "boolean",
+                "const": true
+              },
+              "pressureCauses": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AdmissionPressureCause"
+                },
+                "maxItems": 5,
+                "uniqueItems": true,
+                "minItems": 1
+              }
+            }
           },
-          "assignmentId": {
-            "$ref": "#/components/schemas/Identifier"
-          },
-          "reason": {
-            "$ref": "#/components/schemas/RefusalReason"
-          },
-          "retryable": {
-            "type": "boolean",
-            "description": "True only for worker-admission-pressure."
-          },
-          "pressureCauses": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AdmissionPressureCause"
-            },
-            "maxItems": 5,
-            "uniqueItems": true,
-            "minItems": 1,
-            "description": "Set with worker-admission-pressure."
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "commandId",
+              "assignmentId",
+              "reason",
+              "retryable"
+            ],
+            "properties": {
+              "commandId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "assignmentId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "reason": {
+                "type": "string",
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RefusalReason"
+                  }
+                ],
+                "not": {
+                  "const": "worker-admission-pressure"
+                }
+              },
+              "retryable": {
+                "type": "boolean",
+                "const": false
+              }
+            }
           }
-        }
+        ]
       },
       "AssignmentRefusedObservation": {
         "type": "object",
@@ -1348,42 +1394,78 @@
         }
       },
       "ExecutionExitedPayload": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "executionId",
-          "status",
-          "startProven",
-          "spawnFailed",
-          "terminationEvidence"
-        ],
-        "properties": {
-          "executionId": {
-            "$ref": "#/components/schemas/Identifier"
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "The spawn failed, so no process of the execution ever ran.",
+            "required": [
+              "executionId",
+              "status",
+              "startProven",
+              "spawnFailed",
+              "spawnFailure",
+              "terminationEvidence"
+            ],
+            "properties": {
+              "executionId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "status": {
+                "$ref": "#/components/schemas/ExitStatus"
+              },
+              "startProven": {
+                "type": "boolean",
+                "const": false
+              },
+              "spawnFailed": {
+                "type": "boolean",
+                "const": true
+              },
+              "spawnFailure": {
+                "$ref": "#/components/schemas/DisplayText"
+              },
+              "terminationEvidence": {
+                "type": "string",
+                "const": "never-spawned"
+              }
+            }
           },
-          "status": {
-            "$ref": "#/components/schemas/ExitStatus"
-          },
-          "startProven": {
-            "type": "boolean"
-          },
-          "spawnFailed": {
-            "type": "boolean"
-          },
-          "spawnFailure": {
-            "$ref": "#/components/schemas/DisplayText",
-            "description": "Why the spawn failed, set with spawnFailed."
-          },
-          "terminationEvidence": {
-            "type": "string",
-            "description": "How the empty process set was proven.",
-            "enum": [
-              "containment-empty",
-              "process-group-empty",
-              "never-spawned"
-            ]
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "executionId",
+              "status",
+              "startProven",
+              "spawnFailed",
+              "terminationEvidence"
+            ],
+            "properties": {
+              "executionId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "status": {
+                "$ref": "#/components/schemas/ExitStatus"
+              },
+              "startProven": {
+                "type": "boolean"
+              },
+              "spawnFailed": {
+                "type": "boolean",
+                "const": false
+              },
+              "terminationEvidence": {
+                "type": "string",
+                "description": "containment-empty on Linux, process-group-empty on macOS.",
+                "enum": [
+                  "containment-empty",
+                  "process-group-empty"
+                ]
+              }
+            }
           }
-        }
+        ]
       },
       "ExecutionExitedObservation": {
         "type": "object",

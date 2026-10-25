@@ -124,9 +124,11 @@ function documentsOf(kind: ContractKind): ContractDocument[] {
 }
 
 async function generate(root: string): Promise<void> {
-  const openapi = mergeOpenapi(documentsOf('openapi').map(({ path }) => ({ path, document: JSON.parse(readFileSync(join(root, path), 'utf8')) })));
+  const openapiSources: OpenapiSource[] = documentsOf('openapi').map(({ path }) => ({ path, document: JSON.parse(readFileSync(join(root, path), 'utf8')) }));
   const messageSources: SchemaSource[] = [];
   for (const { path } of documentsOf('asyncapi')) messageSources.push({ path, schemas: await asyncapiSchemas(join(root, path)) });
+  mergeSchemas([...openapiSources.map(({ path, document }) => ({ path, schemas: document.components.schemas })), ...messageSources]);
+  const openapi = mergeOpenapi(openapiSources);
   const messageSchemas = mergeSchemas(messageSources);
   const messageDefinitions = JSON.parse(JSON.stringify(messageSchemas).replace(COMPONENT_REF, '"#/definitions/$1"'));
 

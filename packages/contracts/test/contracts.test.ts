@@ -8,10 +8,12 @@ import {
   beginWorkflowProgress,
   openGate,
   parseArtifactRevision,
+  parseOwnershipGeneration,
   parseSemanticApproval,
   parseWorkflowDefinition,
   parseWorkflowRunBinding,
   recordGateEvidence,
+  useAdmission,
   type ArtifactRevision,
 } from '@taskelith/sdlc';
 
@@ -106,6 +108,19 @@ test('a schema name means the same schema in every document that defines it', ()
 test('an admission record of the domain is a valid wire admission in both documents', () => {
   const record = JSON.parse(JSON.stringify(admission()));
 
+  assert.ok(checkHttpSchema('Admission', record).ok);
+  assert.ok(checkMessageSchema('Admission', record).ok);
+});
+
+test('a used admission with its ownership generation is a valid wire admission in every document', () => {
+  const ownership = parseOwnershipGeneration(2);
+  assert.ok(ownership.ok);
+  const admitted = admission();
+  const used = useAdmission(admitted, admitted.generation, AT, ownership.value);
+  assert.ok(used.ok);
+  const record = JSON.parse(JSON.stringify(used.value));
+
+  assert.equal(record.ownershipGeneration, 2);
   assert.ok(checkHttpSchema('Admission', record).ok);
   assert.ok(checkMessageSchema('Admission', record).ok);
 });

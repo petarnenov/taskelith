@@ -980,42 +980,74 @@
           }
         }
       },
+      "LaunchRejectionReason": {
+        "type": "string",
+        "description": "The non-retryable launch rejection reasons.",
+        "enum": [
+          "stale-recovery-epoch",
+          "worker-not-authorized",
+          "assignment-not-active",
+          "stale-ownership-generation",
+          "attempt-not-launchable",
+          "admission-not-current",
+          "gate-not-passed",
+          "artifact-revision-changed",
+          "policy-revision-changed",
+          "capacity-not-reserved",
+          "execution-conflict",
+          "operation-mismatch"
+        ]
+      },
       "LaunchRejection": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "reason",
-          "retryable",
-          "message"
-        ],
-        "properties": {
-          "reason": {
-            "type": "string",
-            "enum": [
-              "stale-recovery-epoch",
-              "worker-not-authorized",
-              "assignment-not-active",
-              "stale-ownership-generation",
-              "attempt-not-launchable",
-              "admission-not-current",
-              "gate-not-passed",
-              "artifact-revision-changed",
-              "policy-revision-changed",
-              "capacity-not-reserved",
-              "execution-conflict",
-              "operation-mismatch",
-              "quarantined",
-              "unavailable"
-            ]
+        "description": "A rejection is retryable exactly for quarantined and unavailable; a retry uses a new operationId.",
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "reason",
+              "retryable",
+              "message"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "quarantined",
+                  "unavailable"
+                ]
+              },
+              "retryable": {
+                "type": "boolean",
+                "const": true
+              },
+              "message": {
+                "type": "string"
+              }
+            }
           },
-          "retryable": {
-            "type": "boolean",
-            "description": "True only for quarantined and unavailable; a retry uses a new operationId."
-          },
-          "message": {
-            "type": "string"
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "reason",
+              "retryable",
+              "message"
+            ],
+            "properties": {
+              "reason": {
+                "$ref": "#/components/schemas/LaunchRejectionReason"
+              },
+              "retryable": {
+                "type": "boolean",
+                "const": false
+              },
+              "message": {
+                "type": "string"
+              }
+            }
           }
-        }
+        ]
       },
       "RevocationReason": {
         "type": "string",
@@ -1170,9 +1202,7 @@
                 "$ref": "#/components/schemas/Identifier"
               },
               "evidence": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 1024
+                "$ref": "#/components/schemas/DisplayText"
               }
             }
           },
@@ -1304,7 +1334,7 @@
       "Admission": {
         "type": "object",
         "additionalProperties": false,
-        "description": "A task admission record. The ownership generation is added with the execution module (G2).",
+        "description": "A task admission record. A used admission carries the ownership generation of the dispatch that used it.",
         "required": [
           "id",
           "taskId",
@@ -1360,6 +1390,9 @@
             "$ref": "#/components/schemas/AdmissionState"
           },
           "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "ownershipGeneration": {
             "$ref": "#/components/schemas/Generation"
           },
           "changedAt": {
@@ -1537,6 +1570,7 @@
           "runId",
           "taskId",
           "attemptId",
+          "ownershipGeneration",
           "kind",
           "inputArtifacts",
           "codeRevision",
@@ -1563,6 +1597,10 @@
           },
           "attemptId": {
             "$ref": "#/components/schemas/Identifier"
+          },
+          "ownershipGeneration": {
+            "$ref": "#/components/schemas/Generation",
+            "description": "The ownership generation the producer held the attempt at."
           },
           "executionId": {
             "$ref": "#/components/schemas/Identifier"
@@ -1629,6 +1667,7 @@
           "runId",
           "taskId",
           "attemptId",
+          "ownershipGeneration",
           "kind",
           "inputArtifacts",
           "codeRevision",
@@ -1639,6 +1678,7 @@
           "sizeBytes",
           "capturedAt",
           "producer",
+          "ownershipCurrent",
           "publishedAt"
         ],
         "properties": {
@@ -1657,6 +1697,10 @@
           },
           "attemptId": {
             "$ref": "#/components/schemas/Identifier"
+          },
+          "ownershipGeneration": {
+            "$ref": "#/components/schemas/Generation",
+            "description": "The ownership generation the producer held the attempt at."
           },
           "executionId": {
             "$ref": "#/components/schemas/Identifier"
@@ -1727,6 +1771,10 @@
                 "$ref": "#/components/schemas/Identifier"
               }
             }
+          },
+          "ownershipCurrent": {
+            "type": "boolean",
+            "description": "False for evidence published at an older ownership generation, which is kept for audit only."
           },
           "publishedAt": {
             "$ref": "#/components/schemas/Instant"
