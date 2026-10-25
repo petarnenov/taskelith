@@ -6,7 +6,6 @@ import {
   commonProtocolVersion,
   hostMismatch,
   isExpired,
-  rotateCredentials,
   validGenerations,
   type CredentialGeneration,
   type EnrolledWorker,
@@ -102,43 +101,36 @@ export class EnrollmentService {
     const { current } = worker.value.credentials;
     const issued = await this.#issueGeneration(workerId, current.generation + 1);
     if (!issued.ok) return issued;
-    const validUntil = this.#after(this.#deps.clock.now(), this.#limits.rotationGraceMilliseconds);
-    const next = rotateCredentials(worker.value.credentials, issued.value.generation, validUntil);
-    const dropped = worker.value.credentials.previous;
-    const replaced = await this.#deps.registry.replaceCredentials(workerId, current.generation, next);
-    if (!replaced.ok) return replaced;
-    if (dropped !== undefined) {
-      const revoked = await this.#deps.broker.revoke([dropped.brokerUserKey]);
-      if (!revoked.ok) return revoked;
-    }
+    const now = this.#deps.clock.now();
+    const validUntil = this.#after(now, this.#limits.rotationGraceMilliseconds);
+    const rotated = await this.#deps.registry.rotate(workerId, current.generation, issued.value.generation, validUntil, now);
+    if (!rotated.ok) return rotated.error.code === 'forbidden' ? err(notAuthorized()) : rotated;
+    // A dropped predecessor stays recorded until a later publication succeeds.
+    await this.publishRevocations();
     return ok({ credentialGeneration: issued.value.generation.generation, credentials: issued.value.secrets });
   }
 
   // Denies every credential of the worker at once; its active attempts
   // become uncertain through reconciliation (item 21), never dead.
   async revoke(workerId: WorkerId): Promise<Result<void>> {
-    const worker = await this.#deps.registry.worker(workerId);
-    if (!worker.ok) return worker;
-    if (worker.value === undefined) return err(failure('not-found', `no worker ${workerId} is enrolled`, { worker: workerId }));
     const revoked = await this.#deps.registry.revoke(workerId, this.#deps.clock.now());
     if (!revoked.ok) return revoked;
-    const { current, previous } = worker.value.credentials;
-    return this.#deps.broker.revoke(previous === undefined ? [current.brokerUserKey] : [current.brokerUserKey, previous.brokerUserKey]);
+    const published = await this.publishRevocations();
+    return published.ok ? ok(undefined) : published;
   }
 
-  // Ends the grace windows that have passed: revokes the predecessors'
-  // broker users and drops them; the control plane runs it periodically.
+  // Ends the grace windows that have passed; the control plane runs it
+  // periodically, which also retries an unpublished revocation.
   async expireGraceWindows(): Promise<Result<number>> {
-    const expired = await this.#deps.registry.expiredPredecessors(this.#deps.clock.now());
+    const expired = await this.#deps.registry.expirePredecessors(this.#deps.clock.now());
     if (!expired.ok) return expired;
-    for (const worker of expired.value) {
-      const { current, previous } = worker.credentials;
-      const revoked = await this.#deps.broker.revoke([previous!.brokerUserKey]);
-      if (!revoked.ok) return revoked;
-      const replaced = await this.#deps.registry.replaceCredentials(worker.workerId, current.generation, Object.freeze({ current }));
-      if (!replaced.ok && replaced.error.code !== 'conflict') return replaced;
-    }
-    return ok(expired.value.length);
+    const published = await this.publishRevocations();
+    return published.ok ? expired : published;
+  }
+
+  // Sends the broker the complete revocation list when part of it is new.
+  publishRevocations(): Promise<Result<number>> {
+    return this.#deps.registry.publishRevocations((revocations) => this.#deps.broker.publishRevocations(revocations));
   }
 
   // The generation a presented control-plane secret belongs to; a revoked
@@ -190,7 +182,9 @@ function notAuthorized() {
 // A broker user issued for an enrollment that failed is never handed out,
 // so it grants nothing to anyone.
 function enrollFailure(error: ReturnType<typeof failure>): Result<never> {
-  if (error.details.reason === 'token-used') return err(reasoned('forbidden', 'token-invalid', 'the enrollment token was used meanwhile'));
+  if (error.details.reason === 'token-used' || error.details.reason === 'token-expired') {
+    return err(reasoned('forbidden', 'token-invalid', 'the enrollment token was used or expired meanwhile'));
+  }
   if (error.details.reason === 'journal-enrolled') return err(reasoned('conflict', 'journal-enrolled', 'the journal is already enrolled'));
   return err(error);
 }

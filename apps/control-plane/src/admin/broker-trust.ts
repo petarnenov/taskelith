@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ControlPlaneNamespace } from '@taskelith/control-plane-store';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { BrokerAuthority, type ClaimTime } from '@taskelith/nats';
@@ -11,16 +13,21 @@ export interface BrokerTrust {
   readonly serverConfigPath: string;
 }
 
-// The installation's broker authority, kept in the control-plane namespace:
-// made once at initialization and read back by every later command.
-export function ensureBrokerTrust(namespace: ControlPlaneNamespace, now: ClaimTime): Result<BrokerTrust> {
+// The broker authority, made once before the installation exists; one lost
+// afterwards fails closed, as a new one would not match the running broker.
+export function ensureBrokerTrust(namespace: ControlPlaneNamespace, installed: boolean, now: ClaimTime): Result<BrokerTrust> {
   const stored = readBrokerAuthority(namespace);
   if (!stored.ok) return stored;
+  if (stored.value === undefined && installed) {
+    return err(failure('precondition-failed', 'the installation has lost its broker authority; it stays closed'));
+  }
   const authority = stored.value ?? BrokerAuthority.generate();
   if (stored.value === undefined) {
     const created = namespace.create(AUTHORITY_FILE, { ...authority.keys });
     if (!created.ok) return created;
   }
+  const path = join(namespace.directory, SERVER_CONFIG_FILE);
+  if (installed && existsSync(path)) return ok({ authority, serverConfigPath: path });
   const written = namespace.writeText(SERVER_CONFIG_FILE, authority.serverConfig(now));
   return written.ok ? ok({ authority, serverConfigPath: written.value }) : written;
 }

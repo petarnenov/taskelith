@@ -1,22 +1,28 @@
 import type { Instant, Result } from '@taskelith/kernel';
 import type { SecretHash } from '@taskelith/access';
 import type { WorkerId } from '@taskelith/execution';
-import type { EnrolledWorker, EnrollmentToken, WorkerCredentials } from '../domain/enrollment.js';
+import type { BrokerRevocation, CredentialGeneration, EnrolledWorker, EnrollmentToken } from '../domain/enrollment.js';
 
-// Enrollment tokens and enrolled workers. Every write is atomic and runs at
-// SERIALIZABLE, since placement reads the same workers.
+// Tokens, enrolled workers, and the durable list of broker users to revoke;
+// every write is atomic at SERIALIZABLE, since placement reads the workers.
 export interface FleetRegistry {
   addToken(token: EnrollmentToken): Promise<Result<void>>;
   // An unused token by its hash; a used one reads as absent.
   unusedToken(hash: SecretHash): Promise<Result<EnrollmentToken | undefined>>;
-  // Uses the token and adds the worker together; `conflict` with the reason
-  // `token-used` or `journal-enrolled` when either is taken.
+  // Uses the token if unused and unexpired at that moment, and adds the worker;
+  // else `conflict`: `token-used`, `token-expired`, or `journal-enrolled`.
   enroll(tokenHash: SecretHash, worker: EnrolledWorker): Promise<Result<void>>;
   worker(workerId: WorkerId): Promise<Result<EnrolledWorker | undefined>>;
-  // `conflict` unless the stored current generation is `expectedGeneration`.
-  replaceCredentials(workerId: WorkerId, expectedGeneration: number, next: WorkerCredentials): Promise<Result<void>>;
-  // `not-found` for an unknown worker; revoking twice keeps the first time.
+  // `next` becomes current, the current one predecessor until `validUntil`; a
+  // dropped one is recorded. `forbidden` if revoked, `conflict` if stale.
+  rotate(workerId: WorkerId, expectedGeneration: number, next: CredentialGeneration, validUntil: Instant, at: Instant): Promise<Result<void>>;
+  // Marks the worker revoked and records all its broker users for
+  // revocation; revoking twice keeps the first time. `not-found` if unknown.
   revoke(workerId: WorkerId, at: Instant): Promise<Result<void>>;
-  // Workers whose predecessor credentials' grace window ended by `now`.
-  expiredPredecessors(now: Instant): Promise<Result<readonly EnrolledWorker[]>>;
+  // Drops every predecessor whose grace window ended by `now` and records
+  // its broker user for revocation; answers how many it dropped.
+  expirePredecessors(now: Instant): Promise<Result<number>>;
+  // When a recorded revocation is unpublished, hands every recorded one to
+  // `push`, then marks them published; one publisher runs at a time.
+  publishRevocations(push: (revocations: readonly BrokerRevocation[]) => Promise<Result<void>>): Promise<Result<number>>;
 }

@@ -1,8 +1,8 @@
-import { parseIdentifier, parseInstant, type Instant, type Result } from '@taskelith/kernel';
+import { err, failure, ok, parseIdentifier, parseInstant, type Instant, type Result } from '@taskelith/kernel';
 import type { SecretHash } from '@taskelith/access';
 import type { JournalId, WorkerId } from '@taskelith/execution';
 import { expectCode, expectRead, expectSame, expectSuccess, type ConformanceCase } from '@taskelith/sdlc';
-import type { EnrolledWorker, EnrollmentToken, WorkerCredentials } from '../domain/enrollment.js';
+import type { BrokerRevocation, CredentialGeneration, EnrolledWorker, EnrollmentToken } from '../domain/enrollment.js';
 import { installationIdentity } from '../domain/installation.js';
 import type { FleetRegistry } from './fleet-registry.js';
 import type { InstallationTable } from './installation-records.js';
@@ -17,15 +17,17 @@ function must<T>(result: Result<T>): T {
 const at = (text: string): Instant => must(parseInstant(text));
 const AT = at('2026-10-25T09:00:00.000Z');
 const LATER = at('2026-10-25T09:10:00.000Z');
+// The adapters use their own clock at the moment of use, so a valid token
+// expires far ahead and an expired one long ago.
+const FAR_AHEAD = at('2100-01-01T00:00:00.000Z');
+const LONG_AGO = at('2000-01-01T00:00:00.000Z');
 
-export function fleetToken(hash: string, constraints: EnrollmentToken['constraints'] = {}): EnrollmentToken {
-  return Object.freeze({ hash: hash as SecretHash, issuedAt: AT, expiresAt: at('2026-10-25T09:15:00.000Z'), constraints });
+export function fleetToken(hash: string, constraints: EnrollmentToken['constraints'] = {}, expiresAt: Instant = FAR_AHEAD): EnrollmentToken {
+  return Object.freeze({ hash: hash as SecretHash, issuedAt: LONG_AGO, expiresAt, constraints });
 }
 
-function credentials(generation: number, validUntil?: Instant): WorkerCredentials {
-  const current = { generation, controlPlaneHash: `cp-${generation}` as SecretHash, brokerUserKey: `UKEY${generation}` };
-  if (validUntil === undefined) return { current };
-  return { current, previous: { generation: generation - 1, controlPlaneHash: `cp-${generation - 1}` as SecretHash, brokerUserKey: `UKEY${generation - 1}`, validUntil } };
+function generation(number: number, workerId = 'w1'): CredentialGeneration {
+  return Object.freeze({ generation: number, controlPlaneHash: `cp-${number}` as SecretHash, brokerUserKey: `U-${workerId}-${number}` });
 }
 
 export function fleetWorker(workerId: string, journalId: string, overrides: Partial<EnrolledWorker> = {}): EnrolledWorker {
@@ -35,11 +37,27 @@ export function fleetWorker(workerId: string, journalId: string, overrides: Part
     host: { platform: 'linux', architecture: 'x64', hostname: 'build-1' },
     protocolVersions: { minimum: 1, maximum: 1 },
     capacity: { slots: 2, cpuMillicores: 4000, memoryMebibytes: 8192, controls: ['cpu-limit', 'memory-limit'] },
-    credentials: credentials(1),
+    credentials: { current: generation(1, workerId) },
     enrolledAt: AT,
     ...overrides,
   };
   return Object.freeze(worker);
+}
+
+async function enrolled(registry: FleetRegistry, workerId = 'w1', journalId = 'j1'): Promise<EnrolledWorker> {
+  must(await registry.addToken(fleetToken(`t-${workerId}`)));
+  const worker = fleetWorker(workerId, journalId);
+  must(await registry.enroll(`t-${workerId}` as SecretHash, worker));
+  return worker;
+}
+
+function recordingPush(fail = false) {
+  const pushes: string[][] = [];
+  const push = async (revocations: readonly BrokerRevocation[]): Promise<Result<void>> => {
+    pushes.push(revocations.map((revocation) => revocation.userKey).sort());
+    return fail ? err(failure('unavailable', 'the broker is down')) : ok(undefined);
+  };
+  return { pushes, push };
 }
 
 export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>[] = Object.freeze([
@@ -55,8 +73,18 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
       expectRead(problems, 'used token', await registry.unusedToken('t1' as SecretHash), undefined);
       expectRead(problems, 'worker', await registry.worker(fleetWorker('w1', 'j1').workerId), fleetWorker('w1', 'j1'));
       const again = await registry.enroll('t1' as SecretHash, fleetWorker('w2', 'j2'));
-      expectCode(problems, 'reuse', again, 'conflict');
       expectSame(problems, 'reuse reason', again.ok ? undefined : again.error.details.reason, 'token-used');
+      return problems;
+    },
+  },
+  {
+    name: 'an expired token enrolls nothing at the moment of use',
+    async check(registry) {
+      const problems: string[] = [];
+      must(await registry.addToken(fleetToken('t1', {}, LONG_AGO)));
+      const expired = await registry.enroll('t1' as SecretHash, fleetWorker('w1', 'j1'));
+      expectSame(problems, 'reason', expired.ok ? undefined : expired.error.details.reason, 'token-expired');
+      expectRead(problems, 'no worker', await registry.worker(fleetWorker('w1', 'j1').workerId), undefined);
       return problems;
     },
   },
@@ -78,33 +106,98 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
     },
   },
   {
-    name: 'credentials are replaced only at the expected generation, and predecessors expire',
+    name: 'a rotation keeps one predecessor and records the dropped one for revocation',
     async check(registry) {
       const problems: string[] = [];
-      must(await registry.addToken(fleetToken('t1')));
-      const worker = fleetWorker('w1', 'j1');
-      must(await registry.enroll('t1' as SecretHash, worker));
-      expectCode(problems, 'stale', await registry.replaceCredentials(worker.workerId, 2, credentials(3, LATER)), 'conflict');
-      expectSuccess(problems, 'rotate', await registry.replaceCredentials(worker.workerId, 1, credentials(2, LATER)));
-      expectRead(problems, 'rotated', await registry.worker(worker.workerId), { ...worker, credentials: credentials(2, LATER) });
-      expectRead(problems, 'not yet expired', await registry.expiredPredecessors(AT), []);
-      const expired = await registry.expiredPredecessors(LATER);
-      expectSame(problems, 'expired', expired.ok ? expired.value.map((w) => w.workerId) : expired, [worker.workerId]);
-      expectCode(problems, 'unknown worker', await registry.replaceCredentials(fleetWorker('w9', 'j9').workerId, 1, credentials(2)), 'not-found');
+      const worker = await enrolled(registry);
+      expectCode(problems, 'stale', await registry.rotate(worker.workerId, 2, generation(3), LATER, AT), 'conflict');
+      expectSuccess(problems, 'first', await registry.rotate(worker.workerId, 1, generation(2), LATER, AT));
+      expectRead(problems, 'rotated', await registry.worker(worker.workerId), {
+        ...worker, credentials: { current: generation(2), previous: { ...generation(1), validUntil: LATER } },
+      });
+      expectSuccess(problems, 'second', await registry.rotate(worker.workerId, 2, generation(3), LATER, AT));
+      const { pushes, push } = recordingPush();
+      expectRead(problems, 'published', await registry.publishRevocations(push), 1);
+      expectSame(problems, 'pushed', pushes, [['U-w1-1']]);
+      expectCode(problems, 'unknown', await registry.rotate(fleetWorker('w9', 'j9').workerId, 1, generation(2), LATER, AT), 'not-found');
       return problems;
     },
   },
   {
-    name: 'revocation keeps its first time',
+    name: 'a revoked worker cannot rotate, and revocation records all its broker users once',
     async check(registry) {
       const problems: string[] = [];
-      must(await registry.addToken(fleetToken('t1')));
-      const worker = fleetWorker('w1', 'j1');
-      must(await registry.enroll('t1' as SecretHash, worker));
+      const worker = await enrolled(registry);
+      must(await registry.rotate(worker.workerId, 1, generation(2), LATER, AT));
       expectSuccess(problems, 'revoke', await registry.revoke(worker.workerId, AT));
       expectSuccess(problems, 'revoke again', await registry.revoke(worker.workerId, LATER));
-      expectRead(problems, 'revoked', await registry.worker(worker.workerId), { ...worker, revokedAt: AT });
+      const stored = must(await registry.worker(worker.workerId));
+      expectSame(problems, 'revoked at', stored?.revokedAt, AT);
+      expectCode(problems, 'rotate revoked', await registry.rotate(worker.workerId, 2, generation(3), LATER, AT), 'forbidden');
+      const { pushes, push } = recordingPush();
+      expectRead(problems, 'published', await registry.publishRevocations(push), 2);
+      expectSame(problems, 'pushed', pushes, [['U-w1-1', 'U-w1-2']]);
       expectCode(problems, 'unknown', await registry.revoke(fleetWorker('w9', 'j9').workerId, AT), 'not-found');
+      return problems;
+    },
+  },
+  {
+    name: 'expired predecessors are dropped and recorded for revocation',
+    async check(registry) {
+      const problems: string[] = [];
+      const worker = await enrolled(registry);
+      must(await registry.rotate(worker.workerId, 1, generation(2), LATER, AT));
+      expectRead(problems, 'not yet', await registry.expirePredecessors(AT), 0);
+      expectRead(problems, 'expired', await registry.expirePredecessors(LATER), 1);
+      expectRead(problems, 'dropped', await registry.worker(worker.workerId), { ...worker, credentials: { current: generation(2) } });
+      expectRead(problems, 'again', await registry.expirePredecessors(LATER), 0);
+      const { pushes, push } = recordingPush();
+      expectRead(problems, 'published', await registry.publishRevocations(push), 1);
+      expectSame(problems, 'pushed', pushes, [['U-w1-1']]);
+      return problems;
+    },
+  },
+  {
+    name: 'a revocation stays unpublished until a push succeeds, and every push is the complete list',
+    async check(registry) {
+      const problems: string[] = [];
+      const nothing = recordingPush();
+      expectRead(problems, 'nothing', await registry.publishRevocations(nothing.push), 0);
+      expectSame(problems, 'no push', nothing.pushes, []);
+      const first = await enrolled(registry, 'w1', 'j1');
+      must(await registry.revoke(first.workerId, AT));
+      const failing = recordingPush(true);
+      expectCode(problems, 'failed push', await registry.publishRevocations(failing.push), 'unavailable');
+      const retry = recordingPush();
+      expectRead(problems, 'retried', await registry.publishRevocations(retry.push), 1);
+      const second = await enrolled(registry, 'w2', 'j2');
+      must(await registry.revoke(second.workerId, AT));
+      const complete = recordingPush();
+      expectRead(problems, 'second', await registry.publishRevocations(complete.push), 1);
+      expectSame(problems, 'complete', complete.pushes, [['U-w1-1', 'U-w2-1']]);
+      return problems;
+    },
+  },
+  {
+    name: 'publications run one at a time',
+    async check(registry) {
+      const problems: string[] = [];
+      for (const [workerId, journalId] of [['w1', 'j1'], ['w2', 'j2']] as const) {
+        const worker = await enrolled(registry, workerId, journalId);
+        must(await registry.revoke(worker.workerId, AT));
+      }
+      let running = 0;
+      let overlapped = false;
+      const push = async (): Promise<Result<void>> => {
+        running += 1;
+        overlapped ||= running > 1;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        running -= 1;
+        return ok(undefined);
+      };
+      const results = await Promise.all([registry.publishRevocations(push), registry.publishRevocations(push)]);
+      expectSame(problems, 'overlap', overlapped, false);
+      expectSame(problems, 'published once', results.map((result) => (result.ok ? result.value : -1)).sort(), [0, 2]);
       return problems;
     },
   },

@@ -13,6 +13,9 @@ import {
   type BrokerAuthorityKeys,
 } from '@taskelith/nats';
 import { failed, integrationSecret, value } from '@taskelith/testing';
+import { parseInstant } from '@taskelith/kernel';
+
+const nowInstant = () => value(parseInstant(new Date().toISOString()));
 import { offer } from './messages.ts';
 import { expectOk, installation, NATS_URL, recordingHandler, running, TEST_LIMITS, waitFor } from './nats-fixtures.ts';
 
@@ -66,19 +69,23 @@ test('a revoked worker is disconnected at once and cannot connect again, without
   const seen = statuses(worker.connection);
   after(() => worker.close());
 
-  expectOk(await broker.revoke([issued.userKey]));
+  expectOk(await broker.publishRevocations([{ userKey: issued.userKey, revokedAt: nowInstant() }]));
   await waitFor(() => seen.includes('error:User Authentication Revoked'));
   const again = failed(await connectWorkerTransport({ server: NATS_URL, address, workerId: 'worker-1', creds: issued.creds }));
   assert.equal(again.code, 'unavailable');
   assert.match(again.details.cause ?? '', /Authorization Violation/);
 });
 
-test('revocations accumulate: a later one keeps the earlier ones', async () => {
+test('a published list replaces the previous one: listed users are refused, others accepted', async () => {
   const { address } = await workerSetup('worker-1');
   const identity = value(installationIdentity(address.installationId, 1));
   const first = expectOk(await broker.issue(identity, value(parseWorkerId('worker-1')), 2));
   const second = expectOk(await broker.issue(identity, value(parseWorkerId('worker-1')), 3));
-  await Promise.all([broker.revoke([first.userKey]), broker.revoke([second.userKey])]);
+  const third = expectOk(await broker.issue(identity, value(parseWorkerId('worker-1')), 4));
+  expectOk(await broker.publishRevocations([{ userKey: first.userKey, revokedAt: nowInstant() }]));
+  expectOk(await broker.publishRevocations([first, second].map(({ userKey }) => ({ userKey, revokedAt: nowInstant() }))));
+  const accepted = expectOk(await connectWorkerTransport({ server: NATS_URL, address, workerId: 'worker-1', creds: third.creds }));
+  await accepted.close();
 
   for (const issued of [first, second]) {
     assert.equal((await connectWorkerTransport({ server: NATS_URL, address, workerId: 'worker-1', creds: issued.creds })).ok, false);

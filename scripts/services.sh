@@ -14,6 +14,13 @@ compose_file="$repository/infra/services/compose.yaml"
 action="$1"
 project="$2"
 shift 2
+# A Compose project name, which also names the secrets directory below.
+case "$project" in
+  ''|*[!a-z0-9_-]*|[!a-z0-9]*)
+    echo "services.sh: project must be lowercase letters, digits, '_' or '-'" >&2
+    exit 2
+    ;;
+esac
 # Test broker trust and certificates of this project, outside the checkout.
 export TASKELITH_SERVICES_SECRETS="${TMPDIR:-/tmp}/taskelith-services/$project"
 
@@ -56,13 +63,13 @@ test_ca_script() {
   cat <<'SCRIPT'
 set -e
 cd /out
-openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 2 \
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 3650 \
   -subj "/CN=Taskelith test CA" -keyout ca-key.pem -out ca.pem
 openssl req -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
   -subj "/CN=localhost" -keyout server-key.pem -out server.csr
 printf 'subjectAltName=DNS:localhost,IP:127.0.0.1\n' > server.ext
 openssl x509 -req -in server.csr -CA ca.pem -CAkey ca-key.pem -CAcreateserial \
-  -days 2 -extfile server.ext -out server-cert.pem
+  -days 3650 -extfile server.ext -out server-cert.pem
 rm -f ca-key.pem server.csr server.ext ca.srl
 chmod 600 server-key.pem
 SCRIPT

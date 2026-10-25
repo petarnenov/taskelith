@@ -3,7 +3,7 @@ import { parseArgs } from 'node:util';
 import { resolveDataRoot } from '@taskelith/data-root';
 import type { HostArchitecture, HostConstraints, HostPlatform } from '@taskelith/fleet';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
-import { redactFailure } from '@taskelith/secrets';
+import { redactFailure, redactSecrets } from '@taskelith/secrets';
 import { readServiceEndpoints, type Environment } from '../service-endpoints.js';
 import { Administration } from './administration.js';
 
@@ -28,13 +28,21 @@ export interface AdminIo {
 export async function adminMain(argv: readonly string[], io: AdminIo): Promise<number> {
   const parsed = parse(argv);
   if (!parsed.ok) {
-    io.write(`${parsed.error.message}\n${ADMIN_USAGE}`);
+    io.write(`${redactSecrets(parsed.error.message)}\n${ADMIN_USAGE}`);
     return 2;
   }
+  try {
+    return await runCommand(parsed.value, io);
+  } catch (error) {
+    return fail(io, failure('internal', error instanceof Error ? error.message : String(error)));
+  }
+}
+
+async function runCommand(command: Command, io: AdminIo): Promise<number> {
   const opened = openAdministration(io);
   if (!opened.ok) return fail(io, opened.error);
   try {
-    const outcome = await run(opened.value, parsed.value, io.environment);
+    const outcome = await run(opened.value, command, io.environment);
     if (!outcome.ok) return fail(io, outcome.error);
     io.write(JSON.stringify(outcome.value));
     return 0;

@@ -66,7 +66,9 @@ export class Administration {
   async initialize(invocation: AdministrativeInvocation): Promise<Result<Initialization>> {
     const migrated = await migrate(this.#settings.postgres);
     if (!migrated.ok) return migrated;
-    const trust = ensureBrokerTrust(this.#namespace, this.#epochSeconds());
+    const record = await new FileInstallationRecord(this.#namespace).read();
+    if (!record.ok) return record;
+    const trust = ensureBrokerTrust(this.#namespace, record.value !== undefined, this.#epochSeconds());
     if (!trust.ok) return trust;
     const initialized = await this.#installation().initialize(invocation);
     return initialized.ok ? ok({ ...initialized.value, brokerServerConfig: trust.value.serverConfigPath }) : initialized;

@@ -22,15 +22,15 @@ Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-
   2. It writes the copy in the `installation` table, not quarantined.
   3. It issues the bootstrap credential. The credential is printed once and only its hash is stored.
 
-  A rerun after a crash completes the same identity. A rerun after success fails with `conflict`. A table copy without its record fails with `precondition-failed`.
+  A rerun after a crash completes the same identity. A rerun after success fails with `conflict` and keeps the broker trust and its server fragment. A table copy without its record, or a record without its broker authority, fails with `precondition-failed`, because a new authority would not match the running broker.
 - **Start check.** A command or service that needs the installation reads both records. They must exist and be equal. A mismatch, as after a database restore, fails closed with `precondition-failed` until G6's restore procedure. Item 13 never changes `recoveryEpoch`.
 - **Identifiers.** `installationId` is 32 hexadecimal characters and `workerId` is `w` followed by 32 hexadecimal characters, both from 128 random bits. Every identifier of this contract is 1-64 letters, digits, `_`, or `-`, because it becomes a NATS subject token and stream name.
 
 ## 3. The `control-plane/` namespace
 
 - `dataRoot` resolves as in the [storage contract](../storage.md): explicit configuration, then `TASKELITH_DATA_DIR`, then the OS default.
-- `dataRoot` and `dataRoot/control-plane` are directories of mode `0700` owned by the running account. No component from `dataRoot` down may be a symbolic link, owned by another account, or writable by group or others. A data root inside a Git working tree is refused. A colocated worker keeps its own `worker/` subtree.
-- Every file is mode `0600` and written by the durable file rule of the [worker journal](worker-journal.md) section 4. A document carries `format: 1`, and another format is refused.
+- `dataRoot` and `dataRoot/control-plane` are directories owned by the running account and created with mode `0700`. No component from `dataRoot` down may be a symbolic link, owned by another account, or writable by group or others. `control-plane/` and every file in it must give group and others no access at all, since the subtree holds signing seeds. A data root inside a Git working tree is refused. A colocated worker keeps its own `worker/` subtree.
+- Every file is a regular file of mode `0600`, written by the durable file rule of the [worker journal](worker-journal.md) section 4. A document carries `format: 1`, and another format is refused.
 
 | File | Content | Written |
 | --- | --- | --- |
@@ -66,10 +66,13 @@ Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-
   It has no other JetStream API, so a worker connects with `connectWorkerTransport`, and only the control plane manages streams. The broker URL and CA are configured on the worker.
 - **Generations.** Both credentials share one generation number.
   - `rotate-worker` issues the next generation. The previous one stays valid for the grace window.
-  - `expire-grace-windows`, which the control plane runs periodically, revokes the previous broker user and drops the previous generation after the window. A further rotation drops an older predecessor at once.
+  - `expire-grace-windows`, which the control plane runs periodically, drops the previous generation after the window and records its broker user for revocation. A further rotation drops an older predecessor at once in the same way.
+  - A revoked worker gets no new generation: the rotation fails inside the transaction that would store it.
   - Authentication returns the generation a secret belongs to. An unknown, revoked, or expired one is `forbidden` with reason `worker-not-authorized`.
-- **Revocation.** `revoke-worker` marks the worker revoked in the same row placement reads, and revokes every broker user of the worker. The server disconnects such a user at once and refuses it afterwards.
-  - Each revocation reads the account JWT the server holds and adds to its revocations, one at a time per process.
+- **Revocation.** `revoke-worker` marks the worker revoked in the same row placement reads. In the same transaction it records every broker user of the worker in `broker_revocations`. The server disconnects such a user at once and refuses it afterwards.
+  - **Durable list.** Every broker user to revoke is recorded in the transaction that stops its validity: a revocation, a rotation that drops a predecessor, or the end of a grace window. It stays recorded after its publication.
+  - **Publication.** A publication sends the broker the complete list in the account JWT, each user void for JWTs issued up to its time. Publishers take turns under a PostgreSQL advisory lock, across processes, and an entry counts as published only after the broker accepted the list.
+  - **Retry.** A publication that fails leaves the entries unpublished. `revoke-worker` then reports `unavailable`, and its rerun or the next `expire-grace-windows` publishes them.
   - The active attempts of a revoked worker become uncertain through reconciliation (item 21), never dead.
 - **Workers get no database credential.** The control plane connects to NATS as a user of the installation account without subject limits.
 

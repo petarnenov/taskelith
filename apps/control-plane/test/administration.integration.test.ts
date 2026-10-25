@@ -141,6 +141,12 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
   assert.equal((await admin(['expire-grace-windows'], { TASKELITH_OPERATOR_TOKEN: operatorSecret })).status, 1);
   assert.deepEqual((await admin(['expire-grace-windows'], { TASKELITH_OPERATOR_TOKEN: newSecret })).output, { expired: 0 });
 
+  const authorityPath = join(dataRoot, 'control-plane', 'broker-authority');
+  rmSync(authorityPath);
+  const lost = await admin(['init', ...ADMIN]);
+  assert.equal((lost.output.error as { code: string }).code, 'precondition-failed', 'no new authority for an existing installation');
+  value(namespace.create('broker-authority', JSON.parse(integrationSecret('authority.json'))));
+
   await sql(database, 'UPDATE installation SET recovery_epoch = 2');
   const closed = await administration.enrollmentService();
   assert.equal(!closed.ok && closed.error.code, 'precondition-failed', 'a mismatch with the record keeps the installation closed');
@@ -152,6 +158,22 @@ test('usage errors exit with 2 before anything is opened', async () => {
     assert.equal(outcome.status, 2, argv.join(' '));
     assert.match(String(outcome.output.usage), /usage: control-plane-admin/);
   }
+});
+
+test('a usage error redacts a secret typed by mistake', async () => {
+  const secret = `tkop_${'A'.repeat(43)}`;
+  const outcome = await admin([secret]);
+  assert.equal(outcome.status, 2);
+  assert.doesNotMatch(String(outcome.output.usage), new RegExp(secret));
+  assert.match(String(outcome.output.usage), /\[redacted\]/);
+});
+
+test('an exception becomes a redacted failure with status 1', async () => {
+  const lines: string[] = [];
+  const environment = { ...ENVIRONMENT, TASKELITH_NATS_CA: join(base, 'missing-ca.pem') };
+  const status = await adminMain(['expire-grace-windows'], { environment, platform: process.platform, ownerUid, write: (line) => lines.push(line) });
+  assert.equal(status, 1);
+  assert.equal(JSON.parse(lines[0]!).error.code, 'internal');
 });
 
 test('a missing setting fails with its name only', async () => {

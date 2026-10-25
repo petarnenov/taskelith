@@ -54,9 +54,11 @@ Trust model sections 2 to 5, the storage contract, the worker journal's identity
   - The control plane's users have no subject limits.
   - A worker's user has the subjects of execution wire contracts section 2 and no other JetStream API. So a worker connects through `connectWorkerTransport`, without the JetStream manager.
   - The system account's user may only update and look up claims.
-  - Revocations accumulate in the account JWT, so each revocation reads the server's current JWT, adds its keys with the current time, and pushes the result. Revocations run one at a time per process.
+  - Revocations are durable records of the registry, written in the transaction that stops a user's validity: a revocation, a rotation that drops a predecessor, or the end of a grace window. A publication sends the complete list, so it never depends on reading and merging the server's JWT.
+  - Publishers take turns under a PostgreSQL advisory lock held across the push, so concurrent commands, in one process or several, cannot lose an update. An entry is marked published only after the broker accepted the list, so a failed push is retried by the next publication.
 - **The JWT encoder.** Header `{"typ":"JWT","alg":"ed25519-nkey"}`, claims with `jti`, `iat`, `iss`, `name`, `sub`, and `nats` (version 2), signed by the issuer's NKey over base64url, as nats-server verifies. `jti` is base32 of the SHA-512/256 of the claims, as the Go library derives it.
-- **Namespace.** It mirrors the worker root: private modes, no symbolic links, owner checks, no Git checkout, durable create-once documents with `format: 1`, and refusal of another format.
+- **Namespace.** It mirrors the worker root: no symbolic links, owner checks, no Git checkout, durable create-once documents with `format: 1`, and refusal of another format. Because the subtree holds signing seeds, `control-plane/` and its files must give group and others no access, not only no write access.
+- **Initialization and the broker trust.** `init` reads the installation record before it touches the broker trust. A new installation gets a new authority, or keeps one already present. An existing installation keeps its authority and server fragment, and one that lost its authority fails closed.
 - **TLS.** An optional CA (and client certificate) on every connection. Without one, the connection is explicitly plain, because nats.js otherwise upgrades to TLS where the server offers it. The test server allows plain clients for the Toxiproxy route.
 - **Test services.** `services.sh` writes the test trust before compose up and keeps it while the project runs, because the server loaded it at start. `down` removes it. The trust lives outside the checkout in `$TMPDIR/taskelith-services/<project>`. `scripts/integration-broker.ts` imports only the encoder file, which needs no build.
 - **Quarantine (C9).** Item 16 wires `InstallationGuard` into the outbox publisher at its composition root, so that restore quarantine stops command publication. Item 13 writes the installation row, not quarantined, at initialization.
@@ -64,7 +66,8 @@ Trust model sections 2 to 5, the storage contract, the worker journal's identity
 ## Risks / Trade-offs
 
 - **Seeds on disk.** The operator, system account, and installation account seeds are in one `0600` file of the control-plane namespace. Whoever reads it can issue users. Separating the operator key, and signing keys, are G3/G6 hardening.
-- **Revocation concurrency.** Revocations are serialized per process only. Two control-plane processes revoking at once could lose one update; G2 runs one control plane.
-- **Revocations grow.** The account JWT keeps every revoked user key. Pruning revocations of expired users is left to G6.
+- **Revocations grow.** The account JWT and `broker_revocations` keep every revoked user key. Pruning the revocations of users whose JWTs can no longer be used is left to G6.
+- **A rebuilt broker.** A broker whose resolver directory is lost starts from the preloaded account JWT without revocations. Republishing the list then needs a new unpublished entry or a forced publication, which G6's restore procedure adds.
+- **A lock across a network call.** The advisory lock is held while the publication waits for the broker, at most its 5-second timeout. Administrative commands are rare, so this does not contend.
 - **Credentials on the worker.** This item defines the content of both credentials. Their storage under `worker/` is item 20's.
 - **Mixed TLS.** `allow_non_tls` on the test server is test infrastructure only. A production server configuration that requires TLS is item 23's and G3's.

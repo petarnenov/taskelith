@@ -4,12 +4,13 @@ import type { Assignment, AssignmentRepository } from '@taskelith/scheduling';
 import type { AuditEvent, OperatorCredential, OperatorCredentials, SecretHash } from '@taskelith/access';
 import type { WorkerId } from '@taskelith/execution';
 import type {
+  BrokerRevocation,
+  CredentialGeneration,
   EnrolledWorker,
   EnrollmentToken,
   FleetRegistry,
   InstallationIdentity,
   InstallationTable,
-  WorkerCredentials,
 } from '@taskelith/fleet';
 import type {
   AdmissionId,
@@ -193,16 +194,20 @@ export class CommittingFleetRegistry implements FleetRegistry {
     return this.#database.transaction((tx) => tx.fleet.worker(workerId));
   }
 
-  replaceCredentials(workerId: WorkerId, expectedGeneration: number, next: WorkerCredentials): Promise<Result<void>> {
-    return this.#database.transaction((tx) => tx.fleet.replaceCredentials(workerId, expectedGeneration, next));
+  rotate(workerId: WorkerId, expectedGeneration: number, next: CredentialGeneration, validUntil: Instant, at: Instant): Promise<Result<void>> {
+    return this.#database.transaction((tx) => tx.fleet.rotate(workerId, expectedGeneration, next, validUntil, at));
   }
 
   revoke(workerId: WorkerId, at: Instant): Promise<Result<void>> {
     return this.#database.transaction((tx) => tx.fleet.revoke(workerId, at));
   }
 
-  expiredPredecessors(now: Instant): Promise<Result<readonly EnrolledWorker[]>> {
-    return this.#database.transaction((tx) => tx.fleet.expiredPredecessors(now));
+  expirePredecessors(now: Instant): Promise<Result<number>> {
+    return this.#database.transaction((tx) => tx.fleet.expirePredecessors(now));
+  }
+
+  publishRevocations(push: (revocations: readonly BrokerRevocation[]) => Promise<Result<void>>): Promise<Result<number>> {
+    return this.#database.transaction((tx) => tx.fleet.publishRevocations(push));
   }
 }
 

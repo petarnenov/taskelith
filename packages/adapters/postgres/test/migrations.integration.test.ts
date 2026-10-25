@@ -28,7 +28,7 @@ test('migrations apply once, record their checksums, and create the schema', asy
     url, "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name",
   );
   assert.deepEqual(tables.map((row) => row.table_name), [
-    'admissions', 'assignments', 'audit_events', 'capacity_charges', 'capacity_quotas', 'delegations', 'enrollment_tokens', 'gates',
+    'admissions', 'assignments', 'audit_events', 'broker_revocations', 'capacity_charges', 'capacity_quotas', 'delegations', 'enrollment_tokens', 'gates',
     'inbox', 'installation', 'operator_credentials', 'outbox', 'schema_migration_checksums', 'schema_migrations', 'task_lineage',
     'tasks', 'workers', 'workflow_runs',
   ]);

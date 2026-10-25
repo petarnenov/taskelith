@@ -90,10 +90,31 @@ export function commonProtocolVersion(worker: ProtocolWindow, server: ProtocolWi
   return highest >= Math.max(worker.minimum, server.minimum) ? highest : undefined;
 }
 
+// A broker user to revoke, from the time it stopped being valid; NATS voids
+// its JWTs issued at or before that time.
+export interface BrokerRevocation {
+  readonly userKey: string;
+  readonly revokedAt: Instant;
+}
+
+export interface Rotation {
+  readonly credentials: WorkerCredentials;
+  // The predecessor's broker user, which the rotation drops at once.
+  readonly dropped?: string;
+}
+
 // A rotation keeps the current generation as the predecessor until the end
 // of the grace window; an older predecessor is dropped.
-export function rotateCredentials(credentials: WorkerCredentials, next: CredentialGeneration, validUntil: Instant): WorkerCredentials {
-  return Object.freeze({ current: next, previous: Object.freeze({ ...credentials.current, validUntil }) });
+export function rotateCredentials(credentials: WorkerCredentials, next: CredentialGeneration, validUntil: Instant): Rotation {
+  const rotated = Object.freeze({ current: next, previous: Object.freeze({ ...credentials.current, validUntil }) });
+  const dropped = credentials.previous?.brokerUserKey;
+  return dropped === undefined ? { credentials: rotated } : { credentials: rotated, dropped };
+}
+
+// Every broker user of the worker, current and predecessor.
+export function brokerUserKeys(credentials: WorkerCredentials): readonly string[] {
+  const { current, previous } = credentials;
+  return previous === undefined ? [current.brokerUserKey] : [current.brokerUserKey, previous.brokerUserKey];
 }
 
 // The generations a presented secret may still use at `now`.

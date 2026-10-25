@@ -11,11 +11,13 @@ export {
   type InstallationServiceDependencies,
 } from './application/installation-service.js';
 export {
+  brokerUserKeys,
   commonProtocolVersion,
   hostMismatch,
   isExpired,
   rotateCredentials,
   validGenerations,
+  type BrokerRevocation,
   type CredentialGeneration,
   type EnrolledWorker,
   type EnrollmentRequest,
@@ -24,6 +26,7 @@ export {
   type HostConstraints,
   type HostPlatform,
   type ProtocolWindow,
+  type Rotation,
   type WorkerCapacity,
   type WorkerCredentials,
   type WorkerHost,

@@ -49,7 +49,18 @@ ALTER TABLE workers
   ADD COLUMN enrollment text,
   ADD COLUMN predecessor_valid_until timestamptz;
 
+-- Broker users to revoke, kept until the broker has the complete list;
+-- every publication sends all of them (installation contract §6).
+CREATE TABLE broker_revocations (
+  user_key text PRIMARY KEY,
+  worker_id text NOT NULL,
+  revoked_at timestamptz NOT NULL,
+  published boolean NOT NULL DEFAULT false
+);
+
 -- Down Migration
+
+DROP TABLE broker_revocations;
 
 ALTER TABLE workers
   DROP COLUMN predecessor_valid_until,

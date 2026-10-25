@@ -57,6 +57,20 @@ test('a symbolic link, a writable directory, or a Git checkout is refused', () =
   assert.equal(failed(ControlPlaneNamespace.open({ dataRoot: root, ownerUid })).details.reason, 'inside-checkout');
 });
 
+test('a readable subtree or document is refused, since it holds signing seeds', () => {
+  const root = dataRoot();
+  const namespace = value(ControlPlaneNamespace.open({ dataRoot: root, ownerUid }));
+  value(namespace.create('broker-authority', { accountSeed: 'SA' }));
+  chmodSync(join(namespace.directory, 'broker-authority'), 0o644);
+  assert.equal(failed(namespace.read('broker-authority')).details.reason, 'unsafe-path');
+  chmodSync(join(namespace.directory, 'broker-authority'), 0o600);
+  chmodSync(namespace.directory, 0o755);
+  assert.equal(failed(ControlPlaneNamespace.open({ dataRoot: root, ownerUid })).details.reason, 'unsafe-path');
+  chmodSync(namespace.directory, 0o700);
+  mkdirSync(join(namespace.directory, 'installation'));
+  assert.equal(failed(namespace.read('installation')).details.reason, 'unsafe-path');
+});
+
 test('the installation record holds the identity outside the database', async () => {
   const namespace = value(ControlPlaneNamespace.open({ dataRoot: dataRoot(), ownerUid }));
   const record = new FileInstallationRecord(namespace);
@@ -65,7 +79,7 @@ test('the installation record holds the identity outside the database', async ()
   value(await record.create(identity));
   assert.equal(failed(await record.create(identity)).code, 'conflict');
   assert.deepEqual(value(await record.read()), identity);
-  writeFileSync(join(namespace.directory, 'installation'), JSON.stringify({ format: 1, installationId: 'a.b', recoveryEpoch: 1 }));
+  writeFileSync(join(namespace.directory, 'installation'), JSON.stringify({ format: 1, installationId: 'a.b', recoveryEpoch: 1 }), { mode: 0o600 });
   assert.equal(failed(await record.read()).code, 'precondition-failed');
   writeFileSync(join(namespace.directory, 'installation'), JSON.stringify({ format: 1, installationId: 7 }));
   assert.equal(failed(await record.read()).code, 'precondition-failed');

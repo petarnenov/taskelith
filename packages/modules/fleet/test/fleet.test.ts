@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { InMemoryOperatorCredentials, OperatorCredentialService, type SecretHash, type Secrets } from '@taskelith/access';
-import { ok, parseInstant, type Instant, type Result } from '@taskelith/kernel';
+import { err, failure, ok, parseInstant, type Instant, type Result } from '@taskelith/kernel';
 import {
   EnrollmentService,
   FLEET_LIMITS,
@@ -13,13 +13,16 @@ import {
   installationIdentity,
   parseWorkerId,
   type BrokerCredentials,
+  type BrokerRevocation,
   type EnrollmentRequest,
 } from '@taskelith/fleet';
 import { failed, id, value } from '@taskelith/testing';
 
+const realNow = () => value(parseInstant(new Date().toISOString()));
+
 for (const conformance of FLEET_REGISTRY_CONFORMANCE) {
   test(`in-memory fleet registry: ${conformance.name}`, async () => {
-    assert.deepEqual(await conformance.check(new InMemoryFleetRegistry()), []);
+    assert.deepEqual(await conformance.check(new InMemoryFleetRegistry(realNow)), []);
   });
 }
 
@@ -58,9 +61,11 @@ class MutableClock {
   }
 }
 
+// Keeps the last published revocation list, as the broker's account does.
 class RecordingBroker implements BrokerCredentials {
   readonly issued: string[] = [];
-  readonly revoked: string[] = [];
+  revoked: string[] = [];
+  down = false;
 
   async issue(_installation: unknown, workerId: string, generation: number) {
     const userKey = `U-${workerId}-${generation}`;
@@ -68,8 +73,9 @@ class RecordingBroker implements BrokerCredentials {
     return ok({ creds: `creds-${userKey}`, userKey });
   }
 
-  async revoke(userKeys: readonly string[]) {
-    this.revoked.push(...userKeys);
+  async publishRevocations(revocations: readonly BrokerRevocation[]) {
+    if (this.down) return err(failure('unavailable', 'the broker is down'));
+    this.revoked = revocations.map((revocation) => revocation.userKey);
     return ok(undefined);
   }
 }
@@ -118,7 +124,7 @@ test('a database copy without its record, or a mismatch, keeps the installation 
 function enrollment() {
   const clock = new MutableClock();
   const broker = new RecordingBroker();
-  const registry = new InMemoryFleetRegistry();
+  const registry = new InMemoryFleetRegistry(() => clock.now());
   const service = new EnrollmentService({
     installation: value(installationIdentity('install-1', 1)),
     serverProtocolVersions: { minimum: 1, maximum: 1 },
@@ -190,13 +196,27 @@ test('rotation keeps the old generation for the grace window, then revokes its b
   assert.deepEqual(broker.revoked, ['U-worker-1-1', 'U-worker-1-2'], 'a second rotation drops the older predecessor');
 });
 
+test('a revocation the broker missed stays recorded and is published by the next sweep', async () => {
+  const { broker, service } = enrollment();
+  const enrolled = value(await service.enroll(value(await service.issueToken({})), request()));
+  value(await service.rotate(enrolled.workerId));
+  broker.down = true;
+  assert.equal(failed(await service.revoke(enrolled.workerId)).code, 'unavailable');
+  assert.equal(failed(await service.authenticate(enrolled.workerId, enrolled.credentials.controlPlane)).code, 'forbidden');
+  assert.equal(failed(await service.rotate(enrolled.workerId)).details.reason, 'worker-not-authorized', 'a revoked worker gets no new generation');
+
+  broker.down = false;
+  assert.deepEqual(value(await service.expireGraceWindows()), 0);
+  assert.deepEqual(broker.revoked.sort(), ['U-worker-1-1', 'U-worker-1-2']);
+});
+
 test('revocation denies every credential of the worker at once', async () => {
   const { broker, service } = enrollment();
   const enrolled = value(await service.enroll(value(await service.issueToken({})), request()));
   value(await service.rotate(enrolled.workerId));
   value(await service.revoke(enrolled.workerId));
 
-  assert.deepEqual(broker.revoked, ['U-worker-1-2', 'U-worker-1-1']);
+  assert.deepEqual(broker.revoked.sort(), ['U-worker-1-1', 'U-worker-1-2']);
   assert.equal(failed(await service.authenticate(enrolled.workerId, enrolled.credentials.controlPlane)).code, 'forbidden');
   assert.equal(failed(await service.rotate(enrolled.workerId)).code, 'forbidden');
   const unknown = value(parseWorkerId('worker-9'));

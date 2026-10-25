@@ -2,14 +2,17 @@ import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import type { AuditEvent, OperatorCredential, OperatorCredentials, SecretHash } from '@taskelith/access';
 import type { WorkerId } from '@taskelith/execution';
 import {
+  brokerUserKeys,
   installationIdentity,
+  rotateCredentials,
+  type BrokerRevocation,
+  type CredentialGeneration,
   type EnrolledWorker,
   type EnrollmentToken,
   type FleetRegistry,
   type HostConstraints,
   type InstallationIdentity,
   type InstallationTable,
-  type WorkerCredentials,
 } from '@taskelith/fleet';
 import { instant } from './capacity-repositories.js';
 import { decodeRecord, encodeRecord } from './record-codec.js';
@@ -17,6 +20,9 @@ import type { Session } from './session.js';
 
 // Item 13's records. An enrolled worker is a JSON record beside the columns
 // placement reads, which enrollment and revocation keep in step.
+
+// One fixed key of PostgreSQL's advisory locks for revocation publishers.
+const REVOCATION_LOCK = 1_792_930_400;
 
 interface TokenRow {
   readonly secret_hash: string;
@@ -57,11 +63,13 @@ export class PostgresFleetRegistry implements FleetRegistry {
   }
 
   async enroll(tokenHash: SecretHash, worker: EnrolledWorker): Promise<Result<void>> {
-    const used = await this.#session.query(
-      'UPDATE enrollment_tokens SET used_at = now() WHERE secret_hash = $1 AND used_at IS NULL',
+    const { rows } = await this.#session.query<{ expired: boolean }>(
+      `UPDATE enrollment_tokens SET used_at = now() WHERE secret_hash = $1 AND used_at IS NULL
+       RETURNING expires_at <= now() AS expired`,
       [tokenHash],
     );
-    if (used.rowCount === 0) return err(failure('conflict', 'the enrollment token was used', { reason: 'token-used' }));
+    if (rows[0] === undefined) return err(failure('conflict', 'the enrollment token was used', { reason: 'token-used' }));
+    if (rows[0].expired) return err(failure('conflict', 'the enrollment token expired', { reason: 'token-expired' }));
     const journal = await this.#session.query('SELECT 1 FROM workers WHERE journal_id = $1', [worker.journalId]);
     if (journal.rowCount !== 0) return err(failure('conflict', 'the journal is enrolled', { reason: 'journal-enrolled' }));
     const { capacity } = worker;
@@ -78,15 +86,22 @@ export class PostgresFleetRegistry implements FleetRegistry {
     return ok(await this.#read(workerId, ''));
   }
 
-  async replaceCredentials(workerId: WorkerId, expectedGeneration: number, next: WorkerCredentials): Promise<Result<void>> {
+  async rotate(
+    workerId: WorkerId,
+    expectedGeneration: number,
+    next: CredentialGeneration,
+    validUntil: Instant,
+    at: Instant,
+  ): Promise<Result<void>> {
     const worker = await this.#read(workerId, 'FOR UPDATE');
     if (worker === undefined) return err(failure('not-found', `no worker ${workerId} is enrolled`));
+    if (worker.revokedAt !== undefined) return err(failure('forbidden', `worker ${workerId} is revoked`));
     if (worker.credentials.current.generation !== expectedGeneration) {
       return err(failure('conflict', `the current generation is ${worker.credentials.current.generation}`));
     }
-    await this.#session.query('UPDATE workers SET enrollment = $2, predecessor_valid_until = $3 WHERE worker_id = $1', [
-      workerId, encodeRecord({ ...worker, credentials: next }), next.previous?.validUntil ?? null,
-    ]);
+    const rotation = rotateCredentials(worker.credentials, next, validUntil);
+    if (rotation.dropped !== undefined) await this.#record(workerId, [rotation.dropped], at);
+    await this.#write(workerId, { ...worker, credentials: rotation.credentials });
     return ok(undefined);
   }
 
@@ -94,18 +109,54 @@ export class PostgresFleetRegistry implements FleetRegistry {
     const worker = await this.#read(workerId, 'FOR UPDATE');
     if (worker === undefined) return err(failure('not-found', `no worker ${workerId} is enrolled`));
     if (worker.revokedAt !== undefined) return ok(undefined);
-    await this.#session.query('UPDATE workers SET revoked = true, enrollment = $2 WHERE worker_id = $1', [
-      workerId, encodeRecord({ ...worker, revokedAt: at }),
-    ]);
+    await this.#record(workerId, brokerUserKeys(worker.credentials), at);
+    await this.#session.query('UPDATE workers SET revoked = true WHERE worker_id = $1', [workerId]);
+    await this.#write(workerId, { ...worker, revokedAt: at });
     return ok(undefined);
   }
 
-  async expiredPredecessors(now: Instant): Promise<Result<readonly EnrolledWorker[]>> {
+  async expirePredecessors(now: Instant): Promise<Result<number>> {
     const { rows } = await this.#session.query<{ enrollment: string }>(
-      'SELECT enrollment FROM workers WHERE predecessor_valid_until <= $1 ORDER BY worker_id',
+      'SELECT enrollment FROM workers WHERE predecessor_valid_until <= $1 ORDER BY worker_id FOR UPDATE',
       [now],
     );
-    return ok(rows.map((row) => decodeRecord<EnrolledWorker>(row.enrollment)));
+    for (const row of rows) {
+      const worker = decodeRecord<EnrolledWorker>(row.enrollment);
+      const previous = worker.credentials.previous!;
+      await this.#record(worker.workerId, [previous.brokerUserKey], previous.validUntil);
+      await this.#write(worker.workerId, { ...worker, credentials: { current: worker.credentials.current } });
+    }
+    return ok(rows.length);
+  }
+
+  // The advisory lock makes publishers take turns; a rerun of the whole
+  // transaction pushes the same complete list again, which is harmless.
+  async publishRevocations(push: (revocations: readonly BrokerRevocation[]) => Promise<Result<void>>): Promise<Result<number>> {
+    await this.#session.query('SELECT pg_advisory_xact_lock($1)', [REVOCATION_LOCK]);
+    const { rows } = await this.#session.query<{ user_key: string; revoked_at: Date; published: boolean }>(
+      'SELECT user_key, revoked_at, published FROM broker_revocations ORDER BY user_key',
+    );
+    const unpublished = rows.filter((row) => !row.published).length;
+    if (unpublished === 0) return ok(0);
+    const pushed = await push(rows.map((row) => Object.freeze({ userKey: row.user_key, revokedAt: instant(row.revoked_at) })));
+    if (!pushed.ok) return pushed;
+    await this.#session.query('UPDATE broker_revocations SET published = true WHERE NOT published');
+    return ok(unpublished);
+  }
+
+  async #record(workerId: WorkerId, userKeys: readonly string[], at: Instant): Promise<void> {
+    for (const userKey of userKeys) {
+      await this.#session.query(
+        'INSERT INTO broker_revocations (user_key, worker_id, revoked_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+        [userKey, workerId, at],
+      );
+    }
+  }
+
+  async #write(workerId: WorkerId, worker: EnrolledWorker): Promise<void> {
+    await this.#session.query('UPDATE workers SET enrollment = $2, predecessor_valid_until = $3 WHERE worker_id = $1', [
+      workerId, encodeRecord(worker), worker.credentials.previous?.validUntil ?? null,
+    ]);
   }
 
   async #read(workerId: WorkerId, lock: '' | 'FOR UPDATE'): Promise<EnrolledWorker | undefined> {

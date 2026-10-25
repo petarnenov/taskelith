@@ -1,10 +1,20 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { checkControlPath, createOnce, createPrivateDirectory, refuseCheckout, replaceFile, syncBeforeUse } from '@taskelith/data-root';
+import {
+  checkControlPath,
+  createOnce,
+  createPrivateDirectory,
+  dataRootFailure,
+  refuseCheckout,
+  replaceFile,
+  syncBeforeUse,
+} from '@taskelith/data-root';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 
 export const CONTROL_PLANE_DIRECTORY = 'control-plane';
 export const DOCUMENT_FORMAT = 1;
+// The subtree holds signing seeds, so nobody but the owner may even read it.
+const GROUP_OR_OTHER_ACCESS = 0o077;
 
 export interface NamespaceOptions {
   readonly dataRoot: string;
@@ -34,7 +44,8 @@ export class ControlPlaneNamespace {
       const created = createPrivateDirectory(directory);
       if (!created.ok) return created;
     }
-    return ok(namespace);
+    const privateCheck = checkPrivate(namespace.directory, 'directory');
+    return privateCheck.ok ? ok(namespace) : privateCheck;
   }
 
   // A versioned JSON document; one of an unknown newer format is refused.
@@ -42,6 +53,8 @@ export class ControlPlaneNamespace {
     const path = this.#path(name);
     if (!path.ok) return path;
     if (!existsSync(path.value)) return ok(undefined);
+    const privateCheck = checkPrivate(path.value, 'file');
+    if (!privateCheck.ok) return privateCheck;
     const synced = syncBeforeUse(path.value);
     if (!synced.ok) return synced;
     let stored: unknown;
@@ -76,4 +89,15 @@ export class ControlPlaneNamespace {
     const safe = checkControlPath(this.#options.dataRoot, path, this.#options.ownerUid);
     return safe.ok ? ok(path) : safe;
   }
+}
+
+// A private directory or regular file: no access for group or others.
+function checkPrivate(path: string, kind: 'directory' | 'file'): Result<void> {
+  const status = lstatSync(path);
+  const isKind = kind === 'directory' ? status.isDirectory() : status.isFile();
+  if (!isKind) return err(dataRootFailure('unsafe-path', `${path} is not a ${kind}`, { path }));
+  if ((status.mode & GROUP_OR_OTHER_ACCESS) !== 0) {
+    return err(dataRootFailure('unsafe-path', `${path} is accessible to group or others`, { path }));
+  }
+  return ok(undefined);
 }
