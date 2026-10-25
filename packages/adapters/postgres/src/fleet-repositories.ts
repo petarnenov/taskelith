@@ -98,6 +98,16 @@ export class PostgresFleetRegistry implements FleetRegistry {
     return ok(Object.freeze(rows.map((row) => row.worker_id)));
   }
 
+  // The record's `revokedAt` decides, as in the in-memory registry.
+  async recentlyRevokedWorkerIds(limit: number): Promise<Result<readonly WorkerId[]>> {
+    const { rows } = await this.#session.query<{ worker_id: WorkerId }>(
+      `SELECT worker_id FROM workers WHERE enrollment IS NOT NULL AND revoked
+       ORDER BY (enrollment::jsonb ->> 'revokedAt')::timestamptz DESC, worker_id COLLATE "C" LIMIT $1`,
+      [limit],
+    );
+    return ok(Object.freeze(rows.map((row) => row.worker_id)));
+  }
+
   async workerByCredentialHash(hash: SecretHash): Promise<Result<EnrolledWorker | undefined>> {
     const { rows } = await this.#session.query<{ enrollment: string }>(
       `SELECT enrollment FROM workers WHERE (control_plane_hash = $1 OR previous_control_plane_hash = $1)

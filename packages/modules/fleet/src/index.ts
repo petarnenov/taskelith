@@ -4,6 +4,7 @@ export {
   type Enrollment,
   type EnrollmentServiceDependencies,
   type RotatedCredentials,
+  type WorkerRevocation,
 } from './application/enrollment-service.js';
 export {
   InstallationService,

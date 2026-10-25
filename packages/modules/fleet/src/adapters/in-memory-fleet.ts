@@ -63,6 +63,12 @@ export class InMemoryFleetRegistry implements FleetRegistry {
     return settle(ok(Object.freeze(active.sort())));
   }
 
+  recentlyRevokedWorkerIds(limit: number): Promise<Result<readonly WorkerId[]>> {
+    const revoked = [...this.#workers.values()].filter((worker) => worker.revokedAt !== undefined);
+    const latestFirst = revoked.sort((a, b) => b.revokedAt!.localeCompare(a.revokedAt!) || a.workerId.localeCompare(b.workerId));
+    return settle(ok(Object.freeze(latestFirst.slice(0, limit).map((worker) => worker.workerId))));
+  }
+
   workerByCredentialHash(hash: SecretHash): Promise<Result<EnrolledWorker | undefined>> {
     const holds = (worker: EnrolledWorker) => credentialGenerations(worker.credentials).some((generation) => generation.controlPlaneHash === hash);
     const holders = [...this.#workers.values()].filter(holds);
