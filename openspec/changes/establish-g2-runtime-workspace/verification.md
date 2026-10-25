@@ -29,6 +29,8 @@ macOS (Darwin 25.6.0), Node v24.22.1, npm 12.2.1, Docker 29.5.2 with Docker Comp
 - After the pass 1 fixes, on the merge of `origin/dev` (`ac55cb5`), from a state without `coverage/`: `make doctor` reported every check passed, including Docker; `make verify` passed with 303 tests, 0 failed; coverage 99.63% lines, 95.74% branches, 99.28% functions; inventory 695 paths, 21 reviewed gaps; strict OpenSpec validation 38 passed; archive dry run and package verification passed; no `taskelith-` container remained.
 - Pass 2 fixes: `run taskelith-sig2-verify` with a command that takes 3 seconds to stop on `TERM` received `TERM`, then `INT` and `TERM` again; the command printed its stop message before the containers stopped, the project was removed, and the run exited 143. `run` without a command printed the usage and exited 2; `run ... sh -c 'exit 7'` exited 7.
 - After the pass 2 fixes, from a state without `coverage/`: `make verify` passed with 303 tests, 0 failed; coverage 99.63% lines, 95.74% branches, 99.28% functions; inventory 695 paths, 21 reviewed gaps; strict OpenSpec validation 38 passed; archive dry run and package verification passed; no `taskelith-` container remained.
+- Pass 3 fixes: `run taskelith-sig3-verify` with a command that ignores `TERM` and has two `sleep` children received `TERM`; after 31 seconds it exited 143, no `sleep` process remained, and the project was removed.
+- After the pass 3 fixes, from a state without `coverage/`: `make verify` passed with 303 tests, 0 failed; coverage 99.63% lines, 95.74% branches, 99.28% functions; strict OpenSpec validation 38 passed; archive dry run and package verification passed.
 
 ## Independent review
 
@@ -56,6 +58,11 @@ Assigned reviewer: Claude Fable 5.1, medium effort, read-only, run by the coordi
   6. Low: integration-flow still named `npm test` in `make verify`. A MODIFIED "Single definition of the checks" (430 characters) names `make test`, with the scenario "Tests run through make test".
   7. Low: the Docker scenario implied that `make test` fails because of `make services-up`. Reworded.
   8. Low: `make test` used the shell's Node.js. It runs through `with-pinned-node.sh use`, which does not switch again under `make verify`.
+- **Pass 3, final** (session `16ce1ff2-d6c7-42e0-a1ff-368241de270d`; model confirmed, snapshots equal). Every pass-1 and pass-2 finding confirmed resolved. Findings: 0 Critical, 0 High, 0 Medium, 4 Low. Low only, so L1, L2, and L4 were fixed without another review and are **unreviewed fixes**:
+  1. Low: `stop_command` could wait forever. It now waits at most 30 seconds, polling `kill -0`, then sends `KILL`; noted in the design risks. Unreviewed fix.
+  2. Low: descendants of the command were not signalled. `TERM` and the final `KILL` go to the command's process tree, collected recursively with `pgrep -P`; the remaining gap is in the design risks. Unreviewed fix.
+  3. Low: the `docs/g2-plan.md` status line. Handled by the coordinator at archive.
+  4. Low: the "Environment check" delta listed "and" twice. Reworded. Unreviewed fix.
 
 ## Limitations
 
@@ -65,4 +72,4 @@ Assigned reviewer: Claude Fable 5.1, medium effort, read-only, run by the coordi
 
 ## Remaining gates
 
-Independent review; integration by the coordinator.
+Integration by the coordinator, including the `docs/g2-plan.md` status line at archive. The pass 3 fixes are unreviewed.

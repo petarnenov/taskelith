@@ -16,4 +16,4 @@
 
 - [x] 4.1 Update architecture section 6, README, `docs/releases.md`, and the dependency register.
 - [x] 4.2 Run `make verify` and the fail-closed checks.
-- [ ] 4.3 Obtain independent review and record results.
+- [x] 4.3 Obtain independent review and record results.

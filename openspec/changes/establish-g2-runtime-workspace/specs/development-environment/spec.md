@@ -29,7 +29,7 @@ The integration services SHALL be PostgreSQL and NATS in Docker Compose, pinned 
 ## MODIFIED Requirements
 
 ### Requirement: Environment check
-`make doctor` SHALL run with the `.nvmrc` Node.js when nvm has it installed and the shell uses another version, and otherwise with the shell's Node.js; it SHALL check git, that Node.js matches `.nvmrc` and npm the CI pin, that `npm ls --all` passes, and that the hooks and the inventory merge driver are configured, and that the Docker daemon and Compose are reachable; it SHALL print each result with a remedy for each failure, exit non-zero when any check fails, and change nothing.
+`make doctor` SHALL run with the `.nvmrc` Node.js when nvm has it installed and the shell uses another version, and otherwise with the shell's Node.js; it SHALL check git, that Node.js matches `.nvmrc` and npm the CI pin, that `npm ls --all` passes, that the hooks and the inventory merge driver are configured, and that the Docker daemon and Compose are reachable; it SHALL print each result with a remedy for each failure, exit non-zero when any check fails, and change nothing.
 
 #### Scenario: Dependencies missing
 - **WHEN** a clone has no `node_modules`, or lacks a locked package or workspace link, and npm is on `PATH` or the pinned Node.js is not active
