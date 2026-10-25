@@ -4,7 +4,7 @@ G2 item 13 added `rotate-worker`, which issues a new worker credential generatio
 
 ## What Changes
 
-- `docs/contracts/installation-and-enrollment.md` section 6: in G2, rotating a worker means enrolling it again; delivery belongs to G3 item 26. The "Not yet" note points there.
+- `docs/contracts/installation-and-enrollment.md` section 6: in G2 a worker cannot adopt a rotated generation. After the grace window, recovery is a new worker identity with a new token and root, after the old identity is revoked and its attempts are reconciled. Delivery belongs to G3 item 26. The "Not yet" note points there.
 - `docs/g2-plan.md`: a "Recorded limitations" section that item 27 lists among the closure's deferrals.
 - `docs/g3-plan.md` item 26: its scope adds delivery and atomic adoption of a rotated generation.
 

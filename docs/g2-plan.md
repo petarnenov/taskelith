@@ -96,4 +96,4 @@ The options and recommendations were the author's proposals. On 2026-10-25 the o
 
 Item 27 lists these among the closure's deferrals.
 
-- **Rotated worker credentials.** `rotate-worker` issues a new credential generation, but G2 has no path that delivers it to the worker, so in G2 rotating a worker means enrolling it again. Delivery belongs to G3 item 26. The owner's delegated decision-maker decided this on 2026-10-25, while the owner was away.
+- **Rotated worker credentials.** `rotate-worker` issues a new credential generation, but G2 has no path that delivers it to the worker, and the worker cannot adopt it. After the grace window the worker loses access, and the only recovery is a new worker identity with a new token and root, after the old identity is revoked and its attempts are reconciled ([installation and enrollment contract](contracts/installation-and-enrollment.md) section 6). Delivery belongs to G3 item 26. The owner's delegated decision-maker decided this on 2026-10-25, while the owner was away.

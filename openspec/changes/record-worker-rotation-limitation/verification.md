@@ -22,7 +22,15 @@ At the committed revision handed to review:
 
 ## Independent review
 
-Pending.
+Reviewer: Codex CLI, invoked as `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`.
+
+### Pass 1
+
+Session `01a17485-5f95-7971-b4c6-09fb815c617e`, model `gpt-6.1-sol`, reasoning effort `medium`, read-only sandbox. It ran at `fac23ef`, and the SHA-256 snapshots before and after were equal (`2ee03555…1d12`). It confirmed that `skip_specs` is justified.
+
+Findings: Critical 0, High 0, Medium 1, Low 0.
+
+1. Medium, in three places: "rotating a worker means enrolling it again" hid that section 10 refuses enrollment on an existing root, so recovery replaces the worker identity. Fixed: the three places state that the worker cannot adopt a rotated generation, and that recovery is a new identity, a new token and a new root, after the old identity is revoked and its attempts are reconciled.
 
 ## Remaining gates
 
