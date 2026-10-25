@@ -1,11 +1,21 @@
 import { parseIdentifier, parseInstant, type Instant, type Result } from '@taskelith/kernel';
-import type { AttemptId, WorkerId } from '@taskelith/execution';
-import { expectCode, expectSame, expectSuccess, parseOwnershipGeneration, type ConformanceCase, type TaskId } from '@taskelith/sdlc';
+import type { Attempt, AttemptId, Task, TaskRepository, WorkerId } from '@taskelith/execution';
+import {
+  FIRST_GENERATION,
+  expectCode,
+  expectSame,
+  expectSuccess,
+  parseOwnershipGeneration,
+  type AdmissionId,
+  type ConformanceCase,
+  type TaskId,
+} from '@taskelith/sdlc';
 import { createAssignment, endAssignment, type Assignment } from '../domain/assignment.js';
 import { parseResourceRequest, type ProjectId, type ProviderCredentialId, type RunId } from '../domain/capacity-reservation.js';
 import type { TaskLineageLink } from '../domain/delegation-admission.js';
 import type { AssignmentRepository } from './assignment-repository.js';
 import type { CapacityLedger } from './capacity-ledger.js';
+import type { PlacementQueue } from './placement-queue.js';
 import type { PlacementWorkers, WorkerPlacementRecord } from './placement-workers.js';
 import type { QuotaSettings } from './quota-settings.js';
 import type { TaskLineage } from './task-lineage.js';
@@ -182,6 +192,178 @@ export const CAPACITY_LEDGER_CONFORMANCE: readonly ConformanceCase<CapacityLedge
       expectCode(problems, 'reopen', await ledger.openDelegation(delegation), 'conflict');
       expectSame(problems, 'no longer waiting', await ledger.isWaitingParent(parent.attemptId), false);
       expectSame(problems, 'no waiting slots', await ledger.waitingParentSlots(), 0);
+      return problems;
+    },
+  },
+]);
+
+// Eligible workers whose identities and held reservations order differently.
+export const CANDIDATE_WORKER_FIXTURES: readonly WorkerPlacementRecord[] = Object.freeze([
+  worker('worker-b', {}),
+  worker('worker-d', {}),
+  worker('worker-a', {}),
+  worker('worker-c', {}),
+  worker('worker-x', { draining: true }),
+]);
+
+export interface PlacementCandidatesConformanceTarget {
+  readonly workers: PlacementWorkers;
+  readonly assignments: AssignmentRepository;
+}
+
+function heldOn(text: string, attempt: string, workerText: string): Assignment {
+  return Object.freeze({ ...assignment(text, attempt, ROOT, RUN, 100), workerId: id('WorkerId', workerText) as WorkerId });
+}
+
+export const PLACEMENT_CANDIDATES_CONFORMANCE: readonly ConformanceCase<PlacementCandidatesConformanceTarget>[] = Object.freeze([
+  {
+    name: 'candidates are the eligible workers, fewest held reservations first, then by identity',
+    async check({ workers, assignments }: PlacementCandidatesConformanceTarget) {
+      const problems: string[] = [];
+      const released = heldOn('assignment-c2', 'attempt-c2', 'worker-c');
+      const stored = [
+        heldOn('assignment-b1', 'attempt-b1', 'worker-b'), heldOn('assignment-b2', 'attempt-b2', 'worker-b'),
+        heldOn('assignment-c1', 'attempt-c1', 'worker-c'), heldOn('assignment-d1', 'attempt-d1', 'worker-d'),
+        heldOn('assignment-x1', 'attempt-x1', 'worker-x'), released,
+      ];
+      for (const held of stored) expectSuccess(problems, `add ${held.id}`, await assignments.add(held));
+      const ended = must(endAssignment(released, released.generation, 'cancelled', { granted: false, nonTerminal: false }, AT));
+      expectSuccess(problems, 'release', await assignments.replace(ended, released.generation));
+      expectSame(problems, 'candidates', await workers.candidates(), ['worker-a', 'worker-c', 'worker-d', 'worker-b']);
+      return problems;
+    },
+  },
+]);
+
+export interface PlacementQueueConformanceTarget {
+  readonly queue: PlacementQueue;
+  readonly tasks: TaskRepository;
+  readonly lineage: TaskLineage;
+  readonly assignments: AssignmentRepository;
+}
+
+const at = (seconds: number): Instant => must(parseInstant(`2026-10-25T09:00:0${seconds}.000Z`));
+
+function queuedTask(text: string, changedAt: Instant, attempts: readonly Attempt[] = []): Task {
+  return Object.freeze({
+    id: id('TaskId', text) as TaskId,
+    admissionId: id('AdmissionId', `admission-${text}`) as AdmissionId,
+    ownershipGeneration: must(parseOwnershipGeneration(attempts.length + 1)),
+    attempts: Object.freeze(attempts),
+    generation: FIRST_GENERATION,
+    changedAt,
+  });
+}
+
+function activeAttemptOf(text: string): Attempt {
+  return Object.freeze({ id: id('AttemptId', text) as AttemptId, executions: Object.freeze([]) });
+}
+
+function endedAttemptOf(text: string): Attempt {
+  const outcome = { kind: 'not-started' as const, cancelled: false, ownershipGeneration: must(parseOwnershipGeneration(2)), endedAt: AT };
+  return Object.freeze({ ...activeAttemptOf(text), outcome: Object.freeze(outcome) });
+}
+
+function rootLink(taskId: TaskId, project: string): TaskLineageLink {
+  return Object.freeze({ taskId, rootTaskId: taskId, depth: 0, projectId: id('ProjectId', project) as ProjectId, runId: RUN });
+}
+
+export const PLACEMENT_QUEUE_CONFORMANCE: readonly ConformanceCase<PlacementQueueConformanceTarget>[] = Object.freeze([
+  {
+    name: 'waiting tasks without a held reservation are read by project, oldest first in each',
+    async check({ queue, tasks, lineage, assignments }: PlacementQueueConformanceTarget) {
+      const problems: string[] = [];
+      const fresh = queuedTask('task-a', at(2));
+      const released = queuedTask('task-b', at(1), [activeAttemptOf('attempt-b')]);
+      const reserved = queuedTask('task-c', at(0), [activeAttemptOf('attempt-c')]);
+      const ended = queuedTask('task-d', at(0), [endedAttemptOf('attempt-d')]);
+      const later = queuedTask('task-e', at(3));
+      const unlinked = queuedTask('task-f', at(0));
+      for (const task of [fresh, released, reserved, ended, later, unlinked]) expectSuccess(problems, `add ${task.id}`, await tasks.add(task));
+      for (const [task, project] of [[fresh, 'project-1'], [released, 'project-2'], [reserved, 'project-1'], [ended, 'project-1'], [later, 'project-1']] as const) {
+        expectSuccess(problems, `link ${task.id}`, await lineage.add(rootLink(task.id, project)));
+      }
+      const releasedAssignment = assignment('assignment-b', 'attempt-b', released.id, RUN, 100);
+      expectSuccess(problems, 'add released', await assignments.add(releasedAssignment));
+      const ending = must(endAssignment(releasedAssignment, releasedAssignment.generation, 'cancelled', { granted: false, nonTerminal: false }, AT));
+      expectSuccess(problems, 'release', await assignments.replace(ending, releasedAssignment.generation));
+      expectSuccess(problems, 'add held', await assignments.add(assignment('assignment-c', 'attempt-c', reserved.id, RUN, 100)));
+      const entry = (task: Task, project: string) => ({ projectId: project, waitingSince: task.changedAt, item: task.id });
+      const all = [entry(fresh, 'project-1'), entry(released, 'project-2'), entry(later, 'project-1')];
+      expectSame(problems, 'waiting', await queue.waiting(10, [], undefined), all);
+      expectSame(problems, 'limited', await queue.waiting(2, [], undefined), all.slice(0, 2));
+      return problems;
+    },
+  },
+  {
+    name: 'the limit takes each project\'s oldest task before any project\'s next',
+    async check({ queue, tasks, lineage }: PlacementQueueConformanceTarget) {
+      const problems: string[] = [];
+      const older = [queuedTask('task-a1', at(0)), queuedTask('task-a2', at(1)), queuedTask('task-a3', at(2))];
+      const newer = queuedTask('task-b1', at(3));
+      for (const task of [...older, newer]) expectSuccess(problems, `add ${task.id}`, await tasks.add(task));
+      for (const task of older) expectSuccess(problems, `link ${task.id}`, await lineage.add(rootLink(task.id, 'project-a')));
+      expectSuccess(problems, `link ${newer.id}`, await lineage.add(rootLink(newer.id, 'project-b')));
+      const entry = (task: Task, project: string) => ({ projectId: project, waitingSince: task.changedAt, item: task.id });
+      const first = [entry(older[0]!, 'project-a'), entry(newer, 'project-b')];
+      expectSame(problems, 'limited', await queue.waiting(2, [], undefined), first);
+      expectSame(problems, 'all', await queue.waiting(10, [], undefined), [...first, entry(older[1]!, 'project-a'), entry(older[2]!, 'project-a')]);
+      return problems;
+    },
+  },
+  {
+    name: 'excluded tasks are left out before the limit, so the next tasks are read',
+    async check({ queue, tasks, lineage }: PlacementQueueConformanceTarget) {
+      const problems: string[] = [];
+      const backingOff = [queuedTask('task-a', at(0)), queuedTask('task-b', at(1))];
+      const next = queuedTask('task-c', at(2));
+      for (const [task, project] of [[backingOff[0]!, 'project-a'], [backingOff[1]!, 'project-b'], [next, 'project-c']] as const) {
+        expectSuccess(problems, `add ${task.id}`, await tasks.add(task));
+        expectSuccess(problems, `link ${task.id}`, await lineage.add(rootLink(task.id, project)));
+      }
+      const excluding = backingOff.map((task) => task.id);
+      const read = await queue.waiting(2, excluding, undefined);
+      expectSame(problems, 'excluded', read, [{ projectId: 'project-c', waitingSince: next.changedAt, item: next.id }]);
+      return problems;
+    },
+  },
+  {
+    name: 'a read starts after the given project and wraps around, oldest first in each',
+    async check({ queue, tasks, lineage }: PlacementQueueConformanceTarget) {
+      const problems: string[] = [];
+      const placed = [
+        [queuedTask('task-a1', at(0)), 'project-a'], [queuedTask('task-b1', at(1)), 'project-b'],
+        [queuedTask('task-c1', at(2)), 'project-c'], [queuedTask('task-c2', at(3)), 'project-c'],
+      ] as const;
+      for (const [task, project] of placed) {
+        expectSuccess(problems, `add ${task.id}`, await tasks.add(task));
+        expectSuccess(problems, `link ${task.id}`, await lineage.add(rootLink(task.id, project)));
+      }
+      const entry = ([task, project]: (typeof placed)[number]) => ({ projectId: project, waitingSince: task.changedAt, item: task.id });
+      const [a1, b1, c1, c2] = placed.map(entry);
+      const afterB = id('ProjectId', 'project-b') as ProjectId;
+      expectSame(problems, 'after b', await queue.waiting(10, [], afterB), [c1, a1, b1, c2]);
+      expectSame(problems, 'limited after b', await queue.waiting(2, [], afterB), [c1, a1]);
+      const afterC = id('ProjectId', 'project-c') as ProjectId;
+      expectSame(problems, 'after the last', await queue.waiting(2, [], afterC), [a1, b1]);
+      return problems;
+    },
+  },
+  {
+    name: 'only the given tasks that still wait are answered, in id order',
+    async check({ queue, tasks, lineage, assignments }: PlacementQueueConformanceTarget) {
+      const problems: string[] = [];
+      const waiting = queuedTask('task-b', at(0));
+      const reserved = queuedTask('task-a', at(0), [activeAttemptOf('attempt-a')]);
+      const other = queuedTask('task-c', at(0));
+      for (const task of [waiting, reserved, other]) {
+        expectSuccess(problems, `add ${task.id}`, await tasks.add(task));
+        expectSuccess(problems, `link ${task.id}`, await lineage.add(rootLink(task.id, 'project-a')));
+      }
+      expectSuccess(problems, 'add held', await assignments.add(assignment('assignment-a', 'attempt-a', reserved.id, RUN, 100)));
+      const unknown = id('TaskId', 'task-unknown') as TaskId;
+      expectSame(problems, 'still waiting', await queue.stillWaiting([unknown, other.id, reserved.id, waiting.id]), [waiting.id, other.id]);
+      expectSame(problems, 'none asked', await queue.stillWaiting([]), []);
       return problems;
     },
   },

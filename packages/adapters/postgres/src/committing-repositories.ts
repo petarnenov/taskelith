@@ -1,6 +1,7 @@
 import { ok, type EventId, type Instant, type Result } from '@taskelith/kernel';
 import type {
   AssignmentId,
+  AttemptId,
   EvidenceId,
   EvidenceRecord,
   EvidenceRecords,
@@ -164,6 +165,10 @@ export class CommittingAssignmentRepository implements AssignmentRepository {
 
   replace(assignment: Assignment, expectedGeneration: Generation): Promise<Result<void>> {
     return this.#database.transaction((tx) => tx.assignments.replace(assignment, expectedGeneration));
+  }
+
+  listByAttempt(attemptId: AttemptId): Promise<readonly Assignment[]> {
+    return listed(this.#database.transaction(async (tx) => ok(await tx.assignments.listByAttempt(attemptId))));
   }
 }
 

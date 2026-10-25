@@ -24,6 +24,7 @@ import {
   type TaskId,
 } from '@taskelith/sdlc';
 import { failed, value } from '@taskelith/testing';
+import { inMemoryCapacity } from './in-memory-capacity.ts';
 
 const WORKFLOW_DIGEST = `sha256:${'ab'.repeat(32)}`;
 const definition = value(parseWorkflowDefinition({
@@ -66,9 +67,11 @@ async function fixture(): Promise<Fixture> {
   const held = new Map<string, readonly OwnershipGeneration[]>([[`${WORKER}/${ATTEMPT}`, [generation(2), generation(3)]]]);
   const clock = { now: '2026-10-25T09:00:00.000Z' as Instant };
   const workers: Fixture['workers'] = new Map([WORKER, OTHER_WORKER].map((id) => [id, { credentials: { current: { generation: 1 } } }]));
+  const taskStore = new InMemoryTaskRepository();
+  const lineage = new InMemoryTaskLineage();
   const transaction: ControlPlaneTransaction = {
     runs: new InMemoryWorkflowRunRepository(), catalog: new InMemoryRunCatalog(), admissions: new InMemoryAdmissionRepository(),
-    gates: new InMemoryGateRepository(), tasks: new InMemoryTaskRepository(), lineage: new InMemoryTaskLineage(), outbox: new InMemoryOutbox(),
+    gates: new InMemoryGateRepository(), tasks: taskStore, lineage, outbox: new InMemoryOutbox(), ...inMemoryCapacity(taskStore, lineage),
     evidence: new InMemoryEvidenceRecords(),
     producers: { heldGenerations: async (workerId, attemptId) => ok(held.get(`${workerId}/${attemptId}`) ?? []) },
     fleet: { worker: async (workerId) => ok(workers.get(workerId) as never) },

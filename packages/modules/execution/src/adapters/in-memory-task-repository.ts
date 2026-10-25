@@ -8,6 +8,11 @@ import type { TaskRepository } from '../ports/task-repository.js';
 export class InMemoryTaskRepository implements TaskRepository {
   readonly #tasks = new Map<TaskId, Task>();
 
+  // Every stored task, for the in-memory placement queue.
+  all(): readonly Task[] {
+    return [...this.#tasks.values()];
+  }
+
   async get(id: TaskId): Promise<Result<Task>> {
     const task = this.#tasks.get(id);
     if (task === undefined) return err(failure('not-found', `task ${id} does not exist`, { task: id }));
