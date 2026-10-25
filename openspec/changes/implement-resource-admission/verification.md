@@ -31,6 +31,8 @@ On `28338ff`, before review: `make verify` passed: comment rule, workspace packa
 
 On `dbdf9a6`, after the pass 1 fixes: `make verify` passed with 542 tests, coverage 99.70% lines, 95.93% branches, 99.57% functions; the Scheduling operations have 100% line and 80–94% branch coverage.
 
+On `abf7034`, after the pass 2 fixes: `make verify` passed with 544 tests, coverage 99.66% lines, 95.87% branches, 99.46% functions.
+
 ### Required tests of contract section 12
 
 | Required test | Where |
@@ -78,6 +80,25 @@ Assigned reviewer: Claude Code with `claude -p --model claude-fable-5-1 --effort
   16. Low: task 3.2 was open. Ticked after `make verify`.
   17. Low: no mapping of contract section 12's tests. The table above records what is covered and deferred.
   18. Low: `SELECT *` on tables item 13 will extend. Columns are listed.
+
+- **Pass 2 — session `4a7d050a-cb65-4398-a780-55de51f3dd30`, reviewed `c7cef3c` (diff `a1a27a1...HEAD`).** A first invocation again ended with `No messages returned from query` and no session, and is not counted. `modelUsage` lists `claude-fable-5-1`. Snapshots before and after were equal (`83fa6330…079a1`). The prompt named pass 1's session; the reviewer confirmed all 18 resolutions, reran strict validation, the boundary and comment checks, and the Scheduling unit tests. Findings: 0 Critical, 1 High, 2 Medium, 14 Low. Resolutions, in `abf7034`:
+  1. High: the delegation test's last call waited from a fixed instant, so it would turn from waiting to rejected after 09:10 UTC that day. Every delegation in the test now waits from the database clock's time.
+  2. Medium: placement did not check the ownership generation. The request carries the generation the scheduler claimed, and a stale one fails with `conflict` before anything is written, with a test.
+  3. Medium: an active assignment whose attempt ended had no release path. `releaseInTransaction` ends it with `attempt-ended`, releases, and tells the worker, with a test in the transaction that records the attempt's end.
+  4. Low: the credential count could not use the GIN index. It uses `@>`.
+  5. Low: an automatic retry need not name the attempt it retries. It must equal the active attempt's `retryOf`, or the placement fails with `precondition-failed`; the fixture opens the retry with `retryOf`.
+  6. Low: an `exited` attempt whose spawn failed counts as uncertain. Kept as a conservative choice and recorded in the contract's section 13.
+  7. Low: every `conflict` from adding the assignment became `attempt-already-reserved`. Only one naming the attempt does.
+  8. Low: a delegating attempt without a reservation could delegate. It fails with `precondition-failed`, with a test.
+  9. Low: the contract and the operational targets omitted an unknown worker from supersession. Added.
+  10. Low: the proposal promised a suite for every port. It names `InstallationGuard` as tested directly.
+  11. Low: the placement requirement did not list lineage, ownership, and credentials. It does.
+  12. Low: `reserveWithRetry` took two functions as parameters. A `RetryTiming` goes to the constructor.
+  13. Low: a commit of unknown outcome was retried. It is not.
+  14. Low: a local name shadowed the `outcome` helper. Renamed.
+  15. Low: a dead fallback for the end reason. Callers pass the reason.
+  16. Low: the delegation decision used non-null assertions and lookup closures. The chain is a non-empty tuple and each charged run is passed with its quota and waiting units.
+  17. Low: `task_lineage` allowed a parent at depth 0 or none below it. A CHECK requires a parent exactly below depth 0.
 
 ## Limitations
 
