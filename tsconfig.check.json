@@ -12,8 +12,10 @@
     "src/**/*.ts",
     "packages/*/src/**/*.ts",
     "packages/*/*/src/**/*.ts",
+    "apps/*/src/**/*.ts",
     "packages/*/test/**/*.ts",
     "packages/*/*/test/**/*.ts",
+    "apps/*/test/**/*.ts",
     "scripts/**/*.ts",
     "test/**/*.ts",
     "test/**/*.d.ts"

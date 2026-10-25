@@ -2,12 +2,19 @@
 NODE_PIN := $(shell cat .nvmrc)
 NPM_PIN := $(shell sed -n 's/.*npm install --global npm@\([0-9.]*\) --ignore-scripts.*/\1/p' .github/workflows/release.yml | head -n 1)
 
+# Compose projects are named per worktree, so parallel worktrees never share
+# services; make verify and manual use get separate projects.
+SERVICES_ID := $(shell printf '%s' '$(CURDIR)' | cksum | cut -d ' ' -f 1)
+VERIFY_SERVICES := taskelith-$(SERVICES_ID)-verify
+DEV_SERVICES := taskelith-$(SERVICES_ID)-dev
+
 SPECKIT_IMAGE := taskelith-speckit:1.2.3
 SPECKIT_BASE := python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962
 SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
-.PHONY: verify verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility
+.PHONY: verify verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility \
+	test services-up services-down
 
 # Uses the .nvmrc Node.js when nvm has it, so no 'nvm use' is needed first.
 verify:
@@ -15,7 +22,7 @@ verify:
 
 verify-checks: toolchain
 	npm run verify:comments
-	npm test
+	$(MAKE) --no-print-directory test
 	$(MAKE) contract-compatibility
 	npm run verify:dependencies
 	npm run openspec -- validate --all --strict --no-interactive
@@ -42,6 +49,20 @@ hooks:
 # reinstalls first, because the inventory reads the installed packages.
 dependency-inventory:
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use sh -c 'npm ci --ignore-scripts && npm run inventory:dependencies'
+
+# Runs npm test with the .nvmrc Node.js against its own services, which stop
+# also when tests fail; fails closed without Docker.
+test:
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use bash scripts/services.sh run $(VERIFY_SERVICES) npm test
+
+# Starts PostgreSQL and NATS for manual integration test runs and prints
+# the URLs to export.
+services-up:
+	@bash scripts/services.sh up $(DEV_SERVICES)
+
+# Stops the services of services-up and discards their data.
+services-down:
+	@bash scripts/services.sh down $(DEV_SERVICES)
 
 # Fails on an undeclared breaking contract change since the origin/dev merge
 # base; runs oasdiff as its digest-pinned container, so it needs Docker.

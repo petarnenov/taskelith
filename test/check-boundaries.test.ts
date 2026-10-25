@@ -260,6 +260,92 @@ test('the plugin SDK reads a module only type-only through its port entry', () =
   }
 });
 
+test('API and browser apps cannot reach worker-only code, directly or through a package', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-boundaries-worker-'));
+  try {
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ workspaces: ['packages/kernel', 'packages/adapters/*', 'packages/plugins/*', 'apps/*'] }));
+    const packages = {
+      'packages/kernel': '@taskelith/kernel',
+      'packages/adapters/worker-process': '@taskelith/worker-process',
+      'packages/adapters/nats': '@taskelith/nats',
+      'packages/plugins/sdlc-openspec': '@taskelith/sdlc-openspec',
+      'apps/control-plane': '@taskelith/control-plane',
+      'apps/web': '@taskelith/web',
+      'apps/worker': '@taskelith/worker',
+    };
+    for (const [dir, name] of Object.entries(packages)) {
+      mkdirSync(join(root, dir, 'src'), { recursive: true });
+      mkdirSync(join(root, dir, 'test'), { recursive: true });
+      writeFileSync(join(root, dir, 'package.json'), JSON.stringify({ name }));
+    }
+    writeFileSync(join(root, 'packages/adapters/worker-process/src/index.ts'), "export const launch = 1;\n");
+    writeFileSync(join(root, 'packages/plugins/sdlc-openspec/src/index.ts'), "import { execFile } from 'node:child_process';\nexport const run = execFile;\n");
+    writeFileSync(join(root, 'packages/adapters/nats/src/index.ts'), "import { run } from '@taskelith/sdlc-openspec';\nexport const bus = run;\n");
+    writeFileSync(join(root, 'apps/worker/src/index.ts'), "import { spawn } from 'node:child_process';\nimport { launch } from '@taskelith/worker-process';\nimport { bus } from '@taskelith/nats';\nexport { spawn, launch, bus };\n");
+    writeFileSync(
+      join(root, 'apps/control-plane/src/index.ts'),
+      "import { id } from '@taskelith/kernel';\nimport type { Launch } from '@taskelith/worker-process';\nimport { type Step, type Exit } from '@taskelith/worker';\nexport { type Bus } from '@taskelith/nats';\nexport const plane = id;\n",
+    );
+    writeFileSync(join(root, 'apps/control-plane/test/launch.test.ts'), "import { spawn } from 'node:child_process';\nimport { launch } from '@taskelith/worker-process';\n");
+    assert.deepEqual(checkWorkspaceBoundaries(root), []);
+
+    writeFileSync(
+      join(root, 'apps/control-plane/src/launch.ts'),
+      "import { launch } from '@taskelith/worker-process';\nimport { spawn } from 'child_process';\nconst w = import('@taskelith/worker');\nimport { bus } from '@taskelith/nats';\nimport { s } from '../../worker/src/index.ts';\n",
+    );
+    writeFileSync(join(root, 'apps/web/src/view.ts'), "import pty from 'node-pty';\n");
+    writeFileSync(
+      join(root, 'apps/control-plane/src/forms.ts'),
+      "export { s } from '@taskelith/worker';\nconst cp = require('child_process');\nimport { type Step, step } from '@taskelith/worker';\nimport { execa } from 'execa';\n",
+    );
+
+    const violations = checkWorkspaceBoundaries(root);
+    const expected = [
+      ['apps/control-plane/src/launch.ts', 'cannot import worker-only code "@taskelith/worker-process" (packages/adapters/worker-process is worker-only)'],
+      ['apps/control-plane/src/launch.ts', 'cannot import process-launching module "child_process"'],
+      ['apps/control-plane/src/launch.ts', 'cannot import worker-only code "@taskelith/worker" (apps/worker is worker-only)'],
+      ['apps/control-plane/src/launch.ts', 'cannot import worker-only code "@taskelith/nats" (packages/adapters/nats imports packages/plugins/sdlc-openspec; packages/plugins/sdlc-openspec imports "node:child_process")'],
+      ['apps/control-plane/src/launch.ts', 'relative import "../../worker/src/index.ts" crosses into another package'],
+      ['apps/control-plane/src/launch.ts', 'cannot import worker-only code "../../worker/src/index.ts" (apps/worker is worker-only)'],
+      ['apps/web/src/view.ts', 'web SPA cannot import Node or server SDK "node-pty"'],
+      ['apps/web/src/view.ts', 'cannot import process-launching module "node-pty"'],
+      ['apps/control-plane/src/forms.ts', 'cannot import worker-only code "@taskelith/worker" (apps/worker is worker-only)'],
+      ['apps/control-plane/src/forms.ts', 'cannot import process-launching module "child_process"'],
+      ['apps/control-plane/src/forms.ts', 'cannot import worker-only code "@taskelith/worker" (apps/worker is worker-only)'],
+      ['apps/control-plane/src/forms.ts', 'cannot import process-launching module "execa"'],
+    ];
+    for (const [file, message] of expected) {
+      assert(violations.some(v => v.includes(file!) && v.includes(message!)), `${file}: ${message}\n${violations.join('\n')}`);
+    }
+    assert.equal(violations.length, expected.length, violations.join('\n'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('application sources cannot import development code or another app by relative path', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-boundaries-apps-'));
+  try {
+    for (const dir of ['apps/control-plane/src', 'apps/control-plane/test', 'apps/cli/src', 'src']) mkdirSync(join(root, dir), { recursive: true });
+    writeFileSync(join(root, 'apps/control-plane/src/index.ts'), "import { fixture } from '../test/fixture.ts';\n");
+    writeFileSync(join(root, 'apps/cli/src/index.ts'), "import { plane } from '../../control-plane/src/index.ts';\n");
+    writeFileSync(join(root, 'src/cli.ts'), "import { plane } from '../apps/control-plane/src/index.ts';\n");
+
+    const violations = checkWorkspaceBoundaries(root);
+    const expected = [
+      ['apps/control-plane/src/index.ts', 'product source cannot import development scripts or tests'],
+      ['apps/cli/src/index.ts', 'relative import "../../control-plane/src/index.ts" crosses into another package'],
+      ['src/cli.ts', 'relative import "../apps/control-plane/src/index.ts" crosses into another package'],
+    ];
+    for (const [file, message] of expected) {
+      assert(violations.some(v => v.includes(file!) && v.includes(message!)), `${file}: ${message}\n${violations.join('\n')}`);
+    }
+    assert.equal(violations.length, expected.length, violations.join('\n'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('only tests, scripts, and the harness itself import the test harness package', () => {
   const root = mkdtempSync(join(tmpdir(), 'taskelith-boundaries-testing-'));
   try {

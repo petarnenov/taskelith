@@ -39,12 +39,13 @@
     "packages/testing",
     "packages/modules/*",
     "packages/adapters/*",
-    "packages/plugins/*"
+    "packages/plugins/*",
+    "apps/*"
   ],
   "scripts": {
     "build": "node --experimental-strip-types scripts/generate-contracts.ts && node --experimental-strip-types scripts/build-workspaces.ts && tsc -p tsconfig.json",
     "check:boundaries": "tsc -p tsconfig.check.json && node --experimental-strip-types scripts/check-boundaries.ts",
-    "test": "npm run build && npm run check:boundaries && mkdir -p coverage && node --experimental-strip-types --test --experimental-test-coverage --test-coverage-include='dist/**/*.js' --test-coverage-include='packages/*/dist/**/*.js' --test-coverage-include='packages/*/*/dist/**/*.js' --test-coverage-exclude='**/node_modules/**' --test-coverage-lines=75 --test-coverage-branches=75 --test-coverage-functions=75 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info test/*.test.ts 'packages/*/test/*.test.ts' 'packages/*/*/test/*.test.ts' && node --experimental-strip-types scripts/check-coverage-scope.ts coverage/lcov.info",
+    "test": "npm run build && npm run check:boundaries && mkdir -p coverage && node --experimental-strip-types --test --experimental-test-coverage --test-coverage-include='dist/**/*.js' --test-coverage-include='packages/*/dist/**/*.js' --test-coverage-include='packages/*/*/dist/**/*.js' --test-coverage-include='apps/*/dist/**/*.js' --test-coverage-exclude='**/node_modules/**' --test-coverage-lines=75 --test-coverage-branches=75 --test-coverage-functions=75 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info test/*.test.ts 'packages/*/test/*.test.ts' 'packages/*/*/test/*.test.ts' 'apps/*/test/*.test.ts' && node --experimental-strip-types scripts/check-coverage-scope.ts coverage/lcov.info",
     "prepack": "npm run build",
     "openspec": "openspec",
     "release": "semantic-release",
