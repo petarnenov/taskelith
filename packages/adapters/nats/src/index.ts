@@ -1,5 +1,16 @@
 export { applyOnce } from './deduplication.js';
-export { connectTransport, type TransportConnection, type TransportEndpoint } from './connection.js';
+export { BrokerAuthority, type BrokerAuthorityKeys, type IssuedUser } from './broker-authority.js';
+export { accountJwt, credsFile, operatorJwt, userJwt, type ClaimTime, type UserPermissions } from './broker-jwt.js';
+export { NatsBrokerCredentials } from './nats-broker-credentials.js';
+export {
+  connectTransport,
+  connectWorkerTransport,
+  type ControlPlaneConnection,
+  type TransportConnection,
+  type TransportEndpoint,
+  type TransportTls,
+  type WorkerTransportEndpoint,
+} from './connection.js';
 export { encodeJson, JetStreamPublisher, type Publication, type PublishOutcome } from './jetstream-publisher.js';
 export { OUTBOX_BATCH, OutboxPublisher, runOutboxPublisher, type OutboxSource, type PublishRound } from './outbox-publisher.js';
 export {

@@ -1,38 +1,73 @@
 import { jetstream, jetstreamManager, type JetStreamClient, type JetStreamManager } from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/nats-core';
-import { connect } from '@nats-io/transport-node';
+import { connect, credsAuthenticator } from '@nats-io/transport-node';
 import { ok, type Result } from '@taskelith/kernel';
 import { brokerFailure } from './broker-failure.js';
 import type { TransportAddress } from './transport-address.js';
 
-// Credentials and TLS are item 13's; until then the server's default user
-// applies. A worker connection takes the worker's own inbox prefix.
+// The CA the client trusts, in PEM; a client certificate is optional. The
+// installation authority that issues them is G3 item 26 (decision O3 (c)).
+export interface TransportTls {
+  readonly ca: string;
+  readonly cert?: string;
+  readonly key?: string;
+}
+
+// `creds` is the text of a NATS `.creds` file (decision D9 (a)).
 export interface TransportEndpoint {
   readonly server: URL;
   readonly address: TransportAddress;
-  readonly workerId?: string;
+  readonly creds: string;
+  readonly tls?: TransportTls;
+}
+
+// A worker connection takes the worker's own inbox prefix.
+export interface WorkerTransportEndpoint extends TransportEndpoint {
+  readonly workerId: string;
 }
 
 export interface TransportConnection {
   readonly connection: NatsConnection;
   readonly js: JetStreamClient;
-  readonly jsm: JetStreamManager;
   close(): Promise<void>;
+}
+
+// The control plane also manages streams and consumers; a worker's user is
+// not allowed the JetStream API beyond its own consumer.
+export interface ControlPlaneConnection extends TransportConnection {
+  readonly jsm: JetStreamManager;
+}
+
+export async function connectTransport(endpoint: TransportEndpoint): Promise<Result<ControlPlaneConnection>> {
+  const opened = await open(endpoint, undefined);
+  if (!opened.ok) return opened;
+  try {
+    return ok({ ...opened.value, jsm: await jetstreamManager(opened.value.connection) });
+  } catch (error) {
+    await opened.value.close();
+    return brokerFailure(`reach the JetStream API of ${endpoint.server.href}`, error);
+  }
+}
+
+export async function connectWorkerTransport(endpoint: WorkerTransportEndpoint): Promise<Result<TransportConnection>> {
+  const inboxPrefix = endpoint.address.inboxPrefix(endpoint.workerId);
+  return inboxPrefix.ok ? open(endpoint, inboxPrefix.value) : inboxPrefix;
 }
 
 // Reconnects without a limit, so a broker outage delays messages rather than
 // ending the process; unconfirmed publications are retried by their callers.
-export async function connectTransport(endpoint: TransportEndpoint): Promise<Result<TransportConnection>> {
-  const inboxPrefix = endpoint.workerId === undefined ? undefined : endpoint.address.inboxPrefix(endpoint.workerId);
-  if (inboxPrefix && !inboxPrefix.ok) return inboxPrefix;
-  let connection: NatsConnection | undefined;
+async function open(endpoint: TransportEndpoint, inboxPrefix: string | undefined): Promise<Result<TransportConnection>> {
   try {
-    connection = await connect({ servers: endpoint.server.href, inboxPrefix: inboxPrefix?.value, maxReconnectAttempts: -1 });
-    const jsm = await jetstreamManager(connection);
-    const opened = connection;
-    return ok({ connection: opened, js: jetstream(opened), jsm, close: () => opened.close() });
+    const connection = await connect({
+      servers: endpoint.server.href,
+      authenticator: credsAuthenticator(new TextEncoder().encode(endpoint.creds)),
+      inboxPrefix,
+      maxReconnectAttempts: -1,
+      // Without a CA the connection stays plain, even where the server offers TLS.
+      tls: endpoint.tls === undefined ? null : { ...endpoint.tls },
+    });
+    return ok({ connection, js: jetstream(connection), close: () => connection.close() });
   } catch (error) {
-    await connection?.close();
     return brokerFailure(`connect to ${endpoint.server.href}`, error);
   }
 }

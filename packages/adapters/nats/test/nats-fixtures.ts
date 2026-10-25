@@ -10,10 +10,10 @@ import {
   TRANSPORT_LIMITS,
   TransportAddress,
   type DeliveredMessage,
-  type TransportConnection,
+  type ControlPlaneConnection,
   type TransportLimits,
 } from '@taskelith/nats';
-import { integrationEndpoint } from '@taskelith/testing';
+import { integrationEndpoint, integrationSecret } from '@taskelith/testing';
 import { ok, type Result } from '@taskelith/kernel';
 
 export const NATS_URL = integrationEndpoint('TASKELITH_NATS_URL');
@@ -34,7 +34,7 @@ export const TEST_LIMITS: TransportLimits = {
 // server; its streams are deleted when the file ends.
 export async function installation(workers: readonly string[], server = NATS_URL): Promise<{
   address: TransportAddress;
-  transport: TransportConnection;
+  transport: ControlPlaneConnection;
 }> {
   const address = TransportAddress.of(`it${randomUUID().replaceAll('-', '').slice(0, 12)}`);
   assert.ok(address.ok);
@@ -51,13 +51,13 @@ export async function installation(workers: readonly string[], server = NATS_URL
   return { address: address.value, transport };
 }
 
-export async function connected(server: URL, address: TransportAddress, workerId?: string): Promise<TransportConnection> {
-  const transport = await connectTransport({ server, address, workerId });
+export async function connected(server: URL, address: TransportAddress): Promise<ControlPlaneConnection> {
+  const transport = await connectTransport({ server, address, creds: integrationSecret('integration.creds') });
   assert.ok(transport.ok, transport.ok ? '' : transport.error.message);
   return transport.value;
 }
 
-export async function observationReader(transport: TransportConnection, address: TransportAddress, name: string): Promise<void> {
+export async function observationReader(transport: ControlPlaneConnection, address: TransportAddress, name: string): Promise<void> {
   expectOk(await ensureObservationConsumer(transport.jsm, address, name, TEST_LIMITS));
 }
 
