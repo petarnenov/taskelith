@@ -74,8 +74,9 @@ broker_config() {
 
 start() {
   compose up --detach --wait --wait-timeout 120 postgres nats control-plane
+  # Recreates an enrolled worker from a rebuilt image; its volume stays.
   if [ -n "$(compose --profile worker ps --all --quiet worker)" ]; then
-    compose --profile worker start worker
+    compose --profile worker up --detach --no-deps --wait --wait-timeout 120 worker
   fi
 }
 
@@ -121,17 +122,19 @@ enroll() {
 }
 
 check_image() {
-  local image="$1"
-  if [ "$(docker image inspect --format '{{.Config.User}}' "$image")" != "taskelith" ]; then
+  local image="$1" user entries
+  user="$(docker image inspect --format '{{.Config.User}}' "$image")"
+  if [ "$user" != "taskelith" ]; then
     echo "installation.sh: $image does not run as the taskelith user" >&2
     exit 1
   fi
-  if [ -n "$(docker run --rm --entrypoint find "$image" /var/lib/taskelith -mindepth 1)" ]; then
+  entries="$(docker run --rm --entrypoint find "$image" /var/lib/taskelith -mindepth 1)"
+  if [ -n "$entries" ]; then
     echo "installation.sh: $image ships state in its data root" >&2
     exit 1
   fi
-  if docker run --rm --entrypoint test "$image" -e "/opt/taskelith/$2"; then
-    echo "installation.sh: $image contains the untracked file $2" >&2
+  if ! docker run --rm --entrypoint test "$image" ! -e "/opt/taskelith/$2"; then
+    echo "installation.sh: $image contains the untracked file $2, or the check failed" >&2
     exit 1
   fi
 }
@@ -150,8 +153,13 @@ check_running() {
 
 remove_project() {
   rm -f "$repository/$sentinel"
-  compose --profile setup --profile admin --profile worker down --volumes --remove-orphans >/dev/null 2>&1 || true
-  docker image rm "$control_plane_image" "$worker_image" >/dev/null 2>&1 || true
+  compose --profile setup --profile admin --profile worker down --volumes --remove-orphans >/dev/null 2>&1 \
+    && docker image rm "$control_plane_image" "$worker_image" >/dev/null 2>&1
+}
+
+# Without leftovers the images are absent, so only the final removal counts.
+remove_leftovers() {
+  remove_project || true
 }
 
 # Opt-in end-to-end check on a fresh throwaway project with random secrets
@@ -160,8 +168,8 @@ verify() {
   sentinel=".installation-sentinel-$$"
   export TASKELITH_POSTGRES_PASSWORD TASKELITH_API_PUBLISH_PORT='' TASKELITH_NATS_PUBLISH_PORT=''
   TASKELITH_POSTGRES_PASSWORD="$(od -An -tx1 -N16 /dev/urandom | tr -d ' \n')"
-  remove_project
-  trap remove_project EXIT
+  remove_leftovers
+  trap remove_leftovers EXIT
   : > "$repository/$sentinel"
   build
   check_image "$control_plane_image" "$sentinel"
@@ -177,7 +185,12 @@ verify() {
   stop
   start
   check_running
-  echo "installation.sh: built, bootstrapped, started, enrolled, restarted"
+  trap - EXIT
+  if ! remove_project; then
+    echo "installation.sh: the throwaway project was not fully removed" >&2
+    exit 1
+  fi
+  echo "installation.sh: built, bootstrapped, started, enrolled, restarted, removed"
 }
 
 case "$command" in

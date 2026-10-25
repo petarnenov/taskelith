@@ -5,6 +5,7 @@ import test from 'node:test';
 
 interface Mount {
   readonly type: string;
+  readonly source?: string;
   readonly target: string;
 }
 
@@ -23,6 +24,7 @@ interface Service {
 
 interface Composition {
   readonly services: Record<string, Service>;
+  readonly volumes?: Record<string, unknown>;
 }
 
 interface Stage {
@@ -124,15 +126,17 @@ test('long-running services run unprivileged', () => {
 });
 
 test('service data lives on named volumes', () => {
-  const dataPaths: Record<string, string> = {
-    postgres: '/var/lib/postgresql',
-    nats: '/data',
-    'control-plane': '/var/lib/taskelith',
-    worker: '/var/lib/taskelith',
+  const dataVolumes: Record<string, readonly [string, string]> = {
+    postgres: ['/var/lib/postgresql', 'postgres-data'],
+    nats: ['/data', 'nats-data'],
+    'control-plane': ['/var/lib/taskelith', 'control-plane-data'],
+    admin: ['/var/lib/taskelith', 'control-plane-data'],
+    worker: ['/var/lib/taskelith', 'worker-data'],
   };
-  for (const [name, target] of Object.entries(dataPaths)) {
-    const mount = services[name].volumes?.find((volume) => volume.target === target);
-    assert.equal(mount?.type, 'volume', name);
+  for (const [name, [target, volume]] of Object.entries(dataVolumes)) {
+    const mount = services[name].volumes?.find((candidate) => candidate.target === target);
+    assert.deepEqual([mount?.type, mount?.source], ['volume', volume], name);
+    assert.ok(Object.hasOwn(installation.volumes ?? {}, volume), volume);
   }
 });
 
