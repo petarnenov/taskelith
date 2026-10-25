@@ -1,0 +1,9 @@
+{
+  "extends": "../../../tsconfig.package.json",
+  "references": [
+    { "path": "../../kernel" },
+    { "path": "../../modules/execution" },
+    { "path": "../../testing" },
+    { "path": "../worker-journal" }
+  ]
+}
