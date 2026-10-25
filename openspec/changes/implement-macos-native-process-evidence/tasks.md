@@ -17,4 +17,4 @@
 - [x] 3.2 Add the `koffi` row to the dependency register with the owner's governance acceptance.
 - [x] 3.3 Amend the supervisor identity contract sections 4, 8, and 10.
 - [x] 3.4 Run `make verify` and record the results.
-- [ ] 3.5 Obtain independent review (Claude Code, `claude-fable-5-1`, medium) and record results.
+- [x] 3.5 Obtain independent review (Claude Code, `claude-fable-5-1`, medium, for pass 1; Codex, `gpt-6.1-sol`, medium, for passes 2 and 3 under the owner's rule of 2026-10-25) and record results.

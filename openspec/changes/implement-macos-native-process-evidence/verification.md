@@ -70,6 +70,8 @@ Assigned reviewer: Claude Code with `claude -p --model claude-fable-5-1 --effort
   2. Low: no test made a native call throw, so removing the guard would go unnoticed. `loadDarwinNative` takes the `koffi` loader as a parameter, and a test with a binding whose functions throw checks that `sysctl`, `mach_continuous_time`, and `mach_timebase_info` each return a failure.
   3. Low: contract section 12 still assigned a single-instant macOS listing. It names the listing and its two-listing proof with the residual risk of section 8.
 
+- **Pass 3, the last allowed pass — Codex CLI, session `01a172a4-2355-7830-9399-aa688f52f955`, reviewed `69cfe10` (diff `e0db869...HEAD`).** Same invocation; the prompt named the pass 2 session and asked the reviewer to confirm each resolution and then review the whole change. The header confirms `gpt-6.1-sol`, reasoning effort medium, and the read-only sandbox. Snapshots before and after were equal (`865b7657…e1f3d90f`). The reviewer confirmed all three pass 2 resolutions as correct and complete, ran 48 tests and the comment, type, boundary, and inventory checks (two tests against the live system were blocked by its sandbox), and found nothing: 0 Critical, 0 High, 0 Medium, 0 Low.
+
 ## Limitations
 
 - Native x86_64 macOS hardware was not available; x86_64 ran under Rosetta 2 on arm64. Native linux/amd64 was emulated.
@@ -79,4 +81,4 @@ Assigned reviewer: Claude Code with `claude -p --model claude-fable-5-1 --effort
 
 ## Remaining gates
 
-Independent review; integration into `dev` and archive by the coordinator; native x86_64 macOS and the macOS rows of item 25; promotion to `main`.
+Integration into `dev` and archive by the coordinator; native x86_64 macOS and the macOS rows of item 25; promotion to `main`.
