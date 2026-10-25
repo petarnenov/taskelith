@@ -8,4 +8,4 @@
 
 - [x] 2.1 Run `make doctor` on the Linux host under its own `PATH` and run the printed line in a shell.
 - [x] 2.2 Run `make verify`.
-- [ ] 2.3 Pass the independent review and record it in `verification.md`.
+- [x] 2.3 Pass the independent review and record it in `verification.md`.

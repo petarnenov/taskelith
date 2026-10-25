@@ -32,6 +32,8 @@ Reviewer: Codex (`gpt-6.1-sol`), reasoning effort medium, read-only sandbox, as 
   2. Low: the notice said that a failed `node -v` check means another Node.js comes first, which is not the only cause. The fallback now names no cause, and the test asserts the full notice for a shell without Node.js.
   3. Low: the evidence check was not recorded. It is now recorded.
 
+- **Pass 2 — session `01a173ed-3d9d-7980-99ed-9fee194af8d4`, head `805ed36`.** The header confirmed the model, reasoning effort medium, and the read-only sandbox; the snapshot was `17f15300…efe2` before and after the pass. The reviewer confirmed all three pass-1 resolutions and reviewed the whole change again. Findings: 0 Critical, 0 High, 0 Medium, 0 Low. Only this record entry and task 2.3 changed after the pass; `make verify` ran again in the `pre-push` hook of the handoff push.
+
 ## Limitations
 
 - Observed on one Linux host. The printed line uses POSIX shell syntax; other shells need their own form.
