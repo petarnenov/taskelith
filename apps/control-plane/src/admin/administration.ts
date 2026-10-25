@@ -35,9 +35,8 @@ export interface Initialization extends InitializedInstallation {
   readonly brokerServerConfig: string;
 }
 
-// The administrative commands, run directly on the control-plane host: the
-// host boundary authorizes initialization and the operator credential reset
-// (trust model section 2); the others require the operator credential.
+// Commands run on the control-plane host: host access authorizes the init and
+// the operator reset (trust model 2); the others need the operator secret.
 export class Administration {
   readonly #settings: AdministrationSettings;
   readonly #namespace: ControlPlaneNamespace;

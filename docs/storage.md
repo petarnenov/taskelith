@@ -25,7 +25,7 @@ Managed services must supply an explicit dedicated-account data root in their se
 | `worker/` | Local worker identity, installation binding, durable execution journal, and supervisor recovery records. |
 | `worker/workspaces/` | Managed project/attempt workspaces; workspace removal must not delete the worker journal or accepted evidence. |
 
-Subtree names establish ownership, not an already frozen on-disk schema. Version each runtime format before first use. Secrets, journals, accepted evidence, disposable caches, and mutable Git workspaces require separate retention and access rules. Durable control records must never live only in a cache or temporary directory.
+Subtree names establish ownership, not an already frozen on-disk schema. The [installation and enrollment contract](contracts/installation-and-enrollment.md) section 3 fixes the files of `control-plane/`. Version each runtime format before first use. Secrets, journals, accepted evidence, disposable caches, and mutable Git workspaces require separate retention and access rules. Durable control records must never live only in a cache or temporary directory.
 
 The server bootstraps a new installation identity only through an explicit initialization flow. Worker enrollment binds a local worker identity to the authenticated installation; starting a worker must not create a control-plane installation automatically. Separate workers or installations on one host need distinct explicit roots. Colocated worker/control-plane processes may share a root only through distinct role-owned subtrees and the same validated installation binding; they still use the remote protocol.
 

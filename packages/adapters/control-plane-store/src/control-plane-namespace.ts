@@ -11,9 +11,8 @@ export interface NamespaceOptions {
   readonly ownerUid: number;
 }
 
-// The control plane's subtree of the data root (storage contract): private
-// directories and files of the owning account, no symbolic links, never in
-// a Git checkout, and beside the worker subtree a colocated worker owns.
+// The control plane's private subtree of the data root (storage contract):
+// owner-only, no symbolic links, outside a Git checkout, beside `worker/`.
 export class ControlPlaneNamespace {
   readonly directory: string;
   readonly #options: NamespaceOptions;
