@@ -25,10 +25,10 @@ The coordinator developed this change itself, following the worker steps. Base r
     - a first allowlist let `cat … >`, `sed -n … >`, and `git diff >` write files. The probe files were removed.
   - Deny rules for redirection, command substitution, `tee`, `xargs`, `sed -i`, `--output`, and `-exec` were added.
   - A second probe denied `cat … >`, `>>`, `git diff --output=`, `| tee`, and `sed -i`, and allowed `git log` and `grep | head`. No file was created.
-  - The probe sessions were `ses_e8d17ac14ffeg0GBZopG88YbhX`, `ses_e8d177766ffer5qUld6Ope3GFg`, and `ses_e8d16e6bfffefvOuaiXpLerqsz`, at 13:53, 13:53, and 13:54 local time. They ran the documented invocation without `--title`: `opencode run --standalone --agent reviewer -m 'opencode/deepseek-v4.1-flash#high' --format json`. Each completed, and its JSON events carried the `sessionID`. So `-m` with the `#high` variant was accepted.
+  - The probe sessions were `ses_e8d17ac14ffeg0GBZopG88YbhX`, `ses_e8d177766ffer5qUld6Ope3GFg`, and `ses_e8d16e6bfffefvOuaiXpLerqsz`, at 13:53, 13:53, and 13:54 local time. They ran the invocation documented at that time, without `--title`: `opencode run --standalone --agent reviewer -m 'opencode/deepseek-v4.1-flash#high' --format json`. Each completed, and its JSON events carried the `sessionID`. So `-m` with the `#high` variant was accepted.
   - After review pass 1, `sed -n` and `git grep` were removed from the allowlist, and `--pre`, `--ext-diff`, and `--textconv` were denied.
   - **Root cause of the stalls.** `opencode run` waited for the end of stdin, which the coordinator's shell kept open. The OpenCode database held no message for the stalled runs. With `< /dev/null`, five pings in a row (`stdin-test-1` to `-5`) succeeded in 4 to 6 seconds. Two runs that did submit their prompt stalled in the provider, for 38 and 162 seconds in one step.
-  - **Model.** The owner then chose `opencode/kimi-k3`.
+  - **Model.** The owner chose `opencode/kimi-k3` at about 14:40 local time, before the root cause was found.
   - **Qualification with kimi-k3.** Session `ses_e8cc1ded3ffeuEHKfJbqCjB4Ea`, 15:26:53 to 15:32:22 local time.
     - The documented invocation with `< /dev/null` reviewed the same target as the trial.
     - The SHA-256 snapshots before and after were equal.
@@ -38,7 +38,25 @@ The coordinator developed this change itself, following the worker steps. Base r
     - Denied: `cat … >`, `| tee`, process substitution, and `rg --pre`.
     - Allowed: `git log --pretty=oneline` and `grep -c`.
     - No file was created.
-  - Earlier stalls, recorded for history: a qualification run of the full documented invocation started at about 14:20 local time. It produced no output in 10 minutes, and the snapshot stayed equal. Two pings at about 14:31, with and without `-m`, also produced no output in 2 minutes. Under "Unavailable reviewer", OpenCode is unavailable for 30 minutes from those attempts. The cause, the service or the network, is not established.
+  - Earlier stalls, recorded for history: a qualification run of the full documented invocation started at about 14:20 local time. It produced no output in 10 minutes, and the snapshot stayed equal. Two pings at about 14:31, with and without `-m`, also produced no output in 2 minutes. Under "Unavailable reviewer", OpenCode is unavailable for 30 minutes from those attempts. For these runs the cause was not established at the time; the open stdin found later explains them.
+
+## OpenCode attempts
+
+Attempts with the `reviewer` agent and `kimi-k3`, from the OpenCode database. Times are local.
+
+| Session | Time | Kind | Outcome |
+| --- | --- | --- | --- |
+| `ses_e8ce915eaffevzB5STQIQfREMd` | 14:44 | ping | replied in 4 s |
+| none | 14:44 to 15:04 | qualification run | no session: stdin open, stopped after 20 min |
+| `ses_e8cd02c28ffeZXScLjTnf0jz2t` | 15:11 to 15:15 | review with logs | ran 14 steps, one of 162 s of generation; stopped by a 4 min limit |
+| none | 15:16 to 15:23 | 8 pings | no session: stdin open |
+| `ses_e8cc7836dffe5D3OltSiXBNhGP` | 15:20 | ping | replied |
+| `ses_e8cc3e7bfffeBKAiH4q2BOc9gf` | 15:24 | ping | stalled 38 s in the model, stopped by a 40 s limit |
+| `stdin-test-1` to `-5` | 15:25 | pings with `< /dev/null` | each replied in 4 to 6 s |
+| `ses_e8cc1ded3ffeuEHKfJbqCjB4Ea` | 15:26 to 15:32 | qualification review | report: Low 4 only |
+| `ses_e8cbc2464ffeIZ3c0BkKWYsFGO`, `ses_e8cb0fbc5ffevszct1h75T3zS5`, `ses_e8cab5f2dffesp47O3gyFLIlzZ`, `ses_e8caaa916ffe1ooRnzMXOIrTOL` | 15:35 to 16:00 | permission probes | as described above and in pass 3 below |
+
+The pings and probes diagnosed the tool and reviewed no change, so the coordinator did not treat them as review attempts under "Unavailable reviewer". The 14:44 ping falls inside the 30 minutes after the 14:20 and 14:31 attempts. That departs from the rule's no-retry clause, and it is recorded here as a departure. An owner's investigation in their own OpenCode session confirmed the cause in OpenCode's source: `packages/cli/src/run/run.ts` reads stdin to its end whenever stdin is not a terminal, even when a message argument is given. It also found that retries on rate limits are silent, and that the 162 s step was long generation of 13,279 reasoning tokens.
 
 ## Trial findings and their resolution
 
@@ -63,7 +81,7 @@ The coordinator developed this change itself, following the worker steps. Base r
 - The owner's rule is quoted as the owner's, and the derived mechanics are marked as the coordinator's.
 - The one-reviewer rule, the ban on cross-review, and the three-pass cap are unchanged.
 - The governance policy, the protocol, the skill, `AGENTS.md`, and the spec agree.
-- Each requirement is under 500 characters: 430, 216, and 359.
+- Each requirement is under 500 characters: 430, 216, and 350.
 - The change adds no external link. All content is English.
 
 ## Checks
@@ -120,9 +138,29 @@ Findings: Critical 0, High 0, Medium 3, Low 11.
 13. Low: the qualification target and the post-edit probe were missing. Fixed.
 14. Low: the time of pass 1 was missing. Fixed.
 
+### Pass 3
+
+Session `e2a1beae-8323-4e97-a99b-5855d7088057`, model `claude-fable-5-1` confirmed in the JSON `modelUsage`, at `7edeef8`. The SHA-256 snapshots before and after were equal. The pass 2 findings were confirmed resolved, except as listed.
+
+Findings: Critical 0, High 0, Medium 3, Low 8. This is the third pass, so the remaining decision goes to the owner.
+
+1. Medium: `git diff*` matched `git difftool`, which runs external programs. Fixed in the configuration: git subcommands match exactly or with a following space, and `difftool` and `--no-index` are denied. Probe `ses_e8cb0fbc5ffevszct1h75T3zS5` denied `git difftool`, `git diff --no-index`, and `git show-ref`.
+2. Medium: reading outside the worktree through the shell was not proven denied. The same probe read `/etc/hosts` with `cat` and `head`, so the claim was false. Fixed: arguments that are absolute, start with `~`, or go up with `..` are denied. Probes `ses_e8cab5f2dffesp47O3gyFLIlzZ` and `ses_e8caaa916ffe1ooRnzMXOIrTOL` denied `cat /etc/hosts`, `head -1 ~/.zshrc`, and `cat ../…`. They allowed `git diff HEAD~1 --stat` and reads inside the worktree. The read tool denied `/etc/hosts` as `external_directory`.
+3. Medium: the attempt record was incomplete, and its chronology was wrong. Fixed with the table under "OpenCode attempts" and the departure noted there.
+4. Low: the requirement length. Fixed: 350.
+5. Low: a stale "not established". Fixed.
+6. Low: "the documented invocation" was stale. Fixed: "the invocation documented at that time".
+7. Low: coordinator step 1 omitted the requirements skip. Fixed.
+8. Low: the model's variant was not explicit. Fixed: no variant is passed, and the default applies and is recorded.
+9. Low: a duplicated model phrase. Fixed.
+10. Low: `--standalone` was justified by a misattributed cause. Fixed.
+11. Low: OpenCode's first official pass is delayed by a rotation round. Recorded under Limitations.
+
+These fixes are not independently reviewed unless the owner allows another pass.
+
 ## Limitations
 
-Documentation only. The checks ran on macOS arm64. The OpenCode configuration is the user's local file, outside the repository. No change has yet had an official pass by OpenCode; the qualification run reviewed an already merged change.
+Documentation only. The checks ran on macOS arm64. The OpenCode configuration is the user's local file, outside the repository. No change has yet had an official pass by OpenCode; the qualification run reviewed an already merged change. Because this change was assigned to Claude Code by exception, the next change goes to Codex, and OpenCode's first official pass comes one round later.
 
 ## Remaining gates
 
