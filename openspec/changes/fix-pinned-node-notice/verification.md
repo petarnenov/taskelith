@@ -17,11 +17,11 @@ Ubuntu 24.04.5 LTS, Linux 6.8.0-147-generic, x86_64; nvm 0.40.3 with Node.js v24
 
 ## Checks
 
-- `node --experimental-strip-types --test test/environment-checks.test.ts` passed (16 passed, 0 failed).
+- Before pass 1, `node --experimental-strip-types --test test/environment-checks.test.ts` passed (16 passed, 0 failed).
 - `npm run openspec -- validate fix-pinned-node-notice --strict` passed.
-- `make doctor` under the host's own `PATH` passed all 7 checks and printed: "These checks ran under Node.js v24.22.1, which make doctor and make verify select on their own; your shell uses v24.22.0. To run npm or node directly, run 'nvm use' and check that 'node -v' prints v24.22.1; if it does not, another Node.js comes first in PATH, so run: export PATH="/home/petar/.nvm/versions/node/v24.22.1/bin:$PATH"". After the printed line was evaluated in a shell, `command -v node` named the nvm v24.22.1 binary and `node -v` printed v24.22.1.
+- Before pass 1, `make doctor` under the host's own `PATH` passed all 7 checks and printed: "These checks ran under Node.js v24.22.1, which make doctor and make verify select on their own; your shell uses v24.22.0. To run npm or node directly, run 'nvm use' and check that 'node -v' prints v24.22.1; if it does not, another Node.js comes first in PATH, so run: export PATH="/home/petar/.nvm/versions/node/v24.22.1/bin:$PATH"". After the printed line was evaluated in a shell, `command -v node` named the nvm v24.22.1 binary and `node -v` printed v24.22.1.
 - `make verify` at `90cd1d6` under the host's own `PATH` passed (929 tests, 914 passed, 0 failed, 15 skipped on macOS-only tests; coverage 98.94% lines, 91.75% branches, 98.52% functions; strict OpenSpec validation 53 passed, 0 failed). It passed again at `8ec5802`, before pass 1 (914 passed, 0 failed).
-- After the pass-1 fixes: the notice test passed (17 passed, 0 failed), and `make doctor` under the host's own `PATH` printed the line as `export PATH='/home/petar/.nvm/versions/node/v24.22.1/bin':"$PATH"`.
+- After the pass-1 fixes: the notice test passed (17 passed, 0 failed), and `make doctor` under the host's own `PATH` printed the line as `export PATH='/home/petar/.nvm/versions/node/v24.22.1/bin':"$PATH"`. `make verify` at `71410ac`, before pass 2, passed (930 tests, 915 passed, 0 failed, 15 skipped; coverage 98.95% lines, 91.77% branches, 98.52% functions).
 
 ## Independent review
 
