@@ -25,9 +25,10 @@ Revision: a fresh worktree of `origin/dev` at `61e81f4`, with this change's file
 | `make setup`, with nvm's v24.22.1 first in `PATH` | Passed: npm 12.2.1, `npm ci --ignore-scripts`, hooks, merge driver; all 7 doctor checks passed | 37.9 s |
 | `make doctor`, after setup, same `PATH` | All 7 checks passed | 2.3 s |
 | `make verify`, same `PATH`, cold image cache | Passed | 4 min 4 s |
+| `make verify`, same `PATH`, four warm runs at the committed record | Run 1 failed one test (finding F2); runs 2 to 4 passed | 1 min 51 s to 2 min 13 s |
 | `make verify-linux-cgroup`, four runs | Passed in each run, 13 of 13 tests | 46.9 s with the image build, then 23.6 to 23.9 s |
 
-`make verify` in detail:
+`make verify` in detail, from the cold run:
 
 - Comment length check passed.
 - `make test` started PostgreSQL, NATS, and Toxiproxy as the isolated Compose project `taskelith-2480504214-verify`, pulled the images, waited until all three were healthy, ran `npm test`, and then stopped and removed the containers and the network. No container, network, or secrets directory under `/tmp/taskelith-services` remained afterwards.
@@ -49,6 +50,17 @@ v24.22.0
 ```
 
 As a result, `make setup` installs the pinned version and sets the nvm default but then fails. `make doctor` reports the Node.js and npm checks as failed with the remedy `make setup`, which does not help. `make verify` stops at its toolchain check, and so does the `pre-push` hook. This contradicts the `development-environment` scenario "Shell on another Node.js after setup", which expects the pinned version when nvm has it installed. The cause is the host's `PATH`, not Linux itself. The workaround used for the runs above was to put `~/.nvm/versions/node/v24.22.1/bin` first in `PATH` for these commands. No fix is part of this change; the coordinator assigns one separately.
+
+F2. **The event-loop lag test failed once under a full run.** The test "an idle window reads below the resolution" (`packages/adapters/node-observability/test/node-observability.test.ts:96`) samples the event-loop lag over a 100 ms idle window and asserts that the p99 is below 10 ms. In one of five `make verify` runs it failed, while the other 867 tests passed:
+
+```text
+test at packages/adapters/node-observability/test/node-observability.test.ts:96:1
+✖ an idle window reads below the resolution (135.284076ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+    assert.ok(metrics.series('event-loop.lag') .last < 0.01)
+```
+
+The same test passed in ten runs of its file alone. The likely cause is concurrent load from the other test files, which `node --test` runs in parallel on this 8-CPU host, so the test is timing-sensitive; the assertion has no message, so the measured lag was not recorded. A failure of this kind also blocks a push through the `pre-push` hook. No fix is part of this change.
 
 ## Not observed
 

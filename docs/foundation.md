@@ -21,7 +21,7 @@ As of 2026-10-25. This is a readiness ledger, not evidence that the architecture
 - [Data namespace design](storage.md): platform defaults, explicit-root precedence, role separation, and identity-conflict behavior for future runtime implementation.
 - [Identity, enrollment, and trust boundary contract](trust-model.md): installation bootstrap/recovery authority, project-scoped roles, per-worker enrollment/revocation, trusted-host execution boundary, and plugin capability scoping.
 - [Provisional operational targets and resource budgets](operational-targets.md): pre-declared worker/project/delegation resource budgets, retention horizons, and provisional RPO/RTO and latency baselines for the 10, 100, and 1000 machine stages.
-- [Linux verify observation](linux-verify-observation.md) of 2026-10-25: `make doctor`, `make setup`, `make verify`, and `make verify-linux-cgroup` on an x86_64 Ubuntu 24.04 host, with one recorded finding.
+- [Linux verify observation](linux-verify-observation.md) of 2026-10-25: `make doctor`, `make setup`, `make verify`, and `make verify-linux-cgroup` on an x86_64 Ubuntu 24.04 host, with two recorded findings.
 - Automated repository typechecking (`tsconfig.check.json`) and hexagonal/Go boundary enforcement (`scripts/check-boundaries.ts`, `test/check-boundaries.test.ts`) wired into `npm test`.
 
 ## G0 work items
