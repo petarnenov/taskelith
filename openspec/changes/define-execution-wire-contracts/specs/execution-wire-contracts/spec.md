@@ -70,6 +70,10 @@ The AsyncAPI document SHALL define observations for assignment acceptance and re
 ### Requirement: Confirmation and inventory
 The AsyncAPI document SHALL define a cumulative confirmation of a positive `confirmedThrough` per worker and journal. It SHALL also define an inventory report of the held assignments and their executions' journal states with uncertainty beside them, sent in numbered parts of one report identity and an increasing snapshot number, each with the last journal sequence the report reflects and small enough for the broker's `1 MiB` payload limit.
 
+#### Scenario: Snapshot answering a request
+- **WHEN** an inventory part carries the `requestId` of an inventory request
+- **THEN** it is valid, and the inventory request is valid on the command channel
+
 #### Scenario: Uncertainty as a state
 - **WHEN** an inventory execution has the state `uncertain`
 - **THEN** validation fails
@@ -81,6 +85,13 @@ The AsyncAPI document SHALL define a cumulative confirmation of a positive `conf
 #### Scenario: Empty confirmation
 - **WHEN** a confirmation has `confirmedThrough` 0
 - **THEN** validation fails
+
+### Requirement: Inventory request
+The AsyncAPI document SHALL define an inventory request on the command channel with a fresh `requestId`, which a snapshot answering it SHALL return. Only a snapshot that answers the latest request of its worker SHALL prove a journal rollback, by a `throughSequence` below the highest applied sequence or by an omitted accepted assignment. A rollback SHALL start reconciliation and keep ownership and the reservation.
+
+#### Scenario: Rollback in a fresh snapshot
+- **WHEN** a snapshot answering the current request has a `throughSequence` below the highest sequence applied from its journal
+- **THEN** the contract page classifies it as a rollback, and a snapshot without that `requestId` proves none
 
 ### Requirement: Wire vocabularies
 The wire enumerations of refusal, non-retryable launch rejection, launch rejection, revocation, cancellation, and assignment end reasons, and of hard controls, SHALL equal the vocabularies of the execution and scheduling domains, except that the worker's refusal reasons omit `protocol-not-supported`, which the control plane derives from a command rejection.

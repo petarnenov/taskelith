@@ -217,6 +217,10 @@ test('the control plane confirms a journal prefix and the worker reports its inv
 
   assert.ok(checkMessageSchema('ObservationsConfirmed', confirmation).ok);
   assert.ok(checkMessageSchema('InventoryReported', inventory).ok);
+  const request = { messageType: 'worker.inventory.requested', schemaVersion: 1, protocolVersion: 1, issuedAt: AT, workerId: 'worker-1', requestId: 'request-1' };
+  assert.ok(checkMessageSchema('InventoryRequested', request).ok);
+  assert.ok(checkMessageSchema('InventoryReported', { ...inventory, requestId: request.requestId }).ok);
+  assert.ok(!checkMessageSchema('InventoryRequested', { ...request, requestId: undefined }).ok);
   assert.ok(!checkMessageSchema('InventoryExecution', { ...inventory.executions[0], state: 'uncertain' }).ok);
   assert.ok(!checkMessageSchema('ObservationsConfirmed', { ...confirmation, confirmedThrough: 0 }).ok);
 });
@@ -231,6 +235,7 @@ test('the largest valid inventory part fits the broker payload limit', () => {
     schemaVersion: Number.MAX_SAFE_INTEGER,
     protocolVersion: Number.MAX_SAFE_INTEGER,
     reportId: longest,
+    requestId: longest,
     snapshot: Number.MAX_SAFE_INTEGER,
     part: 4096,
     parts: 4096,

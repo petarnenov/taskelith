@@ -45,7 +45,7 @@ Each command is a `CommandMetadata` envelope that also requires `attemptId`, `wo
 - A cancellation without `executionId` targets the attempt; with it, only that execution. A cancellation is never proof of termination.
 - What an offer executes is not part of G2: item 15 runs a test-only scripted process chosen by the worker's test configuration, and the harness invocation joins the offer with the agent harness port in G3.
 
-The control plane also sends `execution.observations.confirmed` on the command subject. It is not a command: it has no `commandId`, the worker does not journal it in its inbox, and applying it twice changes nothing.
+The control plane also sends `execution.observations.confirmed` and `worker.inventory.requested` (section 6) on the command subject. Neither is a command: they have no `commandId`, the worker does not journal them in its inbox, and receiving either twice changes nothing.
 
 ## 5. Observations
 
@@ -76,6 +76,10 @@ The schemas also fix the dependencies between fields:
   - The control plane applies a snapshot only when it has every part and every observation through `throughSequence`. A part of a lower `snapshot` than one already received from the same journal is discarded, so a delayed snapshot never replaces a later one.
   - An omission proves lost local history only for an assignment whose acceptance the control plane applied from the same journal at a sequence up to `throughSequence`, and, after disk loss, for one accepted under an earlier journal of the worker; it is then reconciled as worker journal section 8 states.
   - An unfinished assignment that the snapshot omits without such an acceptance may be one the worker had not received when it took the snapshot. The control plane re-sends its offer with the same `commandId` only if no grant is recorded, which the worker's inbox makes idempotent, and draws no other conclusion from the omission.
+- **Inventory request:** `throughSequence` alone cannot tell a journal rolled back to before an applied acceptance from a delayed snapshot. When the control plane sees a worker reconnect, and whenever a snapshot omits an unfinished assignment it cannot classify, it sends `worker.inventory.requested` with a fresh random `requestId` and keeps only the latest one per worker. The worker answers every request with a snapshot that carries that `requestId`, taken after the request arrived. A snapshot is **fresh** when its `requestId` is the current one of its worker, so it reflects the journal after every acceptance and grant the control plane had applied when it sent the request.
+  - In a fresh snapshot, a `throughSequence` below the highest sequence the control plane applied from that journal is a rollback, and so is the omission of an unfinished assignment whose acceptance it applied before the request.
+  - A rollback starts reconciliation as worker journal section 8 states: ownership and the capacity reservation are kept, and nothing is assumed about prior side effects.
+  - A snapshot with another `requestId`, or without one, is applied only under the rules above and never proves a rollback.
 
 ## 7. HTTP operations
 
@@ -97,4 +101,4 @@ The operator credential is the installation bootstrap credential of decision D10
 - **Items 16, 17, and 19:** the HTTP operations of section 7, with runtime validation against these schemas; the harness side of delegation is G3's.
 - **Item 18:** placement only on a worker with a common protocol version, release on `protocol-not-supported`, and the delegation checks of capacity reservation section 7.
 - **Item 20:** the order of section 3 for every delivered command, and the observations of section 5.
-- **Item 21:** the confirmation and the inventory of section 6.
+- **Item 21:** the confirmation, the inventory, and the inventory request with its rollback rule of section 6.

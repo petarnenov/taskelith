@@ -371,7 +371,7 @@
             }
           },
           "403": {
-            "description": "The worker does not own the attempt at its current ownership generation.",
+            "description": "The worker never held the attempt at the stated ownership generation. Evidence of a generation it held earlier is stored with ownershipCurrent false.",
             "content": {
               "application/json": {
                 "schema": {

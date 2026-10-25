@@ -30,6 +30,9 @@
         },
         "observationsConfirmed": {
           "$ref": "#/components/messages/observationsConfirmed"
+        },
+        "inventoryRequested": {
+          "$ref": "#/components/messages/inventoryRequested"
         }
       }
     },
@@ -108,6 +111,9 @@
         },
         {
           "$ref": "#/channels/workerCommands/messages/observationsConfirmed"
+        },
+        {
+          "$ref": "#/channels/workerCommands/messages/inventoryRequested"
         }
       ]
     },
@@ -660,6 +666,41 @@
           }
         }
       },
+      "InventoryRequested": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Asks the worker for a fresh snapshot of its journal. It is not a command and is not journaled; only the latest request of a worker is current.",
+        "required": [
+          "messageType",
+          "schemaVersion",
+          "protocolVersion",
+          "issuedAt",
+          "workerId",
+          "requestId"
+        ],
+        "properties": {
+          "messageType": {
+            "type": "string",
+            "const": "worker.inventory.requested"
+          },
+          "schemaVersion": {
+            "$ref": "#/components/schemas/SchemaVersion"
+          },
+          "protocolVersion": {
+            "$ref": "#/components/schemas/ProtocolVersion"
+          },
+          "issuedAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "workerId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "requestId": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "A fresh random value for every request, which the snapshot answering it returns."
+          }
+        }
+      },
       "InventoryReported": {
         "type": "object",
         "additionalProperties": false,
@@ -693,6 +734,10 @@
           "reportId": {
             "$ref": "#/components/schemas/Identifier",
             "description": "The same for every part of one snapshot."
+          },
+          "requestId": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The inventory request this snapshot answers, taken after the request arrived."
           },
           "snapshot": {
             "type": "integer",
@@ -1905,6 +1950,13 @@
         "title": "execution.observations.confirmed",
         "payload": {
           "$ref": "#/components/schemas/ObservationsConfirmed"
+        }
+      },
+      "inventoryRequested": {
+        "name": "inventoryRequested",
+        "title": "worker.inventory.requested",
+        "payload": {
+          "$ref": "#/components/schemas/InventoryRequested"
         }
       },
       "assignmentAccepted": {
