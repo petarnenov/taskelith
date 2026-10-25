@@ -67,6 +67,7 @@ Recorded before pass 1.
 - At `beb3b94`, after the pass-1 fixes, with every file tracked: 745 tests passed, 0 failed; coverage 99.18% lines, 92.95% branches, 98.97% functions. The comment, boundary, coverage-scope, dependency-inventory, and OpenSpec checks pass.
 - At `1a02c86`, after the pass-2 fixes: 745 tests passed, 0 failed; coverage 99.21% lines, 93.03% branches, 98.98% functions. The comment, boundary, coverage-scope, dependency-inventory, and OpenSpec checks pass.
 - At `af46cb7`, after the unreviewed pass-3 fixes: 746 tests passed, 0 failed; coverage 99.25% lines, 93.16% branches, 98.98% functions. The comment, boundary, coverage-scope, dependency-inventory, and OpenSpec checks pass.
+- At `57f8cec`, after merging `origin/dev` at `604dcbc` (`c8efb2c`) and regenerating the dependency inventory: 753 tests passed, 0 failed; coverage 99.23% lines, 93.15% branches, 98.98% functions. The merge brought the shared test helpers and a harness manifest rule, and changes no requirement, contract, implementation, or test of this change, so no review was repeated.
 - `npm run openspec -- validate implement-nats-transport --strict` passed at each of these revisions.
 
 ## Independent review
