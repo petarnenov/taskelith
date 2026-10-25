@@ -5,7 +5,7 @@ The worker application of a Taskelith installation: its settings, its enrollment
 ## ADDED Requirements
 
 ### Requirement: Enrollment on first start
-A worker whose root holds no identity SHALL enroll only with the token its configuration names, after it claimed the root, and SHALL create its journal only after the control plane enrolled it. Without a token, or after a refused or failed enrollment, it SHALL create nothing. A worker with an identity SHALL NOT enroll again.
+A worker whose root holds no identity SHALL enroll only with the token its configuration names, after it claimed the root, and SHALL create its journal only after the control plane enrolled it. Without a token, or after a refused or failed enrollment, it SHALL leave no `worker/` subtree. A worker with an identity SHALL NOT enroll again.
 
 #### Scenario: Refused token
 - **WHEN** the control plane refuses the token with `token-invalid`

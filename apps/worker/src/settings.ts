@@ -17,7 +17,7 @@ export interface WorkerSettings {
   readonly controlPlaneUrl: URL;
   readonly natsUrl: URL;
   readonly natsTls?: TransportTls;
-  // Read only by the first start, which enrolls the worker with it.
+  // Used only by the first start, which enrolls the worker with it.
   readonly enrollmentToken?: string;
   readonly host: WorkerHost;
   readonly capacity: WorkerCapacity;

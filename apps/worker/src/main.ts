@@ -56,7 +56,8 @@ export async function serveUntilStopped(worker: RunningWorker, host: ServiceProc
 }
 
 if (import.meta.main) {
-  const worker = await workerMain(process.env, (line) => process.stderr.write(`${line}\n`));
+  const writeLine = (line: string) => void process.stderr.write(`${line}\n`);
+  const worker = await workerMain(process.env, writeLine);
   if (worker === undefined) process.exitCode = 1;
-  else await serveUntilStopped(worker, process, (line) => process.stderr.write(`${line}\n`));
+  else await serveUntilStopped(worker, process, writeLine);
 }

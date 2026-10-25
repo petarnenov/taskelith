@@ -40,7 +40,8 @@ Recorded before pass 1.
 
 - Before pass 1, at `41f2de5`: 1016 tests passed, 0 failed; coverage 99.23% lines, 91.79% branches, 98.89% functions. The comment, boundary, coverage-scope, dependency-inventory, contract-compatibility, OpenSpec, archive, and package checks pass.
 - After the pass-1 fixes, at `ddbf560`: 1019 tests passed, 0 failed; coverage 99.20% lines, 91.78% branches, 98.89% functions; every other check passes.
-- After the pass-2 fixes: 1021 tests passed, 0 failed; coverage 99.21% lines, 91.81% branches, 98.85% functions; every other check passes.
+- After the pass-2 fixes, at `aaff617`: 1021 tests passed, 0 failed; coverage 99.21% lines, 91.81% branches, 98.85% functions; every other check passes.
+- After the pass-3 fixes (unreviewed): 1021 tests passed, 0 failed; coverage 99.21% lines, 91.83% branches, 98.89% functions; every other check passes.
 
 ## Independent review
 
@@ -77,3 +78,28 @@ The reviewer is Claude Code with model `claude-fable-5-1` and effort `medium`, s
 | L3 | The credential read took the owner's uid from the worker's dependencies, while the root checks used the running account's. | Fixed: both use `ownerUid()` of the adapter, and the dependency is gone. |
 | L4 | A failed close at shutdown was silent and exited with status 0. | Fixed: it is written, redacted, and sets the exit status to 1; the test checks both. |
 | L5 | A failure after `prepareDataRoot` created `worker/` left it behind. | Fixed: the claim removes it, except for a concurrent claim's `conflict`. |
+
+### Pass 3
+
+- Session `6edd6a9b-73e3-4758-a6c5-4a59d7dcd353`, 2026-10-25, on `aaff617`; `claude-fable-5-1` in `modelUsage`.
+- Snapshot `a8363624…3373` before and after: unchanged. The reviewer ran only `npm run verify:comments`.
+- It confirmed every resolution of pass 2, and that the resolutions of pass 1 still hold, with pass-1 L4 deferred.
+- Result: Critical 0, High 0, Medium 0, Low 4. As a Low-only pass, its fixes are made without another review, and they are unreviewed.
+
+| # | Finding | Disposition (unreviewed fix) |
+| --- | --- | --- |
+| L1 | The pass-2 check line named no revision. | Fixed: it names `aaff617`. |
+| L2 | The settings comment said the token is read only by the first start. | Fixed: "used only by the first start". |
+| L3 | The entry built the same standard-error writer twice. | Fixed: one `writeLine`. |
+| L4 | The requirement said a refused enrollment creates nothing, while a data root directory the claim created stays. | Fixed in the documents: the requirement says no `worker/` subtree is left, and section 10 says the empty data root directory stays. |
+
+## Limitations
+
+- Pass-1 L4: the `EnrollmentRequest` description in `execution.openapi.json` still says the worker created its journal before enrolling. Changing it is a wire contract change, left to the coordinator.
+- The integration test runs the worker on macOS against the Compose services; the Linux worker image is item 23.
+- A failed first broker connection fails the start (design D6) until the offline mode of 20d.
+
+## Remaining gates
+
+- Coordinator integration into `dev` and archive.
+- 20b to 20e.
