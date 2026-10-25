@@ -5,6 +5,7 @@ import {
   EXECUTION_STATES,
   EXECUTION_TRANSITIONS,
   classifyObservation,
+  isGrantExpired,
   isTerminalExecution,
   parseExitStatus,
   parseRecoveryEpoch,
@@ -14,19 +15,22 @@ import {
   type ObservationId,
   type ObservationPosition,
   type ProducerCursor,
+  type Sequence,
 } from '@taskelith/execution';
-import { OTHER_WORKER, WORKER, authorized, failureOf, value } from './fixtures.ts';
+import { OTHER_WORKER, PARAMETERS, T3, WORKER, authorized, failureOf, grantIssue, value } from './fixtures.ts';
 
 const JOURNAL = value(parseIdentifier('JournalId', 'journal-1'));
 const NEW_JOURNAL = value(parseIdentifier('JournalId', 'journal-2'));
 const observationId = (text: string): ObservationId => value(parseIdentifier('ObservationId', text));
 
-function position(sequence: number, id = `observation-${sequence}`, journalId = JOURNAL): ObservationPosition {
-  return { workerId: WORKER, journalId, sequence, observationId: observationId(id) };
+const sequence = (number: number): Sequence => value(parseSequence(number));
+
+function position(number: number, id = `observation-${number}`, journalId = JOURNAL): ObservationPosition {
+  return { workerId: WORKER, journalId, sequence: sequence(number), observationId: observationId(id) };
 }
 
-function applied(...sequences: number[]): ProducerCursor {
-  return sequences.reduce((cursor, sequence) => value(recordAppliedSequence(cursor, sequence)), startProducerCursor(WORKER, JOURNAL));
+function applied(...numbers: number[]): ProducerCursor {
+  return numbers.reduce((cursor, number) => value(recordAppliedSequence(cursor, sequence(number))), startProducerCursor(WORKER, JOURNAL));
 }
 
 test('the execution transition table allows exactly the transitions of the launch contract', () => {
@@ -36,6 +40,14 @@ test('the execution transition table allows exactly the transitions of the launc
   assert.deepEqual(EXECUTION_TRANSITIONS.exited, []);
   assert.deepEqual(EXECUTION_TRANSITIONS['not-started'], []);
   assert.equal(isTerminalExecution(authorized().task.attempts[0]!.executions[0]!), false);
+});
+
+test('a grant keeps its parameters when the issuing input changes later', () => {
+  const issue = { ...grantIssue(), parameters: { ...PARAMETERS } };
+  const { grant } = authorized(undefined, {}, issue);
+  issue.parameters.ttlMilliseconds = 3_600_000;
+  assert.equal(isGrantExpired(grant, T3), true);
+  assert.ok(Object.isFrozen(grant.parameters));
 });
 
 test('exit statuses are a code, a signal name, or unknown', () => {
@@ -51,17 +63,19 @@ test('recovery epochs and sequences are positive integers', () => {
   assert.equal(value(parseRecoveryEpoch(2)), 2);
   assert.equal(failureOf(parseRecoveryEpoch(0)).code, 'invalid');
   assert.equal(value(parseSequence(1)), 1);
-  assert.equal(failureOf(parseSequence(1.5)).code, 'invalid');
+  for (const invalid of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.equal(failureOf(parseSequence(invalid)).code, 'invalid');
+  }
 });
 
 test('the contiguous prefix is confirmed, and a gap holds later sequences until it closes', () => {
   const gapped = applied(1, 2, 4, 5);
   assert.equal(gapped.confirmedThrough, 2);
   assert.deepEqual(gapped.appliedAbove, [4, 5]);
-  const closed = value(recordAppliedSequence(gapped, 3));
+  const closed = value(recordAppliedSequence(gapped, sequence(3)));
   assert.equal(closed.confirmedThrough, 5);
   assert.deepEqual(closed.appliedAbove, []);
-  assert.equal(failureOf(recordAppliedSequence(closed, 4)).code, 'conflict');
+  assert.equal(failureOf(recordAppliedSequence(closed, sequence(4))).code, 'conflict');
 });
 
 test('a repeated publication is a duplicate, and a reused sequence with another identity is a rollback', () => {

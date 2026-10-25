@@ -71,11 +71,15 @@ A writer that changes a compared value SHALL find every attempt that owns an exe
 - **THEN** the writer finds the execution, revokes the grant, and requests cancellation
 
 ### Requirement: Start observations
-A start SHALL be decided in this order: `foreign` when its grant or execution belongs to another worker; `duplicate` when a start is recorded; `quarantine-evidence` in quarantine or at another epoch; `historical` for an `exited` execution; `started` for the owning `authorized` execution under its own grant; otherwise `unauthorized-start`, which cancels that execution only.
+A start SHALL be `foreign` when its grant or execution belongs to another worker; `duplicate` when the execution has a start recorded and the grant is bound to it or names the recorded one; `quarantine-evidence` in quarantine or at another epoch; `unauthorized-start` without a grant of that execution, cancelling that execution only; then `historical` for an `exited` execution and `started` for the owning one.
 
 #### Scenario: Late start of an exited execution
-- **WHEN** execution A exited, execution B was authorized, and a first start of A arrives
+- **WHEN** execution A exited, execution B was authorized, and a first start of A under A's grant arrives
 - **THEN** the start is recorded as history, A stays `exited`, and nothing is cancelled
+
+#### Scenario: Exited execution under an unknown grant
+- **WHEN** a start of an exited execution names a grant unknown to the authority or bound to another execution
+- **THEN** it is an `unauthorized-start`
 
 ### Requirement: Exit and not-started facts
 A worker SHALL report only its own executions' facts, and another worker's report SHALL be rejected with `forbidden`. An exit SHALL move an `authorized` or `started` execution to `exited`, and `not-started` an `authorized` one; a repeated fact SHALL change nothing, and a fact the current state does not allow SHALL be rejected with `precondition-failed`.
@@ -99,7 +103,7 @@ A cancellation request SHALL be recorded once on an attempt that has not ended, 
 - **THEN** the attempt stays running until the exit is recorded, and then ends with `cancelled` set
 
 ### Requirement: Attempt outcomes and task outcome facts
-An attempt SHALL end only when no execution of it can run, with the outcome of its last exit (`exited` with its status, or `operator-resolved`), or `not-started` without one, and whether cancellation was requested. Its task outcome fact SHALL name the task, attempt, ownership generation, and outcome, and SHALL NOT accept the task's work.
+An attempt SHALL end only when no execution of it can run, with the outcome of its last exit (`exited` with its status, or `operator-resolved`), or `not-started` without one, and whether cancellation was requested. It SHALL keep the ownership generation it ended in, which its task outcome fact names with the task, attempt, and outcome; the fact SHALL NOT accept the task's work.
 
 #### Scenario: Clean exit
 - **WHEN** an attempt whose execution exited with code 0 ends
@@ -113,15 +117,19 @@ An operator reconciliation SHALL end the attempt's owning execution with an unkn
 - **THEN** it is `exited` with an unknown status and the attempt ends `operator-resolved`
 
 ### Requirement: Producer sequence of observations
-Observations SHALL be classified per worker and journal incarnation: an unapplied sequence as `new`, an applied one with the same identity as `duplicate` and with another as `rollback`, and another journal as `new-incarnation`. Confirmation SHALL advance only through the contiguous applied prefix, and a gap SHALL hold later sequences until it closes.
+Observations SHALL be classified per worker and journal incarnation, by a positive integer sequence: an unapplied sequence as `new`, an applied one with the same identity as `duplicate` and with another as `rollback`, and another journal as `new-incarnation`. Confirmation SHALL advance only through the contiguous applied prefix, and a gap SHALL hold later sequences until it closes.
 
 #### Scenario: Gap
 - **WHEN** sequences 1, 2, 4, and 5 are applied and then 3
 - **THEN** confirmation stays at 2 until 3 is applied and then reaches 5
 
 ### Requirement: Pure execution domain
-The execution domain SHALL read no clock, random source, file, or network, SHALL return kernel results for expected outcomes, and SHALL produce frozen values; every change of a task SHALL raise its record generation by one.
+The execution domain SHALL read no clock, random source, file, or network, SHALL return kernel results for expected outcomes, and SHALL produce frozen values that share no mutable input; every change of a task SHALL raise its record generation by one.
 
 #### Scenario: Repeated input
 - **WHEN** the same transition is applied twice to the same task
 - **THEN** both results are equal
+
+#### Scenario: Changed input
+- **WHEN** a reported exit status or the grant parameters change after they were recorded
+- **THEN** the recorded exit, the outcome, and the grant's expiry are unchanged

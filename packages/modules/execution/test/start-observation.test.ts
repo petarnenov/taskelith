@@ -110,3 +110,23 @@ test('a start of an execution the task does not hold is not recorded on it', () 
   const task = value(endAttempt(placedTask(), placedTask().attempts[0]!.id, T2));
   assert.equal(failureOf(recordStartObservation(task, observation(), { installation: INSTALLATION }, T2)).code, 'not-found');
 });
+
+test('a start of an exited execution under an unknown or foreign-bound grant is unauthorized', () => {
+  const { task, grant } = authorized();
+  const exited = value(recordExit(task, { workerId: WORKER, executionId: EXECUTION, status: { kind: 'unknown' }, startProven: false, spawnFailed: false }, T2)).task;
+  assert.equal(decideStartObservation(observation(), { installation: INSTALLATION, task: exited }), 'unauthorized-start');
+  const otherGrant = { ...grant, executionId: executionId('execution-9') };
+  assert.equal(decideStartObservation(observation(), { installation: INSTALLATION, grant: otherGrant, task: exited }), 'unauthorized-start');
+  const mismatched = observation({ launchAuthId: launchAuthId('launch-9') });
+  assert.equal(decideStartObservation(mismatched, { installation: INSTALLATION, grant, task: exited }), 'unauthorized-start');
+});
+
+test('after a recorded start, an unbound grant is unauthorized and leaves the recorded start', () => {
+  const { task, grant } = authorized();
+  const first = value(recordStartObservation(task, observation(), { installation: INSTALLATION, grant }, T2)).task;
+  const unknown = observation({ launchAuthId: launchAuthId('launch-9') });
+  const recorded = value(recordStartObservation(first, unknown, { installation: INSTALLATION }, T3));
+  assert.equal(recorded.decision, 'unauthorized-start');
+  assert.equal(recorded.task, first);
+  assert.equal(decideStartObservation(observation(), { installation: INSTALLATION, task: first }), 'duplicate');
+});

@@ -80,7 +80,14 @@ export type CapacityReservation = ReservationValues & (
 );
 
 export function heldReservation(values: ReservationValues): CapacityReservation {
-  return Object.freeze({ ...values, providerCredentials: Object.freeze([...values.providerCredentials]), state: 'held' });
+  const { scope, requested, providerCredentials } = values;
+  return Object.freeze({
+    ...values,
+    scope: Object.freeze({ ...scope }),
+    requested: Object.freeze({ ...requested, hardControls: Object.freeze([...requested.hardControls]) }),
+    providerCredentials: Object.freeze([...providerCredentials]),
+    state: 'held',
+  });
 }
 
 export function releasedReservation(

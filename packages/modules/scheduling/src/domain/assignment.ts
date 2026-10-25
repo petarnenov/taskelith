@@ -104,8 +104,8 @@ export function acceptAssignment(assignment: Assignment, expectedGeneration: Gen
   return ok(changedAssignment(assignment, { state: 'accepted' }, at));
 }
 
-// A refusal ends the assignment; its reservation is released unless an
-// execution under it can still run.
+// A refusal ends the assignment and releases unless an execution under it can
+// run; an accepted one waits out admission pressure (contract section 8).
 export function refuseAssignment(
   assignment: Assignment,
   expectedGeneration: Generation,
@@ -115,6 +115,9 @@ export function refuseAssignment(
 ): Result<Assignment> {
   const worker = checkWorker(assignment, refusal.workerId);
   if (!worker.ok) return worker;
+  if (refusal.reason === 'worker-admission-pressure' && assignment.state === 'accepted') {
+    return assignmentFailure(assignment, 'is accepted and waits while its worker is under admission pressure');
+  }
   return endWith(assignment, expectedGeneration, { reason: 'refused', refusal: refusal.reason, endedAt: at }, executions);
 }
 

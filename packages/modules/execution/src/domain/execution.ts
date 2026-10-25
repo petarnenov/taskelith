@@ -125,6 +125,6 @@ export function moveExecution(execution: Execution, to: 'exited' | 'not-started'
       to,
     }));
   }
-  const fact = exit === undefined ? {} : { exit: Object.freeze(exit) };
+  const fact = exit === undefined ? {} : { exit: Object.freeze({ ...exit, status: Object.freeze({ ...exit.status }) }) };
   return ok(Object.freeze({ ...execution, state: to, ...fact }));
 }

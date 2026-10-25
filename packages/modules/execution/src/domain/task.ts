@@ -163,7 +163,7 @@ export function requestCancellation(task: Task, attemptId: AttemptId, reason: Ca
   const attempt = findActiveAttempt(task, attemptId);
   if (!attempt.ok) return attempt;
   if (attempt.value.cancellation !== undefined) return attemptFailure(attempt.value, 'already has a cancellation request');
-  return ok(withAttempt(task, settled(withCancellation(attempt.value, reason, at), at), at));
+  return ok(withAttempt(task, settled(task, withCancellation(attempt.value, reason, at), at), at));
 }
 
 // Whether a writer that changes a compared value must revoke this attempt's
@@ -192,7 +192,7 @@ export function endAttempt(task: Task, attemptId: AttemptId, at: Instant): Resul
   if (!attempt.ok) return attempt;
   const owning = owningExecution(attempt.value);
   if (owning !== undefined) return attemptFailure(attempt.value, `cannot end while execution ${owning.id} is ${owning.state}`);
-  return ok(withAttempt(task, Object.freeze({ ...attempt.value, outcome: outcomeOf(attempt.value, at) }), at));
+  return ok(withAttempt(task, Object.freeze({ ...attempt.value, outcome: outcomeOf(attempt.value, task.ownershipGeneration, at) }), at));
 }
 
 // An operator's audited reconciliation of an execution no evidence can
@@ -211,7 +211,7 @@ export function resolveByOperator(task: Task, attemptId: AttemptId, evidence: Ev
   });
   if (!exited.ok) return exited;
   const resolved = withExecution(attempt.value, exited.value);
-  return ok(withAttempt(task, Object.freeze({ ...resolved, outcome: outcomeOf(resolved, at) }), at));
+  return ok(withAttempt(task, Object.freeze({ ...resolved, outcome: outcomeOf(resolved, task.ownershipGeneration, at) }), at));
 }
 
 export function recordExit(task: Task, report: ExitReport, at: Instant): Result<ObservationResult> {
@@ -222,7 +222,7 @@ export function recordExit(task: Task, report: ExitReport, at: Instant): Result<
   const { status, startProven, spawnFailed } = report;
   const exited = moveExecution(execution, 'exited', { status, startProven, spawnFailed, recordedAt: at });
   if (!exited.ok) return exited;
-  return ok(applied(withAttempt(task, settled(withExecution(attempt, exited.value), at), at)));
+  return ok(applied(withAttempt(task, settled(task, withExecution(attempt, exited.value), at), at)));
 }
 
 // `not-started` follows only the worker's read of a durable seal, so no
@@ -234,7 +234,7 @@ export function recordNotStarted(task: Task, report: ExecutionReport, at: Instan
   if (execution.state === 'not-started') return ok(Object.freeze({ effect: 'duplicate', task }));
   const sealed = moveExecution(execution, 'not-started');
   if (!sealed.ok) return sealed;
-  return ok(applied(withAttempt(task, settled(withExecution(attempt, sealed.value), at), at)));
+  return ok(applied(withAttempt(task, settled(task, withExecution(attempt, sealed.value), at), at)));
 }
 
 export function recordExecutionEvidence(task: Task, report: EvidenceReport, at: Instant): Result<ObservationResult> {
@@ -267,7 +267,7 @@ export function taskOutcomeFact(task: Task, attemptId: AttemptId): Result<TaskOu
   return ok(Object.freeze({
     taskId: task.id,
     attemptId,
-    ownershipGeneration: task.ownershipGeneration,
+    ownershipGeneration: attempt.value.outcome.ownershipGeneration,
     outcome: attempt.value.outcome,
   }));
 }
@@ -351,9 +351,9 @@ function withCancellation(attempt: Attempt, reason: CancellationReason, at: Inst
 
 // A cancelled attempt ends as soon as termination is observed: none of its
 // executions can still run.
-function settled(attempt: Attempt, at: Instant): Attempt {
+function settled(task: Task, attempt: Attempt, at: Instant): Attempt {
   if (attempt.cancellation === undefined || attemptPhase(attempt) !== 'awaiting-launch') return attempt;
-  return Object.freeze({ ...attempt, outcome: outcomeOf(attempt, at) });
+  return Object.freeze({ ...attempt, outcome: outcomeOf(attempt, task.ownershipGeneration, at) });
 }
 
 function applied(task: Task): ObservationResult {

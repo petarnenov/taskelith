@@ -129,14 +129,34 @@ test('assignment acceptance, start, exit, and the task outcome are distinct fact
   assert.equal(failureOf(taskOutcomeFact(exited, ATTEMPT)).code, 'precondition-failed');
   const ended = value(endAttempt(exited, ATTEMPT, T4));
   const fact = value(taskOutcomeFact(ended, ATTEMPT));
-  assert.deepEqual(fact.outcome, { kind: 'exited', executionId: EXECUTION, status: { kind: 'code', code: 0 }, startProven: true, cancelled: false, endedAt: T4 });
+  assert.deepEqual(fact.outcome, { kind: 'exited', executionId: EXECUTION, status: { kind: 'code', code: 0 }, startProven: true, cancelled: false, ownershipGeneration: 3, endedAt: T4 });
   assert.equal(fact.taskId, 'task-1');
   assert.equal(failureOf(taskOutcomeFact(ended, attemptId('attempt-9'))).code, 'not-found');
 });
 
+test('an outcome fact keeps the ownership generation its attempt ended in', () => {
+  const ended = value(endAttempt(placedTask(), ATTEMPT, T1));
+  const retried = value(openAttempt(ended, ended.ownershipGeneration, { id: attemptId('attempt-2'), retryOf: ATTEMPT }, T1));
+  const placed = value(claimOwnership(retried, retried.ownershipGeneration, attemptId('attempt-2'), T1));
+  assert.equal(placed.ownershipGeneration, 5);
+  assert.equal(value(taskOutcomeFact(placed, ATTEMPT)).ownershipGeneration, 3);
+});
+
+test('a recorded exit keeps its status when the reported one changes later', () => {
+  const status = { kind: 'code' as const, code: 0 };
+  const exited = value(recordExit(started(), { ...CLEAN_EXIT, status }, T3)).task;
+  (status as { code: number }).code = 99;
+  const ended = value(endAttempt(exited, ATTEMPT, T4));
+  assert.deepEqual(ended.attempts[0]!.executions[0]!.exit?.status, { kind: 'code', code: 0 });
+  const outcome = ended.attempts[0]!.outcome;
+  assert.ok(outcome?.kind === 'exited');
+  assert.deepEqual(outcome.status, { kind: 'code', code: 0 });
+  assert.ok(Object.isFrozen(ended.attempts[0]!.executions[0]!.exit?.status));
+});
+
 test('an attempt without an exit ends as not-started', () => {
   const ended = value(endAttempt(placedTask(), ATTEMPT, T1));
-  assert.deepEqual(ended.attempts[0]!.outcome, { kind: 'not-started', cancelled: false, endedAt: T1 });
+  assert.deepEqual(ended.attempts[0]!.outcome, { kind: 'not-started', cancelled: false, ownershipGeneration: 3, endedAt: T1 });
   assert.equal(failureOf(endAttempt(ended, ATTEMPT, T1)).code, 'precondition-failed');
   assert.equal(failureOf(endAttempt(started(), ATTEMPT, T3)).code, 'precondition-failed');
 });
@@ -154,10 +174,10 @@ test('a cancellation request is not termination: the attempt ends only once noth
 
 test('cancelling an attempt with nothing running ends it at once', () => {
   const cancelled = value(requestCancellation(placedTask(), ATTEMPT, 'requested', T1));
-  assert.deepEqual(cancelled.attempts[0]!.outcome, { kind: 'not-started', cancelled: true, endedAt: T1 });
+  assert.deepEqual(cancelled.attempts[0]!.outcome, { kind: 'not-started', cancelled: true, ownershipGeneration: 3, endedAt: T1 });
   const sealed = value(requestCancellation(authorized().task, ATTEMPT, 'assignment-ended', T2));
   const notStarted = value(recordNotStarted(sealed, REPORT, T3)).task;
-  assert.deepEqual(notStarted.attempts[0]!.outcome, { kind: 'not-started', cancelled: true, endedAt: T3 });
+  assert.deepEqual(notStarted.attempts[0]!.outcome, { kind: 'not-started', cancelled: true, ownershipGeneration: 3, endedAt: T3 });
 });
 
 test('execution facts are accepted by version: duplicates change nothing and terminal facts never regress', () => {
@@ -212,7 +232,7 @@ test('an operator reconciliation ends an uncertain execution with an unknown sta
   assert.deepEqual(execution.exit?.status, { kind: 'unknown' });
   assert.equal(execution.exit?.startProven, true);
   assert.equal(execution.grants[0]!.state, 'revoked');
-  assert.deepEqual(attempt.outcome, { kind: 'operator-resolved', executionId: EXECUTION, evidence: 'incident-7', cancelled: false, endedAt: T4 });
+  assert.deepEqual(attempt.outcome, { kind: 'operator-resolved', executionId: EXECUTION, evidence: 'incident-7', cancelled: false, ownershipGeneration: 3, endedAt: T4 });
   assert.equal(failureOf(resolveByOperator(placedTask(), ATTEMPT, evidence('incident-7'), T4)).code, 'precondition-failed');
 });
 

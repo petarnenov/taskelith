@@ -1,5 +1,5 @@
 import type { Instant } from '@taskelith/kernel';
-import type { EvidenceReference } from '@taskelith/sdlc';
+import type { EvidenceReference, OwnershipGeneration } from '@taskelith/sdlc';
 import { isTerminalExecution, type Execution, type ExitStatus } from './execution.js';
 import type { AttemptId, ExecutionId } from './identifiers.js';
 
@@ -31,25 +31,19 @@ export interface CancellationRequest {
   readonly requestedAt: Instant;
 }
 
-// What an ended attempt reports to its task. A clean exit is not completion:
-// the task's acceptance still depends on its gates (invariant 11).
-export type AttemptOutcome =
-  | {
-    readonly kind: 'exited';
-    readonly executionId: ExecutionId;
-    readonly status: ExitStatus;
-    readonly startProven: boolean;
-    readonly cancelled: boolean;
-    readonly endedAt: Instant;
-  }
-  | {
-    readonly kind: 'operator-resolved';
-    readonly executionId: ExecutionId;
-    readonly evidence: EvidenceReference;
-    readonly cancelled: boolean;
-    readonly endedAt: Instant;
-  }
-  | { readonly kind: 'not-started'; readonly cancelled: boolean; readonly endedAt: Instant };
+// What an ended attempt reports to its task, at the ownership generation it
+// ended in. A clean exit is not completion: gates decide (invariant 11).
+export type AttemptOutcome = OutcomeValues & (
+  | { readonly kind: 'exited'; readonly executionId: ExecutionId; readonly status: ExitStatus; readonly startProven: boolean }
+  | { readonly kind: 'operator-resolved'; readonly executionId: ExecutionId; readonly evidence: EvidenceReference }
+  | { readonly kind: 'not-started' }
+);
+
+export interface OutcomeValues {
+  readonly cancelled: boolean;
+  readonly ownershipGeneration: OwnershipGeneration;
+  readonly endedAt: Instant;
+}
 
 export interface Attempt {
   readonly id: AttemptId;
@@ -75,20 +69,13 @@ export function owningExecution(attempt: Attempt): Execution | undefined {
 
 // The outcome once no execution can run: the last exit decides it, and an
 // attempt without one never started a process.
-export function outcomeOf(attempt: Attempt, endedAt: Instant): AttemptOutcome {
-  const cancelled = attempt.cancellation !== undefined;
+export function outcomeOf(attempt: Attempt, ownershipGeneration: OwnershipGeneration, endedAt: Instant): AttemptOutcome {
+  const values = { cancelled: attempt.cancellation !== undefined, ownershipGeneration, endedAt };
   const exited = [...attempt.executions].reverse().find((execution) => execution.exit !== undefined);
-  if (exited?.exit === undefined) return Object.freeze({ kind: 'not-started', cancelled, endedAt });
+  if (exited?.exit === undefined) return Object.freeze({ ...values, kind: 'not-started' });
   const { exit } = exited;
   if (exit.operatorEvidence !== undefined) {
-    return Object.freeze({ kind: 'operator-resolved', executionId: exited.id, evidence: exit.operatorEvidence, cancelled, endedAt });
+    return Object.freeze({ ...values, kind: 'operator-resolved', executionId: exited.id, evidence: exit.operatorEvidence });
   }
-  return Object.freeze({
-    kind: 'exited',
-    executionId: exited.id,
-    status: exit.status,
-    startProven: exit.startProven,
-    cancelled,
-    endedAt,
-  });
+  return Object.freeze({ ...values, kind: 'exited', executionId: exited.id, status: exit.status, startProven: exit.startProven });
 }

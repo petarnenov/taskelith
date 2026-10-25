@@ -8,6 +8,7 @@ export {
   type AttemptOutcome,
   type AttemptPhase,
   type CancellationReason,
+  type OutcomeValues,
   type CancellationRequest,
 } from './domain/attempt.js';
 export {
@@ -76,6 +77,7 @@ export {
   type ObservationId,
   type ObservationPosition,
   type ProducerCursor,
+  type Sequence,
   type SequenceClass,
 } from './domain/observation-sequence.js';
 export {

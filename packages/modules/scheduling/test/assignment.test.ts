@@ -172,3 +172,29 @@ test('resource requests are positive and name each known hard control once', () 
   assert.equal(code(parseResourceRequest({ cpuMillicores: 1, memoryMebibytes: 1, hardControls: ['gpu-limit'] })), 'invalid');
   assert.equal(code(parseResourceRequest({ cpuMillicores: 1, memoryMebibytes: 1, hardControls: ['cpu-limit', 'cpu-limit'] })), 'invalid');
 });
+
+test('an accepted assignment waits out admission pressure instead of being refused', () => {
+  const assignment = accepted();
+  const pressure = { workerId: WORKER, reason: 'worker-admission-pressure' as const };
+  assert.equal(code(refuseAssignment(assignment, assignment.generation, pressure, NONE, T2)), 'precondition-failed');
+  const control = { workerId: WORKER, reason: 'control-not-enforceable' as const };
+  assert.equal(value(refuseAssignment(assignment, assignment.generation, control, NONE, T2)).state, 'ended');
+});
+
+test('a reservation keeps its scope and request when the inputs change later', () => {
+  const requested = { cpuMillicores: 1000, memoryMebibytes: 2048, hardControls: ['memory-limit'] as ('memory-limit' | 'cpu-limit')[] };
+  const scope = { projectId: value(parseIdentifier('ProjectId', 'project-1')), runId: value(parseIdentifier('RunId', 'run-1')), taskId: TASK, rootTaskId: TASK };
+  const assignment = createAssignment({
+    id: value(parseIdentifier('AssignmentId', 'assignment-1')),
+    attemptId: ATTEMPT,
+    workerId: WORKER,
+    ownershipGeneration: value(parseOwnershipGeneration(3)),
+    reservation: { id: value(parseIdentifier('ReservationId', 'reservation-1')), scope, requested, providerCredentials: [] },
+  }, T0);
+  scope.projectId = value(parseIdentifier('ProjectId', 'project-2'));
+  requested.cpuMillicores = 4000;
+  requested.hardControls.push('cpu-limit');
+  assert.equal(assignment.reservation.scope.projectId, 'project-1');
+  assert.equal(assignment.reservation.requested.cpuMillicores, 1000);
+  assert.deepEqual(assignment.reservation.requested.hardControls, ['memory-limit']);
+});
