@@ -53,14 +53,31 @@ Recorded before pass 1.
 
 ## Checks
 
-`make verify` ran in the worktree before pass 1:
+`make verify` ran in the worktree before pass 1 and after each round of fixes:
 
 - At `583cff0`, with every file tracked: 900 tests passed, 0 failed; coverage 99.12% lines, 91.75% branches, 99.03% functions. The comment, boundary, coverage-scope, dependency-inventory, contract-compatibility, OpenSpec (52 of 52), and package checks pass.
-- `npm run openspec -- validate implement-control-plane-api --strict` passed.
+- At `53e7eb0`, after the pass-1 fixes: 908 tests passed, 0 failed; coverage 99.11% lines, 91.90% branches, 98.82% functions; every other check passes.
+- `npm run openspec -- validate implement-control-plane-api --strict` passed at each of these revisions.
 
 ## Independent review
 
-(to be recorded)
+Assigned reviewer: Codex CLI, with `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, run from the worktree.
+- The prompt named AGENTS.md, ADR 0004, the governance review process, plan row 16 with D10 and D12, architecture section 9 and R18, the trust model, the wire, enrollment, and capacity contracts, the contract documents, and the coordinator decisions Q1 to Q11.
+- The prompt and log are kept outside the worktree.
+
+- **Pass 1 — session `01a1736b-33df-7c41-ae2c-2203f4b82847`,** reviewed `git diff 9e6febd 2f422e2`. The header reports `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`. Snapshot before and after: `f1ecf3f9…a92f`, equal. The reviewer reproduced several findings against the built code. Findings: 0 Critical, 3 High, 8 Medium, 1 Low, all resolved at `53e7eb0`:
+  1. High: a malformed percent-encoding threw outside the error boundary, before authentication, so one request could end the process. Parsing and matching now run inside the boundary; a malformed encoding is 400. A test sends `%ZZ` and then a good request.
+  2. High: the redrive published without the quarantine guard. It now runs under the same publication fence and is 503 under quarantine; the end-to-end test covers it.
+  3. High: the guard checked quarantine before the batch was published, so a quarantine entered meanwhile let up to 100 rows leave. `InstallationPublicationFence` now holds the installation record `FOR SHARE` in a READ COMMITTED transaction for the whole round. A test shows that entering quarantine waits for the round in flight, and that the next round publishes nothing.
+  4. Medium: a body under 1 MiB could make an event over the broker limit, which would block its subject. The submission now fails with 400 when the encoded event exceeds the limit less header room; a test submits a body of 1,046,611 bytes.
+  5. Medium: a correlation header that carried a bearer secret reached the logs. A value with a secret is now replaced by a generated one; a test sends the operator token as the correlation.
+  6. Medium: the redrive sequence was not validated. A sequence that is not a positive safe integer is now 400 before the broker, and the documents bound `sequence` and `from`.
+  7. Medium: success bodies were not validated at runtime. Every operation now names its response schema, and a violating body is 500. A quarantine reason is cut to the 512 characters its schema allows, and the operations declare 500 and 503.
+  8. Medium: `createRun` consulted the registry before the stored run, so a repeat failed after the registry changed. The stored run now answers first; a unit test removes the workflow from the registry and repeats.
+  9. Medium: a thrown start-up failure skipped the release of resources. A cleanup stack now releases everything acquired so far, newest first, on a returned or thrown failure.
+  10. Medium: the loops and the signal shutdown were unsupervised. Each loop is supervised from the start and a failure stops the service; `stop` is idempotent, and the entry handles its errors.
+  11. Medium: an unreadable CA file threw. It is now an `invalid` failure naming `TASKELITH_NATS_CA`; a test covers it.
+  12. Low: the operational target claimed the sweep revokes within the window. It now separates the immediate refusal of the old secret from the broker revocation, which depends on the sweep's success.
 
 ## Remaining gates
 
