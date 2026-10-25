@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-25. Author verification is recorded below; the independent review follows.
+Date: 2026-10-25. Author verification is recorded below, followed by three independent review passes; the last found nothing.
 
 ## Scope and source
 
@@ -63,6 +63,16 @@ Before pass 1, `verify:archive` had warned that a modified "Worker command consu
 | M1: PostgreSQL ordered by `broker_revocations.revoked_at`, which is never earlier than the JWT, unlike the in-memory registry | Fixed: the query orders by the record's `revokedAt`; the conformance case adds a worker whose broker JWT postdates its revocation. |
 | L1: design decision 5 named only `ConsumerNotFound` | Fixed: it names `StreamNotFound` too. |
 
+## Review pass 3
+
+- Reviewer: Codex CLI, the same invocation, run in the worktree at `ab68ea2`; the prompt named both earlier sessions and asked to confirm pass 2's resolutions before reviewing the whole change again.
+- Model confirmation: `gpt-6.1-sol`, reasoning effort medium, sandbox read-only in the output header. Session ID: `01a17502-5150-73e2-845a-170ff61a8bb0`.
+- Snapshot: `adef4b53b6eec75a8ce1983f6b7fd9c0864d414cc68d8855c377a8323bb543e7` before and after, by the protocol's command; unchanged. The reviewer reported a different hash of its own computation, also unchanged before and after.
+- Pass 2 resolutions: both confirmed resolved.
+- Findings: 0 Critical, 0 High, 0 Medium, 0 Low.
+
+No fix followed pass 3; this record is the only change after it.
+
 ## Limitations
 
 - The administration tool's printed retry note is not covered by a test, because only a broker refusal after the revocation's own broker connection would produce it there; the service result it maps is covered.
@@ -70,5 +80,4 @@ Before pass 1, `verify:archive` had warned that a modified "Worker command consu
 
 ## Remaining gates
 
-- Review pass 3, the last under the cap.
 - Integration into `dev` and archive by the coordinator.
