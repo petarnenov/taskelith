@@ -16,6 +16,8 @@ import type {
   AdmissionId,
   AdmissionRepository,
   ArtifactId,
+  ArtifactRevision,
+  CurrentRevisions,
   Gate,
   GateId,
   GateRepository,
@@ -275,5 +277,21 @@ export class CommittingRunCatalog implements RunCatalog {
 
   runOfAdmission(admissionId: AdmissionId): Promise<Result<WorkflowRunId | undefined>> {
     return this.#database.transaction((tx) => tx.catalog.runOfAdmission(admissionId));
+  }
+}
+
+export class CommittingCurrentRevisions implements CurrentRevisions {
+  readonly #database: PostgresDatabase;
+
+  constructor(database: PostgresDatabase) {
+    this.#database = database;
+  }
+
+  seed(runId: WorkflowRunId, revisions: readonly ArtifactRevision[]): Promise<Result<void>> {
+    return this.#database.transaction((tx) => tx.revisions.seed(runId, revisions));
+  }
+
+  current(runId: WorkflowRunId, artifactIds: readonly ArtifactId[]): Promise<Result<readonly ArtifactRevision[]>> {
+    return this.#database.transaction((tx) => tx.revisions.current(runId, artifactIds));
   }
 }

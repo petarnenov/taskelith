@@ -5,6 +5,7 @@ import { InMemoryTaskRepository } from '@taskelith/execution';
 import { InMemoryTaskLineage } from '@taskelith/scheduling';
 import {
   InMemoryAdmissionRepository,
+  InMemoryCurrentRevisions,
   InMemoryGateRepository,
   InMemoryOutbox,
   InMemoryRunCatalog,
@@ -31,6 +32,9 @@ function store(): ControlPlaneStore {
   const transaction: ControlPlaneTransaction = {
     runs: new InMemoryWorkflowRunRepository(), catalog: new InMemoryRunCatalog(), admissions: new InMemoryAdmissionRepository(),
     gates: new InMemoryGateRepository(), tasks: new InMemoryTaskRepository(), lineage: new InMemoryTaskLineage(), outbox: new InMemoryOutbox(),
+    revisions: new InMemoryCurrentRevisions(),
+    // Only the launch authority reads these.
+    assignments: undefined as never, installation: undefined as never, fleet: undefined as never, launches: undefined as never,
     now: async () => '2026-10-25T09:00:00.000Z' as never,
   };
   return { transaction: (work) => work(transaction) };

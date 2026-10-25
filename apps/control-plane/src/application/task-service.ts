@@ -157,6 +157,8 @@ async function storeSubmission(
     () => tx.admissions.add(admitted),
     () => tx.admissions.replace(used, admitted.generation),
     () => tx.catalog.bindAdmission(used.id, run.id),
+    // Until a G3 writer exists, the first bound revision is the current one.
+    () => tx.revisions.seed(run.id, used.artifacts),
     () => tx.tasks.add(task),
     () => tx.lineage.add({ taskId: task.id, rootTaskId: task.id, depth: 0, projectId, runId: run.id }),
   ];

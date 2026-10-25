@@ -19,6 +19,7 @@ import type {
 } from '@taskelith/sdlc';
 import { isJsonObject } from '@taskelith/sdlc';
 import { AggregateStore } from './aggregate-store.js';
+import { indexLaunchGrants } from './launch-repositories.js';
 import { decodeRecord, decodeTask, encodeRecord } from './record-codec.js';
 import type { Session } from './session.js';
 
@@ -112,10 +113,14 @@ export class PostgresGateRepository implements GateRepository {
   }
 }
 
+// Each write also keeps the grant index of launch_authorizations in step.
 export class PostgresTaskRepository implements TaskRepository {
   readonly #store: AggregateStore<Task>;
+  readonly #session: Session;
+  #grantRecorded = false;
 
   constructor(session: Session) {
+    this.#session = session;
     this.#store = new AggregateStore(session, {
       table: 'tasks',
       entity: 'task',
@@ -126,16 +131,28 @@ export class PostgresTaskRepository implements TaskRepository {
     });
   }
 
+  // Whether this transaction recorded a new grant, for its crash points.
+  get grantRecorded(): boolean {
+    return this.#grantRecorded;
+  }
+
   get(id: TaskId): Promise<Result<Task>> {
     return this.#store.get(id);
   }
 
-  add(task: Task): Promise<Result<void>> {
-    return this.#store.add(task);
+  async add(task: Task): Promise<Result<void>> {
+    const added = await this.#store.add(task);
+    return added.ok ? this.#index(task) : added;
   }
 
-  replace(task: Task, expectedGeneration: Generation): Promise<Result<void>> {
-    return this.#store.replace(task, expectedGeneration);
+  async replace(task: Task, expectedGeneration: Generation): Promise<Result<void>> {
+    const replaced = await this.#store.replace(task, expectedGeneration);
+    return replaced.ok ? this.#index(task) : replaced;
+  }
+
+  async #index(task: Task): Promise<Result<void>> {
+    if (await indexLaunchGrants(this.#session, task)) this.#grantRecorded = true;
+    return ok(undefined);
   }
 }
 

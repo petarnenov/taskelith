@@ -14,6 +14,7 @@ import type { AdmissionRepository } from './admission-repository.js';
 import { expectCode, expectRaceWinnerStored, expectRead, expectSame, expectSuccess, type ConformanceCase } from './conformance-case.js';
 import type { GateRepository } from './gate-repository.js';
 import type { Outbox, OutboxMessage } from './outbox.js';
+import type { CurrentRevisions } from './current-revisions.js';
 import type { ProjectId, RunCatalog } from './run-catalog.js';
 import type { WorkflowRunRepository } from './workflow-run-repository.js';
 
@@ -327,6 +328,36 @@ export const RUN_CATALOG_CONFORMANCE: readonly ConformanceCase<RunCatalogConform
       expectSuccess(problems, 'bind', await catalog.bindAdmission(bound.id, stored.id));
       expectCode(problems, 'bind again', await catalog.bindAdmission(bound.id, stored.id), 'conflict');
       expectRead(problems, 'run', await catalog.runOfAdmission(bound.id), stored.id);
+      return problems;
+    },
+  },
+]);
+
+// A database adapter keys revisions by run, so its runs must be stored.
+export interface CurrentRevisionsConformanceTarget {
+  readonly runs: WorkflowRunRepository;
+  readonly revisions: CurrentRevisions;
+}
+
+export const CURRENT_REVISIONS_CONFORMANCE: readonly ConformanceCase<CurrentRevisionsConformanceTarget>[] = Object.freeze([
+  {
+    name: 'the first revision seeded for an artifact of a run stays current',
+    async check({ runs, revisions }) {
+      const problems: string[] = [];
+      const first = run('run-1');
+      const second = run('run-2');
+      must(await runs.add(first));
+      must(await runs.add(second));
+      const spec = revision('spec', 'aa');
+      const ids = [spec.artifactId, revision('design', 'bb').artifactId];
+      expectRead(problems, 'empty', await revisions.current(first.id, ids), []);
+      expectSuccess(problems, 'seed', await revisions.seed(first.id, [spec]));
+      expectSuccess(problems, 'seed another', await revisions.seed(first.id, [revision('spec', 'cc'), revision('design', 'bb')]));
+      expectSuccess(problems, 'seed nothing', await revisions.seed(first.id, []));
+      const current = must(await revisions.current(first.id, ids));
+      expectSame(problems, 'current', [...current].sort((a, b) => a.artifactId.localeCompare(b.artifactId)), [revision('design', 'bb'), spec]);
+      expectRead(problems, 'other run', await revisions.current(second.id, ids), []);
+      expectRead(problems, 'no ids', await revisions.current(first.id, []), []);
       return problems;
     },
   },

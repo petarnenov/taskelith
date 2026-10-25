@@ -61,6 +61,7 @@ export {
 export { planJournalRecovery, type RecoveryAction } from './domain/journal-recovery.js';
 export {
   authorizeLaunch,
+  rejectUnknownAssignment,
   replayLaunchOperation,
   type GrantIssue,
   type LaunchAssignment,
@@ -68,11 +69,13 @@ export {
   type LaunchContext,
   type LaunchRequest,
   type LaunchReservation,
+  type LaunchOutcome,
   type ReplayOutcome,
 } from './domain/launch-authorization.js';
 export {
   GRANT_STATES,
   isGrantExpired,
+  workerLaunchDeadline,
   parseLaunchParameters,
   type GrantState,
   type LaunchGrant,
@@ -84,6 +87,7 @@ export {
   LAUNCH_REJECTION_REASONS,
   RETRYABLE_LAUNCH_REJECTIONS,
   REVOCATION_REASONS,
+  launchRejection,
   type LaunchRejection,
   type LaunchRejectionReason,
   type RevocationReason,
@@ -141,6 +145,8 @@ export {
 export { InMemoryInbox } from './adapters/in-memory-inbox.js';
 export { InMemoryTaskRepository } from './adapters/in-memory-task-repository.js';
 export type { Inbox, InboxOutcome } from './ports/inbox.js';
+export type { LaunchAuthorityClient, LaunchAuthorizationRequest } from './ports/launch-authority-client.js';
+export type { LaunchPredicate, LaunchRecords, RecordedLaunch, RecordedRejection } from './ports/launch-records.js';
 export type { Outbox, OutboxMessage } from './ports/outbox.js';
 // The outbox ports are structurally identical, so they share one suite.
 export { OUTBOX_CONFORMANCE } from '@taskelith/sdlc';

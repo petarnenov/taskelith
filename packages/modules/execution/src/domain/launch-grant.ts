@@ -75,6 +75,12 @@ export interface LaunchGrantValues {
   readonly parameters: LaunchParameters;
 }
 
+// The worker's spawn deadline on its suspend-inclusive monotonic clock, from
+// its reading before the operation's first request (contract section 7).
+export function workerLaunchDeadline(firstRequestReading: number, parameters: LaunchParameters): number {
+  return firstRequestReading + parameters.ttlMilliseconds - parameters.skewMilliseconds;
+}
+
 export function isGrantExpired(grant: LaunchGrant, now: Instant): boolean {
   return Date.parse(now) >= Date.parse(grant.issuedAt) + grant.parameters.ttlMilliseconds;
 }

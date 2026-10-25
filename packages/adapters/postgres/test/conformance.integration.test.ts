@@ -4,6 +4,7 @@ import { INBOX_CONFORMANCE, TASK_REPOSITORY_CONFORMANCE } from '@taskelith/execu
 import {
   CommittingAdmissionRepository,
   CommittingAssignmentRepository,
+  CommittingCurrentRevisions,
   CommittingGateRepository,
   CommittingInbox,
   CommittingOutbox,
@@ -16,6 +17,7 @@ import {
 import { ASSIGNMENT_REPOSITORY_CONFORMANCE } from '@taskelith/scheduling';
 import {
   ADMISSION_REPOSITORY_CONFORMANCE,
+  CURRENT_REVISIONS_CONFORMANCE,
   GATE_REPOSITORY_CONFORMANCE,
   OUTBOX_CONFORMANCE,
   RUN_CATALOG_CONFORMANCE,
@@ -44,6 +46,9 @@ runSuite('run catalog', RUN_CATALOG_CONFORMANCE, () => ({
   runs: new CommittingWorkflowRunRepository(database),
   admissions: new CommittingAdmissionRepository(database),
   catalog: new CommittingRunCatalog(database),
+}));
+runSuite('current revisions', CURRENT_REVISIONS_CONFORMANCE, () => ({
+  runs: new CommittingWorkflowRunRepository(database), revisions: new CommittingCurrentRevisions(database),
 }));
 runSuite('gates', GATE_REPOSITORY_CONFORMANCE, () => new CommittingGateRepository(database));
 runSuite('tasks', TASK_REPOSITORY_CONFORMANCE, () => new CommittingTaskRepository(database));

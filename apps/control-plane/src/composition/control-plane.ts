@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { parseLaunchParameters, type LaunchParametersInput } from '@taskelith/execution';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import {
   connectTransport,
@@ -21,6 +23,7 @@ import { PostgresControlPlaneSignals, PostgresOutboxRelay } from '@taskelith/pos
 import { Administration, type AdministrationSettings } from '../admin/administration.js';
 import { createApiServer } from '../api/api-server.js';
 import { ControlPlaneApi } from '../api/control-plane-api.js';
+import { LaunchAuthority } from '../application/launch-authority.js';
 import { RunService } from '../application/run-service.js';
 import { TaskService } from '../application/task-service.js';
 import { WorkflowRegistry, type KnownWorkflow } from '../application/workflow-registry.js';
@@ -28,6 +31,8 @@ import { InstallationPublicationFence } from './installation-publication-fence.j
 
 // Provisional G2 values in docs/operational-targets.md, which G6 verifies.
 export const GRACE_WINDOW_SWEEP_MILLISECONDS = 60_000;
+// The launch ttl and skew of docs/operational-targets.md (provisional).
+export const LAUNCH_PARAMETERS: LaunchParametersInput = Object.freeze({ ttlMilliseconds: 30_000, skewMilliseconds: 5_000 });
 // How long a stop waits for the loops before it cancels what still blocks.
 export const SHUTDOWN_DEADLINE_MILLISECONDS = 30_000;
 const CANCELLED_SETTLE_MILLISECONDS = 5_000;
@@ -46,6 +51,7 @@ export interface ControlPlaneSettings extends Omit<AdministrationSettings, 'logg
   readonly shutdownMilliseconds?: number;
   // Shorter or smaller ones only in tests; production takes the targets.
   readonly transportLimits?: TransportLimits;
+  readonly launchParameters?: LaunchParametersInput;
 }
 
 export interface RunningControlPlane {
@@ -97,11 +103,16 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   const database = admin.value.database;
   const fence = new InstallationPublicationFence(database);
   const quarantine = new Quarantine(broker.value.jsm, broker.value.js, address.value, limits);
+  const parameters = parseLaunchParameters(settings.launchParameters ?? LAUNCH_PARAMETERS);
+  if (!parameters.ok) return parameters;
+  const workflows = new WorkflowRegistry(settings.workflows);
+  const launches = new LaunchAuthority(database, { workflows, parameters: parameters.value, newLaunchAuthId: () => `l${randomUUID()}` });
   const api = createApiServer(new ControlPlaneApi({
-    runs: new RunService(database, new WorkflowRegistry(settings.workflows)),
+    runs: new RunService(database, workflows),
     tasks: new TaskService(database),
     operator: admin.value.operator,
     enrollment: enrollment.value.service,
+    launches,
     // A redrive publishes too, so it waits for the same fence.
     quarantine: { records: (from, limit) => quarantine.records(from, limit), redrive: (sequence) => fence.hold(() => quarantine.redrive(sequence)) },
   }), { logger });

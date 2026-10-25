@@ -43,6 +43,10 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
     response: 'Enrollment', success: 201, statuses: { ...COMMON, conflict: 409, 'precondition-failed': 422 },
   },
   {
+    operationId: 'authorizeLaunch', method: 'POST', pattern: /^\/launch-authorizations$/, security: 'workerCredential',
+    body: 'LaunchAuthorizationRequest', response: 'LaunchAuthorizationOutcome', success: 200, statuses: COMMON,
+  },
+  {
     operationId: 'listQuarantine', method: 'GET', pattern: /^\/quarantine$/, security: 'operatorToken', response: 'QuarantinePage', success: 200,
     statuses: COMMON,
   },

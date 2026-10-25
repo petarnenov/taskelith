@@ -1,6 +1,6 @@
 # Launch authorization contract
 
-Date: 2026-10-25. Status: proposed protocol contract for G2 ([G2 work plan](../g2-plan.md) item 3), under independent review; once reviewed and merged it resolves the pre-G2 contract "launch linearization and expiry" of [architecture section 15](../architecture.md#15-decisions-still-requiring-evidence-or-owner-scope-confirmation). It serves invariant 13 and R27. No code implements it yet: G2 items 8 (wire contracts), 14 and 15 (worker journal and supervisor), and 17 (launch authority) build on it, and item 24 runs its failure scenarios.
+Date: 2026-10-25. Status: proposed protocol contract for G2 ([G2 work plan](../g2-plan.md) item 3), under independent review; once reviewed and merged it resolves the pre-G2 contract "launch linearization and expiry" of [architecture section 15](../architecture.md#15-decisions-still-requiring-evidence-or-owner-scope-confirmation). It serves invariant 13 and R27. G2 item 17 (`implement-launch-authority`) implements the authority and the worker's client; section 11 records how. Items 8 (wire contracts), 14 and 15 (worker journal and supervisor) build on it too, items 20 and 21 add the worker's use and the start observations, and item 24 runs its failure scenarios.
 
 ## 1. Purpose and parties
 
@@ -146,3 +146,20 @@ Items 17 and 24 implement these as tests through the deterministic test harness 
 - Two admissions with the same bound revisions but different relied-on gates are invalidated only by their own gates' changes; an admission generation mismatch and a gate passed for another subject are rejected with their reasons.
 - A restart with a journaled authorization never spawns under it.
 - Quarantine and an old recovery epoch grant nothing.
+
+## 11. G2 implementation
+
+Item 17 implements sections 2 to 7 on the control-plane side, with these G2 choices (coordinator decisions of 2026-10-25):
+
+- **Operation.** `authorizeLaunch` (`POST /launch-authorizations`) authenticates the worker bearer, then decides in one SERIALIZABLE transaction. The worker must be at its current credential generation; a predecessor within its grace window authenticates but gets `worker-not-authorized`.
+  - A transaction that reaches no decision, including one whose serialization retries are exhausted, is a 503, which the worker retries under the same `operationId`.
+  - The authority never answers a 200 `unavailable`.
+- **Record.** The grant stays in its task's record. The table `launch_authorizations` indexes every grant by `launchAuthId`, by `(workerId, operationId)`, and by the predicates of section 5; the task repository keeps it in step on every write.
+  - A non-retryable rejection is recorded in `launch_rejections` with its request, so a replay never becomes a grant. A retryable one is not recorded.
+- **Current revisions.** `current_revisions` holds a run's current revision of each artifact. Until a G3 writer exists, `submitTask` seeds it from the admission's bound revisions, and the first seeded revision stays current. A G3 writer of artifact revisions must update it as an invalidating writer.
+- **Writers.** A reusable helper reads a predicate's live grants (an empty read included), revokes them, and writes one `execution.cancellation.request` with reason `launch-revoked` per attempt.
+  - Worker revocation uses it in its own transaction, and also marks the execution `uncertain`, which is reconciliation's request (item 21).
+  - The cancellation of item 18 keeps its reason `assignment-ended`.
+  - G2 has no writer of gates, artifact revisions, policy revisions, or quarantine; each must call the helper when it is added.
+- **Crash points.** `LaunchAuthorizationCommit.before` and `.after` surround the commit of a transaction that recorded a grant.
+- **Worker client.** `LaunchAuthorityClient` in Execution, with an HTTP adapter in `@taskelith/worker-control-plane-client`. A 503, a timeout, or a lost connection is `unavailable`. The retry loop and the journal steps W2 and W3 belong to item 20, and consuming start observations to item 21.

@@ -256,6 +256,31 @@ describe('enrollment and quarantine', () => {
     assert.equal(kept.status, 201, 'a refused capacity does not consume the token');
   });
 
+  test('a worker bearer reaches authorizeLaunch, whose decision is recorded and replayed', async () => {
+    const issued = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operator });
+    const enrolled = await call('POST', '/workers/enrollments', {
+      bearer: issued.enrollmentToken as string,
+      body: {
+        journalId: 'journal-launch', host: { platform: 'linux', architecture: 'x64', hostname: 'build-2' },
+        protocolVersions: { minimum: 1, maximum: 1 }, capacity: { slots: 1, cpuMillicores: 1000, memoryMebibytes: 1024, enforceableControls: [] },
+      },
+    });
+    const workerBearer = (enrolled.body.credentials as { controlPlane: string }).controlPlane;
+    const body = {
+      operationId: 'operation-api-1', recoveryEpoch: 1, assignmentId: 'assignment-unknown', attemptId: 'attempt-1', ownershipGeneration: 1,
+      executionId: 'execution-1', admissionId: 'admission-1', admissionGeneration: 1, reportsNotStarted: false,
+    };
+    const decided = await call('POST', '/launch-authorizations', { bearer: workerBearer, body });
+    assert.equal(decided.status, 200, JSON.stringify(decided.body));
+    assert.ok(checkHttpSchema('LaunchAuthorizationOutcome', decided.body).ok);
+    assert.deepEqual(decided.body.outcome, 'rejected');
+    assert.equal((decided.body.rejection as { reason: string }).reason, 'assignment-not-active');
+    const replayed = await call('POST', '/launch-authorizations', { bearer: workerBearer, body: { ...body, executionId: 'execution-2' } });
+    assert.equal((replayed.body.rejection as { reason: string }).reason, 'operation-mismatch');
+    assert.equal((await call('POST', '/launch-authorizations', { bearer: operator, body })).status, 401, 'the operator is no worker');
+    assert.equal((await call('POST', '/launch-authorizations', { bearer: workerBearer, body: { ...body, recoveryEpoch: 0 } })).status, 400);
+  });
+
   test('the quarantine is listed, and redriving an unknown record is 404', async () => {
     const listed = await call('GET', '/quarantine', { bearer: operator });
     assert.deepEqual([listed.status, listed.body], [200, { records: [] }]);

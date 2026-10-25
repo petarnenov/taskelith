@@ -2,8 +2,11 @@ import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { after, before, test } from 'node:test';
 import { ControlPlaneApi, ROUTES, createApiServer, type ApiHandlers, type ApiRequest, type RouteDefinition } from '@taskelith/control-plane';
+import { checkHttpSchema } from '@taskelith/contracts';
+import { parseLaunchParameters, type LaunchGrant, type LaunchOutcome } from '@taskelith/execution';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
+import { failed, value } from '@taskelith/testing';
 
 const OPERATOR = `tkop_${'A'.repeat(43)}`;
 const sink = new InMemoryLogSink();
@@ -89,7 +92,7 @@ test('a redrive sequence that is not a positive safe integer is 400 before the b
   let redriven = 0;
   const api = new ControlPlaneApi({
     runs: undefined as never, tasks: undefined as never, operator: { authenticate: async () => ok(undefined) },
-    enrollment: undefined as never,
+    enrollment: undefined as never, launches: undefined as never,
     quarantine: { records: async () => ok([]), redrive: async () => (redriven++, ok(null)) },
   });
   for (const sequence of ['0', '9007199254740993']) {
@@ -155,9 +158,42 @@ test('an operator route carries no worker principal', async () => {
 test('the API authenticates a worker bearer through enrollment', async () => {
   const principal = { workerId: 'worker-1' as never, generation: 1 };
   const api = new ControlPlaneApi({
-    runs: undefined as never, tasks: undefined as never, operator: undefined as never, quarantine: undefined as never,
+    runs: undefined as never, tasks: undefined as never, operator: undefined as never, quarantine: undefined as never, launches: undefined as never,
     enrollment: { enroll: undefined as never, authenticateWorkerBearer: async (secret) => (secret === 'tkwk_x' ? ok(principal) : err(failure('forbidden', 'no'))) },
   });
   assert.deepEqual(await api.authenticateWorker('tkwk_x'), ok(principal));
   assert.equal((await api.authenticateWorker('tkwk_y')).ok, false);
+});
+
+test('authorizeLaunch maps every outcome to its contract shape, and needs a worker principal', async () => {
+  const parameters = value(parseLaunchParameters({ ttlMilliseconds: 30_000, skewMilliseconds: 5_000 }));
+  const grant = {
+    launchAuthId: 'launch-1', operationId: 'operation-1', executionId: 'execution-1', assignmentId: 'assignment-1', attemptId: 'attempt-1',
+    workerId: 'worker-1', ownershipGeneration: 1, recoveryEpoch: 1, admissionId: 'admission-1', admissionGeneration: 2, reliedOnGates: [],
+    artifacts: [], policyRevision: 'policy-1', issuedAt: '2026-10-25T09:00:00.000Z', parameters, state: 'granted',
+  } as unknown as LaunchGrant;
+  const outcomes: LaunchOutcome[] = [
+    { kind: 'granted', grant },
+    { kind: 'rejected', rejection: { reason: 'unavailable', retryable: true, message: 'later' } },
+    { kind: 'revoked', reason: 'gate-not-passed' },
+    { kind: 'expired' },
+  ];
+  let next = 0;
+  const api = new ControlPlaneApi({
+    runs: undefined as never, tasks: undefined as never, operator: undefined as never, enrollment: undefined as never, quarantine: undefined as never,
+    launches: { authorize: async () => ok(outcomes[next++]!) },
+  });
+  const body = {
+    operationId: 'operation-1', recoveryEpoch: 1, assignmentId: 'assignment-1', attemptId: 'attempt-1', ownershipGeneration: 1,
+    executionId: 'execution-1', admissionId: 'admission-1', admissionGeneration: 2, reportsNotStarted: false,
+  };
+  const request = { parameters: [], body, query: new URLSearchParams(), correlationId: 'c' as never, worker: { workerId: 'worker-1' as never, generation: 1 } };
+  const answers = [];
+  for (let index = 0; index < outcomes.length; index += 1) answers.push(value(await api.handle('authorizeLaunch', request, '')) as { outcome: string });
+  assert.deepEqual(answers.map((answer) => answer.outcome), ['granted', 'rejected', 'revoked', 'expired']);
+  for (const answer of answers) assert.ok(checkHttpSchema('LaunchAuthorizationOutcome', answer).ok, JSON.stringify(answer));
+  assert.deepEqual((answers[0] as unknown as { grant: Record<string, unknown> }).grant.ttlMilliseconds, 30_000);
+  const { worker: _worker, ...anonymous } = request;
+  assert.equal(failed(await api.handle('authorizeLaunch', anonymous, '')).code, 'internal');
+  assert.equal(failed(await api.handle('authorizeLaunch', { ...request, body: { ...body, recoveryEpoch: 0 } }, '')).code, 'invalid');
 });
