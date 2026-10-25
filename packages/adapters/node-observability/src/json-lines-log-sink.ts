@@ -27,12 +27,11 @@ export class JsonLinesLogSink implements LogSink {
     }
     try {
       const accepted = this.#output.write(`${JSON.stringify(record)}\n`, (error) => {
-        if (error) this.#break();
+        if (error) this.#lose();
       });
       if (!accepted) this.#waitForDrain();
     } catch {
-      this.#break();
-      this.#dropped += 1;
+      this.#lose();
     }
   }
 
@@ -41,6 +40,13 @@ export class JsonLinesLogSink implements LogSink {
     this.#output.once('drain', () => {
       this.#waitingForDrain = false;
     });
+  }
+
+  // The `error` event of the same failure only breaks; the write's callback
+  // or catch counts the record.
+  #lose(): void {
+    this.#break();
+    this.#dropped += 1;
   }
 
   #break(): void {

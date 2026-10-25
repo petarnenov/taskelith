@@ -40,8 +40,9 @@ test('an output that fails later loses records, not the process', async () => {
   const logger = new Logger(sink, SYSTEM_CLOCK);
   logger.error('e.first');
   await delay(10);
+  assert.equal(sink.dropped, 1, 'the write that failed after it returned');
   logger.error('e.second');
-  assert.equal(sink.dropped, 1);
+  assert.equal(sink.dropped, 2);
 });
 
 test('an output that throws loses the record, not the caller', () => {

@@ -81,6 +81,8 @@ test('a key-value secret and a password containing @ are redacted', () => {
   assert.equal(redactText(`password='two words' host=db`), `password=${REDACTED} host=db`);
   assert.equal(redactText(`password = "a \\"b\\" c" host=db`), `password=${REDACTED} host=db`);
   assert.equal(redactText(`password='unterminated`), `password=${REDACTED}`);
+  assert.equal(redactText('password=two\\ words host=db'), `password=${REDACTED} host=db`);
+  assert.equal(redactText('password=two\\\tw host=db'), `password=${REDACTED} host=db`);
 });
 
 test('text without credentials is unchanged', () => {
