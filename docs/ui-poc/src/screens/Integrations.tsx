@@ -71,7 +71,7 @@ const BINDING = [
 const EVENTS = [
   { text: 'PR #61 checks passed on a41c9e2', age: '2 min ago' },
   { text: 'Push to add-account-pool-scheduler (pre-authorized)', age: '4 min ago' },
-  { text: 'PR #63 opened by Codex', age: '18 min ago' },
+  { text: 'PR #61 opened by Claude Code', age: '18 min ago' },
   { text: 'PR #46 merged into dev · change archived', age: 'yesterday' },
 ];
 

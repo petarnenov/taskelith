@@ -15,6 +15,9 @@ export interface WorkerPlacementRecord {
   readonly cpuMillicores: number;
   readonly memoryMebibytes: number;
   readonly controls: readonly HardControl[];
+  // The highest protocol version the worker and the control plane share, set
+  // at enrollment; a worker without one is never placed on.
+  readonly protocolVersion?: number;
 }
 
 export interface PlacementWorkers {
@@ -24,5 +27,6 @@ export interface PlacementWorkers {
 }
 
 export function isEligibleForPlacement(worker: WorkerPlacementRecord): boolean {
-  return worker.enrolled && !worker.revoked && !worker.draining && worker.reachable && worker.admissionPressureSince === undefined;
+  return worker.enrolled && !worker.revoked && !worker.draining && worker.reachable && worker.admissionPressureSince === undefined
+    && worker.protocolVersion !== undefined;
 }

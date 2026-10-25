@@ -81,7 +81,7 @@ export {
   type PlacementRequest,
   type ReleaseRequest,
 } from './application/capacity-operations.js';
-export type { CommandIdentity } from './application/capacity-commands.js';
+export type { CommandIdentity, WorkerCommandType } from './application/capacity-commands.js';
 export { ResourceAdmissionService, type RetryTiming } from './application/resource-admission-service.js';
 export {
   ADMISSION_PRESSURE_SUPERSESSION_BOUND_MILLISECONDS,

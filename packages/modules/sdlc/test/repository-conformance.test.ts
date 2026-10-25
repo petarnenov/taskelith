@@ -6,8 +6,10 @@ import {
   InMemoryAdmissionRepository,
   InMemoryGateRepository,
   InMemoryOutbox,
+  InMemoryRunCatalog,
   InMemoryWorkflowRunRepository,
   OUTBOX_CONFORMANCE,
+  RUN_CATALOG_CONFORMANCE,
   WORKFLOW_RUN_REPOSITORY_CONFORMANCE,
   type ConformanceCase,
 } from '@taskelith/sdlc';
@@ -22,6 +24,9 @@ function runSuite<Port>(adapter: string, cases: readonly ConformanceCase<Port>[]
 
 runSuite('in-memory admissions', ADMISSION_REPOSITORY_CONFORMANCE, () => new InMemoryAdmissionRepository());
 runSuite('in-memory runs', WORKFLOW_RUN_REPOSITORY_CONFORMANCE, () => new InMemoryWorkflowRunRepository());
+runSuite('in-memory run catalog', RUN_CATALOG_CONFORMANCE, () => ({
+  runs: new InMemoryWorkflowRunRepository(), admissions: new InMemoryAdmissionRepository(), catalog: new InMemoryRunCatalog(),
+}));
 runSuite('in-memory gates', GATE_REPOSITORY_CONFORMANCE, () => new InMemoryGateRepository());
 runSuite('in-memory outbox', OUTBOX_CONFORMANCE, () => {
   const outbox = new InMemoryOutbox();

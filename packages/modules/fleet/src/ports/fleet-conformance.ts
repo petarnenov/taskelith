@@ -36,6 +36,7 @@ export function fleetWorker(workerId: string, journalId: string, overrides: Part
     journalId: must(parseIdentifier('JournalId', journalId)) as JournalId,
     host: { platform: 'linux', architecture: 'x64', hostname: 'build-1' },
     protocolVersions: { minimum: 1, maximum: 1 },
+    protocolVersion: 1,
     capacity: { slots: 2, cpuMillicores: 4000, memoryMebibytes: 8192, controls: ['cpu-limit', 'memory-limit'] },
     credentials: { current: generation(1, workerId) },
     enrolledAt: AT,

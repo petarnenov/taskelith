@@ -77,9 +77,10 @@ export class PostgresFleetRegistry implements FleetRegistry {
     const { capacity } = worker;
     const inserted = await this.#session.query(
       `INSERT INTO workers (worker_id, enrolled, revoked, draining, reachable, slots, cpu_millicores, memory_mebibytes,
-         controls, journal_id, enrollment)
-       VALUES ($1, true, false, false, false, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING`,
-      [worker.workerId, capacity.slots, capacity.cpuMillicores, capacity.memoryMebibytes, [...capacity.controls], worker.journalId, encodeRecord(worker)],
+         controls, journal_id, enrollment, protocol_version)
+       VALUES ($1, true, false, false, false, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT DO NOTHING`,
+      [worker.workerId, capacity.slots, capacity.cpuMillicores, capacity.memoryMebibytes, [...capacity.controls], worker.journalId,
+        encodeRecord(worker), worker.protocolVersion],
     );
     return inserted.rowCount === 0 ? err(failure('conflict', `worker ${worker.workerId} exists`)) : ok(undefined);
   }

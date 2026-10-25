@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
@@ -46,17 +47,22 @@ export type TransactionWork<Value> = (transaction: PostgresTransaction) => Promi
 // transactions; an `Err` from the work rolls its transaction back.
 export class PostgresDatabase {
   readonly #pool: pg.Pool;
+  readonly #url: URL;
+  readonly #applicationName = `taskelith-${randomUUID()}`;
   readonly #crashPoints: CrashPointHook;
   readonly #serializationAttempts: number;
   readonly #metrics: Metrics;
   readonly #logger: Logger;
 
   constructor(url: URL, options: PostgresDatabaseOptions = {}) {
+    this.#url = url;
     this.#pool = new pg.Pool({
       connectionString: url.href,
       max: options.maxConnections ?? 10,
       query_timeout: options.queryTimeoutMilliseconds,
       connectionTimeoutMillis: options.queryTimeoutMilliseconds,
+      // Names this pool's sessions, so that it can cancel its own queries.
+      application_name: this.#applicationName,
     });
     this.#crashPoints = options.crashPoints ?? NO_CRASH_POINTS;
     this.#serializationAttempts = options.serializationAttempts ?? SERIALIZATION_ATTEMPTS;
@@ -84,6 +90,22 @@ export class PostgresDatabase {
 
   async close(): Promise<void> {
     await this.#pool.end();
+  }
+
+  // Cancels every statement this pool runs, such as one waiting for a lock,
+  // so a shutdown with a deadline can release the pool; answers how many.
+  async cancelActiveStatements(): Promise<number> {
+    const client = new pg.Client({ connectionString: this.#url.href });
+    await client.connect();
+    try {
+      const { rows } = await client.query<{ cancelled: boolean }>(
+        "SELECT pg_cancel_backend(pid) AS cancelled FROM pg_stat_activity WHERE application_name = $1 AND state <> 'idle'",
+        [this.#applicationName],
+      );
+      return rows.filter((row) => row.cancelled).length;
+    } finally {
+      await client.end();
+    }
   }
 
   async #run<Value>(work: TransactionWork<Value>, begin: string): Promise<Result<Value>> {

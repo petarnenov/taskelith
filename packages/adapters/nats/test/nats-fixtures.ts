@@ -40,7 +40,7 @@ export async function installation(workers: readonly string[], server = NATS_URL
   assert.ok(address.ok);
   const transport = await connected(server, address.value, creds);
   after(async () => {
-    for (const kind of ['commands', 'observations', 'quarantine', 'advisories'] as const) {
+    for (const kind of ['commands', 'observations', 'sdlc', 'quarantine', 'advisories'] as const) {
       await transport.jsm.streams.delete(address.value.streamName(kind)).catch(() => false);
     }
     await transport.close();

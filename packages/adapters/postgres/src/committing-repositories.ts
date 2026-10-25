@@ -22,6 +22,8 @@ import type {
   Generation,
   Outbox,
   OutboxMessage,
+  RunCatalog,
+  RunEnvelope,
   TaskAdmission,
   TaskId,
   WorkflowRun,
@@ -244,5 +246,29 @@ export class CommittingOperatorCredentials implements OperatorCredentials {
 
   auditTrail(): Promise<Result<readonly AuditEvent[]>> {
     return this.#database.transaction((tx) => tx.operatorCredentials.auditTrail());
+  }
+}
+
+export class CommittingRunCatalog implements RunCatalog {
+  readonly #database: PostgresDatabase;
+
+  constructor(database: PostgresDatabase) {
+    this.#database = database;
+  }
+
+  register(envelope: RunEnvelope): Promise<Result<void>> {
+    return this.#database.transaction((tx) => tx.catalog.register(envelope));
+  }
+
+  envelope(runId: WorkflowRunId): Promise<Result<RunEnvelope | undefined>> {
+    return this.#database.transaction((tx) => tx.catalog.envelope(runId));
+  }
+
+  bindAdmission(admissionId: AdmissionId, runId: WorkflowRunId): Promise<Result<void>> {
+    return this.#database.transaction((tx) => tx.catalog.bindAdmission(admissionId, runId));
+  }
+
+  runOfAdmission(admissionId: AdmissionId): Promise<Result<WorkflowRunId | undefined>> {
+    return this.#database.transaction((tx) => tx.catalog.runOfAdmission(admissionId));
   }
 }

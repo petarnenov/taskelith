@@ -1,4 +1,4 @@
-import { parseEventMetadata, parseInstant, type Instant, type Result } from '@taskelith/kernel';
+import { parseEventMetadata, parseIdentifier, parseInstant, type Instant, type Result } from '@taskelith/kernel';
 import { parseArtifactRevision, type ArtifactRevision } from '../domain/artifact-revision.js';
 import { openGate, recordGateEvidence, type Gate } from '../domain/gate.js';
 import { parseSemanticApproval } from '../domain/gate-evidence.js';
@@ -14,6 +14,7 @@ import type { AdmissionRepository } from './admission-repository.js';
 import { expectCode, expectRaceWinnerStored, expectRead, expectSame, expectSuccess, type ConformanceCase } from './conformance-case.js';
 import type { GateRepository } from './gate-repository.js';
 import type { Outbox, OutboxMessage } from './outbox.js';
+import type { ProjectId, RunCatalog } from './run-catalog.js';
 import type { WorkflowRunRepository } from './workflow-run-repository.js';
 
 // Shared suites that the in-memory and the database adapters of the SDLC
@@ -286,6 +287,46 @@ export const OUTBOX_CONFORMANCE: readonly ConformanceCase<OutboxConformanceTarge
         expectCode(problems, `payload ${index + 1}`, await outbox.append(invalid), 'invalid');
       }
       expectSame(problems, 'stored', await stored(), []);
+      return problems;
+    },
+  },
+]);
+
+// A catalog with the stores it describes: an envelope belongs to a stored
+// run, and a binding to a stored admission.
+export interface RunCatalogConformanceTarget {
+  readonly runs: WorkflowRunRepository;
+  readonly admissions: AdmissionRepository;
+  readonly catalog: RunCatalog;
+}
+
+export const RUN_CATALOG_CONFORMANCE: readonly ConformanceCase<RunCatalogConformanceTarget>[] = Object.freeze([
+  {
+    name: 'a run is registered once with its project and creation time',
+    async check({ runs, catalog }) {
+      const problems: string[] = [];
+      const stored = run('run-1');
+      must(await runs.add(stored));
+      const envelope = { runId: stored.id, projectId: must(parseIdentifier('ProjectId', 'project-1')) as ProjectId, createdAt: AT };
+      expectRead(problems, 'unregistered', await catalog.envelope(stored.id), undefined);
+      expectSuccess(problems, 'register', await catalog.register(envelope));
+      expectCode(problems, 'register again', await catalog.register(envelope), 'conflict');
+      expectRead(problems, 'envelope', await catalog.envelope(stored.id), envelope);
+      return problems;
+    },
+  },
+  {
+    name: 'an admission is bound to one run',
+    async check({ runs, admissions, catalog }) {
+      const problems: string[] = [];
+      const stored = run('run-1');
+      must(await runs.add(stored));
+      const bound = admission('admission-1', []);
+      must(await admissions.add(bound));
+      expectRead(problems, 'unbound', await catalog.runOfAdmission(bound.id), undefined);
+      expectSuccess(problems, 'bind', await catalog.bindAdmission(bound.id, stored.id));
+      expectCode(problems, 'bind again', await catalog.bindAdmission(bound.id, stored.id), 'conflict');
+      expectRead(problems, 'run', await catalog.runOfAdmission(bound.id), stored.id);
       return problems;
     },
   },

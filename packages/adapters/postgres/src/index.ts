@@ -7,6 +7,7 @@ export {
   CommittingInstallationTable,
   CommittingOperatorCredentials,
   CommittingOutbox,
+  CommittingRunCatalog,
   CommittingTaskRepository,
   CommittingWorkflowRunRepository,
 } from './committing-repositories.js';
@@ -24,3 +25,4 @@ export {
   type TransactionWork,
 } from './postgres-database.js';
 export { PostgresTransaction } from './postgres-transaction.js';
+export { PostgresRunCatalog } from './run-catalog.js';

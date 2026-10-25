@@ -1,6 +1,10 @@
 {
   "extends": "../../tsconfig.package.json",
   "references": [
+    { "path": "../../packages/adapters/node-observability" },
+    { "path": "../../packages/modules/observability" },
+    { "path": "../../packages/modules/scheduling" },
+    { "path": "../../packages/modules/sdlc" },
     { "path": "../../packages/kernel" },
     { "path": "../../packages/contracts" },
     { "path": "../../packages/testing" },

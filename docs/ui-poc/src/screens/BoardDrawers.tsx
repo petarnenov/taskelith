@@ -9,135 +9,206 @@ import {
   Divider,
   Drawer,
   Group,
-  SegmentedControl,
+  Paper,
   Stack,
   Switch,
   Table,
   Text,
-  Timeline,
   Title,
 } from '@mantine/core';
 import { usePoc } from '../store';
-import { Facts, GATE, SectionLabel, SessionBadge } from '../ui';
+import { Facts, GATE, LaterGate, RoleButton, SectionLabel, SessionBadge, deriveSessionStatus } from '../ui';
+import { BINDINGS, SETTINGS_ROWS, WORKFLOWS, conflictFiles } from './board-data';
 import {
-  BINDINGS,
-  COLUMNS,
-  MERGE_ROW,
-  NATIVE_STEPS,
-  SETTINGS_ROWS,
-  conflictFiles,
-  type Framework,
-} from './board-data';
-import { isMergeReady, mergeStepOf, sessionLog, traceFor, type BoardTask } from './board-model';
+  admissionKind,
+  isMergeReady,
+  mergeStepOf,
+  stageRows,
+  type BoardRun,
+  type StageRow,
+} from './board-model';
 import type { BoardFlow } from './Board';
 
-// Merge is the gate between Review (4) and Archived (5).
-const MERGE_GATE_POSITION = 4.5;
+const EVIDENCE_LABEL = {
+  'structural-validation': 'structural validation',
+  'semantic-approval': 'semantic approval',
+  'platform-record': 'platform record',
+};
 
-const LIFECYCLE = [
-  ...COLUMNS.slice(0, 5).map((column, i) => ({ ...column, position: i })),
-  { ...MERGE_ROW, position: MERGE_GATE_POSITION },
-  { ...COLUMNS[5], position: 5 },
-];
-
-function stageRows(task: BoardTask) {
-  const native = NATIVE_STEPS[task.framework];
-  return LIFECYCLE.map((row, i) => {
-    const step = native[i];
-    const gate = row.stage + ' · ' + row.gate + ' · ' + (step ? 'native: ' + step : 'platform-managed');
-    const base = { name: row.name, gate };
-    if (task.stage === 5 || row.position < task.stage)
-      return { ...base, label: 'Passed', color: 'teal', done: true };
-    if (row.position === MERGE_GATE_POSITION) {
-      if (!isMergeReady(task)) return { ...base, label: 'Pending', color: 'gray', done: false };
-      const reason = mergeStepOf(task)?.label ?? 'queued for auto-merge';
-      return { ...base, label: 'Pending · ' + reason, color: 'indigo', done: false };
-    }
-    if (row.position === task.stage) {
-      const look = GATE[task.gate];
-      return { ...base, label: look.label + ' · ' + task.note, color: look.color, done: false };
-    }
-    return { ...base, label: 'Pending', color: 'gray', done: false };
-  });
-}
-
-function bindingFacts(task: BoardTask) {
-  const b = BINDINGS[task.framework];
-  return [
-    { label: 'Plugin', value: b.plugin },
-    { label: 'Upstream tool version', value: b.tool },
-    { label: 'Workflow id', value: b.workflowId },
-    { label: 'Workflow version', value: b.workflowVersion },
-    { label: 'Workflow digest', value: b.digest },
-    { label: 'Configuration revision', value: 'project config r7' },
-    { label: 'Policy revision', value: 'governance v3 · r12' },
-  ];
-}
-
-function admissionFacts(task: BoardTask) {
-  return [
-    { label: 'Work item', value: task.change },
-    { label: 'Artifact revision', value: task.revision ?? '' },
-    { label: 'Policy revision', value: 'governance v3 · r12' },
-    {
-      label: 'Admission',
-      value:
-        task.stage < 2
-          ? 'Planning task · admitted without a spec'
-          : 'Implementation · prerequisite gates passed',
-    },
-  ];
-}
-
-function migrationText(task: BoardTask, other: Framework): string {
-  const started = task.stage >= 2;
-  return (
-    'Explicit migration to ' +
-    other +
-    ': ' +
-    (started ? 'running work is checkpointed and drained first; ' : '') +
-    'the original artifacts are preserved, mapped copies are validated, lossy mappings are listed, affected approvals are invalidated, and a new binding is recorded next to the old one.' +
-    (started
-      ? ' If safe conversion is not possible, the run is kept and a linked successor is created instead.'
-      : '')
-  );
-}
-
-function DrawerSection({ title, children }: { title: string; children: ReactNode }) {
+function DrawerSection({ title, later, children }: { title: string; later?: string; children: ReactNode }) {
   return (
     <Stack gap="xs">
-      <Title order={3} size="h6">
-        {title}
-      </Title>
+      <Group gap="xs">
+        <Title order={3} size="h6">
+          {title}
+        </Title>
+        {later ? <LaterGate>{later}</LaterGate> : null}
+      </Group>
       {children}
     </Stack>
   );
 }
 
-function FrameworkSection({ task, flow }: { task: BoardTask; flow: BoardFlow }) {
-  const [open, setOpen] = useState(false);
-  const other: Framework = task.framework === 'OpenSpec' ? 'SpecKit' : 'OpenSpec';
+function StageTable({ run }: { run: BoardRun }) {
+  const rows = stageRows(run);
+  const reviewIndex = rows.findIndex((row) => row.id === 'review');
+  const mergeReady = isMergeReady(run) || run.mergeStep !== undefined;
+  const mergeLabel = mergeStepOf(run)?.label ?? (mergeReady ? 'queued for auto-merge' : 'not reached');
   return (
-    <DrawerSection title="Framework">
-      <Group justify="space-between">
-        <Text size="sm">{task.framework} · bound to this run</Text>
-        <Button size="xs" variant="default" aria-expanded={open} onClick={() => setOpen(!open)}>
-          Change framework…
-        </Button>
-      </Group>
+    <Table fz="xs" withTableBorder verticalSpacing={6}>
+      <Table.Thead>
+        <Table.Tr>
+          <Table.Th>Stage</Table.Th>
+          <Table.Th>State</Table.Th>
+          <Table.Th>Gates</Table.Th>
+        </Table.Tr>
+      </Table.Thead>
+      <Table.Tbody>
+        {rows.map((row, i) => (
+          <StageRowView
+            key={row.id}
+            row={row}
+            current={row.id === run.at}
+            afterRow={
+              i === reviewIndex ? (
+                <Table.Tr>
+                  <Table.Td>
+                    <Text size="xs" fw={600}>
+                      Merge
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      platform-added · not a framework stage
+                    </Text>
+                  </Table.Td>
+                  <Table.Td>{mergeReady ? 'in progress' : 'not started'}</Table.Td>
+                  <Table.Td>
+                    <Text size="xs">auto-merge · {mergeLabel}</Text>
+                  </Table.Td>
+                </Table.Tr>
+              ) : null
+            }
+          />
+        ))}
+      </Table.Tbody>
+    </Table>
+  );
+}
+
+function StageRowView({ row, current, afterRow }: { row: StageRow; current: boolean; afterRow: ReactNode }) {
+  return (
+    <>
+      <Table.Tr bg={current ? 'var(--mantine-primary-color-light)' : undefined}>
+        <Table.Td>
+          <Text size="xs" fw={600} ff="monospace">
+            {row.id}
+          </Text>
+          <Text size="xs" c="dimmed">
+            {row.origin === 'native' ? 'native: ' + row.native : 'platform-managed'} ·{' '}
+            {row.obligations.join(', ')}
+          </Text>
+        </Table.Td>
+        <Table.Td>{row.state}</Table.Td>
+        <Table.Td>
+          <Stack gap={4}>
+            {row.gates.map((gate) => (
+              <Group key={gate.id} gap={6} wrap="nowrap" align="flex-start">
+                <Badge size="xs" variant="light" color={GATE[gate.state].color}>
+                  {GATE[gate.state].label}
+                </Badge>
+                <Text size="xs">
+                  {EVIDENCE_LABEL[gate.requiredEvidence]} · {gate.label}
+                  {gate.verdict ? ' · ' + gate.verdict : ''}
+                  {current ? ' · generation ' + gate.generation : ''}
+                </Text>
+              </Group>
+            ))}
+          </Stack>
+        </Table.Td>
+      </Table.Tr>
+      {afterRow}
+    </>
+  );
+}
+
+function AdmissionSection({ run }: { run: BoardRun }) {
+  const stage = WORKFLOWS[run.framework].stages.find((s) => s.id === run.at)!;
+  const kind = admissionKind(stage);
+  if (!kind) {
+    return (
+      <DrawerSection title="Admission">
+        <Text size="sm" c="dimmed">
+          No admission: {stage.id} is a {stage.origin} {stage.obligations.join(', ')} stage, which admits no
+          task.
+        </Text>
+      </DrawerSection>
+    );
+  }
+  const items = [
+    { label: 'Stage', value: stage.id },
+    { label: 'Kind', value: kind },
+    { label: 'State', value: run.admission?.state ?? 'not admitted yet' },
+  ];
+  if (run.admission?.invalidatedBy)
+    items.push({ label: 'Invalidated by', value: run.admission.invalidatedBy });
+  if (run.revision) {
+    items.push({ label: 'Artifact', value: run.revision.artifactId });
+    items.push({ label: 'Digest', value: run.revision.digest });
+    items.push({ label: 'Native reference', value: run.revision.nativeReference });
+  }
+  return (
+    <DrawerSection title="Admission">
+      <Facts items={items} />
+      <Text size="xs" c="dimmed">
+        A changed artifact revision invalidates an unused admission.
+      </Text>
+    </DrawerSection>
+  );
+}
+
+function BindingSection({ run }: { run: BoardRun }) {
+  const workflow = WORKFLOWS[run.framework];
+  const binding = BINDINGS[run.framework];
+  return (
+    <DrawerSection
+      title="Run binding"
+      later={run.framework === 'SpecKit' ? 'SpecKit adapter · G4' : undefined}
+    >
+      <Facts
+        items={[
+          { label: 'Plugin', value: binding.plugin },
+          { label: 'Upstream tool version', value: binding.tool },
+          { label: 'Workflow id', value: workflow.id },
+          { label: 'Workflow version', value: workflow.version },
+          { label: 'Workflow digest', value: binding.digest },
+          { label: 'Configuration revision', value: 'config-r7' },
+          { label: 'Policy revision', value: 'governance-v3-r12' },
+        ]}
+      />
+      <Text size="xs" c="dimmed">
+        Fixed for this run. Moving the run to another framework is a migration that binds a new run (G4).
+      </Text>
+    </DrawerSection>
+  );
+}
+
+function ReconcileAction({ run, flow }: { run: BoardRun; flow: BoardFlow }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Stack gap="xs">
+      <RoleButton capability="reconcile" size="xs" color="red" variant="light" onClick={() => setOpen(!open)}>
+        Reconcile…
+      </RoleButton>
       <Collapse expanded={open}>
-        <Alert variant="light" color="indigo">
-          <Stack gap="sm">
-            <Text size="sm">{migrationText(task, other)}</Text>
+        <Alert variant="light" color="red" title="Reconcile this attempt">
+          <Stack gap="xs">
+            <Text size="sm">
+              Records an audited decision with your evidence: the execution ends with an unknown status and
+              the outcome operator-resolved, its launch grants are revoked, and its capacity is released. Use
+              it only when you know the process on {run.harness.split(' · ')[1]} is gone.
+            </Text>
             <Group gap="xs">
-              <Button
-                size="xs"
-                onClick={() => {
-                  flow.migrate(task, other);
-                  setOpen(false);
-                }}
-              >
-                Migrate to {other}
+              <Button size="xs" color="red" onClick={() => flow.reconcile(run)}>
+                Reconcile with evidence
               </Button>
               <Button size="xs" variant="default" onClick={() => setOpen(false)}>
                 Cancel
@@ -146,36 +217,80 @@ function FrameworkSection({ task, flow }: { task: BoardTask; flow: BoardFlow }) 
           </Stack>
         </Alert>
       </Collapse>
-    </DrawerSection>
+    </Stack>
   );
 }
 
-function SessionSection({ task, flow }: { task: BoardTask; flow: BoardFlow }) {
+function RuntimeApproval({ run }: { run: BoardRun }) {
+  const { decisions, decide } = usePoc();
+  const inboxId = run.inboxId;
+  const state = inboxId ? decisions[inboxId] : undefined;
+  if (!inboxId || run.session.turn !== 'awaiting-approval' || state?.confirmed) return null;
+  return (
+    <Alert variant="light" color="orange" title="Native approval request">
+      <Stack gap="xs">
+        <LaterGate>native requests · G3 items 4, 13, 18</LaterGate>
+        <Code>nvm use &amp;&amp; make verify</Code>
+        <Text size="xs" c="dimmed">
+          Request req-7f2c for attempt #{run.session.attempt ?? 1} · provider generation 3. Runtime approval
+          only; it passes no SDLC gate.
+        </Text>
+        {state ? (
+          <Text size="xs">Sending · waiting for the server to confirm…</Text>
+        ) : (
+          <Group gap="xs">
+            <RoleButton
+              capability="answer-runtime-request"
+              size="xs"
+              onClick={() => decide(inboxId, 'approve-once')}
+            >
+              Approve once
+            </RoleButton>
+            <RoleButton
+              capability="answer-runtime-request"
+              size="xs"
+              variant="default"
+              onClick={() => decide(inboxId, 'deny')}
+            >
+              Deny
+            </RoleButton>
+          </Group>
+        )}
+      </Stack>
+    </Alert>
+  );
+}
+
+function sessionLog(run: BoardRun): string {
+  const step = mergeStepOf(run);
+  if (step)
+    return '▸ git merge origin/dev\n✗ CONFLICT in ' + conflictFiles(run).length + ' files\n▸ ' + step.detail;
+  if (run.returnedFromMerge)
+    return '▸ returned from merge: spec conflict with dev\n▸ reconciling spec with the new contract';
+  if (run.session.phase !== 'running') return '';
+  if (run.session.evidence === 'uncertain')
+    return '? last observation from ' + run.harness.split(' · ')[1] + ' ' + run.session.lastContact;
+  if (run.session.turn === 'awaiting-approval')
+    return '▸ task 4 of 9 complete\n▸ request: run nvm use && make verify\n⏸ waiting for approval';
+  return '▸ read tasks of ' + run.workItem + '\n▸ edit 3 files\n▸ run tests: 42 passed';
+}
+
+function SessionSection({ run, flow }: { run: BoardRun; flow: BoardFlow }) {
   const { go } = usePoc();
-  const log = sessionLog(task, conflictFiles(task).length);
-  const canStop = ['live', 'idle', 'approval'].includes(task.session);
+  const status = deriveSessionStatus(run.session);
+  const log = sessionLog(run);
+  const canStop = run.session.phase === 'running' && run.session.cancellation === undefined;
   return (
     <DrawerSection title="Agent session">
-      <SessionBadge state={task.session} harness={task.harness || 'Not assigned'} />
-      {log ? <Code block>{log}</Code> : null}
-      {task.approval ? (
-        <Alert variant="light" color="orange" title="Native approval request">
-          <Stack gap="xs">
-            <Code>nvm use &amp;&amp; make verify</Code>
-            <Text size="xs" c="dimmed">
-              Runtime approval only. It does not pass any SDLC gate.
-            </Text>
-            <Group gap="xs">
-              <Button size="xs" onClick={() => flow.approve(task, 'approved')}>
-                Approve once
-              </Button>
-              <Button size="xs" variant="default" onClick={() => flow.approve(task, 'denied')}>
-                Deny
-              </Button>
-            </Group>
-          </Stack>
-        </Alert>
+      <SessionBadge view={run.session} harness={run.harness || 'Not assigned'} />
+      {run.session.phase !== 'none' ? (
+        <Text size="xs" c="dimmed">
+          Attempt #{run.session.attempt ?? 1} · ownership generation {run.session.ownershipGeneration ?? 1}
+        </Text>
       ) : null}
+      {log ? <Code block>{log}</Code> : null}
+      <RuntimeApproval run={run} />
+      {status.needsReconcile ? <ReconcileAction run={run} flow={flow} /> : null}
       <Group gap="sm">
         <Button size="xs" variant="light" onClick={() => go('session')}>
           Open session
@@ -184,124 +299,89 @@ function SessionSection({ task, flow }: { task: BoardTask; flow: BoardFlow }) {
           View evidence
         </Anchor>
         {canStop ? (
-          <Button size="xs" variant="light" color="red" ml="auto" onClick={() => flow.stopSession(task)}>
-            Stop session
-          </Button>
+          <RoleButton
+            capability="stop-or-retry"
+            size="xs"
+            variant="light"
+            color="red"
+            ml="auto"
+            onClick={() => flow.stopSession(run)}
+          >
+            {run.session.reachability === 'unknown' ? 'Request stop' : 'Stop session'}
+          </RoleButton>
         ) : null}
       </Group>
     </DrawerSection>
   );
 }
 
-function TaskDetail({ task, flow }: { task: BoardTask; flow: BoardFlow }) {
-  const gate = GATE[task.gate];
-  const rows = stageRows(task);
-  const trace = traceFor(task);
+function RunDetail({ run, flow }: { run: BoardRun; flow: BoardFlow }) {
   return (
     <Stack gap="lg">
       <Stack gap={6}>
         <Group gap={6}>
-          <Badge variant="default">{task.framework}</Badge>
-          <Badge variant="light" color={gate.color}>
-            {gate.label}
+          <Badge variant="default">{run.framework}</Badge>
+          <Badge variant="default" tt="none">
+            {run.runId}
           </Badge>
         </Group>
         <Title order={2} size="h3">
-          {task.title}
+          {run.title}
         </Title>
         <Text size="sm" ff="monospace" c="dimmed">
-          {task.change}
+          {run.workItem} · {run.nativeReference}
         </Text>
       </Stack>
-      <DrawerSection title="SDLC gates">
-        <Timeline active={rows.filter((row) => row.done).length - 1} bulletSize={14} lineWidth={2}>
-          {rows.map((row) => (
-            <Timeline.Item
-              key={row.name}
-              color={row.color}
-              title={
-                <Group gap={6}>
-                  <Text size="sm" fw={600}>
-                    {row.name}
-                  </Text>
-                  <Text size="xs" c={row.color === 'gray' ? 'dimmed' : row.color}>
-                    {row.label}
-                  </Text>
-                </Group>
-              }
-            >
-              <Text size="xs" c="dimmed">
-                {row.gate}
-              </Text>
-            </Timeline.Item>
-          ))}
-        </Timeline>
+      <DrawerSection title="Stages and gates">
+        <StageTable run={run} />
+        <Text size="xs" c="dimmed">
+          A stage passes only when all its gates pass; structural validation never replaces semantic approval.
+        </Text>
       </DrawerSection>
-      {task.blockedReason ? (
+      {run.whyNotMoving ? (
         <Alert variant="light" color="orange" title="Why it is not moving">
-          {task.blockedReason}
+          {run.whyNotMoving}
         </Alert>
       ) : null}
-      <DrawerSection title="Traceability">
-        {trace.length ? (
-          <Table fz="xs" withTableBorder>
-            <Table.Tbody>
-              {trace.map((row) => (
-                <Table.Tr key={row.req}>
-                  <Table.Td fw={600}>{row.req}</Table.Td>
-                  <Table.Td ff="monospace">{row.path}</Table.Td>
-                  <Table.Td c={row.color}>{row.state}</Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        ) : (
-          <Text size="sm" c="dimmed">
-            No requirements yet: the spec is not written.
-          </Text>
-        )}
+      <AdmissionSection run={run} />
+      <DrawerSection title="Traceability" later="G3 items 15, 17">
+        <Text size="sm" c="dimmed">
+          Requirements to tasks to attempts, with evidence freshness at the code head.
+        </Text>
       </DrawerSection>
-      {task.stage > 0 ? (
-        <>
-          <DrawerSection title="Run binding">
-            <Facts items={bindingFacts(task)} />
-            <Text size="xs" c="dimmed">
-              Fixed for this run. A new plugin version or policy revision applies to new runs only.
-            </Text>
-          </DrawerSection>
-          <DrawerSection title="Admission">
-            <Facts items={admissionFacts(task)} />
-            <Text size="xs" c="dimmed">
-              A changed artifact revision invalidates an unused admission.
-            </Text>
-          </DrawerSection>
-        </>
-      ) : null}
-      {task.stage < 5 ? <FrameworkSection key={task.id} task={task} flow={flow} /> : null}
-      <SessionSection task={task} flow={flow} />
+      <BindingSection run={run} />
+      <DrawerSection title="Framework" later="G4">
+        <Group justify="space-between">
+          <Text size="sm">{run.framework} · bound to this run</Text>
+          <Button size="xs" variant="default" disabled>
+            Change framework…
+          </Button>
+        </Group>
+      </DrawerSection>
+      <SessionSection run={run} flow={flow} />
     </Stack>
   );
 }
 
-export function TaskDrawer({
-  task,
+export function RunDrawer({
+  run,
   onClose,
   flow,
 }: {
-  task: BoardTask | undefined;
+  run: BoardRun | undefined;
   onClose: () => void;
   flow: BoardFlow;
 }) {
   return (
     <Drawer
-      opened={!!task}
+      opened={!!run}
       onClose={onClose}
       position="right"
-      size="lg"
-      title={<SectionLabel>Task detail</SectionLabel>}
+      size="xl"
+      title={<SectionLabel>Run detail</SectionLabel>}
       closeButtonProps={{ 'aria-label': 'Close panel' }}
     >
-      {task ? <TaskDetail task={task} flow={flow} /> : null}
+      {run ? <RunDetail run={run} flow={flow} /> : null}
     </Drawer>
   );
 }
@@ -311,16 +391,14 @@ export function SettingsDrawer({
   onClose,
   autoMerge,
   onAutoMerge,
-  framework,
-  onFramework,
 }: {
   opened: boolean;
   onClose: () => void;
   autoMerge: boolean;
   onAutoMerge: (on: boolean) => void;
-  framework: Framework;
-  onFramework: (framework: Framework) => void;
 }) {
+  const { can } = usePoc();
+  const editable = can('change-settings');
   return (
     <Drawer
       opened={opened}
@@ -338,47 +416,46 @@ export function SettingsDrawer({
       closeButtonProps={{ 'aria-label': 'Close panel' }}
     >
       <Stack gap="md">
+        {!editable ? (
+          <Alert variant="light" color="gray">
+            Read-only: only a project-maintainer changes these settings.
+          </Alert>
+        ) : null}
         <Group justify="space-between" align="flex-start" wrap="nowrap">
           <Stack gap={2}>
             <Text fw={600} size="sm">
               Members
             </Text>
             <Text size="xs" c="dimmed">
-              PP: installation-owner and project-maintainer. Only project-maintainers change these settings,
-              approve SDLC gates or delegate them by policy.
+              Roles: installation-owner, project-maintainer, project-operator, project-viewer (trust model
+              section 3).
             </Text>
           </Stack>
-          <Anchor href="#" size="sm" onClick={(event) => event.preventDefault()}>
-            Manage
-          </Anchor>
+          <LaterGate>G3 item 11</LaterGate>
         </Group>
         <Divider />
-        <Stack gap={6}>
-          <Text fw={600} size="sm" id="framework-label">
-            SDLC framework
-          </Text>
-          <Text size="xs" c="dimmed">
-            Default for new tasks in this project, Taskelith included; OpenSpec unless a maintainer picks
-            another. A task can override it at creation. Running tasks keep the framework they are bound to.
-          </Text>
-          <SegmentedControl
-            aria-labelledby="framework-label"
-            value={framework}
-            onChange={(v) => onFramework(v as Framework)}
-            data={[
-              { value: 'OpenSpec', label: 'OpenSpec · default' },
-              { value: 'SpecKit', label: 'SpecKit' },
-            ]}
-          />
-        </Stack>
+        <Paper withBorder p="sm" radius="md">
+          <Group justify="space-between" wrap="nowrap">
+            <Stack gap={2}>
+              <Text fw={600} size="sm">
+                SDLC framework
+              </Text>
+              <Text size="xs" c="dimmed">
+                OpenSpec for every project in G3; selecting another framework comes in G4.
+              </Text>
+            </Stack>
+            <LaterGate>G4</LaterGate>
+          </Group>
+        </Paper>
         <Divider />
         <Switch
           size="md"
           labelPosition="left"
           checked={autoMerge}
+          disabled={!editable}
           onChange={(event) => onAutoMerge(event.currentTarget.checked)}
           label="Auto-merge"
-          description="Merge the pull request as soon as the last gate passes. On a conflict, the task's harness resolves it and verification re-runs before the merge. Turn off to merge by hand from the board. Set by a project-maintainer; it is the integration authority for this project."
+          description="Merge the pull request as soon as the last gate passes. On a conflict, the task's harness resolves it and verification re-runs before the merge. Set by a project-maintainer; it is the integration authority for this project (G3 item 23)."
         />
         {SETTINGS_ROWS.map((row) => (
           <Stack key={row.label} gap="md">

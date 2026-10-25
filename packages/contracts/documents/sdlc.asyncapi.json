@@ -2,7 +2,7 @@
   "asyncapi": "3.0.0",
   "info": {
     "title": "Taskelith SDLC messages",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "Command and event envelopes of the SDLC module and its admission and gate events. Transport bindings, subjects, and servers are chosen with the broker in G2, so channel addresses are not yet fixed."
   },
   "defaultContentType": "application/json",
@@ -17,8 +17,13 @@
       }
     },
     "sdlcEvents": {
-      "address": null,
+      "address": "taskelith.{installationId}.sdlc.events",
       "description": "Admission and gate events of SDLC runs.",
+      "parameters": {
+        "installationId": {
+          "description": "The installation that binds the subjects."
+        }
+      },
       "messages": {
         "admissionAdmitted": {
           "$ref": "#/components/messages/admissionAdmitted"

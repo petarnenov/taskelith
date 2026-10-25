@@ -19,7 +19,7 @@ import { decidePlacement, type PlacementSnapshot, type QuotaStanding } from '../
 import { isSupersessionDue } from '../domain/supersession.js';
 import type { CapacityTransaction } from '../ports/capacity-store.js';
 import { isEligibleForPlacement, type WorkerPlacementRecord } from '../ports/placement-workers.js';
-import { appendWorkerCommand, cancelPayload, endedPayload, offeredPayload, type CommandIdentity } from './capacity-commands.js';
+import { appendWorkerCommand, cancellationPayload, endPayload, offerPayload, type CommandIdentity } from './capacity-commands.js';
 
 // The capacity operations of contract sections 4 and 6, each run inside the
 // caller's SERIALIZABLE transaction, such as the one recording a fact.
@@ -74,7 +74,7 @@ export async function cancelInTransaction(tx: CapacityTransaction, request: Rele
   const stored = await tx.assignments.replace(ended.value, assignment.generation);
   if (!stored.ok) return stored;
   const follow = ended.value.reservation.state === 'released'
-    ? await appendWorkerCommand(tx, request, 'scheduling.assignment.ended', assignment.workerId, at, endedPayload(ended.value, 'cancelled'))
+    ? await appendWorkerCommand(tx, request, 'execution.assignment.end', ended.value, at, endPayload(ended.value, 'cancelled'))
     : await revokeRunningLaunch(tx, ended.value, task, request, at);
   return follow.ok ? ok(ended.value) : follow;
 }
@@ -95,7 +95,7 @@ export async function releaseInTransaction(tx: CapacityTransaction, request: Rel
   const stored = await tx.assignments.replace(released.value, assignment.generation);
   if (!stored.ok) return stored;
   if (!attemptEnded) return ok(released.value);
-  const ended = await appendWorkerCommand(tx, request, 'scheduling.assignment.ended', assignment.workerId, at, endedPayload(released.value, 'attempt-ended'));
+  const ended = await appendWorkerCommand(tx, request, 'execution.assignment.end', released.value, at, endPayload(released.value, 'attempt-ended'));
   return ended.ok ? ok(released.value) : ended;
 }
 
@@ -113,7 +113,7 @@ export async function supersedeInTransaction(tx: CapacityTransaction, request: R
   if (!superseded.ok) return superseded;
   const stored = await tx.assignments.replace(superseded.value, assignment.generation);
   if (!stored.ok) return stored;
-  const ended = await appendWorkerCommand(tx, request, 'scheduling.assignment.ended', assignment.workerId, at, endedPayload(superseded.value, 'superseded'));
+  const ended = await appendWorkerCommand(tx, request, 'execution.assignment.end', superseded.value, at, endPayload(superseded.value, 'superseded'));
   return ended.ok ? ok(superseded.value) : ended;
 }
 
@@ -173,7 +173,7 @@ async function insertPlacement(
     });
     if (!charge.ok) return charge;
   }
-  const command = await appendWorkerCommand(tx, request, 'scheduling.assignment.offered', assignment.workerId, at, offeredPayload(assignment));
+  const command = await appendWorkerCommand(tx, request, 'execution.assignment.offer', assignment, at, offerPayload(assignment));
   return command.ok ? ok(Object.freeze({ kind: 'placed', assignment })) : command;
 }
 
@@ -236,5 +236,5 @@ async function revokeRunningLaunch(tx: CapacityTransaction, assignment: Assignme
   if (!revoked.ok) return revoked;
   const stored = await tx.tasks.replace(revoked.value, task.generation);
   if (!stored.ok) return stored;
-  return appendWorkerCommand(tx, request, 'execution.attempt.cancel', assignment.workerId, at, cancelPayload(assignment));
+  return appendWorkerCommand(tx, request, 'execution.cancellation.request', assignment, at, cancellationPayload());
 }

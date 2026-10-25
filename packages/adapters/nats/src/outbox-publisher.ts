@@ -18,10 +18,17 @@ export interface PublishRound {
   readonly deferred: number;
 }
 
+// Holds a round of publications under a condition, such as the absence of
+// restore quarantine, that must not change while the round runs.
+export interface PublicationFence {
+  hold<Value>(work: () => Promise<Result<Value>>): Promise<Result<Value>>;
+}
+
 export interface OutboxPublisherOptions {
   readonly limits?: TransportLimits;
   readonly now?: () => number;
   readonly logger?: Logger;
+  readonly fence?: PublicationFence;
 }
 
 export const OUTBOX_BATCH = 100;
@@ -41,8 +48,10 @@ export class OutboxPublisher {
   readonly #now: () => number;
   readonly #logger: Logger;
   readonly #backoff = new Map<string, SubjectBackoff>();
+  readonly #fence: PublicationFence | undefined;
 
   constructor(source: OutboxSource, publisher: JetStreamPublisher, address: TransportAddress, options: OutboxPublisherOptions = {}) {
+    this.#fence = options.fence;
     this.#source = source;
     this.#publisher = publisher;
     this.#address = address;
@@ -51,7 +60,11 @@ export class OutboxPublisher {
     this.#logger = options.logger ?? SILENT_LOGGER;
   }
 
-  async publishPending(limit = OUTBOX_BATCH): Promise<Result<PublishRound>> {
+  publishPending(limit = OUTBOX_BATCH): Promise<Result<PublishRound>> {
+    return this.#fence === undefined ? this.#round(limit) : this.#fence.hold(() => this.#round(limit));
+  }
+
+  async #round(limit: number): Promise<Result<PublishRound>> {
     const rows = await this.#source.unpublished(limit);
     if (!rows.ok) return rows;
     const blocked = new Set<string>();

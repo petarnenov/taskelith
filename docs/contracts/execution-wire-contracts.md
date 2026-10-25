@@ -7,7 +7,7 @@ Date: 2026-10-25. Status: proposed wire contract for G2 ([G2 work plan](../g2-pl
 | Document | Version | Content |
 | --- | --- | --- |
 | [`execution.asyncapi.json`](../../packages/contracts/documents/execution.asyncapi.json) | 0.1.0 | Commands to a worker and observations from it, over NATS JetStream |
-| [`execution.openapi.json`](../../packages/contracts/documents/execution.openapi.json) | 0.1.0 | Enrollment, launch authorization, delegation, task results, and evidence, over HTTPS |
+| [`execution.openapi.json`](../../packages/contracts/documents/execution.openapi.json) | 0.2.0 | Enrollment, launch authorization, delegation, task results, evidence, and the quarantine with its redrive (item 16), over HTTPS; G2 serves it as plain HTTP on loopback, and TLS is G3 item 26 (D11) |
 
 Both live in `@taskelith/contracts` beside the SDLC documents. The package generates one type and one validator per schema name from all four documents, so a name that several documents define must name the same schema; the build and the package tests fail otherwise. The execution documents reuse `CommandMetadata`, the identifiers, `ArtifactRevision`, and `Admission` of the SDLC documents. `Admission` gains the optional `ownershipGeneration` that a used admission carries ([`sdlc-task-admission`](../../openspec/specs/sdlc-task-admission/spec.md)), which the SDLC documents declare with version 0.2.0.
 
@@ -94,7 +94,7 @@ The schemas also fix the dependencies between fields:
 | `publishEvidence` | Worker credential | A multipart body of the record and its content. Every record names its input artifacts, code revision, validator or producing program with its version, and outcome (architecture section 8). The record names the `ownershipGeneration` at which the worker produced it, and the worker must have held the attempt at that generation. The control plane compares it with the current generation in the transaction that stores the record: evidence of an older generation is kept for audit with `ownershipCurrent` false and never counts as current evidence (launch authorization section 5). The control plane verifies the SHA-256 digest and size before it stores the record; a repeat of the same record returns 200. |
 | `readEvidence`, `downloadEvidence` | Operator credential | The record, and the content whose SHA-256 digest is the record's `contentDigest`; content that is missing or does not match is not served. |
 
-The operator credential is the installation bootstrap credential of decision D10 (a). The SDLC operations stay without a declared credential in this contract; item 16 adds it, with the version of `sdlc.openapi.json` that the change requires.
+The operator credential is the installation bootstrap credential of decision D10 (a). Item 16 declares it on the SDLC operations in `sdlc.openapi.json` 0.3.0.
 
 ## 8. Obligations on other items
 
