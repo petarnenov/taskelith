@@ -22,7 +22,11 @@ At the committed revision handed to review:
 
 ## Independent review
 
-Pending.
+Reviewer: Codex CLI, invoked as `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`.
+
+### Pass 1
+
+Session `01a17542-45a9-7180-81a6-77d76a1f1ad7`, model `gpt-6.1-sol`, reasoning effort `medium`, read-only sandbox. It ran at `de957d3`, and the SHA-256 snapshots before and after were equal (`102ec6dd…60bc`). Findings: Critical 0, High 0, Medium 0, Low 0. It confirmed that no non-archived text names the old model as current and that `skip_specs` is justified.
 
 ## Remaining gates
 
