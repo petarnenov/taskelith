@@ -38,6 +38,11 @@ Assigned reviewer (by the coordinator): Codex (`gpt-6.1-sol`), reasoning effort 
 
   Also before pass 2, D17's options and recommendation were updated from a web comparison of component libraries made on 2026-10-25 at the owner's request (versions, licenses, React 19 support, styling cost, accessibility, coverage, maintenance, and security routes, from npm, GitHub, and official documentation); the facts the plan states are labelled as observations that item 1 confirms.
 
+- **Pass 2 — session `01a172a2-922b-7912-8cbf-d55f610ef5d4`, head `ede4c71`.** The header confirmed the model, reasoning effort medium, and the read-only sandbox; the snapshot was `f0f8b55c…a21dc23` before and after the pass. The reviewer confirmed all seven pass-1 resolutions, the waves, the longest chain, the links, and the D1 record. New findings: 0 Critical, 0 High, 2 Medium, 1 Low. All accepted and resolved (unreviewed until pass 3):
+  1. Medium: item 3's scope depended on D13 without being blocked by it. The port declares the optional capabilities whatever D13 decides, and D13 now applies only to item 18.
+  2. Medium: the SCM port did not limit a per-run credential to the permissions the run needs. Item 7 adds that limit and a conformance check that a credential without write permission cannot write.
+  3. Low: D17 claimed that unstyled primitives reproduce the proof of concept's look exactly. It now states this as an expectation that item 1 confirms.
+
 ## Limitations
 
 - The plan assumes the G2 items as planned; the G2 closure ADR may change the starting point and carry deferrals into G3.
@@ -45,6 +50,6 @@ Assigned reviewer (by the coordinator): Codex (`gpt-6.1-sol`), reasoning effort 
 
 ## Remaining gates
 
-- Independent review pass 2.
+- Independent review pass 3.
 - Coordinator integration into `dev` and archive.
 - Finalization of the plan when G2 closes, and the owner's decisions D2 to D17.
