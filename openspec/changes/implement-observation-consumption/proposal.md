@@ -32,17 +32,18 @@ Obligations left to the later changes. An observation of these types is not appl
 - **Scheduling.**
   - `automaticRetryOf(task, attemptId)` tells whether an ended attempt gets an automatic retry.
   - `releaseInTransaction` and `ResourceAdmissionService.releaseAfterTerminalFact` return `{ outcome: 'released' | 'kept', assignment }`, with every caller and test updated.
-  - `AssignmentRepository.byOfferCommand` finds an assignment by the `commandId` of its offer.
-  - A `WorkerReports` port records first contact, capacity declarations, admission pressure, and capacity refusals in the `workers` record that placement reads.
+  - `AssignmentRepository.byOfferCommand` finds an assignment by the `commandId` of its offer, which offers one assignment only.
+  - `refuseInTransaction` ends a refused assignment, and invalidates as a cancellation does while an execution under it can run.
+  - A `WorkerReports` port records first contact, capacity declarations, admission pressure, capacity refusals, and the protocol version in the `workers` record that placement reads, each report kind behind its own sequence fence.
 - **PostgreSQL.** A migration adds:
   - the `producer_cursors` table;
   - the offer command column of `assignments`, backfilled from the outbox;
-  - the contact, declaration, pressure, and refusal columns of `workers`.
+  - the contact, declaration, pressure, refusal, and sequence fence columns of `workers`.
 - **NATS.** The outbox publisher sends a confirmation without a `Nats-Msg-Id` header, as wire contracts section 2 requires.
 - **Control plane.**
-  - `ObservationService` applies each observation in one SERIALIZABLE transaction: authentication, inbox, cursor, the effect, and the confirmation.
+  - `ObservationService` applies each observation in one SERIALIZABLE transaction: authentication, inbox, cursor, the effect, and the confirmation. A duplicate within the confirmed prefix sends the confirmation again.
   - The composition root runs the observation consumer.
-  - `PlacementService` ends the attempt on a rejecting reason and places a retry as automatic.
+  - `PlacementService` ends the attempt on a rejecting reason and places a retry as automatic once its backoff has passed.
   - `readTaskResult` is pending while the task has an active attempt.
 
 ## Capabilities
