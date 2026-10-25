@@ -198,3 +198,17 @@ test('a new incarnation\'s heartbeat authenticates only after an observation rep
   assert.equal(failed(await heartbeats.record(heartbeat('worker-a'))).code, 'forbidden', 'the replaced journal is refused');
   assert.equal(await reachable('worker-a'), false);
 });
+
+test('a heartbeat of the enrolled journal after a rollback retired it records no contact', async () => {
+  await enroll('worker-a');
+  for (const sequence of [1, 2]) assert.equal(value(await observations.apply(declaration('worker-a', sequence))), 'applied');
+  const rolledBack = { ...declaration('worker-a', 1), body: { ...declaration('worker-a', 1).body } };
+  rolledBack.body.metadata = { ...rolledBack.body.metadata, observationId: 'observation-after-rollback' };
+  assert.equal(failed(await observations.apply(rolledBack)).details.reason, 'not-consumed');
+  const [before] = await sql<{ reachable: boolean; last_contact_at: Date }>(`SELECT reachable, last_contact_at FROM workers WHERE worker_id = 'worker-a'`);
+  assert.equal(before!.reachable, false, 'the rollback retired the journal');
+
+  assert.equal(failed(await heartbeats.record(heartbeat('worker-a'))).code, 'forbidden');
+  const [after] = await sql<{ reachable: boolean; last_contact_at: Date }>(`SELECT reachable, last_contact_at FROM workers WHERE worker_id = 'worker-a'`);
+  assert.deepEqual(after, before);
+});

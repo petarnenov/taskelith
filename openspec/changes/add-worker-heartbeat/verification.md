@@ -6,7 +6,7 @@ Change `add-worker-heartbeat`, part of G2 items 20 and 21.
 
 - **Source:** the coordinator's brief of 2026-10-26, which moves this change ahead of item 20d and carries coordinator decision Q1 (a) of item 20 ([proposal](proposal.md)).
 - **Scope:** the heartbeat contract and the control-plane side: the message and subject, the worker's publish permission, the documentation, the provisional targets, the authenticated consumer, and the bounded lost-contact check.
-- **Excluded:** the worker's heartbeat publisher and its own detection of lost contact (20d); contact from inventory reports (21c); reconciling a lost worker's attempts.
+- **Excluded:** the worker's heartbeat publisher and its own detection of lost contact (20d); reconciling a lost worker's attempts. Contact from inventory reports came with 21c, merged in `bbdec52`.
 - **Branch:** `add-worker-heartbeat`, from `origin/dev` at `aba18f5`.
 
 ## Environment
@@ -34,6 +34,8 @@ Checked before the first pass against `AGENTS.md`, ADR 0004, the governance revi
 | `make verify` | `bf1ce68` | Tests passed (1224, 1209 passed, 0 failed, 15 skipped); failed at OpenSpec validation: the `nats-transport` requirement "Heartbeat receiver" exceeded 500 characters. Fixed in `aecdd19` by splitting it. |
 | `make verify` | `aecdd19` | Passed: 1224 tests, 1209 passed, 0 failed, 15 skipped (macOS only); coverage 99.14% lines, 91.64% branches, 98.67% functions; the contract check passed with 0.4.0; OpenSpec 60 items valid; the archive dry run, dependency inventory, and package checks passed. |
 | `packages/adapters/nats/test/transport.integration.test.ts`, 3 consecutive runs | `bf1ce68` working tree | 16 of 16 tests passed in each run. |
+| `make verify` | `bbdec52` (merge of `origin/dev` at `6b6a656`) | Passed: 1293 tests, 1278 passed, 0 failed, 15 skipped (macOS only); coverage 99.16% lines, 91.46% branches, 98.75% functions; `execution.asyncapi.json` has 2 breaking changes against `6b6a656`, declared by 0.4.0; OpenSpec 61 items valid; the archive dry run, dependency inventory, and package checks passed. |
+| Mutation check of the retired-journal heartbeat test | `bbdec52` working tree | With `isCurrentProducer`'s `retiredAt` check removed, the new test fails (6 passed, 1 failed); restored, 7 of 7 pass. |
 | `make contract-compatibility` with the version left at 0.3.0 | before `bd8f15f` | Failed as expected: `add /components/messages/workerHeartbeat` and `add /components/schemas/WorkerHeartbeat` need a new minor version. |
 | `apps/control-plane/test/heartbeat.integration.test.ts`, 5 consecutive runs | `4b9bbc1` working tree | 5 of 5 tests passed in each run, including both orders of the race between a heartbeat and the check. |
 
@@ -96,6 +98,30 @@ Reviewer assigned by the coordinator: Codex CLI, `gpt-6.1-sol`, reasoning effort
 | --- | --- | --- |
 | L11 | "One transaction per observation" lets a duplicate change nothing but a confirmation, while the new delta records contact for it. | Fixed after pass 3, unreviewed under the Low-only rule: the delta modifies the requirement to allow the worker's contact. |
 | L12 | "Confirmation sent again" forbids any other effect of a duplicate. | Fixed after pass 3, unreviewed under the Low-only rule: the delta modifies the requirement to allow recording the worker's contact. |
+
+### Merge with `dev` (worker step 9)
+
+The coordinator returned the change because merging `origin/dev` at `6b6a656`, which holds item 21c (`implement-inventory-reconciliation`), conflicted in 11 files. The merge commit is `bbdec52`.
+
+Resolution, keeping both sides as the coordinator asked:
+- **Scheduling.** `WorkerReports` keeps `markContactLost` beside 21c's `recordJournalLoss` and `restartFences`, in memory and in PostgreSQL. Both sides' conformance cases are kept.
+- **Observations.** 21c's `ObservationService` is kept: `authenticateProducer` with its journal replacement, `#recordKnown`, the rollback retirement, and the pending snapshots. This change's contact for an authenticated duplicate moves to `#record`, right after authentication, out of `recordPosition`. A rollback still rolls the contact back.
+- **Heartbeat authentication.** `producer-authentication.ts` is removed. Heartbeats use `isCurrentProducer` in `journal-reconciliation.ts`, which shares `enrolledProducer` and `seenJournal` with `authenticateProducer`. It accepts only the enrolled journal, not retired, and never replaces a journal (design decision 7).
+- **New incarnation.** A PostgreSQL test checks the sequence: a heartbeat of an unseen journal is refused and replaces nothing; once an observation of that journal replaces the enrolled one, its heartbeats record contact, and the replaced journal's are refused.
+- **Specs and docs.** The `observation-consumption` delta modifies "One transaction per observation" on top of 21c's text, so archiving keeps 21c's rule. The `worker-contact` delta, the contract page, and the targets count inventory-report contact, which settles pass 1 M3. They also state that a heartbeat replaces no journal.
+- **Composition.** The heartbeat receiver and the lost-contact loop are wired beside 21c's `InventoryService` and start inventories.
+
+Merge review:
+- **Invocation:** as pass 1, with a prompt describing the merge, the coordinator's instruction, and the resolution choices.
+- **Model confirmation:** the output header shows model `gpt-6.1-sol`, reasoning effort medium, sandbox read-only.
+- **Session:** `01a17556-c06a-7a92-b7da-2a071fb9f5b9`.
+- **Revision:** `bbdec52`.
+- **Snapshot:** `86076315bd71527df3ba02632a312826b0c01d70ddaee8be7d988fa67d639761` before and after; unchanged.
+- **Result:** both sides' behavior kept, the new incarnation's heartbeat authenticates after a replacement, contact order keeps the rollback semantics, and no delta overwrites 21c's requirements. 0 High, 0 Medium, 1 Low.
+
+| # | Finding | Disposition |
+| --- | --- | --- |
+| L13 | No test covers a heartbeat of the enrolled journal after a rollback retired it, so `isCurrentProducer`'s `retiredAt` check is untested. | Fixed after the merge review, unreviewed under the Low-only rule: a PostgreSQL test retires the journal by a sequence rollback and shows that its heartbeat is `forbidden` and changes neither `reachable` nor `last_contact_at`; the mutation check above shows that the test catches a missing check. |
 
 ## Limitations
 
