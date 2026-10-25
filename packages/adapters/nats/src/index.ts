@@ -1,3 +1,4 @@
+export { abortableDelay } from './abortable-delay.js';
 export { applyOnce } from './deduplication.js';
 export { BrokerAuthority, type BrokerAuthorityKeys, type IssuedUser } from './broker-authority.js';
 export { accountJwt, credsFile, operatorJwt, userJwt, type ClaimTime, type UserPermissions } from './broker-jwt.js';

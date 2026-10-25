@@ -22881,6 +22881,7 @@
         "@taskelith/kernel@0.0.0",
         "@taskelith/nats@0.0.0",
         "@taskelith/node-observability@0.0.0",
+        "@taskelith/scheduling@0.0.0",
         "@taskelith/secrets@0.0.0",
         "@taskelith/testing@0.0.0",
         "@taskelith/worker-control-plane-client@0.0.0",

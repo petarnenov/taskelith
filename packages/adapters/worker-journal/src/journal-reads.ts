@@ -7,13 +7,14 @@ import type {
   JournaledAuthorization,
   JournaledCancellation,
   JournaledExecution,
+  JournaledIntent,
   JournalSnapshot,
   LaunchAuthId,
-  LaunchIntent,
   LaunchRejectionReason,
   ObservationFact,
   ObservationPosition,
   OutboxEntry,
+  ResourceRequest,
 } from '@taskelith/execution';
 import type { JournalDatabase } from './journal-connection.js';
 import { optionalText, storedInteger, storedText, type Row } from './stored-values.js';
@@ -33,7 +34,8 @@ export function readBinding(database: JournalDatabase): JournalBinding {
 export function readSnapshot(database: JournalDatabase): JournalSnapshot {
   const authorizations = database.prepare('SELECT * FROM authorization_request ORDER BY execution_id, position').all();
   return Object.freeze({
-    intents: Object.freeze(database.prepare('SELECT * FROM launch_intent ORDER BY rowid').all().map(toIntent)),
+    intents: Object.freeze(database.prepare(`SELECT launch_intent.*, assignment_end.command_id IS NOT NULL AS ended
+      FROM launch_intent LEFT JOIN assignment_end USING (assignment_id) ORDER BY launch_intent.rowid`).all().map(toIntent)),
     cancellations: Object.freeze(database.prepare('SELECT * FROM cancellation_request ORDER BY rowid').all().map(toCancellation)),
     executions: Object.freeze(database.prepare('SELECT * FROM execution ORDER BY rowid').all()
       .map((row) => toExecution(row, authorizations))),
@@ -57,13 +59,21 @@ export function readOutbox(database: JournalDatabase, binding: JournalBinding): 
   });
 }
 
-function toIntent(row: Row): LaunchIntent {
-  const intent: LaunchIntent = {
+function toIntent(row: Row): JournaledIntent {
+  const requested: ResourceRequest = {
+    cpuMillicores: storedInteger(row, 'cpu_millicores'),
+    memoryMebibytes: storedInteger(row, 'memory_mebibytes'),
+    hardControls: Object.freeze(JSON.parse(storedText(row, 'hard_controls')) as string[]),
+  };
+  const intent: JournaledIntent = {
     assignmentId: storedText(row, 'assignment_id'),
     attemptId: storedText(row, 'attempt_id'),
     ownershipGeneration: storedInteger(row, 'ownership_generation'),
     admissionId: storedText(row, 'admission_id'),
     admissionGeneration: storedInteger(row, 'admission_generation'),
+    requested: Object.freeze(requested),
+    commandId: storedText(row, 'command_id'),
+    ended: row.ended === 1,
   };
   return Object.freeze(intent);
 }
@@ -88,6 +98,7 @@ function toExecution(row: Row, authorizations: readonly Row[]): JournaledExecuti
     assignmentId: storedText(row, 'assignment_id'),
     ...(state === undefined ? {} : { state }),
     recordWritten: row.record_written === 1,
+    uncertain: storedInteger<number>(row, 'uncertain_count') > 0,
     authorizations: Object.freeze(authorizations
       .filter((authorization) => authorization.execution_id === executionId)
       .map(toAuthorization)),

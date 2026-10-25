@@ -1074,7 +1074,7 @@
       "EnrollmentRequest": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Presented with a single-use enrollment token, after the worker created its journal.",
+        "description": "Presented with a single-use enrollment token, after the worker claimed its data root and before it creates its journal, which takes the journalId named here.",
         "required": [
           "journalId",
           "host",

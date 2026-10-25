@@ -1,17 +1,22 @@
 import { createHash } from 'node:crypto';
-import type { ObservationFact, ObservationId } from '@taskelith/execution';
+import type { JournalId, ObservationFact, ObservationId } from '@taskelith/execution';
 
 // Derives an observation's identity from its source, so a fact derived again
 // after a lost write gets the same identity (contract section 6).
-export function observationIdOf(fact: ObservationFact): ObservationId {
-  const digest = createHash('sha256').update(JSON.stringify(sourceOf(fact))).digest('hex');
+export function observationIdOf(fact: ObservationFact, journalId: JournalId): ObservationId {
+  const digest = createHash('sha256').update(JSON.stringify(sourceOf(fact, journalId))).digest('hex');
   return `obs-${digest}` as ObservationId;
 }
 
-function sourceOf(fact: ObservationFact): readonly (string | number)[] {
+// A declaration counter is unique only within its journal.
+function sourceOf(fact: ObservationFact, journalId: JournalId): readonly (string | number)[] {
   switch (fact.kind) {
     case 'command-rejected':
+    case 'assignment-accepted':
+    case 'assignment-refused':
       return ['command-outcome', fact.commandId];
+    case 'capacity-declared':
+      return ['capacity-declared', journalId, fact.declaration];
     case 'launch-rejected':
       return ['operation-outcome', fact.operationId];
     case 'execution-uncertain':

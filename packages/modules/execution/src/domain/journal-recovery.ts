@@ -5,8 +5,8 @@ import type {
   CommandId,
   JournaledCancellation,
   JournaledExecution,
+  JournaledIntent,
   JournalSnapshot,
-  LaunchIntent,
 } from './journal-records.js';
 
 // What a worker does on start for each record, from the last commit it finds
@@ -26,9 +26,10 @@ export function planJournalRecovery(snapshot: JournalSnapshot): readonly Recover
   return Object.freeze([...cancellations, ...launches].map((action) => Object.freeze(action)));
 }
 
-function recoverIntent(intent: LaunchIntent, snapshot: JournalSnapshot): RecoveryAction[] {
+// An ended assignment launches nothing more, like a cancelled one.
+function recoverIntent(intent: JournaledIntent, snapshot: JournalSnapshot): RecoveryAction[] {
   const executions = snapshot.executions.filter((execution) => execution.assignmentId === intent.assignmentId);
-  const cancelled = isCancelled(intent, executions, snapshot.cancellations);
+  const cancelled = intent.ended || isCancelled(intent, executions, snapshot.cancellations);
   const actions = executions.flatMap((execution) => recoverExecution(execution, cancelled));
   const rejectedFinally = executions.some((execution) => execution.authorizations.some(({ outcome }) => outcome === 'rejected-final'));
   if (!cancelled && !rejectedFinally && executions.every((execution) => endsWithoutProcess(execution))) {
@@ -59,7 +60,7 @@ function lastOutcome(execution: JournaledExecution): AuthorizationOutcome | unde
 }
 
 function isCancelled(
-  intent: LaunchIntent,
+  intent: JournaledIntent,
   executions: readonly JournaledExecution[],
   cancellations: readonly JournaledCancellation[],
 ): boolean {

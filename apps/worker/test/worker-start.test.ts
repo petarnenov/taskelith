@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
-import { SUPPORTED_PROTOCOL_VERSIONS } from '@taskelith/contracts';
+import { setTimeout as delay } from 'node:timers/promises';
+import { SUPPORTED_PROTOCOL_VERSIONS, checkMessageSchema } from '@taskelith/contracts';
 import type { Enrollment, EnrollmentClient, EnrollmentRequest } from '@taskelith/fleet';
 import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
 import type { TransportConnection, WorkerTransportEndpoint } from '@taskelith/nats';
@@ -20,6 +21,7 @@ import {
 import { failureReason, hostBootId, recordJournalFault, workerPaths, type VolumeProbe } from '@taskelith/worker-journal';
 
 const T0 = value(parseInstant('2026-10-25T09:00:00.000Z'));
+const AN_HOUR_LATER = value(parseInstant('2026-10-25T10:00:00.000Z'));
 const TEST_VOLUME: VolumeProbe = () => ({ ok: true, value: { platform: 'darwin', filesystem: 'apfs', local: true } });
 const TOKEN = `tken_${'T'.repeat(43)}`;
 const ENROLLMENT: Enrollment = {
@@ -37,18 +39,33 @@ class FakeEnrollment implements EnrollmentClient {
   }
 }
 
+// A broker that stores publications; it has no consumers, so the command
+// consumer keeps retrying its lookup until the worker stops.
 class FakeBroker {
   readonly endpoints: WorkerTransportEndpoint[] = [];
+  readonly published: Array<{ subject: string; messageId: string | undefined; body: Record<string, unknown> }> = [];
   closed = 0;
   answer: Result<void> = ok(undefined);
 
   connect = async (endpoint: WorkerTransportEndpoint): Promise<Result<TransportConnection>> => {
     this.endpoints.push(endpoint);
     if (!this.answer.ok) return this.answer;
-    return ok({ connection: {} as TransportConnection['connection'], js: {} as TransportConnection['js'], close: async () => {
+    const js = {
+      consumers: { get: async () => Promise.reject(new Error('no consumer')) },
+      publish: async (subject: string, data: Uint8Array, options: { msgID?: string }) => {
+        this.published.push({ subject, messageId: options.msgID, body: JSON.parse(new TextDecoder().decode(data)) as Record<string, unknown> });
+        return { duplicate: false };
+      },
+    } as unknown as TransportConnection['js'];
+    return ok({ connection: {} as TransportConnection['connection'], js, close: async () => {
       this.closed += 1;
     } });
   };
+
+  async publications(count: number): Promise<FakeBroker['published']> {
+    for (let wait = 0; this.published.length < count && wait < 100; wait += 1) await delay(20);
+    return this.published;
+  }
 }
 
 let base: string;
@@ -100,6 +117,24 @@ test('the first start enrolls with the token, stores the credentials, and connec
   const [endpoint] = broker.endpoints;
   assert.deepEqual([endpoint?.server.href, endpoint?.creds, endpoint?.workerId, endpoint?.address.installationId, endpoint?.tls],
     ['nats://broker:4222', ENROLLMENT.credentials.broker, ENROLLMENT.workerId, ENROLLMENT.installationId, undefined]);
+});
+
+test('the worker declares its capacity once per change and publishes it on its observation subject', async () => {
+  const first = await start();
+  const [declared] = await broker.publications(1);
+  assert.equal(declared?.subject, `taskelith.${ENROLLMENT.installationId}.workers.${ENROLLMENT.workerId}.observations`);
+  assert.equal(checkMessageSchema('CapacityDeclaredObservation', declared?.body).ok, true);
+  assert.deepEqual(declared?.body.payload, {
+    capacity: { slots: 2, cpuMillicores: 4000, memoryMebibytes: 7680, enforceableControls: [] }, protocolVersions: SUPPORTED_PROTOCOL_VERSIONS,
+  });
+  await first.stop();
+  // Past the republication bound, every unconfirmed entry is due again.
+  const outbox = (worker: RunningWorker) => value(worker.root.journal.dueForPublication(AN_HOUR_LATER)).map((entry) => entry.fact.kind);
+  const second = await start();
+  assert.deepEqual(outbox(second), ['capacity-declared']);
+  await second.stop();
+  const third = await start({ ...settings, capacity: { ...settings.capacity, slots: 3 } });
+  assert.deepEqual(outbox(third), ['capacity-declared', 'capacity-declared']);
 });
 
 test('the worker listens on no port: every connection is outbound', async () => {

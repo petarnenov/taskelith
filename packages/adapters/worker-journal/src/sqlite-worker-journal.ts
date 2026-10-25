@@ -2,13 +2,17 @@ import { err, failure, ok, type Failure, type Instant, type Result } from '@task
 import type {
   CommandId,
   CommandRecording,
+  DeclaredCapacity,
   ExecutionId,
   ExitStatus,
+  CancellationTarget,
   JournalBinding,
   JournaledCommand,
+  JournalInventory,
   JournalSnapshot,
   LaunchAuthId,
   LaunchGrant,
+  LaunchIntent,
   LaunchRejection,
   LaunchRequest,
   ObservationFact,
@@ -91,7 +95,7 @@ export class SqliteWorkerJournal implements WorkerJournal {
         command.kind,
         command.digest,
         command.outcome,
-        command.outcome === 'rejected' ? command.reason : null,
+        command.outcome === 'rejected' ? command.rejection.reason : null,
         this.#clock.now(),
       );
       const recorded = this.#recordCommandRequest(database, command);
@@ -212,8 +216,30 @@ export class SqliteWorkerJournal implements WorkerJournal {
     });
   }
 
+  recordCapacity(capacity: DeclaredCapacity): Result<void> {
+    return this.#connection.transact((database) => {
+      const meta = metaRow(database);
+      const declared = JSON.stringify(capacity);
+      if (meta.declared_capacity === declared) return ok(undefined);
+      const declaration = storedInteger<number>(meta, 'capacity_declarations') + 1;
+      database.prepare('UPDATE journal_meta SET declared_capacity = ?, capacity_declarations = ?').run(declared, declaration);
+      this.#append(database, { kind: 'capacity-declared', declaration, capacity });
+      return ok(undefined);
+    });
+  }
+
   snapshot(): Result<JournalSnapshot> {
     return this.#connection.read(readSnapshot);
+  }
+
+  takeInventory(): Result<JournalInventory> {
+    return this.#connection.transact((database) => {
+      const meta = metaRow(database);
+      const snapshot = storedInteger<number>(meta, 'inventory_snapshots') + 1;
+      database.prepare('UPDATE journal_meta SET inventory_snapshots = ?').run(snapshot);
+      const throughSequence = storedInteger<number>(meta, 'next_sequence') - 1;
+      return ok(Object.freeze({ snapshot, throughSequence, journal: readSnapshot(database) }));
+    });
   }
 
   dueForPublication(now: Instant): Result<readonly OutboxEntry[]> {
@@ -232,7 +258,7 @@ export class SqliteWorkerJournal implements WorkerJournal {
 
   confirmThrough(sequence: Sequence): Result<void> {
     return this.#connection.transact((database) => {
-      const assigned = storedInteger<number>(nextSequenceRow(database), 'next_sequence') - 1;
+      const assigned = storedInteger<number>(metaRow(database), 'next_sequence') - 1;
       if (sequence > assigned) return err(failure('invalid', `sequence ${sequence} was never assigned; the last is ${assigned}`));
       database.prepare('DELETE FROM outbox WHERE sequence <= ?').run(sequence);
       for (const published of this.#publishedAt.keys()) if (published <= sequence) this.#publishedAt.delete(published);
@@ -252,32 +278,30 @@ export class SqliteWorkerJournal implements WorkerJournal {
   }
 
   #recordCommandRequest(database: JournalDatabase, command: JournaledCommand): Result<void> {
+    const cause = { commandId: command.commandId, correlationId: command.correlationId };
     if (command.outcome === 'rejected') {
-      this.#append(database, { kind: 'command-rejected', commandId: command.commandId, reason: command.reason });
+      const { rejection } = command;
+      this.#append(database, rejection.kind === 'command-rejected'
+        ? { ...rejection, ...cause }
+        : { kind: 'assignment-refused', ...cause, ...rejection.assignment, reason: rejection.reason });
       return ok(undefined);
     }
-    if (command.kind === 'cancellation') {
-      const { target } = command;
-      const targetId = target.kind === 'attempt' ? target.attemptId : target.executionId;
-      database.prepare('INSERT INTO cancellation_request (command_id, target_kind, target_id) VALUES (?, ?, ?)')
-        .run(command.commandId, target.kind, targetId);
-      return ok(undefined);
+    switch (command.kind) {
+      case 'cancellation':
+        return recordCancellation(database, command.commandId, command.target);
+      case 'assignment-end':
+        // A second end of an ended assignment changes nothing.
+        database.prepare('INSERT OR IGNORE INTO assignment_end (assignment_id, command_id) VALUES (?, ?)')
+          .run(command.assignmentId, command.commandId);
+        return ok(undefined);
+      case 'assignment': {
+        const recorded = recordIntent(database, command.commandId, command.intent);
+        if (!recorded.ok) return recorded;
+        const { assignmentId, attemptId, ownershipGeneration } = command.intent;
+        this.#append(database, { kind: 'assignment-accepted', ...cause, assignmentId, attemptId, ownershipGeneration });
+        return ok(undefined);
+      }
     }
-    const { intent } = command;
-    if (database.prepare('SELECT 1 FROM launch_intent WHERE assignment_id = ?').get(intent.assignmentId)) {
-      return err(failure('conflict', `assignment ${intent.assignmentId} already has a launch intent`));
-    }
-    database.prepare(`INSERT INTO launch_intent
-      (assignment_id, command_id, attempt_id, ownership_generation, admission_id, admission_generation)
-      VALUES (?, ?, ?, ?, ?, ?)`).run(
-      intent.assignmentId,
-      command.commandId,
-      intent.attemptId,
-      intent.ownershipGeneration,
-      intent.admissionId,
-      intent.admissionGeneration,
-    );
-    return ok(undefined);
   }
 
   // Creates the execution, or admits a new operation for it, and gives the
@@ -319,11 +343,40 @@ export class SqliteWorkerJournal implements WorkerJournal {
 
   // Assigns the next number of the gapless sequence in the same transaction.
   #append(database: JournalDatabase, fact: ObservationFact): void {
-    const sequence = storedInteger<number>(nextSequenceRow(database), 'next_sequence');
+    const sequence = storedInteger<number>(metaRow(database), 'next_sequence');
     database.prepare('INSERT INTO outbox (sequence, observation_id, fact, recorded_at) VALUES (?, ?, ?, ?)')
-      .run(sequence, observationIdOf(fact), JSON.stringify(fact), this.#clock.now());
+      .run(sequence, observationIdOf(fact, this.binding.journalId), JSON.stringify(fact), this.#clock.now());
     database.prepare('UPDATE journal_meta SET next_sequence = ?').run(sequence + 1);
   }
+}
+
+function recordCancellation(database: JournalDatabase, commandId: CommandId, target: CancellationTarget): Result<void> {
+  const targetId = target.kind === 'attempt' ? target.attemptId : target.executionId;
+  database.prepare('INSERT INTO cancellation_request (command_id, target_kind, target_id) VALUES (?, ?, ?)')
+    .run(commandId, target.kind, targetId);
+  return ok(undefined);
+}
+
+function recordIntent(database: JournalDatabase, commandId: CommandId, intent: LaunchIntent): Result<void> {
+  if (database.prepare('SELECT 1 FROM launch_intent WHERE assignment_id = ?').get(intent.assignmentId)) {
+    return err(failure('conflict', `assignment ${intent.assignmentId} already has a launch intent`));
+  }
+  const { requested } = intent;
+  database.prepare(`INSERT INTO launch_intent
+    (assignment_id, command_id, attempt_id, ownership_generation, admission_id, admission_generation,
+     cpu_millicores, memory_mebibytes, hard_controls)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    intent.assignmentId,
+    commandId,
+    intent.attemptId,
+    intent.ownershipGeneration,
+    intent.admissionId,
+    intent.admissionGeneration,
+    requested.cpuMillicores,
+    requested.memoryMebibytes,
+    JSON.stringify(requested.hardControls),
+  );
+  return ok(undefined);
 }
 
 // Before a grant only a retryable rejection is retried for the execution;
@@ -346,8 +399,8 @@ function writtenExecution(database: JournalDatabase, executionId: ExecutionId): 
   return ok(execution);
 }
 
-function nextSequenceRow(database: JournalDatabase): Row {
-  const row = database.prepare('SELECT next_sequence FROM journal_meta').get();
+function metaRow(database: JournalDatabase): Row {
+  const row = database.prepare('SELECT * FROM journal_meta').get();
   if (row === undefined) throw new TypeError('journal metadata is missing');
   return row;
 }
