@@ -111,29 +111,79 @@ async function waitForWaitingLock(client: pg.Client): Promise<void> {
   throw new Error('the publisher never waited for the advisory lock');
 }
 
-test('a due row whose record holds no predecessor is skipped, and the sweep goes on', { concurrency: false }, async () => {
-  await truncateAll(url);
-  const registry = new CommittingFleetRegistry(database);
-  const [skipped, rotated] = [fleetWorker('w1', 'j1'), fleetWorker('w2', 'j2')];
-  for (const worker of [skipped, rotated]) {
+async function enrollAll(registry: CommittingFleetRegistry, ...workers: ReturnType<typeof fleetWorker>[]): Promise<void> {
+  for (const worker of workers) {
     value(await registry.addToken(fleetToken(`t-${worker.workerId}`)));
     value(await registry.enroll(fleetToken(`t-${worker.workerId}`).hash, worker));
   }
-  const first = rotated.credentials.current;
-  const next: CredentialGeneration = {
+}
+
+function nextGeneration(worker: ReturnType<typeof fleetWorker>): CredentialGeneration {
+  const first = worker.credentials.current;
+  return {
     ...first,
     generation: 2,
     controlPlaneHash: `${first.controlPlaneHash}-next` as CredentialGeneration['controlPlaneHash'],
-    brokerUserKey: 'U-w2-2',
+    brokerUserKey: `U-${worker.workerId}-2`,
   };
+}
+
+const predecessorColumn = (workerId: string) =>
+  query<{ enrollment: string; predecessor_valid_until: Date | null }>(
+    url,
+    'SELECT enrollment, predecessor_valid_until FROM workers WHERE worker_id = $1',
+    [workerId],
+  );
+
+test('a due row whose record holds no predecessor is cleared, and the sweep goes on', { concurrency: false }, async () => {
+  await truncateAll(url);
+  const registry = new CommittingFleetRegistry(database);
+  const [skipped, rotated] = [fleetWorker('w1', 'j1'), fleetWorker('w2', 'j2')];
+  await enrollAll(registry, skipped, rotated);
+  const next = nextGeneration(rotated);
   value(await registry.rotate(rotated.workerId, 1, next, rotated.enrolledAt, rotated.enrolledAt));
   await query(url, "UPDATE workers SET predecessor_valid_until = $1 WHERE worker_id = 'w1'", [rotated.enrolledAt]);
-  const before = await query(url, "SELECT enrollment, predecessor_valid_until FROM workers WHERE worker_id = 'w1'");
+  const [before] = await predecessorColumn('w1');
 
   assert.equal(value(await registry.expirePredecessors(rotated.enrolledAt)), 1, 'only the real predecessor counts');
   assert.deepEqual(value(await registry.worker(rotated.workerId))?.credentials, { current: next });
-  assert.deepEqual(await query(url, "SELECT enrollment, predecessor_valid_until FROM workers WHERE worker_id = 'w1'"), before, 'the skipped row is unchanged');
+  assert.deepEqual(await predecessorColumn('w1'), [{ enrollment: before!.enrollment, predecessor_valid_until: null }], 'the column is cleared, the record kept');
   assert.deepEqual(await query(url, 'SELECT user_key FROM broker_revocations'), [{ user_key: 'U-w2-1' }]);
+
+  const [cleared] = await predecessorColumn('w1');
+  assert.equal(value(await registry.expirePredecessors(rotated.enrolledAt)), 0, 'a second sweep meets nothing');
+  assert.deepEqual(await predecessorColumn('w1'), [cleared], 'and leaves the cleared row alone');
+});
+
+test('a due row without an enrollment record is not swept', { concurrency: false }, async () => {
+  await truncateAll(url);
+  const registry = new CommittingFleetRegistry(database);
+  const [bare, rotated] = [fleetWorker('w1', 'j1'), fleetWorker('w2', 'j2')];
+  await enrollAll(registry, bare, rotated);
+  value(await registry.rotate(rotated.workerId, 1, nextGeneration(rotated), rotated.enrolledAt, rotated.enrolledAt));
+  await query(url, "UPDATE workers SET enrollment = NULL, predecessor_valid_until = $1 WHERE worker_id = 'w1'", [rotated.enrolledAt]);
+  const before = await predecessorColumn('w1');
+
+  assert.equal(value(await registry.expirePredecessors(rotated.enrolledAt)), 1, 'the other worker still expires');
+  assert.deepEqual(await predecessorColumn('w1'), before, 'the row without a record is left as it was');
+  assert.deepEqual(await query(url, 'SELECT user_key FROM broker_revocations'), [{ user_key: 'U-w2-1' }]);
+});
+
+test('a due row whose predecessor is still in its grace window expires nothing yet', { concurrency: false }, async () => {
+  await truncateAll(url);
+  const registry = new CommittingFleetRegistry(database);
+  const worker = fleetWorker('w1', 'j1');
+  await enrollAll(registry, worker);
+  const graceEnds = value(parseInstant(new Date(Date.parse(worker.enrolledAt) + 600_000).toISOString()));
+  value(await registry.rotate(worker.workerId, 1, nextGeneration(worker), graceEnds, worker.enrolledAt));
+  await query(url, "UPDATE workers SET predecessor_valid_until = $1 WHERE worker_id = 'w1'", [worker.enrolledAt]);
+
+  assert.equal(value(await registry.expirePredecessors(worker.enrolledAt)), 0, 'the record, not the column, decides');
+  assert.equal(value(await registry.worker(worker.workerId))?.credentials.previous?.validUntil, graceEnds);
+  const [row] = await predecessorColumn('w1');
+  assert.equal(row!.predecessor_valid_until?.toISOString(), graceEnds, 'the column is set back to the record');
+  assert.deepEqual(await query(url, 'SELECT user_key FROM broker_revocations'), []);
+  assert.equal(value(await registry.expirePredecessors(graceEnds)), 1, 'it expires when its grace window ends');
 });
 
 test('the initialized installation is not quarantined', { concurrency: false }, async () => {

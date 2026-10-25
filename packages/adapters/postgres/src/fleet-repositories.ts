@@ -3,6 +3,7 @@ import type { AuditEvent, OperatorCredential, OperatorCredentials, SecretHash } 
 import type { WorkerId } from '@taskelith/execution';
 import {
   credentialGenerations,
+  expiredPredecessor,
   installationIdentity,
   revocationOf,
   rotateCredentials,
@@ -129,17 +130,21 @@ export class PostgresFleetRegistry implements FleetRegistry {
     return ok(undefined);
   }
 
+  // The record decides, as in the in-memory registry; the column only finds
+  // candidates, and a sweep rewrites a column that disagrees with its record.
   async expirePredecessors(now: Instant): Promise<Result<number>> {
     const { rows } = await this.#session.query<{ enrollment: string }>(
-      'SELECT enrollment FROM workers WHERE predecessor_valid_until <= $1 ORDER BY worker_id FOR UPDATE',
+      'SELECT enrollment FROM workers WHERE predecessor_valid_until <= $1 AND enrollment IS NOT NULL ORDER BY worker_id FOR UPDATE',
       [now],
     );
     let expired = 0;
     for (const row of rows) {
       const worker = decodeRecord<EnrolledWorker>(row.enrollment);
-      const previous = worker.credentials.previous;
-      // A row whose record holds no predecessor has nothing to revoke.
-      if (previous === undefined) continue;
+      const previous = expiredPredecessor(worker.credentials, now);
+      if (previous === undefined) {
+        await this.#write(worker.workerId, worker);
+        continue;
+      }
       await this.#record(worker.workerId, [revocationOf(previous, previous.validUntil)]);
       await this.#write(worker.workerId, { ...worker, credentials: { current: worker.credentials.current } });
       expired += 1;

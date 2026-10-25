@@ -19,6 +19,10 @@ Every request body SHALL be validated against its contract schema before any use
 - **WHEN** `createRun` receives a body without its binding
 - **THEN** the answer is 400 and no run is created
 
+#### Scenario: Enrollment capacity above the bound
+- **WHEN** `enrollWorker` receives a capacity value above the schema's maximum
+- **THEN** the answer is 400 and the enrollment token is not consumed
+
 ### Requirement: Atomic task submission
 `submitTask` SHALL admit the task, use its admission, open the task, write its root lineage link and run binding, and append `sdlc.admission.used`, all in one transaction. A repeat of the same submission SHALL return the stored one, and a conflicting repeat SHALL be 409.
 
