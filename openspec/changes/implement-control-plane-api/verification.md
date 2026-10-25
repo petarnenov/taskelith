@@ -57,6 +57,7 @@ Recorded before pass 1.
 
 - At `583cff0`, with every file tracked: 900 tests passed, 0 failed; coverage 99.12% lines, 91.75% branches, 99.03% functions. The comment, boundary, coverage-scope, dependency-inventory, contract-compatibility, OpenSpec (52 of 52), and package checks pass.
 - At `53e7eb0`, after the pass-1 fixes: 908 tests passed, 0 failed; coverage 99.11% lines, 91.90% branches, 98.82% functions; every other check passes.
+- At `a9d88ba`, after the pass-2 fixes: 913 tests passed, 0 failed; coverage 99.14% lines, 91.94% branches, 98.93% functions; every other check passes.
 - `npm run openspec -- validate implement-control-plane-api --strict` passed at each of these revisions.
 
 ## Independent review
@@ -78,6 +79,15 @@ Assigned reviewer: Codex CLI, with `codex exec -m gpt-6.1-sol -c model_reasoning
   10. Medium: the loops and the signal shutdown were unsupervised. Each loop is supervised from the start and a failure stops the service; `stop` is idempotent, and the entry handles its errors.
   11. Medium: an unreadable CA file threw. It is now an `invalid` failure naming `TASKELITH_NATS_CA`; a test covers it.
   12. Low: the operational target claimed the sweep revokes within the window. It now separates the immediate refusal of the old secret from the broker revocation, which depends on the sweep's success.
+
+- **Pass 2 — session `01a17378-b035-7c53-9d6d-575c248b5645`,** reviewed `git diff 2f422e2 cd70ea3` for the resolutions, then `git diff 9e6febd cd70ea3` as a whole. The header reports `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`. Snapshot before and after: `aed7eabf…ce9d`, equal. The reviewer confirmed pass-1 findings 1 to 4, 6 to 9, 11, and 12 fully resolved, and findings 5 and 10 in part; the gaps are findings 1, 5, and 6 below. Findings: 0 Critical, 0 High, 6 Medium, 1 Low, all resolved at `a9d88ba`:
+  1. Medium: a secret with text glued in front passed the correlation check, since the patterns needed a word boundary. The secret patterns now match without one; tests put a letter or a digit in front of a bearer secret and a seed.
+  2. Medium: an end or cancellation for a worker without a record failed, which kept supersession from releasing the reservation. Such a command is now not written, since no worker reads it; only an offer needs the protocol version and the epoch. A PostgreSQL test deletes the worker and supersedes.
+  3. Medium: an unavailable credential store answered 401. The authentication failure now maps through the operation's statuses: forbidden is 401, unavailable 503. A unit test covers it.
+  4. Medium: an enrollment could pass capacity values the integer columns cannot hold. The handler now refuses a value above 2,147,483,647 with 400 before it presents the token; a test shows that the token stays usable.
+  5. Medium: a loop defect ended the process with code 0. `stopped` now settles with `failed`, and the service entry exits with 1; a unit test covers the entry.
+  6. Medium: `process.once` let a repeated signal kill the process during cleanup. The handlers now stay until the stop ends; `serveUntilStopped` is tested with a process stand-in that delivers SIGTERM twice and SIGINT.
+  7. Low: a malformed path made 400 on `readAdmission` and `readTaskResult`, which did not declare it. Both now declare 400.
 
 ## Remaining gates
 
