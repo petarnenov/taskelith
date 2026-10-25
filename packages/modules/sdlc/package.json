@@ -15,5 +15,8 @@
   },
   "dependencies": {
     "@taskelith/kernel": "0.0.0"
+  },
+  "devDependencies": {
+    "@taskelith/testing": "0.0.0"
   }
 }

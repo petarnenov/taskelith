@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseInstant, type Instant } from '@taskelith/kernel';
-import type { Clock } from '@taskelith/sdlc';
+import type { Instant } from '@taskelith/kernel';
 import { SimulatedHost } from '@taskelith/testing';
 
 const START = '2026-10-25T12:00:00.000Z' as Instant;
@@ -30,11 +29,6 @@ test('a wall clock shift in either direction leaves the monotonic clocks alone',
   host.shiftWallClock(60_000);
   assert.equal(host.wallClock.now(), '2026-10-25T12:00:54.000Z');
   assert.equal(host.deadlineClock.readMilliseconds(), 0);
-});
-
-test('the wall clock serves as the SDLC module Clock port', () => {
-  const clock: Clock = new SimulatedHost(START).wallClock;
-  assert.deepEqual(parseInstant(clock.now()), { ok: true, value: START });
 });
 
 test('negative or fractional durations and unrepresentable times are rejected', () => {

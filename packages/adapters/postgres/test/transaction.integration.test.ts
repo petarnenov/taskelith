@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { after, beforeEach, test } from 'node:test';
 import { err, failure, parseIdentifier } from '@taskelith/kernel';
-import { CrashPoints, SimulatedCrash } from '@taskelith/testing';
+import { CrashPoints, SimulatedCrash, value } from '@taskelith/testing';
 import { PostgresDatabase, PostgresOutboxRelay, SERIALIZATION_ATTEMPTS, type PostgresDatabaseOptions } from '@taskelith/postgres';
 import { endAssignment } from '@taskelith/scheduling';
 import { nextGeneration } from '@taskelith/sdlc';
-import { AT, assignment, command, value } from './fixtures.ts';
+import { AT, assignment, command } from './fixtures.ts';
 import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
 
 const url = await createMigratedDatabase();

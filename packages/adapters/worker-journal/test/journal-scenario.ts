@@ -1,7 +1,7 @@
 import { writeSync } from 'node:fs';
-import { crashPointsFromEnvironment } from '@taskelith/testing';
+import { crashPointsFromEnvironment, id, value } from '@taskelith/testing';
 import { openWorkerRoot } from '@taskelith/worker-journal';
-import { assignment, grantFor, id, launchRequest, rootOptions, value } from './fixtures.ts';
+import { assignment, grantFor, launchRequest, rootOptions } from './fixtures.ts';
 
 // A worker that runs one launch through its W commits; the crash point
 // harness kills it where TASKELITH_CRASH_POINT says. Prints each step.
