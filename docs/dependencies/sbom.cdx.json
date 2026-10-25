@@ -3612,6 +3612,21 @@
       "externalReferences": []
     },
     {
+      "bom-ref": "@taskelith/worker-journal@0.0.0",
+      "type": "library",
+      "name": "@taskelith/worker-journal",
+      "version": "0.0.0",
+      "scope": "required",
+      "purl": "pkg:npm/%40taskelith/worker-journal@0.0.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:private",
+          "value": "true"
+        }
+      ],
+      "externalReferences": []
+    },
+    {
       "bom-ref": "@taskelith/worker@0.0.0",
       "type": "library",
       "name": "@taskelith/worker",
@@ -21908,6 +21923,15 @@
       ]
     },
     {
+      "ref": "@taskelith/worker-journal@0.0.0",
+      "dependsOn": [
+        "@taskelith/execution@0.0.0",
+        "@taskelith/kernel@0.0.0",
+        "@taskelith/sdlc@0.0.0",
+        "@taskelith/testing@0.0.0"
+      ]
+    },
+    {
       "ref": "@taskelith/worker@0.0.0",
       "dependsOn": []
     },
@@ -24956,6 +24980,7 @@
         "@taskelith/sdlc-speckit@0.0.0",
         "@taskelith/sdlc@0.0.0",
         "@taskelith/testing@0.0.0",
+        "@taskelith/worker-journal@0.0.0",
         "@taskelith/worker@0.0.0",
         "@types/node@24.19.2",
         "conventional-changelog-conventionalcommits@9.3.1",
