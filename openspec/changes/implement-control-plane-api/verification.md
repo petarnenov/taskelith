@@ -89,7 +89,13 @@ Assigned reviewer: Codex CLI, with `codex exec -m gpt-6.1-sol -c model_reasoning
   6. Medium: `process.once` let a repeated signal kill the process during cleanup. The handlers now stay until the stop ends; `serveUntilStopped` is tested with a process stand-in that delivers SIGTERM twice and SIGINT.
   7. Low: a malformed path made 400 on `readAdmission` and `readTaskResult`, which did not declare it. Both now declare 400.
 
+- **Pass 3 — session `01a17384-0c58-7a13-b746-9ddfffbfa388`,** reviewed `git diff cd70ea3 9cb5855` for the resolutions, then `git diff 9e6febd 9cb5855` as a whole. The header reports `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`. Snapshot before and after: `4d978192…f5d8`, equal.
+  - It confirmed all seven pass-2 findings and pass-1 finding 5 fully resolved, and pass-1 finding 10 in part; the gap is finding 1 below.
+  - Findings: 0 Critical, 0 High, 1 Medium, 1 Low. This was the third pass, so the findings go to the owner through the coordinator, with options. Both are **open**:
+  1. Medium: shutdown has no deadline. `stop` waits for every operation in flight before it closes anything, and the database operations take no abort signal and have no query timeout. So a round blocked in `holdForPublication` behind a lock held by another transaction keeps the API open and `stopped` unsettled. Proposed fix: stop accepting requests first, bound the wait, then cancel what is still blocked and close the connections; test it with a held installation lock and SIGTERM.
+  2. Low: the bearer scheme is matched case-sensitively, so `bearer` or `BEARER`, which HTTP allows, gets 401. Proposed fix: match the scheme case-insensitively and keep the token exact; test the three spellings.
+
 ## Remaining gates
 
-- Independent review.
+- The owner's decision on the open pass-3 findings.
 - Integration into `dev` by the coordinator, then archiving the change.
