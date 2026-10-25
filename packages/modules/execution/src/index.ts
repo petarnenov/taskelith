@@ -117,3 +117,9 @@ export {
   type Task,
   type TaskOutcomeFact,
 } from './domain/task.js';
+export { InMemoryInbox } from './adapters/in-memory-inbox.js';
+export { InMemoryTaskRepository } from './adapters/in-memory-task-repository.js';
+export type { Inbox, InboxOutcome } from './ports/inbox.js';
+export type { Outbox, OutboxMessage } from './ports/outbox.js';
+export { INBOX_CONFORMANCE, TASK_REPOSITORY_CONFORMANCE } from './ports/repository-conformance.js';
+export type { TaskRepository } from './ports/task-repository.js';

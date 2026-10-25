@@ -47,3 +47,7 @@ export {
   type ReachabilityState,
   type WorkerReachability,
 } from './domain/reachability.js';
+export { InMemoryAssignmentRepository } from './adapters/in-memory-assignment-repository.js';
+export type { AssignmentRepository } from './ports/assignment-repository.js';
+export type { Outbox, OutboxMessage } from './ports/outbox.js';
+export { ASSIGNMENT_REPOSITORY_CONFORMANCE } from './ports/repository-conformance.js';
