@@ -18,11 +18,11 @@
 
 ## 3. Documents
 
-- [x] 3.1 Confirm that no contract or document changes: `execution.asyncapi.json` stays 0.3.0, and the wire contracts and the worker journal contract are unchanged.
+- [x] 3.1 Keep `execution.asyncapi.json` at 0.3.0 and the worker journal contract unchanged, and change only the inventory request text of wire contracts section 6, as the coordinator approved.
 
 ## 4. Verification and review
 
 - [x] 4.1 Add unit, conformance, PostgreSQL, and NATS integration tests, including the control-plane half of worker journal required tests on a missing journal and on a restored journal (lines 217-218).
 - [x] 4.2 Add the security tests of design decision 2: a previously seen journal, a revoked worker's unseen journal, and another worker's journal are each refused without effect.
-- [ ] 4.3 Run `make verify` and record the results.
+- [x] 4.3 Run `make verify` and record the results.
 - [ ] 4.4 Obtain independent review from the reviewer the coordinator assigns, and record the results.

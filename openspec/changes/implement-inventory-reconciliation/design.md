@@ -26,7 +26,7 @@ The domain already has what reconciliation needs: `recordExecutionEvidence` for 
 - the observation types and revoked workers of 21d (proposal);
 - deciding an uncertain execution's outcome, which evidence or an operator does;
 - the worker's side of inventory and incarnations (items 20 and 24);
-- any wire contract change.
+- any wire contract schema change; the only contract text change is the inventory request rule of wire contracts section 6, which the coordinator approved (decision 4).
 
 ## Decisions
 
