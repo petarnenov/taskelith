@@ -2,7 +2,10 @@
   "extends": "../../../tsconfig.package.json",
   "references": [
     { "path": "../../kernel" },
+    { "path": "../../modules/access" },
     { "path": "../../modules/execution" },
+    { "path": "../../modules/fleet" },
+    { "path": "../../modules/observability" },
     { "path": "../../modules/scheduling" },
     { "path": "../../modules/sdlc" },
     { "path": "../../testing" }

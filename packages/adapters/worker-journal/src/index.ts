@@ -1,6 +1,14 @@
-export { resolveDataRoot, type DataRootSources } from './data-root.js';
-export { checkControlPath, refuseCheckout } from './control-records.js';
-export { createOnce, createPrivateDirectory, replaceFile, syncBeforeUse, syncPath } from './durable-file.js';
+export {
+  checkControlPath,
+  createOnce,
+  createPrivateDirectory,
+  refuseCheckout,
+  replaceFile,
+  resolveDataRoot,
+  syncBeforeUse,
+  syncPath,
+  type DataRootSources,
+} from '@taskelith/data-root';
 export { ExclusiveFileLock, LOCK_APPLICATION_ID } from './exclusive-file-lock.js';
 export { JOURNAL_APPLICATION_ID, JOURNAL_FORMAT } from './journal-database.js';
 export { checkJournalFault, hostBootId, recordJournalFault } from './journal-fault.js';

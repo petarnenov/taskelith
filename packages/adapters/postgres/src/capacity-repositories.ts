@@ -39,7 +39,7 @@ interface WorkerRow {
 
 // The columns placement reads; item 13 may add others to the table.
 const WORKER_COLUMNS = 'worker_id, enrolled, revoked, draining, reachable, admission_pressure_since, slots, cpu_millicores, memory_mebibytes, controls';
-const ELIGIBLE = 'enrolled AND NOT revoked AND NOT draining AND reachable AND admission_pressure_since IS NULL';
+export const ELIGIBLE = 'enrolled AND NOT revoked AND NOT draining AND reachable AND admission_pressure_since IS NULL';
 
 export class PostgresPlacementWorkers implements PlacementWorkers {
   readonly #session: Session;
@@ -259,7 +259,7 @@ export async function databaseNow(session: Session): Promise<Instant> {
   return instant(rows[0]!.now);
 }
 
-function instant(date: Date): Instant {
+export function instant(date: Date): Instant {
   const parsed = parseInstant(date.toISOString());
   if (!parsed.ok) throw new Error(parsed.error.message);
   return parsed.value;

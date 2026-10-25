@@ -3,7 +3,9 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import type { JetStreamClient } from '@nats-io/jetstream';
 import { InMemoryInbox } from '@taskelith/execution';
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
+import { InMemoryLogSink, Logger } from '@taskelith/observability';
+import { SimulatedHost, value } from '@taskelith/testing';
 import {
   applyOnce,
   COMMAND_SCHEMAS,
@@ -200,6 +202,30 @@ test('the outbox publisher keeps the order of a subject and lets other subjects 
 
   outbox.unavailable = true;
   assert.equal((await publisher.publishPending()).ok, false);
+});
+
+test('a failed publication is logged with its event identity and backoff', async () => {
+  const sink = new InMemoryLogSink();
+  const logger = new Logger(sink, new SimulatedHost(value(parseInstant('2026-10-25T10:00:00.000Z'))).wallClock);
+  const outbox = new FakeOutbox([outboxRow('e1', 'workers.w1.commands'), outboxRow('e2', 'not.a.command')]);
+  const publisher = new OutboxPublisher(outbox, new JetStreamPublisher(fakeBroker(new Set(['e1']), [])), address, { logger });
+  assert.deepEqual(await publisher.publishPending(), ok({ published: 0, deferred: 2 }));
+  const logged = sink.records.map(({ level, event, correlation, fields: { subject, failures, cause } }) => ({ level, event, correlation, subject, failures, cause }));
+  assert.deepEqual(logged, [
+    {
+      level: 'warn', event: 'nats.outbox.publish-failed', correlation: { eventId: 'e1' }, subject: 'workers.w1.commands', failures: 1,
+      cause: 'the broker could not publish on taskelith.install-1.workers.w1.commands',
+    },
+    {
+      level: 'warn', event: 'nats.outbox.publish-failed', correlation: { eventId: 'e2' }, subject: 'not.a.command', failures: 1,
+      cause: 'an outbox subject must be workers.<workerId>.commands',
+    },
+  ]);
+  const initial = TRANSPORT_LIMITS.retryInitialMilliseconds;
+  for (const record of sink.records) {
+    const delay = Number(record.fields['delayMilliseconds']);
+    assert.ok(delay >= initial * 0.75 && delay <= initial);
+  }
 });
 
 test('a broker failure is unavailable and names the subject', async () => {

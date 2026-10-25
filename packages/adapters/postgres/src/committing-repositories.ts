@@ -1,6 +1,17 @@
-import { ok, type EventId, type Result } from '@taskelith/kernel';
+import { ok, type EventId, type Instant, type Result } from '@taskelith/kernel';
 import type { AssignmentId, Inbox, InboxOutcome, Task, TaskRepository } from '@taskelith/execution';
 import type { Assignment, AssignmentRepository } from '@taskelith/scheduling';
+import type { AuditEvent, OperatorCredential, OperatorCredentials, SecretHash } from '@taskelith/access';
+import type { WorkerId } from '@taskelith/execution';
+import type {
+  BrokerRevocation,
+  CredentialGeneration,
+  EnrolledWorker,
+  EnrollmentToken,
+  FleetRegistry,
+  InstallationIdentity,
+  InstallationTable,
+} from '@taskelith/fleet';
 import type {
   AdmissionId,
   AdmissionRepository,
@@ -157,5 +168,81 @@ export class CommittingInbox implements Inbox {
 
   accept(consumer: string, messageId: EventId): Promise<Result<InboxOutcome>> {
     return this.#database.transaction((tx) => tx.inbox.accept(consumer, messageId));
+  }
+}
+
+export class CommittingFleetRegistry implements FleetRegistry {
+  readonly #database: PostgresDatabase;
+
+  constructor(database: PostgresDatabase) {
+    this.#database = database;
+  }
+
+  addToken(token: EnrollmentToken): Promise<Result<void>> {
+    return this.#database.transaction((tx) => tx.fleet.addToken(token));
+  }
+
+  unusedToken(hash: SecretHash): Promise<Result<EnrollmentToken | undefined>> {
+    return this.#database.transaction((tx) => tx.fleet.unusedToken(hash));
+  }
+
+  enroll(tokenHash: SecretHash, worker: EnrolledWorker): Promise<Result<void>> {
+    return this.#database.transaction((tx) => tx.fleet.enroll(tokenHash, worker));
+  }
+
+  worker(workerId: WorkerId): Promise<Result<EnrolledWorker | undefined>> {
+    return this.#database.transaction((tx) => tx.fleet.worker(workerId));
+  }
+
+  rotate(workerId: WorkerId, expectedGeneration: number, next: CredentialGeneration, validUntil: Instant, at: Instant): Promise<Result<void>> {
+    return this.#database.transaction((tx) => tx.fleet.rotate(workerId, expectedGeneration, next, validUntil, at));
+  }
+
+  revoke(workerId: WorkerId, at: Instant): Promise<Result<void>> {
+    return this.#database.transaction((tx) => tx.fleet.revoke(workerId, at));
+  }
+
+  expirePredecessors(now: Instant): Promise<Result<number>> {
+    return this.#database.transaction((tx) => tx.fleet.expirePredecessors(now));
+  }
+
+  publishRevocations(push: (revocations: readonly BrokerRevocation[]) => Promise<Result<void>>): Promise<Result<number>> {
+    return this.#database.readCommitted((tx) => tx.fleet.publishRevocations(push));
+  }
+}
+
+export class CommittingInstallationTable implements InstallationTable {
+  readonly #database: PostgresDatabase;
+
+  constructor(database: PostgresDatabase) {
+    this.#database = database;
+  }
+
+  read(): Promise<Result<InstallationIdentity | undefined>> {
+    return this.#database.transaction((tx) => tx.installationTable.read());
+  }
+
+  initialize(identity: InstallationIdentity): Promise<Result<void>> {
+    return this.#database.transaction((tx) => tx.installationTable.initialize(identity));
+  }
+}
+
+export class CommittingOperatorCredentials implements OperatorCredentials {
+  readonly #database: PostgresDatabase;
+
+  constructor(database: PostgresDatabase) {
+    this.#database = database;
+  }
+
+  current(): Promise<Result<OperatorCredential | undefined>> {
+    return this.#database.transaction((tx) => tx.operatorCredentials.current());
+  }
+
+  install(next: OperatorCredential, event: AuditEvent): Promise<Result<void>> {
+    return this.#database.transaction((tx) => tx.operatorCredentials.install(next, event));
+  }
+
+  auditTrail(): Promise<Result<readonly AuditEvent[]>> {
+    return this.#database.transaction((tx) => tx.operatorCredentials.auditTrail());
   }
 }

@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { err, failure, ok, type Err, type Failure, type Instant, type Result } from '@taskelith/kernel';
 import type { JournalBinding } from '@taskelith/execution';
-import { syncPath } from './durable-file.js';
+import { syncPath } from '@taskelith/data-root';
 import { rootFailure } from './journal-failure.js';
 import { JOURNAL_SCHEMA } from './journal-schema.js';
 import { isSqliteError, SQLITE_BUSY, SQLITE_CORRUPT, SQLITE_NOTADB } from './sqlite-errors.js';

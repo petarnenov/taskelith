@@ -1,5 +1,7 @@
+import { performance } from 'node:perf_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { measurement, NO_METRICS, SILENT_LOGGER, type Logger, type Metrics } from '@taskelith/observability';
 import pg from 'pg';
 import { NO_CRASH_POINTS, type CrashPointHook } from './crash-points.js';
 import { StatementError, unavailable } from './database-errors.js';
@@ -13,6 +15,14 @@ export const SERIALIZATION_BACKOFF_MILLISECONDS = 10;
 
 const UNIQUE_VIOLATION = '23505';
 
+// A read-only snapshot neither takes part in the writers' serialization
+// checks nor makes them fail.
+const READ_WRITE = 'BEGIN ISOLATION LEVEL SERIALIZABLE';
+const READ_ONLY = 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY';
+// Each statement sees what is committed when it starts, for work that
+// serializes itself with a lock it takes first.
+const READ_COMMITTED = 'BEGIN ISOLATION LEVEL READ COMMITTED';
+
 // The server answers COMMIT with ROLLBACK when the work went on after a
 // failed statement, which it caught instead of returning an `Err`.
 const ABORTED_BY_A_FAILED_STATEMENT = failure(
@@ -25,6 +35,9 @@ export interface PostgresDatabaseOptions {
   readonly serializationAttempts?: number;
   // A statement without an answer by then counts as a lost connection.
   readonly queryTimeoutMilliseconds?: number;
+  // Each transaction attempt, its connection checkout included, is timed.
+  readonly metrics?: Metrics;
+  readonly logger?: Logger;
 }
 
 export type TransactionWork<Value> = (transaction: PostgresTransaction) => Promise<Result<Value>>;
@@ -35,6 +48,8 @@ export class PostgresDatabase {
   readonly #pool: pg.Pool;
   readonly #crashPoints: CrashPointHook;
   readonly #serializationAttempts: number;
+  readonly #metrics: Metrics;
+  readonly #logger: Logger;
 
   constructor(url: URL, options: PostgresDatabaseOptions = {}) {
     this.#pool = new pg.Pool({
@@ -43,29 +58,57 @@ export class PostgresDatabase {
       query_timeout: options.queryTimeoutMilliseconds,
       connectionTimeoutMillis: options.queryTimeoutMilliseconds,
     });
-    // An idle connection that breaks is discarded; the next checkout reports.
-    this.#pool.on('error', ignoreConnectionError);
     this.#crashPoints = options.crashPoints ?? NO_CRASH_POINTS;
     this.#serializationAttempts = options.serializationAttempts ?? SERIALIZATION_ATTEMPTS;
+    this.#metrics = options.metrics ?? NO_METRICS;
+    this.#logger = options.logger ?? SILENT_LOGGER;
+    // An idle connection that breaks is discarded; the next checkout reports.
+    this.#pool.on('error', (error) => this.#logger.warn('postgres.connection.lost', { cause: error.message }));
   }
 
-  async transaction<Value>(work: TransactionWork<Value>): Promise<Result<Value>> {
-    for (let attempt = 1; ; attempt++) {
-      const outcome = await this.#attempt(work);
-      if (outcome.kind === 'done') return outcome.result;
-      if (attempt >= this.#serializationAttempts) {
-        return err(failure('unavailable', `the transaction lost ${attempt} serialization races in a row`, { attempts: String(attempt) }));
-      }
-      await delay(SERIALIZATION_BACKOFF_MILLISECONDS * 2 ** (attempt - 1));
-    }
+  transaction<Value>(work: TransactionWork<Value>): Promise<Result<Value>> {
+    return this.#run(work, READ_WRITE);
+  }
+
+  // One consistent snapshot for reads such as the signal sampler's; a write
+  // inside it is a defect and throws.
+  readOnly<Value>(work: TransactionWork<Value>): Promise<Result<Value>> {
+    return this.#run(work, READ_ONLY);
+  }
+
+  // For work that takes a lock before it reads, such as the revocation
+  // publication: a SERIALIZABLE snapshot would predate the lock's grant.
+  readCommitted<Value>(work: TransactionWork<Value>): Promise<Result<Value>> {
+    return this.#run(work, READ_COMMITTED);
   }
 
   async close(): Promise<void> {
     await this.#pool.end();
   }
 
+  async #run<Value>(work: TransactionWork<Value>, begin: string): Promise<Result<Value>> {
+    for (let attempt = 1; ; attempt++) {
+      const outcome = await this.#timedAttempt(work, begin);
+      if (outcome.kind === 'done') return outcome.result;
+      if (attempt >= this.#serializationAttempts) {
+        this.#logger.warn('postgres.serialization.exhausted', { attempts: attempt });
+        return err(failure('unavailable', `the transaction lost ${attempt} serialization races in a row`, { attempts: String(attempt) }));
+      }
+      await delay(SERIALIZATION_BACKOFF_MILLISECONDS * 2 ** (attempt - 1));
+    }
+  }
+
+  async #timedAttempt<Value>(work: TransactionWork<Value>, begin: string): Promise<Attempt<Value>> {
+    const started = performance.now();
+    try {
+      return await this.#attempt(work, begin);
+    } finally {
+      this.#metrics.record(measurement('database.latency', (performance.now() - started) / 1000));
+    }
+  }
+
   // Runs the work once; a lost serialization race asks for a retry.
-  async #attempt<Value>(work: TransactionWork<Value>): Promise<Attempt<Value>> {
+  async #attempt<Value>(work: TransactionWork<Value>, begin: string): Promise<Attempt<Value>> {
     let client: pg.PoolClient;
     try {
       client = await this.#pool.connect();
@@ -78,7 +121,7 @@ export class PostgresDatabase {
     const session = new Session(client);
     let broken: Error | undefined;
     try {
-      await session.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+      await session.query(begin);
       const transaction = new PostgresTransaction(session);
       const result = await work(transaction);
       // Nothing was committed whether or not the rollback is confirmed.
@@ -115,6 +158,7 @@ export class PostgresDatabase {
       return ok(undefined);
     } catch (error) {
       if (!(error instanceof StatementError) || !error.isConnectionLoss) throw error;
+      this.#logger.error('postgres.commit.unknown', { cause: error.message });
       return err(unavailable('the commit outcome is unknown', error, { outcome: 'unknown' }));
     }
   }

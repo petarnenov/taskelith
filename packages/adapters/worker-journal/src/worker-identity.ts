@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { parseIdentifier, err, ok, type Result } from '@taskelith/kernel';
 import type { InstallationId, JournalId, WorkerId } from '@taskelith/execution';
-import { syncBeforeUse } from './durable-file.js';
+import { syncBeforeUse } from '@taskelith/data-root';
 import { rootFailure } from './journal-failure.js';
 
 // `worker/identity` without the credential references, which item 13 adds.
