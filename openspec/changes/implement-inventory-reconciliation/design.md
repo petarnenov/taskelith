@@ -38,6 +38,7 @@ The domain already has what reconciliation needs: `recordExecutionEvidence` for 
    - **Unseen journal of a worker that is not revoked.** It replaces the enrolled journal:
      1. `WorkerDirectory.replaceJournal(workerId, previousJournalId, journalId)` writes the new journal under SERIALIZABLE. It fails with `conflict` when the enrolled journal is no longer `previousJournalId`, or when another worker's enrolled journal is `journalId`, which the unique `journal_id` column refuses; the report or observation is then refused.
      2. The previous journal's cursor is retired (decision 3), and created retired when it has no row, so that it counts as seen.
+     The worker's report fences (capacity, pressure, refusal, protocol) restart at no sequence in the same transaction, because the new journal's sequences restart at 1; an author fix found during implementation.
      3. The replacement is logged as the structured warning `execution.journal.replaced` with the worker, `previousJournalId`, and `journalId`.
      4. Every unfinished assignment of the worker is reconciled as having lost its local history (decision 9).
      5. The message then continues as one of the enrolled journal, starting a new cursor.

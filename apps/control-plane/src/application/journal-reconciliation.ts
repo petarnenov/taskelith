@@ -66,6 +66,10 @@ async function replaceJournal(
   if (!replaced.ok) return replaced.error.code === 'conflict' || replaced.error.code === 'forbidden' ? notAuthenticated(workerId) : replaced;
   const retired = await tx.cursors.retire(workerId, previousJournalId, await tx.now());
   if (!retired.ok) return retired;
+  // The new journal's sequences restart at 1, so its reports would fall
+  // below the fences of the previous one.
+  const restarted = await tx.reports.restartFences(workerId);
+  if (!restarted.ok) return restarted;
   const discarded = await tx.inventoryReports.removeByJournal(workerId, previousJournalId);
   if (!discarded.ok) return discarded;
   context.log.warn({ workerId }, 'execution.journal.replaced', { previousJournalId, journalId });

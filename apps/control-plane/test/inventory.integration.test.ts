@@ -129,9 +129,9 @@ function observe(type: string, sent: Sent, payload: Record<string, unknown>) {
   return observations.apply({ subjectWorkerId: workerId, type, body: { metadata, payload } });
 }
 
-function declare(sequence: number, journalId = JOURNAL) {
+function declare(sequence: number, journalId = JOURNAL, slots = 4) {
   return observe('worker.capacity.declared', { sequence, journalId }, {
-    capacity: { slots: 4, cpuMillicores: 8000, memoryMebibytes: 16384, enforceableControls: [] }, protocolVersions: { minimum: 1, maximum: 1 },
+    capacity: { slots, cpuMillicores: 8000, memoryMebibytes: 16384, enforceableControls: [] }, protocolVersions: { minimum: 1, maximum: 1 },
   });
 }
 
@@ -521,6 +521,16 @@ describe('journal incarnations', () => {
     const task = await stored(granted.taskId);
     assert.deepEqual([executionOf(task).state, executionOf(task).evidence.map(({ kind }) => kind)], ['authorized', ['local-history-lost']]);
     assert.deepEqual([(await assignmentOf(granted)).reservation.state, (await workerRow()).reachable], ['held', true]);
+  });
+
+  test('the first declaration of a new incarnation applies below the previous journal\'s fences', async () => {
+    await readyWorker();
+    value(await declare(3));
+    value(await pressure(4));
+    assert.equal(value(await declare(1, NEW_JOURNAL, 2)), 'applied');
+    const [row] = await sql<{ slots: number; capacity_sequence: string; pressure_sequence: string }>(
+      'SELECT slots, capacity_sequence, pressure_sequence FROM workers WHERE worker_id = $1', [WORKER]);
+    assert.deepEqual([row!.slots, Number(row!.capacity_sequence), Number(row!.pressure_sequence)], [2, 1, 0]);
   });
 
   test('an inventory report of a new incarnation replaces the journal too', async () => {

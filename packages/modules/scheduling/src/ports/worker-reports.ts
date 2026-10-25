@@ -18,6 +18,8 @@ export interface WorkerReports {
   recordContact(workerId: WorkerId, at: Instant): Promise<Result<void>>;
   // Unreachable after its journal was lost or rolled back, until contact.
   recordJournalLoss(workerId: WorkerId): Promise<Result<void>>;
+  // Every fence back to no sequence, for a new journal incarnation.
+  restartFences(workerId: WorkerId): Promise<Result<void>>;
   // The capacity fence.
   declareCapacity(workerId: WorkerId, declaration: CapacityDeclaration, sequence: Sequence): Promise<Result<void>>;
   // The pressure fence; under pressure since `at`, or an earlier start.

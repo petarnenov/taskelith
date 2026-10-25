@@ -100,11 +100,15 @@ An omitted assignment whose acceptance was applied from the snapshot's journal a
 - **THEN** the offer is re-sent, an inventory request is appended, and no execution changes
 
 ### Requirement: New journal incarnation
-An observation or inventory report of an enrolled worker that is not revoked, whose `journalId` the control plane has never seen from that worker and no other worker holds, SHALL replace the worker's enrolled journal, retire the previous journal, log the replacement with the previous and the new `journalId`, and reconcile every unfinished assignment of the worker as having lost its local history, in its transaction.
+An observation or inventory report of an enrolled worker that is not revoked, whose `journalId` the control plane has never seen from that worker and no other worker holds, SHALL replace the worker's enrolled journal, retire the previous journal, log the replacement with the previous and the new `journalId`, restart the worker's report fences, and reconcile every unfinished assignment of the worker as having lost its local history, in its transaction.
 
 #### Scenario: Missing journal replaced by an operator
 - **WHEN** a worker whose journal was lost publishes its first observation from a new incarnation, with one unfinished assignment without a grant and one whose execution holds a seeded grant
 - **THEN** the enrolled journal is the new one, `execution.journal.replaced` is logged with both journals, the first assignment's offer is re-sent, and the second's execution records `local-history-lost`
+
+#### Scenario: First declaration of a new incarnation
+- **WHEN** the previous journal's last capacity declaration had sequence 3 and the new incarnation declares its capacity at sequence 1
+- **THEN** the new declaration is applied
 
 ### Requirement: Refused journals
 A journal seen from the worker before, a journal another worker holds, and any new journal of a revoked worker SHALL be refused without effect and without contact.

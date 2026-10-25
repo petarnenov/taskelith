@@ -105,6 +105,10 @@ export class PostgresWorkerReports implements WorkerReports {
     return this.#update(workerId, 'reachable = false', []);
   }
 
+  restartFences(workerId: WorkerId): Promise<Result<void>> {
+    return this.#update(workerId, 'capacity_sequence = 0, pressure_sequence = 0, capacity_refusal_sequence = 0, protocol_sequence = 0', []);
+  }
+
   declareCapacity(workerId: WorkerId, declaration: CapacityDeclaration, sequence: Sequence): Promise<Result<void>> {
     const { slots, cpuMillicores, memoryMebibytes, controls } = declaration;
     return this.#update(workerId, `capacity_sequence = $2, slots = $3, cpu_millicores = $4, memory_mebibytes = $5, controls = $6`,

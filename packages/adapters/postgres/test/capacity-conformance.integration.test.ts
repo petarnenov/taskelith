@@ -74,6 +74,7 @@ function committingReports(): WorkerReportsConformanceTarget {
     reports: {
       recordContact: (...args) => write((reports) => reports.recordContact(...args)),
       recordJournalLoss: (...args) => write((reports) => reports.recordJournalLoss(...args)),
+      restartFences: (...args) => write((reports) => reports.restartFences(...args)),
       declareCapacity: (...args) => write((reports) => reports.declareCapacity(...args)),
       enterPressure: (...args) => write((reports) => reports.enterPressure(...args)),
       leavePressure: (...args) => write((reports) => reports.leavePressure(...args)),
