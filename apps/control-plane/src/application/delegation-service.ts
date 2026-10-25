@@ -47,11 +47,11 @@ export class DelegationService {
     return this.#store.transaction(async (tx) => {
       const credential = await checkCredential(tx, principal);
       if (!credential.ok) return credential;
+      const stored = await tx.delegations.get(delegation.value.delegationId);
+      if (stored.ok) return repeat(tx, stored.value, delegation.value);
+      if (stored.error.code !== 'not-found') return stored;
       const parent = await heldParent(tx, delegation.value);
       if (!parent.ok) return parent;
-      const stored = await tx.delegations.get(delegation.value.delegationId);
-      if (stored.ok) return repeat(tx, stored.value, delegation.value, parent.value);
-      if (stored.error.code !== 'not-found') return stored;
       const waitingSince = await tx.now();
       const outcome = await decide(tx, delegation.value, parent.value, waitingSince);
       if (!outcome.ok) return outcome;
@@ -96,19 +96,16 @@ async function heldParent(tx: ControlPlaneTransaction, delegation: Delegation): 
   }));
 }
 
-// Another request under the same identity is `conflict`; a waiting one is
-// decided again from the stored start of its wait.
-async function repeat(
-  tx: ControlPlaneTransaction,
-  stored: DelegationRecord,
-  delegation: Delegation,
-  parent: Assignment,
-): Promise<Result<DelegationAnswer>> {
+// Another request under the same identity is `conflict`; a decided one is
+// answered as stored, and a waiting one decided again if still held.
+async function repeat(tx: ControlPlaneTransaction, stored: DelegationRecord, delegation: Delegation): Promise<Result<DelegationAnswer>> {
   if (!isSameDelegation(stored, delegation.workerId, delegation.values)) {
     return err(failure('conflict', `delegation ${stored.delegationId} was requested with other values`, { delegation: stored.delegationId }));
   }
   if (!isAwaitingCapacity(stored)) return answerOf(tx, stored);
-  const outcome = await decide(tx, delegation, parent, stored.waitingSince);
+  const parent = await heldParent(tx, delegation);
+  if (!parent.ok) return parent;
+  const outcome = await decide(tx, delegation, parent.value, stored.waitingSince);
   if (!outcome.ok) return outcome;
   const record = redecideDelegation(stored, outcome.value);
   const replaced = await tx.delegations.replace(record, stored.generation);

@@ -254,6 +254,10 @@ describe('delegation', () => {
     const events = await sql<{ message: string }>("SELECT message FROM outbox WHERE event_type = 'sdlc.admission.used'");
     assert.equal(events.length, 2, 'the parent and the child');
     assert.deepEqual(value(await delegations.requestDelegation(PRINCIPAL, request(parent), CORRELATION)), answer);
+    // A decided delegation is answered as stored once the parent lets go.
+    await sql(`UPDATE assignments SET reservation_state = 'released',
+      record = jsonb_set(record::jsonb, '{reservation,state}', '"released"')::text`);
+    assert.deepEqual(value(await delegations.requestDelegation(PRINCIPAL, request(parent), CORRELATION)), answer);
   });
 
   test('a repeat with another child is a conflict, and another worker is forbidden; neither stores anything', async () => {
