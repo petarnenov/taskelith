@@ -15,14 +15,15 @@ Obligations this change meets, from the coordinator's brief of 2026-10-26:
 
 Left to other changes:
 - 20d: the worker's heartbeat publisher and its own detection of lost contact;
-- reconciling the attempts of a lost worker; this change affects only placement eligibility.
+- reconciling the attempts of a lost worker; this change affects only placement eligibility;
+- 21c: contact from an inventory report, which this change's check then counts.
 
 ## What Changes
 
 - **Contract.** `execution.asyncapi.json` 0.4.0 adds the `workerHeartbeats` channel, `taskelith.<installationId>.workers.<workerId>.heartbeats`, with the `worker.heartbeat` message and its `WorkerHeartbeat` schema, and the control plane's `receiveWorkerHeartbeat` operation. The contract page, the enrollment contract, and the trust model document the subject and the permission.
 - **Transport.** `TransportAddress` gains the heartbeat subject and adds it to each worker's broker permissions, which enrollment and rotation issue. A new `HeartbeatReceiver` reads every worker's heartbeats over core NATS in one queue group, with no stream.
 - **Scheduling.** `WorkerReports.markContactLost(before, limit)` makes the oldest silent reachable workers unreachable, in memory and in PostgreSQL, with a conformance case.
-- **Control plane.** `HeartbeatService` authenticates a heartbeat and records contact; `LostContactCheck` runs every `10s` with a `30s` timeout and at most `100` workers per run. Observations and heartbeats share one producer authentication.
+- **Control plane.** `HeartbeatService` authenticates a heartbeat and records contact; `LostContactCheck` runs every `10s` with a `30s` timeout and at most `100` workers per run. Observations and heartbeats share one producer authentication, and an authenticated duplicate observation records contact too.
 - **Targets.** `docs/operational-targets.md` gains the heartbeat and lost-contact row.
 
 ## Capabilities
@@ -33,6 +34,7 @@ Left to other changes:
 ### Modified Capabilities
 - `execution-wire-contracts`: the heartbeat channel and message.
 - `installation-enrollment`: the worker's permission to publish its own heartbeats.
+- `observation-consumption`: a duplicate observation records contact.
 - `nats-transport`: the heartbeat receiver.
 
 ## Impact

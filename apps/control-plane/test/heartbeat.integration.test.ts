@@ -107,6 +107,73 @@ test('only a worker silent for longer than the timeout loses contact, and any co
   assert.deepEqual(value(await check.markLost()), []);
 });
 
+// Whether a statement of this database waits for a row lock.
+async function waitsForLock(): Promise<boolean> {
+  const [row] = await sql<{ waiting: number }>(
+    `SELECT count(*)::int AS waiting FROM pg_stat_activity WHERE datname = $1 AND wait_event_type = 'Lock'`, [databaseName],
+  );
+  return row!.waiting > 0;
+}
+
+async function until(condition: () => Promise<boolean>): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (!(await condition())) {
+    if (Date.now() > deadline) throw new Error('condition not met within 10 s');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+
+function gate() {
+  let open!: () => void;
+  const opened = new Promise<void>((resolve) => { open = resolve; });
+  return { open, opened };
+}
+
+async function silentWorker(): Promise<void> {
+  await enroll('worker-a');
+  value(await heartbeats.record(heartbeat('worker-a')));
+  await silentFor('worker-a', 31);
+}
+
+test('a heartbeat that waits for the check commits after it and leaves the worker reachable', async () => {
+  await silentWorker();
+  const marked = gate();
+  const release = gate();
+  const checking = database.transaction(async (tx) => {
+    const before = new Date(Date.parse(await tx.now()) - 30_000).toISOString() as never;
+    const lost = await tx.reports.markContactLost(before, 10);
+    marked.open();
+    await release.opened;
+    return lost;
+  });
+  await marked.opened;
+  const contact = heartbeats.record(heartbeat('worker-a'));
+  await until(waitsForLock);
+  release.open();
+  assert.deepEqual(value(await checking), ['worker-a']);
+  value(await contact);
+  assert.equal(await reachable('worker-a'), true);
+});
+
+test('a check that waits for a heartbeat runs again and keeps the worker reachable', async () => {
+  await silentWorker();
+  const contacted = gate();
+  const release = gate();
+  const contact = database.transaction(async (tx) => {
+    const recorded = await tx.reports.recordContact('worker-a' as never, await tx.now());
+    contacted.open();
+    await release.opened;
+    return recorded;
+  });
+  await contacted.opened;
+  const checking = check.markLost();
+  await until(waitsForLock);
+  release.open();
+  value(await contact);
+  assert.deepEqual(value(await checking), []);
+  assert.equal(await reachable('worker-a'), true);
+});
+
 test('a revoked worker\'s heartbeat records no contact', async () => {
   await enroll('worker-a', '2026-10-26T08:00:00.000Z');
   assert.equal(failed(await heartbeats.record(heartbeat('worker-a'))).code, 'forbidden');

@@ -120,6 +120,15 @@ test('a duplicate within the confirmed prefix confirms it again under a new iden
   assert.deepEqual(await transaction.cursors.get(WORKER, JOURNAL as never), cursor);
 });
 
+test('a duplicate makes a worker that lost contact reachable again', async () => {
+  const { service, transaction } = await fixture();
+  const declared = message('worker.capacity.declared', 1, DECLARATION);
+  value(await service.apply(declared));
+  assert.deepEqual(value(await transaction.reports.markContactLost('2026-10-25T10:00:00.000Z' as Instant, 10)), [WORKER]);
+  assert.equal(value(await service.apply(declared)), 'duplicate');
+  assert.equal((await transaction.workers.get(WORKER))?.reachable, true);
+});
+
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 
 interface PlacedAttempt {

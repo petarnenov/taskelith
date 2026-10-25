@@ -15,7 +15,7 @@ The control plane SHALL record an authenticated heartbeat as contact at the data
 - **THEN** it fails as `forbidden` and records no contact
 
 ### Requirement: Lost contact
-The control plane SHALL mark unreachable each reachable worker whose last contact, from a heartbeat, an observation, or an inventory report, is more than `30s` before the database time. Any later contact SHALL make the worker reachable again. Marking a worker unreachable SHALL change no attempt, assignment, or reservation.
+The control plane SHALL mark unreachable each reachable worker whose last recorded contact is more than `30s` before the database time. Contact SHALL be recorded from an authenticated heartbeat or observation, a duplicate observation included, and, once item 21c consumes it, from an inventory report. Any later contact SHALL make the worker reachable again. Marking a worker unreachable SHALL change no attempt, assignment, or reservation.
 
 #### Scenario: Silent worker
 - **WHEN** a worker has had no contact for more than the timeout
@@ -31,6 +31,10 @@ The control plane SHALL mark unreachable each reachable worker whose last contac
 
 ### Requirement: Bounded lost-contact check
 The lost-contact check SHALL run every `10s`, SHALL mark at most `100` workers per run with the oldest contact first, and SHALL log `fleet.worker.contact-lost` for each worker it marks. A failed check SHALL be logged as `fleet.lost-contact.failed` and run again at the next interval.
+
+#### Scenario: Contact while the check runs
+- **WHEN** a heartbeat commits while the check marks its worker, or the check runs while the heartbeat's transaction holds the worker
+- **THEN** the worker ends reachable, with the heartbeat's contact
 
 #### Scenario: More silent workers than the batch
 - **WHEN** more workers are silent than one check marks

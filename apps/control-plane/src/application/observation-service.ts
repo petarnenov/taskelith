@@ -53,25 +53,26 @@ export class ObservationService {
     return this.#store.transaction((tx) => this.#record(tx, observation, NO_EFFECT, 'rejected'));
   }
 
-  // Decision 1: authentication, the inbox, the sequence, first contact, the
+  // Decision 1: authentication, first contact, the inbox, the sequence, the
   // effect, the cursor, and a confirmation when its prefix grew.
   async #record(
     tx: ControlPlaneTransaction, observation: Observation, effect: ObservationEffect, outcome: 'applied' | 'rejected',
   ): Promise<Result<ObservationOutcome>> {
     const authentic = await authenticate(tx, observation);
     if (!authentic.ok) return authentic;
+    const { workerId, journalId } = observation.position;
+    const at = await tx.now();
+    // A duplicate is contact too, so a republishing worker stays reachable.
+    const contact = await tx.reports.recordContact(workerId, at);
+    if (!contact.ok) return contact;
     const inbox = await tx.inbox.accept(OBSERVATION_CONSUMER, observation.messageId);
     if (!inbox.ok) return inbox;
     if (inbox.value === 'duplicate') return this.#confirmAgain(tx, observation);
-    const { workerId, journalId } = observation.position;
     const cursor = await tx.cursors.get(workerId, journalId);
     // The inbox ran first, so an applied sequence here has a new identity.
     const sequenceClass = classifyObservation(cursor, observation.position);
     if (!sequenceClass.ok) return sequenceClass;
     if (sequenceClass.value !== 'new') return notConsumed(`its sequence is a ${sequenceClass.value}`);
-    const at = await tx.now();
-    const contact = await tx.reports.recordContact(workerId, at);
-    if (!contact.ok) return contact;
     const effected = await effect(tx, observation, at);
     if (!effected.ok) return effected;
     const advanced = await advanceCursor(tx, observation, cursor, at);
