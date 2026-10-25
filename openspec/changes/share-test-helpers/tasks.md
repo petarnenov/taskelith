@@ -2,6 +2,7 @@
 
 - [x] 1.1 Add `value` and `id` to `@taskelith/testing` with their tests.
 - [x] 1.2 Replace the local copies in the `@taskelith/postgres` and `@taskelith/scheduling` tests and add the development dependency.
+- [x] 1.3 Add the `deterministic-test-harness` delta for the shared result helpers.
 
 ## 2. Verification and review
 

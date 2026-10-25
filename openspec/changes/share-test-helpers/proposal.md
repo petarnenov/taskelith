@@ -13,7 +13,7 @@ Pass 3 of the `implement-resource-admission` review (finding 12) reported that t
 
 ### Modified Capabilities
 
-None. The `deterministic-test-harness` requirement "Test-only harness package" already allows tests to import the harness and limits it to the kernel and Node built-ins, which the helpers use, so this change sets `skip_specs: true`.
+- `deterministic-test-harness`: adds the requirement "Shared result helpers". The existing requirement "Test-only harness package" already allows tests to import the harness and limits it to the kernel and Node built-ins, which the helpers use.
 
 ## Impact
 
