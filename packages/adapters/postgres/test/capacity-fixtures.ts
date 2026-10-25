@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { parseIdentifier, type Result } from '@taskelith/kernel';
+import { parseIdentifier } from '@taskelith/kernel';
 import {
   authorizeLaunch,
   claimOwnership,
@@ -24,13 +24,9 @@ import {
   type RunContext,
   type TaskAdmission,
 } from '@taskelith/sdlc';
+import { value } from '@taskelith/testing';
 import { AT } from './fixtures.ts';
 import { query } from './test-database.ts';
-
-function value<T>(result: Result<T>): T {
-  assert.ok(result.ok, result.ok ? '' : result.error.message);
-  return result.value;
-}
 
 export async function seedWorker(url: URL, worker: WorkerPlacementRecord): Promise<void> {
   await query(url, `INSERT INTO workers (worker_id, enrolled, revoked, draining, reachable, admission_pressure_since,

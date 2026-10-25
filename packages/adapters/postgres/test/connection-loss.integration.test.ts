@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { after, afterEach, test } from 'node:test';
 import { parseIdentifier } from '@taskelith/kernel';
-import { Toxiproxy, acquireProcessLock, integrationEndpoint } from '@taskelith/testing';
+import { Toxiproxy, acquireProcessLock, integrationEndpoint, value } from '@taskelith/testing';
 import { PostgresDatabase } from '@taskelith/postgres';
-import { assignment, value } from './fixtures.ts';
+import { assignment } from './fixtures.ts';
 import { PROXY_URL, createMigratedDatabase, databaseUrl, query } from './test-database.ts';
 
 const toxiproxyUrl = integrationEndpoint('TASKELITH_TOXIPROXY_URL');

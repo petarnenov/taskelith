@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { err, failure, ok, parseIdentifier, parseInstant, type Instant, type Result } from '@taskelith/kernel';
+import { err, failure, ok, parseInstant, type Instant, type Result } from '@taskelith/kernel';
 import {
   ADMISSION_PRESSURE_SUPERSESSION_BOUND_MILLISECONDS,
   DELEGATION_CAPACITY_WAIT_BOUND_MILLISECONDS,
@@ -26,13 +26,8 @@ import {
   type TaskLineageLink,
 } from '@taskelith/scheduling';
 import { parseOwnershipGeneration, type TaskId } from '@taskelith/sdlc';
+import { id, value } from '@taskelith/testing';
 
-function value<T>(result: Result<T>): T {
-  assert.ok(result.ok, result.ok ? '' : result.error.message);
-  return result.value;
-}
-
-const id = <Kind extends string>(kind: Kind, text: string) => value(parseIdentifier(kind, text));
 const at = (text: string): Instant => value(parseInstant(text));
 const REQUEST = value(parseResourceRequest({ cpuMillicores: 1000, memoryMebibytes: 2048, hardControls: [] }));
 

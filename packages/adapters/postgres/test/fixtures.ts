@@ -1,12 +1,7 @@
-import assert from 'node:assert/strict';
-import { parseEventMetadata, parseIdentifier, parseInstant, type Result } from '@taskelith/kernel';
+import { parseEventMetadata, parseIdentifier, parseInstant } from '@taskelith/kernel';
 import { createAssignment, parseResourceRequest, type Assignment } from '@taskelith/scheduling';
 import { parseOwnershipGeneration, type OutboxMessage } from '@taskelith/sdlc';
-
-export function value<T>(result: Result<T>): T {
-  assert.ok(result.ok, result.ok ? '' : result.error.message);
-  return result.value;
-}
+import { value } from '@taskelith/testing';
 
 export const AT = value(parseInstant('2026-10-25T09:00:00.000Z'));
 

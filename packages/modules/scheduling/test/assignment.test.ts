@@ -19,11 +19,7 @@ import {
   supersedeAssignment,
   type Assignment,
 } from '@taskelith/scheduling';
-
-function value<T>(result: Result<T>): T {
-  assert.ok(result.ok, `expected success, got ${JSON.stringify(result.ok ? undefined : result.error)}`);
-  return result.value;
-}
+import { value } from '@taskelith/testing';
 
 function code<T>(result: Result<T>): string {
   assert.ok(!result.ok, 'expected a failure');

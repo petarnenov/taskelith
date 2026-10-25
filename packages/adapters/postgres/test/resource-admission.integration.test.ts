@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, beforeEach, test } from 'node:test';
-import { parseIdentifier, type Result } from '@taskelith/kernel';
+import type { Result } from '@taskelith/kernel';
 import { endAttempt, recordNotStarted, type AssignmentId, type AttemptId, type Task, type WorkerId } from '@taskelith/execution';
 import { PostgresDatabase } from '@taskelith/postgres';
 import { releaseInTransaction } from '@taskelith/scheduling';
@@ -19,7 +19,7 @@ import {
   type WorkerPlacementRecord,
 } from '@taskelith/scheduling';
 import { parseOwnershipGeneration, type TaskId } from '@taskelith/sdlc';
-import { CrashPoints, SimulatedCrash } from '@taskelith/testing';
+import { CrashPoints, SimulatedCrash, id, value } from '@taskelith/testing';
 import { authorizedUnder, placedTask, retriedTask, seedWorker } from './capacity-fixtures.ts';
 import { AT, assignment } from './fixtures.ts';
 import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
@@ -38,12 +38,6 @@ const database = open();
 const NO_WAIT = { pause: async () => {}, draw: () => 0 };
 const service = new ResourceAdmissionService(database, NO_WAIT);
 
-function value<T>(result: Result<T>): T {
-  assert.ok(result.ok, result.ok ? '' : result.error.message);
-  return result.value;
-}
-
-const id = <Kind extends string>(kind: Kind, text: string) => value(parseIdentifier(kind, text));
 const WORKER = id('WorkerId', 'worker-1') as WorkerId;
 const PROJECT = ROOT_LINK.projectId;
 const REQUESTED = value(parseResourceRequest({ cpuMillicores: 1000, memoryMebibytes: 2048, hardControls: [] }));
