@@ -179,6 +179,63 @@ test('an applied migration of an interrupted run is checked by the next run', as
   assert.equal(!edited.ok && edited.error.details.migrations, INITIAL);
 });
 
+// The server clock may step back between two migration transactions, as a
+// virtual machine's clock does when it is corrected.
+async function stepClockBack(url: URL): Promise<void> {
+  await query(url, `UPDATE schema_migrations SET run_on = (SELECT run_on FROM schema_migrations WHERE name = $1)
+    - interval '1 millisecond' WHERE name = $2`, [RESOURCE_ADMISSION, OBSERVABILITY_SIGNALS]);
+}
+
+test('an interrupted run during which the clock stepped back is completed', async () => {
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  const directory = await copiedMigrations();
+  await writeFile(join(directory, '1792990000000_broken.sql'), '-- Up Migration\nCREATE TABLE broken (;\n');
+  assert.equal((await migrate(url, directory)).ok, false);
+  await stepClockBack(url);
+  await writeFile(join(directory, '1792990000000_broken.sql'), '-- Up Migration\nCREATE TABLE fixed (id int);\n');
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: ['1792990000000_broken'] });
+});
+
+test('a database whose applied migrations are out of run order migrates again', async () => {
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  const directory = await copiedMigrations();
+  assert.equal((await migrate(url, directory)).ok, true);
+  await stepClockBack(url);
+  await writeFile(join(directory, '1792990000000_add-note.sql'), '-- Up Migration\nCREATE TABLE note (id int);\n');
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: ['1792990000000_add-note'] });
+});
+
+test('a pending migration older than an applied one stops the run before anything is applied', async () => {
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  const directory = await copiedMigrations();
+  assert.equal((await migrate(url, directory)).ok, true);
+  await writeFile(join(directory, '1792929000000_older.sql'), '-- Up Migration\nCREATE TABLE older (id int);\n');
+  await writeFile(join(directory, '1792990000000_add-note.sql'), '-- Up Migration\nCREATE TABLE note (id int);\n');
+  const refused = await migrate(url, directory);
+  assert.equal(!refused.ok && refused.error.code, 'precondition-failed');
+  assert.equal(!refused.ok && refused.error.details.migrations, '1792929000000_older');
+  assert.deepEqual(await query(url, "SELECT 1 FROM information_schema.tables WHERE table_name IN ('older', 'note')"), []);
+});
+
+test('a pending migration is ordered by its numeric prefix, not by its name', async () => {
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  const directory = await copiedMigrations();
+  assert.equal((await migrate(url, directory)).ok, true);
+  await writeFile(join(directory, '9_older.sql'), '-- Up Migration\nCREATE TABLE older (id int);\n');
+  const refused = await migrate(url, directory);
+  assert.equal(!refused.ok && refused.error.details.migrations, '9_older');
+});
+
+test('an applied migration without its file stops the run and is named', async () => {
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  const directory = await copiedMigrations();
+  assert.equal((await migrate(url, directory)).ok, true);
+  await unlink(join(directory, `${OBSERVABILITY_SIGNALS}.sql`));
+  const refused = await migrate(url, directory);
+  assert.equal(!refused.ok && refused.error.code, 'precondition-failed');
+  assert.equal(!refused.ok && refused.error.details.migrations, OBSERVABILITY_SIGNALS);
+});
+
 test('a fixed pending migration is checked by its new content', async () => {
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   const directory = await copiedMigrations();
