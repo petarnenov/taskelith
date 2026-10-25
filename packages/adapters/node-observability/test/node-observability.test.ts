@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Writable } from 'node:stream';
+import { createHistogram, type RecordableHistogram } from 'node:perf_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
 import { parseInstant } from '@taskelith/kernel';
 import {
   EventLoopLagMonitor,
   JsonLinesLogSink,
+  type LoopDelayHistogram,
   runPeriodically,
   SYSTEM_CLOCK,
 } from '@taskelith/node-observability';
@@ -90,19 +92,76 @@ test('the monitor reports the p99 event-loop delay of its window', async () => {
   }
   const lag = metrics.series('event-loop.lag')!;
   assert.ok(lag.last >= 0.03, `p99 ${lag.last}s should show the blocked loop`);
-  assert.ok(lag.last < 5);
+  assert.ok(Number.isFinite(lag.last));
 });
 
-test('an idle window reads below the resolution', async () => {
-  const monitor = new EventLoopLagMonitor(10);
-  const metrics = new InMemoryMetrics();
-  try {
-    await delay(100);
-    monitor.sample(metrics);
-  } finally {
-    monitor.stop();
+// Node's own HDR histogram, filled with given timer intervals; a real idle
+// window in a shared test process is not reliably idle.
+class RecordedHistogram implements LoopDelayHistogram {
+  readonly #histogram: RecordableHistogram = createHistogram();
+  enabled = false;
+  resets = 0;
+
+  record(...milliseconds: number[]): void {
+    for (const value of milliseconds) this.#histogram.record(Math.round(value * 1e6));
   }
-  assert.ok(metrics.series('event-loop.lag')!.last < 0.01);
+
+  get count(): number {
+    return this.#histogram.count;
+  }
+
+  percentile(percent: number): number {
+    return this.#histogram.percentile(percent);
+  }
+
+  reset(): void {
+    this.#histogram.reset();
+    this.resets += 1;
+  }
+
+  enable(): boolean {
+    this.enabled = true;
+    return true;
+  }
+
+  disable(): boolean {
+    this.enabled = false;
+    return true;
+  }
+}
+
+// The histogram keeps three significant digits, so a recorded interval reads
+// back within 0.1 % of itself.
+function hdrTolerance(intervalSeconds: number): number {
+  return intervalSeconds * 0.001;
+}
+
+test('an idle window reads below the resolution', () => {
+  const histogram = new RecordedHistogram();
+  const monitor = new EventLoopLagMonitor(10, histogram);
+  const metrics = new InMemoryMetrics();
+  assert.ok(histogram.enabled, 'the monitor enables its histogram');
+  histogram.record(10.1, 10.2, 10.4, 10.1, 10.3, 10.2, 10.1, 10.6, 10.2, 10.3);
+  monitor.sample(metrics);
+  monitor.stop();
+  const lag = metrics.series('event-loop.lag')!.last;
+  assert.ok(lag >= 0 && lag < 0.01, `idle lag ${lag}s should stay below the 10 ms resolution`);
+  assert.ok(Math.abs(lag - 0.0006) < hdrTolerance(0.0106), 'the p99 interval less the resolution');
+  assert.ok(!histogram.enabled, 'stop disables the histogram');
+});
+
+test('each sample covers only the window since the previous one', () => {
+  const histogram = new RecordedHistogram();
+  const monitor = new EventLoopLagMonitor(10, histogram);
+  const metrics = new InMemoryMetrics();
+  histogram.record(10, 10, 75);
+  monitor.sample(metrics);
+  assert.ok(Math.abs(metrics.series('event-loop.lag')!.last - 0.065) < hdrTolerance(0.075));
+  histogram.record(10, 10.2);
+  monitor.sample(metrics);
+  monitor.stop();
+  assert.equal(histogram.resets, 2);
+  assert.ok(metrics.series('event-loop.lag')!.last < 0.01, 'the blocked interval of the first window is gone');
 });
 
 test('a window without a measured delay reports zero', () => {
