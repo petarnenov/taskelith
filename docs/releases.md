@@ -47,6 +47,8 @@ Because the `verify` check must run on a branch that is up to date with `main`, 
 | Commit | Version change |
 | --- | --- |
 | `fix: correct CLI output` | Patch |
+| `perf: speed up CLI output` | Patch |
+| A revert, `revert:` or `Revert "…"`, whose body says `This reverts commit <hash>.` | Patch |
 | `feat: add project creation` | Minor |
 | `feat!: replace CLI invocation` or a `BREAKING CHANGE:` footer | Major |
 | `docs:`, `test:`, `chore:`, `build:`, `ci:` without breaking changes | No release |
