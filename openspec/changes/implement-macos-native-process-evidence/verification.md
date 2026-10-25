@@ -61,6 +61,8 @@ Assigned reviewer: Claude Code with `claude -p --model claude-fable-5-1 --effort
   6. Low: a `koffi` call that throws escaped the `Result` path. `DarwinNative` returns `Result` from every call, and `darwin-native.ts` turns a throw into a failure; tests cover a failing `sysctl` and clock.
   7. Low: the register omitted `p_pid` and the C reference was not kept. `p_pid` is listed, and the source and output are in `docs/qualification/koffi-3.3.3/`.
 
+- **Pass 2 attempts without a session.** Three invocations of the pass 2 prompt on `2acf747` ended with `Error: No messages returned from query` and produced no session, output, or review; snapshots before and after each were equal (`69b2b0e7…daf1c0`). Their logs are kept outside the worktree. On the coordinator's instruction (2026-10-25), pass 2 is retried with spaced attempts.
+
 ## Limitations
 
 - Native x86_64 macOS hardware was not available; x86_64 ran under Rosetta 2 on arm64. Native linux/amd64 was emulated.

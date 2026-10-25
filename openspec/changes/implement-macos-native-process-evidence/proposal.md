@@ -9,7 +9,7 @@ G2 item 15 (`implement-process-supervisor`) left the macOS adapter failing close
 - `darwin.ts`: the macOS `ProcessInspector` decodes `kinfo_proc` at offsets checked against a C reference, with `KERN_PROC_PID` for one process and `KERN_PROC_ALL` for the listing (size query, fill, retry on `ENOMEM`), and the `DeadlineClock` converts continuous ticks with the timebase. Without the native calls, every read fails and the supervisor seals.
 - `process-set.ts`: the macOS termination proof needs two consecutive empty listings, by the owner's decision of 2026-10-25 on the `KERN_PROC_ALL` race.
 - Tests: fake-native unit tests, native tests and real-process supervisor tests on darwin only, and a test of the two-listing rule.
-- The dependency inventory records per-platform optional packages from the lockfile, so that it stays the same on every host.
+- A necessary extension of scope, accepted by the coordinator on 2026-10-25: the dependency inventory records per-platform optional packages from the lockfile, so that it stays the same on every host. Without it, `make verify` fails, because the inventory required every locked package to be installed.
 - Docs: the `koffi` row in the dependency register, the supervisor identity contract sections 4, 8, and 10, and the inventory description.
 
 ## Capabilities
