@@ -31,6 +31,9 @@ test('the API binds loopback on the default port unless configured', () => {
   assert.deepEqual(configured.api, { host: '0.0.0.0', port: 0 });
   assert.equal(failed(readControlPlaneSettings({ ...BASE, TASKELITH_API_PORT: '70000' }, 'linux', 501)).details.variable, 'TASKELITH_API_PORT');
   assert.equal(failed(readControlPlaneSettings({ ...BASE, TASKELITH_NATS_URL: '' }, 'linux', 501)).details.variable, 'TASKELITH_NATS_URL');
+  assert.equal(failed(readControlPlaneSettings({ ...BASE, TASKELITH_NATS_CA: join(directory, 'missing.pem') }, 'linux', 501)).details.variable, 'TASKELITH_NATS_CA');
+  writeFileSync(join(directory, 'ca.pem'), 'PEM');
+  assert.deepEqual(value(readControlPlaneSettings({ ...BASE, TASKELITH_NATS_CA: join(directory, 'ca.pem') }, 'linux', 501)).natsTls, { ca: 'PEM' });
 });
 
 test('the known workflows come from a JSON file', () => {

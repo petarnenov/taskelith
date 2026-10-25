@@ -20,13 +20,23 @@ export function readControlPlaneSettings(environment: Environment, platform: Nod
   if (!port.ok) return port;
   const workflows = readWorkflows(environment.TASKELITH_WORKFLOWS);
   if (!workflows.ok) return workflows;
-  const ca = environment.TASKELITH_NATS_CA;
+  const ca = readCa(environment.TASKELITH_NATS_CA);
+  if (!ca.ok) return ca;
   return ok({
     dataRoot: dataRoot.value, ownerUid, postgres: endpoints.value.postgres, nats: endpoints.value.nats,
     api: { host: environment.TASKELITH_API_HOST || DEFAULT_API_HOST, port: port.value },
     workflows: workflows.value,
-    ...(ca === undefined || ca === '' ? {} : { natsTls: { ca: readFileSync(ca, 'utf8') } }),
+    ...(ca.value === undefined ? {} : { natsTls: { ca: ca.value } }),
   });
+}
+
+function readCa(path: string | undefined): Result<string | undefined> {
+  if (path === undefined || path === '') return ok(undefined);
+  try {
+    return ok(readFileSync(path, 'utf8'));
+  } catch {
+    return err(failure('invalid', 'TASKELITH_NATS_CA must name a readable PEM file', { variable: 'TASKELITH_NATS_CA' }));
+  }
 }
 
 function readPort(text: string | undefined): Result<number> {

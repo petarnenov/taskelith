@@ -28,6 +28,9 @@ export type TaskResult = HttpSchemas['TaskResult'];
 // `taskelith.<installationId>.sdlc.events` (coordinator decision Q2).
 export const SDLC_EVENTS_SUBJECT = 'sdlc.events';
 
+// The broker's 1 MiB payload limit, less room for the message headers.
+export const MAX_EVENT_BYTES = 1024 ** 2 - 4096;
+
 // Architecture section 9, step 1: binds the task to its run and stage, and
 // creates the task and its outbox entry in one transaction.
 export class TaskService {
@@ -69,6 +72,11 @@ export class TaskService {
       if (!stored.ok) return stored;
       const event = admissionUsedEvent(runId.value, used.value, correlationId, at);
       if (!event.ok) return event;
+      // An event the broker refuses would stay in the outbox and hold back
+      // every later one on its subject, so the submission fails instead.
+      if (Buffer.byteLength(JSON.stringify(event.value.payload)) > MAX_EVENT_BYTES) {
+        return err(failure('invalid', `the task's admission event would exceed ${MAX_EVENT_BYTES} bytes`, { task: request.taskId }));
+      }
       const appended = await tx.outbox.append(event.value);
       return appended.ok ? ok({ taskId: task.value.id, admission: admissionView(used.value) }) : appended;
     });

@@ -6,9 +6,11 @@ import { after, before, describe, test } from 'node:test';
 import pg from 'pg';
 import { createAccount } from '@nats-io/nkeys';
 import { checkHttpSchema, checkMessageSchema } from '@taskelith/contracts';
-import { adminMain, startControlPlane, type AdminIo, type RunningControlPlane } from '@taskelith/control-plane';
+import { adminMain, InstallationPublicationFence, startControlPlane, type AdminIo, type RunningControlPlane } from '@taskelith/control-plane';
 import { ControlPlaneNamespace } from '@taskelith/control-plane-store';
 import { BrokerAuthority, connectSystemAccount, connectTransport, NatsBrokerCredentials, TRANSPORT_LIMITS, TransportAddress } from '@taskelith/nats';
+import { PostgresDatabase } from '@taskelith/postgres';
+import { ok } from '@taskelith/kernel';
 import { InMemoryLogSink } from '@taskelith/observability';
 import { parseWorkflowDefinition } from '@taskelith/sdlc';
 import { integrationEndpoint, integrationSecret, value } from '@taskelith/testing';
@@ -170,6 +172,12 @@ describe('runs and tasks', () => {
       bearer: operator, body: { taskId: 'task-impl', kind: 'implementation', stageId: 'apply', workItem: { id: 'change-1', nativeReference: 'changes/one' } },
     });
     assert.equal(gated.status, 422, 'an implementation task needs its prerequisite gates passed');
+    // A body just under 1 MiB whose event, with metadata, is over the limit.
+    const artifacts = Array.from({ length: 3140 }, (_, index) => ({ artifactId: `a${index}`, digest: DIGEST, nativeReference: `${'r'.repeat(200)}${index}.md` }));
+    const oversized = await call('POST', '/runs/run-1/tasks', { bearer: operator, body: { taskId: 'task-big', kind: 'planning', stageId: 'specs', artifacts } });
+    assert.equal(oversized.status, 400, 'an event the broker would refuse fails the submission');
+    assert.match(String(oversized.body.message), /admission event would exceed/);
+    assert.equal((await call('GET', '/runs/run-1/tasks/task-big/result', { bearer: operator })).status, 404);
 
     const result = await call('GET', '/runs/run-1/tasks/task-1/result', { bearer: operator });
     assert.deepEqual([result.status, result.body], [200, { state: 'pending', runId: 'run-1', taskId: 'task-1' }]);
@@ -193,6 +201,36 @@ describe('runs and tasks', () => {
     assert.equal((await sql(database, 'SELECT 1 FROM outbox WHERE published_at IS NULL')).length, 1);
     await sql(database, 'UPDATE installation SET quarantined = false');
     await waitFor(async () => (await sql(database, 'SELECT 1 FROM outbox WHERE published_at IS NULL')).length === 0);
+  });
+});
+
+describe('publication fence', () => {
+  test('entering quarantine waits for the round in flight, and the next round publishes nothing', async () => {
+    const fenceDatabase = new PostgresDatabase(database);
+    after(() => fenceDatabase.close());
+    const fence = new InstallationPublicationFence(fenceDatabase);
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => { release = resolve; });
+    let roundDone = false;
+    const round = fence.hold(async () => {
+      await released;
+      roundDone = true;
+      return ok('published');
+    });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    let quarantinedAt = 0;
+    const entering = sql(database, 'UPDATE installation SET quarantined = true').then(() => { quarantinedAt = Date.now(); });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.equal(quarantinedAt, 0, 'quarantine waits for the round');
+    release();
+    assert.deepEqual(await round, ok('published'));
+    await entering;
+    assert.ok(roundDone && quarantinedAt > 0);
+    const next = await fence.hold(async () => ok('published'));
+    assert.equal(!next.ok && next.error.details.reason, 'restore-quarantine');
+    const redrive = await call('POST', '/quarantine/1/redrive', { bearer: operator });
+    assert.equal(redrive.status, 503, 'a redrive waits for the same fence');
+    await sql(database, 'UPDATE installation SET quarantined = false');
   });
 });
 

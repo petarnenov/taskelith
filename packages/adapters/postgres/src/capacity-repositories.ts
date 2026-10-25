@@ -90,6 +90,13 @@ export class PostgresInstallationGuard implements InstallationGuard {
     return rows[0]?.quarantined ?? true;
   }
 
+  // Locks the record for share until the transaction ends, so that a writer
+  // entering quarantine waits for it; false without a record or in quarantine.
+  async holdForPublication(): Promise<boolean> {
+    const { rows } = await this.#session.query<{ quarantined: boolean }>('SELECT quarantined FROM installation FOR SHARE');
+    return rows[0]?.quarantined === false;
+  }
+
   async recoveryEpoch(): Promise<number | undefined> {
     const { rows } = await this.#session.query<{ recovery_epoch: number | null }>('SELECT recovery_epoch FROM installation');
     return rows[0]?.recovery_epoch ?? undefined;

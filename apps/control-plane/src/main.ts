@@ -16,5 +16,12 @@ export async function controlPlaneMain(environment: Environment, write: (line: s
 if (import.meta.main) {
   const running = await controlPlaneMain(process.env, (line) => process.stderr.write(`${line}\n`));
   if (running === undefined) process.exitCode = 1;
-  else for (const signal of ['SIGTERM', 'SIGINT'] as const) process.once(signal, () => void running.stop());
+  else {
+    // stop is idempotent, so a second signal waits for the same shutdown.
+    const shutdown = () => running.stop().catch((error: unknown) => {
+      process.stderr.write(`${JSON.stringify({ error: { code: 'internal', message: String(error) } })}\n`);
+      process.exitCode = 1;
+    });
+    for (const signal of ['SIGTERM', 'SIGINT'] as const) process.once(signal, () => void shutdown());
+  }
 }

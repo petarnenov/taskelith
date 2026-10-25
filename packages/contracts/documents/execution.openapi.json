@@ -75,6 +75,26 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A service the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
           }
         }
       }
@@ -277,6 +297,26 @@
           },
           "404": {
             "description": "The run or the task does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A service the operation needs is unavailable; retry later.",
             "content": {
               "application/json": {
                 "schema": {
@@ -529,7 +569,8 @@
             "description": "The first sequence to read.",
             "schema": {
               "type": "integer",
-              "minimum": 1
+              "minimum": 1,
+              "maximum": 9007199254740991
             }
           }
         ],
@@ -556,6 +597,16 @@
           },
           "401": {
             "description": "The operator credential is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
             "content": {
               "application/json": {
                 "schema": {
@@ -594,7 +645,8 @@
             "description": "The quarantine record.",
             "schema": {
               "type": "integer",
-              "minimum": 1
+              "minimum": 1,
+              "maximum": 9007199254740991
             }
           }
         ],
@@ -641,6 +693,16 @@
           },
           "409": {
             "description": "The original expired before the capture, so the record cannot be redriven.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
             "content": {
               "application/json": {
                 "schema": {

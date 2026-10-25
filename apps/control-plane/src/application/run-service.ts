@@ -23,21 +23,24 @@ export class RunService {
     if (!binding.ok) return binding;
     const projectId = parseIdentifier('ProjectId', request.projectId);
     if (!projectId.ok) return projectId;
-    const definition = this.#registry.resolve(binding.value);
-    if (!definition.ok) return definition;
+    const runId = parseIdentifier('RunId', request.runId);
+    if (!runId.ok) return runId;
     return this.#store.transaction(async (tx) => {
+      // A stored run answers a repeat whatever the registry holds now.
+      const existing = await tx.catalog.envelope(runId.value);
+      if (!existing.ok) return existing;
+      if (existing.value !== undefined) {
+        const stored = await tx.runs.get(runId.value);
+        if (!stored.ok) return stored;
+        const same = existing.value.projectId === projectId.value && sameBinding(stored.value.binding, binding.value);
+        if (!same) return err(failure('conflict', `run ${runId.value} exists with another binding`, { run: runId.value }));
+        return ok(view(runId.value, existing.value.projectId, stored.value.binding, existing.value.createdAt));
+      }
+      const definition = this.#registry.resolve(binding.value);
+      if (!definition.ok) return definition;
       const at = await tx.now();
       const run = beginWorkflowRun({ id: request.runId, binding: binding.value, definition: definition.value }, at);
       if (!run.ok) return run;
-      const existing = await tx.catalog.envelope(run.value.id);
-      if (!existing.ok) return existing;
-      if (existing.value !== undefined) {
-        const stored = await tx.runs.get(run.value.id);
-        if (!stored.ok) return stored;
-        const same = existing.value.projectId === projectId.value && sameBinding(stored.value.binding, binding.value);
-        if (!same) return err(failure('conflict', `run ${run.value.id} exists with another binding`, { run: run.value.id }));
-        return ok(view(run.value.id, existing.value.projectId, stored.value.binding, existing.value.createdAt));
-      }
       const added = await tx.runs.add(run.value);
       if (!added.ok) return added;
       const registered = await tx.catalog.register({ runId: run.value.id, projectId: projectId.value as ProjectId, createdAt: at });

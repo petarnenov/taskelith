@@ -14,7 +14,8 @@ export {
   type WorkerTransportEndpoint,
 } from './connection.js';
 export { encodeJson, JetStreamPublisher, type Publication, type PublishOutcome } from './jetstream-publisher.js';
-export { OUTBOX_BATCH, OutboxPublisher, runOutboxPublisher, type OutboxSource, type PublishRound } from './outbox-publisher.js';
+export { OUTBOX_BATCH, OutboxPublisher, runOutboxPublisher, type OutboxSource,
+  type PublicationFence, type PublishRound } from './outbox-publisher.js';
 export {
   MAX_DELIVERIES_REASON,
   Quarantine,

@@ -24,7 +24,7 @@ import { ControlPlaneApi } from '../api/control-plane-api.js';
 import { RunService } from '../application/run-service.js';
 import { TaskService } from '../application/task-service.js';
 import { WorkflowRegistry, type KnownWorkflow } from '../application/workflow-registry.js';
-import { QuarantineGuardedOutbox } from './quarantine-guarded-outbox.js';
+import { InstallationPublicationFence } from './installation-publication-fence.js';
 
 // Provisional G2 values in docs/operational-targets.md, which G6 verifies.
 export const GRACE_WINDOW_SWEEP_MILLISECONDS = 60_000;
@@ -55,17 +55,24 @@ export interface RunningControlPlane {
 export async function startControlPlane(settings: ControlPlaneSettings): Promise<Result<RunningControlPlane>> {
   const logger = new Logger(settings.logSink ?? new JsonLinesLogSink(process.stdout), SYSTEM_CLOCK);
   const metrics = new InMemoryMetrics();
-  const admin = Administration.open({ ...settings, logger, metrics });
-  if (!admin.ok) return admin;
-  const started = await wire(admin.value, settings, logger, metrics);
-  if (!started.ok) await admin.value.close();
-  return started;
+  const cleanup = new CleanupStack();
+  try {
+    const started = await wire(settings, logger, metrics, cleanup);
+    if (!started.ok) await cleanup.run();
+    return started;
+  } catch (error) {
+    await cleanup.run();
+    return err(failure('internal', `the control plane did not start: ${error instanceof Error ? error.message : String(error)}`));
+  }
 }
 
-async function wire(admin: Administration, settings: ControlPlaneSettings, logger: Logger, metrics: InMemoryMetrics): Promise<Result<RunningControlPlane>> {
-  const identity = await admin.verifiedInstallation();
+async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InMemoryMetrics, cleanup: CleanupStack): Promise<Result<RunningControlPlane>> {
+  const admin = Administration.open({ ...settings, logger, metrics });
+  if (!admin.ok) return admin;
+  cleanup.push(() => admin.value.close());
+  const identity = await admin.value.verifiedInstallation();
   if (!identity.ok) return identity;
-  const authority = admin.brokerAuthority();
+  const authority = admin.value.brokerAuthority();
   if (!authority.ok) return authority;
   const address = TransportAddress.of(identity.value.installationId);
   if (!address.ok) return address;
@@ -74,55 +81,71 @@ async function wire(admin: Administration, settings: ControlPlaneSettings, logge
     ...(settings.natsTls === undefined ? {} : { tls: settings.natsTls }),
   });
   if (!broker.ok) return broker;
+  cleanup.push(() => broker.value.close());
   const limits = settings.transportLimits ?? TRANSPORT_LIMITS;
   const topology = await prepareTopology(broker.value, address.value, limits);
-  const enrollment = topology.ok ? await admin.enrollmentService() : topology;
-  if (!enrollment.ok) {
-    await broker.value.close();
-    return enrollment;
-  }
+  if (!topology.ok) return topology;
+  const enrollment = await admin.value.enrollmentService();
+  if (!enrollment.ok) return enrollment;
+  cleanup.push(() => enrollment.value.close());
+  const database = admin.value.database;
+  const fence = new InstallationPublicationFence(database);
   const quarantine = new Quarantine(broker.value.jsm, broker.value.js, address.value, limits);
-  const database = admin.database;
   const api = createApiServer(new ControlPlaneApi({
     runs: new RunService(database, new WorkflowRegistry(settings.workflows)),
     tasks: new TaskService(database),
-    operator: admin.operator,
+    operator: admin.value.operator,
     enrollment: enrollment.value.service,
-    quarantine,
+    // A redrive publishes too, so it waits for the same fence.
+    quarantine: { records: (from, limit) => quarantine.records(from, limit), redrive: (sequence) => fence.hold(() => quarantine.redrive(sequence)) },
   }), { logger });
   const listening = await listen(api, settings.api);
-  if (!listening.ok) {
-    await enrollment.value.close();
-    await broker.value.close();
-    return listening;
-  }
+  if (!listening.ok) return listening;
+  cleanup.push(() => new Promise<void>((resolve) => api.close(() => resolve())));
   const controller = new AbortController();
   const lag = new EventLoopLagMonitor();
-  const publisher = new OutboxPublisher(
-    new QuarantineGuardedOutbox(database, new PostgresOutboxRelay(database)), new JetStreamPublisher(broker.value.js), address.value, { logger, limits },
-  );
+  cleanup.push(async () => lag.stop());
+  const publisher = new OutboxPublisher(new PostgresOutboxRelay(database), new JetStreamPublisher(broker.value.js), address.value, { logger, limits, fence });
   const sweep = settings.sweepMilliseconds ?? GRACE_WINDOW_SWEEP_MILLISECONDS;
+  const stop = once(async () => {
+    controller.abort();
+    await Promise.allSettled(loops);
+    await cleanup.run();
+  });
+  // A loop that fails is a defect: it is logged and stops the whole service.
+  const supervise = (name: string, loop: Promise<void>) => loop.catch((error: unknown) => {
+    logger.error('control-plane.loop.failed', { loop: name, message: error instanceof Error ? error.message : String(error) });
+    void stop();
+  });
   const loops = [
-    runOutboxPublisher(publisher, controller.signal, limits),
-    runQuarantineKeeper(quarantine, controller.signal, limits),
-    runPeriodically(async () => logFailure(logger, 'fleet.grace-windows.failed', await enrollment.value.service.expireGraceWindows()), controller.signal, sweep),
-    runPeriodically(() => sampleControlPlane(new PostgresControlPlaneSignals(database), metrics, logger), controller.signal),
-    runPeriodically(() => lag.sample(metrics), controller.signal),
+    supervise('outbox', runOutboxPublisher(publisher, controller.signal, limits)),
+    supervise('quarantine', runQuarantineKeeper(quarantine, controller.signal, limits)),
+    supervise('grace-windows', runPeriodically(async () => logFailure(logger, 'fleet.grace-windows.failed', await enrollment.value.service.expireGraceWindows()), controller.signal, sweep)),
+    supervise('sampler', runPeriodically(() => sampleControlPlane(new PostgresControlPlaneSignals(database), metrics, logger), controller.signal)),
+    supervise('event-loop', runPeriodically(() => lag.sample(metrics), controller.signal)),
   ];
   logger.info('control-plane.started', { host: listening.value.host, port: listening.value.port });
-  return ok({
-    api: listening.value,
-    metrics,
-    stop: async () => {
-      controller.abort();
-      await new Promise<void>((resolve) => api.close(() => resolve()));
-      await Promise.allSettled(loops);
-      lag.stop();
-      await enrollment.value.close();
-      await broker.value.close();
-      await admin.close();
-    },
-  });
+  return ok({ api: listening.value, metrics, stop });
+}
+
+// Releases what was acquired, newest first; a release that fails does not
+// keep the others from running.
+class CleanupStack {
+  readonly #releases: Array<() => Promise<void>> = [];
+
+  push(release: () => Promise<void>): void {
+    this.#releases.push(release);
+  }
+
+  async run(): Promise<void> {
+    while (this.#releases.length > 0) await this.#releases.pop()!().catch(() => undefined);
+  }
+}
+
+// The first call runs the work; later calls share its promise.
+function once(work: () => Promise<void>): () => Promise<void> {
+  let running: Promise<void> | undefined;
+  return () => (running ??= work());
 }
 
 async function prepareTopology(broker: ControlPlaneConnection, address: TransportAddress, limits: TransportLimits): Promise<Result<void>> {

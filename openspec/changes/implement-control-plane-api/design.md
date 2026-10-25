@@ -46,7 +46,9 @@ These are coordinator decisions; the coordinator reports Q1, Q4, and Q11 to the 
 - **HTTP.**
   - A route table names each operation, its method and path pattern, its security scheme, its body schema, and how its failure codes map to the statuses the document declares.
   - Bearer authentication runs before the body is read. The body is limited to 1 MiB, parsed, and validated against its schema; the first violations go into a 400.
-  - A caller's `x-correlation-id` is kept when it is a valid identifier, otherwise one is made. It is echoed in the response and passed to the use case.
+  - A caller's `x-correlation-id` is kept when it is a valid identifier that carries no secret, otherwise one is made. It is echoed in the response and passed to the use case.
+  - URL parsing and percent-decoding run inside the error boundary: a malformed encoding is 400, and every other failure is answered, never an unhandled rejection.
+  - Every success body is validated against its response schema before it leaves; a violation is a defect and answered 500. The operations declare 500 and 503 beside their other statuses.
   - Failures leave with secrets redacted (`redactFailure`), and the log line per request carries only the operation, the status, and the duration.
 - **Submit task.**
   - Inside one SERIALIZABLE transaction, in this order:
@@ -59,14 +61,22 @@ These are coordinator decisions; the coordinator reports Q1, Q4, and Q11 to the 
     7. append `sdlc.admission.used`.
   - The event's producer is the admission and its sequence the admission's generation, which the SDLC event metadata requires.
   - The admission identity is `a` and the SHA-256 of the run and task identities, which always fits the 128 characters of an identifier.
+  - The encoded event must fit the broker's payload limit, less room for headers. Otherwise the submission fails with 400 and writes nothing, since a refused event would stay in the outbox and hold back the later ones on its subject.
+- **Create run.** A stored run answers a repeat before the registry is consulted, so a repeat stays idempotent after the registry changes, and a conflicting repeat is 409.
 - **Wire commands.** `appendWorkerCommand` reads the task's admission, the worker's protocol version, and the recovery epoch inside the capacity transaction. It writes the outbox row whose payload is the wire command itself, since the publisher sends a row's payload as the body. A command without a protocol version or an epoch fails with `precondition-failed`, so the transaction writes nothing.
 - **Protocol version.** Enrollment computes the version the worker and the control plane share and stores it in `workers.protocol_version`. Scheduling stays free of the contracts package, and the eligibility rule requires a version.
-- **Quarantine guard.** `QuarantineGuardedOutbox` reads the installation's quarantine flag and the unpublished rows in one transaction. It returns no row while quarantined, and also without an installation record, which reads as quarantined. It holds the SDLC events as well as the commands.
+- **Publication fence.** `InstallationPublicationFence` runs each publisher round, and each redrive, while a READ COMMITTED transaction holds the installation record `FOR SHARE`.
+  - A writer entering quarantine therefore waits for the round in flight, and the next round sees the flag and publishes nothing.
+  - A missing installation record counts as quarantine.
+  - The fence holds the SDLC events as well as the commands. A redrive under quarantine is 503.
+  - READ COMMITTED keeps the long-held lock out of the serialization checks; the round's own reads and writes use their own transactions.
 - **Composition.**
   - It starts with one `Logger` (JSON lines on stdout) and one `InMemoryMetrics`, passed to the database and the publisher.
   - It verifies the installation, connects to NATS as a control-plane user of the installation account, and ensures the streams and the advisory consumer.
   - It then starts the API and five loops under one abort signal: the publisher, the quarantine keeper, the grace-window sweep, the sampler, and the lag monitor.
-  - `stop` closes the server, waits for the loops, and closes every connection.
+  - Each acquired resource is pushed onto a cleanup stack at once. A start that fails or throws releases everything acquired so far, newest first.
+  - The loops are supervised from the start: a loop that fails is logged and stops the whole service.
+  - `stop` is idempotent: it aborts the signal, waits for the loops, and releases the stack. The service entry stops it on SIGTERM or SIGINT, and a second signal waits for the same shutdown.
 
 ## Risks / Trade-offs
 

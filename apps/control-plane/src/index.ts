@@ -9,6 +9,6 @@ export { admissionIdOf, SDLC_EVENTS_SUBJECT, TaskService } from './application/t
 export { WorkflowRegistry, type KnownWorkflow } from './application/workflow-registry.js';
 export type { ControlPlaneStore, ControlPlaneTransaction } from './application/control-plane-store.js';
 export { GRACE_WINDOW_SWEEP_MILLISECONDS, startControlPlane, type ControlPlaneSettings, type RunningControlPlane } from './composition/control-plane.js';
-export { QuarantineGuardedOutbox } from './composition/quarantine-guarded-outbox.js';
+export { InstallationPublicationFence } from './composition/installation-publication-fence.js';
 export { DEFAULT_API_HOST, DEFAULT_API_PORT, readControlPlaneSettings } from './composition/settings.js';
 export { controlPlaneMain } from './main.js';

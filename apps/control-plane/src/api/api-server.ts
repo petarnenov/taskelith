@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { performance } from 'node:perf_hooks';
 import { checkHttpSchema, type HttpSchemas } from '@taskelith/contracts';
-import { err, failure, parseIdentifier, type CorrelationId, type Result } from '@taskelith/kernel';
+import { err, failure, ok, parseIdentifier, type CorrelationId, type Result } from '@taskelith/kernel';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
+import { redactSecrets } from '@taskelith/secrets';
 import { bearerToken, failureResponse, readJsonBody, writeJson, type JsonResponse } from './http-exchange.js';
 import { ROUTES, type RouteDefinition } from './routes.js';
 
@@ -31,25 +32,31 @@ export interface ApiServerOptions {
 export function createApiServer(handlers: ApiHandlers, options: ApiServerOptions = {}): Server {
   const logger = options.logger ?? SILENT_LOGGER;
   return createServer((request, response) => {
-    void serve(handlers, logger, request, response);
+    // serve answers every failure itself; this only guards a broken socket.
+    serve(handlers, logger, request, response).catch(() => response.destroy());
   });
 }
 
 async function serve(handlers: ApiHandlers, logger: Logger, request: IncomingMessage, response: ServerResponse): Promise<void> {
   const startedAt = performance.now();
   const correlationId = correlationOf(request);
-  const url = new URL(request.url ?? '/', 'http://control-plane');
-  const matched = match(request.method ?? 'GET', url.pathname);
-  const operationId = matched?.route.operationId ?? 'unknown';
+  let operationId = 'unknown';
   let answer: JsonResponse;
   try {
-    answer = matched === undefined
-      ? failureResponse(404, failure('not-found', `no operation ${request.method} ${url.pathname}`))
-      : await answerRoute(handlers, matched, request, url, correlationId);
+    const url = new URL(request.url ?? '/', 'http://control-plane');
+    const matched = match(request.method ?? 'GET', url.pathname);
+    if (matched === undefined) {
+      answer = failureResponse(404, failure('not-found', 'no operation has this method and path'));
+    } else if (!matched.ok) {
+      answer = failureResponse(400, matched.error);
+    } else {
+      operationId = matched.value.route.operationId;
+      answer = await answerRoute(handlers, matched.value, request, url, correlationId);
+    }
   } catch (error) {
     answer = failureResponse(500, failure('internal', error instanceof Error ? error.message : String(error)));
   }
-  writeJson(response, answer, correlationId);
+  if (!response.headersSent) writeJson(response, answer, correlationId);
   const fields = { operationId, status: answer.status, durationMs: Math.round(performance.now() - startedAt) };
   const log = logger.with({ correlationId });
   if (answer.status >= 500) log.error('api.request', fields);
@@ -72,8 +79,11 @@ async function answerRoute(
   const body = route.body === undefined ? { ok: true as const, value: undefined } : await validatedBody(request, route.body);
   if (!body.ok) return failureResponse(400, body.error);
   const outcome = await handlers.handle(route.operationId, { parameters, body: body.value, query: url.searchParams, correlationId }, bearer);
-  if (outcome.ok) return { status: route.success, body: outcome.value };
-  return failureResponse(route.statuses[outcome.error.code] ?? 500, outcome.error);
+  if (!outcome.ok) return failureResponse(route.statuses[outcome.error.code] ?? 500, outcome.error);
+  // A success that breaks its own schema is a defect, never sent as is.
+  const checked = checkHttpSchema(route.response, outcome.value);
+  if (checked.ok) return { status: route.success, body: outcome.value };
+  return failureResponse(500, failure('internal', `the ${route.operationId} response violates ${route.response}`, { violation: checked.error[0] ?? '' }));
 }
 
 async function validatedBody(request: IncomingMessage, schema: keyof HttpSchemas & string): Promise<Result<unknown>> {
@@ -84,10 +94,15 @@ async function validatedBody(request: IncomingMessage, schema: keyof HttpSchemas
   return err(failure('invalid', checked.error.slice(0, 3).join('; '), { violations: String(checked.error.length) }));
 }
 
-function match(method: string, path: string): { route: RouteDefinition; parameters: readonly string[] } | undefined {
+function match(method: string, path: string): Result<{ route: RouteDefinition; parameters: readonly string[] }> | undefined {
   for (const route of ROUTES) {
     const found = route.method === method ? route.pattern.exec(path) : null;
-    if (found !== null) return { route, parameters: found.slice(1).map((part) => decodeURIComponent(part)) };
+    if (found === null) continue;
+    try {
+      return ok({ route, parameters: found.slice(1).map((part) => decodeURIComponent(part)) });
+    } catch {
+      return err(failure('invalid', 'a path parameter is not valid percent-encoding'));
+    }
   }
   return undefined;
 }
@@ -95,7 +110,9 @@ function match(method: string, path: string): { route: RouteDefinition; paramete
 // A caller's correlation when it is a valid identifier, else a new one.
 function correlationOf(request: IncomingMessage): CorrelationId {
   const header = request.headers['x-correlation-id'];
-  const given = typeof header === 'string' ? parseIdentifier('CorrelationId', header) : undefined;
+  // A value that carries a secret would put it into every log line.
+  const safe = typeof header === 'string' && redactSecrets(header) === header;
+  const given = safe ? parseIdentifier('CorrelationId', header) : undefined;
   if (given?.ok) return given.value as CorrelationId;
   // A prefixed UUID is always a valid identifier.
   return `c-${randomUUID()}` as CorrelationId;

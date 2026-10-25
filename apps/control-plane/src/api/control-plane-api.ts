@@ -7,6 +7,7 @@ import type { TaskService } from '../application/task-service.js';
 import type { ApiHandlers, ApiRequest } from './api-server.js';
 
 export const QUARANTINE_PAGE = 100;
+export const QUARANTINE_REASON_LENGTH = 512;
 
 // The operations the API reaches beyond the run and task use cases.
 export interface ApiServices {
@@ -49,7 +50,7 @@ export class ControlPlaneApi implements ApiHandlers {
       case 'listQuarantine':
         return this.#listQuarantine(request.query);
       case 'redriveQuarantined':
-        return this.#redrive(Number(first));
+        return this.#redrive(first);
       default:
         return err(failure('internal', `operation ${operationId} has no handler`));
     }
@@ -81,7 +82,9 @@ export class ControlPlaneApi implements ApiHandlers {
     return ok(page.length === QUARANTINE_PAGE && last !== undefined ? { records: page, next: last.sequence + 1 } : { records: page });
   }
 
-  async #redrive(sequence: number): Promise<Result<HttpSchemas['Redrive']>> {
+  async #redrive(text: string): Promise<Result<HttpSchemas['Redrive']>> {
+    const sequence = Number(text);
+    if (!Number.isSafeInteger(sequence) || sequence < 1) return err(failure('invalid', 'the sequence must be a positive safe integer'));
     const redriven = await this.#services.quarantine.redrive(sequence);
     if (!redriven.ok) return redriven;
     return ok(redriven.value === null ? { sequence } : { sequence, messageId: redriven.value });
@@ -91,7 +94,9 @@ export class ControlPlaneApi implements ApiHandlers {
 function recordView(record: QuarantineRecord): HttpSchemas['QuarantineRecord'] {
   const { sequence, source, originalSubject, originalStreamSequence, originalMessageId, consumer, deliveries, reason } = record;
   return {
-    sequence, source, originalSubject, originalStreamSequence, consumer, deliveries, reason, bodyExpired: record.body === null,
+    sequence, source, originalSubject, originalStreamSequence, consumer, deliveries, bodyExpired: record.body === null,
+    // A reason is a diagnostic; the contract bounds it, so a longer one is cut.
+    reason: reason.slice(0, QUARANTINE_REASON_LENGTH),
     ...(originalMessageId === undefined ? {} : { originalMessageId }),
   };
 }
