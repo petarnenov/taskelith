@@ -41,7 +41,7 @@ On 2026-10-25 the proof of concept was reviewed against the backend on `dev` at 
 - **Later gates.** What the backend does not have yet is marked with the gate or plan item that adds it: SpecKit runs, framework selection, and Codex in G4, on every Codex session, worker, pool, and reviewer; Claude Code on Linux as qualification pending; Knowledge in G5; imports other than GitHub issues beyond G3 (D9); sessions and turns, account pools, traceability, delegated spec approval, standing rules, the review runtime, and the composition root in their G3 items. The live cursor and the session check stand for G3 items 14, 9, and 10.
 - **Board states.** Added a cursor-expired resynchronization, a restore quarantine, and a first step that signs in with the bootstrap credential to create the first installation-owner.
 
-Open for item 28: the trust model names no role for reconciling an uncertain attempt; the proof of concept gives it to `project-maintainer`.
+Reconciling an attempt in an uncertain state belongs to `project-maintainer` and is audited, as the owner decided on 2026-10-25 and the [trust model](../trust-model.md) section 3 records.
 
 ## Departures from "only Mantine"
 
