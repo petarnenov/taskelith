@@ -6,11 +6,20 @@ export { StatusAnswer, createApiServer, type ApiHandlers, type ApiRequest, type 
 export { ControlPlaneApi, type ApiServices } from './api/control-plane-api.js';
 export { EvidenceService, type EvidenceDownload, type Publication } from './application/evidence-service.js';
 export type { EvidenceView } from './application/evidence-view.js';
+export { LaunchAuthority, type LaunchAuthoritySettings } from './application/launch-authority.js';
 export { RunService } from './application/run-service.js';
 export { admissionIdOf, SDLC_EVENTS_SUBJECT, TaskService } from './application/task-service.js';
 export { WorkflowRegistry, type KnownWorkflow } from './application/workflow-registry.js';
 export type { ControlPlaneStore, ControlPlaneTransaction, EvidenceProducers, WorkerDirectory } from './application/control-plane-store.js';
-export { GRACE_WINDOW_SWEEP_MILLISECONDS, SHUTDOWN_DEADLINE_MILLISECONDS, startControlPlane, type ControlPlaneSettings, type RunningControlPlane } from './composition/control-plane.js';
+export {
+  GRACE_WINDOW_SWEEP_MILLISECONDS,
+  LAUNCH_PARAMETERS,
+  SHUTDOWN_DEADLINE_MILLISECONDS,
+  startControlPlane,
+  type ControlPlaneSettings,
+  type RunningControlPlane,
+} from './composition/control-plane.js';
 export { InstallationPublicationFence } from './composition/installation-publication-fence.js';
+export { LaunchRevokingFleetRegistry } from './composition/launch-revoking-fleet-registry.js';
 export { DEFAULT_API_HOST, DEFAULT_API_PORT, readControlPlaneSettings } from './composition/settings.js';
 export { controlPlaneMain, serveUntilStopped, type ServiceProcess } from './main.js';

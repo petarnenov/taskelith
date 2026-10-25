@@ -21,20 +21,26 @@ import {
   TRANSPORT_LIMITS,
   TransportAddress,
 } from '@taskelith/nats';
+import { PostgresDatabase } from '@taskelith/postgres';
 import { integrationEndpoint, integrationSecret, value } from '@taskelith/testing';
+import { createLaunchRun, launchAuthority, placedTask } from './launch-fixtures.ts';
 
 const POSTGRES = integrationEndpoint('TASKELITH_POSTGRES_URL');
 const NATS = integrationEndpoint('TASKELITH_NATS_URL');
 const ownerUid = process.getuid!();
 
-async function sql(url: URL, text: string): Promise<void> {
+async function rows(url: URL, text: string): Promise<unknown[]> {
   const client = new pg.Client({ connectionString: url.href });
   await client.connect();
   try {
-    await client.query(text);
+    return (await client.query(text)).rows;
   } finally {
     await client.end();
   }
+}
+
+async function sql(url: URL, text: string): Promise<void> {
+  await rows(url, text);
 }
 
 // A database and a data root of this file's own; the data root already
@@ -142,8 +148,22 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
   assert.equal((rotated.output as { credentialGeneration: number }).credentialGeneration, 2);
   assert.equal(value(await enrollment.service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).generation, 1, 'grace window');
 
+  // A grant before the revocation, which the administration must invalidate.
+  const store = new PostgresDatabase(database);
+  after(() => store.close());
+  await sql(database, 'UPDATE workers SET reachable = true');
+  await createLaunchRun(store);
+  const { taskId, request } = await placedTask(store, 'task-1', enrolled.workerId);
+  const granted = value(await launchAuthority(store).authorize({ workerId: enrolled.workerId, generation: 2 }, request));
+  assert.equal(granted.kind, 'granted');
+
   const revoked = await admin(['revoke-worker', enrolled.workerId], { TASKELITH_OPERATOR_TOKEN: operatorSecret });
   assert.deepEqual(revoked.output, { revoked: enrolled.workerId });
+  assert.deepEqual(value(await store.transaction((tx) => tx.launches.liveGrants({ kind: 'all' }))), [], 'the grant is revoked');
+  const launched = value(await store.transaction((tx) => tx.tasks.get(taskId)));
+  assert.equal(launched.attempts[0]!.executions[0]!.evidence[0]?.kind, 'uncertain');
+  const cancellations = await rows(database, `SELECT 1 FROM outbox WHERE event_type = 'execution.cancellation.request'`);
+  assert.equal(cancellations.length, 1);
   await waitFor(() => seen.includes('error:User Authentication Revoked'));
   assert.equal((await enrollment.service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).ok, false);
 

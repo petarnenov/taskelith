@@ -49,6 +49,12 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
     response: 'Enrollment', success: 201, statuses: { ...COMMON, conflict: 409, 'precondition-failed': 422 },
   },
   {
+    operationId: 'authorizeLaunch', method: 'POST', pattern: /^\/launch-authorizations$/, security: 'workerCredential',
+    body: 'LaunchAuthorizationRequest', response: 'LaunchAuthorizationOutcome', success: 200,
+    // The contract has no 500: an undecided operation is retried (section 3).
+    statuses: { ...COMMON, internal: 503 },
+  },
+  {
     operationId: 'publishEvidence', method: 'POST', pattern: /^\/evidence$/, security: 'workerCredential', body: 'EvidencePublication', upload: true,
     response: 'EvidenceRecord', success: 201, statuses: { ...COMMON, forbidden: 403, conflict: 409 },
     // A credential revoked after the bearer check is still a refused one.

@@ -111,11 +111,14 @@ export function authorizeLaunch(
   return ok(Object.freeze({ task: withAttempt(task, owned.value, issue.issuedAt), grant }));
 }
 
-export type ReplayOutcome =
+// The answer to a launch request, fresh or replayed (contract section 6).
+export type LaunchOutcome =
   | { readonly kind: 'granted'; readonly grant: LaunchGrant }
   | { readonly kind: 'revoked'; readonly reason: RevocationReason }
   | { readonly kind: 'expired' }
   | { readonly kind: 'rejected'; readonly rejection: LaunchRejection };
+
+export type ReplayOutcome = LaunchOutcome;
 
 // A transport retry of a granted operation runs no new authorization and
 // never extends the worker's deadline (contract section 6).
@@ -136,6 +139,25 @@ export function replayLaunchOperation(
     return Object.freeze({ kind: 'rejected', rejection });
   }
   return Object.freeze({ kind: 'granted', grant: recorded });
+}
+
+// The installation and worker checks, which come before every other one;
+// the authority runs them before it reads the rest of the context.
+export function checkLaunchPreconditions(
+  request: LaunchRequest,
+  context: Pick<LaunchContext, 'installation' | 'workerAuthorized'>,
+): LaunchRejection | undefined {
+  return checkInstallation(request, context);
+}
+
+// The rejection of a request whose assignment, and so whose task, is not
+// found: the installation and worker checks come before the assignment's.
+export function rejectUnknownAssignment(
+  request: LaunchRequest,
+  context: Pick<LaunchContext, 'installation' | 'workerAuthorized'>,
+): LaunchRejection {
+  return checkInstallation(request, context)
+    ?? launchRejection('assignment-not-active', `assignment ${request.assignmentId} is not active for this worker`);
 }
 
 function checkInstallation(request: LaunchRequest, context: Pick<LaunchContext, 'installation' | 'workerAuthorized'>): Check {
