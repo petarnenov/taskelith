@@ -118,6 +118,7 @@ Recorded before pass 1.
 `make verify` ran in the worktree with every file tracked:
 - At `48c3d5f`, before the second `dev` merge: 1254 tests passed, 0 failed. Coverage was 99.28% lines, 91.63% branches, and 98.98% functions. The comment, boundary, coverage-scope, dependency-inventory, contract-compatibility, OpenSpec strict, archive dry-run, and package checks pass. `make contract-compatibility` against `190e2cc` reports 0 breaking changes.
 - At `575706d`, after merging `aba18f5`: 1259 tests passed, 0 failed. Coverage was 99.29% lines, 91.58% branches, and 98.98% functions. Every other check passes, and contract compatibility against `aba18f5` reports 0 breaking changes.
+- At `8103fa6`, after the pass-1 fixes: 1267 tests passed, 0 failed. Coverage was 99.31% lines, 91.59% branches, and 99.03% functions. Every other check passes.
 
 ## Independent review
 
@@ -125,9 +126,29 @@ The reviewer is Codex CLI with model `gpt-6.1-sol` and reasoning effort `medium`
 
 `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`
 
-It runs from the worktree, with the prompt and log in the session's scratch directory. A SHA-256 snapshot of every tracked and untracked file is taken before and after each pass.
+It runs from the worktree, with the prompt and log in the session's scratch directory. A SHA-256 snapshot of every tracked and untracked file is taken before and after each pass. Each pass reviews the change's own diff, `aba18f5...HEAD`, so the commits that the `dev` merges brought are not reviewed again.
 
-Pending.
+### Pass 1
+
+- **Session:** `01a17516-3197-7851-881a-e59bb000faef`, 2026-10-26 00:02 to 00:09, on `212a46c`. The output header confirms `gpt-6.1-sol`, reasoning effort `medium`, and the `read-only` sandbox.
+- **Snapshot:** `ef188cad…0aab0a41fc`, unchanged.
+- **Reviewer's own checks:** it ran the comment check and 50 selected unit and conformance tests, all passing. It did not run `make verify` or the integration suites.
+- **Result:** Critical 0, High 1, Medium 3, Low 0. The author accepted all four findings.
+- **Fixes:** `b5e96d6` holds the code and tests, and `8103fa6` the design and spec deltas. The `inventory-reconciliation` delta gained these requirements:
+  - "Observation derived again";
+  - "Inconsistent report";
+  - "Pending snapshot bound";
+  - the scenario "Replacement before the retirement".
+
+  The `observation-consumption` delta gained a MODIFIED "One transaction per observation", because a duplicate can now record a new position.
+- **Wire contracts:** none changed for these fixes.
+
+| # | Finding | Disposition |
+| --- | --- | --- |
+| H1 | After a new incarnation, a fact derived again keeps its `observationId` (worker journal line 117). The inbox returns `duplicate` before the new journal records its sequence, which leaves a permanent hole in the new cursor. Snapshots through it never apply, and the worker never prunes. | Fixed in `b5e96d6`: an authenticated duplicate at a sequence new to its journal records its position without its effect, with contact, cursor, confirmation, and evaluation of pending snapshots. A repeat in the same journal keeps 21b's behavior. Covered by a PostgreSQL test and a unit test. |
+| M2 | A sequence rollback retires in a second transaction. A replacement committed in between would be made unreachable by the old journal's `recordJournalLoss`. | Fixed in `b5e96d6`: the retirement re-reads the enrolled journal and the sequence class, and does nothing once the journal was replaced, because the replacement already retired it. A fresh snapshot's rollback retires in the transaction that finds it. Covered by a deterministic test with a replacement between the two transactions. |
+| M3 | `assembleSnapshot` checks part numbers only against the first part's count and takes the common fields from the first part, so a mixed or incomplete report could be applied. | Fixed in `b5e96d6`: all parts must agree on every report field and cover `1..parts` exactly. An inconsistent report's stored parts are deleted without other effect, logged as `execution.inventory.refused` with the reason `inconsistent-parts`. Covered by unit and PostgreSQL tests. |
+| M4 | Pending reports have no growth bound: ten requests answered by one part each left ten reports. | Fixed in `b5e96d6`: after each stored part and each new request, only the newest report that is not fresh survives per journal, and only while its `snapshot` is not below the highest received. The fresh report is kept until its rollback check. Only the enrolled journal keeps parts, so the bound per worker is the current request's report plus one that is not fresh. Covered by unit and PostgreSQL tests. |
 
 ## Limitations
 
