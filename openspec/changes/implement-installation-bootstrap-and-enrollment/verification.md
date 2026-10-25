@@ -72,6 +72,7 @@ Recorded before pass 1.
 - At `c513957`, before pass 1, with every file tracked: 819 tests passed, 0 failed; coverage 99.18% lines, 92.33% branches, 99.07% functions. The comment, boundary, coverage-scope, dependency-inventory, OpenSpec (50 of 50), and package checks pass.
 - At `c46cb1a`, after the pass-1 fixes: 831 tests passed, 0 failed; coverage 99.18% lines, 92.58% branches, 99.09% functions; every other check passes.
 - At `40f2aea`, after the pass-2 fixes: 835 tests passed, 0 failed; coverage 99.18% lines, 92.54% branches, 99.09% functions; every other check passes.
+- At `2deacb0`, after the fixes of the pass-3 findings: 838 tests passed, 0 failed; coverage 99.18% lines, 92.55% branches, 99.15% functions; every other check passes. The new barrier test fails with the earlier SERIALIZABLE publication (1 entry published instead of 2) and passes with READ COMMITTED.
 - `npm run openspec -- validate implement-installation-bootstrap-and-enrollment --strict` passed at each of these revisions.
 
 ## Independent review
@@ -101,12 +102,17 @@ Assigned reviewer: Codex CLI, with `codex exec -m gpt-6.1-sol -c model_reasoning
 
 - **Pass 3 — session `01a1730a-6e53-7333-8c4a-3c30e6bc46d2`,** reviewed `git diff 432ff89 fec38ce` for the resolutions, then `git diff 5878679 fec38ce` as a whole. The header reports `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`. Snapshot before and after: `61782a59…086f`, equal.
   - It confirmed pass-2 findings 1 and 3 to 5, and pass-1 findings 1 and 5, fully resolved, and pass-2 finding 2 in part; the gap is finding 2 below.
-  - Findings: 0 Critical, 1 High, 2 Medium, 0 Low. This was the third pass, so the findings go to the owner through the coordinator, with options. All three are **open**:
-  1. High: the publication's SERIALIZABLE snapshot is taken before the advisory lock is granted. So a publisher that waited could push a stale list. After its serialization failure, the retry would find every entry published and skip the push, leaving a revocation out of the broker. The reviewer derived this from the code and did not run it against PostgreSQL. Proposed fix: run the publication in its own `READ COMMITTED` transaction that takes the advisory lock before reading, pushes the current list, and marks only the rows it read; test it with barriers.
-  2. Medium: an exception, rather than an `Err`, from the publication after a committed rotation still loses the new secrets for the caller. Proposed fix: catch it after the committed rotation and return the secrets with `revocationsPublished: false`; add a regression test.
-  3. Medium: the scrubber keeps credential-bearing URLs, such as `TASKELITH_POSTGRES_URL` with a password, in a child environment and in redacted text. Proposed fix: drop credential-bearing service variables from the child environment and redact URL userinfo, percent-encoded values included; add tests.
+  - Findings: 0 Critical, 1 High, 2 Medium, 0 Low. This was the third pass, so the findings went to the owner through the coordinator, with options. On 2026-10-25 the owner decided, through the coordinator and not by delegation, on option (b): fix all three as proposed, then an exceptional fourth pass limited to the fixes. The fixes are at `2deacb0`:
+  1. High, **resolved by the owner's decision:** the publication's SERIALIZABLE snapshot is taken before the advisory lock is granted. So a publisher that waited could push a stale list. After its serialization failure, the retry would find every entry published and skip the push, leaving a revocation out of the broker. The reviewer derived this from the code and did not run it against PostgreSQL. Proposed fix: run the publication in its own `READ COMMITTED` transaction that takes the advisory lock before reading, pushes the current list, and marks only the rows it read; test it with barriers.
+  2. Medium, **resolved by the owner's decision:** an exception, rather than an `Err`, from the publication after a committed rotation still loses the new secrets for the caller. Proposed fix: catch it after the committed rotation and return the secrets with `revocationsPublished: false`; add a regression test.
+  3. Medium, **resolved in part (pass 4):** the scrubber keeps credential-bearing URLs, such as `TASKELITH_POSTGRES_URL` with a password, in a child environment and in redacted text. Proposed fix: drop credential-bearing service variables from the child environment and redact URL userinfo, percent-encoded values included; add tests.
+
+- **Pass 4 (exceptional, authorized by the owner) — session `01a17316-d03f-7203-be5c-4ae99036e812`,** reviewed `git diff e3c0c9f 2deacb0` only, as the owner's decision limited it. The header reports `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`. Snapshot before and after: `67979b4b…5ed6`, equal.
+  - The reviewer confirmed pass-3 findings 1 and 2 fully resolved, and finding 3 in part. It also confirmed that the new isolation option applies per call and leaves every other transaction SERIALIZABLE.
+  - Findings: 0 Critical, 0 High, 1 Medium, 0 Low. Under the owner's decision a Medium finding stops the change for the coordinator. It is **open**:
+  1. Medium: URL redaction stops at the first `@`, so a password with an unescaped `@`, which `new URL()` accepts, stays partly visible. For example, `postgres://owner:p@ssword@db/taskelith` becomes `postgres://[redacted]@ssword@db/taskelith`. The child environment still drops the variable. Proposed fix: redact the user information up to the last `@` before `/`, `?`, or `#`, with regression tests for one and several unescaped `@`, through `redactFailure` and `scrubEnvironment`.
 
 ## Remaining gates
 
-- The owner's decision on the open pass-3 findings.
+- The coordinator's decision on the open pass-4 finding.
 - Integration into `dev` by the coordinator, then archiving the change.
