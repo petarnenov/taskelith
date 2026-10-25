@@ -6,4 +6,4 @@
 ## 2. Verify
 
 - [x] 2.1 Run `npm run openspec -- validate record-reconcile-role --strict` and `make verify`.
-- [ ] 2.2 Independent review and record it in `verification.md`.
+- [x] 2.2 Independent review and record it in `verification.md`.
