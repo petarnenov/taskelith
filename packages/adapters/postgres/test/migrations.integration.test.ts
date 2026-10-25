@@ -86,8 +86,8 @@ test('the bearer migration copies the control-plane hashes of enrolled workers',
   const revoked = { ...fleetWorker('w3', 'j3'), revokedAt: AT };
   for (const worker of [current, rotated, revoked]) {
     await query(url, `INSERT INTO workers (worker_id, enrolled, revoked, draining, reachable, slots, cpu_millicores, memory_mebibytes,
-      controls, journal_id, enrollment, predecessor_valid_until) VALUES ($1, true, false, false, false, 1, 1, 1, '{}', $2, $3, $4)`,
-    [worker.workerId, worker.journalId, JSON.stringify(worker), worker.credentials.previous?.validUntil ?? null]);
+      controls, journal_id, enrollment, predecessor_valid_until) VALUES ($1, true, $2, false, false, 1, 1, 1, '{}', $3, $4, $5)`,
+    [worker.workerId, 'revokedAt' in worker, worker.journalId, JSON.stringify(worker), worker.credentials.previous?.validUntil ?? null]);
   }
   await writeFile(held, content);
   assert.deepEqual(await migrate(url, directory), { ok: true, value: [WORKER_BEARER] });

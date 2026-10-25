@@ -18,7 +18,7 @@ Item 16 left worker authentication to item 17, as a lookup by credential hash in
   - `ApiHandlers.authenticateWorker`, which the server calls before a worker route's operation.
   - The worker principal on `ApiRequest`.
   - A replaceable route table for the server.
-  - Fixed statuses for authentication failures, whatever a route declares.
+  - Fixed answers for authentication failures, whatever a route declares: 401 for a refused credential, and a constant 503 otherwise.
   - No route of the server's table uses the scheme yet. The contract declares it for `authorizeLaunch` (item 17), `publishEvidence` (item 19), and `requestDelegation` (items 20 and 21).
 
 ## Capabilities
@@ -36,5 +36,5 @@ None.
 
 - The packages `@taskelith/fleet`, `@taskelith/postgres`, and `@taskelith/control-plane`.
 - One migration.
-- No contract document changes: `execution.openapi.json` 0.2.0 already declares `workerCredential`.
+- No OpenAPI or wire contract changes: `execution.openapi.json` 0.2.0 already declares `workerCredential`. The installation and enrollment contract now states the bearer rule.
 - No new dependency.

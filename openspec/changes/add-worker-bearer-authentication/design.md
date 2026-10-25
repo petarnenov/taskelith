@@ -38,8 +38,8 @@ These are coordinator decisions, taken as the worker recommended.
   - item 17: `authorizeLaunch` re-reads the worker and applies the contract's rule "enrolled, unrevoked, at its current credential generation" ([launch authorization](../../../docs/contracts/launch-authorization.md) section 2) to the principal's generation;
   - item 19: `publishEvidence` re-reads the worker, since revocation denies observation writes at once (trust model section 4);
   - the item that implements `requestDelegation` does the same.
-- **Unique columns, and a shared hash fails closed.** A collision of two random 256-bit secrets is not expected. Within a column, the unique constraint refuses the second write. One hash could still be current for one worker and predecessor for another. The lookup then answers `internal` in both adapters, so it authenticates neither worker.
-- **Fixed statuses for authentication.** A refused credential is 401 and a store that is down is 503, whatever a route's own status table declares, for the operator and worker schemes alike.
+- **Unique columns, and a shared hash fails closed.** A collision of two random 256-bit secrets is not expected. Within a column, the unique constraint refuses the second write. One hash could still be current for one worker and predecessor for another. The lookup then answers `internal` in both adapters, so it authenticates neither worker, and the server answers 503.
+- **Fixed answers for authentication.** A refused credential is 401. Any other failure is a constant 503 that carries no store detail to the unauthenticated caller. Both apply whatever a route's own status table declares, for the operator and worker schemes alike. The request log records the status.
 - **A replaceable route table.** `ApiServerOptions.routes` defaults to `ROUTES`. No route of the server's table uses the scheme yet, so the test serves a probe route with it. The contract already declares it for `authorizeLaunch` (item 17), `publishEvidence` (item 19), and `requestDelegation` (items 20 and 21).
 
 ## Risks / Trade-offs

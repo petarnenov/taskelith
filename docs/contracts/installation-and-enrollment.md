@@ -91,7 +91,7 @@ Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-
 
 ## 9. Left to other items
 
-- **Item 16:** the HTTP operations (`enrollWorker` and the operator and worker credential checks); the wiring of `InstallationGuard` into the outbox publisher, which stops command publication under restore quarantine; the periodic `expire-grace-windows`.
+- **Item 16:** the HTTP operations (`enrollWorker` and the operator credential check); worker bearer authentication is the change `add-worker-bearer-authentication`, split from item 17; the wiring of `InstallationGuard` into the outbox publisher, which stops command publication under restore quarantine; the periodic `expire-grace-windows`.
 - **Item 20:** the worker's storage of its credentials under `worker/` with the identity's credential generation, and the use of `connectWorkerTransport` with them.
 - **Item 21:** the uncertain ownership of a revoked worker's attempts.
 - **Item 23:** the `make` targets that run the administrative entry and deploy `nats-authority.conf`.

@@ -75,12 +75,13 @@ export class PostgresFleetRegistry implements FleetRegistry {
     const journal = await this.#session.query('SELECT 1 FROM workers WHERE journal_id = $1', [worker.journalId]);
     if (journal.rowCount !== 0) return err(failure('conflict', 'the journal is enrolled', { reason: 'journal-enrolled' }));
     const { capacity } = worker;
+    const { current, previous } = worker.credentials;
     const inserted = await this.#session.query(
       `INSERT INTO workers (worker_id, enrolled, revoked, draining, reachable, slots, cpu_millicores, memory_mebibytes,
-         controls, journal_id, enrollment, protocol_version, control_plane_hash)
-       VALUES ($1, true, false, false, false, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT DO NOTHING`,
+         controls, journal_id, enrollment, protocol_version, control_plane_hash, previous_control_plane_hash, predecessor_valid_until)
+       VALUES ($1, true, false, false, false, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT DO NOTHING`,
       [worker.workerId, capacity.slots, capacity.cpuMillicores, capacity.memoryMebibytes, [...capacity.controls], worker.journalId,
-        encodeRecord(worker), worker.protocolVersion, worker.credentials.current.controlPlaneHash],
+        encodeRecord(worker), worker.protocolVersion, current.controlPlaneHash, previous?.controlPlaneHash ?? null, previous?.validUntil ?? null],
     );
     return inserted.rowCount === 0 ? err(failure('conflict', `worker ${worker.workerId} exists`)) : ok(undefined);
   }

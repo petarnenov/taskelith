@@ -104,14 +104,14 @@ test('a worker route reaches its operation with the principal of a valid worker 
   const WORKER = `tkwk_${'B'.repeat(43)}`;
   const probe: RouteDefinition = {
     operationId: 'probeWorker', method: 'GET', pattern: /^\/probe$/, security: 'workerCredential', response: 'TaskResult', success: 200,
-    statuses: {},
+    statuses: { forbidden: 418, unavailable: 500 },
   };
   const seen: ApiRequest[] = [];
   let workerStoreDown = false;
   const workerServer = createApiServer({
     ...handlers,
     authenticateWorker: async (secret) => {
-      if (workerStoreDown) return err(failure('unavailable', 'the fleet store is down'));
+      if (workerStoreDown) return err(failure('unavailable', 'connect ECONNREFUSED 10.0.0.5:5432'));
       if (secret !== WORKER) return err(failure('forbidden', 'the worker credential is not valid', { reason: 'worker-not-authorized' }));
       return ok({ workerId: 'worker-1' as never, generation: 2 });
     },
@@ -136,7 +136,8 @@ test('a worker route reaches its operation with the principal of a valid worker 
     assert.deepEqual(JSON.parse(refused.text), { code: 'forbidden', message: 'the worker credential is not valid', details: { reason: 'worker-not-authorized' } });
   }
   workerStoreDown = true;
-  assert.equal((await probeWith(WORKER)).status, 503);
+  const down = await probeWith(WORKER);
+  assert.deepEqual([down.status, JSON.parse(down.text).message], [503, 'the credential store is not available']);
   assert.equal(seen.length, 1, 'no refused or unchecked request reaches the operation');
 });
 
