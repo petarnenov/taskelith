@@ -19,11 +19,15 @@ A worker SHALL hand a grant to its supervisor only before the deadline computed 
 - **THEN** the worker journals it, never writes `intent`, seals the execution, reports `not-started`, and requests a new execution
 
 ### Requirement: Launch through the supervisor
-After a usable grant a worker SHALL write `intent`, commit W4, and only then start the supervisor; it SHALL commit W5s for a spawned `handle`, W5e for an `exit`, W6 for a launch record the supervisor sealed, and `uncertain` once for an unreadable record.
+After a usable grant a worker SHALL write `intent`, commit W4, and only then start the supervisor. It SHALL commit W5s for a spawned `handle` only when the claim names the launch's own grant, W5e for an `exit`, and W6 for a launch record the supervisor sealed; an unreadable record, or a spawn without that claim, SHALL be reported `uncertain` once.
 
 #### Scenario: Run to exit
 - **WHEN** the supervisor writes a spawned `handle` and then an `exit`
 - **THEN** the worker reports `execution.started` with the process identity, then `execution.exited`
+
+#### Scenario: Claim under another grant
+- **WHEN** the launch record claims another grant than the launch's own
+- **THEN** the worker reports `execution.uncertain` once and no `execution.started`
 
 ### Requirement: Offline launch rule
 A worker SHALL start no launch without a grant, whatever the state of its broker connection.

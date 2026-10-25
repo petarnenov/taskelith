@@ -331,3 +331,13 @@ test('a launch failure line keeps a failure\'s code and redacts secrets', () => 
   assert.equal(JSON.stringify(errorLine).includes(secret), false);
   assert.equal(JSON.parse(launchFailureLine('plain')).error.message, 'a launch failed: plain');
 });
+
+test('a launch failure line uses an object\'s message, and falls back on what it cannot render', () => {
+  assert.equal(JSON.parse(launchFailureLine({ message: 'the journal is closed' })).error.message, 'a launch failed: the journal is closed');
+  const unknownCode = JSON.parse(launchFailureLine({ code: 'exploded', message: 'm', details: {} }));
+  assert.deepEqual(unknownCode.error, { code: 'internal', message: 'a launch failed: m' });
+  const badDetails = JSON.parse(launchFailureLine({ code: 'internal', message: 'm', details: { count: 3 } }));
+  assert.deepEqual(badDetails.error, { code: 'internal', message: 'a launch failed: m' });
+  const unprintable = { toString: () => { throw new Error('no text'); } };
+  assert.deepEqual(JSON.parse(launchFailureLine(unprintable)).error, { code: 'internal', message: 'a launch failed' });
+});

@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-26. Author verification is recorded below, followed by the three review passes the cap allows; the fixes of pass 3 are unreviewed.
+Date: 2026-10-26. Author verification is recorded below, followed by the three review passes the cap allows and the owner's exception, an independent review of the pass 3 fixes; the five Low fixes after it are unreviewed.
 
 ## Scope and source
 
@@ -100,9 +100,9 @@ After the fixes, `make verify` ran with every file tracked: exit 0. 1255 tests, 
 - Pass 2: every resolution confirmed.
 - Findings: 0 Critical, 0 High, 2 Medium, 7 Low.
 
-Every fix below is **unreviewed**: the review cap is reached, and the Medium findings left after the third pass go to the owner through the coordinator ([governance](../../../docs/governance.md#independent-review-process)).
+The review cap is reached, and the Medium findings left after the third pass went to the owner through the coordinator ([governance](../../../docs/governance.md#independent-review-process)). The owner's exception below reviewed these fixes independently.
 
-| Finding | Resolution (unreviewed) |
+| Finding | Resolution (reviewed by the owner's exception) |
 | --- | --- |
 | M1: a cancel file that failed with another error than `conflict` made the observation sleep on an aborted signal, a hot loop | Fixed: once cancelled, the observation sleeps on the stop signal only, so a failed `cancel` is retried at the poll interval. Test with a `cancel` that answers `unavailable` and a fake sleep that honours its signal. |
 | M2: `reportLaunchFailure` printed `[object Object]` for a `Failure` | Fixed: `launchFailureLine` writes a `Failure` through `redactFailure` with its code, and anything else as an `internal` message through `redactSecrets`; tests for both. |
@@ -116,6 +116,28 @@ Every fix below is **unreviewed**: the review cap is reached, and the Medium fin
 
 After the fixes, `make verify` ran with every file tracked: exit 0. 1260 tests, 1260 passed, 0 failed; coverage 99.18% lines, 91.64% branches, 98.61% functions; 0 breaking changes in each document; `openspec validate --all --strict` 60 passed; `verify:archive`, `verify:dependencies`, and `verify:package` passed. An earlier run failed only the comment length check on one new comment, which was shortened.
 
+## Owner exception: independent review of the pass 3 fixes
+
+- **Decision.** The owner chose option (c), relayed by the coordinator on 2026-10-26: an independent review limited to the fixes of pass 3.
+- **Reviewer.** OpenCode CLI with the `reviewer` agent, model `opencode-go/deepseek-v4.1-flash#high`, invoked from the worktree as `opencode run --standalone --agent reviewer -m 'opencode-go/deepseek-v4.1-flash#high' --format json --title implement-worker-launch-orchestration "$(cat <prompt-file>)" < /dev/null > <log>`, with the prompt and the log outside the worktree. The prompt carried the shell restrictions: no `git -C`, no absolute paths, and no compound commands.
+- **Scope.** The diff `8a03e33..c93232e` only.
+- **Session.** `ses_e8ab14384ffeaUXfm3zUS7rxnz`; 51 model steps and 50 tool uses.
+- **Model confirmation.** The model and its variant were set by `-m`. The JSON events carry no model field, and the standalone session's messages are absent from the shared OpenCode store (`~/.local/share/opencode/opencode.db`), so only the invocation confirms the model.
+- **Snapshot.** `5fc024b0ad4c7292c78322097b7d6cb33c81b25d02a425b2642c7a6fa154ad74` before and after; unchanged.
+- **Findings.** 0 Critical, 0 High, 0 Medium, 5 Low. It confirmed M1 and M2 of pass 3 as resolved, with discriminating tests, and L1 to L7 without regression.
+
+The five Low fixes below are **unreviewed**, as the review process allows for a Low-only pass.
+
+| Finding | Resolution (unreviewed) |
+| --- | --- |
+| Low 1: the "Launch through the supervisor" requirement said W5s commits for any spawned `handle` | Fixed: W5s only when the claim names the launch's own grant, and `uncertain` once otherwise, with a scenario for a claim under another grant. |
+| Low 2: the reporting of a failed seal and a failed recovery had no test | Fixed: `sealResult` and `recoverResult` in `FakeSupervision`, and one test each that `onFailure` receives the failure and the launch ends. |
+| Low 3: a spawn without a claim was never exercised | Fixed: `claimSpawns` lets a script omit the claim; a test shows `execution-uncertain` and no `execution-started`. |
+| Low 4: `isFailure` accepted any code and details, and `redactFailure` throws on non-string details | Fixed: it requires `isFailureCode` and string details, and formatting falls back to a plain `internal` line on any throw; tests. |
+| Low 5: a plain object with a string `message` printed as `[object Object]` | Fixed: its `message` is used before `String(error)`; a test. |
+
+After the fixes, `make verify` ran with every file tracked: exit 0. 1264 tests, 1264 passed, 0 failed; coverage 99.17% lines, 91.68% branches, 98.61% functions; 0 breaking changes in each document; `openspec validate --all --strict` 60 passed; `verify:archive`, `verify:dependencies`, and `verify:package` passed.
+
 ## Limitations
 
 - A supervisor that dies while the worker runs leaves the execution `started` until a restart; liveness belongs to 20d.
@@ -125,10 +147,11 @@ After the fixes, `make verify` ran with every file tracked: exit 0. 1260 tests, 
 - The supervisor version written in `intent` is the worker package's version, since the supervisor ships in the worker's build.
 - An execution observation's `correlationId` is its `assignmentId`, because the journal keeps no offer correlation with the intent.
 - An `expired` answer abandons its execution but leaves the operation `pending` in the journal, since W3 records no outcome for it; a possible 20d journal follow-up (review pass 2, L4).
+- The OpenCode review of the pass 3 fixes confirms its model only by the invocation: its JSON events name no model, and the standalone session is absent from the shared OpenCode store.
 - A long outage seals one execution, and reports one `not-started`, per deadline cycle of about 25 s to 60 s; a note for 20d and 20e (review pass 2, L6).
 
 ## Remaining gates
 
-- **Owner decision:** the review cap is reached with Medium findings after pass 3 (M1, M2); their fixes are unreviewed. The coordinator brings them to the owner, as governance requires.
+- The owner's decision on the Medium findings of pass 3 is resolved by the owner exception above.
 - Coordinator integration into `dev` and archiving.
-- 20d: start reconciliation, the asyncapi amendment of Q2, and record removal.
+- Obligations on later changes, not gates of this one: 20d's start reconciliation, the asyncapi amendment of Q2, and record removal.

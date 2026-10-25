@@ -124,6 +124,10 @@ export class FakeSupervision implements ExecutionSupervision {
   facts: SupervisedFacts[] = [{ problems: [] }];
   startResult: Result<void> = ok(undefined);
   prepareResult: Result<void> = ok(undefined);
+  sealResult: Result<void> = ok(undefined);
+  recoverResult: Result<void> = ok(undefined);
+  // When false, a scripted spawn is read back without a launch record.
+  claimSpawns = true;
   recovery: SupervisedRecovery = { fact: 'not-started' };
   cancelled: string | undefined;
 
@@ -140,6 +144,7 @@ export class FakeSupervision implements ExecutionSupervision {
 
   async seal(): Promise<Result<LaunchRecord>> {
     this.calls.push('seal');
+    if (!this.sealResult.ok) return this.sealResult;
     this.launch ??= { kind: 'seal', by: 'worker', reason: 'recovery' };
     return ok(this.launch);
   }
@@ -151,16 +156,17 @@ export class FakeSupervision implements ExecutionSupervision {
   }
 
   // A spawn the script names is claimed under the planned grant, unless the
-  // script names its own launch record.
+  // script names its own launch record or claims are off.
   async read(): Promise<Result<SupervisedFacts>> {
     this.calls.push('read');
     const facts = (this.facts.length > 1 ? this.facts.shift() : this.facts[0]) ?? { problems: [] };
-    if (facts.launch !== undefined || facts.process === undefined || this.plan === undefined) return ok(facts);
+    if (!this.claimSpawns || facts.launch !== undefined || facts.process === undefined || this.plan === undefined) return ok(facts);
     return ok({ ...facts, launch: { kind: 'claim', launchAuthId: this.plan.launchAuthId, supervisor: 1 } });
   }
 
   async recover(): Promise<Result<SupervisedRecovery>> {
     this.calls.push('recover');
+    if (!this.recoverResult.ok) return this.recoverResult;
     return ok(this.recovery);
   }
 }

@@ -543,6 +543,54 @@ test('a failed record read ends the launch and is reported', async () => {
   assert.deepEqual(failures.map((failed) => (failed as { message: string }).message), ['the record cannot be read']);
 });
 
+function reportingOrchestrator(failures: unknown[]): LaunchOrchestrator {
+  let ids = 0;
+  return new LaunchOrchestrator({
+    journal, authority, supervision: supervisions.factory, clock, draw: () => 0, newId: () => `id-${(ids += 1)}`,
+    sleep: async () => new Promise((resolve) => setImmediate(resolve)), onFailure: (error) => failures.push(error),
+  });
+}
+
+test('a failed seal is reported and ends the launch', async () => {
+  const failures: unknown[] = [];
+  orchestrator = reportingOrchestrator(failures);
+  value(journal.recordCommand(offer()));
+  authority.answers = [ok({ kind: 'expired' })];
+  supervisions.onCreated = (supervision) => {
+    supervision.sealResult = err(failure('unavailable', 'the seal cannot be written'));
+  };
+  await launchOnce();
+  assert.deepEqual(failures.map((failed) => (failed as { message: string }).message), ['the seal cannot be written']);
+  assert.equal(authority.requests.length, 1);
+  assert.equal(executions()[0]?.state, undefined);
+});
+
+test('a failed recovery is reported and ends the launch', async () => {
+  const failures: unknown[] = [];
+  orchestrator = reportingOrchestrator(failures);
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.startResult = err(failure('unavailable', 'no spawn'));
+    supervision.recoverResult = err(failure('unavailable', 'the record cannot be recovered'));
+  };
+  await launchOnce();
+  assert.deepEqual(failures.map((failed) => (failed as { message: string }).message), ['the record cannot be recovered']);
+  assert.equal(authority.requests.length, 1);
+  assert.equal(executions()[0]?.state, 'authorized');
+});
+
+test('a spawn without a claim is reported uncertain, never as a start', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.claimSpawns = false;
+    supervision.facts = [{ problems: [], process: PROCESS }];
+  };
+  await launchOnce();
+  assert.deepEqual(factKinds(), ['execution-uncertain']);
+});
+
 test('a cancellation journaled before any launch records its evidence and launches nothing', async () => {
   value(journal.recordCommand(offer()));
   value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));

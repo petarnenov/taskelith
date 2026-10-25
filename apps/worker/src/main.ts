@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
-import { ok, type Failure, type Result } from '@taskelith/kernel';
+import { isFailureCode, ok, type Failure, type Result } from '@taskelith/kernel';
 import { SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { connectWorkerTransport } from '@taskelith/nats';
 import { redactFailure, redactSecrets } from '@taskelith/secrets';
@@ -55,15 +55,29 @@ function reportLaunchFailure(error: unknown): void {
 }
 
 // A journal or record failure keeps its code; a thrown error its message.
+// Formatting never throws: anything it cannot render is a plain line.
 export function launchFailureLine(error: unknown): string {
-  if (isFailure(error)) return JSON.stringify({ error: redactFailure(error) });
-  const message = redactSecrets(`a launch failed: ${error instanceof Error ? error.message : String(error)}`);
+  try {
+    if (isFailure(error)) return JSON.stringify({ error: redactFailure(error) });
+    return internalLine(redactSecrets(`a launch failed: ${messageOf(error)}`));
+  } catch {
+    return internalLine('a launch failed');
+  }
+}
+
+function internalLine(message: string): string {
   return JSON.stringify({ error: { code: 'internal', message } });
+}
+
+function messageOf(error: unknown): string {
+  const { message } = (typeof error === 'object' && error !== null ? error : {}) as { message?: unknown };
+  return typeof message === 'string' ? message : String(error);
 }
 
 function isFailure(value: unknown): value is Failure {
   const { code, message, details } = (value ?? {}) as { code?: unknown; message?: unknown; details?: unknown };
-  return typeof code === 'string' && typeof message === 'string' && typeof details === 'object' && details !== null;
+  return typeof code === 'string' && isFailureCode(code) && typeof message === 'string'
+    && typeof details === 'object' && details !== null && Object.values(details).every((detail) => typeof detail === 'string');
 }
 
 function launchHost(launch: LaunchSettings, executions: string, version: string): Result<LaunchHost> {
