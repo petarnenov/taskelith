@@ -87,7 +87,18 @@ A worker enrolled with a one-time token SHALL be admitted automatically once its
 - **WHEN** a newly enrolled worker's self-check fails
 - **THEN** it is not admitted and the failed checks are shown on the workers screen
 
-### Requirement: Harness activity indicator
+### Requirement: Reference proof of concept
+The SPA SHALL start from the Mantine proof of concept in `docs/ui-poc/` (ADR 0011) and follow its matching screen for each screen it builds. The proof of concept is reference material: where it differs from this specification or an ADR, they win, and the change that builds the screen SHALL record the difference.
+
+#### Scenario: Screen built from the proof of concept
+- **WHEN** a UI item builds a screen that the proof of concept shows
+- **THEN** the item's change names the proof of concept source file it follows
+
+#### Scenario: Screen differs from the proof of concept
+- **WHEN** a UI item builds a screen that departs from the proof of concept's matching screen
+- **THEN** the item's change records the departure and the requirement or decision that requires it
+
+### Requirement: Session activity indicator
 Every card or row that shows a harness session, on the board, in the task detail, on the agent session screen, in the "Needs you" inbox, and in the review queue, SHALL show a small round indicator beside the session's label that spins while the harness works and stays still while it waits or has stopped, and the label SHALL name the state.
 
 #### Scenario: Harness works
@@ -106,17 +117,10 @@ Every card or row that shows a harness session, on the board, in the task detail
 - **WHEN** the user's system asks for reduced motion
 - **THEN** no indicator spins, and the labels still name each state
 
-#### Scenario: Ownership uncertain
-- **WHEN** Taskelith has lost contact with the session's worker and does not know whether the harness works
-- **THEN** the indicator is still and drawn in the danger color, and the label says that ownership is uncertain
+#### Scenario: Worker unreachable
+- **WHEN** Taskelith has lost contact with the session's worker and the worker has reported no uncertainty about the process
+- **THEN** the indicator is still, and the label says that the worker is unreachable and when it was last in contact, while the attempt keeps its owner and its ownership generation
 
-### Requirement: Reference proof of concept
-The SPA SHALL start from the Mantine proof of concept in `docs/ui-poc/` (ADR 0011) and follow its matching screen for each screen it builds. The proof of concept is reference material: where it differs from this specification or an ADR, they win, and the change that builds the screen SHALL record the difference.
-
-#### Scenario: Screen built from the proof of concept
-- **WHEN** a UI item builds a screen that the proof of concept shows
-- **THEN** the item's change names the proof of concept source file it follows
-
-#### Scenario: Screen differs from the proof of concept
-- **WHEN** a UI item builds a screen that departs from the proof of concept's matching screen
-- **THEN** the item's change records the departure and the requirement or decision that requires it
+#### Scenario: Process state uncertain
+- **WHEN** the worker reports that it can prove neither that the session's process runs nor that it ended
+- **THEN** the indicator is still and drawn in the danger color, the label says that the process state is uncertain, and the card offers an audited reconciliation to a role allowed to make it
