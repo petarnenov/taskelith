@@ -44,7 +44,12 @@ Assigned reviewer: Codex CLI with `codex exec -m gpt-6.1-sol -c model_reasoning_
   2. High: an `unauthorized-start` occupied the execution's single start field, so the valid start under the real grant became a `duplicate` and the execution stayed `authorized`. Unauthorized starts are now a separate list on the execution, kept once per grant identity, and a test shows the valid start (or a historical one after an exit) still recorded.
   3. Medium: `authorizeLaunch` accepted structurally typed parameters that bypassed `parseLaunchParameters`, such as an infinite ttl or a negative skew. `LaunchParameters` is now a branded type that only the parser creates, with tests of invalid values.
 
+- **Pass 3 — session `01a17074-8f23-74d1-b590-049f06584583`,** reviewed revision `d0e2b8b`; the header reports `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`. Snapshot before and after: `2942d7a8…7dbc`, equal. The reviewer confirmed pass-2 findings 1 and 2 resolved and finding 3 resolved in part, with the gap raised as finding 1 below. Findings: 0 Critical, 0 High, 1 Medium, 1 Low, both open:
+  1. Medium, **open, sent to the owner:** a spread of parsed `LaunchParameters` with replaced values (an infinite ttl, a negative skew) keeps the brand, so `authorizeLaunch` can still issue a grant with unparsed parameters, and the design's claim that it cannot is not yet true. This is the third pass, so the finding went to the owner, through the coordinator, with options.
+  2. Low, open: the comment on `RETRYABLE_LAUNCH_REJECTIONS` says a retryable rejection is retried "with the same operation", while launch authorization section 6 makes a rejection final for its `operationId` and a retry after it uses a new one.
+
 ## Remaining gates
 
-- Independent review pass 3 of the pass-2 fixes, the last pass the review process allows.
+- The owner's decision on pass-3 finding 1, and the fix of the Low finding.
+- Integration into `dev` by the coordinator, then archiving the change.
 - Integration into `dev` by the coordinator, then archiving the change.
