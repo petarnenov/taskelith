@@ -19,6 +19,10 @@ export interface WorkerReports {
   // Up to `limit` reachable workers last in contact before `before`, oldest
   // first, become unreachable; it returns them ordered by identity.
   markContactLost(before: Instant, limit: number): Promise<Result<readonly WorkerId[]>>;
+  // Unreachable after its journal was lost or rolled back, until contact.
+  recordJournalLoss(workerId: WorkerId): Promise<Result<void>>;
+  // Every fence back to no sequence, for a new journal incarnation.
+  restartFences(workerId: WorkerId): Promise<Result<void>>;
   // The capacity fence.
   declareCapacity(workerId: WorkerId, declaration: CapacityDeclaration, sequence: Sequence): Promise<Result<void>>;
   // The pressure fence; under pressure since `at`, or an earlier start.

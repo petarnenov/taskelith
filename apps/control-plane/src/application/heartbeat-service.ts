@@ -1,7 +1,7 @@
-import type { WorkerId } from '@taskelith/execution';
+import type { JournalId, WorkerId } from '@taskelith/execution';
 import { err, failure, type Result } from '@taskelith/kernel';
 import type { ControlPlaneStore, ControlPlaneTransaction } from './control-plane-store.js';
-import { isAuthenticProducer } from './producer-authentication.js';
+import { isCurrentProducer } from './journal-reconciliation.js';
 
 // The queue group in which control-plane instances share the heartbeats.
 export const HEARTBEAT_QUEUE = 'control-plane-heartbeats';
@@ -15,7 +15,7 @@ export interface HeartbeatMessage {
 }
 
 // An authenticated heartbeat records contact at the database time; one
-// that is not changes nothing and is `forbidden`.
+// that is not, a new journal's included, changes nothing: `forbidden`.
 export class HeartbeatService {
   readonly #store: ControlPlaneStore;
 
@@ -30,8 +30,8 @@ export class HeartbeatService {
 
 async function recordContact(tx: ControlPlaneTransaction, message: HeartbeatMessage): Promise<Result<void>> {
   const workerId = message.body['workerId'] as WorkerId;
-  const claim = { subjectWorkerId: message.subjectWorkerId, workerId, journalId: message.body['journalId'] as string };
-  const authentic = await isAuthenticProducer(tx, claim);
+  const producer = { subjectWorkerId: message.subjectWorkerId, workerId, journalId: message.body['journalId'] as JournalId };
+  const authentic = await isCurrentProducer(tx, producer);
   if (!authentic.ok) return authentic;
   if (!authentic.value) return err(failure('forbidden', `the heartbeat of ${workerId} is not authenticated`, { worker: workerId }));
   return tx.reports.recordContact(workerId, await tx.now());

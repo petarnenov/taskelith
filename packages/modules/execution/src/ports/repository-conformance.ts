@@ -37,8 +37,11 @@ import {
   type JournalId,
   type ProducerCursor,
 } from '../domain/observation-sequence.js';
-import type { WorkerId } from '../domain/identifiers.js';
+import type { AssignmentId, WorkerId } from '../domain/identifiers.js';
+import type { InventoryPart, InventoryRequest } from '../domain/inventory.js';
 import type { Inbox } from './inbox.js';
+import type { InventoryReports } from './inventory-reports.js';
+import type { InventoryRequests } from './inventory-requests.js';
 import type { ProducerCursors } from './producer-cursors.js';
 import type { LaunchRecords, RecordedLaunch } from './launch-records.js';
 import type { TaskRepository } from './task-repository.js';
@@ -218,6 +221,87 @@ export const PRODUCER_CURSORS_CONFORMANCE: readonly ConformanceCase<ProducerCurs
       expectSame(problems, 'replaced', await cursors.get(workerId, first), closed);
       const other = journal('journal-2');
       expectSame(problems, 'other journal', await cursors.get(workerId, other), startProducerCursor(workerId, other));
+      return problems;
+    },
+  },
+  {
+    name: 'a worker\'s journals are listed with their retirement and highest snapshot',
+    async check(cursors: ProducerCursors) {
+      const problems: string[] = [];
+      const workerId = id('WorkerId', 'worker-1') as WorkerId;
+      const [first, second, third] = ['journal-1', 'journal-2', 'journal-3'].map((text) => id('JournalId', text) as JournalId);
+      expectSame(problems, 'none', await cursors.listByWorker(workerId), []);
+      const saved = must(recordAppliedSequence(startProducerCursor(workerId, first!), must(parseSequence(1))));
+      expectSuccess(problems, 'save', await cursors.save(saved));
+      expectSuccess(problems, 'snapshot 4', await cursors.recordReportedSnapshot(workerId, first!, 4));
+      expectSuccess(problems, 'snapshot 2', await cursors.recordReportedSnapshot(workerId, first!, 2));
+      expectSuccess(problems, 'retire unknown', await cursors.retire(workerId, third!, AT));
+      expectSuccess(problems, 'retire again', await cursors.retire(workerId, third!, LATER));
+      expectSuccess(problems, 'snapshot unknown', await cursors.recordReportedSnapshot(workerId, second!, 1));
+      expectSuccess(problems, 'other worker', await cursors.retire(id('WorkerId', 'worker-2') as WorkerId, first!, AT));
+      expectSuccess(problems, 'save after snapshot', await cursors.save(saved));
+      expectSame(problems, 'listed', await cursors.listByWorker(workerId), [
+        { cursor: saved, reportedSnapshot: 4 },
+        { cursor: startProducerCursor(workerId, second!), reportedSnapshot: 1 },
+        { cursor: startProducerCursor(workerId, third!), retiredAt: AT, reportedSnapshot: 0 },
+      ]);
+      return problems;
+    },
+  },
+]);
+
+function inventoryRequest(workerText: string, requestId: string, sequence: number): InventoryRequest {
+  return {
+    workerId: id('WorkerId', workerText) as WorkerId, requestId, requestedAt: AT,
+    bound: [{ journalId: id('JournalId', 'journal-1') as JournalId, sequence, assignmentIds: [id('AssignmentId', 'assignment-1') as AssignmentId] }],
+  };
+}
+
+export const INVENTORY_REQUESTS_CONFORMANCE: readonly ConformanceCase<InventoryRequests>[] = Object.freeze([
+  {
+    name: 'only the latest request of each worker is current, with its bound',
+    async check(requests: InventoryRequests) {
+      const problems: string[] = [];
+      const workerId = id('WorkerId', 'worker-1') as WorkerId;
+      expectSame(problems, 'none', await requests.current(workerId), undefined);
+      expectSuccess(problems, 'first', await requests.save(inventoryRequest('worker-1', 'request-1', 9)));
+      expectSuccess(problems, 'other worker', await requests.save(inventoryRequest('worker-2', 'request-2', 1)));
+      expectSuccess(problems, 'second', await requests.save({ ...inventoryRequest('worker-1', 'request-3', 10), requestedAt: LATER, bound: [] }));
+      expectSame(problems, 'current', await requests.current(workerId), { ...inventoryRequest('worker-1', 'request-3', 10), requestedAt: LATER, bound: [] });
+      expectSame(problems, 'kept', await requests.current(id('WorkerId', 'worker-2') as WorkerId), inventoryRequest('worker-2', 'request-2', 1));
+      return problems;
+    },
+  },
+]);
+
+function inventoryPart(reportId: string, part: number, overrides: Partial<InventoryPart> = {}): InventoryPart {
+  return {
+    reportId, part, parts: 2, workerId: id('WorkerId', 'worker-1') as WorkerId, journalId: id('JournalId', 'journal-1') as JournalId,
+    snapshot: 1, throughSequence: 3,
+    assignments: [{ commandId: 'command-1', assignmentId: 'assignment-1', attemptId: 'attempt-1', ownershipGeneration: 2, state: 'accepted' }],
+    executions: [{ executionId: 'execution-1', assignmentId: 'assignment-1', state: 'started', uncertain: false }],
+    ...overrides,
+  };
+}
+
+export const INVENTORY_REPORTS_CONFORMANCE: readonly ConformanceCase<InventoryReports>[] = Object.freeze([
+  {
+    name: 'parts are stored once and listed per journal by snapshot, report, and part',
+    async check(reports: InventoryReports) {
+      const problems: string[] = [];
+      const workerId = id('WorkerId', 'worker-1') as WorkerId;
+      const journalId = id('JournalId', 'journal-1') as JournalId;
+      const later = inventoryPart('report-a', 1, { snapshot: 2, parts: 1, requestId: 'request-1', assignments: [], executions: [] });
+      const parts = [inventoryPart('report-b', 2), later, inventoryPart('report-b', 1)];
+      for (const part of parts) expectSuccess(problems, `add ${part.reportId}.${part.part}`, await reports.add(part));
+      expectCode(problems, 'add again', await reports.add(inventoryPart('report-b', 1, { snapshot: 9 })), 'conflict');
+      expectSuccess(problems, 'other journal', await reports.add(inventoryPart('report-c', 1, { journalId: id('JournalId', 'journal-2') as JournalId })));
+      expectSame(problems, 'listed', await reports.listByJournal(workerId, journalId), [inventoryPart('report-b', 1), inventoryPart('report-b', 2), later]);
+      expectSuccess(problems, 'remove report', await reports.remove('report-b'));
+      expectSame(problems, 'after remove', await reports.listByJournal(workerId, journalId), [later]);
+      expectSuccess(problems, 'remove journal', await reports.removeByJournal(workerId, journalId));
+      expectSame(problems, 'after journal', await reports.listByJournal(workerId, journalId), []);
+      expectSame(problems, 'other kept', (await reports.listByJournal(workerId, id('JournalId', 'journal-2') as JournalId)).length, 1);
       return problems;
     },
   },

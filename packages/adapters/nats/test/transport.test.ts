@@ -233,14 +233,15 @@ test('the outbox publisher keeps the order of a subject and lets other subjects 
   assert.equal((await publisher.publishPending()).ok, false);
 });
 
-test('a confirmation is published without a message identity, a command with its own', async () => {
+test('a confirmation and an inventory request are published without a message identity, a command with its own', async () => {
   const confirmation = { ...outboxRow('o1', 'workers.w1.commands'), metadata: { eventId: 'o1', eventType: 'execution.observations.confirmed' } };
-  const outbox = new FakeOutbox([outboxRow('e1', 'workers.w1.commands'), confirmation as never]);
+  const request = { ...outboxRow('i1', 'workers.w1.commands'), metadata: { eventId: 'i1', eventType: 'worker.inventory.requested' } };
+  const outbox = new FakeOutbox([outboxRow('e1', 'workers.w1.commands'), confirmation as never, request as never]);
   const sent: Array<[string, string | undefined]> = [];
   const publisher = new OutboxPublisher(outbox, new JetStreamPublisher(fakeBroker(new Set(), sent)), address);
-  assert.deepEqual(await publisher.publishPending(), ok({ published: 2, deferred: 0 }));
-  assert.deepEqual(sent.map(([, id]) => id), ['e1', undefined]);
-  assert.deepEqual(outbox.published, ['e1', 'o1']);
+  assert.deepEqual(await publisher.publishPending(), ok({ published: 3, deferred: 0 }));
+  assert.deepEqual(sent.map(([, id]) => id), ['e1', undefined, undefined]);
+  assert.deepEqual(outbox.published, ['e1', 'o1', 'i1']);
 });
 
 test('a failed publication is logged with its event identity and backoff', async () => {

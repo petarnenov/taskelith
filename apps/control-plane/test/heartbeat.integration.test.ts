@@ -35,10 +35,12 @@ async function sql<Row extends pg.QueryResultRow>(text: string, values: unknown[
 const heartbeats = new HeartbeatService(database);
 const check = new LostContactCheck(database, { timeoutMilliseconds: 30_000 });
 let confirmations = 0;
-const observations = new ObservationService(database, { newConfirmationId: () => `confirmation-${++confirmations}` });
+const observations = new ObservationService(database, {
+  newConfirmationId: () => `confirmation-${++confirmations}`, newRequestId: () => `request-${++confirmations}`,
+});
 
 beforeEach(async () => {
-  await sql('TRUNCATE workers, enrollment_tokens, inbox, outbox, producer_cursors');
+  await sql('TRUNCATE workers, enrollment_tokens, inbox, outbox, producer_cursors, inventory_requests, inventory_report_parts');
 });
 
 // Each worker enrolls with a journal of its own.
@@ -54,17 +56,17 @@ async function enroll(workerId: string, revokedAt?: string): Promise<void> {
   }));
 }
 
-function heartbeat(workerId: string) {
+function heartbeat(workerId: string, journalId = journalOf(workerId)) {
   return {
     subjectWorkerId: workerId,
-    body: { messageType: 'worker.heartbeat', schemaVersion: 1, protocolVersion: 1, workerId, journalId: journalOf(workerId), sentAt: '2026-10-26T09:00:00.000Z' },
+    body: { messageType: 'worker.heartbeat', schemaVersion: 1, protocolVersion: 1, workerId, journalId, sentAt: '2026-10-26T09:00:00.000Z' },
   };
 }
 
-function declaration(workerId: string, sequence: number) {
+function declaration(workerId: string, sequence: number, journalId = journalOf(workerId)) {
   const metadata = {
-    observationId: `observation-${workerId}-${sequence}`, observationType: 'worker.capacity.declared', schemaVersion: 1, protocolVersion: 1,
-    occurredAt: '2026-10-26T09:00:00.000Z', correlationId: 'correlation-1', workerId, journalId: journalOf(workerId), sequence,
+    observationId: `observation-${journalId}-${sequence}`, observationType: 'worker.capacity.declared', schemaVersion: 1, protocolVersion: 1,
+    occurredAt: '2026-10-26T09:00:00.000Z', correlationId: 'correlation-1', workerId, journalId, sequence,
   };
   const payload = {
     capacity: { slots: 2, cpuMillicores: 4000, memoryMebibytes: 8192, enforceableControls: [] }, protocolVersions: { minimum: 1, maximum: 1 },
@@ -177,5 +179,22 @@ test('a check that waits for a heartbeat runs again and keeps the worker reachab
 test('a revoked worker\'s heartbeat records no contact', async () => {
   await enroll('worker-a', '2026-10-26T08:00:00.000Z');
   assert.equal(failed(await heartbeats.record(heartbeat('worker-a'))).code, 'forbidden');
+  assert.equal(await reachable('worker-a'), false);
+});
+
+test('a new incarnation\'s heartbeat authenticates only after an observation replaced the journal', async () => {
+  await enroll('worker-a');
+  assert.equal(failed(await heartbeats.record(heartbeat('worker-a', 'journal-new'))).code, 'forbidden', 'a heartbeat replaces no journal');
+  assert.deepEqual(await sql('SELECT journal_id FROM producer_cursors'), []);
+  assert.equal(await reachable('worker-a'), false);
+
+  assert.equal(value(await observations.apply(declaration('worker-a', 1, 'journal-new'))), 'applied');
+  await silentFor('worker-a', 31);
+  assert.deepEqual(value(await check.markLost()), ['worker-a']);
+  value(await heartbeats.record(heartbeat('worker-a', 'journal-new')));
+  assert.equal(await reachable('worker-a'), true);
+  await silentFor('worker-a', 31);
+  value(await check.markLost());
+  assert.equal(failed(await heartbeats.record(heartbeat('worker-a'))).code, 'forbidden', 'the replaced journal is refused');
   assert.equal(await reachable('worker-a'), false);
 });

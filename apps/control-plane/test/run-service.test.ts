@@ -7,7 +7,6 @@ import {
   InMemoryAdmissionRepository,
   InMemoryCurrentRevisions,
   InMemoryGateRepository,
-  InMemoryOutbox,
   InMemoryRunCatalog,
   InMemoryWorkflowRunRepository,
   parseWorkflowDefinition,
@@ -34,9 +33,9 @@ function store(): ControlPlaneStore {
   const lineage = new InMemoryTaskLineage();
   const transaction: ControlPlaneTransaction = {
     runs: new InMemoryWorkflowRunRepository(), catalog: new InMemoryRunCatalog(), admissions: new InMemoryAdmissionRepository(),
-    gates: new InMemoryGateRepository(), tasks, lineage, outbox: new InMemoryOutbox(), ...inMemoryCapacity(tasks, lineage),
+    gates: new InMemoryGateRepository(), tasks, lineage, ...inMemoryCapacity(tasks, lineage),
     evidence: new InMemoryEvidenceRecords(), producers: { heldGenerations: async () => ({ ok: true, value: [] }) },
-    fleet: { worker: async () => ({ ok: true, value: undefined }) },
+    fleet: { worker: async () => ({ ok: true, value: undefined }), replaceJournal: undefined as never },
     revisions: new InMemoryCurrentRevisions(),
     // Only the launch authority reads these.
     assignments: undefined as never, installation: undefined as never, launches: undefined as never,

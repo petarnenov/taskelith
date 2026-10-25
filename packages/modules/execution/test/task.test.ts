@@ -185,6 +185,16 @@ test('a cancellation request is not termination: the attempt ends only once noth
   assert.equal(outcome?.cancelled, true);
 });
 
+test('a cancellation not applied keeps the request pending and the execution known', () => {
+  const requested = value(requestCancellation(started(), ATTEMPT, 'requested', T3));
+  const signalFailed = value(recordExecutionEvidence(requested, { ...REPORT, kind: 'cancellation-not-applied' }, T3)).task;
+  const attempt = signalFailed.attempts[0]!;
+  assert.deepEqual([attempt.executions[0]!.state, attempt.cancellation?.reason], ['started', 'requested']);
+  assert.equal(unknownExecutionCount(signalFailed), 0);
+  const terminated = value(recordExit(signalFailed, { ...CLEAN_EXIT, status: { kind: 'signal', signal: 'SIGKILL' } }, T4)).task;
+  assert.equal(terminated.attempts[0]!.outcome?.cancelled, true);
+});
+
 test('cancelling an attempt with nothing running ends it at once', () => {
   const cancelled = value(requestCancellation(placedTask(), ATTEMPT, 'requested', T1));
   assert.deepEqual(cancelled.attempts[0]!.outcome, { kind: 'not-started', cancelled: true, ownershipGeneration: 3, endedAt: T1 });

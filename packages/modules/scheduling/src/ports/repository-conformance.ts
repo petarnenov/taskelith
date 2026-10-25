@@ -1,5 +1,5 @@
-import { parseIdentifier, parseInstant, type EventId, type Instant, type Result } from '@taskelith/kernel';
-import type { AssignmentExecutions } from '@taskelith/execution';
+import { parseEventMetadata, parseIdentifier, parseInstant, type EventId, type Instant, type Result } from '@taskelith/kernel';
+import { parseSequence, type AssignmentExecutions, type JournalId } from '@taskelith/execution';
 import {
   expectCode,
   expectOneWinner,
@@ -23,6 +23,7 @@ import {
 } from '../domain/delegation-request.js';
 import type { AssignmentRepository } from './assignment-repository.js';
 import type { DelegationRequests } from './delegation-requests.js';
+import type { Outbox, OutboxLookup, OutboxMessage } from './outbox.js';
 
 // A shared suite that the in-memory and the database adapters of the
 // assignment port both pass; each case expects a port with nothing stored.
@@ -165,6 +166,25 @@ export const ASSIGNMENT_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Assignm
     },
   },
   {
+    name: 'an acceptance keeps its provenance, and a worker\'s unfinished assignments are listed in order',
+    async check(repository: AssignmentRepository) {
+      const problems: string[] = [];
+      const first = offered('assignment-2', 'attempt-1');
+      const provenance = { journalId: must(parseIdentifier('JournalId', 'journal-1')) as JournalId, sequence: must(parseSequence(4)) };
+      const accepted = must(acceptAssignment(first, first.generation, first.workerId, LATER, provenance));
+      const done = offered('assignment-3', 'attempt-3');
+      const second = offered('assignment-1', 'attempt-2');
+      const elsewhere = { ...offered('assignment-0', 'attempt-0'), workerId: must(parseIdentifier('WorkerId', 'worker-2')) };
+      for (const assignment of [first, done, second, elsewhere]) expectSuccess(problems, `add ${assignment.id}`, await repository.add(assignment));
+      expectSuccess(problems, 'accept', await repository.replace(accepted, first.generation));
+      expectSuccess(problems, 'end', await repository.replace(ended(done), done.generation));
+      expectRead(problems, 'provenance', await repository.get(first.id), accepted);
+      expectSame(problems, 'unfinished', await repository.listUnfinishedByWorker(first.workerId), [second, accepted]);
+      expectSame(problems, 'unknown worker', await repository.listUnfinishedByWorker(must(parseIdentifier('WorkerId', 'worker-x'))), []);
+      return problems;
+    },
+  },
+  {
     name: 'an assignment is found by the command that offered it, also once ended',
     async check(repository: AssignmentRepository) {
       const problems: string[] = [];
@@ -212,6 +232,32 @@ export const ASSIGNMENT_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Assignm
       expectCode(problems, 'set offer', await repository.replace(reoffered(unoffered, 'offer-1'), unoffered.generation), 'conflict');
       expectRead(problems, 'get', await repository.get(unoffered.id), unoffered);
       expectCode(problems, 'no offer', await repository.byOfferCommand(offerCommand('offer-1')), 'not-found');
+      return problems;
+    },
+  },
+]);
+
+// The outbox and its lookup over the same stored messages.
+export interface OutboxLookupConformanceTarget {
+  readonly outbox: Outbox;
+  readonly lookup: OutboxLookup;
+}
+
+function outboxMessage(eventId: string): OutboxMessage {
+  const metadata = must(parseEventMetadata({
+    eventId, eventType: 'execution.assignment.offer', schemaVersion: 1, occurredAt: AT, correlationId: 'correlation-1',
+  }));
+  return { metadata, subject: 'workers.worker-1.commands', payload: { commandId: eventId, issuedAt: AT, nested: { kept: [1, 'two'] } } };
+}
+
+export const OUTBOX_LOOKUP_CONFORMANCE: readonly ConformanceCase<OutboxLookupConformanceTarget>[] = Object.freeze([
+  {
+    name: 'a stored message is found unchanged by its event identity',
+    async check({ outbox, lookup }: OutboxLookupConformanceTarget) {
+      const problems: string[] = [];
+      for (const eventId of ['offer-1', 'offer-2']) expectSuccess(problems, `append ${eventId}`, await outbox.append(outboxMessage(eventId)));
+      expectSame(problems, 'found', await lookup.byEventId(offerCommand('offer-2')), outboxMessage('offer-2'));
+      expectSame(problems, 'unknown', await lookup.byEventId(offerCommand('offer-9')), undefined);
       return problems;
     },
   },

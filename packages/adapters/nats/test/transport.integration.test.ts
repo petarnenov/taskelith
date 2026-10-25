@@ -23,7 +23,7 @@ import {
   type ReceivedHeartbeat,
 } from '@taskelith/nats';
 import { FakeOutbox, outboxRow } from './fakes.ts';
-import { capacityDeclared, confirmation, heartbeat, inventoryPart, offer } from './messages.ts';
+import { capacityDeclared, confirmation, heartbeat, inventoryPart, inventoryRequest, offer } from './messages.ts';
 import {
   expectOk,
   installation,
@@ -90,6 +90,18 @@ describe('outbox publication', () => {
     assert.deepEqual(first.deliveries.map((d) => [d.identity, d.subject]), [['command-1', expectOk(address.commandSubject('worker-1'))]]);
     assert.deepEqual(second.deliveries.map((d) => d.identity), ['command-2']);
     assert.equal((await transport.jsm.streams.info(address.streamName('commands'))).state.messages, 2);
+  });
+
+  test('an inventory request is stored without a Nats-Msg-Id, an offer with its event identity', async () => {
+    const { address, transport } = await installation(['worker-1']);
+    const request = { ...outboxRow('i-request-1', 'workers.worker-1.commands', inventoryRequest()), metadata: { eventId: 'i-request-1', eventType: 'worker.inventory.requested' } };
+    const outbox = new FakeOutbox([outboxRow('command-1', 'workers.worker-1.commands', offer('command-1')), request as never]);
+    const publisher = new OutboxPublisher(outbox, new JetStreamPublisher(transport.js), address);
+    assert.deepEqual(await publisher.publishPending(), ok({ published: 2, deferred: 0 }));
+    const stream = address.streamName('commands');
+    const stored = await Promise.all([1, 2].map((seq) => transport.jsm.streams.getMessage(stream, { seq })));
+    assert.deepEqual(stored.map((message) => message?.header?.get('Nats-Msg-Id') ?? ''), ['command-1', '']);
+    assert.equal(stored[1]?.json<{ requestId: string }>().requestId, 'request-1');
   });
 
   test('the publisher loop drains the outbox and stops when aborted', async () => {

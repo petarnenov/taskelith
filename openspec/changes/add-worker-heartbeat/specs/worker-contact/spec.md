@@ -4,18 +4,22 @@ How the control plane keeps a worker's reachability current: an authenticated he
 ## ADDED Requirements
 
 ### Requirement: Heartbeat contact
-The control plane SHALL record an authenticated heartbeat as contact at the database time, in its own transaction, which makes the worker reachable and never moves its last contact backward. A heartbeat SHALL be authenticated only when the worker its subject names is the body's `workerId`, enrolled, not revoked, and under its enrolled `journalId`; any other heartbeat SHALL change nothing and fail as `forbidden`.
+The control plane SHALL record an authenticated heartbeat as contact at the database time, in its own transaction, which makes the worker reachable and never moves its last contact backward. A heartbeat SHALL be authenticated only when the worker its subject names is the body's `workerId`, enrolled, not revoked, and under its enrolled `journalId`, which is not retired; any other heartbeat SHALL change nothing and fail as `forbidden`. A heartbeat SHALL never replace a journal.
 
 #### Scenario: Authenticated heartbeat
 - **WHEN** an enrolled worker's heartbeat arrives on its own subject under its enrolled journal
 - **THEN** the worker is reachable and its last contact is the database time
+
+#### Scenario: New incarnation
+- **WHEN** a worker's heartbeat names a journal never seen, and later an observation of that journal replaces the enrolled one
+- **THEN** the first heartbeat fails as `forbidden` and replaces nothing; after the replacement, heartbeats of the new journal record contact and those of the replaced journal fail as `forbidden`
 
 #### Scenario: Revoked or foreign heartbeat
 - **WHEN** a heartbeat comes from a revoked worker, names another worker than its subject, names another journal, or names an unknown worker
 - **THEN** it fails as `forbidden` and records no contact
 
 ### Requirement: Lost contact
-The control plane SHALL mark unreachable each reachable worker whose last recorded contact is more than `30s` before the database time. Contact SHALL be recorded from an authenticated heartbeat or observation, a duplicate observation included, and, once item 21c consumes it, from an inventory report. Any later contact SHALL make the worker reachable again. Marking a worker unreachable SHALL change no attempt, assignment, or reservation.
+The control plane SHALL mark unreachable each reachable worker whose last recorded contact is more than `30s` before the database time. Contact SHALL be recorded from an authenticated heartbeat, observation, a duplicate observation included, or inventory report. Any later contact SHALL make the worker reachable again. Marking a worker unreachable SHALL change no attempt, assignment, or reservation.
 
 #### Scenario: Silent worker
 - **WHEN** a worker has had no contact for more than the timeout

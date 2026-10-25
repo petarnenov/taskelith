@@ -9,8 +9,16 @@ import {
   type InboxOutcome,
   type Task,
   type TaskRepository,
+  type WorkerId,
 } from '@taskelith/execution';
-import type { Assignment, AssignmentRepository, DelegationId, DelegationRecord, DelegationRequests } from '@taskelith/scheduling';
+import type {
+  Assignment,
+  AssignmentRepository,
+  DelegationId,
+  DelegationRecord,
+  DelegationRequests,
+  OutboxLookup,
+} from '@taskelith/scheduling';
 import type {
   AdmissionId,
   AdmissionRepository,
@@ -198,8 +206,10 @@ export class PostgresAssignmentRepository implements AssignmentRepository {
       entity: 'assignment',
       idOf: (assignment) => assignment.id,
       generationOf: (assignment) => assignment.generation,
-      columnsOf: ({ attemptId, workerId, state, changedAt, reservation }) => ({
+      columnsOf: ({ attemptId, workerId, state, changedAt, reservation, acceptance }) => ({
         attempt_id: attemptId,
+        accepted_journal_id: acceptance?.journalId ?? null,
+        accepted_sequence: acceptance?.sequence ?? null,
         worker_id: workerId,
         state,
         changed_at: changedAt,
@@ -240,6 +250,10 @@ export class PostgresAssignmentRepository implements AssignmentRepository {
 
   listByAttempt(attemptId: AttemptId): Promise<readonly Assignment[]> {
     return this.#store.list('attempt_id = $1', [attemptId]);
+  }
+
+  listUnfinishedByWorker(workerId: WorkerId): Promise<readonly Assignment[]> {
+    return this.#store.list("worker_id = $1 AND state <> 'ended'", [workerId]);
   }
 
   async byOfferCommand(commandId: EventId): Promise<Result<Assignment>> {
@@ -304,7 +318,7 @@ export class PostgresDelegationRequests implements DelegationRequests {
 
 // One table serves the outbox ports of every module; `appended` tells the
 // transaction that its commit carries outbox messages.
-export class PostgresOutbox implements Outbox {
+export class PostgresOutbox implements Outbox, OutboxLookup {
   readonly #session: Session;
   #appended = false;
 
@@ -326,6 +340,11 @@ export class PostgresOutbox implements Outbox {
     if (inserted.rowCount === 0) return err(failure('conflict', `outbox message ${eventId} already exists`, { event: eventId }));
     this.#appended = true;
     return ok(undefined);
+  }
+
+  async byEventId(eventId: EventId): Promise<OutboxMessage | undefined> {
+    const { rows: [row] } = await this.#session.query<{ message: unknown }>('SELECT message FROM outbox WHERE event_id = $1', [eventId]);
+    return row === undefined ? undefined : decodeRecord<OutboxMessage>(row.message);
   }
 
   // The oldest messages not yet published, in append order.

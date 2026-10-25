@@ -1,6 +1,6 @@
 import type { MessageSchemas } from '@taskelith/contracts';
 import { parseSequence, type AttemptId, type JournalId, type ObservationId, type ObservationPosition, type WorkerId } from '@taskelith/execution';
-import { err, failure, ok, parseIdentifier, type CorrelationId, type EventId, type Result } from '@taskelith/kernel';
+import { err, failure, ok, parseIdentifier, type CorrelationId, type EventId, type Failure, type Result } from '@taskelith/kernel';
 import type { OwnershipGeneration } from '@taskelith/sdlc';
 
 // An observation as the consumer delivers it, its schema already checked.
@@ -33,8 +33,12 @@ export function notConsumed(why: string): Result<never> {
   return err(failure('precondition-failed', `the observation is not consumed: ${why}`, { reason: NOT_CONSUMED }));
 }
 
-// An inventory report has no observation metadata; 21c consumes it. The
-// consumer checked every identifier's schema, which the kernel shares.
+export function isNotConsumed(error: Failure): boolean {
+  return error.details.reason === NOT_CONSUMED;
+}
+
+// An inventory report has no observation metadata; InventoryService takes
+// it. The consumer checked every identifier's schema, as the kernel's.
 export function parseObservation(message: ObservationMessage): Result<Observation> {
   const metadata = message.body['metadata'] as ObservationMetadata | undefined;
   if (metadata === undefined) return notConsumed(`${message.type} is not an observation with metadata`);

@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: One transaction per observation
-The control plane SHALL apply each observation in one SERIALIZABLE transaction that records its inbox entry, its sequence in the producer cursor of its `(workerId, journalId)`, first contact, its effect, and any confirmation, and SHALL acknowledge the message only after that transaction committed. An observation whose identity the inbox already holds SHALL change nothing but the worker's contact and a confirmation sent again.
+The control plane SHALL apply each observation in one SERIALIZABLE transaction that records its inbox entry, its sequence in the producer cursor of its `(workerId, journalId)`, first contact, its effect, and any confirmation, and SHALL acknowledge it only after that transaction committed. An observation whose identity the inbox already holds SHALL NOT apply its effect again: at a sequence its journal applied, it SHALL change nothing but the worker's contact and a confirmation sent again.
 
 #### Scenario: Redelivered observation
 - **WHEN** an applied acceptance is delivered again under a new broker message identity

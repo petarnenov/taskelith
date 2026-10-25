@@ -137,6 +137,25 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
     },
   },
   {
+    name: 'a journal is replaced only from the enrolled one, by one no worker holds',
+    async check(registry) {
+      const problems: string[] = [];
+      for (const [workerId, journalId] of [['w1', 'j1'], ['w2', 'j2'], ['w3', 'j3']] as const) await enrolled(registry, workerId, journalId);
+      const [w1, w2, w3] = ['w1', 'w2', 'w3'].map((text) => fleetWorker(text, 'j0').workerId);
+      const journal = (text: string) => fleetWorker('w0', text).journalId;
+      expectSuccess(problems, 'replace', await registry.replaceJournal(w1!, journal('j1'), journal('j1b')));
+      expectRead(problems, 'replaced', await registry.worker(w1!), fleetWorker('w1', 'j1b'));
+      expectCode(problems, 'stale previous', await registry.replaceJournal(w1!, journal('j1'), journal('j1c')), 'conflict');
+      expectCode(problems, 'held by another', await registry.replaceJournal(w1!, journal('j1b'), journal('j2')), 'conflict');
+      expectRead(problems, 'other kept', await registry.worker(w2!), fleetWorker('w2', 'j2'));
+      must(await registry.revoke(w3!, AT));
+      expectCode(problems, 'revoked', await registry.replaceJournal(w3!, journal('j3'), journal('j3b')), 'forbidden');
+      expectCode(problems, 'unknown', await registry.replaceJournal(fleetWorker('w9', 'j0').workerId, journal('j9'), journal('j9b')), 'not-found');
+      expectRead(problems, 'first kept', await registry.worker(w1!), fleetWorker('w1', 'j1b'));
+      return problems;
+    },
+  },
+  {
     name: 'a rotation keeps one predecessor and records the dropped one for revocation',
     async check(registry) {
       const problems: string[] = [];
