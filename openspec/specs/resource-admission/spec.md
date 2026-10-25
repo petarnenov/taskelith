@@ -39,11 +39,15 @@ Placement SHALL charge the project quota, the attempt's run quota, its root's ru
 - **THEN** the new reservation is held and the attempt's charge is not repeated
 
 ### Requirement: Justified release
-Cancelling an assignment SHALL end it and release its reservation with an assignment-ended command when no execution under it can run, and otherwise keep the reservation, revoke the running execution's grants, and write a cancellation command; releasing after a terminal fact SHALL run in the transaction that records the fact and only once nothing under the assignment can run.
+Cancelling an assignment SHALL end it and release its reservation with an assignment-ended command when no execution under it can run, and otherwise keep the reservation, revoke the running execution's grants, and write a cancellation command. Releasing after a terminal fact SHALL run in the transaction that records the fact, release only once nothing under the assignment can run, and return the assignment with the outcome `released`, or `kept` while an execution under it can still run.
 
 #### Scenario: Cancellation with a running execution
 - **WHEN** an assignment with an authorized execution is cancelled, and that execution is later recorded as not started
 - **THEN** the execution's grant is revoked, and the reservation stays held until the transaction recording the fact releases it with `execution-terminal`
+
+#### Scenario: Release while an execution runs
+- **WHEN** a release is requested for a cancelled assignment whose execution is still `started`
+- **THEN** it returns `kept` with the assignment, and the reservation stays held
 
 ### Requirement: Bounded supersession and retries
 `supersede` SHALL end and release an assignment without a grant whose worker is unknown, revoked, draining, or unreachable, or that exceeded the 2 minute acknowledgement or 10 minute admission pressure bound, and SHALL otherwise fail with `precondition-failed`; `reserveWithRetry` SHALL retry an `unavailable` placement at most 5 times in all with delays within 5 to 60 seconds.
