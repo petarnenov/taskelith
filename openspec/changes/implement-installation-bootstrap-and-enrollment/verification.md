@@ -67,14 +67,29 @@ Recorded before pass 1.
 
 ## Checks
 
-`make verify` ran in the worktree before pass 1:
+`make verify` ran in the worktree before pass 1 and after each round of fixes:
 
 - At `c513957`, before pass 1, with every file tracked: 819 tests passed, 0 failed; coverage 99.18% lines, 92.33% branches, 99.07% functions. The comment, boundary, coverage-scope, dependency-inventory, OpenSpec (50 of 50), and package checks pass.
-- `npm run openspec -- validate implement-installation-bootstrap-and-enrollment --strict` passed.
+- At `c46cb1a`, after the pass-1 fixes: 831 tests passed, 0 failed; coverage 99.18% lines, 92.58% branches, 99.09% functions; every other check passes.
+- `npm run openspec -- validate implement-installation-bootstrap-and-enrollment --strict` passed at each of these revisions.
 
 ## Independent review
 
-(to be recorded)
+Assigned reviewer: Codex CLI, with `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, run from the worktree.
+- The prompt named AGENTS.md, ADR 0004, the governance review process, plan row 13 with D9 and D10, the trust model, the storage contract, the execution wire contracts with `enrollWorker`, the worker journal, the launch authorization contract, the JetStream spike, and the owner's and coordinator's decisions.
+- The prompt and log are kept outside the worktree.
+
+- **Pass 1 — session `01a172f0-affe-7070-9ea1-b73891f2fedb`,** reviewed `git diff 5878679 19ab8bd`. The header reports `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`. Snapshot before and after: `02056eb7…e816`, equal. The reviewer ran the unit tests, the comment check, and `git diff --check`, and judged the integration tests by reading; it confirmed several races with controlled fakes. Findings: 0 Critical, 4 High, 6 Medium, 0 Low, all resolved at `c46cb1a`:
+  1. High: `revoke` read the keys before its transaction, and `replaceCredentials` did not refuse a revoked worker, so a rotation racing a revocation could leave a valid broker user. The registry's `rotate` now refuses a revoked worker inside its transaction, and `revoke` collects the keys under the row lock. A test rotates a revoked worker and expects `worker-not-authorized`.
+  2. High: a failed or interrupted broker revocation lost the key, because the registry had already dropped it. Every broker user to revoke is now recorded in `broker_revocations` in the same transaction, and kept until a publication succeeds. A unit test and the conformance suite fail a push and see the next one publish it.
+  3. High: revocations were serialized per object only, so two instances could lose one. Publication now sends the complete recorded list under a PostgreSQL advisory lock, and no longer reads and merges the server's JWT. The conformance suite checks that publishers never overlap and that each push is the complete list.
+  4. High: the namespace accepted a readable `control-plane/` and a `0644` seed file. `control-plane/` and its files must now give group and others no access, and a test refuses `0755` and `0644`.
+  5. Medium: token expiry was checked before the atomic use. The use now checks expiry at its own moment (the database's `now()`) and returns `token-expired`, which maps to `token-invalid`; the conformance suite covers it.
+  6. Medium: usage errors printed a mistyped secret. They are now redacted, and a test passes a real-format secret.
+  7. Medium: exceptions escaped the administrative boundary. Every exception now becomes a redacted `internal` failure with status 1; a test uses a missing CA file.
+  8. Medium: a failed rerun of `init` could replace the broker trust. `init` now reads the installation record first, keeps the authority and server fragment of an existing installation, and fails closed when an existing installation lost its authority; the end-to-end test covers it.
+  9. Medium: an invalid Compose project name could steer `rm -rf` outside the secrets directory. `services.sh` now accepts only lowercase letters, digits, `_`, and `-`, starting with a letter or digit.
+  10. Medium: the test certificates expired after two days. They are now valid for ten years, as test infrastructure only.
 
 ## Remaining gates
 
