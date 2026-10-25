@@ -387,6 +387,14 @@ test('only tests, scripts, and the harness itself import the test harness packag
     );
     const harnessRule = 'the test harness may import only the kernel and Node built-ins at runtime';
     assert.deepEqual(checkWorkspaceBoundaries(root).filter(v => v.includes(harnessRule)).map(v => v.split('"')[1]), ['pg', '@taskelith/sdlc', '@taskelith/testing']);
+
+    writeFileSync(join(root, 'packages/testing/package.json'), JSON.stringify({
+      name: '@taskelith/testing',
+      dependencies: { '@taskelith/kernel': '0.0.0' },
+      devDependencies: { '@taskelith/sdlc': '0.0.0', pg: '8.23.1' },
+    }));
+    const manifestRule = 'the test harness may depend on no workspace package but the kernel';
+    assert.deepEqual(checkWorkspaceBoundaries(root).filter(v => v.includes(manifestRule)).map(v => v.split('"')[1]), ['@taskelith/sdlc']);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

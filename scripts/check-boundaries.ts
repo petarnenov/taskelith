@@ -161,6 +161,18 @@ function checkTestHarnessSource({ rel, spec, typeOnly }: ImportEdge): string[] {
   return [`${rel}: the test harness may import only the kernel and Node built-ins at runtime, not "${spec}" (R03)`];
 }
 
+const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
+
+// The harness stands on the kernel alone, so every package's tests can use it.
+function checkTestHarnessManifest(root: string, workspaces: Map<string, string>): string[] {
+  const dir = workspaces.get(TEST_HARNESS_PACKAGE);
+  if (dir === undefined) return [];
+  const manifest = JSON.parse(readFileSync(join(root, dir, 'package.json'), 'utf8'));
+  return DEPENDENCY_FIELDS.flatMap((field) => Object.keys(manifest[field] ?? {}))
+    .filter((name) => name.startsWith(WORKSPACE_SCOPE) && name !== '@taskelith/kernel')
+    .map((name) => `${dir}/package.json: the test harness may depend on no workspace package but the kernel, not "${name}" (R03)`);
+}
+
 function checkWorkspaceEncapsulation({ rel, spec, target, relative: isRelative, workspaces }: ImportEdge): string[] {
   const violations: string[] = [];
   const owner = owningPackage(rel);
@@ -329,7 +341,7 @@ export function checkWorkspaceBoundaries(root: string): string[] {
     }
   }
 
-  return [...violations, ...checkWorkerOnlyReach(edges)];
+  return [...violations, ...checkTestHarnessManifest(root, workspaces), ...checkWorkerOnlyReach(edges)];
 }
 
 function extIsGo(rel: string, base: string): boolean {
