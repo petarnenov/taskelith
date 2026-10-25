@@ -62,6 +62,7 @@ Recorded before pass 1.
 - `make verify-linux-cgroup` passed 13 of 13 tests in each of eight runs, after the test fix that the design records.
 - `npm run openspec -- validate implement-process-supervisor --strict` passed.
 - After the pass-1 fixes, `make verify` passed at `03770ca`: 641 tests passed, 0 failed; coverage 99.23% lines, 92.95% branches, 99.01% functions. `make verify-linux-cgroup` passed 13 of 13 tests in each of four runs.
+- After the pass-2 fixes, `make verify` passed at `98ce73d`: 646 tests passed, 0 failed; coverage 99.23% lines, 93.01% branches, 99.01% functions. `make verify-linux-cgroup` passed 13 of 13 tests in each of four runs.
 
 ## Independent review
 
@@ -85,3 +86,19 @@ Assigned reviewer: Claude Code with `claude -p "<prompt>" --model claude-fable-5
   15. Low L8, **answered without a change:** product code is committed as `chore`. The coordinator's rules for this item allow only `chore`, `test`, `build`, and `docs`, and the private package triggers no release; the scope section records this.
   16. Low L9: `intent` could be replaced after a supervisor started. Replacement is refused once a supervisor record exists; a test covers it.
   17. Low L10: a stale self-check probe made the check report a missing delegation. A stale probe is removed first; the test leaves one in place.
+
+- **Pass 2 — session `91d3efd8-c5e2-4e69-96b7-04b468520e42`,** reviewed revision `aef1bb9`; the JSON `modelUsage` reports only `claude-fable-5-1`. Snapshot before and after: `16d79c7f…51d9`, equal. The reviewer confirmed all 17 pass-1 findings resolved, or answered for L8. Findings: 0 Critical, 0 High, 2 Medium, 12 Low. All accepted; resolved or answered:
+  1. Medium M-1: an unreadable or damaged `events` counted as no recorded descendants in the macOS proof. Recorded descendants are now a result; while the listing or the log cannot be read nothing is proven, and after `unreadablePolls` tries the supervisor ends with `termination-unprovable` and no exit. A test damages the log.
+  2. Medium M-2: without a readable child identity the macOS supervisor never proved termination and ignored a cancellation. The supervisor now signals and proves by the process it spawned, whose ID is its group ID; a test cancels a child without a handle.
+  3. Low L-1: leaving the containment was retried without bound. It is tried at most `unreadablePolls` times, then the supervisor ends with `containment-unusable`; a test covers it.
+  4. Low L-2: the child's identity was read after a possible wait. It is read right after the spawn; the design records an exit with a proven start but no handle.
+  5. Low L-3: a torn last event entry could join the next one. It is cut off first; a test covers it.
+  6. Low L-4: a lock that cannot be opened was reported as busy. It is `lock-unusable`; a test covers it.
+  7. Low L-5: the comment on `lock-held-by-dead` gave the forked-child reason the amendment excludes. It names the window between taking the lock and writing the record.
+  8. Low L-6, **recorded:** the report of populated containments without a record is item 20's start reconciliation (design decision 14).
+  9. Low L-7: `supervisor.ts` mixed launch, adoption, cancellation, and proofs, and adoption reread `intent`. It is split into session, launch, adoption, and process-set modules, and adoption uses the session's intent.
+  10. Low L-8, **answered without a change:** a cancellation before the claim still lets the spawn happen and then kills it, as the contract allows; refusing it would need a contract amendment that this item does not need.
+  11. Low L-9, **recorded:** supplementary groups stay with the child, so item 23's account must not share a group that can write cgroups; the self-check uses the same spawn options (design decision 14).
+  12. Low L-10, **recorded:** recovery's read failures are results that item 20 maps (design decision 14).
+  13. Low L-11, **recorded:** an empty containment left by a crash after `exit` is item 23's cleanup (design decision 14).
+  14. Low L-12, **answered without a change:** every read flushes the file and its directory before the reader acts on it, as the durable file rule requires; caching flushed names is an optimization left for later.
