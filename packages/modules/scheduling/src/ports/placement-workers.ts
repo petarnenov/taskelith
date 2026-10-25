@@ -10,7 +10,11 @@ export interface WorkerPlacementRecord {
   readonly revoked: boolean;
   readonly draining: boolean;
   readonly reachable: boolean;
+  // The database time of the last observation, never moved backward.
+  readonly lastContactAt?: Instant;
   readonly admissionPressureSince?: Instant;
+  // A refusal for slots or capacity, until a declaration or terminal fact.
+  readonly capacityRefusedSince?: Instant;
   readonly slots: number;
   readonly cpuMillicores: number;
   readonly memoryMebibytes: number;
@@ -30,5 +34,5 @@ export interface PlacementWorkers {
 
 export function isEligibleForPlacement(worker: WorkerPlacementRecord): boolean {
   return worker.enrolled && !worker.revoked && !worker.draining && worker.reachable && worker.admissionPressureSince === undefined
-    && worker.protocolVersion !== undefined;
+    && worker.capacityRefusedSince === undefined && worker.protocolVersion !== undefined;
 }

@@ -1,5 +1,5 @@
 import { parseIdentifier, parseInstant, type Instant, type Result } from '@taskelith/kernel';
-import type { Attempt, AttemptId, Task, TaskRepository, WorkerId } from '@taskelith/execution';
+import { parseSequence, type Attempt, type AttemptId, type Task, type TaskRepository, type WorkerId } from '@taskelith/execution';
 import {
   FIRST_GENERATION,
   expectCode,
@@ -19,6 +19,7 @@ import type { PlacementQueue } from './placement-queue.js';
 import type { PlacementWorkers, WorkerPlacementRecord } from './placement-workers.js';
 import type { QuotaSettings } from './quota-settings.js';
 import type { TaskLineage } from './task-lineage.js';
+import type { WorkerReports } from './worker-reports.js';
 
 // Shared suites for the capacity ports. Read-only ports are checked against
 // the fixtures below, which a test stores with its adapter's own means.
@@ -364,6 +365,97 @@ export const PLACEMENT_QUEUE_CONFORMANCE: readonly ConformanceCase<PlacementQueu
       const unknown = id('TaskId', 'task-unknown') as TaskId;
       expectSame(problems, 'still waiting', await queue.stillWaiting([unknown, other.id, reserved.id, waiting.id]), [waiting.id, other.id]);
       expectSame(problems, 'none asked', await queue.stillWaiting([]), []);
+      return problems;
+    },
+  },
+]);
+
+// An enrolled worker before its first contact, which a test stores.
+export const REPORTING_WORKER_FIXTURE: WorkerPlacementRecord = worker('worker-reporting', { reachable: false });
+
+export interface WorkerReportsConformanceTarget {
+  readonly reports: WorkerReports;
+  readonly workers: PlacementWorkers;
+}
+
+const second = (seconds: number): Instant => must(parseInstant(`2026-10-25T09:00:${String(seconds).padStart(2, '0')}.000Z`));
+const sequence = (value: number) => must(parseSequence(value));
+
+export const WORKER_REPORTS_CONFORMANCE: readonly ConformanceCase<WorkerReportsConformanceTarget>[] = Object.freeze([
+  {
+    name: 'contact makes the worker reachable and never moves its last contact backward',
+    async check({ reports, workers }: WorkerReportsConformanceTarget) {
+      const problems: string[] = [];
+      const { workerId } = REPORTING_WORKER_FIXTURE;
+      expectSuccess(problems, 'contact', await reports.recordContact(workerId, second(20)));
+      expectSuccess(problems, 'older contact', await reports.recordContact(workerId, second(10)));
+      expectSame(problems, 'reachable', await workers.get(workerId), { ...REPORTING_WORKER_FIXTURE, reachable: true, lastContactAt: second(20) });
+      expectSame(problems, 'candidates', await workers.candidates(), [workerId]);
+      expectCode(problems, 'unknown worker', await reports.recordContact(id('WorkerId', 'worker-x') as WorkerId, AT), 'not-found');
+      return problems;
+    },
+  },
+  {
+    name: 'a declaration applies only above the last one and clears a capacity refusal',
+    async check({ reports, workers }: WorkerReportsConformanceTarget) {
+      const problems: string[] = [];
+      const { workerId } = REPORTING_WORKER_FIXTURE;
+      expectSuccess(problems, 'refuse', await reports.markCapacityRefused(workerId, second(1)));
+      expectSuccess(problems, 'refuse again', await reports.markCapacityRefused(workerId, second(2)));
+      expectSame(problems, 'refused', (await workers.get(workerId))?.capacityRefusedSince, second(1));
+      const declared = { slots: 4, cpuMillicores: 8000, memoryMebibytes: 16384, controls: ['cpu-limit' as const], protocolVersion: 1 };
+      expectSuccess(problems, 'declare 5', await reports.declareCapacity(workerId, declared, sequence(5)));
+      expectSuccess(problems, 'refuse after', await reports.markCapacityRefused(workerId, second(3)));
+      const older = { slots: 1, cpuMillicores: 1000, memoryMebibytes: 1024, controls: [] };
+      expectSuccess(problems, 'declare 3', await reports.declareCapacity(workerId, older, sequence(3)));
+      const expected = { ...REPORTING_WORKER_FIXTURE, ...declared, capacityRefusedSince: second(3) };
+      expectSame(problems, 'kept the newer', await workers.get(workerId), expected);
+      expectSuccess(problems, 'declare 6', await reports.declareCapacity(workerId, older, sequence(6)));
+      const { protocolVersion: _none, ...withoutProtocol } = REPORTING_WORKER_FIXTURE;
+      expectSame(problems, 'newer', await workers.get(workerId), { ...withoutProtocol, ...older });
+      expectCode(problems, 'unknown worker', await reports.declareCapacity(id('WorkerId', 'worker-x') as WorkerId, older, sequence(1)), 'not-found');
+      return problems;
+    },
+  },
+  {
+    name: 'pressure keeps its earlier start, clears on leaving, and ignores older changes',
+    async check({ reports, workers }: WorkerReportsConformanceTarget) {
+      const problems: string[] = [];
+      const { workerId } = REPORTING_WORKER_FIXTURE;
+      const since = async () => (await workers.get(workerId))?.admissionPressureSince;
+      expectSuccess(problems, 'enter 2', await reports.enterPressure(workerId, sequence(2), second(1)));
+      expectSuccess(problems, 'enter 3', await reports.enterPressure(workerId, sequence(3), second(2)));
+      expectSame(problems, 'earlier start', await since(), second(1));
+      expectSuccess(problems, 'leave 1', await reports.leavePressure(workerId, sequence(1)));
+      expectSame(problems, 'older leave ignored', await since(), second(1));
+      expectSuccess(problems, 'leave 4', await reports.leavePressure(workerId, sequence(4)));
+      expectSame(problems, 'left', await since(), undefined);
+      expectSuccess(problems, 'enter 4 again', await reports.enterPressure(workerId, sequence(4), second(5)));
+      expectSame(problems, 'repeated sequence ignored', await since(), undefined);
+      expectCode(problems, 'unknown worker', await reports.leavePressure(id('WorkerId', 'worker-x') as WorkerId, sequence(9)), 'not-found');
+      return problems;
+    },
+  },
+  {
+    name: 'a capacity refusal clears, and the protocol version is set or removed',
+    async check({ reports, workers }: WorkerReportsConformanceTarget) {
+      const problems: string[] = [];
+      const { workerId } = REPORTING_WORKER_FIXTURE;
+      expectSuccess(problems, 'contact', await reports.recordContact(workerId, AT));
+      expectSuccess(problems, 'refuse', await reports.markCapacityRefused(workerId, AT));
+      expectSame(problems, 'refused worker', await workers.candidates(), []);
+      expectSuccess(problems, 'clear', await reports.clearCapacityRefusal(workerId));
+      expectSame(problems, 'eligible again', await workers.candidates(), [workerId]);
+      expectSuccess(problems, 'no common version', await reports.setProtocolVersion(workerId, undefined));
+      expectSame(problems, 'without protocol', (await workers.get(workerId))?.protocolVersion, undefined);
+      expectSame(problems, 'ineligible', await workers.candidates(), []);
+      expectSuccess(problems, 'version 1', await reports.setProtocolVersion(workerId, 1));
+      expectSame(problems, 'with protocol', (await workers.get(workerId))?.protocolVersion, 1);
+      const unknown = id('WorkerId', 'worker-x') as WorkerId;
+      for (const [label, write] of [
+        ['refuse', reports.markCapacityRefused(unknown, AT)], ['clear', reports.clearCapacityRefusal(unknown)],
+        ['protocol', reports.setProtocolVersion(unknown, 1)], ['enter', reports.enterPressure(unknown, sequence(1), AT)],
+      ] as const) expectCode(problems, `unknown worker ${label}`, await write, 'not-found');
       return problems;
     },
   },

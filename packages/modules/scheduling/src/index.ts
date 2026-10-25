@@ -56,6 +56,7 @@ export {
   InMemoryTaskLineage,
 } from './adapters/in-memory-capacity.js';
 export { InMemoryDelegationRequests, InMemoryPlacementQueue } from './adapters/in-memory-placement.js';
+export { InMemoryWorkerReports } from './adapters/in-memory-worker-reports.js';
 export {
   CANDIDATE_WORKER_FIXTURES,
   CAPACITY_LEDGER_CONFORMANCE,
@@ -66,11 +67,14 @@ export {
   PLACEMENT_WORKER_FIXTURES,
   QUOTA_FIXTURES,
   QUOTA_SETTINGS_CONFORMANCE,
+  REPORTING_WORKER_FIXTURE,
   ROOT_LINK,
   TASK_LINEAGE_CONFORMANCE,
+  WORKER_REPORTS_CONFORMANCE,
   type CapacityLedgerConformanceTarget,
   type PlacementCandidatesConformanceTarget,
   type PlacementQueueConformanceTarget,
+  type WorkerReportsConformanceTarget,
 } from './ports/capacity-conformance.js';
 export type { AssignmentRepository } from './ports/assignment-repository.js';
 export type { Outbox, OutboxMessage } from './ports/outbox.js';
@@ -85,6 +89,7 @@ export {
   supersedeInTransaction,
   type PlacementOutcome,
   type PlacementRequest,
+  type ReleaseOutcome,
   type ReleaseRequest,
 } from './application/capacity-operations.js';
 export type { CommandIdentity, WorkerCommandType } from './application/capacity-commands.js';
@@ -126,6 +131,7 @@ export {
   type StandingReason,
   type WaitingReason,
 } from './domain/capacity-reasons.js';
+export { automaticRetryOf } from './domain/automatic-retry.js';
 export { isSupersessionDue, type SupersessionWorker } from './domain/supersession.js';
 export {
   chargedRuns,
@@ -169,3 +175,4 @@ export type { PlacementQueue } from './ports/placement-queue.js';
 export { isEligibleForPlacement, type PlacementWorkers, type WorkerPlacementRecord } from './ports/placement-workers.js';
 export type { QuotaSettings } from './ports/quota-settings.js';
 export type { TaskLineage } from './ports/task-lineage.js';
+export type { CapacityDeclaration, WorkerReports } from './ports/worker-reports.js';

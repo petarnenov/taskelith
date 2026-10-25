@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { AttemptId, WorkerId } from '@taskelith/execution';
+import type { Attempt, AttemptId, AttemptOutcome, ExecutionId, ExitStatus, Task, WorkerId } from '@taskelith/execution';
 import {
   DEFAULT_ATTEMPT_REQUEST,
   REJECTING_REASONS,
   STANDING_REASONS,
   WAITING_REASONS,
+  automaticRetryOf,
   isAwaitingCapacity,
   isSameDelegation,
   recordDelegation,
@@ -48,4 +49,30 @@ test('a delegation repeat is the same only for the same worker and values, in an
   const rejected = redecideDelegation(record, { state: 'rejected', reason: 'delegation-awaiting-capacity' });
   assert.deepEqual([rejected.generation, rejected.waitingSince, isAwaitingCapacity(rejected)], [record.generation + 1, record.waitingSince, false]);
   assert.ok(Object.isFrozen(rejected) && Object.isFrozen(rejected.outcome));
+});
+
+function endedTask(...outcomes: (Partial<AttemptOutcome> & Pick<AttemptOutcome, 'kind'>)[]): Task {
+  const attempts = outcomes.map((outcome, index): Attempt => ({
+    id: `attempt-${index + 1}` as AttemptId,
+    ...(index === 0 ? {} : { retryOf: `attempt-${index}` as AttemptId }),
+    executions: [],
+    outcome: { cancelled: false, ownershipGeneration: 2 as OwnershipGeneration, endedAt: 'T' as Instant, ...outcome } as AttemptOutcome,
+  }));
+  return { id: 'task-1', admissionId: 'admission-1', ownershipGeneration: 2, attempts, generation: 1, changedAt: 'T' } as unknown as Task;
+}
+
+const exited = (status: ExitStatus, startProven = true) => ({ kind: 'exited' as const, executionId: 'execution-1' as ExecutionId, status, startProven });
+
+test('an attempt gets an automatic retry only after an uncertain-free failure, twice at most', () => {
+  const failedExit = exited({ kind: 'code', code: 1 });
+  assert.equal(automaticRetryOf(endedTask(failedExit), 'attempt-1' as AttemptId), true);
+  assert.equal(automaticRetryOf(endedTask(exited({ kind: 'signal', signal: 'SIGKILL' })), 'attempt-1' as AttemptId), true);
+  assert.equal(automaticRetryOf(endedTask({ kind: 'not-started' }), 'attempt-1' as AttemptId), true);
+  assert.equal(automaticRetryOf(endedTask(exited({ kind: 'code', code: 0 })), 'attempt-1' as AttemptId), false, 'a clean exit');
+  assert.equal(automaticRetryOf(endedTask(exited({ kind: 'code', code: 1 }, false)), 'attempt-1' as AttemptId), false, 'no proven start');
+  assert.equal(automaticRetryOf(endedTask({ ...failedExit, cancelled: true }), 'attempt-1' as AttemptId), false, 'cancelled');
+  assert.equal(automaticRetryOf(endedTask({ kind: 'operator-resolved' }), 'attempt-1' as AttemptId), false, 'operator-resolved');
+  assert.equal(automaticRetryOf(endedTask(failedExit, failedExit), 'attempt-2' as AttemptId), true, 'the first retry');
+  assert.equal(automaticRetryOf(endedTask(failedExit, failedExit, failedExit), 'attempt-3' as AttemptId), false, 'the second retry');
+  assert.equal(automaticRetryOf(endedTask(failedExit), 'attempt-x' as AttemptId), false, 'an unknown attempt');
 });

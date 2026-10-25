@@ -15,7 +15,7 @@ import type { TaskLineage } from '../ports/task-lineage.js';
 // read-only ones take their records from the test that builds them.
 
 export class InMemoryPlacementWorkers implements PlacementWorkers {
-  readonly #workers: ReadonlyMap<WorkerId, WorkerPlacementRecord>;
+  readonly #workers: Map<WorkerId, WorkerPlacementRecord>;
   readonly #assignments: () => readonly Assignment[];
 
   // The assignments supply the held reservations that order the candidates.
@@ -26,6 +26,11 @@ export class InMemoryPlacementWorkers implements PlacementWorkers {
 
   async get(workerId: WorkerId): Promise<WorkerPlacementRecord | undefined> {
     return this.#workers.get(workerId);
+  }
+
+  // For InMemoryWorkerReports, which writes the records placement reads.
+  replace(worker: WorkerPlacementRecord): void {
+    this.#workers.set(worker.workerId, Object.freeze({ ...worker }));
   }
 
   async eligibleSlots(): Promise<number> {

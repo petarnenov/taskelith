@@ -15,13 +15,16 @@ import {
   InMemoryPlacementWorkers,
   InMemoryQuotaSettings,
   InMemoryTaskLineage,
+  InMemoryWorkerReports,
   PLACEMENT_CANDIDATES_CONFORMANCE,
   PLACEMENT_QUEUE_CONFORMANCE,
   PLACEMENT_WORKERS_CONFORMANCE,
   PLACEMENT_WORKER_FIXTURES,
   QUOTA_FIXTURES,
   QUOTA_SETTINGS_CONFORMANCE,
+  REPORTING_WORKER_FIXTURE,
   TASK_LINEAGE_CONFORMANCE,
+  WORKER_REPORTS_CONFORMANCE,
 } from '@taskelith/scheduling';
 
 for (const conformance of ASSIGNMENT_REPOSITORY_CONFORMANCE) {
@@ -58,6 +61,10 @@ runSuite('in-memory placement queue', PLACEMENT_QUEUE_CONFORMANCE, () => {
   return { queue: new InMemoryPlacementQueue(() => tasks.all(), lineage, () => assignments.all()), tasks, lineage, assignments };
 });
 runSuite('in-memory delegation requests', DELEGATION_REQUESTS_CONFORMANCE, () => new InMemoryDelegationRequests());
+runSuite('in-memory worker reports', WORKER_REPORTS_CONFORMANCE, () => {
+  const workers = new InMemoryPlacementWorkers([REPORTING_WORKER_FIXTURE]);
+  return { reports: new InMemoryWorkerReports(workers), workers };
+});
 
 test('workers without assignments are candidates in identity order', async () => {
   assert.deepEqual(await new InMemoryPlacementWorkers(CANDIDATE_WORKER_FIXTURES).candidates(), ['worker-a', 'worker-b', 'worker-c', 'worker-d']);

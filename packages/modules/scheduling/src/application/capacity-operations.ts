@@ -4,6 +4,7 @@ import {
   checkOwnership,
   executionsUnderAssignment,
   revokeLaunch,
+  type AssignmentExecutions,
   type AssignmentId,
   type AttemptId,
   type Task,
@@ -79,14 +80,22 @@ export async function cancelInTransaction(tx: CapacityTransaction, request: Rele
   return follow.ok ? ok(ended.value) : follow;
 }
 
+// A release ends the assignment or frees its reservation; `kept` is an
+// ended assignment whose execution can still run, so capacity stays held.
+export interface ReleaseOutcome {
+  readonly outcome: 'released' | 'kept';
+  readonly assignment: Assignment;
+}
+
 // For the transaction recording an attempt's end or an ended assignment's
 // last terminal fact; any other call is `precondition-failed`.
-export async function releaseInTransaction(tx: CapacityTransaction, request: ReleaseRequest): Promise<Result<Assignment>> {
+export async function releaseInTransaction(tx: CapacityTransaction, request: ReleaseRequest): Promise<Result<ReleaseOutcome>> {
   const loaded = await loadAssignment(tx, request.assignmentId);
   if (!loaded.ok) return loaded;
   const { assignment, task } = loaded.value;
-  const at = await tx.now();
   const executions = executionsUnderAssignment(task, assignment.id);
+  if (isKeptForExecution(assignment, executions)) return ok(releaseOutcome(assignment));
+  const at = await tx.now();
   const attemptEnded = assignment.state !== 'ended' && hasEnded(task, assignment.attemptId);
   const released = attemptEnded
     ? endAssignment(assignment, assignment.generation, 'attempt-ended', executions, at)
@@ -94,9 +103,9 @@ export async function releaseInTransaction(tx: CapacityTransaction, request: Rel
   if (!released.ok) return released;
   const stored = await tx.assignments.replace(released.value, assignment.generation);
   if (!stored.ok) return stored;
-  if (!attemptEnded) return ok(released.value);
+  if (!attemptEnded) return ok(releaseOutcome(released.value));
   const ended = await appendWorkerCommand(tx, request, 'execution.assignment.end', released.value, at, endPayload(released.value, 'attempt-ended'));
-  return ended.ok ? ok(released.value) : ended;
+  return ended.ok ? ok(releaseOutcome(released.value)) : ended;
 }
 
 // Bounded supersession (contract section 6) of an assignment without a
@@ -155,6 +164,7 @@ async function insertPlacement(
     attemptId: request.attemptId,
     workerId: request.workerId,
     ownershipGeneration: task.ownershipGeneration,
+    offerCommandId: request.commandId,
     reservation: {
       id: request.reservationId,
       scope: { projectId: lineage.projectId, runId: lineage.runId, taskId: request.taskId, rootTaskId: lineage.rootTaskId },
@@ -187,6 +197,14 @@ function checkPlacementClaim(task: Task, request: PlacementRequest): Result<void
   return err(failure('precondition-failed', `attempt ${request.attemptId} does not retry ${request.automaticRetryOf}`, {
     attempt: request.attemptId, retryOf: request.automaticRetryOf,
   }));
+}
+
+function isKeptForExecution(assignment: Assignment, executions: AssignmentExecutions): boolean {
+  return assignment.state === 'ended' && assignment.reservation.state === 'held' && executions.nonTerminal;
+}
+
+function releaseOutcome(assignment: Assignment): ReleaseOutcome {
+  return Object.freeze({ outcome: assignment.reservation.state === 'released' ? 'released' : 'kept', assignment });
 }
 
 function hasEnded(task: Task, attemptId: AttemptId): boolean {

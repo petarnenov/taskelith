@@ -1,4 +1,4 @@
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type EventId, type Result } from '@taskelith/kernel';
 import type { AssignmentId, AttemptId } from '@taskelith/execution';
 import { checkGeneration, checkNextGeneration, type Generation } from '@taskelith/sdlc';
 import type { Assignment } from '../domain/assignment.js';
@@ -46,6 +46,12 @@ export class InMemoryAssignmentRepository implements AssignmentRepository {
 
   async listByAttempt(attemptId: AttemptId): Promise<readonly Assignment[]> {
     return this.all().filter((assignment) => assignment.attemptId === attemptId).sort((left, right) => byCodeUnits(left.id, right.id));
+  }
+
+  async byOfferCommand(commandId: EventId): Promise<Result<Assignment>> {
+    const offered = this.all().find((assignment) => assignment.offerCommandId === commandId);
+    if (offered === undefined) return err(failure('not-found', `no assignment was offered by ${commandId}`, { command: commandId }));
+    return ok(offered);
   }
 
   #heldReservationConflict(assignment: Assignment): Result<void> {

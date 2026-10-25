@@ -36,13 +36,14 @@ const AT: Instant = must(parseInstant('2026-10-25T09:00:00.000Z'));
 const LATER: Instant = must(parseInstant('2026-10-25T09:00:10.000Z'));
 const NO_EXECUTION: AssignmentExecutions = { granted: false, nonTerminal: false };
 
-function offered(id: string, attempt: string): Assignment {
+function offered(id: string, attempt: string, offerCommand?: string): Assignment {
   const taskId = must(parseIdentifier('TaskId', 'task-1'));
   return createAssignment({
     id: must(parseIdentifier('AssignmentId', id)),
     attemptId: must(parseIdentifier('AttemptId', attempt)),
     workerId: must(parseIdentifier('WorkerId', 'worker-1')),
     ownershipGeneration: must(parseOwnershipGeneration(2)),
+    ...(offerCommand === undefined ? {} : { offerCommandId: must(parseIdentifier('EventId', offerCommand)) }),
     reservation: {
       id: must(parseIdentifier('ReservationId', `reservation-${id}`)),
       scope: {
@@ -135,6 +136,21 @@ export const ASSIGNMENT_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Assignm
       const listed = [...await repository.listByAttempt(first.attemptId)].sort((left, right) => (left.id < right.id ? -1 : 1));
       expectSame(problems, 'listed', listed, [second, ended(first)]);
       expectSame(problems, 'unknown attempt', await repository.listByAttempt(must(parseIdentifier('AttemptId', 'attempt-x'))), []);
+      return problems;
+    },
+  },
+  {
+    name: 'an assignment is found by the command that offered it, also once ended',
+    async check(repository: AssignmentRepository) {
+      const problems: string[] = [];
+      const first = offered('assignment-1', 'attempt-1', 'offer-1');
+      expectSuccess(problems, 'add', await repository.add(first));
+      expectSuccess(problems, 'add without an offer', await repository.add(offered('assignment-2', 'attempt-2')));
+      const command = (text: string) => must(parseIdentifier('EventId', text));
+      expectRead(problems, 'offered', await repository.byOfferCommand(command('offer-1')), first);
+      expectSuccess(problems, 'end', await repository.replace(ended(first), first.generation));
+      expectRead(problems, 'ended', await repository.byOfferCommand(command('offer-1')), ended(first));
+      expectCode(problems, 'unknown command', await repository.byOfferCommand(command('offer-x')), 'not-found');
       return problems;
     },
   },
