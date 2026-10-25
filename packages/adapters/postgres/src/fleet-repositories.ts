@@ -98,12 +98,11 @@ export class PostgresFleetRegistry implements FleetRegistry {
     return ok(Object.freeze(rows.map((row) => row.worker_id)));
   }
 
-  // A revocation records every broker user of the worker at its time.
+  // The record's `revokedAt` decides, as in the in-memory registry.
   async recentlyRevokedWorkerIds(limit: number): Promise<Result<readonly WorkerId[]>> {
     const { rows } = await this.#session.query<{ worker_id: WorkerId }>(
-      `SELECT worker_id FROM workers JOIN broker_revocations USING (worker_id)
-       WHERE enrollment IS NOT NULL AND revoked GROUP BY worker_id
-       ORDER BY max(revoked_at) DESC, worker_id COLLATE "C" LIMIT $1`,
+      `SELECT worker_id FROM workers WHERE enrollment IS NOT NULL AND revoked
+       ORDER BY (enrollment::jsonb ->> 'revokedAt')::timestamptz DESC, worker_id COLLATE "C" LIMIT $1`,
       [limit],
     );
     return ok(Object.freeze(rows.map((row) => row.worker_id)));

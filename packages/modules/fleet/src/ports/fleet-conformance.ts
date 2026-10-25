@@ -92,10 +92,14 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
     },
   },
   {
-    name: 'the recently revoked workers come latest first, up to the limit',
+    name: 'the recently revoked workers come latest first by revocation, up to the limit',
     async check(registry) {
       const problems: string[] = [];
-      for (const n of [1, 2, 3, 4]) await enrolled(registry, `w${n}`, `j${n}`);
+      // w1's broker JWT postdates its revocation, which the order ignores.
+      const issuedLast = { ...generation(1, 'w1'), brokerIssuedAt: at('2026-10-25T09:20:00.000Z') };
+      must(await registry.addToken(fleetToken('t-w1')));
+      must(await registry.enroll('t-w1' as SecretHash, fleetWorker('w1', 'j1', { credentials: { current: issuedLast } })));
+      for (const n of [2, 3, 4]) await enrolled(registry, `w${n}`, `j${n}`);
       must(await registry.revoke('w2' as WorkerId, AT));
       must(await registry.revoke('w3' as WorkerId, LATER));
       must(await registry.revoke('w1' as WorkerId, AT));

@@ -14,7 +14,7 @@ A G2 follow-up of the worker command intake change (20b of [G2 work plan](../../
 ## Evidence
 
 - Environment: Linux x86_64, Node v24.22.0, npm 11.19.1, Docker with the Compose services of `make verify` (NATS in operator mode with TLS, PostgreSQL, Toxiproxy).
-- Dependencies: none added; no migration, because `broker_revocations` already holds the revocation times.
+- Dependencies: none added; no migration, because the worker record already holds `revokedAt`.
 - Contracts: unchanged.
 
 ## Author self-check
@@ -23,7 +23,7 @@ A G2 follow-up of the worker command intake change (20b of [G2 work plan](../../
 - **Idempotent:** `ConsumerNotFound` and `StreamNotFound` count as removed (`transport.test.ts`); a second removal against the real broker succeeds (`administration.integration.test.ts`).
 - **Revocation removes the consumer:** `revoke-worker` through the administration tool leaves no consumer on the broker.
 - **Healing:** after a refused removal, `repairCommandConsumers` with the PostgreSQL registry removes the leftover consumer and leaves an active worker's consumer in place (integration), and logs each failure and a summary (`command-consumer-repair.test.ts`).
-- **Bound:** at most `REVOKED_CONSUMER_REMOVALS_PER_START` (`100`) of the latest revoked workers per start; the query orders by the latest `broker_revocations.revoked_at` and is a conformance case for the in-memory and PostgreSQL registries.
+- **Bound:** at most `REVOKED_CONSUMER_REMOVALS_PER_START` (`100`) of the latest revoked workers per start; the query orders by the worker record's `revokedAt`, and a conformance case for the in-memory and PostgreSQL registries includes a worker whose broker JWT postdates its revocation.
 - **Against ADR 0004:** hexagonal: the removal is a Fleet port method with a NATS adapter, and the registry stays a persistence boundary; Clean Code: the repair runs one helper for both phases.
 
 ## Checks
