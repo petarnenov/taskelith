@@ -5,16 +5,16 @@
     "npm": "12.2.1"
   },
   "provenance": {
-    "package.json": "06e9cfe245be5f13d9e0a963e50b78a5740f5d246a6da2656ca693bdbaf32e59",
-    "package-lock.json": "5876e012241c9a39afc111faabe9fd7f22a0f100285877da6f3265393ebc0bf3",
+    "package.json": "6dbaf3fa3b38cf2bc5a8c1ef35126fefc38b0a26a247ca1efb4de159b6af4240",
+    "package-lock.json": "76f733171dd563f63e7d8cb9a76d08c67e9aa650d7e30fe3829f1bbfb7d3f673",
     ".nvmrc": "d9f318747a126ce2247661af67852b185def7789492eabfad7bba322be087c33",
     "scripts/dependency-inventory.ts": "5d613a8543422824f7bb703eb6fccc333f450ffe4b9a50c05ea4e23dc5caa446",
     "scripts/inventory-dependencies.ts": "f6be1728d7706b65a25a3fb0d561ec8eee0527f7a9665fe519769caabe339594",
     "scripts/inventory-provenance.ts": "7146327bc8a111a0d61115b720f43705a0e44c3bb7bee2228a993bf5c07c26b7"
   },
   "scope": "Locked npm installation paths; top-level license/notice files only; global binaries and nested vendored code excluded",
-  "packageCount": 681,
-  "packagesWithGaps": 19,
+  "packageCount": 695,
+  "packagesWithGaps": 21,
   "packages": [
     {
       "path": "node_modules/@actions/core",
@@ -4723,6 +4723,25 @@
       "licenseFiles": [
         {
           "path": "node_modules/@types/normalize-package-data/LICENSE",
+          "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@types/pg",
+      "name": "@types/pg",
+      "version": "8.23.1",
+      "integrity": "sha512-fKVHpikPdg4GKks3JuLEhvwSyvwzF23hnabPy6DD8ljVbC7+6J5dQzdv4arV6jqq57djnMgs1HKBxX4P8aBI3A==",
+      "development": true,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "d122ef1e1bdb760edd5cff70d39597b9b3ae757c80e829bc297cd34fb7f01bd3",
+      "licenseFiles": [
+        {
+          "path": "node_modules/@types/pg/LICENSE",
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ],
@@ -10208,6 +10227,171 @@
       "gaps": []
     },
     {
+      "path": "node_modules/pg",
+      "name": "pg",
+      "version": "8.23.1",
+      "integrity": "sha512-aL96AHANtWjPLDOLqnhx+ngp9+UK7ETEU8VJrDCGvsSSi/mGLcWYsS6Herg7lmaBJe4uwrfqsa7gTEFaSizDoQ==",
+      "development": true,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "b1e53333a3d0c2c47c49a5cb919d221135dc03145df740925b899bc2baacc435",
+      "licenseFiles": [
+        {
+          "path": "node_modules/pg/LICENSE",
+          "sha256": "192b8f5c96900f04a1271dec39688655d7416c1c6ea84a508e18b50d2b6751f3"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/pg-cloudflare",
+      "name": "pg-cloudflare",
+      "version": "1.4.1",
+      "integrity": "sha512-6PQbsFWZcp9EmJEwy5cGQ2La+AMWpP46lgbb8X+U/XsHIUweYDNCpeuKck5RxL2MdVFi7krbbEi5nX4Zh7JhrQ==",
+      "development": true,
+      "bundled": false,
+      "optional": true,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "93b30ce3bed1ce3b836aa344c8afdaab74a42c03720e8d5baa801b6ae84ca3e7",
+      "licenseFiles": [
+        {
+          "path": "node_modules/pg-cloudflare/LICENSE",
+          "sha256": "192b8f5c96900f04a1271dec39688655d7416c1c6ea84a508e18b50d2b6751f3"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/pg-connection-string",
+      "name": "pg-connection-string",
+      "version": "2.14.1",
+      "integrity": "sha512-qR3kGNPBLpCNtz0evbKA0Y/MRFXwSSdT+pTJvYp/bXTcReZbvX1kzF0IyTc1QnxqF7AZbOeBhNL8R5mYQZV/MA==",
+      "development": true,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "53d453c5a426e69a11ff479e0d8a293505faa1833e6eb3ff7ceefdaac569e3ea",
+      "licenseFiles": [
+        {
+          "path": "node_modules/pg-connection-string/LICENSE",
+          "sha256": "2244b5486c4427001b6756a87b9a297d427c111dcc3ba64a097492a8979c23d0"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/pg-int8",
+      "name": "pg-int8",
+      "version": "1.0.1",
+      "integrity": "sha512-WCtabS6t3c8SkpDBUlb1kjOs7l66xsGdKpIPZsg4wR+B3+u9UAum2odSsF9tnvxg80h4ZxLWMy4pRjOsFIqQpw==",
+      "development": true,
+      "bundled": false,
+      "optional": false,
+      "declaration": "ISC",
+      "declarationField": "license",
+      "manifestSha256": "147155887a41bb6f69ff98b3dde827b7e6a8214c3a71938da4babf8e12adff2e",
+      "licenseFiles": [
+        {
+          "path": "node_modules/pg-int8/LICENSE",
+          "sha256": "4e8e87ccdfc7e4b47fd89015f78468aa53b6bf43ab6e6e12d43e8f55294911de"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/pg-pool",
+      "name": "pg-pool",
+      "version": "3.14.0",
+      "integrity": "sha512-gKtPkFdQPU3DksooVLi9LsjZxrsBUZIpa+7aVx+LV5pNh0KzP4Zleud2po+ConrxbuXGBJ6Hfer6hdgpIBpBaw==",
+      "development": true,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "0a9924def9e06f791b09a44eaefb227f323a39199887f6ce17b44cb5a9193134",
+      "licenseFiles": [
+        {
+          "path": "node_modules/pg-pool/LICENSE",
+          "sha256": "4f15ee7fc2a72082859d7e0d12dfa4bcdd70b1c744ad3850d07780730ac08557"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/pg-protocol",
+      "name": "pg-protocol",
+      "version": "1.16.1",
+      "integrity": "sha512-p9VOFMiHB/ZbJATetbg+99PxssTVSQRnyuPSQ67mN1+1KBOjZaZ83ZQzltnxPhJwSsC3nwVjJ10DVJlerbFzLg==",
+      "development": true,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "a4a4e23027b26c72be7729d045d0100ad9329959db0449c535fa7b2ba2e717c6",
+      "licenseFiles": [
+        {
+          "path": "node_modules/pg-protocol/LICENSE",
+          "sha256": "192b8f5c96900f04a1271dec39688655d7416c1c6ea84a508e18b50d2b6751f3"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/pg-types",
+      "name": "pg-types",
+      "version": "2.2.0",
+      "integrity": "sha512-qTAAlrEsl8s4OiEQY69wDvcMIdQN6wdz5ojQiOy6YRMuynxenON0O5oCpJI6lshc6scgAY8qvJ2On/p+CXY0GA==",
+      "development": true,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "3ec0293cb38cc8d9475e3eb32ac5f19d195bf9fccc8b19a0714e6ecd6e7c2cf0",
+      "licenseFiles": [],
+      "gaps": [
+        "missing-top-level-license-text"
+      ]
+    },
+    {
+      "path": "node_modules/pgpass",
+      "name": "pgpass",
+      "version": "1.0.5",
+      "integrity": "sha512-FdW9r/jQZhSeohs1Z3sI1yxFQNFvMcnmfuj4WBMUTxOrAyLMaTcE1aAMBiTlbMNaXvBCQuVi0R7hd8udDSP7ug==",
+      "development": true,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "d75240eb4fe759c10db9f903838275348676a8bdc1f329e20a833713cd7c99bd",
+      "licenseFiles": [],
+      "gaps": [
+        "missing-top-level-license-text"
+      ]
+    },
+    {
+      "path": "node_modules/pgpass/node_modules/split2",
+      "name": "split2",
+      "version": "4.2.0",
+      "integrity": "sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==",
+      "development": true,
+      "bundled": false,
+      "optional": false,
+      "declaration": "ISC",
+      "declarationField": "license",
+      "manifestSha256": "87b734c3087c8d9ed5d76d1bff00db30f960831ba8705dd18d73b180d08d2140",
+      "licenseFiles": [
+        {
+          "path": "node_modules/pgpass/node_modules/split2/LICENSE",
+          "sha256": "c372ef2fa1dfcb124ed807609751e75e3a009f108c5724916b489288fcb88a0c"
+        }
+      ],
+      "gaps": []
+    },
+    {
       "path": "node_modules/picocolors",
       "name": "picocolors",
       "version": "1.1.1",
@@ -10336,6 +10520,82 @@
         {
           "path": "node_modules/possible-typed-array-names/LICENSE",
           "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/postgres-array",
+      "name": "postgres-array",
+      "version": "2.0.0",
+      "integrity": "sha512-VpZrUqU5A69eQyW2c5CA1jtLecCsN2U/bD6VilrFDWq5+5UIEVO7nazS3TEcHf1zuPYO/sqGvUvW62g86RXZuA==",
+      "development": true,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "dcd6a505fcbc032b409ee2838ab2c776dea3a9cfe02b736364b6cb82a946665f",
+      "licenseFiles": [
+        {
+          "path": "node_modules/postgres-array/license",
+          "sha256": "f057f36739d53d228a746de4440c1e0c644ecde06d6beab45337d39c9d12a393"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/postgres-bytea",
+      "name": "postgres-bytea",
+      "version": "1.0.1",
+      "integrity": "sha512-5+5HqXnsZPE65IJZSMkZtURARZelel2oXUEO8rH83VS/hxH5vv1uHquPg5wZs8yMAfdv971IU+kcPUczi7NVBQ==",
+      "development": true,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "9125568c5fb51a65b8f11adb0080c2775b99ee82822d73bff8b56b2a9d47d7aa",
+      "licenseFiles": [
+        {
+          "path": "node_modules/postgres-bytea/license",
+          "sha256": "f057f36739d53d228a746de4440c1e0c644ecde06d6beab45337d39c9d12a393"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/postgres-date",
+      "name": "postgres-date",
+      "version": "1.0.7",
+      "integrity": "sha512-suDmjLVQg78nMK2UZ454hAG+OAW+HQPZ6n++TNDUX+L0+uUlLywnoxJKDou51Zm+zTCjrCl0Nq6J9C5hP9vK/Q==",
+      "development": true,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "03f9edefa96697072075e02df045cc61ed4ca2f8dfffb1ff87f4070bc3404151",
+      "licenseFiles": [
+        {
+          "path": "node_modules/postgres-date/license",
+          "sha256": "f057f36739d53d228a746de4440c1e0c644ecde06d6beab45337d39c9d12a393"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/postgres-interval",
+      "name": "postgres-interval",
+      "version": "1.2.0",
+      "integrity": "sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ==",
+      "development": true,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "cc3056db105e66c9128cb8a387cda782d5f1ae9281be90de0b8d26a90af89c57",
+      "licenseFiles": [
+        {
+          "path": "node_modules/postgres-interval/license",
+          "sha256": "f057f36739d53d228a746de4440c1e0c644ecde06d6beab45337d39c9d12a393"
         }
       ],
       "gaps": []

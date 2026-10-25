@@ -60,12 +60,19 @@ The harness SHALL provide sequential and seeded identifier sources that create i
 - **THEN** every process of the group is stopped, and then runs again
 
 ### Requirement: Network partition through Toxiproxy
-The harness SHALL control the Toxiproxy container of the item 9 Compose project through `fetch` without a client package, with operations to create a proxy, disconnect it, black-hole both directions, heal it, remove it, and reset the server, and SHALL report a failed API call with its method, path, status, and body; the Compose project SHALL pin `ghcr.io/shopify/toxiproxy:2.13.0` by its index digest and publish its API only on the loopback interface.
+The harness SHALL control Toxiproxy through `fetch` without a client package, with operations to address a configured route by name, disconnect it, black-hole both directions, heal it, and reset the server, and SHALL report a failed API call with its method, path, status, and body.
 
 #### Scenario: Partition and reconnect a real service
-- **WHEN** an integration test connects to PostgreSQL or NATS through a Toxiproxy proxy, then disconnects or black-holes the proxy, then heals it
-- **THEN** the client observes the failure while the proxy is partitioned and succeeds again after the heal
+- **WHEN** an integration test connects to PostgreSQL or NATS through a Toxiproxy route, then disconnects or black-holes the route, then heals it
+- **THEN** the client observes the failure while the route is partitioned and succeeds again after the heal
 
 #### Scenario: Failed API call
-- **WHEN** a proxy is created with the name of an existing proxy
-- **THEN** the call fails with an error naming `POST /proxies` and status 409
+- **WHEN** a route that the server does not know is disconnected
+- **THEN** the call fails with an error naming `POST /proxies/<name>` and status 404
+
+### Requirement: Toxiproxy integration service
+The integration services SHALL run `ghcr.io/shopify/toxiproxy:2.13.0` pinned by its index digest, with the routes `postgres` and `nats` to those services from a mounted configuration, and SHALL publish its API and routes only on ephemeral loopback ports, exported as `TASKELITH_TOXIPROXY_URL`, `TASKELITH_POSTGRES_PROXY_URL`, and `TASKELITH_NATS_PROXY_URL`.
+
+#### Scenario: Routes reach the services
+- **WHEN** `make test` runs the integration tests
+- **THEN** a PostgreSQL session through `TASKELITH_POSTGRES_PROXY_URL` answers queries and a connection through `TASKELITH_NATS_PROXY_URL` receives the NATS INFO greeting

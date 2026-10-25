@@ -1,9 +1,3 @@
-export interface ProxyRoute {
-  readonly name: string;
-  readonly listen: string;
-  readonly upstream: string;
-}
-
 const STREAMS = ['upstream', 'downstream'] as const;
 
 // Toxiproxy's JSON API over fetch. The API has no authentication, so it must
@@ -15,9 +9,10 @@ export class Toxiproxy {
     this.#api = api;
   }
 
-  async createProxy(route: ProxyRoute): Promise<ToxiproxyProxy> {
-    await this.request('POST', '/proxies', { ...route, enabled: true });
-    return new ToxiproxyProxy(this, route.name);
+  // A route the server configuration defines, such as `postgres` or `nats`
+  // in infra/services/toxiproxy-routes.json.
+  proxy(name: string): ToxiproxyProxy {
+    return new ToxiproxyProxy(this, name);
   }
 
   // Enables every proxy and removes every toxic, for a clean next scenario.
@@ -64,10 +59,6 @@ export class ToxiproxyProxy {
     const toxics = await this.#toxiproxy.request('GET', `${this.#path}/toxics`) as { name: string }[];
     for (const toxic of toxics) await this.#toxiproxy.request('DELETE', `${this.#path}/toxics/${toxic.name}`);
     await this.#update({ enabled: true });
-  }
-
-  async remove(): Promise<void> {
-    await this.#toxiproxy.request('DELETE', this.#path);
   }
 
   get #path(): string {

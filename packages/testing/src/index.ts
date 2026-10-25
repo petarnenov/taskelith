@@ -11,4 +11,4 @@ export { seededUuids, sequentialIds, type IdSource } from './identifier-sources.
 export { ScenarioProcess, type ProcessExit, type ScenarioProcessOptions } from './scenario-process.js';
 export { SEED_VARIABLE, SeededRandom, rerunHint, seedFromEnvironment } from './seeded-random.js';
 export { SimulatedHost, type MonotonicClock, type WallClock } from './simulated-host.js';
-export { Toxiproxy, ToxiproxyProxy, type ProxyRoute } from './toxiproxy.js';
+export { Toxiproxy, ToxiproxyProxy } from './toxiproxy.js';

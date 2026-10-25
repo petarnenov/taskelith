@@ -10,9 +10,9 @@
 
 ## 2. Services
 
-- [ ] 2.1 Add the digest-pinned Toxiproxy service to the item 9 Compose project, with its API on loopback only.
-- [ ] 2.2 Add the integration test that partitions PostgreSQL and NATS through Toxiproxy and observes failure and recovery.
-- [ ] 2.3 Update the Toxiproxy row of the dependency register.
+- [x] 2.1 Add the digest-pinned Toxiproxy service to the item 9 Compose project, with its API on loopback only.
+- [x] 2.2 Add the integration test that partitions PostgreSQL and NATS through Toxiproxy and observes failure and recovery.
+- [x] 2.3 Update the Toxiproxy row of the dependency register.
 
 ## 3. Verification and review
 

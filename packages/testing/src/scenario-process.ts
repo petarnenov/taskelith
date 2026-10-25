@@ -58,7 +58,7 @@ export class ScenarioProcess {
     this.kill('SIGCONT');
   }
 
-  // Resolves once stdout contains the text; rejects if the process closes first.
+  // Resolves once stdout holds the text; rejects if the process closes first.
   waitForOutput(text: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const check = () => {
