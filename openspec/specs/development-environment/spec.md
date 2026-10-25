@@ -24,6 +24,10 @@ Let a contributor check and prepare a clone for building and verifying Taskelith
 - **WHEN** the shell uses a Node.js other than `.nvmrc` and nvm has the pinned version installed
 - **THEN** `make doctor` runs its checks with the pinned version, reports the Node.js check as passed, and says that `nvm use` is needed only for running `npm` or `node` directly in that shell
 
+#### Scenario: Another Node.js earlier in PATH
+- **WHEN** nvm has the pinned version installed and a Node.js outside nvm comes before nvm's directory in `PATH`
+- **THEN** `make doctor` puts the pinned version's directory first in `PATH` for its run, runs its checks with the pinned version, and reports the Node.js check as passed
+
 #### Scenario: Shell on another Node.js
 - **WHEN** the shell uses a Node.js other than `.nvmrc` and nvm is missing or does not have the pinned version
 - **THEN** the Node.js remedy names `make setup` with nvm and a manual install without it, and the npm remedy says to fix the Node.js check first instead of naming `make setup`
