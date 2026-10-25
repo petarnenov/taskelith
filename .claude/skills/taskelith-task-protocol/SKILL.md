@@ -9,3 +9,5 @@ Read `docs/agent-task-protocol.md` in this repository and follow it step by step
 - As the **coordinator**, follow "Coordinator steps" to assign, integrate, archive, clean up, and release workers.
 
 The protocol builds on `AGENTS.md`, `docs/governance.md`, and `docs/releases.md`; read them when the protocol points to them. Never skip the OpenSpec change, `make verify`, or the independent review, and send owner decisions to the coordinator (or, as coordinator, to the owner) with options instead of deciding them.
+
+If a reviewer is unavailable for any reason, do not use it for 30 minutes, and switch the task to the next reviewer in the rotation, as `docs/governance.md` "Unavailable reviewer" sets out.
