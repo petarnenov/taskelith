@@ -91,3 +91,9 @@ The options and recommendations were the author's proposals. On 2026-10-25 the o
 | D12. Launch authorization transport | (a) an HTTPS operation in the OpenAPI document, called by the worker; commands and observations stay on NATS; (b) a NATS request and reply described in AsyncAPI | **Decided by the owner on 2026-10-25: (a).** The online check is a synchronous transaction against PostgreSQL and fails closed when the control plane is unreachable, independently of broker state. | 3, 8, 17 |
 | D13. Observability in G2 | (a) item 22: structured correlated logs and the G2 signals through a module-owned port, with any metrics library chosen later; (b) no separate item, only correlation identifiers inside each item, with metrics deferred to G6 | **Decided by the owner on 2026-10-25: (a).** Section 13 starts the observability foundation by G2, and items 24 and 27 need the signals as evidence. | 22 |
 | D14. Authorization of G2 items | (a) as in G1: after the owner starts G2, items start in dependency order and are merged without a per-item approval, except items blocked by an open decision; (b) a per-item owner approval | **Decided by the owner on 2026-10-25: (a).** | — (see the status above) |
+
+## Recorded limitations
+
+Item 27 lists these among the closure's deferrals.
+
+- **Rotated worker credentials.** `rotate-worker` issues a new credential generation, but G2 has no path that delivers it to the worker, and the worker cannot adopt it. After the grace window the worker loses access, and the only recovery is a new worker identity with a new token and root, after the old identity is revoked and its attempts are reconciled ([installation and enrollment contract](contracts/installation-and-enrollment.md) section 6). Delivery belongs to G3 item 26. The owner's delegated decision-maker decided this on 2026-10-25, while the owner was away.
