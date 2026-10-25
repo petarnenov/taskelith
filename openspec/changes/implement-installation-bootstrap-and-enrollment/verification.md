@@ -74,6 +74,7 @@ Recorded before pass 1.
 - At `40f2aea`, after the pass-2 fixes: 835 tests passed, 0 failed; coverage 99.18% lines, 92.54% branches, 99.09% functions; every other check passes.
 - At `2deacb0`, after the fixes of the pass-3 findings: 838 tests passed, 0 failed; coverage 99.18% lines, 92.55% branches, 99.15% functions; every other check passes. The new barrier test fails with the earlier SERIALIZABLE publication (1 entry published instead of 2) and passes with READ COMMITTED.
 - At `d0e777b`, after the fix of the pass-4 finding: 838 tests passed, 0 failed; coverage 99.18% lines, 92.55% branches, 99.15% functions; every other check passes.
+- At `0aa39ed`, after merging `origin/dev` at `69e5bd2` (execution observability, item 22, and the G3 decisions): 883 tests passed, 0 failed; coverage 99.22% lines, 92.68% branches, 99.25% functions; every other check passes (OpenSpec 51 of 51).
 - `npm run openspec -- validate implement-installation-bootstrap-and-enrollment --strict` passed at each of these revisions.
 
 ## Independent review
@@ -115,6 +116,15 @@ Assigned reviewer: Codex CLI, with `codex exec -m gpt-6.1-sol -c model_reasoning
 
 - **Pass 5 (exceptional, authorized by the owner) — session `01a17321-3471-7422-8fcc-318fa3c6841e`,** reviewed `git diff ada546c d0e777b` only. The header reports `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`. Snapshot before and after: `f18c6bb7…7f45`, equal. The reviewer confirmed the pass-4 finding fully resolved: the user information is redacted up to the last `@` before `/`, `?`, or `#`. It ran 46 checks of the changed helpers in memory. Findings: 0 Critical, 0 High, 0 Medium, 0 Low.
 
+## Merge with `dev`
+
+After pass 5 the branch merged `origin/dev` at `69e5bd2`. Unlike a documentation conflict, the resolution changes code of this change, so the five passes do not cover it, and it is **not independently reviewed**:
+- `postgres-database.ts`: `dev` restructured the runner and added `readOnly()`. The resolution takes `dev`'s version and adds `readCommitted()` beside it, in place of this change's isolation parameter; the revocation publication calls it.
+- Migration: item 22 also used the timestamp `1792930400000`, so this change's migration is renamed `1792930800000_installation-and-enrollment.sql`, after it. This change's migration was not applied anywhere outside tests.
+- `migrations.integration.test.ts`: the signals migration test now also holds back this change's later migration, so both apply in order.
+- `postgres-transaction.ts` and two `tsconfig.json` files keep both sides. The lockfile takes `dev`'s and adds this change's workspace packages; the inventory is regenerated.
+
 ## Remaining gates
 
+- The coordinator's decision on a review of the merge resolution.
 - Integration into `dev` by the coordinator, then archiving the change.
