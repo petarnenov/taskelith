@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { after, afterEach, test } from 'node:test';
 import { parseIdentifier } from '@taskelith/kernel';
-import { Toxiproxy, acquireProcessLock, integrationEndpoint, value } from '@taskelith/testing';
+import { InMemoryLogSink, Logger } from '@taskelith/observability';
+import { SimulatedHost, Toxiproxy, acquireProcessLock, integrationEndpoint, value } from '@taskelith/testing';
 import { PostgresDatabase } from '@taskelith/postgres';
-import { assignment } from './fixtures.ts';
+import { AT, assignment } from './fixtures.ts';
 import { PROXY_URL, createMigratedDatabase, databaseUrl, query } from './test-database.ts';
 
 const toxiproxyUrl = integrationEndpoint('TASKELITH_TOXIPROXY_URL');
@@ -11,7 +12,9 @@ const toxiproxy = new Toxiproxy(toxiproxyUrl);
 const route = toxiproxy.proxy('postgres');
 const direct = await createMigratedDatabase();
 const proxied = databaseUrl(PROXY_URL, direct.pathname.slice(1));
-const database = new PostgresDatabase(proxied, { queryTimeoutMilliseconds: 1000 });
+const sink = new InMemoryLogSink();
+const logger = new Logger(sink, new SimulatedHost(AT).wallClock);
+const database = new PostgresDatabase(proxied, { queryTimeoutMilliseconds: 1000, logger });
 // Other test files partition the same Toxiproxy, so this one waits its turn.
 const release = await acquireProcessLock(`toxiproxy-${toxiproxyUrl.port}`);
 after(async () => {
@@ -66,4 +69,7 @@ test('a commit without an answer reports an unknown outcome instead of retrying'
   });
   assert.equal(!unknown.ok && unknown.error.code, 'unavailable');
   assert.equal(!unknown.ok && unknown.error.details.outcome, 'unknown');
+  const logged = sink.records.find((record) => record.event === 'postgres.commit.unknown');
+  assert.equal(logged?.level, 'error');
+  assert.doesNotMatch(JSON.stringify(sink.records), new RegExp(`:${proxied.password}@`));
 });

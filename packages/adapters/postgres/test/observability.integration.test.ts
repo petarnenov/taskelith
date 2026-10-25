@@ -1,0 +1,101 @@
+import assert from 'node:assert/strict';
+import { after, beforeEach, test } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
+import { ok } from '@taskelith/kernel';
+import { recordExecutionEvidence, type WorkerId } from '@taskelith/execution';
+import { InMemoryLogSink, InMemoryMetrics, Logger } from '@taskelith/observability';
+import { PostgresControlPlaneSignals, PostgresDatabase } from '@taskelith/postgres';
+import { acceptAssignment } from '@taskelith/scheduling';
+import { SimulatedHost, id, value } from '@taskelith/testing';
+import { authorizedUnder, placedTask, seedWorker } from './capacity-fixtures.ts';
+import { AT, assignment, command } from './fixtures.ts';
+import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
+
+const url = await createMigratedDatabase();
+const metrics = new InMemoryMetrics();
+const sink = new InMemoryLogSink();
+const database = new PostgresDatabase(url, { metrics, logger: new Logger(sink, new SimulatedHost(AT).wallClock) });
+const signals = new PostgresControlPlaneSignals(database);
+after(() => database.close());
+beforeEach(() => truncateAll(url));
+
+const EMPTY = {
+  outboxLagSeconds: 0, outboxPending: 0, assignmentAgeSeconds: 0, offeredAssignments: 0, unknownExecutions: 0, eligibleSlots: 0, heldSlots: 0,
+};
+
+function worker(workerId: string, draining: boolean) {
+  return {
+    workerId: id('WorkerId', workerId) as WorkerId, enrolled: true, revoked: false, draining, reachable: true, slots: 2,
+    cpuMillicores: 3500, memoryMebibytes: 7680, controls: [],
+  };
+}
+
+test('an empty state reads as no lag, no age, and no capacity', async () => {
+  assert.deepEqual(await signals.read(), ok(EMPTY));
+});
+
+test('the snapshot reads outbox lag, assignment age, unknown executions, and capacity', async () => {
+  await seedWorker(url, worker('worker-1', false));
+  await seedWorker(url, worker('worker-2', true));
+  const offered = assignment('assignment-1');
+  const placed = placedTask('task-1', 'attempt-1');
+  const authorized = authorizedUnder(placed, offered.id, offered.workerId);
+  const report = { workerId: offered.workerId, executionId: authorized.attempts[0]!.executions[0]!.id };
+  const uncertain = value(recordExecutionEvidence(authorized, { ...report, kind: 'uncertain' }, AT)).task;
+  assert.ok((await database.transaction(async (tx) => {
+    for (const write of [() => tx.assignments.add(offered), () => tx.tasks.add(uncertain), () => tx.outbox.append(command('offer-1'))]) {
+      const written = await write();
+      if (!written.ok) return written;
+    }
+    return tx.outbox.append(command('offer-2'));
+  })).ok);
+  await query(url, "UPDATE outbox SET appended_at = now() - interval '30 seconds'");
+  await query(url, "UPDATE assignments SET changed_at = now() - interval '90 seconds'");
+  const read = value(await signals.read());
+  assert.deepEqual({ ...read, outboxLagSeconds: 0, assignmentAgeSeconds: 0 }, {
+    ...EMPTY, outboxPending: 2, offeredAssignments: 1, unknownExecutions: 1, eligibleSlots: 2, heldSlots: 1,
+  });
+  assert.ok(read.outboxLagSeconds >= 30 && read.outboxLagSeconds < 60, String(read.outboxLagSeconds));
+  assert.ok(read.assignmentAgeSeconds >= 90 && read.assignmentAgeSeconds < 120, String(read.assignmentAgeSeconds));
+});
+
+test('an accepted assignment and a published row no longer count as waiting', async () => {
+  const offered = assignment('assignment-1');
+  const accepted = value(acceptAssignment(offered, offered.generation, offered.workerId, AT));
+  assert.ok((await database.transaction(async (tx) => {
+    const added = await tx.assignments.add(offered);
+    if (!added.ok) return added;
+    const appended = await tx.outbox.append(command('offer-1'));
+    if (!appended.ok) return appended;
+    return tx.assignments.replace(accepted, offered.generation);
+  })).ok);
+  assert.ok((await database.transaction((tx) => tx.outbox.markPublished(command('offer-1').metadata.eventId))).ok);
+  assert.deepEqual(await signals.read(), ok({ ...EMPTY, heldSlots: 1 }));
+});
+
+test('a clock that stamped a row in the future never reads as a negative age', async () => {
+  assert.ok((await database.transaction((tx) => tx.outbox.append(command('offer-1')))).ok);
+  await query(url, "UPDATE outbox SET appended_at = now() + interval '1 hour'");
+  assert.equal(value(await signals.read()).outboxLagSeconds, 0);
+});
+
+test('each transaction attempt is timed as database latency', async () => {
+  const before = metrics.series('database.latency')?.count ?? 0;
+  await signals.read();
+  await signals.read();
+  const latency = metrics.series('database.latency')!;
+  assert.equal(latency.count, before + 2);
+  assert.ok(latency.min >= 0 && latency.max < 10);
+});
+
+test('an idle connection that breaks is logged without the credentials', async () => {
+  await signals.read();
+  await query(url, 'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()');
+  for (let waited = 0; waited < 5000 && !sink.records.some((record) => record.event === 'postgres.connection.lost'); waited += 20) {
+    await delay(20);
+  }
+  const lost = sink.records.find((record) => record.event === 'postgres.connection.lost');
+  assert.equal(lost?.level, 'warn');
+  assert.doesNotMatch(JSON.stringify(sink.records), new RegExp(`:${url.password}@`));
+  assert.ok((await signals.read()).ok);
+});

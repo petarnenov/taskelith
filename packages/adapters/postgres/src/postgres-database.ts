@@ -1,5 +1,7 @@
+import { performance } from 'node:perf_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { measurement, NO_METRICS, SILENT_LOGGER, type Logger, type Metrics } from '@taskelith/observability';
 import pg from 'pg';
 import { NO_CRASH_POINTS, type CrashPointHook } from './crash-points.js';
 import { StatementError, unavailable } from './database-errors.js';
@@ -25,6 +27,9 @@ export interface PostgresDatabaseOptions {
   readonly serializationAttempts?: number;
   // A statement without an answer by then counts as a lost connection.
   readonly queryTimeoutMilliseconds?: number;
+  // Each transaction attempt, its connection checkout included, is timed.
+  readonly metrics?: Metrics;
+  readonly logger?: Logger;
 }
 
 export type TransactionWork<Value> = (transaction: PostgresTransaction) => Promise<Result<Value>>;
@@ -35,6 +40,8 @@ export class PostgresDatabase {
   readonly #pool: pg.Pool;
   readonly #crashPoints: CrashPointHook;
   readonly #serializationAttempts: number;
+  readonly #metrics: Metrics;
+  readonly #logger: Logger;
 
   constructor(url: URL, options: PostgresDatabaseOptions = {}) {
     this.#pool = new pg.Pool({
@@ -43,17 +50,20 @@ export class PostgresDatabase {
       query_timeout: options.queryTimeoutMilliseconds,
       connectionTimeoutMillis: options.queryTimeoutMilliseconds,
     });
-    // An idle connection that breaks is discarded; the next checkout reports.
-    this.#pool.on('error', ignoreConnectionError);
     this.#crashPoints = options.crashPoints ?? NO_CRASH_POINTS;
     this.#serializationAttempts = options.serializationAttempts ?? SERIALIZATION_ATTEMPTS;
+    this.#metrics = options.metrics ?? NO_METRICS;
+    this.#logger = options.logger ?? SILENT_LOGGER;
+    // An idle connection that breaks is discarded; the next checkout reports.
+    this.#pool.on('error', (error) => this.#logger.warn('postgres.connection.lost', { cause: error.message }));
   }
 
   async transaction<Value>(work: TransactionWork<Value>): Promise<Result<Value>> {
     for (let attempt = 1; ; attempt++) {
-      const outcome = await this.#attempt(work);
+      const outcome = await this.#timedAttempt(work);
       if (outcome.kind === 'done') return outcome.result;
       if (attempt >= this.#serializationAttempts) {
+        this.#logger.warn('postgres.serialization.exhausted', { attempts: attempt });
         return err(failure('unavailable', `the transaction lost ${attempt} serialization races in a row`, { attempts: String(attempt) }));
       }
       await delay(SERIALIZATION_BACKOFF_MILLISECONDS * 2 ** (attempt - 1));
@@ -62,6 +72,15 @@ export class PostgresDatabase {
 
   async close(): Promise<void> {
     await this.#pool.end();
+  }
+
+  async #timedAttempt<Value>(work: TransactionWork<Value>): Promise<Attempt<Value>> {
+    const started = performance.now();
+    try {
+      return await this.#attempt(work);
+    } finally {
+      this.#metrics.record(measurement('database.latency', (performance.now() - started) / 1000));
+    }
   }
 
   // Runs the work once; a lost serialization race asks for a retry.
@@ -115,6 +134,7 @@ export class PostgresDatabase {
       return ok(undefined);
     } catch (error) {
       if (!(error instanceof StatementError) || !error.isConnectionLoss) throw error;
+      this.#logger.error('postgres.commit.unknown', { cause: error.message });
       return err(unavailable('the commit outcome is unknown', error, { outcome: 'unknown' }));
     }
   }
