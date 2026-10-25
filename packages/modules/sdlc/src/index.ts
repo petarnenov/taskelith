@@ -1,6 +1,7 @@
 export { InMemoryAdmissionRepository } from './adapters/in-memory-admission-repository.js';
 export { InMemoryGateRepository } from './adapters/in-memory-gate-repository.js';
 export { InMemoryOutbox } from './adapters/in-memory-outbox.js';
+export { InMemoryRunCatalog } from './adapters/in-memory-run-catalog.js';
 export { InMemoryWorkflowRunRepository } from './adapters/in-memory-workflow-run-repository.js';
 export { TaskAdmissionService, type CreatedRevisionOutcome } from './application/task-admission-service.js';
 export {
@@ -181,8 +182,11 @@ export {
   ADMISSION_REPOSITORY_CONFORMANCE,
   GATE_REPOSITORY_CONFORMANCE,
   OUTBOX_CONFORMANCE,
+  RUN_CATALOG_CONFORMANCE,
   WORKFLOW_RUN_REPOSITORY_CONFORMANCE,
   type OutboxConformanceTarget,
+  type RunCatalogConformanceTarget,
 } from './ports/repository-conformance.js';
+export type { ProjectId, RunCatalog, RunEnvelope } from './ports/run-catalog.js';
 export type { WorkflowRunRepository } from './ports/workflow-run-repository.js';
 export type { Clock } from './ports/clock.js';
