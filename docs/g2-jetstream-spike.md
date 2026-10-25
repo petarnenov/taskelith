@@ -10,7 +10,7 @@ Date: 2026-10-25. Status: measurements for item 2 of the [G2 work plan](g2-plan.
 | Clients | `@nats-io/transport-node`, `@nats-io/jetstream`, and `@nats-io/nats-core` 3.4.0, with `@nats-io/nkeys` 2.0.3 and `@nats-io/nuid` 3.0.0 as their dependencies |
 | Runtime | Node 24.22.1 on macOS (Darwin 25.6.0, x86_64); Docker Engine 29.5.2, `linux/amd64` |
 
-**Compatibility (item 1's open risk).** The pinned nats.js 3.4.0 sources neither state support for nats-server 2.15 nor show a CI result for 2.15 on Node 24 ([item 1](g2-infrastructure.md#3-nats-javascript-client)). Every API the spike uses works against 2.15.1 on Node 24.22.1: connection with user and password and a custom `inboxPrefix`, stream and consumer management, `fetch` and `next` on pull consumers, `ack`, `ackAck`, `nak` with a delay, `term` with a reason, `getMessage`, publication with `msgID`, and the connection's status stream. The `types` field that names `./lib/mod.d.js` in `@nats-io/jetstream` and `@nats-io/nats-core` does not matter: TypeScript resolves the declarations through `exports` under the repository's settings, as `make verify`'s type check shows. The client refuses a pull expiry below 1000 ms (`'expires' must be at least 1000ms`). Not covered: `consume()`, ordered and push consumers, key-value and object stores, consumer pause and priority groups, reconnection, and TLS.
+**Compatibility (item 1's open risk).** The pinned nats.js 3.4.0 sources neither state support for nats-server 2.15 nor show a CI result for 2.15 on Node 24 ([item 1](g2-infrastructure.md#3-nats-javascript-client)). Every API the spike uses works against 2.15.1 on Node 24.22.1: connection with user and password and a custom `inboxPrefix`, stream and consumer management, `fetch` and `next` on pull consumers, `ack`, `ackAck`, `nak` with a delay, `term` with a reason, `getMessage`, publication with `msgID`, and the connection's status stream. The `types` field that names `./lib/mod.d.js` in `@nats-io/jetstream` and `@nats-io/nats-core` does not matter: TypeScript resolves the declarations through `exports` under the repository's settings, as `make verify`'s type check shows. The client refuses a pull expiry below 1000 ms (`'expires' must be at least 1000ms`). The APIs not exercised are listed under [Not measured](#not-measured).
 
 ## Measured behavior
 
@@ -20,7 +20,7 @@ The command stream `SPIKE_CMD` takes the subjects `spike.cmd.*`, and each worker
 | --- | --- | --- |
 | Addressed consumers | Consumers `worker-a` and `worker-b` | Each consumer receives only the commands on its own subject, in publication order. |
 | Redelivery after `ack_wait` | `ack_wait` 1 s | An unacknowledged command returns 1001–1004 ms and 2004–2006 ms after its first delivery, with delivery counts 2 and 3 and the redelivered flag: it returns every `ack_wait` until it is acknowledged or `max_deliver` is reached. A command acknowledged with `ackAck()`, which resolves to `true`, does not return: once the third delivery is acknowledged too, a 1.5 s pull receives nothing. |
-| Plain acknowledgement | `ack()` and a flush | The consumer has nothing pending, and its acknowledgement floor is the command's stream sequence. |
+| Plain acknowledgement | `ack()`, then the consumer state polled | The consumer has nothing pending, and its acknowledgement floor is the command's stream sequence. |
 | Negative acknowledgement | `nak(700)` | The command returns 702–704 ms after the negative acknowledgement, with delivery count 2. |
 | Outstanding acknowledgements | `max_ack_pending` 2, five commands | A fetch of five returns two; the consumer then reports 2 pending acknowledgements and 3 pending messages. |
 | Payload | Server `max_payload` | The server announces 1,048,576 bytes (1 MiB, the [operational target](operational-targets.md)); the client rejects a larger payload before sending (`'payload' max_payload size exceeded`). |
@@ -29,7 +29,7 @@ The command stream `SPIKE_CMD` takes the subjects `spike.cmd.*`, and each worker
 | Retention: count and bytes | `discard: new`, `max_msgs` 2 or `max_bytes` 2048 | The publication over the limit is rejected (`maximum messages exceeded`, `maximum bytes exceeded`); the publisher sees the error. |
 | Retention: per subject | `max_msgs_per_subject` 2, `discard_new_per_subject` | The third command for `worker-a` is rejected (`maximum messages per subject exceeded`) while `worker-b` still publishes. |
 | Retention: old | `discard: old`, `max_msgs` 2 | The oldest message is dropped (first sequence 2, last 3). |
-| Retention: age | `max_age` 1 s | The message is gone 1251–1282 ms after its publication, polled every 50 ms. |
+| Retention: age | `max_age` 1 s | The message is gone 1251–1301 ms after its publication, polled every 50 ms. |
 | Termination | `term('schema-invalid')` | The server publishes `$JS.EVENT.ADVISORY.CONSUMER.MSG_TERMINATED.SPIKE_CMD.worker-a` with the stream sequence, one delivery, and the reason; the command is not delivered again. |
 | Delivery limit | `max_deliver` 3, `nak()` on every delivery | After the third delivery the server publishes `…MAX_DELIVERIES.SPIKE_CMD.worker-a` with the stream sequence and 3 deliveries; the consumer then has nothing pending, and the command stays in the stream under its retention limits. |
 | Quarantine capture | Stream `SPIKE_ADVISORIES` on both advisory subjects | Advisories are plain NATS messages: a termination advisory published before the stream existed is not recorded. Once the stream exists it stores both kinds, so a quarantine process can read them later and copy the original by its stream sequence (`getMessage`) into `SPIKE_QUARANTINE`, with three diagnostic headers: the original stream sequence, the original `Nats-Msg-Id`, and the advisory type. |
@@ -58,12 +58,15 @@ By the coordinator's decision of 2026-10-25 (option A), the permissions are meas
 
 ## Not measured
 
+Each entry names the item or gate that owns it.
+
 - Decentralized authentication under D9 (a): JWT and NKey issuance and revocation without a reload (item 13).
-- Server restart and recovery of streams and consumers, clustering and replicas, TLS, and reconnection.
-- Throughput, latency under load, and the 1000-worker comparison with a routing layer, D3 (b) (G7).
-- Work-queue and interest retention, per-message TTL, and `Nats-Expected-Last-Subject-Sequence`.
-- The 7-day and 10 GiB production limits themselves; the spike measures the mechanisms with small limits.
+- Client APIs the spike does not use, `consume()`, ordered and push consumers, key-value and object stores, consumer pause, and priority groups, and the retention options work-queue and interest retention, per-message TTL, and `Nats-Expected-Last-Subject-Sequence`: item 12 qualifies any of them it adopts.
+- Reconnection and server restart with recovery of streams and consumers: item 12 for the adapter's behavior, item 24 for partition and reconnect; backup and disaster recovery belong to G6.
+- The 7-day and 10 GiB production limits: item 12 configures them, and G6 verifies limits; the spike measures the mechanisms with small limits.
+- TLS: no G2 item names it; the [trust model](trust-model.md) puts enrollment over TLS, and G3 is the first gate that enrolls a remote worker.
+- Clustering, replicas, throughput, latency under load, and the 1000-worker comparison with a routing layer, D3 (b): G7.
 
 ## Reproduction
 
-`make verify` runs the spike with the other integration tests against its own services. For a single run, `make services-up`, export the printed URLs, and run `node --experimental-strip-types --test apps/control-plane/test/jetstream-spike.integration.test.ts`; the measured redelivery delays appear as test diagnostics.
+`make test` and `make verify` run the spike with the other integration tests against their own isolated services; the measured intervals appear as test diagnostics in the output.

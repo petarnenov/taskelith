@@ -12,4 +12,4 @@
 ## 3. Verification and review
 
 - [x] 3.1 Run `make verify` and `openspec validate --strict`.
-- [ ] 3.2 Obtain the independent review and record the results.
+- [x] 3.2 Obtain the independent review and record the results.

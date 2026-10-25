@@ -53,6 +53,7 @@ test('nats.js 3.4.0 works against the pinned nats-server 2.15.1', async (t) => {
   t.diagnostic(`server ${nc.info?.version}, JetStream API level ${account.api.level}`);
   t.diagnostic(`max_payload ${nc.info?.max_payload}, Node ${process.version}`);
   assert.equal(nc.info?.version, '2.15.1');
+  assert.equal(account.api.level, 5);
   assert.equal(nc.info?.jetstream, true);
   assert.equal(nc.info?.max_payload, 1024 * 1024);
 });
