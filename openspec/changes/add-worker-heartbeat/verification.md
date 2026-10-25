@@ -30,6 +30,10 @@ Checked before the first pass against `AGENTS.md`, ADR 0004, the governance revi
 | `make verify` | `bd8f15f` | Failed: the type check of the tests rejected a subscription callback that returned a number. Fixed in `6c5145a`. |
 | `make verify` | `6c5145a` | Passed: 1219 tests, 1204 passed, 0 failed, 15 skipped (macOS only); coverage of all files 99.13% lines, 91.59% branches, 98.67% functions. |
 | `make verify` | `4b9bbc1` | Passed: 1222 tests, 1207 passed, 0 failed, 15 skipped (macOS only); coverage 99.13% lines, 91.61% branches, 98.67% functions; `execution.asyncapi.json` has 2 breaking changes against `aba18f5`, declared by 0.4.0; OpenSpec 60 items valid; the archive dry run, dependency inventory, and package checks passed. |
+| `make verify` | `b68deca` | Failed: 1 of 1223 tests. The queue-group integration test let its fixture close the connection before stopping the receivers, which the pass 2 fix now treats as a failure. Fixed in `bf1ce68`. |
+| `make verify` | `bf1ce68` | Tests passed (1224, 1209 passed, 0 failed, 15 skipped); failed at OpenSpec validation: the `nats-transport` requirement "Heartbeat receiver" exceeded 500 characters. Fixed in `aecdd19` by splitting it. |
+| `make verify` | `aecdd19` | Passed: 1224 tests, 1209 passed, 0 failed, 15 skipped (macOS only); coverage 99.14% lines, 91.64% branches, 98.67% functions; the contract check passed with 0.4.0; OpenSpec 60 items valid; the archive dry run, dependency inventory, and package checks passed. |
+| `packages/adapters/nats/test/transport.integration.test.ts`, 3 consecutive runs | `bf1ce68` working tree | 16 of 16 tests passed in each run. |
 | `make contract-compatibility` with the version left at 0.3.0 | before `bd8f15f` | Failed as expected: `add /components/messages/workerHeartbeat` and `add /components/schemas/WorkerHeartbeat` need a new minor version. |
 | `apps/control-plane/test/heartbeat.integration.test.ts`, 5 consecutive runs | `4b9bbc1` working tree | 5 of 5 tests passed in each run, including both orders of the race between a heartbeat and the check. |
 
@@ -65,6 +69,20 @@ Reviewer assigned by the coordinator: Codex CLI, `gpt-6.1-sol`, reasoning effort
 | L8 | The contract page still says that a worker publishes only on its observation subject. | Fixed in `4b9bbc1`. |
 | L9 | The contract page's rule that a malformed message goes to quarantine contradicts the heartbeat receiver. | Fixed in `4b9bbc1`: a malformed heartbeat is dropped and logged. |
 
+### Pass 2
+
+- **Invocation:** as pass 1, with the prompt naming pass 1's session and asking to confirm each resolution first.
+- **Model confirmation:** the output header shows model `gpt-6.1-sol`, reasoning effort medium, sandbox read-only.
+- **Session:** `01a17535-0986-73a0-b029-b3fc4b06203f`.
+- **Revision:** `67dc5df`.
+- **Snapshot:** `70bcc382e283c386713a4ec6ac16d28fd567b6704d80a87338b58b35bc6e444a` before and after; unchanged.
+- **Result:** H1, M2, M4, M5, M6, L8, and L9 confirmed resolved; the disposition of M3 accepted; L7 partly resolved. Remaining: 0 High, 1 Medium, 1 Low.
+
+| # | Finding | Disposition |
+| --- | --- | --- |
+| M10 | A subscription that closes without a stop, for example after a permissions error, ends the receiver as if it succeeded, so the control plane runs on without heartbeats. | Fixed in `b68deca`: the receiver then fails with the closure's cause, and the supervisor stops the control plane; a unit test closes with an error, and an integration test closes the connection (`bf1ce68`). |
+| L7 | The detection time still ignores that each check starts `10s` after the previous one ends, and the duration of the checks in between. | Fixed in `b68deca`: the targets and the design state the interval after each check's end, add the checks' durations, and claim no hard bound while a check's duration is unbounded. |
+
 ## Limitations
 
 - No worker sends heartbeats before 20d, so the end-to-end path from a real worker is untested; the NATS tests publish heartbeats with a worker user's credentials.
@@ -73,5 +91,5 @@ Reviewer assigned by the coordinator: Codex CLI, `gpt-6.1-sol`, reasoning effort
 
 ## Remaining gates
 
-- Review pass 2 of the fixes.
+- Review pass 3 of the pass 2 fixes, the last pass under the cap.
 - Coordinator integration into `dev` and archive.
