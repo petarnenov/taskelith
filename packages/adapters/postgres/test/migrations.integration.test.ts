@@ -77,9 +77,10 @@ test('the signals migration copies the state, change time, and unknown execution
 test('the bearer migration copies the control-plane hashes of enrolled workers', async () => {
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   const directory = await copiedMigrations();
-  const held = join(directory, `${WORKER_BEARER}.sql`);
-  const content = await readFile(held, 'utf8');
-  await unlink(held);
+  // The bearer migration and every later one wait, so they apply in order.
+  const held = [WORKER_BEARER, EVIDENCE_STORE].map((name) => join(directory, `${name}.sql`));
+  const contents = await Promise.all(held.map((path) => readFile(path, 'utf8')));
+  await Promise.all(held.map((path) => unlink(path)));
   assert.equal((await migrate(url, directory)).ok, true);
   const current = fleetWorker('w1', 'j1', { host: { platform: 'linux', architecture: 'x64', hostname: 'build\uD800 \u0000 " \\u0041' } });
   const previous = { ...current.credentials.current, generation: 1, controlPlaneHash: 'cp-old', validUntil: AT };
@@ -90,8 +91,8 @@ test('the bearer migration copies the control-plane hashes of enrolled workers',
       controls, journal_id, enrollment, predecessor_valid_until) VALUES ($1, true, $2, false, false, 1, 1, 1, '{}', $3, $4, $5)`,
     [worker.workerId, 'revokedAt' in worker, worker.journalId, JSON.stringify(worker), worker.credentials.previous?.validUntil ?? null]);
   }
-  await writeFile(held, content);
-  assert.deepEqual(await migrate(url, directory), { ok: true, value: [WORKER_BEARER] });
+  await Promise.all(held.map((path, index) => writeFile(path, contents[index]!)));
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: [WORKER_BEARER, EVIDENCE_STORE] });
   const rows = await query<{ control_plane_hash: string; previous_control_plane_hash: string | null; enrollment: string }>(
     url, 'SELECT control_plane_hash, previous_control_plane_hash, enrollment FROM workers ORDER BY worker_id',
   );

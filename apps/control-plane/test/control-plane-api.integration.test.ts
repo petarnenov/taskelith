@@ -238,14 +238,18 @@ describe('publication fence', () => {
 });
 
 describe('evidence', () => {
-  // The placement loop is item 21's, so the test places task-1 itself.
-  async function placedWorker(journalId: string): Promise<{ bearer: string; workerId: string; attemptId: string; generation: number }> {
+  async function enrolledWorker(journalId: string): Promise<{ bearer: string; workerId: WorkerId }> {
     const issued = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operator });
     const enrolled = await call('POST', '/workers/enrollments', { bearer: issued.enrollmentToken as string, body: {
       journalId, host: { platform: 'linux', architecture: 'x64', hostname: journalId },
       protocolVersions: { minimum: 1, maximum: 1 }, capacity: { slots: 1, cpuMillicores: 1000, memoryMebibytes: 1024, enforceableControls: [] },
     } });
-    const workerId = enrolled.body.workerId as WorkerId;
+    return { bearer: (enrolled.body.credentials as { controlPlane: string }).controlPlane, workerId: enrolled.body.workerId as WorkerId };
+  }
+
+  // The placement loop is item 21's, so the test places task-1 itself.
+  async function placedWorker(journalId: string): Promise<{ bearer: string; workerId: string; attemptId: string; generation: number }> {
+    const { bearer, workerId } = await enrolledWorker(journalId);
     const attemptId = `attempt-${journalId}` as AttemptId;
     const store = new PostgresDatabase(database);
     try {
@@ -264,8 +268,7 @@ describe('evidence', () => {
         const added = await tx.assignments.add(createAssignment({ id: `assignment-${journalId}` as never, attemptId, workerId, ownershipGeneration: generation, reservation }, at));
         return added.ok ? ok(generation) : added;
       });
-      const credentials = enrolled.body.credentials as { controlPlane: string };
-      return { bearer: credentials.controlPlane, workerId, attemptId, generation: value(placed) };
+      return { bearer, workerId, attemptId, generation: value(placed) };
     } finally {
       await store.close();
     }
@@ -295,7 +298,7 @@ describe('evidence', () => {
     assert.equal((await publish(holder.bearer, record, content)).status, 200, 'a retry returns the stored record');
     assert.equal((await publish(holder.bearer, { ...record, outcome: 'exited-1' }, content)).status, 409);
     assert.equal((await publish(operator, record, content)).status, 401);
-    const stranger = await placedWorker('journal-evidence-2');
+    const stranger = await enrolledWorker('journal-evidence-2');
     assert.equal((await publish(stranger.bearer, { ...record, evidenceId: 'evidence-e2e-2' }, content)).status, 403);
 
     const read = await call('GET', '/evidence/evidence-e2e-1', { bearer: operator });
