@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Taskelith execution API",
-    "version": "0.2.1",
+    "version": "0.3.0",
     "description": "Worker enrollment, launch authorization (G2 decision D12 (a)), delegation, task results, and evidence. Worker operations use the per-worker credential and operator operations the installation bootstrap credential (G2 decision D10 (a))."
   },
   "paths": {
@@ -933,15 +933,18 @@
           "slots": {
             "type": "integer",
             "minimum": 1,
+            "maximum": 2147483647,
             "description": "Concurrent active attempts."
           },
           "cpuMillicores": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 1,
+            "maximum": 2147483647
           },
           "memoryMebibytes": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 1,
+            "maximum": 2147483647
           },
           "enforceableControls": {
             "type": "array",

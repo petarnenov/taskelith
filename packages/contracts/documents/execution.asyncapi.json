@@ -2,7 +2,7 @@
   "asyncapi": "3.0.0",
   "info": {
     "title": "Taskelith execution messages",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Commands to workers and observations from workers over NATS JetStream (G2 decision D3 (a)). Operations are described from the control plane. Each command, observation, and report is first published with the Nats-Msg-Id header set to its commandId, its observationId, or its reportId and part, and a redrive sets a new one; the identity in the body never changes. A confirmation is idempotent and has no header. Every message has a JSON encoding of at most 1 MiB. A worker reads the command metadata and payload.protocolVersion first, which keep their meaning across protocol versions, and rejects a command whose version it does not support."
   },
   "defaultContentType": "application/json",
@@ -366,15 +366,18 @@
           "slots": {
             "type": "integer",
             "minimum": 1,
+            "maximum": 2147483647,
             "description": "Concurrent active attempts."
           },
           "cpuMillicores": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 1,
+            "maximum": 2147483647
           },
           "memoryMebibytes": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 1,
+            "maximum": 2147483647
           },
           "enforceableControls": {
             "type": "array",
