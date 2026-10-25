@@ -22,17 +22,27 @@ function bind(koffi: typeof import('koffi'), lib: ReturnType<typeof import('koff
   const timebase = lib.func('mach_timebase_info', 'int', [koffi.out(koffi.pointer(timebaseInfo))]);
   const continuousTime = lib.func('uint64_t mach_continuous_time(void)');
   return {
-    sysctl(name: readonly number[], buffer: Buffer | undefined): SysctlOutcome {
+    sysctl: (name, buffer) => guarded('sysctl', (): SysctlOutcome => {
       const length = [buffer?.length ?? 0];
       const status = sysctl(Int32Array.from(name), name.length, buffer ?? null, length, null, 0) as number;
       return { errno: status === 0 ? 0 : koffi.errno(), length: length[0]! };
-    },
-    continuousTime: () => BigInt(continuousTime() as number | bigint),
+    }),
+    continuousTime: () => guarded('mach_continuous_time', () => BigInt(continuousTime() as number | bigint)),
     timebase(): Result<Timebase> {
       const info = { numer: 0, denom: 0 };
-      const status = timebase(info) as number;
-      if (status !== 0 || info.denom === 0) return err(failure('unavailable', `mach_timebase_info failed with ${status}`));
+      const status = guarded('mach_timebase_info', () => timebase(info) as number);
+      if (!status.ok) return status;
+      if (status.value !== 0 || info.denom === 0) return err(failure('unavailable', `mach_timebase_info failed with ${status.value}`));
       return ok(info);
     },
   };
+}
+
+// A call that throws fails like a call that reports an error.
+function guarded<T>(name: string, call: () => T): Result<T> {
+  try {
+    return ok(call());
+  } catch (error) {
+    return err(failure('unavailable', `${name} threw: ${(error as Error).message}`));
+  }
 }

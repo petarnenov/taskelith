@@ -95,8 +95,7 @@ const EMPTY_LISTINGS = 2;
 export async function awaitDarwinTermination(dependencies: SupervisorDependencies, child: Child): Promise<'proven' | 'unprovable'> {
   let reported = false;
   for (let unreadable = 0; ; await dependencies.sleep(dependencies.timing.pollMilliseconds)) {
-    let proof = await proveFromListing(dependencies, child);
-    for (let empty = 1; proof?.proven === true && empty < EMPTY_LISTINGS; empty += 1) proof = await proveFromListing(dependencies, child);
+    const proof = await proveByConsecutiveListings(dependencies, child);
     if (proof?.proven === true) return 'proven';
     if (proof === undefined) {
       unreadable += 1;
@@ -106,6 +105,15 @@ export async function awaitDarwinTermination(dependencies: SupervisorDependencie
     unreadable = 0;
     if (!reported) await appendEvent(dependencies, { kind: 'survivors', processes: proof.survivors });
     reported = true;
+  }
+}
+
+// Proven only when EMPTY_LISTINGS listings in a row prove it; otherwise the
+// first one that does not.
+async function proveByConsecutiveListings(dependencies: SupervisorDependencies, child: Child): Promise<TerminationProof | undefined> {
+  for (let listings = 1; ; listings += 1) {
+    const proof = await proveFromListing(dependencies, child);
+    if (proof?.proven !== true || listings === EMPTY_LISTINGS) return proof;
   }
 }
 

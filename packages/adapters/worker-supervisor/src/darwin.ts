@@ -18,8 +18,8 @@ export interface Timebase {
 // The libSystem calls the macOS readers need, so that a reader without a
 // foreign function interface stays possible.
 export interface DarwinNative {
-  sysctl(name: readonly number[], buffer: Buffer | undefined): SysctlOutcome;
-  continuousTime(): bigint;
+  sysctl(name: readonly number[], buffer: Buffer | undefined): Result<SysctlOutcome>;
+  continuousTime(): Result<bigint>;
   timebase(): Result<Timebase>;
 }
 
@@ -68,19 +68,30 @@ function sysctlFailure(name: string, errno: number): Result<never> {
   return err(failure('unavailable', `sysctl ${name} failed with errno ${errno}`));
 }
 
+export function readBootSessionUuid(): Result<string> {
+  try {
+    return ok(execFileSync('sysctl', ['-n', 'kern.bootsessionuuid'], { encoding: 'utf8' }).trim());
+  } catch (error) {
+    return err(failure('unavailable', `cannot read kern.bootsessionuuid: ${(error as Error).message}`));
+  }
+}
+
 export class DarwinProcessInspector implements ProcessInspector {
   readonly #native: Result<DarwinNative>;
+  readonly #readBootId: () => Result<string>;
+  #bootId: string | undefined;
 
-  constructor(native: Result<DarwinNative>) {
+  constructor(native: Result<DarwinNative>, readBootId: () => Result<string> = readBootSessionUuid) {
     this.#native = native;
+    this.#readBootId = readBootId;
   }
 
+  // No process outlives its boot, so a boot identity once read stays valid.
   bootId(): Result<string> {
-    try {
-      return ok(execFileSync('sysctl', ['-n', 'kern.bootsessionuuid'], { encoding: 'utf8' }).trim());
-    } catch (error) {
-      return err(failure('unavailable', `cannot read kern.bootsessionuuid: ${(error as Error).message}`));
-    }
+    if (this.#bootId !== undefined) return ok(this.#bootId);
+    const boot = this.#readBootId();
+    if (boot.ok) this.#bootId = boot.value;
+    return boot;
   }
 
   identity(pid: number): Result<ProcessIdentity | undefined> {
@@ -88,7 +99,9 @@ export class DarwinProcessInspector implements ProcessInspector {
     const boot = this.bootId();
     if (!boot.ok) return boot;
     const buffer = Buffer.alloc(KINFO_PROC.size);
-    const outcome = this.#native.value.sysctl([CTL_KERN, KERN_PROC, KERN_PROC_PID, pid], buffer);
+    const called = this.#native.value.sysctl([CTL_KERN, KERN_PROC, KERN_PROC_PID, pid], buffer);
+    if (!called.ok) return called;
+    const outcome = called.value;
     if (outcome.errno !== 0) return sysctlFailure('KERN_PROC_PID', outcome.errno);
     if (outcome.length === 0) return ok(undefined);
     const entry = decodeKinfoProc(buffer.subarray(0, outcome.length), boot.value);
@@ -104,12 +117,14 @@ export class DarwinProcessInspector implements ProcessInspector {
     const name = [CTL_KERN, KERN_PROC, KERN_PROC_ALL];
     for (let attempt = 0; attempt < LISTING_ATTEMPTS; attempt += 1) {
       const size = this.#native.value.sysctl(name, undefined);
-      if (size.errno !== 0) return sysctlFailure('KERN_PROC_ALL', size.errno);
-      const buffer = Buffer.alloc(size.length);
+      if (!size.ok) return size;
+      if (size.value.errno !== 0) return sysctlFailure('KERN_PROC_ALL', size.value.errno);
+      const buffer = Buffer.alloc(size.value.length);
       const filled = this.#native.value.sysctl(name, buffer);
-      if (filled.errno === ENOMEM) continue;
-      if (filled.errno !== 0) return sysctlFailure('KERN_PROC_ALL', filled.errno);
-      return decodeKinfoProcs(buffer.subarray(0, filled.length), boot.value);
+      if (!filled.ok) return filled;
+      if (filled.value.errno === ENOMEM) continue;
+      if (filled.value.errno !== 0) return sysctlFailure('KERN_PROC_ALL', filled.value.errno);
+      return decodeKinfoProcs(buffer.subarray(0, filled.value.length), boot.value);
     }
     return err(failure('unavailable', `the process list kept growing over ${LISTING_ATTEMPTS} attempts`));
   }
@@ -132,15 +147,17 @@ export class DarwinDeadlineClock implements DeadlineClock {
     if (!boot.ok) return boot;
     const timebase = this.#native.value.timebase();
     if (!timebase.ok) return timebase;
-    const nanoseconds = this.#native.value.continuousTime() * BigInt(timebase.value.numer) / BigInt(timebase.value.denom);
+    const ticks = this.#native.value.continuousTime();
+    if (!ticks.ok) return ticks;
+    const nanoseconds = ticks.value * BigInt(timebase.value.numer) / BigInt(timebase.value.denom);
     return ok({ bootId: boot.value, milliseconds: Number(nanoseconds / 1_000_000n) });
   }
 }
 
 // A native reader that fails to load fails every read, so the supervisor
 // seals every launch.
-export function darwinPlatform(native: Result<DarwinNative>): Platform {
-  const inspector = new DarwinProcessInspector(native);
+export function darwinPlatform(native: Result<DarwinNative>, readBootId: () => Result<string> = readBootSessionUuid): Platform {
+  const inspector = new DarwinProcessInspector(native, readBootId);
   return {
     name: 'darwin',
     clock: new DarwinDeadlineClock(native, inspector),

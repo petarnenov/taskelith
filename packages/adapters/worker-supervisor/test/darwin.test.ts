@@ -35,22 +35,23 @@ class FakeNative implements DarwinNative {
   fillErrors: number[] = [];
   sizeError = 0;
   ticks = 24_000_000n;
+  ticksReadable = true;
   timebaseResult: Result<Timebase> = ok({ numer: 125, denom: 3 });
   readonly calls: string[] = [];
 
-  sysctl(name: readonly number[], buffer: Buffer | undefined): SysctlOutcome {
+  sysctl(name: readonly number[], buffer: Buffer | undefined): Result<SysctlOutcome> {
     this.calls.push(`${name.join('.')} ${buffer === undefined ? 'size' : 'fill'}`);
-    if (name[2] === 1) return this.#one(name[3]!, buffer!);
+    if (name[2] === 1) return ok(this.#one(name[3]!, buffer!));
     const all = Buffer.concat(this.processes);
-    if (buffer === undefined) return { errno: this.sizeError, length: all.length };
+    if (buffer === undefined) return ok({ errno: this.sizeError, length: all.length });
     const error = this.fillErrors.shift() ?? 0;
-    if (error !== 0) return { errno: error, length: 0 };
+    if (error !== 0) return ok({ errno: error, length: 0 });
     all.copy(buffer);
-    return { errno: 0, length: Math.min(all.length, buffer.length) };
+    return ok({ errno: 0, length: Math.min(all.length, buffer.length) });
   }
 
-  continuousTime(): bigint {
-    return this.ticks;
+  continuousTime(): Result<bigint> {
+    return this.ticksReadable ? ok(this.ticks) : err(failure('unavailable', 'threw'));
   }
 
   timebase(): Result<Timebase> {
@@ -65,10 +66,10 @@ class FakeNative implements DarwinNative {
   }
 }
 
+const BOOT_ID = 'boot-1';
+
 function platformWith(native: FakeNative) {
-  const platform = darwinPlatform(ok(native));
-  const boot = platform.inspector.bootId();
-  return { platform, bootId: boot.ok ? boot.value : undefined };
+  return { platform: darwinPlatform(ok(native), () => ok(BOOT_ID)), bootId: BOOT_ID };
 }
 
 test('a kinfo_proc decodes to the process identity, parent, and group', () => {
@@ -82,8 +83,7 @@ test('a kinfo_proc decodes to the process identity, parent, and group', () => {
   assert.equal(decodeKinfoProc(negative, 'boot-1').ok, false);
 });
 
-// The boot identity comes from the sysctl command, which only macOS has.
-test('the inspector reads one process and lists all of them', DARWIN_ONLY, () => {
+test('the inspector reads one process and lists all of them', () => {
   const native = new FakeNative();
   const { platform, bootId } = platformWith(native);
   assert.deepEqual(platform.inspector.identity(701), { ok: true, value: { bootId, pid: 701, startTime: 1_792_920_096_000_005 } });
@@ -93,7 +93,7 @@ test('the inspector reads one process and lists all of them', DARWIN_ONLY, () =>
   assert.deepEqual(listing.value.map((entry: ProcessEntry) => [entry.identity.pid, entry.parentPid, entry.processGroupId]), [[700, 1, 700], [701, 700, 700]]);
 });
 
-test('a listing that grows between the size query and the fill is queried again', DARWIN_ONLY, () => {
+test('a listing that grows between the size query and the fill is queried again', () => {
   const native = new FakeNative();
   native.fillErrors = [ENOMEM, ENOMEM];
   const { platform } = platformWith(native);
@@ -106,7 +106,7 @@ test('a listing that grows between the size query and the fill is queried again'
   assert.match((exhausted as { error: { message: string } }).error.message, /kept growing over 5 attempts/);
 });
 
-test('a failed sysctl or a partial kinfo_proc array is not a listing', DARWIN_ONLY, () => {
+test('a failed sysctl or a partial kinfo_proc array is not a listing', () => {
   const native = new FakeNative();
   const { platform } = platformWith(native);
   native.sizeError = 1;
@@ -117,18 +117,27 @@ test('a failed sysctl or a partial kinfo_proc array is not a listing', DARWIN_ON
   native.processes = [SELF, CHILD.subarray(0, 100)];
   assert.equal(platform.inspector.listing().ok, false);
 
-  native.sysctl = () => ({ errno: 3, length: 0 });
+  native.sysctl = () => ok({ errno: 3, length: 0 });
   assert.equal(platform.inspector.identity(700).ok, false);
-  native.sysctl = (_name, buffer) => ({ errno: 0, length: buffer!.length - 1 });
+  native.sysctl = (_name, buffer) => ok({ errno: 0, length: buffer!.length - 1 });
   assert.equal(platform.inspector.identity(700).ok, false);
+  native.sysctl = () => err(failure('unavailable', 'threw'));
+  assert.equal(platform.inspector.identity(700).ok, false);
+  assert.equal(platform.inspector.listing().ok, false);
+  let fills = 0;
+  native.sysctl = (_name, buffer) => (buffer === undefined ? ok({ errno: 0, length: 0 }) : ((fills += 1), err(failure('unavailable', 'threw'))));
+  assert.equal(platform.inspector.listing().ok, false);
+  assert.equal(fills, 1);
 });
 
-test('the deadline clock turns continuous ticks into milliseconds', DARWIN_ONLY, () => {
+test('the deadline clock turns continuous ticks into milliseconds', () => {
   const native = new FakeNative();
   const { platform, bootId } = platformWith(native);
   assert.deepEqual(platform.clock.read(), { ok: true, value: { bootId, milliseconds: 1_000 } });
   native.ticks = 2n ** 62n;
   assert.deepEqual(platform.clock.read(), { ok: true, value: { bootId, milliseconds: 192_153_584_101_141 } });
+  native.ticksReadable = false;
+  assert.equal(platform.clock.read().ok, false);
   native.timebaseResult = err(failure('unavailable', 'no timebase'));
   assert.equal(platform.clock.read().ok, false);
 });
@@ -136,6 +145,20 @@ test('the deadline clock turns continuous ticks into milliseconds', DARWIN_ONLY,
 test('on macOS the native calls load again in the same process', DARWIN_ONLY, () => {
   assert.equal(loadDarwinNative().ok, true);
   assert.equal(loadDarwinNative().ok, true);
+});
+
+test('the boot identity is read once it succeeds, and again after a failure', () => {
+  const reads: Result<string>[] = [err(failure('unavailable', 'no sysctl')), ok('boot-2')];
+  let count = 0;
+  const platform = darwinPlatform(ok(new FakeNative()), () => reads[count++]!);
+  assert.equal(platform.inspector.bootId().ok, false);
+  assert.deepEqual(platform.inspector.bootId(), { ok: true, value: 'boot-2' });
+  assert.deepEqual(platform.clock.read(), { ok: true, value: { bootId: 'boot-2', milliseconds: 1_000 } });
+  assert.equal(count, 2);
+  const failing = darwinPlatform(ok(new FakeNative()), () => err(failure('unavailable', 'no sysctl')));
+  assert.equal(failing.inspector.identity(700).ok, false);
+  assert.equal(failing.inspector.listing().ok, false);
+  assert.equal(failing.clock.read().ok, false);
 });
 
 test('without the native calls every read fails, so the supervisor seals', () => {
