@@ -60,6 +60,7 @@ export {
   ASSIGNMENT_REFUSAL_REASONS,
   AUTHORIZATION_OUTCOMES,
   COMMAND_REJECTION_REASONS,
+  TERMINATION_EVIDENCE_KINDS,
   type AssignmentRef,
   type AssignmentRefusalReason,
   type AuthorizationOutcome,
@@ -70,6 +71,9 @@ export {
   type CommandRejection,
   type CommandRejectionReason,
   type DeclaredCapacity,
+  type ExecutionExit,
+  type ExecutionProcess,
+  type ExecutionSubject,
   type InstallationId,
   type JournalBinding,
   type JournaledAuthorization,
@@ -84,6 +88,7 @@ export {
   type OutboxEntry,
   type ProtocolWindow,
   type ResourceRequest,
+  type TerminationEvidenceKind,
 } from './domain/journal-records.js';
 export {
   assembleSnapshot,
@@ -130,6 +135,7 @@ export {
   type LaunchParameters,
   type LaunchParametersInput,
 } from './domain/launch-grant.js';
+export { LAUNCH_RETRY_DELAY, launchRetryDelay } from './domain/launch-retry.js';
 export {
   LAUNCH_REJECTION_REASONS,
   RETRYABLE_LAUNCH_REJECTIONS,
@@ -197,6 +203,7 @@ export { InMemoryInventoryReports, InMemoryInventoryRequests } from './adapters/
 export { InMemoryProducerCursors } from './adapters/in-memory-producer-cursors.js';
 export { InMemoryTaskRepository } from './adapters/in-memory-task-repository.js';
 export { EVIDENCE_RECORDS_CONFORMANCE, EVIDENCE_STORE_CONFORMANCE } from './ports/evidence-conformance.js';
+export type { EvidencePublisher } from './ports/evidence-publisher.js';
 export type { EvidenceRecords } from './ports/evidence-records.js';
 export type { EvidenceStore } from './ports/evidence-store.js';
 export type { Inbox, InboxOutcome } from './ports/inbox.js';

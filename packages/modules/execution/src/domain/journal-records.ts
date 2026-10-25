@@ -158,6 +158,40 @@ export interface CommandCause {
   readonly correlationId: CorrelationId;
 }
 
+// The child a supervisor spawned, as its `handle` names it (supervisor
+// identity contract, section 2).
+export interface ExecutionProcess {
+  readonly platform: 'linux' | 'darwin';
+  readonly bootId: string;
+  readonly pid: number;
+  readonly startTime: number;
+  readonly processGroupId: number;
+}
+
+// The evidence that an execution's whole process set is gone (section 8).
+export const TERMINATION_EVIDENCE_KINDS = Object.freeze([
+  'containment-empty',
+  'process-group-empty',
+  'never-spawned',
+  'boot-changed',
+  'namespace-ended',
+] as const);
+
+export type TerminationEvidenceKind = (typeof TERMINATION_EVIDENCE_KINDS)[number];
+
+// An execution's `exit` record as the worker reports it.
+export interface ExecutionExit {
+  readonly status: ExitStatus;
+  readonly startProven: boolean;
+  readonly spawnFailure?: string;
+  readonly termination: TerminationEvidenceKind;
+}
+
+// The execution an execution fact is about, with its assignment.
+export interface ExecutionSubject extends AssignmentRef {
+  readonly executionId: ExecutionId;
+}
+
 // The facts a worker reports; the worker maps them to wire messages.
 export type ObservationFact =
   | ({ readonly kind: 'command-rejected' } & CommandCause & {
@@ -168,16 +202,18 @@ export type ObservationFact =
   | ({ readonly kind: 'assignment-accepted' } & CommandCause & AssignmentRef)
   | ({ readonly kind: 'assignment-refused' } & CommandCause & AssignmentRef & { readonly reason: AssignmentRefusalReason })
   | { readonly kind: 'capacity-declared'; readonly declaration: number; readonly capacity: DeclaredCapacity }
-  | {
-    readonly kind: 'launch-rejected';
-    readonly executionId: ExecutionId;
+  | ({ readonly kind: 'launch-rejected' } & ExecutionSubject & {
     readonly operationId: OperationId;
     readonly reason: LaunchRejectionReason;
-  }
-  | { readonly kind: 'execution-started'; readonly executionId: ExecutionId; readonly launchAuthId: LaunchAuthId }
-  | { readonly kind: 'execution-exited'; readonly executionId: ExecutionId; readonly status: ExitStatus }
-  | { readonly kind: 'execution-not-started'; readonly executionId: ExecutionId }
-  | { readonly kind: 'execution-uncertain'; readonly executionId: ExecutionId; readonly evidenceCounter: number };
+  })
+  | ({ readonly kind: 'execution-started' } & ExecutionSubject & {
+    readonly launchAuthId: LaunchAuthId;
+    readonly recoveryEpoch: RecoveryEpoch;
+    readonly process: ExecutionProcess;
+  })
+  | ({ readonly kind: 'execution-exited' } & ExecutionSubject & { readonly exit: ExecutionExit })
+  | ({ readonly kind: 'execution-not-started' } & ExecutionSubject)
+  | ({ readonly kind: 'execution-uncertain' } & ExecutionSubject & { readonly evidenceCounter: number });
 
 export interface OutboxEntry {
   readonly position: ObservationPosition;

@@ -4,6 +4,7 @@ import { resolveDataRoot } from '@taskelith/data-root';
 import type { HostArchitecture, HostPlatform, WorkerCapacity, WorkerHost } from '@taskelith/fleet';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type { TransportTls } from '@taskelith/nats';
+import type { Command, ExecutionAccount } from '@taskelith/worker-supervisor';
 
 export type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -21,6 +22,16 @@ export interface WorkerSettings {
   readonly enrollmentToken?: string;
   readonly host: WorkerHost;
   readonly capacity: WorkerCapacity;
+  // Without it the worker accepts assignments but launches none.
+  readonly launch?: LaunchSettings;
+}
+
+// The program a launch runs (a test-only scripted process in G2) and, on
+// Linux, the delegated cgroup and the account the child runs as.
+export interface LaunchSettings {
+  readonly command: Command;
+  readonly containmentParent?: string;
+  readonly executionAccount?: ExecutionAccount;
 }
 
 export interface HostFacts {
@@ -53,9 +64,12 @@ export function readWorkerSettings(environment: Environment, facts: HostFacts): 
   if (!host.ok) return host;
   const capacity = readCapacity(environment, facts);
   if (!capacity.ok) return capacity;
+  const launch = readLaunch(environment, facts.platform);
+  if (!launch.ok) return launch;
   const token = environment.TASKELITH_ENROLLMENT_TOKEN;
   return ok({
     dataRoot: dataRoot.value, controlPlaneUrl: controlPlaneUrl.value, natsUrl: natsUrl.value, host: host.value, capacity: capacity.value,
+    ...(launch.value === undefined ? {} : { launch: launch.value }),
     ...(ca.value === undefined ? {} : { natsTls: { ca: ca.value } }),
     ...(token === undefined || token === '' ? {} : { enrollmentToken: token }),
   });
@@ -108,5 +122,49 @@ function readCount(environment: Environment, variable: string, fallback: number)
   if (text === undefined || text === '') return ok(fallback);
   const count = Number(text);
   if (/^\d+$/.test(text) && count >= 1 && count <= MAXIMUM_COUNT) return ok(count);
+  return err(failure('invalid', `${variable} must be a positive integer`, { variable }));
+}
+
+// The launch settings; the Linux ones are read only on Linux.
+function readLaunch(environment: Environment, platform: NodeJS.Platform): Result<LaunchSettings | undefined> {
+  const command = readCommand(environment.TASKELITH_WORKER_COMMAND);
+  if (!command.ok) return command;
+  if (command.value === undefined) return ok(undefined);
+  if (platform !== 'linux') return ok({ command: command.value });
+  const parent = environment.TASKELITH_CONTAINMENT_PARENT;
+  if (parent === undefined || !parent.startsWith('/')) {
+    return err(failure('invalid', 'TASKELITH_CONTAINMENT_PARENT must be an absolute path', { variable: 'TASKELITH_CONTAINMENT_PARENT' }));
+  }
+  const uid = readAccountId(environment, 'TASKELITH_EXECUTION_UID');
+  if (!uid.ok) return uid;
+  const gid = readAccountId(environment, 'TASKELITH_EXECUTION_GID');
+  if (!gid.ok) return gid;
+  return ok({ command: command.value, containmentParent: parent, executionAccount: { uid: uid.value, gid: gid.value } });
+}
+
+const COMMAND_INVALID = failure('invalid', 'TASKELITH_WORKER_COMMAND must be a JSON array of the executable and its arguments', {
+  variable: 'TASKELITH_WORKER_COMMAND',
+});
+
+function readCommand(text: string | undefined): Result<Command | undefined> {
+  if (text === undefined || text === '') return ok(undefined);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return err(COMMAND_INVALID);
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every((part) => typeof part === 'string' && part !== '')) {
+    return err(COMMAND_INVALID);
+  }
+  const [executable, ...rest] = parsed as string[];
+  return ok({ executable: executable as string, arguments: rest });
+}
+
+// The execution account owns no cgroup of the worker, so it is never root.
+function readAccountId(environment: Environment, variable: string): Result<number> {
+  const text = environment[variable];
+  const id = Number(text);
+  if (text !== undefined && /^\d+$/.test(text) && id >= 1 && id <= MAXIMUM_COUNT) return ok(id);
   return err(failure('invalid', `${variable} must be a positive integer`, { variable }));
 }

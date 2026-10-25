@@ -15,13 +15,22 @@ export interface HttpAnswer {
 
 // One JSON POST with a bearer. A timeout or lost connection reached no
 // known decision, so it is `unavailable`.
-export async function postJson(endpoint: ControlPlaneEndpoint, path: string, bearer: string, body: unknown): Promise<Result<HttpAnswer>> {
+export function postJson(endpoint: ControlPlaneEndpoint, path: string, bearer: string, body: unknown): Promise<Result<HttpAnswer>> {
+  return post(endpoint, path, { authorization: `Bearer ${bearer}`, 'content-type': 'application/json' }, JSON.stringify(body));
+}
+
+// One `multipart/form-data` POST with a bearer; fetch sets the boundary.
+export function postForm(endpoint: ControlPlaneEndpoint, path: string, bearer: string, form: FormData): Promise<Result<HttpAnswer>> {
+  return post(endpoint, path, { authorization: `Bearer ${bearer}` }, form);
+}
+
+async function post(endpoint: ControlPlaneEndpoint, path: string, headers: Record<string, string>, body: string | FormData): Promise<Result<HttpAnswer>> {
   const send = endpoint.fetch ?? fetch;
   try {
     const response = await send(new URL(path, withTrailingSlash(endpoint.baseUrl)), {
       method: 'POST',
-      headers: { authorization: `Bearer ${bearer}`, 'content-type': 'application/json' },
-      body: JSON.stringify(body),
+      headers,
+      body,
       signal: AbortSignal.timeout(endpoint.timeoutMilliseconds),
     });
     return ok({ status: response.status, body: await response.json().catch(() => undefined) });

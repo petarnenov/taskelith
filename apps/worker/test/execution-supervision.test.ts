@@ -1,0 +1,116 @@
+import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, test } from 'node:test';
+import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { id, value } from '@taskelith/testing';
+import { fileSupervision, type ExecutionSupervision, type LaunchProgram } from '@taskelith/worker';
+import { encodeRecord, RECORD_FILES, type Platform } from '@taskelith/worker-supervisor';
+import { BOOT } from './launch-fakes.ts';
+
+const EXECUTION = id('ExecutionId', 'execution-1');
+const PLAN = { attemptId: 'attempt-1', ownershipGeneration: 2, launchAuthId: 'grant-1', deadline: { bootId: BOOT, milliseconds: 26_000 } };
+const PROGRAM: LaunchProgram = {
+  command: { executable: '/bin/true', arguments: ['--quiet'] }, supervisorVersion: '1.2.3', executionAccount: { uid: 2000, gid: 2001 },
+};
+
+let executions: string;
+let namespace: Result<string> | undefined;
+
+function platform(name: 'linux' | 'darwin'): Platform {
+  return {
+    name,
+    clock: { read: () => ok({ bootId: BOOT, milliseconds: 1_000 }) },
+    inspector: { bootId: () => ok(BOOT), identity: () => ok(undefined), listing: () => ok([]) },
+    containment: () => undefined,
+    namespaceIncarnation: () => namespace,
+  };
+}
+
+function supervision(name: 'linux' | 'darwin' = 'darwin'): ExecutionSupervision {
+  return fileSupervision({ executions, platform: platform(name), program: PROGRAM })(EXECUTION);
+}
+
+function recordFile(file: string): Record<string, unknown> {
+  return JSON.parse(readFileSync(join(executions, EXECUTION, file), 'utf8')) as Record<string, unknown>;
+}
+
+beforeEach(() => {
+  executions = join(realpathSync(mkdtempSync(join(tmpdir(), 'taskelith-supervision-'))), 'executions');
+  mkdirSync(executions, { mode: 0o700 });
+  namespace = undefined;
+});
+
+afterEach(() => rmSync(join(executions, '..'), { recursive: true, force: true }));
+
+test('prepare writes intent with the plan, the program, and on Linux the namespace incarnation', async () => {
+  namespace = ok('pid:[4026531836]');
+  value(await supervision('linux').prepare(PLAN));
+  assert.deepEqual(recordFile(RECORD_FILES.intent), {
+    format: 1, executionId: EXECUTION, ...PLAN, supervisorVersion: '1.2.3', command: PROGRAM.command,
+    namespaceIncarnation: 'pid:[4026531836]', executionAccount: { uid: 2000, gid: 2001 },
+  });
+});
+
+test('prepare fails when the namespace incarnation cannot be read', async () => {
+  namespace = err(failure('unavailable', 'no /proc'));
+  assert.equal((await supervision('linux').prepare(PLAN)).ok, false);
+});
+
+test('seal creates the directory and returns the winning launch record', async () => {
+  assert.deepEqual(value(await supervision().seal()), { kind: 'seal', by: 'worker', reason: 'recovery' });
+  assert.deepEqual(value(await supervision().seal()), { kind: 'seal', by: 'worker', reason: 'recovery' });
+});
+
+test('read reports the launch record, the spawned process, and the exit', async () => {
+  value(await supervision().prepare(PLAN));
+  const directory = join(executions, EXECUTION);
+  writeFileSync(join(directory, RECORD_FILES.launch), encodeRecord({ kind: 'claim', launchAuthId: 'grant-1', supervisor: 1 }));
+  writeFileSync(join(directory, RECORD_FILES.handle), encodeRecord({
+    kind: 'spawned', process: { bootId: BOOT, pid: 42, startTime: 7 }, processGroupId: 42,
+  }));
+  writeFileSync(join(directory, RECORD_FILES.exit), encodeRecord({
+    status: { kind: 'code', code: 0 }, startProven: true, termination: 'process-group-empty',
+  }));
+  const facts = value(await supervision().read());
+  assert.deepEqual(facts, {
+    problems: [],
+    launch: { kind: 'claim', launchAuthId: 'grant-1', supervisor: 1 },
+    process: { platform: 'darwin', bootId: BOOT, pid: 42, startTime: 7, processGroupId: 42 },
+    exit: { status: { kind: 'code', code: 0 }, startProven: true, termination: 'process-group-empty' },
+  });
+});
+
+test('a corrupt launch record is a problem, never a fact', async () => {
+  value(await supervision().prepare(PLAN));
+  writeFileSync(join(executions, EXECUTION, RECORD_FILES.launch), '{not json');
+  const facts = value(await supervision().read());
+  assert.equal(facts.launch, undefined);
+  assert.deepEqual(facts.problems.map(({ file }) => file), [RECORD_FILES.launch]);
+});
+
+test('cancel writes the cancel file once', async () => {
+  value(await supervision().prepare(PLAN));
+  value(await supervision().cancel('cancellation cancel-1'));
+  value(await supervision().cancel('cancellation cancel-2'));
+  assert.deepEqual(recordFile(RECORD_FILES.cancel), { format: 1, reason: 'cancellation cancel-1' });
+});
+
+test('recovery of a record without a launch record seals it and reports not-started', async () => {
+  value(await supervision().prepare(PLAN));
+  assert.deepEqual(value(await supervision().recover()), { fact: 'not-started' });
+  assert.deepEqual(recordFile(RECORD_FILES.launch), { format: 1, kind: 'seal', by: 'worker', reason: 'recovery' });
+});
+
+test('recovery reports a recorded exit, and a missing record is uncertain', async () => {
+  value(await supervision().prepare(PLAN));
+  const directory = join(executions, EXECUTION);
+  writeFileSync(join(directory, RECORD_FILES.launch), encodeRecord({ kind: 'claim', launchAuthId: 'grant-1', supervisor: 1 }));
+  writeFileSync(join(directory, RECORD_FILES.exit), encodeRecord({
+    status: { kind: 'unknown' }, startProven: false, spawnFailure: 'ENOENT', termination: 'never-spawned',
+  }));
+  assert.equal(value(await supervision().recover()).fact, 'exited');
+  rmSync(directory, { recursive: true });
+  assert.deepEqual(value(await supervision().recover()), { fact: 'uncertain' });
+});
