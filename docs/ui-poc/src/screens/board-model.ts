@@ -114,7 +114,12 @@ function withProgress(run: Run, progress: BoardProgress, decisions: Decisions): 
   }
   if (progress.stopping.includes(run.runId)) return withSession(run, { cancellation: 'requested' });
   if (progress.stopped.includes(run.runId)) {
-    return withSession(run, { phase: 'ended', outcome: 'killed', cancellation: undefined });
+    return withSession(run, {
+      phase: 'ended',
+      outcome: 'exited-signal',
+      cancelled: true,
+      cancellation: undefined,
+    });
   }
   if (progress.merged.includes(run.runId)) return merged(run);
   if (progress.returned.includes(run.runId)) return returnedToSpecify(run);

@@ -16,9 +16,9 @@ import {
 import { Facts, LaterGate, PageHeader } from '../ui';
 
 type Port = 'sdlc' | 'harness' | 'scm';
-type RegisterStatus = 'candidate' | 'accepted' | 'rejected' | 'replacement-required' | 'not assessed';
+type RegisterStatus = 'candidate' | 'accepted' | 'rejected' | 'replacement-required' | 'no register entry';
 type Registration =
-  | { result: 'admitted' }
+  | { result: 'registered' }
   | { result: 'rejected'; code: 'invalid' | 'not-found' | 'precondition-failed'; message: string }
   | { result: 'not-installed' };
 
@@ -45,7 +45,7 @@ const PLUGINS: Plugin[] = [
     id: 'sdlc-openspec',
     version: '0.0.0',
     register: 'candidate',
-    registration: { result: 'admitted' },
+    registration: { result: 'registered' },
     range: '^0.2.0',
     upstream: 'OpenSpec 1.14.3 · Node CLI',
     capabilities: ['validate-structure', 'finalize'],
@@ -117,7 +117,7 @@ const PLUGINS: Plugin[] = [
     name: 'Custom flow',
     id: 'sdlc-custom-flow',
     version: '2.0.0',
-    register: 'not assessed',
+    register: 'no register entry',
     registration: {
       result: 'rejected',
       code: 'precondition-failed',
@@ -133,7 +133,7 @@ const PLUGINS: Plugin[] = [
     name: 'Ticket bridge',
     id: 'bridge-tickets',
     version: '0.3.0',
-    register: 'not assessed',
+    register: 'no register entry',
     registration: { result: 'rejected', code: 'not-found', message: 'port TicketBridge is not a known port' },
     range: '^0.2.0',
     declaredPort: 'TicketBridge',
@@ -148,7 +148,7 @@ const REGISTER_COLOR: Record<RegisterStatus, MantineColor> = {
   accepted: 'teal',
   rejected: 'red',
   'replacement-required': 'red',
-  'not assessed': 'gray',
+  'no register entry': 'gray',
 };
 
 const PORT_LABEL: Record<Port, string> = {
@@ -158,10 +158,10 @@ const PORT_LABEL: Record<Port, string> = {
 };
 
 function RegistrationBadge({ registration }: { registration: Registration }) {
-  if (registration.result === 'admitted')
+  if (registration.result === 'registered')
     return (
       <Badge variant="light" color="teal">
-        Registration: admitted
+        Registration: registered (ok)
       </Badge>
     );
   if (registration.result === 'not-installed')
@@ -308,7 +308,7 @@ export function PluginsScreen() {
               <List spacing={4} size="sm">
                 <List.Item>
                   <Text span size="xs" c="teal">
-                    admitted
+                    registered (ok)
                   </Text>{' '}
                   <Text span size="xs">
                     manifest valid, port known, range includes the API

@@ -270,9 +270,12 @@ function WorkerCard({
             ))}
           </Group>
         </Group>
-        <Badge variant="default" size="sm" tt="none">
-          {worker.harness}
-        </Badge>
+        <Group gap={6}>
+          <Badge variant="default" size="sm" tt="none">
+            {worker.harness}
+          </Badge>
+          {worker.harness.startsWith('Codex') ? <LaterGate>Codex · G4</LaterGate> : null}
+        </Group>
         <Stack gap={6}>
           <Meter
             label="Slots"
@@ -345,10 +348,10 @@ export function WorkersScreen() {
               {reachable} reachable
             </Badge>
             <Badge variant="dot" color="orange">
-              {draining.length} draining · 1 under admission pressure
+              {draining.length} draining · {WORKERS.filter((w) => w.pressure).length} under admission pressure
             </Badge>
             <Badge variant="dot" color="red">
-              1 unreachable
+              {WORKERS.filter((w) => !w.reachable).length} unreachable
             </Badge>
             {can('manage-workers') ? (
               <Button aria-expanded={enroll} onClick={() => setEnroll(!enroll)}>
@@ -415,9 +418,12 @@ export function WorkersScreen() {
             <Card key={pool.harness} withBorder radius="md" padding="md">
               <Stack gap="sm">
                 <Group justify="space-between">
-                  <Title order={3} size="h5">
-                    {pool.harness}
-                  </Title>
+                  <Group gap={6}>
+                    <Title order={3} size="h5">
+                      {pool.harness}
+                    </Title>
+                    {pool.harness === 'Codex' ? <LaterGate>G4</LaterGate> : null}
+                  </Group>
                   <Badge variant="light" color={pool.used >= pool.total ? 'orange' : 'teal'}>
                     {pool.used} of {pool.total} attempts
                   </Badge>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Badge,
   Breadcrumbs,
@@ -288,11 +288,16 @@ export function NewTaskScreen() {
       return;
     }
     setSending(true);
-    window.setTimeout(() => {
+  };
+
+  useEffect(() => {
+    if (!sending) return undefined;
+    const timer = window.setTimeout(() => {
       setSending(false);
       setCreated(true);
     }, CREATE_DELAY);
-  };
+    return () => clearTimeout(timer);
+  }, [sending]);
 
   return (
     <Stack gap="md">

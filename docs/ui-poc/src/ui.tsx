@@ -35,17 +35,21 @@ const WAITING_TEXT: Record<WaitingReason, string> = {
   'control-not-enforceable': 'a required resource control cannot be enforced',
 };
 
-// What the backend knows about an attempt; the badge is derived from it and
-// never stored (architecture section 6, invariant 6).
+// Execution facts behind a session; the badge is derived from them and never
+// stored (architecture section 6, invariant 6).
 export interface ExecutionView {
-  phase: 'none' | 'awaiting-launch' | 'offered' | 'launch-authorized' | 'running' | 'ended';
+  phase: 'none' | 'awaiting-launch' | 'launch-authorized' | 'running' | 'ended';
+  assignment?: 'offered' | 'accepted';
   reachability: 'reachable' | 'unknown';
   lastContact?: string;
   waitingReason?: WaitingReason;
   evidence?: 'uncertain' | 'termination-unproven' | 'local-history-lost';
   cancellation?: 'requested' | 'not-applied';
+  // Turns come with sessions in G3 items 4 and 13.
   turn?: 'working' | 'awaiting-approval' | 'awaiting-input' | 'idle';
-  outcome?: 'exited-0' | 'exited-1' | 'killed' | 'operator-resolved' | 'not-started';
+  outcome?: 'exited-0' | 'exited-1' | 'exited-signal' | 'operator-resolved' | 'not-started';
+  cancelled?: boolean;
+  attempt?: number;
   ownershipGeneration?: number;
 }
 
@@ -53,54 +57,64 @@ export interface SessionStatus {
   label: string;
   color: MantineColor;
   spinning: boolean;
+  live: boolean;
   needsReconcile: boolean;
 }
 
 const OUTCOME_TEXT: Record<NonNullable<ExecutionView['outcome']>, string> = {
-  'exited-0': 'Ended · exit 0',
-  'exited-1': 'Ended · exit 1',
-  killed: 'Ended · killed after stop',
-  'operator-resolved': 'Ended · operator-resolved, outcome unknown',
+  'exited-0': 'Ended · exited, code 0',
+  'exited-1': 'Ended · exited, code 1',
+  'exited-signal': 'Ended · exited, signal',
+  'operator-resolved': 'Ended · operator-resolved, status unknown',
   'not-started': 'Never started',
 };
 
-const status = (
-  label: string,
-  color: MantineColor,
-  spinning = false,
-  needsReconcile = false,
-): SessionStatus => ({
+interface StatusLook {
+  spinning?: boolean;
+  live?: boolean;
+  needsReconcile?: boolean;
+}
+
+const status = (label: string, color: MantineColor, look: StatusLook = {}): SessionStatus => ({
   label,
   color,
-  spinning,
-  needsReconcile,
+  spinning: look.spinning ?? false,
+  live: look.live ?? false,
+  needsReconcile: look.needsReconcile ?? false,
 });
 
 function runningStatus(view: ExecutionView): SessionStatus {
   const unreachable = view.reachability === 'unknown';
   const contact = view.lastContact ? ' · last contact ' + view.lastContact : '';
+  const reconcile = { needsReconcile: true };
   if (view.evidence === 'uncertain') {
-    return status(
-      (unreachable ? 'Worker unreachable · ' : '') + 'process state uncertain',
-      'red',
-      false,
-      true,
-    );
+    return status((unreachable ? 'Worker unreachable · ' : '') + 'process state uncertain', 'red', reconcile);
   }
-  if (view.evidence === 'termination-unproven') return status('Termination unproven', 'red', false, true);
-  if (view.evidence === 'local-history-lost') return status('Worker history lost', 'red', false, true);
+  if (view.evidence === 'termination-unproven') return status('Termination unproven', 'red', reconcile);
+  if (view.evidence === 'local-history-lost') return status('Worker history lost', 'red', reconcile);
   if (view.cancellation === 'not-applied')
-    return status('Stop not applied · adopted process', 'red', false, true);
+    return status('Stop not applied · adopted process', 'red', reconcile);
   if (view.cancellation === 'requested') {
     return unreachable
       ? status('Stop requested · delivered when the worker returns', 'orange')
-      : status('Stopping · awaiting proof', 'orange', true);
+      : status('Stopping · awaiting proof', 'orange', { spinning: true });
   }
   if (unreachable) return status('Worker unreachable' + contact, 'orange');
   if (view.turn === 'awaiting-approval') return status('Waiting for you', 'orange');
   if (view.turn === 'awaiting-input') return status('Waiting for your input', 'orange');
   if (view.turn === 'idle') return status('Waiting for the next turn', 'gray');
-  return status('Session live', 'teal', true);
+  return status('Session live', 'teal', { spinning: true, live: true });
+}
+
+function queuedStatus(view: ExecutionView): SessionStatus {
+  if (view.assignment === 'offered') return status('Offered to a worker', 'indigo', { spinning: true });
+  if (!view.waitingReason) return status('Queued', 'gray');
+  return status('Queued · ' + WAITING_TEXT[view.waitingReason], 'gray');
+}
+
+function endedStatus(view: ExecutionView): SessionStatus {
+  if (!view.outcome) return status('Ended · outcome unknown', 'gray');
+  return status(OUTCOME_TEXT[view.outcome] + (view.cancelled ? ' · cancelled' : ''), 'gray');
 }
 
 export function deriveSessionStatus(view: ExecutionView): SessionStatus {
@@ -108,16 +122,23 @@ export function deriveSessionStatus(view: ExecutionView): SessionStatus {
     case 'none':
       return status('No session', 'gray');
     case 'awaiting-launch':
-      return status('Queued · ' + WAITING_TEXT[view.waitingReason ?? 'worker-not-eligible'], 'gray');
-    case 'offered':
-      return status('Offered to a worker', 'indigo', true);
+      return queuedStatus(view);
     case 'launch-authorized':
-      return status('Launching', 'indigo', true);
+      return status('Launching', 'indigo', { spinning: true });
     case 'running':
       return runningStatus(view);
     case 'ended':
-      return status(OUTCOME_TEXT[view.outcome ?? 'exited-0'], 'gray');
+      return endedStatus(view);
   }
+}
+
+// Harnesses and platforms the backend has not admitted yet, named on the
+// badge so that a session does not look supported.
+function harnessLater(harness: string): string | undefined {
+  if (harness.startsWith('Codex')) return 'Codex · G4';
+  if (harness.startsWith('Claude Code') && harness.includes('linux'))
+    return 'Claude Code on Linux · qualification pending';
+  return undefined;
 }
 
 export function SessionBadge({
@@ -131,6 +152,7 @@ export function SessionBadge({
 }) {
   const look = deriveSessionStatus(view);
   const text = label ?? look.label;
+  const later = harness ? harnessLater(harness) : undefined;
   return (
     <Group gap="xs" wrap="wrap">
       {look.spinning ? (
@@ -147,6 +169,7 @@ export function SessionBadge({
           {harness}
         </Text>
       ) : null}
+      {later ? <LaterGate>{later}</LaterGate> : null}
     </Group>
   );
 }

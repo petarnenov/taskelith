@@ -223,15 +223,16 @@ function ReconcileAction({ run, flow }: { run: BoardRun; flow: BoardFlow }) {
 
 function RuntimeApproval({ run }: { run: BoardRun }) {
   const { decisions, decide } = usePoc();
-  const state = run.inboxId ? decisions[run.inboxId] : undefined;
-  if (run.session.turn !== 'awaiting-approval' || state?.confirmed) return null;
+  const inboxId = run.inboxId;
+  const state = inboxId ? decisions[inboxId] : undefined;
+  if (!inboxId || run.session.turn !== 'awaiting-approval' || state?.confirmed) return null;
   return (
     <Alert variant="light" color="orange" title="Native approval request">
       <Stack gap="xs">
         <Code>nvm use &amp;&amp; make verify</Code>
         <Text size="xs" c="dimmed">
-          Request req-7f2c for attempt #2 · provider generation 3. Runtime approval only; it passes no SDLC
-          gate.
+          Request req-7f2c for attempt #{run.session.attempt ?? 1} · provider generation 3. Runtime approval
+          only; it passes no SDLC gate.
         </Text>
         {state ? (
           <Text size="xs">Sending · waiting for the server to confirm…</Text>
@@ -240,7 +241,7 @@ function RuntimeApproval({ run }: { run: BoardRun }) {
             <RoleButton
               capability="answer-runtime-request"
               size="xs"
-              onClick={() => decide('kernel-approval', 'approve-once')}
+              onClick={() => decide(inboxId, 'approve-once')}
             >
               Approve once
             </RoleButton>
@@ -248,7 +249,7 @@ function RuntimeApproval({ run }: { run: BoardRun }) {
               capability="answer-runtime-request"
               size="xs"
               variant="default"
-              onClick={() => decide('kernel-approval', 'deny')}
+              onClick={() => decide(inboxId, 'deny')}
             >
               Deny
             </RoleButton>
@@ -270,7 +271,7 @@ function sessionLog(run: BoardRun): string {
     return '? last observation from ' + run.harness.split(' · ')[1] + ' ' + run.session.lastContact;
   if (run.session.turn === 'awaiting-approval')
     return '▸ task 4 of 9 complete\n▸ request: run nvm use && make verify\n⏸ waiting for approval';
-  return '▸ read ' + run.nativeReference + '\n▸ edit 3 files\n▸ run tests: 42 passed';
+  return '▸ read tasks of ' + run.workItem + '\n▸ edit 3 files\n▸ run tests: 42 passed';
 }
 
 function SessionSection({ run, flow }: { run: BoardRun; flow: BoardFlow }) {
@@ -283,7 +284,7 @@ function SessionSection({ run, flow }: { run: BoardRun; flow: BoardFlow }) {
       <SessionBadge view={run.session} harness={run.harness || 'Not assigned'} />
       {run.session.phase !== 'none' ? (
         <Text size="xs" c="dimmed">
-          Attempt #2 · ownership generation {run.session.ownershipGeneration ?? 1}
+          Attempt #{run.session.attempt ?? 1} · ownership generation {run.session.ownershipGeneration ?? 1}
         </Text>
       ) : null}
       {log ? <Code block>{log}</Code> : null}

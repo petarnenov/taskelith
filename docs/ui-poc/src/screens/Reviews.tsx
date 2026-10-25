@@ -202,6 +202,7 @@ function QueueItem({ review, selected, onPick }: { review: Review; selected: boo
           </Text>
           <Text size="xs" c="dimmed">
             {review.kind} · {review.reviewer} · {review.pass}
+            {review.reviewer.startsWith('Codex') ? ' · Codex reviews in G4' : ''}
           </Text>
           <SessionBadge view={review.session} label={review.sessionLabel} />
         </Stack>

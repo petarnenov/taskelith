@@ -155,10 +155,8 @@ const SCRIPT: Step[] = [
   {
     entries: [
       {
-        kind: 'tool',
-        command: 'nvm use && make verify',
-        output:
-          'typecheck ✓\ndependency boundaries ✓\nopenspec validate ✓\ntests ✓ 42 passed\ncoverage ✓ 81% lines · 77% branches · 84% functions',
+        kind: 'system',
+        text: 'Platform verify on a41c9e2 (not an agent step): make verify and CI passed: typecheck, dependency boundaries, openspec validate, 42 tests, coverage 81% lines · 77% branches · 84% functions.',
       },
     ],
     resolved: 2,
@@ -218,7 +216,7 @@ function status(step: Step, stopping: boolean, stopped: boolean): { label: strin
   if (stopped) {
     return {
       label: 'Ended · killed after stop, confirmed by mac-01',
-      view: { ...running, phase: 'ended', outcome: 'killed' },
+      view: { ...running, phase: 'ended', outcome: 'exited-signal', cancelled: true },
     };
   }
   if (step.done)
@@ -366,14 +364,15 @@ export function SessionScreen() {
     const turnKey = 'tk-' + Math.random().toString(16).slice(2, 8);
     setMessages((m) => [...m, { kind: 'user', text, turnKey, confirmed: false }]);
     setDraft('');
-    window.setTimeout(
-      () =>
-        setMessages((m) =>
-          m.map((e) => (e.kind === 'user' && e.turnKey === turnKey ? { ...e, confirmed: true } : e)),
-        ),
-      TURN_CONFIRM_DELAY,
-    );
   };
+
+  const unconfirmed = messages.some((e) => e.kind === 'user' && !e.confirmed);
+  useEffect(() => {
+    if (!unconfirmed) return undefined;
+    const confirm = (e: Entry): Entry => (e.kind === 'user' ? { ...e, confirmed: true } : e);
+    const timer = window.setTimeout(() => setMessages((m) => m.map(confirm)), TURN_CONFIRM_DELAY);
+    return () => clearTimeout(timer);
+  }, [unconfirmed]);
 
   const entries = [...SCRIPT.slice(0, step + 1).flatMap((s) => s.entries), ...messages];
   const terminal = terminalLines(entries);

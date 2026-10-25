@@ -138,26 +138,21 @@ const SOON: {
 
 // The first answer to the spec approval meets a newer revision, as a stale
 // screen would; the server's conflict reply makes the user look again.
-function useSpecConflict() {
-  const [seen, setSeen] = useState(false);
-  return { firstTry: !seen, markSeen: () => setSeen(true) };
-}
+type SpecConflict = 'not-yet' | 'shown' | 'resolved';
 
 export function InboxScreen() {
   const { decisions, decide, needsYouCount } = usePoc();
   const [results, setResults] = useState<Partial<Record<InboxId, string>>>({});
-  const [conflict, setConflict] = useState(false);
-  const spec = useSpecConflict();
+  const [conflict, setConflict] = useState<SpecConflict>('not-yet');
   const open = NOW.filter((item) => !decisions[item.id]?.confirmed);
   const done = NOW.filter((item) => decisions[item.id]?.confirmed);
 
   const act = (item: InboxItem, action: Action) => {
-    if (item.id === 'codex-spec' && spec.firstTry) {
-      spec.markSeen();
-      setConflict(true);
+    if (item.id === 'codex-spec' && conflict === 'not-yet') {
+      setConflict('shown');
       return;
     }
-    setConflict(false);
+    if (item.id === 'codex-spec') setConflict('resolved');
     setResults({ ...results, [item.id]: action.result });
     decide(item.id, action.decision);
   };
@@ -203,7 +198,7 @@ export function InboxScreen() {
                 <Text size="xs" c="dimmed" ff="monospace">
                   {item.identity}
                 </Text>
-                {item.id === 'codex-spec' && conflict ? (
+                {item.id === 'codex-spec' && conflict === 'shown' ? (
                   <Alert variant="light" color="orange" title="This changed since you opened it">
                     The server refused the answer with conflict: Codex pushed a new specs revision (generation
                     4 → 5). The view is reloaded; review the new revision and answer again.

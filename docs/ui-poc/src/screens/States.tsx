@@ -43,10 +43,10 @@ const VIEWS: { value: View; label: string }[] = [
 
 const SETUP = [
   {
-    title: 'Claim the installation',
+    title: 'Sign in with the bootstrap credential',
     detail:
       'Sign in with the bootstrap credential of the installation to create the first installation-owner (G3 item 10).',
-    action: 'Claim installation',
+    action: 'Sign in as installation-owner',
   },
   {
     title: 'Connect source control',

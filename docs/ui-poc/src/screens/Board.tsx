@@ -278,7 +278,7 @@ export function BoardScreen() {
   const { runs } = flow;
   const lanes = [...new Set(runs.map((run) => laneKey(run, groupBy)))];
   const selected = panel?.kind === 'run' ? runs.find((run) => run.runId === panel.id) : undefined;
-  const liveCount = runs.filter((run) => deriveSessionStatus(run.session).label === 'Session live').length;
+  const liveCount = runs.filter((run) => deriveSessionStatus(run.session).live).length;
 
   return (
     <Stack gap="md">
