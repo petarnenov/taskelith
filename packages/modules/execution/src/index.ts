@@ -73,6 +73,20 @@ export {
   type ObservationFact,
   type OutboxEntry,
 } from './domain/journal-records.js';
+export {
+  assembleSnapshot,
+  classifyOmission,
+  highestAppliedSequence,
+  isRolledBack,
+  type AcceptanceProvenance,
+  type InventoryPart,
+  type InventoryRequest,
+  type InventorySnapshot,
+  type JournalBound,
+  type OmissionClass,
+  type ReportedAssignment,
+  type ReportedExecution,
+} from './domain/inventory.js';
 export { planJournalRecovery, type RecoveryAction } from './domain/journal-recovery.js';
 export {
   authorizeLaunch,
@@ -162,6 +176,7 @@ export {
 } from './domain/task.js';
 export { InMemoryEvidenceRecords } from './adapters/in-memory-evidence.js';
 export { InMemoryInbox } from './adapters/in-memory-inbox.js';
+export { InMemoryInventoryReports, InMemoryInventoryRequests } from './adapters/in-memory-inventory.js';
 export { InMemoryProducerCursors } from './adapters/in-memory-producer-cursors.js';
 export { InMemoryTaskRepository } from './adapters/in-memory-task-repository.js';
 export { EVIDENCE_RECORDS_CONFORMANCE, EVIDENCE_STORE_CONFORMANCE } from './ports/evidence-conformance.js';
@@ -171,11 +186,15 @@ export type { Inbox, InboxOutcome } from './ports/inbox.js';
 export type { LaunchAuthorityClient, LaunchAuthorizationRequest } from './ports/launch-authority-client.js';
 export type { LaunchPredicate, LaunchRecords, RecordedLaunch, RecordedRejection } from './ports/launch-records.js';
 export type { Outbox, OutboxMessage } from './ports/outbox.js';
-export type { ProducerCursors } from './ports/producer-cursors.js';
+export type { InventoryReports } from './ports/inventory-reports.js';
+export type { InventoryRequests } from './ports/inventory-requests.js';
+export type { ProducerCursors, ProducerJournal } from './ports/producer-cursors.js';
 // The outbox ports are structurally identical, so they share one suite.
 export { OUTBOX_CONFORMANCE } from '@taskelith/sdlc';
 export {
   INBOX_CONFORMANCE,
+  INVENTORY_REPORTS_CONFORMANCE,
+  INVENTORY_REQUESTS_CONFORMANCE,
   LAUNCH_RECORDS_CONFORMANCE,
   PRODUCER_CURSORS_CONFORMANCE,
   TASK_REPOSITORY_CONFORMANCE,

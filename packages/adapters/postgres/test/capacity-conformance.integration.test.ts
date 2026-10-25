@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
-import { PRODUCER_CURSORS_CONFORMANCE } from '@taskelith/execution';
+import { INVENTORY_REPORTS_CONFORMANCE, INVENTORY_REQUESTS_CONFORMANCE, PRODUCER_CURSORS_CONFORMANCE } from '@taskelith/execution';
 import { ok, type Result } from '@taskelith/kernel';
 import { PostgresDatabase, type PostgresTransaction } from '@taskelith/postgres';
 import {
   CANDIDATE_WORKER_FIXTURES,
   CAPACITY_LEDGER_CONFORMANCE,
   DELEGATION_REQUESTS_CONFORMANCE,
+  OUTBOX_LOOKUP_CONFORMANCE,
   PLACEMENT_CANDIDATES_CONFORMANCE,
   PLACEMENT_QUEUE_CONFORMANCE,
   PLACEMENT_WORKERS_CONFORMANCE,
@@ -56,6 +57,9 @@ runSuite('candidates', PLACEMENT_CANDIDATES_CONFORMANCE, (tx) => ({ workers: tx.
 runSuite('placement queue', PLACEMENT_QUEUE_CONFORMANCE, (tx) => ({ queue: tx.placements, tasks: tx.tasks, lineage: tx.lineage, assignments: tx.assignments }));
 runSuite('delegation requests', DELEGATION_REQUESTS_CONFORMANCE, (tx) => tx.delegations);
 runSuite('producer cursors', PRODUCER_CURSORS_CONFORMANCE, (tx) => tx.cursors);
+runSuite('inventory requests', INVENTORY_REQUESTS_CONFORMANCE, (tx) => tx.inventoryRequests);
+runSuite('inventory reports', INVENTORY_REPORTS_CONFORMANCE, (tx) => tx.inventoryReports);
+runSuite('outbox lookup', OUTBOX_LOOKUP_CONFORMANCE, (tx) => ({ outbox: tx.outbox, lookup: tx.outboxLookup }));
 
 // Each report commits on its own, as each observation's transaction does,
 // so a case can add a worker or race two reports.
@@ -69,6 +73,7 @@ function committingReports(): WorkerReportsConformanceTarget {
   return {
     reports: {
       recordContact: (...args) => write((reports) => reports.recordContact(...args)),
+      recordJournalLoss: (...args) => write((reports) => reports.recordJournalLoss(...args)),
       declareCapacity: (...args) => write((reports) => reports.declareCapacity(...args)),
       enterPressure: (...args) => write((reports) => reports.enterPressure(...args)),
       leavePressure: (...args) => write((reports) => reports.leavePressure(...args)),

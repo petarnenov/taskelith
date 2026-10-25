@@ -35,6 +35,10 @@ export class InMemoryWorkerReports implements WorkerReports {
     });
   }
 
+  async recordJournalLoss(workerId: WorkerId): Promise<Result<void>> {
+    return this.#change(workerId, (worker) => ({ ...worker, reachable: false }));
+  }
+
   async declareCapacity(workerId: WorkerId, declaration: CapacityDeclaration, sequence: Sequence): Promise<Result<void>> {
     return this.#change(workerId, (worker) => ({ ...worker, ...declaration, controls: Object.freeze([...declaration.controls]) }), {
       fence: 'capacity', sequence,

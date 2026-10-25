@@ -401,6 +401,21 @@ export const WORKER_REPORTS_CONFORMANCE: readonly ConformanceCase<WorkerReportsC
     },
   },
   {
+    name: 'a journal loss makes the worker unreachable until its next contact',
+    async check({ reports, workers }: WorkerReportsConformanceTarget) {
+      const problems: string[] = [];
+      const { workerId } = REPORTING_WORKER_FIXTURE;
+      expectSuccess(problems, 'contact', await reports.recordContact(workerId, second(20)));
+      expectSuccess(problems, 'loss', await reports.recordJournalLoss(workerId));
+      expectSame(problems, 'unreachable', await workers.get(workerId), { ...REPORTING_WORKER_FIXTURE, reachable: false, lastContactAt: second(20) });
+      expectSame(problems, 'no candidate', await workers.candidates(), []);
+      expectSuccess(problems, 'contact again', await reports.recordContact(workerId, second(30)));
+      expectSame(problems, 'candidate again', await workers.candidates(), [workerId]);
+      expectCode(problems, 'unknown worker', await reports.recordJournalLoss(UNKNOWN_WORKER), 'not-found');
+      return problems;
+    },
+  },
+  {
     name: 'a declaration applies only above the last one',
     async check({ reports, workers }: WorkerReportsConformanceTarget) {
       const problems: string[] = [];
