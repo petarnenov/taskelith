@@ -49,11 +49,15 @@ A spawn that fails, or a deadline that passes between claim and spawn, SHALL end
 - **THEN** the exit records the failure, and recovery reports it without a second spawn
 
 ### Requirement: Exit only for an empty process set
-The supervisor SHALL write `exit` only when the process set is proven empty: on Linux when the containment is unpopulated, on macOS when one listing at a single instant holds no process of the child's group and no recorded descendant is alive. Otherwise it SHALL record the survivors and keep waiting.
+The supervisor SHALL write `exit` only when the process set is proven empty: on Linux when the containment is unpopulated, on macOS when two consecutive listings each hold no process of the child's group and no recorded descendant is alive. Otherwise it SHALL record the survivors and keep waiting.
 
 #### Scenario: Escaped descendant on macOS
 - **WHEN** a recorded descendant in its own group lives after the child exited
 - **THEN** the supervisor records it as a survivor and writes no exit until it is gone
+
+#### Scenario: A member the first listing missed
+- **WHEN** a listing holds no process of the child's group, and the next listing holds one
+- **THEN** the supervisor records it as a survivor and writes no exit until two consecutive listings hold none
 
 ### Requirement: Cancellation of the process set
 On a `cancel` file, a Linux supervisor SHALL kill the containment. The first macOS supervisor SHALL send the group a termination signal and then a kill, only while the child is unreaped. An adopting macOS supervisor SHALL record the cancellation as not applied and SHALL signal nothing.
@@ -87,16 +91,30 @@ On Linux, the adapter SHALL read the boot identity, process start time, parent, 
 - **WHEN** the execution account can write a `cgroup.procs` file of the worker
 - **THEN** the self-check fails and names the file
 
-### Requirement: macOS fails closed
-Until the owner decides how macOS native values are read (decision D-A of item 15), the macOS deadline clock, process identities, and process listing SHALL fail. A macOS supervisor SHALL therefore seal every launch.
-
-#### Scenario: Launch on macOS
-- **WHEN** a supervisor with the macOS platform starts
-- **THEN** it cannot read its own identity or the clock, seals, and spawns nothing
-
 ### Requirement: Named crash points
 The worker and the supervisor SHALL reach the crash points CP2, CP4, CP5 to CP9, and CP11 of contract section 4 through an injected hook, after the step each names. A crash at any of them SHALL lead to the recovery result section 6 assigns, without a second spawn.
 
 #### Scenario: Crash after the spawn
 - **WHEN** a supervisor crashes at CP8, before its handle
 - **THEN** recovery adopts the populated containment on Linux and reports `uncertain` on macOS
+
+### Requirement: macOS native readers
+On macOS, the adapter SHALL read process identities, parents, and groups from `kinfo_proc` through `sysctl` with `KERN_PROC_PID` and `KERN_PROC_ALL`, and the deadline clock from `mach_continuous_time` and `mach_timebase_info`.
+
+#### Scenario: Launch on macOS
+- **WHEN** a supervisor with the macOS platform starts and the child exits
+- **THEN** it spawns once, records the exit status, and proves termination by the process group
+
+### Requirement: Native calls confined and failing closed
+The adapter SHALL make the macOS native calls through `koffi`, an exact-pinned dependency confined to one adapter module behind the `DeadlineClock` and `ProcessInspector` ports. When the native calls cannot be loaded or read, the clock, identities, and listing SHALL fail, and the supervisor SHALL then seal.
+
+#### Scenario: Native calls cannot load
+- **WHEN** a supervisor with the macOS platform starts and `koffi` or `libSystem` cannot be loaded
+- **THEN** it cannot read its own identity or the clock, seals, and spawns nothing
+
+### Requirement: Bounded macOS listing
+The macOS listing SHALL query its size, fill, and query again when the fill reports `ENOMEM`, within a bounded number of attempts.
+
+#### Scenario: Listing grows during the fill
+- **WHEN** the process list grows between the size query and the fill on every attempt
+- **THEN** the listing fails after the bounded number of attempts
