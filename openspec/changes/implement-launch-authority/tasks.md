@@ -19,5 +19,5 @@
 ## 4. Verification and review
 
 - [x] 4.1 Add unit, conformance, integration, and end-to-end tests.
-- [ ] 4.2 Run `make verify` and record the results.
+- [x] 4.2 Run `make verify` and record the results.
 - [ ] 4.3 Obtain independent review (OpenCode `deepseek-v4.1-flash`, high, read-only) and record the results.

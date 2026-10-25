@@ -64,8 +64,47 @@ Recorded before pass 1.
 
 `make verify` ran in the worktree with every file tracked:
 
-- Before pass 1: 951 tests passed, 0 failed; coverage 99.18% lines, 91.61% branches, 98.84% functions. The comment, boundary, coverage-scope, dependency-inventory, contract-compatibility, OpenSpec, and package checks pass.
+- Before pass 1, at `298360b`: 951 tests passed, 0 failed; coverage 99.18% lines, 91.61% branches, 98.84% functions. The comment, boundary, coverage-scope, dependency-inventory, contract-compatibility, OpenSpec, and package checks pass.
+- After the pass-1 fixes and the merge of `dev` at `c84ca71` (item 19), at `102d03b`: 990 tests passed, 0 failed; coverage 99.22% lines, 91.71% branches, 98.96% functions; every other check passes.
+
+The merge of `dev` touched code, so the second pass reviews it too (protocol step 9). The conflicts were additive: the store port, the route table, the API services, the composition, the PostgreSQL transaction and committing adapters, and the tests gained both items' members. My migration `1792932000000` stays later than item 19's `1792931700000`.
 
 ## Independent review
 
-Pending.
+The reviewer is OpenCode with model `opencode/deepseek-v4.1-flash` and variant `high`, both set in the invocation. It ran as agent `reviewer`, read-only by pattern rules, with the prompt kept outside the worktree and the coordinator's rules for simple git commands. A SHA-256 snapshot of every tracked and untracked file was taken before and after each pass.
+
+### Pass 1
+
+- Session `ses_e8c0969edffeArfvZLqztFubSh`, 2026-10-25 18:48 to 19:00, on `298360b`.
+- Snapshot `8e54cbf8…94e4` before and after: unchanged.
+- The agent ran 44 shell commands, and 3 were refused.
+- Result: Critical 0, High 2, Medium 7, Low 17.
+
+| # | Finding | Disposition |
+| --- | --- | --- |
+| H1 | A concurrent recorded rejection, or another write conflict, became a 500. | Fixed: a conflict is answered `unavailable`, so the repeat replays the recorded decision. A test races two rejections of one operation. In that test the loser replays the winner's record, through the serialization retry. |
+| H2 | The client accepted a grant without comparing its bound values with the request. | Fixed: a grant for another operation, execution, assignment, attempt, epoch, ownership, or admission is `internal`, and tests cover two of them. |
+| M1 | A missing admission was a 500, not `admission-not-current`. | Fixed: the run comes from the assignment, and a test deletes the admission. |
+| M2 | `current_revisions` had no backfill, so earlier tasks would be rejected. | Fixed: the migration seeds it from the used admissions in identity order, and the migration test checks the first one wins. |
+| M3 | No predicate found the grants affected by a gate added to a stage. | Fixed: the gate predicate takes a set, and a gate writer names every gate of the stage. The conformance suite reads it. |
+| M4 | The race test is not deterministic and proves no order. | Recorded in the design: both sequential orders are tested deterministically, and the concurrent rounds check the invariant whatever the order. Forcing the serialization victim is not done. |
+| M5 | The bulk writer test had one grant. | Fixed: two grants, two revocations, and two cancellation commands. |
+| M6 | The empty predicate was not raced with an authorization. | Recorded in the design: without a changed value, the order cannot be observed, and the empty read is the same index read. |
+| M7 | No shared conformance suite for the new ports. | Fixed for `LaunchRecords`: `LAUNCH_RECORDS_CONFORMANCE`, run against PostgreSQL. Recorded for the client, which has one adapter whose tests are its contract. |
+| L1 | A store failure reading the worker became a recorded rejection. | Fixed: it is propagated. |
+| L2 | `reportsNotStarted` was not checked in the mapping. | Fixed: a non-boolean is `invalid`. |
+| L3 | A 502 or 504 was `internal`. | Fixed: `unavailable`, with tests. |
+| L4 | A base URL without a trailing slash lost its path. | Fixed, with a test. |
+| L5 | The current-revisions conformance comment was wrong. | Fixed. |
+| L6 | `CurrentRevisions` has no update for G3. | Recorded: G3 extends the port, as its comment and the design say. |
+| L7 | Task 4.2 was unchecked. | Fixed with this record. |
+| L8 | Inaccurate statements in the proposal. | Fixed. |
+| L9 | A three-line SQL comment. | Fixed, although `verify:comments` does not cover SQL. |
+| L10 | No test of several failed checks at once. | Fixed: the first failed check wins. |
+| L11 | A missing run or an unknown workflow was a 500. | Fixed: `unavailable`, with a test, and nothing is recorded. |
+| L12 | Item 18's attempt records `launch-revoked` while its command says `assignment-ended`. | Not changed: item 18's behavior is outside this scope, and B8 recorded it as a follow-up. |
+| L13 | The backfill mask corrupted identifiers with a backslash. | Fixed: only the escapes `jsonb` rejects are masked. A test stores an artifact identifier with a backslash and a quote. |
+| L14 | A grant's run could be null. | Fixed: it is the assignment's run, which every grant has. A backfilled grant without its assignment row keeps a null run. |
+| L15 | The trust model says "active attempt", and the code marks executions. | Recorded in the design: an attempt without a grant has no execution that could run, and item 21 decides about it. |
+| L16 | The helper was tested through only two predicates. | Fixed: the run, assignment, artifact, worker, and all predicates go through the helper. The gate predicate is tested as a read. |
+| L17 | The other-worker test used an unenrolled worker. | Fixed: an enrolled worker B gets nothing and changes nothing of A's. |
