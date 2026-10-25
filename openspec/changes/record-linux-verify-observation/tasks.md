@@ -7,4 +7,4 @@
 ## 2. Verification
 
 - [x] 2.1 Run `npm run openspec -- validate record-linux-verify-observation --strict` and `make verify`.
-- [ ] 2.2 Pass the independent review and record it in `verification.md`.
+- [x] 2.2 Pass the independent review and record it in `verification.md`.

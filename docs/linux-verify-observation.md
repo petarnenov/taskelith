@@ -79,7 +79,7 @@ make: *** [Makefile:25: verify] Error 2
 ```
  This contradicts the `development-environment` scenario "Shell on another Node.js after setup", which expects the pinned version when nvm has it installed. The cause is the host's `PATH`, not Linux itself. The workaround used for the runs above was to put `~/.nvm/versions/node/v24.22.1/bin` first in `PATH` for these commands. No fix is part of this change; the coordinator assigns one separately.
 
-F2. **The event-loop lag test failed once under a full run.** The test "an idle window reads below the resolution" (`packages/adapters/node-observability/test/node-observability.test.ts:96`) samples the event loop over a 100 ms idle window with a 10 ms resolution. `EventLoopLagMonitor.sample` records `event-loop.lag` as the histogram's p99 minus the resolution, at least zero, and the test asserts that this lag is below 10 ms. In one of five `make verify` runs it failed, while the other 867 tests passed:
+F2. **The event-loop lag test failed once under a full run.** The test "an idle window reads below the resolution" (`packages/adapters/node-observability/test/node-observability.test.ts:96`) samples the event loop over a 100 ms idle window with a 10 ms resolution. `EventLoopLagMonitor.sample` records `event-loop.lag` as the histogram's p99 minus the resolution, at least zero, and the test asserts that this lag is below 10 ms. In one of the five `make verify` runs of this observation it failed, while the other 867 tests passed; the later runs for this change's review, listed in its `verification.md`, passed:
 
 ```text
 test at packages/adapters/node-observability/test/node-observability.test.ts:96:1

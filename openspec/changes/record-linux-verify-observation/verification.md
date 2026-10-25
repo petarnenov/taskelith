@@ -22,6 +22,8 @@ Ubuntu 24.04.5 LTS, Linux 6.8.0-147-generic, x86_64, cgroup v2; Docker Engine 27
 - `npm run openspec -- validate record-linux-verify-observation --strict` passed.
 - `make verify` at `10099f5`, the first commit of the record: four runs; run 1 failed one test (finding F2), runs 2 to 4 passed (868 passed, 0 failed, 15 skipped).
 - `make verify` at `d6d119f`, before pass 1, passed (868 passed, 0 failed, 15 skipped).
+- `make verify` at `b18d4fb`, after the pass-1 fixes and before pass 2, passed (868 passed, 0 failed, 15 skipped).
+- After the pass-2 fixes, which were not reviewed again, `make verify` ran in the `pre-push` hook of the handoff push.
 
 ## Independent review
 
@@ -34,10 +36,14 @@ Reviewer: Codex (`gpt-6.1-sol`), reasoning effort medium, read-only sandbox, as 
   4. Low: the proposal said earlier runs were on macOS arm64; they were on macOS, x86_64 included. It now says macOS.
   5. Low: the design said the host setup stayed unchanged, although `make setup` installs Node.js and npm and sets the nvm default. It now says that only the `PATH` workaround is temporary.
 
+- **Pass 2 — session `01a17388-27ef-7173-92ac-88496f8bdb6a`, head `b18d4fb`.** The header confirmed the model, reasoning effort medium, and the read-only sandbox; the snapshot was `c2cd0eea…1dbb` before and after the pass. The reviewer confirmed all five pass-1 resolutions and reviewed the whole change again. Findings: 0 Critical, 0 High, 0 Medium, 2 Low. Both accepted and resolved without another review, as the review process permits for a Low-only pass; these fixes are **unreviewed**:
+  1. Low: the record and the limitations counted five full runs, although later runs were recorded. F2 now names the five runs of the observation and points to the later passing runs, and the limitations give one failure in seven full runs.
+  2. Low: no `make verify` was recorded after the pass-1 fixes. The run at `b18d4fb` is now recorded, and the run after the pass-2 fixes is the `pre-push` hook's.
+
 ## Limitations
 
 - One host and one revision; Linux arm64 and the worker image were not observed.
-- F2's flake rate is from five full runs and ten isolated runs only.
+- F2's flake rate is one failure in seven full runs up to `b18d4fb` and none in ten runs of its file alone, a small sample.
 
 ## Remaining gates
 
