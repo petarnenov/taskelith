@@ -181,8 +181,7 @@ function runningWorker(root: WorkerRoot, transport: TransportConnection, loops: 
 async function closeAll(root: WorkerRoot, transport: TransportConnection, loops: Loops): Promise<void> {
   loops.abort();
   try {
-    await loops.finished;
-    await transport.close();
+    await loops.finished.finally(() => transport.close());
   } finally {
     root.close();
   }

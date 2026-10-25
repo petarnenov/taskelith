@@ -24,6 +24,7 @@ export {
   type ControlPlaneSettings,
   type RunningControlPlane,
 } from './composition/control-plane.js';
+export { repairCommandConsumers } from './composition/command-consumer-repair.js';
 export { InstallationPublicationFence } from './composition/installation-publication-fence.js';
 export { LaunchRevokingFleetRegistry } from './composition/launch-revoking-fleet-registry.js';
 export { DEFAULT_API_HOST, DEFAULT_API_PORT, readControlPlaneSettings } from './composition/settings.js';

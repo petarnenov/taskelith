@@ -10,3 +10,7 @@ Enrollment SHALL ensure the durable command consumer of the new worker before it
 #### Scenario: Lost consumer
 - **WHEN** an active worker's consumer was deleted while the control plane was stopped
 - **THEN** the next start creates it again
+
+#### Scenario: Consumer that cannot be ensured at start
+- **WHEN** the broker refuses one active worker's consumer during a start
+- **THEN** the failure is logged with the worker, the other consumers are ensured, and the start continues

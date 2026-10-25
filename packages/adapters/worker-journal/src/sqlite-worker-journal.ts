@@ -219,7 +219,7 @@ export class SqliteWorkerJournal implements WorkerJournal {
   recordCapacity(capacity: DeclaredCapacity): Result<void> {
     return this.#connection.transact((database) => {
       const meta = metaRow(database);
-      const declared = JSON.stringify(capacity);
+      const declared = JSON.stringify(canonicalCapacity(capacity));
       if (meta.declared_capacity === declared) return ok(undefined);
       const declaration = storedInteger<number>(meta, 'capacity_declarations') + 1;
       database.prepare('UPDATE journal_meta SET declared_capacity = ?, capacity_declarations = ?').run(declared, declaration);
@@ -348,6 +348,12 @@ export class SqliteWorkerJournal implements WorkerJournal {
       .run(sequence, observationIdOf(fact, this.binding.journalId), JSON.stringify(fact), this.#clock.now());
     database.prepare('UPDATE journal_meta SET next_sequence = ?').run(sequence + 1);
   }
+}
+
+// A fixed field order, so the stored declaration compares by content.
+function canonicalCapacity(capacity: DeclaredCapacity): DeclaredCapacity {
+  const { slots, cpuMillicores, memoryMebibytes, enforceableControls, protocolVersions: { minimum, maximum } } = capacity;
+  return { slots, cpuMillicores, memoryMebibytes, enforceableControls, protocolVersions: { minimum, maximum } };
 }
 
 function recordCancellation(database: JournalDatabase, commandId: CommandId, target: CancellationTarget): Result<void> {

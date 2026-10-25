@@ -93,7 +93,7 @@ export class PostgresFleetRegistry implements FleetRegistry {
 
   async activeWorkerIds(): Promise<Result<readonly WorkerId[]>> {
     const { rows } = await this.#session.query<{ worker_id: WorkerId }>(
-      'SELECT worker_id FROM workers WHERE enrollment IS NOT NULL AND NOT revoked ORDER BY worker_id',
+      'SELECT worker_id FROM workers WHERE enrollment IS NOT NULL AND NOT revoked ORDER BY worker_id COLLATE "C"',
     );
     return ok(Object.freeze(rows.map((row) => row.worker_id)));
   }

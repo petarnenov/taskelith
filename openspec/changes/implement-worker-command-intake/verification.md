@@ -85,3 +85,29 @@ Before pass 1, `make verify` had failed once on an integration test: two workers
 | L6: the fresh schema kept migration defaults | Fixed: the defaults remain only in the migration. |
 
 After the pass 2 fixes, `make verify` passed again: 1117 tests, 1117 passed, 0 failed, with every other step as above.
+
+## Review pass 3
+
+- Reviewer: the same invocation, run in the worktree at `6d09482`, with both earlier sessions named and pass 2's resolutions to confirm first.
+- Model confirmation: `claude-fable-5-1` in `modelUsage`. Session ID: `3fd4825c-d91f-4d21-9b3c-8c1463fb21f1`.
+- Snapshot: `473a8288f5460c382c5f915c00630594a02c2009b0e0bf7308e0f1f069749e68` before and after; unchanged.
+- Pass 2 resolutions: all seven confirmed.
+- Findings: 0 Critical, 0 High, 0 Medium, 5 Low. Under the review process, a Low-only pass is fixed without another review; the fixes below are therefore **not independently reviewed**.
+
+| Finding | Resolution (unreviewed) |
+| --- | --- |
+| L1: a failed loop skipped closing the broker connection on stop | Fixed: the connection closes once the loops settle, whether they fail or not. |
+| L2: the registries' worker order differed by collation | Fixed: PostgreSQL orders by `COLLATE "C"`, as the in-memory registry does. |
+| L3: the logged repair failures were untested | Fixed: `repairCommandConsumers` has its own module and unit tests, and the delta has a scenario. |
+| L4: the stored declaration compared by the settings' key order | Fixed: the declaration is stored in a fixed field order. |
+| L5: the worker's use cases name `@taskelith/nats` types | Kept: `apps/worker` is the composition root, as the control plane's handlers are; the design's wording stands for the journal port. |
+
+After the pass 3 fixes, `make verify` passed: 1119 tests, 1119 passed, 0 failed; coverage 99.26% lines, 91.85% branches, 98.90% functions; every other step as above.
+
+## Limitations and remaining gates
+
+- No native acceptance on the matrix entries; the tests ran on macOS x86_64 with the Compose services.
+- The worker logs nothing yet (20d and 20e), and `dueForPublication` reads the whole outbox (20e).
+- Execution facts have no wire mapping until 20c; none is journaled before it.
+- Follow-ups: deleting a revoked worker's command consumer; item 21's obligation to republish a stored offer unchanged (design D1); a release note for the journal format change at the promotion to `main`.
+- Integration, archive, and the merge into `dev` belong to the coordinator.

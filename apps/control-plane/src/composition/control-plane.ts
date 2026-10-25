@@ -21,7 +21,6 @@ import {
 import { EventLoopLagMonitor, JsonLinesLogSink, runPeriodically, SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { LocalEvidenceVolume } from '@taskelith/evidence-volume';
 import { InMemoryMetrics, Logger, sampleControlPlane, type LogSink } from '@taskelith/observability';
-import type { FleetRegistry, WorkerCommandConsumers } from '@taskelith/fleet';
 import { CommittingFleetRegistry, PostgresControlPlaneSignals, PostgresOutboxRelay } from '@taskelith/postgres';
 import { Administration, type AdministrationSettings } from '../admin/administration.js';
 import { createApiServer } from '../api/api-server.js';
@@ -33,6 +32,7 @@ import { PlacementService } from '../application/placement-service.js';
 import { RunService } from '../application/run-service.js';
 import { TaskService } from '../application/task-service.js';
 import { WorkflowRegistry, type KnownWorkflow } from '../application/workflow-registry.js';
+import { repairCommandConsumers } from './command-consumer-repair.js';
 import { InstallationPublicationFence } from './installation-publication-fence.js';
 
 // Provisional G2 values in docs/operational-targets.md, which G6 verifies.
@@ -231,21 +231,6 @@ function listen(server: Server, endpoint: ApiEndpoint): Promise<Result<ApiEndpoi
       resolve(ok({ host: bound.address, port: bound.port }));
     });
   });
-}
-
-// Ensures the consumer of every active worker once, so one lost to a crash
-// or a broker reset heals on restart; a failure is logged, not retried.
-async function repairCommandConsumers(registry: FleetRegistry, consumers: WorkerCommandConsumers, logger: Logger): Promise<void> {
-  const workers = await registry.activeWorkerIds();
-  if (!workers.ok) return logFailure(logger, 'fleet.command-consumers.unlisted', workers);
-  let failed = 0;
-  for (const workerId of workers.value) {
-    const ensured = await consumers.ensure(workerId);
-    if (ensured.ok) continue;
-    failed += 1;
-    logger.warn('fleet.command-consumer.failed', { workerId, code: ensured.error.code, message: ensured.error.message });
-  }
-  logger.info('fleet.command-consumers.repaired', { workers: workers.value.length, failed });
 }
 
 function logFailure(logger: Logger, event: string, result: Result<unknown>): void {
