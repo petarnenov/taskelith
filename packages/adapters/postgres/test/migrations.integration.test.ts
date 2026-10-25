@@ -8,6 +8,7 @@ import { SERVER_URL, createTestDatabase, databaseUrl, query } from './test-datab
 
 const INITIAL = '1792929600000_initial-state';
 const RESOURCE_ADMISSION = '1792930000000_resource-admission';
+const ENROLLMENT = '1792930400000_installation-and-enrollment';
 
 async function copiedMigrations(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'taskelith-migrations-'));
@@ -18,17 +19,18 @@ async function copiedMigrations(): Promise<string> {
 
 test('migrations apply once, record their checksums, and create the schema', async () => {
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
-  assert.deepEqual(await migrate(url), { ok: true, value: [INITIAL, RESOURCE_ADMISSION] });
+  assert.deepEqual(await migrate(url), { ok: true, value: [INITIAL, RESOURCE_ADMISSION, ENROLLMENT] });
   assert.deepEqual(await migrate(url), { ok: true, value: [] });
   const checksums = await query<{ name: string; sha256: string }>(url, 'SELECT name, sha256 FROM schema_migration_checksums');
-  assert.deepEqual(checksums.map((row) => row.name).sort(), [INITIAL, RESOURCE_ADMISSION]);
+  assert.deepEqual(checksums.map((row) => row.name).sort(), [INITIAL, RESOURCE_ADMISSION, ENROLLMENT]);
   assert.match(checksums[0]!.sha256, /^[0-9a-f]{64}$/);
   const tables = await query<{ table_name: string }>(
     url, "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name",
   );
   assert.deepEqual(tables.map((row) => row.table_name), [
-    'admissions', 'assignments', 'capacity_charges', 'capacity_quotas', 'delegations', 'gates', 'inbox', 'installation', 'outbox',
-    'schema_migration_checksums', 'schema_migrations', 'task_lineage', 'tasks', 'workers', 'workflow_runs',
+    'admissions', 'assignments', 'audit_events', 'capacity_charges', 'capacity_quotas', 'delegations', 'enrollment_tokens', 'gates',
+    'inbox', 'installation', 'operator_credentials', 'outbox', 'schema_migration_checksums', 'schema_migrations', 'task_lineage',
+    'tasks', 'workers', 'workflow_runs',
   ]);
 });
 
