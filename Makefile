@@ -55,8 +55,8 @@ dependency-inventory:
 test:
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use bash scripts/services.sh run $(VERIFY_SERVICES) npm test
 
-# Starts PostgreSQL and NATS for manual integration test runs and prints
-# the URLs to export.
+# Starts PostgreSQL, NATS, and Toxiproxy for manual integration test runs
+# and prints the URLs to export.
 services-up:
 	@bash scripts/services.sh up $(DEV_SERVICES)
 

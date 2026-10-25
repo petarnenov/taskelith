@@ -345,3 +345,49 @@ test('application sources cannot import development code or another app by relat
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('only tests, scripts, and the harness itself import the test harness package', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-boundaries-testing-'));
+  try {
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ workspaces: ['packages/testing', 'packages/modules/*', 'packages/adapters/*'] }));
+    const packages = { 'packages/testing': '@taskelith/testing', 'packages/modules/sdlc': '@taskelith/sdlc', 'packages/adapters/postgres': '@taskelith/postgres' };
+    for (const [dir, name] of Object.entries(packages)) {
+      mkdirSync(join(root, dir, 'src'), { recursive: true });
+      mkdirSync(join(root, dir, 'test'), { recursive: true });
+      writeFileSync(join(root, dir, 'package.json'), JSON.stringify({ name }));
+    }
+    for (const dir of ['apps/worker/src', 'apps/worker/test', 'packages/kernel/src', 'packages/testing/test/fixtures', 'src', 'test', 'scripts']) {
+      mkdirSync(join(root, dir), { recursive: true });
+    }
+    const harnessImport = "import { CrashPoints } from '@taskelith/testing';\nexport const points = CrashPoints;\n";
+    for (const file of [
+      'packages/testing/test/fixtures/child.ts', 'packages/adapters/postgres/test/a.test.ts',
+      'packages/modules/sdlc/test/b.test.ts', 'apps/worker/test/c.test.ts', 'test/d.test.ts', 'scripts/e.ts',
+    ]) {
+      writeFileSync(join(root, file), harnessImport);
+    }
+    writeFileSync(join(root, 'packages/testing/src/extra.ts'), "import { spawn } from 'node:child_process';\nimport type { Clock } from '@taskelith/sdlc';\n");
+    assert.deepEqual(checkWorkspaceBoundaries(root), []);
+
+    for (const file of [
+      'packages/adapters/postgres/src/store.ts', 'packages/modules/sdlc/src/service.ts', 'apps/worker/src/main.ts',
+      'packages/kernel/src/clock.ts', 'src/cli-helper.ts',
+    ]) {
+      writeFileSync(join(root, file), harnessImport);
+    }
+    const violations = checkWorkspaceBoundaries(root);
+    assert.deepEqual(violations.filter(v => v.includes('cannot import the test harness "@taskelith/testing"')).map(v => v.split(':')[0]), [
+      'apps/worker/src/main.ts', 'packages/adapters/postgres/src/store.ts', 'packages/kernel/src/clock.ts',
+      'packages/modules/sdlc/src/service.ts', 'src/cli-helper.ts',
+    ]);
+
+    writeFileSync(
+      join(root, 'packages/testing/src/extra.ts'),
+      "import { ok } from '@taskelith/kernel';\nimport pg from 'pg';\nimport { run } from '@taskelith/sdlc';\nimport { CrashPoints } from '@taskelith/testing';\n",
+    );
+    const harnessRule = 'the test harness may import only the kernel and Node built-ins at runtime';
+    assert.deepEqual(checkWorkspaceBoundaries(root).filter(v => v.includes(harnessRule)).map(v => v.split('"')[1]), ['pg', '@taskelith/sdlc', '@taskelith/testing']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
