@@ -87,11 +87,19 @@ The AsyncAPI document SHALL define a cumulative confirmation of a positive `conf
 - **THEN** validation fails
 
 ### Requirement: Inventory request
-The AsyncAPI document SHALL define an inventory request on the command channel with a fresh `requestId`, which a snapshot answering it SHALL return. Only a snapshot that answers the latest request of its worker SHALL prove a journal rollback, by a `throughSequence` below the highest applied sequence or by an omitted accepted assignment. A rollback SHALL start reconciliation and keep ownership and the reservation.
+The AsyncAPI document SHALL define an inventory request on the command channel with a fresh `requestId`, which a snapshot answering it SHALL return. Only a snapshot that answers the latest request SHALL prove a rollback, by a `throughSequence` below the bound recorded when the request was sent or by omitting an assignment the bound lists, checked before the lower-`snapshot` filter. A rollback SHALL start reconciliation and keep ownership and the reservation.
 
 #### Scenario: Rollback in a fresh snapshot
-- **WHEN** a snapshot answering the current request has a `throughSequence` below the highest sequence applied from its journal
+- **WHEN** a snapshot answering the current request has a `throughSequence` below the highest sequence applied from its journal when the request was sent
 - **THEN** the contract page classifies it as a rollback, and a snapshot without that `requestId` proves none
+
+#### Scenario: Observation applied after the request
+- **WHEN** an observation is applied after the request and the fresh snapshot's `throughSequence` is below it but not below the bound
+- **THEN** the contract page classifies the snapshot as no rollback
+
+#### Scenario: Rolled-back snapshot counter
+- **WHEN** a complete fresh snapshot has a lower `snapshot` than one already received from its journal
+- **THEN** the contract page checks it for rollback before the `snapshot` filter, and it never replaces the later snapshot
 
 ### Requirement: Wire vocabularies
 The wire enumerations of refusal, non-retryable launch rejection, launch rejection, revocation, cancellation, and assignment end reasons, and of hard controls, SHALL equal the vocabularies of the execution and scheduling domains, except that the worker's refusal reasons omit `protocol-not-supported`, which the control plane derives from a command rejection.

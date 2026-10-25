@@ -225,6 +225,38 @@ test('the control plane confirms a journal prefix and the worker reports its inv
   assert.ok(!checkMessageSchema('ObservationsConfirmed', { ...confirmation, confirmedThrough: 0 }).ok);
 });
 
+const CONTRACT_PAGE = readFileSync(new URL('../../../docs/contracts/execution-wire-contracts.md', import.meta.url), 'utf8');
+
+test('a rollback is judged against the bound recorded when the request was sent', () => {
+  assert.match(CONTRACT_PAGE, /When it sends a request, the control plane records the request's \*\*bound\*\*/);
+  assert.match(CONTRACT_PAGE, /An observation applied after the request does not change the bound\./);
+  assert.match(CONTRACT_PAGE, /a `throughSequence` below the bound of its journal is a rollback/);
+});
+
+test('a fresh snapshot with a rolled-back counter is checked before the snapshot filter', () => {
+  const rolledBack = {
+    messageType: 'worker.inventory.reported',
+    schemaVersion: 1,
+    protocolVersion: 1,
+    reportId: 'report-2',
+    requestId: 'request-2',
+    snapshot: 1,
+    part: 1,
+    parts: 1,
+    reportedAt: AT,
+    workerId: 'worker-1',
+    journalId: 'journal-1',
+    throughSequence: 0,
+    assignments: [],
+    executions: [],
+  };
+
+  assert.ok(checkMessageSchema('InventoryReported', rolledBack).ok);
+  assert.match(CONTRACT_PAGE, /are exempt from this filter until the rollback check below has run\./);
+  assert.match(CONTRACT_PAGE, /checks a complete fresh snapshot for rollback before it applies the lower-`snapshot` filter/);
+  assert.match(CONTRACT_PAGE, /the snapshot never replaces the later one\./);
+});
+
 test('the largest valid inventory part fits the broker payload limit', () => {
   // Every identifier at its maximum length, as backslashes JSON doubles.
   const longest = '\\'.repeat(128);
