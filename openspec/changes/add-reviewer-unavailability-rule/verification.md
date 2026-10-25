@@ -58,4 +58,4 @@ Findings: Critical 0, High 0, Medium 0, Low 0.
 
 ## Remaining gates
 
-Integration into `dev` and integration into `dev` and the archive by the coordinator. Promotion to `main` is a separate owner decision.
+Integration into `dev` and the archive by the coordinator. Promotion to `main` is a separate owner decision.
