@@ -34,7 +34,7 @@ export function checkJournalFault(path: string, bootId: string): Result<void> {
   try {
     stored = JSON.parse(readFileSync(path, 'utf8')) as typeof stored;
   } catch {
-    stored = { bootId };
+    return err(rootFailure('corrupt', `${path} is unreadable; an operator removes it after checking the journal`, { path }));
   }
   if (stored.bootId === bootId) {
     const reason = stored.reason === 'corrupt' ? 'corrupt' : 'flush-failure';

@@ -2,7 +2,7 @@ import { chmodSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { rootFailure } from './journal-failure.js';
-import { isSqliteError, SQLITE_BUSY } from './sqlite-errors.js';
+import { isSqliteError, SQLITE_BUSY, SQLITE_NOTADB } from './sqlite-errors.js';
 
 // Marks a lock file as a Taskelith lock: "TKLK".
 export const LOCK_APPLICATION_ID = 0x544b4c4b;
@@ -37,6 +37,7 @@ export class ExclusiveFileLock {
     } catch (error) {
       database?.close();
       if (isSqliteError(error, SQLITE_BUSY)) return err(rootFailure('root-locked', `${path} is held by another process`, { path }));
+      if (isSqliteError(error, SQLITE_NOTADB)) return err(rootFailure('corrupt', `${path} is not a Taskelith lock`, { path }));
       return err(failure('internal', `cannot lock ${path}: ${(error as Error).message}`, { path }));
     }
   }

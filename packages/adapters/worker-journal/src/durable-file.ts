@@ -55,7 +55,8 @@ export function createPrivateDirectory(path: string): Result<void> {
   try {
     mkdirSync(path, { mode: PRIVATE_DIRECTORY });
   } catch (error) {
-    return err(rootFailure('flush-failure', `cannot create ${path}: ${(error as Error).message}`, { path }));
+    const code = (error as NodeJS.ErrnoException).code === 'EEXIST' ? 'conflict' : 'internal';
+    return err(failure(code, `cannot create ${path}: ${(error as Error).message}`, { path }));
   }
   return syncPath(dirname(path));
 }

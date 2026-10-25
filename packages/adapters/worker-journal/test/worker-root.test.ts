@@ -109,6 +109,13 @@ test('a second worker on the same root fails to take the root lock', () => {
   assert.equal(reasonOf(openWorkerRoot(rootOptions(dataRoot))), 'root-locked');
 });
 
+test('a reopened root holds its existing lock file against a second worker', () => {
+  enroll();
+  opened.splice(0).forEach((root) => root.close());
+  opened.push(value(openWorkerRoot(rootOptions(dataRoot))));
+  assert.equal(reasonOf(openWorkerRoot(rootOptions(dataRoot))), 'root-locked');
+});
+
 test('the root lock of a killed process is free, and a live holder keeps it', async () => {
   const lockFile = join(dirname(dataRoot), 'lock');
   const holder = await ScenarioProcess.start(process.execPath, [
@@ -299,6 +306,7 @@ test('on macOS a data root on a volume that is not local APFS is refused', { ski
   execFileSync('hdiutil', ['attach', '-quiet', '-nobrowse', '-mountpoint', mountPoint, image]);
   try {
     assert.equal(reasonOf(enrollWorkerRoot(rootOptions(join(mountPoint, 'data'), { probe: probeVolume }), BINDING)), 'unsupported-volume');
+    assert.equal(existsSync(join(mountPoint, 'data')), false);
   } finally {
     execFileSync('hdiutil', ['detach', '-quiet', '-force', mountPoint]);
   }

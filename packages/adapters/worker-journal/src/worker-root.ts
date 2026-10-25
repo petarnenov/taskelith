@@ -110,13 +110,18 @@ export function startNewIncarnation(
 function prepareDataRoot(paths: WorkerPaths, options: WorkerRootOptions): Result<void> {
   const outside = refuseCheckout(paths.dataRoot);
   if (!outside.ok) return outside;
+  const volume = checkVolume(nearestExisting(paths.dataRoot), options.probe ?? probeVolume);
+  if (!volume.ok) return volume;
   if (!existsSync(paths.dataRoot)) {
     mkdirSync(paths.dataRoot, { recursive: true, mode: 0o700 });
     const synced = syncPath(dirname(paths.dataRoot));
     if (!synced.ok) return synced;
   }
-  const volume = checkVolume(paths.dataRoot, options.probe ?? probeVolume);
-  return volume.ok ? createPrivateDirectory(paths.worker) : volume;
+  return createPrivateDirectory(paths.worker);
+}
+
+function nearestExisting(path: string): string {
+  return existsSync(path) || dirname(path) === path ? path : nearestExisting(dirname(path));
 }
 
 // The paths of an enrolled root that lies outside any checkout, on a volume

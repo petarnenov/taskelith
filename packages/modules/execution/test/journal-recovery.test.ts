@@ -63,6 +63,11 @@ test('a retryable rejection is retried for the same execution, a final one is no
   assert.deepEqual(plan([execution(['rejected-retryable', 'rejected-final'])]), []);
 });
 
+test('a final rejection stops the launch, after a grant or before a W6', () => {
+  assert.deepEqual(plan([execution(['granted', 'rejected-final'], 'authorized')]), [seal]);
+  assert.deepEqual(plan([execution(['rejected-final'], 'not-started')]), []);
+});
+
 test('a granted execution whose re-authorization was rejected is sealed and relaunched', () => {
   assert.deepEqual(plan([execution(['granted', 'rejected-retryable'], 'authorized')]), [seal, continueLaunch]);
 });

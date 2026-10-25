@@ -97,7 +97,8 @@ function quickCheck(database: DatabaseSync): Result<void> {
 // Another connection opened the journal without exclusive locking, for
 // example an inspection tool while the worker was stopped.
 function sharedMemoryFailure(path: string): Failure {
-  return rootFailure('foreign-access', `${path}-shm exists, so another process opened the journal`, { path });
+  const remedy = 'remove it while the worker is stopped';
+  return rootFailure('foreign-access', `${path}-shm exists, so another process opened the journal; ${remedy}`, { path });
 }
 
 // Opens the file for `use`, which closes it on a failed result; a thrown

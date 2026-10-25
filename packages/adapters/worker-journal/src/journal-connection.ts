@@ -76,7 +76,11 @@ export class JournalConnection {
   // host restart or a new incarnation (contract section 7).
   #stop(fault: Failure): Failure {
     this.#fault = fault;
-    this.close();
+    try {
+      this.close();
+    } catch {
+      // A failing device may also fail the close; the fault still stands.
+    }
     const recorded = this.#onStop(fault);
     if (!recorded.ok) this.#fault = { ...fault, details: { ...fault.details, recording: recorded.error.message } };
     return this.#fault;

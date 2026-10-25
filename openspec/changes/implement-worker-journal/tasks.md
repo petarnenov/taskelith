@@ -16,4 +16,4 @@
 ## 4. Verification and review
 
 - [x] 4.1 Run `make verify` and `openspec validate --strict`.
-- [ ] 4.2 Obtain the independent review and record the results.
+- [x] 4.2 Obtain the independent review and record the results.

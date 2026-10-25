@@ -30,7 +30,8 @@ function recoverIntent(intent: LaunchIntent, snapshot: JournalSnapshot): Recover
   const executions = snapshot.executions.filter((execution) => execution.assignmentId === intent.assignmentId);
   const cancelled = isCancelled(intent, executions, snapshot.cancellations);
   const actions = executions.flatMap((execution) => recoverExecution(execution, cancelled));
-  if (!cancelled && executions.every((execution) => endsWithoutProcess(execution))) {
+  const rejectedFinally = executions.some((execution) => execution.authorizations.some(({ outcome }) => outcome === 'rejected-final'));
+  if (!cancelled && !rejectedFinally && executions.every((execution) => endsWithoutProcess(execution))) {
     actions.push({ kind: 'continue-launch', assignmentId: intent.assignmentId });
   }
   return actions;
