@@ -82,10 +82,11 @@ test('a plain acknowledgement settles a command', async () => {
   const message = await (await js.consumers.get(COMMAND_STREAM, 'worker-a')).next({ expires: 1000 });
 
   message?.ack();
-  await nc.flush();
 
-  const info = await (await jetstreamManager(nc)).consumers.info(COMMAND_STREAM, 'worker-a');
-  assert.deepEqual([info.num_ack_pending, info.num_pending, info.ack_floor.stream_seq], [0, 0, message?.seq]);
+  const jsm = await jetstreamManager(nc);
+  await waitFor(async () => (await jsm.consumers.info(COMMAND_STREAM, 'worker-a')).num_ack_pending === 0, 2000);
+  const info = await jsm.consumers.info(COMMAND_STREAM, 'worker-a');
+  assert.deepEqual([info.num_pending, info.ack_floor.stream_seq], [0, message?.seq]);
 });
 
 describe('explicit acknowledgement and redelivery', () => {
@@ -101,10 +102,15 @@ describe('explicit acknowledgement and redelivery', () => {
     }
 
     const again: Delivery[] = [];
-    for await (const message of await consumer.fetch({ max_messages: 10, expires: 2600 })) again.push(toDelivery(message));
+    for await (const message of await consumer.fetch({ max_messages: 2, expires: 5000 })) {
+      again.push(toDelivery(message));
+      if (message.info.deliveryCount === 3) assert.equal(await message.ackAck(), true);
+    }
+    const afterSettling = await fetchDeliveries(COMMAND_STREAM, 'worker-a', 10, 1500);
 
     assert.deepEqual(first.map((d) => [d.body, d.deliveryCount]), [['unacked', 1], ['acked', 1]]);
     assert.deepEqual(again.map((d) => [d.body, d.deliveryCount, d.redelivered]), [['unacked', 2, true], ['unacked', 3, true]]);
+    assert.deepEqual(afterSettling, []);
     const intervals = again.map((d) => millisecondsSince(first[0]?.receivedAt ?? 0, d.receivedAt));
     t.diagnostic(`redelivered ${intervals.join(' and ')} ms after the first delivery (ack_wait 1000 ms)`);
     assert.ok((intervals[0] ?? 0) >= 900 && (intervals[1] ?? 0) >= 1900);
@@ -243,11 +249,13 @@ describe('poison-message quarantine', () => {
     });
   });
 
+  // Waits for the advisory itself, so it cannot reach the later capture stream.
   async function terminateBeforeCapture(): Promise<number> {
     const published = await js.publish(commandSubject('worker-a'), 'uncaptured');
+    const advisory = nc.subscribe(`$JS.EVENT.ADVISORY.CONSUMER.MSG_TERMINATED.${COMMAND_STREAM}.worker-a`, { max: 1, timeout: 2000 });
     const message = await (await js.consumers.get(COMMAND_STREAM, 'worker-a')).next({ expires: 1000 });
     message?.term('before-capture');
-    await nc.flush();
+    for await (const event of advisory) assert.equal(event.json<{ stream_seq: number }>().stream_seq, published.seq);
     return published.seq;
   }
 
@@ -316,7 +324,8 @@ describe('poison-message quarantine', () => {
     const record = await jsm.streams.getMessage(QUARANTINE_STREAM, { last_by_subj: 'spike.quarantine.worker-a' });
     assert.ok(record);
     const originalMsgId = record.header.get('Spike-Original-Msg-Id');
-    assert.deepEqual([record.string(), originalMsgId, record.header.get('Spike-Original-Stream-Seq')], ['failing', 'command-failing', String(maxDeliver.stream_seq)]);
+    const diagnostics = ['Spike-Original-Stream-Seq', 'Spike-Reason'].map((name) => record.header.get(name));
+    assert.deepEqual([record.string(), originalMsgId, ...diagnostics], ['failing', 'command-failing', String(maxDeliver.stream_seq), maxDeliver.type]);
     const sameId = await js.publish(commandSubject('worker-a'), record.data, { msgID: originalMsgId });
     const newId = await js.publish(commandSubject('worker-a'), record.data, { msgID: `${originalMsgId}.redrive-1` });
     const [redriven] = await fetchDeliveries(COMMAND_STREAM, 'worker-a', 1, 1000);
@@ -363,11 +372,9 @@ describe('per-worker subject permissions', () => {
   test('worker A cannot subscribe to B commands or B inbox', async () => {
     workerA.subscribe(commandSubject('worker-b'));
     workerA.subscribe('_INBOX.worker-b.>');
-    await workerA.flush();
-    await delay(100);
+    const denied = [`Subscription to "${commandSubject('worker-b')}"`, 'Subscription to "_INBOX.worker-b.>"'];
 
-    assert.ok(serverErrors.some((e) => e.includes(`Subscription to "${commandSubject('worker-b')}"`)));
-    assert.ok(serverErrors.some((e) => e.includes('Subscription to "_INBOX.worker-b.>"')));
+    await waitFor(async () => denied.every((text) => serverErrors.some((e) => e.includes(text))), 2000);
   });
 
   test('worker A publishes observations as itself, never as B', async () => {
@@ -392,9 +399,10 @@ describe('per-worker subject permissions', () => {
     const plain = await connectAsWorker('worker-a', '_INBOX');
     try {
       await assert.rejects(jetstream(plain).publish(observationSubject('worker-a'), 'unconfirmed'), /Permissions Violation for Subscription/);
-      await delay(100);
-      const state = (await (await jetstreamManager(nc)).streams.info(OBSERVATION_STREAM)).state;
-      assert.equal(state.messages, 2);
+
+      const jsm = await jetstreamManager(nc);
+      const lastObservation = () => jsm.streams.getMessage(OBSERVATION_STREAM, { last_by_subj: observationSubject('worker-a') });
+      await waitFor(async () => (await lastObservation())?.string() === 'unconfirmed', 2000);
     } finally {
       await plain.close();
     }

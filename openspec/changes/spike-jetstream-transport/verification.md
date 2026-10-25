@@ -13,7 +13,7 @@ macOS (Darwin 25.6.0, x86_64), Node v24.22.1 through `nvm use`, npm 12.2.1, Dock
 ## Evidence
 
 - Before item 9 merged, the author ran exploratory probes and the draft tests from a scratch directory against the item 9 Compose file under a separate Compose project, and against the same image with the draft configuration; nothing in the repository changed. The draft suite passed twice in a row.
-- After the merge, the suite runs inside `make verify` against the per-run services of item 9; its diagnostics report server 2.15.1, JetStream API level 5, `max_payload` 1048576, Node v24.22.1, redelivery 1001–1002 ms and 2004–2005 ms after the first delivery with `ack_wait` 1000 ms, redelivery 702–703 ms after `nak(700)`, and expiry 1251–1261 ms after publication with `max_age` 1000 ms. After the pass-1 fixes the spike passed three runs in a row against `make services-up` and inside `make verify`.
+- After the merge, the suite runs inside `make verify` against the per-run services of item 9; its diagnostics report server 2.15.1, JetStream API level 5, `max_payload` 1048576, Node v24.22.1, redelivery 1001–1004 ms and 2004–2006 ms after the first delivery with `ack_wait` 1000 ms, redelivery 702–704 ms after `nak(700)`, and expiry 1251–1282 ms after publication with `max_age` 1000 ms, across all runs after the pass-1 fixes. After the pass-1 and pass-2 fixes the spike passed three runs in a row against `make services-up` and inside `make verify`.
 - `tsc -p tsconfig.check.json` type-checks the spike against the installed client declarations without errors, which supports the record's statement about the `types` field.
 
 ## Author self-check before review
@@ -26,7 +26,7 @@ macOS (Darwin 25.6.0, x86_64), Node v24.22.1 through `nvm use`, npm 12.2.1, Dock
 
 ## Checks
 
-In the worktree, Node v24.22.1, npm 12.2.1: `npm run openspec -- validate spike-jetstream-transport --strict` passed; `make dependency-inventory` generated 701 package paths, 21 with reviewed license coverage gaps; `make verify` passed (323 tests passed, 0 failed; coverage 99.63% lines, 95.74% branches, 99.28% functions; strict OpenSpec validation 39 passed; archive dry run, dependency inventory check, and package verification passed). After the pass-1 fixes, `make verify` passed with 326 tests and the same coverage and validation results.
+In the worktree, Node v24.22.1, npm 12.2.1: `npm run openspec -- validate spike-jetstream-transport --strict` passed; `make dependency-inventory` generated 701 package paths, 21 with reviewed license coverage gaps; `make verify` passed (323 tests passed, 0 failed; coverage 99.63% lines, 95.74% branches, 99.28% functions; strict OpenSpec validation 39 passed; archive dry run, dependency inventory check, and package verification passed). After the pass-1 fixes and again after the pass-2 fixes, `make verify` passed with 326 tests and the same coverage and validation results.
 
 ## Independent review
 
@@ -40,6 +40,11 @@ Assigned reviewer: Codex CLI, `codex exec -m gpt-6.1-sol -c model_reasoning_effo
   5. Low: `ack()` and the pull-expiry floor were stated without a test. Both are now asserted.
   6. Low: the loss of advisories without a subscriber was stated without a test. A termination before the capture stream exists is now asserted as not recorded.
   7. Low: the compatibility wording overstated item 1's evidence. It now says the pinned sources neither state support nor show a CI result.
+- **Pass 2 — session `01a1707c-1ac0-7cb0-8b2f-fdfdc6681073`**, at `3547119`. The output header reports model `gpt-6.1-sol`, reasoning effort medium, and sandbox read-only. Snapshot before and after: `bc693fe89c54978eee26edfa999dd2716fdf8de8cc16b1cda478a627a0161a29`, unchanged. The reviewer confirmed pass-1 findings 1–5 and 7 as resolved and finding 6 as partly resolved. Findings: 0 Critical, 0 High, 3 Medium, 1 Low. All accepted and fixed:
+  1. Medium: the redelivery test expected exactly two redeliveries inside a fixed window that started late. It now takes exactly two redeliveries from one pull bounded at 5 s, acknowledges the third delivery, and asserts that a further 1.5 s pull receives nothing.
+  2. Medium: `flush()` stood in for the server's processing of `ack()` and `term()`. The plain acknowledgement now polls the consumer state, and the uncaptured termination waits for its advisory before the capture stream is created, which also completes pass-1 finding 6.
+  3. Medium: a fixed 100 ms sleep stood in for the store of a publication through another connection, and for the arrival of subscription errors. Both are now bounded polls; the store is checked by its payload.
+  4. Low: the record said the quarantine record kept the original headers and the advisory type without asserting the type. It now names the three diagnostic headers, and the test asserts all of them.
 
 ## Limitations
 

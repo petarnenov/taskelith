@@ -19,9 +19,9 @@ The command stream `SPIKE_CMD` takes the subjects `spike.cmd.*`, and each worker
 | Topic | Configuration | Measured |
 | --- | --- | --- |
 | Addressed consumers | Consumers `worker-a` and `worker-b` | Each consumer receives only the commands on its own subject, in publication order. |
-| Redelivery after `ack_wait` | `ack_wait` 1 s | An unacknowledged command returns 1001–1002 ms and 2004–2005 ms after its first delivery, with delivery counts 2 and 3 and the redelivered flag: it returns every `ack_wait` until it is acknowledged or `max_deliver` is reached. A command acknowledged with `ackAck()`, which resolves to `true`, does not return within the 2.6 s window. |
+| Redelivery after `ack_wait` | `ack_wait` 1 s | An unacknowledged command returns 1001–1004 ms and 2004–2006 ms after its first delivery, with delivery counts 2 and 3 and the redelivered flag: it returns every `ack_wait` until it is acknowledged or `max_deliver` is reached. A command acknowledged with `ackAck()`, which resolves to `true`, does not return: once the third delivery is acknowledged too, a 1.5 s pull receives nothing. |
 | Plain acknowledgement | `ack()` and a flush | The consumer has nothing pending, and its acknowledgement floor is the command's stream sequence. |
-| Negative acknowledgement | `nak(700)` | The command returns 702–703 ms after the negative acknowledgement, with delivery count 2. |
+| Negative acknowledgement | `nak(700)` | The command returns 702–704 ms after the negative acknowledgement, with delivery count 2. |
 | Outstanding acknowledgements | `max_ack_pending` 2, five commands | A fetch of five returns two; the consumer then reports 2 pending acknowledgements and 3 pending messages. |
 | Payload | Server `max_payload` | The server announces 1,048,576 bytes (1 MiB, the [operational target](operational-targets.md)); the client rejects a larger payload before sending (`'payload' max_payload size exceeded`). |
 | Stream message size | `max_msg_size` 1024 | The stream stores 900 bytes and rejects 1025 bytes with `JetStreamApiError` code 10054 (`message size exceeds maximum allowed`). |
@@ -29,11 +29,11 @@ The command stream `SPIKE_CMD` takes the subjects `spike.cmd.*`, and each worker
 | Retention: count and bytes | `discard: new`, `max_msgs` 2 or `max_bytes` 2048 | The publication over the limit is rejected (`maximum messages exceeded`, `maximum bytes exceeded`); the publisher sees the error. |
 | Retention: per subject | `max_msgs_per_subject` 2, `discard_new_per_subject` | The third command for `worker-a` is rejected (`maximum messages per subject exceeded`) while `worker-b` still publishes. |
 | Retention: old | `discard: old`, `max_msgs` 2 | The oldest message is dropped (first sequence 2, last 3). |
-| Retention: age | `max_age` 1 s | The message is gone 1251–1261 ms after its publication, polled every 50 ms. |
+| Retention: age | `max_age` 1 s | The message is gone 1251–1282 ms after its publication, polled every 50 ms. |
 | Termination | `term('schema-invalid')` | The server publishes `$JS.EVENT.ADVISORY.CONSUMER.MSG_TERMINATED.SPIKE_CMD.worker-a` with the stream sequence, one delivery, and the reason; the command is not delivered again. |
 | Delivery limit | `max_deliver` 3, `nak()` on every delivery | After the third delivery the server publishes `…MAX_DELIVERIES.SPIKE_CMD.worker-a` with the stream sequence and 3 deliveries; the consumer then has nothing pending, and the command stays in the stream under its retention limits. |
-| Quarantine capture | Stream `SPIKE_ADVISORIES` on both advisory subjects | Advisories are plain NATS messages: a termination advisory published before the stream existed is not recorded. Once the stream exists it stores both kinds, so a quarantine process can read them later and copy the original by its stream sequence (`getMessage`) into `SPIKE_QUARANTINE`, with the original stream sequence, `Nats-Msg-Id`, and advisory type as headers. |
-| Redrive | From the quarantine record, original `msgID`, then a new one | The record holds the original payload and headers. Inside the deduplication window, a redrive with the original `msgID` is dropped as a duplicate; under a new `msgID` the command is delivered again with delivery count 1. |
+| Quarantine capture | Stream `SPIKE_ADVISORIES` on both advisory subjects | Advisories are plain NATS messages: a termination advisory published before the stream existed is not recorded. Once the stream exists it stores both kinds, so a quarantine process can read them later and copy the original by its stream sequence (`getMessage`) into `SPIKE_QUARANTINE`, with three diagnostic headers: the original stream sequence, the original `Nats-Msg-Id`, and the advisory type. |
+| Redrive | From the quarantine record, original `msgID`, then a new one | The record holds the original payload and the three diagnostic headers. Inside the deduplication window, a redrive with the original `msgID` is dropped as a duplicate; under a new `msgID` the command is delivered again with delivery count 1. |
 
 ### Per-worker permissions
 
