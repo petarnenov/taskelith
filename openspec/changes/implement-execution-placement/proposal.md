@@ -9,9 +9,9 @@ Obligations this change meets:
 - item 16, coordinator decision Q7: the control-plane side of `requestDelegation` over HTTP, with its repeat by `delegationId`;
 - item 18 (design, non-goals): the scheduling loop, and the persisted wait of a delegation that waits for capacity.
 
-Obligations left to the later changes:
-- 21b: first contact as reachability, the observation consumer and its producer cursors, acceptance and refusal, the exit and not-started outcomes with the outcome facts, the release outcome that tells kept from released, closing a delegation at the child's terminal outcome, automatic retries, and stale-generation rejection of observations;
-- 21c: confirmation by sequence, the inventory request and report, the rollback rules of the item 8 contract, and the disk-loss handling of the worker journal contract;
+Obligations left to the later changes. The coordinator moved first contact from 21a to 21b and 21c on 2026-10-25, because the consumers that see it come there:
+- 21b: first contact as reachability from an observation, the observation consumer and its producer cursors, acceptance and refusal, the exit and not-started outcomes with the outcome facts, the release outcome that tells kept from released, closing a delegation at the child's terminal outcome, automatic retries, and stale-generation rejection of observations;
+- 21c: first contact as reachability from an inventory report, confirmation by sequence, the inventory request and report, the rollback rules of the item 8 contract, and the disk-loss handling of the worker journal contract;
 - 21d: the launch authorization lookup, the reconciliation queue of item 17, and the attempts of a revoked worker (item 13);
 - items 20 and 24: detecting lost contact by timeout.
 
