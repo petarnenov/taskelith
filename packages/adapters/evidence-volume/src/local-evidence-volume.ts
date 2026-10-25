@@ -23,9 +23,8 @@ export interface VolumeOptions {
   readonly ownerUid: number;
 }
 
-// Evidence content on a durable local volume (architecture section 8):
-// `control-plane/evidence/sha256/<first two hex>/<hex>`, one owner-only
-// file per digest, written by the durable file rule and never changed.
+// Evidence content on a durable local volume (architecture section 8): one
+// owner-only file per digest under `control-plane/evidence/sha256/<xx>/`.
 export class LocalEvidenceVolume implements EvidenceStore {
   readonly directory: string;
   readonly #options: VolumeOptions;
