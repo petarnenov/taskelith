@@ -124,6 +124,10 @@ Assigned reviewer: Claude Code with `claude -p --model claude-fable-5-1 --effort
 - Items 13, 20, and 21 do not yet write the workers, installation, and delegation records; tests seed them.
 - The scheduling loop that drives waiting tasks and picks candidate workers, and refusal handling, belong to later items.
 
+## Decision on the pass 3 findings
+
+On 2026-10-25 the coordinator reported the decision on the findings left after the third pass, made not by the owner but by a Fable 5.1 (medium) subagent acting on the owner's delegation: option (a), accept the fixes in `e3b6e19` as they are, without a fourth pass, and merge. The delegate checked the `e3b6e19` diff and found it bounded. The fixes in `e3b6e19` remain **not independently reviewed**. Two Low findings of pass 3 are follow-ups for later items, not part of this change: shared `value`, `must`, and `id` test helpers in `@taskelith/testing` (finding 12), and a release outcome that tells kept from released for item 21, its caller (finding 13).
+
 ## Remaining gates
 
-The owner's decision on the pass 3 findings and their unreviewed fixes (governance: findings left after the third pass); follow-ups for later items: shared test helpers in `@taskelith/testing` (pass 3 finding 12) and a release outcome that distinguishes kept from released (finding 13, item 21); integration into `dev` and archive by the coordinator; promotion to `main`.
+Follow-ups for later items: shared test helpers in `@taskelith/testing` (pass 3 finding 12) and a release outcome that distinguishes kept from released (finding 13, item 21); integration into `dev` and archive by the coordinator; promotion to `main`.
