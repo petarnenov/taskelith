@@ -52,13 +52,20 @@ export interface ExitFact {
 }
 
 // `current` moved the execution to `started`; `historical` arrived after its
-// exit; `unauthorized` arrived after `not-started` and cancels it alone.
-export const START_KINDS = Object.freeze(['current', 'historical', 'unauthorized'] as const);
+// exit and moved nothing.
+export const START_KINDS = Object.freeze(['current', 'historical'] as const);
 
 export type StartKind = (typeof START_KINDS)[number];
 
 export interface StartFact {
   readonly kind: StartKind;
+  readonly launchAuthId: LaunchAuthId;
+  readonly recordedAt: Instant;
+}
+
+// A start reported without a grant of the execution: evidence apart from the
+// accepted start, which cancels this execution only.
+export interface UnauthorizedStart {
   readonly launchAuthId: LaunchAuthId;
   readonly recordedAt: Instant;
 }
@@ -83,6 +90,7 @@ export interface Execution {
   readonly start?: StartFact;
   readonly exit?: ExitFact;
   readonly evidence: readonly ExecutionEvidence[];
+  readonly unauthorizedStarts: readonly UnauthorizedStart[];
 }
 
 export function isTerminalExecution(execution: Execution): boolean {
@@ -97,6 +105,7 @@ export function authorizedExecution(grant: LaunchGrant): Execution {
     state: 'authorized',
     grants: Object.freeze([grant]),
     evidence: Object.freeze([]),
+    unauthorizedStarts: Object.freeze([]),
   });
 }
 
@@ -111,6 +120,12 @@ export function withRevokedGrants(execution: Execution, reason: RevocationReason
 export function withStart(execution: Execution, start: StartFact): Execution {
   const state = start.kind === 'current' ? 'started' : execution.state;
   return Object.freeze({ ...execution, state, start: Object.freeze(start) });
+}
+
+// A repeated report under the same grant identity is recorded once.
+export function withUnauthorizedStart(execution: Execution, start: UnauthorizedStart): Execution {
+  if (execution.unauthorizedStarts.some((known) => known.launchAuthId === start.launchAuthId)) return execution;
+  return Object.freeze({ ...execution, unauthorizedStarts: Object.freeze([...execution.unauthorizedStarts, Object.freeze(start)]) });
 }
 
 export function withEvidence(execution: Execution, evidence: ExecutionEvidence): Execution {

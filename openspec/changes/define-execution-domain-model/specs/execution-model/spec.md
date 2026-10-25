@@ -50,7 +50,7 @@ A grant SHALL make a new execution identity the owning execution only while the 
 - **THEN** the new execution is authorized against the same assignment, and the old identity is never authorized again
 
 ### Requirement: Launch grants
-A grant SHALL record every compared value, its relied-on gates, its operation, its issue time, and the ttl and skew, whose skew SHALL be shorter than the ttl. Expiry SHALL be computed from the issue time and the ttl and SHALL change no state, and a revoked grant SHALL keep its first revocation reason.
+A grant SHALL record every compared value, its relied-on gates, its operation, its issue time, and parsed parameters of positive integer ttl and skew, the skew shorter than the ttl. Expiry SHALL be computed from the issue time and the ttl and SHALL change no state, and a revoked grant SHALL keep its first revocation reason.
 
 #### Scenario: Expiry
 - **WHEN** the ttl has passed since a grant was issued
@@ -71,7 +71,7 @@ A writer that changes a compared value SHALL find every attempt that owns an exe
 - **THEN** the writer finds the execution, revokes the grant, and requests cancellation
 
 ### Requirement: Start observations
-A start SHALL be `foreign` when its grant or execution belongs to another worker; `duplicate` when the execution has a start recorded and the grant is bound to it or names the recorded one; `quarantine-evidence` in quarantine or at another epoch; `unauthorized-start` without a grant of that execution, cancelling that execution only; then `historical` for an `exited` execution and `started` for the owning one.
+A start SHALL be `foreign` when its grant or execution belongs to another worker; `duplicate` when its grant is bound to the execution and a start is recorded; `quarantine-evidence` in quarantine or at another epoch; `unauthorized-start` without a grant bound to that execution, kept apart from the accepted start and cancelling that execution only; then `historical` for an `exited` execution and `started` for the owning one.
 
 #### Scenario: Late start of an exited execution
 - **WHEN** execution A exited, execution B was authorized, and a first start of A under A's grant arrives
@@ -80,6 +80,10 @@ A start SHALL be `foreign` when its grant or execution belongs to another worker
 #### Scenario: Exited execution under an unknown grant
 - **WHEN** a start of an exited execution names a grant unknown to the authority or bound to another execution
 - **THEN** it is an `unauthorized-start`
+
+#### Scenario: Valid start after an unauthorized report
+- **WHEN** a start under an unknown grant is reported and then the start under the execution's grant
+- **THEN** the first is kept as unauthorized evidence and the second moves the execution to `started`
 
 ### Requirement: Exit and not-started facts
 A worker SHALL report only its own executions' facts, and another worker's report SHALL be rejected with `forbidden`. An exit SHALL move an `authorized` or `started` execution to `exited`, and `not-started` an `authorized` one; a repeated fact SHALL change nothing, and a fact the current state does not allow SHALL be rejected with `precondition-failed`.

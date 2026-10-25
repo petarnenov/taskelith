@@ -11,14 +11,18 @@ import type {
 } from './identifiers.js';
 import type { RevocationReason } from './launch-rejection.js';
 
-// The protocol parameters every grant carries (operational targets: `30s`
-// and `5s`); the skew must be shorter than the time to live.
-export interface LaunchParameters {
+export interface LaunchParametersInput {
   readonly ttlMilliseconds: number;
   readonly skewMilliseconds: number;
 }
 
-export function parseLaunchParameters(input: LaunchParameters): Result<LaunchParameters> {
+declare const launchParametersBrand: unique symbol;
+
+// The protocol parameters every grant carries (operational targets: `30s`
+// and `5s`); only parseLaunchParameters creates them, skew below the ttl.
+export type LaunchParameters = LaunchParametersInput & { readonly [launchParametersBrand]: true };
+
+export function parseLaunchParameters(input: LaunchParametersInput): Result<LaunchParameters> {
   const { ttlMilliseconds, skewMilliseconds } = input;
   if (!isPositiveInteger(ttlMilliseconds) || !isPositiveInteger(skewMilliseconds)) {
     return err(failure('invalid', 'launch ttl and skew must be positive integers of milliseconds'));
@@ -26,7 +30,7 @@ export function parseLaunchParameters(input: LaunchParameters): Result<LaunchPar
   if (skewMilliseconds >= ttlMilliseconds) {
     return err(failure('invalid', 'launch skew must be shorter than the launch ttl'));
   }
-  return ok(Object.freeze({ ttlMilliseconds, skewMilliseconds }));
+  return ok(Object.freeze({ ttlMilliseconds, skewMilliseconds }) as LaunchParameters);
 }
 
 export const GRANT_STATES = Object.freeze(['granted', 'revoked'] as const);

@@ -1,6 +1,6 @@
 import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import { owningExecution } from './attempt.js';
-import { withStart, type Execution, type StartFact, type StartKind } from './execution.js';
+import { withStart, withUnauthorizedStart, type Execution } from './execution.js';
 import type { ExecutionId, InstallationState, LaunchAuthId, RecoveryEpoch, WorkerId } from './identifiers.js';
 import type { LaunchGrant } from './launch-grant.js';
 import { locateExecution, withAttempt, withExecution, type Task } from './task.js';
@@ -47,8 +47,7 @@ export function decideStartObservation(observation: StartObservation, context: S
   if (grant !== undefined && grant.workerId !== observation.workerId) return 'foreign';
   if (located !== undefined && located.execution.workerId !== observation.workerId) return 'foreign';
   const bound = located !== undefined && isBoundGrant(grant, observation, located.execution);
-  const recorded = located?.execution.start;
-  if (recorded !== undefined && (bound || recorded.launchAuthId === observation.launchAuthId)) return 'duplicate';
+  if (bound && located.execution.start !== undefined) return 'duplicate';
   if (installation.quarantined || observation.recoveryEpoch !== installation.recoveryEpoch) return 'quarantine-evidence';
   if (located === undefined || !bound) return 'unauthorized-start';
   const { attempt, execution } = located;
@@ -70,11 +69,9 @@ export function recordStartObservation(
     return err(failure('not-found', `task ${task.id} has no execution ${observation.executionId}`, { execution: observation.executionId }));
   }
   const decision = decideStartObservation(observation, { ...context, task });
-  const kind = recordedKind(decision);
-  if (kind === undefined || located.execution.start !== undefined) return ok(Object.freeze({ decision, task }));
-  const start: StartFact = { kind, launchAuthId: observation.launchAuthId, recordedAt: at };
-  const attempt = withExecution(located.attempt, withStart(located.execution, start));
-  return ok(Object.freeze({ decision, task: withAttempt(task, attempt, at) }));
+  const recorded = recordedExecution(decision, located.execution, observation.launchAuthId, at);
+  if (recorded === located.execution) return ok(Object.freeze({ decision, task }));
+  return ok(Object.freeze({ decision, task: withAttempt(task, withExecution(located.attempt, recorded), at) }));
 }
 
 // The grant the observation names exists and is one of this execution's.
@@ -82,9 +79,9 @@ function isBoundGrant(grant: LaunchGrant | undefined, observation: StartObservat
   return grant !== undefined && grant.launchAuthId === observation.launchAuthId && grant.executionId === execution.id;
 }
 
-function recordedKind(decision: StartDecision): StartKind | undefined {
-  if (decision === 'started') return 'current';
-  if (decision === 'historical') return 'historical';
-  if (decision === 'unauthorized-start') return 'unauthorized';
-  return undefined;
+function recordedExecution(decision: StartDecision, execution: Execution, launchAuthId: LaunchAuthId, at: Instant): Execution {
+  if (decision === 'started') return withStart(execution, { kind: 'current', launchAuthId, recordedAt: at });
+  if (decision === 'historical') return withStart(execution, { kind: 'historical', launchAuthId, recordedAt: at });
+  if (decision === 'unauthorized-start') return withUnauthorizedStart(execution, { launchAuthId, recordedAt: at });
+  return execution;
 }

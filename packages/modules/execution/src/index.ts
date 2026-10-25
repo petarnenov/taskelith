@@ -27,6 +27,7 @@ export {
   type ExitStatusInput,
   type StartFact,
   type StartKind,
+  type UnauthorizedStart,
 } from './domain/execution.js';
 export {
   parseRecoveryEpoch,
@@ -58,6 +59,7 @@ export {
   type LaunchGrant,
   type LaunchGrantValues,
   type LaunchParameters,
+  type LaunchParametersInput,
 } from './domain/launch-grant.js';
 export {
   LAUNCH_REJECTION_REASONS,

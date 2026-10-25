@@ -23,7 +23,7 @@ The author ran these checks and `make verify` before pass 1, but recorded them h
 
 ## Checks
 
-In the worktree, `make verify` passed at `295cdca` before review and again after the pass-1 fixes. After the fixes: 365 tests passed, 0 failed; coverage over the compiled product code 99.71% lines, 96.45% branches, 99.50% functions, with every new file at 100% lines and functions (branches: `execution/task.js` 94.07%, `execution/launch-authorization.js` 99.09%, all others 100%); "Workspace and hexagonal boundary checks passed."; "Every product module is in the coverage report."; "Every comment is within the comment length rule."; "Verified 681 package paths"; strict OpenSpec validation 39 passed; package verification passed. The dependency inventory was regenerated with `make dependency-inventory` for the two new workspace packages.
+In the worktree, `make verify` passed at `295cdca` before review, after the pass-1 fixes (365 tests), and after the pass-2 fixes. After the pass-2 fixes: 367 tests passed, 0 failed; coverage over the compiled product code 99.71% lines, 96.45% branches, 99.50% functions, with every new file at 100% lines and functions (branches: `execution/task.js` 94.07%, `execution/launch-authorization.js` 99.09%, all others 100%); "Workspace and hexagonal boundary checks passed."; "Every product module is in the coverage report."; "Every comment is within the comment length rule."; "Verified 681 package paths"; strict OpenSpec validation 39 passed; package verification passed. The dependency inventory was regenerated with `make dependency-inventory` for the two new workspace packages.
 
 ## Independent review
 
@@ -39,7 +39,12 @@ Assigned reviewer: Codex CLI with `codex exec -m gpt-6.1-sol -c model_reasoning_
   7. Medium: the producer cursor accepted any number as a sequence. Sequences are now a branded type created only by `parseSequence`, with tests of invalid values.
   8. Medium: this record lacked the author self-check, evidence check, and checks before the first pass. They are recorded above, with the note that they were recorded after pass 1.
 
+- **Pass 2 — session `01a1706e-e6fc-7c10-a35f-7f6a8d92935b`,** reviewed revision `e061aa7`; the header reports `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`. Snapshot before and after: `0ac793a0…29e9`, equal. The reviewer confirmed pass-1 findings 2 to 8 resolved and finding 1 resolved in part, with the gap raised as finding 1 below. Findings: 0 Critical, 2 High, 1 Medium, 0 Low. All accepted and resolved:
+  1. High: a recorded start with the same `launchAuthId` still made a later observation a `duplicate` without a bound grant. `duplicate` now requires a grant bound to the execution; spec, design, and tests follow.
+  2. High: an `unauthorized-start` occupied the execution's single start field, so the valid start under the real grant became a `duplicate` and the execution stayed `authorized`. Unauthorized starts are now a separate list on the execution, kept once per grant identity, and a test shows the valid start (or a historical one after an exit) still recorded.
+  3. Medium: `authorizeLaunch` accepted structurally typed parameters that bypassed `parseLaunchParameters`, such as an infinite ttl or a negative skew. `LaunchParameters` is now a branded type that only the parser creates, with tests of invalid values.
+
 ## Remaining gates
 
-- Independent review pass 2 of the pass-1 fixes.
+- Independent review pass 3 of the pass-2 fixes, the last pass the review process allows.
 - Integration into `dev` by the coordinator, then archiving the change.

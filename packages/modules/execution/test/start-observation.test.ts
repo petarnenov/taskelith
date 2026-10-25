@@ -4,6 +4,7 @@ import {
   authorizeLaunch,
   decideStartObservation,
   endAttempt,
+  parseLaunchParameters,
   recordExit,
   recordNotStarted,
   recordStartObservation,
@@ -103,7 +104,10 @@ test('a start under an unknown grant, another execution\'s grant, or after not-s
   assert.equal(recorded.decision, 'unauthorized-start');
   const execution = recorded.task.attempts[0]!.executions[0]!;
   assert.equal(execution.state, 'not-started');
-  assert.equal(execution.start?.kind, 'unauthorized');
+  assert.equal(execution.start, undefined);
+  assert.deepEqual(execution.unauthorizedStarts, [{ launchAuthId: 'launch-1', recordedAt: T3 }]);
+  const repeated = value(recordStartObservation(recorded.task, observation(), { installation: INSTALLATION, grant }, T4));
+  assert.equal(repeated.task, recorded.task);
 });
 
 test('a start of an execution the task does not hold is not recorded on it', () => {
@@ -121,12 +125,33 @@ test('a start of an exited execution under an unknown or foreign-bound grant is 
   assert.equal(decideStartObservation(mismatched, { installation: INSTALLATION, grant, task: exited }), 'unauthorized-start');
 });
 
-test('after a recorded start, an unbound grant is unauthorized and leaves the recorded start', () => {
+test('after a recorded start, an unbound grant is unauthorized evidence beside the recorded start', () => {
   const { task, grant } = authorized();
   const first = value(recordStartObservation(task, observation(), { installation: INSTALLATION, grant }, T2)).task;
   const unknown = observation({ launchAuthId: launchAuthId('launch-9') });
   const recorded = value(recordStartObservation(first, unknown, { installation: INSTALLATION }, T3));
   assert.equal(recorded.decision, 'unauthorized-start');
-  assert.equal(recorded.task, first);
-  assert.equal(decideStartObservation(observation(), { installation: INSTALLATION, task: first }), 'duplicate');
+  const execution = recorded.task.attempts[0]!.executions[0]!;
+  assert.deepEqual(execution.start, first.attempts[0]!.executions[0]!.start);
+  assert.equal(execution.unauthorizedStarts.length, 1);
+  assert.equal(decideStartObservation(observation(), { installation: INSTALLATION, task: first }), 'unauthorized-start');
+  assert.equal(decideStartObservation(observation(), { installation: INSTALLATION, grant, task: first }), 'duplicate');
+});
+
+test('an unauthorized report does not block the valid start that follows it', () => {
+  const { task, grant } = authorized();
+  const unknown = observation({ launchAuthId: launchAuthId('launch-9') });
+  const flagged = value(recordStartObservation(task, unknown, { installation: INSTALLATION }, T2)).task;
+  const valid = value(recordStartObservation(flagged, observation(), { installation: INSTALLATION, grant }, T3));
+  assert.equal(valid.decision, 'started');
+  assert.equal(valid.task.attempts[0]!.executions[0]!.state, 'started');
+  const exitReport = { workerId: WORKER, executionId: EXECUTION, status: { kind: 'unknown' as const }, startProven: false, spawnFailed: false };
+  const exited = value(recordExit(flagged, exitReport, T3)).task;
+  assert.equal(value(recordStartObservation(exited, observation(), { installation: INSTALLATION, grant }, T4)).decision, 'historical');
+});
+
+test('only parsed launch parameters can be issued', () => {
+  assert.equal(failureOf(parseLaunchParameters({ ttlMilliseconds: Number.POSITIVE_INFINITY, skewMilliseconds: 1 })).code, 'invalid');
+  assert.equal(failureOf(parseLaunchParameters({ ttlMilliseconds: 30_000, skewMilliseconds: -1 })).code, 'invalid');
+  assert.equal(failureOf(parseLaunchParameters({ ttlMilliseconds: 30_000, skewMilliseconds: 30_000 })).code, 'invalid');
 });

@@ -45,7 +45,7 @@ test('the execution transition table allows exactly the transitions of the launc
 test('a grant keeps its parameters when the issuing input changes later', () => {
   const issue = { ...grantIssue(), parameters: { ...PARAMETERS } };
   const { grant } = authorized(undefined, {}, issue);
-  issue.parameters.ttlMilliseconds = 3_600_000;
+  (issue.parameters as { ttlMilliseconds: number }).ttlMilliseconds = 3_600_000;
   assert.equal(isGrantExpired(grant, T3), true);
   assert.ok(Object.isFrozen(grant.parameters));
 });
