@@ -13,7 +13,8 @@ export interface JsonResponse {
 // The bearer token of the Authorization header, or undefined without one.
 export function bearerToken(request: IncomingMessage): string | undefined {
   const header = request.headers.authorization;
-  const match = header === undefined ? null : /^Bearer ([\x21-\x7e]+)$/.exec(header);
+  // The scheme is case-insensitive (RFC 9110); the token is taken exactly.
+  const match = header === undefined ? null : /^Bearer ([\x21-\x7e]+)$/i.exec(header);
   return match?.[1];
 }
 

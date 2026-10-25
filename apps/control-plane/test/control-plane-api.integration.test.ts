@@ -6,7 +6,7 @@ import { after, before, describe, test } from 'node:test';
 import pg from 'pg';
 import { createAccount } from '@nats-io/nkeys';
 import { checkHttpSchema, checkMessageSchema } from '@taskelith/contracts';
-import { adminMain, InstallationPublicationFence, startControlPlane, type AdminIo, type RunningControlPlane } from '@taskelith/control-plane';
+import { adminMain, InstallationPublicationFence, serveUntilStopped, startControlPlane, type AdminIo, type RunningControlPlane } from '@taskelith/control-plane';
 import { ControlPlaneNamespace } from '@taskelith/control-plane-store';
 import { BrokerAuthority, connectSystemAccount, connectTransport, NatsBrokerCredentials, TRANSPORT_LIMITS, TransportAddress } from '@taskelith/nats';
 import { PostgresDatabase } from '@taskelith/postgres';
@@ -77,9 +77,9 @@ let running: RunningControlPlane;
 before(async () => {
   running = value(await startControlPlane({
     dataRoot, ownerUid, postgres: database, nats: NATS, api: { host: '127.0.0.1', port: 0 },
-    workflows: [{ definition, digest: DIGEST }], logSink: logs, sweepMilliseconds: 200,
+    workflows: [{ definition, digest: DIGEST }], logSink: logs, sweepMilliseconds: 200, shutdownMilliseconds: 1000,
     // The test server keeps JetStream in a small tmpfs.
-    transportLimits: { ...TRANSPORT_LIMITS, streamMaxBytes: 64 * 1024 ** 2 },
+    transportLimits: { ...TRANSPORT_LIMITS, streamMaxBytes: 64 * 1024 ** 2, retryInitialMilliseconds: 100, retryMaxMilliseconds: 200, idlePollMilliseconds: 50 },
   }));
 });
 
@@ -264,10 +264,28 @@ describe('enrollment and quarantine', () => {
     assert.equal((await call('POST', '/quarantine/999/redrive', { bearer: operator })).status, 404);
   });
 
-  test('the running service reports a stop that was asked for', async () => {
-    const outcome = running.stopped;
-    await running.stop();
-    assert.equal(await outcome, 'stopped');
+  test('SIGTERM stops the service within its deadline although a round waits for a lock', { timeout: 30_000 }, async () => {
+    const holder = new pg.Client({ connectionString: database.href });
+    await holder.connect();
+    await holder.query('BEGIN');
+    await holder.query('SELECT 1 FROM installation FOR UPDATE');
+    try {
+      const waiting = async () => (await sql<{ waiting: number }>(database,
+        "SELECT count(*)::int AS waiting FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()"))[0]!.waiting > 0;
+      await waitFor(waiting);
+      const listeners = new Set<() => void>();
+      const host = { on: (_: string, listener: () => void) => listeners.add(listener), off: (_: string, listener: () => void) => listeners.delete(listener) };
+      const startedAt = Date.now();
+      const served = serveUntilStopped(running, host);
+      for (const listener of listeners) listener();
+      await served;
+      assert.ok(Date.now() - startedAt < 10_000, `the stop took ${Date.now() - startedAt} ms`);
+      assert.equal(await running.stopped, 'stopped', 'a cancelled round is not a loop defect');
+      assert.ok(logs.records.some((record) => record.event === 'control-plane.stop.forced'));
+    } finally {
+      await holder.query('ROLLBACK');
+      await holder.end();
+    }
   });
 
   test('every request is logged with its correlation and no secret', async () => {

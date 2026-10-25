@@ -32,6 +32,14 @@ async function call(method: string, path: string, headers: Record<string, string
   return { status: response.status, body: await response.json() as Record<string, unknown>, correlationId: response.headers.get('x-correlation-id') };
 }
 
+test('the bearer scheme is matched in any case, and the token exactly', async () => {
+  answers = { readTaskResult: () => ok({ state: 'pending', runId: 'r', taskId: 't' }) };
+  for (const scheme of ['Bearer', 'bearer', 'BEARER']) {
+    assert.equal((await call('GET', '/runs/r/tasks/t/result', { authorization: `${scheme} ${OPERATOR}` })).status, 200, scheme);
+  }
+  assert.equal((await call('GET', '/runs/r/tasks/t/result', { authorization: `Bearer ${OPERATOR.toLowerCase()}` })).status, 401);
+});
+
 test('a credential store that is down is 503, not a refused credential', async () => {
   storeDown = true;
   try {

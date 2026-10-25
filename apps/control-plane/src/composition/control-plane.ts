@@ -28,6 +28,9 @@ import { InstallationPublicationFence } from './installation-publication-fence.j
 
 // Provisional G2 values in docs/operational-targets.md, which G6 verifies.
 export const GRACE_WINDOW_SWEEP_MILLISECONDS = 60_000;
+// How long a stop waits for the loops before it cancels what still blocks.
+export const SHUTDOWN_DEADLINE_MILLISECONDS = 30_000;
+const CANCELLED_SETTLE_MILLISECONDS = 5_000;
 
 export interface ApiEndpoint {
   // Loopback by default: G2 serves plain HTTP; TLS is G3 item 26 (D11).
@@ -40,6 +43,7 @@ export interface ControlPlaneSettings extends Omit<AdministrationSettings, 'logg
   readonly workflows: readonly KnownWorkflow[];
   readonly logSink?: LogSink;
   readonly sweepMilliseconds?: number;
+  readonly shutdownMilliseconds?: number;
   // Shorter or smaller ones only in tests; production takes the targets.
   readonly transportLimits?: TransportLimits;
 }
@@ -103,7 +107,11 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   }), { logger });
   const listening = await listen(api, settings.api);
   if (!listening.ok) return listening;
-  cleanup.push(() => new Promise<void>((resolve) => api.close(() => resolve())));
+  const closeApi = once(() => new Promise<void>((resolve) => {
+    api.close(() => resolve());
+    api.closeAllConnections();
+  }));
+  cleanup.push(closeApi);
   const controller = new AbortController();
   const lag = new EventLoopLagMonitor();
   cleanup.push(async () => lag.stop());
@@ -112,15 +120,31 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   let outcome: 'stopped' | 'failed' = 'stopped';
   let settle!: (value: 'stopped' | 'failed') => void;
   const stopped = new Promise<'stopped' | 'failed'>((resolve) => { settle = resolve; });
+  const deadline = settings.shutdownMilliseconds ?? SHUTDOWN_DEADLINE_MILLISECONDS;
+  // No new request first; then the loops get the deadline, after which what
+  // still blocks in PostgreSQL is cancelled before everything is closed.
   const stop = once(async () => {
+    const closing = closeApi();
     controller.abort();
-    await Promise.allSettled(loops);
+    const settled = Promise.allSettled(loops);
+    if (!(await within(settled, deadline))) {
+      const cancelled = await database.cancelActiveStatements().catch(() => 0);
+      logger.warn('control-plane.stop.forced', { deadlineMs: deadline, cancelled });
+      await within(settled, CANCELLED_SETTLE_MILLISECONDS);
+    }
+    await within(closing, CANCELLED_SETTLE_MILLISECONDS);
     await cleanup.run();
     settle(outcome);
   });
-  // A loop that fails is a defect: it is logged and stops the whole service.
+  // A loop that fails is a defect that stops the service, unless the stop
+  // itself made it fail, such as by cancelling its statement.
   const supervise = (name: string, loop: Promise<void>) => loop.catch((error: unknown) => {
-    logger.error('control-plane.loop.failed', { loop: name, message: error instanceof Error ? error.message : String(error) });
+    const message = error instanceof Error ? error.message : String(error);
+    if (controller.signal.aborted) {
+      logger.info('control-plane.loop.stopped', { loop: name, message });
+      return;
+    }
+    logger.error('control-plane.loop.failed', { loop: name, message });
     outcome = 'failed';
     void stop();
   });
@@ -146,6 +170,17 @@ class CleanupStack {
 
   async run(): Promise<void> {
     while (this.#releases.length > 0) await this.#releases.pop()!().catch(() => undefined);
+  }
+}
+
+// Whether the promise settled before the timeout.
+async function within(promise: Promise<unknown>, milliseconds: number): Promise<boolean> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<false>((resolve) => { timer = setTimeout(() => resolve(false), milliseconds); });
+  try {
+    return await Promise.race([promise.then(() => true, () => true), timeout]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 

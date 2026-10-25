@@ -78,7 +78,10 @@ These are coordinator decisions; the coordinator reports Q1, Q4, and Q11 to the 
   - It then starts the API and five loops under one abort signal: the publisher, the quarantine keeper, the grace-window sweep, the sampler, and the lag monitor.
   - Each acquired resource is pushed onto a cleanup stack at once. A start that fails or throws releases everything acquired so far, newest first.
   - The loops are supervised from the start: a loop that fails is logged and stops the whole service.
-  - `stop` is idempotent: it aborts the signal, waits for the loops, and releases the stack. `stopped` settles afterwards with `failed` after a loop defect.
+  - `stop` is idempotent. It first closes the API to new requests, then aborts the signal and waits for the loops for at most 30 s.
+  - After that deadline, `PostgresDatabase.cancelActiveStatements` cancels every statement of the service's pool, such as a round waiting for the installation lock. The pool's sessions carry an application name of their own, so that only they are cancelled. The stop then gives the loops 5 s more and releases the stack.
+  - A loop that fails after the stop began is logged, not counted as a defect. `stopped` settles afterwards with `failed` only after a loop defect.
+  - The bearer scheme is matched in any case (RFC 9110), and the token exactly.
   - The service entry keeps its SIGTERM and SIGINT handlers until the stop ends, so a repeated signal joins the same shutdown, and it exits with 1 after a loop defect so that a supervisor restarts it.
 
 ## Risks / Trade-offs
