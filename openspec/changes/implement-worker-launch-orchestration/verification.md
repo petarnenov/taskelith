@@ -53,7 +53,7 @@ An earlier run failed one test only because the build had preceded the fix that 
 
 - Reviewer: Claude Code, `claude -p "<prompt>" --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json`, run by the coordinator in the worktree at `0918727`; the prompt forbade writing any file in the worktree, and the prompt and output are outside it.
 - Model confirmation: Claude Fable 5.1 (`claude-fable-5-1`), medium effort, as the coordinator reported. Session ID: `3b52a249-1c99-40f9-ab57-33d6e54db3fb`.
-- Snapshot: `f75486ec…` before and after; unchanged.
+- Snapshot: `f75486eca664063730ea71a7dd1cc7e3df30fec2be6530a7ee561dd94eb5bcfc` before and after; unchanged.
 - Findings: 0 Critical, 0 High, 1 Medium, 7 Low.
 
 | Finding | Resolution |
