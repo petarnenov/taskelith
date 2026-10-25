@@ -33,13 +33,19 @@ export class InMemoryPlacementWorkers implements PlacementWorkers {
 // `undefined` is an installation without its record, which admits nothing.
 export class InMemoryInstallationGuard implements InstallationGuard {
   readonly #quarantined: boolean | undefined;
+  readonly #recoveryEpoch: number | undefined;
 
-  constructor(quarantined: boolean | undefined) {
+  constructor(quarantined: boolean | undefined, recoveryEpoch: number | undefined = quarantined === undefined ? undefined : 1) {
     this.#quarantined = quarantined;
+    this.#recoveryEpoch = recoveryEpoch;
   }
 
   async quarantined(): Promise<boolean> {
     return this.#quarantined ?? true;
+  }
+
+  async recoveryEpoch(): Promise<number | undefined> {
+    return this.#recoveryEpoch;
   }
 }
 

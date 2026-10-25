@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Badge,
   Breadcrumbs,
@@ -17,9 +17,10 @@ import {
   Title,
 } from '@mantine/core';
 import { usePoc } from '../store';
-import { PageHeader, ScreenLink } from '../ui';
+import { PageHeader, RoleButton, ScreenLink } from '../ui';
 
 interface Option {
+  later?: string;
   id: string;
   label: string;
   hint: string;
@@ -34,14 +35,14 @@ type ChoiceId = 'type' | 'framework' | 'harness' | 'reviewer' | 'specApproval';
 const CHOICES: Choice[] = [
   {
     id: 'type',
-    label: 'Type',
+    label: 'Work type',
     options: [
       { id: 'feature', label: 'Feature', hint: 'New behavior' },
       { id: 'bug', label: 'Bug', hint: 'Broken behavior' },
       { id: 'improvement', label: 'Improvement', hint: 'Better existing behavior' },
-      { id: 'docs', label: 'Docs', hint: 'Documentation only' },
+      { id: 'documentation', label: 'Documentation', hint: 'Documentation only' },
       { id: 'maintenance', label: 'Maintenance', hint: 'Deps, tooling, cleanup' },
-      { id: 'emergency', label: 'Emergency', hint: 'Expedited admission, same gates' },
+      { id: 'emergency', label: 'Emergency', hint: 'Same gates; an expedited policy is not decided yet' },
     ],
   },
   {
@@ -49,7 +50,7 @@ const CHOICES: Choice[] = [
     label: 'SDLC framework',
     options: [
       { id: 'openspec', label: 'OpenSpec', hint: 'Project default' },
-      { id: 'speckit', label: 'SpecKit', hint: 'For this task only' },
+      { id: 'speckit', label: 'SpecKit', hint: 'For this task only', later: 'G4' },
     ],
   },
   {
@@ -58,7 +59,7 @@ const CHOICES: Choice[] = [
     options: [
       { id: 'auto', label: 'Project default', hint: 'Claude Code · least-loaded slot' },
       { id: 'claude', label: 'Claude Code', hint: '1 slot free' },
-      { id: 'codex', label: 'Codex', hint: '1 slot free' },
+      { id: 'codex', label: 'Codex', hint: '1 slot free', later: 'G4' },
     ],
   },
   {
@@ -66,8 +67,12 @@ const CHOICES: Choice[] = [
     label: 'Reviewer',
     options: [
       { id: 'auto', label: 'Auto', hint: 'Next in rotation' },
-      { id: 'fable', label: 'Claude Code · Fable 5.1', hint: 'Reviewer slots full now' },
-      { id: 'codex', label: 'Codex', hint: 'Read-only' },
+      {
+        id: 'fable',
+        label: 'Claude Code · Fable 5.1',
+        hint: 'A separate Claude Code session on another slot (D7)',
+      },
+      { id: 'codex', label: 'Codex', hint: 'Read-only', later: 'G4' },
     ],
   },
   {
@@ -77,7 +82,7 @@ const CHOICES: Choice[] = [
       {
         id: 'reviewer',
         label: 'Independent reviewer',
-        hint: 'Delegated by maintainer policy · no human needed',
+        hint: 'Delegated by maintainer policy · no human needed (G3 item 22)',
       },
       { id: 'me', label: 'Maintainer', hint: 'Waits for a project-maintainer' },
     ],
@@ -92,14 +97,24 @@ const DEFAULTS: Record<ChoiceId, string> = {
   specApproval: 'reviewer',
 };
 
+// Client-chosen IDs make a retried create idempotent: the same draft always
+// sends the same runId and taskId.
+function newRequestIds() {
+  const id = () => Math.random().toString(16).slice(2, 10);
+  return { runId: 'run-' + id(), taskId: 'task-' + id() };
+}
+
+const CREATE_DELAY = 800;
+
 type SourceId = 'jira' | 'github' | 'confluence' | 'file' | 'url';
 
-const SOURCES: { id: SourceId; label: string; placeholder: string }[] = [
-  { id: 'jira', label: 'Jira', placeholder: 'Issue key or link, e.g. PROJ-142' },
+// G3 imports only GitHub issues (D9); the other sources wait for later gates.
+const SOURCES: { id: SourceId; label: string; placeholder: string; later?: boolean }[] = [
   { id: 'github', label: 'GitHub issue', placeholder: 'owner/repo#57 or issue link' },
-  { id: 'confluence', label: 'Confluence', placeholder: 'Page link' },
-  { id: 'file', label: 'Text file', placeholder: 'Path to a .md or .txt file' },
-  { id: 'url', label: 'Other link', placeholder: 'Any web page or document link' },
+  { id: 'jira', label: 'Jira', placeholder: 'Issue key or link, e.g. PROJ-142', later: true },
+  { id: 'confluence', label: 'Confluence', placeholder: 'Page link', later: true },
+  { id: 'file', label: 'Text file', placeholder: 'Path to a .md or .txt file', later: true },
+  { id: 'url', label: 'Other link', placeholder: 'Any web page or document link', later: true },
 ];
 
 const SAMPLES: Record<
@@ -230,7 +245,9 @@ export function NewTaskScreen() {
   const [goal, setGoal] = useState('');
   const [touched, setTouched] = useState(false);
   const [created, setCreated] = useState(false);
-  const [source, setSource] = useState<SourceId>('jira');
+  const [sending, setSending] = useState(false);
+  const [ids, setIds] = useState(newRequestIds);
+  const [source, setSource] = useState<SourceId>('github');
   const [sourceInput, setSourceInput] = useState('');
   const [imported, setImported] = useState<{
     sourceName: string;
@@ -260,11 +277,27 @@ export function NewTaskScreen() {
     setGoal('');
     setTouched(false);
     setCreated(false);
-    setSource('jira');
+    setIds(newRequestIds());
+    setSource('github');
     setSourceInput('');
     setImported(null);
   };
-  const create = () => (hasTitle ? setCreated(true) : setTouched(true));
+  const create = () => {
+    if (!hasTitle) {
+      setTouched(true);
+      return;
+    }
+    setSending(true);
+  };
+
+  useEffect(() => {
+    if (!sending) return undefined;
+    const timer = window.setTimeout(() => {
+      setSending(false);
+      setCreated(true);
+    }, CREATE_DELAY);
+    return () => clearTimeout(timer);
+  }, [sending]);
 
   return (
     <Stack gap="md">
@@ -285,9 +318,14 @@ export function NewTaskScreen() {
             <Button variant="default" onClick={() => go('board')}>
               Cancel
             </Button>
-            <Button onClick={create} disabled={!hasTitle}>
+            <RoleButton
+              capability="submit-task"
+              onClick={create}
+              disabled={!hasTitle || created}
+              loading={sending}
+            >
               Create task
-            </Button>
+            </RoleButton>
           </Group>
         }
       />
@@ -296,7 +334,8 @@ export function NewTaskScreen() {
           <Group justify="space-between" gap="sm">
             <Text size="sm">
               Created “{title.trim()}” ({optionOf('framework', values.framework).label})
-              {imported ? ' from ' + imported.ref : ''}. It is in Propose and inspection has started.
+              {imported ? ' from ' + imported.ref : ''} as {ids.runId} with planning task {ids.taskId}. A
+              retry sends the same IDs, so it cannot create a second run.
             </Text>
             <Group gap="xs">
               <Button size="xs" variant="light" onClick={() => go('board')}>
@@ -324,7 +363,7 @@ export function NewTaskScreen() {
                   setSource(v as SourceId);
                   setSourceInput('');
                 }}
-                data={SOURCES.map((s) => ({ value: s.id, label: s.label }))}
+                data={SOURCES.map((s) => ({ value: s.id, label: s.label, disabled: s.later }))}
               />
               <Group gap="xs" align="flex-end" wrap="nowrap">
                 <TextInput
@@ -402,7 +441,11 @@ export function NewTaskScreen() {
                     size="xs"
                     value={values[choice.id]}
                     onChange={(v) => setValues({ ...values, [choice.id]: v })}
-                    data={choice.options.map((o) => ({ value: o.id, label: o.label }))}
+                    data={choice.options.map((o) => ({
+                      value: o.id,
+                      label: o.later ? o.label + ' · ' + o.later : o.label,
+                      disabled: !!o.later,
+                    }))}
                   />
                   <Text size="xs" c="dimmed">
                     {optionOf(choice.id, values[choice.id]).hint}

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Taskelith execution API",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Worker enrollment, launch authorization (G2 decision D12 (a)), delegation, task results, and evidence. Worker operations use the per-worker credential and operator operations the installation bootstrap credential (G2 decision D10 (a))."
   },
   "paths": {
@@ -68,6 +68,26 @@
           },
           "422": {
             "description": "The host does not match the token constraints, or no protocol version is supported by both sides.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A service the operation needs is unavailable; retry later.",
             "content": {
               "application/json": {
                 "schema": {
@@ -265,6 +285,16 @@
               }
             }
           },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
           "401": {
             "description": "The operator credential is invalid.",
             "content": {
@@ -277,6 +307,26 @@
           },
           "404": {
             "description": "The run or the task does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A service the operation needs is unavailable; retry later.",
             "content": {
               "application/json": {
                 "schema": {
@@ -501,6 +551,178 @@
           },
           "500": {
             "description": "The stored content is missing or does not match its digest, so it is not served.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quarantine": {
+      "get": {
+        "operationId": "listQuarantine",
+        "summary": "List quarantined messages, one page at a time",
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "The first sequence to read.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of quarantine records.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuarantinePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The operator credential is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The broker is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quarantine/{sequence}/redrive": {
+      "post": {
+        "operationId": "redriveQuarantined",
+        "summary": "Publish a quarantined message again on its original subject under a new message identity",
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sequence",
+            "in": "path",
+            "required": true,
+            "description": "The quarantine record.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The message was published again and its record removed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Redrive"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The operator credential is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No quarantine record has this sequence.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The original expired before the capture, so the record cannot be redriven.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The broker is unavailable.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1778,6 +2000,102 @@
           },
           "publishedAt": {
             "$ref": "#/components/schemas/Instant"
+          }
+        }
+      },
+      "QuarantineRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A message the broker gave up on or a consumer terminated, copied with its diagnostics (item 12).",
+        "required": [
+          "sequence",
+          "source",
+          "originalSubject",
+          "originalStreamSequence",
+          "consumer",
+          "deliveries",
+          "reason",
+          "bodyExpired"
+        ],
+        "properties": {
+          "sequence": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The record's sequence in the quarantine stream."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "commands",
+              "observations"
+            ]
+          },
+          "originalSubject": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "originalStreamSequence": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "originalMessageId": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "consumer": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "deliveries": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "bodyExpired": {
+            "type": "boolean",
+            "description": "The original expired from its stream before the capture, so the record cannot be redriven."
+          }
+        }
+      },
+      "QuarantinePage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "records"
+        ],
+        "properties": {
+          "records": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/QuarantineRecord"
+            }
+          },
+          "next": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The sequence to read the next page from; absent on the last page."
+          }
+        }
+      },
+      "Redrive": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sequence"
+        ],
+        "properties": {
+          "sequence": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "messageId": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "The new Nats-Msg-Id, `<original>.redrive.<n>`; absent for a message without one."
           }
         }
       }

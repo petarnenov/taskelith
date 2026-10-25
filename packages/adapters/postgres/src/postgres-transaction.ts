@@ -18,6 +18,7 @@ import {
   PostgresWorkflowRunRepository,
 } from './repositories.js';
 import { PostgresFleetRegistry, PostgresInstallationTable, PostgresOperatorCredentials } from './fleet-repositories.js';
+import { PostgresRunCatalog } from './run-catalog.js';
 import type { Session } from './session.js';
 
 // One SERIALIZABLE transaction: every repository and the outbox and inbox
@@ -36,6 +37,7 @@ export class PostgresTransaction {
   readonly lineage: PostgresTaskLineage;
   readonly ledger: PostgresCapacityLedger;
   readonly fleet: PostgresFleetRegistry;
+  readonly catalog: PostgresRunCatalog;
   readonly installationTable: PostgresInstallationTable;
   readonly operatorCredentials: PostgresOperatorCredentials;
   readonly signals: PostgresSignalReadings;
@@ -56,6 +58,7 @@ export class PostgresTransaction {
     this.lineage = new PostgresTaskLineage(session);
     this.ledger = new PostgresCapacityLedger(session);
     this.fleet = new PostgresFleetRegistry(session);
+    this.catalog = new PostgresRunCatalog(session);
     this.installationTable = new PostgresInstallationTable(session);
     this.operatorCredentials = new PostgresOperatorCredentials(session);
     this.signals = new PostgresSignalReadings(session);

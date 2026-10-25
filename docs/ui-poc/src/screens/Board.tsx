@@ -15,35 +15,38 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { usePoc } from '../store';
-import { GATE, PageHeader, SessionBadge } from '../ui';
+import { GATE, LaterGate, PageHeader, SessionBadge, deriveSessionStatus } from '../ui';
 import { PlusIcon } from '../icons';
-import { COLUMNS, conflictFiles, mergeSteps, type Framework, type Task } from './board-data';
+import { COLUMNS, conflictFiles, mergeSteps, type Run } from './board-data';
 import {
   NO_PROGRESS,
-  currentTasks,
+  cardGate,
+  columnOf,
+  currentRuns,
   isMergeReady,
   laneKey,
   mergeStepOf,
   type BoardProgress,
-  type BoardTask,
+  type BoardRun,
   type GroupBy,
 } from './board-model';
-import { SettingsDrawer, TaskDrawer } from './BoardDrawers';
+import { SettingsDrawer, RunDrawer } from './BoardDrawers';
+import { LiveStatus } from './LiveStatus';
 
 const COLUMN_WIDTH = 264;
 const AUTO_MERGE_DELAY = 6000;
 const MERGE_STEP_DELAY = 3500;
 const STOP_DELAY = 2500;
 
-type Panel = { kind: 'task'; id: string } | { kind: 'settings' } | null;
+type Panel = { kind: 'run'; id: string } | { kind: 'settings' } | null;
 
 function useBoardFlow() {
-  const { decisions, decide } = usePoc();
+  const { decisions } = usePoc();
   const [progress, setProgress] = useState<BoardProgress>(NO_PROGRESS);
   const [autoMerge, setAutoMerge] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const timers = useRef(new Set<number>());
-  const tasks = currentTasks(progress, decisions);
+  const runs = currentRuns(progress, decisions);
   const later = (fn: () => void, ms: number) => {
     const id = window.setTimeout(() => {
       timers.current.delete(id);
@@ -52,88 +55,85 @@ function useBoardFlow() {
     timers.current.add(id);
   };
 
-  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  useEffect(() => {
+    const pending = timers.current;
+    return () => pending.forEach(clearTimeout);
+  }, []);
 
   const update = (change: (p: BoardProgress) => Partial<BoardProgress>) =>
     setProgress((p) => ({ ...p, ...change(p) }));
 
-  const finishMerge = (task: Task) => {
-    const [harness, worker] = task.harness.split(' · ');
-    const files = conflictFiles(task).length;
-    update((p) => ({ merged: [...p.merged, task.id], mergeFlow: omit(p.mergeFlow, task.id) }));
+  const finishMerge = (run: Run) => {
+    const [harness, worker] = run.harness.split(' · ');
+    update((p) => ({ merged: [...p.merged, run.runId], mergeFlow: omit(p.mergeFlow, run.runId) }));
     setToast(
       'Merged ' +
-        task.pr +
+        run.pr +
         ' after ' +
         harness +
         ' resolved ' +
-        files +
+        conflictFiles(run).length +
         ' conflicts and the resolution passed review: ' +
-        task.change +
+        run.workItem +
         ' is archived and the session on ' +
         worker +
         ' was stopped.',
     );
   };
 
-  const returnToSpecify = (task: Task) => {
-    const harness = task.harness.split(' · ')[0];
-    update((p) => ({ returned: [...p.returned, task.id], mergeFlow: omit(p.mergeFlow, task.id) }));
+  const returnToSpecify = (run: Run) => {
+    const harness = run.harness.split(' · ')[0];
+    update((p) => ({ returned: [...p.returned, run.runId], mergeFlow: omit(p.mergeFlow, run.runId) }));
     setToast(
-      task.pr +
+      run.pr +
         ' not merged: ' +
-        task.change +
+        run.workItem +
         ' conflicts with a contract change on dev. Returned to Specify; ' +
         harness +
         ' reconciles the spec without waiting for you.',
     );
   };
 
-  const advanceMerge = (task: Task, step: number) => {
-    if (step < mergeSteps(task).length) {
-      update((p) => ({ mergeFlow: { ...p.mergeFlow, [task.id]: step } }));
-      later(() => advanceMerge(task, step + 1), MERGE_STEP_DELAY);
-    } else if (task.conflict === 'semantic') returnToSpecify(task);
-    else finishMerge(task);
+  const advanceMerge = (run: Run, step: number) => {
+    if (step < mergeSteps(run).length) {
+      update((p) => ({ mergeFlow: { ...p.mergeFlow, [run.runId]: step } }));
+      later(() => advanceMerge(run, step + 1), MERGE_STEP_DELAY);
+    } else if (run.conflict === 'semantic') returnToSpecify(run);
+    else finishMerge(run);
   };
 
-  const startMerge = (task: Task) => advanceMerge(task, 0);
+  const startMerge = (run: Run) => advanceMerge(run, 0);
 
   const merging = Object.keys(progress.mergeFlow).length > 0;
-  const candidate = tasks.find(isMergeReady);
+  const candidate = runs.find(isMergeReady);
   useEffect(() => {
     if (!autoMerge || merging || !candidate) return undefined;
     const timer = window.setTimeout(() => startMerge(candidate), AUTO_MERGE_DELAY);
     return () => clearTimeout(timer);
-  }, [autoMerge, merging, candidate?.id]);
+  }, [autoMerge, merging, candidate?.runId]);
 
-  const stopSession = (task: Task) => {
-    update((p) => ({ stopping: [...p.stopping, task.id] }));
+  const stopSession = (run: Run) => {
+    update((p) => ({ stopping: [...p.stopping, run.runId] }));
+    if (run.session.reachability === 'unknown') return;
     later(
       () =>
         update((p) => ({
-          stopping: p.stopping.filter((id) => id !== task.id),
-          stopped: [...p.stopped, task.id],
+          stopping: p.stopping.filter((id) => id !== run.runId),
+          stopped: [...p.stopped, run.runId],
         })),
       STOP_DELAY,
     );
   };
 
-  const migrate = (task: Task, framework: Framework) => {
-    update((p) => ({ migrated: { ...p.migrated, [task.id]: framework } }));
+  const reconcile = (run: Run) => {
+    update((p) => ({ reconciled: [...p.reconciled, run.runId] }));
     setToast(
-      task.title +
-        ' migrated to ' +
-        framework +
-        '. A new binding is recorded, the originals are kept, and the invalidated gates run again.',
+      run.title +
+        ': reconciled by PP with evidence. The execution ended as operator-resolved and its capacity was released.',
     );
   };
 
-  const approve = (task: Task, decision: 'approved' | 'denied') => {
-    if (task.inboxId) decide(task.inboxId, decision);
-  };
-
-  return { tasks, autoMerge, setAutoMerge, toast, setToast, startMerge, stopSession, migrate, approve };
+  return { runs, autoMerge, setAutoMerge, toast, setToast, startMerge, stopSession, reconcile };
 }
 
 function omit<T>(record: Record<string, T>, key: string): Record<string, T> {
@@ -141,17 +141,23 @@ function omit<T>(record: Record<string, T>, key: string): Record<string, T> {
   return rest;
 }
 
-function cardBorder(task: BoardTask, selected: boolean): string | undefined {
+function awaitsApproval(run: BoardRun): boolean {
+  return run.session.phase === 'running' && run.session.turn === 'awaiting-approval';
+}
+
+function cardBorder(run: BoardRun, selected: boolean): string | undefined {
   if (selected) return '2px solid var(--mantine-primary-color-filled)';
-  if (task.approval) return '1px solid var(--mantine-color-orange-light-color)';
-  if (task.mergeStep !== undefined || task.returnedFromMerge)
+  if (awaitsApproval(run) || deriveSessionStatus(run.session).needsReconcile) {
+    return '1px solid var(--mantine-color-orange-light-color)';
+  }
+  if (run.mergeStep !== undefined || run.returnedFromMerge)
     return '1px solid var(--mantine-color-indigo-light-color)';
-  if (task.justArchived) return '1px solid var(--mantine-color-teal-light-color)';
+  if (run.justArchived) return '1px solid var(--mantine-color-teal-light-color)';
   return undefined;
 }
 
-function MergeProgress({ task, onOpenSession }: { task: BoardTask; onOpenSession: () => void }) {
-  const step = mergeStepOf(task)!;
+function MergeProgress({ run, onOpenSession }: { run: BoardRun; onOpenSession: () => void }) {
+  const step = mergeStepOf(run)!;
   return (
     <Paper withBorder p="xs" radius="sm">
       <Stack gap={4}>
@@ -168,7 +174,7 @@ function MergeProgress({ task, onOpenSession }: { task: BoardTask; onOpenSession
         <Text size="xs" c="dimmed">
           {step.detail}
         </Text>
-        {conflictFiles(task).map((path, i) => (
+        {conflictFiles(run).map((path, i) => (
           <Group key={path} gap={6} wrap="nowrap">
             <Badge size="xs" variant="light" color={i < step.resolved ? 'teal' : 'orange'}>
               {i < step.resolved ? 'resolved' : 'open'}
@@ -183,58 +189,66 @@ function MergeProgress({ task, onOpenSession }: { task: BoardTask; onOpenSession
   );
 }
 
-function TaskCard({
-  task,
+function RunCard({
+  run,
   selected,
   autoMerge,
   onOpen,
   onMerge,
   onOpenSession,
 }: {
-  task: BoardTask;
+  run: BoardRun;
   selected: boolean;
   autoMerge: boolean;
   onOpen: () => void;
   onMerge: () => void;
   onOpenSession: () => void;
 }) {
-  const gate = GATE[task.gate];
-  const mergeReady = isMergeReady(task);
+  const { can } = usePoc();
+  const gate = GATE[cardGate(run)];
+  const mergeReady = isMergeReady(run);
+  const status = deriveSessionStatus(run.session);
   return (
-    <Card withBorder padding="sm" radius="md" bd={cardBorder(task, selected)}>
+    <Card withBorder padding="sm" radius="md" bd={cardBorder(run, selected)}>
       <Stack gap={8}>
-        <Group justify="space-between" align="flex-start" gap="xs" wrap="nowrap">
-          <UnstyledButton onClick={onOpen} aria-label={'Open details for ' + task.title}>
+        <Group justify="space-between" align="flex-start" gap="xs">
+          <UnstyledButton onClick={onOpen} aria-label={'Open details for ' + run.title}>
             <Text fw={600} size="sm">
-              {task.title}
+              {run.title}
             </Text>
           </UnstyledButton>
           <Badge size="xs" variant="default">
-            {task.framework}
+            {run.framework}
           </Badge>
         </Group>
         <Text size="xs" ff="monospace" c="dimmed" truncate>
-          {task.change}
+          {run.workItem}
         </Text>
         <Text size="xs" c="dimmed">
-          Native: {task.native}
+          Stage: {run.at}
         </Text>
         <Group gap={6}>
           <Badge size="sm" variant="light" color={gate.color}>
             {gate.label}
           </Badge>
           <Text size="xs" c="dimmed">
-            {task.note}
+            {run.note}
           </Text>
         </Group>
-        {task.approval ? (
+        {run.laterGate ? <LaterGate>{run.laterGate}</LaterGate> : null}
+        {awaitsApproval(run) ? (
           <Button size="xs" variant="light" color="orange" onClick={onOpen}>
             Approval needed: make verify
           </Button>
         ) : null}
-        <SessionBadge state={task.session} harness={task.harness} />
-        {task.mergeStep !== undefined ? <MergeProgress task={task} onOpenSession={onOpenSession} /> : null}
-        {task.returnedFromMerge ? (
+        {status.needsReconcile ? (
+          <Button size="xs" variant="light" color="red" onClick={onOpen}>
+            Needs reconcile
+          </Button>
+        ) : null}
+        <SessionBadge view={run.session} harness={run.harness} />
+        {run.mergeStep !== undefined ? <MergeProgress run={run} onOpenSession={onOpenSession} /> : null}
+        {run.returnedFromMerge ? (
           <Alert variant="light" color="indigo" p="xs" title="Returned from merge">
             <Text size="xs">
               Spec conflict with dev. Reconciling automatically, then implement, verify and review run again.
@@ -243,12 +257,12 @@ function TaskCard({
         ) : null}
         {mergeReady && autoMerge ? (
           <Badge variant="light" color="teal" fullWidth>
-            Auto-merge queued · {task.pr}
+            Auto-merge queued · {run.pr}
           </Badge>
         ) : null}
-        {mergeReady && !autoMerge ? (
+        {mergeReady && !autoMerge && can('change-settings') ? (
           <Button size="xs" onClick={onMerge}>
-            Merge {task.pr}
+            Merge {run.pr}
           </Button>
         ) : null}
       </Stack>
@@ -257,23 +271,23 @@ function TaskCard({
 }
 
 export function BoardScreen() {
-  const { go, needsYouCount } = usePoc();
+  const { go, needsYouCount, can } = usePoc();
   const flow = useBoardFlow();
   const [panel, setPanel] = useState<Panel>(null);
   const [groupBy, setGroupBy] = useState<GroupBy>('none');
-  const [framework, setFramework] = useState<Framework>('OpenSpec');
-  const { tasks } = flow;
-  const lanes = [...new Set(tasks.map((task) => laneKey(task, groupBy)))];
-  const selected = panel?.kind === 'task' ? tasks.find((task) => task.id === panel.id) : undefined;
-  const liveCount = tasks.filter((task) => task.session === 'live').length;
+  const { runs } = flow;
+  const lanes = [...new Set(runs.map((run) => laneKey(run, groupBy)))];
+  const selected = panel?.kind === 'run' ? runs.find((run) => run.runId === panel.id) : undefined;
+  const liveCount = runs.filter((run) => deriveSessionStatus(run.session).live).length;
 
   return (
     <Stack gap="md">
       <PageHeader
         title="Board"
-        description="Columns are the platform lifecycle stages every framework maps to; each card shows its framework's native step, or “platform-managed” where the framework has none. Tasks move only when a gate passes. Accept and integrate is the merge gate after Review; merging archives the change and stops its agent session."
+        description="One card per workflow run. Columns group the framework's stages by the lifecycle obligation each stage covers; each card names its current stage and the worst state of that stage's gates. Accept and integrate is a platform-added merge step after Review, not a framework stage."
         aside={
           <Group gap="sm">
+            <LiveStatus />
             <Badge size="lg" variant="dot" color="teal">
               {liveCount} sessions live
             </Badge>
@@ -286,9 +300,11 @@ export function BoardScreen() {
                 {flow.autoMerge ? 'On' : 'Off'}
               </Text>
             </Button>
-            <Button leftSection={<PlusIcon />} onClick={() => go('new-task')}>
-              New task
-            </Button>
+            {can('submit-task') ? (
+              <Button leftSection={<PlusIcon />} onClick={() => go('new-task')}>
+                New task
+              </Button>
+            ) : null}
           </Group>
         }
       />
@@ -322,17 +338,17 @@ export function BoardScreen() {
                     {column.name}
                   </Title>
                   <Badge size="sm" variant="default" circle>
-                    {tasks.filter((task) => task.stage === i).length}
+                    {runs.filter((run) => columnOf(run) === i).length}
                   </Badge>
                 </Group>
                 <Text size="xs" c="dimmed">
-                  {column.gate}
+                  {column.obligation}
                 </Text>
               </Stack>
             ))}
           </Group>
           {lanes.map((lane) => {
-            const laneTasks = tasks.filter((task) => laneKey(task, groupBy) === lane);
+            const laneRuns = runs.filter((run) => laneKey(run, groupBy) === lane);
             return (
               <Stack
                 key={lane}
@@ -346,7 +362,7 @@ export function BoardScreen() {
                       {lane}
                     </Title>
                     <Badge size="sm" variant="default">
-                      {laneTasks.length}
+                      {laneRuns.length}
                     </Badge>
                   </Group>
                 ) : null}
@@ -361,16 +377,16 @@ export function BoardScreen() {
                       mih={groupBy === 'none' ? 480 : 80}
                     >
                       <Stack gap={8}>
-                        {laneTasks
-                          .filter((task) => task.stage === i)
-                          .map((task) => (
-                            <TaskCard
-                              key={task.id}
-                              task={task}
+                        {laneRuns
+                          .filter((run) => columnOf(run) === i)
+                          .map((run) => (
+                            <RunCard
+                              key={run.runId}
+                              run={run}
                               autoMerge={flow.autoMerge}
-                              selected={selected?.id === task.id}
-                              onOpen={() => setPanel({ kind: 'task', id: task.id })}
-                              onMerge={() => flow.startMerge(task)}
+                              selected={selected?.runId === run.runId}
+                              onOpen={() => setPanel({ kind: 'run', id: run.runId })}
+                              onMerge={() => flow.startMerge(run)}
                               onOpenSession={() => go('session')}
                             />
                           ))}
@@ -383,14 +399,12 @@ export function BoardScreen() {
           })}
         </Stack>
       </ScrollArea>
-      <TaskDrawer task={selected} onClose={() => setPanel(null)} flow={flow} />
+      <RunDrawer run={selected} onClose={() => setPanel(null)} flow={flow} />
       <SettingsDrawer
         opened={panel?.kind === 'settings'}
         onClose={() => setPanel(null)}
         autoMerge={flow.autoMerge}
         onAutoMerge={flow.setAutoMerge}
-        framework={framework}
-        onFramework={setFramework}
       />
     </Stack>
   );

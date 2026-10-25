@@ -120,7 +120,7 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
   const creds = authority.user('control-plane', Math.floor(Date.now() / 1000)).creds;
   const controlPlane = value(await connectTransport({ server: NATS, address, creds }));
   after(async () => {
-    for (const kind of ['commands', 'observations', 'quarantine', 'advisories'] as const) {
+    for (const kind of ['commands', 'observations', 'sdlc', 'quarantine', 'advisories'] as const) {
       await controlPlane.jsm.streams.delete(address.streamName(kind)).catch(() => false);
     }
     await controlPlane.close();

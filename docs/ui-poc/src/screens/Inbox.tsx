@@ -1,52 +1,78 @@
 import { useState } from 'react';
-import { Alert, Badge, Button, Code, Group, Paper, Stack, Text, Title } from '@mantine/core';
-import { usePoc, type InboxDecision, type InboxId, type Screen } from '../store';
-import { PageHeader, ScreenLink, SectionLabel, SessionBadge, type SessionState } from '../ui';
+import { Alert, Badge, Code, Group, Paper, Stack, Text, Title } from '@mantine/core';
+import { usePoc, type Capability, type InboxDecision, type InboxId, type Screen } from '../store';
+import {
+  PageHeader,
+  RoleButton,
+  ScreenLink,
+  SectionLabel,
+  LaterGate,
+  SessionBadge,
+  type ExecutionView,
+} from '../ui';
 import { CheckIcon } from '../icons';
 
 interface Action {
   label: string;
   primary?: boolean;
   decision: InboxDecision;
+  capability: Capability;
   result: string;
+  later?: string;
 }
 
-const NOW: {
+interface InboxItem {
   id: InboxId;
   kind: string;
   title: string;
   age: string;
-  session: SessionState;
-  sessionLabel: string;
+  session: ExecutionView;
   harness: string;
   why: string;
   code?: string;
+  identity: string;
   actions: Action[];
-}[] = [
+}
+
+const NOW: InboxItem[] = [
   {
     id: 'kernel-approval',
     kind: 'Native approval',
     title: 'Task admission · Claude Code on mac-01',
     age: '6 min',
-    session: 'approval',
-    sessionLabel: 'Waiting for you',
+    session: {
+      phase: 'running',
+      reachability: 'reachable',
+      turn: 'awaiting-approval',
+      attempt: 2,
+      ownershipGeneration: 3,
+    },
     harness: 'Claude Code · mac-01',
     why: 'The harness asks to run a command that the project policy does not pre-authorize.',
     code: 'nvm use && make verify',
+    identity: 'Request req-7f2c · attempt #2 · provider generation 3 · answered once',
     actions: [
       {
         label: 'Approve once',
         primary: true,
-        decision: 'approved',
+        decision: 'approve-once',
+        capability: 'answer-runtime-request',
         result: 'Approved once. The attempt continues.',
       },
       {
         label: 'Always allow in this project',
-        decision: 'approved',
+        decision: 'approve-once',
+        capability: 'add-standing-rule',
         result:
-          'Added to the project policy as a standing rule with your name, its scope (this command in this project) and policy v3 r13. Future runs will not ask; every use is audited.',
+          'Approved once and recorded as a standing rule with your name and its scope (this command in this project).',
+        later: 'G3 items 8, 23',
       },
-      { label: 'Deny', decision: 'denied', result: 'Denied. The harness waits for your instructions.' },
+      {
+        label: 'Deny',
+        decision: 'deny',
+        capability: 'answer-runtime-request',
+        result: 'Denied. The harness waits for instructions.',
+      },
     ],
   },
   {
@@ -54,26 +80,46 @@ const NOW: {
     kind: 'Spec approval',
     title: 'Qualify Codex on Linux',
     age: '22 min',
-    session: 'idle',
-    sessionLabel: 'Session idle',
+    session: { phase: 'ended', outcome: 'exited-0', reachability: 'reachable' },
     harness: 'Codex · linux-02',
-    why: 'You chose to approve this spec yourself. The proposal and 3 requirements are ready; the reviewer found no issues.',
+    why: 'You chose to approve this spec yourself. Structural validation passed; the semantic approval gate waits for you.',
+    identity: 'Gate specs-approval · subject specs sha256:51d0…a7c3 · generation 4',
     actions: [
       {
         label: 'Approve spec',
         primary: true,
         decision: 'approved',
-        result: 'Spec approved. Implementation is admitted.',
+        capability: 'approve-gate',
+        result: 'Approved. The specs stage can complete.',
       },
-      { label: 'Request changes', decision: 'changes', result: 'Sent back to Specify with your note.' },
+      {
+        label: 'Reject with a note',
+        decision: 'rejected',
+        capability: 'approve-gate',
+        result: 'Rejected: the gate failed and reopens on the reworked revision.',
+      },
     ],
   },
 ];
 
+const RECONCILE: { title: string; session: ExecutionView; harness: string; status: string } = {
+  title: 'Evidence store adapter · linux-03',
+  session: {
+    phase: 'running',
+    reachability: 'unknown',
+    lastContact: '6 min ago',
+    evidence: 'uncertain',
+    attempt: 1,
+    ownershipGeneration: 4,
+  },
+  harness: 'Claude Code · linux-03',
+  status:
+    'linux-03 can prove neither that the process runs nor that it ended. The attempt keeps its owner, generation 4, and its capacity until a terminal fact arrives or a maintainer reconciles it on the board.',
+};
+
 const SOON: {
   title: string;
-  session: SessionState;
-  sessionLabel: string;
+  session: ExecutionView;
   harness: string;
   status: string;
   trigger: string;
@@ -81,42 +127,41 @@ const SOON: {
 }[] = [
   {
     title: 'Container Compose baseline',
-    session: 'idle',
-    sessionLabel: 'Session idle',
+    session: { phase: 'ended', outcome: 'exited-0', reachability: 'reachable' },
     harness: 'Claude Code · linux-01',
-    status: 'No reviewer: Claude Code reviewer slots full. Attempt 2 of 3 failed, last attempt in 4 min.',
-    trigger: 'Escalates after attempt 3',
+    status: 'No reviewer slot free. Try 2 of 3 to get a reviewer failed; the next try is in 4 min.',
+    trigger: 'Needs you after try 3',
     to: 'reviews',
   },
   {
     title: 'Lint tooling',
-    session: 'live',
-    sessionLabel: 'Session live',
+    session: { phase: 'running', reachability: 'reachable', turn: 'working' },
     harness: 'Codex · linux-02',
-    status: 'Typecheck failed on attempt 2 of 3. Codex is fixing it.',
-    trigger: 'Escalates after attempt 3',
+    status: 'Typecheck failed in fix round 2 of 3. Codex is fixing it.',
+    trigger: 'Needs you after round 3',
     to: 'session',
   },
-  {
-    title: 'Evidence store adapter · linux-03',
-    session: 'uncertain',
-    sessionLabel: 'Ownership uncertain',
-    harness: 'Claude Code · linux-03',
-    status:
-      'Lost contact 6 min ago. Not reassigned; its capacity stays reserved until ownership is reconciled.',
-    trigger: 'Escalates after 15 min',
-    to: 'workers',
-  },
 ];
+
+// The first answer to the spec approval meets a newer revision, as a stale
+// screen would; the server's conflict reply makes the user look again.
+type SpecConflict = 'not-yet' | 'shown' | 'resolved';
 
 export function InboxScreen() {
   const { decisions, decide, needsYouCount } = usePoc();
   const [results, setResults] = useState<Partial<Record<InboxId, string>>>({});
-  const open = NOW.filter((item) => !decisions[item.id]);
-  const done = NOW.filter((item) => decisions[item.id]);
-  const act = (id: InboxId, action: Action) => {
-    setResults({ ...results, [id]: action.result });
-    decide(id, action.decision);
+  const [conflict, setConflict] = useState<SpecConflict>('not-yet');
+  const open = NOW.filter((item) => !decisions[item.id]?.confirmed);
+  const done = NOW.filter((item) => decisions[item.id]?.confirmed);
+
+  const act = (item: InboxItem, action: Action) => {
+    if (item.id === 'codex-spec' && conflict === 'not-yet') {
+      setConflict('shown');
+      return;
+    }
+    if (item.id === 'codex-spec') setConflict('resolved');
+    setResults({ ...results, [item.id]: action.result });
+    decide(item.id, action.decision);
   };
 
   return (
@@ -132,46 +177,85 @@ export function InboxScreen() {
             Nothing needs you right now.
           </Alert>
         ) : null}
-        {open.map((item) => (
-          <Paper
-            key={item.id}
-            withBorder
-            p="md"
-            radius="md"
-            bd="1px solid var(--mantine-color-orange-light-color)"
-          >
-            <Stack gap="sm">
-              <Group gap="xs" wrap="wrap">
-                <Badge variant="light" color="orange">
-                  {item.kind}
-                </Badge>
-                <Title order={3} size="h5" flex={1}>
-                  {item.title}
-                </Title>
-                <Text size="xs" c="dimmed">
-                  {item.age}
-                </Text>
-              </Group>
-              <SessionBadge state={item.session} label={item.sessionLabel} harness={item.harness} />
-              <Text size="sm">{item.why}</Text>
-              {item.code ? <Code block>{item.code}</Code> : null}
-              <Group gap="xs">
-                {item.actions.map((action) => (
-                  <Button
-                    key={action.label}
-                    variant={action.primary ? 'filled' : 'default'}
-                    onClick={() => act(item.id, action)}
-                  >
-                    {action.label}
-                  </Button>
-                ))}
-                <Group ml="auto">
-                  <ScreenLink to="board">Open task</ScreenLink>
+        {open.map((item) => {
+          const sending = !!decisions[item.id];
+          return (
+            <Paper
+              key={item.id}
+              withBorder
+              p="md"
+              radius="md"
+              bd="1px solid var(--mantine-color-orange-light-color)"
+            >
+              <Stack gap="sm">
+                <Group gap="xs" wrap="wrap">
+                  <Badge variant="light" color="orange">
+                    {item.kind}
+                  </Badge>
+                  {item.id === 'kernel-approval' ? (
+                    <LaterGate>native requests · G3 items 4, 13, 18</LaterGate>
+                  ) : null}
+                  <Title order={3} size="h5" flex={1}>
+                    {item.title}
+                  </Title>
+                  <Text size="xs" c="dimmed">
+                    {item.age}
+                  </Text>
                 </Group>
-              </Group>
-            </Stack>
-          </Paper>
-        ))}
+                <SessionBadge view={item.session} harness={item.harness} />
+                <Text size="sm">{item.why}</Text>
+                {item.code ? <Code block>{item.code}</Code> : null}
+                <Text size="xs" c="dimmed" ff="monospace">
+                  {item.identity}
+                </Text>
+                {item.id === 'codex-spec' && conflict === 'shown' ? (
+                  <Alert variant="light" color="orange" title="This changed since you opened it">
+                    The server refused the answer with conflict: Codex pushed a new specs revision (generation
+                    4 → 5). The view is reloaded; review the new revision and answer again.
+                  </Alert>
+                ) : null}
+                {sending ? (
+                  <Text size="sm">Sending · waiting for the server to confirm…</Text>
+                ) : (
+                  <Group gap="xs">
+                    {item.actions.map((action) => (
+                      <Group key={action.label} gap={4}>
+                        <RoleButton
+                          capability={action.capability}
+                          variant={action.primary ? 'filled' : 'default'}
+                          onClick={() => act(item, action)}
+                        >
+                          {action.label}
+                        </RoleButton>
+                        {action.later ? <LaterGate>{action.later}</LaterGate> : null}
+                      </Group>
+                    ))}
+                    <Group ml="auto">
+                      <ScreenLink to="board">Open task</ScreenLink>
+                    </Group>
+                  </Group>
+                )}
+              </Stack>
+            </Paper>
+          );
+        })}
+        <Paper withBorder p="md" radius="md" bd="1px solid var(--mantine-color-red-light-color)">
+          <Stack gap="sm">
+            <Group gap="xs">
+              <Badge variant="light" color="red">
+                Reconcile
+              </Badge>
+              <Title order={3} size="h5">
+                {RECONCILE.title}
+              </Title>
+            </Group>
+            <SessionBadge view={RECONCILE.session} harness={RECONCILE.harness} />
+            <Text size="sm">{RECONCILE.status}</Text>
+            <Group>
+              <ScreenLink to="board">Reconcile on the board</ScreenLink>
+            </Group>
+          </Stack>
+        </Paper>
       </Stack>
       <Stack gap="sm" component="section" aria-label="Might need you soon">
         <SectionLabel>Taskelith is handling · might need you</SectionLabel>
@@ -181,7 +265,7 @@ export function InboxScreen() {
               <Text fw={600} size="sm" miw={200} flex="1 1 200px">
                 {item.title}
               </Text>
-              <SessionBadge state={item.session} label={item.sessionLabel} harness={item.harness} />
+              <SessionBadge view={item.session} harness={item.harness} />
               <Text size="sm" c="dimmed" flex="2 1 300px">
                 {item.status}
               </Text>
@@ -203,7 +287,7 @@ export function InboxScreen() {
                   {item.title}
                 </Text>
                 <Text size="sm" c="dimmed">
-                  {results[item.id] ?? 'Resolved from the board.'}
+                  {results[item.id] ?? 'Answered from the board.'}
                 </Text>
               </Group>
             </Paper>

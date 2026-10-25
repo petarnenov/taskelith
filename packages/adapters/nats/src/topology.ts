@@ -94,6 +94,7 @@ export function streamConfigs(
       discard_new_per_subject: true,
     },
     { ...bounded, name: address.streamName('observations'), subjects: [address.allWorkerSubjects('observations')] },
+    { ...bounded, name: address.streamName('sdlc'), subjects: [address.sdlcEventsSubject()] },
     {
       // A copy carries diagnostic headers beside a body of up to the limit.
       ...bounded,

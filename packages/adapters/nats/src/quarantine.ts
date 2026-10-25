@@ -4,7 +4,7 @@ import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { abortableDelay } from './abortable-delay.js';
 import { brokerFailure } from './broker-failure.js';
 import { JetStreamPublisher } from './jetstream-publisher.js';
-import type { StreamKind, TransportAddress } from './transport-address.js';
+import type { TransportAddress } from './transport-address.js';
 import { retryDelayMilliseconds, TRANSPORT_LIMITS, type TransportLimits } from './transport-limits.js';
 
 // What JetStream reports when a consumer terminates a message or gives up on
@@ -35,9 +35,12 @@ const CAPTURE_BATCH = 100;
 const CAPTURE_EXPIRES_MILLISECONDS = 1000;
 export const RECORDS_PAGE = 100;
 
+// The streams whose consumers can quarantine a message.
+export type QuarantineSource = 'commands' | 'observations';
+
 export interface QuarantineRecord {
   readonly sequence: number;
-  readonly source: StreamKind;
+  readonly source: QuarantineSource;
   readonly originalSubject: string;
   readonly originalStreamSequence: number;
   readonly originalMessageId: string | undefined;
@@ -145,7 +148,7 @@ export class Quarantine {
     }
   }
 
-  async #copy(advisory: Advisory, source: StreamKind): Promise<boolean> {
+  async #copy(advisory: Advisory, source: QuarantineSource): Promise<boolean> {
     const original = await this.#jsm.streams.getMessage(advisory.stream, { seq: advisory.stream_seq });
     const sent = await this.#publisher.publish({
       subject: this.#address.quarantineSubject(source),
@@ -157,8 +160,8 @@ export class Quarantine {
     return sent.ok;
   }
 
-  #sourceOf(stream: string): StreamKind | undefined {
-    const sources: StreamKind[] = ['commands', 'observations'];
+  #sourceOf(stream: string): QuarantineSource | undefined {
+    const sources: QuarantineSource[] = ['commands', 'observations'];
     return sources.find((source) => this.#address.streamName(source) === stream);
   }
 }

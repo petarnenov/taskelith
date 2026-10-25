@@ -52,10 +52,12 @@ test('subjects follow the execution contract and refuse tokens NATS would parse'
   assert.equal(TransportAddress.of('a.b').ok, false);
   assert.equal(address.subjectOfOutboxRow('workers.a.b.commands').ok, false);
   assert.equal(address.subjectOfOutboxRow('tasks.1.events').ok, false);
+  assert.deepEqual(address.subjectOfOutboxRow('sdlc.events'), ok('taskelith.install-1.sdlc.events'));
 });
 
 test('streams carry the provisional bounds of the operational targets', () => {
-  const [commands, observations, quarantine, advisories] = streamConfigs(address);
+  const [commands, observations, sdlc, quarantine, advisories] = streamConfigs(address);
+  assert.deepEqual(sdlc?.subjects, ['taskelith.install-1.sdlc.events']);
   assert.deepEqual(commands?.subjects, ['taskelith.install-1.workers.*.commands']);
   assert.equal(commands?.max_msgs_per_subject, 10_000);
   assert.equal(commands?.discard_new_per_subject, true);
@@ -218,7 +220,7 @@ test('a failed publication is logged with its event identity and backoff', async
     },
     {
       level: 'warn', event: 'nats.outbox.publish-failed', correlation: { eventId: 'e2' }, subject: 'not.a.command', failures: 1,
-      cause: 'an outbox subject must be workers.<workerId>.commands',
+      cause: 'an outbox subject must be workers.<workerId>.commands or sdlc.events',
     },
   ]);
   const initial = TRANSPORT_LIMITS.retryInitialMilliseconds;

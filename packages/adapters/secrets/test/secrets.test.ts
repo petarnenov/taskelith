@@ -35,6 +35,8 @@ test('text loses bearer secrets, seeds, user JWTs, and creds blocks', () => {
   const creds = `-----BEGIN NATS USER JWT-----\n${jwt}\n------END NATS USER JWT------\n\n-----BEGIN USER NKEY SEED-----\n${seed}\n------END USER NKEY SEED------`;
 
   assert.equal(redactSecrets(`token ${secret} failed`), `token ${REDACTED} failed`);
+  assert.equal(redactSecrets(`x${secret}`), `x${REDACTED}`, 'a prefix glued in front hides nothing');
+  assert.equal(redactSecrets(`9${seed}`), `9${REDACTED}`);
   assert.equal(redactSecrets(`seeds ${seed} ${accountSeed}`), `seeds ${REDACTED} ${REDACTED}`);
   assert.equal(redactSecrets(`jwt ${jwt}`), `jwt ${REDACTED}`);
   assert.equal(redactSecrets(`creds:\n${creds}\nend`), `creds:\n${REDACTED}\nend`);
