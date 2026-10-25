@@ -9,4 +9,4 @@ Before a harness is admitted, its qualification record SHALL review the provider
 
 #### Scenario: Remaining risk
 - **WHEN** the terms leave a risk for pooled or automated subscription use
-- **THEN** the record states the options and any recommendation as the author's proposal, and the owner decides
+- **THEN** the record or the design of the change that records the terms states the options and any recommendation as the author's proposal, and the owner decides

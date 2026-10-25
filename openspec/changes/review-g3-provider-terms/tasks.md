@@ -7,5 +7,5 @@
 
 ## 2. Verification and review
 
-- [ ] 2.1 Run strict validation and `make verify`.
+- [x] 2.1 Run strict validation and `make verify`.
 - [ ] 2.2 Obtain independent review (Claude Code with `claude-fable-5-1`, medium effort, as assigned), with every quoted clause checked against its source, and record the results.
