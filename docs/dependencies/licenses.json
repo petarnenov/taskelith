@@ -6,14 +6,14 @@
   },
   "provenance": {
     "package.json": "96d12d553c5cd631d727661db3375a6f150d04dec4e9ffe522206ada847d7fde",
-    "package-lock.json": "2e24b37aca16cac1cf61fee1de89370c0b8198e757199f3703963d9df5bbf3d2",
+    "package-lock.json": "fa65d52c7c67fe795eba701a76f3af710d8cc79ac46c09e83897c799ddf57aa0",
     ".nvmrc": "d9f318747a126ce2247661af67852b185def7789492eabfad7bba322be087c33",
     "scripts/dependency-inventory.ts": "5d613a8543422824f7bb703eb6fccc333f450ffe4b9a50c05ea4e23dc5caa446",
     "scripts/inventory-dependencies.ts": "f6be1728d7706b65a25a3fb0d561ec8eee0527f7a9665fe519769caabe339594",
     "scripts/inventory-provenance.ts": "7146327bc8a111a0d61115b720f43705a0e44c3bb7bee2228a993bf5c07c26b7"
   },
   "scope": "Locked npm installation paths; top-level license/notice files only; global binaries and nested vendored code excluded",
-  "packageCount": 695,
+  "packageCount": 701,
   "packagesWithGaps": 21,
   "packages": [
     {
@@ -640,6 +640,101 @@
         {
           "path": "node_modules/@jsep-plugin/ternary/LICENSE",
           "sha256": "4a4cffde4afd302689cd6aad9b05463a798d3dbe4cb2488bda45af1977affe33"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@nats-io/jetstream",
+      "name": "@nats-io/jetstream",
+      "version": "3.4.0",
+      "integrity": "sha512-GzHQodNJ942+R5LRb8PuZ5ugVWVWMRiufxUYLLVWkXKfwDXYN+Owo0d7L/b9O7BPyrbYD7jQWAC6+ZVuXa9Gyw==",
+      "development": true,
+      "bundled": false,
+      "optional": false,
+      "declaration": "Apache-2.0",
+      "declarationField": "license",
+      "manifestSha256": "c97f5ce1a038403b88da7c5666d610d8eac9a069e452f44f97eaa6b8bc6283d4",
+      "licenseFiles": [
+        {
+          "path": "node_modules/@nats-io/jetstream/LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@nats-io/nats-core",
+      "name": "@nats-io/nats-core",
+      "version": "3.4.0",
+      "integrity": "sha512-QMDM86EUNm+wudlKC67HLar/KHHQUvJGLfb4jbahje3pUk3K9afeck9fwsxBZF0eUFox6T/TA6m/t+lQqf+QsQ==",
+      "development": true,
+      "bundled": false,
+      "optional": false,
+      "declaration": "Apache-2.0",
+      "declarationField": "license",
+      "manifestSha256": "2866920339fec2de454ec4947c8c158ae1912acc30806f6e5cdfeb1cf211a760",
+      "licenseFiles": [
+        {
+          "path": "node_modules/@nats-io/nats-core/LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@nats-io/nkeys",
+      "name": "@nats-io/nkeys",
+      "version": "2.0.3",
+      "integrity": "sha512-JVt56GuE6Z89KUkI4TXUbSI9fmIfAmk6PMPknijmuL72GcD+UgIomTcRWiNvvJKxA01sBbmIPStqJs5cMRBC3A==",
+      "development": true,
+      "bundled": false,
+      "optional": false,
+      "declaration": "Apache-2.0",
+      "declarationField": "license",
+      "manifestSha256": "d43baf854840cac5bfc05d08c4cda3c80d5b67915bc6bc47dcd873f37478175a",
+      "licenseFiles": [
+        {
+          "path": "node_modules/@nats-io/nkeys/LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@nats-io/nuid",
+      "name": "@nats-io/nuid",
+      "version": "3.0.0",
+      "integrity": "sha512-QbXZDrxmYlrn5AD06gYcUTmEHwxn96HBQMIk7XTjDlEcx6FPzVBBPjp4AMRh1lEv6B4iJ6Xb/Uz61JugPXFRQg==",
+      "development": true,
+      "bundled": false,
+      "optional": false,
+      "declaration": "Apache-2.0",
+      "declarationField": "license",
+      "manifestSha256": "24fa67bb01ff3845614a3f10f9ddb211c14320c8b9887b12a769efdb80e7cb8e",
+      "licenseFiles": [
+        {
+          "path": "node_modules/@nats-io/nuid/LICENSE",
+          "sha256": "dde42c2b944f626f092f21d52176482f71fa1acd6368fb5836255426b7a71086"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@nats-io/transport-node",
+      "name": "@nats-io/transport-node",
+      "version": "3.4.0",
+      "integrity": "sha512-hH7u7ejIBTFEJIZ8rIcMrHJI6wl+HhpO5sVFs1+ppmXa8RuB2+Lh1+UwTzZ5xTNNm1TKcRkYy+2qCV56qp8RxA==",
+      "development": true,
+      "bundled": false,
+      "optional": false,
+      "declaration": "Apache-2.0",
+      "declarationField": "license",
+      "manifestSha256": "c78be46a34f9808f850f490cf28c092be9458156460b66f9dda9ecbc06f049de",
+      "licenseFiles": [
+        {
+          "path": "node_modules/@nats-io/transport-node/LICENSE",
+          "sha256": "9a5e20c4e01158ff66792540310266184fdbe38a9f994d294864b5f9919200e9"
         }
       ],
       "gaps": []
@@ -12383,6 +12478,25 @@
         {
           "path": "node_modules/tunnel/LICENSE",
           "sha256": "a0932fa80b4c27a0dce36e606e8d755cb02511ff25b41622314882415cfd321b"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/tweetnacl",
+      "name": "tweetnacl",
+      "version": "1.0.3",
+      "integrity": "sha512-6rt+RN7aOi1nGMyC4Xa5DdYiukl2UWCbcJft7YhxReBGQD7OAM8Pbxw6YMo4r2diNEA8FEmu32YOn9rhaiE5yw==",
+      "development": true,
+      "bundled": false,
+      "optional": false,
+      "declaration": "Unlicense",
+      "declarationField": "license",
+      "manifestSha256": "929dc634f6c254c5881612db9a4c52e2ef16cc1b3e3da3343b9e31e6cf037448",
+      "licenseFiles": [
+        {
+          "path": "node_modules/tweetnacl/LICENSE",
+          "sha256": "88d9b4eb60579c191ec391ca04c16130572d7eedc4a86daa58bf28c6e14c9bcd"
         }
       ],
       "gaps": []
