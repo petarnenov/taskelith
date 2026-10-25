@@ -16,5 +16,5 @@
 
 ## 3. Verification and review
 
-- [ ] 3.1 Run `make verify` and record the results.
+- [x] 3.1 Run `make verify` and record the results.
 - [ ] 3.2 Obtain independent review (Claude Code, `claude-fable-5-1`, medium) and record results.
