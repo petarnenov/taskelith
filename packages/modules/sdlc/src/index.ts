@@ -62,7 +62,13 @@ export {
   type GateInput,
   type GateState,
 } from './domain/gate.js';
-export { parseGeneration, type Generation } from './domain/generation.js';
+export { FIRST_GENERATION, checkGeneration, nextGeneration, parseGeneration, type Generation } from './domain/generation.js';
+export {
+  FIRST_OWNERSHIP_GENERATION,
+  nextOwnershipGeneration,
+  parseOwnershipGeneration,
+  type OwnershipGeneration,
+} from './domain/ownership-generation.js';
 export { MAX_NATIVE_REFERENCE_LENGTH, parseNativeReference, type NativeReference } from './domain/native-reference.js';
 export {
   STAGE_STATES,
