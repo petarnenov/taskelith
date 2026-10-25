@@ -35,3 +35,14 @@ CMD ["node", "apps/control-plane/dist/main.js"]
 
 FROM runtime AS worker
 CMD ["node", "apps/worker/dist/main.js"]
+
+FROM node-${TARGETARCH} AS harnesses
+WORKDIR /opt/harnesses
+COPY infra/installation/harnesses/package.json infra/installation/harnesses/package-lock.json ./
+RUN npm ci --ignore-scripts
+
+# The worker variant with the pinned harnesses; root owns them, so a harness
+# cannot update itself in place. The default worker image stays without them.
+FROM worker AS worker-harnesses
+COPY --from=harnesses /opt/harnesses /opt/harnesses
+ENV PATH=/opt/harnesses/node_modules/.bin:${PATH} DISABLE_AUTOUPDATER=1

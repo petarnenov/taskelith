@@ -25,7 +25,7 @@ UV_PIN := 0.13.5
 
 .PHONY: verify verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility \
 	test services-up services-down verify-linux-cgroup installation-build installation-bootstrap installation-broker-config installation-start \
-	installation-stop installation-enroll installation-enrollment-token verify-installation
+	installation-stop installation-enroll installation-enrollment-token verify-installation qualify-harnesses
 
 # Uses the .nvmrc Node.js when nvm has it, so no 'nvm use' is needed first.
 verify:
@@ -126,6 +126,12 @@ installation-enrollment-token:
 # make verify, like verify-linux-cgroup.
 verify-installation:
 	@$(INSTALLATION_PINS) bash scripts/installation.sh verify $(INSTALLATION)-verify
+
+# Opt-in: builds the worker-harnesses variant per platform (PLATFORMS, default
+# linux/amd64 linux/arm64) and runs the credential-free steps, into OUT.
+qualify-harnesses:
+	@if [ -z "$$OUT" ]; then echo "make qualify-harnesses: set OUT to a directory outside the worktree" >&2; exit 2; fi
+	@$(INSTALLATION_PINS) PLATFORMS="$$PLATFORMS" bash scripts/harness-qualification.sh "$$OUT"
 
 # SpecKit runs only in its digest-pinned container (G1 decision D5); see
 # docs/qualification/speckit.md.
