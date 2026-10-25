@@ -179,15 +179,17 @@ The findings agree with the Claude Code qualification, so the harness-neutral po
 
 ## Linux worker image
 
-Run: `make qualify-harnesses OUT=<dir> PLATFORMS=linux/amd64` at revision `1dea608`. The run finished at 2026-10-25T21:58:04Z on macOS 26.6.2 (x86_64) with Docker Desktop (engine 29.5.2). The script builds the `worker-harnesses` target of `infra/installation/Dockerfile` from a `git archive` of the tracked files on `ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac` with Node.js 24.22.1. The image ID was `sha256:07a8a3e2ced594c630d6a9275735e3786140dbe36d9505e1918741dd0718e6ca`. `npm ci --ignore-scripts` installed the harnesses from `infra/installation/harnesses/package-lock.json`, checking every tarball against its `sha512` integrity. The steps in `infra/installation/harnesses/qualify.sh` ran once, as the `taskelith` user, with `--network none`, `DISABLE_AUTOUPDATER=1` and `DISABLE_TELEMETRY=1`, and a home under the data root with dedicated `CLAUDE_CONFIG_DIR` and `CODEX_HOME` directories. The `CODEX_HOME` holds a `config.toml` with `check_for_update_on_startup = false`. `docker diff` of the container then listed every changed path.
+Run: `make qualify-harnesses OUT=<dir>` at revision `b3f274b`, finished at 2026-10-25T22:21:10Z on macOS 26.6.2 (x86_64) with Docker Desktop (engine 29.5.2). The script builds the `worker-harnesses` target of `infra/installation/Dockerfile` from a `git archive` of the tracked files on `ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac` with Node.js 24.22.1. The linux/amd64 image ID was `sha256:c890d33d00f6d96b51c5d66de9b53108ac3117b1c1899e668a28be59675c9c3e`. The run's `image.txt` records the SHA-256 of the Dockerfile (`2abdb24b…`), the harness lockfile (`5cec02e4…`), `qualify.sh` (`f98d9d61…`), and `scripts/harness-qualification.sh` (`86ed9253…`). `npm ci --ignore-scripts` installed the harnesses from `infra/installation/harnesses/package-lock.json`, checking every tarball against its `sha512` integrity. The steps in `infra/installation/harnesses/qualify.sh` ran once, as the `taskelith` user, with `--network none`. They ran with `DISABLE_AUTOUPDATER=1` and `DISABLE_TELEMETRY=1`, and a home under the data root with dedicated `CLAUDE_CONFIG_DIR` and `CODEX_HOME` directories; the `CODEX_HOME` holds a `config.toml` with `check_for_update_on_startup = false`. Each step has an expected exit status, and every step matched it.
+
+Host side-effect check: the compared directories are the qualification home, which holds both configuration directories, and `/opt/harnesses`, the installed harness binaries. Before and after the steps, `qualify.sh` listed their entries with type, mode, and link target, plus the SHA-256 of every file. `docker diff` also listed every changed path in the container, except the generated schema files, which are hashed in the steps. Only the steps run in the container, so each difference is attributed to the step that wrote it; none is unexplained.
 
 Scope: on 2026-10-25 the owner decided that only steps needing no credentials run, because no subscription login is authorized for this item ([G2 plan](../g2-plan.md) item 26). The installed tarballs are the qualified ones: the darwin-x64 platform tarballs at the pinned versions match their lockfile integrity, and they contain binaries with the SHA-256 values in [Pinned version](#pinned-version). `npm audit --package-lock-only` on the harness lockfile reported no vulnerability on 2026-10-25.
 
 | Architecture | Result |
 | --- | --- |
 | linux/amd64 | Native on the x86_64 host; the results are below |
-| linux/arm64, emulated | Not run. Under Docker Desktop's QEMU on this host, GNU tar 1.35 in the pinned base failed on every entry of the Node.js tarball with "Cannot mkdir: Invalid argument" or "Cannot open: Invalid argument", while a plain `mkdir` in the same emulated container worked. So the `node-arm64` stage, which the default images share, does not build under this emulation |
-| linux/arm64, native | Not run. No local arm64 Linux host exists; D11 names the GitHub-hosted runner `ubuntu-24.04-arm`, and no workflow was added, because a workflow change is an owner question |
+| linux/arm64, emulated | Not run. The build failed in the `node-arm64` stage, which the default images share. Under Docker Desktop's QEMU on this host, GNU tar 1.35 in the pinned base failed on every entry of the Node.js tarball with "Cannot mkdir: Invalid argument" or "Cannot open: Invalid argument", while a plain `mkdir` in the same emulated container worked |
+| linux/arm64, native | Not run. No local arm64 Linux host was available; D11 names the GitHub-hosted runner `ubuntu-24.04-arm`, and by the coordinator's decision this item adds no workflow |
 
 Results on linux/amd64:
 
@@ -195,10 +197,10 @@ Results on linux/amd64:
 | --- | --- |
 | Platform | `Linux x86_64`, Ubuntu 24.04.5 LTS, Node.js v24.22.1, user `taskelith` |
 | Binary | `@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex`, SHA-256 `b93f6811d3f653f0fb83be4050d857fb9abbb111dfa2ce160563327daff7f306`, reports `codex-cli 0.164.0`. The Linux binary is linked against musl and starts on the glibc base |
-| Login state | `codex login status` exited 1 with `Not logged in`, so the image holds no credential |
-| App-server schema | `codex app-server generate-json-schema` succeeded; the SHA-256 over the sorted file hashes is `fc9256ad0eac370b62b095b8ea218d086d78f954a142f9e1a2e0fee58802c147` |
-| Self-update | Writing to the binary was refused for the `taskelith` user, and the SHA-256 of the whole harness tree (`1249b21fd8433f5c8d31f942941ecb35973b143d3592b67838d4bb28bcf2e896`, shared with Claude Code) was the same before and after the steps |
-| Changed paths | Only inside `CODEX_HOME`: its `config.toml` and `tmp/arg0-linux`, a helper directory Codex creates at startup. Under `/tmp`, Codex refuses to create it and warns. Nothing changed outside the qualification home |
+| Credentials | A search of the whole image as root found no `auth.json` or `.credentials.json`. `codex login status` exited 1 with `Not logged in` for the qualification home |
+| App-server schema | `codex app-server generate-json-schema` wrote 320 files; the SHA-256 over their sorted hashes is `fc9256ad0eac370b62b095b8ea218d086d78f954a142f9e1a2e0fee58802c147` |
+| Self-update | Writing to the binary was refused for the `taskelith` user, and the listing of `/opt/harnesses` was identical before and after the steps. Codex has no environment switch for its update check; `check_for_update_on_startup` is read from `CODEX_HOME`, so a worker must write it into each run's `CODEX_HOME` |
+| Side effects | Only in `CODEX_HOME`: the directory `tmp/arg0-linux` (mode 700), created at startup by a Codex step; which one was not isolated. Apart from the steps' own outputs (the listings under `/tmp`, the schema directory, the `config.toml`, and the mount point of `qualify.sh`), nothing changed in `/opt/harnesses` or elsewhere in the container |
 
 Not run, because they need a login: multi-turn chat, correlation, resume, approvals, interruption, outcomes, the pending approval across a crash, and egress with analytics on and off. They stay open for the Codex admission in G4.
 
@@ -206,6 +208,7 @@ Not run, because they need a login: multi-turn chat, correlation, resume, approv
 
 - The review of OpenAI's data-handling terms, and of whether its terms allow pooled subscriptions for automated use (ADR 0005), is recorded on 2026-10-25 in [Provider terms review](#provider-terms-review), from Wayback Machine snapshots because the live pages returned HTTP 403; the owner decided D15 on 2026-10-25: (a), accept the remaining risk ([G3 plan](../g3-plan.md#owner-decisions)); admission remains subject to the other qualification gates in G4 ([ADR 0007](../decisions/0007-g0-closure.md)).
 - Linux in the worker image ([Linux worker image](#linux-worker-image)): the scenarios that need a login on linux/amd64, which the owner did not authorize for G2 item 26; linux/arm64, natively, for example on D11's runner `ubuntu-24.04-arm` or an Apple Silicon host. Also macOS arm64.
+- Disabling the update check per run: `check_for_update_on_startup = false` in each run's `CODEX_HOME`, because Codex has no environment switch for it.
 - Non-permission input requests, and repeated runs.
 - The cause of the temporary-directory fallback after a crash.
 - Whether plugin-catalog polling and MCP traffic can be disabled.
