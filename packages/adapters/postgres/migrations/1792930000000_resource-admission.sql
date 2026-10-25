@@ -39,7 +39,8 @@ CREATE TABLE task_lineage (
   depth integer NOT NULL CHECK (depth >= 0),
   project_id text NOT NULL,
   run_id text NOT NULL,
-  CHECK ((parent_task_id IS NULL) = (depth = 0))
+  CHECK ((parent_task_id IS NULL) = (depth = 0)),
+  CHECK ((depth = 0) = (root_task_id = task_id))
 );
 CREATE INDEX task_lineage_by_root ON task_lineage (root_task_id);
 CREATE INDEX task_lineage_by_run ON task_lineage (run_id);

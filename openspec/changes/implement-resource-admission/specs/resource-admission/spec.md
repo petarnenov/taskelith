@@ -16,7 +16,7 @@ Define the scheduler side of the capacity reservation contract: placement decide
 - **THEN** no reservation, assignment, charge, or command exists
 
 ### Requirement: Replica races
-Concurrent placements SHALL commit only what a serial order allows: of two replicas placing one attempt, one places it and the other returns `attempt-already-reserved`; of two placing different attempts into the last worker slot or the last project unit, one places its attempt and the other waits.
+Concurrent placements SHALL commit only what a serial order allows: of two replicas placing one attempt, one places it and the other returns the standing reason `attempt-already-reserved`, which, as `attempt-not-reservable`, changes nothing about the task; of two placing different attempts into the last worker slot or the last project unit, one places its attempt and the other waits.
 
 #### Scenario: Last worker slot
 - **WHEN** two replicas concurrently place two attempts on a worker with one free slot
@@ -52,7 +52,7 @@ Cancelling an assignment SHALL end it and release its reservation with an assign
 - **THEN** it ends as superseded, its reservation is released, and the worker gets an assignment-ended command
 
 ### Requirement: Delegation admission
-`admitDelegation` SHALL run in the transaction that creates the child, fail with `precondition-failed` unless the delegating attempt is the parent task's active attempt, reject a child deeper than 3 with `delegation-depth-exceeded` and a chain larger than a quota it charges with `delegation-chain-exceeds-quota`, and otherwise write the child's lineage link and an open delegation.
+`admitDelegation` SHALL run in the transaction that creates the child, fail with `conflict` for a stale ownership generation and with `precondition-failed` unless the delegating attempt is the parent task's active, uncancelled attempt that holds a reservation, reject a child deeper than 3 with `delegation-depth-exceeded` and a chain larger than a quota it charges with `delegation-chain-exceeds-quota`, and otherwise write the child's lineage link and an open delegation.
 
 #### Scenario: Foreign attempt
 - **WHEN** a delegation names an attempt that is not the parent task's active attempt

@@ -101,12 +101,17 @@ export {
 } from './domain/capacity-limits.js';
 export {
   REJECTING_REASONS,
+  STANDING_REASONS,
   WAITING_REASONS,
   isWaitingReason,
+  reasonOutcome,
   type CapacityReason,
+  type ReasonOutcome,
   type RejectingReason,
+  type StandingReason,
   type WaitingReason,
 } from './domain/capacity-reasons.js';
+export { isSupersessionDue, type SupersessionWorker } from './domain/supersession.js';
 export {
   chargedRuns,
   decideDelegation,

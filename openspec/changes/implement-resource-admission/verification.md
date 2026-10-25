@@ -45,7 +45,7 @@ On `abf7034`, after the pass 2 fixes: `make verify` passed with 544 tests, cover
 | Ending an assignment raced with launch authorization; operator release | Deferred to items 17, 21, and 24 |
 | Grant, crash, seal, `not-started`, then a new execution under the same reservation | Deferred to items 15, 17, and 24 |
 | A refused attempt placed again charges nothing | Covered for a cancelled assignment placed again; refusal handling belongs to item 21 |
-| Supersession of an unacknowledged, unreachable, or pressured assignment; none with a grant | Covered for an unreachable worker and a grant; the time bounds are unit-level constants |
+| Supersession of an unacknowledged, unreachable, or pressured assignment; none with a grant | Covered: an unreachable worker, admission pressure before and after its bound, and a grant against PostgreSQL; both time bounds in `isSupersessionDue` unit tests |
 | Expiry or revocation of a grant, a cancellation request, a failover release nothing | Covered for a cancellation with a running execution; the rest belongs to items 17 and 24 |
 | Delegation depth, chain, budget, and shared budgets | Covered for depth 4, the chain rule, and the ninth attempt; session identities belong to G3 |
 | Third automatic retry and retry of uncertain execution; backoff | Covered |

@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { err, failure, ok, parseIdentifier, parseInstant, type Instant, type Result } from '@taskelith/kernel';
 import {
+  ADMISSION_PRESSURE_SUPERSESSION_BOUND_MILLISECONDS,
   DELEGATION_CAPACITY_WAIT_BOUND_MILLISECONDS,
+  UNACKNOWLEDGED_SUPERSESSION_BOUND_MILLISECONDS,
+  acceptAssignment,
+  createAssignment,
+  isSupersessionDue,
+  reasonOutcome,
   PLACEMENT_RETRY_ATTEMPTS,
   ResourceAdmissionService,
   decideDelegation,
@@ -19,7 +25,7 @@ import {
   type RunId,
   type TaskLineageLink,
 } from '@taskelith/scheduling';
-import type { TaskId } from '@taskelith/sdlc';
+import { parseOwnershipGeneration, type TaskId } from '@taskelith/sdlc';
 
 function value<T>(result: Result<T>): T {
   assert.ok(result.ok, result.ok ? '' : result.error.message);
@@ -84,10 +90,38 @@ test('each failed check gives its reason, the first in contract order', () => {
   for (const [overrides, expected] of cases) assert.equal(reasonOf(overrides), expected, JSON.stringify(overrides));
 });
 
-test('waiting reasons leave a task queued, rejecting reasons end it', () => {
+test('waiting reasons leave a task queued, rejecting ones end it, standing ones change nothing', () => {
   assert.equal(isWaitingReason('project-quota-exhausted'), true);
-  assert.equal(isWaitingReason('delegation-awaiting-capacity'), true);
   assert.equal(isWaitingReason('retry-budget-exhausted'), false);
+  assert.deepEqual(
+    ['delegation-awaiting-capacity', 'retry-budget-exhausted', 'attempt-already-reserved', 'attempt-not-reservable'].map((reason) => reasonOutcome(reason as never)),
+    ['waiting', 'rejected', 'standing', 'standing'],
+  );
+});
+
+test('supersession is due for a gone worker at once and otherwise after its bounds', () => {
+  const offered = createAssignment({
+    id: id('AssignmentId', 'assignment-1'), attemptId: id('AttemptId', 'attempt-1'), workerId: id('WorkerId', 'worker-1'),
+    ownershipGeneration: value(parseOwnershipGeneration(1)),
+    reservation: {
+      id: id('ReservationId', 'reservation-1'),
+      scope: { projectId: PROJECT, runId: RUN, taskId: id('TaskId', 'task-1') as TaskId, rootTaskId: id('TaskId', 'task-1') as TaskId },
+      requested: REQUEST,
+      providerCredentials: [],
+    },
+  }, at('2026-10-25T09:00:00.000Z'));
+  const accepted = value(acceptAssignment(offered, offered.generation, offered.workerId, at('2026-10-25T09:00:30.000Z')));
+  const healthy = { revoked: false, draining: false, reachable: true };
+  const minute = (minutes: number) => at(new Date(Date.parse('2026-10-25T09:00:00.000Z') + minutes * 60_000).toISOString());
+  assert.equal(isSupersessionDue(offered, healthy, minute(1)), false);
+  assert.equal(isSupersessionDue(offered, healthy, minute(UNACKNOWLEDGED_SUPERSESSION_BOUND_MILLISECONDS / 60_000)), true);
+  assert.equal(isSupersessionDue(accepted, healthy, minute(60)), false);
+  const pressured = { ...healthy, admissionPressureSince: minute(0) };
+  assert.equal(isSupersessionDue(accepted, pressured, minute(9)), false);
+  assert.equal(isSupersessionDue(accepted, pressured, minute(ADMISSION_PRESSURE_SUPERSESSION_BOUND_MILLISECONDS / 60_000)), true);
+  for (const gone of [undefined, { ...healthy, revoked: true }, { ...healthy, draining: true }, { ...healthy, reachable: false }]) {
+    assert.equal(isSupersessionDue(accepted, gone, minute(0)), true);
+  }
 });
 
 type Chain = DelegationSnapshot['chain'];

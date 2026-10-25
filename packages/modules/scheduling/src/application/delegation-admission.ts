@@ -1,6 +1,6 @@
 import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
-import { activeAttempt, type AttemptId } from '@taskelith/execution';
-import type { TaskId } from '@taskelith/sdlc';
+import { activeAttempt, checkOwnership, type AttemptId } from '@taskelith/execution';
+import type { OwnershipGeneration, TaskId } from '@taskelith/sdlc';
 import type { RunId } from '../domain/capacity-reservation.js';
 import { chargedRuns, decideDelegation, type DelegationDecision, type RunCapacity, type TaskLineageLink } from '../domain/delegation-admission.js';
 import type { CapacityTransaction } from '../ports/capacity-store.js';
@@ -8,6 +8,8 @@ import type { CapacityTransaction } from '../ports/capacity-store.js';
 export interface DelegationRequest {
   readonly parentTaskId: TaskId;
   readonly parentAttemptId: AttemptId;
+  // The ownership the delegating worker holds the attempt at.
+  readonly parentOwnershipGeneration: OwnershipGeneration;
   readonly childTaskId: TaskId;
   readonly childRunId: RunId;
   readonly waitingSince: Instant;
@@ -18,6 +20,7 @@ export interface DelegationRequest {
 export async function admitDelegation(tx: CapacityTransaction, request: DelegationRequest): Promise<Result<DelegationDecision>> {
   const delegating = await checkDelegatingAttempt(tx, request);
   if (!delegating.ok) return delegating;
+  const now = await tx.now();
   const chain = await lineageChain(tx, request.parentTaskId);
   if (!chain.ok) return chain;
   const [root] = chain.value;
@@ -40,20 +43,22 @@ export async function admitDelegation(tx: CapacityTransaction, request: Delegati
     },
     fleetSlots: await tx.workers.eligibleSlots(),
     waitingSince: request.waitingSince,
-    now: await tx.now(),
+    now,
   });
   if (decision.outcome !== 'admitted') return ok(decision);
   const linked = await tx.lineage.add({ taskId: request.childTaskId, ...decision.link });
   if (!linked.ok) return linked;
-  const opened = await tx.ledger.openDelegation({ parentAttemptId: request.parentAttemptId, childTaskId: request.childTaskId, admittedAt: await tx.now() });
+  const opened = await tx.ledger.openDelegation({ parentAttemptId: request.parentAttemptId, childTaskId: request.childTaskId, admittedAt: now });
   return opened.ok ? ok(decision) : opened;
 }
 
-// Contract section 7: the parent is the task of the delegating attempt,
-// which must be its active, uncancelled attempt and hold a reservation.
+// Contract section 7: the parent is the task of the delegating attempt, its
+// active, uncancelled, reserved attempt at the current ownership.
 async function checkDelegatingAttempt(tx: CapacityTransaction, request: DelegationRequest): Promise<Result<void>> {
   const parent = await tx.tasks.get(request.parentTaskId);
   if (!parent.ok) return parent;
+  const owned = checkOwnership(parent.value, request.parentOwnershipGeneration);
+  if (!owned.ok) return owned;
   const attempt = activeAttempt(parent.value);
   const holds = await tx.ledger.heldForAttempt(request.parentAttemptId);
   if (attempt?.id === request.parentAttemptId && attempt.cancellation === undefined && holds) return ok(undefined);

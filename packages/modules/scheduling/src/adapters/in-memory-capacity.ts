@@ -1,4 +1,4 @@
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import type { AttemptId, WorkerId } from '@taskelith/execution';
 import type { TaskId } from '@taskelith/sdlc';
 import { DEFAULT_PROJECT_QUOTA, DEFAULT_RUN_QUOTA } from '../domain/capacity-limits.js';
@@ -81,7 +81,7 @@ export class InMemoryCapacityLedger implements CapacityLedger {
   readonly #assignments: () => readonly Assignment[];
   readonly #lineage: TaskLineage;
   readonly #charges = new Map<AttemptId, CapacityCharge>();
-  readonly #delegations = new Map<TaskId, OpenDelegation & { closed: boolean }>();
+  readonly #delegations = new Map<TaskId, OpenDelegation & { closedAt?: Instant }>();
 
   constructor(assignments: () => readonly Assignment[], lineage: TaskLineage) {
     this.#assignments = assignments;
@@ -135,17 +135,17 @@ export class InMemoryCapacityLedger implements CapacityLedger {
     if (this.#delegations.has(delegation.childTaskId)) {
       return err(failure('conflict', `task ${delegation.childTaskId} is already a delegated child`, { task: delegation.childTaskId }));
     }
-    this.#delegations.set(delegation.childTaskId, { ...delegation, closed: false });
+    this.#delegations.set(delegation.childTaskId, { ...delegation });
     return ok(undefined);
   }
 
   // A closed delegation stays recorded, so the child is never delegated again.
-  async closeDelegation(childTaskId: TaskId): Promise<Result<void>> {
+  async closeDelegation(childTaskId: TaskId, at: Instant): Promise<Result<void>> {
     const delegation = this.#delegations.get(childTaskId);
-    if (delegation === undefined || delegation.closed) {
+    if (delegation === undefined || delegation.closedAt !== undefined) {
       return err(failure('not-found', `task ${childTaskId} is not an open delegated child`, { task: childTaskId }));
     }
-    delegation.closed = true;
+    delegation.closedAt = at;
     return ok(undefined);
   }
 
@@ -166,7 +166,7 @@ export class InMemoryCapacityLedger implements CapacityLedger {
   }
 
   #open(): readonly OpenDelegation[] {
-    return [...this.#delegations.values()].filter((delegation) => !delegation.closed);
+    return [...this.#delegations.values()].filter((delegation) => delegation.closedAt === undefined);
   }
 
   #held(): readonly Assignment[] {

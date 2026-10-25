@@ -1,5 +1,5 @@
-// The scheduler's reasons of contract section 11. A waiting reason leaves the
-// task queued; a rejecting reason ends its admission to capacity.
+// Contract section 11: waiting leaves the task queued, rejecting ends its
+// admission to capacity, and standing changes nothing.
 export const WAITING_REASONS = Object.freeze([
   'quarantined',
   'worker-not-eligible',
@@ -11,9 +11,9 @@ export const WAITING_REASONS = Object.freeze([
   'delegation-awaiting-capacity',
 ] as const);
 
+export const STANDING_REASONS = Object.freeze(['attempt-already-reserved', 'attempt-not-reservable'] as const);
+
 export const REJECTING_REASONS = Object.freeze([
-  'attempt-already-reserved',
-  'attempt-not-reservable',
   'resource-ceiling-exceeded',
   'spend-limit-not-enforceable',
   'delegation-depth-exceeded',
@@ -24,8 +24,16 @@ export const REJECTING_REASONS = Object.freeze([
 
 export type WaitingReason = (typeof WAITING_REASONS)[number];
 export type RejectingReason = (typeof REJECTING_REASONS)[number];
-export type CapacityReason = WaitingReason | RejectingReason;
+export type StandingReason = (typeof STANDING_REASONS)[number];
+export type CapacityReason = WaitingReason | RejectingReason | StandingReason;
+
+export type ReasonOutcome = 'waiting' | 'rejected' | 'standing';
 
 export function isWaitingReason(reason: CapacityReason): reason is WaitingReason {
   return (WAITING_REASONS as readonly string[]).includes(reason);
+}
+
+export function reasonOutcome(reason: CapacityReason): ReasonOutcome {
+  if (isWaitingReason(reason)) return 'waiting';
+  return (STANDING_REASONS as readonly string[]).includes(reason) ? 'standing' : 'rejected';
 }

@@ -11,15 +11,12 @@ import {
 } from '@taskelith/execution';
 import type { OwnershipGeneration, TaskId } from '@taskelith/sdlc';
 import { createAssignment, endAssignment, releaseAfterTerminalFact, supersedeAssignment, type Assignment } from '../domain/assignment.js';
-import {
-  ADMISSION_PRESSURE_SUPERSESSION_BOUND_MILLISECONDS,
-  DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY,
-  UNACKNOWLEDGED_SUPERSESSION_BOUND_MILLISECONDS,
-} from '../domain/capacity-limits.js';
-import { isWaitingReason, type CapacityReason } from '../domain/capacity-reasons.js';
+import { DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY } from '../domain/capacity-limits.js';
+import { reasonOutcome, type CapacityReason } from '../domain/capacity-reasons.js';
 import type { ProjectId, ProviderCredentialId, ReservationId, ResourceRequest } from '../domain/capacity-reservation.js';
 import { chargedRuns, type TaskLineageLink } from '../domain/delegation-admission.js';
-import { decidePlacement, type QuotaStanding } from '../domain/placement-decision.js';
+import { decidePlacement, type PlacementSnapshot, type QuotaStanding } from '../domain/placement-decision.js';
+import { isSupersessionDue } from '../domain/supersession.js';
 import type { CapacityTransaction } from '../ports/capacity-store.js';
 import { isEligibleForPlacement, type WorkerPlacementRecord } from '../ports/placement-workers.js';
 import { appendWorkerCommand, cancelPayload, endedPayload, offeredPayload, type CommandIdentity } from './capacity-commands.js';
@@ -45,7 +42,7 @@ export interface PlacementRequest extends CommandIdentity {
 
 export type PlacementOutcome =
   | { readonly kind: 'placed'; readonly assignment: Assignment }
-  | { readonly kind: 'waiting' | 'rejected'; readonly reason: CapacityReason };
+  | { readonly kind: 'waiting' | 'rejected' | 'standing'; readonly reason: CapacityReason };
 
 export interface ReleaseRequest extends CommandIdentity {
   readonly assignmentId: AssignmentId;
@@ -60,26 +57,7 @@ export async function placeInTransaction(tx: CapacityTransaction, request: Place
   const fenced = checkPlacementClaim(task.value, request);
   if (!fenced.ok) return fenced;
   const charged = await tx.ledger.isCharged(request.attemptId);
-  const decision = decidePlacement({
-    quarantined: await tx.installation.quarantined(),
-    attempt: { reservable: isReservable(task.value, request.attemptId), holdsReservation: await tx.ledger.heldForAttempt(request.attemptId) },
-    worker: await workerStanding(tx, await tx.workers.get(request.workerId)),
-    request: request.requested,
-    quotas: await quotaStandings(tx, lineage, root),
-    credentials: await Promise.all(request.providerCredentials.map(async (credential) => ({
-      limit: DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY, held: await tx.ledger.heldForCredential(credential),
-    }))),
-    charge: {
-      alreadyCharged: charged,
-      treeAttempts: await tx.ledger.treeAttempts(lineage.rootTaskId),
-      ...(request.automaticRetryOf === undefined ? {} : {
-        retry: {
-          uncertain: !(await isSafeToRetry(tx, task.value, request.automaticRetryOf)),
-          automaticRetriesUsed: await tx.ledger.automaticRetries(request.taskId),
-        },
-      }),
-    },
-  });
+  const decision = decidePlacement(await readPlacementSnapshot(tx, request, task.value, lineage, root, charged));
   if (!decision.fits) return outcome(decision.reason);
   return insertPlacement(tx, request, task.value, lineage, charged);
 }
@@ -101,8 +79,8 @@ export async function cancelInTransaction(tx: CapacityTransaction, request: Rele
   return follow.ok ? ok(ended.value) : follow;
 }
 
-// In the transaction that records a terminal fact: an active assignment of
-// an ended attempt ends and releases; an ended one releases once idle.
+// For the transaction recording an attempt's end or an ended assignment's
+// last terminal fact; any other call is `precondition-failed`.
 export async function releaseInTransaction(tx: CapacityTransaction, request: ReleaseRequest): Promise<Result<Assignment>> {
   const loaded = await loadAssignment(tx, request.assignmentId);
   if (!loaded.ok) return loaded;
@@ -128,7 +106,7 @@ export async function supersedeInTransaction(tx: CapacityTransaction, request: R
   if (!loaded.ok) return loaded;
   const { assignment, task } = loaded.value;
   const at = await tx.now();
-  if (!supersessionDue(assignment, await tx.workers.get(assignment.workerId), at)) {
+  if (!isSupersessionDue(assignment, await tx.workers.get(assignment.workerId), at)) {
     return err(failure('precondition-failed', `assignment ${assignment.id} is within its supersession bounds`, { assignment: assignment.id }));
   }
   const superseded = supersedeAssignment(assignment, assignment.generation, executionsUnderAssignment(task, assignment.id), at);
@@ -140,7 +118,30 @@ export async function supersedeInTransaction(tx: CapacityTransaction, request: R
 }
 
 function outcome(reason: CapacityReason): Result<PlacementOutcome> {
-  return ok(Object.freeze({ kind: isWaitingReason(reason) ? 'waiting' : 'rejected', reason }));
+  return ok(Object.freeze({ kind: reasonOutcome(reason), reason }));
+}
+
+// Everything decidePlacement compares, read inside the transaction.
+async function readPlacementSnapshot(
+  tx: CapacityTransaction, request: PlacementRequest, task: Task, lineage: TaskLineageLink, root: TaskLineageLink, charged: boolean,
+): Promise<PlacementSnapshot> {
+  return {
+    quarantined: await tx.installation.quarantined(),
+    attempt: { reservable: isReservable(task, request.attemptId), holdsReservation: await tx.ledger.heldForAttempt(request.attemptId) },
+    worker: await workerStanding(tx, await tx.workers.get(request.workerId)),
+    request: request.requested,
+    quotas: await quotaStandings(tx, lineage, root),
+    credentials: await Promise.all(request.providerCredentials.map(async (credential) => ({
+      limit: DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY, held: await tx.ledger.heldForCredential(credential),
+    }))),
+    charge: { alreadyCharged: charged, treeAttempts: await tx.ledger.treeAttempts(lineage.rootTaskId), ...await retryStanding(tx, request, task) },
+  };
+}
+
+async function retryStanding(tx: CapacityTransaction, request: PlacementRequest, task: Task): Promise<Pick<PlacementSnapshot['charge'], 'retry'>> {
+  if (request.automaticRetryOf === undefined) return {};
+  const uncertain = !(await isSafeToRetry(tx, task, request.automaticRetryOf));
+  return { retry: { uncertain, automaticRetriesUsed: await tx.ledger.automaticRetries(request.taskId) } };
 }
 
 // Inserts the reservation with its assignment, the charge of a first
@@ -181,7 +182,7 @@ async function insertPlacement(
 function checkPlacementClaim(task: Task, request: PlacementRequest): Result<void> {
   const fenced = checkOwnership(task, request.ownershipGeneration);
   if (!fenced.ok) return fenced;
-  const retryOf = activeAttempt(task)?.retryOf;
+  const retryOf = task.attempts.find((attempt) => attempt.id === request.attemptId)?.retryOf;
   if (request.automaticRetryOf === undefined || request.automaticRetryOf === retryOf) return ok(undefined);
   return err(failure('precondition-failed', `attempt ${request.attemptId} does not retry ${request.automaticRetryOf}`, {
     attempt: request.attemptId, retryOf: request.automaticRetryOf,
@@ -226,19 +227,6 @@ async function loadAssignment(tx: CapacityTransaction, assignmentId: AssignmentI
   const task = await tx.tasks.get(assignment.value.reservation.scope.taskId);
   if (!task.ok) return task;
   return ok({ assignment: assignment.value, task: task.value });
-}
-
-function supersessionDue(assignment: Assignment, worker: WorkerPlacementRecord | undefined, at: Instant): boolean {
-  if (worker === undefined || worker.revoked || worker.draining || !worker.reachable) return true;
-  const unacknowledged = assignment.state === 'offered'
-    && elapsed(assignment.reservation.createdAt, at) >= UNACKNOWLEDGED_SUPERSESSION_BOUND_MILLISECONDS;
-  const pressured = worker.admissionPressureSince !== undefined
-    && elapsed(worker.admissionPressureSince, at) >= ADMISSION_PRESSURE_SUPERSESSION_BOUND_MILLISECONDS;
-  return unacknowledged || pressured;
-}
-
-function elapsed(from: Instant, to: Instant): number {
-  return Date.parse(to) - Date.parse(from);
 }
 
 // A cancellation is an invalidating writer (launch authorization section 5):

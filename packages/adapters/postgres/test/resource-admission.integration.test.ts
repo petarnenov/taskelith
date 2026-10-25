@@ -8,6 +8,7 @@ import {
   DELEGATION_CAPACITY_WAIT_BOUND_MILLISECONDS,
   ROOT_LINK,
   ResourceAdmissionService,
+  acceptAssignment,
   admitDelegation,
   parseResourceRequest,
   type PlacementOutcome,
@@ -15,6 +16,7 @@ import {
   type ProjectId,
   type RunId,
   type TaskLineageLink,
+  type WorkerPlacementRecord,
 } from '@taskelith/scheduling';
 import { parseOwnershipGeneration, type TaskId } from '@taskelith/sdlc';
 import { CrashPoints, SimulatedCrash } from '@taskelith/testing';
@@ -46,7 +48,7 @@ const WORKER = id('WorkerId', 'worker-1') as WorkerId;
 const PROJECT = ROOT_LINK.projectId;
 const REQUESTED = value(parseResourceRequest({ cpuMillicores: 1000, memoryMebibytes: 2048, hardControls: [] }));
 
-function worker(workerId: WorkerId, overrides: Record<string, unknown> = {}) {
+function worker(workerId: WorkerId, overrides: Partial<WorkerPlacementRecord> = {}): WorkerPlacementRecord {
   return {
     workerId, enrolled: true, revoked: false, draining: false, reachable: true, slots: 2, cpuMillicores: 3500,
     memoryMebibytes: 7680, controls: ['memory-limit' as const], ...overrides,
@@ -110,13 +112,13 @@ test('a placement writes the held reservation, its assignment, the charge, and t
   assert.ok(placed.kind === 'placed' && placed.assignment.reservation.state === 'held' && placed.assignment.state === 'offered');
   assert.deepEqual(await counts(), { held: 1, assignments: 1, charges: 1, outbox: 1 });
   assert.deepEqual(await eventTypes(), ['scheduling.assignment.offered']);
-  assert.equal(kind(await service.reserve(placement(task, 'b'))), 'rejected:attempt-already-reserved');
+  assert.equal(kind(await service.reserve(placement(task, 'b'))), 'standing:attempt-already-reserved');
 });
 
 test('two replicas placing the same attempt leave one assignment and one held reservation', async () => {
   const task = await rootTask('task-1');
   const results = await Promise.all([service.reserve(placement(task, 'a')), service.reserve(placement(task, 'b'))]);
-  assert.deepEqual(results.map(kind).sort(), ['placed', 'rejected:attempt-already-reserved']);
+  assert.deepEqual(results.map(kind).sort(), ['placed', 'standing:attempt-already-reserved']);
   assert.deepEqual(await counts(), { held: 1, assignments: 1, charges: 1, outbox: 1 });
 });
 
@@ -171,7 +173,7 @@ test('the ninth attempt of a tree is rejected, and so is a retry the attempt doe
   await query(url, 'DELETE FROM capacity_charges');
   const itself = await service.reserve(placement(task, 'b', { automaticRetryOf: task.attempts.at(-1)!.id }));
   assert.equal(!itself.ok && itself.error.code, 'precondition-failed');
-  assert.equal(kind(await service.reserve(placement(task, 'c', { taskId: id('TaskId', 'task-unknown') as TaskId }))), 'rejected:attempt-not-reservable');
+  assert.equal(kind(await service.reserve(placement(task, 'c', { taskId: id('TaskId', 'task-unknown') as TaskId }))), 'standing:attempt-not-reservable');
 });
 
 test('an automatic retry needs a certain, released earlier attempt and stays within two retries', async () => {
@@ -247,6 +249,20 @@ test('cancelling an assignment with a running execution keeps the reservation un
   assert.deepEqual(await counts(), { held: 0, assignments: 1, charges: 1, outbox: 2 });
 });
 
+test('an assignment under admission pressure beyond its bound is superseded', async () => {
+  const task = await rootTask('task-1');
+  const placed = value(await service.reserve(placement(task, 'a')));
+  assert.ok(placed.kind === 'placed');
+  const accepted = value(acceptAssignment(placed.assignment, placed.assignment.generation, WORKER, AT));
+  value(await database.transaction((tx) => tx.assignments.replace(accepted, placed.assignment.generation)));
+  const request = { assignmentId: placed.assignment.id, commandId: id('EventId', 'supersede-a'), correlationId: id('CorrelationId', 'correlation-a') };
+  await query(url, "UPDATE workers SET admission_pressure_since = now() - interval '9 minutes'");
+  const early = await service.supersede(request);
+  assert.equal(!early.ok && early.error.code, 'precondition-failed');
+  await query(url, "UPDATE workers SET admission_pressure_since = now() - interval '11 minutes'");
+  assert.equal(value(await service.supersede(request)).end?.reason, 'superseded');
+});
+
 test('an assignment without a grant is superseded once its worker is gone, never before its bounds', async () => {
   const task = await rootTask('task-1');
   const placed = value(await service.reserve(placement(task, 'a')));
@@ -282,7 +298,7 @@ test('a crash before the placement commits leaves no reservation, assignment, ch
 test('delegations are admitted, fail closed on chains, and wait for a free unit up to the bound', async () => {
   const parent = await rootTask('task-root', 'attempt-root');
   const unreserved = await database.transaction((tx) => admitDelegation(tx, {
-    parentTaskId: parent.id, parentAttemptId: parent.attempts.at(-1)!.id as AttemptId,
+    parentTaskId: parent.id, parentAttemptId: parent.attempts.at(-1)!.id as AttemptId, parentOwnershipGeneration: parent.ownershipGeneration,
     childTaskId: id('TaskId', 'task-early') as TaskId, childRunId: ROOT_LINK.runId, waitingSince: AT,
   }));
   assert.equal(!unreserved.ok && unreserved.error.code, 'precondition-failed');
@@ -291,7 +307,7 @@ test('delegations are admitted, fail closed on chains, and wait for a free unit 
   const now = value(await database.transaction(async (tx) => ({ ok: true, value: await tx.now() })));
   const delegate = (child: string, overrides: Partial<Parameters<typeof admitDelegation>[1]> = {}) => database.transaction((tx) =>
     admitDelegation(tx, {
-      parentTaskId: parent.id, parentAttemptId: parent.attempts.at(-1)!.id as AttemptId,
+      parentTaskId: parent.id, parentAttemptId: parent.attempts.at(-1)!.id as AttemptId, parentOwnershipGeneration: parent.ownershipGeneration,
       childTaskId: id('TaskId', child) as TaskId, childRunId: id('RunId', 'run-child') as RunId, waitingSince: now, ...overrides,
     }));
   const admitted = value(await delegate('task-child'));
@@ -312,6 +328,8 @@ test('delegations are admitted, fail closed on chains, and wait for a free unit 
   assert.equal(!unknown.ok && unknown.error.code, 'not-found');
   const foreign = await delegate('task-foreign', { parentAttemptId: id('AttemptId', 'attempt-other') as AttemptId });
   assert.equal(!foreign.ok && foreign.error.code, 'precondition-failed');
+  const stale = await delegate('task-stale', { parentOwnershipGeneration: value(parseOwnershipGeneration(parent.ownershipGeneration + 1)) });
+  assert.equal(!stale.ok && stale.error.code, 'conflict');
   assert.deepEqual(value(await delegate('task-child')).outcome, 'waiting');
 });
 
@@ -327,7 +345,7 @@ test('a fourth level of delegation is rejected at creation', async () => {
   await query(url, "INSERT INTO capacity_quotas (scope, scope_id, quota) VALUES ('project', $1, 10)", [PROJECT]);
   assert.equal(kind(await service.reserve(placement(deepest, 'c'))), 'placed');
   const decision = value(await database.transaction((tx) => admitDelegation(tx, {
-    parentTaskId: links[2]!.taskId, parentAttemptId: id('AttemptId', 'attempt-c') as AttemptId,
+    parentTaskId: links[2]!.taskId, parentAttemptId: id('AttemptId', 'attempt-c') as AttemptId, parentOwnershipGeneration: deepest.ownershipGeneration,
     childTaskId: id('TaskId', 'task-d') as TaskId, childRunId: ROOT_LINK.runId, waitingSince: AT,
   })));
   assert.deepEqual(decision, { outcome: 'rejected', reason: 'delegation-depth-exceeded' });
