@@ -10,6 +10,10 @@ The control plane SHALL request a worker's inventory by appending `worker.invent
 - **WHEN** a worker's report arrives without a `requestId`
 - **THEN** one inventory request with a new `requestId` is appended to the worker's command subject, and its bound lists the highest sequence applied from each of the worker's journals
 
+#### Scenario: Fresh snapshot omits an undelivered offer
+- **WHEN** a fresh snapshot omits an unfinished assignment whose acceptance was never applied and for which no grant is recorded
+- **THEN** the assignment's offer is re-sent and no new inventory request is appended
+
 #### Scenario: Newer request
 - **WHEN** a second request is sent to a worker before the first is answered
 - **THEN** only the second is the worker's current request, and a snapshot answering the first is not fresh

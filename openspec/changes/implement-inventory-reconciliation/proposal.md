@@ -60,4 +60,4 @@ Obligations left to the later changes:
 
 ## Impact
 
-`packages/modules/execution`, `packages/modules/scheduling`, `packages/modules/fleet`, `packages/adapters/postgres`, `packages/adapters/nats`, and `apps/control-plane`. No new dependency and no wire contract change: `worker.inventory.requested` and `worker.inventory.reported` are already in `execution.asyncapi.json` 0.3.0.
+`packages/modules/execution`, `packages/modules/scheduling`, `packages/modules/fleet`, `packages/adapters/postgres`, `packages/adapters/nats`, and `apps/control-plane`. No new dependency and no contract schema change: `worker.inventory.requested` and `worker.inventory.reported` are already in `execution.asyncapi.json` 0.3.0. The inventory request text of `docs/contracts/execution-wire-contracts.md` section 6 changes, as the coordinator approved on 2026-10-25: only a snapshot that is not fresh requests inventory again for an unclassified omission, and the re-sent offer covers a fresh snapshot's undelivered offer.
