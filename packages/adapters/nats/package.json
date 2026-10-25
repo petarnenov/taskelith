@@ -1,0 +1,25 @@
+{
+  "name": "@taskelith/nats",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@nats-io/jetstream": "3.4.0",
+    "@nats-io/nats-core": "3.4.0",
+    "@nats-io/transport-node": "3.4.0",
+    "@taskelith/contracts": "0.0.0",
+    "@taskelith/execution": "0.0.0",
+    "@taskelith/kernel": "0.0.0",
+    "@taskelith/sdlc": "0.0.0"
+  },
+  "devDependencies": {
+    "@taskelith/postgres": "0.0.0",
+    "@taskelith/testing": "0.0.0"
+  }
+}

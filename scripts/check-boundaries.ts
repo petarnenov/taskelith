@@ -11,6 +11,7 @@ const PLUGIN_ALLOWED_PACKAGES = new Set(['@taskelith/kernel', '@taskelith/plugin
 const INFRA_SDKS = new Set([
   'pg', 'postgres', 'nats', 'neo4j-driver', 'better-sqlite3', 'sqlite3',
   'express', 'fastify', 'koa', 'ws', 'undici', 'axios', 'node-pty',
+  '@nats-io/jetstream', '@nats-io/nats-core', '@nats-io/transport-node',
 ]);
 
 function walkFiles(dir: string): string[] {
