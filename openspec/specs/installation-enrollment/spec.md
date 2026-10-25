@@ -37,6 +37,10 @@ Enrollment SHALL return a control-plane bearer secret and a NATS `.creds` file o
 - **WHEN** a worker's credentials are rotated and the grace window passes
 - **THEN** the previous control-plane secret is refused and the previous broker user is revoked
 
+#### Scenario: Due row without a predecessor
+- **WHEN** the expiry sweep meets a worker that is due by its stored expiry time but whose record holds no previous credential
+- **THEN** the sweep skips that worker without failing, records no revocation for it, expires every other due predecessor, and counts only the predecessors it expired
+
 ### Requirement: Broker permissions and revocation
 A worker's broker user SHALL publish only to its own consumer API, acknowledgements, and observation subject, and subscribe only under its own inbox prefix. A revocation SHALL reach the server through the system account without a reload, and SHALL disconnect the user.
 
