@@ -5,7 +5,8 @@ In the PostgreSQL fleet registry, `expirePredecessors` selects the workers whose
 ## What Changes
 
 - `PostgresFleetRegistry.expirePredecessors` checks for an absent predecessor and skips the row, as the in-memory registry already does, and returns the number of predecessors it actually expired instead of the number of rows it selected.
-- A PostgreSQL integration test covers a due row whose record holds no predecessor: nothing expires, the record is unchanged, and nothing is recorded for revocation.
+- A PostgreSQL integration test covers a due row whose record holds no predecessor next to a worker whose predecessor really expires: only the real predecessor expires and counts, the skipped row and its expiry column are unchanged, and only the real predecessor's broker user is recorded for revocation.
+- The `installation-enrollment` requirement "Worker credentials" gains the scenario "Due row without a predecessor".
 
 ## Capabilities
 
@@ -13,7 +14,7 @@ In the PostgreSQL fleet registry, `expirePredecessors` selects the workers whose
 
 ### Modified Capabilities
 
-None. The expiry behavior the fleet conformance suite checks is unchanged; the change handles an inconsistent row explicitly, so it sets `skip_specs: true`.
+- `installation-enrollment`: the requirement "Worker credentials" gains the scenario "Due row without a predecessor"; its text and its scenario "Grace window" are unchanged.
 
 ## Impact
 
