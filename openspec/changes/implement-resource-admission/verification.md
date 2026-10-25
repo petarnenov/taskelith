@@ -33,6 +33,8 @@ On `dbdf9a6`, after the pass 1 fixes: `make verify` passed with 542 tests, cover
 
 On `abf7034`, after the pass 2 fixes: `make verify` passed with 544 tests, coverage 99.66% lines, 95.87% branches, 99.46% functions.
 
+On `e3b6e19`, after the pass 3 fixes: `make verify` passed with 546 tests, coverage 99.67% lines, 95.93% branches, 99.47% functions.
+
 ### Required tests of contract section 12
 
 | Required test | Where |
@@ -100,6 +102,22 @@ Assigned reviewer: Claude Code with `claude -p --model claude-fable-5-1 --effort
   16. Low: the delegation decision used non-null assertions and lookup closures. The chain is a non-empty tuple and each charged run is passed with its quota and waiting units.
   17. Low: `task_lineage` allowed a parent at depth 0 or none below it. A CHECK requires a parent exactly below depth 0.
 
+- **Pass 3, the last allowed pass — session `b155c2e8-dddc-4e9f-9e76-d9d45989920f`, reviewed `e531ce6` (diff `a1a27a1...HEAD`).** `modelUsage` lists `claude-fable-5-1`. Snapshots before and after were equal (`b9b9983a…979e1`). The reviewer confirmed all 17 pass 2 resolutions and reran strict validation, the boundary and comment checks, and the Scheduling unit tests. Findings: 0 Critical, 0 High, 2 Medium, 12 Low. Fixed in `e3b6e19`; **these fixes have not been independently reviewed**, and because Medium findings remain after the third pass, the governance process sends them to the owner through the coordinator:
+  1. Medium: `attempt-already-reserved` and `attempt-not-reservable` were rejecting reasons, though the contract gives them no outcome. They are standing reasons with the outcome kind `standing`; the specification, the contract's section 13, and the tests say so.
+  2. Medium: the supersession time bounds had no test. The rule is the pure `isSupersessionDue`, unit-tested at both bounds and for gone workers, and an integration test supersedes an accepted assignment only after 10 minutes of admission pressure.
+  3. Low: delegation read the database clock twice. Once.
+  4. Low: delegation did not check the parent's ownership generation. The request names it, and a stale one fails with `conflict`, with a test.
+  5. Low: the delegation requirement omitted the reservation condition. Added.
+  6. Low: the in-memory ledger ignored the close time. It records `closedAt`.
+  7. Low: a root's lineage need not name itself as root. A CHECK requires it.
+  8. Low: an automatic retry was compared with the active attempt's `retryOf`. It is compared with the requested attempt's.
+  9. Low: safe retries are judged by a certain outcome only. The contract's section 13 says that side effects are not judged in G2.
+  10. Low: the placement snapshot was built inline. `readPlacementSnapshot` and `retryStanding` build it.
+  11. Low: a test helper took untyped overrides. They are `Partial<WorkerPlacementRecord>`.
+  12. Low: `value`, `must`, and `id` helpers are repeated in four test files. Not changed in this diff: a shared helper in `@taskelith/testing` is a follow-up.
+  13. Low: `releaseInTransaction` reports `precondition-failed` when nothing is due. Its comment states when to call it; an outcome that distinguishes kept from released is left to item 21, its caller.
+  14. Low: the section 12 table called the time bounds unit-level constants. It names the new tests.
+
 ## Limitations
 
 - Checks ran on macOS arm64 only; Linux runs in CI.
@@ -108,4 +126,4 @@ Assigned reviewer: Claude Code with `claude -p --model claude-fable-5-1 --effort
 
 ## Remaining gates
 
-Independent review; integration into `dev` and archive by the coordinator; promotion to `main`.
+The owner's decision on the pass 3 findings and their unreviewed fixes (governance: findings left after the third pass); follow-ups for later items: shared test helpers in `@taskelith/testing` (pass 3 finding 12) and a release outcome that distinguishes kept from released (finding 13, item 21); integration into `dev` and archive by the coordinator; promotion to `main`.
