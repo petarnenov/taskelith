@@ -83,6 +83,20 @@ Reviewer assigned by the coordinator: Codex CLI, `gpt-6.1-sol`, reasoning effort
 | M10 | A subscription that closes without a stop, for example after a permissions error, ends the receiver as if it succeeded, so the control plane runs on without heartbeats. | Fixed in `b68deca`: the receiver then fails with the closure's cause, and the supervisor stops the control plane; a unit test closes with an error, and an integration test closes the connection (`bf1ce68`). |
 | L7 | The detection time still ignores that each check starts `10s` after the previous one ends, and the duration of the checks in between. | Fixed in `b68deca`: the targets and the design state the interval after each check's end, add the checks' durations, and claim no hard bound while a check's duration is unbounded. |
 
+### Pass 3
+
+- **Invocation:** as pass 1, with the prompt naming the sessions of passes 1 and 2 and asking to confirm M10 and L7 first.
+- **Model confirmation:** the output header shows model `gpt-6.1-sol`, reasoning effort medium, sandbox read-only.
+- **Session:** `01a17540-a0b2-7ad3-9d6e-0b60c56f9cfe`.
+- **Revision:** `5ca6633`.
+- **Snapshot:** `b1bf26a45f07b6cb9bb055590e74111dfa03c792f8c82063b304ebd8b903ee26` before and after; unchanged.
+- **Result:** M10 and L7 confirmed resolved; no new functional defect. Remaining: 0 High, 0 Medium, 2 Low.
+
+| # | Finding | Disposition |
+| --- | --- | --- |
+| L11 | "One transaction per observation" lets a duplicate change nothing but a confirmation, while the new delta records contact for it. | Fixed after pass 3, unreviewed under the Low-only rule: the delta modifies the requirement to allow the worker's contact. |
+| L12 | "Confirmation sent again" forbids any other effect of a duplicate. | Fixed after pass 3, unreviewed under the Low-only rule: the delta modifies the requirement to allow recording the worker's contact. |
+
 ## Limitations
 
 - No worker sends heartbeats before 20d, so the end-to-end path from a real worker is untested; the NATS tests publish heartbeats with a worker user's credentials.
@@ -91,5 +105,4 @@ Reviewer assigned by the coordinator: Codex CLI, `gpt-6.1-sol`, reasoning effort
 
 ## Remaining gates
 
-- Review pass 3 of the pass 2 fixes, the last pass under the cap.
 - Coordinator integration into `dev` and archive.
