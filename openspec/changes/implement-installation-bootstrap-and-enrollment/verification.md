@@ -99,7 +99,14 @@ Assigned reviewer: Codex CLI, with `codex exec -m gpt-6.1-sol -c model_reasoning
   4. Medium: two test files published revocation lists for the same account, and a list replaces the account's, so one could undo the other. Each such file now creates and registers an account of its own with the test operator.
   5. Medium: a default data root on a fresh account lacked its parents. The namespace now creates each missing parent owner-only; a test opens `home/.local/share/taskelith` under an empty directory.
 
+- **Pass 3 — session `01a1730a-6e53-7333-8c4a-3c30e6bc46d2`,** reviewed `git diff 432ff89 fec38ce` for the resolutions, then `git diff 5878679 fec38ce` as a whole. The header reports `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`. Snapshot before and after: `61782a59…086f`, equal.
+  - It confirmed pass-2 findings 1 and 3 to 5, and pass-1 findings 1 and 5, fully resolved, and pass-2 finding 2 in part; the gap is finding 2 below.
+  - Findings: 0 Critical, 1 High, 2 Medium, 0 Low. This was the third pass, so the findings go to the owner through the coordinator, with options. All three are **open**:
+  1. High: the publication's SERIALIZABLE snapshot is taken before the advisory lock is granted. So a publisher that waited could push a stale list. After its serialization failure, the retry would find every entry published and skip the push, leaving a revocation out of the broker. The reviewer derived this from the code and did not run it against PostgreSQL. Proposed fix: run the publication in its own `READ COMMITTED` transaction that takes the advisory lock before reading, pushes the current list, and marks only the rows it read; test it with barriers.
+  2. Medium: an exception, rather than an `Err`, from the publication after a committed rotation still loses the new secrets for the caller. Proposed fix: catch it after the committed rotation and return the secrets with `revocationsPublished: false`; add a regression test.
+  3. Medium: the scrubber keeps credential-bearing URLs, such as `TASKELITH_POSTGRES_URL` with a password, in a child environment and in redacted text. Proposed fix: drop credential-bearing service variables from the child environment and redact URL userinfo, percent-encoded values included; add tests.
+
 ## Remaining gates
 
-- Independent review.
+- The owner's decision on the open pass-3 findings.
 - Integration into `dev` by the coordinator, then archiving the change.
