@@ -1,15 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { ConformanceCase } from '@taskelith/sdlc';
+import { InMemoryTaskRepository } from '@taskelith/execution';
 import {
   ASSIGNMENT_REPOSITORY_CONFORMANCE,
+  CANDIDATE_WORKER_FIXTURES,
   CAPACITY_LEDGER_CONFORMANCE,
+  DELEGATION_REQUESTS_CONFORMANCE,
   InMemoryAssignmentRepository,
   InMemoryCapacityLedger,
+  InMemoryDelegationRequests,
   InMemoryInstallationGuard,
+  InMemoryPlacementQueue,
   InMemoryPlacementWorkers,
   InMemoryQuotaSettings,
   InMemoryTaskLineage,
+  PLACEMENT_CANDIDATES_CONFORMANCE,
+  PLACEMENT_QUEUE_CONFORMANCE,
   PLACEMENT_WORKERS_CONFORMANCE,
   PLACEMENT_WORKER_FIXTURES,
   QUOTA_FIXTURES,
@@ -38,6 +45,22 @@ runSuite('in-memory ledger', CAPACITY_LEDGER_CONFORMANCE, () => {
   const assignments = new InMemoryAssignmentRepository();
   const lineage = new InMemoryTaskLineage();
   return { ledger: new InMemoryCapacityLedger(() => assignments.all(), lineage), assignments, lineage };
+});
+
+runSuite('in-memory candidates', PLACEMENT_CANDIDATES_CONFORMANCE, () => {
+  const assignments = new InMemoryAssignmentRepository();
+  return { workers: new InMemoryPlacementWorkers(CANDIDATE_WORKER_FIXTURES, () => assignments.all()), assignments };
+});
+runSuite('in-memory placement queue', PLACEMENT_QUEUE_CONFORMANCE, () => {
+  const tasks = new InMemoryTaskRepository();
+  const lineage = new InMemoryTaskLineage();
+  const assignments = new InMemoryAssignmentRepository();
+  return { queue: new InMemoryPlacementQueue(() => tasks.all(), lineage, () => assignments.all()), tasks, lineage, assignments };
+});
+runSuite('in-memory delegation requests', DELEGATION_REQUESTS_CONFORMANCE, () => new InMemoryDelegationRequests());
+
+test('workers without assignments are candidates in identity order', async () => {
+  assert.deepEqual(await new InMemoryPlacementWorkers(CANDIDATE_WORKER_FIXTURES).candidates(), ['worker-a', 'worker-b', 'worker-c', 'worker-d']);
 });
 
 test('an installation without its record admits nothing, as one in quarantine', async () => {

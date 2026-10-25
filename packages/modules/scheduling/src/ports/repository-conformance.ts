@@ -5,14 +5,17 @@ import {
   expectOneWinner,
   expectRaceWinnerStored,
   expectRead,
+  expectSame,
   expectSuccess,
   nextGeneration,
   parseOwnershipGeneration,
   type ConformanceCase,
 } from '@taskelith/sdlc';
 import { acceptAssignment, createAssignment, endAssignment, type Assignment } from '../domain/assignment.js';
-import { parseResourceRequest } from '../domain/capacity-reservation.js';
+import { parseResourceRequest, type RunId } from '../domain/capacity-reservation.js';
+import { recordDelegation, redecideDelegation, type DelegationId, type DelegationRecord } from '../domain/delegation-request.js';
 import type { AssignmentRepository } from './assignment-repository.js';
+import type { DelegationRequests } from './delegation-requests.js';
 
 // A shared suite that the in-memory and the database adapters of the
 // assignment port both pass; each case expects a port with nothing stored.
@@ -109,6 +112,56 @@ export const ASSIGNMENT_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Assignm
         expectRead(problems, 'winning holder', await repository.get(racers[winner]!.id), racers[winner]);
         expectCode(problems, 'losing holder', await repository.get(racers[1 - winner]!.id), 'not-found');
       }
+      return problems;
+    },
+  },
+  {
+    name: 'the assignments of an attempt are listed by identity, held or not',
+    async check(repository: AssignmentRepository) {
+      const problems: string[] = [];
+      const first = offered('assignment-2', 'attempt-1');
+      const second = offered('assignment-1', 'attempt-1');
+      expectSuccess(problems, 'add first', await repository.add(first));
+      expectSuccess(problems, 'release first', await repository.replace(ended(first), first.generation));
+      expectSuccess(problems, 'add second', await repository.add(second));
+      expectSuccess(problems, 'add other attempt', await repository.add(offered('assignment-3', 'attempt-2')));
+      expectSame(problems, 'listed', await repository.listByAttempt(first.attemptId), [second, ended(first)]);
+      expectSame(problems, 'unknown attempt', await repository.listByAttempt(must(parseIdentifier('AttemptId', 'attempt-x'))), []);
+      return problems;
+    },
+  },
+]);
+
+function delegation(text: string): DelegationRecord {
+  return recordDelegation({
+    delegationId: must(parseIdentifier('DelegationId', text)) as DelegationId,
+    workerId: must(parseIdentifier('WorkerId', 'worker-1')),
+    values: {
+      attemptId: must(parseIdentifier('AttemptId', 'attempt-1')),
+      ownershipGeneration: must(parseOwnershipGeneration(2)),
+      runId: must(parseIdentifier('RunId', 'run-1')) as RunId,
+      child: { taskId: 'task-child', kind: 'planning', stageId: 'specs' },
+    },
+    waitingSince: AT,
+  }, { state: 'awaiting-capacity' });
+}
+
+export const DELEGATION_REQUESTS_CONFORMANCE: readonly ConformanceCase<DelegationRequests>[] = Object.freeze([
+  {
+    name: 'a delegation reads back as stored, once, and replace compares its generation',
+    async check(requests: DelegationRequests) {
+      const problems: string[] = [];
+      const waiting = delegation('delegation-1');
+      expectSuccess(problems, 'add', await requests.add(waiting));
+      expectCode(problems, 'second add', await requests.add(waiting), 'conflict');
+      expectRead(problems, 'get', await requests.get(waiting.delegationId), waiting);
+      expectCode(problems, 'get unknown', await requests.get(delegation('delegation-x').delegationId), 'not-found');
+      const rejected = redecideDelegation(waiting, { state: 'rejected', reason: 'delegation-awaiting-capacity' });
+      expectSuccess(problems, 'replace', await requests.replace(rejected, waiting.generation));
+      expectCode(problems, 'stale replace', await requests.replace(redecideDelegation(waiting, { state: 'awaiting-capacity' }), waiting.generation), 'conflict');
+      expectCode(problems, 'unchanged generation', await requests.replace(rejected, rejected.generation), 'invalid');
+      expectCode(problems, 'replace unknown', await requests.replace(redecideDelegation(delegation('delegation-x'), { state: 'awaiting-capacity' }), waiting.generation), 'not-found');
+      expectRead(problems, 'after rejected writes', await requests.get(waiting.delegationId), rejected);
       return problems;
     },
   },

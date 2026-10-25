@@ -135,6 +135,7 @@ export {
   isLaunchAffected,
   openAttempt,
   openTask,
+  placementNeed,
   rebindAdmission,
   recordExecutionEvidence,
   recordExit,
@@ -150,6 +151,7 @@ export {
   type ExecutionReport,
   type ExitReport,
   type ObservationResult,
+  type PlacementNeed,
   type Task,
   type TaskOutcomeFact,
 } from './domain/task.js';

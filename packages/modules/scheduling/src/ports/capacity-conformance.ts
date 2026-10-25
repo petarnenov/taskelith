@@ -1,11 +1,21 @@
 import { parseIdentifier, parseInstant, type Instant, type Result } from '@taskelith/kernel';
-import type { AttemptId, WorkerId } from '@taskelith/execution';
-import { expectCode, expectSame, expectSuccess, parseOwnershipGeneration, type ConformanceCase, type TaskId } from '@taskelith/sdlc';
+import type { Attempt, AttemptId, Task, TaskRepository, WorkerId } from '@taskelith/execution';
+import {
+  FIRST_GENERATION,
+  expectCode,
+  expectSame,
+  expectSuccess,
+  parseOwnershipGeneration,
+  type AdmissionId,
+  type ConformanceCase,
+  type TaskId,
+} from '@taskelith/sdlc';
 import { createAssignment, endAssignment, type Assignment } from '../domain/assignment.js';
 import { parseResourceRequest, type ProjectId, type ProviderCredentialId, type RunId } from '../domain/capacity-reservation.js';
 import type { TaskLineageLink } from '../domain/delegation-admission.js';
 import type { AssignmentRepository } from './assignment-repository.js';
 import type { CapacityLedger } from './capacity-ledger.js';
+import type { PlacementQueue } from './placement-queue.js';
 import type { PlacementWorkers, WorkerPlacementRecord } from './placement-workers.js';
 import type { QuotaSettings } from './quota-settings.js';
 import type { TaskLineage } from './task-lineage.js';
@@ -182,6 +192,106 @@ export const CAPACITY_LEDGER_CONFORMANCE: readonly ConformanceCase<CapacityLedge
       expectCode(problems, 'reopen', await ledger.openDelegation(delegation), 'conflict');
       expectSame(problems, 'no longer waiting', await ledger.isWaitingParent(parent.attemptId), false);
       expectSame(problems, 'no waiting slots', await ledger.waitingParentSlots(), 0);
+      return problems;
+    },
+  },
+]);
+
+// Eligible workers whose identities and held reservations order differently.
+export const CANDIDATE_WORKER_FIXTURES: readonly WorkerPlacementRecord[] = Object.freeze([
+  worker('worker-b', {}),
+  worker('worker-d', {}),
+  worker('worker-a', {}),
+  worker('worker-c', {}),
+  worker('worker-x', { draining: true }),
+]);
+
+export interface PlacementCandidatesConformanceTarget {
+  readonly workers: PlacementWorkers;
+  readonly assignments: AssignmentRepository;
+}
+
+function heldOn(text: string, attempt: string, workerText: string): Assignment {
+  return Object.freeze({ ...assignment(text, attempt, ROOT, RUN, 100), workerId: id('WorkerId', workerText) as WorkerId });
+}
+
+export const PLACEMENT_CANDIDATES_CONFORMANCE: readonly ConformanceCase<PlacementCandidatesConformanceTarget>[] = Object.freeze([
+  {
+    name: 'candidates are the eligible workers, fewest held reservations first, then by identity',
+    async check({ workers, assignments }: PlacementCandidatesConformanceTarget) {
+      const problems: string[] = [];
+      const released = heldOn('assignment-c2', 'attempt-c2', 'worker-c');
+      const stored = [
+        heldOn('assignment-b1', 'attempt-b1', 'worker-b'), heldOn('assignment-b2', 'attempt-b2', 'worker-b'),
+        heldOn('assignment-c1', 'attempt-c1', 'worker-c'), heldOn('assignment-d1', 'attempt-d1', 'worker-d'),
+        heldOn('assignment-x1', 'attempt-x1', 'worker-x'), released,
+      ];
+      for (const held of stored) expectSuccess(problems, `add ${held.id}`, await assignments.add(held));
+      const ended = must(endAssignment(released, released.generation, 'cancelled', { granted: false, nonTerminal: false }, AT));
+      expectSuccess(problems, 'release', await assignments.replace(ended, released.generation));
+      expectSame(problems, 'candidates', await workers.candidates(), ['worker-a', 'worker-c', 'worker-d', 'worker-b']);
+      return problems;
+    },
+  },
+]);
+
+export interface PlacementQueueConformanceTarget {
+  readonly queue: PlacementQueue;
+  readonly tasks: TaskRepository;
+  readonly lineage: TaskLineage;
+  readonly assignments: AssignmentRepository;
+}
+
+const at = (seconds: number): Instant => must(parseInstant(`2026-10-25T09:00:0${seconds}.000Z`));
+
+function queuedTask(text: string, changedAt: Instant, attempts: readonly Attempt[] = []): Task {
+  return Object.freeze({
+    id: id('TaskId', text) as TaskId,
+    admissionId: id('AdmissionId', `admission-${text}`) as AdmissionId,
+    ownershipGeneration: must(parseOwnershipGeneration(attempts.length + 1)),
+    attempts: Object.freeze(attempts),
+    generation: FIRST_GENERATION,
+    changedAt,
+  });
+}
+
+function activeAttemptOf(text: string): Attempt {
+  return Object.freeze({ id: id('AttemptId', text) as AttemptId, executions: Object.freeze([]) });
+}
+
+function endedAttemptOf(text: string): Attempt {
+  const outcome = { kind: 'not-started' as const, cancelled: false, ownershipGeneration: must(parseOwnershipGeneration(2)), endedAt: AT };
+  return Object.freeze({ ...activeAttemptOf(text), outcome: Object.freeze(outcome) });
+}
+
+function rootLink(taskId: TaskId, project: string): TaskLineageLink {
+  return Object.freeze({ taskId, rootTaskId: taskId, depth: 0, projectId: id('ProjectId', project) as ProjectId, runId: RUN });
+}
+
+export const PLACEMENT_QUEUE_CONFORMANCE: readonly ConformanceCase<PlacementQueueConformanceTarget>[] = Object.freeze([
+  {
+    name: 'waiting tasks without a held reservation are read oldest first, with their project',
+    async check({ queue, tasks, lineage, assignments }: PlacementQueueConformanceTarget) {
+      const problems: string[] = [];
+      const fresh = queuedTask('task-a', at(2));
+      const released = queuedTask('task-b', at(1), [activeAttemptOf('attempt-b')]);
+      const reserved = queuedTask('task-c', at(0), [activeAttemptOf('attempt-c')]);
+      const ended = queuedTask('task-d', at(0), [endedAttemptOf('attempt-d')]);
+      const later = queuedTask('task-e', at(3));
+      const unlinked = queuedTask('task-f', at(0));
+      for (const task of [fresh, released, reserved, ended, later, unlinked]) expectSuccess(problems, `add ${task.id}`, await tasks.add(task));
+      for (const [task, project] of [[fresh, 'project-1'], [released, 'project-2'], [reserved, 'project-1'], [ended, 'project-1'], [later, 'project-1']] as const) {
+        expectSuccess(problems, `link ${task.id}`, await lineage.add(rootLink(task.id, project)));
+      }
+      const releasedAssignment = assignment('assignment-b', 'attempt-b', released.id, RUN, 100);
+      expectSuccess(problems, 'add released', await assignments.add(releasedAssignment));
+      const ending = must(endAssignment(releasedAssignment, releasedAssignment.generation, 'cancelled', { granted: false, nonTerminal: false }, AT));
+      expectSuccess(problems, 'release', await assignments.replace(ending, releasedAssignment.generation));
+      expectSuccess(problems, 'add held', await assignments.add(assignment('assignment-c', 'attempt-c', reserved.id, RUN, 100)));
+      const entry = (task: Task, project: string) => ({ projectId: project, waitingSince: task.changedAt, item: task.id });
+      const all = [entry(released, 'project-2'), entry(fresh, 'project-1'), entry(later, 'project-1')];
+      expectSame(problems, 'waiting', await queue.waiting(10), all);
+      expectSame(problems, 'limited', await queue.waiting(2), all.slice(0, 2));
       return problems;
     },
   },

@@ -55,9 +55,13 @@ export {
   InMemoryQuotaSettings,
   InMemoryTaskLineage,
 } from './adapters/in-memory-capacity.js';
+export { InMemoryDelegationRequests, InMemoryPlacementQueue } from './adapters/in-memory-placement.js';
 export {
+  CANDIDATE_WORKER_FIXTURES,
   CAPACITY_LEDGER_CONFORMANCE,
   CHILD_LINK,
+  PLACEMENT_CANDIDATES_CONFORMANCE,
+  PLACEMENT_QUEUE_CONFORMANCE,
   PLACEMENT_WORKERS_CONFORMANCE,
   PLACEMENT_WORKER_FIXTURES,
   QUOTA_FIXTURES,
@@ -65,12 +69,14 @@ export {
   ROOT_LINK,
   TASK_LINEAGE_CONFORMANCE,
   type CapacityLedgerConformanceTarget,
+  type PlacementCandidatesConformanceTarget,
+  type PlacementQueueConformanceTarget,
 } from './ports/capacity-conformance.js';
 export type { AssignmentRepository } from './ports/assignment-repository.js';
 export type { Outbox, OutboxMessage } from './ports/outbox.js';
 // The outbox ports are structurally identical, so they share one suite.
 export { OUTBOX_CONFORMANCE } from '@taskelith/sdlc';
-export { ASSIGNMENT_REPOSITORY_CONFORMANCE } from './ports/repository-conformance.js';
+export { ASSIGNMENT_REPOSITORY_CONFORMANCE, DELEGATION_REQUESTS_CONFORMANCE } from './ports/repository-conformance.js';
 export { admitDelegation, type DelegationRequest } from './application/delegation-admission.js';
 export {
   cancelInTransaction,
@@ -85,6 +91,7 @@ export type { CommandIdentity, WorkerCommandType } from './application/capacity-
 export { ResourceAdmissionService, type RetryTiming } from './application/resource-admission-service.js';
 export {
   ADMISSION_PRESSURE_SUPERSESSION_BOUND_MILLISECONDS,
+  DEFAULT_ATTEMPT_REQUEST,
   DEFAULT_PROJECT_QUOTA,
   DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY,
   DEFAULT_RUN_QUOTA,
@@ -103,8 +110,10 @@ export {
   REJECTING_REASONS,
   STANDING_REASONS,
   WAITING_REASONS,
+  WORKER_REASONS,
   isWaitingReason,
   reasonOutcome,
+  triesNextCandidate,
   type CapacityReason,
   type ReasonOutcome,
   type RejectingReason,
@@ -121,6 +130,19 @@ export {
   type TaskLineageLink,
   type WaitingParentUnits,
 } from './domain/delegation-admission.js';
+export {
+  DELEGATION_STATES,
+  isAwaitingCapacity,
+  isSameDelegation,
+  recordDelegation,
+  redecideDelegation,
+  type DelegationId,
+  type DelegationInput,
+  type DelegationOutcome,
+  type DelegationRecord,
+  type DelegationState,
+  type DelegationValues,
+} from './domain/delegation-request.js';
 export { fairPlacementOrder, type WaitingPlacement } from './domain/fair-order.js';
 export { placementBackoff } from './domain/placement-backoff.js';
 export {
@@ -135,7 +157,9 @@ export {
 } from './domain/placement-decision.js';
 export type { CapacityCharge, CapacityLedger, OpenDelegation, WorkerOccupancy } from './ports/capacity-ledger.js';
 export type { CapacityStore, CapacityTransaction } from './ports/capacity-store.js';
+export type { DelegationRequests } from './ports/delegation-requests.js';
 export type { InstallationGuard } from './ports/installation-guard.js';
+export type { PlacementQueue } from './ports/placement-queue.js';
 export { isEligibleForPlacement, type PlacementWorkers, type WorkerPlacementRecord } from './ports/placement-workers.js';
 export type { QuotaSettings } from './ports/quota-settings.js';
 export type { TaskLineage } from './ports/task-lineage.js';
