@@ -73,6 +73,7 @@ Recorded before pass 1.
 - At `c46cb1a`, after the pass-1 fixes: 831 tests passed, 0 failed; coverage 99.18% lines, 92.58% branches, 99.09% functions; every other check passes.
 - At `40f2aea`, after the pass-2 fixes: 835 tests passed, 0 failed; coverage 99.18% lines, 92.54% branches, 99.09% functions; every other check passes.
 - At `2deacb0`, after the fixes of the pass-3 findings: 838 tests passed, 0 failed; coverage 99.18% lines, 92.55% branches, 99.15% functions; every other check passes. The new barrier test fails with the earlier SERIALIZABLE publication (1 entry published instead of 2) and passes with READ COMMITTED.
+- At `d0e777b`, after the fix of the pass-4 finding: 838 tests passed, 0 failed; coverage 99.18% lines, 92.55% branches, 99.15% functions; every other check passes.
 - `npm run openspec -- validate implement-installation-bootstrap-and-enrollment --strict` passed at each of these revisions.
 
 ## Independent review
@@ -109,10 +110,11 @@ Assigned reviewer: Codex CLI, with `codex exec -m gpt-6.1-sol -c model_reasoning
 
 - **Pass 4 (exceptional, authorized by the owner) — session `01a17316-d03f-7203-be5c-4ae99036e812`,** reviewed `git diff e3c0c9f 2deacb0` only, as the owner's decision limited it. The header reports `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`. Snapshot before and after: `67979b4b…5ed6`, equal.
   - The reviewer confirmed pass-3 findings 1 and 2 fully resolved, and finding 3 in part. It also confirmed that the new isolation option applies per call and leaves every other transaction SERIALIZABLE.
-  - Findings: 0 Critical, 0 High, 1 Medium, 0 Low. Under the owner's decision a Medium finding stops the change for the coordinator. It is **open**:
-  1. Medium: URL redaction stops at the first `@`, so a password with an unescaped `@`, which `new URL()` accepts, stays partly visible. For example, `postgres://owner:p@ssword@db/taskelith` becomes `postgres://[redacted]@ssword@db/taskelith`. The child environment still drops the variable. Proposed fix: redact the user information up to the last `@` before `/`, `?`, or `#`, with regression tests for one and several unescaped `@`, through `redactFailure` and `scrubEnvironment`.
+  - Findings: 0 Critical, 0 High, 1 Medium, 0 Low. Under the owner's decision a Medium finding stopped the change. On 2026-10-25 the owner chose option (b) directly: fix it, then an exceptional fifth pass limited to the fix.
+  1. Medium, **resolved by the owner's decision:** URL redaction stops at the first `@`, so a password with an unescaped `@`, which `new URL()` accepts, stays partly visible. For example, `postgres://owner:p@ssword@db/taskelith` becomes `postgres://[redacted]@ssword@db/taskelith`. The child environment still drops the variable. Proposed fix: redact the user information up to the last `@` before `/`, `?`, or `#`, with regression tests for one and several unescaped `@`, through `redactFailure` and `scrubEnvironment`.
+
+- **Pass 5 (exceptional, authorized by the owner) — session `01a17321-3471-7422-8fcc-318fa3c6841e`,** reviewed `git diff ada546c d0e777b` only. The header reports `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`. Snapshot before and after: `f18c6bb7…7f45`, equal. The reviewer confirmed the pass-4 finding fully resolved: the user information is redacted up to the last `@` before `/`, `?`, or `#`. It ran 46 checks of the changed helpers in memory. Findings: 0 Critical, 0 High, 0 Medium, 0 Low.
 
 ## Remaining gates
 
-- The coordinator's decision on the open pass-4 finding.
 - Integration into `dev` by the coordinator, then archiving the change.
