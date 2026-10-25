@@ -29,15 +29,15 @@ These are coordinator decisions, taken as the worker recommended unless stated.
 
 ## Decisions
 
-### D1: enroll first, then create the root
+### D1: claim the root, enroll, then create the journal
 
-The `EnrollmentRequest` names the `journalId`, and the journal's binding needs the `installationId` and `workerId` that only the answer gives. So the worker draws the `journalId`, enrolls, and then creates the root in the order journal, credentials, identity. A failure before the identity removes the partial subtree, as `enrollWorkerRoot` already did.
+The `EnrollmentRequest` names the `journalId`, and the journal's binding needs the `installationId` and `workerId` that only the answer gives. So the worker first claims the root with `claimWorkerRoot`: the local checks of the data root and volume, an empty `worker/`, and the root lock. Then it draws the `journalId` and enrolls, and the claim creates the journal, credentials, and identity in that order. A failure, or an abandoned claim, removes the partial subtree. A root that cannot be created therefore never spends a token (review pass 1, H1 and M1). The `EnrollmentRequest` description in `execution.openapi.json` still says the worker created its journal first; it is left unchanged here and reported to the coordinator.
 
 - **Alternative:** a journal without a binding, bound after the answer. It would add a journal state that every start check must handle, for no gain: a lost answer loses the token either way.
 
 ### D2: the token is read only without an identity
 
-`openWorkerRoot` decides: only its `not-enrolled` reason leads to enrollment. Every other failure, such as a journal fault, a lost journal, or a locked root, is returned unchanged, so a configured token can never re-enroll a worker whose journal is lost.
+`openWorkerRoot` decides: only its `not-enrolled` reason leads to enrollment, and the claim then refuses an existing `worker/`, such as one left without an identity. Every other failure, such as a journal fault, a lost journal, or a locked root, is returned unchanged, so a configured token can never re-enroll a worker whose journal is lost.
 
 ### D3: identity format stays 1
 
@@ -61,5 +61,5 @@ The slots default to 2 (operational targets). CPU defaults to the available para
 
 ## Risks / Trade-offs
 
-- **Lost enrollment answer.** The token is spent and the created worker row never connects. The contract page says that the operator issues a new token and revokes the row.
+- **Spent token.** A lost answer, or a crash between the answer and the identity, spends the token, and the created worker row never connects. The contract page says that the operator issues a new token and revokes the row.
 - **Secrets in memory.** The credentials are read at start and kept for the connection. They never reach a log, because the entry redacts every failure.

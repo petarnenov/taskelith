@@ -12,7 +12,7 @@ Item 13 left the worker's storage of its credentials under `worker/`, with the i
   - The JSON POST and the status mapping move into a shared module that `HttpLaunchAuthorityClient` also uses. 409 and 422 map to `conflict` and `precondition-failed`, and a server's `reason` detail is kept.
 - **Worker journal.**
   - `worker/identity` records the credential generation and references to the credential files.
-  - Enrollment writes the journal, then the credential files under `worker/credentials/`, then the identity.
+  - `claimWorkerRoot` runs every local check and takes the root lock before enrollment asks the control plane. Completing the claim writes the journal, then the credential files under `worker/credentials/`, then the identity.
   - `readWorkerCredentials` reads them only through safe control-record paths.
   - An open root exposes its identity.
 - **Worker application.**

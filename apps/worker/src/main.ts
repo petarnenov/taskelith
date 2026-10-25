@@ -39,8 +39,9 @@ export interface ServiceProcess {
   off(signal: 'SIGTERM' | 'SIGINT', listener: () => void): unknown;
 }
 
+// A failed close still settles `stopped`; it is not rethrown at shutdown.
 export async function serveUntilStopped(worker: RunningWorker, host: ServiceProcess): Promise<void> {
-  const shutdown = () => void worker.stop();
+  const shutdown = () => void worker.stop().catch(() => undefined);
   for (const signal of ['SIGTERM', 'SIGINT'] as const) host.on(signal, shutdown);
   await worker.stopped;
   for (const signal of ['SIGTERM', 'SIGINT'] as const) host.off(signal, shutdown);

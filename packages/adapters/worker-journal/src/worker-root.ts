@@ -54,21 +54,59 @@ export function openWorkerRoot(options: WorkerRootOptions): Result<WorkerRoot> {
   });
 }
 
-// Enrollment's part (items 13, 20): the journal, then the credentials, then
-// the identity, so an identity without a journal means a loss (section 2).
-export function enrollWorkerRoot(options: WorkerRootOptions, enrollment: WorkerEnrollment): Result<WorkerRoot> {
+// A root that enrollment has claimed: `worker/` exists, holds nothing but
+// the root lock, and is held until `complete` or `abandon`.
+export interface RootClaim {
+  readonly paths: WorkerPaths;
+  complete(enrollment: WorkerEnrollment): Result<WorkerRoot>;
+  abandon(): void;
+}
+
+// Every local check of enrollment, before the control plane is asked, so a
+// root that cannot be created never spends a token (item 20).
+export function claimWorkerRoot(options: WorkerRootOptions): Result<RootClaim> {
   const paths = workerPaths(options.dataRoot);
   if (existsSync(paths.worker)) return err(failure('conflict', `${paths.worker} already exists`));
   const prepared = prepareDataRoot(paths, options);
   if (!prepared.ok) return prepared;
-  let enrolled: Result<WorkerRoot> | undefined;
-  try {
-    enrolled = withRootLock(paths, (lock) => createJournalThenIdentity(paths, options, enrollment, lock));
-    return enrolled;
-  } finally {
-    // A failed enrollment leaves no partial subtree that blocks a retry.
-    if (!enrolled?.ok) rmSync(paths.worker, { recursive: true, force: true });
+  const safe = checkControlPath(paths.dataRoot, paths.lock, ownerUid());
+  const lock = safe.ok ? ExclusiveFileLock.acquire(paths.lock) : safe;
+  if (!lock.ok) {
+    removeSubtree(paths);
+    return lock;
   }
+  return ok(rootClaim(paths, options, lock.value));
+}
+
+// Enrollment's part (items 13, 20): the journal, then the credentials, then
+// the identity, so an identity without a journal means a loss (section 2).
+export function enrollWorkerRoot(options: WorkerRootOptions, enrollment: WorkerEnrollment): Result<WorkerRoot> {
+  const claim = claimWorkerRoot(options);
+  return claim.ok ? claim.value.complete(enrollment) : claim;
+}
+
+// A failed or abandoned enrollment leaves no partial subtree that blocks a
+// retry; the claim is settled once.
+function rootClaim(paths: WorkerPaths, options: WorkerRootOptions, lock: ExclusiveFileLock): RootClaim {
+  let settled = false;
+  const abandon = () => {
+    if (settled) return;
+    settled = true;
+    lock.release();
+    removeSubtree(paths);
+  };
+  const complete = (enrollment: WorkerEnrollment): Result<WorkerRoot> => {
+    if (settled) return err(failure('conflict', `the claim of ${paths.worker} is settled`));
+    const enrolled = checkRecordsThen(paths, () => createJournalThenIdentity(paths, options, enrollment, lock));
+    if (enrolled.ok) settled = true;
+    else abandon();
+    return enrolled;
+  };
+  return Object.freeze({ paths, complete, abandon });
+}
+
+function removeSubtree(paths: WorkerPaths): void {
+  rmSync(paths.worker, { recursive: true, force: true });
 }
 
 function createJournalThenIdentity(

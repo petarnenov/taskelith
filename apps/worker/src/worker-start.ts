@@ -1,14 +1,16 @@
 import { SUPPORTED_PROTOCOL_VERSIONS } from '@taskelith/contracts';
-import { parseInstallationId, type EnrollmentClient } from '@taskelith/fleet';
+import type { JournalId } from '@taskelith/execution';
+import { parseInstallationId, type Enrollment, type EnrollmentClient } from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import { TransportAddress, type TransportConnection, type WorkerTransportEndpoint } from '@taskelith/nats';
 import {
-  enrollWorkerRoot,
+  claimWorkerRoot,
   failureReason,
   openWorkerRoot,
   readWorkerCredentials,
   type JournalClock,
   type VolumeProbe,
+  type WorkerEnrollment,
   type WorkerIdentity,
   type WorkerRoot,
   type WorkerRootOptions,
@@ -52,8 +54,8 @@ function rootOptions(settings: WorkerSettings, dependencies: WorkerDependencies)
   return { dataRoot: settings.dataRoot, clock, ...(probe === undefined ? {} : { probe }) };
 }
 
-// The first start: a new journal identity is enrolled, then the root is
-// created with the returned binding and credentials.
+// The first start claims the root before it asks the control plane, so a
+// root that cannot be created never spends the token.
 async function enroll(settings: WorkerSettings, dependencies: WorkerDependencies, options: WorkerRootOptions): Promise<Result<WorkerRoot>> {
   const { enrollmentToken } = settings;
   if (enrollmentToken === undefined) {
@@ -63,17 +65,26 @@ async function enroll(settings: WorkerSettings, dependencies: WorkerDependencies
   }
   const journalId = parseIdentifier('JournalId', dependencies.newJournalId());
   if (!journalId.ok) return journalId;
+  const claim = claimWorkerRoot(options);
+  if (!claim.ok) return claim;
   const enrolled = await dependencies.enrollment.enroll(enrollmentToken, {
     journalId: journalId.value, host: settings.host, protocolVersions: SUPPORTED_PROTOCOL_VERSIONS, capacity: settings.capacity,
   });
-  if (!enrolled.ok) return enrolled;
-  const { installationId, workerId, recoveryEpoch, credentialGeneration, credentials } = enrolled.value;
-  // It becomes a subject token, so it is checked before the root exists.
-  const installation = parseInstallationId(installationId);
-  if (!installation.ok) return installation;
-  return enrollWorkerRoot(options, {
-    installationId: installation.value, workerId, journalId: journalId.value, recoveryEpoch, credentialGeneration, credentials,
-  });
+  const binding = enrolled.ok ? rootEnrollment(enrolled.value, journalId.value) : enrolled;
+  if (!binding.ok) {
+    claim.value.abandon();
+    return binding;
+  }
+  return claim.value.complete(binding.value);
+}
+
+// The installation identifier becomes a subject token, so it is checked
+// before the root exists.
+function rootEnrollment(enrollment: Enrollment, journalId: JournalId): Result<WorkerEnrollment> {
+  const installationId = parseInstallationId(enrollment.installationId);
+  if (!installationId.ok) return installationId;
+  const { workerId, recoveryEpoch, credentialGeneration, credentials } = enrollment;
+  return ok({ installationId: installationId.value, workerId, journalId, recoveryEpoch, credentialGeneration, credentials });
 }
 
 async function connectBroker(settings: WorkerSettings, dependencies: WorkerDependencies, root: WorkerRoot): Promise<Result<RunningWorker>> {

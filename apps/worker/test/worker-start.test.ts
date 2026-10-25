@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
@@ -17,7 +17,7 @@ import {
   type WorkerDependencies,
   type WorkerSettings,
 } from '@taskelith/worker';
-import { hostBootId, recordJournalFault, workerPaths, type VolumeProbe } from '@taskelith/worker-journal';
+import { failureReason, hostBootId, recordJournalFault, workerPaths, type VolumeProbe } from '@taskelith/worker-journal';
 
 const T0 = value(parseInstant('2026-10-25T09:00:00.000Z'));
 const TEST_VOLUME: VolumeProbe = () => ({ ok: true, value: { platform: 'darwin', filesystem: 'apfs', local: true } });
@@ -131,14 +131,24 @@ test('an unenrolled worker without a token, or with a refused token, creates not
   assert.equal(broker.endpoints.length, 0);
 });
 
+test('a root that cannot be created never spends the token', async () => {
+  const unsupported: VolumeProbe = () => ({ ok: true, value: { platform: 'darwin', filesystem: 'hfs', local: true } });
+  const refused = failed(await startWorker(settings, { ...dependencies(), probe: unsupported }));
+  assert.equal(failureReason(refused), 'unsupported-volume');
+  const paths = workerPaths(settings.dataRoot);
+  mkdirSync(paths.worker, { recursive: true, mode: 0o700 });
+  assert.equal(failed(await startWorker(settings, dependencies())).code, 'conflict');
+  assert.equal(existsSync(paths.identity) || existsSync(paths.journalDirectory), false);
+  assert.equal(enrollment.calls.length, 0);
+});
+
 test('a journal fault stops the start before any request or connection', async () => {
   const first = await start();
   await first.stop();
   const bootId = value(hostBootId());
   const paths = workerPaths(settings.dataRoot);
   value(recordJournalFault(paths.fault, failure('unavailable', 'flush failed', { reason: 'flush-failure' }), bootId));
-  const refused = await startWorker(settings, dependencies());
-  assert.equal(refused.ok, false);
+  assert.equal(failureReason(failed(await startWorker(settings, dependencies()))), 'flush-failure');
   assert.equal(enrollment.calls.length, 1);
   assert.equal(broker.endpoints.length, 1);
 });
@@ -164,6 +174,20 @@ test('stop closes the connection and the root once, and a signal stops a served 
   await worker.stop();
   assert.equal(broker.closed, 1);
   assert.equal(listeners.size, 0);
+  assert.equal((await start()).identity.workerId, ENROLLMENT.workerId);
+});
+
+test('a close that fails still stops a served worker without a rejection', async () => {
+  const failing = { ...dependencies(), connect: async (endpoint: WorkerTransportEndpoint) => {
+    const connected = await broker.connect(endpoint);
+    return connected.ok ? ok({ ...connected.value, close: async () => Promise.reject(new Error('close failed')) }) : connected;
+  } };
+  const worker = value(await startWorker(settings, failing));
+  const listeners = new Map<string, () => void>();
+  const served = serveUntilStopped(worker, { on: (signal, listener) => listeners.set(signal, listener), off: () => undefined });
+  listeners.get('SIGINT')?.();
+  await served;
+  await assert.rejects(worker.stop(), /close failed/);
   assert.equal((await start()).identity.workerId, ENROLLMENT.workerId);
 });
 

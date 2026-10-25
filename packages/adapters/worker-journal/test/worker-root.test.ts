@@ -11,6 +11,7 @@ import {
   JOURNAL_APPLICATION_ID,
   JOURNAL_FORMAT,
   checkVolume,
+  claimWorkerRoot,
   credentialReferencesOf,
   enrollWorkerRoot,
   parseDfMountPoint,
@@ -98,6 +99,21 @@ test('enrollment creates the journal before the identity, with private modes', (
   assert.deepEqual(root.identity.credentials, credentialReferencesOf(1));
   assert.deepEqual(value(readWorkerCredentials(paths, root.identity, process.getuid?.() ?? -1)), ENROLLMENT.credentials);
   assert.equal(failed(enrollWorkerRoot(rootOptions(dataRoot), ENROLLMENT)).code, 'conflict');
+});
+
+test('a claim holds the root lock until it completes or is abandoned', () => {
+  const claim = value(claimWorkerRoot(rootOptions(dataRoot)));
+  const { paths } = claim;
+  assert.equal(failed(claimWorkerRoot(rootOptions(dataRoot))).code, 'conflict');
+  assert.equal(failed(ExclusiveFileLock.acquire(paths.lock)).code, 'conflict');
+  claim.abandon();
+  claim.abandon();
+  assert.equal(existsSync(paths.worker), false);
+  assert.equal(failed(claim.complete(ENROLLMENT)).code, 'conflict');
+  const completed = value(claimWorkerRoot(rootOptions(dataRoot)));
+  opened.push(value(completed.complete(ENROLLMENT)));
+  completed.abandon();
+  assert.equal(existsSync(paths.identity), true);
 });
 
 test('the credentials are read only while present, nonempty, and safe', () => {

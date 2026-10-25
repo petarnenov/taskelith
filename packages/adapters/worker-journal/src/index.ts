@@ -32,5 +32,13 @@ export {
   type WorkerEnrollment,
 } from './worker-credentials.js';
 export { IDENTITY_FORMAT, readIdentity, type CredentialReferences, type WorkerIdentity } from './worker-identity.js';
-export { enrollWorkerRoot, openWorkerRoot, startNewIncarnation, type WorkerRoot, type WorkerRootOptions } from './worker-root.js';
+export {
+  claimWorkerRoot,
+  enrollWorkerRoot,
+  openWorkerRoot,
+  startNewIncarnation,
+  type RootClaim,
+  type WorkerRoot,
+  type WorkerRootOptions,
+} from './worker-root.js';
 export { JOURNAL_FILE, workerPaths, type WorkerPaths } from './worker-paths.js';

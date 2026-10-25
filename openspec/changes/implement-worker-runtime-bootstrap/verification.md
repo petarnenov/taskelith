@@ -38,8 +38,25 @@ Recorded before pass 1.
 
 `make verify` ran in the worktree with every file tracked:
 
-- Before pass 1: 1016 tests passed, 0 failed; coverage 99.23% lines, 91.79% branches, 98.89% functions. The comment, boundary, coverage-scope, dependency-inventory, contract-compatibility, OpenSpec, archive, and package checks pass.
+- Before pass 1, at `41f2de5`: 1016 tests passed, 0 failed; coverage 99.23% lines, 91.79% branches, 98.89% functions. The comment, boundary, coverage-scope, dependency-inventory, contract-compatibility, OpenSpec, archive, and package checks pass.
+- After the pass-1 fixes: 1019 tests passed, 0 failed; coverage 99.20% lines, 91.78% branches, 98.89% functions; every other check passes.
 
 ## Independent review
 
 The reviewer is Claude Code with model `claude-fable-5-1` and effort `medium`, set in the invocation, in plan permission mode with `Edit`, `Write`, and `NotebookEdit` disallowed. The prompt is kept outside the worktree. A SHA-256 snapshot of every tracked and untracked file is taken before and after each pass.
+
+### Pass 1
+
+- Session `bdfbca64-bd91-4d62-ab50-f783ae295a98`, 2026-10-25, on `41f2de5`; `claude-fable-5-1` in `modelUsage`.
+- Snapshot `e6e940a6…3fc2d` before and after: unchanged. The reviewer reports that it copied a temporary script into `apps/worker/` for a few seconds to reproduce H1 and removed it at once, which the read-only rule does not allow. The snapshot and `git status` show no change left behind.
+- Result: Critical 0, High 1, Medium 1, Low 5.
+
+| # | Finding | Disposition |
+| --- | --- | --- |
+| H1 | A `worker/` without an identity made the first start spend the token before `enrollWorkerRoot` refused the subtree, and the first start asked the control plane without the root lock. | Fixed: `claimWorkerRoot` refuses an existing `worker/` and takes the root lock before the request; the start test creates such a subtree and sees no request. |
+| M1 | Every local precondition of the root was checked only after the token was spent. | Fixed with H1: the claim runs the checkout, volume, and path checks first; the start test with an unsupported volume sees no request. Section 10 of the contract states the remaining window. |
+| L1 | A failing close at shutdown became an unhandled rejection. | Fixed: the signal handler drops the rejection, `stopped` still settles, and a test closes with an error. |
+| L2 | The journal fault test accepted any failure. | Fixed: it expects reason `flush-failure`. |
+| L3 | The contract said a later start never reads the token, while the settings read it. | Fixed: "never redeems the token". |
+| L4 | The `EnrollmentRequest` description in `execution.openapi.json` says the worker created its journal first. | Not changed: the wire contracts change only with the coordinator's approval. Recorded in the design and reported to the coordinator. |
+| L5 | Task 4.1 was unchecked. | Fixed. |

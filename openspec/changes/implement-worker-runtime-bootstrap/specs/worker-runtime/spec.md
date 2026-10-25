@@ -5,11 +5,15 @@ The worker application of a Taskelith installation: its settings, its enrollment
 ## ADDED Requirements
 
 ### Requirement: Enrollment on first start
-A worker whose root holds no identity SHALL enroll only with the token its configuration names, and SHALL create its root only after the control plane enrolled it, with the returned binding and credentials. Without a token, or after a refused or failed enrollment, it SHALL create nothing. A worker with an identity SHALL NOT enroll again.
+A worker whose root holds no identity SHALL enroll only with the token its configuration names, after it claimed the root, and SHALL create its journal only after the control plane enrolled it. Without a token, or after a refused or failed enrollment, it SHALL create nothing. A worker with an identity SHALL NOT enroll again.
 
 #### Scenario: Refused token
 - **WHEN** the control plane refuses the token with `token-invalid`
 - **THEN** the start fails with that reason, and no `worker/` subtree exists
+
+#### Scenario: Root that cannot be created
+- **WHEN** the data root's volume is unsupported, or a `worker/` without an identity exists
+- **THEN** the start fails without an enrollment request
 
 ### Requirement: Start sequence
 A worker SHALL take the root lock and pass the journal fault check before any request or connection, and SHALL then connect to the broker with its stored broker credential and its own inbox prefix. A failed connection SHALL fail the start and release the root.
