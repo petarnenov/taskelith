@@ -64,7 +64,7 @@ runSuite('outbox lookup', OUTBOX_LOOKUP_CONFORMANCE, (tx) => ({ outbox: tx.outbo
 // Each report commits on its own, as each observation's transaction does,
 // so a case can add a worker or race two reports.
 function committingReports(): WorkerReportsConformanceTarget {
-  const write = (work: (reports: WorkerReports) => Promise<Result<void>>) => database.transaction((tx) => work(tx.reports));
+  const write = <Value>(work: (reports: WorkerReports) => Promise<Result<Value>>) => database.transaction((tx) => work(tx.reports));
   const read = async <Value>(work: (workers: PlacementWorkers) => Promise<Value>): Promise<Value> => {
     const outcome = await database.readCommitted(async (tx) => ok(await work(tx.workers)));
     if (!outcome.ok) throw new Error(outcome.error.message);
@@ -73,6 +73,7 @@ function committingReports(): WorkerReportsConformanceTarget {
   return {
     reports: {
       recordContact: (...args) => write((reports) => reports.recordContact(...args)),
+      markContactLost: (...args) => write((reports) => reports.markContactLost(...args)),
       recordJournalLoss: (...args) => write((reports) => reports.recordJournalLoss(...args)),
       restartFences: (...args) => write((reports) => reports.restartFences(...args)),
       declareCapacity: (...args) => write((reports) => reports.declareCapacity(...args)),

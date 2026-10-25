@@ -41,15 +41,37 @@ export async function authenticateProducer(
   tx: ControlPlaneTransaction, producer: Producer, context: ReconciliationContext,
 ): Promise<Result<void>> {
   const { workerId, journalId } = producer;
-  const worker = await tx.fleet.worker(workerId);
+  const worker = await enrolledProducer(tx, producer);
   if (!worker.ok) return worker;
   const enrolled = worker.value;
-  if (producer.subjectWorkerId !== workerId || enrolled === undefined || enrolled.revokedAt !== undefined) return notAuthenticated(workerId);
-  const seen = (await tx.cursors.listByWorker(workerId)).find(({ cursor }) => cursor.journalId === journalId);
+  if (enrolled === undefined) return notAuthenticated(workerId);
+  const seen = await seenJournal(tx, producer);
   if (journalId === enrolled.journalId) return seen?.retiredAt === undefined ? ok(undefined) : notAuthenticated(workerId);
   if (seen === undefined) return replaceJournal(tx, enrolled, journalId, context);
   context.log.warn({ workerId }, 'execution.journal.refused', { journalId });
   return notAuthenticated(workerId);
+}
+
+// Whether the producer is the subject's enrolled worker under its enrolled
+// journal, not retired; unlike an observation, this replaces no journal.
+export async function isCurrentProducer(tx: ControlPlaneTransaction, producer: Producer): Promise<Result<boolean>> {
+  const worker = await enrolledProducer(tx, producer);
+  if (!worker.ok) return worker;
+  if (worker.value?.journalId !== producer.journalId) return ok(false);
+  return ok((await seenJournal(tx, producer))?.retiredAt === undefined);
+}
+
+// The subject's worker, enrolled and not revoked, if the body names it.
+async function enrolledProducer(tx: ControlPlaneTransaction, producer: Producer): Promise<Result<EnrolledWorker | undefined>> {
+  const worker = await tx.fleet.worker(producer.workerId);
+  if (!worker.ok) return worker;
+  const enrolled = worker.value;
+  const authentic = producer.subjectWorkerId === producer.workerId && enrolled !== undefined && enrolled.revokedAt === undefined;
+  return ok(authentic ? enrolled : undefined);
+}
+
+async function seenJournal(tx: ControlPlaneTransaction, { workerId, journalId }: Producer) {
+  return (await tx.cursors.listByWorker(workerId)).find(({ cursor }) => cursor.journalId === journalId);
 }
 
 function notAuthenticated(workerId: WorkerId): Result<never> {

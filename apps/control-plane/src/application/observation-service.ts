@@ -64,18 +64,21 @@ export class ObservationService {
     return this.#transaction('committed', (tx, context) => this.#record(tx, context, observation, NO_EFFECT, 'rejected'));
   }
 
-  // Decision 1, and the pending snapshots that a grown confirmed prefix may
-  // complete (21c decision 7).
+  // Decision 1 with contact before the inbox, and the pending snapshots that
+  // a grown confirmed prefix may complete (21c decision 7).
   async #record(
     tx: ControlPlaneTransaction, context: ReconciliationContext, observation: Observation, effect: ObservationEffect,
     outcome: 'applied' | 'rejected',
   ): Promise<Result<ObservationOutcome>> {
     const authentic = await authenticateProducer(tx, producerOf(observation), context);
     if (!authentic.ok) return authentic;
+    const { workerId, journalId } = observation.position;
+    // A duplicate is contact too, so a republishing worker stays reachable.
+    const contact = await tx.reports.recordContact(workerId, await tx.now());
+    if (!contact.ok) return contact;
     const inbox = await tx.inbox.accept(OBSERVATION_CONSUMER, observation.messageId);
     if (!inbox.ok) return inbox;
     if (inbox.value === 'duplicate') return this.#recordKnown(tx, context, observation);
-    const { workerId, journalId } = observation.position;
     const cursor = await tx.cursors.get(workerId, journalId);
     // The inbox ran first, so an applied sequence here has a new identity.
     const sequenceClass = classifyObservation(cursor, observation.position);
@@ -160,15 +163,13 @@ async function retireRolledBack(tx: ControlPlaneTransaction, observation: Observ
   return sequenceClass.value === 'rollback' ? retireJournal(tx, workerId, journalId, 'sequence-rollback', context) : ok(undefined);
 }
 
-// First contact, the effect, and the cursor; then the pending snapshots,
-// once the confirmed prefix grew.
+// The effect and the cursor, after `#record` recorded the contact; then the
+// pending snapshots, once the confirmed prefix grew.
 async function recordPosition(
   tx: ControlPlaneTransaction, context: ReconciliationContext, observation: Observation, cursor: ProducerCursor, effect: ObservationEffect,
 ): Promise<Result<void>> {
   const { workerId, journalId } = observation.position;
   const at = await tx.now();
-  const contact = await tx.reports.recordContact(workerId, at);
-  if (!contact.ok) return contact;
   const effected = await effect(tx, observation, at, context.log);
   if (!effected.ok) return effected;
   const advanced = await advanceCursor(tx, observation, cursor, at);

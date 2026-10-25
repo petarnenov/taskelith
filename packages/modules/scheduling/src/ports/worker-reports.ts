@@ -16,6 +16,9 @@ export interface WorkerReports {
   // Reachable, with the last contact moved to `at` but never backward; each
   // write is `not-found` for a worker without a record.
   recordContact(workerId: WorkerId, at: Instant): Promise<Result<void>>;
+  // Up to `limit` reachable workers last in contact before `before`, oldest
+  // first, become unreachable; it returns them ordered by identity.
+  markContactLost(before: Instant, limit: number): Promise<Result<readonly WorkerId[]>>;
   // Unreachable after its journal was lost or rolled back, until contact.
   recordJournalLoss(workerId: WorkerId): Promise<Result<void>>;
   // Every fence back to no sequence, for a new journal incarnation.
