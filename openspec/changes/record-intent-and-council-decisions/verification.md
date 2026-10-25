@@ -23,10 +23,10 @@ The change cites no new external fact or external link. It refers to decisions a
 
 ## Checks
 
-Run on the working tree at base `166a910` plus this change, before the verification record was committed:
+Run on the working tree at base `166a910` plus this change:
 
-- `npm run openspec -- validate record-intent-and-council-decisions --strict`: passed, with the expected `skip_specs` notice.
-- `make verify`: passed after one fix. The first run failed `verify:package`, because `docs/architecture.md` linked to the new decisions by relative path while only `docs/architecture.md` ships in the package. The links were changed to the repository's absolute GitHub form, and the final run passed:
+- `npm run openspec -- validate record-intent-and-council-decisions --strict`: passed on both runs, with the expected `skip_specs` notice.
+- `make verify`: passed after one fix. The first run failed `verify:package`, because `docs/architecture.md` linked to the new decisions by relative path while only `docs/architecture.md` ships in the package. The links were changed to the repository's absolute GitHub form, and the run after commit `fd61dce` passed:
   - comment length rule: every comment within the rule;
   - workspace and hexagonal boundary checks: passed;
   - 1088 tests passed, 0 failed;
@@ -36,15 +36,28 @@ Run on the working tree at base `166a910` plus this change, before the verificat
   - strict OpenSpec validation: 58 passed, 0 failed;
   - archive dry run: every active change archives into strictly valid specs;
   - package verification: packed allowlist and installed CLI passed.
+- `make verify` was run again after the first review pass's fixes were applied and passed with 1088 tests, 0 failed, coverage 99.24% lines, 91.80% branches, 98.96% functions, 58 strict OpenSpec items, 731 package paths, and the same archive and package results.
 
 ## Independent review
 
-Pending. No reviewer has been assigned for this change yet. Per the governance review process, the assigned reviewer runs read-only with the model and effort set in the invocation, and `verification.md` records the invocation, session ID, snapshot result, findings, and their resolution.
+Reviewer assigned by rotation: Codex CLI (`gpt-6.1-sol`), reasoning effort medium, read-only sandbox, because Claude Code had reviewed the preceding task and the Antigravity CLI is paused until about 2026-10-31. Invocation, run from the worktree with the prompt and log outside it: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`. The prompt named `AGENTS.md`, ADR 0004, the governance review process, the two new ADRs, and the documents this change touches, and listed the owner's decisions for fidelity checking.
+
+- **Pass 1 — session `01a174bc-67d6-75e0-80c7-cffcb62c494f`, head `fd61dce`.** The header confirmed Codex v0.164.0, the model, effort medium, and the read-only sandbox. The snapshot (`git ls-files -co --exclude-standard | xargs shasum -a 256 | shasum -a 256`) was `32c9fe833e65e052a801cd81b1352fd148559bf01a2e46df8133b42593fbb1f5` before and after the pass. Findings: 0 Critical, 5 High, 4 Medium, 0 Low. Resolutions:
+  1. High — partial council substitution and degraded mode were undefined. ADR 0014 decision 2 now requires all three seats, forbids substitution, escalates to a human, and leaves a degraded mode to a separate owner decision; decision 8, the governance policy, and the design agree.
+  2. High — standing approval expanded spec approval into a merge without ratification. ADR 0014 decisions 3 and 6 now state that the standing approval covers specification and merge, that each merge records a use bound to revisions, and that the council may require a per-change vote; the design and the proposal match.
+  3. High — a hold could be placed on a prerequisite after a dependent was requested. ADR 0013 decision 6 now rejects such a hold and names the dependent, defines that a hold never touches prerequisites or siblings, and states that containment is not a dependency; the architecture and the design carry the same rule.
+  4. High — readiness was defined only by dependencies. ADR 0013 decision 5 now defines integration per node and makes graph readiness necessary but not sufficient, with admission, gates, holds, and capacity also required; the architecture and the design agree.
+  5. High — owner-only promotion into `main` was not excluded from general integration authority. The governance Authority paragraph, ADR 0013 decision 7, ADR 0014 decision 9 and its prohibition, the architecture invariants and campaign subsection, and the design now state that no integrator, auto-merge setting, or council approval authorizes that merge.
+  6. Medium — `integrated` had no meaning for a campaign. ADR 0013 decision 5 now defines completion and integration for a change, a campaign, and an intent.
+  7. Medium — the default precedence contradicted the recorded order. ADR 0014 decision 2 and the design now name the owner-approved default Claude, Codex, OpenCode, set at appointment.
+  8. Medium — G4 was presented as a sufficient delivery gate. ADR 0013, ADR 0014, the architecture, the design, the proposal, and this record now say the council needs all three admissions plus the owner's authorization and fix no delivery gate.
+  9. Medium — the appointment delegation to a project-maintainer was unrecorded. ADR 0014 decision 1 now reserves appointment and rotation to the owner.
+- Pass 2 is pending and will confirm each resolution before reviewing the whole change again.
 
 ## Limitations
 
 - Documentation only. The campaign model, blueprint manifest, dispatcher, branch ladder, council, decision records, and communication plugin are recorded designs, not implemented behavior.
-- The delivery note in ADR 0013 and the delivery-order decision in ADR 0014 mean the council cannot be constituted before three harnesses are admitted, so the earliest gate that can deliver it in full is G4.
+- The delivery note in ADR 0013 and the delivery-order decision in ADR 0014 mean the council cannot be constituted before Claude Code, Codex, and OpenCode are admitted, so the full model follows those admissions and a separate owner authorization; no delivery gate is fixed.
 - No runtime claim is made: `make verify` proves the repository's checks on this tree, not the future behavior of the recorded design.
 
 ## Remaining gates
