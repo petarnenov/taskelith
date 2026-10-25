@@ -207,7 +207,7 @@ for (const platform of ['darwin', 'linux'] as const) {
       const recovered = await recoverExecution(setup.worker, 'record');
       assert.ok(recovered.ok);
       assert.equal(recovered.value.fact, fact);
-      // Recovery spawns nothing; it starts an adopter only where section 6 says.
+      // Recovery never spawns; it starts an adopter where section 6 says.
       assert.deepEqual(setup.started, fact === 'adopted' ? ['adopt'] : []);
       assert.equal(setup.spawner.spawned.length, ['CP8', 'CP9', 'CP11'].includes(point) ? 1 : 0);
     });
