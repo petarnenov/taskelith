@@ -30,4 +30,4 @@ const html = `<!doctype html>
 `;
 mkdirSync('dist', { recursive: true });
 writeFileSync('dist/taskelith-ui-poc.html', html);
-console.log('bytes', html.length);
+console.log('bytes', Buffer.byteLength(html));

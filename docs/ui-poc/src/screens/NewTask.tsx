@@ -170,7 +170,15 @@ const SAMPLES: Record<
 };
 
 function optionOf(id: ChoiceId, value: string): Option {
-  return CHOICES.find((c) => c.id === id)!.options.find((o) => o.id === value)!;
+  const option = CHOICES.find((c) => c.id === id)?.options.find((o) => o.id === value);
+  if (!option) throw new Error('Unknown option ' + id + '=' + value);
+  return option;
+}
+
+function sourceOf(id: SourceId) {
+  const source = SOURCES.find((s) => s.id === id);
+  if (!source) throw new Error('Unknown source ' + id);
+  return source;
 }
 
 function slugOf(title: string): string {
@@ -240,7 +248,7 @@ export function NewTaskScreen() {
     setValues({ ...values, type: sample.type });
     setTouched(true);
     setImported({
-      sourceName: SOURCES.find((s) => s.id === source)!.label,
+      sourceName: sourceOf(source).label,
       ref: sourceInput.trim() || sample.ref,
       kind: sample.kind,
       mapping: sample.mapping,
@@ -323,7 +331,7 @@ export function NewTaskScreen() {
                   flex={1}
                   label="Source reference"
                   value={sourceInput}
-                  placeholder={SOURCES.find((s) => s.id === source)!.placeholder}
+                  placeholder={sourceOf(source).placeholder}
                   onChange={(event) => setSourceInput(event.currentTarget.value)}
                 />
                 <Button variant="light" onClick={importSource}>

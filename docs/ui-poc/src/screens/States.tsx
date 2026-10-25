@@ -127,6 +127,16 @@ function bannerFor(view: View, retried: boolean): Banner | null {
   }
 }
 
+function previewCards(loading: boolean, populated: boolean, count: number): number {
+  if (loading) return 2;
+  return populated ? Math.min(count, 2) : 0;
+}
+
+function previewCount(loading: boolean, populated: boolean, count: number): string {
+  if (loading) return '…';
+  return String(populated ? count : 0);
+}
+
 function PreviewBoard({ view }: { view: View }) {
   const loading = view === 'loading';
   const populated = ['reconnecting', 'no-workers', 'viewer'].includes(view);
@@ -134,7 +144,7 @@ function PreviewBoard({ view }: { view: View }) {
     <ScrollArea type="auto" offsetScrollbars>
       <Group gap={12} wrap="nowrap" align="flex-start" aria-busy={loading}>
         {COLUMNS.map((name, i) => {
-          const cards = loading ? 2 : populated ? Math.min(COUNTS[i], 2) : 0;
+          const cards = previewCards(loading, populated, COUNTS[i]);
           const hint = view === 'no-workers' ? NO_WORKER_HINTS[i] : '';
           return (
             <Stack key={name} gap="xs" w={200} miw={200}>
@@ -143,7 +153,7 @@ function PreviewBoard({ view }: { view: View }) {
                   {name}
                 </Title>
                 <Badge size="sm" variant="default">
-                  {loading ? '…' : populated ? COUNTS[i] : 0}
+                  {previewCount(loading, populated, COUNTS[i])}
                 </Badge>
               </Group>
               <Paper p={6} radius="md" bg="var(--mantine-color-default-hover)" mih={260}>

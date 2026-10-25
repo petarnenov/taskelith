@@ -154,6 +154,16 @@ const BUDGETS = [
   { scope: 'Run · Lint tooling', limit: '2 h per run', confirmed: 78, estimated: 86 },
 ];
 
+function noteColorOf(worker: Worker): MantineColor {
+  if (worker.status === 'lost') return 'red';
+  return worker.disk >= 80 ? 'orange' : 'dimmed';
+}
+
+function accountColor(account: Account, revoked: boolean): MantineColor {
+  if (revoked) return 'dimmed';
+  return account.limited ? 'red' : 'orange';
+}
+
 function meterColor(percent: number): MantineColor {
   if (percent >= 80) return 'red';
   if (percent >= 60) return 'orange';
@@ -201,7 +211,7 @@ function WorkerCard({
       : { label: 'Online', color: 'teal' };
   const [used, total] = worker.slots;
   const note = draining ? 'Draining: running sessions finish, no new work is admitted.' : worker.note;
-  const noteColor = lost ? 'red' : worker.disk >= 80 ? 'orange' : 'dimmed';
+  const noteColor = noteColorOf(worker);
   return (
     <Card
       withBorder
@@ -375,7 +385,7 @@ export function WorkersScreen() {
                             <Text size="sm" ff="monospace">
                               {account.name}
                             </Text>
-                            <Text size="xs" fw={600} c={off ? 'dimmed' : account.limited ? 'red' : 'orange'}>
+                            <Text size="xs" fw={600} c={accountColor(account, off)}>
                               {off ? 'Revoked' : account.state}
                             </Text>
                             {!off ? (

@@ -56,7 +56,7 @@ const NAV: { screen: Screen; label: string }[] = [
   { screen: 'states', label: 'Board states' },
 ];
 
-const SCREENS: Record<Screen, () => ReactNode> = {
+const SCREEN_VIEWS: Record<Screen, () => ReactNode> = {
   board: BoardScreen,
   session: SessionScreen,
   reviews: ReviewsScreen,
@@ -117,7 +117,7 @@ function AccountMenu() {
     <Menu position="bottom-end" width={280} withArrow>
       <Menu.Target>
         <UnstyledButton aria-label="Account menu">
-          <Avatar size={44} radius="xl" color="initials" name="P P">
+          <Avatar size={44} radius="xl" color="orange">
             PP
           </Avatar>
         </UnstyledButton>
@@ -165,8 +165,8 @@ function SignInScreen() {
           <Text size="sm" c="dimmed">
             You are signed out. Agents and merges keep running; only this browser session ended.
           </Text>
-          <TextInput label="Username" defaultValue="pp" autoComplete="username" />
-          <PasswordInput label="Password" defaultValue="poc-password" autoComplete="current-password" />
+          <TextInput label="Username" placeholder="pp" autoComplete="username" />
+          <PasswordInput label="Password" placeholder="Any password" autoComplete="current-password" />
           <Button type="submit" h={44}>
             Sign in
           </Button>
@@ -179,7 +179,7 @@ function SignInScreen() {
 function Shell() {
   const { screen, go, signedIn } = usePoc();
   const [opened, { toggle, close }] = useDisclosure(false);
-  const Current = SCREENS[screen];
+  const Current = SCREEN_VIEWS[screen];
   const navigate = (to: Screen) => {
     go(to);
     close();

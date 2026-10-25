@@ -6,13 +6,13 @@ Started on 2026-10-25 by the UI worker (Desi) on the owner's request in the proj
 
 Source: on 2026-10-25 the owner asked for the UI proof of concept to be reworked to use only Mantine (D17), chose a new interactive build with real Mantine components over a restyled canvas, and then asked to record it as the official proof of concept and the basis of item 28, to mark the old canvas as superseded, and to share the link with the other sessions. Asked whether to store the source, the owner chose to store it in the repository as reference material. During pass 1 the owner asked what the "PP" avatar shows and why there is no sign-out; the proof of concept gained an account menu with "Sign out" and a sign-in screen.
 
-Outside the repository: the Mantine build is published as the private artifact `M8VnvLLCrAMiBPrkKezGzk` (version 2 matches `docs/ui-poc/`), and the old canvas `Q84QABcHZZ1ow9B7UcZdNS` was retitled "Taskelith UI POC (superseded)" with a note naming the new artifact (canvas version 29).
+Outside the repository: the Mantine build is published as the private artifact `M8VnvLLCrAMiBPrkKezGzk` (version 3 matches `docs/ui-poc/`), and the old canvas `Q84QABcHZZ1ow9B7UcZdNS` was retitled "Taskelith UI POC (superseded)" with a note naming the new artifact (canvas version 29).
 
 ## Author self-check before review
 
 - ADR 0011 keeps every ADR 0008 decision and changes only its storage consequence, which ADR 0008's status and consequence now name.
 - `docs/ui-poc/` has no `package.json` or lockfile and lies outside `tsconfig.check.json`, the workspaces, the coverage scope (`dist/` only), and the package `files` list.
-- The README rebuild was run from a fresh scratch copy (`mktemp -d`) with the pinned versions and Node.js 24.22.1: `tsc -p .` passed and the output was byte-identical to the published build (SHA-256 `85c3e6f2…c791`, 901,446 bytes).
+- The README rebuild was run from a fresh scratch copy (`mktemp -d`) with the pinned versions and Node.js 24.22.1: `tsc -p .` passed and the output was byte-identical to the build published as version 2 (SHA-256 `85c3e6f2…c791`). After the pass-2 fixes the build is version 3 (SHA-256 `732f02e9…6ca1`, 901,814 bytes by `wc -c`).
 - The proof of concept was checked in a browser (Playwright, 1440 × 900 and 390 × 844): all ten screens render without console errors, no page scrolls horizontally at 390 px, and "Sign out" leads to the sign-in screen and back.
 - Evidence check: the two artifact links are marked as unversioned private pages; all other links are relative.
 
@@ -37,6 +37,20 @@ Reviewer: Claude Code with `claude-fable-5-1`, effort medium, run from the workt
   10. Low: unlabeled external links. Marked as unversioned private pages.
   11. Low: D1 and D17 referred to the old canvas. A note under the decisions table names ADR 0011.
   12. to 19. Low, reference source: merged duplicate imports (`Inbox.tsx`); imported `ReactNode` instead of the global `React` namespace (`main.tsx`, `BoardDrawers.tsx`); cleared the session stop timer and expired board timers; replaced the nested ternary with `verifyStateOf`; named `MERGE_GATE_POSITION`; formatted the source with Prettier 3.6.2 at 110 columns (only single prose strings stay longer); derived `Screen` from one `SCREENS` list; removed the heading inside the card's button.
+
+- **Pass 2 — session `67c8d11a-d623-48c0-9e4d-56c0e7f37dc2`, head `1a26731`.** The JSON `modelUsage` confirmed `claude-fable-5-1`; the snapshot was `ff74ffec…4bb0` before and after the pass. The reviewer confirmed all 19 pass-1 resolutions and reviewed the whole change again, including the account menu and sign-in screen. Findings: 0 Critical, 0 High, 0 Medium, 10 Low. Because the pass found only Low findings, they were fixed without another review pass, as the review process allows; these fixes are unreviewed:
+  1. `build.mjs` logged UTF-16 length as bytes. It uses `Buffer.byteLength`, and the README size comes from `wc -c`.
+  2. The README said only "Sign out" works. It names both working actions and the inert ones.
+  3. "Account settings" and "Change password" had no owner. The README assigns them to G3 item 10.
+  4. The sign-in screen prefilled a password. Both fields now use placeholders.
+  5. The avatar duplicated `name` and children. It shows the initials with a fixed color.
+  6. Nested ternaries in `board-model.ts`, `Workers.tsx`, and `States.tsx` became small named functions or a lookup table.
+  7. Non-null assertions in `NewTask.tsx` became `optionOf` and `sourceOf`, which throw a clear error.
+  8. Two `SCREENS` constants. The component map in `main.tsx` is `SCREEN_VIEWS`.
+  9. A cast before the check in `store.tsx`. It uses the type guard `isScreen`.
+  10. Item 28 still said "recreating the design". It now ports the proof of concept within D17.
+
+  After the fixes: `tsc -p .` passed, all ten screens rendered without console errors in the browser, `npm run openspec -- validate record-mantine-ui-poc --strict` and `make verify` passed.
 
   Out of scope, noted by the reviewer: the comment-length rule and `scripts/check-comment-length.ts` do not cover `.tsx`; item 28 should extend them before the source becomes product code.
 

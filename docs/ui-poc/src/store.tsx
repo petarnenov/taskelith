@@ -32,9 +32,13 @@ interface PocState {
 
 const PocContext = createContext<PocState | null>(null);
 
+function isScreen(name: string): name is Screen {
+  return (SCREENS as readonly string[]).includes(name);
+}
+
 function screenFromHash(): Screen {
-  const name = window.location.hash.replace('#', '') as Screen;
-  return (SCREENS as readonly string[]).includes(name) ? name : 'board';
+  const name = window.location.hash.replace('#', '');
+  return isScreen(name) ? name : 'board';
 }
 
 export function PocProvider({ children }: { children: ReactNode }) {

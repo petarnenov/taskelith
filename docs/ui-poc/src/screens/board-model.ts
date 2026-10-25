@@ -132,19 +132,31 @@ function verifyStateOf(task: BoardTask, resolving: boolean): VerifyState {
   return 'none';
 }
 
+const VERIFY_COLOR: Record<VerifyState, string> = {
+  stale: 'orange',
+  fresh: 'teal',
+  running: 'dimmed',
+  none: 'dimmed',
+};
+
+function reviewStateOf(task: BoardTask, reviewed: boolean): string {
+  if (reviewed) return 'review passed';
+  return task.stage === 4 ? 'in review' : 'not reviewed';
+}
+
 export function traceFor(task: BoardTask) {
   if (task.stage === 0) return [];
   const resolving = task.mergeStep !== undefined;
   const verifyState = verifyStateOf(task, resolving);
   const reviewed = task.stage === 5 || (isMergeReady(task) && !resolving);
-  const review = reviewed ? 'review passed' : task.stage === 4 ? 'in review' : 'not reviewed';
+  const review = reviewStateOf(task, reviewed);
   const verify = {
     stale: 'evidence stale (new head)',
     fresh: 'verify fresh',
     running: 'verify running',
     none: 'not verified',
   }[verifyState];
-  const color = verifyState === 'stale' ? 'orange' : verifyState === 'fresh' ? 'teal' : 'dimmed';
+  const color = VERIFY_COLOR[verifyState];
   return ['R1', 'R2'].map((req, i) => ({
     req,
     path: task.stage >= 2 ? 'task ' + (i + 1) + '.1 → attempt #' + (i + 1) : 'tasks not planned yet',
