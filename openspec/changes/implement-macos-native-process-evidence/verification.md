@@ -46,6 +46,8 @@ On `0dbc4aa`, before review: `make verify` passed: comment rule, workspace packa
 
 On `db3939f`, after the pass 1 fixes: `make verify` passed with 719 tests, coverage 99.28% lines, 93.31% branches, 99.31% functions; `darwin.js` 98.70% lines and 97.10% branches, `darwin-native.js` 95.74% and 77.78%, `process-set.js` 100% and 92.00%.
 
+On `85929cf`, after the pass 2 fixes: `make verify` passed with 720 tests, coverage 99.28% lines, 93.33% branches, 99.31% functions; `darwin-native.js` 100% lines and 90.91% branches; the inventory has 731 package paths and 41 reviewed coverage gaps.
+
 The two-listing test fails when `EMPTY_LISTINGS` is set to 1 and passes with 2. The worker-supervisor tests passed three runs in a row on this host.
 
 ## Independent review
@@ -61,7 +63,12 @@ Assigned reviewer: Claude Code with `claude -p --model claude-fable-5-1 --effort
   6. Low: a `koffi` call that throws escaped the `Result` path. `DarwinNative` returns `Result` from every call, and `darwin-native.ts` turns a throw into a failure; tests cover a failing `sysctl` and clock.
   7. Low: the register omitted `p_pid` and the C reference was not kept. `p_pid` is listed, and the source and output are in `docs/qualification/koffi-3.3.3/`.
 
-- **Pass 2 attempts without a session.** Three invocations of the pass 2 prompt on `2acf747` ended with `Error: No messages returned from query` and produced no session, output, or review; snapshots before and after each were equal (`69b2b0e7…daf1c0`). Their logs are kept outside the worktree. On the coordinator's instruction (2026-10-25), pass 2 is retried with spaced attempts.
+- **Pass 2 attempts without a session.** Three invocations of the pass 2 prompt on `2acf747` ended with `Error: No messages returned from query` and produced no session, output, or review; snapshots before and after each were equal (`69b2b0e7…daf1c0`). Their logs are kept outside the worktree. On the coordinator's instruction (2026-10-25), pass 2 was first to be retried with spaced attempts; a fourth attempt was scheduled and stopped before it ran. Under the owner's rule of 2026-10-25, a reviewer that is unavailable is not used for the next 30 minutes and the next reviewer in the rotation takes over, so the coordinator moved pass 2 to Codex. Pass 2 still counts as the second of three passes.
+
+- **Pass 2 — Codex CLI, session `01a1729f-8ba1-7d32-856e-9eef46773fe3`, reviewed `6ea9b15` (diff `e0db869...HEAD`).** Invocation: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> -`, the prompt on stdin with the full diff except the generated inventory files and the lockfile, the pass 1 findings, and their resolutions. The header confirms `gpt-6.1-sol`, reasoning effort medium, and the read-only sandbox. Snapshots before and after were equal (`84d53c4f…48c15b`). The reviewer confirmed resolutions 1 to 5 and 7 of pass 1 as correct and complete and resolution 6 as partial (finding 2 below); it ran the comment and inventory checks and 49 tests, of which two native tests were blocked by its sandbox (`EPERM` on `ps` and `sysctl`). Findings: 0 Critical, 0 High, 1 Medium, 2 Low. Resolutions, in `85929cf`:
+  1. Medium: a platform package recorded from the lockfile had no gap when it declared a license, so no review was required although no license text was inspected. Such a record now has the gap `license-text-not-inspected`, and the 20 `koffi` platform paths are reviewed in `license-reviews.json`, keyed by `lockfile`, as `text-located` through the MIT `LICENSE.txt` at the upstream tag `koffi/3.3.3`; all 20 published tarballs were listed and ship no license file. A test checks that a missing review fails.
+  2. Low: no test made a native call throw, so removing the guard would go unnoticed. `loadDarwinNative` takes the `koffi` loader as a parameter, and a test with a binding whose functions throw checks that `sysctl`, `mach_continuous_time`, and `mach_timebase_info` each return a failure.
+  3. Low: contract section 12 still assigned a single-instant macOS listing. It names the listing and its two-listing proof with the residual risk of section 8.
 
 ## Limitations
 
