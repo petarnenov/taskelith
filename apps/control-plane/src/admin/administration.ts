@@ -125,7 +125,7 @@ export class Administration {
   // The enrollment service as the HTTP layer (item 16) uses it, with a
   // system connection for revocations that the caller closes.
   async enrollmentService(
-    commandConsumers: WorkerCommandConsumers = NO_ENROLLMENT,
+    commandConsumers: WorkerCommandConsumers,
   ): Promise<Result<{ service: EnrollmentService; close(): Promise<void> }>> {
     const identity = await this.verifiedInstallation();
     if (!identity.ok) return identity;
@@ -152,7 +152,7 @@ export class Administration {
   async #asOperator<T>(operatorSecret: string, command: (enrollment: EnrollmentService) => Promise<Result<T>>): Promise<Result<T>> {
     const authenticated = await this.#operator.authenticate(operatorSecret);
     if (!authenticated.ok) return authenticated;
-    const enrollment = await this.enrollmentService();
+    const enrollment = await this.enrollmentService(NO_ENROLLMENT);
     if (!enrollment.ok) return enrollment;
     try {
       return await command(enrollment.value.service);

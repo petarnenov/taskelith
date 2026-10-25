@@ -62,7 +62,6 @@ class MutableClock {
   }
 }
 
-// Keeps the last published revocation list, as the broker's account does.
 class RecordingConsumers implements WorkerCommandConsumers {
   readonly ensured: string[] = [];
   down = false;
@@ -74,6 +73,7 @@ class RecordingConsumers implements WorkerCommandConsumers {
   }
 }
 
+// Keeps the last published revocation list, as the broker's account does.
 class RecordingBroker implements BrokerCredentials {
   readonly issued: string[] = [];
   revoked: string[] = [];

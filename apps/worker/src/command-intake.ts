@@ -63,7 +63,7 @@ export class CommandIntake {
     const { metadata, payload } = command;
     const source = {
       commandId: metadata.commandId as CommandId,
-      digest: createHash('sha256').update(JSON.stringify(command)).digest('hex'),
+      digest: createHash('sha256').update(canonicalJson(command)).digest('hex'),
       correlationId: metadata.correlationId as CorrelationId,
     };
     if (!supportsProtocolVersion(SUPPORTED_PROTOCOL_VERSIONS, payload.protocolVersion)) {
@@ -144,6 +144,15 @@ function intentOf({ metadata, payload }: Offer): Result<LaunchIntent> {
   const { cpuMillicores, memoryMebibytes, hardControls } = payload.reservation.requested;
   const requested = Object.freeze({ cpuMillicores, memoryMebibytes, hardControls: Object.freeze([...hardControls]) });
   return ok(Object.freeze({ ...values, requested }) as LaunchIntent);
+}
+
+// Sorted keys, so a resent command's digest does not depend on its sender's
+// key order; the content itself must be the stored command's.
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (typeof value !== 'object' || value === null) return JSON.stringify(value);
+  const entries = Object.entries(value).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+  return `{${entries.map(([key, field]) => `${JSON.stringify(key)}:${canonicalJson(field)}`).join(',')}}`;
 }
 
 // The reader validated the body against the schema its type names.

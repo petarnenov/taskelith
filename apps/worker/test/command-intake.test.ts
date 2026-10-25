@@ -279,6 +279,7 @@ test('an inventory request is answered with a fresh snapshot in parts', async ()
   });
   intake = newIntake({ ...CAPACITY, slots: 300, cpuMillicores: 300_000, memoryMebibytes: 400_000 });
   for (let number = 1; number <= 300; number += 1) value(await deliver(offer(number)));
+  beginLaunch();
   value(await deliver(request('worker-2')));
   assert.equal(broker.published.length, 0);
   value(await deliver(request(WORKER)));
@@ -288,20 +289,35 @@ test('an inventory request is answered with a fresh snapshot in parts', async ()
     ['report-1', 'request-1', 1, 1, 2, 300], ['report-1', 'request-1', 1, 2, 2, 300],
   ]);
   assert.deepEqual(parts.map((part) => (part.assignments as unknown[]).length), [256, 44]);
+  assert.deepEqual(parts.map((part) => part.executions), [
+    [{ executionId: 'execution-1', assignmentId: 'assignment-1', state: 'launch-intended', uncertain: false }], [],
+  ]);
   assert.deepEqual(broker.published.map((publication) => publication.messageId), ['report-1.1', 'report-1.2']);
   broker.failAfter = 2;
   assert.equal(failed(await deliver(request(WORKER))).code, 'unavailable');
 });
 
-test('an execution fact is not published until the launches map it', async () => {
-  value(await deliver(offer(1)));
+// W2 for the first intent, as 20c's launches will journal it.
+function beginLaunch(): void {
   const { assignmentId, attemptId, ownershipGeneration, admissionId, admissionGeneration } = value(root.journal.snapshot()).intents[0]!;
-  const executionId = id('ExecutionId', 'execution-1');
   value(root.journal.beginAuthorization({
     operationId: id('OperationId', 'operation-1'), workerId: BINDING.workerId, recoveryEpoch: BINDING.recoveryEpoch,
-    assignmentId, attemptId, ownershipGeneration, executionId, admissionId, admissionGeneration, reportsNotStarted: false,
+    assignmentId, attemptId, ownershipGeneration, executionId: id('ExecutionId', 'execution-1'), admissionId, admissionGeneration,
+    reportsNotStarted: false,
   }));
-  value(root.journal.recordNotStarted(executionId));
+}
+
+test('a resent command with its keys in another order is a duplicate', async () => {
+  value(await deliver(offer(1)));
+  const { metadata, payload } = offer(1);
+  const reordered = { payload, metadata: Object.fromEntries(Object.entries(metadata as object).reverse()) };
+  assert.deepEqual(value(await deliver(reordered)), { kind: 'duplicate' });
+});
+
+test('an execution fact is not published until the launches map it', async () => {
+  value(await deliver(offer(1)));
+  beginLaunch();
+  value(root.journal.recordNotStarted(id('ExecutionId', 'execution-1')));
   assert.equal(failed(await publishDueObservations(publisherOptions())).code, 'precondition-failed');
   assert.equal(broker.published.length, 1);
 });

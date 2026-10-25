@@ -112,10 +112,7 @@ async function connectBroker(settings: WorkerSettings, dependencies: WorkerDepen
   if (!address.ok) return address;
   const observationSubject = address.value.observationSubject(identity.workerId);
   if (!observationSubject.ok) return observationSubject;
-  // Sorted, so a reordered configuration declares nothing new.
-  const { controls, ...capacity } = settings.capacity;
-  const enforceableControls = [...controls].sort();
-  const declared = root.journal.recordCapacity({ ...capacity, enforceableControls, protocolVersions: SUPPORTED_PROTOCOL_VERSIONS });
+  const declared = declareCapacity(settings, root);
   if (!declared.ok) return declared;
   const transport = await dependencies.connect({
     server: settings.natsUrl, creds: credentials.value.broker, address: address.value, workerId: identity.workerId,
@@ -124,6 +121,13 @@ async function connectBroker(settings: WorkerSettings, dependencies: WorkerDepen
   if (!transport.ok) return transport;
   const loops = startLoops({ settings, dependencies, root, transport: transport.value, address: address.value, observationSubject: observationSubject.value });
   return ok(runningWorker(root, transport.value, loops));
+}
+
+// Sorted, so a reordered configuration declares nothing new.
+function declareCapacity(settings: WorkerSettings, root: WorkerRoot): Result<void> {
+  const { controls, ...capacity } = settings.capacity;
+  const enforceableControls = [...controls].sort();
+  return root.journal.recordCapacity({ ...capacity, enforceableControls, protocolVersions: SUPPORTED_PROTOCOL_VERSIONS });
 }
 
 interface LoopContext {

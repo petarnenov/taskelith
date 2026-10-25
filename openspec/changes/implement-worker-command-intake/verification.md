@@ -65,3 +65,23 @@ Before pass 1, `make verify` had failed once on an integration test: two workers
 | L5: `dueForPublication` reads the whole outbox | Deferred to 20e with the backlog limit; recorded in the design's risks. |
 | L6: `controls` and `enforceableControls` name one concept | Kept: Fleet's name predates this change, and the declaration follows the wire schema's name. |
 | L7: the format change has no release note under `chore` | Recorded above for the promotion to `main`. |
+
+## Review pass 2
+
+- Reviewer: the same invocation, run in the worktree at `357c3d5`, with the pass 1 session named and its resolutions to confirm first.
+- Model confirmation: `claude-fable-5-1` in `modelUsage`. Session ID: `4db92f70-855c-4fea-84ea-2c0b794a10ff`.
+- Snapshot: `99f94aa286be0c282fe685d059fe6a110f26840c8c8af21a3904f1900295d049` before and after; unchanged.
+- Pass 1 resolutions: every fix confirmed; M3's rebuttal and the kept or deferred Lows accepted.
+- Findings: 0 Critical, 0 High, 1 Medium, 6 Low.
+
+| Finding | Resolution |
+| --- | --- |
+| M1: the digest depends on the sender's serialization; a rebuilt resend would be a conflict | Fixed: the digest uses sorted keys (test with reordered keys), and design D1 records the obligation on item 21 to republish the stored command unchanged. |
+| L1: a test comment stood above the wrong class | Fixed. |
+| L2: a default parameter hid the refusing enrollment mode | Fixed: the parameter is required, and the administration tool passes `NO_ENROLLMENT` explicitly. |
+| L3: the worker's consumer and publisher log nothing | Deferred to 20d and 20e; recorded in the design's risks. |
+| L4: an inventory execution was never checked against the schema | Fixed: the inventory test journals W2 for one offer and checks its `launch-intended` execution. |
+| L5: `connectBroker` mixed levels | Fixed: `declareCapacity` extracted. |
+| L6: the fresh schema kept migration defaults | Fixed: the defaults remain only in the migration. |
+
+After the pass 2 fixes, `make verify` passed again: 1117 tests, 1117 passed, 0 failed, with every other step as above.

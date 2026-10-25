@@ -30,9 +30,9 @@ CREATE TABLE launch_intent (
   admission_id TEXT NOT NULL,
   admission_generation INTEGER NOT NULL,
   recovery_epoch INTEGER NOT NULL,
-  cpu_millicores INTEGER NOT NULL DEFAULT 0,
-  memory_mebibytes INTEGER NOT NULL DEFAULT 0,
-  hard_controls TEXT NOT NULL DEFAULT '[]'
+  cpu_millicores INTEGER NOT NULL,
+  memory_mebibytes INTEGER NOT NULL,
+  hard_controls TEXT NOT NULL
 ) STRICT;
 
 CREATE TABLE assignment_end (

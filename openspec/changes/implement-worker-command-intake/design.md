@@ -23,7 +23,7 @@
 `CommandIntake.handle` turns each delivered command into one `JournaledCommand` and calls `recordCommand`, which is W1. A rejection or refusal is journaled with its observation in that transaction, and an accepted offer with its `assignment-accepted` observation. The consumer acknowledges only after `handle` answers ok, so a failed or interrupted commit leaves the command unacknowledged, and the redelivery is a duplicate of a committed W1 or a first W1.
 
 - **Order.** The reader applies `VersionedCommand`, the version window, and the schema. A command of an unsupported version passes with its stable part only; the intake checks the window again and rejects it with `protocol-not-supported`, then rejects another `workerId` with `addressed-to-another-worker`. Only then does it read the command's own fields.
-- **Digest.** The SHA-256 of the command's JSON, so a reused `commandId` with other content is a conflict.
+- **Digest.** The SHA-256 of the command's JSON with sorted keys, so a reused `commandId` with other content is a conflict, whatever the sender's key order. Every field counts, `issuedAt` included: a resent command must be the stored command, as item 12's outbox publishes it. **Obligation on item 21:** a re-sent offer (wire contracts section 6) republishes the stored command unchanged; a rebuilt one with a new `issuedAt` would be a conflict and end in quarantine (review pass 2, M1).
 
 ### D2: commands in any order
 
@@ -67,6 +67,7 @@ The worker's broker user may read its consumer but not create it, and before thi
 ## Risks / Trade-offs
 
 - **Admission outside W1.** Correct only while one consumer journals commands. 20c adds launches, which change executions but never add intents, so the count can only fall between the read and W1.
+- **Worker logs.** The worker has no logger yet, so its consumer and publisher log nothing; a redelivery, a quarantined command, or a stopped publication leaves no trace on the worker. The worker's logs belong with the reachability and limits of 20d and 20e (review pass 2, L3).
 - **Outbox reads.** `dueForPublication` reads the whole outbox on every idle poll. Within the backlog limit of 10,000 entries that is bounded; a batch limit belongs with the backlog limit in 20e (review pass 1, L5).
 - **Unmapped execution facts.** Until 20c, an execution fact in the outbox would stop publication; no code before 20c journals one.
 - **Contract description.** The `EnrollmentRequest` description in `execution.openapi.json` now states the enrollment order of 20a's D1. It is a description-only change that the coordinator approved, and `make contract-compatibility` reports no breaking change, so the document version is unchanged.

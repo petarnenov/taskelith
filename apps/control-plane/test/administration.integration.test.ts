@@ -178,7 +178,7 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
   value(namespace.create('broker-authority', authorityKeys));
 
   await sql(database, 'UPDATE installation SET recovery_epoch = 2');
-  const closed = await administration.enrollmentService();
+  const closed = await administration.enrollmentService(new NatsCommandConsumers(controlPlane.jsm, address));
   assert.equal(!closed.ok && closed.error.code, 'precondition-failed', 'a mismatch with the record keeps the installation closed');
 });
 
