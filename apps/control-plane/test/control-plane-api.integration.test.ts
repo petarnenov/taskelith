@@ -517,8 +517,10 @@ describe('enrollment and quarantine', () => {
       };
       assert.ok(checkMessageSchema('CapacityDeclaredObservation', declared).ok);
       await broker.js.publish(value(address.observationSubject(workerId)), encodeJson(declared), { msgID: 'declared-observed-1' });
+      // Other tests' workers are confirmed too, so the row must be this one's.
       const published = async () => (await sql<{ published: boolean }>(database,
-        "SELECT published_at IS NOT NULL AS published FROM outbox WHERE event_type = 'execution.observations.confirmed'"))[0]?.published === true;
+        `SELECT published_at IS NOT NULL AS published FROM outbox
+         WHERE event_type = 'execution.observations.confirmed' AND strpos(message, $1) > 0`, [workerId]))[0]?.published === true;
       await waitFor(published);
       const [worker] = await sql<{ reachable: boolean }>(database, 'SELECT reachable FROM workers WHERE worker_id = $1', [workerId]);
       assert.equal(worker?.reachable, true);
