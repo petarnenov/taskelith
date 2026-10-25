@@ -5,9 +5,9 @@ The test "an idle window reads below the resolution" in `packages/adapters/node-
 ## What Changes
 
 - `EventLoopLagMonitor` takes an optional histogram, typed `LoopDelayHistogram` (the part of Node's `ELDHistogram` it reads), and defaults to `monitorEventLoopDelay` as before; production callers are unchanged.
-- The idle test feeds the monitor a recorded histogram of an idle window's intervals and checks that it reads below the resolution, exactly the p99 interval less the resolution, and that the monitor enables and disables its histogram.
+- The idle test feeds the monitor Node's own HDR histogram (`createHistogram`) filled with an idle window's intervals and checks that it reads below the resolution, the p99 interval less the resolution within the histogram's precision, and that the monitor enables and disables its histogram.
 - A new test checks that each sample covers only its own window: the histogram is reset after each sample, and a blocked interval does not carry into the next window.
-- The blocked-loop test keeps Node's real histogram: load can only raise the measured delay, so it stays deterministic, and it proves the integration with `monitorEventLoopDelay`.
+- The blocked-loop test keeps Node's real histogram and proves the integration with `monitorEventLoopDelay`; load can only raise the measured delay, so its lower bound cannot fail spuriously. Its upper bound of 5 s, which a long process pause could break, becomes a finiteness check.
 
 ## Capabilities
 

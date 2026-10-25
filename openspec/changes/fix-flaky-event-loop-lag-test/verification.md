@@ -6,6 +6,19 @@ Assigned on 2026-10-25 by the coordinator (Niki) to the UI worker (Desi) as find
 
 Source of the problem: "an idle window reads below the resolution" failed in 1 of 7 full `make verify` runs on Linux and once in a macOS pre-push run, and passed alone.
 
+## Author self-check before review
+
+- Against the requirement "Event-loop lag and JSON lines": the blocked scenario still runs on Node's real histogram and asserts at least 30 ms; the idle scenario asserts a lag below the resolution from idle intervals; the new window test covers "each sample window".
+- Against the coordinator's scope: the monitor's behavior and default are unchanged (`apps/control-plane/src/composition/control-plane.ts` still calls `new EventLoopLagMonitor()`), and the diagnosis found the monitor correct under load, so nothing is reported against it.
+- Evidence check: no external link; the counts below come from the commands listed under "Commands".
+
+## Commands
+
+- Load: 32 busy loops, `for i in $(seq 1 32); do node -e 'for(;;){}' & done`, stopped after each series.
+- One run of the test file, as `npm test` runs it: `node --experimental-strip-types --test --experimental-test-coverage packages/adapters/node-observability/test/node-observability.test.ts`, repeated N times and counting non-zero exits and the failing test names.
+- The old test was run from a temporary copy of `origin/dev`'s test file (`git show origin/dev:<path> > test/baseline.tmp.test.ts`), deleted after the series.
+- Histogram probe outside the test process: a script that creates `monitorEventLoopDelay({ resolution: 10 })` 200 times, waits 100 ms with each enabled, and counts the windows whose p99 less 10 ms is at least 10 ms, together with the intervals per window.
+
 ## Diagnosis
 
 Environment: macOS 26 (Darwin 25.6.0, x86_64, 16 logical CPUs), Node.js v24.22.1, npm 12.2.1. Load: 32 busy-loop Node processes (`node -e 'for(;;){}'`) while the test file ran with `node --experimental-strip-types --test --experimental-test-coverage`, as `npm test` runs it.
@@ -18,11 +31,16 @@ Conclusion: the monitor reads the delay correctly. With eight or nine intervals,
 
 ## Checks
 
-Under the same load after the fix, the full test file with coverage: 0 failures in 200 runs and 0 in a further 600 runs (0 in 800). The file runs 12 tests, all passing. `npm run verify:comments` passed. `npm run openspec -- validate fix-flaky-event-loop-lag-test --strict` passed. Before pass 1, `make verify` passed: 915 tests, 0 failures; coverage 99.15 % lines, 91.90 % branches, 98.88 % functions; strict OpenSpec validation 53 passed, 0 failed; archive dry run and package verification passed.
+Under the same load after the first fix, the full test file with coverage: 0 failures in 200 runs and 0 in a further 600 runs (0 in 800). After the pass-1 fixes: 0 failures in 400 runs. The file runs 12 tests, all passing. `npm run verify:comments` passed. `npm run openspec -- validate fix-flaky-event-loop-lag-test --strict` passed. Before pass 1, `make verify` passed: 915 tests, 0 failures; coverage 99.15 % lines, 91.90 % branches, 98.88 % functions; strict OpenSpec validation 53 passed, 0 failed; archive dry run and package verification passed. After the pass-1 fixes, `make verify` passed again: 915 tests, 0 failures; coverage 99.15 % lines, 91.89 % branches, 98.88 % functions; 53 strict validations.
 
 ## Independent review
 
-Pending.
+Reviewer: Codex (`gpt-6.1-sol`), reasoning effort medium, read-only sandbox, run from the worktree as `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, with the prompt and log outside the worktree.
+
+- **Pass 1 — session `01a173c6-8da3-7132-8c71-f716f2cdf997`, head `4a53a33`.** The header confirmed Codex v0.164.0, the model, reasoning effort medium, and the read-only sandbox; the snapshot (`git ls-files -co --exclude-standard | xargs shasum -a 256 | shasum -a 256`) was `f5818ba40cc02676add9dc26d66b3ece597d69934fe01dc7fc765551cdec8139` before and after the pass. The reviewer confirmed that production behavior and the control-plane caller are unchanged, the `test` type, and `skip_specs`, and ran the file (12 of 12 passed). Findings: 0 Critical, 0 High, 2 Medium, 1 Low. All accepted and resolved (unreviewed until pass 2):
+  1. Medium: the test's own histogram returned exact values, while Node's HDR histogram rounds to bucket boundaries, so the exact assertions did not match Node. The test now records the intervals into Node's `createHistogram()` and asserts within its 0.1 % precision.
+  2. Medium: the blocked-loop test's upper bound of 5 s could fail on a long process pause with a correct monitor. It is now a finiteness check, and the proposal and design say so.
+  3. Low: no self-check, evidence check, or commands before pass 1. They are recorded above.
 
 ## Limitations
 
