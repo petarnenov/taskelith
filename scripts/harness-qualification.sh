@@ -29,7 +29,11 @@ for name in TASKELITH_UBUNTU_BASE TASKELITH_NODE_VERSION TASKELITH_NODE_SHA256_A
   fi
 done
 # OUT is checked before it is created, so a refused path leaves nothing.
-out="$(cd "$(dirname "$1")" && pwd -P)/$(basename "$1")"
+if [ -e "$1" ]; then
+  out="$(cd "$1" && pwd -P)"
+else
+  out="$(cd "$(dirname "$1")" && pwd -P)/$(basename "$1")"
+fi
 case "$out/" in
   "$repository/"*)
     echo "harness-qualification.sh: OUT must be outside the worktree" >&2

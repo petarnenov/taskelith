@@ -53,6 +53,8 @@ listing /opt/harnesses "$HOME" > "$listings/before.txt" && [ -s "$listings/befor
   || fail_setup "listing before"
 observe environment 0 sh -c \
   'env | grep -E "^(PATH|HOME|CLAUDE_CONFIG_DIR|CODEX_HOME|DISABLE_AUTOUPDATER|DISABLE_TELEMETRY)=" | sort'
+observe environment-names 0 sh -c 'env | cut -d= -f1 | sort'
+expect secret-like-names-absent 1 '' sh -c 'env | cut -d= -f1 | grep -E "KEY|TOKEN|SECRET"'
 observe platform 0 uname -sm
 observe os 0 sh -c '. /etc/os-release && echo "$PRETTY_NAME"'
 observe node 0 node --version
@@ -64,9 +66,9 @@ observe claude-musl-package-absent 0 test ! -e "$modules/@anthropic-ai/claude-ag
 expect claude-auth-status 1 '"loggedIn": false' "$claude" auth status
 observe codex-path 0 echo "${codex#"$modules/"}"
 observe codex-sha256 0 sha256_of "$codex"
-observe codex-version 0 codex --version
-expect codex-login-status 1 '^Not logged in' codex login status
-observe codex-schema 0 codex app-server generate-json-schema --out "$HOME/schema"
+observe codex-version 0 "$codex" --version
+expect codex-login-status 1 '^Not logged in' "$codex" login status
+observe codex-schema 0 "$codex" app-server generate-json-schema --out "$HOME/schema"
 observe codex-schema-files 0 bash -c \
   "count=\$(find '$HOME/schema' -type f | wc -l); echo \"\$count\"; test \"\$count\" -gt 0"
 observe codex-schema-sha256 0 bash -o pipefail -c \
