@@ -27,7 +27,7 @@ The publisher SHALL publish an outbox row with `Nats-Msg-Id` set to its event id
 - **THEN** it fails as `unavailable`, and its retry after the heal stores the message once
 
 ### Requirement: Acknowledgement after commit
-A consumer SHALL acknowledge a message only after its handler reported the commit. It SHALL redeliver a message whose commit failed after a backoff, and SHALL extend `ack_wait` while a commit runs.
+A consumer SHALL acknowledge a message only after its handler reported the commit. It SHALL redeliver a message whose commit failed after a backoff, during which later messages MAY pass it, and SHALL extend `ack_wait` while a commit runs.
 
 #### Scenario: Failed commit
 - **WHEN** the handler fails the first delivery of a command

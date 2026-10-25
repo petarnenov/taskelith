@@ -33,6 +33,7 @@ export const MAX_DELIVERIES_REASON = 'max-deliveries';
 const REDRIVEN = /^(.*)\.redrive\.(\d+)$/;
 const CAPTURE_BATCH = 100;
 const CAPTURE_EXPIRES_MILLISECONDS = 1000;
+export const RECORDS_PAGE = 100;
 
 export interface QuarantineRecord {
   readonly sequence: number;
@@ -54,12 +55,14 @@ export class Quarantine {
   readonly #js: JetStreamClient;
   readonly #publisher: JetStreamPublisher;
   readonly #address: TransportAddress;
+  readonly #limits: TransportLimits;
 
-  constructor(jsm: JetStreamManager, js: JetStreamClient, address: TransportAddress) {
+  constructor(jsm: JetStreamManager, js: JetStreamClient, address: TransportAddress, limits: TransportLimits = TRANSPORT_LIMITS) {
     this.#jsm = jsm;
     this.#js = js;
     this.#publisher = new JetStreamPublisher(js);
     this.#address = address;
+    this.#limits = limits;
   }
 
   // Captures the advisories that are waiting; returns how many it copied.
@@ -75,12 +78,14 @@ export class Quarantine {
     }
   }
 
-  async records(): Promise<Result<readonly QuarantineRecord[]>> {
+  // Up to `limit` records from the sequence on; the caller pages on from the
+  // last record's sequence plus one.
+  async records(fromSequence = 1, limit = RECORDS_PAGE): Promise<Result<readonly QuarantineRecord[]>> {
     try {
       const stream = this.#address.streamName('quarantine');
       const { first_seq, last_seq, messages } = (await this.#jsm.streams.info(stream)).state;
       const records: QuarantineRecord[] = [];
-      for (let seq = first_seq; messages > 0 && seq <= last_seq; seq++) {
+      for (let seq = Math.max(first_seq, fromSequence); messages > 0 && seq <= last_seq && records.length < limit; seq++) {
         const stored = await this.#jsm.streams.getMessage(stream, { seq });
         if (stored) records.push(toRecord(stored));
       }
@@ -129,13 +134,19 @@ export class Quarantine {
       message.term('not an advisory of a transport stream');
       return false;
     }
-    let original: StoredMsg | null;
     try {
-      original = await this.#jsm.streams.getMessage(advisory.stream, { seq: advisory.stream_seq });
+      const sent = await this.#copy(advisory, source);
+      if (sent) message.ack();
+      else message.nak(retryDelayMilliseconds(message.info.deliveryCount, this.#limits));
+      return sent;
     } catch {
-      message.nak(retryDelayMilliseconds(message.info.deliveryCount));
+      message.nak(retryDelayMilliseconds(message.info.deliveryCount, this.#limits));
       return false;
     }
+  }
+
+  async #copy(advisory: Advisory, source: StreamKind): Promise<boolean> {
+    const original = await this.#jsm.streams.getMessage(advisory.stream, { seq: advisory.stream_seq });
     const sent = await this.#publisher.publish({
       subject: this.#address.quarantineSubject(source),
       body: original?.data ?? new Uint8Array(),
@@ -143,8 +154,6 @@ export class Quarantine {
       messageId: `${advisory.stream}.${advisory.consumer}.${advisory.stream_seq}`,
       headers: diagnostics(advisory, original),
     });
-    if (sent.ok) message.ack();
-    else message.nak(retryDelayMilliseconds(message.info.deliveryCount));
     return sent.ok;
   }
 
@@ -157,7 +166,9 @@ export class Quarantine {
 function readAdvisory(message: JsMsg): Advisory | undefined {
   try {
     const advisory = message.json<Advisory>();
-    return typeof advisory?.stream === 'string' && Number.isSafeInteger(advisory.stream_seq) ? advisory : undefined;
+    const valid = typeof advisory?.stream === 'string' && typeof advisory.consumer === 'string'
+      && Number.isSafeInteger(advisory.stream_seq) && Number.isSafeInteger(advisory.deliveries);
+    return valid ? advisory : undefined;
   } catch {
     return undefined;
   }
@@ -189,9 +200,9 @@ function diagnostics(advisory: Advisory, original: StoredMsg | null): MsgHdrs {
   const h = newHeaders();
   h.set(QUARANTINE_HEADERS.sourceStream, advisory.stream);
   h.set(QUARANTINE_HEADERS.originalStreamSequence, String(advisory.stream_seq));
-  h.set(QUARANTINE_HEADERS.consumer, advisory.consumer);
+  h.set(QUARANTINE_HEADERS.consumer, headerValue(advisory.consumer));
   h.set(QUARANTINE_HEADERS.deliveries, String(advisory.deliveries));
-  h.set(QUARANTINE_HEADERS.reason, advisory.reason ?? MAX_DELIVERIES_REASON);
+  h.set(QUARANTINE_HEADERS.reason, headerValue(advisory.reason ?? MAX_DELIVERIES_REASON));
   if (original === null) {
     h.set(QUARANTINE_HEADERS.originalMissing, 'true');
     return h;
@@ -200,6 +211,11 @@ function diagnostics(advisory: Advisory, original: StoredMsg | null): MsgHdrs {
   const messageId = original.header?.get('Nats-Msg-Id');
   if (messageId) h.set(QUARANTINE_HEADERS.originalMessageId, messageId);
   return h;
+}
+
+// A header value may not hold line breaks, which a termination reason could.
+function headerValue(text: string): string {
+  return text.replace(/[\r\n]+/g, ' ');
 }
 
 function toRecord(stored: StoredMsg): QuarantineRecord {

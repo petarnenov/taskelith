@@ -53,6 +53,7 @@ Recorded before pass 1.
   - a crash point (`OutboxPublish.before`, SIGKILL) between the broker acknowledgement and the outbox mark;
   - a Toxiproxy disconnect for publication and for a consumer.
 - Obligations for later items:
+  - item 20 handles every delivered command whatever arrived before it, because a failed commit lets later commands of the same worker pass (pass-2 finding 1);
   - item 16 builds the wire commands from the provisional scheduling outbox payloads (coordinator decision Q2), and adds the operator API and authorization for redrive (Q3);
   - item 13 provides credentials, TLS, `installationId`, and the product server users;
   - items 13 or 16 stop command publication under restore quarantine (Q5).

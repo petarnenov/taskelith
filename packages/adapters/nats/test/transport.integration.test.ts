@@ -5,7 +5,9 @@ import { err, failure, ok } from '@taskelith/kernel';
 import {
   applyOnce,
   encodeJson,
+  ensureObservationConsumer,
   ensureStreams,
+  ensureWorkerConsumer,
   JetStreamPublisher,
   MAX_DELIVERIES_REASON,
   observationConsumer,
@@ -47,11 +49,16 @@ describe('topology', () => {
       [commands.config.max_msgs_per_subject, commands.config.discard_new_per_subject, commands.config.max_msg_size],
       [10_000, true, 1024 ** 2],
     );
+    expectOk(await ensureWorkerConsumer(transport.jsm, address, 'worker-1', { ...TEST_LIMITS, maxDeliver: 4 }));
+    await observationReader(transport, address, 'execution');
+    expectOk(await ensureObservationConsumer(transport.jsm, address, 'execution', { ...TEST_LIMITS, maxDeliver: 2 }));
     const consumer = await transport.jsm.consumers.info(address.streamName('commands'), 'worker-1');
     assert.deepEqual(
       [consumer.config.filter_subject, consumer.config.max_deliver, consumer.config.max_ack_pending],
-      [expectOk(address.commandSubject('worker-1')), 3, 4],
+      [expectOk(address.commandSubject('worker-1')), 4, 4],
     );
+    const reader = await transport.jsm.consumers.info(address.streamName('observations'), 'execution');
+    assert.deepEqual([reader.config.filter_subject, reader.config.max_deliver], [address.allWorkerSubjects('observations'), 2]);
   });
 });
 
@@ -112,7 +119,7 @@ describe('worker command consumer', () => {
       ['execution.observations.confirmed', 1],
       ['command-1', 2],
     ]);
-    const [record] = await quarantined(new Quarantine(transport.jsm, transport.js, address), 1);
+    const [record] = await quarantined(new Quarantine(transport.jsm, transport.js, address, TEST_LIMITS), 1);
     assert.deepEqual(
       [record?.source, record?.reason, record?.originalMessageId, record?.consumer, record?.originalSubject],
       ['commands', 'not UTF-8 JSON', 'command-bad', 'worker-1', subject],
@@ -126,7 +133,7 @@ describe('worker command consumer', () => {
     expectOk(await new JetStreamPublisher(transport.js).publish({ subject, body: encodeJson(offer('command-1')), messageId: 'command-1' }));
     const handler = recordingHandler([failed, failed, failed]);
     running((signal) => workerCommandConsumer(transport.js, address, 'worker-1', handler.handle, { limits: TEST_LIMITS }).run(signal));
-    const quarantine = new Quarantine(transport.jsm, transport.js, address);
+    const quarantine = new Quarantine(transport.jsm, transport.js, address, TEST_LIMITS);
 
     const [record] = await quarantined(quarantine, 1);
     assert.deepEqual(
@@ -137,6 +144,7 @@ describe('worker command consumer', () => {
     await waitFor(() => handler.deliveries.length === 4);
     assert.deepEqual([handler.deliveries[3]?.identity, handler.deliveries[3]?.deliveryCount], ['command-1', 1]);
     assert.deepEqual(expectOk(await quarantine.records()), []);
+    assert.deepEqual(expectOk(await quarantine.records(record!.sequence + 1, 1)), []);
     assert.equal((await quarantine.redrive(record!.sequence)).ok, false);
   });
 
@@ -206,12 +214,13 @@ describe('quarantine keeper', () => {
     const advisorySubject = `$JS.EVENT.ADVISORY.CONSUMER.MSG_TERMINATED.${address.streamName('commands')}.worker-1`;
     transport.connection.publish(advisorySubject, '{');
     transport.connection.publish(advisorySubject, JSON.stringify({ stream: 'OTHER', stream_seq: 1 }));
+    transport.connection.publish(advisorySubject, JSON.stringify({ stream: address.streamName('commands'), stream_seq: 1 }));
     await transport.connection.flush();
     const subject = expectOk(address.commandSubject('worker-1'));
     expectOk(await new JetStreamPublisher(transport.js).publish({ subject, body: encodeJson({ junk: true }), messageId: 'command-bad' }));
     running((signal) => workerCommandConsumer(transport.js, address, 'worker-1', recordingHandler().handle, { limits: TEST_LIMITS }).run(signal));
 
-    const records = await quarantined(new Quarantine(transport.jsm, transport.js, address), 1);
+    const records = await quarantined(new Quarantine(transport.jsm, transport.js, address, TEST_LIMITS), 1);
     assert.deepEqual(records.map((r) => r.originalMessageId), ['command-bad']);
     await waitFor(async () => {
       const info = await transport.jsm.consumers.info(address.streamName('advisories'), 'quarantine');
@@ -241,11 +250,15 @@ describe('observation consumers', () => {
     await waitFor(() => execution.deliveries.length === 2 && learning.deliveries.length === 2);
     assert.deepEqual(execution.deliveries.map((d) => d.identity), ['observation-1', 'report-1.1']);
     assert.deepEqual(learning.deliveries.map((d) => d.identity), ['observation-1', 'report-1.1']);
-    const records = await quarantined(new Quarantine(transport.jsm, transport.js, address), 2);
+    const records = await quarantined(new Quarantine(transport.jsm, transport.js, address, TEST_LIMITS), 2);
     assert.deepEqual(records.map((r) => [r.source, r.consumer, r.originalMessageId]).sort(), [
       ['observations', 'execution', 'observation-bad'],
       ['observations', 'learning', 'observation-bad'],
     ]);
     assert.match(records[0]!.reason, /^violates ExecutionStartedObservation: /);
+    const quarantine = new Quarantine(transport.jsm, transport.js, address, TEST_LIMITS);
+    const [first] = expectOk(await quarantine.records(1, 1));
+    const rest = expectOk(await quarantine.records(first!.sequence + 1));
+    assert.deepEqual([first, ...rest].map((r) => r.sequence), records.map((r) => r.sequence));
   });
 });

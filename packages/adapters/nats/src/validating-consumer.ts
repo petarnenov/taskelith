@@ -55,14 +55,18 @@ export class ValidatingConsumer {
     return this.#options.limits ?? TRANSPORT_LIMITS;
   }
 
+  // Looks the consumer up once, and again only after a failed pull.
   async run(signal: AbortSignal): Promise<void> {
     let failedPulls = 0;
+    let consumer: Consumer | undefined;
     while (!signal.aborted) {
       try {
-        await this.#pull(await this.#js.consumers.get(this.#stream, this.#durable), signal);
+        consumer ??= await this.#js.consumers.get(this.#stream, this.#durable);
+        await this.#pull(consumer, signal);
         failedPulls = 0;
       } catch {
         // A lost connection or a denied pull; the next pull retries.
+        consumer = undefined;
         failedPulls += 1;
         await abortableDelay(retryDelayMilliseconds(failedPulls, this.#limits), signal);
       }

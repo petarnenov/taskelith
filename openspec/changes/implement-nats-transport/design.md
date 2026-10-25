@@ -63,6 +63,7 @@ The coordinator took the author's recommendations. These are coordinator decisio
 - **Consumers.** One message per pull, in order, through `fetch`; `consume()` is unmeasured, so it is not used. A message fetched in a batch behind a long commit would pass its `ack_wait` and be delivered again, so the consumer fetches one at a time. `max_ack_pending` bounds the broker side.
   - The handler commits the effect with its inbox record and answers.
   - `ok` → `ack`. A failure, or a handler that throws → `nak` with the backoff of the delivery count. The broker quarantines the message after `max_deliver`.
+  - Order holds only while commits succeed: during the backoff of a failed commit, the next command of the same worker is delivered first. A repeat after the broker window or a redrive also arrives out of order. The contract makes no rule depend on delivery order (section 2), so a receiver must handle each command whatever came before it: item 20 handles, for example, an assignment end or a cancellation that arrives before its offer.
   - `working()` runs every third of `ack_wait` while the handler runs, so a long commit is not delivered to a second handler meanwhile.
   - Validation before the handler: a command against `VersionedCommand`, then, when this build supports the version, against its own schema. A notice against its own schema. An observation or inventory part against its schema.
   - A message that fails is terminated with a short reason. It is not answered with an observation, as the contract requires.
