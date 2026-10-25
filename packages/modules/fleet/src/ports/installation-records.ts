@@ -1,9 +1,8 @@
 import type { Result } from '@taskelith/kernel';
 import type { InstallationIdentity } from '../domain/installation.js';
 
-// The record outside the database, under `control-plane/` of the data root,
-// which a database restore cannot roll back (trust model section 2).
-// `create` fails with `conflict` when a record exists.
+// The record outside the database, under `control-plane/`, which a restore
+// cannot roll back (trust model 2); `create` fails with `conflict` if present.
 export interface InstallationRecord {
   read(): Promise<Result<InstallationIdentity | undefined>>;
   create(identity: InstallationIdentity): Promise<Result<void>>;

@@ -13,9 +13,8 @@ interface ClaimsReply {
   readonly error?: { readonly code?: number; readonly description?: string };
 }
 
-// Issues worker users with the subject permissions of the execution
-// contract, and revokes them by pushing the account JWT with its
-// revocations over the system account, without a server reload (O2 (a)).
+// Issues worker users with the contract's subject permissions; revokes them
+// by pushing the account JWT over the system account, with no reload (O2 a).
 export class NatsBrokerCredentials implements BrokerCredentials {
   readonly #authority: BrokerAuthority;
   readonly #system: NatsConnection;

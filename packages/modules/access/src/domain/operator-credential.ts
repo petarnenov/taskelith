@@ -1,5 +1,5 @@
 import type { Instant } from '@taskelith/kernel';
-import type { SecretHash } from '../ports/secrets.js';
+import type { SecretHash } from './secret-hash.js';
 
 // The installation-owner credential: one current generation, replaced only
 // by bootstrap (generation 1) or by an audited reset (trust model 2).

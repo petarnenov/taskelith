@@ -7,4 +7,5 @@ export {
 export { AUDIT_TEXT_MAX_LENGTH, type AuditEvent, type AuditEventKind, type OperatorCredential } from './domain/operator-credential.js';
 export { OPERATOR_CREDENTIALS_CONFORMANCE } from './ports/access-conformance.js';
 export type { OperatorCredentials } from './ports/operator-credentials.js';
-export type { IssuedSecret, SecretHash, SecretKind, Secrets } from './ports/secrets.js';
+export type { SecretHash } from './domain/secret-hash.js';
+export type { IssuedSecret, SecretKind, Secrets } from './ports/secrets.js';

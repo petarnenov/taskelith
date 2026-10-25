@@ -46,9 +46,8 @@ export interface EnrollmentServiceDependencies {
   readonly limits?: FleetLimits;
 }
 
-// Enrollment, rotation, revocation, and worker authentication of trust
-// model section 4. A failure's `reason` detail tells the HTTP layer (item
-// 16) which status it is: 401, 409, or 422 of `enrollWorker`.
+// Enrollment, rotation, revocation, and authentication (trust model sec. 4).
+// A failure's `reason` maps to 401, 409, or 422 of `enrollWorker` (item 16).
 export class EnrollmentService {
   readonly #deps: EnrollmentServiceDependencies;
   readonly #limits: FleetLimits;

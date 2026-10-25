@@ -9,9 +9,8 @@ export interface FleetRegistry {
   addToken(token: EnrollmentToken): Promise<Result<void>>;
   // An unused token by its hash; a used one reads as absent.
   unusedToken(hash: SecretHash): Promise<Result<EnrollmentToken | undefined>>;
-  // Uses the token and adds the worker together. `conflict` with reason
-  // `token-used` when the token was used meanwhile, and `journal-enrolled`
-  // when the journal belongs to a worker already.
+  // Uses the token and adds the worker together; `conflict` with the reason
+  // `token-used` or `journal-enrolled` when either is taken.
   enroll(tokenHash: SecretHash, worker: EnrolledWorker): Promise<Result<void>>;
   worker(workerId: WorkerId): Promise<Result<EnrolledWorker | undefined>>;
   // `conflict` unless the stored current generation is `expectedGeneration`.

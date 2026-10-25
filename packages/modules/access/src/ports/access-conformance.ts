@@ -2,7 +2,7 @@ import { parseInstant, type Instant, type Result } from '@taskelith/kernel';
 import { expectCode, expectSame, expectSuccess, type ConformanceCase } from '@taskelith/sdlc';
 import type { AuditEvent, OperatorCredential } from '../domain/operator-credential.js';
 import type { OperatorCredentials } from './operator-credentials.js';
-import type { SecretHash } from './secrets.js';
+import type { SecretHash } from '../domain/secret-hash.js';
 
 // The shared suite for OperatorCredentials; each case gets an empty store.
 

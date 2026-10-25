@@ -38,9 +38,8 @@ down() {
   rm -rf "$TASKELITH_SERVICES_SECRETS"
 }
 
-# The test operator, accounts, and users (D9 (a)), and a test CA with the
-# server's certificate (O3 (c)), made by openssl of the pinned postgres image.
-# A running project keeps its secrets, which its server loaded at start.
+# Test operator, accounts, users (D9 a) and a test CA by the postgres image's
+# openssl (O3 c); a running project keeps the secrets its server loaded.
 prepare_secrets() {
   local postgres_image
   if [ -f "$TASKELITH_SERVICES_SECRETS/server-cert.pem" ]; then return; fi

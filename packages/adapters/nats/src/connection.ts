@@ -63,7 +63,7 @@ async function open(endpoint: TransportEndpoint, inboxPrefix: string | undefined
       authenticator: credsAuthenticator(new TextEncoder().encode(endpoint.creds)),
       inboxPrefix,
       maxReconnectAttempts: -1,
-      // Without a CA the connection stays plain, even where the server offers TLS.
+      // Without a CA it stays plain, even where the server offers TLS.
       tls: endpoint.tls === undefined ? null : { ...endpoint.tls },
     });
     return ok({ connection, js: jetstream(connection), close: () => connection.close() });
