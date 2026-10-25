@@ -14,7 +14,7 @@ The change adds no requirement: the `delivery-planning` requirement "Owner decis
 
 ## Checks
 
-In the worktree, Node v24.22.1, before the first review pass: `npm run openspec -- validate record-g3-decisions --strict` passed; a script recomputed the waves from the "Depends on" column (12 waves, all matching) and checked that every decision in a "Blocked by" entry lists that item under "Applies to" (no mismatch); `make verify` passed (strict OpenSpec validation 50 passed, 0 failed; archive dry run and package verification passed).
+In the worktree, Node v24.22.1, before the first review pass and again after the pass-1 fixes (the wave and blocking check and `make verify` passed both times): `npm run openspec -- validate record-g3-decisions --strict` passed; a script recomputed the waves from the "Depends on" column (12 waves, all matching) and checked that every decision in a "Blocked by" entry lists that item under "Applies to" (no mismatch); `make verify` passed (strict OpenSpec validation 50 passed, 0 failed; archive dry run and package verification passed).
 
 ## Independent review
 
@@ -25,6 +25,8 @@ Reviewer: Codex (`gpt-6.1-sol`), reasoning effort medium, read-only sandbox, run
   2. Medium: the terminal's process lifecycle was undefined. Item 3 attaches a terminal only to a running attempt's execution, and item 39 runs it inside that execution's authority and process set, ending on cancellation or at the attempt's end and never recovered as a separate execution; item 41 cancels the attempt while the terminal is open.
   3. Low: item 1 still described its evaluation as preceding the decisions. It now evaluates the libraries and tools of the decided options.
 
+- **Pass 2 — session `01a172c6-cdca-76d1-b661-23224cf71929`, head `f59cd3f`.** The header confirmed the model, reasoning effort medium, and the read-only sandbox; the snapshot was `332247cf…6f19` before and after the pass. The reviewer confirmed all three pass-1 resolutions and reviewed the whole change again: 42 consecutive items, 12 matching waves, the longest chain, and D15 blocking only items 35 and 36. Findings: 0 Critical, 0 High, 0 Medium, 0 Low. Only this record entry and task 2.2 changed after the pass.
+
 ## Limitations
 
 - The plan remains a draft that the G2 closure may change.
@@ -32,6 +34,5 @@ Reviewer: Codex (`gpt-6.1-sol`), reasoning effort medium, read-only sandbox, run
 
 ## Remaining gates
 
-- Independent review.
 - Coordinator integration into `dev` and archive.
 - The owner's decision D15 after item 2.
