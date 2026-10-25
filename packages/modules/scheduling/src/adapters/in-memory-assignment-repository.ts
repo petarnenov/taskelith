@@ -1,6 +1,6 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type { AssignmentId } from '@taskelith/execution';
-import { checkGeneration, type Generation } from '@taskelith/sdlc';
+import { checkGeneration, checkNextGeneration, type Generation } from '@taskelith/sdlc';
 import type { Assignment } from '../domain/assignment.js';
 import type { AssignmentRepository } from '../ports/assignment-repository.js';
 
@@ -30,6 +30,8 @@ export class InMemoryAssignmentRepository implements AssignmentRepository {
     if (stored === undefined) return err(failure('not-found', `assignment ${assignment.id} does not exist`, { assignment: assignment.id }));
     const generation = checkGeneration(`assignment ${assignment.id}`, stored.generation, expectedGeneration);
     if (!generation.ok) return generation;
+    const next = checkNextGeneration(`assignment ${assignment.id}`, assignment.generation, expectedGeneration);
+    if (!next.ok) return next;
     const held = this.#heldReservationConflict(assignment);
     if (!held.ok) return held;
     this.#assignments.set(assignment.id, assignment);

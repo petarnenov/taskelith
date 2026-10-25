@@ -74,47 +74,67 @@ test('an inbox entry commits with the state it applied, and a repeat is a duplic
   assert.deepEqual(crashPoints.reached, ['InboxCommit.before', 'InboxCommit.after', 'InboxCommit.before']);
 });
 
-// Two writers read the same held reservations and each adds one for another
-// attempt: SERIALIZABLE aborts one of them, which then reruns from scratch.
-test('a lost serialization race reruns the whole transaction and then commits', async () => {
-  const database = open();
-  let bothRead: () => void = () => {};
-  const barrier = new Promise<void>((resolve) => { bothRead = resolve; });
+// Each writer reads both assignments and adds one: a write skew that
+// SERIALIZABLE must break by aborting one of them.
+function skewedWriters(database: PostgresDatabase) {
+  const ids = ['assignment-a', 'assignment-b'].map((id) => value(parseIdentifier('AssignmentId', id)));
+  let release: () => void = () => {};
+  const bothRead = new Promise<void>((resolve) => { release = resolve; });
   let reads = 0;
-  const runs = { first: 0, second: 0 };
-  const writer = (name: 'first' | 'second', id: string) => database.transaction(async (tx) => {
-    runs[name] += 1;
-    const held = await tx.assignments.get(value(parseIdentifier('AssignmentId', 'assignment-0')));
-    const seen = held.ok ? 1 : 0;
-    if (runs[name] === 1 && ++reads === 2) bothRead();
-    if (runs[name] === 1) await barrier;
-    const added = await tx.assignments.add(assignment(id, `attempt-${id}`));
-    if (!added.ok) return added;
-    return tx.outbox.append(command(`offer-${id}-${seen}`));
+  const runs: number[] = [0, 0];
+  const writer = (index: number) => database.transaction(async (tx) => {
+    runs[index] = runs[index]! + 1;
+    for (const id of ids) await tx.assignments.get(id);
+    if (runs[index] === 1) {
+      if (++reads === 2) release();
+      await withDeadline(bothRead, 'both writers to read');
+    }
+    const added = await tx.assignments.add(assignment(ids[index]!, `attempt-${index}`));
+    return added.ok ? tx.outbox.append(command(`offer-${ids[index]}`)) : added;
   });
-  const results = await Promise.all([writer('first', 'a'), writer('second', 'b')]);
-  assert.deepEqual(results, [{ ok: true, value: undefined }, { ok: true, value: undefined }]);
-  assert.deepEqual([runs.first, runs.second].sort(), [1, 2]);
+  return { runs, results: () => Promise.all([writer(0), writer(1)]) };
+}
+
+function withDeadline<T>(promise: Promise<T>, what: string, milliseconds = 10_000): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`timed out waiting for ${what}`)), milliseconds);
+  });
+  return Promise.race([promise, expired]).finally(() => clearTimeout(timer));
+}
+
+test('a lost serialization race reruns the whole transaction and then commits', async () => {
+  const writers = skewedWriters(open());
+  assert.deepEqual(await writers.results(), [{ ok: true, value: undefined }, { ok: true, value: undefined }]);
+  assert.deepEqual([...writers.runs].sort(), [1, 2]);
   assert.deepEqual(await counts(), { assignments: 2, outbox: 2, inbox: 0 });
 });
 
 test('retries stop after the configured attempts with unavailable', async () => {
   assert.equal(SERIALIZATION_ATTEMPTS, 5);
-  const database = open({ serializationAttempts: 1 });
-  let bothRead: () => void = () => {};
-  const barrier = new Promise<void>((resolve) => { bothRead = resolve; });
-  let reads = 0;
-  const writer = (id: string) => database.transaction(async (tx) => {
-    await tx.assignments.get(value(parseIdentifier('AssignmentId', 'assignment-0')));
-    if (++reads === 2) bothRead();
-    await barrier;
-    return tx.assignments.add(assignment(id, `attempt-${id}`));
-  });
-  const results = await Promise.all([writer('a'), writer('b')]);
+  const results = await skewedWriters(open({ serializationAttempts: 1 })).results();
   const failed = results.filter((result) => !result.ok);
   assert.equal(failed.length, 1);
   assert.equal(!failed[0]!.ok && failed[0]!.error.code, 'unavailable');
   assert.equal(!failed[0]!.ok && failed[0]!.error.details.attempts, '1');
+  assert.deepEqual(await counts(), { assignments: 1, outbox: 1, inbox: 0 });
+});
+
+test('work that catches a failed statement and returns Ok commits nothing and is told so', async () => {
+  const database = open();
+  assert.ok((await database.transaction((tx) => tx.assignments.add(assignment('assignment-1')))).ok);
+  const crashPoints = new CrashPoints();
+  const swallowing = open({ crashPoints });
+  const result = await swallowing.transaction(async (tx) => {
+    await tx.outbox.append(command('offer-assignment-2'));
+    const nullGeneration = { ...assignment('assignment-2', 'attempt-2'), generation: null as never };
+    await tx.assignments.add(nullGeneration).catch(() => undefined);
+    return { ok: true as const, value: undefined };
+  });
+  assert.equal(!result.ok && result.error.code, 'internal');
+  assert.equal(!result.ok && result.error.details.outcome, 'rolled-back');
+  assert.deepEqual(crashPoints.reached, ['OutboxCommit.before']);
+  assert.deepEqual(await counts(), { assignments: 1, outbox: 0, inbox: 0 });
 });
 
 test('a unique constraint is a conflict, and a defect in the work is rethrown', async () => {
@@ -132,7 +152,7 @@ test('a unique constraint is a conflict, and a defect in the work is rethrown', 
   assert.deepEqual(await counts(), { assignments: 2, outbox: 0, inbox: 0 });
 });
 
-test('the relay reads unpublished messages in commit order and marks them once', async () => {
+test('the relay reads unpublished messages in append order and marks them once', async () => {
   const crashPoints = new CrashPoints();
   const database = open();
   const relay = new PostgresOutboxRelay(database, crashPoints);

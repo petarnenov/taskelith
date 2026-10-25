@@ -18,7 +18,7 @@ interface MigrationFile {
 }
 
 // Applies the pending migrations, one transaction per file, after checking
-// that no applied file changed: node-pg-migrate records names only.
+// applied files against checksums recorded before they ran.
 export async function migrate(url: URL, directory: string = MIGRATIONS_DIRECTORY): Promise<Result<readonly string[]>> {
   const client = new pg.Client({ connectionString: url.href });
   try {
@@ -34,11 +34,11 @@ export async function migrate(url: URL, directory: string = MIGRATIONS_DIRECTORY
     if (changed.length > 0) {
       return err(failure('precondition-failed', `applied migrations differ from their files: ${changed.join(', ')}`, { migrations: changed.join(',') }));
     }
+    await recordPendingChecksums(client, files);
     const applied = await runner({
       dbClient: client, dir: directory, migrationsTable: MIGRATIONS_TABLE, direction: 'up',
       checkOrder: true, singleTransaction: false, noLock: true, log: () => {},
     });
-    await recordChecksums(client, files);
     return ok(applied.map((migration) => migration.name));
   } catch (error) {
     return err(failure('internal', `migration failed: ${(error as Error).message}`));
@@ -55,7 +55,8 @@ async function migrationFiles(directory: string): Promise<readonly MigrationFile
   })));
 }
 
-// An applied migration whose file is missing or whose checksum differs.
+// An applied migration whose file is missing, whose checksum differs, or
+// that has no checksum, which only a migration run outside this one leaves.
 async function changedAppliedFiles(client: pg.Client, files: readonly MigrationFile[]): Promise<readonly string[]> {
   const exists = await client.query('SELECT to_regclass($1) AS table', [MIGRATIONS_TABLE]);
   if (exists.rows[0]?.table === null) return [];
@@ -64,16 +65,19 @@ async function changedAppliedFiles(client: pg.Client, files: readonly MigrationF
   );
   const byName = new Map(files.map((file) => [file.name, file.sha256]));
   return applied.rows
-    .filter((row) => !byName.has(row.name) || (row.sha256 !== null && row.sha256 !== byName.get(row.name)))
+    .filter((row) => row.sha256 === null || row.sha256 !== byName.get(row.name))
     .map((row) => row.name);
 }
 
-async function recordChecksums(client: pg.Client, files: readonly MigrationFile[]): Promise<void> {
+// Records the checksum of every file not yet applied before any of them
+// runs, so a file applied by an interrupted run is checked next time.
+async function recordPendingChecksums(client: pg.Client, files: readonly MigrationFile[]): Promise<void> {
+  const exists = await client.query('SELECT to_regclass($1) AS table', [MIGRATIONS_TABLE]);
+  const appliedFilter = exists.rows[0]?.table === null ? '' : `WHERE f.name NOT IN (SELECT name FROM ${MIGRATIONS_TABLE})`;
   await client.query(
     `INSERT INTO ${CHECKSUMS_TABLE} (name, sha256)
-     SELECT m.name, f.sha256 FROM ${MIGRATIONS_TABLE} m
-     JOIN unnest($1::text[], $2::text[]) AS f(name, sha256) ON f.name = m.name
-     ON CONFLICT (name) DO NOTHING`,
+     SELECT f.name, f.sha256 FROM unnest($1::text[], $2::text[]) AS f(name, sha256) ${appliedFilter}
+     ON CONFLICT (name) DO UPDATE SET sha256 = excluded.sha256`,
     [files.map((file) => file.name), files.map((file) => file.sha256)],
   );
 }

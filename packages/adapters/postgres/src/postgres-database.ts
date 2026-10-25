@@ -13,6 +13,12 @@ export const SERIALIZATION_BACKOFF_MILLISECONDS = 10;
 
 const UNIQUE_VIOLATION = '23505';
 
+// The server answers COMMIT with ROLLBACK when the work went on after a
+// failed statement, which it caught instead of returning an `Err`.
+const ABORTED_BY_A_FAILED_STATEMENT = failure(
+  'internal', 'a failed statement aborted the transaction, so nothing was committed', { outcome: 'rolled-back' },
+);
+
 export interface PostgresDatabaseOptions {
   readonly crashPoints?: CrashPointHook;
   readonly maxConnections?: number;
@@ -75,8 +81,9 @@ export class PostgresDatabase {
       await session.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
       const transaction = new PostgresTransaction(session);
       const result = await work(transaction);
+      // Nothing was committed whether or not the rollback is confirmed.
       if (!result.ok) {
-        await session.query('ROLLBACK');
+        broken = await rollbackOrBreak(session);
         return done(result);
       }
       const points = commitPoints(transaction);
@@ -89,12 +96,9 @@ export class PostgresDatabase {
       for (const point of points) this.#crashPoints.reach(`${point}.after`);
       return done(result);
     } catch (error) {
-      if (!(error instanceof StatementError)) {
-        await rollbackQuietly(session);
-        throw error;
-      }
-      if (error.isConnectionLoss) broken = error;
-      else await rollbackQuietly(session);
+      const lost = error instanceof StatementError && error.isConnectionLoss;
+      broken = lost ? error : await rollbackOrBreak(session);
+      if (!(error instanceof StatementError)) throw error;
       return statementOutcome(error);
     } finally {
       client.off('error', ignoreConnectionError);
@@ -106,7 +110,8 @@ export class PostgresDatabase {
   // is not retried; a serialization failure at commit is.
   async #commit(session: Session): Promise<Result<void>> {
     try {
-      await session.query('COMMIT');
+      const committed = await session.query('COMMIT');
+      if (committed.command !== 'COMMIT') return err(ABORTED_BY_A_FAILED_STATEMENT);
       return ok(undefined);
     } catch (error) {
       if (!(error instanceof StatementError) || !error.isConnectionLoss) throw error;
@@ -139,7 +144,13 @@ function commitPoints(transaction: PostgresTransaction): ('OutboxCommit' | 'Inbo
   ];
 }
 
-async function rollbackQuietly(session: Session): Promise<void> {
-  await session.query('ROLLBACK').catch(() => undefined);
+// A connection whose rollback was not confirmed is destroyed, not reused.
+async function rollbackOrBreak(session: Session): Promise<Error | undefined> {
+  try {
+    await session.query('ROLLBACK');
+    return undefined;
+  } catch (error) {
+    return error as Error;
+  }
 }
 

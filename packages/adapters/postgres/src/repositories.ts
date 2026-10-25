@@ -17,6 +17,7 @@ import type {
   WorkflowRunId,
   WorkflowRunRepository,
 } from '@taskelith/sdlc';
+import { isJsonObject } from '@taskelith/sdlc';
 import { AggregateStore } from './aggregate-store.js';
 import { decodeRecord, decodeTask, encodeRecord } from './record-codec.js';
 import type { Session } from './session.js';
@@ -138,8 +139,8 @@ export class PostgresTaskRepository implements TaskRepository {
   }
 }
 
-// One held reservation per attempt is the partial unique index
-// `assignments_one_held_reservation`.
+// One held reservation per attempt is checked first, so a transaction gets a
+// `conflict` result; the partial unique index guards concurrent writers.
 export class PostgresAssignmentRepository implements AssignmentRepository {
   readonly #session: Session;
   readonly #store: AggregateStore<Assignment>;
@@ -168,14 +169,18 @@ export class PostgresAssignmentRepository implements AssignmentRepository {
     return this.#store.add(assignment, { uniqueConflict: () => this.#heldReservationConflict(assignment) });
   }
 
-  replace(assignment: Assignment, expectedGeneration: Generation): Promise<Result<void>> {
+  async replace(assignment: Assignment, expectedGeneration: Generation): Promise<Result<void>> {
+    if (assignment.reservation.state === 'held') {
+      const held = await this.#heldReservationConflict(assignment);
+      if (!held.ok) return held;
+    }
     return this.#store.replace(assignment, expectedGeneration);
   }
 
   async #heldReservationConflict(assignment: Assignment): Promise<Result<void>> {
     const { rows } = await this.#session.query<{ id: string }>(
-      `SELECT id FROM assignments WHERE attempt_id = $1 AND reservation_state = 'held'`,
-      [assignment.attemptId],
+      `SELECT id FROM assignments WHERE attempt_id = $1 AND reservation_state = 'held' AND id <> $2`,
+      [assignment.attemptId, assignment.id],
     );
     if (rows[0] === undefined) return ok(undefined);
     return err(failure('conflict', `attempt ${assignment.attemptId} already holds a reservation through ${rows[0].id}`, {
@@ -200,6 +205,7 @@ export class PostgresOutbox implements Outbox {
 
   async append(message: OutboxMessage): Promise<Result<void>> {
     const { eventId, eventType } = message.metadata;
+    if (!isJsonObject(message.payload)) return err(failure('invalid', `outbox message ${eventId} has a payload that is not JSON`, { event: eventId }));
     const inserted = await this.#session.query(
       'INSERT INTO outbox (event_id, event_type, subject, message) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING',
       [eventId, eventType, message.subject, encodeRecord(message)],

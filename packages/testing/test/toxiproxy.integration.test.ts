@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict';
 import { connect } from 'node:net';
-import { afterEach, test } from 'node:test';
+import { after, afterEach, test } from 'node:test';
 import pg from 'pg';
-import { Toxiproxy, integrationEndpoint } from '@taskelith/testing';
+import { Toxiproxy, acquireProcessLock, integrationEndpoint } from '@taskelith/testing';
 
-const toxiproxy = new Toxiproxy(integrationEndpoint('TASKELITH_TOXIPROXY_URL'));
+const toxiproxyUrl = integrationEndpoint('TASKELITH_TOXIPROXY_URL');
+const toxiproxy = new Toxiproxy(toxiproxyUrl);
 const postgresRoute = integrationEndpoint('TASKELITH_POSTGRES_PROXY_URL');
 const natsRoute = integrationEndpoint('TASKELITH_NATS_PROXY_URL');
 
+// Test files run in parallel, and each one partitions the shared routes.
+const release = await acquireProcessLock(`toxiproxy-${toxiproxyUrl.port}`);
+after(release);
 afterEach(() => toxiproxy.reset());
 
 type Greeting = 'info' | 'unexpected' | 'closed' | 'silent';

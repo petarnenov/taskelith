@@ -2,7 +2,7 @@ import { parseEventMetadata, parseInstant, type Instant, type Result } from '@ta
 import { parseArtifactRevision, type ArtifactRevision } from '../domain/artifact-revision.js';
 import { openGate, recordGateEvidence, type Gate } from '../domain/gate.js';
 import { parseSemanticApproval } from '../domain/gate-evidence.js';
-import { nextGeneration } from '../domain/generation.js';
+import { nextGeneration, parseGeneration, type Generation } from '../domain/generation.js';
 import { parseOwnershipGeneration } from '../domain/ownership-generation.js';
 import { startStage } from '../domain/stage-progress.js';
 import { admitPlanningTask, useAdmission, type TaskAdmission } from '../domain/task-admission.js';
@@ -11,7 +11,7 @@ import { parseWorkflowDefinition } from '../domain/workflow-definition.js';
 import { beginWorkflowRun, type WorkflowRun } from '../domain/workflow-run.js';
 import { parseWorkflowRunBinding } from '../domain/workflow-run-binding.js';
 import type { AdmissionRepository } from './admission-repository.js';
-import { expectCode, expectSame, expectSuccess, type ConformanceCase } from './conformance-case.js';
+import { expectCode, expectOneWinner, expectRead, expectSame, expectSuccess, type ConformanceCase } from './conformance-case.js';
 import type { GateRepository } from './gate-repository.js';
 import type { Outbox, OutboxMessage } from './outbox.js';
 import type { WorkflowRunRepository } from './workflow-run-repository.js';
@@ -76,6 +76,18 @@ function passed(pending: Gate): Gate {
   return must(recordGateEvidence(pending, pending.generation, evidence, LATER));
 }
 
+// The record a later writer would store over `record`.
+function advanced<Stored extends { readonly generation: Generation }>(record: Stored): Stored {
+  return { ...record, generation: nextGeneration(record.generation) };
+}
+
+function advancedRun(stored: WorkflowRun): WorkflowRun {
+  return { ...stored, progress: { ...stored.progress, generation: nextGeneration(stored.progress.generation) } };
+}
+
+// Beyond 32 bits, so a store must keep the domain's safe-integer range.
+const LARGE_GENERATION = must(parseGeneration(2 ** 31 + 7));
+
 function message(eventId: string): OutboxMessage {
   const metadata = must(parseEventMetadata({
     eventId, eventType: 'sdlc.gate.passed', schemaVersion: 1, occurredAt: AT, correlationId: 'correlation-1',
@@ -90,10 +102,11 @@ export const ADMISSION_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Admissio
       const problems: string[] = [];
       const stored = dispatched(admission('admission-1', [revision('spec', 'aa')]));
       expectSuccess(problems, 'add', await repository.add(stored));
-      const read = await repository.get(stored.id);
-      expectSuccess(problems, 'get', read);
-      if (read.ok) expectSame(problems, 'get', read.value, stored);
+      expectRead(problems, 'get', await repository.get(stored.id), stored);
       expectCode(problems, 'get unknown', await repository.get(admission('admission-x', []).id), 'not-found');
+      const large = { ...admission('admission-2', []), generation: LARGE_GENERATION };
+      expectSuccess(problems, 'add large generation', await repository.add(large));
+      expectRead(problems, 'get large generation', await repository.get(large.id), large);
       return problems;
     },
   },
@@ -103,22 +116,24 @@ export const ADMISSION_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Admissio
       const problems: string[] = [];
       const first = admission('admission-1', []);
       expectSuccess(problems, 'first add', await repository.add(first));
-      expectCode(problems, 'second add', await repository.add(first), 'conflict');
+      expectCode(problems, 'second add', await repository.add(dispatched(first)), 'conflict');
+      expectRead(problems, 'after conflict', await repository.get(first.id), first);
       return problems;
     },
   },
   {
-    name: 'replace compares the stored generation and keeps the record on a conflict',
+    name: 'replace needs the stored generation and the next one, and keeps the record otherwise',
     async check(repository: AdmissionRepository) {
       const problems: string[] = [];
       const admitted = admission('admission-1', [revision('spec', 'aa')]);
       expectSuccess(problems, 'add', await repository.add(admitted));
       const used = dispatched(admitted);
       expectSuccess(problems, 'replace', await repository.replace(used, admitted.generation));
-      expectCode(problems, 'stale replace', await repository.replace(admitted, admitted.generation), 'conflict');
-      const read = await repository.get(admitted.id);
-      if (read.ok) expectSame(problems, 'after conflict', read.value, used);
-      expectCode(problems, 'replace unknown', await repository.replace(admission('admission-x', []), admitted.generation), 'not-found');
+      expectCode(problems, 'stale replace', await repository.replace(dispatched(admitted), admitted.generation), 'conflict');
+      expectCode(problems, 'unchanged generation', await repository.replace(used, used.generation), 'invalid');
+      expectCode(problems, 'older generation', await repository.replace(admitted, used.generation), 'invalid');
+      expectRead(problems, 'after rejected writes', await repository.get(admitted.id), used);
+      expectCode(problems, 'replace unknown', await repository.replace(advanced(admission('admission-x', [])), admitted.generation), 'not-found');
       return problems;
     },
   },
@@ -128,9 +143,9 @@ export const ADMISSION_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Admissio
       const problems: string[] = [];
       const admitted = admission('admission-1', []);
       expectSuccess(problems, 'add', await repository.add(admitted));
-      const results = await Promise.all([1, 2].map(() => repository.replace(dispatched(admitted), admitted.generation)));
-      const wins = results.filter((result) => result.ok).length;
-      if (wins !== 1) problems.push(`concurrent replace: expected one success, got ${wins}`);
+      const used = dispatched(admitted);
+      expectOneWinner(problems, 'concurrent replace', await Promise.all([1, 2].map(() => repository.replace(used, admitted.generation))));
+      expectRead(problems, 'after the race', await repository.get(admitted.id), used);
       return problems;
     },
   },
@@ -143,7 +158,7 @@ export const ADMISSION_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Admissio
       const used = dispatched(admission('admission-3', [revision('spec', 'aa')]));
       for (const stored of [bound, other, used]) expectSuccess(problems, `add ${stored.id}`, await repository.add(stored));
       const listed = await repository.listUnusedBoundTo(revision('spec', 'cc').artifactId);
-      expectSame(problems, 'listed', listed.map((item) => item.id), [bound.id]);
+      expectSame(problems, 'listed', listed, [bound]);
       return problems;
     },
   },
@@ -157,29 +172,27 @@ export const WORKFLOW_RUN_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Workf
       const stored = run('run-1');
       expectSuccess(problems, 'add', await repository.add(stored));
       expectCode(problems, 'second add', await repository.add(stored), 'conflict');
-      const read = await repository.get(stored.id);
-      expectSuccess(problems, 'get', read);
-      if (read.ok) expectSame(problems, 'get', read.value, stored);
+      expectRead(problems, 'get', await repository.get(stored.id), stored);
       expectCode(problems, 'get unknown', await repository.get(run('run-x').id), 'not-found');
       return problems;
     },
   },
   {
-    name: 'replace compares the progress generation',
+    name: 'replace needs the stored progress generation and the next one',
     async check(repository: WorkflowRunRepository) {
       const problems: string[] = [];
       const started = run('run-1');
       expectSuccess(problems, 'add', await repository.add(started));
       const progress = must(startStage(started.progress, started.progress.generation, DEFINITION.stages[0]!.id, [], LATER));
-      const advanced = { ...started, progress };
-      expectSuccess(problems, 'replace', await repository.replace(advanced, started.progress.generation));
-      expectCode(problems, 'stale replace', await repository.replace(started, started.progress.generation), 'conflict');
-      const read = await repository.get(started.id);
-      if (read.ok) expectSame(problems, 'after conflict', read.value, advanced);
-      expectCode(problems, 'replace unknown', await repository.replace(run('run-x'), started.progress.generation), 'not-found');
-      const next = { ...advanced, progress: { ...progress, generation: nextGeneration(progress.generation) } };
-      const results = await Promise.all([1, 2].map(() => repository.replace(next, progress.generation)));
-      if (results.filter((result) => result.ok).length !== 1) problems.push('concurrent replace: expected one success');
+      const moved = { ...started, progress };
+      expectSuccess(problems, 'replace', await repository.replace(moved, started.progress.generation));
+      expectCode(problems, 'stale replace', await repository.replace(advancedRun(started), started.progress.generation), 'conflict');
+      expectCode(problems, 'unchanged generation', await repository.replace(moved, progress.generation), 'invalid');
+      expectRead(problems, 'after rejected writes', await repository.get(started.id), moved);
+      expectCode(problems, 'replace unknown', await repository.replace(advancedRun(run('run-x')), started.progress.generation), 'not-found');
+      const next = advancedRun(moved);
+      expectOneWinner(problems, 'concurrent replace', await Promise.all([1, 2].map(() => repository.replace(next, progress.generation))));
+      expectRead(problems, 'after the race', await repository.get(started.id), next);
       return problems;
     },
   },
@@ -196,30 +209,28 @@ export const GATE_REPOSITORY_CONFORMANCE: readonly ConformanceCase<GateRepositor
       expectSuccess(problems, 'add pending', await repository.add(first.id, gate('gate-2')));
       expectSuccess(problems, 'add other run', await repository.add(second.id, gate('gate-3')));
       expectCode(problems, 'second add', await repository.add(second.id, decided), 'conflict');
-      const read = await repository.get(decided.id);
-      if (read.ok) expectSame(problems, 'get', read.value, decided);
-      else problems.push(`get: ${read.error.message}`);
+      expectRead(problems, 'get', await repository.get(decided.id), decided);
       expectCode(problems, 'get unknown', await repository.get(gate('gate-x').id), 'not-found');
-      const listed = (await repository.listByRun(first.id)).map((item) => item.id).sort();
-      expectSame(problems, 'listed', listed, ['gate-1', 'gate-2']);
+      expectSame(problems, 'listed', await repository.listByRun(first.id), [decided, gate('gate-2')]);
       expectSame(problems, 'listed empty', await repository.listByRun(run('run-x').id), []);
       return problems;
     },
   },
   {
-    name: 'replace compares the gate generation and keeps its run',
+    name: 'replace needs the stored gate generation and the next one, and keeps its run',
     async check(repository: GateRepository) {
       const problems: string[] = [];
       const pending = gate('gate-1');
       expectSuccess(problems, 'add', await repository.add(run('run-1').id, pending));
       const decided = passed(pending);
       expectSuccess(problems, 'replace', await repository.replace(decided, pending.generation));
-      expectCode(problems, 'stale replace', await repository.replace(pending, pending.generation), 'conflict');
-      expectCode(problems, 'replace unknown', await repository.replace(gate('gate-x'), pending.generation), 'not-found');
+      expectCode(problems, 'stale replace', await repository.replace(advanced(pending), pending.generation), 'conflict');
+      expectCode(problems, 'unchanged generation', await repository.replace(decided, decided.generation), 'invalid');
+      expectCode(problems, 'replace unknown', await repository.replace(advanced(gate('gate-x')), pending.generation), 'not-found');
       expectSame(problems, 'listed', await repository.listByRun(run('run-1').id), [decided]);
-      const next = { ...decided, generation: nextGeneration(decided.generation) };
-      const results = await Promise.all([1, 2].map(() => repository.replace(next, decided.generation)));
-      if (results.filter((result) => result.ok).length !== 1) problems.push('concurrent replace: expected one success');
+      const next = advanced(decided);
+      expectOneWinner(problems, 'concurrent replace', await Promise.all([1, 2].map(() => repository.replace(next, decided.generation))));
+      expectRead(problems, 'after the race', await repository.get(decided.id), next);
       return problems;
     },
   },
@@ -234,7 +245,7 @@ export interface OutboxConformanceTarget {
 
 export const OUTBOX_CONFORMANCE: readonly ConformanceCase<OutboxConformanceTarget>[] = Object.freeze([
   {
-    name: 'messages are stored in order under their event identity, once',
+    name: 'messages are stored under their event identity, once, in append order',
     async check({ outbox, stored }: OutboxConformanceTarget) {
       const problems: string[] = [];
       const [first, second] = [message('event-1'), message('event-2')];
@@ -242,6 +253,20 @@ export const OUTBOX_CONFORMANCE: readonly ConformanceCase<OutboxConformanceTarge
       expectSuccess(problems, 'second append', await outbox.append(second));
       expectCode(problems, 'repeated append', await outbox.append(first), 'conflict');
       expectSame(problems, 'stored', await stored(), [first, second]);
+      return problems;
+    },
+  },
+  {
+    name: 'a payload that JSON cannot carry unchanged is rejected',
+    async check({ outbox, stored }: OutboxConformanceTarget) {
+      const problems: string[] = [];
+      const base = message('event-1');
+      const payloads: unknown[] = [{ count: Number.NaN }, { missing: undefined }, { at: new Date(0) }, { list: [Number.POSITIVE_INFINITY] }];
+      for (const [index, payload] of payloads.entries()) {
+        const invalid = { ...base, payload } as unknown as OutboxMessage;
+        expectCode(problems, `payload ${index + 1}`, await outbox.append(invalid), 'invalid');
+      }
+      expectSame(problems, 'stored', await stored(), []);
       return problems;
     },
   },

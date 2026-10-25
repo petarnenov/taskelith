@@ -4,21 +4,21 @@
 -- checks, query columns, and the record as JSON.
 CREATE TABLE workflow_runs (
   id text PRIMARY KEY,
-  generation integer NOT NULL CHECK (generation >= 1),
+  generation bigint NOT NULL CHECK (generation >= 1),
   record jsonb NOT NULL
 );
 
 CREATE TABLE gates (
   id text PRIMARY KEY,
   run_id text NOT NULL,
-  generation integer NOT NULL CHECK (generation >= 1),
+  generation bigint NOT NULL CHECK (generation >= 1),
   record jsonb NOT NULL
 );
 CREATE INDEX gates_by_run ON gates (run_id);
 
 CREATE TABLE admissions (
   id text PRIMARY KEY,
-  generation integer NOT NULL CHECK (generation >= 1),
+  generation bigint NOT NULL CHECK (generation >= 1),
   state text NOT NULL,
   artifact_ids text[] NOT NULL,
   record jsonb NOT NULL
@@ -28,7 +28,7 @@ CREATE INDEX admissions_unused_by_artifact ON admissions USING gin (artifact_ids
 CREATE TABLE tasks (
   id text PRIMARY KEY,
   admission_id text NOT NULL,
-  generation integer NOT NULL CHECK (generation >= 1),
+  generation bigint NOT NULL CHECK (generation >= 1),
   record jsonb NOT NULL
 );
 CREATE INDEX tasks_by_admission ON tasks (admission_id);
@@ -38,7 +38,7 @@ CREATE TABLE assignments (
   attempt_id text NOT NULL,
   worker_id text NOT NULL,
   reservation_state text NOT NULL CHECK (reservation_state IN ('held', 'released')),
-  generation integer NOT NULL CHECK (generation >= 1),
+  generation bigint NOT NULL CHECK (generation >= 1),
   record jsonb NOT NULL
 );
 -- Capacity contract section 4: one held reservation per attempt.

@@ -65,7 +65,14 @@ export {
   type GateInput,
   type GateState,
 } from './domain/gate.js';
-export { FIRST_GENERATION, checkGeneration, nextGeneration, parseGeneration, type Generation } from './domain/generation.js';
+export {
+  FIRST_GENERATION,
+  checkGeneration,
+  checkNextGeneration,
+  nextGeneration,
+  parseGeneration,
+  type Generation,
+} from './domain/generation.js';
 export {
   FIRST_OWNERSHIP_GENERATION,
   nextOwnershipGeneration,
@@ -158,9 +165,17 @@ export {
   type SdlcConformanceReport,
 } from './ports/sdlc-framework-conformance.js';
 export type { AdmissionRepository } from './ports/admission-repository.js';
-export { expectCode, expectSame, expectSuccess, type ConformanceCase } from './ports/conformance-case.js';
+export {
+  expectCode,
+  expectOneWinner,
+  expectRead,
+  expectSame,
+  expectSuccess,
+  isSameData,
+  type ConformanceCase,
+} from './ports/conformance-case.js';
 export type { GateRepository } from './ports/gate-repository.js';
-export type { Outbox, OutboxMessage } from './ports/outbox.js';
+export { isJsonObject, type JsonObject, type JsonValue, type Outbox, type OutboxMessage } from './ports/outbox.js';
 export {
   ADMISSION_REPOSITORY_CONFORMANCE,
   GATE_REPOSITORY_CONFORMANCE,

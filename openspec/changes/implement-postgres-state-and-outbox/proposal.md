@@ -8,15 +8,16 @@ G2 work item 11 ([docs/g2-plan.md](../../../docs/g2-plan.md)): PostgreSQL state 
   - `@taskelith/sdlc`: a minimal `WorkflowRun` record (`id`, `binding`, `progress`, compared on the progress generation) with `beginWorkflowRun`; `WorkflowRunRepository`, `GateRepository` (gates stored per run), and `Outbox`; a suite for these and for the existing `AdmissionRepository`; and the shared conformance helpers.
   - `@taskelith/execution`: `TaskRepository` (one record per task with its attempts, executions, and grants), `Outbox`, and `Inbox` (owned by the consuming side, observations for now).
   - `@taskelith/scheduling`: `AssignmentRepository` (one held reservation per attempt) and `Outbox`.
+  - A replacement must carry the next generation (`checkNextGeneration`), so an unchanged or older record is `invalid`.
   - The in-memory repositories check and write without awaiting, so that two concurrent compare-and-set writes cannot both succeed; this fixes `InMemoryAdmissionRepository`, whose `replace` awaited between its check and its write.
 - New private adapter package `@taskelith/postgres` (`packages/adapters/postgres`):
   - versioned SQL migrations through node-pg-migrate, plus a checksum table and check that fails when an applied file changed or is missing (the gap item 1 recorded);
   - one table per aggregate with a generation column, query columns, and the record as JSON; a partial unique index for one held reservation per attempt;
-  - one outbox table for every module's `Outbox` port, an inbox table keyed by consumer and message identity, and a relay that reads unpublished messages in commit order and marks them published;
+  - one outbox table for every module's `Outbox` port with JSON object payloads, an inbox table keyed by consumer and message identity, and a relay that reads unpublished messages in append order and marks them published;
   - `PostgresDatabase.transaction`: SERIALIZABLE, rerun as a whole on SQLSTATE 40001 or 40P01 up to `SERIALIZATION_ATTEMPTS` (5) with doubling backoff from `SERIALIZATION_BACKOFF_MILLISECONDS` (10), rolled back on an `Err`, and `unavailable` on lost connections, with an unknown-outcome mark for a lost COMMIT;
   - crash points `OutboxCommit`, `InboxCommit`, and `OutboxPublish`, each `.before` and `.after`, through a structural hook that the harness's `CrashPoints` satisfies and `NO_CRASH_POINTS` fills in production;
   - committing facades that run each port call as its own transaction.
-- `@taskelith/testing` gains `integrationEndpoint` and `SERVICES_REMEDY` (the item 10 follow-up), used by the new tests and the Toxiproxy test.
+- `@taskelith/testing` gains `integrationEndpoint` and `SERVICES_REMEDY` (the item 10 follow-up), used by the new tests and the Toxiproxy test, and `acquireProcessLock`, which keeps test files that partition the shared Toxiproxy from running at once.
 - The dependency register records the installation, the closed checksum gap, and the evidence of the tests.
 
 ## Capabilities

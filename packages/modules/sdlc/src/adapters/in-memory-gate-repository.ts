@@ -1,6 +1,6 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import type { Gate, GateId } from '../domain/gate.js';
-import { checkGeneration, type Generation } from '../domain/generation.js';
+import { checkGeneration, checkNextGeneration, type Generation } from '../domain/generation.js';
 import type { WorkflowRunId } from '../domain/workflow-run.js';
 import type { GateRepository } from '../ports/gate-repository.js';
 
@@ -30,6 +30,8 @@ export class InMemoryGateRepository implements GateRepository {
     if (stored === undefined) return err(failure('not-found', `gate ${gate.id} does not exist`, { gate: gate.id }));
     const generation = checkGeneration(`gate ${gate.id}`, stored.gate.generation, expectedGeneration);
     if (!generation.ok) return generation;
+    const next = checkNextGeneration(`gate ${gate.id}`, gate.generation, expectedGeneration);
+    if (!next.ok) return next;
     this.#gates.set(gate.id, { runId: stored.runId, gate });
     return ok(undefined);
   }

@@ -1,5 +1,5 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
-import { checkGeneration, type Generation, type TaskId } from '@taskelith/sdlc';
+import { checkGeneration, checkNextGeneration, type Generation, type TaskId } from '@taskelith/sdlc';
 import type { Task } from '../domain/task.js';
 import type { TaskRepository } from '../ports/task-repository.js';
 
@@ -25,6 +25,8 @@ export class InMemoryTaskRepository implements TaskRepository {
     if (stored === undefined) return err(failure('not-found', `task ${task.id} does not exist`, { task: task.id }));
     const generation = checkGeneration(`task ${task.id}`, stored.generation, expectedGeneration);
     if (!generation.ok) return generation;
+    const next = checkNextGeneration(`task ${task.id}`, task.generation, expectedGeneration);
+    if (!next.ok) return next;
     this.#tasks.set(task.id, task);
     return ok(undefined);
   }

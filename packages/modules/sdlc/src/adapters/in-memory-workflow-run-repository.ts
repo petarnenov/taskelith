@@ -1,5 +1,5 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
-import { checkGeneration, type Generation } from '../domain/generation.js';
+import { checkGeneration, checkNextGeneration, type Generation } from '../domain/generation.js';
 import type { WorkflowRun, WorkflowRunId } from '../domain/workflow-run.js';
 import type { WorkflowRunRepository } from '../ports/workflow-run-repository.js';
 
@@ -25,6 +25,8 @@ export class InMemoryWorkflowRunRepository implements WorkflowRunRepository {
     if (stored === undefined) return err(failure('not-found', `workflow run ${run.id} does not exist`, { run: run.id }));
     const generation = checkGeneration(`workflow run ${run.id}`, stored.progress.generation, expectedGeneration);
     if (!generation.ok) return generation;
+    const next = checkNextGeneration(`workflow run ${run.id}`, run.progress.generation, expectedGeneration);
+    if (!next.ok) return next;
     this.#runs.set(run.id, run);
     return ok(undefined);
   }

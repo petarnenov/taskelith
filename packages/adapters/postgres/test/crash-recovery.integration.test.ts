@@ -12,7 +12,9 @@ async function placeWithCrashAt(point: string): Promise<{ signal: string | null;
   const child = await ScenarioProcess.start(process.execPath, ['--experimental-strip-types', PLACEMENT, url.href], {
     env: { ...process.env, ...crashEnvironment(point) },
   });
-  const exit = await child.exited;
+  const timer = setTimeout(() => child.kill(), 30_000);
+  const exit = await child.exited.finally(() => clearTimeout(timer));
+  assert.equal(child.stderr, '', `the placement process wrote to stderr (exit ${exit.code})`);
   return { signal: exit.signal, stdout: child.stdout };
 }
 

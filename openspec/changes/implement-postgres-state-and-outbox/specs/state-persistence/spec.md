@@ -5,7 +5,7 @@ Define the module-owned persistence ports of the control plane, their in-memory 
 ## ADDED Requirements
 
 ### Requirement: Module-owned repository ports
-The SDLC module SHALL own `WorkflowRunRepository` and `GateRepository` beside `AdmissionRepository`, the Execution module SHALL own `TaskRepository`, and the Scheduling module SHALL own `AssignmentRepository`; each SHALL offer `get`, `add`, and a `replace` that is a compare-and-set on the record's generation, and SHALL return `not-found` for an unknown record and `conflict` for an existing identifier or a stale generation.
+The SDLC module SHALL own `WorkflowRunRepository` and `GateRepository` beside `AdmissionRepository`, the Execution module SHALL own `TaskRepository`, and the Scheduling module SHALL own `AssignmentRepository`; each SHALL offer `get`, `add`, and a `replace` that is a compare-and-set on the record's generation, and SHALL return `not-found` for an unknown record, `conflict` for an existing identifier or a stale generation, and `invalid` for a replacement that does not carry the next generation.
 
 #### Scenario: Stale write
 - **WHEN** a record is replaced at its stored generation and then replaced again at that same, now stale, generation
@@ -13,7 +13,11 @@ The SDLC module SHALL own `WorkflowRunRepository` and `GateRepository` beside `A
 
 #### Scenario: Concurrent writers
 - **WHEN** two writers replace one record concurrently at the same expected generation
-- **THEN** exactly one succeeds
+- **THEN** exactly one succeeds, the other fails with `conflict`, and the winner's record is stored
+
+#### Scenario: Unchanged generation
+- **WHEN** a record is replaced by one at the same generation as the stored record
+- **THEN** the write fails with `invalid` and the stored record is unchanged
 
 ### Requirement: Workflow runs and their gates
 A workflow run SHALL be its binding and progress with an identifier of kind `RunId`, compared on the progress generation, and `beginWorkflowRun` SHALL reject a binding that names another workflow or version than the definition; the gate repository SHALL keep the run each gate was added to and list a run's gates.
@@ -30,7 +34,7 @@ The assignment repository SHALL reject, with `conflict`, storing an assignment w
 - **THEN** the add fails with `conflict`, and after the first assignment's reservation is released the add succeeds
 
 ### Requirement: Outbox and inbox ports
-Each module that writes messages SHALL declare its own `Outbox` port, structurally identical across modules, whose `append` stores a message with event metadata, subject, and payload and fails with `conflict` for a known event identity; the consuming module SHALL own an `Inbox` whose `accept` returns `accepted` once per consumer and message identity and `duplicate` afterwards.
+Each module that writes messages SHALL declare its own `Outbox` port, structurally identical across modules, whose `append` stores a message with event metadata, subject, and a JSON object payload, and fails with `conflict` for a known event identity and with `invalid` for a payload JSON cannot carry unchanged; the consuming module SHALL own an `Inbox` whose `accept` returns `accepted` once per consumer and message identity and `duplicate` afterwards.
 
 #### Scenario: Repeated delivery
 - **WHEN** one consumer accepts the same message identity twice and another consumer accepts it once

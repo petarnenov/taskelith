@@ -54,6 +54,39 @@ test('an edited or deleted applied migration stops the run before anything is ap
   assert.deepEqual(await query(url, "SELECT 1 FROM information_schema.tables WHERE table_name = 'note'"), []);
 });
 
+// A run that fails after applying earlier files still checked them: their
+// checksums were recorded before anything ran.
+test('an applied migration of an interrupted run is checked by the next run', async () => {
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  const directory = await copiedMigrations();
+  await writeFile(join(directory, '1792929700000_broken.sql'), '-- Up Migration\nCREATE TABLE broken (;\n');
+  const interrupted = await migrate(url, directory);
+  assert.equal(!interrupted.ok && interrupted.error.code, 'internal');
+  await writeFile(join(directory, `${INITIAL}.sql`), '-- Up Migration\nSELECT 1;\n');
+  await writeFile(join(directory, '1792929700000_broken.sql'), '-- Up Migration\nCREATE TABLE fixed (id int);\n');
+  const edited = await migrate(url, directory);
+  assert.equal(!edited.ok && edited.error.code, 'precondition-failed');
+  assert.equal(!edited.ok && edited.error.details.migrations, INITIAL);
+});
+
+test('a fixed pending migration is checked by its new content', async () => {
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  const directory = await copiedMigrations();
+  await writeFile(join(directory, '1792929700000_broken.sql'), '-- Up Migration\nCREATE TABLE broken (;\n');
+  assert.equal((await migrate(url, directory)).ok, false);
+  await writeFile(join(directory, '1792929700000_broken.sql'), '-- Up Migration\nCREATE TABLE fixed (id int);\n');
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: ['1792929700000_broken'] });
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: [] });
+});
+
+test('an applied migration without a checksum stops the run', async () => {
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  assert.equal((await migrate(url)).ok, true);
+  await query(url, 'DELETE FROM schema_migration_checksums');
+  const unchecked = await migrate(url);
+  assert.equal(!unchecked.ok && unchecked.error.code, 'precondition-failed');
+});
+
 test('a failing migration is reported, and an unreachable server is unavailable', async () => {
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   const directory = await copiedMigrations();

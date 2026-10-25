@@ -4,6 +4,8 @@ import {
   admitImplementationTask,
   beginWorkflowProgress,
   expectCode,
+  expectOneWinner,
+  expectRead,
   expectSame,
   expectSuccess,
   nextGeneration,
@@ -116,6 +118,10 @@ function authorizedTask(taskId: string): Task {
   return authorization.task;
 }
 
+function advanced(task: Task): Task {
+  return { ...task, generation: nextGeneration(task.generation) };
+}
+
 export const TASK_REPOSITORY_CONFORMANCE: readonly ConformanceCase<TaskRepository>[] = Object.freeze([
   {
     name: 'a task with its attempts, executions, and grants reads back as stored',
@@ -125,8 +131,8 @@ export const TASK_REPOSITORY_CONFORMANCE: readonly ConformanceCase<TaskRepositor
       expectSuccess(problems, 'add', await repository.add(stored));
       expectCode(problems, 'second add', await repository.add(stored), 'conflict');
       const read = await repository.get(stored.id);
-      if (!read.ok) return [...problems, `get: ${read.error.message}`];
-      expectSame(problems, 'get', read.value, stored);
+      expectRead(problems, 'get', read, stored);
+      if (!read.ok) return problems;
       const grant = read.value.attempts[0]?.executions[0]?.grants[0];
       const parameters = must(parseLaunchParameters({ ttlMilliseconds: 30_000, skewMilliseconds: 5_000 }));
       if (!(grant?.parameters instanceof parameters.constructor)) problems.push('get: grant parameters are not LaunchParameters');
@@ -143,13 +149,13 @@ export const TASK_REPOSITORY_CONFORMANCE: readonly ConformanceCase<TaskRepositor
       expectSuccess(problems, 'add', await repository.add(opened));
       const attempted = must(openAttempt(opened, opened.ownershipGeneration, { id: id('AttemptId', 'attempt-1') }, LATER));
       expectSuccess(problems, 'replace', await repository.replace(attempted, opened.generation));
-      expectCode(problems, 'stale replace', await repository.replace(opened, opened.generation), 'conflict');
-      const read = await repository.get(opened.id);
-      if (read.ok) expectSame(problems, 'after conflict', read.value, attempted);
-      expectCode(problems, 'replace unknown', await repository.replace(openedTask('task-x'), opened.generation), 'not-found');
-      const next = { ...attempted, generation: nextGeneration(attempted.generation) };
-      const results = await Promise.all([1, 2].map(() => repository.replace(next, attempted.generation)));
-      if (results.filter((result) => result.ok).length !== 1) problems.push('concurrent replace: expected one success');
+      expectCode(problems, 'stale replace', await repository.replace(advanced(opened), opened.generation), 'conflict');
+      expectCode(problems, 'unchanged generation', await repository.replace(attempted, attempted.generation), 'invalid');
+      expectRead(problems, 'after rejected writes', await repository.get(opened.id), attempted);
+      expectCode(problems, 'replace unknown', await repository.replace(advanced(openedTask('task-x')), opened.generation), 'not-found');
+      const next = advanced(attempted);
+      expectOneWinner(problems, 'concurrent replace', await Promise.all([1, 2].map(() => repository.replace(next, attempted.generation))));
+      expectRead(problems, 'after the race', await repository.get(opened.id), next);
       return problems;
     },
   },

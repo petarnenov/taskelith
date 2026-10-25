@@ -2,7 +2,8 @@ import { parseIdentifier, parseInstant, type Instant, type Result } from '@taske
 import type { AssignmentExecutions } from '@taskelith/execution';
 import {
   expectCode,
-  expectSame,
+  expectOneWinner,
+  expectRead,
   expectSuccess,
   nextGeneration,
   parseOwnershipGeneration,
@@ -49,6 +50,10 @@ function ended(assignment: Assignment): Assignment {
   return must(endAssignment(assignment, assignment.generation, 'cancelled', NO_EXECUTION, LATER));
 }
 
+function advanced(assignment: Assignment): Assignment {
+  return { ...assignment, generation: nextGeneration(assignment.generation) };
+}
+
 export const ASSIGNMENT_REPOSITORY_CONFORMANCE: readonly ConformanceCase<AssignmentRepository>[] = Object.freeze([
   {
     name: 'an assignment with its reservation reads back as stored, once',
@@ -57,9 +62,7 @@ export const ASSIGNMENT_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Assignm
       const stored = offered('assignment-1', 'attempt-1');
       expectSuccess(problems, 'add', await repository.add(stored));
       expectCode(problems, 'second add', await repository.add(stored), 'conflict');
-      const read = await repository.get(stored.id);
-      if (read.ok) expectSame(problems, 'get', read.value, stored);
-      else problems.push(`get: ${read.error.message}`);
+      expectRead(problems, 'get', await repository.get(stored.id), stored);
       expectCode(problems, 'get unknown', await repository.get(offered('assignment-x', 'attempt-x').id), 'not-found');
       return problems;
     },
@@ -72,13 +75,13 @@ export const ASSIGNMENT_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Assignm
       expectSuccess(problems, 'add', await repository.add(first));
       const acceptance = must(acceptAssignment(first, first.generation, first.workerId, LATER));
       expectSuccess(problems, 'replace', await repository.replace(acceptance, first.generation));
-      expectCode(problems, 'stale replace', await repository.replace(first, first.generation), 'conflict');
-      const read = await repository.get(first.id);
-      if (read.ok) expectSame(problems, 'after conflict', read.value, acceptance);
-      expectCode(problems, 'replace unknown', await repository.replace(offered('assignment-x', 'attempt-x'), first.generation), 'not-found');
-      const next = { ...acceptance, generation: nextGeneration(acceptance.generation) };
-      const results = await Promise.all([1, 2].map(() => repository.replace(next, acceptance.generation)));
-      if (results.filter((result) => result.ok).length !== 1) problems.push('concurrent replace: expected one success');
+      expectCode(problems, 'stale replace', await repository.replace(advanced(first), first.generation), 'conflict');
+      expectCode(problems, 'unchanged generation', await repository.replace(acceptance, acceptance.generation), 'invalid');
+      expectRead(problems, 'after rejected writes', await repository.get(first.id), acceptance);
+      expectCode(problems, 'replace unknown', await repository.replace(advanced(offered('assignment-x', 'attempt-x')), first.generation), 'not-found');
+      const next = advanced(acceptance);
+      expectOneWinner(problems, 'concurrent replace', await Promise.all([1, 2].map(() => repository.replace(next, acceptance.generation))));
+      expectRead(problems, 'after the race', await repository.get(first.id), next);
       return problems;
     },
   },
@@ -91,10 +94,13 @@ export const ASSIGNMENT_REPOSITORY_CONFORMANCE: readonly ConformanceCase<Assignm
       expectCode(problems, 'second holder', await repository.add(offered('assignment-2', 'attempt-1')), 'conflict');
       expectSuccess(problems, 'other attempt', await repository.add(offered('assignment-3', 'attempt-2')));
       expectSuccess(problems, 'release', await repository.replace(ended(first), first.generation));
-      expectSuccess(problems, 'after release', await repository.add(offered('assignment-2', 'attempt-1')));
+      const second = offered('assignment-2', 'attempt-1');
+      expectSuccess(problems, 'after release', await repository.add(second));
+      const reheld = { ...advanced(ended(first)), reservation: first.reservation };
+      expectCode(problems, 'replace holding again', await repository.replace(reheld, ended(first).generation), 'conflict');
+      expectRead(problems, 'released kept', await repository.get(first.id), ended(first));
       const racers = [offered('assignment-4', 'attempt-3'), offered('assignment-5', 'attempt-3')];
-      const results = await Promise.all(racers.map((assignment) => repository.add(assignment)));
-      if (results.filter((result) => result.ok).length !== 1) problems.push('concurrent holders: expected one success');
+      expectOneWinner(problems, 'concurrent holders', await Promise.all(racers.map((assignment) => repository.add(assignment))));
       return problems;
     },
   },

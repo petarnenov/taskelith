@@ -50,4 +50,6 @@ export {
 export { InMemoryAssignmentRepository } from './adapters/in-memory-assignment-repository.js';
 export type { AssignmentRepository } from './ports/assignment-repository.js';
 export type { Outbox, OutboxMessage } from './ports/outbox.js';
+// The outbox ports are structurally identical, so they share one suite.
+export { OUTBOX_CONFORMANCE } from '@taskelith/sdlc';
 export { ASSIGNMENT_REPOSITORY_CONFORMANCE } from './ports/repository-conformance.js';

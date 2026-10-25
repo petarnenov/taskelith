@@ -1,5 +1,5 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
-import { checkGeneration, type Generation } from '@taskelith/sdlc';
+import { checkGeneration, checkNextGeneration, type Generation } from '@taskelith/sdlc';
 import { encodeRecord } from './record-codec.js';
 import type { Session } from './session.js';
 
@@ -66,19 +66,27 @@ export class AggregateStore<Stored> {
     return conflict.ok ? err(failure('conflict', `${this.#mapping.entity} ${id} conflicts with a stored record`)) : conflict;
   }
 
+  // Checks the stored generation first, as the in-memory adapters do, and
+  // only then that the replacement carries the next one.
   async replace(record: Stored, expectedGeneration: Generation): Promise<Result<void>> {
     const id = this.#mapping.idOf(record);
+    const next = checkNextGeneration(`${this.#mapping.entity} ${id}`, this.#mapping.generationOf(record), expectedGeneration);
+    if (next.ok && await this.#update(record, expectedGeneration)) return ok(undefined);
+    const { rows } = await this.#session.query<{ generation: string }>(`SELECT generation FROM ${this.#mapping.table} WHERE id = $1`, [id]);
+    if (rows[0] === undefined) return this.#notFound(id);
+    const stored = checkGeneration(`${this.#mapping.entity} ${id}`, Number(rows[0].generation) as Generation, expectedGeneration);
+    return stored.ok ? next : stored;
+  }
+
+  async #update(record: Stored, expectedGeneration: Generation): Promise<boolean> {
     const columns = this.#columns(record);
     const names = Object.keys(columns).filter((name) => name !== 'id');
     const assignments = names.map((name, index) => `${name} = $${index + 3}`);
     const updated = await this.#session.query(
       `UPDATE ${this.#mapping.table} SET ${assignments.join(', ')} WHERE id = $1 AND generation = $2`,
-      [id, expectedGeneration, ...names.map((name) => columns[name])],
+      [this.#mapping.idOf(record), expectedGeneration, ...names.map((name) => columns[name])],
     );
-    if (updated.rowCount === 1) return ok(undefined);
-    const { rows } = await this.#session.query<{ generation: number }>(`SELECT generation FROM ${this.#mapping.table} WHERE id = $1`, [id]);
-    if (rows[0] === undefined) return this.#notFound(id);
-    return checkGeneration(`${this.#mapping.entity} ${id}`, rows[0].generation as Generation, expectedGeneration);
+    return updated.rowCount === 1;
   }
 
   #columns(record: Stored): Readonly<Record<string, unknown>> {

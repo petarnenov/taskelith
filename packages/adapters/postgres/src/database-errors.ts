@@ -1,4 +1,5 @@
 import { failure, type Failure } from '@taskelith/kernel';
+import pg from 'pg';
 
 // SQLSTATE serialization_failure and deadlock_detected: the transaction
 // lost a race and can be retried as a whole.
@@ -12,9 +13,10 @@ export class StatementError extends Error {
     this.name = 'StatementError';
   }
 
+  // Only a server error carries an SQLSTATE; a socket error code such as
+  // EPIPE has the same shape but means a lost connection.
   get sqlState(): string | undefined {
-    const code = (this.cause as { code?: unknown } | null)?.code;
-    return typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code) ? code : undefined;
+    return this.cause instanceof pg.DatabaseError ? this.cause.code : undefined;
   }
 
   get isRetryable(): boolean {
