@@ -30,8 +30,8 @@ Neither adapter logged. Each swallowed connection, pull, and publication errors,
   - `ControlPlaneSignals.read()` returns a `Result`, because a database read can fail.
   - Components that take a logger or metrics default to `SILENT_LOGGER` and `NO_METRICS`, in the null-object style of `NO_CRASH_POINTS`.
 - **Redaction in the logger, not in the sink.** Every record passes the same rules before any sink sees it:
-  - A field name is split into its camelCase, `_`, and `-` segments. A name with a secret segment (password, secret, token, credential, authorization, cookie, private key, API key) has its value replaced by `[redacted]`. Whole segments keep counts such as `promptTokens` and words such as `passedChecks` readable.
-  - URL user information, bearer tokens, and `password=`-style pairs inside text are removed. This covers a failure message that quotes a connection URL or a libpq string.
+  - A field name is split into its camelCase, acronym (`APIToken`, `DBPassword`), `_`, and `-` segments. A name with a secret segment (password, secret, token, credential, authorization, cookie, private key, API key) has its value replaced by `[redacted]`. Whole segments keep counts such as `promptTokens` and words such as `passedChecks` readable.
+  - URL user information, bearer tokens, and `password=`-style pairs inside text are removed, quoted values whole. This covers a failure message that quotes a connection URL or a libpq string.
   - A correlation keeps only the known identifier keys with string values, so a received body cannot add other fields.
   - Message bodies and payloads are never logged.
 - **Signals.** The catalogue fixes each name, kind, and unit.
@@ -40,13 +40,16 @@ Neither adapter logged. Each swallowed connection, pull, and publication errors,
 - **Inbox lag** runs from the JetStream append (`timestampNanos`) to the receiver's commit, per stream and consumer. The broker clock and the receiver clock may differ, so a negative value reads as zero. The PostgreSQL inbox has no send time, and the command's `issuedAt` would also count outbox lag, which has a signal of its own.
 - **Query columns instead of `jsonb` scans.** Reading the assignment state or the executions from the text records would cast every row to `jsonb` in every sample, and the cast fails on an escaped NUL.
   - The migration adds `assignments.state`, `assignments.changed_at`, and `tasks.unknown_executions`, with partial indexes on the waiting rows. The repositories write them with each record, as they write the other query columns.
-  - The one-time backfill reads the records as `jsonb`, as the resource-admission migration does.
+  - The one-time backfill needs only states and evidence. `jsonb`, and even `json` processing, reject the escapes of NUL and of a lone surrogate, which a stored reference may hold. A temporary function therefore replaces escaped backslashes and every `\uXXXX` escape before the cast. That changes string contents that the backfill does not read.
 - **Unknown execution.** It is an execution that is not terminal and has evidence (`uncertain`, `termination-unproven`, `local-history-lost`) beside its state. This is the set that keeps ownership and capacity until reconciled.
   - The domain function `unknownExecutionCount` in `@taskelith/execution` defines it once.
   - The PostgreSQL column stores its result.
 - **A read-only snapshot.** The sampler reads every 15 s. A `SERIALIZABLE` read would take predicate locks on four tables and could abort the writers, so `PostgresDatabase.readOnly` reads in `REPEATABLE READ READ ONLY`. That is one consistent snapshot without serialization checks. Its own statements count in `database.latency`.
+- **Outbox lag from the oldest append.** `appended_at` is the start time of the appending transaction, so a later position can hold an older time. The snapshot reads `min(appended_at)` over a partial index of the unpublished rows.
 - **Ages on the database clock.** Assignments are stamped by `tx.now()`, and the outbox by `now()`. The snapshot therefore subtracts on the database clock, and a row stamped in the future reads as age zero.
 - **Database latency** is each transaction attempt, its connection checkout included, so retries and pool waits are visible.
+- **A sink that never blocks.** `JsonLinesLogSink` listens for the output's `error`, because an unhandled one would end the process. After a failed write it drops every later record. While the output is full it drops records until `drain`, so a stalled collector cannot grow the process's memory. `dropped` counts what was lost.
+- **Conformance suites.** `LOG_SINK_CONFORMANCE`, `METRICS_CONFORMANCE`, and `CONTROL_PLANE_SIGNALS_CONFORMANCE` run against every adapter of each port (ADR 0004 principle 2): the in-memory and discarding adapters, the JSON-lines sink with a working and a failing output, and PostgreSQL.
 - **Event-loop lag less the resolution.** `monitorEventLoopDelay` records whole timer intervals, so an idle process reads about the resolution. The monitor subtracts it, and an idle loop reads near zero against the 200 ms target.
 - **Logged events.**
   - `postgres.connection.lost`, `postgres.commit.unknown`, and `postgres.serialization.exhausted`.

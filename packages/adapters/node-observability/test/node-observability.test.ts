@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { Writable } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 import { parseInstant } from '@taskelith/kernel';
 import {
@@ -8,11 +9,22 @@ import {
   runPeriodically,
   SYSTEM_CLOCK,
 } from '@taskelith/node-observability';
-import { InMemoryMetrics, Logger } from '@taskelith/observability';
+import { InMemoryMetrics, LOG_SINK_CONFORMANCE, Logger } from '@taskelith/observability';
+
+function capturing(): { output: Writable; lines: string[] } {
+  const lines: string[] = [];
+  const output = new Writable({
+    write(chunk: Buffer, _encoding, done) {
+      lines.push(chunk.toString());
+      done();
+    },
+  });
+  return { output, lines };
+}
 
 test('the sink writes one JSON line per record', () => {
-  const lines: string[] = [];
-  const logger = new Logger(new JsonLinesLogSink({ write: (chunk: string) => lines.push(chunk) }), SYSTEM_CLOCK);
+  const { output, lines } = capturing();
+  const logger = new Logger(new JsonLinesLogSink(output), SYSTEM_CLOCK);
   logger.with({ attemptId: 'attempt-1' }).info('e.one', { n: 1 });
   logger.warn('e.two');
   assert.equal(lines.length, 2);
@@ -22,9 +34,45 @@ test('the sink writes one JSON line per record', () => {
   assert.ok(parseInstant(first.at).ok);
 });
 
+test('an output that fails later loses records, not the process', async () => {
+  const output = new Writable({ write: (_chunk, _encoding, done) => done(new Error('closed')) });
+  const sink = new JsonLinesLogSink(output);
+  const logger = new Logger(sink, SYSTEM_CLOCK);
+  logger.error('e.first');
+  await delay(10);
+  logger.error('e.second');
+  assert.equal(sink.dropped, 1);
+});
+
 test('an output that throws loses the record, not the caller', () => {
-  const sink = new JsonLinesLogSink({ write: () => { throw new Error('closed'); } });
+  const output = new Writable();
+  output.write = () => { throw new Error('closed'); };
+  const sink = new JsonLinesLogSink(output);
   new Logger(sink, SYSTEM_CLOCK).error('e');
+  new Logger(sink, SYSTEM_CLOCK).error('e');
+  assert.equal(sink.dropped, 2);
+});
+
+test('a full output drops records until it drains', async () => {
+  const pending: Array<() => void> = [];
+  const written: string[] = [];
+  const output = new Writable({
+    highWaterMark: 1,
+    write(chunk: Buffer, _encoding, done) {
+      written.push(chunk.toString());
+      pending.push(done);
+    },
+  });
+  const sink = new JsonLinesLogSink(output);
+  const logger = new Logger(sink, SYSTEM_CLOCK);
+  for (let index = 0; index < 1000; index++) logger.info('e.flood', { index });
+  assert.equal(sink.dropped, 999);
+  assert.ok(output.writableLength < 1000);
+  pending.shift()!();
+  await delay(10);
+  logger.info('e.after-drain');
+  assert.equal(sink.dropped, 999);
+  assert.equal(written.length, 2);
 });
 
 test('the monitor reports the p99 event-loop delay of its window', async () => {
@@ -84,4 +132,14 @@ test('a sample that throws ends the loop with its error', async () => {
 function blockFor(milliseconds: number): void {
   const until = Date.now() + milliseconds;
   while (Date.now() < until);
+}
+
+for (const conformance of LOG_SINK_CONFORMANCE) {
+  test(`JSON-lines sink: ${conformance.name}`, async () => {
+    assert.deepEqual(await conformance.check(new JsonLinesLogSink(capturing().output)), []);
+  });
+  test(`failing JSON-lines sink: ${conformance.name}`, async () => {
+    const output = new Writable({ write: (_chunk, _encoding, done) => done(new Error('closed')) });
+    assert.deepEqual(await conformance.check(new JsonLinesLogSink(output)), []);
+  });
 }

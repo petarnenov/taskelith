@@ -66,7 +66,10 @@ test('credentials inside text are redacted in fields and correlation', () => {
 });
 
 test('a name redacts only by whole segments', () => {
-  const secret = ['password', 'apiKey', 'api_key', 'privateKey', 'x-auth-token', 'Cookie', 'accessToken', 'providerCredential'];
+  const secret = [
+    'password', 'apiKey', 'api_key', 'privateKey', 'x-auth-token', 'Cookie', 'accessToken', 'providerCredential',
+    'APIToken', 'DBPassword', 'JWTToken', 'APIKey',
+  ];
   const plain = ['promptTokens', 'passedChecks', 'compass', 'bypassed', 'keyId', 'authority'];
   assert.deepEqual(secret.filter((name) => !isSecretFieldName(name)), []);
   assert.deepEqual(plain.filter(isSecretFieldName), []);
@@ -75,6 +78,9 @@ test('a name redacts only by whole segments', () => {
 test('a key-value secret and a password containing @ are redacted', () => {
   assert.equal(redactText('password=hunter2 host=db token=abc'), `password=${REDACTED} host=db token=${REDACTED}`);
   assert.equal(redactText('postgres://user:p@ss@db/x'), `postgres://${REDACTED}@db/x`);
+  assert.equal(redactText(`password='two words' host=db`), `password=${REDACTED} host=db`);
+  assert.equal(redactText(`password = "a \\"b\\" c" host=db`), `password=${REDACTED} host=db`);
+  assert.equal(redactText(`password='unterminated`), `password=${REDACTED}`);
 });
 
 test('text without credentials is unchanged', () => {

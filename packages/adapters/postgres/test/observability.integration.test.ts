@@ -3,18 +3,19 @@ import { after, beforeEach, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { ok } from '@taskelith/kernel';
 import { recordExecutionEvidence, type WorkerId } from '@taskelith/execution';
-import { InMemoryLogSink, InMemoryMetrics, Logger } from '@taskelith/observability';
+import { CONTROL_PLANE_SIGNALS_CONFORMANCE, InMemoryLogSink, InMemoryMetrics, Logger } from '@taskelith/observability';
 import { PostgresControlPlaneSignals, PostgresDatabase } from '@taskelith/postgres';
 import { acceptAssignment } from '@taskelith/scheduling';
 import { SimulatedHost, id, value } from '@taskelith/testing';
 import { authorizedUnder, placedTask, seedWorker } from './capacity-fixtures.ts';
 import { AT, assignment, command } from './fixtures.ts';
-import { assertNoPassword, createMigratedDatabase, query, truncateAll } from './test-database.ts';
+import { assertNoPassword, createMigratedDatabase, query, sentinelCredentials, truncateAll } from './test-database.ts';
 
 const url = await createMigratedDatabase();
 const metrics = new InMemoryMetrics();
 const sink = new InMemoryLogSink();
-const database = new PostgresDatabase(url, { metrics, logger: new Logger(sink, new SimulatedHost(AT).wallClock) });
+const observer = await sentinelCredentials(url);
+const database = new PostgresDatabase(observer, { metrics, logger: new Logger(sink, new SimulatedHost(AT).wallClock) });
 const signals = new PostgresControlPlaneSignals(database);
 after(() => database.close());
 beforeEach(() => truncateAll(url));
@@ -30,9 +31,11 @@ function worker(workerId: string, draining: boolean) {
   };
 }
 
-test('an empty state reads as no lag, no age, and no capacity', async () => {
-  assert.deepEqual(await signals.read(), ok(EMPTY));
-});
+for (const conformance of CONTROL_PLANE_SIGNALS_CONFORMANCE) {
+  test(`PostgreSQL signals: ${conformance.name}`, async () => {
+    assert.deepEqual(await conformance.check(signals), []);
+  });
+}
 
 test('the snapshot reads outbox lag, assignment age, unknown executions, and capacity', async () => {
   await seedWorker(url, worker('worker-1', false));
@@ -73,6 +76,17 @@ test('an accepted assignment and a published row no longer count as waiting', as
   assert.deepEqual(await signals.read(), ok({ ...EMPTY, heldSlots: 1 }));
 });
 
+test('outbox lag reads the oldest append, which need not be the lowest position', async () => {
+  assert.ok((await database.transaction(async (tx) => {
+    const first = await tx.outbox.append(command('offer-1'));
+    return first.ok ? tx.outbox.append(command('offer-2')) : first;
+  })).ok);
+  await query(url, "UPDATE outbox SET appended_at = now() - interval '5 seconds' WHERE event_id = 'offer-1'");
+  await query(url, "UPDATE outbox SET appended_at = now() - interval '60 seconds' WHERE event_id = 'offer-2'");
+  const lag = value(await signals.read()).outboxLagSeconds;
+  assert.ok(lag >= 60 && lag < 90, String(lag));
+});
+
 test('a clock that stamped a row in the future never reads as a negative age', async () => {
   assert.ok((await database.transaction((tx) => tx.outbox.append(command('offer-1')))).ok);
   await query(url, "UPDATE outbox SET appended_at = now() + interval '1 hour'");
@@ -101,6 +115,6 @@ test('an idle connection that breaks is logged without the credentials', async (
   }
   const lost = sink.records.find((record) => record.event === 'postgres.connection.lost');
   assert.equal(lost?.level, 'warn');
-  assertNoPassword(JSON.stringify(sink.records), url.password);
+  assertNoPassword(JSON.stringify(sink.records), observer.password);
   assert.ok((await signals.read()).ok);
 });

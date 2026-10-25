@@ -28,3 +28,4 @@ export {
 export type { ControlPlaneSignals, ControlPlaneSnapshot } from './ports/control-plane-signals.js';
 export { NO_LOGS, type LogSink } from './ports/log-sink.js';
 export { NO_METRICS, type Metrics } from './ports/metrics.js';
+export { CONTROL_PLANE_SIGNALS_CONFORMANCE, LOG_SINK_CONFORMANCE, METRICS_CONFORMANCE } from './ports/port-conformance.js';

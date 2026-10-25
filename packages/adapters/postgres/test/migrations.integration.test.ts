@@ -52,9 +52,12 @@ test('the signals migration copies the state, change time, and unknown execution
   const authorized = authorizedUnder(placed, offered.id, offered.workerId);
   const report = { workerId: offered.workerId, executionId: authorized.attempts[0]!.executions[0]!.id };
   const uncertain = value(recordExecutionEvidence(authorized, { ...report, kind: 'uncertain' }, AT)).task;
+  // jsonb rejects the escapes of a lone surrogate and NUL, which a stored
+  // reference may hold; an escaped backslash before `u` is no escape.
+  const probe = 'spec\uD800.md \u0000 \\ud800';
   for (const task of [placed, uncertain]) {
     await query(url, 'INSERT INTO tasks (id, admission_id, generation, record) VALUES ($1, $2, 1, $3)',
-      [`${task.id}-${task.generation}`, task.admissionId, JSON.stringify(task)]);
+      [`${task.id}-${task.generation}`, task.admissionId, JSON.stringify({ ...task, probe })]);
   }
   await writeFile(signals, content);
   assert.deepEqual(await migrate(url, directory), { ok: true, value: [OBSERVABILITY_SIGNALS] });

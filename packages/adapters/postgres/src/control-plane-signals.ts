@@ -18,7 +18,7 @@ interface SnapshotRow {
 // also stamps the rows (capacity contract section 4).
 const SNAPSHOT = `SELECT
   coalesce(extract(epoch FROM now() - (
-    SELECT appended_at FROM outbox WHERE published_at IS NULL ORDER BY position LIMIT 1
+    SELECT min(appended_at) FROM outbox WHERE published_at IS NULL
   )), 0)::float8 AS outbox_lag,
   (SELECT count(*) FROM outbox WHERE published_at IS NULL) AS outbox_pending,
   coalesce(extract(epoch FROM now() - (

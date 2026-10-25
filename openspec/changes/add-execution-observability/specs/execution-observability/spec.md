@@ -41,6 +41,15 @@ The observability module SHALL define the G2 signals `outbox.lag`, `outbox.pendi
 - **WHEN** a gauge is recorded twice and a distribution three times under one label set
 - **THEN** the gauge reads its last value, and the distribution reads its count, sum, minimum, maximum, and last sample
 
+### Requirement: Port conformance
+
+Every adapter of the log sink, metrics, and control-plane signal ports SHALL pass the module's shared conformance suite for that port.
+
+#### Scenario: Each adapter passes its suite
+
+- **WHEN** the suites run against the in-memory and discarding adapters, the JSON-lines sink with a working and a failing output, and the PostgreSQL signals over an empty state
+- **THEN** none of them reports a problem
+
 ### Requirement: Control-plane snapshot from PostgreSQL
 
 The PostgreSQL adapter SHALL read, in one read-only snapshot that takes no part in the writers' serialization checks and on the database clock, the age of the oldest unpublished outbox row and the unpublished count, the age of the oldest assignment still offered and their count, the number of unknown executions, the slots of the workers eligible for placement, and the held reservations. An age SHALL be zero when nothing waits or when a row was stamped in the future.
@@ -49,6 +58,11 @@ The PostgreSQL adapter SHALL read, in one read-only snapshot that takes no part 
 
 - **WHEN** two outbox rows wait for 30 seconds, an offered assignment waits for 90 seconds, a task holds an uncertain execution, and one of two workers is eligible
 - **THEN** the snapshot reads two pending rows with a lag of at least 30 seconds, one offered assignment aged at least 90 seconds, one unknown execution, the eligible worker's slots, and one held slot
+
+#### Scenario: A later position appended earlier
+
+- **WHEN** a row at a later outbox position has the older append time
+- **THEN** the outbox lag reads the age of that older append
 
 #### Scenario: Accepted and published work stops waiting
 
@@ -66,7 +80,7 @@ An unknown execution SHALL be one that is not terminal and carries evidence besi
 
 #### Scenario: Stored records are backfilled
 
-- **WHEN** the migration runs over an assignment and tasks stored before it
+- **WHEN** the migration runs over an assignment and tasks stored before it, whose records hold the escapes of a lone surrogate and of NUL
 - **THEN** the assignment's state and change time, and each task's count of unknown executions, are copied from their records
 
 ### Requirement: Database latency and logs
@@ -104,7 +118,7 @@ The NATS consumer SHALL record `inbox.lag` from the stream append to the receive
 
 ### Requirement: Event-loop lag and JSON lines
 
-The Node adapter SHALL report the p99 event-loop delay of each sample window with Node's built-in histogram, less the histogram's resolution, and SHALL write log records as one JSON object per line. A sink that cannot write SHALL drop the record without throwing.
+The Node adapter SHALL report the p99 event-loop delay of each sample window with Node's built-in histogram, less the histogram's resolution, and SHALL write log records as one JSON object per line. A sink that cannot write, synchronously or later, SHALL drop records without throwing or ending the process, and a full output SHALL drop records until it drains.
 
 #### Scenario: A blocked event loop
 
@@ -116,7 +130,12 @@ The Node adapter SHALL report the p99 event-loop delay of each sample window wit
 - **WHEN** the event loop idles through a sample window
 - **THEN** that window's `event-loop.lag` reads below the resolution
 
+#### Scenario: A full output
+
+- **WHEN** a thousand records meet an output that accepts one and has not drained
+- **THEN** the rest are dropped and counted, and a record after the drain is written
+
 #### Scenario: A closed output
 
-- **WHEN** the output throws on write
-- **THEN** the logger's caller continues
+- **WHEN** the output throws on write, or fails a write after it returned
+- **THEN** the logger's caller and the process continue, and later records are dropped

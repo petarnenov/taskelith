@@ -12,10 +12,12 @@ const SECRET_SEGMENTS = new Set([
 // Secrets that can hide inside free text, such as a failure message.
 const URL_USERINFO = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#]+@/gi;
 const BEARER = /\bbearer\s+[A-Za-z0-9._~+/-]+=*/gi;
-const KEY_VALUE = /\b(password|passwd|pwd|secret|token|api[_-]?key)=\S+/gi;
+// A libpq-style pair; a quoted value may hold spaces and escaped quotes.
+const KEY_VALUE = /\b(password|passwd|pwd|secret|token|api[_-]?key)\s*=\s*('(?:[^'\\]|\\.)*'?|"(?:[^"\\]|\\.)*"?|\S+)/gi;
 
 export function isSecretFieldName(name: string): boolean {
-  const segments = name.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/);
+  const words = name.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
+  const segments = words.toLowerCase().split(/[^a-z0-9]+/);
   const pairs = segments.slice(1).map((segment, index) => `${segments[index]}${segment}`);
   return [...segments, ...pairs].some((segment) => SECRET_SEGMENTS.has(segment));
 }

@@ -1,23 +1,49 @@
+import type { Writable } from 'node:stream';
 import type { LogRecord, LogSink } from '@taskelith/observability';
 
-export interface TextOutput {
-  write(chunk: string): unknown;
-}
-
 // One JSON object per line, for a collector reading the process output.
+// Logging never fails or blocks work, so a record it cannot take is dropped.
 export class JsonLinesLogSink implements LogSink {
-  readonly #output: TextOutput;
+  readonly #output: Writable;
+  #waitingForDrain = false;
+  #broken = false;
+  #dropped = 0;
 
-  constructor(output: TextOutput) {
+  constructor(output: Writable) {
     this.#output = output;
+    // Without a listener a failed write would end the process.
+    output.on('error', () => this.#break());
   }
 
-  // A record that cannot be written is dropped; logging never fails work.
+  // Records dropped while the output was full or after it failed.
+  get dropped(): number {
+    return this.#dropped;
+  }
+
   write(record: LogRecord): void {
-    try {
-      this.#output.write(`${JSON.stringify(record)}\n`);
-    } catch {
+    if (this.#broken || this.#waitingForDrain) {
+      this.#dropped += 1;
       return;
     }
+    try {
+      const accepted = this.#output.write(`${JSON.stringify(record)}\n`, (error) => {
+        if (error) this.#break();
+      });
+      if (!accepted) this.#waitForDrain();
+    } catch {
+      this.#break();
+      this.#dropped += 1;
+    }
+  }
+
+  #waitForDrain(): void {
+    this.#waitingForDrain = true;
+    this.#output.once('drain', () => {
+      this.#waitingForDrain = false;
+    });
+  }
+
+  #break(): void {
+    this.#broken = true;
   }
 }

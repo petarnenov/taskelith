@@ -5,13 +5,16 @@ import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { SimulatedHost, Toxiproxy, acquireProcessLock, integrationEndpoint, value } from '@taskelith/testing';
 import { PostgresDatabase } from '@taskelith/postgres';
 import { AT, assignment } from './fixtures.ts';
-import { PROXY_URL, assertNoPassword, createMigratedDatabase, databaseUrl, query } from './test-database.ts';
+import { PROXY_URL, assertNoPassword, createMigratedDatabase, databaseUrl, query, sentinelCredentials } from './test-database.ts';
 
 const toxiproxyUrl = integrationEndpoint('TASKELITH_TOXIPROXY_URL');
 const toxiproxy = new Toxiproxy(toxiproxyUrl);
 const route = toxiproxy.proxy('postgres');
 const direct = await createMigratedDatabase();
+const observer = await sentinelCredentials(direct);
 const proxied = databaseUrl(PROXY_URL, direct.pathname.slice(1));
+proxied.username = observer.username;
+proxied.password = observer.password;
 const sink = new InMemoryLogSink();
 const logger = new Logger(sink, new SimulatedHost(AT).wallClock);
 const database = new PostgresDatabase(proxied, { queryTimeoutMilliseconds: 1000, logger });
