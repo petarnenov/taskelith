@@ -24,8 +24,10 @@ import { PostgresControlPlaneSignals, PostgresOutboxRelay } from '@taskelith/pos
 import { Administration, type AdministrationSettings } from '../admin/administration.js';
 import { createApiServer } from '../api/api-server.js';
 import { ControlPlaneApi } from '../api/control-plane-api.js';
+import { DelegationService } from '../application/delegation-service.js';
 import { EvidenceService } from '../application/evidence-service.js';
 import { LaunchAuthority } from '../application/launch-authority.js';
+import { PlacementService } from '../application/placement-service.js';
 import { RunService } from '../application/run-service.js';
 import { TaskService } from '../application/task-service.js';
 import { WorkflowRegistry, type KnownWorkflow } from '../application/workflow-registry.js';
@@ -33,6 +35,7 @@ import { InstallationPublicationFence } from './installation-publication-fence.j
 
 // Provisional G2 values in docs/operational-targets.md, which G6 verifies.
 export const GRACE_WINDOW_SWEEP_MILLISECONDS = 60_000;
+export const PLACEMENT_PASS_MILLISECONDS = 5_000;
 // The launch ttl and skew of docs/operational-targets.md (provisional).
 export const LAUNCH_PARAMETERS: LaunchParametersInput = Object.freeze({ ttlMilliseconds: 30_000, skewMilliseconds: 5_000 });
 // How long a stop waits for the loops before it cancels what still blocks.
@@ -50,6 +53,7 @@ export interface ControlPlaneSettings extends Omit<AdministrationSettings, 'logg
   readonly workflows: readonly KnownWorkflow[];
   readonly logSink?: LogSink;
   readonly sweepMilliseconds?: number;
+  readonly placementMilliseconds?: number;
   readonly shutdownMilliseconds?: number;
   // Shorter or smaller ones only in tests; production takes the targets.
   readonly transportLimits?: TransportLimits;
@@ -115,6 +119,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     runs: new RunService(database, workflows),
     tasks: new TaskService(database),
     evidence: new EvidenceService(database, volume.value),
+    delegations: new DelegationService(database),
     operator: admin.value.operator,
     enrollment: enrollment.value.service,
     launches,
@@ -133,6 +138,8 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   cleanup.push(async () => lag.stop());
   const publisher = new OutboxPublisher(new PostgresOutboxRelay(database), new JetStreamPublisher(broker.value.js), address.value, { logger, limits, fence });
   const sweep = settings.sweepMilliseconds ?? GRACE_WINDOW_SWEEP_MILLISECONDS;
+  const placement = new PlacementService(database, { now: Date.now, draw: Math.random });
+  const placementPass = settings.placementMilliseconds ?? PLACEMENT_PASS_MILLISECONDS;
   let outcome: 'stopped' | 'failed' = 'stopped';
   let settle!: (value: 'stopped' | 'failed') => void;
   const stopped = new Promise<'stopped' | 'failed'>((resolve) => { settle = resolve; });
@@ -168,6 +175,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     supervise('outbox', runOutboxPublisher(publisher, controller.signal, limits)),
     supervise('quarantine', runQuarantineKeeper(quarantine, controller.signal, limits)),
     supervise('grace-windows', runPeriodically(async () => logFailure(logger, 'fleet.grace-windows.failed', await enrollment.value.service.expireGraceWindows()), controller.signal, sweep)),
+    supervise('placement', runPeriodically(async () => logFailure(logger, 'execution.placement.failed', await placement.placeWaiting()), controller.signal, placementPass)),
     supervise('sampler', runPeriodically(() => sampleControlPlane(new PostgresControlPlaneSignals(database), metrics, logger), controller.signal)),
     supervise('event-loop', runPeriodically(() => lag.sample(metrics), controller.signal)),
   ];

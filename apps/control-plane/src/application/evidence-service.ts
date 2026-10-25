@@ -10,11 +10,12 @@ import {
   type EvidenceRecord,
   type EvidenceStore,
 } from '@taskelith/execution';
-import { validGenerations, type WorkerPrincipal } from '@taskelith/fleet';
+import type { WorkerPrincipal } from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import type { ContentDigest } from '@taskelith/sdlc';
 import type { ControlPlaneStore, ControlPlaneTransaction } from './control-plane-store.js';
 import { viewOf, type EvidenceView } from './evidence-view.js';
+import { checkCredential } from './worker-credential.js';
 
 // The outcome of a publication: the stored record, and whether this call
 // stored it (201) or found it already stored (200).
@@ -140,17 +141,6 @@ export class EvidenceService {
     const context = { task: task.value, projectId: link.projectId, runId: link.runId, heldGenerations: heldGenerations.value };
     return acceptEvidence(publication, producer, context, await tx.now());
   }
-}
-
-// The bearer was checked before the transaction; a revocation or an ended
-// grace window since then refuses the write (trust model, section 4).
-async function checkCredential(tx: ControlPlaneTransaction, principal: WorkerPrincipal): Promise<Result<void>> {
-  const worker = await tx.fleet.worker(principal.workerId);
-  if (!worker.ok) return worker;
-  const valid = worker.value !== undefined && worker.value.revokedAt === undefined
-    && validGenerations(worker.value.credentials, await tx.now()).some((generation) => generation.generation === principal.generation);
-  if (valid) return ok(undefined);
-  return err(failure('forbidden', 'the worker credential is not valid', { reason: 'worker-not-authorized' }));
 }
 
 // A path that is no identifier is `invalid` (400), as the contract declares.

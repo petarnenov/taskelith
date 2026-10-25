@@ -61,6 +61,12 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
     reasons: { 'worker-not-authorized': 401 },
   },
   {
+    operationId: 'requestDelegation', method: 'POST', pattern: /^\/delegations$/, security: 'workerCredential', body: 'DelegationRequest',
+    response: 'DelegationOutcome', success: 200,
+    statuses: { ...COMMON, forbidden: 403, conflict: 409, 'not-found': 422, 'precondition-failed': 422 },
+    reasons: { 'worker-not-authorized': 401 },
+  },
+  {
     operationId: 'readEvidence', method: 'GET', pattern: new RegExp(`^/evidence/${SEGMENT}$`), security: 'operatorToken',
     response: 'EvidenceRecord', success: 200, statuses: { ...COMMON, 'not-found': 404 },
   },

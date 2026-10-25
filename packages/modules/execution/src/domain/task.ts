@@ -85,6 +85,12 @@ export interface ObservationResult {
   readonly task: Task;
 }
 
+// What a task needs from placement: its first attempt, or a placement of
+// its active attempt, which must be uncancelled and own nothing that runs.
+export type PlacementNeed = { readonly kind: 'open-attempt' } | { readonly kind: 'place'; readonly attemptId: AttemptId };
+
+const OPEN_ATTEMPT: PlacementNeed = Object.freeze({ kind: 'open-attempt' });
+
 export function openTask(admission: TaskAdmission, at: Instant): Result<Task> {
   const ownership = dispatchedOwnership(admission);
   if (!ownership.ok) return ownership;
@@ -275,6 +281,14 @@ export function taskOutcomeFact(task: Task, attemptId: AttemptId): Result<TaskOu
     ownershipGeneration: attempt.value.outcome.ownershipGeneration,
     outcome: attempt.value.outcome,
   }));
+}
+
+// Undefined once every attempt ended: an automatic retry is not placement.
+export function placementNeed(task: Task): PlacementNeed | undefined {
+  if (task.attempts.length === 0) return OPEN_ATTEMPT;
+  const active = activeAttempt(task);
+  if (active === undefined || active.cancellation !== undefined || owningExecution(active) !== undefined) return undefined;
+  return Object.freeze({ kind: 'place', attemptId: active.id });
 }
 
 export function activeAttempt(task: Task): Attempt | undefined {

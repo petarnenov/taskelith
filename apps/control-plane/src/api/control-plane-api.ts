@@ -3,6 +3,7 @@ import type { LaunchAuthorizationRequest, LaunchOutcome } from '@taskelith/execu
 import type { Enrollment, EnrollmentRequest, WorkerPrincipal } from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import type { QuarantineRecord } from '@taskelith/nats';
+import type { DelegationService } from '../application/delegation-service.js';
 import type { EvidenceService } from '../application/evidence-service.js';
 import type { RunService } from '../application/run-service.js';
 import type { TaskService } from '../application/task-service.js';
@@ -17,6 +18,7 @@ export interface ApiServices {
   readonly runs: RunService;
   readonly tasks: TaskService;
   readonly evidence: EvidenceService;
+  readonly delegations: DelegationService;
   readonly operator: { authenticate(secret: string): Promise<Result<void>> };
   readonly enrollment: {
     enroll(tokenSecret: string, request: EnrollmentRequest): Promise<Result<Enrollment>>;
@@ -61,6 +63,8 @@ export class ControlPlaneApi implements ApiHandlers {
         return this.#services.tasks.readTaskResult(first, second);
       case 'publishEvidence':
         return this.#publish(request);
+      case 'requestDelegation':
+        return this.#requestDelegation(request);
       case 'readEvidence':
         return this.#services.evidence.read(first);
       case 'downloadEvidence':
@@ -107,6 +111,11 @@ export class ControlPlaneApi implements ApiHandlers {
     const published = await this.#services.evidence.publish(worker, record as HttpSchemas['EvidencePublication'], content);
     if (!published.ok) return published;
     return ok(new StatusAnswer(published.value.created ? 201 : 200, published.value.record));
+  }
+
+  async #requestDelegation({ worker, body, correlationId }: ApiRequest): Promise<Result<HttpSchemas['DelegationOutcome']>> {
+    if (worker === undefined) return err(failure('internal', 'requestDelegation reached its handler without a worker'));
+    return this.#services.delegations.requestDelegation(worker, body as HttpSchemas['DelegationRequest'], correlationId);
   }
 
   async #download(evidenceId: string): Promise<Result<Uint8Array>> {
