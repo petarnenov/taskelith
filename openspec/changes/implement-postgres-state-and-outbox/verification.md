@@ -27,11 +27,31 @@ Evidence check: node-pg-migrate's `runner` options, its `schema_migrations` tabl
 
 Environment: macOS (Darwin 25.6.0, arm64), Node v24.22.1, npm 12.2.1 (through `make verify`), Docker Engine 29.6.1, Docker Compose v5.2.0, PostgreSQL 18.6 from the pinned image.
 
-On `1dcbc6f`: `make verify` passed: comment rule, workspace package contract and boundary checks, 484 tests (including 33 PostgreSQL integration tests), coverage 99.68% lines, 95.98% branches, 99.45% functions, contract compatibility, the dependency inventory (710 package paths), strict OpenSpec validation (43 items), the archive dry run, and package verification.
+On `1dcbc6f`, before review: `make verify` passed: comment rule, workspace package contract and boundary checks, 484 tests (including 33 PostgreSQL integration tests), coverage 99.68% lines, 95.98% branches, 99.45% functions, contract compatibility, the dependency inventory (710 package paths), strict OpenSpec validation (43 items), the archive dry run, and package verification.
+
+On `1b9a04b`, after the pass 1 fixes: `make verify` passed with 496 tests (45 PostgreSQL adapter tests, of which 43 are integration tests) and coverage 99.70% lines, 96.48% branches, 99.06% functions. The adapter and harness integration tests passed three runs in a row (46 tests each) against fresh Compose projects.
 
 ## Independent review
 
-Assigned reviewer: Codex CLI 0.164.0 with `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> -`, the prompt on stdin; prompt and output files were kept outside the worktree.
+Assigned reviewer: Codex CLI 0.164.0 with `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> -`, the prompt on stdin; prompt and output files were kept outside the worktree. The prompt named `AGENTS.md`, ADR 0004, the governance review process, the plan row and decision D6, the architecture and contract sections the change serves, and the specifications it touches, and asked for every instance of a problem with severity, file, line, and fix.
+
+- **Pass 1 — session `01a170ab-c5f9-7440-a0bb-ec6d62f1b460`, reviewed `66f26fa` (diff `78362da...HEAD`).** The output header confirms model `gpt-6.1-sol`, reasoning effort medium, and the read-only sandbox. The author's SHA-256 snapshots of `git ls-files -co --exclude-standard` before and after the pass were equal (`8a6e7080…1e91e`); the reviewer could not take its own first snapshot in the sandbox and reported its later snapshots and `git status` unchanged. It ran strict validation, the boundary and comment checks, and the 20 tests that need no services. Findings: 0 Critical, 3 High, 9 Medium, 2 Low. Resolutions, in `1b9a04b`:
+  1. High: an applied migration could stay without a checksum when a later file of the run failed. Checksums of pending files are now recorded before any file runs, an applied migration without a checksum fails the run, and tests cover an interrupted run with an edited applied file, a fixed pending file, and a deleted checksum.
+  2. High: a COMMIT answered with `ROLLBACK` counted as success. The command tag is checked; the result is `internal` with `outcome: rolled-back`, no `.after` point is reached, and a test catches a failed statement inside the work.
+  3. High: a failed rollback returned the connection to the pool. An unconfirmed rollback destroys it, also when the work returned an `Err`, whose result is kept; a test black-holes a rollback on a one-connection pool and then commits on a new connection.
+  4. Medium: `replace` accepted an unchanged or older generation. `checkNextGeneration` requires the next one in every adapter, after the existence and stored-generation checks that keep G1's codes, and every suite checks it.
+  5. Medium: `EPIPE` matched the SQLSTATE pattern. Only a `pg.DatabaseError` has an SQLSTATE; a unit test covers socket codes and server codes.
+  6. Medium: the identity column gives append order, not commit order. Design, specification, and proposal now promise append order, and the design explains why the relay still misses no late commit.
+  7. Medium: payloads could hold values JSON changes, and the comparator hid it. Payloads are `JsonObject`, both outboxes reject other values with `invalid` (a shared case), and the comparator compares numbers exactly and arrays and keys strictly, treating only `undefined` fields as absent.
+  8. Medium: Toxiproxy test files interfered in parallel. The harness adds `acquireProcessLock`, keyed by the Toxiproxy port, which both Toxiproxy test files hold, with its own tests.
+  9. Medium: the race tests relied on coarse predicate locks. Each writer now reads both rows and inserts one, a write skew SERIALIZABLE must break, and the exhaustion test checks what committed.
+  10. Medium: `integer` generation columns were narrower than the domain. They are `bigint`, and the admission suite stores a generation beyond 2^31.
+  11. Medium: the transaction-scoped assignment `replace` threw on the held-reservation index. It checks first and returns `conflict`, and the assignment suite replaces a released assignment back to held.
+  12. Medium: suites could skip a failed read and did not check race losers or final records. `expectRead` and `expectOneWinner` require both.
+  13. Low: Execution and Scheduling exported no outbox suite. Both re-export the shared `OUTBOX_CONFORMANCE`, since their ports are structurally identical.
+  14. Low: crash and barrier tests could hang. Barriers have a ten-second deadline, child processes are killed after thirty seconds and must write nothing to stderr, and the lock has a deadline.
+
+  The reviewer also noted that the contracts' invalidating writers need predicates (non-terminal executions by artifact, gate, run, assignment, or worker; occupancy by quota scope) and a database clock that this change does not add; design non-goals and risks leave them to items 17, 18, and 21, which add the columns and queries with their use cases.
 
 ## Limitations
 
