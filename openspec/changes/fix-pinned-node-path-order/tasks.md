@@ -8,4 +8,4 @@
 
 - [x] 2.1 Show that the new test fails without the fix and passes with it.
 - [x] 2.2 Run `make doctor`, `make setup`, and `make verify` on the Linux host under its own `PATH`.
-- [ ] 2.3 Pass the independent review and record it in `verification.md`.
+- [x] 2.3 Pass the independent review and record it in `verification.md`.
