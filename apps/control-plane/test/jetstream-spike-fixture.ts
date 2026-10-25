@@ -1,10 +1,12 @@
-import { connect } from '@nats-io/transport-node';
+import { connect, credsAuthenticator } from '@nats-io/transport-node';
+import { integrationSecret } from '@taskelith/testing';
 import type { NatsConnection } from '@nats-io/nats-core';
 import { AckPolicy, jetstreamManager, StorageType } from '@nats-io/jetstream';
 import type { ConsumerConfig, JetStreamManager, JsMsg, StreamConfig } from '@nats-io/jetstream';
 import { integrationEndpoints } from './integration-services.ts';
 
-// Names and users match the spike section of infra/services/nats-server.conf.
+// Names and users match the spike users that scripts/integration-broker.ts
+// issues with the spike's permissions.
 export const COMMAND_STREAM = 'SPIKE_CMD';
 export const OBSERVATION_STREAM = 'SPIKE_OBS';
 export const QUARANTINE_STREAM = 'SPIKE_QUARANTINE';
@@ -23,11 +25,15 @@ export function observationSubject(worker: WorkerId): string {
 }
 
 export function connectAsIntegration(): Promise<NatsConnection> {
-  return connect({ servers: integrationEndpoints().nats.href });
+  return connect({ servers: integrationEndpoints().nats.href, authenticator: creds('integration'), tls: null });
 }
 
 export function connectAsWorker(worker: WorkerId, inboxPrefix = `_INBOX.${worker}`): Promise<NatsConnection> {
-  return connect({ servers: integrationEndpoints().nats.href, user: worker, pass: worker, inboxPrefix });
+  return connect({ servers: integrationEndpoints().nats.href, authenticator: creds(worker), inboxPrefix, tls: null });
+}
+
+function creds(user: string) {
+  return credsAuthenticator(new TextEncoder().encode(integrationSecret(`${user}.creds`)));
 }
 
 export async function recreateStream(jsm: JetStreamManager, config: Partial<StreamConfig> & { name: string }): Promise<void> {

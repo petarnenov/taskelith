@@ -10,12 +10,23 @@
     }
   },
   "dependencies": {
-    "@taskelith/kernel": "0.0.0"
+    "@taskelith/access": "0.0.0",
+    "@taskelith/contracts": "0.0.0",
+    "@taskelith/control-plane-store": "0.0.0",
+    "@taskelith/data-root": "0.0.0",
+    "@taskelith/execution": "0.0.0",
+    "@taskelith/fleet": "0.0.0",
+    "@taskelith/kernel": "0.0.0",
+    "@taskelith/nats": "0.0.0",
+    "@taskelith/postgres": "0.0.0",
+    "@taskelith/secrets": "0.0.0"
   },
   "devDependencies": {
     "@nats-io/jetstream": "3.4.0",
     "@nats-io/nats-core": "3.4.0",
+    "@nats-io/nkeys": "2.0.3",
     "@nats-io/transport-node": "3.4.0",
+    "@taskelith/testing": "0.0.0",
     "@types/pg": "8.23.1",
     "pg": "8.23.1"
   }

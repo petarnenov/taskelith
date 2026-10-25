@@ -50,6 +50,23 @@ export class TransportAddress {
     return `TASKELITH_${this.installationId}_${kind.toUpperCase()}`;
   }
 
+  // What a worker's broker user may do: pull and acknowledge its own commands,
+  // publish its own observations, and receive replies under its own prefix.
+  workerPermissions(workerId: string): Result<{ publish: string[]; subscribe: string[] }> {
+    const observations = this.observationSubject(workerId);
+    if (!observations.ok) return observations;
+    const stream = this.streamName('commands');
+    return ok({
+      publish: [
+        `$JS.API.CONSUMER.INFO.${stream}.${workerId}`,
+        `$JS.API.CONSUMER.MSG.NEXT.${stream}.${workerId}`,
+        `$JS.ACK.${stream}.${workerId}.>`,
+        observations.value,
+      ],
+      subscribe: [`_INBOX.${this.installationId}.${workerId}.>`],
+    });
+  }
+
   // A worker's replies arrive only under its own prefix (JetStream spike).
   inboxPrefix(workerId: string): Result<string> {
     const checked = checkToken('workerId', workerId);

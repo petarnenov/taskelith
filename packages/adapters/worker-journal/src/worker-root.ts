@@ -3,8 +3,15 @@ import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { err, failure, ok, type Failure, type Result } from '@taskelith/kernel';
 import type { JournalBinding, JournalId, RecoveryEpoch } from '@taskelith/execution';
-import { checkControlPath, refuseCheckout } from './control-records.js';
-import { createOnce, createPrivateDirectory, removeTemporaries, replaceFile, syncPath } from './durable-file.js';
+import {
+  checkControlPath,
+  createOnce,
+  createPrivateDirectory,
+  refuseCheckout,
+  removeTemporaries,
+  replaceFile,
+  syncPath,
+} from '@taskelith/data-root';
 import { ExclusiveFileLock } from './exclusive-file-lock.js';
 import { createJournalDatabase, openJournalDatabase } from './journal-database.js';
 import { rootFailure } from './journal-failure.js';

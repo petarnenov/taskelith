@@ -259,7 +259,7 @@ export async function databaseNow(session: Session): Promise<Instant> {
   return instant(rows[0]!.now);
 }
 
-function instant(date: Date): Instant {
+export function instant(date: Date): Instant {
   const parsed = parseInstant(date.toISOString());
   if (!parsed.ok) throw new Error(parsed.error.message);
   return parsed.value;

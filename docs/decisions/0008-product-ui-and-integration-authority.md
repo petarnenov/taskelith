@@ -1,7 +1,7 @@
 # ADR 0008: Product UI, auto-merge authority, and selectable SDLC framework
 
 Date: 2026-10-24
-Status: Decided by the owner on 2026-10-24 in the project conversation, while reviewing a clickable UI proof of concept screen by screen. Recorded; no UI, merge automation, intake, or framework-selection code exists yet. Each decision is implemented in the delivery gate named below.
+Status: Decided by the owner on 2026-10-24 in the project conversation, while reviewing a clickable UI proof of concept screen by screen. Recorded; no UI, merge automation, intake, or framework-selection code exists yet. Each decision is implemented in the delivery gate named below. On 2026-10-25 [ADR 0011](0011-mantine-ui-proof-of-concept.md) replaced the proof of concept with a Mantine build and stored its source in the repository.
 
 ## Context
 
@@ -75,6 +75,6 @@ The owner resolved the merge conflicts with "ауто мърдж побежда�
 ## Consequences
 
 - ADR 0004 principle 8, the governance policy (version 3), the architecture, the repository instructions, and the README are updated to match.
-- The proof of concept is reference material, not product code, and is not stored in this repository. The decisions above are the binding record.
+- The proof of concept is reference material, not product code, and is not stored in this repository. The decisions above are the binding record. (Amended by ADR 0011: the Mantine proof of concept's source is stored in `docs/ui-poc/` as reference material.)
 - This ADR implements nothing. Each decision becomes work items in its gate's plan, tracked through the selected SDLC framework.
 - Auto-merge changes nothing in the release policy, in deployment authorization, or in promotions from `dev` to `main`.

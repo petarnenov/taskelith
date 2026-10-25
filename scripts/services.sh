@@ -9,10 +9,20 @@ usage() {
 }
 
 if [ "$#" -lt 2 ]; then usage; fi
-compose_file="$(dirname "$0")/../infra/services/compose.yaml"
+repository="$(cd "$(dirname "$0")/.." && pwd)"
+compose_file="$repository/infra/services/compose.yaml"
 action="$1"
 project="$2"
 shift 2
+# A Compose project name, which also names the secrets directory below.
+case "$project" in
+  ''|*[!a-z0-9_-]*|[!a-z0-9]*)
+    echo "services.sh: project must be lowercase letters, digits, '_' or '-'" >&2
+    exit 2
+    ;;
+esac
+# Test broker trust and certificates of this project, outside the checkout.
+export TASKELITH_SERVICES_SECRETS="${TMPDIR:-/tmp}/taskelith-services/$project"
 
 compose() {
   docker compose --file "$compose_file" --project-name "$project" "$@"
@@ -26,11 +36,43 @@ require_docker() {
 }
 
 up() {
+  prepare_secrets
   compose up --detach --wait --wait-timeout 120
 }
 
 down() {
   compose down --volumes --remove-orphans
+  rm -rf "$TASKELITH_SERVICES_SECRETS"
+}
+
+# Test operator, accounts, users (D9 a) and a test CA by the postgres image's
+# openssl (O3 c); a running project keeps the secrets its server loaded.
+prepare_secrets() {
+  local postgres_image
+  if [ -f "$TASKELITH_SERVICES_SECRETS/server-cert.pem" ]; then return; fi
+  rm -rf "$TASKELITH_SERVICES_SECRETS"
+  mkdir -p "$TASKELITH_SERVICES_SECRETS"
+  chmod 700 "$TASKELITH_SERVICES_SECRETS"
+  node --experimental-strip-types "$repository/scripts/integration-broker.ts" "$TASKELITH_SERVICES_SECRETS"
+  postgres_image="$(sed -n 's/^ *image: \(postgres:.*\)$/\1/p' "$compose_file")"
+  docker run --rm --user "$(id -u):$(id -g)" --volume "$TASKELITH_SERVICES_SECRETS:/out" \
+    --entrypoint sh "$postgres_image" -c "$(test_ca_script)" >/dev/null 2>&1
+}
+
+test_ca_script() {
+  cat <<'SCRIPT'
+set -e
+cd /out
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 3650 \
+  -subj "/CN=Taskelith test CA" -keyout ca-key.pem -out ca.pem
+openssl req -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+  -subj "/CN=localhost" -keyout server-key.pem -out server.csr
+printf 'subjectAltName=DNS:localhost,IP:127.0.0.1\n' > server.ext
+openssl x509 -req -in server.csr -CA ca.pem -CAkey ca-key.pem -CAcreateserial \
+  -days 3650 -extfile server.ext -out server-cert.pem
+rm -f ca-key.pem server.csr server.ext ca.srl
+chmod 600 server-key.pem
+SCRIPT
 }
 
 # Teardown and the stop of the command ignore further signals, so a second
@@ -101,6 +143,7 @@ case "$action" in
     echo "export TASKELITH_TOXIPROXY_URL=$TASKELITH_TOXIPROXY_URL"
     echo "export TASKELITH_POSTGRES_PROXY_URL=$TASKELITH_POSTGRES_PROXY_URL"
     echo "export TASKELITH_NATS_PROXY_URL=$TASKELITH_NATS_PROXY_URL"
+    echo "export TASKELITH_SERVICES_SECRETS=$TASKELITH_SERVICES_SECRETS"
     ;;
   down)
     down

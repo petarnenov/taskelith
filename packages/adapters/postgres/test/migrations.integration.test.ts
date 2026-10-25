@@ -13,6 +13,7 @@ import { SERVER_URL, createTestDatabase, databaseUrl, query } from './test-datab
 const INITIAL = '1792929600000_initial-state';
 const RESOURCE_ADMISSION = '1792930000000_resource-admission';
 const OBSERVABILITY_SIGNALS = '1792930400000_observability-signals';
+const ENROLLMENT = '1792930800000_installation-and-enrollment';
 
 async function copiedMigrations(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'taskelith-migrations-'));
@@ -23,26 +24,28 @@ async function copiedMigrations(): Promise<string> {
 
 test('migrations apply once, record their checksums, and create the schema', async () => {
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
-  assert.deepEqual(await migrate(url), { ok: true, value: [INITIAL, RESOURCE_ADMISSION, OBSERVABILITY_SIGNALS] });
+  assert.deepEqual(await migrate(url), { ok: true, value: [INITIAL, RESOURCE_ADMISSION, OBSERVABILITY_SIGNALS, ENROLLMENT] });
   assert.deepEqual(await migrate(url), { ok: true, value: [] });
   const checksums = await query<{ name: string; sha256: string }>(url, 'SELECT name, sha256 FROM schema_migration_checksums');
-  assert.deepEqual(checksums.map((row) => row.name).sort(), [INITIAL, RESOURCE_ADMISSION, OBSERVABILITY_SIGNALS]);
+  assert.deepEqual(checksums.map((row) => row.name).sort(), [INITIAL, RESOURCE_ADMISSION, OBSERVABILITY_SIGNALS, ENROLLMENT]);
   assert.match(checksums[0]!.sha256, /^[0-9a-f]{64}$/);
   const tables = await query<{ table_name: string }>(
     url, "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name",
   );
   assert.deepEqual(tables.map((row) => row.table_name), [
-    'admissions', 'assignments', 'capacity_charges', 'capacity_quotas', 'delegations', 'gates', 'inbox', 'installation', 'outbox',
-    'schema_migration_checksums', 'schema_migrations', 'task_lineage', 'tasks', 'workers', 'workflow_runs',
+    'admissions', 'assignments', 'audit_events', 'broker_revocations', 'capacity_charges', 'capacity_quotas', 'delegations', 'enrollment_tokens', 'gates',
+    'inbox', 'installation', 'operator_credentials', 'outbox', 'schema_migration_checksums', 'schema_migrations', 'task_lineage',
+    'tasks', 'workers', 'workflow_runs',
   ]);
 });
 
 test('the signals migration copies the state, change time, and unknown executions of stored records', async () => {
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   const directory = await copiedMigrations();
-  const signals = join(directory, `${OBSERVABILITY_SIGNALS}.sql`);
-  const content = await readFile(signals, 'utf8');
-  await unlink(signals);
+  // The signals migration and every later one wait, so they apply in order.
+  const held = [OBSERVABILITY_SIGNALS, ENROLLMENT].map((name) => join(directory, `${name}.sql`));
+  const contents = await Promise.all(held.map((path) => readFile(path, 'utf8')));
+  await Promise.all(held.map((path) => unlink(path)));
   assert.equal((await migrate(url, directory)).ok, true);
   const offered = assignment('assignment-1');
   await query(url, `INSERT INTO assignments (id, attempt_id, worker_id, reservation_state, generation, record, project_id, run_id,
@@ -59,8 +62,8 @@ test('the signals migration copies the state, change time, and unknown execution
     await query(url, 'INSERT INTO tasks (id, admission_id, generation, record) VALUES ($1, $2, 1, $3)',
       [`${task.id}-${task.generation}`, task.admissionId, JSON.stringify({ ...task, probe })]);
   }
-  await writeFile(signals, content);
-  assert.deepEqual(await migrate(url, directory), { ok: true, value: [OBSERVABILITY_SIGNALS] });
+  await Promise.all(held.map((path, index) => writeFile(path, contents[index]!)));
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: [OBSERVABILITY_SIGNALS, ENROLLMENT] });
   const [row] = await query<{ state: string; changed_at: Date }>(url, 'SELECT state, changed_at FROM assignments');
   assert.deepEqual([row!.state, row!.changed_at.toISOString()], ['offered', AT]);
   const tasks = await query<{ unknown_executions: number }>(url, 'SELECT unknown_executions FROM tasks ORDER BY unknown_executions');
