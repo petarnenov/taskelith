@@ -6,7 +6,10 @@ import { migrate } from '@taskelith/postgres';
 export const SERVER_URL = integrationEndpoint('TASKELITH_POSTGRES_URL');
 export const PROXY_URL = integrationEndpoint('TASKELITH_POSTGRES_PROXY_URL');
 
-const TABLES = ['workflow_runs', 'gates', 'admissions', 'tasks', 'assignments', 'outbox', 'inbox'];
+const TABLES = [
+  'workflow_runs', 'gates', 'admissions', 'tasks', 'assignments', 'outbox', 'inbox',
+  'task_lineage', 'capacity_charges', 'delegations', 'capacity_quotas', 'workers', 'installation',
+];
 let created = 0;
 
 // Each test file gets a database of its own, since files run in parallel;
