@@ -63,6 +63,7 @@ Recorded before pass 1.
 - `npm run openspec -- validate implement-process-supervisor --strict` passed.
 - After the pass-1 fixes, `make verify` passed at `03770ca`: 641 tests passed, 0 failed; coverage 99.23% lines, 92.95% branches, 99.01% functions. `make verify-linux-cgroup` passed 13 of 13 tests in each of four runs.
 - After the pass-2 fixes, `make verify` passed at `98ce73d`: 646 tests passed, 0 failed; coverage 99.23% lines, 93.01% branches, 99.01% functions. `make verify-linux-cgroup` passed 13 of 13 tests in each of four runs.
+- After the pass-3 fixes, which were not reviewed again, `make verify` passed at `28a4163`: 651 tests passed, 0 failed; coverage 99.21% lines, 93.12% branches, 99.01% functions. `make verify-linux-cgroup` passed 13 of 13 tests in each of four runs.
 
 ## Independent review
 
@@ -102,3 +103,19 @@ Assigned reviewer: Claude Code with `claude -p "<prompt>" --model claude-fable-5
   12. Low L-10, **recorded:** recovery's read failures are results that item 20 maps (design decision 14).
   13. Low L-11, **recorded:** an empty containment left by a crash after `exit` is item 23's cleanup (design decision 14).
   14. Low L-12, **answered without a change:** every read flushes the file and its directory before the reader acts on it, as the durable file rule requires; caching flushed names is an optimization left for later.
+
+- **Pass 3 — session `36dd7af7-a44e-4d42-8572-c60faa46c9cb`,** reviewed revision `a4450a2`; the JSON `modelUsage` reports only `claude-fable-5-1`. Snapshot before and after: `043de01d…7917`, equal. The reviewer confirmed all 14 pass-2 findings resolved, recorded, or answered. Findings: 0 Critical, 0 High, 0 Medium, 9 Low. Under the review process a Low-only pass is fixed without another review, so **these fixes have not been independently reviewed:**
+  1. Recovery took the containment from the platform's path, not the one the claim names. A claim whose containment differs from the platform's path is now unreadable evidence, so recovery is `uncertain`; a test covers it.
+  2. A spawn failure retried its writes without bound and without a live child. They are tried at most `unreadablePolls` times, then the supervisor ends with `write-failed`; a test covers it.
+  3. A failed descendant write blocked the watch loop. It now ends that walk, and the next walk records the process again; a test covers it.
+  4. An adopter accepted being `supervisor.1`, a claim without a first supervisor record. It now reports the record as unusable; a test covers it.
+  5. A failed listing of the record was reported as a failed write. It is `record-unusable` with the reason; a test covers it.
+  6. The in-process crash tests asserted at most one spawn, which their fake made trivially true. They now assert which adopter recovery starts and the exact spawn count for each crash point.
+  7. The contract said `events` is append-only, while a torn last entry is cut off by a replace. The contract's row now says so.
+  8. A comment on the program's arguments omitted the mode. It now follows CP4.
+  9. No test removed a record with the real store and lock. A test seals, recovers, and removes one on disk.
+
+## Remaining gates
+
+- The owner's decision D-A on macOS native reads, with the `koffi` proposal; until then macOS seals every launch, and item 25's macOS rows stay open.
+- Integration into `dev` by the coordinator, then archiving the change.
