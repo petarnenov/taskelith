@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import { OPERATOR_CREDENTIALS_CONFORMANCE } from '@taskelith/access';
-import { FLEET_REGISTRY_CONFORMANCE, INSTALLATION_TABLE_CONFORMANCE, fleetToken, fleetWorker, installationIdentity } from '@taskelith/fleet';
+import {
+  FLEET_REGISTRY_CONFORMANCE,
+  INSTALLATION_TABLE_CONFORMANCE,
+  fleetToken,
+  fleetWorker,
+  installationIdentity,
+  type CredentialGeneration,
+} from '@taskelith/fleet';
 import {
   CommittingFleetRegistry,
   CommittingInstallationTable,
@@ -103,6 +110,31 @@ async function waitForWaitingLock(client: pg.Client): Promise<void> {
   }
   throw new Error('the publisher never waited for the advisory lock');
 }
+
+test('a due row whose record holds no predecessor is skipped, and the sweep goes on', { concurrency: false }, async () => {
+  await truncateAll(url);
+  const registry = new CommittingFleetRegistry(database);
+  const [skipped, rotated] = [fleetWorker('w1', 'j1'), fleetWorker('w2', 'j2')];
+  for (const worker of [skipped, rotated]) {
+    value(await registry.addToken(fleetToken(`t-${worker.workerId}`)));
+    value(await registry.enroll(fleetToken(`t-${worker.workerId}`).hash, worker));
+  }
+  const first = rotated.credentials.current;
+  const next: CredentialGeneration = {
+    ...first,
+    generation: 2,
+    controlPlaneHash: `${first.controlPlaneHash}-next` as CredentialGeneration['controlPlaneHash'],
+    brokerUserKey: 'U-w2-2',
+  };
+  value(await registry.rotate(rotated.workerId, 1, next, rotated.enrolledAt, rotated.enrolledAt));
+  await query(url, "UPDATE workers SET predecessor_valid_until = $1 WHERE worker_id = 'w1'", [rotated.enrolledAt]);
+  const before = await query(url, "SELECT enrollment, predecessor_valid_until FROM workers WHERE worker_id = 'w1'");
+
+  assert.equal(value(await registry.expirePredecessors(rotated.enrolledAt)), 1, 'only the real predecessor counts');
+  assert.deepEqual(value(await registry.worker(rotated.workerId))?.credentials, { current: next });
+  assert.deepEqual(await query(url, "SELECT enrollment, predecessor_valid_until FROM workers WHERE worker_id = 'w1'"), before, 'the skipped row is unchanged');
+  assert.deepEqual(await query(url, 'SELECT user_key FROM broker_revocations'), [{ user_key: 'U-w2-1' }]);
+});
 
 test('the initialized installation is not quarantined', { concurrency: false }, async () => {
   await truncateAll(url);
