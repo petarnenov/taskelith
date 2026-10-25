@@ -41,7 +41,7 @@ test('an enrolled worker is placeable once reachable, and a revoked one is not',
 
   assert.deepEqual(value(await placement()), {
     workerId: worker.workerId, enrolled: true, revoked: false, draining: false, reachable: false,
-    slots: 2, cpuMillicores: 4000, memoryMebibytes: 8192, controls: ['cpu-limit', 'memory-limit'],
+    slots: 2, cpuMillicores: 4000, memoryMebibytes: 8192, controls: ['cpu-limit', 'memory-limit'], protocolVersion: 1,
   });
   value(await registry.revoke(worker.workerId, worker.enrolledAt));
   assert.equal(value(await placement())?.revoked, true);

@@ -76,7 +76,8 @@ export class EnrollmentService {
     if (token.value === undefined || isExpired(token.value, now)) return err(reasoned('forbidden', 'token-invalid', 'the enrollment token is unknown, used, or expired'));
     const field = hostMismatch(token.value.constraints, request.host);
     if (field !== undefined) return err(reasoned('precondition-failed', 'host-mismatch', `the host ${field} does not match the token`));
-    if (commonProtocolVersion(request.protocolVersions, this.#deps.serverProtocolVersions) === undefined) {
+    const protocolVersion = commonProtocolVersion(request.protocolVersions, this.#deps.serverProtocolVersions);
+    if (protocolVersion === undefined) {
       return err(reasoned('precondition-failed', 'protocol-not-supported', 'no protocol version is supported by both sides'));
     }
     const workerId = parseWorkerId(this.#deps.ids.newWorkerId());
@@ -84,7 +85,7 @@ export class EnrollmentService {
     const issued = await this.#issueGeneration(workerId.value, 1);
     if (!issued.ok) return issued;
     const worker: EnrolledWorker = Object.freeze({
-      workerId: workerId.value, journalId: request.journalId, host: request.host, protocolVersions: request.protocolVersions,
+      workerId: workerId.value, journalId: request.journalId, host: request.host, protocolVersions: request.protocolVersions, protocolVersion,
       capacity: request.capacity, credentials: Object.freeze({ current: issued.value.generation }), enrolledAt: now,
     });
     const enrolled = await this.#deps.registry.enroll(tokenHash, worker);

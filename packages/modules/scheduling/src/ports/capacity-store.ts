@@ -1,5 +1,6 @@
 import type { Instant, Result } from '@taskelith/kernel';
 import type { TaskRepository } from '@taskelith/execution';
+import type { AdmissionRepository } from '@taskelith/sdlc';
 import type { AssignmentRepository } from './assignment-repository.js';
 import type { CapacityLedger } from './capacity-ledger.js';
 import type { InstallationGuard } from './installation-guard.js';
@@ -12,6 +13,8 @@ import type { TaskLineage } from './task-lineage.js';
 // single SERIALIZABLE transaction; `now` is the database clock.
 export interface CapacityTransaction {
   readonly assignments: AssignmentRepository;
+  // The admission each command names in its SDLC metadata.
+  readonly admissions: AdmissionRepository;
   readonly tasks: TaskRepository;
   readonly outbox: Outbox;
   readonly workers: PlacementWorkers;

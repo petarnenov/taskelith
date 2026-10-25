@@ -7,6 +7,7 @@ import {
   CommittingGateRepository,
   CommittingInbox,
   CommittingOutbox,
+  CommittingRunCatalog,
   CommittingTaskRepository,
   CommittingWorkflowRunRepository,
   PostgresDatabase,
@@ -17,6 +18,7 @@ import {
   ADMISSION_REPOSITORY_CONFORMANCE,
   GATE_REPOSITORY_CONFORMANCE,
   OUTBOX_CONFORMANCE,
+  RUN_CATALOG_CONFORMANCE,
   WORKFLOW_RUN_REPOSITORY_CONFORMANCE,
   type ConformanceCase,
 } from '@taskelith/sdlc';
@@ -38,6 +40,11 @@ function runSuite<Port>(port: string, cases: readonly ConformanceCase<Port>[], c
 
 runSuite('admissions', ADMISSION_REPOSITORY_CONFORMANCE, () => new CommittingAdmissionRepository(database));
 runSuite('runs', WORKFLOW_RUN_REPOSITORY_CONFORMANCE, () => new CommittingWorkflowRunRepository(database));
+runSuite('run catalog', RUN_CATALOG_CONFORMANCE, () => ({
+  runs: new CommittingWorkflowRunRepository(database),
+  admissions: new CommittingAdmissionRepository(database),
+  catalog: new CommittingRunCatalog(database),
+}));
 runSuite('gates', GATE_REPOSITORY_CONFORMANCE, () => new CommittingGateRepository(database));
 runSuite('tasks', TASK_REPOSITORY_CONFORMANCE, () => new CommittingTaskRepository(database));
 runSuite('assignments', ASSIGNMENT_REPOSITORY_CONFORMANCE, () => new CommittingAssignmentRepository(database));

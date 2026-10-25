@@ -2,14 +2,19 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Taskelith SDLC API",
-    "version": "0.2.0",
-    "description": "Creates SDLC workflow runs, submits tasks for admission, and reads admissions. Authentication is defined with enrollment in G2."
+    "version": "0.3.0",
+    "description": "Creates SDLC workflow runs, submits tasks for admission, and reads admissions. Every operation requires the installation-owner credential (decision D10 (a))."
   },
   "paths": {
     "/runs": {
       "post": {
         "operationId": "createRun",
         "summary": "Create a workflow run bound to a framework workflow and policy revision",
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -41,8 +46,48 @@
               }
             }
           },
+          "401": {
+            "description": "The operator credential is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
           "409": {
             "description": "A run with this identifier already exists with another binding.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The binding names a workflow, version, or digest the control plane does not know.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A service the operation needs is unavailable; retry later.",
             "content": {
               "application/json": {
                 "schema": {
@@ -58,6 +103,11 @@
       "post": {
         "operationId": "submitTask",
         "summary": "Submit a task to a stage of a run for admission",
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ],
         "parameters": [
           {
             "name": "runId",
@@ -100,6 +150,16 @@
               }
             }
           },
+          "401": {
+            "description": "The operator credential is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
           "404": {
             "description": "The run or the stage does not exist.",
             "content": {
@@ -129,6 +189,26 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A service the operation needs is unavailable; retry later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
           }
         }
       }
@@ -137,6 +217,11 @@
       "get": {
         "operationId": "readAdmission",
         "summary": "Read an admission of a run",
+        "security": [
+          {
+            "operatorToken": []
+          }
+        ],
         "parameters": [
           {
             "name": "runId",
@@ -168,8 +253,48 @@
               }
             }
           },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The operator credential is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
           "404": {
             "description": "The run or the admission does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The control plane failed; nothing is assumed to have taken effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A service the operation needs is unavailable; retry later.",
             "content": {
               "application/json": {
                 "schema": {
@@ -500,6 +625,13 @@
             }
           }
         }
+      }
+    },
+    "securitySchemes": {
+      "operatorToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The installation bootstrap credential."
       }
     }
   }

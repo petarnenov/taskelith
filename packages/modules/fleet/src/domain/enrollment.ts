@@ -69,6 +69,9 @@ export interface EnrolledWorker {
   readonly journalId: JournalId;
   readonly host: WorkerHost;
   readonly protocolVersions: ProtocolWindow;
+  // The highest version the worker and the control plane share, which the
+  // control plane stamps on the worker's commands (wire contracts, section 3).
+  readonly protocolVersion: number;
   readonly capacity: WorkerCapacity;
   readonly credentials: WorkerCredentials;
   readonly enrolledAt: Instant;

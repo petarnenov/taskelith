@@ -20,7 +20,8 @@ import {
 } from '@taskelith/scheduling';
 import { parseOwnershipGeneration, type TaskId } from '@taskelith/sdlc';
 import { CrashPoints, SimulatedCrash, id, value } from '@taskelith/testing';
-import { authorizedUnder, placedTask, retriedTask, seedWorker } from './capacity-fixtures.ts';
+import { authorizedUnder, placedTask, retriedTask, seedWorker, usedAdmission } from './capacity-fixtures.ts';
+import { checkMessageSchema } from '@taskelith/contracts';
 import { AT, assignment } from './fixtures.ts';
 import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
 
@@ -45,13 +46,13 @@ const REQUESTED = value(parseResourceRequest({ cpuMillicores: 1000, memoryMebiby
 function worker(workerId: WorkerId, overrides: Partial<WorkerPlacementRecord> = {}): WorkerPlacementRecord {
   return {
     workerId, enrolled: true, revoked: false, draining: false, reachable: true, slots: 2, cpuMillicores: 3500,
-    memoryMebibytes: 7680, controls: ['memory-limit' as const], ...overrides,
+    memoryMebibytes: 7680, controls: ['memory-limit' as const], protocolVersion: 1, ...overrides,
   };
 }
 
 beforeEach(async () => {
   await truncateAll(url);
-  await query(url, 'INSERT INTO installation (quarantined) VALUES (false)');
+  await query(url, 'INSERT INTO installation (quarantined, recovery_epoch) VALUES (false, 1)');
   await seedWorker(url, worker(WORKER));
 });
 
@@ -59,6 +60,8 @@ beforeEach(async () => {
 async function rootTask(task: string, attempt = `${task}-attempt`, runId = ROOT_LINK.runId, stored = placedTask(task, attempt)): Promise<Task> {
   const link: TaskLineageLink = { ...ROOT_LINK, taskId: stored.id, rootTaskId: stored.id, runId };
   value(await database.transaction(async (tx) => {
+    const admitted = await tx.admissions.add(usedAdmission(stored.id));
+    if (!admitted.ok) return admitted;
     const added = await tx.tasks.add(stored);
     return added.ok ? tx.lineage.add(link) : added;
   }));
@@ -95,6 +98,11 @@ async function counts(): Promise<{ held: number; assignments: number; charges: n
   return row!;
 }
 
+// Each outbox row's payload is the wire command the publisher sends as is.
+async function commands(): Promise<Array<{ metadata: Record<string, unknown>; payload: Record<string, unknown> }>> {
+  return (await query<{ message: string }>(url, 'SELECT message FROM outbox ORDER BY position')).map((row) => JSON.parse(row.message).payload);
+}
+
 async function eventTypes(): Promise<string[]> {
   return (await query<{ event_type: string }>(url, 'SELECT event_type FROM outbox ORDER BY position')).map((row) => row.event_type);
 }
@@ -105,7 +113,11 @@ test('a placement writes the held reservation, its assignment, the charge, and t
   assert.equal(placed.kind, 'placed');
   assert.ok(placed.kind === 'placed' && placed.assignment.reservation.state === 'held' && placed.assignment.state === 'offered');
   assert.deepEqual(await counts(), { held: 1, assignments: 1, charges: 1, outbox: 1 });
-  assert.deepEqual(await eventTypes(), ['scheduling.assignment.offered']);
+  assert.deepEqual(await eventTypes(), ['execution.assignment.offer']);
+  const [offer] = await commands();
+  assert.deepEqual(checkMessageSchema('AssignmentOfferCommand', offer), { ok: true, value: offer });
+  assert.deepEqual(offer!.metadata.sdlc, { runId: ROOT_LINK.runId, stageId: 'specs', admissionId: `admission-${task.id}`, admissionGeneration: 2 });
+  assert.deepEqual([offer!.payload.protocolVersion, offer!.payload.recoveryEpoch], [1, 1]);
   assert.equal(kind(await service.reserve(placement(task, 'b'))), 'standing:attempt-already-reserved');
 });
 
@@ -209,7 +221,7 @@ test('cancelling an assignment without a grant ends it, releases, and tells the 
   const ended = value(await service.cancelAssignment(cancel));
   assert.deepEqual([ended.state, ended.end?.reason, ended.reservation.state], ['ended', 'cancelled', 'released']);
   assert.equal(ended.reservation.state === 'released' && ended.reservation.releasedBy, 'cancelled');
-  assert.deepEqual(await eventTypes(), ['scheduling.assignment.offered', 'scheduling.assignment.ended']);
+  assert.deepEqual(await eventTypes(), ['execution.assignment.offer', 'execution.assignment.end']);
   assert.equal(kind(await service.reserve(placement(task, 'b'))), 'placed');
   assert.deepEqual(await counts(), { held: 1, assignments: 2, charges: 1, outbox: 3 });
   const again = await service.cancelAssignment(cancel);
@@ -225,7 +237,7 @@ test('cancelling an assignment with a running execution keeps the reservation un
   const request = { assignmentId: placed.assignment.id, commandId: id('EventId', 'cancel-a'), correlationId: id('CorrelationId', 'correlation-a') };
   const ended = value(await service.cancelAssignment(request));
   assert.deepEqual([ended.state, ended.reservation.state], ['ended', 'held']);
-  assert.deepEqual(await eventTypes(), ['scheduling.assignment.offered', 'execution.attempt.cancel']);
+  assert.deepEqual(await eventTypes(), ['execution.assignment.offer', 'execution.cancellation.request']);
   const early = await service.releaseAfterTerminalFact({ ...request, commandId: id('EventId', 'release-early') });
   assert.equal(!early.ok && early.error.code, 'precondition-failed');
   const cancelled = value(await database.transaction((tx) => tx.tasks.get(task.id)));
@@ -267,7 +279,17 @@ test('an assignment without a grant is superseded once its worker is gone, never
   await query(url, 'UPDATE workers SET reachable = false');
   const superseded = value(await service.supersede(request));
   assert.deepEqual([superseded.end?.reason, superseded.reservation.state], ['superseded', 'released']);
-  assert.deepEqual(await eventTypes(), ['scheduling.assignment.offered', 'scheduling.assignment.ended']);
+  assert.deepEqual(await eventTypes(), ['execution.assignment.offer', 'execution.assignment.end']);
+});
+
+test('an assignment whose worker has no record is superseded and released without a command', async () => {
+  const task = await rootTask('task-1');
+  const placed = value(await service.reserve(placement(task, 'a')));
+  assert.ok(placed.kind === 'placed');
+  await query(url, 'DELETE FROM workers');
+  const superseded = value(await service.supersede({ assignmentId: placed.assignment.id, commandId: id('EventId', 's'), correlationId: id('CorrelationId', 'c') }));
+  assert.deepEqual([superseded.end?.reason, superseded.reservation.state], ['superseded', 'released']);
+  assert.deepEqual(await eventTypes(), ['execution.assignment.offer']);
 });
 
 test('a granted assignment is not superseded', async () => {
@@ -330,7 +352,10 @@ test('delegations are admitted, fail closed on chains, and wait for a free unit 
 test('a fourth level of delegation is rejected at creation', async () => {
   const root = await rootTask('task-root');
   const deepest = placedTask('task-c', 'attempt-c');
-  value(await database.transaction((tx) => tx.tasks.add(deepest)));
+  value(await database.transaction(async (tx) => {
+    const admitted = await tx.admissions.add(usedAdmission(deepest.id));
+    return admitted.ok ? tx.tasks.add(deepest) : admitted;
+  }));
   const links: TaskLineageLink[] = ['a', 'b', 'c'].map((name, index) => ({
     ...ROOT_LINK, taskId: id('TaskId', `task-${name}`) as TaskId, parentTaskId: index === 0 ? root.id : id('TaskId', `task-${'abc'[index - 1]}`) as TaskId,
     rootTaskId: root.id, depth: index + 1, projectId: PROJECT as ProjectId,
@@ -373,7 +398,7 @@ test('the transaction recording an attempt\'s end also ends its active assignmen
     return stored.ok ? releaseInTransaction(tx, request) : stored;
   }));
   assert.deepEqual([released.end?.reason, released.reservation.state], ['attempt-ended', 'released']);
-  assert.deepEqual(await eventTypes(), ['scheduling.assignment.offered', 'scheduling.assignment.ended']);
+  assert.deepEqual(await eventTypes(), ['execution.assignment.offer', 'execution.assignment.end']);
   const active = await service.releaseAfterTerminalFact(request);
   assert.equal(!active.ok && active.error.code, 'precondition-failed');
 });

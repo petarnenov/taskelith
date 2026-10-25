@@ -6,13 +6,13 @@ export const REDACTED = '[redacted]';
 // password may hold an unescaped `@` (`postgres://owner:p@ss@host`).
 const URL_USERINFO = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#]*@/gi;
 
-// Secrets that text may carry: this installation's bearer secrets, NATS seeds
-// and user JWTs, and a whole `.creds` block (trust model section 5).
+// Bearer secrets, NATS seeds and JWTs, and `.creds` blocks (trust model 5),
+// without word boundaries, so text glued in front of one hides nothing.
 const SECRET_PATTERNS: readonly RegExp[] = [
-  new RegExp(`\\b(?:${Object.values(SECRET_PREFIXES).join('|')})_[A-Za-z0-9_-]{20,}`, 'g'),
+  new RegExp(`(?:${Object.values(SECRET_PREFIXES).join('|')})_[A-Za-z0-9_-]{20,}`, 'g'),
   /-----BEGIN NATS USER JWT-----[\s\S]*?------END USER NKEY SEED------/g,
-  /\bS[OAU][A-Z2-7]{56}\b/g,
-  /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
+  /S[OAU][A-Z2-7]{56}/g,
+  /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
 ];
 
 // Environment variables whose names mark them as secrets.

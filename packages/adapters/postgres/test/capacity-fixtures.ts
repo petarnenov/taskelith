@@ -30,9 +30,9 @@ import { query } from './test-database.ts';
 
 export async function seedWorker(url: URL, worker: WorkerPlacementRecord): Promise<void> {
   await query(url, `INSERT INTO workers (worker_id, enrolled, revoked, draining, reachable, admission_pressure_since,
-    slots, cpu_millicores, memory_mebibytes, controls) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, [
+    slots, cpu_millicores, memory_mebibytes, controls, protocol_version) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`, [
     worker.workerId, worker.enrolled, worker.revoked, worker.draining, worker.reachable, worker.admissionPressureSince ?? null,
-    worker.slots, worker.cpuMillicores, worker.memoryMebibytes, [...worker.controls],
+    worker.slots, worker.cpuMillicores, worker.memoryMebibytes, [...worker.controls], worker.protocolVersion ?? null,
   ]);
 }
 
@@ -52,7 +52,8 @@ function run(): RunContext {
   return { binding, progress: beginWorkflowProgress(definition, AT) };
 }
 
-function usedAdmission(taskId: string): TaskAdmission {
+// The used admission a fixture task names, which every command reads.
+export function usedAdmission(taskId: string): TaskAdmission {
   const admitted = value(admitPlanningTask({ id: `admission-${taskId}`, taskId, stageId: 'specs' }, run(), [], AT));
   return value(useAdmission(admitted, admitted.generation, AT, FIRST_OWNERSHIP_GENERATION));
 }
