@@ -3522,6 +3522,21 @@
       "externalReferences": []
     },
     {
+      "bom-ref": "@taskelith/postgres@0.0.0",
+      "type": "library",
+      "name": "@taskelith/postgres",
+      "version": "0.0.0",
+      "scope": "required",
+      "purl": "pkg:npm/%40taskelith/postgres@0.0.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:private",
+          "value": "true"
+        }
+      ],
+      "externalReferences": []
+    },
+    {
       "bom-ref": "@taskelith/scheduling@0.0.0",
       "type": "library",
       "name": "@taskelith/scheduling",
@@ -3784,12 +3799,7 @@
       "version": "24.19.2",
       "scope": "optional",
       "purl": "pkg:npm/%40types/node@24.19.2",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -3850,12 +3860,7 @@
       "version": "8.23.1",
       "scope": "optional",
       "purl": "pkg:npm/%40types/pg@8.23.1",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -4265,14 +4270,9 @@
       "type": "library",
       "name": "ansi-regex",
       "version": "6.4.0",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/ansi-regex@6.4.0",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -4364,14 +4364,9 @@
       "type": "library",
       "name": "ansi-styles",
       "version": "6.2.3",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/ansi-styles@6.2.3",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -5739,14 +5734,9 @@
       "type": "library",
       "name": "cliui",
       "version": "9.0.1",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/cliui@9.0.1",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -6958,14 +6948,9 @@
       "type": "library",
       "name": "emoji-regex",
       "version": "10.6.0",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/emoji-regex@10.6.0",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -7446,14 +7431,9 @@
       "type": "library",
       "name": "escalade",
       "version": "3.2.0",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/escalade@3.2.0",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -8398,14 +8378,9 @@
       "type": "library",
       "name": "get-caller-file",
       "version": "2.0.5",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/get-caller-file@2.0.5",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -8431,14 +8406,9 @@
       "type": "library",
       "name": "get-east-asian-width",
       "version": "1.7.0",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/get-east-asian-width@1.7.0",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -11214,6 +11184,34 @@
       ]
     },
     {
+      "bom-ref": "jiti@2.7.0",
+      "type": "library",
+      "name": "jiti",
+      "version": "2.7.0",
+      "scope": "required",
+      "purl": "pkg:npm/jiti@2.7.0",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/jiti/-/jiti-2.7.0.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "002ffb2687c9bd91abae779635a12725e38b531f89946b7bb4d6b4c198913d3e0c635c267ca8eddbee8eda9daecf6fac92597c39966624c36a7a47bb90a6cd81"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
       "bom-ref": "js-levenshtein@1.1.6",
       "type": "library",
       "name": "js-levenshtein",
@@ -12586,14 +12584,9 @@
       "type": "library",
       "name": "lru-cache",
       "version": "11.5.3",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/lru-cache@11.5.3",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -12988,6 +12981,34 @@
         }
       ],
       "externalReferences": [],
+      "licenses": [
+        {
+          "license": {
+            "id": "BlueOak-1.0.0"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "minimatch@10.2.6",
+      "type": "library",
+      "name": "minimatch",
+      "version": "10.2.6",
+      "scope": "required",
+      "purl": "pkg:npm/minimatch@10.2.6",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/minimatch/-/minimatch-10.2.6.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "be92d012cf952c2af59d4d015d2d3b99a628170943007d209e042ebadb71230bad0c510c1ead9b957fbcbe98310dd2b72753f08c22627a9efb3a2b536782e5d4"
+        }
+      ],
       "licenses": [
         {
           "license": {
@@ -13630,6 +13651,34 @@
         }
       ],
       "externalReferences": [],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "node-pg-migrate@9.0.0",
+      "type": "library",
+      "name": "node-pg-migrate",
+      "version": "9.0.0",
+      "scope": "required",
+      "purl": "pkg:npm/node-pg-migrate@9.0.0",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/node-pg-migrate/-/node-pg-migrate-9.0.0.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "969e7e519c7528a80ecffcb487a05818fb89e7056565382204f197086a17e81b3a5fd2ed88886b238576c96e263f09c905fa6d56ad0ab4b42d5c772810a3b28a"
+        }
+      ],
       "licenses": [
         {
           "license": {
@@ -15223,12 +15272,7 @@
       "version": "1.4.1",
       "scope": "optional",
       "purl": "pkg:npm/pg-cloudflare@1.4.1",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -15254,14 +15298,9 @@
       "type": "library",
       "name": "pg-connection-string",
       "version": "2.14.1",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/pg-connection-string@2.14.1",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -15287,14 +15326,9 @@
       "type": "library",
       "name": "pg-int8",
       "version": "1.0.1",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/pg-int8@1.0.1",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -15320,14 +15354,9 @@
       "type": "library",
       "name": "pg-pool",
       "version": "3.14.0",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/pg-pool@3.14.0",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -15353,14 +15382,9 @@
       "type": "library",
       "name": "pg-protocol",
       "version": "1.16.1",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/pg-protocol@1.16.1",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -15386,14 +15410,9 @@
       "type": "library",
       "name": "pg-types",
       "version": "2.2.0",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/pg-types@2.2.0",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -15419,14 +15438,9 @@
       "type": "library",
       "name": "pg",
       "version": "8.23.1",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/pg@8.23.1",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -15452,14 +15466,9 @@
       "type": "library",
       "name": "pgpass",
       "version": "1.0.5",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/pgpass@1.0.5",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -15801,14 +15810,9 @@
       "type": "library",
       "name": "postgres-array",
       "version": "2.0.0",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/postgres-array@2.0.0",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -15834,14 +15838,9 @@
       "type": "library",
       "name": "postgres-bytea",
       "version": "1.0.1",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/postgres-bytea@1.0.1",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -15867,14 +15866,9 @@
       "type": "library",
       "name": "postgres-date",
       "version": "1.0.7",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/postgres-date@1.0.7",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -15900,14 +15894,9 @@
       "type": "library",
       "name": "postgres-interval",
       "version": "1.2.0",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/postgres-interval@1.2.0",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -17806,14 +17795,9 @@
       "type": "library",
       "name": "split2",
       "version": "4.2.0",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/split2@4.2.0",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -18030,14 +18014,9 @@
       "type": "library",
       "name": "string-width",
       "version": "7.2.0",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/string-width@7.2.0",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -18228,14 +18207,9 @@
       "type": "library",
       "name": "strip-ansi",
       "version": "7.2.0",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/strip-ansi@7.2.0",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -19526,12 +19500,7 @@
       "version": "7.24.6",
       "scope": "optional",
       "purl": "pkg:npm/undici-types@7.24.6",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -20479,14 +20448,9 @@
       "type": "library",
       "name": "wrap-ansi",
       "version": "9.0.2",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/wrap-ansi@9.0.2",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -20538,14 +20502,9 @@
       "type": "library",
       "name": "xtend",
       "version": "4.0.2",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/xtend@4.0.2",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -20571,14 +20530,9 @@
       "type": "library",
       "name": "y18n",
       "version": "5.0.8",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/y18n@5.0.8",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -20788,14 +20742,9 @@
       "type": "library",
       "name": "yargs-parser",
       "version": "22.0.0",
-      "scope": "optional",
+      "scope": "required",
       "purl": "pkg:npm/yargs-parser@22.0.0",
-      "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        }
-      ],
+      "properties": [],
       "externalReferences": [
         {
           "type": "distribution",
@@ -20839,6 +20788,34 @@
         {
           "alg": "SHA-512",
           "content": "36df592635d3bf947c3076ea6f2ff05d0e868b405bdd37186644756f3b8be320763b158f917927cf9d778041741a803ab67d345296cfbc4456f2bcc2b96080eb"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "yargs@18.0.0",
+      "type": "library",
+      "name": "yargs",
+      "version": "18.0.0",
+      "scope": "required",
+      "purl": "pkg:npm/yargs@18.0.0",
+      "properties": [],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/yargs/-/yargs-18.0.0.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "e1412a75cd916061d973b0e8caa92baa2967de9f57d83655c5a19bc219f6a62eccad16a029a39c20a7bc2f73b161c6e15cb80b1544b7cc062e4232814209ae36"
         }
       ],
       "licenses": [
@@ -21891,6 +21868,19 @@
         "@taskelith/kernel@0.0.0",
         "@taskelith/sdlc@0.0.0",
         "ajv@8.20.0"
+      ]
+    },
+    {
+      "ref": "@taskelith/postgres@0.0.0",
+      "dependsOn": [
+        "@taskelith/execution@0.0.0",
+        "@taskelith/kernel@0.0.0",
+        "@taskelith/scheduling@0.0.0",
+        "@taskelith/sdlc@0.0.0",
+        "@taskelith/testing@0.0.0",
+        "@types/pg@8.23.1",
+        "node-pg-migrate@9.0.0",
+        "pg@8.23.1"
       ]
     },
     {
@@ -23375,6 +23365,10 @@
       "dependsOn": []
     },
     {
+      "ref": "jiti@2.7.0",
+      "dependsOn": []
+    },
+    {
       "ref": "js-levenshtein@1.1.6",
       "dependsOn": []
     },
@@ -23726,6 +23720,12 @@
       ]
     },
     {
+      "ref": "minimatch@10.2.6",
+      "dependsOn": [
+        "brace-expansion@5.0.12"
+      ]
+    },
+    {
       "ref": "minimatch@3.1.5",
       "dependsOn": [
         "brace-expansion@1.1.21"
@@ -23863,6 +23863,16 @@
         "tinyglobby@0.2.17",
         "undici@6.29.0",
         "which@6.0.1"
+      ]
+    },
+    {
+      "ref": "node-pg-migrate@9.0.0",
+      "dependsOn": [
+        "@types/pg@8.23.1",
+        "glob@13.0.6",
+        "jiti@2.7.0",
+        "pg@8.23.1",
+        "yargs@18.0.0"
       ]
     },
     {
@@ -24964,6 +24974,7 @@
         "@taskelith/execution@0.0.0",
         "@taskelith/kernel@0.0.0",
         "@taskelith/plugin-sdk@0.0.0",
+        "@taskelith/postgres@0.0.0",
         "@taskelith/scheduling@0.0.0",
         "@taskelith/sdlc-openspec@0.0.0",
         "@taskelith/sdlc-speckit@0.0.0",
@@ -25378,6 +25389,17 @@
         "string-width@4.2.3",
         "y18n@5.0.8",
         "yargs-parser@20.2.9"
+      ]
+    },
+    {
+      "ref": "yargs@18.0.0",
+      "dependsOn": [
+        "cliui@9.0.1",
+        "escalade@3.2.0",
+        "get-caller-file@2.0.5",
+        "string-width@7.2.0",
+        "y18n@5.0.8",
+        "yargs-parser@22.0.0"
       ]
     },
     {
