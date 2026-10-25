@@ -66,6 +66,7 @@ Recorded before pass 1.
 - At `44e57b1`, before pass 1, with the package's files still untracked: 743 tests passed, 0 failed; coverage 99.18% lines, 92.93% branches, 98.97% functions. The comment check reads only tracked files, so it missed five three-line comments in the new package (pass-1 finding H2), and the pre-push hook would have failed. That run is therefore not valid for `44e57b1`.
 - At `beb3b94`, after the pass-1 fixes, with every file tracked: 745 tests passed, 0 failed; coverage 99.18% lines, 92.95% branches, 98.97% functions. The comment, boundary, coverage-scope, dependency-inventory, and OpenSpec checks pass.
 - At `1a02c86`, after the pass-2 fixes: 745 tests passed, 0 failed; coverage 99.21% lines, 93.03% branches, 98.98% functions. The comment, boundary, coverage-scope, dependency-inventory, and OpenSpec checks pass.
+- At `af46cb7`, after the unreviewed pass-3 fixes: 746 tests passed, 0 failed; coverage 99.25% lines, 93.16% branches, 98.98% functions. The comment, boundary, coverage-scope, dependency-inventory, and OpenSpec checks pass.
 - `npm run openspec -- validate implement-nats-transport --strict` passed at each of these revisions.
 
 ## Independent review
@@ -98,7 +99,15 @@ Assigned reviewer: Claude Code with `claude -p "<prompt>" --model claude-fable-5
   7. Low: `records()` read the whole quarantine stream. It now reads one page from a given sequence, which a test pages through.
   8. Low: task 3.2 was unchecked. It is checked with the final run.
 
+- **Pass 3 — session `c61d5cdd-1cd7-467f-99c2-e716ef4db264`,** reviewed `git diff 1a95f23 34c03c5` for the resolutions, then `git diff 61946e7 34c03c5` as a whole. The JSON `modelUsage` reports `claude-fable-5-1`. Snapshot before and after: `dd15fb09…a1b9`, equal. The reviewer ran the unit tests, the comment check, and OpenSpec validation.
+  - It confirmed all eight pass-2 findings fully resolved, and pass-1 finding 4 now fully resolved.
+  - Findings: 0 Critical, 0 High, 0 Medium, 5 Low. Under the review process, a Low-only pass is fixed without another review. The fixes at `af46cb7` are **not independently reviewed**:
+  1. Low: the floor of the first retry delay removed its jitter, so the first redeliveries of many failed commits came together. Each delay is now up to a quarter shorter, the first one included. The unit test and the operational-target row say so.
+  2. Low: no test covered an original that expired before the capture. An integration test now deletes the original before the capture, and expects a record without a body and a redrive refused with `precondition-failed`.
+  3. Low: a keeper that stops between copying an advisory and acknowledging it, and returns after the 2-minute window, copies it twice. Recorded as a risk in the design; the receiver's inbox stops a second redrive.
+  4. Low: a redriven observation reaches every reader again. The design now says so, and that the other readers stop it through their inbox.
+  5. Low: one integration test depended on the order of a redelivery and a later message. It now checks the first delivery and the set of the other two.
+
 ## Remaining gates
 
-- Independent review.
 - Integration into `dev` by the coordinator, then archiving the change.
