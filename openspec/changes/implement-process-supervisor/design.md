@@ -1,0 +1,48 @@
+## Context
+
+The [supervisor identity contract](../../../docs/contracts/supervisor-identity.md) (G2 item 4) defines the execution record, the launch sequence CP1 to CP12, recovery, termination evidence, and native evidence per operating system. Decision D7 (c) makes the supervisor one small process per execution. The worker journal contract (item 5) gives the durable file rule and the root lock. Item 14 implements both helpers in its adapter, and this item reuses them when item 14 merges. The deterministic test harness (item 10) provides crash points, scenario processes, and a simulated host.
+
+On 2026-10-25 the coordinator brought four mechanism questions to the owner. A Claude Fable 5.1 subagent decided them under the owner's delegation; they are not the owner's own decisions:
+
+- **D-A:** deferred to the owner. A native dependency or addon is the owner's call, so macOS fails closed for now. `koffi` evidence is proposed for that decision.
+- **D-B (a):** the execution lock is an exclusive SQLite lock.
+- **D-C (a):** the child runs under a separate execution account.
+- **D-C2 (a):** the worker container uses Docker's built-in init.
+
+The Linux cgroup test stays out of `make verify`, because `make verify` stays unprivileged; it runs from an explicit opt-in target.
+
+## Goals / Non-Goals
+
+**Goals:** everything the contract assigns to item 15 (section 12): the supervisor and the adopting supervisor; the per-OS readers; the Linux containment with the denial mechanism and the self-check; the namespace incarnation; the crash points; and the recovery table. Also the required tests of section 13 that a single host can run.
+
+**Non-Goals:** the worker runtime that schedules these steps and publishes observations (item 20); the journal (item 14); the image, its account, capabilities, and init (item 23); native acceptance on the matrix (item 25); and the agent harness (G3).
+
+## Decisions
+
+1. **Hexagonal shape.** Everything that touches the operating system sits behind ports in `ports.ts`:
+   - `DeadlineClock`, `ProcessInspector`, `Containment`, and `Platform` for native evidence;
+   - `Spawner` for processes;
+   - `RecordStore` for the record's files;
+   - `ExecutionLock` for the lock.
+
+   The launch sequence (`supervisor.ts`), the worker's steps (`worker-supervision.ts`), the recovery table (`recovery.ts`), and the macOS proof (`termination.ts`) use only these ports. That lets the harness drive every crash window in process with fakes, and lets item 20 compose the real adapters.
+2. **Recovery as a pure decision.** `decideRecovery` maps the evidence of contract section 6 to one decision. `recoverExecution` gathers the evidence and applies the decision: it seals and reads the seal back, writes an exit, or starts an adopter. A seal that loses its race is decided again from the winner. No decision spawns.
+3. **Crash points.** Each step reaches its contract name, such as `CP5`, through an injected hook, right after the step's durable effect. Product code never imports `@taskelith/testing`, as item 14 does with its write points. The worker's own CP1, CP3, CP10, and CP12 belong to the journal and the runtime (items 14 and 20).
+4. **Record format.** Each file is one JSON object with `format: 1`. The event log frames each entry with its byte length and a CRC-32, using Node's built-in `zlib.crc32`. A reader treats a corrupt, unversioned, or newer file as a problem, so recovery is `uncertain`. The list of readable formats keeps the previous format readable once a second one exists.
+5. **Contract amendments.** `intent` gains the command the child runs and, on Linux, the execution account. The record gains a `cancel` file, because the supervisor reports and receives only through files (section 1). The worker creates it once, and every supervisor of the execution acts on it. A supervisor that cannot read its own identity seals with `identity-unreadable`, because no supervisor record could name who claims. Under D-B (a), the lock rules of sections 3, 6, and 10 now name the SQLite lock and its two constraints. The worker probes the lock only during recovery.
+6. **Linux.** The readers use `/proc` through `node:fs`:
+   - `boot_id`;
+   - fields 4, 5, and 22 of `stat`, counted after the command's last parenthesis;
+   - `uptime` for `CLOCK_BOOTTIME`;
+   - `self/cgroup`, and `self/ns/pid` with PID 1's start time as the namespace incarnation, because a namespace inode alone can be reused.
+
+   A containment is a directory named from the `executionId` under a delegated parent that holds no processes. The supervisor admits itself just before the spawn and releases itself right after. Cancellation writes `cgroup.kill`, and emptiness comes from `cgroup.events`. The self-check creates a probe cgroup, requires `cgroup.kill`, and runs a probe as the execution account against the probe cgroup, the parent, and the worker's own cgroup. Each write must be denied.
+7. **macOS.** By D-A, the clock, the identities, and the listing fail closed, so a macOS supervisor seals every launch. Only the boot identity is read, through `sysctl -n kern.bootsessionuuid`. The termination proof, the descendant walk, group signalling while the child is unreaped, and observation-only adoption are implemented against the ports and tested with a simulated host. They wait for a native reader before they run on macOS.
+8. **Spawn.** Node's `spawn` with `detached: true` calls `setsid`, so the child leads a new session and process group, and its group ID is its process ID. An `error` before `spawn` is a spawn failure. Node reaps a child as soon as it exits, so on macOS the "unreaped" window ends when the exit event arrives. A signal sent in the interval between the kernel reaping the child and the event arriving can reach a recycled group ID. This is a residual risk of the macOS path, recorded for D-A; Linux signals no process ID.
+9. **Reuse of item 14.** The real `RecordStore` and `ExecutionLock` adapters wrap item 14's durable file helpers and `ExclusiveFileLock` once item 14 merges. If the boundary rule forbids one adapter importing another, or both adapters need the helpers anyway, the helpers move into a small shared worker-only package such as `packages/adapters/worker-files`. Adapters never import across each other ad hoc.
+
+## Risks / Trade-offs
+
+- Until D-A is decided, nothing runs on macOS. Item 25's macOS rows stay open.
+- `/proc/uptime` counting suspend comes from the kernel source. It is not measured here, because no test host can suspend; item 25 measures it.
+- The containment parent must be delegated and must hold no processes, which item 23's composition provides.
