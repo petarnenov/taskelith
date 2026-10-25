@@ -13,7 +13,8 @@ const healthy: EnvironmentFacts = {
   npmVersion: '12.2.1',
   dependenciesInstalled: true,
   hooksPath: '.githooks',
-  inventoryMergeDriver: 'true'
+  inventoryMergeDriver: 'true',
+  dockerAvailable: true
 };
 
 function failing(facts: EnvironmentFacts): string[] {
@@ -22,7 +23,7 @@ function failing(facts: EnvironmentFacts): string[] {
 
 test('a complete environment passes every check and needs no setup step', () => {
   const results = checkEnvironment(healthy, pins);
-  assert.deepEqual(results.map((result) => result.id), ['git', 'node', 'npm', 'dependencies', 'hooks', 'merge-driver']);
+  assert.deepEqual(results.map((result) => result.id), ['git', 'node', 'npm', 'dependencies', 'hooks', 'merge-driver', 'docker']);
   assert.ok(results.every((result) => result.ok));
   assert.deepEqual(setupSteps(healthy, pins), []);
   assert.match(formatReport(results), /All checks passed\.$/);
@@ -38,6 +39,13 @@ test('each missing part fails only its own check', () => {
   assert.deepEqual(failing({ ...healthy, hooksPath: '.husky' }), ['hooks']);
   assert.deepEqual(failing({ ...healthy, inventoryMergeDriver: undefined }), ['merge-driver']);
   assert.deepEqual(failing({ ...healthy, inventoryMergeDriver: 'git merge-file' }), ['merge-driver']);
+  assert.deepEqual(failing({ ...healthy, dockerAvailable: false }), ['docker']);
+});
+
+test('without Docker, the check names its install and start, and setup adds no step', () => {
+  const facts: EnvironmentFacts = { ...healthy, dockerAvailable: false };
+  assert.match(formatReport(checkEnvironment(facts, pins)), /FAIL Docker daemon and Compose reachable: not reachable\n {5}Install Docker with the Compose plugin and start it/);
+  assert.deepEqual(setupSteps(facts, pins), []);
 });
 
 test('without the pinned Node.js, the remedies name setup through nvm and fix the Node.js check before npm', () => {
@@ -91,7 +99,7 @@ test('without git, setup reports it and does not try to enable the hooks or the 
   assert.match(formatReport(results), /FAIL git: not found\n {5}Install git/);
   assert.match(formatReport(results), /FAIL pre-push and post-merge hooks enabled: not configured\n {5}Install git, then run make setup\./);
   assert.match(formatReport(results), /FAIL dependency inventory merge driver configured: not configured\n {5}Install git, then run make setup\./);
-  assert.match(formatReport(results), /3 of 6 checks failed\.$/);
+  assert.match(formatReport(results), /3 of 7 checks failed\.$/);
 });
 
 test('without the pinned Node.js, setup changes nothing', () => {
@@ -111,7 +119,9 @@ test('facts come from git and npm, and a failing command counts as missing', () 
     'npm -v': { status: 0, stdout: '12.2.1\n' },
     'npm ls --all': { status: 1, stdout: '' },
     'git config --get core.hooksPath': { status: 1, stdout: '' },
-    'git config --get merge.dependency-inventory.driver': { status: 0, stdout: 'true\n' }
+    'git config --get merge.dependency-inventory.driver': { status: 0, stdout: 'true\n' },
+    'docker info': { status: 0, stdout: '' },
+    'docker compose version': { status: 1, stdout: '' }
   };
   const calls: string[] = [];
   const facts = collectFacts((command, args) => {
@@ -119,7 +129,7 @@ test('facts come from git and npm, and a failing command counts as missing', () 
     calls.push(key);
     return outcomes[key] ?? { status: null, stdout: '' };
   }, 'v24.22.1');
-  assert.deepEqual(facts, { gitAvailable: true, nodeVersion: 'v24.22.1', npmVersion: '12.2.1', dependenciesInstalled: false, hooksPath: undefined, inventoryMergeDriver: 'true' });
+  assert.deepEqual(facts, { gitAvailable: true, nodeVersion: 'v24.22.1', npmVersion: '12.2.1', dependenciesInstalled: false, hooksPath: undefined, inventoryMergeDriver: 'true', dockerAvailable: false });
   assert.ok(calls.includes('npm ls --all'));
 });
 
