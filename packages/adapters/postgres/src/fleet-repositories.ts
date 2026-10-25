@@ -3,6 +3,7 @@ import type { AuditEvent, OperatorCredential, OperatorCredentials, SecretHash } 
 import type { WorkerId } from '@taskelith/execution';
 import {
   credentialGenerations,
+  expiredPredecessor,
   installationIdentity,
   revocationOf,
   rotateCredentials,
@@ -139,8 +140,8 @@ export class PostgresFleetRegistry implements FleetRegistry {
     let expired = 0;
     for (const row of rows) {
       const worker = decodeRecord<EnrolledWorker>(row.enrollment);
-      const previous = worker.credentials.previous;
-      if (previous === undefined || Date.parse(previous.validUntil) > Date.parse(now)) {
+      const previous = expiredPredecessor(worker.credentials, now);
+      if (previous === undefined) {
         await this.#write(worker.workerId, worker);
         continue;
       }

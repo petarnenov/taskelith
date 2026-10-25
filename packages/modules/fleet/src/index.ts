@@ -13,6 +13,7 @@ export {
 export {
   commonProtocolVersion,
   credentialGenerations,
+  expiredPredecessor,
   hostMismatch,
   isExpired,
   revocationOf,

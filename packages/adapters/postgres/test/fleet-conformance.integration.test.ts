@@ -162,12 +162,14 @@ test('a due row without an enrollment record is not swept', { concurrency: false
   await enrollAll(registry, bare, rotated);
   value(await registry.rotate(rotated.workerId, 1, nextGeneration(rotated), rotated.enrolledAt, rotated.enrolledAt));
   await query(url, "UPDATE workers SET enrollment = NULL, predecessor_valid_until = $1 WHERE worker_id = 'w1'", [rotated.enrolledAt]);
+  const before = await predecessorColumn('w1');
 
   assert.equal(value(await registry.expirePredecessors(rotated.enrolledAt)), 1, 'the other worker still expires');
+  assert.deepEqual(await predecessorColumn('w1'), before, 'the row without a record is left as it was');
   assert.deepEqual(await query(url, 'SELECT user_key FROM broker_revocations'), [{ user_key: 'U-w2-1' }]);
 });
 
-test('a due column with a predecessor still in its grace window expires nothing yet', { concurrency: false }, async () => {
+test('a due row whose predecessor is still in its grace window expires nothing yet', { concurrency: false }, async () => {
   await truncateAll(url);
   const registry = new CommittingFleetRegistry(database);
   const worker = fleetWorker('w1', 'j1');

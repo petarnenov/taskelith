@@ -3,6 +3,7 @@ import type { SecretHash } from '@taskelith/access';
 import type { WorkerId } from '@taskelith/execution';
 import {
   credentialGenerations,
+  expiredPredecessor,
   isExpired,
   revocationOf,
   rotateCredentials,
@@ -89,8 +90,8 @@ export class InMemoryFleetRegistry implements FleetRegistry {
   expirePredecessors(now: Instant): Promise<Result<number>> {
     let expired = 0;
     for (const worker of this.#workers.values()) {
-      const previous = worker.credentials.previous;
-      if (previous === undefined || Date.parse(previous.validUntil) > Date.parse(now)) continue;
+      const previous = expiredPredecessor(worker.credentials, now);
+      if (previous === undefined) continue;
       this.#record([revocationOf(previous, previous.validUntil)]);
       this.#workers.set(worker.workerId, Object.freeze({ ...worker, credentials: Object.freeze({ current: worker.credentials.current }) }));
       expired += 1;

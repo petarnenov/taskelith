@@ -6,7 +6,7 @@ The review of `remove-predecessor-non-null-assertion` left three follow-ups in t
 
 - A due row whose record holds no predecessor gets its expiry column cleared in the same sweep, so a later sweep no longer meets it; its record is kept.
 - The sweep's query filters `enrollment IS NOT NULL`, as the adapter's other reads do.
-- The record decides, as in the in-memory registry: a predecessor whose `validUntil` is still ahead is kept and not revoked, and the column is set back to the record's time, so it expires when its grace window ends.
+- The record decides, as in the in-memory registry: a predecessor whose `validUntil` is still ahead is kept and not revoked, and the column is set back to the record's time, so it expires when its grace window ends. Both registries take the rule from one domain predicate, `expiredPredecessor`, in `packages/modules/fleet/src/domain/enrollment.ts`.
 - Three PostgreSQL integration tests cover the cases, and each fails without the change.
 - The `installation-enrollment` requirement "Worker credentials" changes the scenario "Due row without a predecessor" and gains the scenarios "Due row without an enrollment record" and "Predecessor still in its grace window".
 
@@ -20,4 +20,4 @@ The review of `remove-predecessor-non-null-assertion` left three follow-ups in t
 
 ## Impact
 
-The PostgreSQL adapter's sweep only. The port, the in-memory registry, and the conformance suite are unchanged.
+The PostgreSQL adapter's sweep, and one domain predicate that both registries use. The port, the conformance suite, and the in-memory registry's behavior are unchanged.
