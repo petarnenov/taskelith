@@ -31,6 +31,8 @@ On `1dcbc6f`, before review: `make verify` passed: comment rule, workspace packa
 
 On `1b9a04b`, after the pass 1 fixes: `make verify` passed with 496 tests (45 PostgreSQL adapter tests, of which 43 are integration tests) and coverage 99.70% lines, 96.48% branches, 99.06% functions. The adapter and harness integration tests passed three runs in a row (46 tests each) against fresh Compose projects.
 
+On `4c66f0a`, after the pass 2 fixes: `make verify` passed with 500 tests and coverage 99.66% lines, 96.39% branches, 99.47% functions; the adapter and harness tests passed (75 tests) against a fresh Compose project.
+
 ## Independent review
 
 Assigned reviewer: Codex CLI 0.164.0 with `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> -`, the prompt on stdin; prompt and output files were kept outside the worktree. The prompt named `AGENTS.md`, ADR 0004, the governance review process, the plan row and decision D6, the architecture and contract sections the change serves, and the specifications it touches, and asked for every instance of a problem with severity, file, line, and fix.
@@ -50,6 +52,16 @@ Assigned reviewer: Codex CLI 0.164.0 with `codex exec -m gpt-6.1-sol -c model_re
   12. Medium: suites could skip a failed read and did not check race losers or final records. `expectRead` and `expectOneWinner` require both.
   13. Low: Execution and Scheduling exported no outbox suite. Both re-export the shared `OUTBOX_CONFORMANCE`, since their ports are structurally identical.
   14. Low: crash and barrier tests could hang. Barriers have a ten-second deadline, child processes are killed after thirty seconds and must write nothing to stderr, and the lock has a deadline.
+
+- **Pass 2 — session `01a170b9-0ca6-71e1-b813-365bde305e37`, reviewed `19cecbd` (diff `78362da...HEAD`).** Header: `gpt-6.1-sol`, medium, read-only. Author snapshots before and after were equal (`06dc6877…a55fe`), as were the reviewer's own. The prompt named pass 1's session and asked for each resolution first: findings 1 to 5, 9, 10, and 13 were confirmed resolved; 6, 7, 8, 11, 12, and 14 partly, with the remainders reported again below. It reran strict validation, the boundary and comment checks, and 23 tests that need no services, and reproduced findings 1, 3, and 7 below. Findings: 0 Critical, 0 High, 7 Medium, 1 Low. Resolutions, in `4c66f0a`:
+  1. Medium: the payload check accepted `-0` and array holes, which JSON changes, and threw on a cycle. It rejects all three with `invalid`; the outbox suite and unit tests cover them.
+  2. Medium: `jsonb` rejects NUL and unpaired surrogates, which payloads and domain strings accept. Records and messages are stored as JSON text, and the outbox suite carries NUL and an unpaired surrogate, the admission suite an unpaired surrogate in a native reference. The unused outbox `subject` column, which could not hold NUL, is dropped.
+  3. Medium: the PostgreSQL assignment `replace` checked the held reservation before existence and generations. It checks them in the in-memory order, and the assignment suite covers the combinations.
+  4. Medium: the file lock's stale takeover could admit two holders. The lock is now an exclusive listen on a loopback port derived from its name, which is atomic and freed by the operating system when a holder dies; tests cover three waiters, a killed holder, and a timeout.
+  5. Medium: a child killed at its deadline could pass as a crash. The deadline marks a timeout, which fails the test.
+  6. Medium: race cases wrote identical records, so a loser's write was invisible. They race two distinct candidates and require the winner's record, and of two competing adds the loser's record must not exist.
+  7. Medium: array comparison skipped holes in one direction. It compares every index and its presence; unit tests cover both directions.
+  8. Low: two comments still promised commit order. They say append order.
 
   The reviewer also noted that the contracts' invalidating writers need predicates (non-terminal executions by artifact, gate, run, assignment, or worker; occupancy by quota scope) and a database clock that this change does not add; design non-goals and risks leave them to items 17, 18, and 21, which add the columns and queries with their use cases.
 
