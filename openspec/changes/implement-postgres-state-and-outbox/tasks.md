@@ -16,5 +16,5 @@
 
 - [x] 3.1 Share the integration endpoint helper in `@taskelith/testing`.
 - [x] 3.2 Update the dependency register and regenerate the dependency inventory.
-- [ ] 3.3 Run `make verify` and record the results.
-- [ ] 3.4 Obtain independent review (Codex CLI, `gpt-6.1-sol`, medium) and record results.
+- [x] 3.3 Run `make verify` and record the results.
+- [x] 3.4 Obtain independent review (Codex CLI, `gpt-6.1-sol`, medium) and record results.

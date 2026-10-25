@@ -33,6 +33,8 @@ On `1b9a04b`, after the pass 1 fixes: `make verify` passed with 496 tests (45 Po
 
 On `4c66f0a`, after the pass 2 fixes: `make verify` passed with 500 tests and coverage 99.66% lines, 96.39% branches, 99.47% functions; the adapter and harness tests passed (75 tests) against a fresh Compose project.
 
+On `d684860`, after the pass 3 fixes: `make verify` passed with 502 tests and coverage 99.66% lines, 96.40% branches, 99.48% functions.
+
 ## Independent review
 
 Assigned reviewer: Codex CLI 0.164.0 with `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> -`, the prompt on stdin; prompt and output files were kept outside the worktree. The prompt named `AGENTS.md`, ADR 0004, the governance review process, the plan row and decision D6, the architecture and contract sections the change serves, and the specifications it touches, and asked for every instance of a problem with severity, file, line, and fix.
@@ -63,6 +65,11 @@ Assigned reviewer: Codex CLI 0.164.0 with `codex exec -m gpt-6.1-sol -c model_re
   7. Medium: array comparison skipped holes in one direction. It compares every index and its presence; unit tests cover both directions.
   8. Low: two comments still promised commit order. They say append order.
 
+- **Pass 3, the last allowed pass — session `01a170c1-32cf-7660-8b15-55e74f41d5ad`, reviewed `9c00615` (diff `78362da...HEAD`).** Header: `gpt-6.1-sol`, medium, read-only. Author snapshots before and after were equal (`60949056…ab319`), as were the reviewer's own. The reviewer confirmed all eight pass 2 resolutions, reran strict validation, the boundary and comment checks, and 26 tests that need no services. Findings: 0 Critical, 0 High, 2 Medium, 1 Low. All three are fixed in `d684860`; **these fixes have not been independently reviewed**, and because Medium findings remain after the third pass, the governance process sends them to the owner through the coordinator:
+  1. Medium: the PostgreSQL inbox stored the consumer as UTF-8 text, which cannot hold NUL and maps two different unpaired surrogates to the same bytes. The consumer is stored as JSON text, and the inbox suite accepts NUL and two different unpaired surrogates as distinct consumers.
+  2. Medium: node-pg-migrate would also run JavaScript or TypeScript migrations, which the checksums do not cover. A directory with any file other than `.sql` (dotfiles aside) fails with `precondition-failed` before anything is applied, with a test.
+  3. Low: an exit code of `-0`, which `parseExitStatus` accepted, did not round-trip through JSON. `parseExitStatus` records it as `0`, with a unit test.
+
   The reviewer also noted that the contracts' invalidating writers need predicates (non-terminal executions by artifact, gate, run, assignment, or worker; occupancy by quota scope) and a database clock that this change does not add; design non-goals and risks leave them to items 17, 18, and 21, which add the columns and queries with their use cases.
 
 ## Limitations
@@ -72,4 +79,4 @@ Assigned reviewer: Codex CLI 0.164.0 with `codex exec -m gpt-6.1-sol -c model_re
 
 ## Remaining gates
 
-Independent review; integration into `dev` and archive by the coordinator; promotion to `main`.
+The owner's decision on the pass 3 findings and their unreviewed fixes (governance: findings left after the third pass); integration into `dev` and archive by the coordinator; promotion to `main`.
