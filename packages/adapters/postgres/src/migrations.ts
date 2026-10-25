@@ -29,11 +29,12 @@ export async function migrate(url: URL, directory: string = MIGRATIONS_DIRECTORY
   try {
     await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK]);
     await client.query(`CREATE TABLE IF NOT EXISTS ${CHECKSUMS_TABLE} (name text PRIMARY KEY, sha256 text NOT NULL)`);
-    const unsupported = await unsupportedFiles(directory);
+    const names = await readdir(directory);
+    const unsupported = unsupportedFiles(names);
     if (unsupported.length > 0) {
       return err(failure('precondition-failed', `only .sql migrations are supported, not: ${unsupported.join(', ')}`, { files: unsupported.join(',') }));
     }
-    const files = await migrationFiles(directory);
+    const files = await migrationFiles(directory, names);
     const changed = await changedAppliedFiles(client, files);
     if (changed.length > 0) {
       return err(failure('precondition-failed', `applied migrations differ from their files: ${changed.join(', ')}`, { migrations: changed.join(',') }));
@@ -53,13 +54,13 @@ export async function migrate(url: URL, directory: string = MIGRATIONS_DIRECTORY
 
 // node-pg-migrate would also run JavaScript and TypeScript files, which the
 // checksums do not cover; dotfiles are ignored, as node-pg-migrate does.
-async function unsupportedFiles(directory: string): Promise<readonly string[]> {
-  return (await readdir(directory)).filter((name) => !name.startsWith('.') && !name.endsWith('.sql')).sort();
+function unsupportedFiles(names: readonly string[]): readonly string[] {
+  return names.filter((name) => !name.startsWith('.') && !name.endsWith('.sql')).sort();
 }
 
-async function migrationFiles(directory: string): Promise<readonly MigrationFile[]> {
-  const names = (await readdir(directory)).filter((name) => name.endsWith('.sql')).sort();
-  return Promise.all(names.map(async (file) => ({
+async function migrationFiles(directory: string, names: readonly string[]): Promise<readonly MigrationFile[]> {
+  const sqlFiles = names.filter((name) => name.endsWith('.sql')).sort();
+  return Promise.all(sqlFiles.map(async (file) => ({
     name: basename(file, '.sql'),
     sha256: createHash('sha256').update(await readFile(join(directory, file))).digest('hex'),
   })));
