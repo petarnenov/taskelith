@@ -20,6 +20,7 @@ The [storage contract](../storage.md) resolves `dataRoot` and assigns `worker/` 
 | `worker/lock` | The root lock (section 9) | Worker | For the root's lifetime |
 | `worker/identity` | `installationId`, `workerId`, the credential references, and the `journalId` it is bound to (item 13 defines the credential content) | Enrollment | Until re-enrollment |
 | `worker/journal/journal.sqlite` and its `-wal` file | The journal | Worker | For the journal incarnation's lifetime (section 8) |
+| `worker/journal-fault` | Written when a flush failure or corruption stops the journal: the host boot identity (`/proc/sys/kernel/random/boot_id` on Linux, which a container shares with its host; `kern.bootsessionuuid` on macOS), the failure's reason and message, and a format version | Worker | Until a start in a later host boot, or a new journal incarnation, removes it (section 7) |
 | `worker/executions/<executionId>/` | The execution record (item 4) | Worker and supervisor | Until the execution's terminal fact is confirmed (section 6) |
 | `worker/logs/` | Buffered stream logs, which are nonessential | Worker | Truncatable at any time |
 | `worker/workspaces/` | Managed workspaces | Worker | Workspace rules; never touch the paths above |
@@ -128,7 +129,7 @@ A duplicate command (its `commandId` already in the inbox) is acknowledged again
 1. takes none of the actions that the failed write was to precede: no acknowledgement, no request, no hand-off, no publication of it;
 2. closes the journal, stops acknowledging commands, requesting launch authorizations, and publishing, and leaves running supervisors alone, because they do not depend on the journal;
 3. reports the fault in its local service status and logs, since the outbox cannot carry it, and stays stopped (fail closed);
-4. resumes only when what it reads comes from the device: after a restart of the host (the machine, not the worker container), or after an operator starts a new journal incarnation (section 8). It then continues under section 5.
+4. resumes only when what it reads comes from the device: after a restart of the host (the machine, not the worker container), or after an operator starts a new journal incarnation (section 8). It then continues under section 5. The worker records the stop in `worker/journal-fault` (section 2), so a worker restarted in the same host boot also stays stopped: a start refuses while the record names the current boot, removes the record in a later boot, and a new incarnation removes it too. An unreadable record fails startup until an operator removes it. If the record cannot be written, the fault in the service status says so, and the worker is not restarted automatically.
 
 A write refused for lack of space before its commit (SQLite reports the database or disk as full) is not a flush failure: the transaction rolls back, and the full-disk rules below apply.
 
