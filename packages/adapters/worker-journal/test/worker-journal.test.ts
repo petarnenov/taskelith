@@ -13,7 +13,8 @@ import {
   type JournalDatabase,
   type WorkerRoot,
 } from '@taskelith/worker-journal';
-import { BINDING, CLOCK, T0, assignment, digest, failed, grantFor, id, intent, launchRequest, rootOptions, temporaryDataRoot, value } from './fixtures.ts';
+import { failed, id, value } from '@taskelith/testing';
+import { BINDING, CLOCK, T0, assignment, digest, grantFor, intent, launchRequest, rootOptions, temporaryDataRoot } from './fixtures.ts';
 
 let root: WorkerRoot;
 let journal: WorkerJournal;

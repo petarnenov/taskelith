@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { after, test } from 'node:test';
 import { planJournalRecovery, type ObservationFact, type RecoveryAction } from '@taskelith/execution';
-import { crashEnvironment, ScenarioProcess } from '@taskelith/testing';
+import { crashEnvironment, ScenarioProcess, id, value } from '@taskelith/testing';
 import { enrollWorkerRoot, openWorkerRoot } from '@taskelith/worker-journal';
-import { BINDING, T0, assignment, id, rootOptions, temporaryDataRoot, value } from './fixtures.ts';
+import { BINDING, T0, assignment, rootOptions, temporaryDataRoot } from './fixtures.ts';
 
 // Contract section 13: a crash before and after each of W1 to W6, followed
 // by recovery, gives the result the recovery table of section 5 assigns.

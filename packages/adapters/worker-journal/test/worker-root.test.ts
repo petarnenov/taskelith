@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, test } from 'node:test';
 import { failure } from '@taskelith/kernel';
-import { ScenarioProcess } from '@taskelith/testing';
+import { ScenarioProcess, failed, id, value } from '@taskelith/testing';
 import {
   ExclusiveFileLock,
   JOURNAL_APPLICATION_ID,
@@ -25,7 +25,7 @@ import {
   type VolumeProbe,
   type WorkerRoot,
 } from '@taskelith/worker-journal';
-import { BINDING, digest, failed, id, rootOptions, temporaryDataRoot, value } from './fixtures.ts';
+import { BINDING, digest, rootOptions, temporaryDataRoot } from './fixtures.ts';
 
 let dataRoot: string;
 let remove: () => void;

@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseIdentifier } from '@taskelith/kernel';
 import { parseGeneration, parseOwnershipGeneration } from '@taskelith/sdlc';
 import {
   planJournalRecovery,
@@ -12,9 +11,7 @@ import {
   type LaunchIntent,
   type RecoveryAction,
 } from '@taskelith/execution';
-import { value } from './fixtures.ts';
-
-const id = <Kind extends string>(kind: Kind, text: string) => value(parseIdentifier(kind, text));
+import { id, value } from '@taskelith/testing';
 
 const INTENT: LaunchIntent = {
   assignmentId: id('AssignmentId', 'assignment-1'),
