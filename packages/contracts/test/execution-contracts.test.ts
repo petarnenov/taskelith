@@ -107,6 +107,21 @@ test('an assignment offer carries the section 9 command fields and its reservati
   assert.ok(violations(checkMessageSchema('AssignmentOfferCommand', asCancellation)).some((text) => text.includes('/metadata/commandType')));
 });
 
+test('requested CPU and memory in an assignment offer fit a PostgreSQL integer', () => {
+  const largestInteger = 2_147_483_647;
+  const offer = (requested: object) => ({
+    ...OFFER,
+    payload: { ...OFFER.payload, reservation: { ...OFFER.payload.reservation, requested } },
+  });
+
+  for (const field of ['cpuMillicores', 'memoryMebibytes']) {
+    const largest = { ...OFFER.payload.reservation.requested, [field]: largestInteger };
+    const tooLarge = { ...OFFER.payload.reservation.requested, [field]: largestInteger + 1 };
+    assert.ok(checkMessageSchema('AssignmentOfferCommand', offer(largest)).ok, field);
+    assert.ok(violations(checkMessageSchema('AssignmentOfferCommand', offer(tooLarge))).some((text) => text.includes(field)), field);
+  }
+});
+
 test('cancellation and assignment end commands name their reason and target', () => {
   const cancellation = { metadata: commandMetadata('execution.cancellation.request'), payload: { protocolVersion: 1, reason: 'launch-revoked', executionId: 'execution-1' } };
   const end = { metadata: commandMetadata('execution.assignment.end'), payload: { protocolVersion: 1, assignmentId: 'assignment-1', reason: 'superseded' } };

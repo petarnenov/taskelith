@@ -6,7 +6,7 @@ Date: 2026-10-25. Status: proposed wire contract for G2 ([G2 work plan](../g2-pl
 
 | Document | Version | Content |
 | --- | --- | --- |
-| [`execution.asyncapi.json`](../../packages/contracts/documents/execution.asyncapi.json) | 0.2.0 | Commands to a worker and observations from it, over NATS JetStream |
+| [`execution.asyncapi.json`](../../packages/contracts/documents/execution.asyncapi.json) | 0.3.0 | Commands to a worker and observations from it, over NATS JetStream |
 | [`execution.openapi.json`](../../packages/contracts/documents/execution.openapi.json) | 0.3.0 | Enrollment, launch authorization, delegation, task results, evidence with its 400, 500, and 503 failures (item 19), and the quarantine with its redrive (item 16), over HTTPS; G2 serves it as plain HTTP on loopback, and TLS is G3 item 26 (D11) |
 
 Both live in `@taskelith/contracts` beside the SDLC documents. The package generates one type and one validator per schema name from all four documents, so a name that several documents define must name the same schema; the build and the package tests fail otherwise. The execution documents reuse `CommandMetadata`, the identifiers, `ArtifactRevision`, and `Admission` of the SDLC documents. `Admission` gains the optional `ownershipGeneration` that a used admission carries ([`sdlc-task-admission`](../../openspec/specs/sdlc-task-admission/spec.md)), which the SDLC documents declare with version 0.2.0.
@@ -37,7 +37,7 @@ Each command is a `CommandMetadata` envelope that also requires `attemptId`, `wo
 
 | Command | `commandType` | Written by |
 | --- | --- | --- |
-| Assignment offer | `execution.assignment.offer` | The assignment's creation, with its reservation (capacity reservation section 4) |
+| Assignment offer | `execution.assignment.offer` | The assignment's creation, with its reservation (capacity reservation section 4); the requested CPU and memory are each at most `2147483647`, the largest PostgreSQL `integer`, and the per-attempt ceiling of capacity reservation section 8 still applies |
 | Cancellation | `execution.cancellation.request` | A cancellation request, a revocation after authorization (launch authorization section 5), an `unauthorized-start` for that execution only, or an assignment end while an execution under it can run |
 | Assignment end | `execution.assignment.end` | The cancellation and supersession transactions (capacity reservation section 6) |
 
