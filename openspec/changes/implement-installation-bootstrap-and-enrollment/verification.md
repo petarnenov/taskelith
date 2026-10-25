@@ -118,13 +118,17 @@ Assigned reviewer: Codex CLI, with `codex exec -m gpt-6.1-sol -c model_reasoning
 
 ## Merge with `dev`
 
-After pass 5 the branch merged `origin/dev` at `69e5bd2`. Unlike a documentation conflict, the resolution changes code of this change, so the five passes do not cover it, and it is **not independently reviewed**:
+After pass 5 the branch merged `origin/dev` at `69e5bd2` (merge commit `0aa39ed`). Unlike a documentation conflict, the resolution changes code of this change, so the five passes do not cover it, and protocol step 9 requires the assigned reviewer to review it:
 - `postgres-database.ts`: `dev` restructured the runner and added `readOnly()`. The resolution takes `dev`'s version and adds `readCommitted()` beside it, in place of this change's isolation parameter; the revocation publication calls it.
 - Migration: item 22 also used the timestamp `1792930400000`, so this change's migration is renamed `1792930800000_installation-and-enrollment.sql`, after it. This change's migration was not applied anywhere outside tests.
 - `migrations.integration.test.ts`: the signals migration test now also holds back this change's later migration, so both apply in order.
 - `postgres-transaction.ts` and two `tsconfig.json` files keep both sides. The lockfile takes `dev`'s and adds this change's workspace packages; the inventory is regenerated.
+- **Merge review — session `01a17329-af14-7d23-b0aa-93e32e9aa4ad`,** reviewed `git diff 0aa39ed^1 0aa39ed` and `git diff 0aa39ed^2 0aa39ed`. The header reports `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`. Snapshot before and after: `dce8c396…4a0d`, equal. Findings: 0 Critical, 0 High, 0 Medium, 0 Low. The reviewer confirmed:
+  - `readCommitted()` uses the shared runner with its metrics, logging, retries, and commit crash points; the publication takes the advisory lock before it reads; every other transaction stays SERIALIZABLE, and the sampler keeps `readOnly()`;
+  - the renamed migration is byte-identical and independent of item 22's;
+  - the signals test still proves its backfill;
+  - the lockfile is the exact union of both parents, and the inventory keeps every component.
 
 ## Remaining gates
 
-- The coordinator's decision on a review of the merge resolution.
 - Integration into `dev` by the coordinator, then archiving the change.
