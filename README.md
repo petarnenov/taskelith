@@ -45,11 +45,11 @@ Use the exact Node.js version in `.nvmrc` and the npm version pinned in CI. Deve
 make setup    # installs what is missing: the .nvmrc Node.js (through nvm, as its default), the npm pin, the locked dependencies, the hooks, the inventory merge driver
 make doctor   # checks the environment without changing it
 make verify   # the same checks CI runs; needs Docker
-make services-up    # starts PostgreSQL and NATS and prints the URLs to export
+make services-up    # starts PostgreSQL, NATS, and Toxiproxy and prints the URLs to export
 make services-down  # stops them and discards their data
 ```
 
-`make verify` runs the tests through `make test`, which starts the digest-pinned PostgreSQL and NATS containers of `infra/services/compose.yaml` in a Compose project of its own, named after the worktree, on ephemeral localhost ports, runs `npm test` with `TASKELITH_POSTGRES_URL` and `TASKELITH_NATS_URL` set, and stops that project. `make services-up` uses a separate project. Integration tests are named `*.integration.test.ts`; without those variables or the services they fail and name the remedy.
+`make verify` runs the tests through `make test`, which starts the digest-pinned PostgreSQL, NATS, and Toxiproxy containers of `infra/services/compose.yaml` in a Compose project of its own, named after the worktree, on ephemeral localhost ports, runs `npm test` with `TASKELITH_POSTGRES_URL` and `TASKELITH_NATS_URL` set, and with `TASKELITH_TOXIPROXY_URL`, `TASKELITH_POSTGRES_PROXY_URL`, and `TASKELITH_NATS_PROXY_URL` for the Toxiproxy API and its routes to PostgreSQL and NATS, and stops that project. `make services-up` uses a separate project. Integration tests are named `*.integration.test.ts`; without those variables or the services they fail and name the remedy.
 
 `make setup` does not install git, nvm, or Docker; `make doctor` names what is missing. With nvm, `make doctor`, `make verify`, and the `pre-push` hook switch to the `.nvmrc` Node.js on their own, and new shells start with it; run `nvm use` in a shell that was open before `make setup` when you run `npm` or `node` directly.
 

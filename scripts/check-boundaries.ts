@@ -123,7 +123,7 @@ function importTarget(file: string, spec: string, root: string, workspaces: Map<
 // The product package that owns a path: the root package (`src/`), a workspace
 // package under `packages/`, or an application under `apps/`.
 function owningPackage(path: string): string | null {
-  const match = path.match(/^(?:(src)\/|(packages\/(?:kernel|contracts|plugin-sdk))\/|(packages\/(?:modules|adapters|plugins)\/[^/]+)\/|(apps\/[^/]+)\/)/);
+  const match = path.match(/^(?:(src)\/|(packages\/(?:kernel|contracts|plugin-sdk|testing))\/|(packages\/(?:modules|adapters|plugins)\/[^/]+)\/|(apps\/[^/]+)\/)/);
   if (!match) return null;
   return match[1] ? 'root' : (match[2] ?? match[3] ?? match[4])!;
 }
@@ -142,6 +142,23 @@ function isDevelopmentCode(path: string): boolean {
 function checkDevelopmentImport({ rel, spec, target, relative: isRelative }: ImportEdge): string[] {
   if (!isRelative || !target || !isProductSource(rel) || !isDevelopmentCode(target)) return [];
   return [`${rel}: product source cannot import development scripts or tests (${spec})`];
+}
+
+const TEST_HARNESS_PACKAGE = '@taskelith/testing';
+
+// The test harness serves tests only; product code takes the real adapters.
+function checkTestHarnessImport({ rel, spec }: ImportEdge): string[] {
+  if (packageName(spec) !== TEST_HARNESS_PACKAGE || isDevelopmentCode(rel)) return [];
+  const owner = owningPackage(rel);
+  if (owner === null || owner === 'packages/testing') return [];
+  return [`${rel}: product code cannot import the test harness "${spec}" (R03)`];
+}
+
+// At runtime the harness itself stands on the kernel and Node built-ins only.
+function checkTestHarnessSource({ rel, spec, typeOnly }: ImportEdge): string[] {
+  if (!rel.startsWith('packages/testing/src/') || typeOnly || spec.startsWith('.')) return [];
+  if (spec.startsWith('node:') || isBuiltin(spec) || spec === '@taskelith/kernel') return [];
+  return [`${rel}: the test harness may import only the kernel and Node built-ins at runtime, not "${spec}" (R03)`];
 }
 
 function checkWorkspaceEncapsulation({ rel, spec, target, relative: isRelative, workspaces }: ImportEdge): string[] {
@@ -283,7 +300,7 @@ function checkWorkerOnlyReach(edges: ImportEdge[]): string[] {
 }
 
 const IMPORT_RULES = [
-  checkDevelopmentImport, checkWorkspaceEncapsulation, checkKernelImport, checkPluginImport, checkPluginSdkImport, checkModuleImport,
+  checkDevelopmentImport, checkTestHarnessImport, checkTestHarnessSource, checkWorkspaceEncapsulation, checkKernelImport, checkPluginImport, checkPluginSdkImport, checkModuleImport,
   checkWebImport,
 ];
 

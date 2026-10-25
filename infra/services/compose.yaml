@@ -32,3 +32,20 @@ services:
       interval: 1s
       timeout: 5s
       retries: 60
+
+  # Partition proxy (D8): tests reach PostgreSQL and NATS through its routes.
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.13.0@sha256:5d3dae09bc185dcc5ff6cf43abf6062a4a720aff0c4306a471e773acdcd107aa
+    command: ["-host=0.0.0.0", "-config=/etc/toxiproxy/routes.json"]
+    volumes:
+      - ./toxiproxy-routes.json:/etc/toxiproxy/routes.json:ro
+    # The API has no authentication; like the routes, it is on localhost only.
+    ports:
+      - "127.0.0.1::8474"
+      - "127.0.0.1::15432"
+      - "127.0.0.1::14222"
+    healthcheck:
+      test: ["CMD", "/toxiproxy-cli", "list"]
+      interval: 1s
+      timeout: 5s
+      retries: 60
