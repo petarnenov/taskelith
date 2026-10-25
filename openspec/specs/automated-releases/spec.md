@@ -13,7 +13,7 @@ The release workflow SHALL calculate versions from Conventional Commits since th
 - **THEN** the version advances by patch, minor, or major respectively, with the highest applicable increment winning
 
 #### Scenario: Non-release changes
-- **WHEN** only docs, test, or chore commits exist without breaking changes
+- **WHEN** only docs, test, chore, build, or ci commits exist without breaking changes
 - **THEN** no package version is published
 
 ### Requirement: Trusted publication
