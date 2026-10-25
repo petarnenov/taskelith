@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Linux qualification in the worker image
-A harness qualification on Linux SHALL run inside the worker image's harness variant on every architecture of the worker matrix, and SHALL record each architecture as native, emulated, or not run, with the reason.
+A harness qualification on Linux SHALL run inside the worker image's harness variant on each architecture of the worker matrix that the qualification host or an authorized runner provides. It SHALL record every architecture of the matrix as native, emulated, or not run, with the reason, and SHALL list each architecture without native evidence among the gates before admission.
 
 #### Scenario: Emulated architecture
 - **WHEN** an architecture runs only under emulation on the qualification host

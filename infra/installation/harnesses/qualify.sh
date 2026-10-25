@@ -4,43 +4,60 @@
 set -uo pipefail
 
 modules=/opt/harnesses/node_modules
+listings=/tmp/qualify-listings
 arch="$(node -p process.arch)"
 claude="$modules/@anthropic-ai/claude-agent-sdk-linux-$arch/claude"
 codex="$(find "$modules/@openai/codex-linux-$arch/vendor" -path '*/bin/codex' -type f)"
 export HOME=/var/lib/taskelith/qualify-home
 export CLAUDE_CONFIG_DIR="$HOME/claude" CODEX_HOME="$HOME/codex" DISABLE_TELEMETRY=1
+unexpected=0
 
+# Runs one step; a step that exits other than expected fails the run.
 observe() {
-  local name="$1" output status
-  shift
+  local name="$1" expected="$2" output status
+  shift 2
   output="$("$@" 2>&1)"
   status=$?
-  printf '%s: exit %s: %s\n' "$name" "$status" "$(printf '%s' "$output" | tr '\n' ' ')"
+  if [ "$status" -ne "$expected" ]; then unexpected=1; fi
+  printf '%s: exit %s (expected %s): %s\n' "$name" "$status" "$expected" \
+    "$(printf '%s' "$output" | tr '\n' ' ')"
 }
 
-tree_hash() {
-  find /opt/harnesses -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1
+# Lists entries with type, mode, and link target, then file hashes.
+listing() {
+  find "$@" -printf '%y %m %p -> %l\n' | sort
+  find "$@" -type f -print0 | sort -z | xargs -0 -r sha256sum
 }
 
-mkdir -p "$CLAUDE_CONFIG_DIR" "$CODEX_HOME"
+if [ ! -x "$claude" ] || [ -z "$codex" ] || [ ! -x "$codex" ]; then
+  echo "binaries: missing: claude '$claude', codex '$codex'"
+  exit 1
+fi
+mkdir -p "$CLAUDE_CONFIG_DIR" "$CODEX_HOME" "$listings"
 printf 'check_for_update_on_startup = false\n' > "$CODEX_HOME/config.toml"
-before="$(tree_hash)"
-observe platform uname -sm
-observe os sh -c '. /etc/os-release && echo "$PRETTY_NAME"'
-observe node node --version
-observe user id -un
-observe claude-path echo "${claude#"$modules/"}"
-observe claude-sha256 sh -c "sha256sum '$claude' | cut -d' ' -f1"
-observe claude-version "$claude" --version
-observe claude-musl-package-absent test ! -e "$modules/@anthropic-ai/claude-agent-sdk-linux-$arch-musl"
-observe claude-auth-status "$claude" auth status
-observe codex-path echo "${codex#"$modules/"}"
-observe codex-sha256 sh -c "sha256sum '$codex' | cut -d' ' -f1"
-observe codex-version codex --version
-observe codex-login-status codex login status
-observe codex-schema codex app-server generate-json-schema --out "$HOME/schema"
-observe codex-schema-sha256 sh -c \
+listing /opt/harnesses "$HOME" > "$listings/before.txt"
+observe platform 0 uname -sm
+observe os 0 sh -c '. /etc/os-release && echo "$PRETTY_NAME"'
+observe node 0 node --version
+observe user 0 id -un
+observe credential-files-absent 0 sh -c '! find / -xdev \( -name auth.json -o -name .credentials.json \) -print | grep .'
+observe claude-path 0 echo "${claude#"$modules/"}"
+observe claude-sha256 0 sh -c "sha256sum '$claude' | cut -d' ' -f1"
+observe claude-version 0 "$claude" --version
+observe claude-musl-package-absent 0 test ! -e "$modules/@anthropic-ai/claude-agent-sdk-linux-$arch-musl"
+observe claude-auth-status 1 "$claude" auth status
+observe codex-path 0 echo "${codex#"$modules/"}"
+observe codex-sha256 0 sh -c "sha256sum '$codex' | cut -d' ' -f1"
+observe codex-version 0 codex --version
+observe codex-login-status 1 codex login status
+observe codex-schema 0 codex app-server generate-json-schema --out "$HOME/schema"
+observe codex-schema-files 0 bash -c \
+  "count=\$(find '$HOME/schema' -type f | wc -l); echo \"\$count\"; test \"\$count\" -gt 0"
+observe codex-schema-sha256 0 bash -o pipefail -c \
   "cd '$HOME/schema' && find . -type f | sort | xargs sha256sum | sha256sum | cut -d' ' -f1"
-observe harness-write-refused sh -c "! touch '$claude' '$codex' 2>/dev/null"
-observe harness-tree-sha256 echo "$before"
-observe harness-tree-unchanged test "$before" = "$(tree_hash)"
+observe claude-write-refused 1 touch "$claude"
+observe codex-write-refused 1 touch "$codex"
+listing /opt/harnesses "$HOME" > "$listings/after.txt"
+observe harness-tree-unchanged 0 diff <(grep ' /opt/harnesses' "$listings/before.txt") \
+  <(grep ' /opt/harnesses' "$listings/after.txt")
+exit "$unexpected"

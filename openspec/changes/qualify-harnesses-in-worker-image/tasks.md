@@ -7,7 +7,8 @@
 
 - [x] 2.1 Add `infra/installation/harnesses/qualify.sh` with the credential-free steps
 - [x] 2.2 Add `scripts/harness-qualification.sh` and the opt-in `make qualify-harnesses` target
-- [x] 2.3 Run it for linux/amd64 (native) and linux/arm64 (QEMU)
+- [x] 2.3 Run it for linux/amd64 (native)
+- [x] 2.4 Record linux/arm64 as not run: the emulated build fails on this host; a native run follows later (coordinator)
 
 ## 3. Checks and records
 
