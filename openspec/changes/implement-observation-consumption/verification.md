@@ -141,6 +141,14 @@ It runs from the worktree, with the prompt and log in the session's scratch dire
 | M10 | The rest of M9: `replace` can change or clear an assignment's `offerCommandId`. The in-memory adapter then has two assignments claiming one offer. PostgreSQL keeps the old column value beside a changed record. | Fixed in `f23f6a6`: the identity is immutable on `replace` in both adapters, with shared conformance cases for changing, clearing, and duplicating it. In PostgreSQL the column is the source: a record read without the identity carries the column's value, and a PostgreSQL test covers a backfilled row through `replace`. |
 | L11 | `readTaskResult` was made pending while an attempt is active. That breaks execution-wire-contracts "Task result and evidence" and the contract page, which promise the last ended attempt's outcome. | Fixed in `641dc13`: the author restores the contract's behavior instead of changing a wire contract, and removes the rule from the proposal, the design, and the deltas. |
 
+### Pass 3
+
+- **Session:** `01a174c0-9352-70e2-a551-8388895e5b98`, 2026-10-25 22:28 to 22:31, on `9b92633`, reviewing `8b451e3..9b92633`. The output header confirms `gpt-6.1-sol`, reasoning effort `medium`, and the `read-only` sandbox.
+- **Snapshot:** `3b1338b9…57794e7b4`, unchanged.
+- **Reviewer's own checks:** it ran 48 tests, the comment check, and `git diff --check`, all passing.
+- **Earlier findings:** the reviewer confirmed M9, M10, and L11 resolved, with evidence.
+- **Result:** Critical 0, High 0, Medium 0, Low 0. The whole-change review found no further defect.
+
 ## Limitations
 
 - **Unconsumed observations.** Until 21c and 21d, they reach quarantine after five deliveries, and the worker republishes them while unconfirmed. No worker publishes observations before item 20b.
@@ -149,6 +157,5 @@ It runs from the worktree, with the prompt and log in the session's scratch dire
 
 ## Remaining gates
 
-- Independent review.
 - Integration into `dev` and archiving, by the coordinator.
 - No deployment validation is claimed.
