@@ -111,6 +111,7 @@ export {
 } from './domain/start-observation.js';
 export {
   activeAttempt,
+  checkOwnership,
   canResendAssignment,
   claimOwnership,
   endAttempt,

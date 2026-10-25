@@ -1,6 +1,6 @@
 # Capacity reservation contract
 
-Date: 2026-10-25. Status: proposed protocol contract for G2 ([G2 work plan](../g2-plan.md) item 6), under independent review; once reviewed and merged it resolves the pre-G2 contract "capacity reservations" of [architecture section 15](../architecture.md#15-decisions-still-requiring-evidence-or-owner-scope-confirmation). It serves F22 and R32. No code implements it yet: G2 items 7 (execution domain model), 18 (resource admission), and 20 (worker agent runtime) build on it, and item 24 runs its failure scenarios.
+Date: 2026-10-25. Status: proposed protocol contract for G2 ([G2 work plan](../g2-plan.md) item 6), under independent review; once reviewed and merged it resolves the pre-G2 contract "capacity reservations" of [architecture section 15](../architecture.md#15-decisions-still-requiring-evidence-or-owner-scope-confirmation). It serves F22 and R32. G2 item 7 (execution domain model) modeled its records and item 18 (resource admission) implements the scheduler side (section 13); item 20 (worker agent runtime) builds the worker side, and item 24 runs its failure scenarios.
 
 ## 1. Purpose and parties
 
@@ -224,3 +224,25 @@ Items 18, 20, and 24 implement these as tests through the deterministic test har
 - Cancelling an acknowledged assignment with no grant on a healthy, reachable worker ends it, releases its reservation, and sends the worker an assignment-ended command; cancelling one with a started execution releases only at that execution's terminal fact.
 - One project's retry loop or approval-blocked attempts do not stop another project from receiving capacity.
 - An exhausted provider credential limit makes the next attempt that needs it wait.
+
+## 13. Values and writers fixed by G2 item 18
+
+G2 item 18 (`implement-resource-admission`) implements the scheduler side in the `Scheduling` module and `@taskelith/postgres`, and fixes what this contract left to it, as provisional values recorded in the [operational targets](../operational-targets.md) section 1:
+
+- **Fair order.** Round-robin across projects, oldest waiting task first within each (`fairPlacementOrder`).
+- **Backoff.** A base doubling from `5s` to `60s`, each delay within `[5s, 60s]` with jitter; a transiently failed placement is tried at most `5` times.
+- **Delegation wait.** A delegation waits with `delegation-awaiting-capacity` for at most `10 min`, then is rejected with that reason.
+- **Supersession.** An assignment without a grant is superseded after `2 min` unacknowledged, after `10 min` under admission pressure, and at once when its worker is unknown, unreachable, draining, or revoked.
+- **Unknown installation.** An installation without its record admits nothing, as one in quarantine.
+- **Standing reasons.** `attempt-already-reserved` and `attempt-not-reservable` are reported as standing: the placement changes nothing, and the task's admission to capacity is neither queued again nor ended by it.
+- **Check order.** Step 4's request checks that no worker can satisfy, a hard spend limit and a size above the per-attempt ceiling, are made before the worker checks of step 3, so such a request is rejected instead of waiting for a worker.
+- **Automatic retries.** A retry is automatic only after an earlier attempt of the task that ended `not-started` or `exited` with a proven start and whose reservation is released; any other earlier attempt is uncertain and gets `retry-budget-exhausted`, including an `exited` one whose spawn failed without a proven start, which is conservative. Whether an earlier attempt's side effects make a retry safe is not judged in G2; a later policy item decides it, and until then a proven exit counts as safe. The retry must name the earlier attempt that the active attempt retries.
+- **Provider credentials.** Each credential a reservation holds is checked against the default concurrency of `4`; G2 reserves none.
+- **Cancellation with a running execution.** The cancelling transaction revokes the owning execution's grants with `attempt-not-launchable` and writes its cancellation command (launch authorization section 5); the reservation is released by the transaction that records the terminal fact.
+
+The reservation transaction reads tables that other items write, and each of those writers runs at `SERIALIZABLE` (section 4):
+
+- `workers` (enrollment, revocation, drain, capacity declarations, controls, reachability, admission pressure) and `installation` (quarantine): created by item 18 with the columns placement reads; item 13 owns and extends them, and items 13, 20, and 21 write them.
+- `capacity_quotas`: installation settings; a missing row is the operational targets' default.
+- `task_lineage`: written once per task when it is created, by the item that creates tasks (a root link with depth `0`, or a child link through delegation admission).
+- `delegations`: opened by delegation admission; the transaction that records a child's terminal outcome (item 21) closes it, which ends its parent's waiting.

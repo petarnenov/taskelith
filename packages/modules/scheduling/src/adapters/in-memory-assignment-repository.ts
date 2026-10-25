@@ -9,6 +9,11 @@ import type { AssignmentRepository } from '../ports/assignment-repository.js';
 export class InMemoryAssignmentRepository implements AssignmentRepository {
   readonly #assignments = new Map<AssignmentId, Assignment>();
 
+  // Every stored assignment, for the in-memory capacity ledger.
+  all(): readonly Assignment[] {
+    return [...this.#assignments.values()];
+  }
+
   async get(id: AssignmentId): Promise<Result<Assignment>> {
     const assignment = this.#assignments.get(id);
     if (assignment === undefined) return err(failure('not-found', `assignment ${id} does not exist`, { assignment: id }));

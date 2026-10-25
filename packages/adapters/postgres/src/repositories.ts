@@ -152,10 +152,17 @@ export class PostgresAssignmentRepository implements AssignmentRepository {
       entity: 'assignment',
       idOf: (assignment) => assignment.id,
       generationOf: (assignment) => assignment.generation,
-      columnsOf: (assignment) => ({
-        attempt_id: assignment.attemptId,
-        worker_id: assignment.workerId,
-        reservation_state: assignment.reservation.state,
+      columnsOf: ({ attemptId, workerId, reservation }) => ({
+        attempt_id: attemptId,
+        worker_id: workerId,
+        reservation_state: reservation.state,
+        project_id: reservation.scope.projectId,
+        run_id: reservation.scope.runId,
+        task_id: reservation.scope.taskId,
+        root_task_id: reservation.scope.rootTaskId,
+        cpu_millicores: reservation.requested.cpuMillicores,
+        memory_mebibytes: reservation.requested.memoryMebibytes,
+        provider_credentials: [...reservation.providerCredentials],
       }),
       decode: decodeRecord,
     });

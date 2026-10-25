@@ -1,3 +1,12 @@
+import type { Instant } from '@taskelith/kernel';
+import {
+  PostgresCapacityLedger,
+  PostgresInstallationGuard,
+  PostgresPlacementWorkers,
+  PostgresQuotaSettings,
+  PostgresTaskLineage,
+  databaseNow,
+} from './capacity-repositories.js';
 import {
   PostgresAdmissionRepository,
   PostgresAssignmentRepository,
@@ -19,8 +28,15 @@ export class PostgresTransaction {
   readonly assignments: PostgresAssignmentRepository;
   readonly outbox: PostgresOutbox;
   readonly inbox: PostgresInbox;
+  readonly workers: PostgresPlacementWorkers;
+  readonly installation: PostgresInstallationGuard;
+  readonly quotas: PostgresQuotaSettings;
+  readonly lineage: PostgresTaskLineage;
+  readonly ledger: PostgresCapacityLedger;
+  readonly #session: Session;
 
   constructor(session: Session) {
+    this.#session = session;
     this.admissions = new PostgresAdmissionRepository(session);
     this.runs = new PostgresWorkflowRunRepository(session);
     this.gates = new PostgresGateRepository(session);
@@ -28,5 +44,14 @@ export class PostgresTransaction {
     this.assignments = new PostgresAssignmentRepository(session);
     this.outbox = new PostgresOutbox(session);
     this.inbox = new PostgresInbox(session);
+    this.workers = new PostgresPlacementWorkers(session);
+    this.installation = new PostgresInstallationGuard(session);
+    this.quotas = new PostgresQuotaSettings(session);
+    this.lineage = new PostgresTaskLineage(session);
+    this.ledger = new PostgresCapacityLedger(session);
+  }
+
+  now(): Promise<Instant> {
+    return databaseNow(this.#session);
   }
 }
