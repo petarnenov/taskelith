@@ -29,8 +29,7 @@ const SETTINGS: readonly (readonly [pragma: string, value: string, expected: num
 // identity names the journal (contract sections 2 and 8).
 export function createJournalDatabase(path: string, binding: JournalBinding, createdAt: Instant): Result<DatabaseSync> {
   if (existsSync(path)) return err(failure('conflict', `a journal already exists at ${path}`, { path }));
-  return guard(path, () => {
-    const database = new DatabaseSync(path, { timeout: 0 });
+  return guard(path, (database) => {
     chmodSync(path, 0o600);
     const configured = configure(database, path);
     if (!configured.ok) return closeWith(database, configured);
@@ -52,8 +51,7 @@ export function createJournalDatabase(path: string, binding: JournalBinding, cre
 // caller compares the stored binding with the worker identity.
 export function openJournalDatabase(path: string): Result<DatabaseSync> {
   if (!existsSync(path)) return err(rootFailure('journal-loss', `the journal ${path} is missing`, { path }));
-  return guard(path, () => {
-    const database = new DatabaseSync(path, { timeout: 0 });
+  return guard(path, (database) => {
     const checked = configure(database, path);
     if (!checked.ok) return closeWith(database, checked);
     const verified = verifyFormat(database);
@@ -86,10 +84,15 @@ function verifyFormat(database: DatabaseSync): Result<void> {
   return ok(undefined);
 }
 
-function guard<T>(path: string, open: () => Result<T>): Result<T> {
+// Opens the file for `use`, which closes it on a failed result; a thrown
+// error closes it here and is classified.
+function guard(path: string, use: (database: DatabaseSync) => Result<DatabaseSync>): Result<DatabaseSync> {
+  let database: DatabaseSync | undefined;
   try {
-    return open();
+    database = new DatabaseSync(path, { timeout: 0 });
+    return use(database);
   } catch (error) {
+    if (database?.isOpen) database.close();
     if (isSqliteError(error, SQLITE_CORRUPT) || isSqliteError(error, SQLITE_NOTADB)) {
       return err(rootFailure('corrupt', `the journal ${path} is corrupt: ${(error as Error).message}`, { path }));
     }

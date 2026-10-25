@@ -6,6 +6,7 @@ export interface WorkerPaths {
   readonly worker: string;
   readonly lock: string;
   readonly identity: string;
+  readonly fault: string;
   readonly journalDirectory: string;
   readonly journal: string;
   readonly executions: string;
@@ -23,6 +24,7 @@ export function workerPaths(dataRoot: string): WorkerPaths {
     worker,
     lock: join(worker, 'lock'),
     identity: join(worker, 'identity'),
+    fault: join(worker, 'journal-fault'),
     journalDirectory,
     journal: join(journalDirectory, JOURNAL_FILE),
     executions: join(worker, 'executions'),

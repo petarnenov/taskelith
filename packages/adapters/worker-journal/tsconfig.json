@@ -1,4 +1,9 @@
 {
   "extends": "../../../tsconfig.package.json",
-  "references": [{ "path": "../../modules/execution" }, { "path": "../../kernel" }, { "path": "../../modules/sdlc" }]
+  "references": [
+    { "path": "../../kernel" },
+    { "path": "../../modules/execution" },
+    { "path": "../../modules/sdlc" },
+    { "path": "../../testing" }
+  ]
 }

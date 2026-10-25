@@ -10,10 +10,12 @@ export type JournalDatabase = Pick<DatabaseSync, 'exec' | 'prepare' | 'close' | 
 // closed after a flush failure or corruption (contract sections 7 and 8).
 export class JournalConnection {
   readonly #database: JournalDatabase;
+  readonly #onStop: (fault: Failure) => void;
   #fault: Failure | undefined;
 
-  constructor(database: JournalDatabase) {
+  constructor(database: JournalDatabase, onStop: (fault: Failure) => void) {
     this.#database = database;
+    this.#onStop = onStop;
   }
 
   get fault(): Failure | undefined {
@@ -61,6 +63,7 @@ export class JournalConnection {
   #stop(fault: Failure): Failure {
     this.#fault = fault;
     this.close();
+    this.#onStop(fault);
     return fault;
   }
 

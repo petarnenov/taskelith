@@ -1,13 +1,14 @@
 import { existsSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Failure, type Result } from '@taskelith/kernel';
 import type { JournalBinding, JournalId, RecoveryEpoch } from '@taskelith/execution';
 import { checkControlPath, refuseCheckout } from './control-records.js';
 import { createOnce, createPrivateDirectory, removeTemporaries, replaceFile, syncPath } from './durable-file.js';
 import { ExclusiveFileLock } from './exclusive-file-lock.js';
 import { createJournalDatabase, openJournalDatabase } from './journal-database.js';
 import { rootFailure } from './journal-failure.js';
-import { SqliteWorkerJournal, type JournalClock } from './sqlite-worker-journal.js';
+import { checkJournalFault, clearJournalFault, hostBootId, recordJournalFault } from './journal-fault.js';
+import { SqliteWorkerJournal, type CommitPointHook, type JournalClock } from './sqlite-worker-journal.js';
 import { checkVolume, probeVolume, type VolumeProbe } from './volume.js';
 import { readIdentity, serializeIdentity, type WorkerIdentity } from './worker-identity.js';
 import { workerPaths, type WorkerPaths } from './worker-paths.js';
@@ -16,6 +17,7 @@ export interface WorkerRootOptions {
   readonly dataRoot: string;
   readonly clock: JournalClock;
   readonly probe?: VolumeProbe;
+  readonly onCommitPoint?: CommitPointHook;
 }
 
 // An open worker root: the root lock is held until `close`.
@@ -33,6 +35,10 @@ export function openWorkerRoot(options: WorkerRootOptions): Result<WorkerRoot> {
   return withRootLock(paths, options, (lock) => {
     const identity = readIdentity(paths.identity);
     if (!identity.ok) return identity;
+    const bootId = hostBootId();
+    if (!bootId.ok) return bootId;
+    const fault = checkJournalFault(paths.fault, bootId.value);
+    if (!fault.ok) return fault;
     return openJournal(paths, options, identity.value, lock);
   });
 }
@@ -72,6 +78,8 @@ export function startNewIncarnation(
     if (!identity.ok) return identity;
     const moved = moveJournalAside(paths, identity.value.journalId);
     if (!moved.ok) return moved;
+    const cleared = clearJournalFault(paths.fault);
+    if (!cleared.ok) return cleared;
     const binding = { ...identity.value, journalId, recoveryEpoch };
     const created = createJournalDatabase(paths.journal, binding, options.clock.now());
     if (!created.ok) return created;
@@ -117,7 +125,7 @@ function withRootLock(
 
 function checkRecordsThen(paths: WorkerPaths, use: () => Result<WorkerRoot>): Result<WorkerRoot> {
   const uid = process.getuid?.() ?? -1;
-  for (const record of [paths.identity, paths.journal, `${paths.journal}-wal`, paths.executions, paths.logs]) {
+  for (const record of [paths.identity, paths.fault, paths.journal, `${paths.journal}-wal`, paths.executions, paths.logs]) {
     const safe = checkControlPath(paths.dataRoot, record, uid);
     if (!safe.ok) return safe;
   }
@@ -133,7 +141,10 @@ function openJournal(
 ): Result<WorkerRoot> {
   const database = openJournalDatabase(paths.journal);
   if (!database.ok) return database;
-  const journal = SqliteWorkerJournal.open(database.value, options.clock);
+  const journal = SqliteWorkerJournal.open(database.value, options.clock, {
+    ...(options.onCommitPoint === undefined ? {} : { onCommitPoint: options.onCommitPoint }),
+    onStop: (fault) => keepStopped(paths, fault),
+  });
   if (!journal.ok) {
     database.value.close();
     return journal;
@@ -152,6 +163,12 @@ function openJournal(
       lock.release();
     },
   }));
+}
+
+// Best effort: a fault that cannot be recorded still stops this process.
+function keepStopped(paths: WorkerPaths, fault: Failure): void {
+  const bootId = hostBootId();
+  if (bootId.ok) recordJournalFault(paths.fault, fault, bootId.value);
 }
 
 function moveJournalAside(paths: WorkerPaths, oldJournalId: JournalId): Result<void> {

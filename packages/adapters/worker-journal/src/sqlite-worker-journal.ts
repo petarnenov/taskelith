@@ -26,6 +26,21 @@ export interface JournalClock {
   now(): Instant;
 }
 
+// The commits of contract section 5; tests crash a worker on either side.
+export const WRITE_POINTS = Object.freeze(['W1', 'W2', 'W3', 'W4', 'W5s', 'W5e', 'W6'] as const);
+
+export type WritePoint = (typeof WRITE_POINTS)[number];
+
+// Called with `W1.before`, `W1.after`, and so on; a crash point harness
+// passes its `reach`.
+export type CommitPointHook = (point: `${WritePoint}.${'before' | 'after'}`) => void;
+
+export interface JournalHooks {
+  readonly onCommitPoint?: CommitPointHook;
+  // Called once when a flush failure or corruption stops the journal.
+  readonly onStop?: (fault: Failure) => void;
+}
+
 // An unconfirmed entry is published again after this bound (contract
 // section 6); publication marks live in memory only.
 export const REPUBLICATION_BOUND_MS = 60_000;
@@ -37,18 +52,25 @@ export class SqliteWorkerJournal implements WorkerJournal {
   readonly #connection: JournalConnection;
   readonly #clock: JournalClock;
   readonly #publishedAt = new Map<number, number>();
+  readonly #onCommitPoint: CommitPointHook;
 
-  private constructor(connection: JournalConnection, binding: JournalBinding, clock: JournalClock) {
+  private constructor(
+    connection: JournalConnection,
+    binding: JournalBinding,
+    clock: JournalClock,
+    onCommitPoint: CommitPointHook,
+  ) {
     this.#connection = connection;
     this.binding = binding;
     this.#clock = clock;
+    this.#onCommitPoint = onCommitPoint;
   }
 
-  static open(database: JournalDatabase, clock: JournalClock): Result<SqliteWorkerJournal> {
-    const connection = new JournalConnection(database);
+  static open(database: JournalDatabase, clock: JournalClock, hooks: JournalHooks = {}): Result<SqliteWorkerJournal> {
+    const connection = new JournalConnection(database, hooks.onStop ?? (() => {}));
     const binding = connection.read(readBinding);
     if (!binding.ok) return binding;
-    return ok(new SqliteWorkerJournal(connection, binding.value, clock));
+    return ok(new SqliteWorkerJournal(connection, binding.value, clock, hooks.onCommitPoint ?? (() => {})));
   }
 
   // The flush failure or corruption that stopped the journal, if any.
@@ -57,7 +79,7 @@ export class SqliteWorkerJournal implements WorkerJournal {
   }
 
   recordCommand(command: JournaledCommand): Result<CommandRecording> {
-    return this.#connection.transact((database) => {
+    return this.#commit<CommandRecording>('W1', (database) => {
       const known = database.prepare('SELECT digest FROM inbox WHERE command_id = ?').get(command.commandId);
       if (known !== undefined) {
         if (known.digest === command.digest) return ok(Object.freeze({ kind: 'duplicate' as const }));
@@ -78,7 +100,7 @@ export class SqliteWorkerJournal implements WorkerJournal {
   }
 
   beginAuthorization(request: LaunchRequest): Result<void> {
-    return this.#connection.transact((database) => {
+    return this.#commit('W2', (database) => {
       const intent = database.prepare('SELECT * FROM launch_intent WHERE assignment_id = ?').get(request.assignmentId);
       if (intent === undefined || intent.attempt_id !== request.attemptId
         || intent.ownership_generation !== request.ownershipGeneration) {
@@ -96,7 +118,7 @@ export class SqliteWorkerJournal implements WorkerJournal {
   }
 
   recordGrant(grant: LaunchGrant): Result<void> {
-    return this.#connection.transact((database) => {
+    return this.#commit('W3', (database) => {
       const pending = this.#pendingAuthorization(database, grant.operationId, grant.executionId);
       if (!pending.ok) return pending;
       database.prepare(`UPDATE authorization_request SET outcome = 'granted', launch_auth_id = ?, grant_values = ?
@@ -107,7 +129,7 @@ export class SqliteWorkerJournal implements WorkerJournal {
   }
 
   recordLaunchRejection(operationId: OperationId, rejection: LaunchRejection): Result<void> {
-    return this.#connection.transact((database) => {
+    return this.#commit('W3', (database) => {
       const pending = this.#pendingAuthorization(database, operationId);
       if (!pending.ok) return pending;
       const outcome = rejection.retryable ? 'rejected-retryable' : 'rejected-final';
@@ -121,7 +143,7 @@ export class SqliteWorkerJournal implements WorkerJournal {
   }
 
   recordExecutionRecordWritten(executionId: ExecutionId): Result<void> {
-    return this.#connection.transact((database) => {
+    return this.#commit('W4', (database) => {
       const execution = executionRow(database, executionId);
       if (execution?.state !== 'authorized') return err(notInState(executionId, 'authorized'));
       database.prepare('UPDATE execution SET record_written = 1 WHERE execution_id = ?').run(executionId);
@@ -130,7 +152,7 @@ export class SqliteWorkerJournal implements WorkerJournal {
   }
 
   recordStart(executionId: ExecutionId, launchAuthId: LaunchAuthId): Result<void> {
-    return this.#connection.transact((database) => {
+    return this.#commit('W5s', (database) => {
       const execution = writtenExecution(database, executionId);
       if (!execution.ok) return execution;
       if (execution.value.state === 'started' || execution.value.state === 'exited') return ok(undefined);
@@ -144,7 +166,7 @@ export class SqliteWorkerJournal implements WorkerJournal {
   }
 
   recordExit(executionId: ExecutionId, status: ExitStatus): Result<void> {
-    return this.#connection.transact((database) => {
+    return this.#commit('W5e', (database) => {
       const execution = writtenExecution(database, executionId);
       if (!execution.ok) return execution;
       if (execution.value.state === 'exited') return ok(undefined);
@@ -157,7 +179,7 @@ export class SqliteWorkerJournal implements WorkerJournal {
   }
 
   recordNotStarted(executionId: ExecutionId): Result<void> {
-    return this.#connection.transact((database) => {
+    return this.#commit('W6', (database) => {
       const execution = executionRow(database, executionId);
       if (execution === undefined) return err(unknownExecution(executionId));
       if (execution.state === 'not-started') return ok(undefined);
@@ -221,6 +243,13 @@ export class SqliteWorkerJournal implements WorkerJournal {
     this.#connection.close();
   }
 
+  #commit<T>(point: WritePoint, write: (database: JournalDatabase) => Result<T>): Result<T> {
+    this.#onCommitPoint(`${point}.before`);
+    const written = this.#connection.transact(write);
+    if (written.ok) this.#onCommitPoint(`${point}.after`);
+    return written;
+  }
+
   #recordCommandRequest(database: JournalDatabase, command: JournaledCommand): Result<void> {
     if (command.outcome === 'rejected') {
       this.#append(database, { kind: 'command-rejected', commandId: command.commandId, reason: command.reason });
@@ -271,7 +300,7 @@ export class SqliteWorkerJournal implements WorkerJournal {
     return ok(storedInteger<number>(last ?? { position: 0 }, 'position') + 1);
   }
 
-  // The pending operation's execution, optionally checked against `executionId`.
+  // The pending operation's execution, checked against `executionId` if given.
   #pendingAuthorization(database: JournalDatabase, operationId: OperationId, executionId?: ExecutionId): Result<ExecutionId> {
     const pending = database.prepare('SELECT execution_id, outcome FROM authorization_request WHERE operation_id = ?')
       .get(operationId);
