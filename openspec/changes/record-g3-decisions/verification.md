@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-Follow-up to `draft-g3-plan` (PR #151), started on 2026-10-25 on the owner's instruction to run another review cycle, and reported to the coordinator (Niki). Base revision: `018d533` on `dev`. Scope: `docs/g3-plan.md` and this change. Prepared in the git worktree `../taskelith-worktrees/record-g3-decisions` on branch `record-g3-decisions`. Source: the owner's decisions in the project conversation on 2026-10-25, given one group at a time in answer to the options and recommendations of the draft plan: D2 (a), D3 (a), D4 (a), D5 (a), D6 (a), D7 (a), D8 (a), D9 (a), D10 (a), D11 (b), D12 (a), D13 (c), D14 (a), D16 (a), and the new D18 (a). D15 stays open.
+Follow-up to `draft-g3-plan` (PR #151), started on 2026-10-25 on the owner's instruction to run another review cycle, and reported to the coordinator (Niki). Base revision: `06ea7f3` on `dev`. Scope: `docs/g3-plan.md` and this change. Prepared in the git worktree `../taskelith-worktrees/record-g3-decisions` on branch `record-g3-decisions`. Source: the owner's decisions in the project conversation on 2026-10-25, given one group at a time in answer to the options and recommendations of the draft plan: D2 (a), D3 (a), D4 (a), D5 (a), D6 (a), D7 (a), D8 (a), D9 (a), D10 (a), D11 (b), D12 (a), D13 (c), D14 (a), D16 (a), and the new D18 (a). D15 stays open.
 
 The change adds no requirement: the `delivery-planning` requirement "Owner decisions recorded in the plan" applies, so `.openspec.yaml` sets `skip_specs: true`.
 
