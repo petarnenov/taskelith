@@ -12,8 +12,8 @@ import { isSqliteError, SQLITE_BUSY, SQLITE_CORRUPT, SQLITE_NOTADB } from './sql
 export const JOURNAL_APPLICATION_ID = 0x544b4a4c;
 export const JOURNAL_FORMAT = 1;
 
-// Section 3 of the worker journal contract, in this order: exclusive
-// locking before WAL and before any other access.
+// Section 3 of the worker journal contract: exclusive locking first, then
+// these, in order; the header is checked before WAL mode changes the file.
 const SETTINGS: readonly (readonly [pragma: string, value: string, expected: number | string])[] = Object.freeze([
   ['locking_mode', 'EXCLUSIVE', 'exclusive'],
   ['journal_mode', 'WAL', 'wal'],
@@ -31,6 +31,7 @@ export function createJournalDatabase(path: string, binding: JournalBinding, cre
   if (existsSync(path)) return err(failure('conflict', `a journal already exists at ${path}`, { path }));
   return guard(path, (database) => {
     chmodSync(path, 0o600);
+    database.exec('PRAGMA locking_mode = EXCLUSIVE');
     const configured = configure(database, path);
     if (!configured.ok) return closeWith(database, configured);
     database.exec('BEGIN IMMEDIATE');
@@ -52,10 +53,13 @@ export function createJournalDatabase(path: string, binding: JournalBinding, cre
 export function openJournalDatabase(path: string): Result<DatabaseSync> {
   if (!existsSync(path)) return err(rootFailure('journal-loss', `the journal ${path} is missing`, { path }));
   return guard(path, (database) => {
+    database.exec('PRAGMA locking_mode = EXCLUSIVE');
+    const header = verifyHeader(database);
+    if (!header.ok) return closeWith(database, header);
     const checked = configure(database, path);
     if (!checked.ok) return closeWith(database, checked);
-    const verified = verifyFormat(database);
-    return verified.ok ? ok(database) : closeWith(database, verified);
+    const intact = quickCheck(database);
+    return intact.ok ? ok(database) : closeWith(database, intact);
   });
 }
 
@@ -71,7 +75,8 @@ function configure(database: DatabaseSync, path: string): Result<void> {
   return ok(undefined);
 }
 
-function verifyFormat(database: DatabaseSync): Result<void> {
+// Reads only the header, so a foreign file stays untouched (section 8).
+function verifyHeader(database: DatabaseSync): Result<void> {
   const applicationId = Number(database.prepare('PRAGMA application_id').get()?.application_id);
   if (applicationId !== JOURNAL_APPLICATION_ID) return err(rootFailure('corrupt', 'the file is not a Taskelith worker journal'));
   const format = Number(database.prepare('PRAGMA user_version').get()?.user_version);
@@ -79,6 +84,10 @@ function verifyFormat(database: DatabaseSync): Result<void> {
     return err(rootFailure('newer-format', `journal format ${format} is newer than ${JOURNAL_FORMAT}`, { format: String(format) }));
   }
   if (format < JOURNAL_FORMAT) return err(rootFailure('corrupt', `journal format ${format} is unknown`));
+  return ok(undefined);
+}
+
+function quickCheck(database: DatabaseSync): Result<void> {
   const check = database.prepare('PRAGMA quick_check').all().map((row) => row.quick_check);
   if (check.length !== 1 || check[0] !== 'ok') return err(rootFailure('corrupt', `quick_check failed: ${check.join('; ')}`));
   return ok(undefined);

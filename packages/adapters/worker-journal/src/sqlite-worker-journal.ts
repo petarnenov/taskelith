@@ -38,7 +38,7 @@ export type CommitPointHook = (point: `${WritePoint}.${'before' | 'after'}`) => 
 export interface JournalHooks {
   readonly onCommitPoint?: CommitPointHook;
   // Called once when a flush failure or corruption stops the journal.
-  readonly onStop?: (fault: Failure) => void;
+  readonly onStop?: (fault: Failure) => Result<void>;
 }
 
 // An unconfirmed entry is published again after this bound (contract
@@ -67,7 +67,7 @@ export class SqliteWorkerJournal implements WorkerJournal {
   }
 
   static open(database: JournalDatabase, clock: JournalClock, hooks: JournalHooks = {}): Result<SqliteWorkerJournal> {
-    const connection = new JournalConnection(database, hooks.onStop ?? (() => {}));
+    const connection = new JournalConnection(database, hooks.onStop ?? (() => ok(undefined)));
     const binding = connection.read(readBinding);
     if (!binding.ok) return binding;
     return ok(new SqliteWorkerJournal(connection, binding.value, clock, hooks.onCommitPoint ?? (() => {})));
@@ -293,8 +293,7 @@ export class SqliteWorkerJournal implements WorkerJournal {
     }
     const last = database.prepare(`SELECT position, outcome FROM authorization_request
       WHERE execution_id = ? ORDER BY position DESC LIMIT 1`).get(request.executionId);
-    const closed = execution.state === 'exited' || execution.state === 'not-started' || execution.record_written === 1;
-    if (closed || last?.outcome === 'pending' || last?.outcome === 'rejected-final') {
+    if (!mayAuthorizeAgain(execution, last, request)) {
       return err(failure('precondition-failed', `execution ${request.executionId} cannot be authorized again`));
     }
     return ok(storedInteger<number>(last ?? { position: 0 }, 'position') + 1);
@@ -302,9 +301,11 @@ export class SqliteWorkerJournal implements WorkerJournal {
 
   // The pending operation's execution, checked against `executionId` if given.
   #pendingAuthorization(database: JournalDatabase, operationId: OperationId, executionId?: ExecutionId): Result<ExecutionId> {
-    const pending = database.prepare('SELECT execution_id, outcome FROM authorization_request WHERE operation_id = ?')
-      .get(operationId);
-    if (pending?.outcome !== 'pending' || (executionId !== undefined && pending.execution_id !== executionId)) {
+    const pending = database.prepare(`SELECT request.execution_id, request.outcome, execution.state
+      FROM authorization_request AS request JOIN execution USING (execution_id)
+      WHERE request.operation_id = ?`).get(operationId);
+    const open = pending?.state !== 'exited' && pending?.state !== 'not-started';
+    if (pending?.outcome !== 'pending' || !open || (executionId !== undefined && pending.execution_id !== executionId)) {
       return err(failure('precondition-failed', `operation ${operationId} has no pending request`));
     }
     return ok(storedText<ExecutionId>(pending, 'execution_id'));
@@ -322,6 +323,13 @@ export class SqliteWorkerJournal implements WorkerJournal {
       .run(sequence, observationIdOf(fact), JSON.stringify(fact), this.#clock.now());
     database.prepare('UPDATE journal_meta SET next_sequence = ?').run(sequence + 1);
   }
+}
+
+// A retryable rejection is retried for the same execution; a granted one
+// only while the supervisor's launch record says it has not started.
+function mayAuthorizeAgain(execution: Row, last: Row | undefined, request: LaunchRequest): boolean {
+  if (last?.outcome === 'rejected-retryable') return execution.state === null;
+  return last?.outcome === 'granted' && execution.state === 'authorized' && request.reportsNotStarted;
 }
 
 function executionRow(database: JournalDatabase, executionId: ExecutionId): Row | undefined {

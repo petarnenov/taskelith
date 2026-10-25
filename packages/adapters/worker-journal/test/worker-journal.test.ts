@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, test } from 'node:test';
-import { parseInstant } from '@taskelith/kernel';
+import { err, failure, parseInstant, type Failure } from '@taskelith/kernel';
 import { parseSequence, type ExecutionId, type JournaledCommand, type OperationId, type WorkerJournal } from '@taskelith/execution';
 import {
   REPUBLICATION_BOUND_MS,
@@ -146,6 +146,40 @@ test('W6 reports not-started once, and uncertain evidence gets a new identity ea
   assert.equal(new Set(entries.map((entry) => entry.position.observationId)).size, 3);
 });
 
+test('a grant or rejection arriving after W6 is refused and reports nothing', () => {
+  value(journal.recordCommand(assignment()));
+  const request = launchRequest(EXECUTION, OPERATION);
+  value(journal.beginAuthorization(request));
+  value(journal.recordNotStarted(EXECUTION));
+  assert.equal(failed(journal.recordGrant(grantFor(request))).code, 'precondition-failed');
+  assert.equal(failed(journal.recordLaunchRejection(OPERATION, { reason: 'gate-not-passed', retryable: false, message: '' })).code, 'precondition-failed');
+  assert.equal(value(journal.snapshot()).executions[0]?.state, 'not-started');
+  assert.deepEqual(factKinds(), ['execution-not-started']);
+});
+
+test('a granted execution is authorized again only when its launch record says it has not started', () => {
+  value(journal.recordCommand(assignment()));
+  launchUntilWritten();
+  const again = id('OperationId', 'operation-2');
+  assert.equal(failed(journal.beginAuthorization(launchRequest(EXECUTION, again))).code, 'precondition-failed');
+  value(journal.beginAuthorization({ ...launchRequest(EXECUTION, again), reportsNotStarted: true }));
+  value(journal.recordGrant(grantFor(launchRequest(EXECUTION, again), 'launch-auth-2')));
+  value(journal.recordStart(EXECUTION, id('LaunchAuthId', 'launch-auth-2')));
+});
+
+test('a cancellation delivered twice is journaled once and stays pending until its evidence', () => {
+  const cancellation: JournaledCommand = {
+    commandId: id('CommandId', 'cancel-1'),
+    digest: digest('cancel'),
+    outcome: 'accepted',
+    kind: 'cancellation',
+    target: { kind: 'attempt', attemptId: intent(1).attemptId },
+  };
+  value(journal.recordCommand(cancellation));
+  assert.deepEqual(value(journal.recordCommand(cancellation)), { kind: 'duplicate' });
+  assert.deepEqual(value(journal.snapshot()).cancellations.map((entry) => entry.evidenceRecorded), [false]);
+});
+
 test('a started execution cannot be reported as not started', () => {
   value(journal.recordCommand(assignment()));
   launchUntilWritten();
@@ -188,10 +222,15 @@ test('the outbox continues the sequence after pruning and a reopen', () => {
 test('an I/O error at COMMIT stops the journal until a restart', () => {
   const database = faultyDatabase(10);
   const stops: string[] = [];
-  const faulty = value(SqliteWorkerJournal.open(database.handle, CLOCK, { onStop: (fault) => stops.push(fault.details.reason ?? '') }));
+  const onStop = (fault: Failure) => {
+    stops.push(fault.details.reason ?? '');
+    return err(failure('internal', 'the fault record could not be written'));
+  };
+  const faulty = value(SqliteWorkerJournal.open(database.handle, CLOCK, { onStop }));
   database.failNextCommit();
   assert.equal(failureReason(failed(faulty.recordCommand(assignment()))), 'flush-failure');
   assert.deepEqual(stops, ['flush-failure']);
+  assert.equal(faulty.fault?.details.recording, 'the fault record could not be written');
   assert.equal(faulty.fault?.details.reason, 'flush-failure');
   assert.equal(database.handle.isOpen, false);
   assert.equal(failureReason(failed(faulty.recordCommand(assignment(2)))), 'stopped');

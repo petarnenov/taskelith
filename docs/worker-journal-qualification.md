@@ -11,9 +11,9 @@ Date: 2026-10-25. Status: qualification record for G2 item 14 (`implement-worker
 
 `node:sqlite` on Node 24.22.1 is fit for the journal; the `better-sqlite3` fallback was not needed. Measured:
 
-- The settings of section 3 apply in their required order, and each is read back after opening: `locking_mode` `exclusive` before `journal_mode` `wal`, `synchronous` 2 (`FULL`), `fullfsync` 1, `checkpoint_fullfsync` 1, `foreign_keys` 1, `wal_autocheckpoint` 1000 pages, and `journal_size_limit` 64 MiB (the values item 14 chooses). `application_id` is `0x544b4a4c` ("TKJL") and `user_version` is format 1.
+- The settings of section 3 apply in their required order, and each is read back after opening; on an existing file, exclusive locking is set first and the header (`application_id` and `user_version`) is checked before WAL mode, so a foreign SQLite database is refused unchanged: `locking_mode` `exclusive` before `journal_mode` `wal`, `synchronous` 2 (`FULL`), `fullfsync` 1, `checkpoint_fullfsync` 1, `foreign_keys` 1, `wal_autocheckpoint` 1000 pages, and `journal_size_limit` 64 MiB (the values item 14 chooses). `application_id` is `0x544b4a4c` ("TKJL") and `user_version` is format 1.
 - With exclusive locking set first, WAL creates no `-shm` file; the adapter refuses to open a journal if one exists.
-- A second connection to an open journal, in the same or another process, fails with `SQLITE_BUSY`.
+- A second connection to an open journal fails with `SQLITE_BUSY`; the suite asserts it in the same process, and the scratch qualification also saw it from another process.
 - node:sqlite reports SQLite result codes in the error's `errcode` (`5` busy, `14` cannot open, `26` not a database), so the adapter tells I/O errors, corruption, and a full disk apart.
 
 ## Root lock
@@ -28,9 +28,9 @@ Node has no `flock`. The qualified mechanism takes SQLite's exclusive lock on `w
 
 - `dataRoot` resolution follows the storage contract's precedence, refuses empty, relative, and tilde paths, and never falls back from an invalid configured value.
 - A data root inside a Git working tree is refused, which covers the checkout and every managed checkout. A data root inside a home directory that is itself a Git repository is refused too; such a host sets an explicit root outside it.
-- Every component from `dataRoot` down to each control record is refused if it is a symbolic link, owned by another account, or writable by group or others; a symbolic link inside `worker/workspaces/` is accepted. Enrollment creates directories with mode `0700` and files with mode `0600`.
-- **macOS startup check.** The volume holding the root must be local APFS, read from `mount` for the mount point found by device number. A FAT image mounted with `hdiutil` is refused. Other volume types are not exercised.
-- **Linux.** Remote, volatile, and container-layer filesystems are refused by their `statfs` magic numbers (NFS, SMB, CIFS, Coda, AFS, 9P, FUSE, Ceph, overlayfs, tmpfs, ramfs); tested with injected values only.
+- Every component from `dataRoot` down to each control record is refused if it is a symbolic link, owned by another account, or writable by group or others; a symbolic link inside `worker/workspaces/` is accepted. The tests exercise symbolic links and group write; a foreign owner needs a second account and is **not tested**. Enrollment creates directories with mode `0700` and files with mode `0600`.
+- **macOS startup check.** The volume holding the root must be local APFS, read from `mount` for the mount point that `df -P` reports. A FAT image mounted with `hdiutil` is refused. Other volume types, and Apple silicon (arm64) hosts, are not exercised.
+- **Linux.** Remote, volatile, and container-layer filesystems are refused by their `statfs` magic numbers (NFS, SMB, CIFS, Coda, AFS, 9P, FUSE, Ceph, overlayfs, tmpfs, ramfs); tested with injected values only. The filesystem tests therefore pass a probe that accepts their temporary volume, which may be tmpfs or overlayfs; only the volume tests use the real probe.
 
 ## Open macOS gate (unchanged)
 
@@ -38,10 +38,11 @@ No mechanism was found that surfaces every `F_FULLFSYNC` failure: SQLite 3.53.4 
 
 ## Records, outbox, and recovery
 
-- Each W commit of section 5 is one `BEGIN IMMEDIATE` transaction in one adapter method: W1 `recordCommand`, W2 `beginAuthorization`, W3 `recordGrant` or `recordLaunchRejection`, W4 `recordExecutionRecordWritten`, W5s `recordStart`, W5e `recordExit`, and W6 `recordNotStarted`. Out-of-order calls fail; a fact derived again after a lost write is accepted once and keeps its observation.
+- Each W commit of section 5 is one `BEGIN IMMEDIATE` transaction in one adapter method: W1 `recordCommand`, W2 `beginAuthorization`, W3 `recordGrant` or `recordLaunchRejection`, W4 `recordExecutionRecordWritten`, W5s `recordStart`, W5e `recordExit`, and W6 `recordNotStarted`. Out-of-order calls fail, including a grant or rejection for an execution already `not-started` or `exited`; a fact derived again after a lost write is accepted once and keeps its observation.
+- A new operation for an existing execution is allowed after a retryable rejection (item 3 section 6), or after a grant only while the request reports, from the supervisor's launch record, that it has not started (item 3 re-authorization); otherwise the worker uses a new execution.
 - `observationId` is `obs-` and the SHA-256 of the observation's source: the `commandId` for a command outcome, the `operationId` for a final launch rejection, the `executionId` and fact for an execution fact, and the evidence counter for a repeated `uncertain`.
 - The outbox numbers entries gaplessly per journal in the same transaction, prunes only through a cumulative confirmation, and publishes an unconfirmed entry again after 60 seconds (`REPUBLICATION_BOUND_MS`, the bound section 6 leaves to item 14), with publication marks in memory only.
-- An I/O error from `COMMIT`, or corruption, stops the journal: it closes the database, refuses every later call, and records `worker/journal-fault` with the host boot identity (`/proc/sys/kernel/random/boot_id` on Linux, `kern.bootsessionuuid` on macOS). A worker restarted in the same boot refuses to start; a later boot or a new incarnation clears the record. The stop is tested with an injected error code, and the boot rule with a recorded fault. A full disk rolls the transaction back and leaves the journal usable.
+- An I/O error from `COMMIT` (also `SQLITE_CANTOPEN`, `SQLITE_READONLY`, and `SQLITE_PROTOCOL`, which mean the file or device is unusable), or corruption, stops the journal: it closes the database, refuses every later call, and records `worker/journal-fault` with the host boot identity (`/proc/sys/kernel/random/boot_id` on Linux, `kern.bootsessionuuid` on macOS). A worker restarted in the same boot refuses to start; a later boot or a new incarnation clears the record. If the record cannot be written, the journal's fault carries that failure for the worker's service status. The stop is tested with an injected error code, and the boot rule with a recorded fault. A full disk rolls the transaction back and leaves the journal usable.
 
 ## Crash tests (item 10 harness)
 
@@ -51,5 +52,6 @@ A child process runs one launch through W1 to W5e, and one through W6, and is ki
 
 - **Bit flips.** `PRAGMA quick_check` detects damage to page structure, but SQLite keeps no page checksums, so a bit flip in a page's unused space or inside a stored value is not detected at start.
 - **Migrations.** Format 1 is the first format, so there is no previous format to migrate; the start check refuses a newer or unknown one.
-- **Not implemented here.** The disk floor and the backlog limit of sections 6 and 7 (worker-side admission, items 6 and 20), the publication loop and confirmation message (items 8 and 20), item 4's execution record and seal (item 15), and credential content in `worker/identity` (item 13).
-- **Not measured.** Linux in the worker image, power loss, a host restart after a flush failure, and an `F_FULLFSYNC` or checkpoint I/O error on a real device.
+- **Failed enrollment.** Enrollment removes the `worker/` subtree it created when a later step fails, so a retry is not blocked; this path is not exercised by a test.
+- **Not implemented here.** The disk floor and the backlog limit of sections 6 and 7 (worker-side admission, items 6 and 20); the publication loop and confirmation message (items 8 and 20); item 4's execution record and seal (item 15); credential content in `worker/identity` (item 13); workspace management, including the rule that removing a workspace never removes a control record (item 20 and G3); and a port operation to change the recovery epoch held in the journal, which a new incarnation sets today (item 21 and the restore procedure of G6). A cancellation redelivered after a crash is covered by the duplicate rule and a unit test, not by a crash test.
+- **Not measured.** Linux in the worker image, Apple silicon hosts, power loss, a host restart after a flush failure, an `F_FULLFSYNC` or checkpoint I/O error on a real device, a foreign owner on a control record, and the fork behavior of the lock.

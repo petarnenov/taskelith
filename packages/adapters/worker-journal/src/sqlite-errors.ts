@@ -1,9 +1,12 @@
 // SQLite primary result codes that the journal acts on; node:sqlite puts
 // the code in the error's `errcode`, possibly as an extended code.
 export const SQLITE_BUSY = 5;
+export const SQLITE_READONLY = 8;
 export const SQLITE_IOERR = 10;
 export const SQLITE_CORRUPT = 11;
 export const SQLITE_FULL = 13;
+export const SQLITE_CANTOPEN = 14;
+export const SQLITE_PROTOCOL = 15;
 export const SQLITE_NOTADB = 26;
 
 export function sqliteCode(error: unknown): number | undefined {

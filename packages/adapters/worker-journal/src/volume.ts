@@ -1,6 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { realpathSync, statSync, statfsSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { statfsSync } from 'node:fs';
 import { err, ok, type Result } from '@taskelith/kernel';
 import { rootFailure } from './journal-failure.js';
 
@@ -52,8 +51,15 @@ export function probeVolume(path: string): Result<VolumeDescription> {
 }
 
 function describeMacVolume(path: string): Result<VolumeDescription> {
-  const mountPoint = mountPointOf(realpathSync(path));
-  const mounts = execFileSync('/sbin/mount', { encoding: 'utf8' });
+  let mountPoint: string | undefined;
+  let mounts: string;
+  try {
+    mountPoint = parseDfMountPoint(execFileSync('/bin/df', ['-P', path], { encoding: 'utf8' }));
+    mounts = execFileSync('/sbin/mount', { encoding: 'utf8' });
+  } catch (error) {
+    return err(rootFailure('unsupported-volume', `cannot read the volume of ${path}: ${(error as Error).message}`));
+  }
+  if (mountPoint === undefined) return err(rootFailure('unsupported-volume', `no mount point for ${path}`));
   const options = parseMacMountOptions(mounts, mountPoint);
   if (options === undefined) {
     return err(rootFailure('unsupported-volume', `no mount entry for ${mountPoint}`, { mountPoint }));
@@ -61,12 +67,10 @@ function describeMacVolume(path: string): Result<VolumeDescription> {
   return ok({ platform: 'darwin', filesystem: options[0] ?? '', local: options.includes('local') });
 }
 
-// The highest directory on the same device as `path`.
-function mountPointOf(path: string): string {
-  const device = statSync(path).dev;
-  let current = path;
-  while (dirname(current) !== current && statSync(dirname(current)).dev === device) current = dirname(current);
-  return current;
+// `df -P` ends its second line with the capacity and the mount point,
+// which may contain spaces, as may the device name before it.
+export function parseDfMountPoint(output: string): string | undefined {
+  return /\d+%\s+(\/.*)$/.exec(output.trim().split('\n')[1] ?? '')?.[1];
 }
 
 // `mount` prints `<device> on <mount point> (<type>, <option>, ...)`.

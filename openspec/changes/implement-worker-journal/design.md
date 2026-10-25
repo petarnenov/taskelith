@@ -23,6 +23,9 @@ The worker journal contract (item 5) fixes what the worker persists and in which
 - **Observation identity.** SHA-256 of the observation's source, so a re-derived fact gets the same `observationId`.
 - **Crash points as a hook.** The adapter calls an optional `onCommitPoint` before and after each commit; tests pass `CrashPoints.reach`, so product code does not depend on the test harness.
 - **Republication bound.** 60 seconds, held in memory.
+- **Re-authorization.** A new operation for an existing execution follows item 3: after a retryable rejection, or after a grant only while the request reports, from the launch record, that the execution has not started.
+- **Device faults.** I/O errors, and a file that cannot be opened, is read-only, or breaks the locking protocol, stop the journal like a flush failure, because the device state is unknown.
+- **Test volume.** Filesystem tests pass a probe that accepts their temporary volume, so the suite runs on tmpfs and overlayfs too; only the volume tests use the real probe.
 
 ## Risks / Trade-offs
 

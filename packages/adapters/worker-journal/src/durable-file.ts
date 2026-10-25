@@ -52,7 +52,11 @@ export function syncBeforeUse(path: string): Result<void> {
 }
 
 export function createPrivateDirectory(path: string): Result<void> {
-  mkdirSync(path, { mode: PRIVATE_DIRECTORY });
+  try {
+    mkdirSync(path, { mode: PRIVATE_DIRECTORY });
+  } catch (error) {
+    return err(rootFailure('flush-failure', `cannot create ${path}: ${(error as Error).message}`, { path }));
+  }
   return syncPath(dirname(path));
 }
 
@@ -65,7 +69,11 @@ export function removeTemporaries(directory: string): void {
 
 function publish(path: string, content: string, place: (temporary: string) => void): Result<void> {
   const temporary = join(dirname(path), `.${basename(path)}${TEMPORARY_MARKER}${randomBytes(8).toString('hex')}`);
-  writeFileSync(temporary, content, { mode: PRIVATE_FILE, flag: 'wx' });
+  try {
+    writeFileSync(temporary, content, { mode: PRIVATE_FILE, flag: 'wx' });
+  } catch (error) {
+    return err(rootFailure('flush-failure', `cannot write ${temporary}: ${(error as Error).message}`, { path }));
+  }
   const synced = syncPath(temporary);
   if (!synced.ok) return synced;
   try {

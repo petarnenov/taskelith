@@ -12,6 +12,7 @@ import {
   JOURNAL_FORMAT,
   checkVolume,
   enrollWorkerRoot,
+  parseDfMountPoint,
   failureReason,
   hostBootId,
   openWorkerRoot,
@@ -111,7 +112,6 @@ test('a second worker on the same root fails to take the root lock', () => {
 test('the root lock of a killed process is free, and a live holder keeps it', async () => {
   const lockFile = join(dirname(dataRoot), 'lock');
   const holder = await ScenarioProcess.start(process.execPath, [
-    '--experimental-strip-types',
     '--input-type=module',
     '-e',
     `import { ExclusiveFileLock } from '@taskelith/worker-journal';
@@ -129,7 +129,7 @@ test('a data root inside a Git working tree is refused', () => {
   assert.equal(reasonOf(enrollWorkerRoot(rootOptions(dataRoot), BINDING)), 'inside-checkout');
 });
 
-test('a symbolic link, a foreign owner, or a group-writable control record fails startup', () => {
+test('a symbolic link or a group-writable control record fails startup', () => {
   const { paths } = enroll();
   opened.splice(0).forEach((root) => root.close());
   rmSync(paths.logs, { recursive: true });
@@ -176,6 +176,27 @@ test('a new incarnation keeps the old journal files aside as evidence', () => {
   const evidence = readdirSync(paths.journalDirectory).filter((name) => name.startsWith('evidence-'));
   assert.equal(evidence.length, 1);
   assert.equal(fileDigest(join(paths.journalDirectory, evidence[0]!, 'journal.sqlite')), before);
+});
+
+test('a valid SQLite database of another application is refused untouched', () => {
+  const { paths } = enroll();
+  opened.splice(0).forEach((root) => root.close());
+  rmSync(paths.journal);
+  rmSync(`${paths.journal}-wal`, { force: true });
+  const foreign = new DatabaseSync(paths.journal);
+  foreign.exec('CREATE TABLE notes (text TEXT); INSERT INTO notes VALUES (1)');
+  foreign.close();
+  const before = fileDigest(paths.journal);
+  assert.equal(reasonOf(openWorkerRoot(rootOptions(dataRoot))), 'corrupt');
+  assert.equal(fileDigest(paths.journal), before);
+  assert.equal(existsSync(`${paths.journal}-wal`), false);
+});
+
+test('the open journal refuses a second connection, which the root lock alone would not stop', () => {
+  const { paths } = enroll();
+  const second = new DatabaseSync(paths.journal, { timeout: 0 });
+  assert.throws(() => second.prepare('SELECT * FROM journal_meta').get(), (error: { errcode?: number }) => error.errcode === 5);
+  second.close();
 });
 
 test('a foreign, truncated, bit-flipped, or newer journal fails startup without changing the files', () => {
@@ -250,8 +271,12 @@ test('only local APFS is accepted on macOS, and remote or volatile filesystems o
   assert.equal(reasonOf(enrollWorkerRoot(rootOptions(dataRoot, { probe: darwin('hfs') }), BINDING)), 'unsupported-volume');
 });
 
-test('the real probe accepts the test volume and reads mount options', () => {
-  value(checkVolume(dirname(dataRoot), probeVolume));
+test('the real probe describes the test volume and parses df and mount output', () => {
+  const described = value(probeVolume(dirname(dataRoot)));
+  assert.equal(described.platform, process.platform);
+  if (process.platform === 'darwin') value(checkVolume(dirname(dataRoot), probeVolume));
+  assert.equal(parseDfMountPoint('Filesystem 512-blocks Used Available Capacity Mounted on\nmap auto_home 0 0 0 100% /System/Volumes/Data/home\n'), '/System/Volumes/Data/home');
+  assert.equal(parseDfMountPoint('header only'), undefined);
   const mounts = '/dev/disk1 on / (apfs, local, journaled)\n/dev/disk5s1 on /Volumes/My Disk (msdos, local, nodev)';
   assert.deepEqual(parseMacMountOptions(mounts, '/Volumes/My Disk'), ['msdos', 'local', 'nodev']);
   assert.equal(parseMacMountOptions(mounts, '/missing'), undefined);
@@ -264,7 +289,7 @@ test('on macOS a data root on a volume that is not local APFS is refused', { ski
   execFileSync('hdiutil', ['create', '-quiet', '-size', '16m', '-fs', 'MS-DOS FAT16', '-volname', 'TJFAT', image]);
   execFileSync('hdiutil', ['attach', '-quiet', '-nobrowse', '-mountpoint', mountPoint, image]);
   try {
-    assert.equal(reasonOf(enrollWorkerRoot(rootOptions(join(mountPoint, 'data')), BINDING)), 'unsupported-volume');
+    assert.equal(reasonOf(enrollWorkerRoot(rootOptions(join(mountPoint, 'data'), { probe: probeVolume }), BINDING)), 'unsupported-volume');
   } finally {
     execFileSync('hdiutil', ['detach', '-quiet', '-force', mountPoint]);
   }

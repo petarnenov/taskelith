@@ -16,7 +16,7 @@ import {
   type LaunchRequest,
   type OperationId,
 } from '@taskelith/execution';
-import type { JournalClock, WorkerRootOptions } from '@taskelith/worker-journal';
+import type { JournalClock, VolumeProbe, WorkerRootOptions } from '@taskelith/worker-journal';
 
 export function value<T, E>(result: Result<T, E>): T {
   assert.ok(result.ok, `expected success, got ${JSON.stringify(result.ok ? undefined : result.error)}`);
@@ -47,8 +47,12 @@ export function temporaryDataRoot(): { readonly dataRoot: string; readonly remov
   return { dataRoot: join(base, 'data'), remove: () => rmSync(base, { recursive: true, force: true }) };
 }
 
+// Accepts the test volume, which may be tmpfs or overlayfs on Linux; the
+// volume tests pass the real probe or their own.
+export const TEST_VOLUME: VolumeProbe = () => ({ ok: true, value: { platform: 'darwin', filesystem: 'apfs', local: true } });
+
 export function rootOptions(dataRoot: string, extra: Partial<WorkerRootOptions> = {}): WorkerRootOptions {
-  return { dataRoot, clock: CLOCK, ...extra };
+  return { dataRoot, clock: CLOCK, probe: TEST_VOLUME, ...extra };
 }
 
 export function intent(number = 1): LaunchIntent {
