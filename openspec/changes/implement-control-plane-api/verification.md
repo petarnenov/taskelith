@@ -58,6 +58,7 @@ Recorded before pass 1.
 - At `583cff0`, with every file tracked: 900 tests passed, 0 failed; coverage 99.12% lines, 91.75% branches, 99.03% functions. The comment, boundary, coverage-scope, dependency-inventory, contract-compatibility, OpenSpec (52 of 52), and package checks pass.
 - At `53e7eb0`, after the pass-1 fixes: 908 tests passed, 0 failed; coverage 99.11% lines, 91.90% branches, 98.82% functions; every other check passes.
 - At `a9d88ba`, after the pass-2 fixes: 913 tests passed, 0 failed; coverage 99.14% lines, 91.94% branches, 98.93% functions; every other check passes.
+- At `bfe50e6`, the unreviewed fixes of the pass-3 findings, and at `bd10adf`, after merging `origin/dev` at `01d3183`: 914 tests passed, 0 failed; coverage 99.15% lines, 91.90% branches, 98.88% functions; every other check passes (OpenSpec 53 of 53). The merge brought documents, the review rules (OpenCode, rotation, unavailable reviewers), and `AGENTS.md` wording, and touches no file of this change, so it needed no review.
 - `npm run openspec -- validate implement-control-plane-api --strict` passed at each of these revisions.
 
 ## Independent review
