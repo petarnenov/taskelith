@@ -13,6 +13,7 @@
     { "path": "../../packages/modules/fleet" },
     { "path": "../../packages/adapters/control-plane-store" },
     { "path": "../../packages/adapters/data-root" },
+    { "path": "../../packages/adapters/evidence-volume" },
     { "path": "../../packages/adapters/nats" },
     { "path": "../../packages/adapters/postgres" },
     { "path": "../../packages/adapters/secrets" }

@@ -87,7 +87,7 @@ test('a correlation that carries a secret is replaced, so no log line holds it',
 test('a redrive sequence that is not a positive safe integer is 400 before the broker', async () => {
   let redriven = 0;
   const api = new ControlPlaneApi({
-    runs: undefined as never, tasks: undefined as never, operator: { authenticate: async () => ok(undefined) },
+    runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: { authenticate: async () => ok(undefined) },
     enrollment: undefined as never,
     quarantine: { records: async () => ok([]), redrive: async () => (redriven++, ok(null)) },
   });
@@ -97,4 +97,18 @@ test('a redrive sequence that is not a positive safe integer is 400 before the b
   }
   assert.equal(redriven, 0);
   assert.deepEqual(await api.handle('redriveQuarantined', { parameters: ['7'], body: undefined, query: new URLSearchParams(), correlationId: 'c' as never }, ''), ok({ sequence: 7 }));
+});
+
+test('evidence content is sent as exact bytes, and a handler that returns no bytes is 500', async () => {
+  answers = { downloadEvidence: () => ok(Uint8Array.of(0, 255, 10)) };
+  const response = await fetch(`${base}/evidence/evidence-1/content`, { headers: { authorization: `Bearer ${OPERATOR}` } });
+  assert.deepEqual([response.status, response.headers.get('content-type'), response.headers.get('x-content-type-options')],
+    [200, 'application/octet-stream', 'nosniff']);
+  assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [0, 255, 10]);
+  answers = { downloadEvidence: () => ok('text') };
+  assert.equal((await call('GET', '/evidence/evidence-1/content')).status, 500);
+  answers = { downloadEvidence: () => err(failure('internal', 'corrupt', { reason: 'evidence-corrupt' })) };
+  assert.equal((await call('GET', '/evidence/evidence-1/content')).status, 500);
+  answers = { readEvidence: () => err(failure('not-found', 'no evidence')) };
+  assert.equal((await call('GET', '/evidence/evidence-9')).status, 404);
 });

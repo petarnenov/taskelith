@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { HttpSchemas } from '@taskelith/contracts';
-import { openTask, type Task } from '@taskelith/execution';
+import { openTask, type EvidenceRecord, type Task } from '@taskelith/execution';
 import { err, failure, ok, parseEventMetadata, parseIdentifier, type CorrelationId, type Instant, type Result } from '@taskelith/kernel';
 import {
   FIRST_OWNERSHIP_GENERATION,
@@ -18,6 +18,7 @@ import {
   type WorkflowRun,
 } from '@taskelith/sdlc';
 import type { ControlPlaneStore, ControlPlaneTransaction } from './control-plane-store.js';
+import { viewOf } from './evidence-service.js';
 
 export type SubmitTaskRequest = HttpSchemas['SubmitTaskRequest'];
 export type TaskSubmission = HttpSchemas['TaskSubmission'];
@@ -94,8 +95,8 @@ export class TaskService {
     });
   }
 
-  // Pending until an attempt ends; then the outcome of the last ended attempt.
-  // Evidence is item 19's, so the list stays empty until then.
+  // Pending until an attempt ends; then the outcome of the last ended attempt
+  // with every evidence record of the task, current or not.
   readTaskResult(runIdText: string, taskIdText: string): Promise<Result<TaskResult>> {
     return this.#store.transaction(async (tx) => {
       const taskId = parseIdentifier('TaskId', taskIdText);
@@ -104,7 +105,9 @@ export class TaskService {
       if (link === undefined || link.runId !== runIdText) return notFound('task', taskIdText);
       const task = await tx.tasks.get(taskId.value);
       if (!task.ok) return task;
-      return ok(resultOf(link.runId, task.value));
+      const evidence = await tx.evidence.listByTask(taskId.value);
+      if (!evidence.ok) return evidence;
+      return ok(resultOf(link.runId, task.value, evidence.value));
     });
   }
 }
@@ -193,11 +196,11 @@ function admissionView(admission: TaskAdmission): AdmissionView {
   return JSON.parse(JSON.stringify(admission)) as AdmissionView;
 }
 
-function resultOf(runId: string, task: Task): TaskResult {
+function resultOf(runId: string, task: Task, evidence: readonly EvidenceRecord[]): TaskResult {
   const ended = task.attempts.filter((attempt) => attempt.outcome !== undefined).at(-1);
   if (ended === undefined || ended.outcome === undefined) return { state: 'pending', runId, taskId: task.id };
   const outcome = JSON.parse(JSON.stringify(ended.outcome)) as Extract<TaskResult, { state: 'ended' }>['outcome'];
-  return { state: 'ended', runId, taskId: task.id, attemptId: ended.id, ownershipGeneration: ended.outcome.ownershipGeneration, outcome, evidence: [] };
+  return { state: 'ended', runId, taskId: task.id, attemptId: ended.id, ownershipGeneration: ended.outcome.ownershipGeneration, outcome, evidence: evidence.map(viewOf) };
 }
 
 function parseArtifacts(inputs: readonly HttpSchemas['ArtifactRevision'][]): Result<readonly ArtifactRevision[]> {

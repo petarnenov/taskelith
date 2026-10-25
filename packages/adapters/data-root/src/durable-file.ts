@@ -36,11 +36,11 @@ export function syncPath(path: string): Result<void> {
 }
 
 // Fails with `conflict` when the name exists; the caller reads that file.
-export function createOnce(path: string, content: string): Result<void> {
+export function createOnce(path: string, content: string | Uint8Array): Result<void> {
   return publish(path, content, (temporary) => linkAndDrop(temporary, path));
 }
 
-export function replaceFile(path: string, content: string): Result<void> {
+export function replaceFile(path: string, content: string | Uint8Array): Result<void> {
   return publish(path, content, (temporary) => renameSync(temporary, path));
 }
 
@@ -68,7 +68,7 @@ export function removeTemporaries(directory: string): void {
   }
 }
 
-function publish(path: string, content: string, place: (temporary: string) => void): Result<void> {
+function publish(path: string, content: string | Uint8Array, place: (temporary: string) => void): Result<void> {
   const temporary = join(dirname(path), `.${basename(path)}${TEMPORARY_MARKER}${randomBytes(8).toString('hex')}`);
   try {
     writeFileSync(temporary, content, { mode: PRIVATE_FILE, flag: 'wx' });

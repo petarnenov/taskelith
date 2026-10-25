@@ -11,8 +11,9 @@ export interface RouteDefinition {
   readonly pattern: RegExp;
   readonly security: SecurityScheme;
   readonly body?: keyof HttpSchemas & string;
-  // The schema every success body is validated against before it leaves.
-  readonly response: keyof HttpSchemas & string;
+  // The schema every success body is validated against before it leaves,
+  // or `binary` for exact bytes sent as application/octet-stream.
+  readonly response: (keyof HttpSchemas & string) | 'binary';
   readonly success: number;
   readonly statuses: Partial<Record<FailureCode, number>>;
 }
@@ -41,6 +42,14 @@ export const ROUTES: readonly RouteDefinition[] = Object.freeze([
   {
     operationId: 'enrollWorker', method: 'POST', pattern: /^\/workers\/enrollments$/, security: 'enrollmentToken', body: 'EnrollmentRequest',
     response: 'Enrollment', success: 201, statuses: { ...COMMON, conflict: 409, 'precondition-failed': 422 },
+  },
+  {
+    operationId: 'readEvidence', method: 'GET', pattern: new RegExp(`^/evidence/${SEGMENT}$`), security: 'operatorToken',
+    response: 'EvidenceRecord', success: 200, statuses: { ...COMMON, 'not-found': 404 },
+  },
+  {
+    operationId: 'downloadEvidence', method: 'GET', pattern: new RegExp(`^/evidence/${SEGMENT}/content$`), security: 'operatorToken',
+    response: 'binary', success: 200, statuses: { ...COMMON, 'not-found': 404 },
   },
   {
     operationId: 'listQuarantine', method: 'GET', pattern: /^\/quarantine$/, security: 'operatorToken', response: 'QuarantinePage', success: 200,

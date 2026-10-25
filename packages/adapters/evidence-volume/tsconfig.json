@@ -1,0 +1,11 @@
+{
+  "extends": "../../../tsconfig.package.json",
+  "references": [
+    { "path": "../control-plane-store" },
+    { "path": "../data-root" },
+    { "path": "../../kernel" },
+    { "path": "../../modules/execution" },
+    { "path": "../../modules/sdlc" },
+    { "path": "../../testing" }
+  ]
+}

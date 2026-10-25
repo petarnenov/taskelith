@@ -30,13 +30,14 @@ Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-
 
 - `dataRoot` resolves as in the [storage contract](../storage.md): explicit configuration, then `TASKELITH_DATA_DIR`, then the OS default.
 - `dataRoot` and `dataRoot/control-plane` are directories owned by the running account and created with mode `0700`, as is every missing parent of `dataRoot`, such as `~/.local/share` on a fresh account. No component from `dataRoot` down may be a symbolic link, owned by another account, or writable by group or others. `control-plane/` and every file in it must give group and others no access at all, since the subtree holds signing seeds. A data root inside a Git working tree is refused. A colocated worker keeps its own `worker/` subtree.
-- Every file is a regular file of mode `0600`, written by the durable file rule of the [worker journal](worker-journal.md) section 4. A document carries `format: 1`, and another format is refused.
+- Every file is a regular file of mode `0600`, written by the durable file rule of the [worker journal](worker-journal.md) section 4. A document carries `format: 1`, and another format is refused. Evidence content is raw bytes, not a document.
 
 | File | Content | Written |
 | --- | --- | --- |
 | `installation` | `installationId`, `recoveryEpoch` | Once, at `init` |
 | `broker-authority` | The operator, system account, and installation account seeds (`BrokerAuthorityKeys`) | Once, at `init` |
 | `nats-authority.conf` | The nats-server trust fragment: `operator`, `system_account`, the `full` resolver, and its preload of both accounts | At `init`, for the operator to include in the server configuration (item 23) |
+| `evidence/sha256/<first two hex digits>/<hex digest>` | Evidence content named by its SHA-256 digest (G2 item 19); its record is in PostgreSQL | Once per digest, at its first publication; a republication of the same content replaces a corrupt copy |
 
 ## 4. The operator credential
 

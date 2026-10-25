@@ -2,6 +2,7 @@ import type { HttpSchemas } from '@taskelith/contracts';
 import type { Enrollment, EnrollmentRequest } from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import type { QuarantineRecord } from '@taskelith/nats';
+import type { EvidenceService } from '../application/evidence-service.js';
 import type { RunService } from '../application/run-service.js';
 import type { TaskService } from '../application/task-service.js';
 import type { ApiHandlers, ApiRequest } from './api-server.js';
@@ -15,6 +16,7 @@ export const QUARANTINE_REASON_LENGTH = 512;
 export interface ApiServices {
   readonly runs: RunService;
   readonly tasks: TaskService;
+  readonly evidence: EvidenceService;
   readonly operator: { authenticate(secret: string): Promise<Result<void>> };
   readonly enrollment: { enroll(tokenSecret: string, request: EnrollmentRequest): Promise<Result<Enrollment>> };
   readonly quarantine: {
@@ -47,6 +49,10 @@ export class ControlPlaneApi implements ApiHandlers {
         return this.#services.tasks.readAdmission(first, second);
       case 'readTaskResult':
         return this.#services.tasks.readTaskResult(first, second);
+      case 'readEvidence':
+        return this.#services.evidence.read(first);
+      case 'downloadEvidence':
+        return this.#download(first);
       case 'enrollWorker':
         return this.#enroll(bearer, request.body as HttpSchemas['EnrollmentRequest']);
       case 'listQuarantine':
@@ -75,6 +81,11 @@ export class ControlPlaneApi implements ApiHandlers {
     if (!enrolled.ok) return enrolled;
     const { installationId, workerId, credentialGeneration, recoveryEpoch, protocolVersions, credentials } = enrolled.value;
     return ok({ installationId, workerId, credentialGeneration, recoveryEpoch, protocolVersions, credentials });
+  }
+
+  async #download(evidenceId: string): Promise<Result<Uint8Array>> {
+    const downloaded = await this.#services.evidence.download(evidenceId);
+    return downloaded.ok ? ok(downloaded.value.content) : downloaded;
   }
 
   async #listQuarantine(query: URLSearchParams): Promise<Result<HttpSchemas['QuarantinePage']>> {

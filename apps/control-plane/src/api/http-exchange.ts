@@ -10,6 +10,13 @@ export interface JsonResponse {
   readonly body: unknown;
 }
 
+export interface BinaryResponse {
+  readonly status: number;
+  readonly binary: Uint8Array;
+}
+
+export type ApiResponse = JsonResponse | BinaryResponse;
+
 // The bearer token of the Authorization header, or undefined without one.
 export function bearerToken(request: IncomingMessage): string | undefined {
   const header = request.headers.authorization;
@@ -34,15 +41,18 @@ export async function readJsonBody(request: IncomingMessage): Promise<Result<unk
   }
 }
 
-export function writeJson(response: ServerResponse, { status, body }: JsonResponse, correlationId: string): void {
-  const text = JSON.stringify(body);
-  response.writeHead(status, {
-    'content-type': 'application/json',
-    'content-length': Buffer.byteLength(text),
+export function writeResponse(response: ServerResponse, answer: ApiResponse, correlationId: string): void {
+  const binary = 'binary' in answer;
+  const content = binary ? answer.binary : Buffer.from(JSON.stringify(answer.body));
+  response.writeHead(answer.status, {
+    'content-type': binary ? 'application/octet-stream' : 'application/json',
+    'content-length': content.byteLength,
     'x-correlation-id': correlationId,
     'cache-control': 'no-store',
+    // Evidence bytes are data; a browser must not render them as a page.
+    'x-content-type-options': 'nosniff',
   });
-  response.end(text);
+  response.end(content);
 }
 
 // A failure leaves the process with its secrets redacted (trust model 5).

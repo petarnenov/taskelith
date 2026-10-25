@@ -1,6 +1,7 @@
 export {
   CommittingAdmissionRepository,
   CommittingAssignmentRepository,
+  CommittingEvidenceRecords,
   CommittingFleetRegistry,
   CommittingGateRepository,
   CommittingInbox,
@@ -12,6 +13,7 @@ export {
   CommittingWorkflowRunRepository,
 } from './committing-repositories.js';
 export { PostgresControlPlaneSignals } from './control-plane-signals.js';
+export { PostgresEvidenceProducers, PostgresEvidenceRecords } from './evidence-records.js';
 export { StatementError } from './database-errors.js';
 export { PostgresFleetRegistry, PostgresInstallationTable, PostgresOperatorCredentials } from './fleet-repositories.js';
 export { NO_CRASH_POINTS, type CrashPointHook, type PostgresCrashPoint } from './crash-points.js';

@@ -5,7 +5,7 @@ import { checkHttpSchema, type HttpSchemas } from '@taskelith/contracts';
 import { err, failure, ok, parseIdentifier, type CorrelationId, type Result } from '@taskelith/kernel';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import { redactSecrets } from '@taskelith/secrets';
-import { bearerToken, failureResponse, readJsonBody, writeJson, type JsonResponse } from './http-exchange.js';
+import { bearerToken, failureResponse, readJsonBody, writeResponse, type ApiResponse } from './http-exchange.js';
 import { ROUTES, type RouteDefinition } from './routes.js';
 
 // A validated request: the route's path parameters, its body when it has
@@ -41,7 +41,7 @@ async function serve(handlers: ApiHandlers, logger: Logger, request: IncomingMes
   const startedAt = performance.now();
   const correlationId = correlationOf(request);
   let operationId = 'unknown';
-  let answer: JsonResponse;
+  let answer: ApiResponse;
   try {
     const url = new URL(request.url ?? '/', 'http://control-plane');
     const matched = match(request.method ?? 'GET', url.pathname);
@@ -56,7 +56,7 @@ async function serve(handlers: ApiHandlers, logger: Logger, request: IncomingMes
   } catch (error) {
     answer = failureResponse(500, failure('internal', error instanceof Error ? error.message : String(error)));
   }
-  if (!response.headersSent) writeJson(response, answer, correlationId);
+  if (!response.headersSent) writeResponse(response, answer, correlationId);
   const fields = { operationId, status: answer.status, durationMs: Math.round(performance.now() - startedAt) };
   const log = logger.with({ correlationId });
   if (answer.status >= 500) log.error('api.request', fields);
@@ -69,7 +69,7 @@ async function answerRoute(
   request: IncomingMessage,
   url: URL,
   correlationId: CorrelationId,
-): Promise<JsonResponse> {
+): Promise<ApiResponse> {
   const bearer = bearerToken(request);
   if (bearer === undefined) return failureResponse(401, failure('forbidden', 'the request has no bearer credential'));
   if (route.security === 'operatorToken') {
@@ -81,9 +81,17 @@ async function answerRoute(
   if (!body.ok) return failureResponse(400, body.error);
   const outcome = await handlers.handle(route.operationId, { parameters, body: body.value, query: url.searchParams, correlationId }, bearer);
   if (!outcome.ok) return failureResponse(route.statuses[outcome.error.code] ?? 500, outcome.error);
-  // A success that breaks its own schema is a defect, never sent as is.
-  const checked = checkHttpSchema(route.response, outcome.value);
-  if (checked.ok) return { status: route.success, body: outcome.value };
+  return successResponse(route, outcome.value);
+}
+
+// A success that breaks its own schema is a defect, never sent as is.
+function successResponse(route: RouteDefinition, value: unknown): ApiResponse {
+  if (route.response === 'binary') {
+    if (value instanceof Uint8Array) return { status: route.success, binary: value };
+    return failureResponse(500, failure('internal', `the ${route.operationId} response is not bytes`));
+  }
+  const checked = checkHttpSchema(route.response, value);
+  if (checked.ok) return { status: route.success, body: value };
   return failureResponse(500, failure('internal', `the ${route.operationId} response violates ${route.response}`, { violation: checked.error[0] ?? '' }));
 }
 
