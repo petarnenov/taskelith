@@ -99,18 +99,29 @@ function commonFieldsOf({ reportId, parts, workerId, journalId, requestId, snaps
 // journal's highest received `snapshot`, and the report that wins a tie.
 export interface ReportFreshness {
   readonly requestId: string | undefined;
-  readonly reportedSnapshot: number;
+  readonly highestSnapshot: number;
   readonly preferred?: string;
 }
 
-// Of the reports that are not fresh, only the newest survives, and only
-// while it is not below the journal's highest received `snapshot`.
+// Only the newest fresh report and the newest one not fresh survive; the
+// latter only while it is not below the journal's highest `snapshot`.
 export function supersededReports(pending: readonly InventoryPart[], freshness: ReportFreshness): ReadonlySet<string> {
+  const fresh = new Map<string, number>();
   const stale = new Map<string, number>();
-  for (const part of pending) if (!isFreshReport(part, freshness.requestId)) stale.set(part.reportId, part.snapshot);
-  const newest = newestReport(stale, freshness.preferred);
-  const superseded = [...stale].filter(([reportId, snapshot]) => reportId !== newest || snapshot < freshness.reportedSnapshot);
-  return new Set(superseded.map(([reportId]) => reportId));
+  for (const part of pending) (isFreshReport(part, freshness.requestId) ? fresh : stale).set(part.reportId, part.snapshot);
+  const newestFresh = newestReport(fresh, freshness.preferred);
+  const newestStale = newestReport(stale, freshness.preferred);
+  const superseded = [
+    ...[...fresh.keys()].filter((reportId) => reportId !== newestFresh),
+    ...[...stale].filter(([reportId, snapshot]) => reportId !== newestStale || snapshot < freshness.highestSnapshot).map(([reportId]) => reportId),
+  ];
+  return new Set(superseded);
+}
+
+// The highest `snapshot` received from a journal: of a complete report, or
+// of a part still pending, whose stored siblings agree with it.
+export function highestReceivedSnapshot(reportedSnapshot: number, pending: readonly InventoryPart[]): number {
+  return Math.max(reportedSnapshot, ...pending.map((part) => part.snapshot));
 }
 
 // A report is fresh when it answers the worker's current request.

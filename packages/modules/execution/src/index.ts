@@ -89,6 +89,7 @@ export {
   assembleSnapshot,
   classifyOmission,
   highestAppliedSequence,
+  highestReceivedSnapshot,
   isFreshReport,
   isRolledBack,
   supersededReports,

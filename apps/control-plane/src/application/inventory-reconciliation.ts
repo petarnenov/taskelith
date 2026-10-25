@@ -3,6 +3,7 @@ import {
   assembleSnapshot,
   classifyOmission,
   highestAppliedSequence,
+  highestReceivedSnapshot,
   isFreshReport,
   isRolledBack,
   startProducerCursor,
@@ -10,9 +11,9 @@ import {
   type InventoryPart,
   type InventorySnapshot,
   type JournalId,
+  type ProducerCursor,
   type ProducerJournal,
   type ReportFreshness,
-  type SnapshotAssembly,
   type WorkerId,
 } from '@taskelith/execution';
 import { ok, parseEventMetadata, type Result } from '@taskelith/kernel';
@@ -58,33 +59,44 @@ export async function requestInventory(tx: ControlPlaneTransaction, workerId: Wo
 async function removeReplacedReports(tx: ControlPlaneTransaction, journals: readonly ProducerJournal[], requestId: string): Promise<Result<void>> {
   for (const { cursor, reportedSnapshot } of journals) {
     const pending = await tx.inventoryReports.listByJournal(cursor.workerId, cursor.journalId);
-    const pruned = await removeSuperseded(tx, pending, { requestId, reportedSnapshot });
+    const pruned = await removeSuperseded(tx, pending, { requestId, highestSnapshot: highestReceivedSnapshot(reportedSnapshot, pending) });
     if (!pruned.ok) return pruned;
   }
   return ok(undefined);
 }
 
-// Decision 7, receipt: a part that is not fresh, below a snapshot already
-// received, is discarded; an unsolicited report requests inventory.
+// Decision 7, receipt: a part that disagrees with its report's stored parts
+// refuses the report; one not fresh and below the highest is discarded.
 export async function receivePart(tx: ControlPlaneTransaction, part: InventoryPart, context: ReconciliationContext): Promise<Result<void>> {
   const { workerId, journalId } = part;
+  const pending = await tx.inventoryReports.listByJournal(workerId, journalId);
+  const assembly = assembleSnapshot([...pending.filter((stored) => stored.reportId === part.reportId), part]);
+  if (assembly === 'inconsistent') return refuseReport(tx, part, context);
   const current = await tx.inventoryRequests.current(workerId);
   const fresh = isFreshReport(part, current?.requestId);
   const journal = await producerJournal(tx, workerId, journalId);
-  if (!fresh && part.snapshot < journal.reportedSnapshot) return ok(undefined);
-  const pending = await tx.inventoryReports.listByJournal(workerId, journalId);
+  const highestSnapshot = highestReceivedSnapshot(journal.reportedSnapshot, [...pending, part]);
+  if (!fresh && part.snapshot < highestSnapshot) return ok(undefined);
   const added = await tx.inventoryReports.add(part);
   if (!added.ok) return added;
-  const raised = await tx.cursors.recordReportedSnapshot(workerId, journalId, part.snapshot);
+  const raised = assembly === 'incomplete' ? ok(undefined) : await tx.cursors.recordReportedSnapshot(workerId, journalId, part.snapshot);
   if (!raised.ok) return raised;
-  const reportedSnapshot = Math.max(journal.reportedSnapshot, part.snapshot);
-  const pruned = await removeSuperseded(tx, [...pending, part], { requestId: current?.requestId, reportedSnapshot, preferred: part.reportId });
+  const pruned = await removeSuperseded(tx, [...pending, part], { requestId: current?.requestId, highestSnapshot, preferred: part.reportId });
   if (!pruned.ok) return pruned;
   const unsolicited = !fresh && !pending.some((stored) => stored.reportId === part.reportId);
   return unsolicited ? requestInventory(tx, workerId, context) : ok(undefined);
 }
 
-// Decision 7, bound: what is not fresh keeps only its newest report.
+// Decision 7: its stored parts are deleted without effect, and it is logged.
+async function refuseReport(tx: ControlPlaneTransaction, part: InventoryPart, context: ReconciliationContext): Promise<Result<void>> {
+  const { workerId, journalId, reportId } = part;
+  const removed = await tx.inventoryReports.remove(reportId);
+  if (removed.ok) context.log.warn({ workerId }, 'execution.inventory.refused', { journalId, reportId, reason: 'inconsistent-parts' });
+  return removed;
+}
+
+// Decision 7, bound: each journal keeps its newest fresh report and its
+// newest report that is not fresh.
 async function removeSuperseded(tx: ControlPlaneTransaction, pending: readonly InventoryPart[], freshness: ReportFreshness): Promise<Result<void>> {
   for (const reportId of supersededReports(pending, freshness)) {
     const removed = await tx.inventoryReports.remove(reportId);
@@ -101,26 +113,13 @@ export async function evaluateSnapshots(
   const parts = await tx.inventoryReports.listByJournal(workerId, journalId);
   if (parts.length === 0) return ok(undefined);
   const journal = await producerJournal(tx, workerId, journalId);
-  for (const [reportId, assembly] of assembleReports(parts)) {
-    if (assembly === 'incomplete' || !(await isPending(tx, workerId, journalId, reportId))) continue;
-    if (assembly === 'inconsistent') {
-      const refused = await refuseReport(tx, workerId, journalId, reportId, context);
-      if (!refused.ok) return refused;
-      continue;
-    }
-    const evaluated = await evaluateSnapshot(tx, assembly, journal, context);
+  const highestSnapshot = highestReceivedSnapshot(journal.reportedSnapshot, parts);
+  for (const snapshot of completeSnapshots(parts)) {
+    if (!(await isPending(tx, workerId, journalId, snapshot.reportId))) continue;
+    const evaluated = await evaluateSnapshot(tx, snapshot, journal.cursor, highestSnapshot, context);
     if (!evaluated.ok || evaluated.value === 'retired') return evaluated.ok ? ok(undefined) : evaluated;
   }
   return ok(undefined);
-}
-
-// Decision 7: parts that disagree are deleted without effect and logged.
-async function refuseReport(
-  tx: ControlPlaneTransaction, workerId: WorkerId, journalId: JournalId, reportId: string, context: ReconciliationContext,
-): Promise<Result<void>> {
-  const removed = await tx.inventoryReports.remove(reportId);
-  if (removed.ok) context.log.warn({ workerId }, 'execution.inventory.refused', { journalId, reportId, reason: 'inconsistent-parts' });
-  return removed;
 }
 
 async function isPending(tx: ControlPlaneTransaction, workerId: WorkerId, journalId: JournalId, reportId: string): Promise<boolean> {
@@ -130,7 +129,7 @@ async function isPending(tx: ControlPlaneTransaction, workerId: WorkerId, journa
 // Decision 6 before any other rule; then the lower-`snapshot` filter, and
 // the snapshot is applied once the cursor reached `throughSequence`.
 async function evaluateSnapshot(
-  tx: ControlPlaneTransaction, snapshot: InventorySnapshot, journal: ProducerJournal, context: ReconciliationContext,
+  tx: ControlPlaneTransaction, snapshot: InventorySnapshot, cursor: ProducerCursor, highestSnapshot: number, context: ReconciliationContext,
 ): Promise<Result<'retired' | 'kept'>> {
   const { workerId, journalId, reportId } = snapshot;
   const current = await tx.inventoryRequests.current(workerId);
@@ -139,8 +138,8 @@ async function evaluateSnapshot(
     const retired = await retireJournal(tx, workerId, journalId, 'snapshot-rollback', context);
     return retired.ok ? ok('retired') : retired;
   }
-  if (snapshot.snapshot < journal.reportedSnapshot) return keep(await tx.inventoryReports.remove(reportId));
-  if (journal.cursor.confirmedThrough < snapshot.throughSequence) return ok('kept');
+  if (snapshot.snapshot < highestSnapshot) return keep(await tx.inventoryReports.remove(reportId));
+  if (cursor.confirmedThrough < snapshot.throughSequence) return ok('kept');
   const applied = await applySnapshot(tx, snapshot, fresh, context);
   return applied.ok ? keep(await tx.inventoryReports.remove(reportId)) : applied;
 }
@@ -163,10 +162,11 @@ async function applySnapshot(
   return unclassified && !fresh ? requestInventory(tx, snapshot.workerId, context) : ok(undefined);
 }
 
-function assembleReports(parts: readonly InventoryPart[]): ReadonlyMap<string, SnapshotAssembly> {
+// Stored parts never disagree, as receipt refuses a report whose do.
+function completeSnapshots(parts: readonly InventoryPart[]): readonly InventorySnapshot[] {
   const reports = new Map<string, InventoryPart[]>();
   for (const part of parts) reports.set(part.reportId, [...(reports.get(part.reportId) ?? []), part]);
-  return new Map([...reports].map(([reportId, reportParts]) => [reportId, assembleSnapshot(reportParts)]));
+  return [...reports.values()].map(assembleSnapshot).filter((assembly) => typeof assembly !== 'string');
 }
 
 async function producerJournal(tx: ControlPlaneTransaction, workerId: WorkerId, journalId: JournalId): Promise<ProducerJournal> {

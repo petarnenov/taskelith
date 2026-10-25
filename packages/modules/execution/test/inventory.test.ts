@@ -4,6 +4,7 @@ import {
   assembleSnapshot,
   classifyOmission,
   highestAppliedSequence,
+  highestReceivedSnapshot,
   isFreshReport,
   isRolledBack,
   parseSequence,
@@ -66,13 +67,24 @@ function report(reportId: string, snapshot: number, requestId?: string): Invento
 
 test('of the reports that are not fresh only the newest survives, while not below the highest snapshot', () => {
   const pending = [report('report-a', 2), report('report-b', 3), report('report-c', 1, 'request-1'), report('report-d', 5, 'request-2')];
-  assert.deepEqual(supersededReports(pending, { requestId: 'request-2', reportedSnapshot: 5 }), new Set(['report-a', 'report-b', 'report-c']));
-  assert.deepEqual(supersededReports(pending, { requestId: 'request-1', reportedSnapshot: 5 }), new Set(['report-a', 'report-b']));
-  assert.deepEqual(supersededReports(pending.slice(0, 2), { requestId: undefined, reportedSnapshot: 3 }), new Set(['report-a']));
+  assert.deepEqual(supersededReports(pending, { requestId: 'request-2', highestSnapshot: 5 }), new Set(['report-a', 'report-b', 'report-c']));
+  assert.deepEqual(supersededReports(pending, { requestId: 'request-1', highestSnapshot: 5 }), new Set(['report-a', 'report-b']));
+  assert.deepEqual(supersededReports(pending.slice(0, 2), { requestId: undefined, highestSnapshot: 3 }), new Set(['report-a']));
   const tied = [report('report-a', 3), report('report-b', 3)];
-  assert.deepEqual(supersededReports(tied, { requestId: undefined, reportedSnapshot: 3 }), new Set(['report-a']), 'the last wins a tie');
-  assert.deepEqual(supersededReports(tied, { requestId: undefined, reportedSnapshot: 3, preferred: 'report-a' }), new Set(['report-b']));
-  assert.deepEqual(supersededReports([], { requestId: undefined, reportedSnapshot: 0 }), new Set());
+  assert.deepEqual(supersededReports(tied, { requestId: undefined, highestSnapshot: 3 }), new Set(['report-a']), 'the last wins a tie');
+  assert.deepEqual(supersededReports(tied, { requestId: undefined, highestSnapshot: 3, preferred: 'report-a' }), new Set(['report-b']));
+  assert.deepEqual(supersededReports([], { requestId: undefined, highestSnapshot: 0 }), new Set());
+});
+
+test('of the fresh reports only the newest survives, the arriving one winning a tie', () => {
+  const answers = [report('report-a', 4, 'request-1'), report('report-b', 6, 'request-1'), report('report-c', 6, 'request-1')];
+  assert.deepEqual(supersededReports(answers, { requestId: 'request-1', highestSnapshot: 6 }), new Set(['report-a', 'report-b']));
+  assert.deepEqual(supersededReports(answers, { requestId: 'request-1', highestSnapshot: 9, preferred: 'report-b' }), new Set(['report-a', 'report-c']));
+});
+
+test('the highest received snapshot counts the pending parts', () => {
+  assert.equal(highestReceivedSnapshot(3, []), 3);
+  assert.equal(highestReceivedSnapshot(3, [report('report-a', 7)]), 7);
 });
 
 test('a report is fresh only when it answers the current request', () => {

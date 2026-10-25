@@ -389,6 +389,30 @@ describe('pending snapshots and their rollback check', () => {
     ]);
   });
 
+  test('a refused report leaves the highest snapshot alone, so a later fresh snapshot handles its omission', async () => {
+    await readyWorker();
+    const at = await placed('task-1');
+    await inventory.requestAll([WORKER as WorkerId]);
+    const requestId = (await currentRequest())!.request_id;
+    value(await report({ reportId: 'report-1', snapshot: 100, throughSequence: 1, parts: 2, requestId }));
+    value(await report({ reportId: 'report-1', snapshot: 1, throughSequence: 1, parts: 2, part: 2, requestId }));
+    assert.equal(warnings('execution.inventory.refused').length, 1);
+    const [cursor] = await sql<{ reported_snapshot: string }>('SELECT reported_snapshot FROM producer_cursors WHERE journal_id = $1', [JOURNAL]);
+    assert.equal(Number(cursor?.reported_snapshot ?? 0), 0);
+    value(await report({ reportId: 'report-2', snapshot: 2, throughSequence: 1, requestId }));
+    assert.deepEqual([await pendingParts(), (await offersOf(at)).length, await retired()], [[], 2, false], 'applied: the offer is sent again');
+  });
+
+  test('several incomplete answers to one request keep only the newest', async () => {
+    await enroll();
+    await inventory.requestAll([WORKER as WorkerId]);
+    const requestId = (await currentRequest())!.request_id;
+    for (let snapshot = 1; snapshot <= 5; snapshot += 1) {
+      value(await report({ reportId: `report-${snapshot}`, snapshot, throughSequence: 0, parts: 2, requestId }));
+    }
+    assert.deepEqual(await pendingParts(), ['report-5.1']);
+  });
+
   test('incomplete answers to repeated requests keep only the current one and the newest that is not fresh', async () => {
     await enroll();
     for (let snapshot = 1; snapshot <= 10; snapshot += 1) {
