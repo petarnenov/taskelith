@@ -2,9 +2,10 @@ import type { HttpSchemas } from '@taskelith/contracts';
 import type { Enrollment, EnrollmentRequest, WorkerPrincipal } from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import type { QuarantineRecord } from '@taskelith/nats';
+import type { EvidenceService } from '../application/evidence-service.js';
 import type { RunService } from '../application/run-service.js';
 import type { TaskService } from '../application/task-service.js';
-import type { ApiHandlers, ApiRequest } from './api-server.js';
+import { StatusAnswer, type ApiHandlers, type ApiRequest, type Upload } from './api-server.js';
 
 export const QUARANTINE_PAGE = 100;
 // The capacity columns are PostgreSQL integers.
@@ -15,6 +16,7 @@ export const QUARANTINE_REASON_LENGTH = 512;
 export interface ApiServices {
   readonly runs: RunService;
   readonly tasks: TaskService;
+  readonly evidence: EvidenceService;
   readonly operator: { authenticate(secret: string): Promise<Result<void>> };
   readonly enrollment: {
     enroll(tokenSecret: string, request: EnrollmentRequest): Promise<Result<Enrollment>>;
@@ -54,6 +56,12 @@ export class ControlPlaneApi implements ApiHandlers {
         return this.#services.tasks.readAdmission(first, second);
       case 'readTaskResult':
         return this.#services.tasks.readTaskResult(first, second);
+      case 'publishEvidence':
+        return this.#publish(request);
+      case 'readEvidence':
+        return this.#services.evidence.read(first);
+      case 'downloadEvidence':
+        return this.#download(first);
       case 'enrollWorker':
         return this.#enroll(bearer, request.body as HttpSchemas['EnrollmentRequest']);
       case 'listQuarantine':
@@ -82,6 +90,19 @@ export class ControlPlaneApi implements ApiHandlers {
     if (!enrolled.ok) return enrolled;
     const { installationId, workerId, credentialGeneration, recoveryEpoch, protocolVersions, credentials } = enrolled.value;
     return ok({ installationId, workerId, credentialGeneration, recoveryEpoch, protocolVersions, credentials });
+  }
+
+  async #publish({ worker, body }: ApiRequest): Promise<Result<StatusAnswer>> {
+    if (worker === undefined) return err(failure('internal', 'publishEvidence reached its handler without a worker'));
+    const { record, content } = body as Upload;
+    const published = await this.#services.evidence.publish(worker, record as HttpSchemas['EvidencePublication'], content);
+    if (!published.ok) return published;
+    return ok(new StatusAnswer(published.value.created ? 201 : 200, published.value.record));
+  }
+
+  async #download(evidenceId: string): Promise<Result<Uint8Array>> {
+    const downloaded = await this.#services.evidence.download(evidenceId);
+    return downloaded.ok ? ok(downloaded.value.content) : downloaded;
   }
 
   async #listQuarantine(query: URLSearchParams): Promise<Result<HttpSchemas['QuarantinePage']>> {

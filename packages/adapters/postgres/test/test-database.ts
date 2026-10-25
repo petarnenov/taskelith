@@ -11,7 +11,7 @@ export const PROXY_URL = integrationEndpoint('TASKELITH_POSTGRES_PROXY_URL');
 const TABLES = [
   'workflow_runs', 'gates', 'admissions', 'tasks', 'assignments', 'outbox', 'inbox',
   'task_lineage', 'capacity_charges', 'delegations', 'capacity_quotas', 'workers', 'installation',
-  'operator_credentials', 'audit_events', 'enrollment_tokens', 'broker_revocations',
+  'operator_credentials', 'audit_events', 'enrollment_tokens', 'broker_revocations', 'evidence',
 ];
 let created = 0;
 

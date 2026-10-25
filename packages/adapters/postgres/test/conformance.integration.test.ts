@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
-import { INBOX_CONFORMANCE, TASK_REPOSITORY_CONFORMANCE } from '@taskelith/execution';
+import { EVIDENCE_RECORDS_CONFORMANCE, INBOX_CONFORMANCE, TASK_REPOSITORY_CONFORMANCE } from '@taskelith/execution';
 import {
   CommittingAdmissionRepository,
   CommittingAssignmentRepository,
+  CommittingEvidenceRecords,
   CommittingGateRepository,
   CommittingInbox,
   CommittingOutbox,
@@ -48,6 +49,7 @@ runSuite('run catalog', RUN_CATALOG_CONFORMANCE, () => ({
 runSuite('gates', GATE_REPOSITORY_CONFORMANCE, () => new CommittingGateRepository(database));
 runSuite('tasks', TASK_REPOSITORY_CONFORMANCE, () => new CommittingTaskRepository(database));
 runSuite('assignments', ASSIGNMENT_REPOSITORY_CONFORMANCE, () => new CommittingAssignmentRepository(database));
+runSuite('evidence', EVIDENCE_RECORDS_CONFORMANCE, () => new CommittingEvidenceRecords(database));
 runSuite('inbox', INBOX_CONFORMANCE, () => new CommittingInbox(database));
 runSuite('outbox', OUTBOX_CONFORMANCE, () => {
   const relay = new PostgresOutboxRelay(database);

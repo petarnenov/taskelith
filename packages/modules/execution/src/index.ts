@@ -31,6 +31,21 @@ export {
   type UnauthorizedStart,
 } from './domain/execution.js';
 export {
+  EVIDENCE_RETENTION_DAYS,
+  acceptEvidence,
+  checkRetentionElapsed,
+  isSamePublication,
+  parseEvidencePublication,
+  retentionEndsAt,
+  type EvidenceContext,
+  type EvidenceId,
+  type EvidenceProducer,
+  type EvidencePublication,
+  type EvidencePublicationInput,
+  type EvidenceRecord,
+  type EvidenceValidator,
+} from './domain/evidence.js';
+export {
   parseRecoveryEpoch,
   type AssignmentId,
   type AttemptId,
@@ -138,8 +153,12 @@ export {
   type Task,
   type TaskOutcomeFact,
 } from './domain/task.js';
+export { InMemoryEvidenceRecords } from './adapters/in-memory-evidence.js';
 export { InMemoryInbox } from './adapters/in-memory-inbox.js';
 export { InMemoryTaskRepository } from './adapters/in-memory-task-repository.js';
+export { EVIDENCE_RECORDS_CONFORMANCE, EVIDENCE_STORE_CONFORMANCE } from './ports/evidence-conformance.js';
+export type { EvidenceRecords } from './ports/evidence-records.js';
+export type { EvidenceStore } from './ports/evidence-store.js';
 export type { Inbox, InboxOutcome } from './ports/inbox.js';
 export type { Outbox, OutboxMessage } from './ports/outbox.js';
 // The outbox ports are structurally identical, so they share one suite.
