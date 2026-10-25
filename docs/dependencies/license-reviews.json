@@ -124,6 +124,22 @@
       "evidence": ["https://github.com/boennemann/nerf-dart/tree/e9a53497e0c3dcb42289607cf12986fcc1ba5b9d"]
     },
     {
+      "path": "node_modules/pg-types",
+      "version": "2.2.0",
+      "manifestSha256": "3ec0293cb38cc8d9475e3eb32ac5f19d195bf9fccc8b19a0714e6ecd6e7c2cf0",
+      "status": "text-located",
+      "finding": "Dependency of pg@8.23.1 (G2 item 9). The installed README ends with the full MIT License text, copyright 2014 Brian M. Carlson; no separate license file ships.",
+      "evidence": ["https://github.com/brianc/node-pg-types/blob/d9d9dfb87eb50914043cbc178c301b7dd3b0c50d/README.md"]
+    },
+    {
+      "path": "node_modules/pgpass",
+      "version": "1.0.5",
+      "manifestSha256": "d75240eb4fe759c10db9f903838275348676a8bdc1f329e20a833713cd7c99bd",
+      "status": "text-located",
+      "finding": "Dependency of pg@8.23.1 (G2 item 9). The installed README ends with the full MIT License text, copyright 2013-2016 Hannes Hörl; no separate license file ships.",
+      "evidence": ["https://github.com/hoegaarden/pgpass/blob/4230ed5e417ba6044ea7eb80b7c33db9ec301398/README.md"]
+    },
+    {
       "path": "node_modules/proxy-agent-negotiate",
       "version": "1.1.0",
       "manifestSha256": "7b7c2579ea138d20d4f7699ca78ef16c526f35168dbf694f1d47cc861b0954d4",

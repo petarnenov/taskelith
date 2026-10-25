@@ -81,3 +81,26 @@ The project SHALL typecheck all repository TypeScript files (`src/`, `scripts/`,
 #### Scenario: Module tests use adapters
 - **WHEN** a file under a module package's `test/` imports an infrastructure SDK or an adapter package
 - **THEN** the boundary checker accepts it
+
+#### Scenario: Application source imports development code or another application
+- **WHEN** a file under `apps/<name>/src/` imports repository scripts or tests, or another application's files by a relative path
+- **THEN** the boundary checker fails with the offending file path
+
+### Requirement: Worker-only code stays out of API and browser bundles
+The boundary checker SHALL treat as worker-only `apps/worker`, each `packages/adapters/worker-*` package, and each product package whose source imports at runtime a process-launching module of a named list (`child_process`, `node-pty`, `execa`, `cross-spawn`, `shelljs`, `zx`) or, transitively, a worker-only package. It SHALL fail when `apps/control-plane/src/` or `apps/web/src/` imports such a module or worker-only code at runtime.
+
+#### Scenario: Direct import of a worker-only package
+- **WHEN** control-plane or web source imports `apps/worker` or a `packages/adapters/worker-*` package by name or relative path
+- **THEN** the boundary checker fails with the offending file path
+
+#### Scenario: Process launch in API or browser code
+- **WHEN** control-plane or web source imports a module of that list, such as `node:child_process` or `execa`, including through `require()` or a re-export
+- **THEN** the boundary checker fails with the offending file path
+
+#### Scenario: Transitive reach
+- **WHEN** control-plane source imports a package that, through its own runtime imports, reaches a package that launches processes
+- **THEN** the boundary checker fails and names the import chain
+
+#### Scenario: Types and tests
+- **WHEN** control-plane source imports a worker-only package with `import type` or with only inline `type` bindings, or a control-plane test imports `node:child_process`
+- **THEN** the boundary checker accepts it, because neither enters a bundle while no TypeScript configuration enables `verbatimModuleSyntax`, which would keep an inline-type-only import as a side-effect import

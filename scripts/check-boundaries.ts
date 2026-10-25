@@ -33,9 +33,26 @@ function isImportOrRequire(node: ts.CallExpression): boolean {
   return ts.isIdentifier(node.expression) && node.expression.text === 'require' && node.arguments.length === 1;
 }
 
+// `typeOnly`: declared with `import type` or `export type`. `erased`: also
+// when every named binding has an inline `type`, so no runtime code loads.
 interface ModuleImport {
   spec: string;
   typeOnly: boolean;
+  erased: boolean;
+}
+
+function hasOnlyInlineTypeImports(clause: ts.ImportClause | undefined): boolean {
+  const bindings = clause?.namedBindings;
+  return !clause?.name && bindings !== undefined && ts.isNamedImports(bindings) && allTypeOnly(bindings.elements);
+}
+
+function hasOnlyInlineTypeExports(node: ts.ExportDeclaration): boolean {
+  const clause = node.exportClause;
+  return clause !== undefined && ts.isNamedExports(clause) && allTypeOnly(clause.elements);
+}
+
+function allTypeOnly(elements: ts.NodeArray<ts.ImportSpecifier | ts.ExportSpecifier>): boolean {
+  return elements.length > 0 && elements.every((element) => element.isTypeOnly);
 }
 
 function extractImports(filePath: string, source: string): ModuleImport[] {
@@ -43,15 +60,16 @@ function extractImports(filePath: string, source: string): ModuleImport[] {
   const imports: ModuleImport[] = [];
   const visit = (node: ts.Node) => {
     if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
-      imports.push({ spec: node.moduleSpecifier.text, typeOnly: node.importClause?.isTypeOnly ?? false });
+      const typeOnly = node.importClause?.isTypeOnly ?? false;
+      imports.push({ spec: node.moduleSpecifier.text, typeOnly, erased: typeOnly || hasOnlyInlineTypeImports(node.importClause) });
     } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
-      imports.push({ spec: node.moduleSpecifier.text, typeOnly: node.isTypeOnly });
+      imports.push({ spec: node.moduleSpecifier.text, typeOnly: node.isTypeOnly, erased: node.isTypeOnly || hasOnlyInlineTypeExports(node) });
     } else if (ts.isCallExpression(node) && isImportOrRequire(node) && node.arguments[0] && ts.isStringLiteralLike(node.arguments[0])) {
-      imports.push({ spec: node.arguments[0].text, typeOnly: false });
+      imports.push({ spec: node.arguments[0].text, typeOnly: false, erased: false });
     } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) && ts.isStringLiteral(node.argument.literal)) {
-      imports.push({ spec: node.argument.literal.text, typeOnly: true });
+      imports.push({ spec: node.argument.literal.text, typeOnly: true, erased: true });
     } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference) && ts.isStringLiteral(node.moduleReference.expression)) {
-      imports.push({ spec: node.moduleReference.expression.text, typeOnly: node.isTypeOnly });
+      imports.push({ spec: node.moduleReference.expression.text, typeOnly: node.isTypeOnly, erased: node.isTypeOnly });
     }
     ts.forEachChild(node, visit);
   };
@@ -75,6 +93,7 @@ interface ImportEdge {
   target: string | null;
   relative: boolean;
   typeOnly: boolean;
+  erased: boolean;
   workspaces: Map<string, string>;
 }
 
@@ -112,7 +131,7 @@ function owningPackage(path: string): string | null {
 function isProductSource(path: string): boolean {
   const owner = owningPackage(path);
   if (owner === 'root') return true;
-  return owner !== null && owner.startsWith('packages/') && path.startsWith(`${owner}/src/`);
+  return owner !== null && path.startsWith(`${owner}/src/`);
 }
 
 function isDevelopmentCode(path: string): boolean {
@@ -142,7 +161,7 @@ function checkWorkspaceEncapsulation({ rel, spec, target, relative: isRelative, 
     violations.push(`${rel}: the published root package cannot import private workspace package "${spec}" until a distribution strategy exists (R03)`);
   }
   const targetOwner = target ? owningPackage(target) : null;
-  if (isRelative && targetOwner && targetOwner !== owner && (owner.startsWith('packages/') || targetOwner.startsWith('packages/'))) {
+  if (isRelative && targetOwner && targetOwner !== owner) {
     violations.push(`${rel}: relative import "${spec}" crosses into another package; import it by package name (F11/R03)`);
   }
   return violations;
@@ -210,6 +229,59 @@ function checkWebImport({ rel, spec, target, relative: isRelative }: ImportEdge)
   return violations;
 }
 
+// Worker-only code: the worker app, worker process adapters, and each package
+// that launches processes or imports worker-only code at runtime.
+const WORKER_ONLY_PACKAGE = /^(?:apps\/worker|packages\/adapters\/worker-[^/]+)$/;
+const PROCESS_LAUNCH_MODULES = new Set(['child_process', 'node-pty', 'execa', 'cross-spawn', 'shelljs', 'zx']);
+const API_AND_BROWSER_APPS = new Set(['apps/control-plane', 'apps/web']);
+
+function isProcessLaunchModule(spec: string): boolean {
+  return PROCESS_LAUNCH_MODULES.has(packageName(spec.replace(/^node:/, '')));
+}
+
+function targetPackage({ rel, target }: ImportEdge): string | null {
+  const owner = target ? owningPackage(target) : null;
+  return owner !== owningPackage(rel) ? owner : null;
+}
+
+// Gives the import chain that makes a package worker-only, following runtime
+// imports between packages until nothing changes.
+function workerOnlyChains(edges: ImportEdge[]): (dir: string) => string | undefined {
+  const chains = new Map<string, string>();
+  const chainOf = (dir: string) => (WORKER_ONLY_PACKAGE.test(dir) ? `${dir} is worker-only` : chains.get(dir));
+  for (const edge of edges) {
+    const owner = owningPackage(edge.rel)!;
+    if (isProcessLaunchModule(edge.spec) && !chains.has(owner)) chains.set(owner, `${owner} imports "${edge.spec}"`);
+  }
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const edge of edges) {
+      const owner = owningPackage(edge.rel)!;
+      const target = targetPackage(edge);
+      const targetChain = target ? chainOf(target) : undefined;
+      if (chainOf(owner) || !targetChain) continue;
+      chains.set(owner, `${owner} imports ${target}; ${targetChain}`);
+      changed = true;
+    }
+  }
+  return chainOf;
+}
+
+// API and browser bundles hold what their app imports at runtime, so neither
+// may reach code that launches processes (architecture section 6).
+function checkWorkerOnlyReach(edges: ImportEdge[]): string[] {
+  const runtimeEdges = edges.filter((edge) => !edge.erased && isProductSource(edge.rel));
+  const chainOf = workerOnlyChains(runtimeEdges);
+  return runtimeEdges.filter((edge) => API_AND_BROWSER_APPS.has(owningPackage(edge.rel)!)).flatMap((edge) => {
+    if (isProcessLaunchModule(edge.spec)) {
+      return [`${edge.rel}: API and browser code cannot import process-launching module "${edge.spec}" (worker-only)`];
+    }
+    const target = targetPackage(edge);
+    const chain = target ? chainOf(target) : undefined;
+    return chain ? [`${edge.rel}: API and browser code cannot import worker-only code "${edge.spec}" (${chain})`] : [];
+  });
+}
+
 const IMPORT_RULES = [
   checkDevelopmentImport, checkWorkspaceEncapsulation, checkKernelImport, checkPluginImport, checkPluginSdkImport, checkModuleImport,
   checkWebImport,
@@ -218,6 +290,7 @@ const IMPORT_RULES = [
 export function checkWorkspaceBoundaries(root: string): string[] {
   const violations: string[] = [];
   const workspaces = workspacePackagesByName(root);
+  const edges: ImportEdge[] = [];
 
   for (const file of walkFiles(root)) {
     const rel = toPosix(relative(root, file));
@@ -227,18 +300,19 @@ export function checkWorkspaceBoundaries(root: string): string[] {
     }
     if (!/\.(?:[cm]?ts|tsx)$/.test(rel)) continue;
 
-    for (const { spec, typeOnly } of extractImports(rel, readFileSync(file, 'utf8'))) {
+    for (const { spec, typeOnly, erased } of extractImports(rel, readFileSync(file, 'utf8'))) {
       const target = importTarget(file, spec, root, workspaces);
-      const edge: ImportEdge = { rel, spec, target, relative: spec.startsWith('.'), typeOnly, workspaces };
+      const edge: ImportEdge = { rel, spec, target, relative: spec.startsWith('.'), typeOnly, erased, workspaces };
       if (edge.relative && edge.target!.startsWith('..')) {
         violations.push(`${rel}: import escapes repository root (${spec})`);
         continue;
       }
       for (const rule of IMPORT_RULES) violations.push(...rule(edge));
+      edges.push(edge);
     }
   }
 
-  return violations;
+  return [...violations, ...checkWorkerOnlyReach(edges)];
 }
 
 function extIsGo(rel: string, base: string): boolean {

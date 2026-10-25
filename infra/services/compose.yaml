@@ -1,0 +1,34 @@
+# Integration services run by scripts/services.sh, pinned by the digests in
+# docs/g2-infrastructure.md; ephemeral host ports on localhost only.
+
+services:
+  postgres:
+    image: postgres:18.6-trixie@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
+    environment:
+      POSTGRES_USER: taskelith
+      POSTGRES_PASSWORD: taskelith
+      POSTGRES_DB: taskelith
+    ports:
+      - "127.0.0.1::5432"
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      # TCP, because the init server listens only on the Unix socket.
+      test: ["CMD", "pg_isready", "--host", "127.0.0.1", "--username", "taskelith", "--dbname", "taskelith"]
+      interval: 1s
+      timeout: 5s
+      retries: 60
+
+  nats:
+    image: nats:2.15.1-alpine@sha256:7ae34c25dfd6fe2e01c6483eabef20d796690fdcac6c4d94ca780a6cf9877fde
+    volumes:
+      - ./nats-server.conf:/etc/nats/nats-server.conf:ro
+    ports:
+      - "127.0.0.1::4222"
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8222/healthz?js-enabled-only=true"]
+      interval: 1s
+      timeout: 5s
+      retries: 60
