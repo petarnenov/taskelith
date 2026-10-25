@@ -5,8 +5,9 @@ Finding F1 of the [Linux verify observation](../../../docs/linux-verify-observat
 ## What Changes
 
 - After a successful `nvm use` or `nvm install`, `scripts/with-pinned-node.sh` puts the directory of the pinned Node.js, from `nvm which`, first in `PATH` for the command it runs.
+- In the use mode, the wrapper selects the pinned version whenever nvm is installed, also when the shell's Node.js reports the same version, because that Node.js may come from another installation with another npm.
 - Without the pinned version, the wrapper still leaves `PATH` alone, so the checks keep reporting the mismatch with their current remedies.
-- A new test, `test/with-pinned-node.test.ts`, runs the wrapper with a fake nvm and a fake Node.js earlier in `PATH`.
+- A new test, `test/with-pinned-node.test.ts`, runs the wrapper with a fake nvm and a fake Node.js earlier in `PATH`, of another and of the same version, and through an install of a missing pin.
 
 ## Capabilities
 

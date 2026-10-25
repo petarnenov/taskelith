@@ -9,8 +9,9 @@ Run the wrapped command with the pinned Node.js whenever nvm has it, whatever el
 ## Decisions
 
 - The wrapper keeps `nvm use`, which also sets nvm's own variables, and then prepends the directory that `nvm which "$NODE_PIN"` names. This relies on documented nvm commands rather than on nvm's internal path functions.
+- The use mode no longer skips nvm when the shell's Node.js reports the pinned version: that Node.js may be another installation, with another npm, so only the directory nvm names counts as the pin. The cost is sourcing nvm on every run where nvm exists.
 - The prepend runs only after `nvm use` or `nvm install` succeeded, and `put_pinned_node_first` returns without a change when `nvm which` fails, so a missing pin leaves the shell's Node.js and the existing failures and remedies in place.
-- The test uses a fake `nvm.sh` that leaves `PATH` order unchanged, as real nvm does in this case, and fake `node` programs that print their version. It runs on Linux and macOS without nvm or network access. Without the fix, the two pinned cases fail.
+- The test uses a fake `nvm.sh` that leaves `PATH` order unchanged, as real nvm does in this case, and fake `node` programs that print their version; the wrapped command prints the `node` it finds, so a same-version shadow is told apart by its path. A marker file makes `nvm install` real for the fake, so the install case runs through the install branch. The test runs on Linux and macOS without nvm or network access. Without the fix, the three pinned cases fail.
 
 ## Risks / Trade-offs
 

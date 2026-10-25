@@ -65,7 +65,7 @@ case "$mode" in
     ;;
   use)
     # Without the pinned version, the shell's Node.js stays and checks fail.
-    if [ "$INVOKING_NODE" != "v$NODE_PIN" ] && [ -s "$nvm_script" ]; then use_pinned_node; fi
+    if [ -s "$nvm_script" ]; then use_pinned_node; fi
     ;;
   *)
     echo "$usage" >&2

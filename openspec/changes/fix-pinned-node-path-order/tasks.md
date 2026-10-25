@@ -1,7 +1,7 @@
 ## 1. Fix
 
 - [x] 1.1 Put the pinned Node.js directory first in `PATH` in `scripts/with-pinned-node.sh` after a successful `nvm use` or `nvm install`.
-- [x] 1.2 Add `test/with-pinned-node.test.ts` with a fake Node.js earlier in `PATH`, for the use and install modes and for a missing pin.
+- [x] 1.2 Add `test/with-pinned-node.test.ts` with a fake Node.js earlier in `PATH`, of another and of the same version, for the use mode, for the install of a missing pin, and for a missing pin in the use mode.
 - [x] 1.3 Add the scenario "Another Node.js earlier in PATH" to the `development-environment` requirement "Environment check".
 
 ## 2. Verification
