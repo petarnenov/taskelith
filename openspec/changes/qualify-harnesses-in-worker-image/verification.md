@@ -10,7 +10,7 @@ Decisions taken during the task:
 
 ## Revision and environment
 
-- Base: `origin/dev` at `190e2cc`. Branch `qualify-harnesses-in-worker-image`. The variant and steps are in `1dea608`, the records in `8fe91be`; review pass 1 is of `8fe91be`. The pass 1 fixes are in `a439c3e`, `5a3130d`, `b3f274b`, and `fd85386`, together with this record.
+- Base: `origin/dev` at `190e2cc`. Branch `qualify-harnesses-in-worker-image`. The variant and steps are in `1dea608`, the records in `8fe91be`; review pass 1 is of `8fe91be`. The pass 1 fixes are in `a439c3e`, `5a3130d`, `b3f274b`, and `fd85386`, with this record in `111b8d3`, which pass 2 reviewed. The pass 2 fixes are in `52a7ba4`, `b59f9bb`, `15f16a9`, and `c80bbed`, together with this update, which pass 3 reviews.
 - Host: macOS 26.6.2 on x86_64; Docker Desktop with engine 29.5.2 and Compose 5.1.3; Node.js 24.22.1 from `.nvmrc`.
 
 ## Author self-check and evidence check
@@ -21,7 +21,7 @@ Decisions taken during the task:
 - The SDK's binary selection was read from its bundled `sdk.mjs`: on glibc Linux it tries `-linux-<arch>` before `-linux-<arch>-musl`. On linux/amd64 npm installed only the glibc package.
 - No credential is in the image. A search of the whole image as root finds no `auth.json` or `.credentials.json`, both harnesses report no login for the qualification home, the build context is a `git archive` of the tracked files, and the steps run with `--network none`.
 - Default images: the new stages are appended after `worker`, which is unchanged, and the test asserts that the `worker` stage does not mention the harnesses. `make verify-installation` was run but did not pass (see Checks); the same failure happens on unchanged `dev`.
-- The pin test was mutation-checked: changing one integrity character in `docs/qualification/codex.md` made "each qualification record states the locked integrity hashes" fail, and the file was restored.
+- The pin test was mutation-checked. Before pass 1, changing one integrity character in `docs/qualification/codex.md` made the record test fail. After pass 2, naming the linux-x64 entry with the arm64 version made the pair test fail. Both times the file was restored.
 
 ## Checks
 
@@ -31,15 +31,27 @@ Decisions taken during the task:
 | `npm run verify:comments` | passed |
 | `make verify` at `8fe91be` content, before pass 1 | passed; 1203 tests, 1203 passed, 0 failed; coverage 99.29 % lines, 91.83 % branches, 98.96 % functions; archive dry run valid |
 | `make qualify-harnesses OUT=… PLATFORMS=linux/amd64` at `1dea608`, before pass 1 | passed; finished 2026-10-25T21:58:04Z; image `sha256:07a8a3e2…`; superseded by the run at `b3f274b` |
-| `make qualify-harnesses OUT=…` at `b3f274b`, after the pass 1 fixes | linux/amd64 passed: every step matched its expected exit status, finished 2026-10-25T22:21:10Z, image `sha256:c890d33d…`, the same binary and schema hashes as before, and the root search found no credential file. linux/arm64 failed in the `node-arm64` build stage with tar's exit status 2, recorded in its `error.txt`, and the target then failed, as designed. These are the results in the records' "Linux worker image" sections |
+| `make qualify-harnesses OUT=…` at `b3f274b`, after the pass 1 fixes | linux/amd64 passed: every step matched its expected exit status, finished 2026-10-25T22:21:10Z, image `sha256:c890d33d…`, the same binary and schema hashes as before, and the root search found no credential file. linux/arm64 failed in the `node-arm64` build stage with tar's exit status 2, recorded in its `error.txt`, and the target then failed, as designed. Superseded by the run at `15f16a9` |
+| `make qualify-harnesses OUT=…` at `15f16a9`, after the pass 2 fixes | linux/amd64 passed: every step matched its expected exit status and output, finished 2026-10-25T22:39:26Z, image `sha256:a1ace3a1…`, the same binary and schema hashes, and no credential file. linux/arm64 failed in the `node-arm64` build stage again, recorded in its `error.txt`, and the target failed. These are the results in the records' "Linux worker image" sections |
+| Refusals of the hardened script | `PLATFORMS=linux/..` is refused as an unsupported platform, `OUT=./tmp-out` is refused before any directory is created, and `PLATFORMS=" "` is refused because it names no platform |
 | `make qualify-harnesses` for both platforms, at the uncommitted first draft | linux/amd64 passed with the same binary hashes. The linux/arm64 build failed in the `node-arm64` stage: under Docker Desktop's QEMU, GNU tar 1.35 failed on every entry with "Cannot mkdir: Invalid argument" or "Cannot open: Invalid argument". A plain `mkdir` in an emulated container of the same base worked |
 | `make verify` after the pass 1 fixes, with this record | passed; 1203 tests, 1203 passed, 0 failed; coverage 99.28 % lines, 91.82 % branches, 98.96 % functions; archive dry run valid |
+| `make verify` after the pass 2 fixes, with this record | passed; 1203 tests, 1203 passed, 0 failed; coverage 99.29 % lines, 91.82 % branches, 98.96 % functions; archive dry run valid |
 | `make verify-installation` on the branch | failed: `control-plane-1 is unhealthy` at the first start |
 | `make verify-installation` on unchanged `dev` (`aba18f5`, main clone) | failed the same way, so the failure is not caused by this change; its cause on this host was not investigated |
 
 ## Independent review
 
 Reviewer assigned by the coordinator: OpenCode CLI, `opencode/deepseek-v4.1-flash` with variant `high`, agent `reviewer` (no edits; read-only shell allowlist; web fetch allowed).
+
+Invocation of every pass, from the worktree, with the prompt and log in the session's scratch directory outside it:
+
+```bash
+opencode run --standalone --agent reviewer -m 'opencode/deepseek-v4.1-flash#high' --format json \
+  --title qualify-harnesses-in-worker-image "$(cat <scratch>/reviewN.md)" < /dev/null > <scratch>/reviewN.jsonl
+```
+
+The prompt names the criteria, the coordinator's paragraph on simple read-only commands, and the external facts to fetch. From pass 2 on, it names the earlier session and asks for each finding's resolution to be confirmed first.
 
 ### Pass 1
 
@@ -70,6 +82,31 @@ Reviewer assigned by the coordinator: OpenCode CLI, `opencode/deepseek-v4.1-flas
 | L18 | Design and proposal overstated the records' integrity coverage, and no `test` commit existed. | Fixed: the design says that the records hold the direct packages' hashes and the lockfile all of them; the test changes are in a `test` commit (`a439c3e`). |
 | L19 | "The image holds no credential" was inferred from the login status. | Fixed: a root search of the whole image for credential files supports it, and the login status is stated for the qualification home only. |
 
+
+### Pass 2
+
+- Session `ses_e8ad59c4fffe5ObWdFAKHspy0b`, on `111b8d3`. The stored messages record model `deepseek-v4.1-flash`, provider `opencode`, and variant `high`.
+- Snapshot before and after: `65b49ccde09ac403e88c7896870617536e44bab0f055ff9813b1fedaffe47c52`, equal.
+- All 19 pass 1 resolutions were confirmed. The reviewer fetched the npm registry entries again, and every lockfile integrity it checked matched. deps.dev showed no advisory for a wider sample of the transitive packages. It also confirmed that Codex documents no environment switch for the update check.
+- New findings: 0 Critical, 1 High, 3 Medium, 11 Low.
+
+| # | Finding | Resolution |
+| --- | --- | --- |
+| H1 | An unvalidated `PLATFORMS` value such as `linux/..` could point `rm -rf` outside `OUT`. | Fixed: only `linux/amd64` and `linux/arm64` are accepted, and the check runs before anything is created or removed; `rm -rf --` follows the check. |
+| M1 | A failed `describe_run` was ignored. | Fixed: it checks the image inspection, the engine query, and every hash, and a failure fails the platform. The hash uses `sha256sum` when present, otherwise `shasum -a 256`. |
+| M2 | The record test missed version drift and swapped hashes. | Fixed: the records give each entry as `name@version` next to its integrity, and the test requires that exact pair for each harness and its linux-x64, linux-arm64, and darwin-x64 packages. |
+| M3 | Remaining false-pass paths in `qualify.sh`. | Fixed: setup and both listings stop the run on failure, empty listings are refused, and binary hashes must be 64 hex characters. |
+| L1 | `OUT` was created before the worktree check. | Fixed: the path is resolved through its parent and checked first. |
+| L2 | A failed `docker diff` was not counted. | Fixed: its status fails the platform, and the schema lines are removed afterwards. |
+| L3 | An empty `PLATFORMS` list ended with success. | Fixed: it is refused. |
+| L4 | `image.txt` lacked the manifest hash and the environment. | Fixed: it hashes `package.json`, and the first step records the run's environment. |
+| L5 | "Attributed to the step" contradicted "not isolated". | Fixed: the differences are proven to come from the steps, and the records say where the writing step was not isolated. |
+| L6 | The tarball sentence named the darwin-x64 tarballs as installed. | Fixed: it says that the darwin-x64 tarballs tie the lock to the macOS binaries, and that the image installs the linux-x64 tarballs; the records list the darwin-x64 integrities. |
+| L7 | The exact review invocation was missing. | Fixed: above. |
+| L8 | `cpu`, `libc`, and the optional aliases were not checked. | Fixed: the test checks each platform package's `os`, `cpu`, and `libc`, and the harness entry's optional dependency specifier. |
+| L9 | The login and write steps checked only the exit status. | Fixed: they also require `"loggedIn": false`, `Not logged in`, or `Permission denied` in their output. |
+| L10 | "Without a network" was ambiguous for the build. | Fixed: the build uses the pinned inputs, and the steps run with `--network none`. |
+| L11 | The register text was inexact. | Fixed: `DISABLE_AUTOUPDATER=1` stays open for macOS, and the Codex row names the per-run update-check setting as a Linux addendum of 2026-10-25. |
 
 ## Limitations
 
