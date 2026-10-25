@@ -6,8 +6,8 @@ export type TerminationProof =
 
 export interface DarwinTerminationInput {
   readonly processGroupId: number;
-  // One kernel listing at a single instant, taken after the child was
-  // reaped; absent when no such listing can be taken.
+  // One kernel listing, taken after the child was reaped; absent when no
+  // listing can be taken. The caller asks for two in a row (section 8).
   readonly listing: readonly ProcessEntry[] | undefined;
   readonly recordedDescendants: readonly ProcessIdentity[];
 }

@@ -13,6 +13,9 @@ interface LockedPackage {
   optional?: boolean;
   link?: boolean;
   resolved?: string;
+  license?: string;
+  os?: string[];
+  cpu?: string[];
 }
 
 // npm records each workspace package as a link and a directory; both are
@@ -45,28 +48,51 @@ export function collectLicenses(root: string, packages: Record<string, LockedPac
       if (isAbsolute(path) || path.includes('\\') || path.split('/').some(part => part === '..') || !isInstallationPath(path, workspaces)) {
         throw new Error(`Unsafe lockfile installation path: ${path}`);
       }
-      const directory = join(root, path);
-      const manifestPath = join(directory, 'package.json');
-      if (!existsSync(manifestPath)) throw new Error(`Missing installed package: ${path}; run npm ci --ignore-scripts`);
-      if (lstatSync(directory).isSymbolicLink()) throw new Error(`Linked package cannot establish inventory: ${path}`);
-      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-      if (manifest.version !== locked.version) throw new Error(`Installed version differs from lockfile: ${path}`);
-      const licenseFiles = readdirSync(directory).sort().filter(name => /^(licen[cs]e|copying|notice)([._-].*)?$/i.test(name))
-        .filter(name => lstatSync(join(directory, name)).isFile())
-        .map(name => ({ path: `${path}/${name}`, sha256: sha256(readFileSync(join(directory, name))) }));
-      const declaration = manifest.license ?? manifest.licenses ?? null;
-      return {
-        path, name: manifest.name, version: manifest.version,
-        integrity: locked.integrity ?? null,
-        development: locked.dev === true, bundled: locked.inBundle === true, optional: locked.optional === true,
-        declaration, declarationField: manifest.license ? 'license' : manifest.licenses ? 'licenses' : null,
-        manifestSha256: sha256(readFileSync(manifestPath)), licenseFiles,
-        gaps: [
-          ...(declaration === null ? ['missing-license-declaration'] : []),
-          ...(licenseFiles.length === 0 ? ['missing-top-level-license-text'] : []),
-        ],
-      };
+      return isPlatformSpecific(locked) ? lockedOnly(path, locked) : inspectInstalled(root, path, locked);
     });
+}
+
+function inspectInstalled(root: string, path: string, locked: LockedPackage) {
+  const directory = join(root, path);
+  const manifestPath = join(directory, 'package.json');
+  if (!existsSync(manifestPath)) throw new Error(`Missing installed package: ${path}; run npm ci --ignore-scripts`);
+  if (lstatSync(directory).isSymbolicLink()) throw new Error(`Linked package cannot establish inventory: ${path}`);
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  if (manifest.version !== locked.version) throw new Error(`Installed version differs from lockfile: ${path}`);
+  const licenseFiles = readdirSync(directory).sort().filter(name => /^(licen[cs]e|copying|notice)([._-].*)?$/i.test(name))
+    .filter(name => lstatSync(join(directory, name)).isFile())
+    .map(name => ({ path: `${path}/${name}`, sha256: sha256(readFileSync(join(directory, name))) }));
+  const declaration = manifest.license ?? manifest.licenses ?? null;
+  return {
+    path, name: manifest.name, version: manifest.version,
+    integrity: locked.integrity ?? null,
+    development: locked.dev === true, bundled: locked.inBundle === true, optional: locked.optional === true,
+    declaration, declarationField: manifest.license ? 'license' : manifest.licenses ? 'licenses' : null,
+    manifestSha256: sha256(readFileSync(manifestPath)), licenseFiles,
+    gaps: [
+      ...(declaration === null ? ['missing-license-declaration'] : []),
+      ...(licenseFiles.length === 0 ? ['missing-top-level-license-text'] : []),
+    ],
+  };
+}
+
+// A package for one platform is installed only there, so it is recorded
+// from the lockfile alone, the same on every host, and marked uninspected.
+function isPlatformSpecific(locked: LockedPackage): boolean {
+  return locked.optional === true && (locked.os !== undefined || locked.cpu !== undefined);
+}
+
+function lockedOnly(path: string, locked: LockedPackage) {
+  const declaration = locked.license ?? null;
+  return {
+    path, name: path.slice(path.lastIndexOf('node_modules/') + 'node_modules/'.length), version: locked.version,
+    integrity: locked.integrity ?? null,
+    development: locked.dev === true, bundled: locked.inBundle === true, optional: true,
+    declaration, declarationField: declaration === null ? null : 'license',
+    manifestSha256: null, licenseFiles: [],
+    platform: { os: locked.os ?? [], cpu: locked.cpu ?? [] }, inspected: false,
+    gaps: declaration === null ? ['missing-license-declaration'] : [],
+  };
 }
 
 const reviewStatuses = ['text-located', 'notice-only', 'declaration-only'] as const;
@@ -84,12 +110,13 @@ export interface LicenseReview {
 interface InventoriedPackage {
   path: string;
   version: string;
-  manifestSha256: string;
+  manifestSha256: string | null;
   gaps: string[];
 }
 
-const reviewKey = (entry: { path: string; version: string; manifestSha256: string }): string =>
-  `${entry.path}@${entry.version}#${entry.manifestSha256}`;
+// A package recorded from the lockfile has no manifest hash to key on.
+const reviewKey = (entry: { path: string; version: string; manifestSha256: string | null }): string =>
+  `${entry.path}@${entry.version}#${entry.manifestSha256 ?? 'lockfile'}`;
 
 const isNonBlankString = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '';
 

@@ -40,6 +40,8 @@ The generator uses npm's built-in `sbom --sbom-format=cyclonedx --package-lock-o
 
 The license inventory records each locked installation path, package version, lockfile integrity, installed manifest hash, declared license including legacy `licenses`, and SHA-256 hashes of discovered top-level LICENSE/COPYING/NOTICE files. It also records tool versions and hashes of the package manifest, lockfile, Node pin, and generator sources. Paths are relative to the repository. Missing installations, mismatched installed versions, and linked package directories fail generation rather than silently reducing coverage.
 
+An optional package that the lockfile restricts to an operating system or CPU, such as the per-platform binaries of `koffi`, is installed only on its own platform. The inventory therefore records it from the lockfile alone on every host: its declared license comes from the lockfile, it has no manifest hash or license files, and it is marked `"inspected": false` with its `platform`. A missing declaration is still a gap, whose review names `lockfile` as the manifest hash. The tarballs of the platforms in the support matrix are inspected by hand and recorded in the dependency register.
+
 Evidence at this inventory change: 487 installation paths, 143 bundled entries, 478 license/notice files, 459 deduplicated SBOM components, and 14 reviewed coverage gaps. A second run and a clean install under exact tool versions reproduced the retained evidence on macOS. After G1 item 8 added `ajv@8.20.0` and its four dependencies, the retained evidence has 492 installation paths, 143 bundled entries, 483 license/notice files, 467 deduplicated SBOM components, and 14 reviewed coverage gaps. Native Linux CI execution is not claimed.
 
 ## License coverage review

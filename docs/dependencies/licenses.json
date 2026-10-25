@@ -6,14 +6,14 @@
   },
   "provenance": {
     "package.json": "6dbaf3fa3b38cf2bc5a8c1ef35126fefc38b0a26a247ca1efb4de159b6af4240",
-    "package-lock.json": "22286d92ebcb17313815a6ef34090f2a6925e949d5f27a3d6cbfb79551d5a754",
+    "package-lock.json": "882bd66ddefd2eec987d87c42c1ab4767fadda32335d9e074a1affb373a64f4c",
     ".nvmrc": "d9f318747a126ce2247661af67852b185def7789492eabfad7bba322be087c33",
-    "scripts/dependency-inventory.ts": "5d613a8543422824f7bb703eb6fccc333f450ffe4b9a50c05ea4e23dc5caa446",
+    "scripts/dependency-inventory.ts": "4bbac75cb91717f5a47f4ebb69dbf303b3701eef8410703aef7bacceb5b9a7e9",
     "scripts/inventory-dependencies.ts": "f6be1728d7706b65a25a3fb0d561ec8eee0527f7a9665fe519769caabe339594",
     "scripts/inventory-provenance.ts": "7146327bc8a111a0d61115b720f43705a0e44c3bb7bee2228a993bf5c07c26b7"
   },
   "scope": "Locked npm installation paths; top-level license/notice files only; global binaries and nested vendored code excluded",
-  "packageCount": 710,
+  "packageCount": 731,
   "packagesWithGaps": 21,
   "packages": [
     {
@@ -642,6 +642,466 @@
           "sha256": "4a4cffde4afd302689cd6aad9b05463a798d3dbe4cb2488bda45af1977affe33"
         }
       ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@koromix/koffi-android-arm64",
+      "name": "@koromix/koffi-android-arm64",
+      "version": "3.3.3",
+      "integrity": "sha512-c8iDq/mPXkgQmrmZ6SpqWIVF3ZnJEpjVQswzKzbrCSdr68pmSY/cNj1t4qvv32T8nNjW71/hB+E8Rq1+vVpmQg==",
+      "development": false,
+      "bundled": false,
+      "optional": true,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": null,
+      "licenseFiles": [],
+      "platform": {
+        "os": [
+          "android"
+        ],
+        "cpu": [
+          "arm64"
+        ]
+      },
+      "inspected": false,
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@koromix/koffi-android-x64",
+      "name": "@koromix/koffi-android-x64",
+      "version": "3.3.3",
+      "integrity": "sha512-yAFu4oX6rpBCqr4HiGo3FpywmRN11LOSde4+GJZvfkFymqV3wZtx6TgVe8rZ4ogJZz9B8o1tDeKsZ6pqeoH40g==",
+      "development": false,
+      "bundled": false,
+      "optional": true,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": null,
+      "licenseFiles": [],
+      "platform": {
+        "os": [
+          "android"
+        ],
+        "cpu": [
+          "x64"
+        ]
+      },
+      "inspected": false,
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@koromix/koffi-darwin-arm64",
+      "name": "@koromix/koffi-darwin-arm64",
+      "version": "3.3.3",
+      "integrity": "sha512-aFYI3YMdQWOAmHlVA+GfBlJZTpvfbUv/NoeBBkqblWN7BxuY02bkWMyoksUEl+mnx7ScoMonnjzXKJkNQXmR3w==",
+      "development": false,
+      "bundled": false,
+      "optional": true,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": null,
+      "licenseFiles": [],
+      "platform": {
+        "os": [
+          "darwin"
+        ],
+        "cpu": [
+          "arm64"
+        ]
+      },
+      "inspected": false,
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@koromix/koffi-darwin-x64",
+      "name": "@koromix/koffi-darwin-x64",
+      "version": "3.3.3",
+      "integrity": "sha512-6Q8/DDhVADPMm3lFnZFJRETJtf485jZKzn1KogXeA9Gfztv/XMFiCOK4aEouFc256h9uWzC69mGimtcVcwK+Ww==",
+      "development": false,
+      "bundled": false,
+      "optional": true,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": null,
+      "licenseFiles": [],
+      "platform": {
+        "os": [
+          "darwin"
+        ],
+        "cpu": [
+          "x64"
+        ]
+      },
+      "inspected": false,
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@koromix/koffi-freebsd-arm64",
+      "name": "@koromix/koffi-freebsd-arm64",
+      "version": "3.3.3",
+      "integrity": "sha512-IynEDMMU9pp7EVVqQwXVU9x0JH7Opj8KB0wbcKgYNEhRM9eGzJ4ai7iwG8y8tdD/Y8niSVrVTj5WLNCCvUWXIw==",
+      "development": false,
+      "bundled": false,
+      "optional": true,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": null,
+      "licenseFiles": [],
+      "platform": {
+        "os": [
+          "freebsd"
+        ],
+        "cpu": [
+          "arm64"
+        ]
+      },
+      "inspected": false,
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@koromix/koffi-freebsd-ia32",
+      "name": "@koromix/koffi-freebsd-ia32",
+      "version": "3.3.3",
+      "integrity": "sha512-5b4W9jX+wmfWn9vG7DvKIrNhhRpPDAx7YQV5i9epUR0Ogxz4s4a3APz/beLCvgHt4WhaSRrazxGYQz1oFOlfow==",
+      "development": false,
+      "bundled": false,
+      "optional": true,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": null,
+      "licenseFiles": [],
+      "platform": {
+        "os": [
+          "freebsd"
+        ],
+        "cpu": [
+          "ia32"
+        ]
+      },
+      "inspected": false,
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@koromix/koffi-freebsd-x64",
+      "name": "@koromix/koffi-freebsd-x64",
+      "version": "3.3.3",
+      "integrity": "sha512-+NmMrp3ji1NN4PTaLaXDCKMaJ5Fl+0+nrClmtsu/7wi+fjCrCSGMrJZUmTIJPm1nd8Z5fMRjWesiVvQiy/ETDg==",
+      "development": false,
+      "bundled": false,
+      "optional": true,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": null,
+      "licenseFiles": [],
+      "platform": {
+        "os": [
+          "freebsd"
+        ],
+        "cpu": [
+          "x64"
+        ]
+      },
+      "inspected": false,
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@koromix/koffi-linux-arm",
+      "name": "@koromix/koffi-linux-arm",
+      "version": "3.3.3",
+      "integrity": "sha512-K+NFO4/SiF4ANCS1ykem36wbEjfBJKsaakLKZ+6LbaLqyLjHHGky4fEIgipac/+XJtD4ZXjhexPIVjwzkO+rMQ==",
+      "development": false,
+      "bundled": false,
+      "optional": true,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": null,
+      "licenseFiles": [],
+      "platform": {
+        "os": [
+          "linux"
+        ],
+        "cpu": [
+          "arm"
+        ]
+      },
+      "inspected": false,
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@koromix/koffi-linux-arm64",
+      "name": "@koromix/koffi-linux-arm64",
+      "version": "3.3.3",
+      "integrity": "sha512-y7UHjwOKbj2IjIpWtHmI8LEKXchidt47k605DCv5+YQMIDTbzhz/i3zTI1kRp6EYBLTBwRkR1X1PGt3uUi+rKQ==",
+      "development": false,
+      "bundled": false,
+      "optional": true,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": null,
+      "licenseFiles": [],
+      "platform": {
+        "os": [
+          "linux"
+        ],
+        "cpu": [
+          "arm64"
+        ]
+      },
+      "inspected": false,
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@koromix/koffi-linux-ia32",
+      "name": "@koromix/koffi-linux-ia32",
+      "version": "3.3.3",
+      "integrity": "sha512-dbcpe7IrWr18AAbIKa/RvJ8pM1lEpSELWYW6wsEBIYw/RTLfXqWJ6d9Ya0NWJgHTW+N7783KVQaV5c1Sr3ONDQ==",
+      "development": false,
+      "bundled": false,
+      "optional": true,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": null,
+      "licenseFiles": [],
+      "platform": {
+        "os": [
+          "linux"
+        ],
+        "cpu": [
+          "ia32"
+        ]
+      },
+      "inspected": false,
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@koromix/koffi-linux-loong64",
+      "name": "@koromix/koffi-linux-loong64",
+      "version": "3.3.3",
+      "integrity": "sha512-kbJFmWSoDHGZgxgDhInuvDi8MzrHafBfQ7iWN5P+nHv297beQXrHecFfCNBApnG9d2wrhEoY+EH/TdITuvaSwQ==",
+      "development": false,
+      "bundled": false,
+      "optional": true,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": null,
+      "licenseFiles": [],
+      "platform": {
+        "os": [
+          "linux"
+        ],
+        "cpu": [
+          "loong64"
+        ]
+      },
+      "inspected": false,
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@koromix/koffi-linux-ppc64",
+      "name": "@koromix/koffi-linux-ppc64",
+      "version": "3.3.3",
+      "integrity": "sha512-YwGxjudYHsiDZ6qH4WmEawHXmTaZzjiZ4xdjcbzsVHqNvgZ3Nz7WG03PybecJ+BVH2vqBOntGZ2VsG/sL0WY1g==",
+      "development": false,
+      "bundled": false,
+      "optional": true,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": null,
+      "licenseFiles": [],
+      "platform": {
+        "os": [
+          "linux"
+        ],
+        "cpu": [
+          "ppc64"
+        ]
+      },
+      "inspected": false,
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@koromix/koffi-linux-riscv64",
+      "name": "@koromix/koffi-linux-riscv64",
+      "version": "3.3.3",
+      "integrity": "sha512-k/txpUsOO/L4TexahQHxqdFRmBEGE+g++np9M5eNcsHWNXmazeWBrrfB9sjl6cZAP69KZFO0toP+ZMfDUDHmnQ==",
+      "development": false,
+      "bundled": false,
+      "optional": true,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": null,
+      "licenseFiles": [],
+      "platform": {
+        "os": [
+          "linux"
+        ],
+        "cpu": [
+          "riscv64"
+        ]
+      },
+      "inspected": false,
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@koromix/koffi-linux-x64",
+      "name": "@koromix/koffi-linux-x64",
+      "version": "3.3.3",
+      "integrity": "sha512-AI4kcNNWeGmzQzsNb0S+ZL/ht4HMtDcQl5nYFkkuVUO2g1/2KdvNekkwNWhpp805mDbLSDoRZtlioHyH/v8poQ==",
+      "development": false,
+      "bundled": false,
+      "optional": true,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": null,
+      "licenseFiles": [],
+      "platform": {
+        "os": [
+          "linux"
+        ],
+        "cpu": [
+          "x64"
+        ]
+      },
+      "inspected": false,
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@koromix/koffi-openbsd-arm64",
+      "name": "@koromix/koffi-openbsd-arm64",
+      "version": "3.3.3",
+      "integrity": "sha512-NEbQMrixbAWSmWCh4XyHWuhgEqgO4tegWyHoJej7Q3PmyIlgxKHTcRZsjAJ9C3sfgBDNIqPWTjMy3KO2mqEp1g==",
+      "development": false,
+      "bundled": false,
+      "optional": true,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": null,
+      "licenseFiles": [],
+      "platform": {
+        "os": [
+          "openbsd"
+        ],
+        "cpu": [
+          "arm64"
+        ]
+      },
+      "inspected": false,
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@koromix/koffi-openbsd-ia32",
+      "name": "@koromix/koffi-openbsd-ia32",
+      "version": "3.3.3",
+      "integrity": "sha512-zGFX0KwZGmrV7AZY0+oozBpMuQZT7yQEY3NCDSb0rEqKyOrYLBNiXiXA5T8NSY3ipaW0b71L5Cu0KLKabdLY0A==",
+      "development": false,
+      "bundled": false,
+      "optional": true,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": null,
+      "licenseFiles": [],
+      "platform": {
+        "os": [
+          "openbsd"
+        ],
+        "cpu": [
+          "ia32"
+        ]
+      },
+      "inspected": false,
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@koromix/koffi-openbsd-x64",
+      "name": "@koromix/koffi-openbsd-x64",
+      "version": "3.3.3",
+      "integrity": "sha512-c1HMWkZPAZKQesKj2HqA6Zk1YEcv7Doc6JU9YJepXG8KpK4XZmI0L5vESSfySmidmasm05QDyLAcwDnNSvtfRA==",
+      "development": false,
+      "bundled": false,
+      "optional": true,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": null,
+      "licenseFiles": [],
+      "platform": {
+        "os": [
+          "openbsd"
+        ],
+        "cpu": [
+          "x64"
+        ]
+      },
+      "inspected": false,
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@koromix/koffi-win32-arm64",
+      "name": "@koromix/koffi-win32-arm64",
+      "version": "3.3.3",
+      "integrity": "sha512-eL7gW4D22OBb3fi04s5ElzzNk+gkGEahaTNMB29UDLDeORe+0qIkhccBPovXW3/IRpdt8W7o8X2myUDXlTSYDQ==",
+      "development": false,
+      "bundled": false,
+      "optional": true,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": null,
+      "licenseFiles": [],
+      "platform": {
+        "os": [
+          "win32"
+        ],
+        "cpu": [
+          "arm64"
+        ]
+      },
+      "inspected": false,
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@koromix/koffi-win32-ia32",
+      "name": "@koromix/koffi-win32-ia32",
+      "version": "3.3.3",
+      "integrity": "sha512-3sw9vvQqro4yKsOWfKebzfTcdPKRwMrodGXWbfwkTsL61EQKdwsMNKA/0dDe0/ubAAZ0yPgstX8/gs94Svzfgw==",
+      "development": false,
+      "bundled": false,
+      "optional": true,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": null,
+      "licenseFiles": [],
+      "platform": {
+        "os": [
+          "win32"
+        ],
+        "cpu": [
+          "ia32"
+        ]
+      },
+      "inspected": false,
+      "gaps": []
+    },
+    {
+      "path": "node_modules/@koromix/koffi-win32-x64",
+      "name": "@koromix/koffi-win32-x64",
+      "version": "3.3.3",
+      "integrity": "sha512-tLTF17wl4CCwOlo1Tt0NbduwUduDvM6c8JSyearcLu6hpNHQo44RF3rKN2i7UkxwCqXyiudZK0lS421CC/TPZA==",
+      "development": false,
+      "bundled": false,
+      "optional": true,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": null,
+      "licenseFiles": [],
+      "platform": {
+        "os": [
+          "win32"
+        ],
+        "cpu": [
+          "x64"
+        ]
+      },
+      "inspected": false,
       "gaps": []
     },
     {
@@ -9047,6 +9507,25 @@
         {
           "path": "node_modules/jsonpointer/LICENSE.md",
           "sha256": "3c79924aa8d99d94626e0abf13e80c30096b0c74c8d2a90e58cb598f480b9d3d"
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "path": "node_modules/koffi",
+      "name": "koffi",
+      "version": "3.3.3",
+      "integrity": "sha512-XWNI4eyxJJzR2MakPZzR3QeZ06JOklLbxglin0dHhx/qIQCby8lqHs9Acq4Q7CpCKnOrBSj+6b9J5y69wfr2ZA==",
+      "development": false,
+      "bundled": false,
+      "optional": false,
+      "declaration": "MIT",
+      "declarationField": "license",
+      "manifestSha256": "32348b820c55b8da99c14edd319eb4bc393c26f0bd405201031fd5b94d5c3046",
+      "licenseFiles": [
+        {
+          "path": "node_modules/koffi/LICENSE.txt",
+          "sha256": "22bcbbbacd739b026a8dc484f62a31484ce4c4e31f3408b60b29b4e41d62b290"
         }
       ],
       "gaps": []
