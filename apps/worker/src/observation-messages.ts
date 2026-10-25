@@ -57,12 +57,24 @@ export function observationMessage(entry: OutboxEntry): Result<ObservationMessag
 function exitedPayload(executionId: string, exit: ExecutionExit): Result<Record<string, unknown>> {
   const { status, startProven, spawnFailure, termination } = exit;
   if (termination === 'never-spawned') {
-    return ok({ executionId, status, startProven: false, spawnFailed: true, spawnFailure: spawnFailure ?? 'the spawn failed', terminationEvidence: termination });
+    const failure = displayText(spawnFailure ?? 'the spawn failed');
+    return ok({ executionId, status, startProven: false, spawnFailed: true, spawnFailure: failure, terminationEvidence: termination });
   }
   if (termination === 'containment-empty' || termination === 'process-group-empty') {
     return ok({ executionId, status, startProven, spawnFailed: false, terminationEvidence: termination });
   }
   return err(failure('precondition-failed', `an exit with termination evidence ${termination} has no wire form yet`, { termination }));
+}
+
+const DISPLAY_TEXT_MAXIMUM = 1024;
+// C0 and C1 control characters, which `DisplayText` forbids.
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
+
+// A supervisor's failure text as `DisplayText`: no control characters, at
+// most 1024 characters, and never empty.
+function displayText(text: string): string {
+  const cleaned = [...text.replace(CONTROL_CHARACTERS, ' ').trim()].slice(0, DISPLAY_TEXT_MAXIMUM).join('');
+  return cleaned === '' ? 'the spawn failed' : cleaned;
 }
 
 // An execution fact is about its attempt at the generation of the offer.

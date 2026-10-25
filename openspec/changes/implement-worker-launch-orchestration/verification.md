@@ -73,7 +73,28 @@ After the fixes, `make verify` ran with every file tracked: exit 0. 1250 tests, 
 
 ## Review pass 2
 
-Not yet run.
+- Reviewer: Claude Code with the invocation of pass 1, run by the coordinator in the worktree at `6a62cf4`; the prompt named pass 1's session and forbade writing any file in the worktree.
+- Model confirmation: `claude-fable-5-1` in `modelUsage`, medium effort. Session ID: `dca0e12a-6d12-4967-983c-0cd87729096b`.
+- Snapshot: `96468a7adc9014c088836b47a1b722b1e88d271e4cbc3703b7b79d8c27911b87` before and after; unchanged.
+- Pass 1: every resolution confirmed.
+- Findings: 0 Critical, 0 High, 1 Medium, 7 Low.
+
+| Finding | Resolution |
+| --- | --- |
+| M1: an execution finally rejected before any grant keeps no state, so the cancellation's evidence was never recorded | Fixed: `isSettled` counts it as settled; a pending W2 without a live launch does not (design D5). Tests "a cancellation after a final rejection records its evidence" and one for the pending W2. |
+| L1: `spawnFailure` could violate `DisplayText` | Fixed: control characters are replaced and the text is cut to 1024 characters, with a schema-checked test. |
+| L2: journal commits whose failure was dropped silently | Fixed: the helper `reported` passes each such failure to `onFailure` (the snapshot, the cancellation evidence, W4 after a lost seal, W5e, and `uncertain`) without changing the flow; a test fails W5e. |
+| L3: a `conflict` from writing `cancel` was not treated as forwarded | Fixed: `cancelFiled` treats it as forwarded, in the pass and in the observation; a test. |
+| L4: an `expired` answer leaves its operation pending in the journal | Documented in design D2 and the limitations, as a possible 20d journal follow-up. |
+| L5: the worker-start `until` did not assert its condition | Fixed: it asserts after its bounded loop. |
+| L6: a failed answer slept before the deadline check | Fixed: the deadline is checked before and after the delay. The cost of a long outage is recorded in design D2 and the limitations, for 20d and 20e. |
+| L7: the orchestrator imported the clock port from the adapter package | Fixed: `execution-supervision.ts` re-exports `DeadlineClock` and `DeadlineReading`, and the orchestrator imports them from there. |
+
+After the fixes, `make verify` ran with every file tracked: exit 0. 1255 tests, 1255 passed, 0 failed; coverage 99.18% lines, 91.63% branches, 98.61% functions; 0 breaking changes in each document; `openspec validate --all --strict` 60 passed; `verify:archive`, `verify:dependencies`, and `verify:package` passed.
+
+## Review pass 3
+
+Not yet run. It is the last pass the cap allows.
 
 ## Limitations
 
@@ -83,6 +104,8 @@ Not yet run.
 - Before a grant names its own `ttl` and `skew`, the retry loop bounds an operation with the provisional `30s` and `5s` of the operational targets.
 - The supervisor version written in `intent` is the worker package's version, since the supervisor ships in the worker's build.
 - An execution observation's `correlationId` is its `assignmentId`, because the journal keeps no offer correlation with the intent.
+- An `expired` answer abandons its execution but leaves the operation `pending` in the journal, since W3 records no outcome for it; a possible 20d journal follow-up (review pass 2, L4).
+- A long outage seals one execution, and reports one `not-started`, per deadline cycle of about 25 s to 60 s; a note for 20d and 20e (review pass 2, L6).
 
 ## Remaining gates
 

@@ -41,11 +41,11 @@ For a launch, the orchestrator draws a new `executionId` and `operationId`, read
 | `rejected`, retryable | W3 records it; wait the retry delay, then W2 a new `operationId` for the same execution, with a new clock reading |
 | `rejected`, not retryable | W3 records it with its `launch.rejected` observation; the launch ends |
 | `revoked` | W3 records the revocation reason as a rejection: retryable for `quarantined`, otherwise final |
-| `expired` | A grant existed and is no longer usable; abandon the execution |
+| `expired` | A grant existed and is no longer usable; abandon the execution. The operation stays `pending` in the journal, since W3 has no outcome for it; a possible journal follow-up for 20d |
 
 - **Deadline.** The reading precedes the operation's first request and is kept for its retries, so a retry never extends it (`workerLaunchDeadline`). The clock is the supervisor platform's `DeadlineClock` (`CLOCK_BOOTTIME`, `mach_continuous_time`), which counts suspended time; a reading in another boot, or a clock that cannot be read, never hands a grant out.
 - **Retry delay.** `launchRetryDelay(retry, draw)` in Execution doubles a base from 5 s to 60 s and adds jitter below the cap, so every delay is within [5 s, 60 s] (operational targets, the retry row). It mirrors the placement backoff of item 18 but lives in Execution, since the worker must not depend on scheduling for it.
-- **Offline.** A worker that cannot reach the authority stays in this loop and starts nothing. The broker plays no part: commands may still be journaled, but nothing spawns without a grant.
+- **Offline.** A worker that cannot reach the authority stays in this loop and starts nothing. The deadline is checked before and after each delay, so no delay is slept once it has passed. A long outage therefore seals one execution, and reports one `not-started`, per deadline cycle; a note for 20d and 20e. The broker plays no part: commands may still be journaled, but nothing spawns without a grant.
 
 ### D3: abandoning an execution before W4
 
@@ -68,7 +68,7 @@ An intent whose executions all end `not-started` is launched again under D2 (jou
 
 - a launch still in D2 stops; an execution with a pending W2 or an unused grant is abandoned as in D3;
 - an execution whose record is journaled gets the `cancel` file through `requestCancellation`, which every supervisor of the execution acts on (supervisor identity section 8);
-- the cancellation's evidence is recorded (`recordCancellationEvidence`) once no launch of the intent is live and every execution of the intent is terminal, `exited` or `not-started`, or immediately when it has none.
+- the cancellation's evidence is recorded (`recordCancellationEvidence`) once no launch of the intent is live and every execution of the intent is settled: `exited`, `not-started`, or never granted and finally rejected (review pass 2, M1). A pending W2 without a live launch is not settled; 20d reconciles it.
 
 A cancellation is never reported as termination: only the exit or the seal is.
 

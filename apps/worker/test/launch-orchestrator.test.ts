@@ -410,6 +410,71 @@ test('a launch that throws is reported and ends; the orchestrator keeps running'
   assert.equal(failures.length, 1);
 });
 
+test('a cancellation after a final rejection records its evidence', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [ok({ kind: 'rejected', rejection: launchRejection('gate-not-passed', 'gate') })];
+  await launchOnce();
+  assert.equal(executions()[0]?.state, undefined);
+
+  value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));
+  await launchOnce();
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
+});
+
+test('a cancellation of an execution with a pending W2 and no live launch waits for 20d', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [unavailable()];
+  stopAfterRequests(1);
+  await launchOnce();
+  controller = new AbortController();
+
+  value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));
+  await launchOnce();
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, false);
+});
+
+test('a commit that fails without changing the decision is reported', async () => {
+  const failures: unknown[] = [];
+  let ids = 0;
+  orchestrator = new LaunchOrchestrator({
+    journal, authority, supervision: supervisions.factory, clock, draw: () => 0, newId: () => `id-${(ids += 1)}`,
+    sleep: async () => new Promise((resolve) => setImmediate(resolve)), onFailure: (error) => failures.push(error),
+  });
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  const recordExit = journal.recordExit.bind(journal);
+  journal.recordExit = () => err(failure('unavailable', 'the disk is full'));
+  await launchOnce();
+  journal.recordExit = recordExit;
+  assert.deepEqual(failures.map((failed) => (failed as { message: string }).message), ['the disk is full']);
+});
+
+test('an existing cancel file counts as forwarded', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS }];
+    supervision.cancel = async (reason) => {
+      supervision.calls.push('cancel');
+      supervision.cancelled = reason;
+      return err(failure('conflict', 'cancel exists'));
+    };
+  };
+  await orchestrator.pass(controller.signal);
+  await until(() => executions()[0]?.state === 'started');
+  controller.abort();
+  await orchestrator.settled();
+
+  controller = new AbortController();
+  value(journal.recordCommand(cancellation(1, { executionId: executions()[0]?.executionId ?? '' })));
+  await orchestrator.pass(controller.signal);
+  await orchestrator.pass(controller.signal);
+  assert.equal(supervisions.all[0]?.calls.filter((call) => call === 'cancel').length, 1);
+});
+
 test('a cancellation journaled before any launch records its evidence and launches nothing', async () => {
   value(journal.recordCommand(offer()));
   value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));

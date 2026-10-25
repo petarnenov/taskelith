@@ -20,8 +20,13 @@ import {
   type WorkerJournal,
 } from '@taskelith/execution';
 import { parseIdentifier, type Result } from '@taskelith/kernel';
-import type { DeadlineClock, DeadlineReading } from '@taskelith/worker-supervisor';
-import { sealWon, type ExecutionSupervision, type SupervisionFactory } from './execution-supervision.js';
+import {
+  sealWon,
+  type DeadlineClock,
+  type DeadlineReading,
+  type ExecutionSupervision,
+  type SupervisionFactory,
+} from './execution-supervision.js';
 
 // The provisional `ttl` and `skew` (operational targets), which bound the
 // retries of an operation before any grant names its own.
@@ -76,7 +81,7 @@ export class LaunchOrchestrator {
   // One pass over the journal: new launches and cancellations to forward.
   async pass(signal: AbortSignal): Promise<void> {
     const snapshot = this.#options.journal.snapshot();
-    if (!snapshot.ok) return;
+    if (!reported(this.#options, snapshot)) return;
     for (const action of planJournalRecovery(snapshot.value)) {
       if (action.kind === 'continue-launch') this.#launch(action.assignmentId, snapshot.value, signal);
       if (action.kind === 'forward-cancellation') await this.#forward(action.commandId, action.target, snapshot.value);
@@ -116,10 +121,11 @@ export class LaunchOrchestrator {
     for (const execution of executions) {
       const key = `${commandId}/${execution.executionId}`;
       if (!needsCancelFile(execution, this.#launches.has(execution.assignmentId)) || this.#forwarded.has(key)) continue;
-      const cancelled = await this.#options.supervision(execution.executionId).cancel(reason);
-      if (cancelled.ok) this.#forwarded.add(key);
+      if (cancelFiled(await this.#options.supervision(execution.executionId).cancel(reason))) this.#forwarded.add(key);
     }
-    if (launches.length === 0 && executions.every(isTerminal)) this.#options.journal.recordCancellationEvidence(commandId);
+    if (launches.length === 0 && executions.every(isSettled)) {
+      reported(this.#options, this.#options.journal.recordCancellationEvidence(commandId));
+    }
   }
 
   #failed(error: unknown): void {
@@ -137,6 +143,23 @@ function targetedAssignments(target: CancellationTarget, snapshot: JournalSnapsh
 
 function isTerminal(execution: JournaledExecution): boolean {
   return execution.state === 'exited' || execution.state === 'not-started';
+}
+
+// Nothing more happens to it: terminal, or never granted and finally
+// rejected. A pending W2 is not settled; 20d reconciles it.
+function isSettled(execution: JournaledExecution): boolean {
+  return isTerminal(execution) || (execution.state === undefined && execution.authorizations.at(-1)?.outcome === 'rejected-final');
+}
+
+// A `cancel` file that already exists was forwarded before.
+function cancelFiled(result: Result<void>): boolean {
+  return result.ok || result.error.code === 'conflict';
+}
+
+// A commit whose failure changes no decision is still reported.
+function reported<T>(options: LaunchOrchestratorOptions, result: Result<T>): result is Extract<Result<T>, { ok: true }> {
+  if (!result.ok) options.onFailure?.(result.error);
+  return result.ok;
 }
 
 // A live launch cancels its own execution; any other open one with a
@@ -223,6 +246,7 @@ class Launch {
       const answer = await this.#options.authority.authorize(sent);
       if (this.#stopping.aborted) return { kind: 'end' };
       if (!answer.ok) {
+        if (!this.#beforeDeadline(reading.value, DEFAULT_PARAMETERS)) return { kind: 'abandon' };
         await this.#backOff();
         if (!this.#beforeDeadline(reading.value, DEFAULT_PARAMETERS)) return { kind: 'abandon' };
         continue;
@@ -274,7 +298,7 @@ class Launch {
   // No supervisor of this launch can claim before W4, so a claim is a record
   // nobody journaled: journal it, where a grant allows, and report uncertain.
   #claimedBeforeW4(executionId: ExecutionId): Executed {
-    this.#options.journal.recordExecutionRecordWritten(executionId);
+    reported(this.#options, this.#options.journal.recordExecutionRecordWritten(executionId));
     return this.#recordUncertain(executionId);
   }
 
@@ -326,7 +350,7 @@ class Launch {
     let started = false;
     let forwarded = false;
     while (!this.#stopping.aborted) {
-      if (this.#cancelled && !forwarded) forwarded = (await supervision.cancel(this.#cancelReason ?? '')).ok;
+      if (this.#cancelled && !forwarded) forwarded = cancelFiled(await supervision.cancel(this.#cancelReason ?? ''));
       const facts = await supervision.read();
       if (!facts.ok) return 'end';
       if (facts.value.problems.length > 0) return this.#recordUncertain(executionId);
@@ -343,12 +367,12 @@ class Launch {
   }
 
   #recordExit(executionId: ExecutionId, exit: ExecutionExit): Executed {
-    this.#options.journal.recordExit(executionId, exit);
+    reported(this.#options, this.#options.journal.recordExit(executionId, exit));
     return 'end';
   }
 
   #recordUncertain(executionId: ExecutionId): Executed {
-    this.#options.journal.recordUncertain(executionId);
+    reported(this.#options, this.#options.journal.recordUncertain(executionId));
     return 'end';
   }
 

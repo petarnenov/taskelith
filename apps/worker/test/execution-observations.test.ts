@@ -82,6 +82,15 @@ test('a spawn failure is published with its failure and never-spawned', async ()
   });
 });
 
+test('a spawn failure is published as DisplayText: control characters replaced, at most 1024 characters', async () => {
+  launched();
+  const spawnFailure = `spawn\u0000failed\n${'x'.repeat(2000)}`;
+  value(journal.recordExit(EXECUTION, { status: { kind: 'unknown' }, startProven: false, spawnFailure, termination: 'never-spawned' }));
+  const payload = (await publishedAs('ExecutionExitedObservation')).payload as Record<string, string>;
+  assert.equal(payload.spawnFailure?.length, 1024);
+  assert.ok(payload.spawnFailure?.startsWith('spawn failed x'));
+});
+
 test('an exit with recovery-only termination evidence fails its mapping until 20d', async () => {
   launched();
   value(journal.recordExit(EXECUTION, { status: { kind: 'unknown' }, startProven: false, termination: 'boot-changed' }));

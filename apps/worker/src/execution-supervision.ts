@@ -14,12 +14,18 @@ import {
   startDetachedSupervisor,
   startSupervisor,
   type Command,
+  type DeadlineClock,
+  type DeadlineReading,
   type ExecutionAccount,
   type LaunchRecord,
   type Platform,
   type RecordProblem,
   type WorkerSupervisionDependencies,
 } from '@taskelith/worker-supervisor';
+
+// The suspend-inclusive clock the launch deadline uses, as the supervisor
+// adapter reads it on each platform.
+export type { DeadlineClock, DeadlineReading };
 
 // What a launch hands its supervisor: the grant it claims and the deadline
 // on the deadline clock, in the boot the reading was taken in.

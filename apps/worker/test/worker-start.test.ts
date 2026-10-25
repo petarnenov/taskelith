@@ -285,6 +285,7 @@ const LAUNCH: LaunchSettings = { command: { executable: '/bin/true', arguments: 
 
 async function until(condition: () => boolean): Promise<void> {
   for (let wait = 0; !condition() && wait < 200; wait += 1) await delay(10);
+  assert.ok(condition(), 'the condition never held');
 }
 
 test('a worker without a launch command accepts an assignment and never launches it', async () => {
