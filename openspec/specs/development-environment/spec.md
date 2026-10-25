@@ -22,7 +22,7 @@ Let a contributor check and prepare a clone for building and verifying Taskelith
 
 #### Scenario: Shell on another Node.js after setup
 - **WHEN** the shell uses a Node.js other than `.nvmrc` and nvm has the pinned version installed
-- **THEN** `make doctor` runs its checks with the pinned version, reports the Node.js check as passed, and says that `nvm use` is needed only for running `npm` or `node` directly in that shell
+- **THEN** `make doctor` runs its checks with the pinned version, reports the Node.js check as passed, and says that running `npm` or `node` directly in that shell needs `nvm use` with a `node -v` check, or, when that check fails, the printed `export PATH` line that puts the pinned version's directory first, quoted so that the shell takes it literally
 
 #### Scenario: Another Node.js earlier in PATH
 - **WHEN** nvm has the pinned version installed and a Node.js outside nvm comes before nvm's directory in `PATH`
@@ -53,7 +53,7 @@ Let a contributor check and prepare a clone for building and verifying Taskelith
 
 #### Scenario: Shell on another Node.js
 - **WHEN** the calling shell uses a Node.js other than `.nvmrc` and nvm is installed
-- **THEN** setup installs and uses the pinned version for its own run, makes it nvm's default, says that its checks ran under that version and that `make doctor` and `make verify` select it themselves, and names `nvm use` only for running `npm` or `node` directly in that shell
+- **THEN** setup installs and uses the pinned version for its own run, makes it nvm's default, says that its checks ran under that version and that `make doctor` and `make verify` select it themselves, and, for running `npm` or `node` directly in that shell, names `nvm use` with a `node -v` check and, for when that check fails, the `export PATH` line that puts the pinned version's directory first, quoted so that the shell takes it literally
 
 #### Scenario: npm pin changes
 - **WHEN** npm is on `PATH` but does not match the CI pin
