@@ -16,5 +16,5 @@
 
 ## 4. Verification and review
 
-- [ ] 4.1 Run `make verify` and `make verify-installation`.
+- [x] 4.1 Run `make verify` and `make verify-installation`.
 - [ ] 4.2 Run the independent review and record it in `verification.md`.
