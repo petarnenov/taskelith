@@ -49,7 +49,7 @@ export type SupervisorOutcome =
   | { readonly kind: 'child-gone' };
 
 export interface Session {
-  readonly serial: number | 'identity-unreadable' | 'write-failed';
+  readonly serial: number | 'identity-unreadable' | 'list-failed' | 'write-failed';
   readonly intent: IntentRecord;
 }
 
@@ -76,7 +76,7 @@ async function writeSupervisorRecord(dependencies: SupervisorDependencies): Prom
   const self = dependencies.platform.inspector.identity(dependencies.selfPid);
   if (!self.ok || self.value === undefined) return 'identity-unreadable';
   const names = await dependencies.store.list();
-  if (!names.ok) return 'write-failed';
+  if (!names.ok) return 'list-failed';
   let serial = highestSupervisor(names.value) + 1;
   for (;;) {
     const created = await dependencies.store.createOnce(supervisorFile(serial), encodeRecord({ serial, process: self.value }));
@@ -100,9 +100,9 @@ export async function persist<T>(dependencies: SupervisorDependencies, write: ()
 }
 
 // Retries a step at most `unreadablePolls` times.
-export async function attempt<T>(dependencies: SupervisorDependencies, step: () => Result<T>): Promise<boolean> {
+export async function attempt<T>(dependencies: SupervisorDependencies, step: () => Result<T> | Promise<Result<T>>): Promise<boolean> {
   for (let tries = 1; ; tries += 1) {
-    if (step().ok) return true;
+    if ((await step()).ok) return true;
     if (tries >= dependencies.timing.unreadablePolls) return false;
     await dependencies.sleep(dependencies.timing.retryMilliseconds);
   }

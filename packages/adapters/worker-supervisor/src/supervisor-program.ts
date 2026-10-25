@@ -33,8 +33,8 @@ export const SUPERVISOR_TIMING: SupervisorTiming = Object.freeze({
 
 const CONTAINMENT_PARENT = '--containment-parent';
 
-// The supervisor gets only its execution directory (CP4), plus the
-// containment parent that the worker's configuration names on Linux.
+// CP4 passes the mode, the execution directory, and on Linux the
+// containment parent that the worker's configuration names.
 export function parseProgramArguments(argv: readonly string[]): Result<ProgramArguments> {
   const [mode, directory, flag, parent, ...rest] = argv;
   const valid = (mode === 'launch' || mode === 'adopt') && directory !== undefined && rest.length === 0

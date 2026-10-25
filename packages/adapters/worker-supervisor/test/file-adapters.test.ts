@@ -11,6 +11,8 @@ import {
   parseLaunch,
   parseProgramArguments,
   prepareRecord,
+  recoverExecution,
+  removeRecord,
   runSupervisorProgram,
   SqliteExecutionLock,
   startDetachedSupervisor,
@@ -101,6 +103,20 @@ test('the execution lock is exclusive within a process and across processes, and
 
   writeFileSync(join(directory, 'lock'), 'not a database, only text that SQLite cannot read as one');
   assert.equal(lock.tryAcquire().ok, false);
+});
+
+test('a sealed record on disk is removed with its lock files, the launch record last', async (t) => {
+  const directory = join(scratch(t), 'execution-1');
+  const setup = rig();
+  const worker = { ...setup.worker, store: new FileRecordStore(directory), lock: new SqliteExecutionLock(directory) };
+  assert.ok((await prepareRecord(worker, intent())).ok);
+  const probe = worker.lock.tryAcquire();
+  assert.ok(probe.ok && probe.value !== undefined);
+  probe.value.release();
+  assert.deepEqual(await recoverExecution(worker, 'record'), { ok: true, value: { fact: 'not-started' } });
+
+  assert.ok((await removeRecord(worker)).ok);
+  assert.deepEqual(await worker.store.exists(), { ok: true, value: false });
 });
 
 test('the supervisor program takes a mode, its directory, and on Linux the containment parent', () => {

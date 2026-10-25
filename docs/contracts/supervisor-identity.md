@@ -35,7 +35,7 @@ Every execution has a directory `worker/executions/<executionId>/` under the wor
 | `supervisor.<n>` | Each supervisor, once | Right after it takes `lock` | Its supervisor identity; `n` is one more than the highest existing number, created exclusively |
 | `launch` | The first supervisor, or the worker | Created once, exclusively | The **launch record**: either a **claim** (the `launchAuthId` it spawns under, `supervisor.1`, and the containment) or a **seal** |
 | `handle` | The first supervisor | Right after a spawn returns | The child's process identity and process group ID, or the spawn failure (section 4) |
-| `events` | Every supervisor | Append only | Descendant identities observed, cancellation steps, and termination evidence (section 8) |
+| `events` | Every supervisor | Append only; a torn last entry is cut off before the next one is written | Descendant identities observed, cancellation steps, and termination evidence (section 8) |
 | `exit` | A supervisor | When the process set is proven empty | The child's exit code or signal, or an unknown status, and the termination evidence |
 | `cancel` | Worker | Created once, when cancellation is requested | The cancellation reason; every supervisor of the execution acts on it as section 8 states |
 

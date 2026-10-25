@@ -217,3 +217,13 @@ test('a Linux intent without its namespace incarnation proves no namespace curre
 test('a failed detached start is reported, not thrown', async () => {
   assert.equal((await startDetachedProcess({ executable: '/nonexistent/supervisor', arguments: [] })).ok, false);
 });
+
+test('recovery takes as evidence only the containment that the claim names', async () => {
+  const setup = await prepared('linux');
+  setup.store.files.set('launch', encodeRecord({ kind: 'claim', launchAuthId: 'launch-1', supervisor: 1, containment: '/old/parent/execution-1' }));
+  setup.store.files.set('handle', HANDLE);
+  setup.fake.containmentPopulated = true;
+
+  assert.equal((await fact(setup)).fact, 'uncertain');
+  assert.deepEqual(setup.started, []);
+});

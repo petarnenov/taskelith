@@ -20,6 +20,7 @@ export async function superviseLaunch(dependencies: SupervisorDependencies): Pro
     // Without its own identity no supervisor record proves who claims.
     if (session.serial === 'identity-unreadable') return seal(dependencies, 'identity-unreadable');
     if (session.serial === 'write-failed') return { kind: 'write-failed', file: 'supervisor record' };
+    if (session.serial === 'list-failed') return { kind: 'record-unusable', reason: 'cannot list the record' };
     if (session.serial !== 1) return { kind: 'not-first' };
     const refusal = checkLaunchable(dependencies, session.intent);
     if (refusal !== undefined) return seal(dependencies, refusal);
@@ -116,15 +117,22 @@ async function runChild(
   return { kind: 'exited', exit };
 }
 
+// No child runs, so a write that keeps failing ends the supervisor; recovery
+// then completes the spawn failure or writes an unknown exit.
 async function finishSpawnFailure(
   dependencies: SupervisorDependencies,
   failure: string,
   containment: Containment | undefined,
 ): Promise<SupervisorOutcome> {
-  await persist(dependencies, () => dependencies.store.createOnce(RECORD_FILES.handle, encodeRecord({ kind: 'spawn-failed', failure })));
+  const handle = encodeRecord({ kind: 'spawn-failed', failure });
+  if (!(await attempt(dependencies, () => dependencies.store.createOnce(RECORD_FILES.handle, handle)))) {
+    return { kind: 'write-failed', file: RECORD_FILES.handle };
+  }
   dependencies.crashPoint('CP9');
   const exit: ExitRecord = { status: { kind: 'unknown' }, startProven: false, spawnFailure: failure, termination: 'never-spawned' };
-  await writeExit(dependencies, exit);
+  if (!(await attempt(dependencies, () => dependencies.store.createOnce(RECORD_FILES.exit, encodeRecord(exit))))) {
+    return { kind: 'write-failed', file: RECORD_FILES.exit };
+  }
   dependencies.crashPoint('CP11');
   containment?.remove();
   return { kind: 'exited', exit };

@@ -8,6 +8,8 @@ import { cancellationRequested, readParsed, withLock, writeExit, type Supervisor
 export async function adoptExecution(dependencies: SupervisorDependencies): Promise<SupervisorOutcome> {
   return withLock(dependencies, async (session) => {
     if (typeof session.serial !== 'number') return { kind: 'record-unusable', reason: 'the supervisor record cannot be written' };
+    // A claim names supervisor.1, so an adopter is never the first one.
+    if (session.serial === 1) return { kind: 'record-unusable', reason: 'a claim without a first supervisor record' };
     const launch = await readParsed(dependencies.store, RECORD_FILES.launch, parseLaunch);
     const handle = await readParsed(dependencies.store, RECORD_FILES.handle, parseHandle);
     if (!launch.ok || !handle.ok || launch.value?.kind !== 'claim') return { kind: 'record-unusable', reason: 'no readable claim' };

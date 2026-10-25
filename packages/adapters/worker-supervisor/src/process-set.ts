@@ -14,14 +14,16 @@ export interface Child {
 // A torn last entry is cut off before the next one is written, so that it
 // can never join the new entry into a damaged one.
 export async function appendEvent(dependencies: SupervisorDependencies, entry: EventEntry): Promise<void> {
+  await persist(dependencies, () => writeEvent(dependencies.store, entry));
+}
+
+async function writeEvent(store: RecordStore, entry: EventEntry): Promise<Result<void>> {
   const frame = encodeEvent(entry);
-  await persist(dependencies, async () => {
-    const text = await dependencies.store.read(RECORD_FILES.events);
-    if (!text.ok) return text;
-    const current = text.value ?? '';
-    if (current === '' || current.endsWith('\n')) return dependencies.store.append(RECORD_FILES.events, frame);
-    return dependencies.store.replace(RECORD_FILES.events, current.slice(0, current.lastIndexOf('\n') + 1) + frame);
-  });
+  const text = await store.read(RECORD_FILES.events);
+  if (!text.ok) return text;
+  const current = text.value ?? '';
+  if (current === '' || current.endsWith('\n')) return store.append(RECORD_FILES.events, frame);
+  return store.replace(RECORD_FILES.events, current.slice(0, current.lastIndexOf('\n') + 1) + frame);
 }
 
 export async function recordedDescendants(store: RecordStore): Promise<Result<ProcessIdentity[]>> {
@@ -33,7 +35,8 @@ export async function recordedDescendants(store: RecordStore): Promise<Result<Pr
   return ok(events.value.flatMap((entry) => (entry.kind === 'descendant' ? [entry.process] : [])));
 }
 
-// The interval walk of parent links that records every descendant seen.
+// The interval walk of parent links that records every descendant seen; a
+// failed write ends this walk, and the next one records the process again.
 export async function recordDescendants(dependencies: SupervisorDependencies, child: Child, seen: ProcessIdentity[]): Promise<void> {
   const listing = dependencies.platform.inspector.listing();
   if (!listing.ok) return;
@@ -45,8 +48,8 @@ export async function recordDescendants(dependencies: SupervisorDependencies, ch
       family.add(entry.identity.pid);
       grew = true;
       if (seen.some((known) => sameProcess(known, entry.identity))) continue;
+      if (!(await writeEvent(dependencies.store, { kind: 'descendant', process: entry.identity })).ok) return;
       seen.push(entry.identity);
-      await appendEvent(dependencies, { kind: 'descendant', process: entry.identity });
     }
   }
 }

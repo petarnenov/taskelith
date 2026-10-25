@@ -207,7 +207,9 @@ for (const platform of ['darwin', 'linux'] as const) {
       const recovered = await recoverExecution(setup.worker, 'record');
       assert.ok(recovered.ok);
       assert.equal(recovered.value.fact, fact);
-      assert.ok(setup.spawner.spawned.length <= 1);
+      // Recovery spawns nothing; it starts an adopter only where section 6 says.
+      assert.deepEqual(setup.started, fact === 'adopted' ? ['adopt'] : []);
+      assert.equal(setup.spawner.spawned.length, ['CP8', 'CP9', 'CP11'].includes(point) ? 1 : 0);
     });
   }
 }
@@ -216,9 +218,10 @@ test('an adopting Linux supervisor watches the containment and records an unknow
   const setup = await prepared('linux');
   setup.store.files.set('launch', encodeRecord({ kind: 'claim', launchAuthId: 'launch-1', supervisor: 1, containment: '/sys/fs/cgroup/executions/execution-1' }));
   setup.store.files.set('handle', encodeRecord({ kind: 'spawned', process: identity(500), processGroupId: 500 }));
+  setup.store.files.set('supervisor.1', encodeRecord({ serial: 1, process: identity(99) }));
   setup.fake.containmentPopulated = true;
   const run = adoptExecution(setup.supervisor);
-  await until(() => setup.store.files.has('supervisor.1'));
+  await until(() => setup.store.files.has('supervisor.2'));
   await requestCancellation(setup.worker, 'requested');
   const outcome = await run;
 
@@ -230,6 +233,7 @@ test('an adopting macOS supervisor only observes, and records a cancellation as 
   const setup = await prepared();
   setup.store.files.set('launch', encodeRecord({ kind: 'claim', launchAuthId: 'launch-1', supervisor: 1 }));
   setup.store.files.set('handle', encodeRecord({ kind: 'spawned', process: identity(500), processGroupId: 500 }));
+  setup.store.files.set('supervisor.1', encodeRecord({ serial: 1, process: identity(99) }));
   setup.fake.run({ identity: identity(500), parentPid: 1, processGroupId: 500 });
   const run = adoptExecution(setup.supervisor);
   await requestCancellation(setup.worker, 'requested');
@@ -245,11 +249,17 @@ test('an adopter without a readable claim or a matching containment adopts nothi
   const unclaimed = await prepared();
   assert.equal((await adoptExecution(unclaimed.supervisor)).kind, 'record-unusable');
 
+  const first = await prepared();
+  first.store.files.set('launch', encodeRecord({ kind: 'claim', launchAuthId: 'launch-1', supervisor: 1 }));
+  assert.deepEqual(await adoptExecution(first.supervisor), { kind: 'record-unusable', reason: 'a claim without a first supervisor record' });
+
   const elsewhere = await prepared('linux');
+  elsewhere.store.files.set('supervisor.1', encodeRecord({ serial: 1, process: identity(99) }));
   elsewhere.store.files.set('launch', encodeRecord({ kind: 'claim', launchAuthId: 'launch-1', supervisor: 1, containment: '/elsewhere' }));
   assert.equal((await adoptExecution(elsewhere.supervisor)).kind, 'record-unusable');
 
   const handleless = await prepared();
+  handleless.store.files.set('supervisor.1', encodeRecord({ serial: 1, process: identity(99) }));
   handleless.store.files.set('launch', encodeRecord({ kind: 'claim', launchAuthId: 'launch-1', supervisor: 1 }));
   assert.equal((await adoptExecution(handleless.supervisor)).kind, 'record-unusable');
 });
@@ -298,6 +308,7 @@ test('a containment that stays unreadable ends the wait without an exit', async 
   assert.equal(file(launched, 'exit'), undefined);
 
   const adopted = await prepared('linux');
+  adopted.store.files.set('supervisor.1', encodeRecord({ serial: 1, process: identity(99) }));
   adopted.store.files.set('launch', encodeRecord({ kind: 'claim', launchAuthId: 'launch-1', supervisor: 1, containment: '/sys/fs/cgroup/executions/execution-1' }));
   assert.deepEqual(await adoptExecution(adopted.supervisor), { kind: 'containment-unreadable' });
   assert.equal(adopted.lock.held, false);
@@ -417,4 +428,35 @@ test('a lock that cannot be opened is reported apart from a busy one', async () 
   const setup = await prepared();
   const lock = { tryAcquire: () => ({ ok: false as const, error: { code: 'internal' as const, message: 'not a lock', details: {} } }) };
   assert.deepEqual(await superviseLaunch({ ...setup.supervisor, lock }), { kind: 'lock-unusable', reason: 'not a lock' });
+});
+
+test('a spawn failure whose records cannot be written ends without holding the lock', async () => {
+  const setup = await prepared();
+  setup.spawner.failure = 'ENOENT';
+  setup.store.failing.add('handle');
+
+  assert.deepEqual(await superviseLaunch(setup.supervisor), { kind: 'write-failed', file: 'handle' });
+  assert.equal(setup.lock.held, false);
+});
+
+test('a record that cannot be listed is reported as unusable, not as a failed write', async () => {
+  const setup = await prepared();
+  setup.store.list = async () => ({ ok: false, error: { code: 'unavailable', message: 'no listing', details: {} } });
+  assert.deepEqual(await superviseLaunch(setup.supervisor), { kind: 'record-unusable', reason: 'cannot list the record' });
+});
+
+test('a descendant whose record cannot be written is recorded on a later walk', async () => {
+  const setup = await prepared();
+  const run = superviseLaunch(setup.supervisor);
+  await until(() => file(setup, 'handle') !== undefined);
+  setup.store.failing.add('events');
+  setup.fake.run({ identity: identity(501), parentPid: 500, processGroupId: 500 });
+  for (let tick = 0; tick < 10; tick += 1) await new Promise((resolve) => setImmediate(resolve));
+  setup.store.failing.delete('events');
+  await until(() => file(setup, 'events') !== undefined);
+  setup.fake.end(501);
+  setup.spawner.exit(0);
+  await run;
+
+  assert.deepEqual(events(setup), [{ kind: 'descendant', process: identity(501) }]);
 });

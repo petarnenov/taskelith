@@ -239,7 +239,10 @@ function nativeEvidence(platform: Platform, record: RecordSnapshot | undefined):
   const recorded = record?.intent?.namespaceIncarnation;
   const namespaceCurrent = recorded !== undefined && incarnation?.ok === true && incarnation.value === recorded;
   const containment = record?.intent === undefined ? undefined : platform.containment(record.intent.executionId);
-  const populated = containment?.ok ? containment.value.populated() : undefined;
+  // Only the containment the claim names is evidence about this execution.
+  const claimed = record?.launch?.kind === 'claim' ? record.launch.containment : undefined;
+  const matches = containment?.ok === true && (claimed === undefined || claimed === containment.value.path);
+  const populated = matches && containment?.ok ? containment.value.populated() : undefined;
   return ok({
     platform: 'linux',
     bootChanged,
