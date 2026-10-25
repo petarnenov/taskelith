@@ -33,7 +33,7 @@ A worker SHALL start no launch without a grant, whatever the state of its broker
 - **THEN** no supervisor is started, and each abandoned execution is reported `not-started`
 
 ### Requirement: Cancellation forwarding
-A worker SHALL stop a launch whose attempt or execution is cancelled before its supervisor starts, sealing it, SHALL write the `cancel` file of a started execution, and SHALL record the cancellation's evidence only once every targeted execution is `exited` or `not-started`.
+A cancellation of an attempt or of any execution of an intent SHALL stop the intent's launch, sealing an execution before its supervisor starts, and SHALL write the `cancel` file of a started one. Its evidence SHALL be recorded once no launch of the intent is live and every execution is `exited`, `not-started`, or rejected without a grant, and at once when there is none.
 
 #### Scenario: Cancelled after W4
 - **WHEN** a cancellation names an execution whose supervisor runs

@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
-import { ok, type Result } from '@taskelith/kernel';
+import { ok, type Failure, type Result } from '@taskelith/kernel';
 import { SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { connectWorkerTransport } from '@taskelith/nats';
 import { redactFailure, redactSecrets } from '@taskelith/secrets';
@@ -51,8 +51,19 @@ function productionLaunching(settings: WorkerSettings): LaunchingDependencies {
 
 // The worker has no logger yet (20d), so a failed launch goes to stderr.
 function reportLaunchFailure(error: unknown): void {
-  const message = redactSecrets(`a launch failed: ${String(error)}`);
-  process.stderr.write(`${JSON.stringify({ error: { code: 'internal', message } })}\n`);
+  process.stderr.write(`${launchFailureLine(error)}\n`);
+}
+
+// A journal or record failure keeps its code; a thrown error its message.
+export function launchFailureLine(error: unknown): string {
+  if (isFailure(error)) return JSON.stringify({ error: redactFailure(error) });
+  const message = redactSecrets(`a launch failed: ${error instanceof Error ? error.message : String(error)}`);
+  return JSON.stringify({ error: { code: 'internal', message } });
+}
+
+function isFailure(value: unknown): value is Failure {
+  const { code, message, details } = (value ?? {}) as { code?: unknown; message?: unknown; details?: unknown };
+  return typeof code === 'string' && typeof message === 'string' && typeof details === 'object' && details !== null;
 }
 
 function launchHost(launch: LaunchSettings, executions: string, version: string): Result<LaunchHost> {

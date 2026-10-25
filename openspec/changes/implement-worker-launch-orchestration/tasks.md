@@ -19,4 +19,4 @@
 ## 4. Verification and review
 
 - [x] 4.1 Run `make verify`.
-- [ ] 4.2 Run the independent review and record it in `verification.md`.
+- [x] 4.2 Run the independent review, passes 1 to 3, and record it in `verification.md`; the pass 3 fixes are unreviewed.

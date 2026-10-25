@@ -12,14 +12,15 @@ export {
 export { CommandIntake, type CommandIntakeOptions } from './command-intake.js';
 export { publishDueObservations, runObservationPublisher, type ObservationPublisherOptions } from './observation-publisher.js';
 export { startWorker, type LaunchHost, type LaunchingDependencies, type RunningWorker, type WorkerDependencies } from './worker-start.js';
-export {
-  fileSupervision,
-  type ExecutionSupervision,
-  type LaunchPlan,
-  type LaunchProgram,
-  type SupervisedFacts,
-  type SupervisedRecovery,
-  type SupervisionFactory,
-} from './execution-supervision.js';
+export { fileSupervision, type LaunchProgram } from './execution-supervision.js';
+export type {
+  DeadlineClock,
+  DeadlineReading,
+  ExecutionSupervision,
+  LaunchPlan,
+  SupervisedFacts,
+  SupervisedRecovery,
+  SupervisionFactory,
+} from './execution-supervision-port.js';
 export { LAUNCH_POLL_MILLISECONDS, LaunchOrchestrator, type LaunchOrchestratorOptions } from './launch-orchestrator.js';
-export { productionDependencies, serveUntilStopped, workerMain, type ServiceProcess } from './main.js';
+export { launchFailureLine, productionDependencies, serveUntilStopped, workerMain, type ServiceProcess } from './main.js';

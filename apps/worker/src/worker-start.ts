@@ -23,9 +23,8 @@ import {
   type WorkerRoot,
   type WorkerRootOptions,
 } from '@taskelith/worker-journal';
-import type { DeadlineClock } from '@taskelith/worker-supervisor';
 import { CommandIntake } from './command-intake.js';
-import type { SupervisionFactory } from './execution-supervision.js';
+import type { DeadlineClock, SupervisionFactory } from './execution-supervision-port.js';
 import { LaunchOrchestrator } from './launch-orchestrator.js';
 import { runObservationPublisher } from './observation-publisher.js';
 import type { LaunchSettings, WorkerSettings } from './settings.js';

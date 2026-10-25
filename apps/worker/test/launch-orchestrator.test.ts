@@ -45,8 +45,10 @@ beforeEach(() => {
   let ids = 0;
   orchestrator = new LaunchOrchestrator({
     journal, authority, supervision: supervisions.factory, clock, draw: () => 0.5, newId: () => `id-${(ids += 1)}`,
-    // Each sleep advances the clock and yields, so polling never spins.
-    sleep: async (milliseconds) => {
+    // Each sleep advances the clock and yields, so polling never spins; an
+    // aborted signal returns at once, as the production sleep does.
+    sleep: async (milliseconds, signal) => {
+      if (signal.aborted) return;
       delays.push(milliseconds);
       clock.milliseconds += milliseconds;
       await new Promise((resolve) => setImmediate(resolve));
@@ -473,6 +475,72 @@ test('an existing cancel file counts as forwarded', async () => {
   await orchestrator.pass(controller.signal);
   await orchestrator.pass(controller.signal);
   assert.equal(supervisions.all[0]?.calls.filter((call) => call === 'cancel').length, 1);
+});
+
+test('a cancel file that cannot be written is retried at the poll interval, never in a hot loop', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS }];
+    supervision.cancel = async () => {
+      supervision.calls.push('cancel');
+      if (supervision.calls.filter((call) => call === 'cancel').length === 3) {
+        supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+      }
+      return err(failure('unavailable', 'the record is not writable'));
+    };
+  };
+  await orchestrator.pass(controller.signal);
+  await until(() => executions()[0]?.state === 'started');
+  const polls = delays.length;
+  value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));
+  await orchestrator.pass(controller.signal);
+  await orchestrator.settled();
+
+  const calls = supervisions.all[0]?.calls ?? [];
+  assert.equal(calls.filter((call) => call === 'cancel').length, 3);
+  assert.equal(delays.length - polls, 2);
+  assert.equal(executions()[0]?.state, 'exited');
+});
+
+test('a spawn claimed under another grant is reported uncertain, never as a start', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, launch: { kind: 'claim', launchAuthId: 'another-grant', supervisor: 1 } }];
+  };
+  await launchOnce();
+  assert.deepEqual(factKinds(), ['execution-uncertain']);
+});
+
+test('a cancellation after a retryable rejection of a stopped launch records its evidence', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [ok({ kind: 'rejected', rejection: launchRejection('quarantined', 'restore') })];
+  // The worker stops during the delay before the retry, after W3.
+  authority.onRequest = () => void setImmediate(() => controller.abort());
+  await launchOnce();
+  assert.deepEqual(executions()[0]?.authorizations.map(({ outcome }) => outcome), ['rejected-retryable']);
+  controller = new AbortController();
+
+  value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));
+  await launchOnce();
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
+});
+
+test('a failed record read ends the launch and is reported', async () => {
+  const failures: unknown[] = [];
+  let ids = 0;
+  orchestrator = new LaunchOrchestrator({
+    journal, authority, supervision: supervisions.factory, clock, draw: () => 0, newId: () => `id-${(ids += 1)}`,
+    sleep: async () => new Promise((resolve) => setImmediate(resolve)), onFailure: (error) => failures.push(error),
+  });
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.read = async () => err(failure('unavailable', 'the record cannot be read'));
+  };
+  await launchOnce();
+  assert.deepEqual(failures.map((failed) => (failed as { message: string }).message), ['the record cannot be read']);
 });
 
 test('a cancellation journaled before any launch records its evidence and launches nothing', async () => {

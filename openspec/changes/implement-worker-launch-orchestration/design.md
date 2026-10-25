@@ -58,7 +58,7 @@ After a usable grant:
 1. **CP2.** `prepareRecord` writes `intent` with the grant's `launchAuthId`, the deadline as a reading of the deadline clock with its boot identity, the namespace incarnation on Linux, the supervisor version, the configured command, and on Linux the configured execution account.
 2. **CP3.** W4 journals the record; from here on, a missing record is data loss, never proof of absence.
 3. **CP4.** `startSupervisor` starts the detached supervisor in launch mode. If it cannot start, `recoverExecution` decides from the record: without a launch record it seals and the worker reports `not-started`.
-4. **CP10 and CP12.** The orchestrator reads the record at an interval with `readReportedFacts`. A `handle` of a spawn commits W5s; an `exit` commits W5e (after W5s when the handle shows a spawn); a launch record sealed by the supervisor, for example past its deadline, commits W6; a corrupt or newer-format file commits `uncertain` once and stops the observation, which 20d's recovery resumes.
+4. **CP10 and CP12.** The orchestrator reads the record at an interval with `readReportedFacts`. A `handle` of a spawn commits W5s with the claimed `launchAuthId`, and a claim under another grant than its own is reported `uncertain` (review pass 3, L3); an `exit` commits W5e (after W5s when the handle shows a spawn); a launch record sealed by the supervisor, for example past its deadline, commits W6; a corrupt or newer-format file commits `uncertain` once and stops the observation, which 20d's recovery resumes.
 
 An intent whose executions all end `not-started` is launched again under D2 (journal contract, the launch intent row), unless it has been cancelled or ended meanwhile.
 
@@ -68,7 +68,7 @@ An intent whose executions all end `not-started` is launched again under D2 (jou
 
 - a launch still in D2 stops; an execution with a pending W2 or an unused grant is abandoned as in D3;
 - an execution whose record is journaled gets the `cancel` file through `requestCancellation`, which every supervisor of the execution acts on (supervisor identity section 8);
-- the cancellation's evidence is recorded (`recordCancellationEvidence`) once no launch of the intent is live and every execution of the intent is settled: `exited`, `not-started`, or never granted and finally rejected (review pass 2, M1). A pending W2 without a live launch is not settled; 20d reconciles it.
+- the cancellation's evidence is recorded (`recordCancellationEvidence`) once no launch of the intent is live and every execution of the intent is settled: `exited`, `not-started`, or never granted and rejected, finally or retryably (review passes 2, M1, and 3, L1). A pending W2 without a live launch is not settled; 20d reconciles it.
 
 A cancellation is never reported as termination: only the exit or the seal is.
 

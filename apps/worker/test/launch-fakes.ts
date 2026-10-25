@@ -150,9 +150,13 @@ export class FakeSupervision implements ExecutionSupervision {
     return ok(undefined);
   }
 
+  // A spawn the script names is claimed under the planned grant, unless the
+  // script names its own launch record.
   async read(): Promise<Result<SupervisedFacts>> {
     this.calls.push('read');
-    return ok((this.facts.length > 1 ? this.facts.shift() : this.facts[0]) ?? { problems: [] });
+    const facts = (this.facts.length > 1 ? this.facts.shift() : this.facts[0]) ?? { problems: [] };
+    if (facts.launch !== undefined || facts.process === undefined || this.plan === undefined) return ok(facts);
+    return ok({ ...facts, launch: { kind: 'claim', launchAuthId: this.plan.launchAuthId, supervisor: 1 } });
   }
 
   async recover(): Promise<Result<SupervisedRecovery>> {

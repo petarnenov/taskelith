@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-26. Author verification is recorded below; the independent review has not run yet.
+Date: 2026-10-26. Author verification is recorded below, followed by the three review passes the cap allows; the fixes of pass 3 are unreviewed.
 
 ## Scope and source
 
@@ -94,7 +94,27 @@ After the fixes, `make verify` ran with every file tracked: exit 0. 1255 tests, 
 
 ## Review pass 3
 
-Not yet run. It is the last pass the cap allows.
+- Reviewer: Claude Code with the invocation of pass 1, run by the coordinator in the worktree at `8a03e33`; the prompt named pass 2's session and forbade writing any file in the worktree. It is the last pass the cap allows.
+- Model confirmation: `claude-fable-5-1` in `modelUsage`, medium effort. Session ID: `e1c102b6-c148-4fa0-ad32-8c129952985a`.
+- Snapshot: `d30140016f4467ebfeac426e1898fce9d6c14656527fd5a7ab1d006dab0bc03c` before and after; unchanged.
+- Pass 2: every resolution confirmed.
+- Findings: 0 Critical, 0 High, 2 Medium, 7 Low.
+
+Every fix below is **unreviewed**: the review cap is reached, and the Medium findings left after the third pass go to the owner through the coordinator ([governance](../../../docs/governance.md#independent-review-process)).
+
+| Finding | Resolution (unreviewed) |
+| --- | --- |
+| M1: a cancel file that failed with another error than `conflict` made the observation sleep on an aborted signal, a hot loop | Fixed: once cancelled, the observation sleeps on the stop signal only, so a failed `cancel` is retried at the poll interval. Test with a `cancel` that answers `unavailable` and a fake sleep that honours its signal. |
+| M2: `reportLaunchFailure` printed `[object Object]` for a `Failure` | Fixed: `launchFailureLine` writes a `Failure` through `redactFailure` with its code, and anything else as an `internal` message through `redactSecrets`; tests for both. |
+| L1: a stopped launch's execution whose last outcome is a retryable rejection was never settled | Fixed: `isSettled` counts an execution never granted and rejected, finally or retryably, while no launch of the intent is live; a pending W2 stays unsettled. Test. |
+| L2: failures of seal, recover, and read ended a launch silently | Fixed: each is passed to `onFailure` through `reported` before the launch ends; a test fails the read. |
+| L3: W5s used the grant's `launchAuthId`, not the claim's | Fixed: W5s commits only when the claim names the launch's grant; a claim under another grant is reported `uncertain`. Test. |
+| L4: the "Cancellation forwarding" requirement did not match D5 | Fixed: the requirement now names any target cancelling the intent, the settled executions, and evidence at once when there is none. |
+| L5: `worker-start.ts` imported `DeadlineClock` from the adapter package | Fixed: it imports it from the port. |
+| L6: the fake sleep advanced the clock on an aborted signal | Fixed: it returns at once without advancing the clock. |
+| L7: the port types shared a file with the file adapter | Fixed: `execution-supervision-port.ts` holds the port, its types, the clock re-exports, and `sealWon`; `execution-supervision.ts` keeps the file adapter. |
+
+After the fixes, `make verify` ran with every file tracked: exit 0. 1260 tests, 1260 passed, 0 failed; coverage 99.18% lines, 91.64% branches, 98.61% functions; 0 breaking changes in each document; `openspec validate --all --strict` 60 passed; `verify:archive`, `verify:dependencies`, and `verify:package` passed. An earlier run failed only the comment length check on one new comment, which was shortened.
 
 ## Limitations
 
@@ -109,6 +129,6 @@ Not yet run. It is the last pass the cap allows.
 
 ## Remaining gates
 
-- The independent review (Claude Fable 5.1, medium), at most three passes.
+- **Owner decision:** the review cap is reached with Medium findings after pass 3 (M1, M2); their fixes are unreviewed. The coordinator brings them to the owner, as governance requires.
 - Coordinator integration into `dev` and archiving.
 - 20d: start reconciliation, the asyncapi amendment of Q2, and record removal.

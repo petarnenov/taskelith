@@ -26,7 +26,7 @@ import {
   type DeadlineReading,
   type ExecutionSupervision,
   type SupervisionFactory,
-} from './execution-supervision.js';
+} from './execution-supervision-port.js';
 
 // The provisional `ttl` and `skew` (operational targets), which bound the
 // retries of an operation before any grant names its own.
@@ -145,10 +145,12 @@ function isTerminal(execution: JournaledExecution): boolean {
   return execution.state === 'exited' || execution.state === 'not-started';
 }
 
-// Nothing more happens to it: terminal, or never granted and finally
-// rejected. A pending W2 is not settled; 20d reconciles it.
+// With no live launch, nothing more happens to it: terminal, or never
+// granted and rejected. A pending W2 is not settled; 20d reconciles it.
 function isSettled(execution: JournaledExecution): boolean {
-  return isTerminal(execution) || (execution.state === undefined && execution.authorizations.at(-1)?.outcome === 'rejected-final');
+  const outcome = execution.authorizations.at(-1)?.outcome;
+  const rejected = outcome === 'rejected-final' || outcome === 'rejected-retryable';
+  return isTerminal(execution) || (execution.state === undefined && rejected);
 }
 
 // A `cancel` file that already exists was forwarded before.
@@ -290,7 +292,7 @@ class Launch {
   // read back (W6), and launch a new execution unless cancelled (design D3).
   async #abandon(executionId: ExecutionId): Promise<Executed> {
     const sealed = await this.#options.supervision(executionId).seal();
-    if (!sealed.ok) return 'end';
+    if (!reported(this.#options, sealed)) return 'end';
     if (!sealWon(sealed.value).ok) return this.#claimedBeforeW4(executionId);
     return this.#notStarted(executionId);
   }
@@ -324,14 +326,14 @@ class Launch {
   // A record without a supervisor: a won seal proves nothing can spawn.
   async #sealWritten(executionId: ExecutionId, supervision: ExecutionSupervision): Promise<Executed> {
     const sealed = await supervision.seal();
-    if (!sealed.ok) return 'end';
+    if (!reported(this.#options, sealed)) return 'end';
     if (!sealWon(sealed.value).ok) return this.#recordUncertain(executionId);
     return this.#notStarted(executionId);
   }
 
   async #recover(executionId: ExecutionId, supervision: ExecutionSupervision, grant: LaunchGrant): Promise<Executed> {
     const recovered = await supervision.recover();
-    if (!recovered.ok) return 'end';
+    if (!reported(this.#options, recovered)) return 'end';
     switch (recovered.value.fact) {
       case 'not-started':
         return this.#notStarted(executionId);
@@ -352,15 +354,19 @@ class Launch {
     while (!this.#stopping.aborted) {
       if (this.#cancelled && !forwarded) forwarded = cancelFiled(await supervision.cancel(this.#cancelReason ?? ''));
       const facts = await supervision.read();
-      if (!facts.ok) return 'end';
+      if (!reported(this.#options, facts)) return 'end';
       if (facts.value.problems.length > 0) return this.#recordUncertain(executionId);
       if (facts.value.launch?.kind === 'seal') return this.#notStarted(executionId);
       if (!started && facts.value.process !== undefined) {
+        // The claim names the spawn's grant; another one is no start of ours.
+        const claimed = facts.value.launch?.kind === 'claim' ? facts.value.launch.launchAuthId : undefined;
+        if (claimed !== grant.launchAuthId) return this.#recordUncertain(executionId);
         if (!this.#options.journal.recordStart(executionId, grant.launchAuthId, facts.value.process).ok) return 'end';
         started = true;
       }
       if (facts.value.exit !== undefined) return this.#recordExit(executionId, facts.value.exit);
-      const wakeOn = forwarded ? this.#stopping : this.#signal;
+      // Once cancelled, the cancel signal stays aborted and cannot wake it.
+      const wakeOn = this.#cancelled ? this.#stopping : this.#signal;
       await this.#options.sleep(this.#options.pollMilliseconds ?? LAUNCH_POLL_MILLISECONDS, wakeOn);
     }
     return 'end';

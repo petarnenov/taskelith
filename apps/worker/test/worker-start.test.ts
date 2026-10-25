@@ -11,6 +11,7 @@ import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
 import type { TransportConnection, WorkerTransportEndpoint } from '@taskelith/nats';
 import { failed, id, value } from '@taskelith/testing';
 import {
+  launchFailureLine,
   serveUntilStopped,
   startWorker,
   workerMain,
@@ -317,4 +318,16 @@ test('a launch host that cannot be built fails the start', async () => {
   launching.hostAnswer = err(failure('unavailable', 'no supervisor platform'));
   const started = await startWorker({ ...settings, launch: LAUNCH }, dependencies(launching.dependencies));
   assert.equal(failed(started).code, 'unavailable');
+});
+
+test('a launch failure line keeps a failure\'s code and redacts secrets', () => {
+  const secret = `tkwk_${'S'.repeat(43)}`;
+  const failureLine = JSON.parse(launchFailureLine(failure('unavailable', `the record is gone ${secret}`)));
+  assert.equal(failureLine.error.code, 'unavailable');
+  assert.equal(JSON.stringify(failureLine).includes(secret), false);
+  const errorLine = JSON.parse(launchFailureLine(new Error(`broken ${secret}`)));
+  assert.equal(errorLine.error.code, 'internal');
+  assert.ok(errorLine.error.message.startsWith('a launch failed: broken'));
+  assert.equal(JSON.stringify(errorLine).includes(secret), false);
+  assert.equal(JSON.parse(launchFailureLine('plain')).error.message, 'a launch failed: plain');
 });
