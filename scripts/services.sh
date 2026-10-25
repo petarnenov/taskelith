@@ -40,10 +40,26 @@ teardown() {
   down
 }
 
+# Prints a process and all its descendants, parents first.
+process_tree() {
+  local child
+  echo "$1"
+  for child in $(pgrep -P "$1" 2>/dev/null || true); do process_tree "$child"; done
+}
+
+# Sends TERM to the command's process tree, waits up to 30 seconds, then
+# sends KILL to what is left of it.
 stop_command() {
   trap '' INT TERM HUP
   if [ -n "${command_pid:-}" ]; then
-    kill "$command_pid" 2>/dev/null || true
+    local tree waited=0
+    tree="$(process_tree "$command_pid")"
+    kill -TERM $tree 2>/dev/null || true
+    while kill -0 "$command_pid" 2>/dev/null && [ "$waited" -lt 30 ]; do
+      sleep 1
+      waited=$((waited + 1))
+    done
+    kill -KILL $tree 2>/dev/null || true
     wait "$command_pid" 2>/dev/null || true
   fi
   exit "$1"
