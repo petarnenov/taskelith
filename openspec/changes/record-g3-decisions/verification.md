@@ -20,6 +20,11 @@ In the worktree, Node v24.22.1, before the first review pass: `npm run openspec 
 
 Reviewer: Codex (`gpt-6.1-sol`), reasoning effort medium, read-only sandbox, run from the worktree as `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, with the prompt and log outside the worktree.
 
+- **Pass 1 — session `01a172c3-50e9-7652-8c89-ec34ab0c74d8`, head `b5c37a3`.** The header confirmed the model, reasoning effort medium, and the read-only sandbox; the snapshot (`git ls-files -co --exclude-standard | xargs shasum -a 256 | shasum -a 256`) was `70666e83…a65f` before and after the pass. The reviewer confirmed the waves, the longest chain, the numbering and references, and that only D15 still blocks. Findings: 0 Critical, 0 High, 2 Medium, 1 Low. All accepted and resolved (unreviewed until pass 2):
+  1. Medium: delegation did not return the child's outcome to the parent. Items 3, 9, and 38 add the correlated result, idempotent on redelivery and recovered after a restart; item 41 checks that the parent receives it and continues.
+  2. Medium: the terminal's process lifecycle was undefined. Item 3 attaches a terminal only to a running attempt's execution, and item 39 runs it inside that execution's authority and process set, ending on cancellation or at the attempt's end and never recovered as a separate execution; item 41 cancels the attempt while the terminal is open.
+  3. Low: item 1 still described its evaluation as preceding the decisions. It now evaluates the libraries and tools of the decided options.
+
 ## Limitations
 
 - The plan remains a draft that the G2 closure may change.
