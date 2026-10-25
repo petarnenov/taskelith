@@ -16,7 +16,7 @@ import {
   type OperationId,
 } from '@taskelith/execution';
 import { id, value } from '@taskelith/testing';
-import type { JournalClock, VolumeProbe, WorkerRootOptions } from '@taskelith/worker-journal';
+import type { JournalClock, VolumeProbe, WorkerEnrollment, WorkerRootOptions } from '@taskelith/worker-journal';
 
 export const T0: Instant = value(parseInstant('2026-10-25T09:00:00.000Z'));
 export const CLOCK: JournalClock = { now: () => T0 };
@@ -26,6 +26,12 @@ export const BINDING: JournalBinding = {
   workerId: id('WorkerId', 'worker-1'),
   journalId: id('JournalId', 'journal-1'),
   recoveryEpoch: value(parseRecoveryEpoch(1)),
+};
+
+export const ENROLLMENT: WorkerEnrollment = {
+  ...BINDING,
+  credentialGeneration: 1,
+  credentials: { controlPlane: 'tkwk_test-secret', broker: '-----BEGIN NATS USER JWT-----\ntest\n' },
 };
 
 // A fresh data root outside any checkout, resolved past symbolic links

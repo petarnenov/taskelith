@@ -17,6 +17,7 @@ import { ok } from '@taskelith/kernel';
 import { InMemoryLogSink } from '@taskelith/observability';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
 import { integrationEndpoint, integrationSecret, value } from '@taskelith/testing';
+import { productionDependencies, workerMain } from '@taskelith/worker';
 
 const POSTGRES = integrationEndpoint('TASKELITH_POSTGRES_URL');
 const NATS = integrationEndpoint('TASKELITH_NATS_URL');
@@ -338,6 +339,29 @@ describe('delegation', () => {
 });
 
 describe('enrollment and quarantine', () => {
+  test('a worker enrolls on its first start, then connects with its stored broker credential', async () => {
+    const issued = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operator });
+    const environment = {
+      TASKELITH_DATA_DIR: join(base, 'worker-root'), TASKELITH_CONTROL_PLANE_URL: `http://127.0.0.1:${running.api.port}/`, TASKELITH_NATS_URL: NATS.href,
+    };
+    // The test volume may be tmpfs, which the real probe refuses.
+    const dependencies = (settings: Parameters<typeof productionDependencies>[0]) => ({
+      ...productionDependencies(settings), probe: () => ok({ platform: 'darwin' as const, filesystem: 'apfs', local: true }),
+    });
+    const lines: string[] = [];
+    const first = await workerMain({ ...environment, TASKELITH_ENROLLMENT_TOKEN: issued.enrollmentToken as string }, (line) => lines.push(line), dependencies);
+    assert.ok(first, lines.join('\n'));
+    await first.transport.connection.flush();
+    const [row] = await sql<{ journal_id: string }>(database, 'SELECT journal_id FROM workers WHERE worker_id = $1', [first.identity.workerId]);
+    assert.equal(row?.journal_id, first.identity.journalId);
+    await first.stop();
+    const again = await workerMain(environment, (line) => lines.push(line), dependencies);
+    assert.ok(again, lines.join('\n'));
+    await again.transport.connection.flush();
+    assert.equal(again.identity.workerId, first.identity.workerId);
+    await again.stop();
+  });
+
   test('a worker enrolls over the API with its token once', async () => {
     const issued = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operator });
     const body = {

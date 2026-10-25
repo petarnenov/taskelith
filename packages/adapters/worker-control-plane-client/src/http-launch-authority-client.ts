@@ -9,32 +9,27 @@ import {
 } from '@taskelith/execution';
 import { err, failure, ok, parseIdentifier, parseInstant, type Result } from '@taskelith/kernel';
 import { parseArtifactRevision, parseGeneration, parseOwnershipGeneration, type ArtifactRevision } from '@taskelith/sdlc';
+import { postJson, statusFailure, type ControlPlaneEndpoint } from './control-plane-http.js';
 
-export interface ControlPlaneClientSettings {
-  // The API's base, such as `https://control-plane:8443/`.
-  readonly baseUrl: URL;
+export interface ControlPlaneClientSettings extends ControlPlaneEndpoint {
   // The control-plane secret of the worker's current credential generation.
   readonly credential: string;
-  readonly timeoutMilliseconds: number;
-  readonly fetch?: typeof fetch;
 }
 
 // `authorizeLaunch` over HTTP with the built-in fetch. A 503, a timeout,
 // or a lost connection is `unavailable`: no decision was reached.
 export class HttpLaunchAuthorityClient implements LaunchAuthorityClient {
   readonly #settings: ControlPlaneClientSettings;
-  readonly #fetch: typeof fetch;
 
   constructor(settings: ControlPlaneClientSettings) {
     this.#settings = settings;
-    this.#fetch = settings.fetch ?? fetch;
   }
 
   async authorize(request: LaunchAuthorizationRequest): Promise<Result<LaunchOutcome>> {
-    const answered = await this.#post(request);
+    const answered = await postJson(this.#settings, 'launch-authorizations', this.#settings.credential, request);
     if (!answered.ok) return answered;
     const { status, body } = answered.value;
-    if (status !== 200) return err(statusFailure(status, body));
+    if (status !== 200) return err(statusFailure('authorizeLaunch', answered.value));
     const checked = checkHttpSchema('LaunchAuthorizationOutcome', body);
     if (!checked.ok) return err(failure('internal', 'the launch outcome violates its schema', { violation: checked.error[0] ?? '' }));
     const outcome = parseOutcome(body as HttpSchemas['LaunchAuthorizationOutcome']);
@@ -44,33 +39,6 @@ export class HttpLaunchAuthorityClient implements LaunchAuthorityClient {
     }
     return outcome;
   }
-
-  async #post(request: LaunchAuthorizationRequest): Promise<Result<{ status: number; body: unknown }>> {
-    const { baseUrl, credential, timeoutMilliseconds } = this.#settings;
-    try {
-      const response = await this.#fetch(new URL('launch-authorizations', withTrailingSlash(baseUrl)), {
-        method: 'POST',
-        headers: { authorization: `Bearer ${credential}`, 'content-type': 'application/json' },
-        body: JSON.stringify(request),
-        signal: AbortSignal.timeout(timeoutMilliseconds),
-      });
-      return ok({ status: response.status, body: await response.json().catch(() => undefined) });
-    } catch (error) {
-      // The request may have reached a decision, which a retry replays.
-      const cause = error instanceof Error ? error.name : 'unknown';
-      return err(failure('unavailable', 'the control plane did not answer', { cause }));
-    }
-  }
-}
-
-// A 503, or a proxy's timeout or bad gateway, reached no decision, so the
-// same operation is retried; every other status ends it.
-const UNDECIDED_STATUSES = new Set([502, 503, 504]);
-
-function statusFailure(status: number, body: unknown) {
-  const message = typeof (body as { message?: unknown })?.message === 'string' ? (body as { message: string }).message : '';
-  const code = UNDECIDED_STATUSES.has(status) ? 'unavailable' : status === 401 ? 'forbidden' : status === 400 ? 'invalid' : 'internal';
-  return failure(code, `authorizeLaunch answered ${status}${message === '' ? '' : `: ${message}`}`, { status: String(status) });
 }
 
 // A grant for another operation or execution is never used (section 6).
@@ -78,11 +46,6 @@ function bindsRequest(grant: LaunchGrant, request: LaunchAuthorizationRequest): 
   const bound = ['operationId', 'recoveryEpoch', 'assignmentId', 'attemptId', 'ownershipGeneration', 'executionId', 'admissionId',
     'admissionGeneration'] as const;
   return bound.every((field) => grant[field] === request[field]);
-}
-
-// A base without a trailing slash would drop its last path segment.
-function withTrailingSlash(base: URL): URL {
-  return base.pathname.endsWith('/') ? base : new URL(`${base.pathname}/${base.search}`, base);
 }
 
 function parseOutcome(body: HttpSchemas['LaunchAuthorizationOutcome']): Result<LaunchOutcome> {
