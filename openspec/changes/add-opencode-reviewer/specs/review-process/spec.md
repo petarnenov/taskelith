@@ -33,8 +33,12 @@ A change's `verification.md` SHALL record each failed review attempt with its ti
 - **THEN** `verification.md` lists each failed attempt with its time, and the pass numbering continues
 
 ### Requirement: Rotation order
-Rotation SHALL follow the order of the authorized reviewer list in the governance policy, skipping a reviewer that is unavailable or paused, and a new change SHALL go to the reviewer after the one most recently assigned.
+Rotation SHALL follow the order of the authorized reviewer list in the governance policy, skipping a reviewer that is unavailable, paused, or unable to meet the change's review requirements. A new change SHALL go to the reviewer after the one most recently assigned, for whatever reason it was assigned.
 
 #### Scenario: Reviewer after a replacement
 - **WHEN** a replacement reviewer was the most recently assigned
 - **THEN** the next new change goes to the reviewer after the replacement in the list
+
+#### Scenario: Reviewer that cannot meet the requirements
+- **WHEN** the next reviewer in the list lacks network access and the change depends on external facts
+- **THEN** it is skipped for that change

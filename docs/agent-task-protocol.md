@@ -45,18 +45,11 @@ Run each reviewer from the task's worktree, read-only, with the model and effort
 | --- | --- | --- |
 | Codex CLI | `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>` | Model, reasoning effort, read-only sandbox, and session ID in the output header. Always pass `-s read-only`, because a local configuration may default to full access. No network access. |
 | Antigravity CLI | `agy -p "<prompt>" --model gemini-4-argon-medium --effort medium --mode plan --output-format json --log-file <log>` | Model in the log; `conversation_id` in the JSON output. Has network access. |
-| OpenCode CLI | `opencode run --standalone --agent reviewer -m 'opencode/deepseek-v4.1-flash#high' --format json --title <change> "$(cat <prompt-file>)" > <log>` | The model and variant are set by `-m`; the `sessionID` is in the JSON events. `--standalone` runs a private server in the worktree; without it the run attaches to the background service, which may run in another directory. Never pass `--auto`. The `reviewer` agent in the user's OpenCode configuration must deny editing and allow only read-only shell commands. Has network access. |
+| OpenCode CLI | `opencode run --standalone --agent reviewer -m 'opencode/deepseek-v4.1-flash#high' --format json --title <change> "$(cat <prompt-file>)" > <log>` | The model and variant are set by `-m`; the `sessionID` is in the JSON events. `--standalone` runs a private server in the worktree; without it the run attaches to the background service, which may run in another directory. Never pass `--auto`. The `reviewer` agent in the user's OpenCode configuration must deny editing and allow only an allowlist of read-only shell commands; the snapshot remains the proof. Web fetch and search are allowed in that agent. |
 | Claude Code | `claude -p "<prompt>" --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json` | `claude-fable-5-1` in the JSON `modelUsage`; `session_id` in the JSON output. Can reach the network. |
 
-If a review attempt does not run to a report for any reason, for example an error, no session, or a quota limit, the worker does not retry that reviewer for 30 minutes and proposes the next reviewer in the rotation that meets the task's review requirements to the coordinator, as the governance rule "Unavailable reviewer" sets out. The replacement is briefed with the earlier passes. Failed attempts do not count as passes, and the pass count carries over.
+If a review attempt does not run to a report for any reason, for example an error, no session, or a quota limit, the worker does not retry that reviewer for 30 minutes and proposes the next reviewer in the rotation that meets the task's review requirements to the coordinator (a coordinator that develops the task itself chooses it and records why), as the governance rule "Unavailable reviewer" sets out. The replacement is briefed with the earlier passes. Failed attempts do not count as passes, and the pass count carries over.
 
-### Reviewer pauses
-
-A reviewer with a pause longer than the 30 minutes of "Unavailable reviewer" is listed here until the pause ends.
-
-| Reviewer | Paused until | Reason |
-| --- | --- | --- |
-| Antigravity CLI | about 2026-10-31 13:25 local time | Quota limit (HTTP 429) |
 
 Snapshot before and after each pass, and compare the two. Include any external evidence directory shared with the reviewer as well.
 
@@ -65,3 +58,11 @@ git ls-files -co --exclude-standard | xargs shasum -a 256 | shasum -a 256
 ```
 
 The prompt names the criteria (`AGENTS.md`, [ADR 0004](decisions/0004-first-class-engineering-principles.md), the governance review process, and the specifications the change touches). It asks for every instance of a problem with its severity, file and line, and a fix, and for counts per severity at the end. For a later pass, it names the earlier pass's session and asks the reviewer to confirm each finding's resolution before reviewing the whole change again.
+
+### Reviewer pauses
+
+A reviewer with a pause longer than the 30 minutes of "Unavailable reviewer" is listed here until the pause ends. The coordinator adds a row when a reviewer reports a reset time more than 30 minutes away, and removes it after the first successful run.
+
+| Reviewer | Paused until | Reason |
+| --- | --- | --- |
+| Antigravity CLI | about 2026-10-31 13:25 local time | Quota limit (HTTP 429) |

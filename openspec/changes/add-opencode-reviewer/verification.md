@@ -18,13 +18,16 @@ The coordinator developed this change itself, following the worker steps. Base r
   - Findings: Critical 0, High 1, Medium 6, Low 7.
   - A first attempt without `--standalone` attached to the background service and stalled without output.
 - **Configuration.**
-  - The `reviewer` agent was added to `~/.config/opencode/opencode.jsonc`, and the previous file was backed up next to it.
+  - The `reviewer` agent was added to `~/.config/opencode/opencode.jsonc`. The previous file was backed up as `opencode.jsonc.bak-reviewer-20261025135248`.
   - Probes in a detached worktree showed the following:
     - denied: an `echo` redirection and a chained `touch`;
     - allowed: `git log` and `grep | head`;
     - a first allowlist let `cat … >`, `sed -n … >`, and `git diff >` write files. The probe files were removed.
   - Deny rules for redirection, command substitution, `tee`, `xargs`, `sed -i`, `--output`, and `-exec` were added.
   - A second probe denied `cat … >`, `>>`, `git diff --output=`, `| tee`, and `sed -i`, and allowed `git log` and `grep | head`. No file was created.
+  - The probe sessions were `ses_e8d17ac14ffeg0GBZopG88YbhX`, `ses_e8d177766ffer5qUld6Ope3GFg`, and `ses_e8d16e6bfffefvOuaiXpLerqsz`, at 13:53, 13:53, and 13:54 local time. They ran the documented invocation without `--title`: `opencode run --standalone --agent reviewer -m 'opencode/deepseek-v4.1-flash#high' --format json`. Each completed, and its JSON events carried the `sessionID`. So `-m` with the `#high` variant was accepted.
+  - After review pass 1, `sed -n` and `git grep` were removed from the allowlist, and `--pre`, `--ext-diff`, and `--textconv` were denied.
+  - A qualification run of the full documented invocation started at about 14:20 local time. It produced no output in 10 minutes, and the snapshot stayed equal. Two pings at about 14:31, with and without `-m`, also produced no output in 2 minutes. Under "Unavailable reviewer", OpenCode is unavailable for 30 minutes from those attempts. The cause, the service or the network, is not established.
 
 ## Trial findings and their resolution
 
@@ -57,11 +60,32 @@ The coordinator developed this change itself, following the worker steps. Base r
 Node v24.22.1, in the worktree:
 
 - `npm run openspec -- validate add-opencode-reviewer --strict` passed.
-- `make verify` results are listed below, per head.
+- `make verify` passed at `5c74e1b` before pass 1: 728 tests passed, 0 failed, and the comment check passed.
+- After the pass 1 fixes, `make verify` passed at the head reviewed by pass 2, which this record names.
 
 ## Independent review
 
-Reviewer: Claude Code with `claude-fable-5-1`, effort `medium`. The rotation would give OpenCode this change, which follows Codex, the most recently assigned reviewer, when Antigravity is skipped. This change governs OpenCode itself, so it needs another reviewer.
+Reviewer: Claude Code with `claude-fable-5-1`, effort `medium`, invoked as `claude -p "<prompt>" --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json`.
+
+The rotation would give this change to OpenCode: Codex was the most recently assigned, and Antigravity is skipped. The coordinator took the rotation's exception for a task that needs a particular reviewer, because this change defines OpenCode's own authorization and invocation, and a reviewer that is not its subject reviews it.
+
+### Pass 1
+
+Session `9cec1f01-c535-4a5f-81da-315bd8982503`, model `claude-fable-5-1` confirmed in the JSON `modelUsage`, at `5c74e1b`. The SHA-256 snapshots before and after were equal.
+
+Findings: Critical 0, High 0, Medium 4, Low 7.
+
+1. Medium: the Rotation bullet carried mechanics derived by the coordinator under the owner's attribution. Fixed: that sentence is marked as the coordinator's.
+2. Medium: rotation skipped only unavailable or paused reviewers, and a forced assignment was undefined. Fixed: a reviewer that cannot meet the requirements is also skipped, any assignment counts as the most recent, and a scenario covers the skip.
+3. Medium: no `make verify` result was recorded. Fixed under Checks.
+4. Medium: the documented invocation had no evidence. Fixed: the probe sessions show that `-m` with `#high` and the `sessionID` work. The full run's failure is recorded under the configuration.
+5. Low: "Reviewer pauses" swallowed the snapshot and prompt paragraphs. Fixed: the subsection moved to the end of the section.
+6. Low: the read-only claims were overstated. Fixed: the wording says "allowlist", and the snapshot is named as the proof. `sed` and `git grep` were removed, and more deny rules were added.
+7. Low: network access was stated as observed. Fixed: "Web fetch and search are allowed in that agent".
+8. Low: the OpenCode skip had no recognized ground. Fixed: it is recorded as the rotation's exception, with its reason.
+9. Low: who lists a pause was undefined. Fixed: the coordinator adds a row when the reset time is more than 30 minutes away, and removes it after the first successful run.
+10. Low: the protocol and the skill omitted the case where the coordinator develops the task itself. Fixed.
+11. Low: the probes had no sessions, and the backup had no name. Fixed under the configuration.
 
 ## Limitations
 

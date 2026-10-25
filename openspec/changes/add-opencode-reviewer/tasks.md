@@ -10,5 +10,5 @@
 
 ## 3. Verification and review
 
-- [ ] 3.1 Run `make verify` and the OpenSpec strict validation.
+- [x] 3.1 Run `make verify` and the OpenSpec strict validation.
 - [ ] 3.2 Obtain independent review, from Claude Fable 5.1 medium, and record the results.
