@@ -50,11 +50,15 @@ Enrollment SHALL return a control-plane bearer secret and a NATS `.creds` file o
 - **THEN** the sweep keeps the previous credential, records no revocation, sets the stored expiry time back to the record's, and expires it only when that time has passed
 
 ### Requirement: Broker permissions and revocation
-A worker's broker user SHALL publish only to its own consumer API, acknowledgements, and observation subject, and subscribe only under its own inbox prefix. A revocation SHALL reach the server through the system account without a reload, and SHALL disconnect the user.
+A worker's broker user SHALL publish only to its own consumer API, acknowledgements, observation subject, and heartbeat subject, and subscribe only under its own inbox prefix. A revocation SHALL reach the server through the system account without a reload, and SHALL disconnect the user.
 
 #### Scenario: Forged observation
 - **WHEN** a worker publishes on another worker's observation subject
 - **THEN** the server reports a permissions violation
+
+#### Scenario: Forged heartbeat
+- **WHEN** a worker publishes a heartbeat on its own and on another worker's heartbeat subject
+- **THEN** only its own heartbeat is delivered, and the server reports a permissions violation for the other
 
 #### Scenario: Revoked worker
 - **WHEN** a connected worker is revoked
