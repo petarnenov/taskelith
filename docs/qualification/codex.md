@@ -177,7 +177,7 @@ The findings agree with the Claude Code qualification, so the harness-neutral po
 
 ## Remaining before admission
 
-- The review of OpenAI's data-handling terms, and of whether its terms allow pooled subscriptions for automated use (ADR 0005), is recorded on 2026-10-25 in [Provider terms review](#provider-terms-review), from Wayback Machine snapshots because the live pages returned HTTP 403; the owner decided D15 on 2026-10-25: (a), accept the remaining risk ([G3 plan](../g3-plan.md#owner-decisions)); admission follows in G3 ([ADR 0007](../decisions/0007-g0-closure.md)).
+- The review of OpenAI's data-handling terms, and of whether its terms allow pooled subscriptions for automated use (ADR 0005), is recorded on 2026-10-25 in [Provider terms review](#provider-terms-review), from Wayback Machine snapshots because the live pages returned HTTP 403; the owner decided D15 on 2026-10-25: (a), accept the remaining risk ([G3 plan](../g3-plan.md#owner-decisions)); admission remains subject to the other qualification gates in G4 ([ADR 0007](../decisions/0007-g0-closure.md)).
 - Linux x64 and arm64 in the planned worker container image (G2, [ADR 0007](../decisions/0007-g0-closure.md)), and macOS arm64.
 - Non-permission input requests, and repeated runs.
 - The cause of the temporary-directory fallback after a crash.
