@@ -34,7 +34,7 @@ From item 18:
 ## Evidence
 
 - **Environment:** macOS 26.6.2 arm64, Node v24.22.1 (`.nvmrc`), and Docker with the Compose services of `make verify` (PostgreSQL, NATS, Toxiproxy).
-- **Dependencies and contracts:** no dependency was added, and no contract changed.
+- **Dependencies and contracts:** no dependency was added. `execution.openapi.json` moved from 0.3.0 to 0.3.1 to declare the 500 and 503 failures of `requestDelegation` (review pass 1). `make contract-compatibility` reports no breaking change.
 - **Test grants:** they are seeded with `authorizedUnder` (decision Q6) where an execution is needed.
 - **Merge resolution:**
   - `ControlPlaneTransaction` extends `CapacityTransaction`, keeps `placements` and `delegations`, and adds item 17's `revisions` and `launches`.
@@ -105,6 +105,18 @@ It ran from the worktree. The prompt and log were kept in the session's scratch 
 | L7 | `listByAttempt` ordered differently in the two adapters. | Fixed: the port leaves the order unspecified, and the suite compares without order. |
 | M8 | There were no tests of concurrent passes, of the rollback of a failed re-placement, or of the current revisions of a delegated child. | Fixed: PostgreSQL tests for each. |
 | L9 | The proposal named an old contract version. | Fixed. |
+
+### Pass 2
+
+- Session `01a1744a-1565-7543-887e-b668e3bf5e0f`, 2026-10-25 20:19 to 20:22, on `959b3f7`.
+- Snapshot `38aff9c3…8cfd66ca` before and after: unchanged.
+- Result: Critical 0, High 1, Medium 0, Low 1. The reviewer confirmed each pass-1 finding resolved.
+- The fix is in `389c3fa`, and the record fix in the commit that follows it. A High finding needs another pass, so pass 3 follows.
+
+| # | Finding | Disposition |
+| --- | --- | --- |
+| H10 | With more than 100 projects whose first 100 tasks were blocked, every read chose the same 100, because the backoff filtered only after the limited read. | Fixed: the queue leaves out the tasks that are backing off before the ranking and the limit. A backoff entry is forgotten 60 seconds after its next try without a new failure, not when the task is missing from one page. The spec delta has the scenario "Blocked batch", and a PostgreSQL regression places project 101's task behind 100 blocked projects. |
+| L11 | This record said that no contract changed. | Fixed: the evidence names the compatible move to 0.3.1. |
 
 ## Limitations
 
