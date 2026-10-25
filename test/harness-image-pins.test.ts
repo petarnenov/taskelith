@@ -7,13 +7,26 @@ interface LockedPackage {
   readonly resolved?: string;
   readonly integrity?: string;
   readonly os?: readonly string[];
+  readonly cpu?: readonly string[];
+  readonly libc?: readonly string[];
+  readonly dependencies?: Record<string, string>;
+  readonly optionalDependencies?: Record<string, string>;
+}
+
+interface PlatformPackage {
+  readonly name: string;
+  readonly os: string;
+  readonly cpu: string;
+  readonly libc?: string;
 }
 
 interface Harness {
   readonly name: string;
   readonly version: string;
   readonly record: string;
-  readonly linuxPackages: readonly string[];
+  /** How the harness's lock entry names a platform package version. */
+  readonly optionalSpecifier: (version: string) => string;
+  readonly platformPackages: readonly PlatformPackage[];
 }
 
 const HARNESS_DIRECTORY = 'infra/installation/harnesses';
@@ -25,13 +38,23 @@ const HARNESSES: readonly Harness[] = [
     name: '@anthropic-ai/claude-agent-sdk',
     version: '0.3.308',
     record: 'docs/qualification/claude-code.md',
-    linuxPackages: ['@anthropic-ai/claude-agent-sdk-linux-x64', '@anthropic-ai/claude-agent-sdk-linux-arm64'],
+    optionalSpecifier: (version) => version,
+    platformPackages: [
+      { name: '@anthropic-ai/claude-agent-sdk-linux-x64', os: 'linux', cpu: 'x64', libc: 'glibc' },
+      { name: '@anthropic-ai/claude-agent-sdk-linux-arm64', os: 'linux', cpu: 'arm64', libc: 'glibc' },
+      { name: '@anthropic-ai/claude-agent-sdk-darwin-x64', os: 'darwin', cpu: 'x64' },
+    ],
   },
   {
     name: '@openai/codex',
     version: '0.164.0',
     record: 'docs/qualification/codex.md',
-    linuxPackages: ['@openai/codex-linux-x64', '@openai/codex-linux-arm64'],
+    optionalSpecifier: (version) => `npm:@openai/codex@${version}`,
+    platformPackages: [
+      { name: '@openai/codex-linux-x64', os: 'linux', cpu: 'x64' },
+      { name: '@openai/codex-linux-arm64', os: 'linux', cpu: 'arm64' },
+      { name: '@openai/codex-darwin-x64', os: 'darwin', cpu: 'x64' },
+    ],
   },
 ];
 
@@ -39,7 +62,7 @@ const manifest = JSON.parse(readFileSync(`${HARNESS_DIRECTORY}/package.json`, 'u
   readonly dependencies: Record<string, string>;
 };
 const lock = JSON.parse(readFileSync(`${HARNESS_DIRECTORY}/package-lock.json`, 'utf8')) as {
-  readonly packages: Record<string, LockedPackage & { readonly dependencies?: Record<string, string> }>;
+  readonly packages: Record<string, LockedPackage>;
 };
 const dockerfile = readFileSync('infra/installation/Dockerfile', 'utf8');
 
@@ -71,24 +94,30 @@ test('every locked package comes from the registry with an integrity hash', () =
   }
 });
 
-test('each harness locks its pinned version and Linux packages', () => {
+test('each harness locks its version and platform packages', () => {
   for (const harness of HARNESSES) {
-    assert.equal(locked(harness.name).version, harness.version, harness.name);
-    for (const name of [harness.name, ...harness.linuxPackages]) {
-      const entry = locked(name);
-      assert.ok(entry.version?.startsWith(harness.version), name);
-      assert.ok(entry.resolved?.endsWith(`-${entry.version}.tgz`), `${name} resolves to its version`);
+    const root = locked(harness.name);
+    assert.equal(root.version, harness.version, harness.name);
+    assert.ok(root.resolved?.endsWith(`-${harness.version}.tgz`), harness.name);
+    for (const platform of harness.platformPackages) {
+      const entry = locked(platform.name);
+      assert.ok(entry.version?.startsWith(harness.version), platform.name);
+      assert.ok(entry.resolved?.endsWith(`-${entry.version}.tgz`), `${platform.name} resolves to its version`);
+      assert.equal(root.optionalDependencies?.[platform.name], harness.optionalSpecifier(entry.version ?? ''));
+      assert.deepEqual(entry.os, [platform.os], platform.name);
+      assert.deepEqual(entry.cpu, [platform.cpu], platform.name);
+      assert.deepEqual(entry.libc, platform.libc === undefined ? undefined : [platform.libc], platform.name);
     }
-    for (const platform of harness.linuxPackages) assert.deepEqual(locked(platform).os, ['linux'], platform);
   }
 });
 
-test('each qualification record states the locked integrity hashes', () => {
+test('each qualification record pairs every locked version with its integrity', () => {
   for (const harness of HARNESSES) {
     const record = readFileSync(harness.record, 'utf8');
-    assert.ok(record.includes(`\`${harness.name}@${harness.version}\``), harness.record);
-    for (const name of [harness.name, ...harness.linuxPackages]) {
-      assert.ok(record.includes(locked(name).integrity ?? '-'), `${harness.record} states ${name}`);
+    for (const name of [harness.name, ...harness.platformPackages.map((platform) => platform.name)]) {
+      const entry = locked(name);
+      const pair = `\`${name}@${entry.version}\` \`${entry.integrity}\``;
+      assert.ok(record.includes(pair), `${harness.record} states ${pair}`);
     }
   }
 });
