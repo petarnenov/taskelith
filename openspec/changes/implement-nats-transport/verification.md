@@ -65,6 +65,7 @@ Recorded before pass 1.
 
 - At `44e57b1`, before pass 1, with the package's files still untracked: 743 tests passed, 0 failed; coverage 99.18% lines, 92.93% branches, 98.97% functions. The comment check reads only tracked files, so it missed five three-line comments in the new package (pass-1 finding H2), and the pre-push hook would have failed. That run is therefore not valid for `44e57b1`.
 - At `beb3b94`, after the pass-1 fixes, with every file tracked: 745 tests passed, 0 failed; coverage 99.18% lines, 92.95% branches, 98.97% functions. The comment, boundary, coverage-scope, dependency-inventory, and OpenSpec checks pass.
+- At `1a02c86`, after the pass-2 fixes: 745 tests passed, 0 failed; coverage 99.21% lines, 93.03% branches, 98.98% functions. The comment, boundary, coverage-scope, dependency-inventory, and OpenSpec checks pass.
 - `npm run openspec -- validate implement-nats-transport --strict` passed at each of these revisions.
 
 ## Independent review
@@ -84,6 +85,18 @@ Assigned reviewer: Claude Code with `claude -p "<prompt>" --model claude-fable-5
   10. Low: a redrive whose record removal failed can be repeated under the same identity. Recorded as a risk in the design; the receiver's inbox stops the repeat.
   11. Low: this record claimed coverage and a passing run before they were recorded. The claims now point to the checks.
   12. Low: the test-only `@taskelith/postgres` dependency for a type pin contradicted the design. It is removed, and the design says that item 16's wiring type-checks the pairing.
+
+- **Pass 2 — session `d7c55d13-0ad6-44ad-9ac5-f052edc5f09e`,** reviewed `git diff 44e57b1 1a95f23` for the resolutions, then `git diff 61946e7 1a95f23` as a whole. The JSON `modelUsage` reports `claude-fable-5-1`. Snapshot before and after: `4fe197fd…b3b7f`, equal. The reviewer ran the comment check, the unit tests, and OpenSpec validation, and judged the integration tests by reading.
+  - It confirmed pass-1 findings 1 to 3, 5, 7, 8, 11, and 12 fully resolved, and 6, 9, and 10 resolved as recorded decisions or risks. It found finding 4 resolved in part; the gap is finding 2 below.
+  - Findings: 0 Critical, 0 High, 1 Medium, 7 Low, all resolved at `1a02c86`:
+  1. Medium: after a failed commit, the next command of the same worker is delivered first, while the documents promised order. The contract makes no rule depend on delivery order, so the design and the spec now say that order holds only while commits succeed. An obligation for item 20 is recorded above: it must handle each command whatever arrived before it.
+  2. Low: an advisory without `consumer`, or a reason with a line break, made the header code throw, which stopped the capture. `readAdvisory` now requires `consumer` and `deliveries`, line breaks in header values become spaces, and any throw while copying redelivers only that advisory. The integration test adds an advisory without `consumer`.
+  3. Low: the consumer was looked up on every pull. It is now looked up once, and again only after a failed pull.
+  4. Low: the consumer update path was untested. The topology test now updates a worker and an observation consumer and reads their configuration.
+  5. Low: `Quarantine` used the production delays. It now takes the limits as an optional argument.
+  6. Low: the operational target called `max_ack_pending` twice the concurrency, although the adapter holds one message in flight. The row now calls it a broker-side ceiling.
+  7. Low: `records()` read the whole quarantine stream. It now reads one page from a given sequence, which a test pages through.
+  8. Low: task 3.2 was unchecked. It is checked with the final run.
 
 ## Remaining gates
 
