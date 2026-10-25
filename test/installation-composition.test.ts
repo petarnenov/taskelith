@@ -118,7 +118,7 @@ test('the effective user of a stage follows its parents', () => {
 });
 
 test('long-running services run unprivileged', () => {
-  for (const target of ['control-plane', 'worker']) assert.equal(isRoot(effectiveUser(stages, target)), false, target);
+  for (const target of ['control-plane', 'worker', 'worker-harnesses']) assert.equal(isRoot(effectiveUser(stages, target)), false, target);
   for (const [name, service] of Object.entries(services)) {
     if (service.image.startsWith('taskelith-')) assert.equal(service.user, undefined, name);
   }

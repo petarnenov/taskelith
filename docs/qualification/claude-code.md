@@ -1,6 +1,6 @@
 # Claude Code harness qualification
 
-Date: 2026-10-24. Status: macOS x86_64 evidence for the first harness (G3) selected in [ADR 0003](../decisions/0003-first-integrations-and-plugin-kernel.md). Claude Code stays `candidate` in the [dependency register](../dependencies.md). Linux, macOS arm64, provider alternatives, repeated runs, and independent adoption evidence remain open. No plugin code exists yet.
+Date: 2026-10-24. Status: macOS x86_64 evidence for the first harness (G3) selected in [ADR 0003](../decisions/0003-first-integrations-and-plugin-kernel.md). Claude Code stays `candidate` in the [dependency register](../dependencies.md). Linux x86_64 evidence without credentials in the worker image was added on 2026-10-25 ([Linux worker image](#linux-worker-image)); Linux capability scenarios, Linux arm64, macOS arm64, provider alternatives, repeated runs, and independent adoption evidence remain open. No plugin code exists yet.
 
 Sources: outside the [Provider terms review](#provider-terms-review), a link labeled "docs" is an unversioned page retrieved on 2026-10-24, and every other external source is pinned to an exact package version or tag. The terms review cites unversioned pages accessed on 2026-10-25 and one dated Wayback Machine snapshot; its source table gives each effective or modified date where the page states one.
 
@@ -10,6 +10,8 @@ Sources: outside the [Provider terms review](#provider-terms-review), a link lab
 | --- | --- |
 | Package | `@anthropic-ai/claude-agent-sdk@0.3.308`. The SDK has only `latest` (0.3.310) and `next` dist-tags; 0.3.308 matches the CLI package's `stable` dist-tag (2.1.308) |
 | Harness binary | The SDK's bundled `@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.308` reports `2.1.308 (Claude Code)`; SHA-256 `9a0bc140f5fb06e6366624d770371ef290e6731d1e84c4def5daf4df946d1b59` |
+| Linux binary | `@anthropic-ai/claude-agent-sdk-linux-x64@0.3.308` reports `2.1.308 (Claude Code)`; SHA-256 `356733f185fa988e6bf3aa9a555269fdd167982a2e2a80d3c8a78037bb92ad58` ([Linux worker image](#linux-worker-image)) |
+| Lockfile integrity | Worker image variant, `infra/installation/harnesses/package-lock.json`, as name, locked version, and integrity: `@anthropic-ai/claude-agent-sdk@0.3.308` `sha512-oda1EZ4wjculEQWjakYSEM12qiB4hU2jgMEhg9bvNhW++tvp8CKZ9ad6gVAl3psADktEg6C8MYGlfNpvnO47Ug==`; `@anthropic-ai/claude-agent-sdk-linux-x64@0.3.308` `sha512-wuV+isiZwoq/gk18sSE8n2kceABC/INePiSY/wo3Hfnp++D/0cmfuTw3EMD6eC24woJjiDijPqIg1XnfPXeeaw==`; `@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.308` `sha512-w7POEEUooA+4PV2a3MKMV5YWEdiz1QfB/B2DMCCSBvpsFFddesTFDO4rOIrYsoWG4zj9MHm/g5PvpcNobUQvwA==`; `@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.308` `sha512-F3ODpsTc3OG96pK86S2GUH95BfTqg8SO0fycfP6IEjkT8lrP5/IL5ExbnvbAy4TuuPJyVzeUm5Ho3gkytjhUdg==`. The darwin-x64 entry ties the lock to the macOS binary above |
 | Published | 2026-10-22. The SDK has had 147 releases on the 0.3 line since 2026-05-14, and the CLI 27 releases in the last 30 days, so the plugin must pin an exact version and re-qualify on upgrade |
 | Platforms in scope | Native packages for Linux x64/arm64 (glibc and musl) and macOS x64/arm64; Windows packages also exist but are out of scope ([npm](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk/v/0.3.308)) |
 
@@ -164,14 +166,41 @@ These findings constrain the port contract, not the kernel. Per ADR 0003 decisio
 
 Proposal for the port design, not yet decided: each plugin manifest declares its telemetry switch and expected outbound destinations, so the egress test can be generated from the manifest.
 
+## Linux worker image
+
+Run: `make qualify-harnesses OUT=<dir>` at revision `c0f7bf8`, finished at 2026-10-25T22:59:40Z on macOS 26.6.2 (x86_64) with Docker Desktop (engine 29.5.2). The script builds the `worker-harnesses` target of `infra/installation/Dockerfile` from a `git archive` of the tracked files on `ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac` with Node.js 24.22.1. The linux/amd64 image ID was `sha256:15e680d4e7debcc494182ec5cee264c1636792619bd7083f78a9def265ca2505`. The run's `image.txt` records the SHA-256 of the Dockerfile (`2abdb24b…`), the harness manifest (`2a3472f9…`) and lockfile (`5cec02e4…`), `qualify.sh` (`9e3ccb05…`), and `scripts/harness-qualification.sh` (`c1c1a661…`), and the steps record the environment and the names of all its variables, none of which contains `KEY`, `TOKEN`, or `SECRET`. `npm ci --ignore-scripts` installed the harnesses from `infra/installation/harnesses/package-lock.json`, checking every tarball against its `sha512` integrity. The steps in `infra/installation/harnesses/qualify.sh` ran once, as the `taskelith` user, with `--network none`. They ran with `DISABLE_AUTOUPDATER=1` and `DISABLE_TELEMETRY=1`, and a home under the data root with dedicated `CLAUDE_CONFIG_DIR` and `CODEX_HOME` directories; the `CODEX_HOME` holds a `config.toml` with `check_for_update_on_startup = false`. Each step has an expected exit status, and the login and write steps also an expected output; every step matched.
+
+Host side-effect check: the compared directories are the qualification home, which holds both configuration directories, and `/opt/harnesses`, the installed harness binaries. Before and after the steps, `qualify.sh` listed their entries with type, mode, and link target, plus the SHA-256 of every file. `docker diff` also listed every changed path in the container, except the generated schema files, which are hashed in the steps. Only the steps run in the container, so every difference is proven to come from them; which step wrote each file was not isolated where the table says so, and none is unexplained.
+
+Scope: on 2026-10-25 the owner decided that only steps needing no credentials run, because no subscription login is authorized for this item ([G2 plan](../g2-plan.md) item 26). The lockfile's tarballs are the qualified ones: its darwin-x64 tarballs, which match their lockfile integrity, contain binaries with the SHA-256 values that the macOS series qualified ([Pinned version](#pinned-version)), and the image installs the linux-x64 tarballs from the same lockfile. `npm audit --package-lock-only` on the harness lockfile reported no vulnerability on 2026-10-25.
+
+| Architecture | Result |
+| --- | --- |
+| linux/amd64 | Native on the x86_64 host; the results are below |
+| linux/arm64, emulated | Not run. The build failed in the `node-arm64` stage, which the default images share. Under Docker Desktop's QEMU on this host, GNU tar 1.35 in the pinned base failed on every entry of the Node.js tarball with "Cannot mkdir: Invalid argument" or "Cannot open: Invalid argument", while a plain `mkdir` in the same emulated container worked |
+| linux/arm64, native | Not run. No local arm64 Linux host was available; D11 names the GitHub-hosted runner `ubuntu-24.04-arm`, and by the coordinator's decision this item adds no workflow |
+
+Results on linux/amd64:
+
+| Step | Result |
+| --- | --- |
+| Platform | `Linux x86_64`, Ubuntu 24.04.5 LTS, Node.js v24.22.1, user `taskelith` |
+| Binary | `@anthropic-ai/claude-agent-sdk-linux-x64/claude`, SHA-256 `356733f185fa988e6bf3aa9a555269fdd167982a2e2a80d3c8a78037bb92ad58`, reports `2.1.308 (Claude Code)`. Only the glibc package was installed; the `-musl` package is absent, and the SDK's bundled code tries the glibc package first on a glibc host |
+| Credentials | A search of the whole image as root found no `.credentials.json` or `auth.json`. `claude auth status` exited 1 with `"loggedIn": false` and `"authMethod": "none"` for the qualification home |
+| Self-update | Writing to the binary was refused for the `taskelith` user, and the listing of `/opt/harnesses` was identical before and after the steps |
+| Side effects | Only in the dedicated configuration directory: `.claude.json` (mode 600) and `backups/.claude.json.backup.<timestamp>` (mode 600, in a directory of mode 755), written by the two Claude Code steps; which of them wrote them was not isolated. Apart from the steps' own outputs (the listings under `/tmp`, the schema directory, the Codex `config.toml`, and the mount point of `qualify.sh`), nothing changed in `/opt/harnesses` or elsewhere in the container |
+
+Not run, because they need a login: multi-turn chat, prompt correlation, resume, permission requests, interruption, outcomes, the pending approval across a crash, and egress with telemetry on and off. They stay open for G3 item 35 ([G3 plan](../g3-plan.md)).
+
 ## Remaining before admission
 
-- Linux x64 and arm64 in the planned worker container image (G2, [ADR 0007](../decisions/0007-g0-closure.md)), and macOS arm64, with `DISABLE_AUTOUPDATER=1` and a check that nothing outside the configuration directory changes.
+- Inventory, SBOM, and license evidence for the packages of the harness lockfile (`infra/installation/harnesses/package-lock.json`), which the root dependency inventory does not cover.
+- Linux in the worker image ([Linux worker image](#linux-worker-image)): the scenarios that need a login on linux/amd64, which the owner did not authorize for G2 item 26; linux/arm64, natively, for example on D11's runner `ubuntu-24.04-arm` or an Apple Silicon host. Also macOS arm64, with `DISABLE_AUTOUPDATER=1` and a check that nothing outside the configuration directory changes.
 - Non-permission input requests, which no scenario tested.
 - The subscription mechanism for account slots (a long-lived subscription token or a per-slot device login), its load, limit, and reset signals, and whether an agent can read an injected credential ([ADR 0005](../decisions/0005-harness-subscription-account-pools.md)).
 - An alternative provider or gateway path, if the owner wants one, authenticated only through a subscription (ADR 0005).
 - The automatic interrupted-turn re-run, and repeated runs to check stability.
 - The review of Anthropic's terms, including whether they allow pooled subscriptions for automated use (ADR 0005), is recorded on 2026-10-25 in [Provider terms review](#provider-terms-review); the owner decided D15 on 2026-10-25: (a), accept the remaining risk ([G3 plan](../g3-plan.md#owner-decisions)); admission follows in G3 ([ADR 0007](../decisions/0007-g0-closure.md)).
 - Independent adoption evidence for the pinned version.
-- A host side-effect check with before-and-after listings, which the `harness-qualification` spec now requires; this record does not yet meet it.
+- A host side-effect check with before-and-after listings, which the `harness-qualification` spec now requires; the macOS series does not yet meet it, while the [Linux worker image](#linux-worker-image) run does.
 - A versioned conformance suite in the repository, run through `make`, once the agent port exists (G3).
