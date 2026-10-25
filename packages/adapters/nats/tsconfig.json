@@ -5,7 +5,6 @@
     { "path": "../../kernel" },
     { "path": "../../modules/execution" },
     { "path": "../../modules/sdlc" },
-    { "path": "../postgres" },
     { "path": "../../testing" }
   ]
 }

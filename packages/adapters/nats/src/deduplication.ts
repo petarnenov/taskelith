@@ -2,9 +2,8 @@ import type { Inbox, InboxOutcome } from '@taskelith/execution';
 import { ok, parseIdentifier, type EventId, type Result } from '@taskelith/kernel';
 import type { WireMessage } from './wire-message.js';
 
-// Applies a message at most once per consumer, by the identity in its body,
-// for the inbox's lifetime rather than the broker's window. Pass the inbox of
-// the transaction that applies the message, so both commit together.
+// Applies a message once per consumer by its body identity, for the inbox's
+// lifetime; pass the applying transaction's inbox so both commit together.
 export async function applyOnce(
   inbox: Inbox,
   consumer: string,

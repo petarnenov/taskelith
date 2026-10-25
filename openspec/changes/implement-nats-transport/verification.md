@@ -48,7 +48,7 @@ Recorded before pass 1.
 - Against ADR 0004:
   - hexagonal: the adapter imports module types only, and modules may not import `@nats-io` (boundary check);
   - Docker: integration tests run against the Compose services in `make verify`;
-  - coverage: above 75%.
+  - coverage: see the checks below.
 - Item 10's harness:
   - a crash point (`OutboxPublish.before`, SIGKILL) between the broker acknowledgement and the outbox mark;
   - a Toxiproxy disconnect for publication and for a consumer.
@@ -60,9 +60,9 @@ Recorded before pass 1.
 
 ## Checks
 
-`make verify` passed in the worktree before pass 1:
+`make verify` ran in the worktree before pass 1 and after each round of fixes:
 
-- (to be recorded)
+- At `44e57b1`, before pass 1, with the package's files still untracked: 743 tests passed, 0 failed; coverage 99.18% lines, 92.93% branches, 98.97% functions. The comment check reads only tracked files, so it missed five three-line comments in the new package (pass-1 finding H2), and the pre-push hook would have failed. That run is therefore not valid for `44e57b1`.
 
 ## Independent review
 

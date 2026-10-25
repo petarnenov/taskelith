@@ -47,9 +47,8 @@ export interface QuarantineRecord {
   readonly body: Uint8Array | null;
 }
 
-// Copies every terminated or exhausted message with its diagnostics into the
-// quarantine stream, and sends a record back on request under a new
-// `Nats-Msg-Id`, as the broker would drop the old one inside its window.
+// Copies terminated or exhausted messages with diagnostics into quarantine;
+// a redrive needs a new `Nats-Msg-Id`, which the broker window would drop.
 export class Quarantine {
   readonly #jsm: JetStreamManager;
   readonly #js: JetStreamClient;
@@ -121,14 +120,22 @@ export class Quarantine {
     }
   }
 
+  // Settles each advisory on its own, so one that fails cannot hold back the
+  // rest; an advisory that can never be captured is terminated.
   async #captureOne(message: JsMsg): Promise<boolean> {
-    const advisory = message.json<Advisory>();
-    const source = this.#sourceOf(advisory.stream);
-    if (source === undefined) {
-      message.term('advisory of an unknown stream');
+    const advisory = readAdvisory(message);
+    const source = advisory === undefined ? undefined : this.#sourceOf(advisory.stream);
+    if (advisory === undefined || source === undefined) {
+      message.term('not an advisory of a transport stream');
       return false;
     }
-    const original = await this.#jsm.streams.getMessage(advisory.stream, { seq: advisory.stream_seq });
+    let original: StoredMsg | null;
+    try {
+      original = await this.#jsm.streams.getMessage(advisory.stream, { seq: advisory.stream_seq });
+    } catch {
+      message.nak(retryDelayMilliseconds(message.info.deliveryCount));
+      return false;
+    }
     const sent = await this.#publisher.publish({
       subject: this.#address.quarantineSubject(source),
       body: original?.data ?? new Uint8Array(),
@@ -144,6 +151,15 @@ export class Quarantine {
   #sourceOf(stream: string): StreamKind | undefined {
     const sources: StreamKind[] = ['commands', 'observations'];
     return sources.find((source) => this.#address.streamName(source) === stream);
+  }
+}
+
+function readAdvisory(message: JsMsg): Advisory | undefined {
+  try {
+    const advisory = message.json<Advisory>();
+    return typeof advisory?.stream === 'string' && Number.isSafeInteger(advisory.stream_seq) ? advisory : undefined;
+  } catch {
+    return undefined;
   }
 }
 

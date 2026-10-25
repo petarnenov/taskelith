@@ -20,9 +20,7 @@ import {
   streamConfigs,
   TRANSPORT_LIMITS,
   TransportAddress,
-  type OutboxSource,
 } from '@taskelith/nats';
-import type { PostgresOutboxRelay } from '@taskelith/postgres';
 import { FakeOutbox, outboxRow } from './fakes.ts';
 import { capacityDeclared, confirmation, inventoryPart, inventoryRequest, offer } from './messages.ts';
 
@@ -168,9 +166,6 @@ function fakeBroker(rejected: Set<string>, sent: Array<[string, string | undefin
   } as unknown as JetStreamClient;
 }
 
-// The PostgreSQL relay of item 11 is the production outbox source.
-export const relayIsOutboxSource = (relay: PostgresOutboxRelay): OutboxSource => relay;
-
 test('the outbox publisher keeps the order of a subject and lets other subjects continue', async () => {
   const outbox = new FakeOutbox([
     outboxRow('e1', 'workers.w1.commands'),
@@ -181,7 +176,9 @@ test('the outbox publisher keeps the order of a subject and lets other subjects 
   ]);
   const rejected = new Set(['e2']);
   const sent: Array<[string, string | undefined]> = [];
-  const publisher = new OutboxPublisher(outbox, new JetStreamPublisher(fakeBroker(rejected, sent)), address);
+  let clock = 0;
+  const options = { now: () => clock };
+  const publisher = new OutboxPublisher(outbox, new JetStreamPublisher(fakeBroker(rejected, sent)), address, options);
 
   assert.deepEqual(await publisher.publishPending(), ok({ published: 2, deferred: 3 }));
   assert.deepEqual(sent, [
@@ -190,12 +187,16 @@ test('the outbox publisher keeps the order of a subject and lets other subjects 
   ]);
 
   rejected.clear();
+  outbox.rows.push(outboxRow('e6', 'workers.w2.commands'));
+  assert.deepEqual(await publisher.publishPending(), ok({ published: 1, deferred: 3 }), 'w1 backs off, w2 goes on');
+  clock += TRANSPORT_LIMITS.retryInitialMilliseconds;
   outbox.failMarkFor.add('e4');
   assert.deepEqual(await publisher.publishPending(), ok({ published: 1, deferred: 2 }));
   outbox.failMarkFor.clear();
+  clock += TRANSPORT_LIMITS.retryMaxMilliseconds;
   assert.deepEqual(await publisher.publishPending(), ok({ published: 1, deferred: 1 }));
-  assert.deepEqual(outbox.published, ['e1', 'e3', 'e2', 'e4']);
-  assert.deepEqual(sent.map(([, id]) => id), ['e1', 'e3', 'e2', 'e4', 'e4']);
+  assert.deepEqual(outbox.published, ['e1', 'e3', 'e6', 'e2', 'e4']);
+  assert.deepEqual(sent.map(([, id]) => id), ['e1', 'e3', 'e6', 'e2', 'e4', 'e4']);
 
   outbox.unavailable = true;
   assert.equal((await publisher.publishPending()).ok, false);

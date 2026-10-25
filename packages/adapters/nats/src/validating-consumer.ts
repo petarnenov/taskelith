@@ -1,5 +1,5 @@
 import type { Consumer, JetStreamClient, JsMsg } from '@nats-io/jetstream';
-import type { Result } from '@taskelith/kernel';
+import { err, failure, type Result } from '@taskelith/kernel';
 import { abortableDelay } from './abortable-delay.js';
 import type { TransportAddress } from './transport-address.js';
 import { retryDelayMilliseconds, TRANSPORT_LIMITS, type TransportLimits } from './transport-limits.js';
@@ -23,15 +23,13 @@ type MessageReader = (data: Uint8Array) => Result<WireMessage, Malformed>;
 
 export interface ConsumerOptions {
   readonly limits?: TransportLimits;
-  readonly fetchBatch?: number;
   readonly fetchExpiresMilliseconds?: number;
 }
 
 const DEFAULT_FETCH_EXPIRES_MILLISECONDS = 5000;
 
-// Reads one durable pull consumer in order and settles every message: ack
-// after the handler committed, nak with backoff after it failed, and term
-// with the reason for a message that fails its schema, which quarantines it.
+// Settles each message of one pull consumer in order: ack after a commit, nak
+// with backoff after a failure, term (quarantine) when its schema fails.
 export class ValidatingConsumer {
   readonly #js: JetStreamClient;
   readonly #stream: string;
@@ -72,12 +70,15 @@ export class ValidatingConsumer {
   }
 
   async #pull(consumer: Consumer, signal: AbortSignal): Promise<void> {
+    // One message per pull: a fetched message waiting behind a long commit
+    // would pass its `ack_wait` and be delivered a second time.
     const messages = await consumer.fetch({
-      max_messages: this.#options.fetchBatch ?? this.#limits.maxAckPendingPerWorker,
+      max_messages: 1,
       expires: this.#options.fetchExpiresMilliseconds ?? DEFAULT_FETCH_EXPIRES_MILLISECONDS,
     });
     const stop = () => void messages.stop();
     signal.addEventListener('abort', stop, { once: true });
+    if (signal.aborted) stop();
     try {
       for await (const message of messages) {
         if (signal.aborted) break;
@@ -96,9 +97,19 @@ export class ValidatingConsumer {
     }
     const deliveryCount = message.info.deliveryCount;
     const delivered = { ...read.value, subject: message.subject, deliveryCount };
-    const handled = await whileWorking(message, this.#limits, () => this.#handle(delivered));
+    const handled = await whileWorking(message, this.#limits, () => this.#handleSafely(delivered));
     if (handled.ok) message.ack();
     else message.nak(retryDelayMilliseconds(deliveryCount, this.#limits));
+  }
+
+  // A handler that throws has not committed, like one that returns an error.
+  async #handleSafely(message: DeliveredMessage): Promise<Result<unknown>> {
+    try {
+      return await this.#handle(message);
+    } catch (error) {
+      const cause = error instanceof Error ? error.message : String(error);
+      return err(failure('internal', 'the message handler threw', { cause }));
+    }
   }
 }
 

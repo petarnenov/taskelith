@@ -13,9 +13,8 @@ export interface Publication {
   readonly headers?: MsgHdrs;
 }
 
-// A publication counts only once the broker acknowledged it; anything else,
-// including a timeout after the broker stored it, leaves it unconfirmed, and
-// the caller publishes it again with the same message identity.
+// Only a broker acknowledgement confirms a publication; on any failure the
+// caller publishes again with the same message identity.
 export class JetStreamPublisher {
   readonly #js: JetStreamClient;
 

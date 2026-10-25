@@ -13,6 +13,7 @@ import {
   Quarantine,
   runOutboxPublisher,
   workerCommandConsumer,
+  TRANSPORT_LIMITS,
   type QuarantineRecord,
 } from '@taskelith/nats';
 import { FakeOutbox, outboxRow } from './fakes.ts';
@@ -62,10 +63,12 @@ describe('outbox publication', () => {
       outboxRow('command-2', 'workers.worker-2.commands', offer('command-2', 'worker-2')),
     ]);
     outbox.failMarkFor.add('command-1');
-    const publisher = new OutboxPublisher(outbox, new JetStreamPublisher(transport.js), address);
+    let clock = 0;
+    const publisher = new OutboxPublisher(outbox, new JetStreamPublisher(transport.js), address, { now: () => clock });
 
     assert.deepEqual(await publisher.publishPending(), ok({ published: 1, deferred: 1 }));
     outbox.failMarkFor.clear();
+    clock += TEST_LIMITS.retryMaxMilliseconds + TRANSPORT_LIMITS.retryMaxMilliseconds;
     assert.deepEqual(await publisher.publishPending(), ok({ published: 1, deferred: 0 }));
 
     const first = recordingHandler();
@@ -159,7 +162,28 @@ describe('worker command consumer', () => {
     assert.deepEqual(outcomes, ['accepted', 'duplicate']);
   });
 
-  test('a commit longer than ack_wait is not redelivered meanwhile', async () => {
+  test('a commit longer than ack_wait redelivers neither its message nor the next one', async () => {
+    const { address, transport } = await installation(['worker-1']);
+    const subject = expectOk(address.commandSubject('worker-1'));
+    const publisher = new JetStreamPublisher(transport.js);
+    for (const id of ['command-1', 'command-2']) expectOk(await publisher.publish({ subject, body: encodeJson(offer(id)), messageId: id }));
+    const deliveries: Array<[string | undefined, number]> = [];
+    running((signal) =>
+      workerCommandConsumer(transport.js, address, 'worker-1', async (message) => {
+        deliveries.push([message.identity, message.deliveryCount]);
+        if (message.identity === 'command-1') await new Promise((resolve) => setTimeout(resolve, 2 * TEST_LIMITS.ackWaitMilliseconds));
+        return ok(undefined);
+      }, { limits: TEST_LIMITS }).run(signal));
+
+    await waitFor(async () => {
+      const info = await transport.jsm.consumers.info(address.streamName('commands'), 'worker-1');
+      return info.ack_floor.stream_seq === 2;
+    });
+    await new Promise((resolve) => setTimeout(resolve, TEST_LIMITS.ackWaitMilliseconds));
+    assert.deepEqual(deliveries, [['command-1', 1], ['command-2', 1]]);
+  });
+
+  test('a handler that throws is redelivered like a failed commit', async () => {
     const { address, transport } = await installation(['worker-1']);
     const subject = expectOk(address.commandSubject('worker-1'));
     expectOk(await new JetStreamPublisher(transport.js).publish({ subject, body: encodeJson(offer('command-1')), messageId: 'command-1' }));
@@ -167,15 +191,32 @@ describe('worker command consumer', () => {
     running((signal) =>
       workerCommandConsumer(transport.js, address, 'worker-1', async (message) => {
         deliveries.push(message.deliveryCount);
-        await new Promise((resolve) => setTimeout(resolve, 2 * TEST_LIMITS.ackWaitMilliseconds));
+        if (message.deliveryCount === 1) throw new Error('handler bug');
         return ok(undefined);
       }, { limits: TEST_LIMITS }).run(signal));
 
+    await waitFor(() => deliveries.length === 2);
+    assert.deepEqual(deliveries, [1, 2]);
+  });
+});
+
+describe('quarantine keeper', () => {
+  test('an advisory that cannot be captured is terminated and does not hold back the others', async () => {
+    const { address, transport } = await installation(['worker-1']);
+    const advisorySubject = `$JS.EVENT.ADVISORY.CONSUMER.MSG_TERMINATED.${address.streamName('commands')}.worker-1`;
+    transport.connection.publish(advisorySubject, '{');
+    transport.connection.publish(advisorySubject, JSON.stringify({ stream: 'OTHER', stream_seq: 1 }));
+    await transport.connection.flush();
+    const subject = expectOk(address.commandSubject('worker-1'));
+    expectOk(await new JetStreamPublisher(transport.js).publish({ subject, body: encodeJson({ junk: true }), messageId: 'command-bad' }));
+    running((signal) => workerCommandConsumer(transport.js, address, 'worker-1', recordingHandler().handle, { limits: TEST_LIMITS }).run(signal));
+
+    const records = await quarantined(new Quarantine(transport.jsm, transport.js, address), 1);
+    assert.deepEqual(records.map((r) => r.originalMessageId), ['command-bad']);
     await waitFor(async () => {
-      const info = await transport.jsm.consumers.info(address.streamName('commands'), 'worker-1');
-      return deliveries.length === 1 && info.ack_floor.stream_seq === 1;
+      const info = await transport.jsm.consumers.info(address.streamName('advisories'), 'quarantine');
+      return info.num_pending === 0 && info.num_ack_pending === 0;
     });
-    assert.deepEqual(deliveries, [1]);
   });
 });
 

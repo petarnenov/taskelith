@@ -25,15 +25,14 @@ export interface TransportConnection {
 export async function connectTransport(endpoint: TransportEndpoint): Promise<Result<TransportConnection>> {
   const inboxPrefix = endpoint.workerId === undefined ? undefined : endpoint.address.inboxPrefix(endpoint.workerId);
   if (inboxPrefix && !inboxPrefix.ok) return inboxPrefix;
+  let connection: NatsConnection | undefined;
   try {
-    const connection = await connect({
-      servers: endpoint.server.href,
-      inboxPrefix: inboxPrefix?.value,
-      maxReconnectAttempts: -1,
-    });
+    connection = await connect({ servers: endpoint.server.href, inboxPrefix: inboxPrefix?.value, maxReconnectAttempts: -1 });
     const jsm = await jetstreamManager(connection);
-    return ok({ connection, js: jetstream(connection), jsm, close: () => connection.close() });
+    const opened = connection;
+    return ok({ connection: opened, js: jetstream(opened), jsm, close: () => opened.close() });
   } catch (error) {
+    await connection?.close();
     return brokerFailure(`connect to ${endpoint.server.href}`, error);
   }
 }
