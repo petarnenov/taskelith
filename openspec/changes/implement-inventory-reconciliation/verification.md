@@ -119,6 +119,7 @@ Recorded before pass 1.
 - At `48c3d5f`, before the second `dev` merge: 1254 tests passed, 0 failed. Coverage was 99.28% lines, 91.63% branches, and 98.98% functions. The comment, boundary, coverage-scope, dependency-inventory, contract-compatibility, OpenSpec strict, archive dry-run, and package checks pass. `make contract-compatibility` against `190e2cc` reports 0 breaking changes.
 - At `575706d`, after merging `aba18f5`: 1259 tests passed, 0 failed. Coverage was 99.29% lines, 91.58% branches, and 98.98% functions. Every other check passes, and contract compatibility against `aba18f5` reports 0 breaking changes.
 - At `8103fa6`, after the pass-1 fixes: 1267 tests passed, 0 failed. Coverage was 99.31% lines, 91.59% branches, and 99.03% functions. Every other check passes.
+- At `01018a7`, after the pass-2 fixes: 1271 tests passed, 0 failed. Coverage was 99.31% lines, 91.58% branches, and 99.03% functions. Every other check passes.
 
 ## Independent review
 
@@ -148,7 +149,22 @@ It runs from the worktree, with the prompt and log in the session's scratch dire
 | H1 | After a new incarnation, a fact derived again keeps its `observationId` (worker journal line 117). The inbox returns `duplicate` before the new journal records its sequence, which leaves a permanent hole in the new cursor. Snapshots through it never apply, and the worker never prunes. | Fixed in `b5e96d6`: an authenticated duplicate at a sequence new to its journal records its position without its effect, with contact, cursor, confirmation, and evaluation of pending snapshots. A repeat in the same journal keeps 21b's behavior. Covered by a PostgreSQL test and a unit test. |
 | M2 | A sequence rollback retires in a second transaction. A replacement committed in between would be made unreachable by the old journal's `recordJournalLoss`. | Fixed in `b5e96d6`: the retirement re-reads the enrolled journal and the sequence class, and does nothing once the journal was replaced, because the replacement already retired it. A fresh snapshot's rollback retires in the transaction that finds it. Covered by a deterministic test with a replacement between the two transactions. |
 | M3 | `assembleSnapshot` checks part numbers only against the first part's count and takes the common fields from the first part, so a mixed or incomplete report could be applied. | Fixed in `b5e96d6`: all parts must agree on every report field and cover `1..parts` exactly. An inconsistent report's stored parts are deleted without other effect, logged as `execution.inventory.refused` with the reason `inconsistent-parts`. Covered by unit and PostgreSQL tests. |
-| M4 | Pending reports have no growth bound: ten requests answered by one part each left ten reports. | Fixed in `b5e96d6`: after each stored part and each new request, only the newest report that is not fresh survives per journal, and only while its `snapshot` is not below the highest received. The fresh report is kept until its rollback check. Only the enrolled journal keeps parts, so the bound per worker is the current request's report plus one that is not fresh. Covered by unit and PostgreSQL tests. |
+| M4 | Pending reports have no growth bound: ten requests answered by one part each left ten reports. | Fixed in `b5e96d6`: after each stored part and each new request, only the newest report that is not fresh survives per journal, and only while its `snapshot` is not below the highest received. The fresh report is kept until its rollback check. Only the enrolled journal keeps parts, so the bound per worker was the current request's reports plus one that is not fresh (see M6). Covered by unit and PostgreSQL tests. |
+
+### Pass 2
+
+- **Session:** `01a17526-ed83-7f11-9bd2-059b50fface3`, 2026-10-26 00:20 to 00:24, on `6027ece`. The output header confirms `gpt-6.1-sol`, reasoning effort `medium`, and the `read-only` sandbox.
+- **Snapshot:** `9364774e…c6fb5be246`, unchanged.
+- **Reviewer's own checks:** it ran the comment check and 62 selected unit and conformance tests, all passing.
+- **Pass-1 findings:** the reviewer confirmed H1 and M2 resolved, with evidence, and M3 and M4 partly resolved.
+- **Result:** Critical 0, High 0, Medium 2, Low 0. The author accepted both findings.
+- **Fixes:** `2a443a9` holds the code and tests, and `01018a7` the design and spec delta. The requirement "Inconsistent report" was rewritten, and the scenarios "Snapshot numbers disagree" and "One request answered several times" were added.
+- **Wire contracts:** none changed for these fixes.
+
+| # | Finding | Disposition |
+| --- | --- | --- |
+| M5 | The rest of M3: an arriving part raised `reported_snapshot` and pruned other reports before the consistency check. A refused report with the snapshots 1 and 100 left the watermark at 100, so a later valid fresh snapshot 2 was deleted without handling its omissions. | Fixed in `2a443a9`: an arriving part is assembled with its stored siblings first, and an inconsistent one refuses its report on receipt without touching the watermark, other reports, or requests. `reported_snapshot` rises only when a part completes its report. The lower-snapshot filter uses the highest received snapshot, the greater of `reported_snapshot` and every pending part's `snapshot`, so wire contracts line 76 still holds for every part that is not refused. Covered by a PostgreSQL regression test. |
+| M6 | The rest of M4: every report answering the current request was exempt from pruning, so several incomplete answers to one request grew without bound. The worker answers a redelivered request with a new report. | Fixed in `2a443a9`: per journal, only the newest fresh report and the newest one that is not fresh survive. Newest means the highest `snapshot`, and the arriving report wins a tie. The surviving fresh report is checked against the bound once it is complete. The bound per worker is one fresh and one non-fresh report. Covered by unit and PostgreSQL tests. |
 
 ## Limitations
 
