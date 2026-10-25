@@ -1,0 +1,21 @@
+{
+  "name": "@taskelith/postgres",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@taskelith/kernel": "0.0.0",
+    "@taskelith/sdlc": "0.0.0",
+    "node-pg-migrate": "9.0.0",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1"
+  }
+}
