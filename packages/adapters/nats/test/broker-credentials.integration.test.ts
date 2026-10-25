@@ -74,7 +74,7 @@ test('a worker user publishes heartbeats only on its own heartbeat subject', asy
   const { address, transport, issued } = await workerSetup('worker-1');
   const received: string[] = [];
   const subscription = transport.connection.subscribe(address.allWorkerSubjects('heartbeats'), {
-    callback: (_error, message) => received.push(message.subject),
+    callback: (_error, message) => { received.push(message.subject); },
   });
   after(() => subscription.unsubscribe());
   await transport.connection.flush();
