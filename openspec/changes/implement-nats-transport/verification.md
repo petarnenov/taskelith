@@ -68,6 +68,7 @@ Recorded before pass 1.
 - At `1a02c86`, after the pass-2 fixes: 745 tests passed, 0 failed; coverage 99.21% lines, 93.03% branches, 98.98% functions. The comment, boundary, coverage-scope, dependency-inventory, and OpenSpec checks pass.
 - At `af46cb7`, after the unreviewed pass-3 fixes: 746 tests passed, 0 failed; coverage 99.25% lines, 93.16% branches, 98.98% functions. The comment, boundary, coverage-scope, dependency-inventory, and OpenSpec checks pass.
 - At `57f8cec`, after merging `origin/dev` at `604dcbc` (`c8efb2c`) and regenerating the dependency inventory: 753 tests passed, 0 failed; coverage 99.23% lines, 93.15% branches, 98.98% functions. The merge brought the shared test helpers and a harness manifest rule, and changes no requirement, contract, implementation, or test of this change, so no review was repeated.
+- At `f7bba7c`, after merging `origin/dev` at `3d678df` (`0714d51`) and regenerating the dependency inventory: 775 tests passed, 0 failed; coverage 99.26% lines, 93.33% branches, 99.21% functions.
 - `npm run openspec -- validate implement-nats-transport --strict` passed at each of these revisions.
 
 ## Independent review
@@ -108,6 +109,15 @@ Assigned reviewer: Claude Code with `claude -p "<prompt>" --model claude-fable-5
   3. Low: a keeper that stops between copying an advisory and acknowledging it, and returns after the 2-minute window, copies it twice. Recorded as a risk in the design; the receiver's inbox stops a second redrive.
   4. Low: a redriven observation reaches every reader again. The design now says so, and that the other readers stop it through their inbox.
   5. Low: one integration test depended on the order of a redelivery and a later message. It now checks the first delivery and the set of the other two.
+
+## Conflict resolution
+
+The coordinator returned the branch on 2026-10-25 under agent task protocol step 9: after the macOS koffi change (#149), it conflicted with `dev` at `3d678df`.
+
+- The only conflict was the G2 infrastructure paragraph of `docs/dependencies.md`. Both sentences are kept: this change's sentence on the `@nats-io` runtime dependencies of `@taskelith/nats`, and `dev`'s sentence on `koffi@3.3.3`.
+- The lockfile merged without conflict and differs from `dev` only in this change's package. The generated inventory files are regenerated from it.
+- The merge (`0714d51`) changes nothing else of this change.
+- The three review passes are spent. As the coordinator decided, this docs-only union is recorded as a conflict resolution **without independent review**.
 
 ## Remaining gates
 
