@@ -56,11 +56,30 @@ export function intent(number = 1): LaunchIntent {
     ownershipGeneration: value(parseOwnershipGeneration(1)),
     admissionId: id('AdmissionId', `admission-${number}`),
     admissionGeneration: value(parseGeneration(1)),
+    recoveryEpoch: value(parseRecoveryEpoch(1)),
+    requested: { cpuMillicores: 1000, memoryMebibytes: 1024, hardControls: [] },
   };
 }
 
+export const CORRELATION = id('CorrelationId', 'correlation-1');
+
 export function assignment(number = 1): JournaledCommand {
-  return { commandId: id('CommandId', `command-${number}`), digest: digest(`assignment-${number}`), outcome: 'accepted', kind: 'assignment', intent: intent(number) };
+  return {
+    commandId: id('CommandId', `command-${number}`), digest: digest(`assignment-${number}`), correlationId: CORRELATION,
+    outcome: 'accepted', kind: 'assignment', intent: intent(number),
+  };
+}
+
+// A command of a protocol version the worker does not support.
+export function unsupported(number: number): JournaledCommand {
+  return {
+    commandId: id('CommandId', `command-${number}`), digest: digest(`unsupported-${number}`), correlationId: CORRELATION,
+    outcome: 'rejected', kind: 'execution.assignment.offer',
+    rejection: {
+      kind: 'command-rejected', commandType: 'execution.assignment.offer', reason: 'protocol-not-supported',
+      supportedProtocolVersions: { minimum: 1, maximum: 1 },
+    },
+  };
 }
 
 export function digest(content: string): string {

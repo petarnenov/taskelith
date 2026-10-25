@@ -7,9 +7,28 @@ import { after, before, describe, test } from 'node:test';
 import pg from 'pg';
 import { createAccount } from '@nats-io/nkeys';
 import { checkHttpSchema, checkMessageSchema } from '@taskelith/contracts';
-import { adminMain, InstallationPublicationFence, serveUntilStopped, startControlPlane, type AdminIo, type RunningControlPlane } from '@taskelith/control-plane';
+import {
+  adminMain,
+  InstallationPublicationFence,
+  serveUntilStopped,
+  startControlPlane,
+  type AdminIo,
+  type ControlPlaneSettings,
+  type RunningControlPlane,
+} from '@taskelith/control-plane';
 import { ControlPlaneNamespace } from '@taskelith/control-plane-store';
-import { BrokerAuthority, connectSystemAccount, connectTransport, encodeJson, NatsBrokerCredentials, TRANSPORT_LIMITS, TransportAddress } from '@taskelith/nats';
+import {
+  BrokerAuthority,
+  connectSystemAccount,
+  connectTransport,
+  encodeJson,
+  JetStreamPublisher,
+  NatsBrokerCredentials,
+  readObservationSubjectMessage,
+  TRANSPORT_LIMITS,
+  TransportAddress,
+  type ControlPlaneConnection,
+} from '@taskelith/nats';
 import { openAttempt, type AttemptId, type WorkerId } from '@taskelith/execution';
 import { PostgresDatabase } from '@taskelith/postgres';
 import { createAssignment, parseResourceRequest } from '@taskelith/scheduling';
@@ -78,13 +97,15 @@ const definition = value(parseWorkflowDefinition({
 const logs = new InMemoryLogSink();
 let running: RunningControlPlane;
 
+const SETTINGS: ControlPlaneSettings = {
+  dataRoot, ownerUid, postgres: database, nats: NATS, api: { host: '127.0.0.1', port: 0 },
+  workflows: [{ definition, digest: DIGEST }], logSink: logs, sweepMilliseconds: 200, shutdownMilliseconds: 1000,
+  // The test server keeps JetStream in a small tmpfs.
+  transportLimits: { ...TRANSPORT_LIMITS, streamMaxBytes: 64 * 1024 ** 2, retryInitialMilliseconds: 100, retryMaxMilliseconds: 200, idlePollMilliseconds: 50 },
+};
+
 before(async () => {
-  running = value(await startControlPlane({
-    dataRoot, ownerUid, postgres: database, nats: NATS, api: { host: '127.0.0.1', port: 0 },
-    workflows: [{ definition, digest: DIGEST }], logSink: logs, sweepMilliseconds: 200, shutdownMilliseconds: 1000,
-    // The test server keeps JetStream in a small tmpfs.
-    transportLimits: { ...TRANSPORT_LIMITS, streamMaxBytes: 64 * 1024 ** 2, retryInitialMilliseconds: 100, retryMaxMilliseconds: 200, idlePollMilliseconds: 50 },
-  }));
+  running = value(await startControlPlane(SETTINGS));
 });
 
 after(async () => {
@@ -97,6 +118,30 @@ after(async () => {
   rmSync(base, { recursive: true, force: true });
   await sql(POSTGRES, `DROP DATABASE IF EXISTS ${databaseName} WITH (FORCE)`);
 });
+
+function intakeOffer(commandId: string, workerId: string, protocolVersion: number): Record<string, unknown> {
+  const metadata = {
+    commandId, commandType: 'execution.assignment.offer', schemaVersion: 1, issuedAt: new Date().toISOString(), correlationId: `correlation-${commandId}`,
+    projectId: 'project-1', taskId: `task-${commandId}`, sdlc: { runId: 'run-1', stageId: 'apply', admissionId: `admission-${commandId}`, admissionGeneration: 1 },
+    attemptId: `attempt-${commandId}`, workerId, ownershipGeneration: 1,
+  };
+  const requested = { cpuMillicores: 500, memoryMebibytes: 256, hardControls: [] };
+  const payload = { protocolVersion, assignmentId: `assignment-${commandId}`, recoveryEpoch: 1, reservation: { reservationId: `reservation-${commandId}`, requested } };
+  return { metadata, payload };
+}
+
+// Reads the worker's observation subject from its start, through an ordered
+// consumer, until `count` observations arrived; each must pass its schema.
+async function observationTypes(broker: ControlPlaneConnection, subject: string, count: number): Promise<string[]> {
+  const consumer = await broker.js.consumers.get(address.streamName('observations'), { filter_subjects: [subject] });
+  const types: string[] = [];
+  const deadline = Date.now() + 15_000;
+  while (types.length < count && Date.now() < deadline) {
+    const message = await consumer.next({ expires: 1000 });
+    if (message !== null) types.push(value(readObservationSubjectMessage(message.data)).type);
+  }
+  return types;
+}
 
 interface Answer {
   readonly status: number;
@@ -362,6 +407,59 @@ describe('enrollment and quarantine', () => {
     await again.stop();
   });
 
+  test('a worker journals its commands before it acknowledges them and publishes its observations', async () => {
+    const issued = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operator });
+    const environment = {
+      TASKELITH_DATA_DIR: join(base, 'intake-root'), TASKELITH_CONTROL_PLANE_URL: `http://127.0.0.1:${running.api.port}/`, TASKELITH_NATS_URL: NATS.href,
+      TASKELITH_ENROLLMENT_TOKEN: issued.enrollmentToken as string,
+    };
+    const limits = { ...TRANSPORT_LIMITS, retryInitialMilliseconds: 100, retryMaxMilliseconds: 200, idlePollMilliseconds: 50 };
+    const dependencies = (settings: Parameters<typeof productionDependencies>[0]) => ({
+      ...productionDependencies(settings), probe: () => ok({ platform: 'darwin' as const, filesystem: 'apfs', local: true }), limits,
+    });
+    const lines: string[] = [];
+    const worker = await workerMain(environment, (line) => lines.push(line), dependencies);
+    assert.ok(worker, lines.join('\n'));
+    const { workerId } = worker.identity;
+    const broker = value(await connectTransport({ server: NATS, address, creds: authority.user('intake-test', Math.floor(Date.now() / 1000)).creds }));
+    try {
+      // Enrollment created the worker's consumer; nothing here creates it.
+      const publisher = new JetStreamPublisher(broker.js);
+      for (const [commandId, protocolVersion] of [['offer-1', 1], ['offer-2', 2]] as const) {
+        const offer = intakeOffer(commandId, workerId, protocolVersion);
+        value(await publisher.publish({ subject: value(address.commandSubject(workerId)), body: encodeJson(offer), messageId: commandId }));
+      }
+      // The observations follow W1 of both offers; confirmations of them share
+      // the command subject, so only an empty consumer proves every ack.
+      const types = await observationTypes(broker, value(address.observationSubject(workerId)), 3);
+      assert.deepEqual(types, ['worker.capacity.declared', 'execution.assignment.accepted', 'execution.command.rejected']);
+      assert.deepEqual(value(worker.root.journal.snapshot()).intents.map((intent) => intent.assignmentId), ['assignment-offer-1']);
+      await waitFor(async () => {
+        const consumer = await broker.jsm.consumers.info(address.streamName('commands'), workerId);
+        return consumer.num_pending === 0 && consumer.num_ack_pending === 0;
+      });
+    } finally {
+      await worker.stop();
+      await broker.close();
+    }
+  });
+
+  test('a restart ensures the command consumer of every active worker', async () => {
+    const { workerId } = await enrolledWorker('journal-consumer-repair');
+    const broker = value(await connectTransport({ server: NATS, address, creds: authority.user('repair-test', Math.floor(Date.now() / 1000)).creds }));
+    const stream = address.streamName('commands');
+    try {
+      assert.equal((await broker.jsm.consumers.info(stream, workerId)).name, workerId);
+      await broker.jsm.consumers.delete(stream, workerId);
+      await running.stop();
+      running = value(await startControlPlane(SETTINGS));
+      assert.equal((await broker.jsm.consumers.info(stream, workerId)).name, workerId);
+      assert.ok(logs.records.some((record) => record.event === 'fleet.command-consumers.repaired'));
+    } finally {
+      await broker.close();
+    }
+  });
+
   test('a worker enrolls over the API with its token once', async () => {
     const issued = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operator });
     const body = {
@@ -421,8 +519,11 @@ describe('enrollment and quarantine', () => {
       };
       assert.ok(checkMessageSchema('CapacityDeclaredObservation', declared).ok);
       await broker.js.publish(value(address.observationSubject(workerId)), encodeJson(declared), { msgID: 'declared-observed-1' });
+      // Other tests' workers are confirmed too, so the row must be this one's.
       const published = async () => (await sql<{ published: boolean }>(database,
-        "SELECT published_at IS NOT NULL AS published FROM outbox WHERE event_type = 'execution.observations.confirmed'"))[0]?.published === true;
+        `SELECT published_at IS NOT NULL AS published FROM outbox
+         WHERE event_type = 'execution.observations.confirmed' AND (message::jsonb)->>'subject' = $1`,
+        [`workers.${workerId}.commands`]))[0]?.published === true;
       await waitFor(published);
       const [worker] = await sql<{ reachable: boolean }>(database, 'SELECT reachable FROM workers WHERE worker_id = $1', [workerId]);
       assert.equal(worker?.reachable, true);

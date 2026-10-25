@@ -2,8 +2,17 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, test } from 'node:test';
 import { err, failure, parseInstant, type Failure } from '@taskelith/kernel';
-import { parseSequence, type ExecutionId, type JournaledCommand, type OperationId, type WorkerJournal } from '@taskelith/execution';
 import {
+  parseSequence,
+  type DeclaredCapacity,
+  type ExecutionId,
+  type JournaledCommand,
+  type LaunchIntent,
+  type OperationId,
+  type WorkerJournal,
+} from '@taskelith/execution';
+import {
+  JOURNAL_FORMAT,
   REPUBLICATION_BOUND_MS,
   SqliteWorkerJournal,
   enrollWorkerRoot,
@@ -14,7 +23,7 @@ import {
   type WorkerRoot,
 } from '@taskelith/worker-journal';
 import { failed, id, value } from '@taskelith/testing';
-import { BINDING, ENROLLMENT, CLOCK, T0, assignment, digest, grantFor, intent, launchRequest, rootOptions, temporaryDataRoot } from './fixtures.ts';
+import { BINDING, CORRELATION, ENROLLMENT, CLOCK, T0, assignment, digest, grantFor, intent, launchRequest, rootOptions, temporaryDataRoot, unsupported } from './fixtures.ts';
 
 let root: WorkerRoot;
 let journal: WorkerJournal;
@@ -42,8 +51,11 @@ function launchUntilWritten(executionId: ExecutionId = EXECUTION, operationId: O
   value(journal.recordExecutionRecordWritten(executionId));
 }
 
+// The facts after the acceptance of the offer, which W1 journals first.
 function factKinds(): string[] {
-  return value(journal.dueForPublication(T0)).map((entry) => entry.fact.kind);
+  const [accepted, ...facts] = value(journal.dueForPublication(T0)).map((entry) => entry.fact.kind);
+  assert.equal(accepted, 'assignment-accepted');
+  return facts;
 }
 
 const later = (milliseconds: number) => value(parseInstant(new Date(Date.parse(T0) + milliseconds).toISOString()));
@@ -57,19 +69,23 @@ test('W1 records an assignment once; a repeat is a duplicate and other content a
 });
 
 test('W1 journals a rejection with its observation, and a cancellation request', () => {
-  const rejected: JournaledCommand = { commandId: id('CommandId', 'command-9'), digest: digest('x'), outcome: 'rejected', kind: 'assignment', reason: 'backlog' };
+  const rejected = unsupported(9);
   value(journal.recordCommand(rejected));
   const cancellation: JournaledCommand = {
     commandId: id('CommandId', 'cancel-1'),
     digest: digest('cancel'),
+    correlationId: CORRELATION,
     outcome: 'accepted',
     kind: 'cancellation',
     target: { kind: 'execution', executionId: EXECUTION },
   };
   value(journal.recordCommand(cancellation));
   const [entry] = value(journal.dueForPublication(T0));
-  assert.deepEqual(entry?.fact, { kind: 'command-rejected', commandId: rejected.commandId, reason: 'backlog' });
-  assert.equal(entry?.position.observationId, observationIdOf(entry!.fact));
+  assert.deepEqual(entry?.fact, {
+    kind: 'command-rejected', commandId: rejected.commandId, correlationId: CORRELATION, commandType: 'execution.assignment.offer',
+    reason: 'protocol-not-supported', supportedProtocolVersions: { minimum: 1, maximum: 1 },
+  });
+  assert.equal(entry?.position.observationId, observationIdOf(entry!.fact, BINDING.journalId));
   assert.deepEqual(value(journal.snapshot()).cancellations, [{ commandId: cancellation.commandId, target: cancellation.target, evidenceRecorded: false }]);
   value(journal.recordCancellationEvidence(cancellation.commandId));
   assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
@@ -88,6 +104,7 @@ test('W2 to W5e record one execution through its exit, in order', () => {
     assignmentId: intent(1).assignmentId,
     state: 'exited',
     recordWritten: true,
+    uncertain: false,
     authorizations: [{ operationId: OPERATION, outcome: 'granted', launchAuthId: id('LaunchAuthId', 'launch-auth-1') }],
   });
   assert.deepEqual(factKinds(), ['execution-started', 'execution-exited']);
@@ -151,8 +168,8 @@ test('uncertain evidence after W4 gets a new identity each time, until a termina
   value(journal.recordExit(EXECUTION, { kind: 'unknown' }));
   assert.equal(failed(journal.recordUncertain(EXECUTION)).code, 'precondition-failed');
   const entries = value(journal.dueForPublication(T0));
-  assert.deepEqual(entries.map((entry) => entry.fact.kind), ['execution-uncertain', 'execution-uncertain', 'execution-exited']);
-  assert.equal(new Set(entries.map((entry) => entry.position.observationId)).size, 3);
+  assert.deepEqual(entries.map((entry) => entry.fact.kind), ['assignment-accepted', 'execution-uncertain', 'execution-uncertain', 'execution-exited']);
+  assert.equal(new Set(entries.map((entry) => entry.position.observationId)).size, 4);
 });
 
 test('a late grant cannot move a started execution back to authorized', () => {
@@ -201,6 +218,7 @@ test('a cancellation delivered twice is journaled once and stays pending until i
   const cancellation: JournaledCommand = {
     commandId: id('CommandId', 'cancel-1'),
     digest: digest('cancel'),
+    correlationId: CORRELATION,
     outcome: 'accepted',
     kind: 'cancellation',
     target: { kind: 'attempt', attemptId: intent(1).attemptId },
@@ -224,29 +242,29 @@ test('the outbox numbers entries gaplessly and keeps them until confirmed', () =
   value(journal.recordStart(EXECUTION, id('LaunchAuthId', 'launch-auth-1')));
   value(journal.recordExit(EXECUTION, { kind: 'code', code: 1 }));
   const entries = value(journal.dueForPublication(T0));
-  assert.deepEqual(entries.map((entry) => entry.position.sequence), [1, 2]);
-  assert.deepEqual(entries.map((entry) => [entry.position.workerId, entry.position.journalId]), [[BINDING.workerId, BINDING.journalId], [BINDING.workerId, BINDING.journalId]]);
+  assert.deepEqual(entries.map((entry) => entry.position.sequence), [1, 2, 3]);
+  const producer = [BINDING.workerId, BINDING.journalId];
+  assert.deepEqual(entries.map((entry) => [entry.position.workerId, entry.position.journalId]), [producer, producer, producer]);
 
   for (const entry of entries) journal.markPublished(entry.position.sequence, T0);
   assert.deepEqual(value(journal.dueForPublication(later(REPUBLICATION_BOUND_MS - 1))), []);
-  assert.equal(value(journal.dueForPublication(later(REPUBLICATION_BOUND_MS))).length, 2);
+  assert.equal(value(journal.dueForPublication(later(REPUBLICATION_BOUND_MS))).length, 3);
 
-  value(journal.confirmThrough(value(parseSequence(1))));
-  assert.deepEqual(value(journal.dueForPublication(later(REPUBLICATION_BOUND_MS))).map((entry) => entry.position.sequence), [2]);
-  assert.equal(failed(journal.confirmThrough(value(parseSequence(3)))).code, 'invalid');
+  value(journal.confirmThrough(value(parseSequence(2))));
+  assert.deepEqual(value(journal.dueForPublication(later(REPUBLICATION_BOUND_MS))).map((entry) => entry.position.sequence), [3]);
+  assert.equal(failed(journal.confirmThrough(value(parseSequence(4)))).code, 'invalid');
 });
 
 test('the outbox continues the sequence after pruning and a reopen', () => {
   value(journal.recordCommand(assignment()));
   value(journal.beginAuthorization(launchRequest(EXECUTION, OPERATION)));
   value(journal.recordNotStarted(EXECUTION));
-  value(journal.confirmThrough(value(parseSequence(1))));
+  value(journal.confirmThrough(value(parseSequence(2))));
   root.close();
   root = value(openWorkerRoot(rootOptions(root.paths.dataRoot)));
   journal = root.journal;
-  const rejected: JournaledCommand = { commandId: id('CommandId', 'command-2'), digest: digest('2'), outcome: 'rejected', kind: 'assignment', reason: 'disk-floor' };
-  value(journal.recordCommand(rejected));
-  assert.deepEqual(value(journal.dueForPublication(T0)).map((entry) => entry.position.sequence), [2]);
+  value(journal.recordCommand(unsupported(2)));
+  assert.deepEqual(value(journal.dueForPublication(T0)).map((entry) => entry.position.sequence), [3]);
 });
 
 test('an I/O error at COMMIT stops the journal until a restart', () => {
@@ -300,3 +318,134 @@ function faultyDatabase(code: number): { handle: JournalDatabase; failNextCommit
   };
   return { handle, failNextCommit: () => { failing = true; } };
 }
+
+const CAPACITY: DeclaredCapacity = {
+  slots: 2, cpuMillicores: 4000, memoryMebibytes: 7680, enforceableControls: [], protocolVersions: { minimum: 1, maximum: 1 },
+};
+
+function end(number: number, assignmentNumber = number): JournaledCommand {
+  return {
+    commandId: id('CommandId', `end-${number}`), digest: digest(`end-${number}`), correlationId: CORRELATION,
+    outcome: 'accepted', kind: 'assignment-end', assignmentId: intent(assignmentNumber).assignmentId,
+  };
+}
+
+test('W1 journals an accepted offer with its acceptance, and a refusal with its reason', () => {
+  value(journal.recordCommand(assignment()));
+  const { assignmentId, attemptId, ownershipGeneration } = intent(2);
+  const refused: JournaledCommand = {
+    commandId: id('CommandId', 'command-2'), digest: digest('refused'), correlationId: CORRELATION, outcome: 'rejected',
+    kind: 'execution.assignment.offer',
+    rejection: { kind: 'assignment-refused', assignment: { assignmentId, attemptId, ownershipGeneration }, reason: 'worker-slots-exhausted' },
+  };
+  value(journal.recordCommand(refused));
+  const facts = value(journal.dueForPublication(T0)).map((entry) => entry.fact);
+  assert.deepEqual(facts, [
+    { kind: 'assignment-accepted', commandId: assignment().commandId, correlationId: CORRELATION, ...pick(intent(1)) },
+    { kind: 'assignment-refused', commandId: refused.commandId, correlationId: CORRELATION, ...pick(intent(2)), reason: 'worker-slots-exhausted' },
+  ]);
+  assert.deepEqual(value(journal.snapshot()).intents.map((entry) => [entry.commandId, entry.ended, entry.requested]), [
+    [assignment().commandId, false, intent().requested],
+  ]);
+});
+
+function pick({ assignmentId, attemptId, ownershipGeneration }: LaunchIntent) {
+  return { assignmentId, attemptId, ownershipGeneration };
+}
+
+test('an assignment end is journaled before or after its offer and ends the assignment', () => {
+  value(journal.recordCommand(end(1)));
+  value(journal.recordCommand(assignment(1)));
+  value(journal.recordCommand(assignment(2)));
+  value(journal.recordCommand(end(2)));
+  assert.deepEqual(value(journal.recordCommand(end(2))), { kind: 'duplicate' });
+  assert.deepEqual(value(journal.snapshot()).intents.map((entry) => entry.ended), [true, true]);
+  assert.deepEqual(value(journal.recordCommand(end(3, 1))), { kind: 'recorded' });
+});
+
+test('a capacity declaration is journaled only when it changes, each with its own identity', () => {
+  value(journal.recordCapacity(CAPACITY));
+  value(journal.recordCapacity(CAPACITY));
+  value(journal.recordCapacity({ ...CAPACITY, slots: 3 }));
+  value(journal.recordCapacity(CAPACITY));
+  const entries = value(journal.dueForPublication(T0));
+  assert.deepEqual(entries.map((entry) => entry.fact), [
+    { kind: 'capacity-declared', declaration: 1, capacity: CAPACITY },
+    { kind: 'capacity-declared', declaration: 2, capacity: { ...CAPACITY, slots: 3 } },
+    { kind: 'capacity-declared', declaration: 3, capacity: CAPACITY },
+  ]);
+  assert.equal(new Set(entries.map((entry) => entry.position.observationId)).size, 3);
+  const otherJournal = observationIdOf(entries[0]!.fact, id('JournalId', 'journal-2'));
+  assert.notEqual(otherJournal, entries[0]!.position.observationId);
+});
+
+test('each inventory gets a higher snapshot number and the last sequence it reflects', () => {
+  const first = value(journal.takeInventory());
+  assert.deepEqual([first.snapshot, first.throughSequence, first.journal.intents.length], [1, 0, 0]);
+  value(journal.recordCommand(assignment()));
+  launchUntilWritten();
+  value(journal.recordUncertain(EXECUTION));
+  const second = value(journal.takeInventory());
+  assert.deepEqual([second.snapshot, second.throughSequence], [2, 2]);
+  assert.deepEqual(second.journal.executions.map((execution) => [execution.state, execution.uncertain]), [['authorized', true]]);
+  root.close();
+  root = value(openWorkerRoot(rootOptions(root.paths.dataRoot)));
+  journal = root.journal;
+  assert.equal(value(journal.takeInventory()).snapshot, 3);
+});
+
+test('a format 1 journal is migrated to format 2 and keeps its records', () => {
+  value(journal.recordCommand(assignment()));
+  const { paths } = root;
+  root.close();
+  const raw = new DatabaseSync(paths.journal);
+  raw.exec('PRAGMA locking_mode = EXCLUSIVE');
+  for (const column of ['declared_capacity', 'capacity_declarations', 'inventory_snapshots']) raw.exec(`ALTER TABLE journal_meta DROP COLUMN ${column}`);
+  for (const column of ['recovery_epoch', 'cpu_millicores', 'memory_mebibytes', 'hard_controls']) raw.exec(`ALTER TABLE launch_intent DROP COLUMN ${column}`);
+  raw.exec('DROP TABLE assignment_end');
+  raw.exec('PRAGMA user_version = 1');
+  raw.close();
+  root = value(openWorkerRoot(rootOptions(paths.dataRoot)));
+  journal = root.journal;
+  const [migrated] = value(journal.snapshot()).intents;
+  assert.deepEqual([migrated?.assignmentId, migrated?.ended, migrated?.recoveryEpoch, migrated?.requested], [
+    intent().assignmentId, false, BINDING.recoveryEpoch, { cpuMillicores: 0, memoryMebibytes: 0, hardControls: [] },
+  ]);
+  value(journal.recordCommand(end(1)));
+  assert.equal(value(journal.takeInventory()).snapshot, 1);
+  root.close();
+  const check = new DatabaseSync(paths.journal);
+  check.exec('PRAGMA locking_mode = EXCLUSIVE');
+  assert.equal(check.prepare('PRAGMA user_version').get()?.user_version, JOURNAL_FORMAT);
+  check.close();
+  root = value(openWorkerRoot(rootOptions(paths.dataRoot)));
+  journal = root.journal;
+});
+
+test('a migration that fails part way leaves the format 1 journal complete', () => {
+  value(journal.recordCommand(assignment()));
+  const { paths } = root;
+  root.close();
+  const raw = new DatabaseSync(paths.journal);
+  raw.exec('PRAGMA locking_mode = EXCLUSIVE');
+  for (const column of ['recovery_epoch', 'cpu_millicores', 'memory_mebibytes', 'hard_controls']) raw.exec(`ALTER TABLE launch_intent DROP COLUMN ${column}`);
+  raw.exec('PRAGMA user_version = 1');
+  raw.close();
+  // journal_meta still has the format 2 columns, so the first ALTER fails.
+  assert.equal(failed(openWorkerRoot(rootOptions(paths.dataRoot))).code, 'internal');
+  const check = new DatabaseSync(paths.journal);
+  check.exec('PRAGMA locking_mode = EXCLUSIVE');
+  assert.equal(check.prepare('PRAGMA user_version').get()?.user_version, 1);
+  assert.deepEqual(check.prepare('SELECT assignment_id FROM launch_intent').all().map((row) => row.assignment_id), [intent().assignmentId]);
+  assert.equal(check.prepare("SELECT 1 FROM pragma_table_info('launch_intent') WHERE name = 'cpu_millicores'").get(), undefined);
+  check.close();
+  // afterEach closes a root; this one is fresh and removed with the first.
+  const fresh = temporaryDataRoot();
+  const removeFirst = remove;
+  remove = () => {
+    removeFirst();
+    fresh.remove();
+  };
+  root = value(enrollWorkerRoot(rootOptions(fresh.dataRoot), ENROLLMENT));
+  journal = root.journal;
+});

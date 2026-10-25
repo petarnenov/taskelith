@@ -1,4 +1,4 @@
-// Journal format 1: the records of the worker journal contract, section 5.
+// Journal format 2: the records of the worker journal contract, section 5.
 export const JOURNAL_SCHEMA = `
 CREATE TABLE journal_meta (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -7,7 +7,10 @@ CREATE TABLE journal_meta (
   worker_id TEXT NOT NULL,
   recovery_epoch INTEGER NOT NULL,
   next_sequence INTEGER NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  declared_capacity TEXT,
+  capacity_declarations INTEGER NOT NULL DEFAULT 0,
+  inventory_snapshots INTEGER NOT NULL DEFAULT 0
 ) STRICT;
 
 CREATE TABLE inbox (
@@ -25,7 +28,16 @@ CREATE TABLE launch_intent (
   attempt_id TEXT NOT NULL,
   ownership_generation INTEGER NOT NULL,
   admission_id TEXT NOT NULL,
-  admission_generation INTEGER NOT NULL
+  admission_generation INTEGER NOT NULL,
+  recovery_epoch INTEGER NOT NULL,
+  cpu_millicores INTEGER NOT NULL,
+  memory_mebibytes INTEGER NOT NULL,
+  hard_controls TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE assignment_end (
+  assignment_id TEXT PRIMARY KEY,
+  command_id TEXT NOT NULL UNIQUE REFERENCES inbox (command_id)
 ) STRICT;
 
 CREATE TABLE cancellation_request (
@@ -60,5 +72,22 @@ CREATE TABLE outbox (
   observation_id TEXT NOT NULL UNIQUE,
   fact TEXT NOT NULL,
   recorded_at TEXT NOT NULL
+) STRICT;
+`;
+
+// Format 1 to 2 (contract section 10); a format 1 intent keeps no request
+// and takes the journal's recovery epoch.
+export const MIGRATION_FROM_FORMAT_1 = `
+ALTER TABLE journal_meta ADD COLUMN declared_capacity TEXT;
+ALTER TABLE journal_meta ADD COLUMN capacity_declarations INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE journal_meta ADD COLUMN inventory_snapshots INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE launch_intent ADD COLUMN recovery_epoch INTEGER NOT NULL DEFAULT 0;
+UPDATE launch_intent SET recovery_epoch = (SELECT recovery_epoch FROM journal_meta);
+ALTER TABLE launch_intent ADD COLUMN cpu_millicores INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE launch_intent ADD COLUMN memory_mebibytes INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE launch_intent ADD COLUMN hard_controls TEXT NOT NULL DEFAULT '[]';
+CREATE TABLE assignment_end (
+  assignment_id TEXT PRIMARY KEY,
+  command_id TEXT NOT NULL UNIQUE REFERENCES inbox (command_id)
 ) STRICT;
 `;
