@@ -108,6 +108,11 @@ The prompt names the criteria, the coordinator's paragraph on simple read-only c
 | L10 | "Without a network" was ambiguous for the build. | Fixed: the build uses the pinned inputs, and the steps run with `--network none`. |
 | L11 | The register text was inexact. | Fixed: `DISABLE_AUTOUPDATER=1` stays open for macOS, and the Codex row names the per-run update-check setting as a Linux addendum of 2026-10-25. |
 
+### Failed attempt of pass 3
+
+- Session `ses_e8ac4dc96ffevqfxoiVoDsuTlY`, on `cd225d5`, ended at 2026-10-25 22:47:19 UTC with `provider.no-route: Model unavailable: opencode/deepseek-v4.1-flash`, before any report. The snapshot before and after, `1cb5ae7722a74432fe526c6b876d609d8abcdc2d56f8a0cc3ead1f65b18c47c5`, was equal.
+- It does not count as a pass. Under the unavailable-reviewer rule, OpenCode is not used for any task until 23:17 UTC, and the worker proposed Claude Fable 5.1 to the coordinator as the replacement for pass 3.
+
 ## Limitations
 
 - One run per architecture, on linux/amd64 only. Emulated arm64 evidence would not have been support evidence in any case.
