@@ -10,7 +10,7 @@ Decisions taken during the task:
 
 ## Revision and environment
 
-- Base: `origin/dev` at `190e2cc`. Branch `qualify-harnesses-in-worker-image`. The variant and steps are in `1dea608`, the records in `8fe91be`; review pass 1 is of `8fe91be`. The pass 1 fixes are in `a439c3e`, `5a3130d`, `b3f274b`, and `fd85386`, with this record in `111b8d3`, which pass 2 reviewed. The pass 2 fixes are in `52a7ba4`, `b59f9bb`, `15f16a9`, and `c80bbed`, together with this update, which pass 3 reviews.
+- Base: `origin/dev` at `190e2cc`. Branch `qualify-harnesses-in-worker-image`. The variant and steps are in `1dea608`, the records in `8fe91be`; review pass 1 is of `8fe91be`. The pass 1 fixes are in `a439c3e`, `5a3130d`, `b3f274b`, and `fd85386`, with this record in `111b8d3`, which pass 2 reviewed. The pass 2 fixes are in `52a7ba4`, `b59f9bb`, `15f16a9`, and `c80bbed`, with the records of pass 2 and of the failed pass 3 attempt in `cd225d5` and `82445a8`; pass 3 reviewed `82445a8`. Its Low fixes are in `abb8a40` and `c0f7bf8`, together with this update, unreviewed.
 - Host: macOS 26.6.2 on x86_64; Docker Desktop with engine 29.5.2 and Compose 5.1.3; Node.js 24.22.1 from `.nvmrc`.
 
 ## Author self-check and evidence check
@@ -32,13 +32,15 @@ Decisions taken during the task:
 | `make verify` at `8fe91be` content, before pass 1 | passed; 1203 tests, 1203 passed, 0 failed; coverage 99.29 % lines, 91.83 % branches, 98.96 % functions; archive dry run valid |
 | `make qualify-harnesses OUT=… PLATFORMS=linux/amd64` at `1dea608`, before pass 1 | passed; finished 2026-10-25T21:58:04Z; image `sha256:07a8a3e2…`; superseded by the run at `b3f274b` |
 | `make qualify-harnesses OUT=…` at `b3f274b`, after the pass 1 fixes | linux/amd64 passed: every step matched its expected exit status, finished 2026-10-25T22:21:10Z, image `sha256:c890d33d…`, the same binary and schema hashes as before, and the root search found no credential file. linux/arm64 failed in the `node-arm64` build stage with tar's exit status 2, recorded in its `error.txt`, and the target then failed, as designed. Superseded by the run at `15f16a9` |
-| `make qualify-harnesses OUT=…` at `15f16a9`, after the pass 2 fixes | linux/amd64 passed: every step matched its expected exit status and output, finished 2026-10-25T22:39:26Z, image `sha256:a1ace3a1…`, the same binary and schema hashes, and no credential file. linux/arm64 failed in the `node-arm64` build stage again, recorded in its `error.txt`, and the target failed. These are the results in the records' "Linux worker image" sections |
+| `make qualify-harnesses OUT=…` at `15f16a9`, after the pass 2 fixes | linux/amd64 passed: every step matched its expected exit status and output, finished 2026-10-25T22:39:26Z, image `sha256:a1ace3a1…`, the same binary and schema hashes, and no credential file. linux/arm64 failed in the `node-arm64` build stage again, recorded in its `error.txt`, and the target failed. Superseded by the run at `c0f7bf8` |
+| `make qualify-harnesses OUT=…` at `c0f7bf8`, after the pass 3 fixes, unreviewed | linux/amd64 passed: every step matched its expected exit status and output, finished 2026-10-25T22:59:40Z, image `sha256:15e680d4…`, the same binary and schema hashes, no secret-like variable name, and no credential file. linux/arm64 failed in the `node-arm64` build stage again, recorded in its `error.txt`, and the target failed. These are the results in the records' "Linux worker image" sections |
 | Refusals of the hardened script | `PLATFORMS=linux/..` is refused as an unsupported platform, `OUT=./tmp-out` is refused before any directory is created, and `PLATFORMS=" "` is refused because it names no platform |
 | `make qualify-harnesses` for both platforms, at the uncommitted first draft | linux/amd64 passed with the same binary hashes. The linux/arm64 build failed in the `node-arm64` stage: under Docker Desktop's QEMU, GNU tar 1.35 failed on every entry with "Cannot mkdir: Invalid argument" or "Cannot open: Invalid argument". A plain `mkdir` in an emulated container of the same base worked |
 | `make verify` after the pass 1 fixes, with this record | passed; 1203 tests, 1203 passed, 0 failed; coverage 99.28 % lines, 91.82 % branches, 98.96 % functions; archive dry run valid |
 | `make verify` after the pass 2 fixes, with this record | passed; 1203 tests, 1203 passed, 0 failed; coverage 99.29 % lines, 91.82 % branches, 98.96 % functions; archive dry run valid |
+| `make verify` after the pass 3 fixes, with this record | passed; 1203 tests, 1203 passed, 0 failed; coverage 99.29 % lines, 91.83 % branches, 98.96 % functions; archive dry run valid. The `pre-push` hook runs it again on the pushed head |
 | `make verify-installation` on the branch | failed: `control-plane-1 is unhealthy` at the first start |
-| `make verify-installation` on unchanged `dev` (`aba18f5`, main clone) | failed the same way, so the failure is not caused by this change; its cause on this host was not investigated |
+| `make verify-installation` on unchanged `dev` (`aba18f5`, main clone) | failed the same way, so the failure is not caused by this change; its cause on this host was not investigated; the coordinator asked the author of 23a to look at it |
 
 ## Independent review
 
@@ -111,7 +113,25 @@ The prompt names the criteria, the coordinator's paragraph on simple read-only c
 ### Failed attempt of pass 3
 
 - Session `ses_e8ac4dc96ffevqfxoiVoDsuTlY`, on `cd225d5`, ended at 2026-10-25 22:47:19 UTC with `provider.no-route: Model unavailable: opencode/deepseek-v4.1-flash`, before any report. The snapshot before and after, `1cb5ae7722a74432fe526c6b876d609d8abcdc2d56f8a0cc3ead1f65b18c47c5`, was equal.
-- It does not count as a pass. Under the unavailable-reviewer rule, OpenCode is not used for any task until 23:17 UTC, and the worker proposed Claude Fable 5.1 to the coordinator as the replacement for pass 3.
+- It does not count as a pass. Under the unavailable-reviewer rule, OpenCode is not used for any task until 23:17 UTC. The worker proposed Claude Fable 5.1 to the coordinator as the replacement for pass 3, and the coordinator approved it. The coordinator noted that the owner had just made `opencode-go/deepseek-v4.1-flash#high` the OpenCode reviewer model, which fits the no-route error, and told the worker not to switch back for this task.
+
+### Pass 3
+
+- Reviewer: Claude Code with `claude-fable-5-1`, effort medium, permission mode `plan`, editing tools disallowed, the coordinator's replacement for OpenCode. Invocation, from the worktree: `claude -p "$(cat <scratch>/review4.md)" --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json < /dev/null`. The prompt named both earlier passes and their resolution tables.
+- Session `54972bd5-1240-4eda-81fa-49b9396dc9e2`, on `82445a8`. The JSON `modelUsage` reports only `claude-fable-5-1`.
+- Snapshot before and after: `c7306520b120779af91e7b1d8a42154bf1490c8177fc62bc1b2db4b8f925cdcb`, equal.
+- The reviewer ran the pin and composition tests (13 of 13 passed), `npm run verify:comments`, and strict OpenSpec validation. It matched all 119 lockfile entries against the registry's integrity and tarball, and OSV returned no advisory for any of them. It confirmed that the input hashes quoted in the records equal the files at `82445a8`.
+- All 15 pass 2 resolutions were confirmed; L5 only in the records, which is its new L1. New findings: 0 Critical, 0 High, 0 Medium, 7 Low. By the review process, a Low-only pass is fixed without another review; the fixes below are unreviewed.
+
+| # | Finding | Resolution (unreviewed) |
+| --- | --- | --- |
+| L1 | The design still attributed each difference to a single step. | Fixed: it says that every difference is proven to come from the steps and that the records name where the step was not isolated. |
+| L2 | Design and proposal placed the credential-file search in `qualify.sh`. | Fixed: both name the host script's root search of the image. |
+| L3 | The environment step showed only six variables. | Fixed: a step prints the names of all variables, and another requires that none contains `KEY`, `TOKEN`, or `SECRET`. |
+| L4 | The Codex version and login steps ran the npm wrapper, not the hashed binary. | Fixed: they run the vendor binary directly, as the schema step does. |
+| L5 | A run silently replaced an earlier platform directory. | Fixed: `docs/local-installation.md` says so. |
+| L6 | An existing `OUT` that is a symlink into the worktree passed the check. | Fixed: an existing `OUT` is resolved itself; only a new one is resolved through its parent. |
+| L7 | The records' gates omitted inventory and license evidence for the harness lockfile. | Fixed: both "Remaining before admission" lists name it. |
 
 ## Limitations
 
@@ -125,4 +145,6 @@ The prompt names the criteria, the coordinator's paragraph on simple read-only c
 
 - Native linux/arm64: a run of `make qualify-harnesses OUT=<dir> PLATFORMS=linux/arm64` on an Apple Silicon host, which the coordinator will arrange, or on D11's runner `ubuntu-24.04-arm` if the owner adds a workflow.
 - The model-calling scenarios on Linux, with an authorized login: G3 item 35 for Claude Code, and the G4 admission for Codex.
+- The pass 3 Low fixes are unreviewed, as the review process allows for a Low-only pass.
+- `make verify-installation` failing on this host, on `dev` as well, is with the author of 23a.
 - Coordinator integration, merge into `dev`, and archive.

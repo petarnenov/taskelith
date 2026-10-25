@@ -14,4 +14,4 @@
 
 - [x] 3.1 Add `test/harness-image-pins.test.ts` and cover the variant in the composition test
 - [x] 3.2 Update `docs/qualification/claude-code.md` and `codex.md`
-- [ ] 3.3 `make verify`, independent review, and `verification.md`
+- [x] 3.3 `make verify`, independent review, and `verification.md`
