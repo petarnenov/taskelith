@@ -194,6 +194,7 @@ Not run, because they need a login: multi-turn chat, prompt correlation, resume,
 
 ## Remaining before admission
 
+- Inventory, SBOM, and license evidence for the packages of the harness lockfile (`infra/installation/harnesses/package-lock.json`), which the root dependency inventory does not cover.
 - Linux in the worker image ([Linux worker image](#linux-worker-image)): the scenarios that need a login on linux/amd64, which the owner did not authorize for G2 item 26; linux/arm64, natively, for example on D11's runner `ubuntu-24.04-arm` or an Apple Silicon host. Also macOS arm64, with `DISABLE_AUTOUPDATER=1` and a check that nothing outside the configuration directory changes.
 - Non-permission input requests, which no scenario tested.
 - The subscription mechanism for account slots (a long-lived subscription token or a per-slot device login), its load, limit, and reset signals, and whether an agent can read an injected credential ([ADR 0005](../decisions/0005-harness-subscription-account-pools.md)).

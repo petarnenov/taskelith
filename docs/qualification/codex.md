@@ -206,6 +206,7 @@ Not run, because they need a login: multi-turn chat, correlation, resume, approv
 
 ## Remaining before admission
 
+- Inventory, SBOM, and license evidence for the packages of the harness lockfile (`infra/installation/harnesses/package-lock.json`), which the root dependency inventory does not cover.
 - The review of OpenAI's data-handling terms, and of whether its terms allow pooled subscriptions for automated use (ADR 0005), is recorded on 2026-10-25 in [Provider terms review](#provider-terms-review), from Wayback Machine snapshots because the live pages returned HTTP 403; the owner decided D15 on 2026-10-25: (a), accept the remaining risk ([G3 plan](../g3-plan.md#owner-decisions)); admission remains subject to the other qualification gates in G4 ([ADR 0007](../decisions/0007-g0-closure.md)).
 - Linux in the worker image ([Linux worker image](#linux-worker-image)): the scenarios that need a login on linux/amd64, which the owner did not authorize for G2 item 26; linux/arm64, natively, for example on D11's runner `ubuntu-24.04-arm` or an Apple Silicon host. Also macOS arm64.
 - Disabling the update check per run: `check_for_update_on_startup = false` in each run's `CODEX_HOME`, because Codex has no environment switch for it.
