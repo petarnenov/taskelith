@@ -238,8 +238,9 @@ test('cancelling an assignment with a running execution keeps the reservation un
   const ended = value(await service.cancelAssignment(request));
   assert.deepEqual([ended.state, ended.reservation.state], ['ended', 'held']);
   assert.deepEqual(await eventTypes(), ['execution.assignment.offer', 'execution.cancellation.request']);
-  const early = await service.releaseAfterTerminalFact({ ...request, commandId: id('EventId', 'release-early') });
-  assert.equal(!early.ok && early.error.code, 'precondition-failed');
+  const early = value(await service.releaseAfterTerminalFact({ ...request, commandId: id('EventId', 'release-early') }));
+  assert.deepEqual([early.outcome, early.assignment], ['kept', ended]);
+  assert.deepEqual(await counts(), { held: 1, assignments: 1, charges: 1, outbox: 2 });
   const cancelled = value(await database.transaction((tx) => tx.tasks.get(task.id)));
   const attempt = cancelled.attempts.at(-1)!;
   assert.equal(attempt.cancellation?.reason, 'launch-revoked');
@@ -251,7 +252,8 @@ test('cancelling an assignment with a running execution keeps the reservation un
     const stored = await tx.tasks.replace(sealed.value.task, cancelled.generation);
     return stored.ok ? releaseInTransaction(tx, { ...request, commandId: id('EventId', 'release-a') }) : stored;
   }));
-  assert.equal(released.reservation.state === 'released' && released.reservation.releasedBy, 'execution-terminal');
+  assert.equal(released.outcome, 'released');
+  assert.equal(released.assignment.reservation.state === 'released' && released.assignment.reservation.releasedBy, 'execution-terminal');
   assert.deepEqual(await counts(), { held: 0, assignments: 1, charges: 1, outbox: 2 });
 });
 
@@ -397,7 +399,7 @@ test('the transaction recording an attempt\'s end also ends its active assignmen
     const stored = await tx.tasks.replace(ended.value, task.generation);
     return stored.ok ? releaseInTransaction(tx, request) : stored;
   }));
-  assert.deepEqual([released.end?.reason, released.reservation.state], ['attempt-ended', 'released']);
+  assert.deepEqual([released.outcome, released.assignment.end?.reason, released.assignment.reservation.state], ['released', 'attempt-ended', 'released']);
   assert.deepEqual(await eventTypes(), ['execution.assignment.offer', 'execution.assignment.end']);
   const active = await service.releaseAfterTerminalFact(request);
   assert.equal(!active.ok && active.error.code, 'precondition-failed');

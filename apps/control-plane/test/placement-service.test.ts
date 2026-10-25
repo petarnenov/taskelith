@@ -17,6 +17,8 @@ function timing() {
 const UNPLACED = err(failure('precondition-failed', 'no candidate accepted it'));
 const DOWN = err(failure('unavailable', 'the store is down'));
 const GONE = err(failure('precondition-failed', 'it does not wait', { reason: 'not-waiting' }));
+const PLACED = ok({ kind: 'placed' });
+const ENDED = ok({ kind: 'ended' });
 
 // Answers the waiting read and each placement transaction from scripts,
 // counting both; the transactions themselves run in the integration tests.
@@ -54,7 +56,7 @@ function scriptedStore(placements: Result<unknown>[]) {
 
 test('a task that is not placed backs off exponentially and is reset once placed', async () => {
   const { clock, timing: controlled } = timing();
-  const { state, store } = scriptedStore([UNPLACED, UNPLACED, ok({})]);
+  const { state, store } = scriptedStore([UNPLACED, UNPLACED, PLACED]);
   const service = new PlacementService(store, controlled);
   assert.deepEqual(value(await service.placeWaiting()), { waiting: 1, placed: 0 });
   clock.at = 7_499;
@@ -82,9 +84,31 @@ test('a task that backs off is excluded from the waiting read until due', async 
   assert.deepEqual(state.excluded, [[], ['task-1'], []]);
 });
 
+test('a task whose attempt a rejecting reason ended is not placed and keeps no backoff', async () => {
+  const { state, store } = scriptedStore([ENDED, UNPLACED]);
+  const service = new PlacementService(store, timing().timing);
+  assert.deepEqual(value(await service.placeWaiting()), { waiting: 1, placed: 0 });
+  value(await service.placeWaiting());
+  assert.deepEqual([state.opened, state.excluded], [2, [[], []]], 'read again at once');
+});
+
+test('a retry that backs off is not read until its due time, and keeps no failure count', async () => {
+  const { clock, timing: controlled } = timing();
+  const { state, store } = scriptedStore([ok({ kind: 'backing-off', dueAt: 30_000 }), UNPLACED]);
+  const service = new PlacementService(store, controlled);
+  assert.deepEqual(value(await service.placeWaiting()), { waiting: 1, placed: 0 });
+  clock.at = 29_999;
+  assert.deepEqual(value(await service.placeWaiting()), { waiting: 0, placed: 0 });
+  clock.at = 30_000;
+  value(await service.placeWaiting());
+  clock.at = 37_499;
+  value(await service.placeWaiting());
+  assert.deepEqual([state.opened, state.excluded.at(-1)], [2, ['task-1']], 'its first failure delays it 7.5 s');
+});
+
 test('without a candidate no transaction is opened and the tasks back off', async () => {
   const { clock, timing: controlled } = timing();
-  const { state, store } = scriptedStore([ok({})]);
+  const { state, store } = scriptedStore([PLACED]);
   state.candidates = [];
   const service = new PlacementService(store, controlled);
   assert.deepEqual(value(await service.placeWaiting()), { waiting: 1, placed: 0 });
@@ -215,7 +239,7 @@ async function blockedProjectsStore(): Promise<ControlPlaneStore> {
     transaction: async (work) => {
       const asked: string[] = [];
       await work({ tasks: { get: async (taskId: string) => (asked.push(taskId), UNPLACED) } } as never);
-      return (asked.includes(PLACEABLE) ? ok({}) : UNPLACED) as never;
+      return (asked.includes(PLACEABLE) ? PLACED : UNPLACED) as never;
     },
   };
 }

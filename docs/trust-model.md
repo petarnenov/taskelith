@@ -12,6 +12,7 @@ Taskelith enforces explicit identity separation across every control-plane, brok
 | Operator / user principal | Authenticated human principal managed via the replaceable `Access` authentication adapter; initial bootstrap creates the first `installation-owner` credential explicitly. | Performs interactive SPA/CLI/API actions according to assigned installation and project roles. |
 | Worker principal (`workerId`) | Per-worker service identity established by exchanging a short-lived, single-use enrollment token; bound to `installationId` and credential generation. | Initiates outbound control-plane/broker/relay connections, polls addressed commands, requests launch authorization, and publishes observations for its own `workerId`. |
 | Attempt launch authorization (`launchAuthId`) | Short-lived online token/grant issued transactionally by the control plane for a specific `(attemptId, workerId, executionId, ownershipGeneration, recoveryEpoch, artifactRevision, policyRevision)`. | Authorizes starting or adopting one admitted execution attempt within the declared clock-skew and expiry window. |
+| Decision council (`councilDecisionId`) | Delegated decision body of three independently configured harness seats, appointed and revocable by an `installation-owner`; each decision is an immutable record bound to exact artifact, code, and policy revisions ([ADR 0014](decisions/0014-decision-council-and-delegated-approval.md)). | Approves intents, standalone specifications, verification and review ratification, and merges up to an integration branch. Never `main`, release, deployment, policy, project settings, or an operator hold. |
 
 ## 2. Installation bootstrap and disaster recovery authority
 
@@ -32,6 +33,8 @@ Every mutating command and query is authorized against `installationId`, `projec
 
 Cross-project isolation is mandatory: knowledge retrieval (`Knowledge` module), artifact/evidence downloads (`EvidenceStore`), and session streams filter and authorize by `projectId` prior to returning results.
 
+A decision council is a delegated principal, not a role. It acts under an owner-recorded appointment and can be disabled by the owner; its authority is the subset of `project-maintainer` approvals named in [ADR 0014](decisions/0014-decision-council-and-delegated-approval.md), and it never performs `installation-owner` actions.
+
 ## 4. Worker enrollment, rotation, and revocation
 
 - **Enrollment:** An `installation-owner` generates a short-lived, single-use enrollment token bound to expected host metadata/pool constraints. The worker presents this token over TLS to the control plane, which mints a unique `workerId` and per-worker credentials for the control plane and NATS subjects.
@@ -42,7 +45,7 @@ Cross-project isolation is mandatory: knowledge retrieval (`Knowledge` module), 
 
 - **Explicitly trusted enrolled hosts:** Initial Linux and macOS workers are operated on explicitly enrolled, trusted hosts (`docs/worker-platforms.md`). Linux workers and their harnesses run in the digest-pinned worker container image, and macOS workers run natively ([ADR 0004](decisions/0004-first-class-engineering-principles.md)). Protecting the control plane and broker does not turn either a worker container or a native worker OS user into a sandbox against arbitrary shell commands executed by an admitted agent harness; container isolation is not claimed as a security boundary until it is separately qualified.
 - **Per-workspace credential scoping:** Workers must not expose installation-wide secrets, broker credentials, or another project's tokens to child agent processes. Git/SCM credentials injected into an attempt are scoped to the specific workspace/project; for the GitHub.com SCM they are GitHub App installation tokens limited to the project's repositories and delivered only to that run ([ADR 0006](decisions/0006-github-first-scm.md)). Harness provider credentials come from subscription account slots: each is scoped to its slot and the projects explicitly allowed for it, and is injected only for the run that reserved it ([ADR 0005](decisions/0005-harness-subscription-account-pools.md)). All of them are scrubbed from environment variables, logs, lessons, and error payloads by default.
-- **Separation of approvals:** SDLC gate approval (`GateDecision`) authorizes lifecycle stage progression for exact artifact/code/policy revisions. Runtime native approval (`NativeApprovalRequest`) authorizes a specific tool/input request within one live attempt and provider generation. Neither implies the other.
+- **Separation of approvals:** SDLC gate approval (`GateDecision`) authorizes lifecycle stage progression for exact artifact/code/policy revisions. Runtime native approval (`NativeApprovalRequest`) authorizes a specific tool/input request within one live attempt and provider generation. Neither implies the other. A decision-council approval is a delegated SDLC gate approval, recorded like any other gate decision; it is distinct from a native runtime approval and authorizes no tool call.
 
 ## 6. Plugin trust and capability contract
 

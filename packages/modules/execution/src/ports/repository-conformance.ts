@@ -30,7 +30,16 @@ import { parseRecoveryEpoch } from '../domain/identifiers.js';
 import { claimOwnership, openAttempt, openTask, type Task } from '../domain/task.js';
 import { launchRejection } from '../domain/launch-rejection.js';
 import { revokeLaunch } from '../domain/task.js';
+import {
+  parseSequence,
+  recordAppliedSequence,
+  startProducerCursor,
+  type JournalId,
+  type ProducerCursor,
+} from '../domain/observation-sequence.js';
+import type { WorkerId } from '../domain/identifiers.js';
 import type { Inbox } from './inbox.js';
+import type { ProducerCursors } from './producer-cursors.js';
 import type { LaunchRecords, RecordedLaunch } from './launch-records.js';
 import type { TaskRepository } from './task-repository.js';
 
@@ -185,6 +194,30 @@ export const INBOX_CONFORMANCE: readonly ConformanceCase<Inbox>[] = Object.freez
       const unusual = ['nul \u0000', 'unpaired \uD800', 'unpaired \uD801'];
       const accepted = await Promise.all(unusual.map((consumer) => inbox.accept(consumer, message)));
       expectSame(problems, 'distinct unusual consumers', accepted, unusual.map(() => ({ ok: true, value: 'accepted' })));
+      return problems;
+    },
+  },
+]);
+
+export const PRODUCER_CURSORS_CONFORMANCE: readonly ConformanceCase<ProducerCursors>[] = Object.freeze([
+  {
+    name: 'a cursor starts at zero, reads back as saved, and is kept per journal',
+    async check(cursors: ProducerCursors) {
+      const problems: string[] = [];
+      const workerId = must(parseIdentifier('WorkerId', 'worker-1')) as WorkerId;
+      const journal = (text: string) => must(parseIdentifier('JournalId', text)) as JournalId;
+      const first = journal('journal-1');
+      expectSame(problems, 'unknown', await cursors.get(workerId, first), startProducerCursor(workerId, first));
+      const applied = (cursor: ProducerCursor, ...sequences: number[]) => sequences.reduce(
+        (next, sequence) => must(recordAppliedSequence(next, must(parseSequence(sequence)))), cursor);
+      const gapped = applied(startProducerCursor(workerId, first), 1, 2, 4, 7);
+      expectSuccess(problems, 'save', await cursors.save(gapped));
+      expectSame(problems, 'saved', await cursors.get(workerId, first), gapped);
+      const closed = applied(gapped, 3);
+      expectSuccess(problems, 'save again', await cursors.save(closed));
+      expectSame(problems, 'replaced', await cursors.get(workerId, first), closed);
+      const other = journal('journal-2');
+      expectSame(problems, 'other journal', await cursors.get(workerId, other), startProducerCursor(workerId, other));
       return problems;
     },
   },
