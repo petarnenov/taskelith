@@ -33,6 +33,8 @@ Reviewer: Codex (`gpt-6.1-sol`), reasoning effort medium, read-only sandbox, as 
   - Low: `design.md` said the ledger sums the values in the same type, but `heldOnWorker` sums without a cast. Resolved: the claim is removed.
   - Low: `design.md` said the worker enforces the ceiling, but the worker has no behavior yet. Resolved: the scheduler's enforcement and the contract requirement on the worker are stated separately.
   - Low: `design.md` said a larger value from an old peer failed at the database. Resolved: it now states only that wire validation refuses such a value and offers from the placement path stay valid.
+- **Pass 2 — session `01a17443-811a-7483-af35-415d7d373923`, head `1dbbc08`.** The header confirmed the model, reasoning effort medium, and the read-only sandbox; the snapshot was `4e0ffc90…f5e6d48b` before and after the pass. The reviewer confirmed the resolution of each pass 1 finding, the boundary tests (21 contract tests passed), the 14 breaking paths and version 0.3.0, that only the AsyncAPI document defines `ResourceRequest`, that the per-attempt ceiling is unchanged, and that no hand check is left to remove. Findings: 0 Critical, 0 High, 0 Medium, 1 Low.
+  - Low: "Remaining gates" omitted the open review while it was in progress. Resolved without another review, as a Low-only pass allows: the review is complete with this entry, and task 2.3 is checked. This record entry and `tasks.md` are the only changes after pass 2, unreviewed; `make verify` ran again in the `pre-push` hook of the handoff push.
 
 ## Limitations
 

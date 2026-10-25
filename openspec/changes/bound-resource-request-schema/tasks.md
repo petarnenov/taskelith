@@ -10,4 +10,4 @@
 
 - [x] 2.1 Show that the new test fails without the bound and passes with it.
 - [x] 2.2 Run `make verify` on the Linux host.
-- [ ] 2.3 Pass the independent review and record it in `verification.md`.
+- [x] 2.3 Pass the independent review and record it in `verification.md`.
