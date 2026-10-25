@@ -126,6 +126,16 @@ The coordinator returned the task because merging `origin/dev` at `21537cd`, whi
 | M1: no record of the merge | Fixed: this section. |
 | L1: the confirmation was matched by a substring of the message | Fixed: it is matched by the outbox row's subject. |
 
+`make verify` after the merge review fixes (`505a83b`): 1198 tests, 1198 passed, 0 failed; coverage 99.29% lines, 91.82% branches, 98.96% functions; every other step passed.
+
+### Merge review pass 2
+
+- Reviewer: the same invocation at `505a83b`, with pass 1's session named and its findings to confirm.
+- Model confirmation: `claude-fable-5-1` in `modelUsage`. Session ID: `990fcb1b-9658-4d67-be42-f86b06e5b30b`.
+- Snapshot: `18d5bbe08253fe6562b551d124637b22159f0493521749931ef87aa0acd333df` before and after; unchanged.
+- H1, M1, and L1 confirmed resolved. Findings: 0 Critical, 0 High, 0 Medium, 1 Low.
+- L1: the `make verify` result after `505a83b` was not recorded. Fixed by the line above, without another review (Low-only pass).
+
 ## Limitations and remaining gates
 
 - No native acceptance on the matrix entries; the tests ran on macOS x86_64 with the Compose services.
