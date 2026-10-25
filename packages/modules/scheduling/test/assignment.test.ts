@@ -19,11 +19,7 @@ import {
   supersedeAssignment,
   type Assignment,
 } from '@taskelith/scheduling';
-
-function value<T>(result: Result<T>): T {
-  assert.ok(result.ok, `expected success, got ${JSON.stringify(result.ok ? undefined : result.error)}`);
-  return result.value;
-}
+import { value } from '@taskelith/testing';
 
 function code<T>(result: Result<T>): string {
   assert.ok(!result.ok, 'expected a failure');
@@ -114,6 +110,13 @@ test('a refusal ends the assignment and releases its reservation', () => {
   assert.deepEqual(refused.end, { reason: 'refused', refusal: 'worker-admission-pressure', endedAt: T1 });
   assert.equal(refused.reservation.state === 'released' && refused.reservation.releasedBy, 'refused');
   assert.equal(launchAssignment(refused).active, false);
+});
+
+test('an offer in a protocol version the worker lacks is refused and released', () => {
+  const assignment = offered();
+  const refused = value(refuseAssignment(assignment, assignment.generation, { workerId: WORKER, reason: 'protocol-not-supported' }, NONE, T1));
+  assert.deepEqual(refused.end, { reason: 'refused', refusal: 'protocol-not-supported', endedAt: T1 });
+  assert.equal(refused.reservation.state === 'released' && refused.reservation.releasedBy, 'refused');
 });
 
 test('ending while an execution can run keeps the reservation until its terminal fact', () => {

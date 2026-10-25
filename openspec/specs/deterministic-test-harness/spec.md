@@ -81,3 +81,22 @@ The integration services SHALL run `ghcr.io/shopify/toxiproxy:2.13.0` pinned by 
 #### Scenario: Routes reach the services
 - **WHEN** `make test` runs the integration tests
 - **THEN** a PostgreSQL session through `TASKELITH_POSTGRES_PROXY_URL` answers queries and a connection through `TASKELITH_NATS_PROXY_URL` receives the NATS INFO greeting
+
+### Requirement: Shared result helpers
+The harness SHALL provide `value`, which returns the value of a successful result and fails the test with the failure as JSON otherwise, `failed`, which returns the error of a failed result and fails the test otherwise, and `id`, which parses an identifier through the kernel's `parseIdentifier` and `value`. The harness SHALL depend on no workspace package but the kernel, so that the tests of every package share these helpers instead of defining their own copies.
+
+#### Scenario: Successful result
+- **WHEN** a test passes a successful result to `value`
+- **THEN** `value` returns the result's value
+
+#### Scenario: Failed result
+- **WHEN** a test passes a failed result to `value`, or text that the kernel rejects to `id`
+- **THEN** the call throws an assertion error that contains the failure
+
+#### Scenario: Expected failure
+- **WHEN** a test passes a failed result to `failed`
+- **THEN** `failed` returns the result's error, and for a successful result it throws an assertion error
+
+#### Scenario: Harness manifest names another workspace package
+- **WHEN** any dependency field of the `@taskelith/testing` manifest names a workspace package other than `@taskelith/kernel`
+- **THEN** the boundary check reports a violation naming that package

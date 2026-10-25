@@ -2,7 +2,7 @@
   "asyncapi": "3.0.0",
   "info": {
     "title": "Taskelith SDLC messages",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Command and event envelopes of the SDLC module and its admission and gate events. Transport bindings, subjects, and servers are chosen with the broker in G2, so channel addresses are not yet fixed."
   },
   "defaultContentType": "application/json",
@@ -178,7 +178,7 @@
       "Admission": {
         "type": "object",
         "additionalProperties": false,
-        "description": "A task admission record. The ownership generation is added with the execution module (G2).",
+        "description": "A task admission record. A used admission carries the ownership generation of the dispatch that used it.",
         "required": [
           "id",
           "taskId",
@@ -234,6 +234,9 @@
             "$ref": "#/components/schemas/AdmissionState"
           },
           "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "ownershipGeneration": {
             "$ref": "#/components/schemas/Generation"
           },
           "changedAt": {

@@ -1,5 +1,4 @@
-import assert from 'node:assert/strict';
-import { parseIdentifier, parseInstant, type Instant, type Result } from '@taskelith/kernel';
+import { parseIdentifier, parseInstant, type Instant } from '@taskelith/kernel';
 import {
   FIRST_OWNERSHIP_GENERATION,
   admitImplementationTask,
@@ -42,16 +41,7 @@ import {
   type Task,
   type WorkerId,
 } from '@taskelith/execution';
-
-export function value<T, E>(result: Result<T, E>): T {
-  assert.ok(result.ok, `expected success, got ${JSON.stringify(result.ok ? undefined : result.error)}`);
-  return result.value;
-}
-
-export function failureOf<T, E>(result: Result<T, E>): E {
-  assert.ok(!result.ok, 'expected a failure');
-  return result.error;
-}
+import { value } from '@taskelith/testing';
 
 export function instant(text: string): Instant {
   return value(parseInstant(text));
