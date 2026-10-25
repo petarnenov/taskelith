@@ -11,6 +11,7 @@ import {
   JOURNAL_APPLICATION_ID,
   JOURNAL_FORMAT,
   checkVolume,
+  credentialReferencesOf,
   enrollWorkerRoot,
   parseDfMountPoint,
   failureReason,
@@ -19,13 +20,14 @@ import {
   recordJournalFault,
   parseMacMountOptions,
   probeVolume,
+  readWorkerCredentials,
   resolveDataRoot,
   startNewIncarnation,
   workerPaths,
   type VolumeProbe,
   type WorkerRoot,
 } from '@taskelith/worker-journal';
-import { BINDING, digest, rootOptions, temporaryDataRoot } from './fixtures.ts';
+import { BINDING, ENROLLMENT, digest, rootOptions, temporaryDataRoot } from './fixtures.ts';
 
 let dataRoot: string;
 let remove: () => void;
@@ -41,7 +43,7 @@ afterEach(() => {
 });
 
 function enroll(): WorkerRoot {
-  const root = value(enrollWorkerRoot(rootOptions(dataRoot), BINDING));
+  const root = value(enrollWorkerRoot(rootOptions(dataRoot), ENROLLMENT));
   opened.push(root);
   return root;
 }
@@ -78,18 +80,45 @@ test('enrollment creates the journal before the identity, with private modes', (
   for (const directory of [paths.worker, paths.journalDirectory, paths.executions, paths.logs, paths.workspaces]) {
     assert.equal(statSync(directory).mode & 0o777, 0o700, directory);
   }
-  for (const file of [paths.lock, paths.identity, paths.journal, `${paths.journal}-wal`]) {
+  const credentialFiles = [join(paths.credentials, 'control-plane.1'), join(paths.credentials, 'broker.1.creds')];
+  for (const file of [paths.lock, paths.identity, paths.journal, `${paths.journal}-wal`, ...credentialFiles]) {
     assert.equal(statSync(file).mode & 0o777, 0o600, file);
   }
+  assert.equal(statSync(paths.credentials).mode & 0o777, 0o700);
   assert.equal(existsSync(`${paths.journal}-shm`), false);
   assert.deepEqual(JSON.parse(readFileSync(paths.identity, 'utf8')), {
     format: 1,
     installationId: BINDING.installationId,
     workerId: BINDING.workerId,
     journalId: BINDING.journalId,
+    credentialGeneration: 1,
+    credentials: { controlPlane: 'credentials/control-plane.1', broker: 'credentials/broker.1.creds' },
   });
   assert.deepEqual(root.journal.binding, BINDING);
-  assert.equal(failed(enrollWorkerRoot(rootOptions(dataRoot), BINDING)).code, 'conflict');
+  assert.deepEqual(root.identity.credentials, credentialReferencesOf(1));
+  assert.deepEqual(value(readWorkerCredentials(paths, root.identity, process.getuid?.() ?? -1)), ENROLLMENT.credentials);
+  assert.equal(failed(enrollWorkerRoot(rootOptions(dataRoot), ENROLLMENT)).code, 'conflict');
+});
+
+test('the credentials are read only while present, nonempty, and safe', () => {
+  const { paths, identity } = enroll();
+  const uid = process.getuid?.() ?? -1;
+  const broker = join(paths.credentials, 'broker.1.creds');
+  writeFileSync(broker, '');
+  assert.equal(reasonOf(readWorkerCredentials(paths, identity, uid)), 'corrupt');
+  rmSync(broker);
+  assert.equal(reasonOf(readWorkerCredentials(paths, identity, uid)), 'corrupt');
+  symlinkSync(paths.identity, broker);
+  assert.equal(reasonOf(readWorkerCredentials(paths, identity, uid)), 'unsafe-path');
+  rmSync(join(paths.credentials, 'control-plane.1'));
+  assert.equal(reasonOf(readWorkerCredentials(paths, identity, uid)), 'corrupt');
+});
+
+test('a group-writable credentials directory fails startup', () => {
+  const { paths } = enroll();
+  opened.splice(0).forEach((root) => root.close());
+  chmodSync(paths.credentials, 0o770);
+  assert.equal(reasonOf(openWorkerRoot(rootOptions(dataRoot))), 'unsafe-path');
 });
 
 test('the journal is a Taskelith journal of the current format, reopened with its binding', () => {
@@ -133,7 +162,7 @@ test('the root lock of a killed process is free, and a live holder keeps it', as
 
 test('a data root inside a Git working tree is refused', () => {
   mkdirSync(join(dirname(dataRoot), '.git'));
-  assert.equal(reasonOf(enrollWorkerRoot(rootOptions(dataRoot), BINDING)), 'inside-checkout');
+  assert.equal(reasonOf(enrollWorkerRoot(rootOptions(dataRoot), ENROLLMENT)), 'inside-checkout');
 });
 
 test('a symbolic link or a group-writable control record fails startup', () => {
@@ -241,8 +270,13 @@ test('a foreign, truncated, bit-flipped, or newer journal fails startup without 
 test('a journal that is not the one the identity names fails startup', () => {
   const { paths } = enroll();
   opened.splice(0).forEach((root) => root.close());
-  writeFileSync(paths.identity, JSON.stringify({ format: 1, installationId: BINDING.installationId, workerId: BINDING.workerId, journalId: 'other' }));
+  const stored = JSON.parse(readFileSync(paths.identity, 'utf8')) as Record<string, unknown>;
+  writeFileSync(paths.identity, JSON.stringify({ ...stored, journalId: 'other' }));
   assert.equal(reasonOf(openWorkerRoot(rootOptions(dataRoot))), 'binding-mismatch');
+  for (const invalid of [{ credentialGeneration: 0 }, { credentials: { controlPlane: '../identity', broker: 'credentials/b' } }, { credentials: null }]) {
+    writeFileSync(paths.identity, JSON.stringify({ ...stored, ...invalid }));
+    assert.equal(reasonOf(openWorkerRoot(rootOptions(dataRoot))), 'corrupt');
+  }
   writeFileSync(paths.identity, JSON.stringify({ format: 2 }));
   assert.equal(reasonOf(openWorkerRoot(rootOptions(dataRoot))), 'newer-format');
   writeFileSync(paths.identity, '{');
@@ -284,7 +318,7 @@ test('only local APFS is accepted on macOS, and remote or volatile filesystems o
   assert.equal(reasonOf(checkVolume('/data', darwin('apfs', false))), 'unsupported-volume');
   value(checkVolume('/data', linux(0xef53n)));
   for (const magic of [0x6969n, 0x794c7630n, 0x01021994n]) assert.equal(reasonOf(checkVolume('/data', linux(magic))), 'unsupported-volume');
-  assert.equal(reasonOf(enrollWorkerRoot(rootOptions(dataRoot, { probe: darwin('hfs') }), BINDING)), 'unsupported-volume');
+  assert.equal(reasonOf(enrollWorkerRoot(rootOptions(dataRoot, { probe: darwin('hfs') }), ENROLLMENT)), 'unsupported-volume');
 });
 
 test('the real probe describes the test volume and parses df and mount output', () => {
@@ -305,7 +339,7 @@ test('on macOS a data root on a volume that is not local APFS is refused', { ski
   execFileSync('hdiutil', ['create', '-quiet', '-size', '16m', '-fs', 'MS-DOS FAT16', '-volname', 'TJFAT', image]);
   execFileSync('hdiutil', ['attach', '-quiet', '-nobrowse', '-mountpoint', mountPoint, image]);
   try {
-    assert.equal(reasonOf(enrollWorkerRoot(rootOptions(join(mountPoint, 'data'), { probe: probeVolume }), BINDING)), 'unsupported-volume');
+    assert.equal(reasonOf(enrollWorkerRoot(rootOptions(join(mountPoint, 'data'), { probe: probeVolume }), ENROLLMENT)), 'unsupported-volume');
     assert.equal(existsSync(join(mountPoint, 'data')), false);
   } finally {
     execFileSync('hdiutil', ['detach', '-quiet', '-force', mountPoint]);

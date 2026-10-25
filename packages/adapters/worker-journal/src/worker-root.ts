@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { err, failure, ok, type Failure, type Result } from '@taskelith/kernel';
-import type { JournalBinding, JournalId, RecoveryEpoch } from '@taskelith/execution';
+import type { JournalId, RecoveryEpoch } from '@taskelith/execution';
 import {
   checkControlPath,
   createOnce,
@@ -18,6 +18,7 @@ import { rootFailure } from './journal-failure.js';
 import { checkJournalFault, clearJournalFault, hostBootId, recordJournalFault } from './journal-fault.js';
 import { SqliteWorkerJournal, type CommitPointHook, type JournalClock } from './sqlite-worker-journal.js';
 import { checkVolume, probeVolume, type VolumeProbe } from './volume.js';
+import { writeCredentials, type WorkerEnrollment } from './worker-credentials.js';
 import { readIdentity, serializeIdentity, type WorkerIdentity } from './worker-identity.js';
 import { workerPaths, type WorkerPaths } from './worker-paths.js';
 
@@ -31,6 +32,7 @@ export interface WorkerRootOptions {
 // An open worker root: the root lock is held until `close`.
 export interface WorkerRoot {
   readonly paths: WorkerPaths;
+  readonly identity: WorkerIdentity;
   readonly journal: SqliteWorkerJournal;
   close(): void;
 }
@@ -52,16 +54,16 @@ export function openWorkerRoot(options: WorkerRootOptions): Result<WorkerRoot> {
   });
 }
 
-// Enrollment's part (item 13): the journal first, the identity last, so an
-// identity without a journal always means a loss (contract section 2).
-export function enrollWorkerRoot(options: WorkerRootOptions, binding: JournalBinding): Result<WorkerRoot> {
+// Enrollment's part (items 13, 20): the journal, then the credentials, then
+// the identity, so an identity without a journal means a loss (section 2).
+export function enrollWorkerRoot(options: WorkerRootOptions, enrollment: WorkerEnrollment): Result<WorkerRoot> {
   const paths = workerPaths(options.dataRoot);
   if (existsSync(paths.worker)) return err(failure('conflict', `${paths.worker} already exists`));
   const prepared = prepareDataRoot(paths, options);
   if (!prepared.ok) return prepared;
   let enrolled: Result<WorkerRoot> | undefined;
   try {
-    enrolled = withRootLock(paths, (lock) => createJournalThenIdentity(paths, options, binding, lock));
+    enrolled = withRootLock(paths, (lock) => createJournalThenIdentity(paths, options, enrollment, lock));
     return enrolled;
   } finally {
     // A failed enrollment leaves no partial subtree that blocks a retry.
@@ -72,19 +74,23 @@ export function enrollWorkerRoot(options: WorkerRootOptions, binding: JournalBin
 function createJournalThenIdentity(
   paths: WorkerPaths,
   options: WorkerRootOptions,
-  binding: JournalBinding,
+  enrollment: WorkerEnrollment,
   lock: ExclusiveFileLock,
 ): Result<WorkerRoot> {
   for (const directory of [paths.journalDirectory, paths.executions, paths.logs, paths.workspaces]) {
     const created = createPrivateDirectory(directory);
     if (!created.ok) return created;
   }
-  const created = createJournalDatabase(paths.journal, binding, options.clock.now());
+  const created = createJournalDatabase(paths.journal, enrollment, options.clock.now());
   if (!created.ok) return created;
   created.value.close();
-  const identity = createOnce(paths.identity, serializeIdentity(binding));
-  if (!identity.ok) return identity;
-  return openJournal(paths, options, binding, lock);
+  const credentials = writeCredentials(paths, enrollment);
+  if (!credentials.ok) return credentials;
+  const { installationId, workerId, journalId, credentialGeneration } = enrollment;
+  const identity: WorkerIdentity = { installationId, workerId, journalId, credentialGeneration, credentials: credentials.value };
+  const written = createOnce(paths.identity, serializeIdentity(identity));
+  if (!written.ok) return written;
+  return openJournal(paths, options, identity, lock);
 }
 
 // The operator's explicit recovery from a journal loss or corruption: the
@@ -104,13 +110,13 @@ export function startNewIncarnation(
     if (!moved.ok) return moved;
     const cleared = clearJournalFault(paths.fault);
     if (!cleared.ok) return cleared;
-    const binding = { ...identity.value, journalId, recoveryEpoch };
-    const created = createJournalDatabase(paths.journal, binding, options.clock.now());
+    const renewed = { ...identity.value, journalId };
+    const created = createJournalDatabase(paths.journal, { ...renewed, recoveryEpoch }, options.clock.now());
     if (!created.ok) return created;
     created.value.close();
-    const replaced = replaceFile(paths.identity, serializeIdentity(binding));
+    const replaced = replaceFile(paths.identity, serializeIdentity(renewed));
     if (!replaced.ok) return replaced;
-    return openJournal(paths, options, binding, lock);
+    return openJournal(paths, options, renewed, lock);
   });
 }
 
@@ -164,11 +170,12 @@ function withRootLock(paths: WorkerPaths, use: (lock: ExclusiveFileLock) => Resu
 
 function checkRecordsThen(paths: WorkerPaths, use: () => Result<WorkerRoot>): Result<WorkerRoot> {
   const uid = ownerUid();
-  for (const record of [paths.identity, paths.fault, paths.journal, `${paths.journal}-wal`, paths.executions, paths.logs]) {
+  const records = [paths.identity, paths.credentials, paths.fault, paths.journal, `${paths.journal}-wal`, paths.executions, paths.logs];
+  for (const record of records) {
     const safe = checkControlPath(paths.dataRoot, record, uid);
     if (!safe.ok) return safe;
   }
-  for (const directory of [paths.worker, paths.journalDirectory]) if (existsSync(directory)) removeTemporaries(directory);
+  for (const directory of [paths.worker, paths.credentials, paths.journalDirectory]) if (existsSync(directory)) removeTemporaries(directory);
   return use();
 }
 
@@ -196,6 +203,7 @@ function openJournal(
   }
   return ok(Object.freeze({
     paths,
+    identity,
     journal: journal.value,
     close: () => {
       journal.value.close();

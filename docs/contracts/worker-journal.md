@@ -18,7 +18,8 @@ The [storage contract](../storage.md) resolves `dataRoot` and assigns `worker/` 
 | Path under `dataRoot` | Content | Written by | Retention |
 | --- | --- | --- | --- |
 | `worker/lock` | The root lock (section 9) | Worker | For the root's lifetime |
-| `worker/identity` | `installationId`, `workerId`, the credential references, and the `journalId` it is bound to (item 13 defines the credential content) | Enrollment | Until re-enrollment |
+| `worker/identity` | `installationId`, `workerId`, the credential generation and references, and the `journalId` it is bound to (item 13 defines the credential content) | Enrollment | Until re-enrollment |
+| `worker/credentials/` | One file per credential and generation, `control-plane.<generation>` and `broker.<generation>.creds`, that the identity references ([installation and enrollment](installation-and-enrollment.md) section 10) | Enrollment | Until re-enrollment |
 | `worker/journal/journal.sqlite` and its `-wal` file | The journal | Worker | For the journal incarnation's lifetime (section 8) |
 | `worker/journal-fault` | Written when a flush failure or corruption stops the journal: the host boot identity (`/proc/sys/kernel/random/boot_id` on Linux, which a container shares with its host; `kern.bootsessionuuid` on macOS), the failure's reason and message, and a format version | Worker | Until a start in a later host boot, or a new journal incarnation, removes it (section 7) |
 | `worker/executions/<executionId>/` | The execution record (item 4) | Worker and supervisor | Until the execution's terminal fact is confirmed (section 6) |
@@ -27,7 +28,7 @@ The [storage contract](../storage.md) resolves `dataRoot` and assigns `worker/` 
 
 The **control records** are every path in the table except `worker/workspaces/` and its content. Rules for the subtree:
 
-- **Explicit creation.** Enrollment creates `worker/`; starting an unenrolled worker fails and creates nothing. Enrollment creates the journal first and `worker/identity` last, so an identity without a journal always means loss (section 8).
+- **Explicit creation.** Enrollment creates `worker/`; starting an unenrolled worker fails and creates nothing. Enrollment creates the journal first, then the credential files, and `worker/identity` last, so an identity without a journal always means loss (section 8), and an identity never names a credential that was not written.
 - **Ownership and permissions.** `worker/` and every control record are owned by the worker's account; `worker/` and the control-record directories have mode `0700`, and control-record files mode `0600`. A control record, or a directory on the path to one, owned by another account or writable by group or others, fails startup.
 - **No redirection.** No path component from `dataRoot` down to a control record is a symbolic link; the worker refuses one instead of following it. The checkout or a subtree of it is refused as `dataRoot` (storage contract).
 - **Workspaces.** Content under `worker/workspaces/` is project content with its own modes and symbolic links; the workspace rules of item 14 and G3 govern it, and nothing in it is read as a control record. `worker/` being `0700` closes it to other accounts.

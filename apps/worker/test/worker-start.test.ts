@@ -1,0 +1,179 @@
+import assert from 'node:assert/strict';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, test } from 'node:test';
+import { SUPPORTED_PROTOCOL_VERSIONS } from '@taskelith/contracts';
+import type { Enrollment, EnrollmentClient, EnrollmentRequest } from '@taskelith/fleet';
+import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
+import type { TransportConnection, WorkerTransportEndpoint } from '@taskelith/nats';
+import { failed, id, value } from '@taskelith/testing';
+import {
+  serveUntilStopped,
+  startWorker,
+  workerMain,
+  type RunningWorker,
+  type ServiceProcess,
+  type WorkerDependencies,
+  type WorkerSettings,
+} from '@taskelith/worker';
+import { hostBootId, recordJournalFault, workerPaths, type VolumeProbe } from '@taskelith/worker-journal';
+
+const T0 = value(parseInstant('2026-10-25T09:00:00.000Z'));
+const TEST_VOLUME: VolumeProbe = () => ({ ok: true, value: { platform: 'darwin', filesystem: 'apfs', local: true } });
+const TOKEN = `tken_${'T'.repeat(43)}`;
+const ENROLLMENT: Enrollment = {
+  installationId: 'a'.repeat(32), workerId: id('WorkerId', `w${'b'.repeat(32)}`), credentialGeneration: 1, recoveryEpoch: 1 as Enrollment['recoveryEpoch'],
+  protocolVersions: { minimum: 1, maximum: 1 }, credentials: { controlPlane: `tkwk_${'C'.repeat(43)}`, broker: 'broker creds text' },
+};
+
+class FakeEnrollment implements EnrollmentClient {
+  readonly calls: Array<{ token: string; request: EnrollmentRequest }> = [];
+  answer: Result<Enrollment> = ok(ENROLLMENT);
+
+  async enroll(token: string, request: EnrollmentRequest): Promise<Result<Enrollment>> {
+    this.calls.push({ token, request });
+    return this.answer;
+  }
+}
+
+class FakeBroker {
+  readonly endpoints: WorkerTransportEndpoint[] = [];
+  closed = 0;
+  answer: Result<void> = ok(undefined);
+
+  connect = async (endpoint: WorkerTransportEndpoint): Promise<Result<TransportConnection>> => {
+    this.endpoints.push(endpoint);
+    if (!this.answer.ok) return this.answer;
+    return ok({ connection: {} as TransportConnection['connection'], js: {} as TransportConnection['js'], close: async () => {
+      this.closed += 1;
+    } });
+  };
+}
+
+let base: string;
+let settings: WorkerSettings;
+let enrollment: FakeEnrollment;
+let broker: FakeBroker;
+const running: RunningWorker[] = [];
+
+beforeEach(() => {
+  base = realpathSync(mkdtempSync(join(tmpdir(), 'taskelith-worker-')));
+  settings = {
+    dataRoot: join(base, 'data'), controlPlaneUrl: new URL('https://control-plane/'), natsUrl: new URL('nats://broker:4222'),
+    host: { platform: 'linux', architecture: 'x64', hostname: 'build-1' },
+    capacity: { slots: 2, cpuMillicores: 4000, memoryMebibytes: 7680, controls: [] },
+    enrollmentToken: TOKEN,
+  };
+  enrollment = new FakeEnrollment();
+  broker = new FakeBroker();
+});
+
+afterEach(async () => {
+  for (const worker of running.splice(0)) await worker.stop();
+  rmSync(base, { recursive: true, force: true });
+});
+
+function dependencies(): WorkerDependencies {
+  return {
+    enrollment, connect: broker.connect, newJournalId: () => 'c'.repeat(32), clock: { now: () => T0 },
+    ownerUid: process.getuid?.() ?? -1, probe: TEST_VOLUME,
+  };
+}
+
+async function start(chosen: WorkerSettings = settings): Promise<RunningWorker> {
+  const worker = value(await startWorker(chosen, dependencies()));
+  running.push(worker);
+  return worker;
+}
+
+test('the first start enrolls with the token, stores the credentials, and connects with them', async () => {
+  const worker = await start();
+  assert.deepEqual(enrollment.calls, [{
+    token: TOKEN,
+    request: { journalId: 'c'.repeat(32), host: settings.host, protocolVersions: SUPPORTED_PROTOCOL_VERSIONS, capacity: settings.capacity },
+  }]);
+  assert.deepEqual([worker.identity.installationId, worker.identity.workerId, worker.identity.journalId], [ENROLLMENT.installationId, ENROLLMENT.workerId, 'c'.repeat(32)]);
+  const paths = workerPaths(settings.dataRoot);
+  assert.equal(readFileSync(join(paths.worker, worker.identity.credentials.broker), 'utf8'), ENROLLMENT.credentials.broker);
+  assert.equal(readFileSync(join(paths.worker, worker.identity.credentials.controlPlane), 'utf8'), ENROLLMENT.credentials.controlPlane);
+  const [endpoint] = broker.endpoints;
+  assert.deepEqual([endpoint?.server.href, endpoint?.creds, endpoint?.workerId, endpoint?.address.installationId, endpoint?.tls],
+    ['nats://broker:4222', ENROLLMENT.credentials.broker, ENROLLMENT.workerId, ENROLLMENT.installationId, undefined]);
+});
+
+test('the worker listens on no port: every connection is outbound', async () => {
+  await start();
+  assert.equal(process.getActiveResourcesInfo().includes('TCPServerWrap'), false);
+});
+
+test('a later start reuses the enrolled identity and never redeems a token again', async () => {
+  const first = await start();
+  await first.stop();
+  const second = await start({ ...settings, natsTls: { ca: 'PEM' } });
+  assert.equal(enrollment.calls.length, 1);
+  assert.deepEqual(second.identity, first.identity);
+  assert.deepEqual(broker.endpoints[1]?.tls, { ca: 'PEM' });
+  const { enrollmentToken: _token, ...withoutToken } = settings;
+  await second.stop();
+  assert.equal((await start(withoutToken)).identity.workerId, ENROLLMENT.workerId);
+});
+
+test('an unenrolled worker without a token, or with a refused token, creates nothing', async () => {
+  const { enrollmentToken: _token, ...withoutToken } = settings;
+  const missing = failed(await startWorker(withoutToken, dependencies()));
+  assert.deepEqual([missing.code, missing.details.reason, missing.details.variable], ['not-found', 'not-enrolled', 'TASKELITH_ENROLLMENT_TOKEN']);
+  enrollment.answer = err(failure('forbidden', 'enrollWorker answered 401', { reason: 'token-invalid' }));
+  assert.equal(failed(await startWorker(settings, dependencies())).details.reason, 'token-invalid');
+  enrollment.answer = ok({ ...ENROLLMENT, installationId: 'not.valid' });
+  assert.equal(failed(await startWorker(settings, dependencies())).code, 'invalid');
+  assert.equal(existsSync(workerPaths(settings.dataRoot).worker), false);
+  assert.equal(broker.endpoints.length, 0);
+});
+
+test('a journal fault stops the start before any request or connection', async () => {
+  const first = await start();
+  await first.stop();
+  const bootId = value(hostBootId());
+  const paths = workerPaths(settings.dataRoot);
+  value(recordJournalFault(paths.fault, failure('unavailable', 'flush failed', { reason: 'flush-failure' }), bootId));
+  const refused = await startWorker(settings, dependencies());
+  assert.equal(refused.ok, false);
+  assert.equal(enrollment.calls.length, 1);
+  assert.equal(broker.endpoints.length, 1);
+});
+
+test('a broker that cannot be reached fails the start and releases the root', async () => {
+  broker.answer = err(failure('unavailable', 'connect failed'));
+  assert.equal(failed(await startWorker(settings, dependencies())).code, 'unavailable');
+  broker.answer = ok(undefined);
+  await start();
+  assert.equal(enrollment.calls.length, 1);
+});
+
+test('stop closes the connection and the root once, and a signal stops a served worker', async () => {
+  const worker = await start();
+  const listeners = new Map<string, () => void>();
+  const host: ServiceProcess = {
+    on: (signal, listener) => listeners.set(signal, listener),
+    off: (signal) => listeners.delete(signal),
+  };
+  const served = serveUntilStopped(worker, host);
+  listeners.get('SIGTERM')?.();
+  await served;
+  await worker.stop();
+  assert.equal(broker.closed, 1);
+  assert.equal(listeners.size, 0);
+  assert.equal((await start()).identity.workerId, ENROLLMENT.workerId);
+});
+
+test('the entry reports a start failure redacted and returns nothing', async () => {
+  const lines: string[] = [];
+  const environment = { TASKELITH_DATA_DIR: settings.dataRoot, TASKELITH_CONTROL_PLANE_URL: 'https://control-plane/', TASKELITH_NATS_URL: 'nats://broker:4222' };
+  assert.equal(await workerMain(environment, (line) => lines.push(line), dependencies), undefined);
+  assert.equal(JSON.parse(lines[0] ?? '{}').error.details.reason, 'not-enrolled');
+  const worker = await workerMain({ ...environment, TASKELITH_ENROLLMENT_TOKEN: TOKEN }, (line) => lines.push(line), dependencies);
+  assert.ok(worker);
+  running.push(worker);
+  assert.equal(lines.length, 1);
+});

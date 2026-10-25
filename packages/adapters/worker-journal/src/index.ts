@@ -25,6 +25,12 @@ export {
   type WritePoint,
 } from './sqlite-worker-journal.js';
 export { checkVolume, parseDfMountPoint, parseMacMountOptions, probeVolume, type VolumeDescription, type VolumeProbe } from './volume.js';
-export { IDENTITY_FORMAT, readIdentity, type WorkerIdentity } from './worker-identity.js';
+export {
+  credentialReferencesOf,
+  readWorkerCredentials,
+  type WorkerCredentials,
+  type WorkerEnrollment,
+} from './worker-credentials.js';
+export { IDENTITY_FORMAT, readIdentity, type CredentialReferences, type WorkerIdentity } from './worker-identity.js';
 export { enrollWorkerRoot, openWorkerRoot, startNewIncarnation, type WorkerRoot, type WorkerRootOptions } from './worker-root.js';
 export { JOURNAL_FILE, workerPaths, type WorkerPaths } from './worker-paths.js';

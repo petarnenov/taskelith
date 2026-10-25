@@ -4,7 +4,7 @@ import { after, test } from 'node:test';
 import { planJournalRecovery, type ObservationFact, type RecoveryAction } from '@taskelith/execution';
 import { crashEnvironment, ScenarioProcess, id, value } from '@taskelith/testing';
 import { enrollWorkerRoot, openWorkerRoot } from '@taskelith/worker-journal';
-import { BINDING, T0, assignment, rootOptions, temporaryDataRoot } from './fixtures.ts';
+import { ENROLLMENT, T0, assignment, rootOptions, temporaryDataRoot } from './fixtures.ts';
 
 // Contract section 13: a crash before and after each of W1 to W6, followed
 // by recovery, gives the result the recovery table of section 5 assigns.
@@ -47,7 +47,7 @@ after(() => cleanups.forEach((cleanup) => cleanup()));
 async function crashAt(scenario: string, point: string): Promise<{ dataRoot: string; stdout: string }> {
   const { dataRoot, remove } = temporaryDataRoot();
   cleanups.push(remove);
-  value(enrollWorkerRoot(rootOptions(dataRoot), BINDING)).close();
+  value(enrollWorkerRoot(rootOptions(dataRoot), ENROLLMENT)).close();
   const worker = await ScenarioProcess.start(process.execPath, ['--experimental-strip-types', SCENARIO, dataRoot, scenario], {
     env: { ...process.env, ...crashEnvironment(point) },
   });
