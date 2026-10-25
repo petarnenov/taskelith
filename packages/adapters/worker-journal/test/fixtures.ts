@@ -7,7 +7,10 @@ import { parseGeneration, parseOwnershipGeneration } from '@taskelith/sdlc';
 import {
   parseLaunchParameters,
   parseRecoveryEpoch,
+  type ExecutionExit,
   type ExecutionId,
+  type ExecutionProcess,
+  type ExitStatus,
   type JournalBinding,
   type JournaledCommand,
   type LaunchGrant,
@@ -121,4 +124,10 @@ export function grantFor(request: LaunchRequest, launchAuthText = 'launch-auth-1
     issuedAt: T0,
     parameters: value(parseLaunchParameters({ ttlMilliseconds: 30_000, skewMilliseconds: 5_000 })),
   };
+}
+
+export const PROCESS: ExecutionProcess = { platform: 'darwin', bootId: 'boot-1', pid: 4242, startTime: 1, processGroupId: 4242 };
+
+export function exitWith(status: ExitStatus): ExecutionExit {
+  return { status, startProven: true, termination: 'process-group-empty' };
 }

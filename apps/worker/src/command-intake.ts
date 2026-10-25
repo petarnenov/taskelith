@@ -33,6 +33,8 @@ export interface CommandIntakeOptions {
   readonly observationSubject: string;
   readonly newReportId: () => string;
   readonly now: () => Instant;
+  // Called after each W1 commit, so a launch can start at once.
+  readonly onRecorded?: () => void;
 }
 
 // The worker's command handler: the consumer acks a message only after
@@ -54,7 +56,9 @@ export class CommandIntake {
         return this.#answerInventory(checked<InventoryRequest>(message));
       default: {
         const command = this.#journaled(checked<Versioned>(message));
-        return command.ok ? this.#options.journal.recordCommand(command.value) : command;
+        const recorded = command.ok ? this.#options.journal.recordCommand(command.value) : command;
+        if (recorded.ok) this.#options.onRecorded?.();
+        return recorded;
       }
     }
   };

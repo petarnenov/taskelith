@@ -314,10 +314,12 @@ test('a resent command with its keys in another order is a duplicate', async () 
   assert.deepEqual(value(await deliver(reordered)), { kind: 'duplicate' });
 });
 
-test('an execution fact is not published until the launches map it', async () => {
+test('an execution fact is published in sequence after the acceptance before it', async () => {
   value(await deliver(offer(1)));
   beginLaunch();
   value(root.journal.recordNotStarted(id('ExecutionId', 'execution-1')));
-  assert.equal(failed(await publishDueObservations(publisherOptions())).code, 'precondition-failed');
-  assert.equal(broker.published.length, 1);
+  assert.equal(value(await publishDueObservations(publisherOptions())), 2);
+  assert.deepEqual(broker.bodies().map((body) => (body.metadata as Record<string, unknown>).observationType), [
+    'execution.assignment.accepted', 'execution.not-started',
+  ]);
 });

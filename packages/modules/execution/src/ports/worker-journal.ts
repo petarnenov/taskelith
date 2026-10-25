@@ -1,5 +1,4 @@
 import type { Instant, Result } from '@taskelith/kernel';
-import type { ExitStatus } from '../domain/execution.js';
 import type { ExecutionId, LaunchAuthId, OperationId } from '../domain/identifiers.js';
 import type { LaunchRequest } from '../domain/launch-authorization.js';
 import type { LaunchGrant } from '../domain/launch-grant.js';
@@ -9,6 +8,8 @@ import type {
   CommandRecording,
   JournalBinding,
   DeclaredCapacity,
+  ExecutionExit,
+  ExecutionProcess,
   JournaledCommand,
   JournalInventory,
   JournalSnapshot,
@@ -30,8 +31,8 @@ export interface WorkerJournal {
   // W4: before the supervisor starts.
   recordExecutionRecordWritten(executionId: ExecutionId): Result<void>;
   // W5s and W5e: before anything leaves the execution record.
-  recordStart(executionId: ExecutionId, launchAuthId: LaunchAuthId): Result<void>;
-  recordExit(executionId: ExecutionId, status: ExitStatus): Result<void>;
+  recordStart(executionId: ExecutionId, launchAuthId: LaunchAuthId, process: ExecutionProcess): Result<void>;
+  recordExit(executionId: ExecutionId, exit: ExecutionExit): Result<void>;
   // W6: after the seal is durable.
   recordNotStarted(executionId: ExecutionId): Result<void>;
   recordUncertain(executionId: ExecutionId): Result<void>;

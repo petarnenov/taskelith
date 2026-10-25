@@ -28,6 +28,12 @@ The control-plane API is on `http://127.0.0.1:8080` and NATS on `nats://127.0.0.
 
 `make installation-enrollment-token PLATFORM=darwin ARCHITECTURE=arm64`, with `TASKELITH_OPERATOR_TOKEN` set, prints a token; `WORKER_HOSTNAME` restricts it to one host name. Then, in a built checkout, run the worker with `TASKELITH_CONTROL_PLANE_URL=http://127.0.0.1:8080`, `TASKELITH_NATS_URL=nats://127.0.0.1:4222`, and the token in `TASKELITH_ENROLLMENT_TOKEN`: `node apps/worker/dist/main.js`. A launchd service is G6 work.
 
+### Launch settings
+
+A worker launches accepted assignments only when `TASKELITH_WORKER_COMMAND` names the program each launch runs, as a JSON array of the executable and its arguments, for example `["/usr/local/bin/scripted-process","--exit","0"]`. In G2 this is a test-only scripted process; the harness invocation comes with G3. Without it the worker accepts assignments and launches none.
+
+On Linux a launch also needs `TASKELITH_CONTAINMENT_PARENT`, the absolute path of the delegated cgroup that holds each execution's containment, and `TASKELITH_EXECUTION_UID` and `TASKELITH_EXECUTION_GID`, the account the child runs as, which owns no cgroup of the worker. A missing or invalid value fails the worker's start and names the variable.
+
 ## Checks
 
 - `make verify` validates the resolved composition and the Dockerfile: digest pins, checksummed Node.js tarballs, unprivileged services, named data volumes, localhost-only ports, and secrets from the environment.

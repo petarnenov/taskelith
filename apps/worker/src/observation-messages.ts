@@ -1,5 +1,5 @@
 import { EXECUTION_PROTOCOL_VERSION, type MessageSchemas } from '@taskelith/contracts';
-import type { CommandCause, JournalBinding, JournalInventory, OutboxEntry } from '@taskelith/execution';
+import type { CommandCause, ExecutionExit, ExecutionSubject, JournalBinding, JournalInventory, OutboxEntry } from '@taskelith/execution';
 import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 
 // The wire shapes of execution.asyncapi.json for what the journal records.
@@ -9,7 +9,6 @@ const ITEMS_PER_PART = 256;
 
 export type ObservationMessage = { readonly metadata: Record<string, unknown>; readonly payload: Record<string, unknown> };
 
-// Execution facts get their wire mapping with the launches that produce them.
 export function observationMessage(entry: OutboxEntry): Result<ObservationMessage> {
   const { fact } = entry;
   switch (fact.kind) {
@@ -33,9 +32,43 @@ export function observationMessage(entry: OutboxEntry): Result<ObservationMessag
       const metadata = metadataOf(entry, 'worker.capacity.declared', { correlationId: entry.position.observationId });
       return ok({ metadata, payload: { capacity, protocolVersions } });
     }
-    default:
-      return err(failure('precondition-failed', `this worker cannot publish ${fact.kind} yet`, { kind: fact.kind }));
+    case 'launch-rejected': {
+      const { executionId, assignmentId, operationId, reason } = fact;
+      return ok({ metadata: aboutAttempt(entry, 'execution.launch.rejected', fact), payload: { executionId, assignmentId, operationId, reason } });
+    }
+    case 'execution-started': {
+      const { executionId, assignmentId, launchAuthId, recoveryEpoch, process } = fact;
+      const payload = { executionId, assignmentId, launchAuthId, recoveryEpoch, process };
+      return ok({ metadata: aboutAttempt(entry, 'execution.started', fact), payload });
+    }
+    case 'execution-exited': {
+      const payload = exitedPayload(fact.executionId, fact.exit);
+      return payload.ok ? ok({ metadata: aboutAttempt(entry, 'execution.exited', fact), payload: payload.value }) : payload;
+    }
+    case 'execution-not-started':
+      return ok({ metadata: aboutAttempt(entry, 'execution.not-started', fact), payload: { executionId: fact.executionId } });
+    case 'execution-uncertain':
+      return ok({ metadata: aboutAttempt(entry, 'execution.uncertain', fact), payload: { executionId: fact.executionId } });
   }
+}
+
+// Only the live termination evidence has a wire form; a recovery's
+// `boot-changed` or `namespace-ended` waits for 20d's amendment.
+function exitedPayload(executionId: string, exit: ExecutionExit): Result<Record<string, unknown>> {
+  const { status, startProven, spawnFailure, termination } = exit;
+  if (termination === 'never-spawned') {
+    return ok({ executionId, status, startProven: false, spawnFailed: true, spawnFailure: spawnFailure ?? 'the spawn failed', terminationEvidence: termination });
+  }
+  if (termination === 'containment-empty' || termination === 'process-group-empty') {
+    return ok({ executionId, status, startProven, spawnFailed: false, terminationEvidence: termination });
+  }
+  return err(failure('precondition-failed', `an exit with termination evidence ${termination} has no wire form yet`, { termination }));
+}
+
+// An execution fact is about its attempt at the generation of the offer.
+function aboutAttempt(entry: OutboxEntry, observationType: string, subject: ExecutionSubject): Record<string, unknown> {
+  const { attemptId, ownershipGeneration } = subject;
+  return { ...metadataOf(entry, observationType, { correlationId: subject.assignmentId }), attemptId, ownershipGeneration };
 }
 
 function causedBy(cause: CommandCause): Record<string, string> {

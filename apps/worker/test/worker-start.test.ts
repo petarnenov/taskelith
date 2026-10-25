@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,11 +14,15 @@ import {
   serveUntilStopped,
   startWorker,
   workerMain,
+  type LaunchHost,
+  type LaunchingDependencies,
+  type LaunchSettings,
   type RunningWorker,
   type ServiceProcess,
   type WorkerDependencies,
   type WorkerSettings,
 } from '@taskelith/worker';
+import { FakeAuthority, FakeClock, FakeSupervisions, offer } from './launch-fakes.ts';
 import { failureReason, hostBootId, recordJournalFault, workerPaths, type VolumeProbe } from '@taskelith/worker-journal';
 
 const T0 = value(parseInstant('2026-10-25T09:00:00.000Z'));
@@ -91,15 +96,38 @@ afterEach(async () => {
   rmSync(base, { recursive: true, force: true });
 });
 
-function dependencies(): WorkerDependencies {
+function dependencies(launching?: LaunchingDependencies): WorkerDependencies {
   return {
     enrollment, connect: broker.connect, newJournalId: () => 'c'.repeat(32), clock: { now: () => T0 },
-    probe: TEST_VOLUME,
+    probe: TEST_VOLUME, ...(launching === undefined ? {} : { launching }),
   };
 }
 
-async function start(chosen: WorkerSettings = settings): Promise<RunningWorker> {
-  const worker = value(await startWorker(chosen, dependencies()));
+// Launch dependencies that record what the worker asked of them.
+class RecordingLaunching {
+  readonly credentials: string[] = [];
+  readonly hosts: Array<{ launch: LaunchSettings; executions: string }> = [];
+  readonly authority = new FakeAuthority();
+  hostAnswer: Result<LaunchHost> = ok({ clock: new FakeClock(), supervision: new FakeSupervisions().factory });
+
+  readonly dependencies: LaunchingDependencies = {
+    authority: (credential) => {
+      this.credentials.push(credential);
+      return this.authority;
+    },
+    host: (launch, executions) => {
+      this.hosts.push({ launch, executions });
+      return this.hostAnswer;
+    },
+    sleep: (milliseconds, signal) => delay(milliseconds, undefined, { signal }).catch(() => undefined),
+    draw: () => 0,
+    newId: randomUUID,
+    pollMilliseconds: 10,
+  };
+}
+
+async function start(chosen: WorkerSettings = settings, launching?: LaunchingDependencies): Promise<RunningWorker> {
+  const worker = value(await startWorker(chosen, dependencies(launching)));
   running.push(worker);
   return worker;
 }
@@ -245,10 +273,46 @@ test('a close that fails still stops a served worker without a rejection', async
 test('the entry reports a start failure redacted and returns nothing', async () => {
   const lines: string[] = [];
   const environment = { TASKELITH_DATA_DIR: settings.dataRoot, TASKELITH_CONTROL_PLANE_URL: 'https://control-plane/', TASKELITH_NATS_URL: 'nats://broker:4222' };
-  assert.equal(await workerMain(environment, (line) => lines.push(line), dependencies), undefined);
+  assert.equal(await workerMain(environment, (line) => lines.push(line), () => dependencies()), undefined);
   assert.equal(JSON.parse(lines[0] ?? '{}').error.details.reason, 'not-enrolled');
-  const worker = await workerMain({ ...environment, TASKELITH_ENROLLMENT_TOKEN: TOKEN }, (line) => lines.push(line), dependencies);
+  const worker = await workerMain({ ...environment, TASKELITH_ENROLLMENT_TOKEN: TOKEN }, (line) => lines.push(line), () => dependencies());
   assert.ok(worker);
   running.push(worker);
   assert.equal(lines.length, 1);
+});
+
+const LAUNCH: LaunchSettings = { command: { executable: '/bin/true', arguments: [] } };
+
+async function until(condition: () => boolean): Promise<void> {
+  for (let wait = 0; !condition() && wait < 200; wait += 1) await delay(10);
+}
+
+test('a worker without a launch command accepts an assignment and never launches it', async () => {
+  const launching = new RecordingLaunching();
+  const worker = await start(settings, launching.dependencies);
+  value(worker.root.journal.recordCommand(offer()));
+  await delay(100);
+  assert.deepEqual([launching.credentials, launching.hosts, launching.authority.requests], [[], [], []]);
+  assert.equal(value(worker.root.journal.snapshot()).intents.length, 1);
+  assert.deepEqual(value(worker.root.journal.snapshot()).executions, []);
+});
+
+test('with a launch command, an accepted assignment is authorized with the stored credential', async () => {
+  const launching = new RecordingLaunching();
+  launching.authority.answers = [ok({ kind: 'rejected', rejection: { reason: 'gate-not-passed', retryable: false, message: 'gate' } })];
+  const worker = await start({ ...settings, launch: LAUNCH }, launching.dependencies);
+  value(worker.root.journal.recordCommand(offer()));
+  await until(() => launching.authority.requests.length > 0);
+  assert.deepEqual(launching.credentials, [ENROLLMENT.credentials.controlPlane]);
+  assert.deepEqual(launching.hosts, [{ launch: LAUNCH, executions: workerPaths(settings.dataRoot).executions }]);
+  assert.equal(launching.authority.requests[0]?.assignmentId, 'assignment-1');
+  await until(() => value(worker.root.journal.snapshot()).executions[0]?.authorizations[0]?.outcome === 'rejected-final');
+  await worker.stop();
+});
+
+test('a launch host that cannot be built fails the start', async () => {
+  const launching = new RecordingLaunching();
+  launching.hostAnswer = err(failure('unavailable', 'no supervisor platform'));
+  const started = await startWorker({ ...settings, launch: LAUNCH }, dependencies(launching.dependencies));
+  assert.equal(failed(started).code, 'unavailable');
 });

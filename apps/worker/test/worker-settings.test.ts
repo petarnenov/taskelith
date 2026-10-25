@@ -60,3 +60,40 @@ test('only linux or darwin on x64 or arm64 hosts a worker', () => {
   const host = currentHost();
   assert.ok(host.cpuMillicores >= 1000 && host.memoryMebibytes >= 1 && host.hostname !== '');
 });
+
+const LINUX_LAUNCH = {
+  TASKELITH_WORKER_COMMAND: '["/usr/bin/scripted","--exit","0"]', TASKELITH_CONTAINMENT_PARENT: '/sys/fs/cgroup/taskelith',
+  TASKELITH_EXECUTION_UID: '2000', TASKELITH_EXECUTION_GID: '2001',
+};
+
+test('without a launch command the worker has no launch settings', () => {
+  assert.equal('launch' in value(readWorkerSettings(BASE, FACTS)), false);
+  assert.equal('launch' in value(readWorkerSettings({ ...BASE, TASKELITH_WORKER_COMMAND: '' }, FACTS)), false);
+});
+
+test('the launch command, and on Linux the containment parent and execution account, come from the environment', () => {
+  assert.deepEqual(value(readWorkerSettings({ ...BASE, ...LINUX_LAUNCH }, FACTS)).launch, {
+    command: { executable: '/usr/bin/scripted', arguments: ['--exit', '0'] }, containmentParent: '/sys/fs/cgroup/taskelith',
+    executionAccount: { uid: 2000, gid: 2001 },
+  });
+  const darwin = value(readWorkerSettings({ ...BASE, TASKELITH_WORKER_COMMAND: '["/bin/true"]' }, { ...FACTS, platform: 'darwin' }));
+  assert.deepEqual(darwin.launch, { command: { executable: '/bin/true', arguments: [] } });
+});
+
+test('an invalid launch setting fails startup and names only its variable', () => {
+  const cases: Array<[Record<string, string | undefined>, string]> = [
+    [{ TASKELITH_WORKER_COMMAND: 'secret-not-json' }, 'TASKELITH_WORKER_COMMAND'],
+    [{ TASKELITH_WORKER_COMMAND: '[]' }, 'TASKELITH_WORKER_COMMAND'],
+    [{ TASKELITH_WORKER_COMMAND: '["/bin/x", 3]' }, 'TASKELITH_WORKER_COMMAND'],
+    [{ TASKELITH_WORKER_COMMAND: '{"executable":"/bin/x"}' }, 'TASKELITH_WORKER_COMMAND'],
+    [{ TASKELITH_CONTAINMENT_PARENT: undefined }, 'TASKELITH_CONTAINMENT_PARENT'],
+    [{ TASKELITH_CONTAINMENT_PARENT: 'relative/cgroup' }, 'TASKELITH_CONTAINMENT_PARENT'],
+    [{ TASKELITH_EXECUTION_UID: '0' }, 'TASKELITH_EXECUTION_UID'],
+    [{ TASKELITH_EXECUTION_GID: 'staff' }, 'TASKELITH_EXECUTION_GID'],
+  ];
+  for (const [change, variable] of cases) {
+    const failure = failed(readWorkerSettings({ ...BASE, ...LINUX_LAUNCH, ...change }, FACTS));
+    assert.equal(failure.details.variable, variable);
+    for (const text of Object.values(change)) if (text !== undefined) assert.equal(failure.message.includes(text), false, failure.message);
+  }
+});

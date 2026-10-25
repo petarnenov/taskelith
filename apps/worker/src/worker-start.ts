@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { SUPPORTED_PROTOCOL_VERSIONS } from '@taskelith/contracts';
-import type { JournalId } from '@taskelith/execution';
+import type { JournalId, LaunchAuthorityClient } from '@taskelith/execution';
 import { parseInstallationId, type Enrollment, type EnrollmentClient } from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import {
@@ -23,9 +23,12 @@ import {
   type WorkerRoot,
   type WorkerRootOptions,
 } from '@taskelith/worker-journal';
+import type { DeadlineClock } from '@taskelith/worker-supervisor';
 import { CommandIntake } from './command-intake.js';
+import type { SupervisionFactory } from './execution-supervision.js';
+import { LaunchOrchestrator } from './launch-orchestrator.js';
 import { runObservationPublisher } from './observation-publisher.js';
-import type { WorkerSettings } from './settings.js';
+import type { LaunchSettings, WorkerSettings } from './settings.js';
 
 export interface WorkerDependencies {
   readonly enrollment: EnrollmentClient;
@@ -35,6 +38,24 @@ export interface WorkerDependencies {
   readonly probe?: VolumeProbe;
   // Shorter transport timers for tests.
   readonly limits?: TransportLimits;
+  // Used only when the settings name a launch command.
+  readonly launching?: LaunchingDependencies;
+}
+
+// What launches need beyond the journal: the launch authority with the
+// worker's control-plane credential, and the supervision of one host.
+export interface LaunchingDependencies {
+  readonly authority: (credential: string) => LaunchAuthorityClient;
+  readonly host: (launch: LaunchSettings, executions: string) => Result<LaunchHost>;
+  readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>;
+  readonly draw: () => number;
+  readonly newId: () => string;
+  readonly pollMilliseconds?: number;
+}
+
+export interface LaunchHost {
+  readonly clock: DeadlineClock;
+  readonly supervision: SupervisionFactory;
 }
 
 // A started worker: it holds the root lock and its broker connection, reads
@@ -112,6 +133,8 @@ async function connectBroker(settings: WorkerSettings, dependencies: WorkerDepen
   if (!address.ok) return address;
   const observationSubject = address.value.observationSubject(identity.workerId);
   if (!observationSubject.ok) return observationSubject;
+  const launcher = launchOrchestrator(settings, dependencies, root, credentials.value.controlPlane);
+  if (!launcher.ok) return launcher;
   const declared = declareCapacity(settings, root);
   if (!declared.ok) return declared;
   const transport = await dependencies.connect({
@@ -119,8 +142,30 @@ async function connectBroker(settings: WorkerSettings, dependencies: WorkerDepen
     ...(settings.natsTls === undefined ? {} : { tls: settings.natsTls }),
   });
   if (!transport.ok) return transport;
-  const loops = startLoops({ settings, dependencies, root, transport: transport.value, address: address.value, observationSubject: observationSubject.value });
+  const loops = startLoops({
+    settings, dependencies, root, transport: transport.value, address: address.value, observationSubject: observationSubject.value,
+    ...(launcher.value === undefined ? {} : { launcher: launcher.value }),
+  });
   return ok(runningWorker(root, transport.value, loops));
+}
+
+// Only a worker whose settings name a launch command launches anything.
+function launchOrchestrator(
+  settings: WorkerSettings,
+  dependencies: WorkerDependencies,
+  root: WorkerRoot,
+  credential: string,
+): Result<LaunchOrchestrator | undefined> {
+  const { launch } = settings;
+  const { launching } = dependencies;
+  if (launch === undefined || launching === undefined) return ok(undefined);
+  const host = launching.host(launch, root.paths.executions);
+  if (!host.ok) return host;
+  const { sleep, draw, newId, pollMilliseconds } = launching;
+  return ok(new LaunchOrchestrator({
+    journal: root.journal, authority: launching.authority(credential), supervision: host.value.supervision, clock: host.value.clock,
+    sleep, draw, newId, ...(pollMilliseconds === undefined ? {} : { pollMilliseconds }),
+  }));
 }
 
 // Sorted, so a reordered configuration declares nothing new.
@@ -137,6 +182,7 @@ interface LoopContext {
   readonly transport: TransportConnection;
   readonly address: TransportAddress;
   readonly observationSubject: string;
+  readonly launcher?: LaunchOrchestrator;
 }
 
 interface Loops {
@@ -144,15 +190,17 @@ interface Loops {
   abort(): void;
 }
 
-// The command consumer and the observation publisher, until aborted.
+// The command consumer, the observation publisher, and the launches, until
+// aborted.
 function startLoops(context: LoopContext): Loops {
-  const { settings, dependencies, root, transport, address, observationSubject } = context;
+  const { settings, dependencies, root, transport, address, observationSubject, launcher } = context;
   const { journal } = root;
   const publisher = new JetStreamPublisher(transport.js);
   const publish = publisher.publish.bind(publisher);
   const now = () => dependencies.clock.now();
   const intake = new CommandIntake({
     journal, capacity: settings.capacity, publish, observationSubject, newReportId: randomUUID, now,
+    ...(launcher === undefined ? {} : { onRecorded: launcher.notify }),
   });
   const options = dependencies.limits === undefined ? {} : { limits: dependencies.limits };
   const consumer = workerCommandConsumer(transport.js, address, root.identity.workerId, intake.handle, options);
@@ -160,6 +208,7 @@ function startLoops(context: LoopContext): Loops {
   const finished = Promise.all([
     consumer.run(controller.signal),
     runObservationPublisher({ journal, publish, observationSubject, now }, controller.signal, dependencies.limits),
+    launcher?.run(controller.signal),
   ]).then(() => undefined);
   return { finished, abort: () => controller.abort() };
 }

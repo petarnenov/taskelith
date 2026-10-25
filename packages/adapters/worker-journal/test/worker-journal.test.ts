@@ -23,7 +23,7 @@ import {
   type WorkerRoot,
 } from '@taskelith/worker-journal';
 import { failed, id, value } from '@taskelith/testing';
-import { BINDING, CORRELATION, ENROLLMENT, CLOCK, T0, assignment, digest, grantFor, intent, launchRequest, rootOptions, temporaryDataRoot, unsupported } from './fixtures.ts';
+import { BINDING, CORRELATION, ENROLLMENT, CLOCK, PROCESS, T0, assignment, exitWith, digest, grantFor, intent, launchRequest, rootOptions, temporaryDataRoot, unsupported } from './fixtures.ts';
 
 let root: WorkerRoot;
 let journal: WorkerJournal;
@@ -95,8 +95,8 @@ test('W1 journals a rejection with its observation, and a cancellation request',
 test('W2 to W5e record one execution through its exit, in order', () => {
   value(journal.recordCommand(assignment()));
   launchUntilWritten();
-  value(journal.recordStart(EXECUTION, id('LaunchAuthId', 'launch-auth-1')));
-  value(journal.recordExit(EXECUTION, { kind: 'code', code: 0 }));
+  value(journal.recordStart(EXECUTION, id('LaunchAuthId', 'launch-auth-1'), PROCESS));
+  value(journal.recordExit(EXECUTION, exitWith({ kind: 'code', code: 0 })));
 
   const [execution] = value(journal.snapshot()).executions;
   assert.deepEqual(execution, {
@@ -110,27 +110,40 @@ test('W2 to W5e record one execution through its exit, in order', () => {
   assert.deepEqual(factKinds(), ['execution-started', 'execution-exited']);
 });
 
+test('execution facts name the assignment of their launch intent, from the journal', () => {
+  value(journal.recordCommand(assignment()));
+  launchUntilWritten();
+  value(journal.recordStart(EXECUTION, id('LaunchAuthId', 'launch-auth-1'), PROCESS));
+  value(journal.recordExit(EXECUTION, exitWith({ kind: 'code', code: 0 })));
+  const { assignmentId, attemptId, ownershipGeneration, recoveryEpoch } = intent(1);
+  const subject = { executionId: EXECUTION, assignmentId, attemptId, ownershipGeneration };
+  const launchAuthId = id('LaunchAuthId', 'launch-auth-1');
+  const [, started, exited] = value(journal.dueForPublication(T0)).map((entry) => entry.fact);
+  assert.deepEqual(started, { kind: 'execution-started', ...subject, launchAuthId, recoveryEpoch, process: PROCESS });
+  assert.deepEqual(exited, { kind: 'execution-exited', ...subject, exit: exitWith({ kind: 'code', code: 0 }) });
+});
+
 test('the protocol order is enforced: no W2 without W1, no W4 without a grant, no fact without W4', () => {
   assert.equal(failed(journal.beginAuthorization(launchRequest(EXECUTION, OPERATION))).code, 'precondition-failed');
   value(journal.recordCommand(assignment()));
   value(journal.beginAuthorization(launchRequest(EXECUTION, OPERATION)));
   assert.equal(failed(journal.beginAuthorization(launchRequest(EXECUTION, OPERATION))).code, 'conflict');
   assert.equal(failed(journal.recordExecutionRecordWritten(EXECUTION)).code, 'precondition-failed');
-  assert.equal(failed(journal.recordStart(EXECUTION, id('LaunchAuthId', 'launch-auth-1'))).code, 'precondition-failed');
+  assert.equal(failed(journal.recordStart(EXECUTION, id('LaunchAuthId', 'launch-auth-1'), PROCESS)).code, 'precondition-failed');
   value(journal.recordGrant(grantFor(launchRequest(EXECUTION, OPERATION))));
   assert.equal(failed(journal.recordGrant(grantFor(launchRequest(EXECUTION, OPERATION)))).code, 'precondition-failed');
   value(journal.recordExecutionRecordWritten(EXECUTION));
-  assert.equal(failed(journal.recordStart(EXECUTION, id('LaunchAuthId', 'other-grant'))).code, 'precondition-failed');
-  assert.equal(failed(journal.recordExit(id('ExecutionId', 'unknown'), { kind: 'unknown' })).code, 'not-found');
+  assert.equal(failed(journal.recordStart(EXECUTION, id('LaunchAuthId', 'other-grant'), PROCESS)).code, 'precondition-failed');
+  assert.equal(failed(journal.recordExit(id('ExecutionId', 'unknown'), exitWith({ kind: 'unknown' }))).code, 'not-found');
 });
 
 test('a fact derived again after a lost write keeps its observation', () => {
   value(journal.recordCommand(assignment()));
   launchUntilWritten();
-  value(journal.recordStart(EXECUTION, id('LaunchAuthId', 'launch-auth-1')));
-  value(journal.recordStart(EXECUTION, id('LaunchAuthId', 'launch-auth-1')));
-  value(journal.recordExit(EXECUTION, { kind: 'signal', signal: 'SIGTERM' }));
-  value(journal.recordExit(EXECUTION, { kind: 'signal', signal: 'SIGTERM' }));
+  value(journal.recordStart(EXECUTION, id('LaunchAuthId', 'launch-auth-1'), PROCESS));
+  value(journal.recordStart(EXECUTION, id('LaunchAuthId', 'launch-auth-1'), PROCESS));
+  value(journal.recordExit(EXECUTION, exitWith({ kind: 'signal', signal: 'SIGTERM' })));
+  value(journal.recordExit(EXECUTION, exitWith({ kind: 'signal', signal: 'SIGTERM' })));
   assert.deepEqual(factKinds(), ['execution-started', 'execution-exited']);
 });
 
@@ -165,7 +178,7 @@ test('uncertain evidence after W4 gets a new identity each time, until a termina
   launchUntilWritten();
   value(journal.recordUncertain(EXECUTION));
   value(journal.recordUncertain(EXECUTION));
-  value(journal.recordExit(EXECUTION, { kind: 'unknown' }));
+  value(journal.recordExit(EXECUTION, exitWith({ kind: 'unknown' })));
   assert.equal(failed(journal.recordUncertain(EXECUTION)).code, 'precondition-failed');
   const entries = value(journal.dueForPublication(T0));
   assert.deepEqual(entries.map((entry) => entry.fact.kind), ['assignment-accepted', 'execution-uncertain', 'execution-uncertain', 'execution-exited']);
@@ -177,7 +190,7 @@ test('a late grant cannot move a started execution back to authorized', () => {
   launchUntilWritten();
   const again = launchRequest(EXECUTION, id('OperationId', 'operation-2'));
   value(journal.beginAuthorization({ ...again, reportsNotStarted: true }));
-  value(journal.recordStart(EXECUTION, id('LaunchAuthId', 'launch-auth-1')));
+  value(journal.recordStart(EXECUTION, id('LaunchAuthId', 'launch-auth-1'), PROCESS));
   assert.equal(failed(journal.recordGrant(grantFor(again, 'launch-auth-2'))).code, 'precondition-failed');
   assert.equal(value(journal.snapshot()).executions[0]?.state, 'started');
 });
@@ -211,7 +224,7 @@ test('a granted execution is authorized again only when its launch record says i
   assert.equal(failed(journal.beginAuthorization(launchRequest(EXECUTION, again))).code, 'precondition-failed');
   value(journal.beginAuthorization({ ...launchRequest(EXECUTION, again), reportsNotStarted: true }));
   value(journal.recordGrant(grantFor(launchRequest(EXECUTION, again), 'launch-auth-2')));
-  value(journal.recordStart(EXECUTION, id('LaunchAuthId', 'launch-auth-2')));
+  value(journal.recordStart(EXECUTION, id('LaunchAuthId', 'launch-auth-2'), PROCESS));
 });
 
 test('a cancellation delivered twice is journaled once and stays pending until its evidence', () => {
@@ -231,7 +244,7 @@ test('a cancellation delivered twice is journaled once and stays pending until i
 test('a started execution cannot be reported as not started', () => {
   value(journal.recordCommand(assignment()));
   launchUntilWritten();
-  value(journal.recordStart(EXECUTION, id('LaunchAuthId', 'launch-auth-1')));
+  value(journal.recordStart(EXECUTION, id('LaunchAuthId', 'launch-auth-1'), PROCESS));
   assert.equal(failed(journal.recordNotStarted(EXECUTION)).code, 'precondition-failed');
   assert.equal(failed(journal.beginAuthorization(launchRequest(EXECUTION, id('OperationId', 'operation-2')))).code, 'precondition-failed');
 });
@@ -239,8 +252,8 @@ test('a started execution cannot be reported as not started', () => {
 test('the outbox numbers entries gaplessly and keeps them until confirmed', () => {
   value(journal.recordCommand(assignment()));
   launchUntilWritten();
-  value(journal.recordStart(EXECUTION, id('LaunchAuthId', 'launch-auth-1')));
-  value(journal.recordExit(EXECUTION, { kind: 'code', code: 1 }));
+  value(journal.recordStart(EXECUTION, id('LaunchAuthId', 'launch-auth-1'), PROCESS));
+  value(journal.recordExit(EXECUTION, exitWith({ kind: 'code', code: 1 })));
   const entries = value(journal.dueForPublication(T0));
   assert.deepEqual(entries.map((entry) => entry.position.sequence), [1, 2, 3]);
   const producer = [BINDING.workerId, BINDING.journalId];

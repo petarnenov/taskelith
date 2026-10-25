@@ -1,10 +1,22 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { setTimeout as delay } from 'node:timers/promises';
+import { ok, type Result } from '@taskelith/kernel';
 import { SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { connectWorkerTransport } from '@taskelith/nats';
 import { redactFailure, redactSecrets } from '@taskelith/secrets';
-import { HttpEnrollmentClient } from '@taskelith/worker-control-plane-client';
-import { CONTROL_PLANE_TIMEOUT_MILLISECONDS, currentHost, readWorkerSettings, type Environment, type WorkerSettings } from './settings.js';
-import { startWorker, type RunningWorker, type WorkerDependencies } from './worker-start.js';
+import { HttpEnrollmentClient, HttpLaunchAuthorityClient } from '@taskelith/worker-control-plane-client';
+import { hostPlatform } from '@taskelith/worker-supervisor';
+import { fileSupervision } from './execution-supervision.js';
+import {
+  CONTROL_PLANE_TIMEOUT_MILLISECONDS,
+  currentHost,
+  readWorkerSettings,
+  type Environment,
+  type LaunchSettings,
+  type WorkerSettings,
+} from './settings.js';
+import { startWorker, type LaunchHost, type LaunchingDependencies, type RunningWorker, type WorkerDependencies } from './worker-start.js';
 
 // A journal identity is 128 random bits (worker journal contract sec. 8).
 const JOURNAL_ID_BYTES = 16;
@@ -15,7 +27,35 @@ export function productionDependencies(settings: WorkerSettings): WorkerDependen
     connect: connectWorkerTransport,
     newJournalId: () => randomBytes(JOURNAL_ID_BYTES).toString('hex'),
     clock: SYSTEM_CLOCK,
+    launching: productionLaunching(settings),
   };
+}
+
+// The supervisor ships in the worker's build, so the worker's package
+// version names the supervisor program.
+const SUPERVISOR_VERSION = (JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }).version;
+
+function productionLaunching(settings: WorkerSettings): LaunchingDependencies {
+  const endpoint = { baseUrl: settings.controlPlaneUrl, timeoutMilliseconds: CONTROL_PLANE_TIMEOUT_MILLISECONDS };
+  return {
+    authority: (credential) => new HttpLaunchAuthorityClient({ ...endpoint, credential }),
+    host: launchHost,
+    sleep: (milliseconds, signal) => delay(milliseconds, undefined, { signal }).catch(() => undefined),
+    draw: Math.random,
+    newId: randomUUID,
+  };
+}
+
+function launchHost(launch: LaunchSettings, executions: string): Result<LaunchHost> {
+  const platform = hostPlatform(launch.containmentParent);
+  if (!platform.ok) return platform;
+  const { command, containmentParent, executionAccount } = launch;
+  const program = {
+    command, supervisorVersion: SUPERVISOR_VERSION,
+    ...(containmentParent === undefined ? {} : { containmentParent }),
+    ...(executionAccount === undefined ? {} : { executionAccount }),
+  };
+  return ok({ clock: platform.value.clock, supervision: fileSupervision({ executions, platform: platform.value, program }) });
 }
 
 // The worker entry that item 23's image runs; it exits with 1 when it cannot
