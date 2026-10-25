@@ -8,13 +8,17 @@ SERVICES_ID := $(shell printf '%s' '$(CURDIR)' | cksum | cut -d ' ' -f 1)
 VERIFY_SERVICES := taskelith-$(SERVICES_ID)-verify
 DEV_SERVICES := taskelith-$(SERVICES_ID)-dev
 
+LINUX_CGROUP_IMAGE := taskelith-linux-cgroup:test
+LINUX_CGROUP_BASE := ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
+NODE_LINUX_X64_SHA256 := eb6728e77c576a35162c122c45ccadf224d89ff00abc8dae46cc2897c6002d7c
+
 SPECKIT_IMAGE := taskelith-speckit:1.2.3
 SPECKIT_BASE := python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962
 SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
 .PHONY: verify verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility \
-	test services-up services-down
+	test services-up services-down verify-linux-cgroup
 
 # Uses the .nvmrc Node.js when nvm has it, so no 'nvm use' is needed first.
 verify:
@@ -68,6 +72,18 @@ services-down:
 # base; runs oasdiff as its digest-pinned container, so it needs Docker.
 contract-compatibility:
 	node --experimental-strip-types scripts/check-contract-compatibility.ts
+
+# Opt-in privileged cgroup v2 tests of the worker supervisor; kept out of
+# make verify, which stays unprivileged. x86_64 Docker hosts only.
+verify-linux-cgroup:
+	@if [ "$$(docker info --format '{{.Architecture}}')" != "x86_64" ]; then \
+		echo "make verify-linux-cgroup: needs an x86_64 Docker host; the image pins the linux-x64 Node.js." >&2; \
+		exit 1; \
+	fi
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run build
+	docker build --quiet --build-arg BASE=$(LINUX_CGROUP_BASE) --build-arg NODE_VERSION=$(NODE_PIN) \
+		--build-arg NODE_SHA256=$(NODE_LINUX_X64_SHA256) --tag $(LINUX_CGROUP_IMAGE) tools/linux-cgroup
+	docker run --rm --privileged --cgroupns=private --network none --volume "$(CURDIR):/repo:ro" $(LINUX_CGROUP_IMAGE)
 
 # SpecKit runs only in its digest-pinned container (G1 decision D5); see
 # docs/qualification/speckit.md.

@@ -1,0 +1,48 @@
+# worker-journal-adapter Specification
+
+## Purpose
+Implements the worker journal contract on SQLite for the worker: its data root and subtree rules, root lock, start checks, the W1 to W6 commits, the local outbox, and recovery planning, with recorded qualification results.
+
+## Requirements
+
+### Requirement: Journal store settings
+The adapter SHALL open the journal through `node:sqlite` with exclusive locking set before WAL mode, `synchronous` FULL, `fullfsync` and `checkpoint_fullfsync` on, and foreign keys on, SHALL verify each setting after opening, and SHALL refuse a journal that has a `-shm` file, a foreign `application_id`, a newer or unknown format, a failed `quick_check`, or a binding that differs from `worker/identity`.
+
+#### Scenario: Damaged or foreign journal
+- **WHEN** the journal is truncated, has a damaged page header, is not a Taskelith journal, or has a newer format
+- **THEN** startup fails and the journal file is unchanged
+
+### Requirement: Data root and subtree
+The adapter SHALL resolve `dataRoot` by the storage contract's precedence without falling back from an invalid configured value, SHALL refuse a data root inside a Git working tree, and SHALL refuse a symbolic link, a foreign owner, or group or other write permission on any path from `dataRoot` to a control record.
+
+#### Scenario: Symbolic link in a workspace
+- **WHEN** a symbolic link exists inside `worker/workspaces/`
+- **THEN** startup succeeds, while a symbolic link on a control-record path fails it
+
+### Requirement: Root lock
+The adapter SHALL hold an exclusive, kernel-released lock on `worker/lock` before it reads anything else under `worker/`, taken without waiting, and a second worker on the same root SHALL fail to start.
+
+#### Scenario: Killed holder
+- **WHEN** the process holding the lock is killed
+- **THEN** another process can take the lock
+
+### Requirement: Ordered commits
+Each W commit of the contract SHALL be one transaction in one adapter method, the adapter SHALL refuse a commit out of protocol order, SHALL accept a fact derived again once without a second observation, and SHALL number outbox entries gaplessly per journal and prune them only through a cumulative confirmation.
+
+#### Scenario: Fact derived again
+- **WHEN** an execution's start or exit is recorded twice
+- **THEN** the outbox holds one observation for it
+
+### Requirement: Crash recovery
+A worker killed before or after any W commit SHALL find on restart a journal from which the recovery table of the contract gives the required action, and an I/O error from a commit SHALL stop the journal until the host restarts or a new incarnation starts, also across worker restarts.
+
+#### Scenario: Crash after a grant and before W4
+- **WHEN** the worker is killed after W3 recorded a grant and before W4
+- **THEN** recovery seals the execution and continues the launch with a new execution
+
+### Requirement: Qualification record
+`docs/worker-journal-qualification.md` SHALL record the measured fitness of `node:sqlite`, the lock mechanism and its hazards, the volume checks, the state of the macOS `F_FULLFSYNC` gate, and what is not implemented or not measured.
+
+#### Scenario: Gate without a mechanism
+- **WHEN** no mechanism surfaces every `F_FULLFSYNC` failure
+- **THEN** the record states the gate as open

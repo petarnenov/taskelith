@@ -29,3 +29,16 @@ export function checkGeneration(entity: string, actual: Generation, expected: Ge
   }
   return ok(undefined);
 }
+
+// A replacement carries the generation after the one its writer read, so an
+// unchanged or older record cannot be written back over a newer one.
+export function checkNextGeneration(entity: string, replacement: Generation, expected: Generation): Result<void> {
+  if (replacement !== nextGeneration(expected)) {
+    return err(failure(
+      'invalid',
+      `${entity} replacing generation ${expected} must be at generation ${nextGeneration(expected)}, not ${replacement}`,
+      { expected: String(expected), replacement: String(replacement) },
+    ));
+  }
+  return ok(undefined);
+}

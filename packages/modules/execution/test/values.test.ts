@@ -97,3 +97,9 @@ test('an observation of another worker is not classified in this worker\'s curso
   const foreign = { ...position(1), workerId: OTHER_WORKER };
   assert.equal(failureOf(classifyObservation(applied(), foreign)).code, 'forbidden');
 });
+
+test('an exit code of -0 is recorded as 0, so it round-trips through JSON', () => {
+  const status = parseExitStatus({ kind: 'code', code: -0 });
+  assert.ok(status.ok && status.value.kind === 'code');
+  assert.ok(Object.is(status.value.code, 0));
+});
