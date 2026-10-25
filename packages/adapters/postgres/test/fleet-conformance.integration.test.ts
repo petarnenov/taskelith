@@ -9,7 +9,7 @@ import {
   PostgresDatabase,
 } from '@taskelith/postgres';
 import type { ConformanceCase } from '@taskelith/sdlc';
-import { parseInstant } from '@taskelith/kernel';
+import { ok, parseInstant } from '@taskelith/kernel';
 import { value } from '@taskelith/testing';
 import pg from 'pg';
 import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
@@ -63,6 +63,46 @@ test('a token that expires while its use waits for the row lock enrolls nothing'
   const enrolled = await enrolling;
   assert.equal(!enrolled.ok && enrolled.error.details.reason, 'token-expired');
 });
+
+test('a publisher that waited for the lock pushes every entry committed meanwhile', { concurrency: false }, async () => {
+  await truncateAll(url);
+  const registry = new CommittingFleetRegistry(database);
+  for (const [workerId, journalId] of [['w1', 'j1'], ['w2', 'j2']] as const) {
+    value(await registry.addToken(fleetToken(`t-${workerId}`)));
+    value(await registry.enroll(fleetToken(`t-${workerId}`).hash, fleetWorker(workerId, journalId)));
+  }
+  value(await registry.revoke(fleetWorker('w1', 'j1').workerId, fleetWorker('w1', 'j1').enrolledAt));
+  const holder = new pg.Client({ connectionString: url.href });
+  await holder.connect();
+  await holder.query('SELECT pg_advisory_lock(1792930400)');
+  const pushes: string[][] = [];
+  const push = async (revocations: readonly { userKey: string }[]) => {
+    pushes.push(revocations.map((revocation) => revocation.userKey));
+    return ok(undefined);
+  };
+  const publishing = registry.publishRevocations(push);
+  // The barrier: the publisher is waiting for the advisory lock.
+  await waitForWaitingLock(holder);
+  value(await registry.revoke(fleetWorker('w2', 'j2').workerId, fleetWorker('w2', 'j2').enrolledAt));
+  await holder.query('SELECT pg_advisory_unlock(1792930400)');
+  await holder.end();
+
+  assert.equal(value(await publishing), 2);
+  assert.deepEqual(pushes, [['U-w1-1', 'U-w2-1']]);
+  assert.equal(value(await registry.publishRevocations(push)), 0);
+});
+
+async function waitForWaitingLock(client: pg.Client): Promise<void> {
+  for (let tries = 0; tries < 200; tries++) {
+    const { rows } = await client.query<{ waiting: number }>(
+      `SELECT count(*)::int AS waiting FROM pg_locks WHERE locktype = 'advisory' AND objid = 1792930400 AND NOT granted
+         AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
+    );
+    if (rows[0]!.waiting > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('the publisher never waited for the advisory lock');
+}
 
 test('the initialized installation is not quarantined', { concurrency: false }, async () => {
   await truncateAll(url);

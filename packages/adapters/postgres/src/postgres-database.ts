@@ -29,6 +29,15 @@ export interface PostgresDatabaseOptions {
 
 export type TransactionWork<Value> = (transaction: PostgresTransaction) => Promise<Result<Value>>;
 
+// SERIALIZABLE by default; READ COMMITTED gives each statement a fresh
+// snapshot, for work that serializes itself with a lock it takes first.
+export type TransactionIsolation = 'serializable' | 'read-committed';
+
+const BEGIN: Readonly<Record<TransactionIsolation, string>> = Object.freeze({
+  serializable: 'BEGIN ISOLATION LEVEL SERIALIZABLE',
+  'read-committed': 'BEGIN ISOLATION LEVEL READ COMMITTED',
+});
+
 // The control plane's PostgreSQL state. Work runs in SERIALIZABLE
 // transactions; an `Err` from the work rolls its transaction back.
 export class PostgresDatabase {
@@ -49,9 +58,9 @@ export class PostgresDatabase {
     this.#serializationAttempts = options.serializationAttempts ?? SERIALIZATION_ATTEMPTS;
   }
 
-  async transaction<Value>(work: TransactionWork<Value>): Promise<Result<Value>> {
+  async transaction<Value>(work: TransactionWork<Value>, isolation: TransactionIsolation = 'serializable'): Promise<Result<Value>> {
     for (let attempt = 1; ; attempt++) {
-      const outcome = await this.#attempt(work);
+      const outcome = await this.#attempt(work, isolation);
       if (outcome.kind === 'done') return outcome.result;
       if (attempt >= this.#serializationAttempts) {
         return err(failure('unavailable', `the transaction lost ${attempt} serialization races in a row`, { attempts: String(attempt) }));
@@ -65,7 +74,7 @@ export class PostgresDatabase {
   }
 
   // Runs the work once; a lost serialization race asks for a retry.
-  async #attempt<Value>(work: TransactionWork<Value>): Promise<Attempt<Value>> {
+  async #attempt<Value>(work: TransactionWork<Value>, isolation: TransactionIsolation): Promise<Attempt<Value>> {
     let client: pg.PoolClient;
     try {
       client = await this.#pool.connect();
@@ -78,7 +87,7 @@ export class PostgresDatabase {
     const session = new Session(client);
     let broken: Error | undefined;
     try {
-      await session.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+      await session.query(BEGIN[isolation]);
       const transaction = new PostgresTransaction(session);
       const result = await work(transaction);
       // Nothing was committed whether or not the rollback is confirmed.

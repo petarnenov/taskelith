@@ -2,6 +2,10 @@ import { SECRET_PREFIXES } from './node-secrets.js';
 
 export const REDACTED = '[redacted]';
 
+// The user information of a URL, such as `postgres://owner:p%40ss@host`,
+// which may hold a password or a token, percent-encoded or not.
+const URL_USERINFO = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#@]+@/gi;
+
 // Secrets that text may carry: this installation's bearer secrets, NATS seeds
 // and user JWTs, and a whole `.creds` block (trust model section 5).
 const SECRET_PATTERNS: readonly RegExp[] = [
@@ -15,7 +19,8 @@ const SECRET_PATTERNS: readonly RegExp[] = [
 const SECRET_VARIABLE = /(?:TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDS|SEED|PRIVATE_KEY|API_KEY)/i;
 
 export function redactSecrets(text: string): string {
-  return SECRET_PATTERNS.reduce((redacted, pattern) => redacted.replace(pattern, REDACTED), text);
+  const withoutUserinfo = text.replace(URL_USERINFO, `$1${REDACTED}@`);
+  return SECRET_PATTERNS.reduce((redacted, pattern) => redacted.replace(pattern, REDACTED), withoutUserinfo);
 }
 
 // Redacts every string of a failure's message and details before it leaves

@@ -131,19 +131,20 @@ export class PostgresFleetRegistry implements FleetRegistry {
     return ok(rows.length);
   }
 
-  // The advisory lock makes publishers take turns; a rerun of the whole
-  // transaction pushes the same complete list again, which is harmless.
+  // Run it in its own READ COMMITTED transaction: the advisory lock makes
+  // publishers take turns, and the read after it sees every committed entry.
   async publishRevocations(push: (revocations: readonly BrokerRevocation[]) => Promise<Result<void>>): Promise<Result<number>> {
     await this.#session.query('SELECT pg_advisory_xact_lock($1)', [REVOCATION_LOCK]);
     const { rows } = await this.#session.query<{ user_key: string; revoked_at: Date; published: boolean }>(
       'SELECT user_key, revoked_at, published FROM broker_revocations ORDER BY user_key',
     );
-    const unpublished = rows.filter((row) => !row.published).length;
-    if (unpublished === 0) return ok(0);
+    const unpublished = rows.filter((row) => !row.published).map((row) => row.user_key);
+    if (unpublished.length === 0) return ok(0);
     const pushed = await push(rows.map((row) => Object.freeze({ userKey: row.user_key, revokedAt: instant(row.revoked_at) })));
     if (!pushed.ok) return pushed;
-    await this.#session.query('UPDATE broker_revocations SET published = true WHERE NOT published');
-    return ok(unpublished);
+    // Only the entries this push carried; a later one waits for its own.
+    await this.#session.query('UPDATE broker_revocations SET published = true WHERE user_key = ANY($1)', [unpublished]);
+    return ok(unpublished.length);
   }
 
   async #record(workerId: WorkerId, revocations: readonly BrokerRevocation[]): Promise<void> {

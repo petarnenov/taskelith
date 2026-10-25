@@ -43,10 +43,19 @@ test('text loses bearer secrets, seeds, user JWTs, and creds blocks', () => {
   assert.deepEqual([redacted.message, redacted.details], [`bad ${REDACTED}`, { presented: REDACTED, worker: 'w1' }]);
 });
 
+test('the user information of a URL is redacted, percent-encoded or not', () => {
+  assert.equal(redactSecrets('postgres://owner:example-password@localhost/taskelith'), `postgres://${REDACTED}@localhost/taskelith`);
+  assert.equal(redactSecrets('connect nats://s3cr%40t:p%2Fw@127.0.0.1:4222 failed'), `connect nats://${REDACTED}@127.0.0.1:4222 failed`);
+  assert.equal(redactSecrets('nats://token-only@host'), `nats://${REDACTED}@host`);
+  assert.equal(redactSecrets('https://example.org/path?q=a@b'), 'https://example.org/path?q=a@b');
+  assert.equal(redactSecrets('mail owner@example.org'), 'mail owner@example.org');
+});
+
 test('a child environment keeps no secret variable or value', () => {
   const secret = new NodeSecrets().issue('worker').secret;
   assert.deepEqual(scrubEnvironment({
     PATH: '/usr/bin', HOME: '/home/w', TASKELITH_WORKER_CREDENTIAL: 'x', NATS_CREDS: '/x.creds', GITHUB_TOKEN: 'ghp',
     OTHER: `uses ${secret}`, AWS_SECRET_ACCESS_KEY: 'k', UNSET: undefined,
-  }), { PATH: '/usr/bin', HOME: '/home/w' });
+    TASKELITH_POSTGRES_URL: 'postgres://owner:p%40ss@db/taskelith', TASKELITH_NATS_URL: 'nats://127.0.0.1:4222',
+  }), { PATH: '/usr/bin', HOME: '/home/w', TASKELITH_NATS_URL: 'nats://127.0.0.1:4222' });
 });

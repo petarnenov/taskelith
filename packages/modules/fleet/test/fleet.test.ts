@@ -213,6 +213,18 @@ test('a revocation the broker missed stays recorded and is published by the next
   assert.deepEqual(broker.revoked.sort(), ['U-worker-1-1', 'U-worker-1-2', 'U-worker-1-3', 'U-worker-1-4']);
 });
 
+test('a publication that throws after a committed rotation still returns the new secrets', async () => {
+  const { broker, service } = enrollment();
+  const enrolled = value(await service.enroll(value(await service.issueToken({})), request()));
+  value(await service.rotate(enrolled.workerId));
+  broker.publishRevocations = async () => {
+    throw new Error('statement timeout');
+  };
+  const rotated = value(await service.rotate(enrolled.workerId));
+  assert.deepEqual([rotated.credentialGeneration, rotated.revocationsPublished], [3, false]);
+  assert.equal(value(await service.authenticate(enrolled.workerId, rotated.credentials.controlPlane)), 3);
+});
+
 test('revocation denies every credential of the worker at once', async () => {
   const { broker, service } = enrollment();
   const enrolled = value(await service.enroll(value(await service.issueToken({})), request()));

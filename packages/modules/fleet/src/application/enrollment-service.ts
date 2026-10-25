@@ -109,10 +109,8 @@ export class EnrollmentService {
     const rotated = await this.#deps.registry.rotate(workerId, current.generation, issued.value.generation, validUntil, now);
     if (!rotated.ok) return rotated.error.code === 'forbidden' ? err(notAuthorized()) : rotated;
     // The rotation is committed, so its new secrets are returned in any case.
-    const published = await this.publishRevocations();
-    return ok({
-      credentialGeneration: issued.value.generation.generation, credentials: issued.value.secrets, revocationsPublished: published.ok,
-    });
+    const revocationsPublished = await this.#publishedAfterCommit();
+    return ok({ credentialGeneration: issued.value.generation.generation, credentials: issued.value.secrets, revocationsPublished });
   }
 
   // Denies every credential of the worker at once; its active attempts
@@ -146,6 +144,15 @@ export class EnrollmentService {
     const generations = validGenerations(worker.value.credentials, this.#deps.clock.now());
     const matched = generations.find((generation) => this.#deps.secrets.matches(secret, generation.controlPlaneHash));
     return matched === undefined ? err(notAuthorized()) : ok(matched.generation);
+  }
+
+  // A thrown failure counts as an unpublished one: the entries stay recorded.
+  async #publishedAfterCommit(): Promise<boolean> {
+    try {
+      return (await this.publishRevocations()).ok;
+    } catch {
+      return false;
+    }
   }
 
   async #activeWorker(workerId: WorkerId): Promise<Result<EnrolledWorker>> {

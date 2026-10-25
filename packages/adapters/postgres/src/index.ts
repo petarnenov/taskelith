@@ -20,6 +20,7 @@ export {
   SERIALIZATION_ATTEMPTS,
   SERIALIZATION_BACKOFF_MILLISECONDS,
   type PostgresDatabaseOptions,
+  type TransactionIsolation,
   type TransactionWork,
 } from './postgres-database.js';
 export { PostgresTransaction } from './postgres-transaction.js';

@@ -72,8 +72,8 @@ Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-
 - **Revocation.** `revoke-worker` marks the worker revoked in the same row placement reads. In the same transaction it records every broker user of the worker in `broker_revocations`. The server disconnects such a user at once and refuses it afterwards.
   - **Durable list.** Every broker user to revoke is recorded in the transaction that stops its validity: a revocation, a rotation that drops a predecessor, or the end of a grace window. It stays recorded after its publication.
   - **Time.** Each user is void for JWTs issued up to its revocation time, and that time is never earlier than its own JWT's issue time, which its generation records. So a revocation that raced a rotation still voids the new user.
-  - **Publication.** A publication sends the broker the complete list in the account JWT. Publishers take turns under a PostgreSQL advisory lock, across processes, and an entry counts as published only after the broker accepted the list.
-  - **Retry.** A publication that fails leaves the entries unpublished. `revoke-worker` then reports `unavailable`. A rotation is already committed, so it returns its new secrets with `revocationsPublished: false`, and the administrative entry prints them with a retry hint and exits with status 1. The rerun, or the next `expire-grace-windows`, publishes the entries.
+  - **Publication.** A publication sends the broker the complete list in the account JWT. It runs in its own READ COMMITTED transaction: it takes a PostgreSQL advisory lock first, so publishers take turns across processes, and then reads every committed entry. An entry counts as published only after the broker accepted a list that contained it.
+  - **Retry.** A publication that fails leaves the entries unpublished. `revoke-worker` then reports `unavailable`. A rotation is already committed, so it returns its new secrets with `revocationsPublished: false`, also when the publication throws, and the administrative entry prints them with a retry hint and exits with status 1. The rerun, or the next `expire-grace-windows`, publishes the entries.
   - The active attempts of a revoked worker become uncertain through reconciliation (item 21), never dead.
 - **Workers get no database credential.** The control plane connects to NATS as a user of the installation account without subject limits.
 
@@ -83,9 +83,9 @@ Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-
 
 ## 8. Secret scrubbing
 
-`@taskelith/secrets` redacts this installation's bearer secrets (by their `tkop_`, `tken_`, `tkwk_` prefixes), NKey seeds, NATS JWTs, and whole `.creds` blocks.
+`@taskelith/secrets` redacts this installation's bearer secrets (by their `tkop_`, `tken_`, `tkwk_` prefixes), NKey seeds, NATS JWTs, whole `.creds` blocks, and the user information of URLs, such as a database password, percent-encoded or not.
 - The administrative entry redacts every failure before printing it.
-- `scrubEnvironment` drops every variable named like a secret, or holding one, from a child process's environment.
+- `scrubEnvironment` drops every variable named like a secret, or holding one, from a child process's environment, a service URL with user information included.
 - Failures name settings and identifiers, never secret values.
 - Logs are item 22's, which uses the same helpers.
 
