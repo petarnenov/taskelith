@@ -6,11 +6,15 @@ Define the first wire contracts of the SDLC module: an OpenAPI 3.1 document for 
 ## Requirements
 
 ### Requirement: Contracts package and documents
-The private workspace package `@taskelith/contracts` SHALL hold the documents `documents/sdlc.openapi.json` (OpenAPI 3.1.0) and `documents/sdlc.asyncapi.json` (AsyncAPI 3.0.0), each with a semantic `info.version`. Each document SHALL be self-contained, and every schema that both documents define under the same component name SHALL be identical.
+The private workspace package `@taskelith/contracts` SHALL hold `documents/sdlc.openapi.json` (OpenAPI 3.1.0), `documents/sdlc.asyncapi.json` (AsyncAPI 3.0.0), and the execution documents, each with a semantic `info.version`. Each document SHALL be self-contained, and every schema that several documents define under the same component name SHALL be identical.
 
 #### Scenario: Shared schema drifts
 - **WHEN** the admission schema of one document differs from the admission schema of the other
 - **THEN** the package tests fail and name the schema
+
+#### Scenario: Name with two meanings
+- **WHEN** two documents define different schemas under one component name
+- **THEN** generation fails and names the schema and both documents
 
 ### Requirement: Command envelope
 A command SHALL be an object of `metadata` and `payload`, whose metadata requires the command identifier and type, schema version, issue time, correlation identifier, project and task identity, and the SDLC run, stage, admission, and admission generation, and allows causation, expiry, attempt, worker, and ownership generation. It SHALL reject properties it does not define.
@@ -37,6 +41,10 @@ The AsyncAPI document SHALL define the admission events `sdlc.admission.admitted
 - **WHEN** an admitted-event body is validated as an invalidated event
 - **THEN** validation fails at the metadata event type
 
+#### Scenario: Used admission on the wire
+- **WHEN** a used admission with its ownership generation is serialized as JSON
+- **THEN** it is valid against the admission schema of every document that defines it
+
 ### Requirement: SDLC HTTP operations
 The OpenAPI document SHALL define `createRun` (`POST /runs`), `submitTask` (`POST /runs/{runId}/tasks`), and `readAdmission` (`GET /runs/{runId}/admissions/{admissionId}`), with client-chosen run and task identifiers, the admission as the result of a submitted task, and the kernel failure shape for errors, using 422 for a task that cannot be admitted.
 
@@ -45,11 +53,15 @@ The OpenAPI document SHALL define `createRun` (`POST /runs`), `submitTask` (`POS
 - **THEN** the request body is invalid
 
 ### Requirement: Generated types
-The build that `make verify` runs SHALL validate the AsyncAPI document with `@asyncapi/parser`, failing on errors and warnings, and SHALL generate the TypeScript types of both documents and their schema bundles under `packages/contracts/src/generated/`, which is not committed.
+The build that `make verify` runs SHALL validate every AsyncAPI document with `@asyncapi/parser`, failing on errors and warnings. It SHALL generate the TypeScript types of all documents and one HTTP and one message schema bundle under `packages/contracts/src/generated/`, which is not committed, and SHALL fail when two OpenAPI documents define the same path.
 
 #### Scenario: Invalid AsyncAPI document
-- **WHEN** the parser reports an error or a warning for the AsyncAPI document
+- **WHEN** the parser reports an error or a warning for an AsyncAPI document
 - **THEN** generation and the build fail
+
+#### Scenario: Path defined twice
+- **WHEN** two OpenAPI documents define the same path
+- **THEN** generation fails and names the path
 
 ### Requirement: Generated validators
 The package SHALL export `checkHttpSchema` and `checkMessageSchema`, which validate an input against a named schema of the documents with ajv in strict mode (JSON Schema 2020-12 for HTTP, draft-07 for messages) and return the typed value or readable violations.
