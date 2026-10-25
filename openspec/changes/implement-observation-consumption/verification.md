@@ -96,6 +96,7 @@ Recorded before pass 1.
 `make verify` ran in the worktree with every file tracked:
 - At `cb83f79`, before pass 1: 1131 tests passed, 0 failed. Coverage was 99.27% lines, 91.75% branches, and 99.09% functions. The comment, boundary, coverage-scope, dependency-inventory, contract-compatibility, OpenSpec strict, archive dry-run, and package checks pass.
 - At `e95b8e3`, after the pass-1 fixes: 1150 tests passed, 0 failed. Coverage was 99.27% lines, 91.74% branches, and 99.06% functions. Every other check passes.
+- At `641dc13`, after the pass-2 fixes: 1159 tests passed, 0 failed. Coverage was 99.27% lines, 91.75% branches, and 99.06% functions. Every other check passes.
 
 ## Independent review
 
@@ -118,13 +119,27 @@ It runs from the worktree, with the prompt and log in the session's scratch dire
 | --- | --- | --- |
 | H1 | A lost confirmation is never sent again. A republished observation is an inbox duplicate, so a worker whose confirmation expired never prunes. | Fixed in `11021e3`: an authenticated duplicate at or below `confirmedThrough` appends the current confirmation again under a fresh event identity. |
 | H2 | A refusal of an assignment whose execution can run keeps the reservation but leaves its grant live, with no cancellation. | Fixed in `11021e3`: `refuseInTransaction` acts as an invalidating writer, as cancellation does. It revokes the grants with `attempt-not-launchable` and appends the cancellation command. |
-| H3 | The migration's backfill of `offer_command_id` corrupts valid JSON escapes in identifiers. | Fixed in `11021e3`: use the `\` protection of the placement migration, with tests for backslash, literal `\u0000`, quotes, and unsupported escapes. |
+| H3 | The migration's backfill of `offer_command_id` corrupts valid JSON escapes in identifiers. | Fixed in `11021e3`: use the `\u005c` protection of the placement migration, with tests for backslash, literal `\u0000`, quotes, and unsupported escapes. |
 | M4 | Marking and clearing a capacity refusal have no common sequence fence, so a late refusal or an older declaration wins. | Fixed in `11021e3`: one refusal watermark for every mark and clear. |
 | M5 | A late protocol rejection overwrites a newer declared protocol window, and the reverse. | Fixed in `11021e3`: a shared protocol watermark for declarations and rejections. |
 | M6 | An automatic retry is placed at once, bypassing the backoff of capacity reservation sections 5 and 12. | Fixed in `11021e3`: placement waits until the retried attempt's end plus `placementBackoff` of the retry number. |
 | M7 | The in-memory `WorkerReports` loses an update under concurrency. | Fixed in `11021e3`: atomic read, check, and write, with a concurrent conformance case. |
 | M8 | The in-memory `WorkerReports` advances its watermark even when the worker is missing. | Fixed in `11021e3`: advance only with a successful update, with a conformance case. |
 | M9 | The in-memory assignment repository accepts a duplicate `offerCommandId`, which PostgreSQL rejects. | Fixed in `11021e3`: `conflict`, with a conformance case. |
+
+### Pass 2
+
+- **Session:** `01a174b7-292a-7fe0-84a3-f273feaae945`, 2026-10-25 22:18 to 22:22, on `36922c8`, reviewing `8b451e3..36922c8`. The output header confirms `gpt-6.1-sol`, reasoning effort `medium`, and the `read-only` sandbox.
+- **Snapshot:** `28d3d17d…5788ee36`, unchanged.
+- **Reviewer's own checks:** it ran 40 tests, the comment check, and `git diff --check`, all passing.
+- **Pass-1 findings:** the reviewer confirmed H1 to M8 resolved, with evidence, and M9 partly resolved.
+- **Result:** Critical 0, High 0, Medium 1, Low 1. The reviewer found no other correctness or safety defect.
+- **Wire contracts:** none changed for L11; `task-service.ts` equals its `dev` version again.
+
+| # | Finding | Disposition |
+| --- | --- | --- |
+| M10 | The rest of M9: `replace` can change or clear an assignment's `offerCommandId`. The in-memory adapter then has two assignments claiming one offer. PostgreSQL keeps the old column value beside a changed record. | Fixed in `f23f6a6`: the identity is immutable on `replace` in both adapters, with shared conformance cases for changing, clearing, and duplicating it. In PostgreSQL the column is the source: a record read without the identity carries the column's value, and a PostgreSQL test covers a backfilled row through `replace`. |
+| L11 | `readTaskResult` was made pending while an attempt is active. That breaks execution-wire-contracts "Task result and evidence" and the contract page, which promise the last ended attempt's outcome. | Fixed in `641dc13`: the author restores the contract's behavior instead of changing a wire contract, and removes the rule from the proposal, the design, and the deltas. |
 
 ## Limitations
 
