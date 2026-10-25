@@ -233,10 +233,53 @@ test('an evidence upload reaches its operation with the record and the exact con
     [Buffer.from('--b0undary\r\nnot a header\r\n\r\n{}\r\n--b0undary--'), undefined],
     [Buffer.from('--b0undary\r\nContent-Type: text/plain\r\n\r\n{}\r\n--b0undary--'), undefined],
     [body(part('record', 'application/json', Buffer.alloc(1024 ** 2 + 1, 0x20)), contentPart), undefined],
+    [body(recordPart, part('content', 'application/octet-stream', Buffer.alloc(64 * 1024 ** 2 + 1))), undefined],
+    [Buffer.alloc(65 * 1024 ** 2 + 1), undefined],
   ] as const;
   for (const [payload, contentType] of invalid) {
     const refused = await post(payload, contentType);
     assert.deepEqual([refused.status, refused.body.code], [400, 'invalid'], payload.subarray(0, 60).toString());
   }
   assert.equal(uploads.length, handled, 'no invalid upload reaches the operation');
+});
+
+test('evidence uploads beyond the concurrency limit wait for a free slot', async () => {
+  const WORKER = `tkwk_${'E'.repeat(43)}`;
+  const started: number[] = [];
+  const releases: (() => void)[] = [];
+  const slotServer = createApiServer({
+    ...handlers,
+    authenticateWorker: async () => ok({ workerId: 'worker-1' as never, generation: 1 }),
+    handle: async () => {
+      started.push(Date.now());
+      await new Promise<void>((resolve) => releases.push(resolve));
+      return err(failure('conflict', 'stop here'));
+    },
+  }, { maxConcurrentUploads: 1 });
+  await new Promise<void>((resolve) => slotServer.listen(0, '127.0.0.1', () => resolve()));
+  after(() => new Promise<void>((resolve) => slotServer.close(() => resolve())));
+  const record = {
+    evidenceId: 'e', projectId: 'p', runId: 'r', taskId: 't', attemptId: 'a', ownershipGeneration: 1, kind: 'log', inputArtifacts: [],
+    codeRevision: 'c', validator: { name: 'v', version: '1' }, outcome: 'ok', contentDigest: `sha256:${'ab'.repeat(32)}`,
+    contentType: 'text/plain', sizeBytes: 1, capturedAt: '2026-10-25T09:00:00.000Z',
+  };
+  const upload = () => {
+    const form = new FormData();
+    form.append('record', new Blob([JSON.stringify(record)], { type: 'application/json' }));
+    form.append('content', new Blob(['x']));
+    const port = (slotServer.address() as AddressInfo).port;
+    return fetch(`http://127.0.0.1:${port}/evidence`, { method: 'POST', headers: { authorization: `Bearer ${WORKER}` }, body: form });
+  };
+  const waitFor = async (condition: () => boolean) => {
+    while (!condition()) await new Promise((resolve) => setTimeout(resolve, 10));
+  };
+  const first = upload();
+  const second = upload();
+  await waitFor(() => started.length === 1);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(started.length, 1, 'the second upload waits while the first holds the only slot');
+  releases[0]!();
+  await waitFor(() => started.length === 2);
+  releases[1]!();
+  assert.deepEqual([(await first).status, (await second).status], [409, 409]);
 });

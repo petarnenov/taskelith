@@ -4,8 +4,10 @@ import { redactFailure } from '@taskelith/secrets';
 
 // Every message of the execution and SDLC contracts is at most 1 MiB.
 export const MAX_BODY_BYTES = 1024 ** 2;
-// Provisional, in the operational targets: content per evidence publication.
+// Provisional, in the operational targets: content per evidence publication,
+// and publications buffered at once.
 export const MAX_EVIDENCE_BYTES = 64 * 1024 ** 2;
+export const MAX_CONCURRENT_UPLOADS = 4;
 
 export interface JsonResponse {
   readonly status: number;

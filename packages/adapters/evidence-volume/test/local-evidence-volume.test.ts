@@ -7,6 +7,7 @@ import { afterEach, test } from 'node:test';
 import { ControlPlaneNamespace } from '@taskelith/control-plane-store';
 import { EVIDENCE_STORE_CONFORMANCE } from '@taskelith/execution';
 import { LocalEvidenceVolume } from '@taskelith/evidence-volume';
+import type { Result } from '@taskelith/kernel';
 import { parseContentDigest, type ContentDigest } from '@taskelith/sdlc';
 import { failed, value } from '@taskelith/testing';
 
@@ -76,9 +77,10 @@ test('a symbolic link or a writable shard in place of content is refused', async
   rmSync(path);
   writeFileSync(join(base, 'outside'), 'linked');
   symlinkSync(join(base, 'outside'), path);
-  assert.equal(failed(await volume.read(digest)).details.reason, 'unsafe-path');
-  assert.equal(failed(await volume.put(digest, content)).details.reason, 'unsafe-path');
-  assert.equal(failed(await volume.remove(digest)).details.reason, 'unsafe-path');
+  const refusals: Result<unknown>[] = [await volume.read(digest), await volume.put(digest, content), await volume.remove(digest)];
+  for (const refused of refusals) {
+    assert.deepEqual([failed(refused).code, failed(refused).details.reason], ['internal', 'unsafe-path'], 'a volume defect, not a refusal');
+  }
   rmSync(path);
   chmodSync(join(path, '..'), 0o777);
   assert.equal(failed(LocalEvidenceVolume.open({ dataRoot: root, ownerUid })).details.reason, 'unsafe-path');

@@ -35,7 +35,7 @@ function store(): ControlPlaneStore {
     fleet: { worker: async () => ({ ok: true, value: undefined }) },
     now: async () => '2026-10-25T09:00:00.000Z' as never,
   };
-  return { transaction: (work) => work(transaction) };
+  return { transaction: (work) => work(transaction), readCommitted: (work) => work(transaction) };
 }
 
 test('a stored run answers a repeat after its workflow left the registry', async () => {

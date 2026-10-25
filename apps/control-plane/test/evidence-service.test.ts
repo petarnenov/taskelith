@@ -73,7 +73,7 @@ async function fixture(): Promise<Fixture> {
     fleet: { worker: async (workerId) => ok(workers.get(workerId) as never) },
     now: async () => clock.now,
   };
-  const store: ControlPlaneStore = { transaction: (work) => work(transaction) };
+  const store: ControlPlaneStore = { transaction: (work) => work(transaction), readCommitted: (work) => work(transaction) };
   value(await new RunService(store, new WorkflowRegistry([{ definition, digest: WORKFLOW_DIGEST }])).createRun({ runId: 'run-1', projectId: 'project-1', binding }));
   const tasks = new TaskService(store);
   value(await tasks.submitTask('run-1', { taskId: 'task-1', kind: 'planning', stageId: 'specs' }, 'corr-1' as never));

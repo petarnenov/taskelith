@@ -8,6 +8,7 @@ import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import { redactSecrets } from '@taskelith/secrets';
 import {
   MAX_BODY_BYTES,
+  MAX_CONCURRENT_UPLOADS,
   MAX_EVIDENCE_BYTES,
   bearerToken,
   failureResponse,
@@ -18,6 +19,7 @@ import {
   type ApiResponse,
 } from './http-exchange.js';
 import { parseMultipart } from './multipart.js';
+import { UploadSlots } from './upload-slots.js';
 import { ROUTES, type RouteDefinition, type SecurityScheme } from './routes.js';
 
 // A validated request: path parameters, body, query, and correlation, and
@@ -53,6 +55,7 @@ export interface ApiServerOptions {
   readonly logger?: Logger;
   // The operations served; the contract's route table unless replaced.
   readonly routes?: readonly RouteDefinition[];
+  readonly maxConcurrentUploads?: number;
 }
 
 // The control-plane API over node:http: no framework, contract validation
@@ -60,14 +63,16 @@ export interface ApiServerOptions {
 export function createApiServer(handlers: ApiHandlers, options: ApiServerOptions = {}): Server {
   const logger = options.logger ?? SILENT_LOGGER;
   const routes = options.routes ?? ROUTES;
+  const uploads = new UploadSlots(options.maxConcurrentUploads ?? MAX_CONCURRENT_UPLOADS);
   return createServer((request, response) => {
     // serve answers every failure itself; this only guards a broken socket.
-    serve(handlers, routes, logger, request, response).catch(() => response.destroy());
+    serve(handlers, uploads, routes, logger, request, response).catch(() => response.destroy());
   });
 }
 
 async function serve(
   handlers: ApiHandlers,
+  uploads: UploadSlots,
   routes: readonly RouteDefinition[],
   logger: Logger,
   request: IncomingMessage,
@@ -86,7 +91,7 @@ async function serve(
       answer = failureResponse(400, matched.error);
     } else {
       operationId = matched.value.route.operationId;
-      answer = await answerRoute(handlers, matched.value, request, url, correlationId);
+      answer = await answerRoute(handlers, uploads, matched.value, request, url, correlationId);
     }
   } catch (error) {
     answer = failureResponse(500, failure('internal', error instanceof Error ? error.message : String(error)));
@@ -100,6 +105,7 @@ async function serve(
 
 async function answerRoute(
   handlers: ApiHandlers,
+  uploads: UploadSlots,
   { route, parameters }: { route: RouteDefinition; parameters: readonly string[] },
   request: IncomingMessage,
   url: URL,
@@ -109,12 +115,15 @@ async function answerRoute(
   if (bearer === undefined) return failureResponse(401, failure('forbidden', 'the request has no bearer credential'));
   const principal = await authenticated(handlers, route.security, bearer);
   if (!principal.ok) return refusal(principal.error);
-  const body = await validatedBody(request, route);
-  if (!body.ok) return failureResponse(400, body.error);
-  const validated = { parameters, body: body.value, query: url.searchParams, correlationId, ...principal.value };
-  const outcome = await handlers.handle(route.operationId, validated, bearer);
-  if (!outcome.ok) return failureResponse(statusOf(route, outcome.error), outcome.error);
-  return successResponse(route, outcome.value);
+  const handled = async (): Promise<ApiResponse> => {
+    const body = await validatedBody(request, route);
+    if (!body.ok) return failureResponse(400, body.error);
+    const validated = { parameters, body: body.value, query: url.searchParams, correlationId, ...principal.value };
+    const outcome = await handlers.handle(route.operationId, validated, bearer);
+    if (!outcome.ok) return failureResponse(statusOf(route, outcome.error), outcome.error);
+    return successResponse(route, outcome.value);
+  };
+  return route.upload ? uploads.run(handled) : handled();
 }
 
 function statusOf(route: RouteDefinition, failed: Failure): number {

@@ -8,7 +8,7 @@ G2 work item 19 ([docs/g2-plan.md](../../../docs/g2-plan.md)) delivers the `Evid
   - The evidence domain: the record fields of architecture section 8, parsing, and producer authorization. A producer may publish only for an attempt it held at the stated ownership generation; evidence of an earlier held generation is kept with `ownershipCurrent` false. The rule for a retried publication, and the minimum retention of 365 days.
   - The `EvidenceStore` port for content-addressed bytes and the `EvidenceRecords` port for the metadata, with an in-memory records adapter and conformance suites for both.
 - **`@taskelith/evidence-volume`**, a new adapter: content on a durable local volume under `control-plane/evidence/sha256/`, owner-only and written by the durable file rule. It verifies the SHA-256 digest on every write and read, so content that is corrupt or missing is detected and never served, and a republication of the same content repairs a corrupt copy.
-- **`@taskelith/data-root`.** The durable file helpers also write bytes.
+- **`@taskelith/data-root`.** Asynchronous forms of the durable file helpers.
 - **PostgreSQL.**
   - A migration adds the `evidence` table.
   - `PostgresEvidenceRecords`, with a per-digest advisory lock.
@@ -29,6 +29,6 @@ G2 work item 19 ([docs/g2-plan.md](../../../docs/g2-plan.md)) delivers the `Evid
 
 ## Impact
 
-The published `taskelith` package and CLI are unchanged, and no dependency is added. The contracts are unchanged.
+The published `taskelith` package and CLI are unchanged, and no dependency is added. `execution.openapi.json` moves to 0.2.1, which declares the 400, 500, and 503 failures of the evidence operations.
 
 Worker authentication of `publishEvidence` comes from `add-worker-bearer-authentication`. On 2026-10-25 the coordinator decided that the item 17 side lands it first as a separate change (option (c)).

@@ -126,11 +126,9 @@ export function acceptEvidence(
 ): Result<EvidenceRecord> {
   const { task } = context;
   const placed = publication.taskId === task.id && publication.runId === context.runId && publication.projectId === context.projectId;
-  if (!placed) return notAuthorized(publication, 'the task is not in the stated run and project');
   const attempt = task.attempts.find((candidate) => candidate.id === publication.attemptId);
-  if (attempt === undefined) return notAuthorized(publication, 'the task has no such attempt');
-  if (!context.heldGenerations.includes(publication.ownershipGeneration)) {
-    return notAuthorized(publication, `the producer never held the attempt at generation ${publication.ownershipGeneration}`);
+  if (!placed || attempt === undefined || !context.heldGenerations.includes(publication.ownershipGeneration)) {
+    return notAuthorized(publication);
   }
   const { executionId } = publication;
   if (executionId !== undefined && !attempt.executions.some((execution) => execution.id === executionId)) {
@@ -147,17 +145,17 @@ export function isSamePublication(record: EvidenceRecord, publication: EvidenceP
   return stored.kind === producer.kind && stored.workerId === producer.workerId && canonical(published) === canonical(publication);
 }
 
-export function retentionEndsAt(record: EvidenceRecord): Instant {
-  const ends = instantFromEpochMilliseconds(Date.parse(record.publishedAt) + EVIDENCE_RETENTION_DAYS * DAY_MILLISECONDS);
-  // A parsed instant plus 365 days stays far inside the Date range.
-  return ends.ok ? ends.value : record.publishedAt;
+export function retentionEndsAt(record: EvidenceRecord): Result<Instant> {
+  return instantFromEpochMilliseconds(Date.parse(record.publishedAt) + EVIDENCE_RETENTION_DAYS * DAY_MILLISECONDS);
 }
 
-// A record may be removed only once its minimum retention has passed.
+// A record may be removed only once its minimum retention has passed; an
+// end that cannot be computed keeps the record.
 export function checkRetentionElapsed(record: EvidenceRecord, now: Instant): Result<void> {
   const ends = retentionEndsAt(record);
-  if (Date.parse(now) >= Date.parse(ends)) return ok(undefined);
-  return err(failure('precondition-failed', `evidence ${record.evidenceId} is retained until ${ends}`, {
+  if (!ends.ok) return ends;
+  if (Date.parse(now) >= Date.parse(ends.value)) return ok(undefined);
+  return err(failure('precondition-failed', `evidence ${record.evidenceId} is retained until ${ends.value}`, {
     evidence: record.evidenceId,
     reason: 'retention-not-elapsed',
   }));
@@ -169,27 +167,38 @@ type ParsedIdentifiers = Pick<
 >;
 
 function parseIdentifiers(input: EvidencePublicationInput): Result<ParsedIdentifiers> {
-  const fields = [
-    ['evidenceId', 'EvidenceId', input.evidenceId],
-    ['projectId', 'ProjectId', input.projectId],
-    ['runId', 'RunId', input.runId],
-    ['taskId', 'TaskId', input.taskId],
-    ['attemptId', 'AttemptId', input.attemptId],
-    ['kind', 'EvidenceKind', input.kind],
-    ['codeRevision', 'CodeRevision', input.codeRevision],
-    ['outcome', 'EvidenceOutcome', input.outcome],
-    ['validator.name', 'ValidatorName', input.validator.name],
-    ['validator.version', 'ValidatorVersion', input.validator.version],
-    ...(input.executionId === undefined ? [] : [['executionId', 'ExecutionId', input.executionId]]),
-  ] as const;
-  const parsed: Record<string, string> = {};
-  for (const [field, kind, text] of fields) {
-    const identifier = parseIdentifier(kind, text);
-    if (!identifier.ok) return fieldError(field, identifier.error.message);
-    parsed[field] = identifier.value;
-  }
-  const { 'validator.name': name, 'validator.version': version, ...rest } = parsed;
-  return ok({ ...rest, validator: Object.freeze({ name, version }) } as unknown as ParsedIdentifiers);
+  const evidenceId = identifier('evidenceId', 'EvidenceId', input.evidenceId);
+  if (!evidenceId.ok) return evidenceId;
+  const projectId = identifier('projectId', 'ProjectId', input.projectId);
+  if (!projectId.ok) return projectId;
+  const runId = identifier('runId', 'RunId', input.runId);
+  if (!runId.ok) return runId;
+  const taskId = identifier('taskId', 'TaskId', input.taskId);
+  if (!taskId.ok) return taskId;
+  const attemptId = identifier('attemptId', 'AttemptId', input.attemptId);
+  if (!attemptId.ok) return attemptId;
+  const executionId = input.executionId === undefined ? undefined : identifier('executionId', 'ExecutionId', input.executionId);
+  if (executionId !== undefined && !executionId.ok) return executionId;
+  const kind = identifier('kind', 'EvidenceKind', input.kind);
+  if (!kind.ok) return kind;
+  const codeRevision = identifier('codeRevision', 'CodeRevision', input.codeRevision);
+  if (!codeRevision.ok) return codeRevision;
+  const name = identifier('validator.name', 'ValidatorName', input.validator.name);
+  if (!name.ok) return name;
+  const version = identifier('validator.version', 'ValidatorVersion', input.validator.version);
+  if (!version.ok) return version;
+  const outcome = identifier('outcome', 'EvidenceOutcome', input.outcome);
+  if (!outcome.ok) return outcome;
+  return ok({
+    evidenceId: evidenceId.value, projectId: projectId.value, runId: runId.value, taskId: taskId.value, attemptId: attemptId.value,
+    ...(executionId === undefined ? {} : { executionId: executionId.value }),
+    kind: kind.value, codeRevision: codeRevision.value, validator: Object.freeze({ name: name.value, version: version.value }), outcome: outcome.value,
+  });
+}
+
+function identifier<Kind extends string>(field: string, kind: Kind, text: string): Result<Identifier<Kind>> {
+  const parsed = parseIdentifier(kind, text);
+  return parsed.ok ? parsed : fieldError(field, parsed.error.message);
 }
 
 function parseArtifacts(inputs: readonly ArtifactRevisionInput[]): Result<readonly ArtifactRevision[]> {
@@ -210,8 +219,10 @@ function canonical(value: unknown): string {
   });
 }
 
-function notAuthorized(publication: EvidencePublication, reason: string): Result<never> {
-  return err(failure('forbidden', `evidence ${publication.evidenceId} is not authorized: ${reason}`, {
+// One message for every check, so that a refusal does not tell a worker
+// which tasks or attempts exist.
+function notAuthorized(publication: EvidencePublication): Result<never> {
+  return err(failure('forbidden', `evidence ${publication.evidenceId} is not authorized for this producer`, {
     evidence: publication.evidenceId,
     reason: 'producer-not-authorized',
   }));

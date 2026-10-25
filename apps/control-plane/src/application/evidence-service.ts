@@ -14,8 +14,8 @@ import { validGenerations, type WorkerPrincipal } from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import type { ContentDigest } from '@taskelith/sdlc';
 import type { ControlPlaneStore, ControlPlaneTransaction } from './control-plane-store.js';
+import { viewOf, type EvidenceView } from './evidence-view.js';
 
-export type EvidenceView = HttpSchemas['EvidenceRecord'];
 
 // The outcome of a publication: the stored record, and whether this call
 // stored it (201) or found it already stored (200).
@@ -95,13 +95,19 @@ export class EvidenceService {
       const deleted = await tx.evidence.remove(record.value.evidenceId);
       return deleted.ok ? ok(record.value.contentDigest) : deleted;
     });
-    if (!removed.ok) return removed;
-    return this.#store.transaction(async (tx) => {
-      const locked = await tx.evidence.lockDigest(removed.value);
+    return removed.ok ? this.#removeUnreferenced(removed.value) : removed;
+  }
+
+  // The count runs after the lock is granted, so it sees every publication
+  // of the digest that committed meanwhile and keeps their content.
+  #removeUnreferenced(digest: ContentDigest): Promise<Result<void>> {
+    return this.#store.readCommitted(async (tx) => {
+      const locked = await tx.evidence.lockDigest(digest);
       if (!locked.ok) return locked;
-      const references = await tx.evidence.countByDigest(removed.value);
-      if (!references.ok || references.value > 0) return references.ok ? ok(undefined) : references;
-      return this.#contents.remove(removed.value);
+      const references = await tx.evidence.countByDigest(digest);
+      if (!references.ok) return references;
+      if (references.value > 0) return ok(undefined);
+      return this.#contents.remove(digest);
     });
   }
 
@@ -159,12 +165,10 @@ async function storedRecord(tx: ControlPlaneTransaction, evidenceIdText: string)
   return err(failure('not-found', `no evidence ${evidenceIdText}`, { evidence: evidenceIdText }));
 }
 
-export function viewOf(record: EvidenceRecord): EvidenceView {
-  return JSON.parse(JSON.stringify(record)) as EvidenceView;
-}
-
+// The same refusal as any other producer check, so that a worker cannot
+// learn which tasks exist.
 function unknownTask(publication: EvidencePublication): Result<never> {
-  return err(failure('forbidden', `evidence ${publication.evidenceId} is not authorized: no task ${publication.taskId}`, {
+  return err(failure('forbidden', `evidence ${publication.evidenceId} is not authorized for this producer`, {
     evidence: publication.evidenceId,
     reason: 'producer-not-authorized',
   }));

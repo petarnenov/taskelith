@@ -51,7 +51,10 @@ export class PostgresEvidenceRecords implements EvidenceRecords {
 }
 
 // The generations at which a worker held an attempt: those of its
-// assignments for it, except one it refused, which it never held.
+// assignments for it, except a refused one and one superseded without a
+// grant, under which it could never launch (launch authorization).
+const NEVER_HELD: ReadonlySet<string> = new Set(['refused', 'superseded']);
+
 export class PostgresEvidenceProducers {
   readonly #session: Session;
 
@@ -64,7 +67,7 @@ export class PostgresEvidenceProducers {
       'SELECT record FROM assignments WHERE attempt_id = $1 AND worker_id = $2',
       [attemptId, workerId],
     );
-    const held = rows.map((row) => decodeRecord<Assignment>(row.record)).filter((assignment) => assignment.end?.reason !== 'refused');
+    const held = rows.map((row) => decodeRecord<Assignment>(row.record)).filter((assignment) => !NEVER_HELD.has(assignment.end?.reason ?? ''));
     return ok(held.map((assignment) => assignment.ownershipGeneration));
   }
 }

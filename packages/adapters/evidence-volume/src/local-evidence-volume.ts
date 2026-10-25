@@ -1,15 +1,16 @@
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { constants, existsSync, lstatSync, readdirSync } from 'node:fs';
+import { open as openFile, unlink, type FileHandle } from 'node:fs/promises';
 import { join } from 'node:path';
 import { CONTROL_PLANE_DIRECTORY } from '@taskelith/control-plane-store';
 import {
   checkControlPath,
-  createOnce,
+  createOnceAsync,
   createPrivateDirectory,
   dataRootFailure,
   removeTemporaries,
-  replaceFile,
-  syncPath,
+  replaceFileAsync,
+  syncPathAsync,
 } from '@taskelith/data-root';
 import type { EvidenceStore } from '@taskelith/execution';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
@@ -53,48 +54,59 @@ export class LocalEvidenceVolume implements EvidenceStore {
     return ok(volume);
   }
 
+  // Content is read and written without blocking the event loop; a path
+  // that fails its safety checks is a volume defect, so `internal`.
   async put(digest: ContentDigest, content: Uint8Array): Promise<Result<void>> {
+    return asStoreResult(await this.#put(digest, content));
+  }
+
+  async read(digest: ContentDigest): Promise<Result<Uint8Array>> {
+    return asStoreResult(await this.#readVerified(digest, this.#contentPath(digest)));
+  }
+
+  async remove(digest: ContentDigest): Promise<Result<void>> {
+    const path = this.#contentPath(digest);
+    const safe = checkControlPath(this.#options.dataRoot, path, this.#options.ownerUid);
+    if (!safe.ok) return asStoreResult(safe);
+    if (!existsSync(path)) return ok(undefined);
+    await unlink(path);
+    return syncPathAsync(this.#shardDirectory(digest));
+  }
+
+  async #put(digest: ContentDigest, content: Uint8Array): Promise<Result<void>> {
     if (digestOf(content) !== digest) return err(failure('invalid', `the content does not match ${digest}`, { digest }));
     const shard = this.#ensureDirectory(this.#shardDirectory(digest));
     if (!shard.ok) return shard;
     const path = this.#contentPath(digest);
     if (!existsSync(path)) {
-      const created = createOnce(path, content);
+      const created = await createOnceAsync(path, content);
       // A concurrent writer may place the same digest first.
       if (created.ok || created.error.code !== 'conflict') return created;
     }
     return this.#keepOrRepair(digest, path, content);
   }
 
-  async read(digest: ContentDigest): Promise<Result<Uint8Array>> {
-    return this.#readVerified(digest, this.#contentPath(digest));
-  }
-
-  async remove(digest: ContentDigest): Promise<Result<void>> {
-    const path = this.#contentPath(digest);
-    const safe = checkControlPath(this.#options.dataRoot, path, this.#options.ownerUid);
-    if (!safe.ok) return safe;
-    if (!existsSync(path)) return ok(undefined);
-    rmSync(path);
-    return syncPath(this.#shardDirectory(digest));
-  }
-
   // An intact copy is kept; republishing the exact content repairs a
   // corrupt one.
-  #keepOrRepair(digest: ContentDigest, path: string, content: Uint8Array): Result<void> {
-    const stored = this.#readVerified(digest, path);
+  async #keepOrRepair(digest: ContentDigest, path: string, content: Uint8Array): Promise<Result<void>> {
+    const stored = await this.#readVerified(digest, path);
     if (stored.ok) return ok(undefined);
-    return stored.error.details.reason === 'evidence-corrupt' ? replaceFile(path, content) : stored;
+    return stored.error.details.reason === 'evidence-corrupt' ? replaceFileAsync(path, content) : stored;
   }
 
-  #readVerified(digest: ContentDigest, path: string): Result<Uint8Array> {
+  async #readVerified(digest: ContentDigest, path: string): Promise<Result<Uint8Array>> {
     const safe = checkControlPath(this.#options.dataRoot, path, this.#options.ownerUid);
     if (!safe.ok) return safe;
-    if (!existsSync(path)) return err(failure('not-found', `no evidence content ${digest}`, { digest }));
-    if (!lstatSync(path).isFile()) return err(dataRootFailure('unsafe-path', `${path} is not a file`, { path }));
-    const content = readFileSync(path);
-    if (digestOf(content) === digest) return ok(content);
-    return err(failure('internal', `evidence content ${digest} is corrupt`, { digest, reason: 'evidence-corrupt' }));
+    const handle = await openNoFollow(path);
+    if (!handle.ok) return handle.error.code === 'not-found' ? err(failure('not-found', `no evidence content ${digest}`, { digest })) : handle;
+    try {
+      if (!(await handle.value.stat()).isFile()) return err(dataRootFailure('unsafe-path', `${path} is not a file`, { path }));
+      const content = await handle.value.readFile();
+      if (digestOf(content) === digest) return ok(content);
+      return err(failure('internal', `evidence content ${digest} is corrupt`, { digest, reason: 'evidence-corrupt' }));
+    } finally {
+      await handle.value.close();
+    }
   }
 
   #ensureDirectory(path: string): Result<void> {
@@ -122,6 +134,24 @@ export class LocalEvidenceVolume implements EvidenceStore {
   #contentPath(digest: ContentDigest): string {
     return join(this.#shardDirectory(digest), hexOf(digest));
   }
+}
+
+// O_NOFOLLOW closes the gap between the path check and the open: a link
+// placed there meanwhile fails the open instead of being followed.
+async function openNoFollow(path: string): Promise<Result<FileHandle>> {
+  try {
+    return ok(await openFile(path, constants.O_RDONLY | constants.O_NOFOLLOW));
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return err(failure('not-found', `${path} does not exist`, { path }));
+    if (code === 'ELOOP') return err(dataRootFailure('unsafe-path', `${path} is a symbolic link`, { path }));
+    throw error;
+  }
+}
+
+function asStoreResult<Value>(result: Result<Value>): Result<Value> {
+  if (result.ok || result.error.code !== 'forbidden') return result;
+  return err(failure('internal', result.error.message, result.error.details));
 }
 
 function hexOf(digest: ContentDigest): string {

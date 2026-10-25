@@ -17,7 +17,7 @@ import { dataRootFailure } from './data-root-failure.js';
 
 // The durable file rule of the worker journal contract, section 4. On macOS
 // Node's fsync uses F_FULLFSYNC first, as section 3 describes.
-const TEMPORARY_MARKER = '.tmp-';
+export const TEMPORARY_MARKER = '.tmp-';
 const PRIVATE_FILE = 0o600;
 const PRIVATE_DIRECTORY = 0o700;
 
@@ -36,11 +36,11 @@ export function syncPath(path: string): Result<void> {
 }
 
 // Fails with `conflict` when the name exists; the caller reads that file.
-export function createOnce(path: string, content: string | Uint8Array): Result<void> {
+export function createOnce(path: string, content: string): Result<void> {
   return publish(path, content, (temporary) => linkAndDrop(temporary, path));
 }
 
-export function replaceFile(path: string, content: string | Uint8Array): Result<void> {
+export function replaceFile(path: string, content: string): Result<void> {
   return publish(path, content, (temporary) => renameSync(temporary, path));
 }
 
@@ -68,7 +68,7 @@ export function removeTemporaries(directory: string): void {
   }
 }
 
-function publish(path: string, content: string | Uint8Array, place: (temporary: string) => void): Result<void> {
+function publish(path: string, content: string, place: (temporary: string) => void): Result<void> {
   const temporary = join(dirname(path), `.${basename(path)}${TEMPORARY_MARKER}${randomBytes(8).toString('hex')}`);
   try {
     writeFileSync(temporary, content, { mode: PRIVATE_FILE, flag: 'wx' });

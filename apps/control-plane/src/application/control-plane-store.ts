@@ -33,4 +33,7 @@ export interface EvidenceProducers {
 // An `Err` from the work rolls the whole transaction back.
 export interface ControlPlaneStore {
   transaction<Value>(work: (transaction: ControlPlaneTransaction) => Promise<Result<Value>>): Promise<Result<Value>>;
+  // READ COMMITTED: a statement after a lock wait sees what committed during
+  // it, which a SERIALIZABLE snapshot taken before the grant would miss.
+  readCommitted<Value>(work: (transaction: ControlPlaneTransaction) => Promise<Result<Value>>): Promise<Result<Value>>;
 }

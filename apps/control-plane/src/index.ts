@@ -4,7 +4,8 @@ export { Administration, type AdministrationSettings, type Initialization } from
 export { ROUTES, type RouteDefinition } from './api/routes.js';
 export { StatusAnswer, createApiServer, type ApiHandlers, type ApiRequest, type Upload } from './api/api-server.js';
 export { ControlPlaneApi, type ApiServices } from './api/control-plane-api.js';
-export { EvidenceService, type EvidenceDownload, type EvidenceView, type Publication } from './application/evidence-service.js';
+export { EvidenceService, type EvidenceDownload, type Publication } from './application/evidence-service.js';
+export type { EvidenceView } from './application/evidence-view.js';
 export { RunService } from './application/run-service.js';
 export { admissionIdOf, SDLC_EVENTS_SUBJECT, TaskService } from './application/task-service.js';
 export { WorkflowRegistry, type KnownWorkflow } from './application/workflow-registry.js';

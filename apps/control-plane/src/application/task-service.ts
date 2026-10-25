@@ -18,7 +18,7 @@ import {
   type WorkflowRun,
 } from '@taskelith/sdlc';
 import type { ControlPlaneStore, ControlPlaneTransaction } from './control-plane-store.js';
-import { viewOf } from './evidence-service.js';
+import { viewOf } from './evidence-view.js';
 
 export type SubmitTaskRequest = HttpSchemas['SubmitTaskRequest'];
 export type TaskSubmission = HttpSchemas['TaskSubmission'];

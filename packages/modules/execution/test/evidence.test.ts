@@ -75,7 +75,8 @@ test('a producer that never held the attempt, or a misplaced task, is not author
   ];
   for (const refused of refusals.slice(0, 4)) {
     const failure = failed(acceptEvidence(publication, PRODUCER, refused, T1));
-    assert.deepEqual([failure.code, failure.details.reason], ['forbidden', 'producer-not-authorized']);
+    assert.deepEqual([failure.code, failure.details.reason, failure.message],
+      ['forbidden', 'producer-not-authorized', 'evidence evidence-1 is not authorized for this producer']);
   }
   assert.equal(failed(acceptEvidence(publication, PRODUCER, refusals[4]!, T1)).details.field, 'executionId');
   const otherAttempt = value(parseEvidencePublication({ ...INPUT, attemptId: 'attempt-9' }));
@@ -97,8 +98,10 @@ test('a retry is the same publication only with every value and the producer equ
 
 test('evidence is retained for 365 days after its publication', () => {
   const record = value(acceptEvidence(value(parseEvidencePublication(INPUT)), PRODUCER, context(), T0));
-  assert.equal(retentionEndsAt(record), '2027-10-25T09:00:00.000Z');
+  assert.equal(value(retentionEndsAt(record)), '2027-10-25T09:00:00.000Z');
   const kept = failed(checkRetentionElapsed(record, instant('2027-10-25T08:59:59.999Z')));
   assert.deepEqual([kept.code, kept.details.reason], ['precondition-failed', 'retention-not-elapsed']);
   assert.equal(checkRetentionElapsed(record, instant('2027-10-25T09:00:00.000Z')).ok, true);
+  const unreadable = { ...record, publishedAt: 'not an instant' as never };
+  assert.equal(checkRetentionElapsed(unreadable, instant('2099-01-01T00:00:00.000Z')).ok, false, 'an unknown end keeps the record');
 });
