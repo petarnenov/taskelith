@@ -25,6 +25,61 @@ These are the records ADR 0003 decision 2 requires before a closed harness is ad
 | Credential scope | Device authentication binds the login to a worker host's configuration directory, not to a workspace. The [trust model](../trust-model.md) then required provider credentials scoped per workspace or project, so this was an open owner decision. It now scopes harness provider credentials to a subscription slot and its allowed projects. The owner has since chosen subscription account pools per harness ([ADR 0005](../decisions/0005-harness-subscription-account-pools.md)), which scope each credential to a slot and its allowed projects |
 | Security reporting | HackerOne ([SECURITY.md](https://github.com/anthropics/claude-code/blob/v2.1.308/SECURITY.md)) |
 | Maintenance | Frequent releases (see above). No vendor stability statement for the SDK was found |
+| Terms review | Recorded on 2026-10-25 in [Provider terms review](#provider-terms-review); the owner's decision D15 is pending |
+
+## Provider terms review
+
+On 2026-10-25, for G3 item 2 (`review-g3-provider-terms`), this section records what Anthropic's terms and documentation say about Taskelith's use and where the text is ambiguous; it is not legal advice, and the decision on the remaining risk is the owner's decision D15 in the [G3 plan](../g3-plan.md).
+
+The use under review is the [ADR 0005](../decisions/0005-harness-subscription-account-pools.md) pool: unattended workers run the pinned Agent SDK, authenticated only by Pro or Max subscriptions held as slots that may belong to different people, selected least-loaded with cooldown, serving several projects, with credentials stored by the control plane and injected per run.
+
+| Document | Version or effective date | URL (accessed 2026-10-25) |
+| --- | --- | --- |
+| Consumer Terms, EEA and Switzerland variant | Effective Oct 8, 2025 | [anthropic.com/legal/consumer-terms](https://www.anthropic.com/legal/consumer-terms), the variant the live page serves to a Bulgarian address |
+| Consumer Terms, US and rest-of-world variant | Effective Oct 8, 2025 | [Wayback snapshot 2026-10-24 14:00:17 UTC](http://web.archive.org/web/20261024140017/https://www.anthropic.com/legal/consumer-terms), because the live page varies by location |
+| Commercial Terms | Effective Jun 17, 2025 | [anthropic.com/legal/commercial-terms](https://www.anthropic.com/legal/commercial-terms) |
+| Usage Policy | The page marked current shows "Effective Nov 12, 2026", later than the access date; the [previous version](https://www.anthropic.com/legal/archive/22742366-2ef0-4c7a-a833-6523f10d3944) is effective Sep 15, 2025, so the version in force on the access date is unclear | [anthropic.com/legal/aup](https://www.anthropic.com/legal/aup) |
+| Claude Code docs: [Legal and compliance](https://code.claude.com/docs/en/legal-and-compliance), [Authentication](https://code.claude.com/docs/en/authentication), [Data usage](https://code.claude.com/docs/en/data-usage); [Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview) | No date on the pages | as linked |
+| Support: [Monthly API credits for Max and Team plans](https://support.claude.com/en/articles/17154008-monthly-api-credits-for-max-and-team-plans), [What is the Max plan?](https://support.claude.com/en/articles/11049741-what-is-the-max-plan) | Modified 2026-10-19 and 2026-10-13 | as linked |
+
+### Automated use with a subscription
+
+Consumer Terms, section 3 "Use of our Services", forbids, "Except when you are accessing our Services via an Anthropic API Key or where we otherwise explicitly permit it", access "through automated or non-human means, whether through a bot, script, or otherwise". Authentication, "Generate a long-lived token", offers `claude setup-token` "For CI pipelines, scripts, or other environments where interactive browser login isn't available". Legal and compliance, "Acceptable use": "Advertised usage limits for Pro and Max plans assume ordinary, individual usage of Claude Code and the Agent SDK."
+
+- The text says: automated access is forbidden unless explicitly permitted; the documentation appears to permit a subscriber's own scripted and CI use, and the support article on monthly API credits says Agent SDK usage signed in with a plan draws "from your plan's usage limits".
+- Ambiguous: whether that permission covers a standing, multi-worker orchestrator running unattended, and whether such use is "ordinary, individual usage"; the documentation pages carry no date or version.
+
+### Account sharing and pooled subscriptions (ADR 0005)
+
+Consumer Terms, section 2 "Account creation and access" (EEA variant; the US variant has the same content): "You may not share your Account login information, Anthropic API key, or Account credentials with anyone else or make your Account available to anyone else". Section 3 forbids "bypassing any of our systems or protective measures". Usage Policy (Nov 12, 2026 version), "Do Not Abuse Our Platform": "create multiple accounts, to avoid detection, circumvent product guardrails".
+
+- The text says: sharing an account or making it available to anyone else is forbidden, with no exception for consent; no clause found names pooling or load balancing, and the multi-account clause is tied to evading detection or guardrails.
+- Ambiguous: whether rotating among one person's several subscriptions on cooldown is "bypassing any of our systems or protective measures", since usage limits are not named as such a measure; the multi-account wording in the Sep 15, 2025 version was not verified, because that page renders the section collapsed.
+
+### Credential storage and intermediation by a third-party product
+
+Legal and compliance, "Authentication and credential use": "developers may not collect, store, or intermediate Claude.ai credentials or session tokens", nor "route requests through Free, Pro, or Max plan credentials on behalf of their users"; it does not prevent "signing in to the unmodified Claude Code binary with their own Claude subscription". Agent SDK overview: "Anthropic does not allow third party developers to offer claude.ai login or rate limits for their products, including agents built on the Claude Agent SDK", "Unless previously approved".
+
+- The text says: developers of products built on the SDK should use API keys and may not store or intermediate subscription credentials; an end user may sign in to the unmodified binary with their own subscription.
+- Ambiguous: whether Taskelith, an npm package that each operator self-hosts, is a "third party developer" product; whether a stored `setup-token` token is a "session token"; and whether SDK-driven use falls under the carve-out for the unmodified binary.
+
+### Which terms govern
+
+Legal and compliance, "License": the Consumer Terms apply "for Free, Pro, and Max users"; "Can customers offer Claude Code in their products?" requires the Commercial Terms for "running Claude Code in your products or services (e.g. in hosted sandboxes or other agent infrastructure)". Consumer Terms (EEA): "You are a consumer if you are acting wholly or mainly outside your trade, business, craft or profession".
+
+- The text says: a Pro or Max login is governed by the Consumer Terms and the Usage Policy; the SDK license points to the same legal page.
+- Ambiguous: whether Taskelith is "agent infrastructure" that requires the Commercial Terms while each login stays under the Consumer Terms, and which terms govern an EEA subscriber whose work is professional.
+
+### Data use for training
+
+Data usage, "Data training policy": "We will train new models using data from Free, Pro, and Max accounts when this setting is on (including when you use Claude Code from these accounts)." Consumer Terms, section 4: training applies "unless you opt out of training through your account settings", except for Feedback and material flagged for safety review. Commercial Terms: "Anthropic may not train models on Customer Content from Services".
+
+- The text says: training on code sent through a Pro or Max login depends on each account's setting (5-year retention when on, 30-day when off); API-key use under the Commercial Terms is not used for training.
+- Ambiguous: in a pool, each slot owner's setting decides the treatment of every project that slot serves, and no text addresses how a project owner could see or control it.
+
+### Consequences for D15
+
+Against the ADR 0005 pool model: slots owned by different people appear to conflict with the account-sharing clause ("make your Account available to anyone else"); the control plane storing and injecting subscription tokens appears to conflict with "may not collect, store, or intermediate" if Taskelith is read as a third-party developer's product, and the text does not distinguish a self-hosted tool; pooling several subscriptions of one person is not addressed, and no clause forbids holding several plans; least-loaded rotation across accounts is not addressed by name but may be read as bypassing protective measures or as beyond "ordinary, individual usage". Unattended automated use itself appears permitted for a subscriber's own scripts, with its limit undefined. Anthropic was not contacted; the legal page offers "contact sales" for questions about permitted authentication methods.
 
 ## Method
 
@@ -112,7 +167,7 @@ Proposal for the port design, not yet decided: each plugin manifest declares its
 - The subscription mechanism for account slots (a long-lived subscription token or a per-slot device login), its load, limit, and reset signals, and whether an agent can read an injected credential ([ADR 0005](../decisions/0005-harness-subscription-account-pools.md)).
 - An alternative provider or gateway path, if the owner wants one, authenticated only through a subscription (ADR 0005).
 - The automatic interrupted-turn re-run, and repeated runs to check stability.
-- Review of Anthropic's terms, including whether they allow pooled subscriptions for automated use (ADR 0005), before admission in G3 ([ADR 0007](../decisions/0007-g0-closure.md)).
+- The review of Anthropic's terms, including whether they allow pooled subscriptions for automated use (ADR 0005), is recorded on 2026-10-25 in [Provider terms review](#provider-terms-review); the owner's decision D15 on the remaining risk is pending before admission in G3 ([ADR 0007](../decisions/0007-g0-closure.md)).
 - Independent adoption evidence for the pinned version.
 - A host side-effect check with before-and-after listings, which the `harness-qualification` spec now requires; this record does not yet meet it.
 - A versioned conformance suite in the repository, run through `make`, once the agent port exists (G3).

@@ -22,7 +22,63 @@ Sources: GitHub's documentation is pinned to commit `02c25d16369fe27f9bdb28d1201
 | --- | --- |
 | Terms of service | [GitHub Terms of Service](https://github.com/github/docs/blob/02c25d16369fe27f9bdb28d1201f6b452f0d21dd/content/site-policy/github-terms/github-terms-of-service.md) |
 | Data handling | [GitHub General Privacy Statement](https://github.com/github/docs/blob/02c25d16369fe27f9bdb28d1201f6b452f0d21dd/content/site-policy/privacy-policies/github-general-privacy-statement.md) |
-| Review of terms | The documents are linked, not yet reviewed against Taskelith's use (automated agents acting through a GitHub App on project repositories). That review is a gate before admission |
+| Review of terms | Recorded on 2026-10-25 in [Terms review](#terms-review), against Taskelith's use (automated agents acting through a GitHub App on project repositories); the owner's decision D15 is pending |
+
+## Terms review
+
+On 2026-10-25, for G3 item 2 (`review-g3-provider-terms`), this section records what GitHub's terms and documentation say about Taskelith's use (automated agents acting through a self-hosted GitHub App with per-run installation tokens, and a separate reviewer identity, on the operator's repositories) and where the text is ambiguous; it is not legal advice, and the decision on the remaining risk is the owner's decision D15 in the [G3 plan](../g3-plan.md).
+
+Every document was read on 2026-10-25 at commit `02c25d16369fe27f9bdb28d1201f6b452f0d21dd` of `github/docs`, which was still the head of `main` on that date (`PIN` below is `https://github.com/github/docs/blob/02c25d16369fe27f9bdb28d1201f6b452f0d21dd/content`).
+
+| Document | Version or effective date | URL (accessed 2026-10-25) |
+| --- | --- | --- |
+| GitHub Terms of Service (ToS) | "Effective date: April 27, 2026" | [PIN/site-policy/github-terms/github-terms-of-service.md](https://github.com/github/docs/blob/02c25d16369fe27f9bdb28d1201f6b452f0d21dd/content/site-policy/github-terms/github-terms-of-service.md) |
+| GitHub Acceptable Use Policies (AUP) | No date stated | [PIN/site-policy/acceptable-use-policies/github-acceptable-use-policies.md](https://github.com/github/docs/blob/02c25d16369fe27f9bdb28d1201f6b452f0d21dd/content/site-policy/acceptable-use-policies/github-acceptable-use-policies.md) |
+| Terms for Additional Products and Features | "Version Effective Date: August 27, 2026" | [PIN/site-policy/github-terms/github-terms-for-additional-products-and-features.md](https://github.com/github/docs/blob/02c25d16369fe27f9bdb28d1201f6b452f0d21dd/content/site-policy/github-terms/github-terms-for-additional-products-and-features.md) |
+| Marketplace Developer Agreement; Registered Developer Agreement | Effective May 27, 2025; no date stated | [Marketplace](https://github.com/github/docs/blob/02c25d16369fe27f9bdb28d1201f6b452f0d21dd/content/site-policy/github-terms/github-marketplace-developer-agreement.md), [Registered](https://github.com/github/docs/blob/02c25d16369fe27f9bdb28d1201f6b452f0d21dd/content/site-policy/github-terms/github-registered-developer-agreement.md) |
+| GitHub General Privacy Statement | Effective April 27, 2026 | [PIN/site-policy/privacy-policies/github-general-privacy-statement.md](https://github.com/github/docs/blob/02c25d16369fe27f9bdb28d1201f6b452f0d21dd/content/site-policy/privacy-policies/github-general-privacy-statement.md) |
+| Docs (product documentation, not terms): About creating GitHub Apps; About protected branches | n/a | [Apps](https://github.com/github/docs/blob/02c25d16369fe27f9bdb28d1201f6b452f0d21dd/content/apps/creating-github-apps/about-creating-github-apps/about-creating-github-apps.md), [protected branches](https://github.com/github/docs/blob/02c25d16369fe27f9bdb28d1201f6b452f0d21dd/content/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches.md) |
+
+### Automated use and machine accounts
+
+ToS, B.3 "Account Requirements": Accounts registered by bots "or other automated methods are not permitted", but "A machine account is used exclusively for performing automated tasks", and "You may maintain no more than one free machine account in addition to your free Personal Account". ToS, H "API Terms" covers "use of the API through a third party product that accesses GitHub" and says "You may not share API tokens to exceed GitHub's rate limitations". AUP, section 4, forbids "automated excessive bulk activity and coordinated inauthentic activity".
+
+- The text says: automation is permitted in principle through machine accounts and the API, with a human owner "ultimately responsible for the machine's actions"; the prohibitions target excessive, bulk, inauthentic, or disruptive activity.
+- Ambiguous: "excessive" has no threshold beyond the documented rate limits, and GitHub decides abuse "in our sole discretion"; "automated inauthentic activity" is not defined.
+
+### GitHub App use
+
+Docs, About creating GitHub Apps: GitHub Apps "can also act independently of a user", and an app acting "on behalf of itself, rather than a user" should use "an installation access token". The Marketplace Developer Agreement covers products "accessible via Marketplace"; the Registered Developer Agreement "governs your participation in the Program".
+
+- The text says: per-run installation tokens follow the documented server-to-server pattern; a self-hosted App that is not listed on Marketplace and not enrolled in the Program does not appear to fall under either developer agreement.
+- Ambiguous: B.3 speaks of Accounts, and the ToS does not say whether an App's `[bot]` identity falls under the "bots" sentence, the machine-account rule, or neither; Section H clearly applies to its API traffic.
+
+### Separate reviewer identity
+
+Docs, About protected branches: required reviews mean approval "by the required number of reviewers with write permissions", optionally "by someone other than the person who pushed it". No term found addresses a second identity approving changes on the owner's repositories.
+
+- The text says: no term forbids a second App or machine account from approving pull requests on the operator's own repositories.
+- Ambiguous: an approval by a second identity under the same operator's control may be read as "coordinated inauthentic activity" (AUP 4); a machine-account reviewer counts against the one-free-machine-account limit; whether an App's review counts toward required approvals needs a live test.
+
+### AI-specific terms
+
+ToS, J.3 grants GitHub a license to use "your Inputs and Outputs to develop, train and improve artificial intelligence and machine learning models", tied to GitHub's own AI Features (Copilot and similar). The AUP's Synthetic Media and AI Tools rule covers only the creation of specific harmful content. The Additional Products terms place Copilot under "Section J (AI Features) of the GitHub Terms of Service".
+
+- The text says: GitHub's AI terms govern GitHub's own AI Features; no term found expressly permits or forbids third-party AI agents acting through the API, which fall under the general ToS, Section H, and the AUP.
+- Ambiguous: whether third-party agent content later read by a Copilot feature on the same repositories becomes "Input" under Section J.
+
+### Data and AI training license in D.4
+
+ToS, D.4 "License Grant to Us": GitHub may use Your Content "including by training AI Features, and for the purpose of training, developing, and improving artificial intelligence and machine learning models and technologies of our Affiliates". J.3: the opt-out "does not apply to the license granted in Sections D.4-D.8". E.3, for private repositories: "We will not otherwise use your private repository contents to develop or improve the Service."
+
+- The text says: D.4 licenses AI training on Your Content with no limit to public repositories, and the J.3 opt-out does not reach it.
+- Ambiguous: how D.4, E.3, and J.3 fit together for private repositories that agents push to, in particular whether E.3, which speaks of "the Service", limits the training of Affiliates' models under D.4.
+
+General Privacy Statement: under "Service Usage Information", "We collect data about your interactions with the Services", which covers the orchestrator's API calls; for third-party integrations, "the privacy policies of these third parties apply to any Personal Data you provide or consent to share with them". Beyond its general retention sentence, it does not say how long webhook delivery records or App audit data are kept, or whose personal data an App's activity is.
+
+### Consequences for D15
+
+No term found blocks [ADR 0006](../decisions/0006-github-first-scm.md): a self-hosted GitHub App with per-run installation tokens acting on the operator's own repositories appears to be permitted automation under the ToS and Section H. The ambiguous points are the separate reviewer identity, which no term addresses and which may be read against the AUP's "coordinated inauthentic activity" or, as a machine account, the one-free-machine-account limit; the undefined thresholds for "excessive" automated activity; and the D.4 AI-training license over Your Content, including private repositories.
 
 ## Method
 
@@ -66,7 +122,7 @@ Stated in harness-neutral terms, so that a later Forgejo plugin maps onto the sa
 
 ## Remaining before admission
 
-- Review of GitHub's terms of service and privacy statement against Taskelith's use, before admission in G3 ([ADR 0007](../decisions/0007-g0-closure.md)).
+- The review of GitHub's terms against Taskelith's use is recorded on 2026-10-25 in [Terms review](#terms-review); the owner's decision D15 on the remaining risk is pending before admission in G3 ([ADR 0007](../decisions/0007-g0-closure.md)).
 - A real webhook receiver that verifies signatures on the raw body, in place of the API copy, covering every delivery of a run, including redeliveries and deliveries caused by cleanup.
 - A reviewer identity separate from the App for approvals.
 - Token refresh for runs longer than an hour, and rate-limit behaviour under load.

@@ -21,11 +21,68 @@ These are the records ADR 0003 decision 2 requires before admission. License evi
 | Item | Record |
 | --- | --- |
 | License | Apache-2.0 ([LICENSE](https://github.com/openai/codex/blob/rust-v0.164.0/LICENSE)) |
-| Data-handling terms | Not yet recorded. OpenAI's terms, privacy, and data-controls pages returned HTTP 403 to an automated client on 2026-10-24, so their content was not reviewed. This is a gate before admission |
+| Data-handling terms | Recorded on 2026-10-25 in [Provider terms review](#provider-terms-review); the owner's decision D15 is pending. OpenAI's terms, privacy, and help pages returned HTTP 403 to an automated client on 2026-10-24 and again on 2026-10-25, so the review used Wayback Machine snapshots of them |
 | Provider dependency | This qualification used the owner's ChatGPT subscription; inference ran over a WebSocket to `chatgpt.com/backend-api/codex/responses`. Other providers were not tested |
 | Credentials used | The owner signed in once with ChatGPT using the pinned binary and a dedicated `CODEX_HOME`, configured with `cli_auth_credentials_store = "file"`. The credential is the file `auth.json` (mode 600) in that directory; no Codex Keychain entry exists. The probe passed no credential and logged none |
 | Credential scope | Per [ADR 0005](../decisions/0005-harness-subscription-account-pools.md), a subscription slot is injected per run. A file-based `CODEX_HOME` per slot fits that model; whether an agent's own commands can read it was not tested |
 | Security reporting | Bugcrowd ([SECURITY.md](https://github.com/openai/codex/blob/rust-v0.164.0/SECURITY.md)) |
+
+## Provider terms review
+
+On 2026-10-25, for G3 item 2 (`review-g3-provider-terms`), this section records what OpenAI's terms and documentation say about Taskelith's use and where the text is ambiguous; it is not legal advice, and the decision on the remaining risk is the owner's decision D15 in the [G3 plan](../g3-plan.md).
+
+The use under review is the [ADR 0005](../decisions/0005-harness-subscription-account-pools.md) pool: unattended workers run the pinned `codex app-server`, signed in only with ChatGPT subscriptions (`auth.json` per `CODEX_HOME`) held as slots that may belong to different people, selected least-loaded with cooldown, serving several projects, with credentials stored by the control plane and injected per run.
+
+The live `openai.com` and `help.openai.com` pages returned HTTP 403 again on 2026-10-25, so they were read from the Wayback Machine snapshots linked below; a change after a snapshot's date would not be visible. The latest snapshot of the Terms of Use (20261023195311) was itself a stored 403, so the latest 200 snapshot was used. The Codex and SIWC developer pages were fetched live.
+
+| Document | Version or effective date | URL (accessed 2026-10-25) |
+| --- | --- | --- |
+| Terms of Use | "Effective: January 1, 2026" | [Wayback 20261023001957](https://web.archive.org/web/20261023001957/https://openai.com/policies/terms-of-use/) |
+| Europe Terms of Use (EEA, Switzerland, UK) | "Updated: January 16, 2026" | [Wayback 20261012125824](https://web.archive.org/web/20261012125824/https://openai.com/policies/eu-terms-of-use/) |
+| Service Terms | "Updated: October 16, 2026" | [Wayback 20261021154355](https://web.archive.org/web/20261021154355/https://openai.com/policies/service-terms/) |
+| Services Agreement (business) | "Effective: January 1, 2026" | [Wayback 20261023110309](https://web.archive.org/web/20261023110309/https://openai.com/policies/services-agreement/) |
+| Sign in with ChatGPT (SIWC) Terms | September 29, 2026 | [Wayback 20261007132710](https://web.archive.org/web/20261007132710/https://openai.com/policies/sign-in-with-chatgpt-terms/) |
+| Help: Using Codex with your ChatGPT plan; How your data is used to improve model performance | About 2026-10-19 (relative dates on the snapshots) | [Wayback 20261020143905](https://web.archive.org/web/20261020143905/https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan), [Wayback 20261019170943](https://web.archive.org/web/20261019170943/https://help.openai.com/en/articles/5722486-how-your-data-is-used-to-improve-model-performance) |
+| Codex docs: [Authentication](https://developers.openai.com/codex/auth), [CI/CD auth](https://developers.openai.com/codex/auth/ci-cd-auth), [Access tokens](https://developers.openai.com/codex/enterprise/access-tokens); SIWC developer docs ([overview](https://developers.openai.com/siwc), [request a client ID](https://developers.openai.com/siwc/request-client-id)) | No date on the pages; the Codex pages redirect to `learn.chatgpt.com/docs` | as linked |
+
+### Automated use with a subscription
+
+Terms of Use, "What you cannot do": "Automatically or programmatically extract data or Output" (Europe Terms: "Automatically or programmatically extracting data or Output"). Codex docs, CI/CD auth: "The right way to authenticate automation is with an API key", and "Do not use this workflow for public or open-source repositories". SIWC Terms, "2. ChatGPT plan usage": "Requests must be for the authenticated user and arise from their activity or expressly authorized automations or background processes."
+
+- The text says: the consumer Terms forbid automatic extraction of data or Output, not automated use as such; the Codex docs describe running Codex under a ChatGPT account on "trusted private automation", one `auth.json` per machine or serialized job stream, while naming API keys as the default for automation.
+- Ambiguous: whether receiving Codex output inside OpenAI's own client, when a program drives that client, counts as programmatic extraction of "Output"; whether the docs' guidance binds as terms; Taskelith and its target projects may be public repositories.
+
+### Account sharing and pooled subscriptions (ADR 0005)
+
+Terms of Use, "Registration": "You may not share your account credentials or make your account available to anyone else" (same wording in the Europe Terms); "What you cannot do" forbids to "circumvent any rate limits or restrictions". SIWC Terms, "4. Prohibited activities": "Creating multiple accounts, splitting usage, rotating accounts, or otherwise bypassing usage limits", "Pooling, transferring, reselling, gifting, or sharing ChatGPT plan usage or Authentication Tokens", and "Using one user's subscription to fulfill another user's requests". Services Agreement, 3.1: "Customer will not share Account access credentials or individual login credentials between multiple users".
+
+- The text says: every instrument forbids sharing credentials or making an account available to others; the SIWC Terms name rotating accounts, pooling plan usage, and serving another user's requests as prohibited, which is the closest text to the slot pool.
+- Ambiguous: the SIWC Terms govern SIWC in "an application you develop or maintain", and whether Taskelith, which runs OpenAI's own binary with its own login and registers no client, is such an application is not stated; outside SIWC, whether one person rotating their own subscriptions on a rate limit is circumvention of "any rate limits or restrictions" is not stated.
+
+### Credential storage and intermediation by a third-party product
+
+SIWC Terms, "1. Application identity and security": "Any persistent storage of Authentication Tokens must be local and under the user's control, not in a remote or managed environment." Codex docs, Authentication: "treat ~/.codex/auth.json like a password"; CI/CD auth: "Do not share the same file across concurrent jobs or multiple machines". SIWC client IDs: "Sign in with ChatGPT is currently offered to a select group of commercial partners."
+
+- The text says: Codex credentials are to be kept like passwords and used by one machine or job stream at a time; where the SIWC Terms apply, stored tokens must stay local and under the user's control.
+- Ambiguous: whether a self-hosted control plane that the subscriber operates is "under the user's control" or a "managed environment", and whether it matters when the SIWC Terms do not apply.
+
+### Which terms govern
+
+Terms of Use: residents of the EEA, Switzerland, or the UK are under the Europe Terms; Business Terms "govern use of ChatGPT Enterprise, our APIs, and our other services for businesses and developers"; users must follow "any other documentation, guidelines, or policies we make available to you". Service Terms, section 15: "If you use SIWC in your services, the Sign in with ChatGPT Terms apply." Europe Terms scope: "personal, non-commercial use of our Services by consumers", with a "Business use of the Services addendum".
+
+- The text says: a Plus or Pro subscriber resident in Bulgaria is under the Europe Terms, the Service Terms, and the Usage Policies; Business and Enterprise seats are under the Services Agreement.
+- Ambiguous: whether the "documentation, guidelines, or policies" clause makes the Codex docs' automation guidance binding; whether the SIWC Terms reach Taskelith; which Usage Policies version applies (the snapshot shows a version effective November 20, 2026).
+
+### Data use for training
+
+Help, "Does OpenAI train on my Codex usage?", Pro and Plus: "Conversations may be used to improve models unless you turn off training in ChatGPT data controls." The same article, "Data controls": "Your ChatGPT training data controls apply to content processed through Codex". Services Agreement, 4.2: "OpenAI will not use Customer Content to develop or improve the Services, unless Customer explicitly agrees to such use."
+
+- The text says: code sent through a Plus or Pro slot may be used for training unless that account's owner opts out, and Codex has a separate "Include environments" setting; Business and Enterprise content is not used by default.
+- Ambiguous: whether "Include environments" applies to local app-server runs; in a pool mixing slots, the treatment of a project's code depends on the selected slot owner's settings, and no text addresses this.
+
+### Consequences for D15
+
+Against the ADR 0005 pool model: slots owned by different people appear to conflict with "make your account available to anyone else", and, where the SIWC Terms apply, with "Using one user's subscription to fulfill another user's requests"; least-loaded rotation with cooldown across accounts closely matches the SIWC prohibition of "rotating accounts" and "Pooling ... ChatGPT plan usage", and outside SIWC may be read as circumventing rate limits; pooling several subscriptions of one person is not addressed by the consumer Terms; the control plane storing and injecting `auth.json` appears to conflict with the SIWC storage rule if those Terms apply, and with the CI/CD guidance against sharing one file across concurrent jobs if a slot serves concurrent sessions. OpenAI was not contacted; a written answer, for example through the SIWC client-ID request, is the route the text offers.
 
 ## Method
 
@@ -113,7 +170,7 @@ The findings agree with the Claude Code qualification, so the harness-neutral po
 
 ## Remaining before admission
 
-- OpenAI's data-handling terms, and whether its terms allow pooled subscriptions for automated use (ADR 0005), reviewed before admission in G3 ([ADR 0007](../decisions/0007-g0-closure.md)).
+- The review of OpenAI's data-handling terms, and of whether its terms allow pooled subscriptions for automated use (ADR 0005), is recorded on 2026-10-25 in [Provider terms review](#provider-terms-review), from Wayback Machine snapshots because the live pages returned HTTP 403; the owner's decision D15 on the remaining risk is pending before admission in G3 ([ADR 0007](../decisions/0007-g0-closure.md)).
 - Linux x64 and arm64 in the planned worker container image (G2, [ADR 0007](../decisions/0007-g0-closure.md)), and macOS arm64.
 - Non-permission input requests, and repeated runs.
 - The cause of the temporary-directory fallback after a crash.
