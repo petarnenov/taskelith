@@ -14,7 +14,7 @@ The owner or an explicitly authorized integrator controls merging and pushing. F
 
 ## Independent review process
 
-These rules were set or approved by the owner on 2026-10-24; the source of each is in parentheses.
+These rules were set or approved by the owner on 2026-10-24 unless a rule names another date; the source of each is in parentheses.
 
 - **Authorized reviewers** (owner). Each runs read-only, with the model and effort set in the invocation, not only in the prompt. `verification.md` records the invocation; where a tool reports the model or effort in its output or log, that report is recorded as confirmation.
   - Codex CLI: model `gpt-6.1-sol`, `model_reasoning_effort = "medium"`, sandbox `read-only`. In this configuration it has had no network access.
@@ -22,7 +22,7 @@ These rules were set or approved by the owner on 2026-10-24; the source of each 
   - Claude Code: model `claude-fable-5-1`, effort `medium`, permission mode `plan`, editing tools disallowed. It can fetch public web pages when network access is allowed; in this configuration it has queried GitHub with the `gh` CLI.
 - **One reviewer per task** (owner). Each task has one assigned reviewer, and no second reviewer cross-reviews it. Re-review passes by the assigned reviewer are allowed. A switch under "Unavailable reviewer" below replaces the assigned reviewer; it is not a cross-review.
 - **Rotation** (approved by the owner). Consecutive tasks go to different reviewers in turn, unless a task needs a particular reviewer.
-- **Unavailable reviewer** (owner, 2026-10-25). A reviewer that is unavailable for any reason is not used for any task for the next 30 minutes. Unavailable means an error, a run that opens no session, a quota limit, or an outage. The next authorized reviewer in the rotation that is not paused becomes the task's reviewer for its remaining passes. That reviewer's first pass is given the earlier passes' findings and fixes, so that it confirms them. The pass count carries over, and `verification.md` records the failed attempts and the switch.
+- **Unavailable reviewer** (owner, 2026-10-25). A reviewer that is unavailable for any reason, for example an error, a run that opens no session, a quota limit, or an outage, is not used for any task for the next 30 minutes, whether or not it is already assigned. The next authorized reviewer in the rotation that is not paused is proposed in its place: the worker proposes it to the coordinator, who assigns it as the task's reviewer for its remaining passes. That reviewer's first pass is given the earlier passes' findings and fixes, so that it confirms them. The pass count carries over, and `verification.md` records the failed attempts and the switch.
 - **External facts** (approved by the owner). A task whose review depends on external facts goes to a reviewer with network access.
 - **Proof of read-only review** (approved by the owner). Take a SHA-256 snapshot of all tracked and untracked files before and after each pass, plus any external evidence directory shared with the reviewer. A change made by the reviewer invalidates the pass.
 - **Review prompt** (approved by the owner; ADR 0004). The prompt names the [ADR 0004](decisions/0004-first-class-engineering-principles.md) principles as criteria and asks for every instance of a problem, not examples. `verification.md` records the reviewer, model, effort, session ID, findings, and their resolution.

@@ -7,7 +7,7 @@ On 2026-10-25 a Claude Fable 5.1 review pass failed three times in a row with "N
 - Add the rule "Unavailable reviewer" to the governance review process.
 - Name the rule in the agent task protocol, both in the coordinator's assignment step and in the reviewer invocations.
 - Point to the rule from the `taskelith-task-protocol` project skill.
-- Add a `review-process` requirement for it.
+- Add a `review-process` requirement for it, and amend the single-reviewer requirement to allow the replacement.
 
 ## Capabilities
 
@@ -15,7 +15,7 @@ On 2026-10-25 a Claude Fable 5.1 review pass failed three times in a row with "N
 
 ### Modified Capabilities
 
-- `review-process`: a new requirement "Unavailable reviewer" allows the next reviewer in the rotation to take over a change whose assigned reviewer is unavailable. The pass count carries over.
+- `review-process`: a new requirement "Unavailable reviewer" has the next reviewer in the rotation proposed and assigned when a reviewer is unavailable. The pass count carries over. "Authorized single-reviewer review" now allows that replacement and keeps the ban on cross-review.
 
 ## Impact
 

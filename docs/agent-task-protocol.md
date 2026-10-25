@@ -47,7 +47,7 @@ Run each reviewer from the task's worktree, read-only, with the model and effort
 | Antigravity CLI | `agy -p "<prompt>" --model gemini-4-argon-medium --effort medium --mode plan --output-format json --log-file <log>` | Model in the log; `conversation_id` in the JSON output. Has network access. |
 | Claude Code | `claude -p "<prompt>" --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json` | `claude-fable-5-1` in the JSON `modelUsage`; `session_id` in the JSON output. Can reach the network. |
 
-If a reviewer fails to run, for example with an error, no session, or a quota limit, the worker reports it to the coordinator. Under the governance rule "Unavailable reviewer", that reviewer is not used for 30 minutes, and the next reviewer in the rotation takes over the task, briefed with the earlier passes. The pass count carries over.
+If a reviewer is unavailable for any reason, for example an error, no session, or a quota limit, the worker stops using it and proposes the next reviewer in the rotation to the coordinator. Under the governance rule "Unavailable reviewer", that reviewer is not used for 30 minutes, and the coordinator assigns the proposed one, which is briefed with the earlier passes. The pass count carries over.
 
 Snapshot before and after each pass, and compare the two. Include any external evidence directory shared with the reviewer as well.
 
