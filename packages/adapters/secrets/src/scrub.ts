@@ -2,9 +2,9 @@ import { SECRET_PREFIXES } from './node-secrets.js';
 
 export const REDACTED = '[redacted]';
 
-// The user information of a URL, such as `postgres://owner:p%40ss@host`,
-// which may hold a password or a token, percent-encoded or not.
-const URL_USERINFO = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#@]+@/gi;
+// A URL's user information, up to the last `@` of its authority, since a
+// password may hold an unescaped `@` (`postgres://owner:p@ss@host`).
+const URL_USERINFO = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#]*@/gi;
 
 // Secrets that text may carry: this installation's bearer secrets, NATS seeds
 // and user JWTs, and a whole `.creds` block (trust model section 5).

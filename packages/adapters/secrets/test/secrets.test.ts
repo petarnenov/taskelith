@@ -47,6 +47,10 @@ test('the user information of a URL is redacted, percent-encoded or not', () => 
   assert.equal(redactSecrets('postgres://owner:example-password@localhost/taskelith'), `postgres://${REDACTED}@localhost/taskelith`);
   assert.equal(redactSecrets('connect nats://s3cr%40t:p%2Fw@127.0.0.1:4222 failed'), `connect nats://${REDACTED}@127.0.0.1:4222 failed`);
   assert.equal(redactSecrets('nats://token-only@host'), `nats://${REDACTED}@host`);
+  assert.equal(redactSecrets('postgres://owner:p@ssword@db/taskelith'), `postgres://${REDACTED}@db/taskelith`);
+  assert.equal(redactSecrets('postgres://a@b:c@d@e@db:5432/x?y=z@w'), `postgres://${REDACTED}@db:5432/x?y=z@w`);
+  const failed = redactFailure(failure('unavailable', 'cannot reach postgres://owner:p@ssword@db', { url: 'nats://u:p@q@host' }));
+  assert.deepEqual([failed.message, failed.details.url], [`cannot reach postgres://${REDACTED}@db`, `nats://${REDACTED}@host`]);
   assert.equal(redactSecrets('https://example.org/path?q=a@b'), 'https://example.org/path?q=a@b');
   assert.equal(redactSecrets('mail owner@example.org'), 'mail owner@example.org');
 });
@@ -57,5 +61,6 @@ test('a child environment keeps no secret variable or value', () => {
     PATH: '/usr/bin', HOME: '/home/w', TASKELITH_WORKER_CREDENTIAL: 'x', NATS_CREDS: '/x.creds', GITHUB_TOKEN: 'ghp',
     OTHER: `uses ${secret}`, AWS_SECRET_ACCESS_KEY: 'k', UNSET: undefined,
     TASKELITH_POSTGRES_URL: 'postgres://owner:p%40ss@db/taskelith', TASKELITH_NATS_URL: 'nats://127.0.0.1:4222',
+    DATABASE_LINK: 'postgres://owner:p@ssword@db/taskelith',
   }), { PATH: '/usr/bin', HOME: '/home/w', TASKELITH_NATS_URL: 'nats://127.0.0.1:4222' });
 });
