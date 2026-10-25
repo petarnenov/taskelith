@@ -149,6 +149,15 @@ It ran from the worktree. The prompt and log were kept in the session's scratch 
 | H12 | There is still no rotation across projects between passes. With a batch of 100, a 5-second pass, and a 60-second maximum backoff, 1200 older blocked projects can fill every pass. The reviewer reproduced it in memory. | Fixed in `645355b`: a project rotation cursor kept between passes, applied before the limit in both adapters, so each project with a waiting task that is not backing off is read within ⌈P/limit⌉ passes. A test with 1200 blocked projects covers it. |
 | M13 | `forgetStale` drops the backoff of a task that still waits, for example after an outage longer than 60 seconds, which resets its exponent. The reviewer reproduced it. | Fixed in `645355b`: a backoff is forgotten only on success, or when the queue (`stillWaiting`) or the task's transaction confirms the task no longer waits. A test keeps the cap across an outage of more than 60 seconds. |
 
+### Merge review (worker step 9)
+
+- After the handoff of `478ae8d`, the coordinator asked for `origin/dev` at `bb79126` to be merged in, in merge commit `e6c38b9`.
+- **Conflict.** The only conflict was the document-version table in `docs/contracts/execution-wire-contracts.md`. Both bumps are kept: `execution.asyncapi.json` 0.3.0 (#201) and `execution.openapi.json` 0.3.1 (this change).
+- **Checks.** `make contract-compatibility` reports no breaking change against `bb79126`. `make verify` on `e6c38b9`: 1055 tests passed, 0 failed. Coverage 99.26% lines, 91.71% branches, 99.02% functions. Every other check passes.
+- **Review session.** Codex, the same invocation as above. Session `01a17467-9dc9-71f3-91dd-9c2eb40bfcbb`, 2026-10-25, ending at 20:52, on `e6c38b9`. The review was limited to the conflict resolution and to how the incoming changes interact with this branch, notably the bounded resource request of #201 against `DEFAULT_ATTEMPT_REQUEST`.
+- **Snapshot.** `46dbcb9f…0f813ed` before and after: unchanged.
+- **Result.** Critical 0, High 0, Medium 0, Low 0.
+
 ## Limitations
 
 - **No reachable worker until 21b.** No production path marks a worker reachable before 21b, so only tests that seed reachable workers place anything. The HTTP test of `requestDelegation` therefore answers `awaiting-capacity`.
