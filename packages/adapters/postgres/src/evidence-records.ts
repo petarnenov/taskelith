@@ -50,9 +50,8 @@ export class PostgresEvidenceRecords implements EvidenceRecords {
   }
 }
 
-// The generations at which a worker held an attempt: those of its
-// assignments for it, except a refused one and one superseded without a
-// grant, under which it could never launch (launch authorization).
+// The generations of a worker's assignments for an attempt, except refused
+// ones and superseded ones, which end without a grant to launch under.
 const NEVER_HELD: ReadonlySet<string> = new Set(['refused', 'superseded']);
 
 export class PostgresEvidenceProducers {
