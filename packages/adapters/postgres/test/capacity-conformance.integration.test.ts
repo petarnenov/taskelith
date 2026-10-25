@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import { PostgresDatabase, type PostgresTransaction } from '@taskelith/postgres';
 import {
+  CANDIDATE_WORKER_FIXTURES,
   CAPACITY_LEDGER_CONFORMANCE,
+  DELEGATION_REQUESTS_CONFORMANCE,
+  PLACEMENT_CANDIDATES_CONFORMANCE,
+  PLACEMENT_QUEUE_CONFORMANCE,
   PLACEMENT_WORKERS_CONFORMANCE,
   PLACEMENT_WORKER_FIXTURES,
   QUOTA_FIXTURES,
@@ -39,6 +43,11 @@ runSuite('quotas', QUOTA_SETTINGS_CONFORMANCE, (tx) => tx.quotas, async () => {
 });
 runSuite('lineage', TASK_LINEAGE_CONFORMANCE, (tx) => tx.lineage);
 runSuite('ledger', CAPACITY_LEDGER_CONFORMANCE, (tx) => ({ ledger: tx.ledger, assignments: tx.assignments, lineage: tx.lineage }));
+runSuite('candidates', PLACEMENT_CANDIDATES_CONFORMANCE, (tx) => ({ workers: tx.workers, assignments: tx.assignments }), async () => {
+  for (const worker of CANDIDATE_WORKER_FIXTURES) await seedWorker(url, worker);
+});
+runSuite('placement queue', PLACEMENT_QUEUE_CONFORMANCE, (tx) => ({ queue: tx.placements, tasks: tx.tasks, lineage: tx.lineage, assignments: tx.assignments }));
+runSuite('delegation requests', DELEGATION_REQUESTS_CONFORMANCE, (tx) => tx.delegations);
 
 test('an installation without its record is treated as quarantined', async () => {
   await truncateAll(url);

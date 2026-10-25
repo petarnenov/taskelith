@@ -2,6 +2,7 @@ import type { Instant } from '@taskelith/kernel';
 import {
   PostgresCapacityLedger,
   PostgresInstallationGuard,
+  PostgresPlacementQueue,
   PostgresPlacementWorkers,
   PostgresQuotaSettings,
   PostgresTaskLineage,
@@ -12,6 +13,7 @@ import { PostgresEvidenceProducers, PostgresEvidenceRecords } from './evidence-r
 import {
   PostgresAdmissionRepository,
   PostgresAssignmentRepository,
+  PostgresDelegationRequests,
   PostgresGateRepository,
   PostgresInbox,
   PostgresOutbox,
@@ -37,6 +39,8 @@ export class PostgresTransaction {
   readonly quotas: PostgresQuotaSettings;
   readonly lineage: PostgresTaskLineage;
   readonly ledger: PostgresCapacityLedger;
+  readonly placements: PostgresPlacementQueue;
+  readonly delegations: PostgresDelegationRequests;
   readonly fleet: PostgresFleetRegistry;
   readonly catalog: PostgresRunCatalog;
   readonly installationTable: PostgresInstallationTable;
@@ -60,6 +64,8 @@ export class PostgresTransaction {
     this.quotas = new PostgresQuotaSettings(session);
     this.lineage = new PostgresTaskLineage(session);
     this.ledger = new PostgresCapacityLedger(session);
+    this.placements = new PostgresPlacementQueue(session);
+    this.delegations = new PostgresDelegationRequests(session);
     this.fleet = new PostgresFleetRegistry(session);
     this.catalog = new PostgresRunCatalog(session);
     this.installationTable = new PostgresInstallationTable(session);

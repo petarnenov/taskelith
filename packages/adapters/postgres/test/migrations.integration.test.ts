@@ -3,11 +3,11 @@ import { cp, mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { recordExecutionEvidence } from '@taskelith/execution';
+import { endAttempt, openTask, recordExecutionEvidence } from '@taskelith/execution';
 import { fleetWorker } from '@taskelith/fleet';
 import { MIGRATIONS_DIRECTORY, migrate } from '@taskelith/postgres';
 import { value } from '@taskelith/testing';
-import { authorizedUnder, placedTask } from './capacity-fixtures.ts';
+import { authorizedUnder, placedTask, usedAdmission } from './capacity-fixtures.ts';
 import { AT, assignment } from './fixtures.ts';
 import { SERVER_URL, createTestDatabase, databaseUrl, query } from './test-database.ts';
 
@@ -18,6 +18,7 @@ const ENROLLMENT = '1792930800000_installation-and-enrollment';
 const CONTROL_PLANE_API = '1792931200000_control-plane-api';
 const WORKER_BEARER = '1792931600000_worker-bearer-authentication';
 const EVIDENCE_STORE = '1792931700000_evidence-store';
+const EXECUTION_PLACEMENT = '1792932100000_execution-placement';
 
 async function copiedMigrations(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'taskelith-migrations-'));
@@ -28,16 +29,16 @@ async function copiedMigrations(): Promise<string> {
 
 test('migrations apply once, record their checksums, and create the schema', async () => {
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
-  assert.deepEqual(await migrate(url), { ok: true, value: [INITIAL, RESOURCE_ADMISSION, OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE] });
+  assert.deepEqual(await migrate(url), { ok: true, value: [INITIAL, RESOURCE_ADMISSION, OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE, EXECUTION_PLACEMENT] });
   assert.deepEqual(await migrate(url), { ok: true, value: [] });
   const checksums = await query<{ name: string; sha256: string }>(url, 'SELECT name, sha256 FROM schema_migration_checksums');
-  assert.deepEqual(checksums.map((row) => row.name).sort(), [INITIAL, RESOURCE_ADMISSION, OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE]);
+  assert.deepEqual(checksums.map((row) => row.name).sort(), [INITIAL, RESOURCE_ADMISSION, OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE, EXECUTION_PLACEMENT]);
   assert.match(checksums[0]!.sha256, /^[0-9a-f]{64}$/);
   const tables = await query<{ table_name: string }>(
     url, "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name",
   );
   assert.deepEqual(tables.map((row) => row.table_name), [
-    'admissions', 'assignments', 'audit_events', 'broker_revocations', 'capacity_charges', 'capacity_quotas', 'delegations', 'enrollment_tokens', 'evidence', 'gates',
+    'admissions', 'assignments', 'audit_events', 'broker_revocations', 'capacity_charges', 'capacity_quotas', 'delegation_requests', 'delegations', 'enrollment_tokens', 'evidence', 'gates',
     'inbox', 'installation', 'operator_credentials', 'outbox', 'schema_migration_checksums', 'schema_migrations', 'task_lineage',
     'tasks', 'workers', 'workflow_runs',
   ]);
@@ -47,7 +48,7 @@ test('the signals migration copies the state, change time, and unknown execution
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   const directory = await copiedMigrations();
   // The signals migration and every later one wait, so they apply in order.
-  const held = [OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE].map((name) => join(directory, `${name}.sql`));
+  const held = [OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE, EXECUTION_PLACEMENT].map((name) => join(directory, `${name}.sql`));
   const contents = await Promise.all(held.map((path) => readFile(path, 'utf8')));
   await Promise.all(held.map((path) => unlink(path)));
   assert.equal((await migrate(url, directory)).ok, true);
@@ -67,7 +68,7 @@ test('the signals migration copies the state, change time, and unknown execution
       [`${task.id}-${task.generation}`, task.admissionId, JSON.stringify({ ...task, probe })]);
   }
   await Promise.all(held.map((path, index) => writeFile(path, contents[index]!)));
-  assert.deepEqual(await migrate(url, directory), { ok: true, value: [OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE] });
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: [OBSERVABILITY_SIGNALS, ENROLLMENT, CONTROL_PLANE_API, WORKER_BEARER, EVIDENCE_STORE, EXECUTION_PLACEMENT] });
   const [row] = await query<{ state: string; changed_at: Date }>(url, 'SELECT state, changed_at FROM assignments');
   assert.deepEqual([row!.state, row!.changed_at.toISOString()], ['offered', AT]);
   const tasks = await query<{ unknown_executions: number }>(url, 'SELECT unknown_executions FROM tasks ORDER BY unknown_executions');
@@ -78,7 +79,7 @@ test('the bearer migration copies the control-plane hashes of enrolled workers',
   const url = databaseUrl(SERVER_URL, await createTestDatabase());
   const directory = await copiedMigrations();
   // The bearer migration and every later one wait, so they apply in order.
-  const held = [WORKER_BEARER, EVIDENCE_STORE].map((name) => join(directory, `${name}.sql`));
+  const held = [WORKER_BEARER, EVIDENCE_STORE, EXECUTION_PLACEMENT].map((name) => join(directory, `${name}.sql`));
   const contents = await Promise.all(held.map((path) => readFile(path, 'utf8')));
   await Promise.all(held.map((path) => unlink(path)));
   assert.equal((await migrate(url, directory)).ok, true);
@@ -92,7 +93,7 @@ test('the bearer migration copies the control-plane hashes of enrolled workers',
     [worker.workerId, 'revokedAt' in worker, worker.journalId, JSON.stringify(worker), worker.credentials.previous?.validUntil ?? null]);
   }
   await Promise.all(held.map((path, index) => writeFile(path, contents[index]!)));
-  assert.deepEqual(await migrate(url, directory), { ok: true, value: [WORKER_BEARER, EVIDENCE_STORE] });
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: [WORKER_BEARER, EVIDENCE_STORE, EXECUTION_PLACEMENT] });
   const rows = await query<{ control_plane_hash: string; previous_control_plane_hash: string | null; enrollment: string }>(
     url, 'SELECT control_plane_hash, previous_control_plane_hash, enrollment FROM workers ORDER BY worker_id',
   );
@@ -100,6 +101,40 @@ test('the bearer migration copies the control-plane hashes of enrolled workers',
     ['cp-w1-1', null], ['cp-new', 'cp-old'], ['cp-w3-1', null],
   ]);
   assert.equal(rows[0]!.enrollment, JSON.stringify(current), 'the record itself is unchanged');
+});
+
+test('the placement migration derives the queue columns of stored tasks', async () => {
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  const directory = await copiedMigrations();
+  const held = join(directory, `${EXECUTION_PLACEMENT}.sql`);
+  const content = await readFile(held, 'utf8');
+  await unlink(held);
+  assert.equal((await migrate(url, directory)).ok, true);
+  const offered = assignment('assignment-1');
+  const ending = placedTask('task-ended', 'attempt-3');
+  const tasks = [
+    value(openTask(usedAdmission('task-fresh'), AT)),
+    placedTask('task-placed', 'attempt\\1'),
+    authorizedUnder(placedTask('task-running', 'attempt-2'), offered.id, offered.workerId),
+    value(endAttempt(ending, ending.attempts[0]!.id, AT)),
+  ];
+  // Escapes that jsonb rejects, and an escaped backslash before `u`.
+  const probe = 'spec\uD800.md \u0000 \\ud800';
+  for (const task of tasks) {
+    await query(url, 'INSERT INTO tasks (id, admission_id, generation, record) VALUES ($1, $2, 1, $3)',
+      [task.id, task.admissionId, JSON.stringify({ ...task, probe })]);
+  }
+  await writeFile(held, content);
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: [EXECUTION_PLACEMENT] });
+  const rows = await query<{ id: string; awaits_placement: boolean; active_attempt_id: string | null; placement_waiting_since: Date | null }>(
+    url, 'SELECT id, awaits_placement, active_attempt_id, placement_waiting_since FROM tasks ORDER BY id',
+  );
+  assert.deepEqual(rows.map((row) => [row.id, row.awaits_placement, row.active_attempt_id, row.placement_waiting_since?.toISOString() ?? null]), [
+    ['task-ended', false, null, null],
+    ['task-fresh', true, null, AT],
+    ['task-placed', true, 'attempt\\1', AT],
+    ['task-running', false, 'attempt-2', null],
+  ]);
 });
 
 test('a later migration file is applied after the applied ones', async () => {

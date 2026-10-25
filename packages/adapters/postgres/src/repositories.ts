@@ -1,6 +1,16 @@
 import { err, failure, ok, type EventId, type Result } from '@taskelith/kernel';
-import { unknownExecutionCount, type AssignmentId, type Inbox, type InboxOutcome, type Task, type TaskRepository } from '@taskelith/execution';
-import type { Assignment, AssignmentRepository } from '@taskelith/scheduling';
+import {
+  activeAttempt,
+  placementNeed,
+  unknownExecutionCount,
+  type AssignmentId,
+  type AttemptId,
+  type Inbox,
+  type InboxOutcome,
+  type Task,
+  type TaskRepository,
+} from '@taskelith/execution';
+import type { Assignment, AssignmentRepository, DelegationId, DelegationRecord, DelegationRequests } from '@taskelith/scheduling';
 import type {
   AdmissionId,
   AdmissionRepository,
@@ -121,7 +131,7 @@ export class PostgresTaskRepository implements TaskRepository {
       entity: 'task',
       idOf: (task) => task.id,
       generationOf: (task) => task.generation,
-      columnsOf: (task) => ({ admission_id: task.admissionId, unknown_executions: unknownExecutionCount(task) }),
+      columnsOf: (task) => ({ admission_id: task.admissionId, unknown_executions: unknownExecutionCount(task), ...placementColumns(task) }),
       decode: decodeTask,
     });
   }
@@ -137,6 +147,16 @@ export class PostgresTaskRepository implements TaskRepository {
   replace(task: Task, expectedGeneration: Generation): Promise<Result<void>> {
     return this.#store.replace(task, expectedGeneration);
   }
+}
+
+// The placement queue reads these; a task waits since its last change.
+function placementColumns(task: Task): Readonly<Record<string, unknown>> {
+  const awaits = placementNeed(task) !== undefined;
+  return {
+    awaits_placement: awaits,
+    active_attempt_id: activeAttempt(task)?.id ?? null,
+    placement_waiting_since: awaits ? task.changedAt : null,
+  };
 }
 
 // One held reservation per attempt is checked before writing, so a transaction
@@ -183,6 +203,10 @@ export class PostgresAssignmentRepository implements AssignmentRepository {
     return this.#store.replace(assignment, expectedGeneration, held);
   }
 
+  listByAttempt(attemptId: AttemptId): Promise<readonly Assignment[]> {
+    return this.#store.list('attempt_id = $1', [attemptId]);
+  }
+
   async #heldReservationConflict(assignment: Assignment): Promise<Result<void>> {
     const { rows } = await this.#session.query<{ id: string }>(
       `SELECT id FROM assignments WHERE attempt_id = $1 AND reservation_state = 'held' AND id <> $2`,
@@ -192,6 +216,33 @@ export class PostgresAssignmentRepository implements AssignmentRepository {
     return err(failure('conflict', `attempt ${assignment.attemptId} already holds a reservation through ${rows[0].id}`, {
       attempt: assignment.attemptId, assignment: rows[0].id,
     }));
+  }
+}
+
+export class PostgresDelegationRequests implements DelegationRequests {
+  readonly #store: AggregateStore<DelegationRecord>;
+
+  constructor(session: Session) {
+    this.#store = new AggregateStore(session, {
+      table: 'delegation_requests',
+      entity: 'delegation',
+      idOf: (record) => record.delegationId,
+      generationOf: (record) => record.generation,
+      columnsOf: (record) => ({ attempt_id: record.values.attemptId, state: record.outcome.state }),
+      decode: decodeRecord,
+    });
+  }
+
+  get(delegationId: DelegationId): Promise<Result<DelegationRecord>> {
+    return this.#store.get(delegationId);
+  }
+
+  add(record: DelegationRecord): Promise<Result<void>> {
+    return this.#store.add(record);
+  }
+
+  replace(record: DelegationRecord, expectedGeneration: Generation): Promise<Result<void>> {
+    return this.#store.replace(record, expectedGeneration);
   }
 }
 
