@@ -36,6 +36,7 @@
     "packages/kernel",
     "packages/contracts",
     "packages/plugin-sdk",
+    "packages/testing",
     "packages/modules/*",
     "packages/adapters/*",
     "packages/plugins/*"

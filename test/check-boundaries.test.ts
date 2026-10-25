@@ -259,3 +259,33 @@ test('the plugin SDK reads a module only type-only through its port entry', () =
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('only tests, scripts, and the harness itself import the test harness package', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-boundaries-testing-'));
+  try {
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ workspaces: ['packages/testing', 'packages/modules/*', 'packages/adapters/*'] }));
+    const packages = { 'packages/testing': '@taskelith/testing', 'packages/modules/sdlc': '@taskelith/sdlc', 'packages/adapters/postgres': '@taskelith/postgres' };
+    for (const [dir, name] of Object.entries(packages)) {
+      mkdirSync(join(root, dir, 'src'), { recursive: true });
+      mkdirSync(join(root, dir, 'test'), { recursive: true });
+      writeFileSync(join(root, dir, 'package.json'), JSON.stringify({ name }));
+    }
+    mkdirSync(join(root, 'apps/worker/src'), { recursive: true });
+    mkdirSync(join(root, 'test'));
+    const harnessImport = "import { CrashPoints } from '@taskelith/testing';\nexport const points = CrashPoints;\n";
+    for (const file of ['packages/testing/src/extra.ts', 'packages/adapters/postgres/test/a.test.ts', 'packages/modules/sdlc/test/b.test.ts', 'test/c.test.ts']) {
+      writeFileSync(join(root, file), harnessImport);
+    }
+    assert.deepEqual(checkWorkspaceBoundaries(root), []);
+
+    for (const file of ['packages/adapters/postgres/src/store.ts', 'packages/modules/sdlc/src/service.ts', 'apps/worker/src/main.ts']) {
+      writeFileSync(join(root, file), harnessImport);
+    }
+    const violations = checkWorkspaceBoundaries(root);
+    assert.deepEqual(violations.filter(v => v.includes('cannot import the test harness "@taskelith/testing"')).map(v => v.split(':')[0]), [
+      'apps/worker/src/main.ts', 'packages/adapters/postgres/src/store.ts', 'packages/modules/sdlc/src/service.ts',
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
