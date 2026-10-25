@@ -39,7 +39,7 @@ export const ASSIGNMENT_END_REASONS = Object.freeze([
 export type AssignmentEndReason = (typeof ASSIGNMENT_END_REASONS)[number];
 
 // The worker-side reasons of the capacity reservation contract, section 11,
-// and the refusal of an offer in a protocol version the worker lacks.
+// and the refusal of an offer that the worker rejected for its protocol.
 export const REFUSAL_REASONS = Object.freeze([
   'worker-slots-exhausted',
   'worker-capacity-exhausted',

@@ -3,7 +3,7 @@
   "info": {
     "title": "Taskelith execution messages",
     "version": "0.1.0",
-    "description": "Commands to workers and observations from workers over NATS JetStream (G2 decision D3 (a)). Operations are described from the control plane. Each message is published with the Nats-Msg-Id header set to its commandId, observationId, or reportId, and its JSON encoding is at most 1 MiB. A worker reads the command metadata and payload.protocolVersion first, which keep their meaning across protocol versions, and rejects a command whose version it does not support."
+    "description": "Commands to workers and observations from workers over NATS JetStream (G2 decision D3 (a)). Operations are described from the control plane. Each command, observation, and report is published with the Nats-Msg-Id header set to its commandId, its observationId, or its reportId and part; a confirmation is idempotent and has none. Every message has a JSON encoding of at most 1 MiB. A worker reads the command metadata and payload.protocolVersion first, which keep their meaning across protocol versions, and rejects a command whose version it does not support."
   },
   "defaultContentType": "application/json",
   "channels": {
@@ -496,14 +496,13 @@
       },
       "RefusalReason": {
         "type": "string",
-        "description": "Worker-side refusal reasons of the capacity reservation contract, and protocol-not-supported.",
+        "description": "Worker-side refusal reasons of the capacity reservation contract. An offer in an unsupported protocol version is rejected as a command instead.",
         "enum": [
           "worker-slots-exhausted",
           "worker-capacity-exhausted",
           "resource-ceiling-exceeded",
           "control-not-enforceable",
-          "worker-admission-pressure",
-          "protocol-not-supported"
+          "worker-admission-pressure"
         ]
       },
       "AdmissionPressureCause": {
@@ -664,17 +663,20 @@
       "InventoryReported": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Sent on every reconnect: the assignments the worker holds and their executions. It is a snapshot outside the journal sequence.",
+        "description": "Sent on every reconnect: the assignments the worker holds and their executions, in parts that together form one snapshot outside the journal sequence.",
         "required": [
           "messageType",
           "schemaVersion",
           "protocolVersion",
           "reportId",
+          "part",
+          "parts",
           "reportedAt",
           "workerId",
           "journalId",
           "throughSequence",
-          "assignments"
+          "assignments",
+          "executions"
         ],
         "properties": {
           "messageType": {
@@ -688,7 +690,19 @@
             "$ref": "#/components/schemas/ProtocolVersion"
           },
           "reportId": {
-            "$ref": "#/components/schemas/Identifier"
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The same for every part of one snapshot."
+          },
+          "part": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4096,
+            "description": "This part, from 1 to parts."
+          },
+          "parts": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4096
           },
           "reportedAt": {
             "$ref": "#/components/schemas/Instant"
@@ -710,7 +724,14 @@
             "items": {
               "$ref": "#/components/schemas/InventoryAssignment"
             },
-            "maxItems": 1024
+            "maxItems": 256
+          },
+          "executions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventoryExecution"
+            },
+            "maxItems": 256
           }
         }
       },
@@ -722,8 +743,7 @@
           "assignmentId",
           "attemptId",
           "ownershipGeneration",
-          "state",
-          "executions"
+          "state"
         ],
         "properties": {
           "commandId": {
@@ -744,35 +764,39 @@
               "accepted",
               "ended"
             ]
+          }
+        }
+      },
+      "InventoryExecution": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "An execution in the worker journal; uncertainty is evidence beside its state.",
+        "required": [
+          "executionId",
+          "assignmentId",
+          "state",
+          "uncertain"
+        ],
+        "properties": {
+          "executionId": {
+            "$ref": "#/components/schemas/Identifier"
           },
-          "executions": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [
-                "executionId",
-                "state"
-              ],
-              "properties": {
-                "executionId": {
-                  "$ref": "#/components/schemas/Identifier"
-                },
-                "state": {
-                  "type": "string",
-                  "description": "The worker journal state of the execution.",
-                  "enum": [
-                    "launch-intended",
-                    "authorized",
-                    "started",
-                    "exited",
-                    "not-started",
-                    "uncertain"
-                  ]
-                }
-              }
-            },
-            "maxItems": 64
+          "assignmentId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "state": {
+            "type": "string",
+            "description": "launch-intended until the first grant is journaled.",
+            "enum": [
+              "launch-intended",
+              "authorized",
+              "started",
+              "exited",
+              "not-started"
+            ]
+          },
+          "uncertain": {
+            "type": "boolean"
           }
         }
       },
@@ -1164,7 +1188,7 @@
       "CommandRejectedObservation": {
         "type": "object",
         "additionalProperties": false,
-        "description": "The worker cannot execute a command. It reads only the command metadata and payload.protocolVersion to decide, and executes nothing of it.",
+        "description": "The worker executes nothing of a command it cannot execute, an offer included. It names the command only by its commandId and type, so that no field of an unknown payload is needed.",
         "required": [
           "metadata",
           "payload"
@@ -1177,20 +1201,10 @@
               },
               {
                 "type": "object",
-                "required": [
-                  "attemptId",
-                  "ownershipGeneration"
-                ],
                 "properties": {
                   "observationType": {
                     "type": "string",
                     "const": "execution.command.rejected"
-                  },
-                  "attemptId": {
-                    "$ref": "#/components/schemas/Identifier"
-                  },
-                  "ownershipGeneration": {
-                    "$ref": "#/components/schemas/Generation"
                   }
                 }
               }

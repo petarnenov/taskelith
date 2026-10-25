@@ -47,6 +47,10 @@ Every observation SHALL carry a deterministic `observationId`, its fixed type, s
 ### Requirement: Execution observations
 The AsyncAPI document SHALL define observations for assignment acceptance and refusal, command rejection, non-retryable launch rejection, and the supervisor facts. The facts are `started`, `exited`, `not-started`, `uncertain`, `termination-unproven`, and `unrecorded-process`. It SHALL also define a cancellation that was not applied, capacity declaration, and admission pressure.
 
+#### Scenario: Refusal for the protocol
+- **WHEN** an assignment refusal names `protocol-not-supported`
+- **THEN** validation fails, because the worker rejects such an offer as a command
+
 #### Scenario: Retryable launch rejection
 - **WHEN** a launch rejection observation names `unavailable`
 - **THEN** validation fails
@@ -56,21 +60,33 @@ The AsyncAPI document SHALL define observations for assignment acceptance and re
 - **THEN** validation fails
 
 ### Requirement: Confirmation and inventory
-The AsyncAPI document SHALL define a cumulative confirmation of a positive `confirmedThrough` per worker and journal. It SHALL also define an inventory report of the held assignments and their executions' journal states, with the last journal sequence the report reflects.
+The AsyncAPI document SHALL define a cumulative confirmation of a positive `confirmedThrough` per worker and journal. It SHALL also define an inventory report of the held assignments and their executions' journal states with uncertainty beside them, sent in numbered parts of one report identity, each with the last journal sequence the report reflects and small enough for the broker's `1 MiB` payload limit.
+
+#### Scenario: Uncertainty as a state
+- **WHEN** an inventory execution has the state `uncertain`
+- **THEN** validation fails
+
+#### Scenario: Largest inventory part
+- **WHEN** an inventory part has the most entries and the longest identifiers the schema allows
+- **THEN** its JSON encoding is smaller than 1 MiB
 
 #### Scenario: Empty confirmation
 - **WHEN** a confirmation has `confirmedThrough` 0
 - **THEN** validation fails
 
 ### Requirement: Wire vocabularies
-The wire enumerations of refusal, non-retryable launch rejection, launch rejection, revocation, cancellation, and assignment end reasons, and of hard controls, SHALL equal the vocabularies of the execution and scheduling domains.
+The wire enumerations of refusal, non-retryable launch rejection, launch rejection, revocation, cancellation, and assignment end reasons, and of hard controls, SHALL equal the vocabularies of the execution and scheduling domains, except that the worker's refusal reasons omit `protocol-not-supported`, which the control plane derives from a command rejection.
 
 #### Scenario: Domain reason added
 - **WHEN** a domain vocabulary gains a value the wire enumeration lacks
 - **THEN** the package tests fail
 
 ### Requirement: Execution HTTP operations
-The OpenAPI document SHALL define `enrollWorker`, `authorizeLaunch`, `readTaskResult`, `publishEvidence`, `readEvidence`, and `downloadEvidence`. Each SHALL declare its credential: an enrollment token, the worker credential, or the operator credential. Errors SHALL use the kernel failure shape.
+The OpenAPI document SHALL define `enrollWorker`, `authorizeLaunch`, `requestDelegation`, `readTaskResult`, `publishEvidence`, `readEvidence`, and `downloadEvidence`. Each SHALL declare its credential: an enrollment token, the worker credential, or the operator credential. Errors SHALL use the kernel failure shape.
+
+#### Scenario: Parent in a delegation request
+- **WHEN** a delegation request names `parentTaskId`
+- **THEN** the request body is invalid
 
 #### Scenario: Worker in a launch request
 - **WHEN** a launch authorization request names `workerId`
@@ -84,7 +100,11 @@ The OpenAPI document SHALL define `enrollWorker`, `authorizeLaunch`, `readTaskRe
 - **THEN** validation fails
 
 ### Requirement: Task result and evidence
-`readTaskResult` SHALL return a pending result, or the outcome fact of the task's last ended attempt with the task's evidence records. An evidence record SHALL carry the fields of architecture section 8, a SHA-256 content digest, and its producer.
+`readTaskResult` SHALL return a pending result, or the outcome fact of the task's last ended attempt with the task's evidence records. An evidence record SHALL require the fields of architecture section 8, a SHA-256 content digest, and its producer.
+
+#### Scenario: Evidence without validator
+- **WHEN** an evidence publication omits its validator
+- **THEN** validation fails and names the field
 
 #### Scenario: Pending result with outcome
 - **WHEN** a pending task result carries an outcome
@@ -95,7 +115,7 @@ Every execution command, observation, and report SHALL carry a positive integer 
 
 #### Scenario: Later version
 - **WHEN** a worker supporting version 1 receives an offer of version 2 with unknown payload fields
-- **THEN** `VersionedCommand` accepts it, the version is unsupported, and the offer schema rejects it
+- **THEN** `VersionedCommand` accepts it, the version is unsupported, the offer schema rejects it, and a command rejection naming only its `commandId` and type is valid
 
 #### Scenario: No common version
 - **WHEN** the worker supports only version 1 and the control plane versions 2 to 3

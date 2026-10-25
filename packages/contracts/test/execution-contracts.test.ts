@@ -86,7 +86,7 @@ const PROCESS = { platform: 'linux', bootId: 'boot-1', pid: 4242, startTime: 912
 test('the wire enumerations are the domain vocabularies', () => {
   const nonRetryable = LAUNCH_REJECTION_REASONS.filter((reason) => !RETRYABLE_LAUNCH_REJECTIONS.includes(reason));
 
-  assert.deepEqual(MESSAGES.RefusalReason!.enum, [...REFUSAL_REASONS]);
+  assert.deepEqual([...MESSAGES.RefusalReason!.enum!, 'protocol-not-supported'], [...REFUSAL_REASONS]);
   assert.deepEqual(MESSAGES.LaunchRejectionReason!.enum, nonRetryable);
   assert.deepEqual(new Set(HTTP.LaunchRejection!.properties!.reason!.enum), new Set(LAUNCH_REJECTION_REASONS));
   assert.deepEqual(HTTP.RevocationReason!.enum, [...REVOCATION_REASONS]);
@@ -122,8 +122,15 @@ test('a worker reads the protocol version of a command of a later version and fa
   assert.equal(supportsProtocolVersion(SUPPORTED_PROTOCOL_VERSIONS, versioned.value.payload.protocolVersion), false);
   assert.ok(!checkMessageSchema('AssignmentOfferCommand', later).ok);
   assert.ok(violations(checkMessageSchema('VersionedCommand', { ...later, payload: {} })).some((text) => text.includes('protocolVersion')));
-  const rejected = { commandId: 'command-1', commandType: 'execution.assignment.offer', reason: 'protocol-not-supported', supportedProtocolVersions: SUPPORTED_PROTOCOL_VERSIONS };
-  assert.ok(checkMessageSchema('CommandRejectedObservation', observation('execution.command.rejected', rejected)).ok);
+  const rejected = observation('execution.command.rejected', {
+    commandId: later.metadata.commandId,
+    commandType: later.metadata.commandType,
+    reason: 'protocol-not-supported',
+    supportedProtocolVersions: SUPPORTED_PROTOCOL_VERSIONS,
+  });
+  const { attemptId: _attemptId, ownershipGeneration: _generation, ...unattributed } = rejected.metadata;
+  assert.ok(checkMessageSchema('CommandRejectedObservation', { ...rejected, metadata: unattributed }).ok);
+  assert.ok(!checkMessageSchema('AssignmentRefusedPayload', { commandId: 'command-1', assignmentId: 'assignment-1', reason: 'protocol-not-supported', retryable: false }).ok);
 });
 
 test('the protocol windows of a worker and the control plane give the version to stamp', () => {
@@ -185,16 +192,44 @@ test('the control plane confirms a journal prefix and the worker reports its inv
     schemaVersion: 1,
     protocolVersion: 1,
     reportId: 'report-1',
+    part: 1,
+    parts: 1,
     reportedAt: AT,
     workerId: 'worker-1',
     journalId: 'journal-1',
     throughSequence: 7,
-    assignments: [{ commandId: 'command-1', assignmentId: 'assignment-1', attemptId: 'attempt-1', ownershipGeneration: 2, state: 'accepted', executions: [{ executionId: 'execution-1', state: 'uncertain' }] }],
+    assignments: [{ commandId: 'command-1', assignmentId: 'assignment-1', attemptId: 'attempt-1', ownershipGeneration: 2, state: 'accepted' }],
+    executions: [{ executionId: 'execution-1', assignmentId: 'assignment-1', state: 'started', uncertain: true }],
   };
 
   assert.ok(checkMessageSchema('ObservationsConfirmed', confirmation).ok);
   assert.ok(checkMessageSchema('InventoryReported', inventory).ok);
+  assert.ok(!checkMessageSchema('InventoryExecution', { ...inventory.executions[0], state: 'uncertain' }).ok);
   assert.ok(!checkMessageSchema('ObservationsConfirmed', { ...confirmation, confirmedThrough: 0 }).ok);
+});
+
+test('the largest valid inventory part fits the broker payload limit', () => {
+  // Every identifier at its maximum length, as backslashes JSON doubles.
+  const longest = '\\'.repeat(128);
+  const assignment = { commandId: longest, assignmentId: longest, attemptId: longest, ownershipGeneration: Number.MAX_SAFE_INTEGER, state: 'accepted' };
+  const execution = { executionId: longest, assignmentId: longest, state: 'launch-intended', uncertain: false };
+  const part = {
+    messageType: 'worker.inventory.reported',
+    schemaVersion: Number.MAX_SAFE_INTEGER,
+    protocolVersion: Number.MAX_SAFE_INTEGER,
+    reportId: longest,
+    part: 4096,
+    parts: 4096,
+    reportedAt: AT,
+    workerId: longest,
+    journalId: longest,
+    throughSequence: Number.MAX_SAFE_INTEGER,
+    assignments: Array.from({ length: 256 }, () => assignment),
+    executions: Array.from({ length: 256 }, () => execution),
+  };
+
+  assert.ok(checkMessageSchema('InventoryReported', part).ok);
+  assert.ok(Buffer.byteLength(JSON.stringify(part)) < 1024 * 1024);
 });
 
 test('capacity and admission pressure are declared as observations', () => {
@@ -277,6 +312,9 @@ test('an evidence record is content addressed and names its producer', () => {
     attemptId: 'attempt-1',
     kind: 'execution-log',
     inputArtifacts: [],
+    codeRevision: 'commit-1',
+    validator: { name: 'scripted-process', version: '1' },
+    outcome: 'exited',
     contentDigest: DIGEST,
     contentType: 'text/plain',
     sizeBytes: 12,
@@ -286,4 +324,22 @@ test('an evidence record is content addressed and names its producer', () => {
   assert.ok(checkHttpSchema('EvidencePublication', publication).ok);
   assert.ok(checkHttpSchema('EvidenceRecord', { ...publication, producer: { kind: 'worker', workerId: 'worker-1' }, publishedAt: AT }).ok);
   assert.ok(!checkHttpSchema('EvidencePublication', { ...publication, contentDigest: 'md5:00' }).ok);
+  const { validator: _validator, ...withoutValidator } = publication;
+  assert.ok(violations(checkHttpSchema('EvidencePublication', withoutValidator)).some((text) => text.includes('validator')));
+});
+
+test('a delegation names the attempt it delegates from and returns its state', () => {
+  const request = {
+    delegationId: 'delegation-1',
+    attemptId: 'attempt-1',
+    ownershipGeneration: 2,
+    runId: 'run-1',
+    child: { taskId: 'task-2', kind: 'planning', stageId: 'specs' },
+  };
+
+  assert.ok(checkHttpSchema('DelegationRequest', request).ok);
+  assert.ok(violations(checkHttpSchema('DelegationRequest', { ...request, parentTaskId: 'task-1' })).some((text) => text.includes('parentTaskId')));
+  assert.ok(checkHttpSchema('DelegationOutcome', { state: 'awaiting-capacity', delegationId: 'delegation-1' }).ok);
+  assert.ok(checkHttpSchema('DelegationOutcome', { state: 'rejected', delegationId: 'delegation-1', reason: 'delegation-depth-exceeded' }).ok);
+  assert.ok(!checkHttpSchema('DelegationOutcome', { state: 'rejected', delegationId: 'delegation-1', reason: 'delegation-budget-exhausted' }).ok);
 });

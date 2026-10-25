@@ -3,7 +3,7 @@
   "info": {
     "title": "Taskelith execution API",
     "version": "0.1.0",
-    "description": "Worker enrollment, launch authorization (G2 decision D12 (a)), task results, and evidence. Worker operations use the per-worker credential and operator operations the installation bootstrap credential (G2 decision D10 (a))."
+    "description": "Worker enrollment, launch authorization (G2 decision D12 (a)), delegation, task results, and evidence. Worker operations use the per-worker credential and operator operations the installation bootstrap credential (G2 decision D10 (a))."
   },
   "paths": {
     "/workers/enrollments": {
@@ -131,6 +131,89 @@
           },
           "503": {
             "description": "No decision was reached; retry with the same operationId until the worker deadline.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/delegations": {
+      "post": {
+        "operationId": "requestDelegation",
+        "summary": "Create a child task of an attempt the worker owns",
+        "security": [
+          {
+            "workerCredential": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DelegationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The current state of the delegation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DelegationOutcome"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The worker credential is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The worker does not own the attempt at the current ownership generation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A delegation with this delegationId exists with other values, or the child task identifier is taken.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "SDLC admission rejected the child task.",
             "content": {
               "application/json": {
                 "schema": {
@@ -809,7 +892,7 @@
           },
           "reportsNotStarted": {
             "type": "boolean",
-            "description": "The supervisor sealed an earlier launch record of this execution as not started."
+            "description": "The supervisor launch record of this execution shows that no spawn was claimed; required to authorize the same execution again."
           }
         }
       },
@@ -1187,6 +1270,263 @@
           }
         ]
       },
+      "TaskKind": {
+        "type": "string",
+        "enum": [
+          "planning",
+          "implementation"
+        ]
+      },
+      "WorkItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "nativeReference"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "nativeReference": {
+            "$ref": "#/components/schemas/DisplayText"
+          }
+        }
+      },
+      "AdmissionState": {
+        "type": "string",
+        "enum": [
+          "admitted",
+          "used",
+          "invalidated"
+        ]
+      },
+      "Admission": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A task admission record. The ownership generation is added with the execution module (G2).",
+        "required": [
+          "id",
+          "taskId",
+          "kind",
+          "workflowId",
+          "workflowVersion",
+          "stageId",
+          "artifacts",
+          "policyRevision",
+          "createdRevisions",
+          "state",
+          "generation",
+          "changedAt"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "taskId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TaskKind"
+          },
+          "workflowId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "workflowVersion": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "stageId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "workItemId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRevision"
+            }
+          },
+          "policyRevision": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "createdRevisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRevision"
+            }
+          },
+          "state": {
+            "$ref": "#/components/schemas/AdmissionState"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "changedAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "invalidatedBy": {
+            "$ref": "#/components/schemas/ArtifactRevision"
+          }
+        }
+      },
+      "TaskSubmission": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "taskId",
+          "admission"
+        ],
+        "properties": {
+          "taskId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "admission": {
+            "$ref": "#/components/schemas/Admission"
+          }
+        }
+      },
+      "DelegationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Creates a child task of the delegating attempt, which the worker owns at ownershipGeneration; the parent is derived from the attempt, never named.",
+        "required": [
+          "delegationId",
+          "attemptId",
+          "ownershipGeneration",
+          "runId",
+          "child"
+        ],
+        "properties": {
+          "delegationId": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "Chosen by the worker; a repeat returns the current state of the delegation."
+          },
+          "attemptId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "ownershipGeneration": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "runId": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The run the child is bound to."
+          },
+          "child": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "The child task, as SDLC admission takes it.",
+            "required": [
+              "taskId",
+              "kind",
+              "stageId"
+            ],
+            "properties": {
+              "taskId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/TaskKind"
+              },
+              "stageId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "workItem": {
+                "$ref": "#/components/schemas/WorkItem"
+              },
+              "artifacts": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ArtifactRevision"
+                }
+              }
+            }
+          }
+        }
+      },
+      "DelegationOutcome": {
+        "description": "An admitted child, a delegation that waits for capacity, or a rejection with its capacity reservation reason.",
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "delegationId",
+              "parentTaskId",
+              "rootTaskId",
+              "depth",
+              "submission"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "admitted"
+              },
+              "delegationId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "parentTaskId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "rootTaskId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "depth": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3
+              },
+              "submission": {
+                "$ref": "#/components/schemas/TaskSubmission"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "delegationId"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "awaiting-capacity"
+              },
+              "delegationId": {
+                "$ref": "#/components/schemas/Identifier"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "delegationId",
+              "reason"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "rejected"
+              },
+              "delegationId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "delegation-depth-exceeded",
+                  "delegation-chain-exceeds-quota",
+                  "delegation-awaiting-capacity"
+                ]
+              }
+            }
+          }
+        ]
+      },
       "EvidencePublication": {
         "type": "object",
         "additionalProperties": false,
@@ -1199,6 +1539,9 @@
           "attemptId",
           "kind",
           "inputArtifacts",
+          "codeRevision",
+          "validator",
+          "outcome",
           "contentDigest",
           "contentType",
           "sizeBytes",
@@ -1235,12 +1578,13 @@
             }
           },
           "codeRevision": {
-            "$ref": "#/components/schemas/Identifier"
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The code revision the evidence is about."
           },
           "validator": {
             "type": "object",
             "additionalProperties": false,
-            "description": "The validator or reviewer that produced the evidence.",
+            "description": "The validator, reviewer, or producing program and its version.",
             "required": [
               "name",
               "version"
@@ -1287,6 +1631,9 @@
           "attemptId",
           "kind",
           "inputArtifacts",
+          "codeRevision",
+          "validator",
+          "outcome",
           "contentDigest",
           "contentType",
           "sizeBytes",
@@ -1325,12 +1672,13 @@
             }
           },
           "codeRevision": {
-            "$ref": "#/components/schemas/Identifier"
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The code revision the evidence is about."
           },
           "validator": {
             "type": "object",
             "additionalProperties": false,
-            "description": "The validator or reviewer that produced the evidence.",
+            "description": "The validator, reviewer, or producing program and its version.",
             "required": [
               "name",
               "version"

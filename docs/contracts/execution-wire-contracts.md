@@ -7,7 +7,7 @@ Date: 2026-10-25. Status: proposed wire contract for G2 ([G2 work plan](../g2-pl
 | Document | Version | Content |
 | --- | --- | --- |
 | [`execution.asyncapi.json`](../../packages/contracts/documents/execution.asyncapi.json) | 0.1.0 | Commands to a worker and observations from it, over NATS JetStream |
-| [`execution.openapi.json`](../../packages/contracts/documents/execution.openapi.json) | 0.1.0 | Enrollment, launch authorization, task results, and evidence, over HTTPS |
+| [`execution.openapi.json`](../../packages/contracts/documents/execution.openapi.json) | 0.1.0 | Enrollment, launch authorization, delegation, task results, and evidence, over HTTPS |
 
 Both live in `@taskelith/contracts` beside the SDLC documents. The package generates one type and one validator per schema name from all four documents, so a name that several documents define must name the same schema; the build and the package tests fail otherwise. The execution documents reuse `CommandMetadata`, the identifiers, and `ArtifactRevision` of the SDLC documents unchanged.
 
@@ -16,8 +16,8 @@ Both live in `@taskelith/contracts` beside the SDLC documents. The package gener
 By decision D3 (a), each worker has its own command subject, read through its own durable pull consumer, and its own observation subject; by D12 (a), launch authorization is the HTTPS operation `authorizeLaunch`, and commands and observations stay on NATS.
 
 - **Subjects:** `taskelith.<installationId>.workers.<workerId>.commands` and `taskelith.<installationId>.workers.<workerId>.observations`. The per-worker broker credentials of D9 (a) let a worker read only its own command subject and publish only on its own observation subject ([trust model](../trust-model.md)). The subject names are the author's proposal; item 2 confirms the topology, and item 12 owns the streams and consumers.
-- **Deduplication:** every message is published with the `Nats-Msg-Id` header set to its `commandId`, `observationId`, or `reportId`. The broker window is an optimization; receivers deduplicate by these identities for their whole lifetime (architecture section 9).
-- **Size:** a message's JSON encoding is at most `1 MiB`, the broker's maximum payload ([operational targets](../operational-targets.md)). The array bounds of the schemas keep every message below it.
+- **Deduplication:** every command, observation, and inventory part is published with the `Nats-Msg-Id` header set to its `commandId`, its `observationId`, or its `reportId` followed by `.` and its `part`. A confirmation has no identity and no header: it is cumulative, so a duplicate changes nothing. The broker window is an optimization; receivers deduplicate by these identities for their whole lifetime (architecture section 9).
+- **Size:** a message's JSON encoding is at most `1 MiB`, the broker's maximum payload ([operational targets](../operational-targets.md)). The array bounds keep every message below it; a test checks the largest one, an inventory part with every identifier at its maximum length.
 - **Malformed messages:** a message that fails its schema is not acted on and goes to quarantine with diagnostics (item 12); it is not rejected by an observation, because none of its fields can be trusted.
 
 ## 3. Protocol version
@@ -26,7 +26,7 @@ Architecture section 13 requires compatible server and worker version windows an
 
 - **Version:** the execution protocol version is a positive integer, `1` in this contract, exported as `EXECUTION_PROTOCOL_VERSION`. Every execution command carries it as `payload.protocolVersion`, and every observation and report as `protocolVersion`.
 - **Stable part:** `CommandMetadata` and `payload.protocolVersion` keep their meaning in every protocol version. The worker validates a delivered command against `VersionedCommand` first, then checks the version against its window, and only then validates the command's own schema.
-- **Fail closed:** a worker that does not support the version, or that finds another `workerId` in the metadata, executes nothing of the command. It refuses an offer with `protocol-not-supported`, and rejects any other command with `execution.command.rejected`; both name its window. It acknowledges the command only after that observation is committed, as for every rejected command ([worker journal](worker-journal.md) W1).
+- **Fail closed:** a worker that does not support the version, or that finds another `workerId` in the metadata, executes nothing of the command, an offer included. It rejects the command with `execution.command.rejected`, which names the command only by `commandId` and `commandType`, so that no field of an unknown payload is needed, and which carries the worker's window. It acknowledges the command only after that observation is committed, as for every rejected command ([worker journal](worker-journal.md) W1). For an offer, the control plane finds the assignment by its `commandId` and refuses it with `protocol-not-supported`, which ends it and releases its reservation (capacity reservation section 6).
 - **Windows:** the worker declares its window at enrollment and in every `worker.capacity.declared` observation. The control plane stamps each command with the highest version both windows contain (`commonProtocolVersion`) and places no assignment on a worker whose window has no common version; enrollment of such a worker fails with 422.
 - **Compatibility window:** the control plane supports the current and the previous protocol version, so that workers can be upgraded after the control plane. A worker that supports neither is drained and upgraded before it receives work (architecture section 13).
 - **New versions:** a change that a worker of the current version could not execute correctly, such as a new required field or a changed meaning, needs the next protocol version. A change that the breaking-change check reports for a document also needs a new `info.version` of that document, as for every contract document.
@@ -54,7 +54,7 @@ Each observation is an `ObservationMetadata` envelope with a fixed `observationT
 | Observation | `observationType` | Source |
 | --- | --- | --- |
 | Assignment accepted | `execution.assignment.accepted` | The offer was journaled and accepted |
-| Assignment refused | `execution.assignment.refused` | A worker-side reason of capacity reservation section 11, or `protocol-not-supported` |
+| Assignment refused | `execution.assignment.refused` | A worker-side reason of capacity reservation section 11 |
 | Command rejected | `execution.command.rejected` | Section 3 |
 | Launch rejected | `execution.launch.rejected` | A non-retryable launch rejection (launch authorization section 9) |
 | Started, exited, not started, uncertain, termination unproven, unrecorded process | `execution.started`, `execution.exited`, `execution.not-started`, `execution.uncertain`, `execution.termination-unproven`, `execution.unrecorded-process` | The facts of supervisor identity section 11 |
@@ -71,7 +71,7 @@ Rules that the schemas cannot express:
 ## 6. Confirmation and inventory
 
 - **Confirmation:** `confirmedThrough` is the end of the contiguous prefix of the journal's sequence that the control plane has applied. It only grows for a `(workerId, journalId)`; a lower value than the worker's local one is ignored. A broker acknowledgement confirms nothing (worker journal section 6).
-- **Inventory:** on every reconnect the worker publishes `worker.inventory.reported` with the assignments it holds and the journal state of their executions, and `throughSequence`, the last sequence the snapshot reflects. The report is outside the journal sequence and is not confirmed. The control plane applies it only after every observation through `throughSequence`, and reconciles any unfinished assignment the report omits as the worker journal contract (section 8) states.
+- **Inventory:** on every reconnect the worker publishes `worker.inventory.reported` with the assignments it holds, their executions with their journal state and whether they are uncertain, and `throughSequence`, the last sequence the snapshot reflects. Uncertainty is evidence beside the state, as in the journal, and `launch-intended` is an execution without a journaled grant. One snapshot is sent in `parts` messages with one `reportId`, each of at most 256 assignments and 256 executions. The report is outside the journal sequence and is not confirmed. The control plane applies a snapshot only when it has every part and every observation through `throughSequence`, and only then reconciles an unfinished assignment the snapshot omits, as worker journal section 8 states; a newer `reportId` replaces an incomplete one.
 
 ## 7. HTTP operations
 
@@ -79,8 +79,9 @@ Rules that the schemas cannot express:
 | --- | --- | --- |
 | `enrollWorker` | Single-use enrollment token | The worker presents its new `journalId`, host, protocol window, and capacity; the response holds the `workerId`, the credential generation, the recovery epoch, the control plane's protocol window, and both credentials, whose content item 13 defines. |
 | `authorizeLaunch` | Worker credential | Status 200 carries the decision recorded for the `operationId`: a grant, a rejection, or, on a transport retry, `revoked` or `expired`. Status 503 means no decision was reached; the worker retries with the same `operationId` until its deadline. A rejection is `retryable` exactly for `quarantined` and `unavailable`, and a retry after it uses a new `operationId`. `skewMilliseconds` is less than `ttlMilliseconds`. The worker computes its deadline from its own suspend-inclusive clock (launch authorization section 7); `issuedAt` is never compared with the worker's clock. |
+| `requestDelegation` | Worker credential | The worker names the delegating attempt at its ownership generation and the child task; the control plane derives the parent and root, and admits, holds, or rejects the child with the reasons of capacity reservation section 7. A repeat with the same `delegationId` returns the current state. |
 | `readTaskResult` | Operator credential | `pending` until an attempt of the task ends; then the outcome of its last ended attempt, which does not accept the task's work, and the evidence records of the task. |
-| `publishEvidence` | Worker credential | A multipart body of the record and its content. The worker must own the attempt at its current ownership generation. The control plane verifies the SHA-256 digest and size before it stores the record; a repeat of the same record returns 200. |
+| `publishEvidence` | Worker credential | A multipart body of the record and its content. Every record names its input artifacts, code revision, validator or producing program with its version, and outcome (architecture section 8). The worker must own the attempt at its current ownership generation. The control plane verifies the SHA-256 digest and size before it stores the record; a repeat of the same record returns 200. |
 | `readEvidence`, `downloadEvidence` | Operator credential | The record, and the content whose SHA-256 digest is the record's `contentDigest`; content that is missing or does not match is not served. |
 
 The operator credential is the installation bootstrap credential of decision D10 (a). The SDLC operations stay without a declared credential in this contract; item 16 adds it, with the version of `sdlc.openapi.json` that the change requires.
@@ -89,7 +90,7 @@ The operator credential is the installation bootstrap credential of decision D10
 
 - **Item 12:** the streams, consumers, and quarantine for the subjects of section 2, and the `Nats-Msg-Id` header.
 - **Item 13:** the credential content, the subject permissions of section 2, and the protocol window check at enrollment.
-- **Items 16, 17, and 19:** the HTTP operations of section 7, with runtime validation against these schemas.
-- **Item 18:** placement only on a worker with a common protocol version, and release on `protocol-not-supported`.
+- **Items 16, 17, and 19:** the HTTP operations of section 7, with runtime validation against these schemas; the harness side of delegation is G3's.
+- **Item 18:** placement only on a worker with a common protocol version, release on `protocol-not-supported`, and the delegation checks of capacity reservation section 7.
 - **Item 20:** the order of section 3 for every delivered command, and the observations of section 5.
 - **Item 21:** the confirmation and the inventory of section 6.
