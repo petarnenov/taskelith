@@ -15,6 +15,8 @@ export interface FleetRegistry {
   worker(workerId: WorkerId): Promise<Result<EnrolledWorker | undefined>>;
   // Every enrolled worker that is not revoked, in identifier order.
   activeWorkerIds(): Promise<Result<readonly WorkerId[]>>;
+  // At most `limit` revoked workers, the latest revocation first.
+  recentlyRevokedWorkerIds(limit: number): Promise<Result<readonly WorkerId[]>>;
   // The worker, revoked or not, with this control-plane hash in its current
   // or predecessor generation; `internal` if two workers hold it.
   workerByCredentialHash(hash: SecretHash): Promise<Result<EnrolledWorker | undefined>>;

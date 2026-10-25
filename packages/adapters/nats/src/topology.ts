@@ -47,6 +47,17 @@ export async function ensureWorkerConsumer(
   });
 }
 
+// Deletes a revoked worker's consumer; one that is already gone counts.
+export async function removeWorkerConsumer(jsm: JetStreamManager, address: TransportAddress, workerId: string): Promise<Result<void>> {
+  try {
+    await jsm.consumers.delete(address.streamName('commands'), workerId);
+    return ok(undefined);
+  } catch (error) {
+    if (error instanceof JetStreamApiError && error.code === JetStreamApiCodes.ConsumerNotFound) return ok(undefined);
+    return brokerFailure(`remove consumer ${workerId}`, error);
+  }
+}
+
 // One independent consumer per reader of every worker's observations.
 export function ensureObservationConsumer(
   jsm: JetStreamManager,

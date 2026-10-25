@@ -98,6 +98,17 @@ export class PostgresFleetRegistry implements FleetRegistry {
     return ok(Object.freeze(rows.map((row) => row.worker_id)));
   }
 
+  // A revocation records every broker user of the worker at its time.
+  async recentlyRevokedWorkerIds(limit: number): Promise<Result<readonly WorkerId[]>> {
+    const { rows } = await this.#session.query<{ worker_id: WorkerId }>(
+      `SELECT worker_id FROM workers JOIN broker_revocations USING (worker_id)
+       WHERE enrollment IS NOT NULL AND revoked GROUP BY worker_id
+       ORDER BY max(revoked_at) DESC, worker_id COLLATE "C" LIMIT $1`,
+      [limit],
+    );
+    return ok(Object.freeze(rows.map((row) => row.worker_id)));
+  }
+
   async workerByCredentialHash(hash: SecretHash): Promise<Result<EnrolledWorker | undefined>> {
     const { rows } = await this.#session.query<{ enrollment: string }>(
       `SELECT enrollment FROM workers WHERE (control_plane_hash = $1 OR previous_control_plane_hash = $1)

@@ -1,24 +1,48 @@
+import type { WorkerId } from '@taskelith/execution';
 import type { FleetRegistry, WorkerCommandConsumers } from '@taskelith/fleet';
+import type { Result } from '@taskelith/kernel';
 import type { Logger } from '@taskelith/observability';
 
-// Ensures the consumer of every active worker once, so one lost to a crash
-// or a broker reset heals on restart; a failure is logged, not retried.
+// Provisional G2 value in docs/operational-targets.md, which G6 verifies.
+export const REVOKED_CONSUMER_REMOVALS_PER_START = 100;
+
+// Ensures the consumer of every active worker and removes those of the
+// latest revoked ones once, so a start heals; failures are logged only.
 export async function repairCommandConsumers(
-  registry: Pick<FleetRegistry, 'activeWorkerIds'>,
+  registry: Pick<FleetRegistry, 'activeWorkerIds' | 'recentlyRevokedWorkerIds'>,
   consumers: WorkerCommandConsumers,
   logger: Logger,
 ): Promise<void> {
-  const workers = await registry.activeWorkerIds();
+  await eachWorker(registry.activeWorkerIds(), (workerId) => consumers.ensure(workerId), {
+    logger, failed: 'fleet.command-consumer.failed', done: 'fleet.command-consumers.repaired',
+  });
+  await eachWorker(registry.recentlyRevokedWorkerIds(REVOKED_CONSUMER_REMOVALS_PER_START), (workerId) => consumers.remove(workerId), {
+    logger, failed: 'fleet.command-consumer.unremoved', done: 'fleet.command-consumers.removed',
+  });
+}
+
+interface RepairEvents {
+  readonly logger: Logger;
+  readonly failed: string;
+  readonly done: string;
+}
+
+async function eachWorker(
+  listed: Promise<Result<readonly WorkerId[]>>,
+  repair: (workerId: WorkerId) => Promise<Result<void>>,
+  events: RepairEvents,
+): Promise<void> {
+  const workers = await listed;
   if (!workers.ok) {
-    logger.warn('fleet.command-consumers.unlisted', { code: workers.error.code, message: workers.error.message });
+    events.logger.warn('fleet.command-consumers.unlisted', { code: workers.error.code, message: workers.error.message });
     return;
   }
   let failed = 0;
   for (const workerId of workers.value) {
-    const ensured = await consumers.ensure(workerId);
-    if (ensured.ok) continue;
+    const repaired = await repair(workerId);
+    if (repaired.ok) continue;
     failed += 1;
-    logger.warn('fleet.command-consumer.failed', { workerId, code: ensured.error.code, message: ensured.error.message });
+    events.logger.warn(events.failed, { workerId, code: repaired.error.code, message: repaired.error.message });
   }
-  logger.info('fleet.command-consumers.repaired', { workers: workers.value.length, failed });
+  events.logger.info(events.done, { workers: workers.value.length, failed });
 }

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import pg from 'pg';
-import { Administration, adminMain, type AdminIo } from '@taskelith/control-plane';
+import { Administration, adminMain, repairCommandConsumers, type AdminIo } from '@taskelith/control-plane';
 import { ControlPlaneNamespace } from '@taskelith/control-plane-store';
 import { parseIdentifier } from '@taskelith/kernel';
 import { createAccount } from '@nats-io/nkeys';
@@ -15,13 +15,15 @@ import {
   connectWorkerTransport,
   encodeJson,
   ensureStreams,
+  ensureWorkerConsumer,
   JetStreamPublisher,
   NatsBrokerCredentials,
   NatsCommandConsumers,
   TRANSPORT_LIMITS,
   TransportAddress,
 } from '@taskelith/nats';
-import { PostgresDatabase } from '@taskelith/postgres';
+import { InMemoryLogSink, Logger } from '@taskelith/observability';
+import { CommittingFleetRegistry, PostgresDatabase } from '@taskelith/postgres';
 import { integrationEndpoint, integrationSecret, value } from '@taskelith/testing';
 import { createLaunchRun, launchAuthority, placedTask } from './launch-fixtures.ts';
 
@@ -157,6 +159,17 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
 
   const revoked = await admin(['revoke-worker', enrolled.workerId], { TASKELITH_OPERATOR_TOKEN: operatorSecret });
   assert.deepEqual(revoked.output, { revoked: enrolled.workerId });
+  const commands = address.streamName('commands');
+  const consumerExists = () => controlPlane.jsm.consumers.info(commands, enrolled.workerId).then(() => true, () => false);
+  assert.equal(await consumerExists(), false, 'the revocation removes the command consumer');
+  const consumers = new NatsCommandConsumers(controlPlane.jsm, address);
+  value(await consumers.remove(enrolled.workerId));
+  // A consumer whose removal failed is removed by the next start.
+  value(await ensureWorkerConsumer(controlPlane.jsm, address, enrolled.workerId));
+  const sink = new InMemoryLogSink();
+  await repairCommandConsumers(new CommittingFleetRegistry(store), consumers, new Logger(sink, { now: () => new Date().toISOString() as never }));
+  assert.equal(await consumerExists(), false, 'the start removes the leftover consumer');
+  assert.deepEqual(sink.records.at(-1)?.fields, { workers: 1, failed: 0 });
   assert.deepEqual(value(await store.transaction((tx) => tx.launches.liveGrants({ kind: 'all' }))), [], 'the grant is revoked');
   const launched = value(await store.transaction((tx) => tx.tasks.get(taskId)));
   assert.equal(launched.attempts[0]!.executions[0]!.evidence[0]?.kind, 'uncertain');

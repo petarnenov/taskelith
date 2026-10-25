@@ -92,6 +92,19 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
     },
   },
   {
+    name: 'the recently revoked workers come latest first, up to the limit',
+    async check(registry) {
+      const problems: string[] = [];
+      for (const n of [1, 2, 3, 4]) await enrolled(registry, `w${n}`, `j${n}`);
+      must(await registry.revoke('w2' as WorkerId, AT));
+      must(await registry.revoke('w3' as WorkerId, LATER));
+      must(await registry.revoke('w1' as WorkerId, AT));
+      const recent = must(await registry.recentlyRevokedWorkerIds(2));
+      if (recent.join(',') !== 'w3,w1') problems.push(`recently revoked workers are ${recent.join(',')}, expected w3,w1`);
+      return problems;
+    },
+  },
+  {
     name: 'an expired token enrolls nothing at the moment of use',
     async check(registry) {
       const problems: string[] = [];

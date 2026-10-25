@@ -227,6 +227,10 @@ export class CommittingFleetRegistry implements FleetRegistry {
     return this.#database.readOnly((tx) => tx.fleet.activeWorkerIds());
   }
 
+  recentlyRevokedWorkerIds(limit: number): Promise<Result<readonly WorkerId[]>> {
+    return this.#database.readOnly((tx) => tx.fleet.recentlyRevokedWorkerIds(limit));
+  }
+
   // Read-only, so the lookup on every worker request never aborts a writer.
   workerByCredentialHash(hash: SecretHash): Promise<Result<EnrolledWorker | undefined>> {
     return this.#database.readOnly((tx) => tx.fleet.workerByCredentialHash(hash));
