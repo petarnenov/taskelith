@@ -1,6 +1,6 @@
 import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import type { AuditEvent, OperatorCredential, OperatorCredentials, SecretHash } from '@taskelith/access';
-import type { WorkerId } from '@taskelith/execution';
+import type { JournalId, WorkerId } from '@taskelith/execution';
 import {
   credentialGenerations,
   expiredPredecessor,
@@ -91,9 +91,32 @@ export class PostgresFleetRegistry implements FleetRegistry {
     return ok(await this.#read(workerId, ''));
   }
 
+  // The unique column also refuses a journal another worker took meanwhile.
+  async replaceJournal(workerId: WorkerId, previous: JournalId, journalId: JournalId): Promise<Result<void>> {
+    const worker = await this.#read(workerId, 'FOR UPDATE');
+    if (worker === undefined) return err(failure('not-found', `no worker ${workerId} is enrolled`));
+    if (worker.revokedAt !== undefined) return err(failure('forbidden', `worker ${workerId} is revoked`));
+    if (worker.journalId !== previous) return err(failure('conflict', `worker ${workerId} no longer holds journal ${previous}`));
+    const held = await this.#session.query('SELECT 1 FROM workers WHERE journal_id = $1', [journalId]);
+    if (held.rowCount !== 0) return err(failure('conflict', 'the journal is enrolled', { reason: 'journal-enrolled' }));
+    await this.#session.query('UPDATE workers SET journal_id = $2 WHERE worker_id = $1', [workerId, journalId]);
+    await this.#write(workerId, { ...worker, journalId });
+    return ok(undefined);
+  }
+
   async activeWorkerIds(): Promise<Result<readonly WorkerId[]>> {
     const { rows } = await this.#session.query<{ worker_id: WorkerId }>(
       'SELECT worker_id FROM workers WHERE enrollment IS NOT NULL AND NOT revoked ORDER BY worker_id COLLATE "C"',
+    );
+    return ok(Object.freeze(rows.map((row) => row.worker_id)));
+  }
+
+  // The record's `revokedAt` decides, as in the in-memory registry.
+  async recentlyRevokedWorkerIds(limit: number): Promise<Result<readonly WorkerId[]>> {
+    const { rows } = await this.#session.query<{ worker_id: WorkerId }>(
+      `SELECT worker_id FROM workers WHERE enrollment IS NOT NULL AND revoked
+       ORDER BY (enrollment::jsonb ->> 'revokedAt')::timestamptz DESC, worker_id COLLATE "C" LIMIT $1`,
+      [limit],
     );
     return ok(Object.freeze(rows.map((row) => row.worker_id)));
   }

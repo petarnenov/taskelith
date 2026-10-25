@@ -57,6 +57,7 @@ export {
 } from './adapters/in-memory-capacity.js';
 export { InMemoryDelegationRequests, InMemoryPlacementQueue } from './adapters/in-memory-placement.js';
 export { InMemoryWorkerReports } from './adapters/in-memory-worker-reports.js';
+export { InMemoryOutboxLookup } from './adapters/in-memory-outbox-lookup.js';
 export {
   CANDIDATE_WORKER_FIXTURES,
   CAPACITY_LEDGER_CONFORMANCE,
@@ -77,10 +78,15 @@ export {
   type WorkerReportsConformanceTarget,
 } from './ports/capacity-conformance.js';
 export type { AssignmentRepository } from './ports/assignment-repository.js';
-export type { Outbox, OutboxMessage } from './ports/outbox.js';
+export type { Outbox, OutboxLookup, OutboxMessage } from './ports/outbox.js';
 // The outbox ports are structurally identical, so they share one suite.
 export { OUTBOX_CONFORMANCE } from '@taskelith/sdlc';
-export { ASSIGNMENT_REPOSITORY_CONFORMANCE, DELEGATION_REQUESTS_CONFORMANCE } from './ports/repository-conformance.js';
+export {
+  ASSIGNMENT_REPOSITORY_CONFORMANCE,
+  DELEGATION_REQUESTS_CONFORMANCE,
+  OUTBOX_LOOKUP_CONFORMANCE,
+  type OutboxLookupConformanceTarget,
+} from './ports/repository-conformance.js';
 export { admitDelegation, type DelegationRequest } from './application/delegation-admission.js';
 export {
   cancelInTransaction,

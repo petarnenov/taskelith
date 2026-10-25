@@ -6,4 +6,6 @@ import type { WorkerId } from '@taskelith/execution';
 export interface WorkerCommandConsumers {
   // Idempotent: an existing consumer of the worker is kept.
   ensure(workerId: WorkerId): Promise<Result<void>>;
+  // Idempotent: a missing consumer of the worker is a success.
+  remove(workerId: WorkerId): Promise<Result<void>>;
 }

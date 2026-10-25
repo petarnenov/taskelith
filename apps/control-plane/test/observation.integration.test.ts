@@ -70,6 +70,7 @@ const binding = {
 const TABLES = [
   'workflow_runs', 'gates', 'admissions', 'tasks', 'assignments', 'outbox', 'inbox', 'task_lineage', 'capacity_charges', 'delegations',
   'capacity_quotas', 'workers', 'installation', 'enrollment_tokens', 'delegation_requests', 'current_revisions', 'producer_cursors',
+  'inventory_requests', 'inventory_report_parts',
 ];
 const CORRELATION = 'correlation-1' as CorrelationId;
 const WORKER = 'worker-a';
@@ -86,7 +87,10 @@ let observed = 0;
 let confirmationIds = 0;
 
 function observationService(store: ControlPlaneStore, logger?: Logger): ObservationService {
-  return new ObservationService(store, { newConfirmationId: () => `confirmation-${++confirmationIds}`, ...(logger === undefined ? {} : { logger }) });
+  return new ObservationService(store, {
+    newConfirmationId: () => `confirmation-${++confirmationIds}`, newRequestId: () => `request-${++confirmationIds}`,
+    ...(logger === undefined ? {} : { logger }),
+  });
 }
 
 beforeEach(async () => {
@@ -305,10 +309,11 @@ describe('consumption', () => {
     assert.deepEqual(await sql('SELECT * FROM inbox'), []);
   });
 
-  test('an observation of a journal other than the enrolled one is not applied and not recorded', async () => {
+  test('an observation of a journal seen before, other than the enrolled one, is not applied and not recorded', async () => {
     await enroll();
+    await sql("INSERT INTO producer_cursors (worker_id, journal_id, confirmed_through, applied_above) VALUES ($1, 'journal-x', 0, '{}')", [WORKER]);
     assert.equal(failed(await observe('worker.admission-pressure.changed', { sequence: 1, journalId: 'journal-x' }, { causes: [] })).details.reason, 'not-consumed');
-    assert.deepEqual([(await worker()).reachable, await cursor()], [false, undefined]);
+    assert.deepEqual([(await worker()).reachable, await cursor()], [false, { confirmed_through: '0', applied_above: [] }]);
     assert.equal(failed(await observe('worker.admission-pressure.changed', { sequence: 1, workerId: 'worker-x' }, { causes: [] })).details.reason, 'not-consumed');
   });
 
@@ -322,11 +327,12 @@ describe('consumption', () => {
     assert.equal(inventory.details.reason, 'not-consumed');
   });
 
-  test('a new identity at an applied sequence is a rollback, left to item 21c', async () => {
+  test('a new identity at an applied sequence is a rollback, which retires the journal', async () => {
     await enroll();
     value(await pressure(1, []));
     assert.equal(failed(await pressure(1, ['disk-floor'])).details.reason, 'not-consumed');
-    assert.deepEqual([(await worker()).admission_pressure_since, await confirmations()], [null, [1]]);
+    assert.deepEqual([(await worker()).admission_pressure_since, (await worker()).reachable, await confirmations()], [null, false, [1]]);
+    assert.equal((await sql<{ retired: boolean }>('SELECT retired_at IS NOT NULL AS retired FROM producer_cursors'))[0]?.retired, true);
   });
 
   test('a store failure while an exit is applied commits nothing, so the message is delivered again', async () => {

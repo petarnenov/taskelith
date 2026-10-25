@@ -92,6 +92,23 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
     },
   },
   {
+    name: 'the recently revoked workers come latest first by revocation, up to the limit',
+    async check(registry) {
+      const problems: string[] = [];
+      // w1's broker JWT postdates its revocation, which the order ignores.
+      const issuedLast = { ...generation(1, 'w1'), brokerIssuedAt: at('2026-10-25T09:20:00.000Z') };
+      must(await registry.addToken(fleetToken('t-w1')));
+      must(await registry.enroll('t-w1' as SecretHash, fleetWorker('w1', 'j1', { credentials: { current: issuedLast } })));
+      for (const n of [2, 3, 4]) await enrolled(registry, `w${n}`, `j${n}`);
+      must(await registry.revoke('w2' as WorkerId, AT));
+      must(await registry.revoke('w3' as WorkerId, LATER));
+      must(await registry.revoke('w1' as WorkerId, AT));
+      const recent = must(await registry.recentlyRevokedWorkerIds(2));
+      if (recent.join(',') !== 'w3,w1') problems.push(`recently revoked workers are ${recent.join(',')}, expected w3,w1`);
+      return problems;
+    },
+  },
+  {
     name: 'an expired token enrolls nothing at the moment of use',
     async check(registry) {
       const problems: string[] = [];
@@ -116,6 +133,25 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
         registry.enroll('t3' as SecretHash, fleetWorker('w4', 'j4')),
       ]);
       expectSame(problems, 'race winners', race.filter((result) => result.ok).length, 1);
+      return problems;
+    },
+  },
+  {
+    name: 'a journal is replaced only from the enrolled one, by one no worker holds',
+    async check(registry) {
+      const problems: string[] = [];
+      for (const [workerId, journalId] of [['w1', 'j1'], ['w2', 'j2'], ['w3', 'j3']] as const) await enrolled(registry, workerId, journalId);
+      const [w1, w2, w3] = ['w1', 'w2', 'w3'].map((text) => fleetWorker(text, 'j0').workerId);
+      const journal = (text: string) => fleetWorker('w0', text).journalId;
+      expectSuccess(problems, 'replace', await registry.replaceJournal(w1!, journal('j1'), journal('j1b')));
+      expectRead(problems, 'replaced', await registry.worker(w1!), fleetWorker('w1', 'j1b'));
+      expectCode(problems, 'stale previous', await registry.replaceJournal(w1!, journal('j1'), journal('j1c')), 'conflict');
+      expectCode(problems, 'held by another', await registry.replaceJournal(w1!, journal('j1b'), journal('j2')), 'conflict');
+      expectRead(problems, 'other kept', await registry.worker(w2!), fleetWorker('w2', 'j2'));
+      must(await registry.revoke(w3!, AT));
+      expectCode(problems, 'revoked', await registry.replaceJournal(w3!, journal('j3'), journal('j3b')), 'forbidden');
+      expectCode(problems, 'unknown', await registry.replaceJournal(fleetWorker('w9', 'j0').workerId, journal('j9'), journal('j9b')), 'not-found');
+      expectRead(problems, 'first kept', await registry.worker(w1!), fleetWorker('w1', 'j1b'));
       return problems;
     },
   },

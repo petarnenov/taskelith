@@ -111,7 +111,9 @@ async function run(admin: Administration, command: Command, environment: Environ
         ? rotated
         : { ...rotated, retry: 'run expire-grace-windows to publish the pending revocation' });
     case 'revoke-worker':
-      return mapped(await admin.revokeWorker(operator, command.worker!), () => ({ revoked: command.worker }));
+      return mapped(await admin.revokeWorker(operator, command.worker!), (revocation) => revocation.commandConsumerRemoved
+        ? { revoked: command.worker }
+        : { revoked: command.worker, commandConsumerRemoved: false, retry: 'a control-plane start retries the removal while the worker is among the latest revoked' });
     default:
       return mapped(await admin.expireGraceWindows(operator), (expired) => ({ expired }));
   }

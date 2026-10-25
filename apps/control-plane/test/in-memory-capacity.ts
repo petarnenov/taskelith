@@ -1,9 +1,17 @@
-import { InMemoryInbox, InMemoryProducerCursors, type InMemoryTaskRepository } from '@taskelith/execution';
+import {
+  InMemoryInbox,
+  InMemoryInventoryReports,
+  InMemoryInventoryRequests,
+  InMemoryProducerCursors,
+  type InMemoryTaskRepository,
+} from '@taskelith/execution';
+import { InMemoryOutbox } from '@taskelith/sdlc';
 import {
   InMemoryAssignmentRepository,
   InMemoryCapacityLedger,
   InMemoryDelegationRequests,
   InMemoryInstallationGuard,
+  InMemoryOutboxLookup,
   InMemoryPlacementQueue,
   InMemoryPlacementWorkers,
   InMemoryQuotaSettings,
@@ -12,9 +20,11 @@ import {
   type WorkerPlacementRecord,
 } from '@taskelith/scheduling';
 
-// The capacity and observation members of an in-memory transaction, over
-// its own task and lineage stores, with the given workers.
-export function inMemoryCapacity(tasks: InMemoryTaskRepository, lineage: InMemoryTaskLineage, records: readonly WorkerPlacementRecord[] = []) {
+// The capacity, observation, and inventory members of an in-memory
+// transaction, over its own task, lineage, and outbox stores.
+export function inMemoryCapacity(
+  tasks: InMemoryTaskRepository, lineage: InMemoryTaskLineage, records: readonly WorkerPlacementRecord[] = [], outbox = new InMemoryOutbox(),
+) {
   const assignments = new InMemoryAssignmentRepository();
   const workers = new InMemoryPlacementWorkers(records, () => assignments.all());
   return {
@@ -28,5 +38,9 @@ export function inMemoryCapacity(tasks: InMemoryTaskRepository, lineage: InMemor
     inbox: new InMemoryInbox(),
     cursors: new InMemoryProducerCursors(),
     reports: new InMemoryWorkerReports(workers),
+    outbox,
+    outboxLookup: new InMemoryOutboxLookup(() => outbox.messages),
+    inventoryRequests: new InMemoryInventoryRequests(),
+    inventoryReports: new InMemoryInventoryReports(),
   };
 }

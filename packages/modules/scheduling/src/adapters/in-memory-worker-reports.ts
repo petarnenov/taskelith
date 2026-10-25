@@ -35,6 +35,16 @@ export class InMemoryWorkerReports implements WorkerReports {
     });
   }
 
+  async recordJournalLoss(workerId: WorkerId): Promise<Result<void>> {
+    return this.#change(workerId, (worker) => ({ ...worker, reachable: false }));
+  }
+
+  async restartFences(workerId: WorkerId): Promise<Result<void>> {
+    if (this.#workers.current(workerId) === undefined) return err(failure('not-found', `worker ${workerId} has no record`, { worker: workerId }));
+    this.#sequences.delete(workerId);
+    return ok(undefined);
+  }
+
   async declareCapacity(workerId: WorkerId, declaration: CapacityDeclaration, sequence: Sequence): Promise<Result<void>> {
     return this.#change(workerId, (worker) => ({ ...worker, ...declaration, controls: Object.freeze([...declaration.controls]) }), {
       fence: 'capacity', sequence,
