@@ -1,6 +1,7 @@
 import { ok, type Result } from '@taskelith/kernel';
 import type { ArtifactRevision } from '../domain/artifact-revision.js';
 import type { Generation } from '../domain/generation.js';
+import type { OwnershipGeneration } from '../domain/ownership-generation.js';
 import {
   admitImplementationTask,
   admitPlanningTask,
@@ -45,8 +46,12 @@ export class TaskAdmissionService {
     return this.#add(admitPlanningTask(request, context, artifacts, this.#clock.now()));
   }
 
-  async useAdmission(id: AdmissionId, expectedGeneration: Generation): Promise<Result<TaskAdmission>> {
-    return this.#change(id, (admission) => useAdmission(admission, expectedGeneration, this.#clock.now()));
+  async useAdmission(
+    id: AdmissionId,
+    expectedGeneration: Generation,
+    ownershipGeneration?: OwnershipGeneration,
+  ): Promise<Result<TaskAdmission>> {
+    return this.#change(id, (admission) => useAdmission(admission, expectedGeneration, this.#clock.now(), ownershipGeneration));
   }
 
   // Invalidates what the revision outdates before storing it, so a failed

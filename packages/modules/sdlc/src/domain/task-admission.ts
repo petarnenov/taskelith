@@ -3,6 +3,7 @@ import type { ArtifactId, ArtifactRevision } from './artifact-revision.js';
 import { fieldFailure } from './field-failure.js';
 import type { Gate } from './gate.js';
 import { FIRST_GENERATION, checkGeneration, nextGeneration, type Generation } from './generation.js';
+import type { OwnershipGeneration } from './ownership-generation.js';
 import { hasStagePassed, type WorkflowProgress } from './stage-progress.js';
 import type { WorkItem, WorkItemId } from './work-item.js';
 import type { Stage, StageId, WorkflowId, WorkflowVersion } from './workflow-definition.js';
@@ -29,8 +30,8 @@ export const ADMISSION_TRANSITIONS: Readonly<Record<AdmissionState, readonly Adm
   invalidated: Object.freeze([] as const),
 });
 
-// Lets one task of a run be dispatched, bound to stage, work item, inputs, and
-// policy revision; the execution module (G2) adds the ownership generation.
+// Lets one task of a run be dispatched, bound to stage, work item, inputs,
+// policy revision, and the ownership generation its dispatch starts.
 export interface TaskAdmission {
   readonly id: AdmissionId;
   readonly taskId: TaskId;
@@ -46,6 +47,7 @@ export interface TaskAdmission {
   readonly generation: Generation;
   readonly changedAt: Instant;
   readonly invalidatedBy?: ArtifactRevision;
+  readonly ownershipGeneration?: OwnershipGeneration;
 }
 
 export interface TaskAdmissionRequest {
@@ -108,10 +110,18 @@ export function admitPlanningTask(
   return ok(newAdmission(target.value, request.workItem, artifacts, context.binding, at));
 }
 
-export function useAdmission(admission: TaskAdmission, expectedGeneration: Generation, at: Instant): Result<TaskAdmission> {
+// Dispatches the task; a dispatch fenced by an ownership generation binds it,
+// and the task's ownership then starts at exactly that generation.
+export function useAdmission(
+  admission: TaskAdmission,
+  expectedGeneration: Generation,
+  at: Instant,
+  ownershipGeneration?: OwnershipGeneration,
+): Result<TaskAdmission> {
   const allowed = checkTransition(admission, expectedGeneration, 'used');
   if (!allowed.ok) return allowed;
-  return ok(changedAdmission(admission, { state: 'used' }, at));
+  const ownership = ownershipGeneration === undefined ? {} : { ownershipGeneration };
+  return ok(changedAdmission(admission, { state: 'used', ...ownership }, at));
 }
 
 // A revision outdates an admission when it is a different revision of an
@@ -253,7 +263,8 @@ function admissionFailure(id: AdmissionId, message: string, details: Readonly<Re
   return err(failure('precondition-failed', `admission ${id} ${message}`, { admission: id, ...details }));
 }
 
-type AdmissionChange = Partial<Pick<TaskAdmission, 'createdRevisions' | 'invalidatedBy'>> & Pick<TaskAdmission, 'state'>;
+type AdmissionChange = Partial<Pick<TaskAdmission, 'createdRevisions' | 'invalidatedBy' | 'ownershipGeneration'>>
+  & Pick<TaskAdmission, 'state'>;
 
 function changedAdmission(admission: TaskAdmission, change: AdmissionChange, at: Instant): TaskAdmission {
   return Object.freeze({ ...admission, ...change, generation: nextGeneration(admission.generation), changedAt: at });

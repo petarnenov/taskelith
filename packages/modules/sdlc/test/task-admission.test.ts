@@ -13,6 +13,7 @@ import {
   openGate,
   parseArtifactRevision,
   parseGeneration,
+  parseOwnershipGeneration,
   parseSemanticApproval,
   parseWorkItem,
   parseWorkflowDefinition,
@@ -333,4 +334,22 @@ test('an outdated generation is rejected before any other rule', () => {
 
 test('admission rules are deterministic', () => {
   assert.deepEqual(implementationAdmission(), implementationAdmission());
+});
+
+test('a dispatch fenced by an ownership generation binds it, and later changes keep it', () => {
+  const ownership = parseOwnershipGeneration(3);
+  assert.ok(ownership.ok);
+  const planning = planningAdmission();
+  const dispatched = useAdmission(planning, planning.generation, LATER, ownership.value);
+  assert.ok(dispatched.ok);
+  assert.equal(dispatched.value.ownershipGeneration, 3);
+  const recorded = recordCreatedRevision(dispatched.value, dispatched.value.generation, SPEC, LATER);
+  assert.ok(recorded.ok);
+  assert.equal(recorded.value.ownershipGeneration, 3);
+  assert.equal(used(implementationAdmission()).ownershipGeneration, undefined);
+  assert.equal(implementationAdmission().ownershipGeneration, undefined);
+});
+
+test('an ownership generation is a positive integer', () => {
+  for (const invalid of [0, -1, 1.5, Number.NaN]) assertRejected(parseOwnershipGeneration(invalid), 'invalid');
 });
