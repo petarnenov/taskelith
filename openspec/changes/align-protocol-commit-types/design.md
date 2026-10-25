@@ -1,6 +1,6 @@
 ## Context
 
-`release.config.js` uses `@semantic-release/commit-analyzer` 13.0.1 with the `conventionalcommits` preset and no `releaseRules`, so the analyzer's default rules apply: a breaking change is major, `feat` is minor, and `fix`, `perf`, and a revert are patch. Before applying them, `index.js` calls `filterRevertedCommitsSync`, which drops a revert and the commit it reverts when both are in the analyzed range.
+`release.config.js` uses `@semantic-release/commit-analyzer` 13.0.1 with the `conventionalcommits` preset and no `releaseRules`, so the analyzer's default rules apply: a breaking change is major, `feat` is minor, and `fix`, `perf`, and a revert are patch. Before applying them, `index.js` calls `filterRevertedCommitsSync`, which drops a revert and the commit it reverts when both are in the analyzed range and the header and hash the revert names match that commit's exactly (`conventional-commits-filter`).
 
 ## Goals / Non-Goals
 

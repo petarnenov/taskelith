@@ -53,7 +53,7 @@ Because the `verify` check must run on a branch that is up to date with `main`, 
 | `feat!: replace CLI invocation` or a `BREAKING CHANGE:` footer | Major |
 | `docs:`, `test:`, `chore:`, `build:`, `ci:` without breaking changes | No release |
 
-Before these rules apply, the analyzer drops a revert together with the commit it reverts when both are in the analyzed range, so such a pair releases nothing. The largest increment since the last release wins. These rules also apply before 1.0; a breaking change advances the major version. One promotion may bundle several changes; their commits are analyzed together, and the largest increment among them wins. Promotions use a merge commit or a rebase, never a squash, so that semantic-release sees each Conventional Commit and its breaking-change footer.
+Before these rules apply, the analyzer drops a revert together with the commit it reverts when both are in the analyzed range and the revert names that commit's exact header and full hash, as `git revert` writes them; such a pair releases nothing, and any other revert counts as a patch. The largest increment since the last release wins. These rules also apply before 1.0; a breaking change advances the major version. One promotion may bundle several changes; their commits are analyzed together, and the largest increment among them wins. Promotions use a merge commit or a rebase, never a squash, so that semantic-release sees each Conventional Commit and its breaking-change footer.
 
 ## Version source of truth
 
