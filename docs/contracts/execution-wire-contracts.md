@@ -16,7 +16,7 @@ Both live in `@taskelith/contracts` beside the SDLC documents. The package gener
 By decision D3 (a), each worker has its own command subject, read through its own durable pull consumer, and its own observation subject; by D12 (a), launch authorization is the HTTPS operation `authorizeLaunch`, and commands and observations stay on NATS.
 
 - **Subjects:** `taskelith.<installationId>.workers.<workerId>.commands` and `taskelith.<installationId>.workers.<workerId>.observations`. The per-worker broker credentials of D9 (a) let a worker read only its own command subject and publish only on its own observation subject ([trust model](../trust-model.md)). The subject names are the author's proposal; item 2 confirms the topology, and item 12 owns the streams and consumers.
-- **Deduplication:** every command, observation, and inventory part is published with the `Nats-Msg-Id` header set to its `commandId`, its `observationId`, or its `reportId` followed by `.` and its `part`. A confirmation has no identity and no header: it is cumulative, so a duplicate changes nothing. The broker window is an optimization; receivers deduplicate by these identities for their whole lifetime (architecture section 9).
+- **Deduplication:** every command, observation, and inventory part is first published with the `Nats-Msg-Id` header set to its `commandId`, its `observationId`, or its `reportId` followed by `.` and its `part`. A redrive from quarantine needs a new header value inside the broker's window ([JetStream spike](../g2-jetstream-spike.md#consequences-for-later-items)), so the header is only a broker hint: the message's identity is the field in its body, which never changes. A confirmation has no identity and no header: it is cumulative, so a duplicate changes nothing. The broker window is an optimization; receivers deduplicate by the body identities for their whole lifetime (architecture section 9). The broker's stream sequence is not the producer sequence: a repeat after the window or a redrive gets a new one, so no rule depends on it.
 - **Size:** a message's JSON encoding is at most `1 MiB`, the broker's maximum payload ([operational targets](../operational-targets.md)). The array bounds keep every message below it; a test checks the largest one, an inventory part with every identifier at its maximum length.
 - **Malformed messages:** a message that fails its schema is not acted on and goes to quarantine with diagnostics (item 12); it is not rejected by an observation, because none of its fields can be trusted.
 
@@ -96,7 +96,7 @@ The operator credential is the installation bootstrap credential of decision D10
 
 ## 8. Obligations on other items
 
-- **Item 12:** the streams, consumers, and quarantine for the subjects of section 2, and the `Nats-Msg-Id` header.
+- **Item 12:** the streams, consumers, and quarantine for the subjects of section 2, the `Nats-Msg-Id` header and its new value on a redrive, a per-worker inbox prefix, and a publication the client reports as failed treated as unconfirmed and retried with the same identity.
 - **Item 13:** the credential content, the subject permissions of section 2, and the protocol window check at enrollment.
 - **Items 16, 17, and 19:** the HTTP operations of section 7, with runtime validation against these schemas; the harness side of delegation is G3's.
 - **Item 18:** placement only on a worker with a common protocol version, release on `protocol-not-supported`, and the delegation checks of capacity reservation section 7.
