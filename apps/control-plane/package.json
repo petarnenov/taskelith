@@ -32,6 +32,7 @@
     "@nats-io/nkeys": "2.0.3",
     "@nats-io/transport-node": "3.4.0",
     "@taskelith/testing": "0.0.0",
+    "@taskelith/worker": "0.0.0",
     "@types/pg": "8.23.1",
     "pg": "8.23.1"
   }

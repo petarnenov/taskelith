@@ -1,3 +1,16 @@
 {
-  "extends": "../../tsconfig.package.json"
+  "extends": "../../tsconfig.package.json",
+  "references": [
+    { "path": "../../packages/adapters/data-root" },
+    { "path": "../../packages/adapters/nats" },
+    { "path": "../../packages/adapters/node-observability" },
+    { "path": "../../packages/adapters/secrets" },
+    { "path": "../../packages/adapters/worker-control-plane-client" },
+    { "path": "../../packages/adapters/worker-journal" },
+    { "path": "../../packages/contracts" },
+    { "path": "../../packages/kernel" },
+    { "path": "../../packages/modules/execution" },
+    { "path": "../../packages/modules/fleet" },
+    { "path": "../../packages/testing" }
+  ]
 }

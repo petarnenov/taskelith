@@ -1,3 +1,5 @@
+import type { ResourceRequest } from './capacity-reservation.js';
+
 // The provisional defaults of docs/operational-targets.md section 1 that the
 // scheduler enforces; quotas are installation settings with these defaults.
 export const DEFAULT_PROJECT_QUOTA = 4;
@@ -24,3 +26,11 @@ export const PLACEMENT_RETRY_ATTEMPTS = 5;
 // Backoff for placement retries and capacity waits (contract section 5).
 export const PLACEMENT_BACKOFF_INITIAL_MILLISECONDS = 5_000;
 export const PLACEMENT_BACKOFF_MAX_MILLISECONDS = 60_000;
+
+// What placement reserves for an attempt: there are no provider credentials
+// in G2, so no hard control is required (contract section 2).
+export const DEFAULT_ATTEMPT_REQUEST: ResourceRequest = Object.freeze({
+  cpuMillicores: 1_000,
+  memoryMebibytes: 2_048,
+  hardControls: Object.freeze([]),
+});

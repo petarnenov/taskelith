@@ -16,6 +16,7 @@
     { "path": "../../packages/adapters/evidence-volume" },
     { "path": "../../packages/adapters/nats" },
     { "path": "../../packages/adapters/postgres" },
-    { "path": "../../packages/adapters/secrets" }
+    { "path": "../../packages/adapters/secrets" },
+    { "path": "../worker" }
   ]
 }

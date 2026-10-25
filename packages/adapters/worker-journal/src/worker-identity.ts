@@ -4,18 +4,32 @@ import type { InstallationId, JournalId, WorkerId } from '@taskelith/execution';
 import { syncBeforeUse } from '@taskelith/data-root';
 import { rootFailure } from './journal-failure.js';
 
-// `worker/identity` without the credential references, which item 13 adds.
+// Where the current generation's credentials are, relative to `worker/`.
+export interface CredentialReferences {
+  readonly controlPlane: string;
+  readonly broker: string;
+}
+
+// `worker/identity`: the binding, and the credential generation with the
+// references to its files (installation and enrollment contract, item 20).
 export interface WorkerIdentity {
   readonly installationId: InstallationId;
   readonly workerId: WorkerId;
   readonly journalId: JournalId;
+  readonly credentialGeneration: number;
+  readonly credentials: CredentialReferences;
 }
 
 export const IDENTITY_FORMAT = 1;
 
+// A reference names one file directly under `worker/credentials/`.
+const CREDENTIAL_REFERENCE = /^credentials\/[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/;
+
 export function serializeIdentity(identity: WorkerIdentity): string {
-  const { installationId, workerId, journalId } = identity;
-  return `${JSON.stringify({ format: IDENTITY_FORMAT, installationId, workerId, journalId })}\n`;
+  const { installationId, workerId, journalId, credentialGeneration, credentials } = identity;
+  const { controlPlane, broker } = credentials;
+  const stored = { format: IDENTITY_FORMAT, installationId, workerId, journalId, credentialGeneration, credentials: { controlPlane, broker } };
+  return `${JSON.stringify(stored)}\n`;
 }
 
 // No identity means the worker is not enrolled (contract section 8).
@@ -35,8 +49,26 @@ export function readIdentity(path: string): Result<WorkerIdentity> {
   const installationId = parseIdentifier('InstallationId', String(stored.installationId));
   const workerId = parseIdentifier('WorkerId', String(stored.workerId));
   const journalId = parseIdentifier('JournalId', String(stored.journalId));
-  if (!installationId.ok || !workerId.ok || !journalId.ok) {
-    return err(rootFailure('corrupt', `the worker identity ${path} has invalid identifiers`, { path }));
+  const credentials = credentialReferences(stored.credentials);
+  const { credentialGeneration } = stored;
+  if (!installationId.ok || !workerId.ok || !journalId.ok || credentials === undefined || !isGeneration(credentialGeneration)) {
+    return err(rootFailure('corrupt', `the worker identity ${path} has invalid values`, { path }));
   }
-  return ok(Object.freeze({ installationId: installationId.value, workerId: workerId.value, journalId: journalId.value }));
+  return ok(Object.freeze({
+    installationId: installationId.value, workerId: workerId.value, journalId: journalId.value, credentialGeneration, credentials,
+  }));
+}
+
+function credentialReferences(stored: unknown): CredentialReferences | undefined {
+  const { controlPlane, broker } = (stored ?? {}) as Record<string, unknown>;
+  if (!isReference(controlPlane) || !isReference(broker)) return undefined;
+  return Object.freeze({ controlPlane, broker });
+}
+
+function isReference(value: unknown): value is string {
+  return typeof value === 'string' && CREDENTIAL_REFERENCE.test(value);
+}
+
+function isGeneration(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1;
 }

@@ -67,6 +67,7 @@ Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-
   It has no other JetStream API, so a worker connects with `connectWorkerTransport`, and only the control plane manages streams. The broker URL and CA are configured on the worker.
 - **Generations.** Both credentials share one generation number.
   - `rotate-worker` issues the next generation. The previous one stays valid for the grace window.
+  - In G2 nothing delivers a rotated generation to the worker, and the worker cannot adopt one: a worker keeps the generation it enrolled with, and loses access when that generation's grace window ends. Section 10 refuses a new enrollment on an existing root, so the only recovery is a new worker: a new token, a new root and a new `workers` row. The old identity is revoked, and its unfinished attempts are reconciled before its journal is removed. Delivery and adoption belong to [G3 item 26](../g3-plan.md#work-items) (decided on 2026-10-25).
   - `expire-grace-windows`, which the control plane runs periodically, drops the previous generation after the window and records its broker user for revocation. A further rotation drops an older predecessor at once in the same way.
   - A revoked worker gets no new generation: the rotation fails inside the transaction that would store it.
   - Authentication takes the bearer alone and returns the worker and the generation it belongs to, found by the hash of the secret (change `add-worker-bearer-authentication`). An unknown, revoked, or expired one is `forbidden` with reason `worker-not-authorized`. The check is point in time: an operation that writes re-reads the worker in its own transaction.
@@ -93,8 +94,19 @@ Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-
 ## 9. Left to other items
 
 - **Item 16:** the HTTP operations (`enrollWorker` and the operator credential check); worker bearer authentication is the change `add-worker-bearer-authentication`, split from item 17; the wiring of `InstallationGuard` into the outbox publisher, which stops command publication under restore quarantine; the periodic `expire-grace-windows`.
-- **Item 20:** the worker's storage of its credentials under `worker/` with the identity's credential generation, and the use of `connectWorkerTransport` with them.
+- **Item 20:** the worker's storage of its credentials under `worker/` with the identity's credential generation, and the use of `connectWorkerTransport` with them. Change `implement-worker-runtime-bootstrap` implements both (section 10).
 - **Item 21:** the uncertain ownership of a revoked worker's attempts.
 - **Item 23:** the `make` targets that run the administrative entry and deploy `nats-authority.conf`.
 - **G3 item 26:** the installation CA and TLS for every endpoint.
 - **G6:** restore quarantine and the epoch increment, and the verification of the provisional values.
+
+## 10. Worker side
+
+Change `implement-worker-runtime-bootstrap` (G2 item 20a) implements the worker's part in `apps/worker`, `@taskelith/worker-journal`, and `@taskelith/worker-control-plane-client`. The coordinator's decisions Q2, Q3, and Q5 of 2026-10-25 set it.
+
+- **First start.** A worker whose root holds no identity enrolls only when its configuration names a token in `TASKELITH_ENROLLMENT_TOKEN`; otherwise it fails with reason `not-enrolled` and creates nothing. A later start never redeems the token. The published `taskelith` CLI has no enrollment command.
+- **Order.** The worker first claims the root: every local check of the data root and its volume, the creation of an empty `worker/`, and the root lock. An existing `worker/` fails with `conflict`, so a token is never spent on a root that cannot be created. Then it draws a new 128-bit `journalId` and calls `enrollWorker`. Only then does it create the journal, the credential files, and `worker/identity`. A refused or failed call, or a failure after it, removes `worker/`; a data root directory the claim created stays, empty.
+- **Spent token.** An `unavailable` answer may come after the control plane used the token, and a crash or a local failure between the answer and `worker/identity` leaves the enrolled row without a root. A retry with the token then fails with `token-invalid`. The operator issues a new token and revokes the row, which never connects. A crash can also leave a `worker/` without an identity; every later start then fails with `conflict`, and the operator removes that `worker/` before enrolling again.
+- **Files.** `worker/credentials/` has mode `0700`. It holds `control-plane.<generation>` and `broker.<generation>.creds`, each of mode `0600` and created once by the durable file rule of the [worker journal](worker-journal.md) section 4. `worker/identity` records `credentialGeneration` and the references `credentials.controlPlane` and `credentials.broker`, relative to `worker/`. A reference outside `worker/credentials/`, a missing or empty file, or an unsafe path fails startup.
+- **Broker.** The worker connects with `connectWorkerTransport`, the stored `.creds` text, the configured broker URL and CA, and its own inbox prefix. It opens no listening socket.
+- **Not yet.** Storing a rotated generation on the worker belongs to G3 item 26 (section 6). The use of the control-plane secret for launch authorization comes in item 20c.

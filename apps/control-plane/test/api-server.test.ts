@@ -1,7 +1,18 @@
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { after, before, test } from 'node:test';
-import { ControlPlaneApi, ROUTES, StatusAnswer, createApiServer, type ApiHandlers, type ApiRequest, type RouteDefinition, type Upload } from '@taskelith/control-plane';
+import {
+  ControlPlaneApi,
+  DelegationService,
+  ROUTES,
+  StatusAnswer,
+  createApiServer,
+  type ApiHandlers,
+  type ApiRequest,
+  type ControlPlaneStore,
+  type RouteDefinition,
+  type Upload,
+} from '@taskelith/control-plane';
 import { checkHttpSchema } from '@taskelith/contracts';
 import { parseLaunchParameters, type LaunchGrant, type LaunchOutcome } from '@taskelith/execution';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
@@ -91,7 +102,7 @@ test('a correlation that carries a secret is replaced, so no log line holds it',
 test('a redrive sequence that is not a positive safe integer is 400 before the broker', async () => {
   let redriven = 0;
   const api = new ControlPlaneApi({
-    runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: { authenticate: async () => ok(undefined) },
+    runs: undefined as never, tasks: undefined as never, evidence: undefined as never, delegations: undefined as never, operator: { authenticate: async () => ok(undefined) },
     enrollment: undefined as never, launches: undefined as never,
     quarantine: { records: async () => ok([]), redrive: async () => (redriven++, ok(null)) },
   });
@@ -172,7 +183,7 @@ test('an operator route carries no worker principal', async () => {
 test('the API authenticates a worker bearer through enrollment', async () => {
   const principal = { workerId: 'worker-1' as never, generation: 1 };
   const api = new ControlPlaneApi({
-    runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, quarantine: undefined as never,
+    runs: undefined as never, tasks: undefined as never, evidence: undefined as never, delegations: undefined as never, operator: undefined as never, quarantine: undefined as never,
     launches: undefined as never,
     enrollment: { enroll: undefined as never, authenticateWorkerBearer: async (secret) => (secret === 'tkwk_x' ? ok(principal) : err(failure('forbidden', 'no'))) },
   });
@@ -304,7 +315,7 @@ test('authorizeLaunch maps every outcome to its contract shape, and needs a work
   let next = 0;
   const api = new ControlPlaneApi({
     runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, enrollment: undefined as never,
-    quarantine: undefined as never,
+    quarantine: undefined as never, delegations: undefined as never,
     launches: { authorize: async () => ok(outcomes[next++]!) },
   });
   const body = {
@@ -338,4 +349,29 @@ test('an undecided launch operation is 503, never 500', async () => {
     method: 'POST', headers: { authorization: `Bearer tkwk_${'F'.repeat(43)}`, 'content-type': 'application/json' }, body: JSON.stringify(body),
   });
   assert.equal(response.status, 503);
+});
+
+test('a delegation while the database is down is 503 with a Failure', async () => {
+  const down = { transaction: async () => err(failure('unavailable', 'the database is down')) } as unknown as ControlPlaneStore;
+  const api = new ControlPlaneApi({
+    runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, enrollment: undefined as never,
+    quarantine: undefined as never, launches: undefined as never, delegations: new DelegationService(down),
+  });
+  const delegationServer = createApiServer({
+    ...handlers,
+    authenticateWorker: async () => ok({ workerId: 'worker-1' as never, generation: 1 }),
+    handle: (operationId, request, bearer) => api.handle(operationId, request, bearer),
+  });
+  await new Promise<void>((resolve) => delegationServer.listen(0, '127.0.0.1', () => resolve()));
+  after(() => new Promise<void>((resolve) => delegationServer.close(() => resolve())));
+  const body = {
+    delegationId: 'delegation-1', attemptId: 'attempt-1', ownershipGeneration: 2, runId: 'run-1',
+    child: { taskId: 'task-child', kind: 'planning', stageId: 'specs' },
+  };
+  const response = await fetch(`http://127.0.0.1:${(delegationServer.address() as AddressInfo).port}/delegations`, {
+    method: 'POST', headers: { authorization: `Bearer tkwk_${'F'.repeat(43)}`, 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const answer: unknown = await response.json();
+  assert.equal(response.status, 503);
+  assert.ok(checkHttpSchema('Failure', answer).ok, JSON.stringify(answer));
 });

@@ -1,3 +1,12 @@
-// The worker composition root. It has no behaviour yet: worker code arrives
-// with the G2 items that implement it (docs/g2-plan.md).
-export {};
+export {
+  CONTROL_PLANE_TIMEOUT_MILLISECONDS,
+  DAEMON_MEMORY_MEBIBYTES,
+  DEFAULT_SLOTS,
+  currentHost,
+  readWorkerSettings,
+  type Environment,
+  type HostFacts,
+  type WorkerSettings,
+} from './settings.js';
+export { startWorker, type RunningWorker, type WorkerDependencies } from './worker-start.js';
+export { productionDependencies, serveUntilStopped, workerMain, type ServiceProcess } from './main.js';

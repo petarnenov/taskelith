@@ -14,7 +14,7 @@ import {
   type WorkerRoot,
 } from '@taskelith/worker-journal';
 import { failed, id, value } from '@taskelith/testing';
-import { BINDING, CLOCK, T0, assignment, digest, grantFor, intent, launchRequest, rootOptions, temporaryDataRoot } from './fixtures.ts';
+import { BINDING, ENROLLMENT, CLOCK, T0, assignment, digest, grantFor, intent, launchRequest, rootOptions, temporaryDataRoot } from './fixtures.ts';
 
 let root: WorkerRoot;
 let journal: WorkerJournal;
@@ -26,7 +26,7 @@ const OPERATION = id('OperationId', 'operation-1');
 beforeEach(() => {
   const temporary = temporaryDataRoot();
   remove = temporary.remove;
-  root = value(enrollWorkerRoot(rootOptions(temporary.dataRoot), BINDING));
+  root = value(enrollWorkerRoot(rootOptions(temporary.dataRoot), ENROLLMENT));
   journal = root.journal;
 });
 

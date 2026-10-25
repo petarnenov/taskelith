@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { basename, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { runner } from 'node-pg-migrate';
+import { getMigrationFilePaths } from 'node-pg-migrate/migration';
 import pg from 'pg';
 
 export const MIGRATIONS_DIRECTORY = fileURLToPath(new URL('../migrations', import.meta.url));
@@ -39,10 +40,14 @@ export async function migrate(url: URL, directory: string = MIGRATIONS_DIRECTORY
     if (changed.length > 0) {
       return err(failure('precondition-failed', `applied migrations differ from their files: ${changed.join(', ')}`, { migrations: changed.join(',') }));
     }
+    const misordered = await firstMisorderedFile(client, directory);
+    if (misordered !== undefined) {
+      return err(failure('precondition-failed', `pending migration ${misordered} precedes an applied one`, { migrations: misordered }));
+    }
     await recordPendingChecksums(client, files);
     const applied = await runner({
       dbClient: client, dir: directory, migrationsTable: MIGRATIONS_TABLE, direction: 'up',
-      checkOrder: true, singleTransaction: false, noLock: true, log: () => {},
+      checkOrder: false, singleTransaction: false, noLock: true, log: () => {},
     });
     return ok(applied.map((migration) => migration.name));
   } catch (error) {
@@ -78,6 +83,23 @@ async function changedAppliedFiles(client: pg.Client, files: readonly MigrationF
   return applied.rows
     .filter((row) => row.sha256 === null || row.sha256 !== byName.get(row.name))
     .map((row) => row.name);
+}
+
+// node-pg-migrate orders applied files by their run time, which a server
+// clock stepping back breaks; its own file order is independent of it.
+async function firstMisorderedFile(client: pg.Client, directory: string): Promise<string | undefined> {
+  const applied = new Set(await appliedNames(client));
+  const names = (await getMigrationFilePaths(directory)).map((path) => basename(path, extname(path)));
+  const firstPending = names.findIndex((name) => !applied.has(name));
+  if (firstPending === -1) return undefined;
+  return names.slice(firstPending).some((name) => applied.has(name)) ? names[firstPending] : undefined;
+}
+
+async function appliedNames(client: pg.Client): Promise<readonly string[]> {
+  const exists = await client.query('SELECT to_regclass($1) AS table', [MIGRATIONS_TABLE]);
+  if (exists.rows[0]?.table === null) return [];
+  const applied = await client.query<{ name: string }>(`SELECT name FROM ${MIGRATIONS_TABLE}`);
+  return applied.rows.map((row) => row.name);
 }
 
 // Records the checksum of every file not yet applied before any of them

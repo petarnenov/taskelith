@@ -22,6 +22,9 @@ export const REJECTING_REASONS = Object.freeze([
   'retry-budget-exhausted',
 ] as const);
 
+// Reasons about one worker: placement tries the next candidate on them.
+export const WORKER_REASONS = Object.freeze(['worker-not-eligible', 'worker-capacity-exhausted', 'control-not-enforceable'] as const);
+
 export type WaitingReason = (typeof WAITING_REASONS)[number];
 export type RejectingReason = (typeof REJECTING_REASONS)[number];
 export type StandingReason = (typeof STANDING_REASONS)[number];
@@ -36,4 +39,8 @@ export function isWaitingReason(reason: CapacityReason): reason is WaitingReason
 export function reasonOutcome(reason: CapacityReason): ReasonOutcome {
   if (isWaitingReason(reason)) return 'waiting';
   return (STANDING_REASONS as readonly string[]).includes(reason) ? 'standing' : 'rejected';
+}
+
+export function triesNextCandidate(reason: CapacityReason): boolean {
+  return (WORKER_REASONS as readonly string[]).includes(reason);
 }

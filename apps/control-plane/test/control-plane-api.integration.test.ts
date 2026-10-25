@@ -17,6 +17,7 @@ import { ok } from '@taskelith/kernel';
 import { InMemoryLogSink } from '@taskelith/observability';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
 import { integrationEndpoint, integrationSecret, value } from '@taskelith/testing';
+import { productionDependencies, workerMain } from '@taskelith/worker';
 
 const POSTGRES = integrationEndpoint('TASKELITH_POSTGRES_URL');
 const NATS = integrationEndpoint('TASKELITH_NATS_URL');
@@ -237,43 +238,44 @@ describe('publication fence', () => {
   });
 });
 
+async function enrolledWorker(journalId: string): Promise<{ bearer: string; workerId: WorkerId }> {
+  const issued = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operator });
+  const enrolled = await call('POST', '/workers/enrollments', { bearer: issued.enrollmentToken as string, body: {
+    journalId, host: { platform: 'linux', architecture: 'x64', hostname: journalId },
+    protocolVersions: { minimum: 1, maximum: 1 }, capacity: { slots: 1, cpuMillicores: 1000, memoryMebibytes: 1024, enforceableControls: [] },
+  } });
+  return { bearer: (enrolled.body.credentials as { controlPlane: string }).controlPlane, workerId: enrolled.body.workerId as WorkerId };
+}
+
+// Enrolled workers are unreachable until item 21b, so the placement loop
+// places nothing and a test places the task itself.
+async function placedWorker(journalId: string, taskId = 'task-1'): Promise<{ bearer: string; workerId: string; attemptId: string; generation: number }> {
+  const { bearer, workerId } = await enrolledWorker(journalId);
+  const attemptId = `attempt-${journalId}` as AttemptId;
+  const store = new PostgresDatabase(database);
+  try {
+    const placed = await store.transaction(async (tx) => {
+      const task = await tx.tasks.get(taskId as TaskId);
+      if (!task.ok) return task;
+      const at = await tx.now();
+      const attempted = openAttempt(task.value, task.value.ownershipGeneration, { id: attemptId }, at);
+      if (!attempted.ok) return attempted;
+      const replaced = await tx.tasks.replace(attempted.value, task.value.generation);
+      if (!replaced.ok) return replaced;
+      const scope = { projectId: 'project-1', runId: 'run-1', taskId, rootTaskId: taskId } as never;
+      const requested = value(parseResourceRequest({ cpuMillicores: 100, memoryMebibytes: 128, hardControls: [] }));
+      const reservation = { id: `reservation-${journalId}` as never, scope, requested, providerCredentials: [] };
+      const generation = attempted.value.ownershipGeneration;
+      const added = await tx.assignments.add(createAssignment({ id: `assignment-${journalId}` as never, attemptId, workerId, ownershipGeneration: generation, reservation }, at));
+      return added.ok ? ok(generation) : added;
+    });
+    return { bearer, workerId, attemptId, generation: value(placed) };
+  } finally {
+    await store.close();
+  }
+}
+
 describe('evidence', () => {
-  async function enrolledWorker(journalId: string): Promise<{ bearer: string; workerId: WorkerId }> {
-    const issued = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operator });
-    const enrolled = await call('POST', '/workers/enrollments', { bearer: issued.enrollmentToken as string, body: {
-      journalId, host: { platform: 'linux', architecture: 'x64', hostname: journalId },
-      protocolVersions: { minimum: 1, maximum: 1 }, capacity: { slots: 1, cpuMillicores: 1000, memoryMebibytes: 1024, enforceableControls: [] },
-    } });
-    return { bearer: (enrolled.body.credentials as { controlPlane: string }).controlPlane, workerId: enrolled.body.workerId as WorkerId };
-  }
-
-  // The placement loop is item 21's, so the test places task-1 itself.
-  async function placedWorker(journalId: string): Promise<{ bearer: string; workerId: string; attemptId: string; generation: number }> {
-    const { bearer, workerId } = await enrolledWorker(journalId);
-    const attemptId = `attempt-${journalId}` as AttemptId;
-    const store = new PostgresDatabase(database);
-    try {
-      const placed = await store.transaction(async (tx) => {
-        const task = await tx.tasks.get('task-1' as TaskId);
-        if (!task.ok) return task;
-        const at = await tx.now();
-        const attempted = openAttempt(task.value, task.value.ownershipGeneration, { id: attemptId }, at);
-        if (!attempted.ok) return attempted;
-        const replaced = await tx.tasks.replace(attempted.value, task.value.generation);
-        if (!replaced.ok) return replaced;
-        const scope = { projectId: 'project-1', runId: 'run-1', taskId: 'task-1', rootTaskId: 'task-1' } as never;
-        const requested = value(parseResourceRequest({ cpuMillicores: 100, memoryMebibytes: 128, hardControls: [] }));
-        const reservation = { id: `reservation-${journalId}` as never, scope, requested, providerCredentials: [] };
-        const generation = attempted.value.ownershipGeneration;
-        const added = await tx.assignments.add(createAssignment({ id: `assignment-${journalId}` as never, attemptId, workerId, ownershipGeneration: generation, reservation }, at));
-        return added.ok ? ok(generation) : added;
-      });
-      return { bearer, workerId, attemptId, generation: value(placed) };
-    } finally {
-      await store.close();
-    }
-  }
-
   async function publish(bearer: string, record: Record<string, unknown>, content: Uint8Array<ArrayBuffer>): Promise<Answer> {
     const form = new FormData();
     form.append('record', new Blob([JSON.stringify(record)], { type: 'application/json' }));
@@ -312,7 +314,54 @@ describe('evidence', () => {
   });
 });
 
+describe('delegation', () => {
+  test('a worker requests a delegation of the attempt it holds, and failures map to their statuses', async () => {
+    const submitted = await call('POST', '/runs/run-1/tasks', { bearer: operator, body: { taskId: 'task-parent', kind: 'planning', stageId: 'specs' } });
+    assert.equal(submitted.status, 201);
+    const holder = await placedWorker('journal-delegation-1', 'task-parent');
+    const body = {
+      delegationId: 'delegation-http-1', attemptId: holder.attemptId, ownershipGeneration: holder.generation, runId: 'run-1',
+      child: { taskId: 'task-delegated', kind: 'planning', stageId: 'specs' },
+    };
+    // No reachable worker yet, so the fleet has no free slot for the child.
+    const waiting = await call('POST', '/delegations', { bearer: holder.bearer, body });
+    assert.deepEqual([waiting.status, waiting.body], [200, { state: 'awaiting-capacity', delegationId: 'delegation-http-1' }]);
+    assert.equal((await call('POST', '/delegations', { bearer: holder.bearer, body })).status, 200, 'a repeat answers the stored state');
+    const other = { ...body, child: { ...body.child, taskId: 'task-other' } };
+    assert.equal((await call('POST', '/delegations', { bearer: holder.bearer, body: other })).status, 409);
+    const unknownRun = { ...body, delegationId: 'delegation-http-2', runId: 'run-9' };
+    assert.equal((await call('POST', '/delegations', { bearer: holder.bearer, body: unknownRun })).status, 422);
+    const stranger = await enrolledWorker('journal-delegation-2');
+    assert.equal((await call('POST', '/delegations', { bearer: stranger.bearer, body: { ...body, delegationId: 'delegation-http-3' } })).status, 403);
+    assert.equal((await call('POST', '/delegations', { bearer: operator, body })).status, 401);
+    assert.equal((await call('POST', '/delegations', { bearer: holder.bearer, body: { ...body, child: {} } })).status, 400);
+  });
+});
+
 describe('enrollment and quarantine', () => {
+  test('a worker enrolls on its first start, then connects with its stored broker credential', async () => {
+    const issued = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operator });
+    const environment = {
+      TASKELITH_DATA_DIR: join(base, 'worker-root'), TASKELITH_CONTROL_PLANE_URL: `http://127.0.0.1:${running.api.port}/`, TASKELITH_NATS_URL: NATS.href,
+    };
+    // The test volume may be tmpfs, which the real probe refuses.
+    const dependencies = (settings: Parameters<typeof productionDependencies>[0]) => ({
+      ...productionDependencies(settings), probe: () => ok({ platform: 'darwin' as const, filesystem: 'apfs', local: true }),
+    });
+    const lines: string[] = [];
+    const first = await workerMain({ ...environment, TASKELITH_ENROLLMENT_TOKEN: issued.enrollmentToken as string }, (line) => lines.push(line), dependencies);
+    assert.ok(first, lines.join('\n'));
+    await first.transport.connection.flush();
+    const [row] = await sql<{ journal_id: string }>(database, 'SELECT journal_id FROM workers WHERE worker_id = $1', [first.identity.workerId]);
+    assert.equal(row?.journal_id, first.identity.journalId);
+    await first.stop();
+    const again = await workerMain(environment, (line) => lines.push(line), dependencies);
+    assert.ok(again, lines.join('\n'));
+    await again.transport.connection.flush();
+    assert.equal(again.identity.workerId, first.identity.workerId);
+    await again.stop();
+  });
+
   test('a worker enrolls over the API with its token once', async () => {
     const issued = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operator });
     const body = {

@@ -1,8 +1,9 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
-import type { AssignmentId } from '@taskelith/execution';
+import type { AssignmentId, AttemptId } from '@taskelith/execution';
 import { checkGeneration, checkNextGeneration, type Generation } from '@taskelith/sdlc';
 import type { Assignment } from '../domain/assignment.js';
 import type { AssignmentRepository } from '../ports/assignment-repository.js';
+import { byCodeUnits } from './in-memory-capacity.js';
 
 // Keeps assignments in process memory; it checks and writes without
 // awaiting, so concurrent writers cannot both pass a check.
@@ -41,6 +42,10 @@ export class InMemoryAssignmentRepository implements AssignmentRepository {
     if (!held.ok) return held;
     this.#assignments.set(assignment.id, assignment);
     return ok(undefined);
+  }
+
+  async listByAttempt(attemptId: AttemptId): Promise<readonly Assignment[]> {
+    return this.all().filter((assignment) => assignment.attemptId === attemptId).sort((left, right) => byCodeUnits(left.id, right.id));
   }
 
   #heldReservationConflict(assignment: Assignment): Result<void> {

@@ -6,6 +6,7 @@ export interface WorkerPaths {
   readonly worker: string;
   readonly lock: string;
   readonly identity: string;
+  readonly credentials: string;
   readonly fault: string;
   readonly journalDirectory: string;
   readonly journal: string;
@@ -16,6 +17,11 @@ export interface WorkerPaths {
 
 export const JOURNAL_FILE = 'journal.sqlite';
 
+// The account every control record must belong to: the running one.
+export function ownerUid(): number {
+  return process.getuid?.() ?? -1;
+}
+
 export function workerPaths(dataRoot: string): WorkerPaths {
   const worker = join(dataRoot, 'worker');
   const journalDirectory = join(worker, 'journal');
@@ -24,6 +30,7 @@ export function workerPaths(dataRoot: string): WorkerPaths {
     worker,
     lock: join(worker, 'lock'),
     identity: join(worker, 'identity'),
+    credentials: join(worker, 'credentials'),
     fault: join(worker, 'journal-fault'),
     journalDirectory,
     journal: join(journalDirectory, JOURNAL_FILE),
