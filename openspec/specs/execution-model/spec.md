@@ -95,7 +95,7 @@ A worker SHALL report only its own executions' facts, and another worker's repor
 - **THEN** the second exit is a duplicate and the `not-started` is rejected, and the terminal fact stays
 
 ### Requirement: Evidence beside the state
-The facts `uncertain`, `termination-unproven`, and `local-history-lost` SHALL be recorded beside the state of an execution that is not terminal without changing its state, ownership, or grants, and SHALL be rejected for a terminal execution. A command SHALL be resendable after lost local history only while no grant was ever recorded for the attempt.
+The facts `uncertain`, `termination-unproven`, `local-history-lost`, and `cancellation-not-applied` SHALL be recorded beside the state of an execution that is not terminal without changing its state, ownership, or grants, and SHALL be rejected for a terminal execution. A command SHALL be resendable after lost local history only while no grant was ever recorded for the attempt.
 
 #### Scenario: Uncertain execution
 - **WHEN** a running execution is reported `uncertain`
@@ -139,3 +139,10 @@ The execution domain SHALL read no clock, random source, file, or network, SHALL
 #### Scenario: Changed input
 - **WHEN** a reported exit status or the grant parameters change after they were recorded
 - **THEN** the recorded exit, the outcome, and the grant's expiry are unchanged
+
+### Requirement: Cancellation not applied
+The evidence `cancellation-not-applied` SHALL keep the attempt's cancellation request pending and SHALL NOT make the execution unknown.
+
+#### Scenario: Cancellation not applied
+- **WHEN** a running execution of an attempt with a cancellation request records `cancellation-not-applied`
+- **THEN** it stays `started`, the cancellation request stays, and the execution is not unknown
