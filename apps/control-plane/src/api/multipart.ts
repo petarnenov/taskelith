@@ -12,11 +12,17 @@ const HEADER_END = Buffer.from('\r\n\r\n');
 const BOUNDARY = /^multipart\/form-data\s*;(?:.*;)?\s*boundary=(?:"([^"]{1,70})"|([^;\s"]{1,70}))/i;
 const PART_NAME = /^form-data(?:\s*;.*?)?;\s*name="([^"]*)"/i;
 
-// The parts in body order; a body that is not well formed is `invalid`.
-export function parseMultipart(contentType: string | undefined, body: Buffer): Result<readonly FormPart[]> {
+// The boundary of a `multipart/form-data` content type, checked before the
+// body is read.
+export function multipartBoundary(contentType: string | undefined): Result<string> {
   const boundary = BOUNDARY.exec(contentType ?? '');
   if (boundary === null) return invalid('the request is not multipart/form-data with a boundary');
-  const delimiter = Buffer.from(`--${boundary[1] ?? boundary[2]}`);
+  return ok(boundary[1] ?? boundary[2] ?? '');
+}
+
+// The parts in body order; a body that is not well formed is `invalid`.
+export function parseMultipart(boundary: string, body: Buffer): Result<readonly FormPart[]> {
+  const delimiter = Buffer.from(`--${boundary}`);
   const parts: FormPart[] = [];
   let position = body.indexOf(delimiter);
   if (position === -1) return invalid('the multipart body has no boundary');

@@ -18,7 +18,7 @@ import {
   writeResponse,
   type ApiResponse,
 } from './http-exchange.js';
-import { parseMultipart } from './multipart.js';
+import { multipartBoundary, parseMultipart } from './multipart.js';
 import { UploadSlots } from './upload-slots.js';
 import { ROUTES, type RouteDefinition, type SecurityScheme } from './routes.js';
 
@@ -174,9 +174,11 @@ async function validatedBody(request: IncomingMessage, route: RouteDefinition): 
 
 // Exactly a JSON `record` part, at most 1 MiB, and a `content` part.
 async function validatedUpload(request: IncomingMessage, schema: keyof HttpSchemas & string): Promise<Result<Upload>> {
+  const boundary = multipartBoundary(request.headers['content-type']);
+  if (!boundary.ok) return boundary;
   const body = await readBody(request, MAX_EVIDENCE_BYTES + MAX_BODY_BYTES);
   if (!body.ok) return body;
-  const parts = parseMultipart(request.headers['content-type'], body.value);
+  const parts = parseMultipart(boundary.value, body.value);
   if (!parts.ok) return parts;
   const record = parts.value.find((part) => part.name === 'record');
   const content = parts.value.find((part) => part.name === 'content');

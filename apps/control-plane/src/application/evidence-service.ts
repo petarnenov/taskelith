@@ -16,7 +16,6 @@ import type { ContentDigest } from '@taskelith/sdlc';
 import type { ControlPlaneStore, ControlPlaneTransaction } from './control-plane-store.js';
 import { viewOf, type EvidenceView } from './evidence-view.js';
 
-
 // The outcome of a publication: the stored record, and whether this call
 // stored it (201) or found it already stored (200).
 export interface Publication {
@@ -52,12 +51,17 @@ export class EvidenceService {
     return this.#store.transaction(async (tx) => {
       const credential = await checkCredential(tx, principal);
       if (!credential.ok) return credential;
+      // Taken before the record is read, so that a retry is ordered against
+      // a retirement of the same content, which takes the lock too.
+      const locked = await tx.evidence.lockDigest(publication.value.contentDigest);
+      if (!locked.ok) return locked;
       const stored = await tx.evidence.get(publication.value.evidenceId);
       if (!stored.ok) return stored;
-      if (stored.value !== undefined) return this.#repeat(tx, stored.value, publication.value, producer, content);
+      if (stored.value !== undefined) return this.#repeat(stored.value, publication.value, producer, content);
       const record = await this.#authorize(tx, publication.value, producer);
       if (!record.ok) return record;
-      const written = await this.#writeContent(tx, record.value.contentDigest, content);
+      // Written before its record commits, so a committed record has content.
+      const written = await this.#contents.put(record.value.contentDigest, content);
       if (!written.ok) return written;
       const added = await tx.evidence.add(record.value);
       return added.ok ? ok({ record: viewOf(record.value), created: true }) : added;
@@ -114,7 +118,6 @@ export class EvidenceService {
   // A retry of the same publication returns the stored record and repairs
   // its content; another publication under the identity is a conflict.
   async #repeat(
-    tx: ControlPlaneTransaction,
     record: EvidenceRecord,
     publication: EvidencePublication,
     producer: EvidenceProducer,
@@ -123,7 +126,7 @@ export class EvidenceService {
     if (!isSamePublication(record, publication, producer)) {
       return err(failure('conflict', `evidence ${record.evidenceId} was published with other values`, { evidence: record.evidenceId }));
     }
-    const written = await this.#writeContent(tx, record.contentDigest, content);
+    const written = await this.#contents.put(record.contentDigest, content);
     return written.ok ? ok({ record: viewOf(record), created: false }) : written;
   }
 
@@ -136,13 +139,6 @@ export class EvidenceService {
     if (!heldGenerations.ok) return heldGenerations;
     const context = { task: task.value, projectId: link.projectId, runId: link.runId, heldGenerations: heldGenerations.value };
     return acceptEvidence(publication, producer, context, await tx.now());
-  }
-
-  // Content is written before its record commits, under the digest's lock,
-  // so a committed record always has content that retire cannot remove.
-  async #writeContent(tx: ControlPlaneTransaction, digest: ContentDigest, content: Uint8Array): Promise<Result<void>> {
-    const locked = await tx.evidence.lockDigest(digest);
-    return locked.ok ? this.#contents.put(digest, content) : locked;
   }
 }
 
@@ -157,9 +153,11 @@ async function checkCredential(tx: ControlPlaneTransaction, principal: WorkerPri
   return err(failure('forbidden', 'the worker credential is not valid', { reason: 'worker-not-authorized' }));
 }
 
+// A path that is no identifier is `invalid` (400), as the contract declares.
 async function storedRecord(tx: ControlPlaneTransaction, evidenceIdText: string): Promise<Result<EvidenceRecord>> {
   const evidenceId = parseIdentifier('EvidenceId', evidenceIdText);
-  const record = evidenceId.ok ? await tx.evidence.get(evidenceId.value as EvidenceId) : ok(undefined);
+  if (!evidenceId.ok) return evidenceId;
+  const record = await tx.evidence.get(evidenceId.value as EvidenceId);
   if (!record.ok) return record;
   if (record.value !== undefined) return ok(record.value);
   return err(failure('not-found', `no evidence ${evidenceIdText}`, { evidence: evidenceIdText }));

@@ -158,7 +158,7 @@ test('content that is corrupt or missing is not downloaded, and a retry repairs 
   const missing = failed(await service.download('evidence-1'));
   assert.deepEqual([missing.code, missing.details.reason], ['internal', 'evidence-missing']);
   assert.equal(failed(await service.download('evidence-9')).code, 'not-found');
-  assert.equal(failed(await service.download('has space')).code, 'not-found');
+  assert.equal(failed(await service.download('has space')).code, 'invalid');
 });
 
 test('a record is retired only after its retention, and its content once unreferenced', async () => {
