@@ -32,7 +32,7 @@ export {
   type ControlPlaneSettings,
   type RunningControlPlane,
 } from './composition/control-plane.js';
-export { repairCommandConsumers } from './composition/command-consumer-repair.js';
+export { repairCommandConsumers, REVOKED_CONSUMER_REMOVALS_PER_START } from './composition/command-consumer-repair.js';
 export { requestStartInventories } from './composition/start-inventory-requests.js';
 export { InstallationPublicationFence } from './composition/installation-publication-fence.js';
 export { LaunchRevokingFleetRegistry } from './composition/launch-revoking-fleet-registry.js';

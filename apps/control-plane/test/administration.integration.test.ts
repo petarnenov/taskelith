@@ -4,9 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import pg from 'pg';
-import { Administration, adminMain, type AdminIo } from '@taskelith/control-plane';
+import { Administration, adminMain, repairCommandConsumers, type AdminIo } from '@taskelith/control-plane';
 import { ControlPlaneNamespace } from '@taskelith/control-plane-store';
-import { parseIdentifier } from '@taskelith/kernel';
+import type { WorkerId } from '@taskelith/execution';
+import type { EnrollmentService } from '@taskelith/fleet';
+import { err, failure, parseIdentifier } from '@taskelith/kernel';
 import { createAccount } from '@nats-io/nkeys';
 import {
   BrokerAuthority,
@@ -21,7 +23,8 @@ import {
   TRANSPORT_LIMITS,
   TransportAddress,
 } from '@taskelith/nats';
-import { PostgresDatabase } from '@taskelith/postgres';
+import { InMemoryLogSink, Logger } from '@taskelith/observability';
+import { CommittingFleetRegistry, PostgresDatabase } from '@taskelith/postgres';
 import { integrationEndpoint, integrationSecret, value } from '@taskelith/testing';
 import { createLaunchRun, launchAuthority, placedTask } from './launch-fixtures.ts';
 
@@ -157,6 +160,28 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
 
   const revoked = await admin(['revoke-worker', enrolled.workerId], { TASKELITH_OPERATOR_TOKEN: operatorSecret });
   assert.deepEqual(revoked.output, { revoked: enrolled.workerId });
+  const commands = address.streamName('commands');
+  const consumerExists = (workerId: string) => controlPlane.jsm.consumers.info(commands, workerId).then(() => true, () => false);
+  assert.equal(await consumerExists(enrolled.workerId), false, 'the revocation removes the command consumer');
+  const consumers = new NatsCommandConsumers(controlPlane.jsm, address);
+  value(await consumers.remove(enrolled.workerId));
+
+  // A removal the broker refuses leaves a committed revocation and a
+  // consumer that the next start removes; an active worker keeps its own.
+  const refusing = value(await administration.enrollmentService({
+    ensure: (workerId) => consumers.ensure(workerId), remove: async () => err(failure('unavailable', 'the broker is down')),
+  }));
+  after(() => refusing.close());
+  const unremoved = await enrollWorker(refusing.service, 'journal-2');
+  const active = await enrollWorker(refusing.service, 'journal-3');
+  assert.deepEqual(value(await refusing.service.revoke(unremoved)), { commandConsumerRemoved: false });
+  const fleet = new CommittingFleetRegistry(store);
+  assert.deepEqual(value(await fleet.recentlyRevokedWorkerIds(10)), [unremoved, enrolled.workerId], 'committed latest first');
+  assert.equal(await consumerExists(unremoved), true);
+  const sink = new InMemoryLogSink();
+  await repairCommandConsumers(fleet, consumers, new Logger(sink, { now: () => new Date().toISOString() as never }));
+  assert.deepEqual([await consumerExists(unremoved), await consumerExists(active)], [false, true]);
+  assert.deepEqual(sink.records.at(-1)?.fields, { workers: 2, failed: 0 });
   assert.deepEqual(value(await store.transaction((tx) => tx.launches.liveGrants({ kind: 'all' }))), [], 'the grant is revoked');
   const launched = value(await store.transaction((tx) => tx.tasks.get(taskId)));
   assert.equal(launched.attempts[0]!.executions[0]!.evidence[0]?.kind, 'uncertain');
@@ -181,6 +206,16 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
   const closed = await administration.enrollmentService(new NatsCommandConsumers(controlPlane.jsm, address));
   assert.equal(!closed.ok && closed.error.code, 'precondition-failed', 'a mismatch with the record keeps the installation closed');
 });
+
+async function enrollWorker(service: EnrollmentService, journal: string): Promise<WorkerId> {
+  const token = value(await service.issueToken({}));
+  return value(await service.enroll(token, {
+    journalId: value(parseIdentifier('JournalId', journal)),
+    host: { platform: 'linux', architecture: 'x64', hostname: journal },
+    protocolVersions: { minimum: 1, maximum: 1 },
+    capacity: { slots: 1, cpuMillicores: 1000, memoryMebibytes: 1024, controls: [] },
+  })).workerId;
+}
 
 test('usage errors exit with 2 before anything is opened', async () => {
   for (const argv of [[], ['unknown'], ['rotate-worker'], ['init', 'extra'], ['issue-enrollment-token', '--platform', 'windows'], ['init', '--bogus']]) {

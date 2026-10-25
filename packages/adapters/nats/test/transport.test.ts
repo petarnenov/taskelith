@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import type { JetStreamClient } from '@nats-io/jetstream';
-import { InMemoryInbox } from '@taskelith/execution';
+import { JetStreamApiCodes, JetStreamApiError, type JetStreamClient, type JetStreamManager } from '@nats-io/jetstream';
+import { InMemoryInbox, type WorkerId } from '@taskelith/execution';
 import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { SimulatedHost, value } from '@taskelith/testing';
@@ -13,6 +13,7 @@ import {
   encodeJson,
   INVENTORY_REPORTED,
   JetStreamPublisher,
+  NatsCommandConsumers,
   OBSERVATION_SCHEMAS,
   OutboxPublisher,
   readCommandSubjectMessage,
@@ -254,4 +255,30 @@ test('a broker failure is unavailable and names the subject', async () => {
   assert.deepEqual(sent.error.details, { cause: 'timeout' });
   assert.deepEqual(await publisher.publish({ subject: 's', body: bytes({}), messageId: 'y' }), ok('stored'));
   assert.deepEqual(await publisher.publish({ subject: 's', body: bytes({}), messageId: 'y' }), ok('duplicate'));
+});
+
+function deletingConsumers(failure?: Error): { deleted: string[]; jsm: JetStreamManager } {
+  const deleted: string[] = [];
+  const consumers = {
+    delete: async (stream: string, name: string) => {
+      if (failure !== undefined) throw failure;
+      deleted.push(`${stream}/${name}`);
+      return true;
+    },
+  };
+  return { deleted, jsm: { consumers } as unknown as JetStreamManager };
+}
+
+const WORKER = 'worker-1' as WorkerId;
+const apiError = (code: number) => new JetStreamApiError({ code: 404, err_code: code, description: 'not found' });
+
+test('removing a worker command consumer deletes it, and one already gone counts as removed', async () => {
+  const removed = deletingConsumers();
+  value(await new NatsCommandConsumers(removed.jsm, ADDRESS.value).remove(WORKER));
+  assert.deepEqual(removed.deleted, [`${ADDRESS.value.streamName('commands')}/worker-1`]);
+  for (const code of [JetStreamApiCodes.ConsumerNotFound, JetStreamApiCodes.StreamNotFound]) {
+    value(await new NatsCommandConsumers(deletingConsumers(apiError(code)).jsm, ADDRESS.value).remove(WORKER));
+  }
+  const refused = await new NatsCommandConsumers(deletingConsumers(new Error('timeout')).jsm, ADDRESS.value).remove(WORKER);
+  assert.equal(refused.ok, false);
 });
