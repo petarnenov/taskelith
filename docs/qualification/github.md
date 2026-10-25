@@ -22,7 +22,7 @@ Sources: GitHub's documentation is pinned to commit `02c25d16369fe27f9bdb28d1201
 | --- | --- |
 | Terms of service | [GitHub Terms of Service](https://github.com/github/docs/blob/02c25d16369fe27f9bdb28d1201f6b452f0d21dd/content/site-policy/github-terms/github-terms-of-service.md) |
 | Data handling | [GitHub General Privacy Statement](https://github.com/github/docs/blob/02c25d16369fe27f9bdb28d1201f6b452f0d21dd/content/site-policy/privacy-policies/github-general-privacy-statement.md) |
-| Review of terms | Recorded on 2026-10-25 in [Terms review](#terms-review), against Taskelith's use (automated agents acting through a GitHub App on project repositories); the owner's decision D15 is pending |
+| Review of terms | Recorded on 2026-10-25 in [Terms review](#terms-review), against Taskelith's use (automated agents acting through a GitHub App on project repositories); the owner decided D15 on 2026-10-25: (a), accept the remaining risk ([G3 plan](../g3-plan.md#owner-decisions)) |
 
 ## Terms review
 
@@ -123,7 +123,7 @@ Stated in harness-neutral terms, so that a later Forgejo plugin maps onto the sa
 
 ## Remaining before admission
 
-- The review of GitHub's terms against Taskelith's use is recorded on 2026-10-25 in [Terms review](#terms-review); the owner's decision D15 on the remaining risk is pending before admission in G3 ([ADR 0007](../decisions/0007-g0-closure.md)).
+- The review of GitHub's terms against Taskelith's use is recorded on 2026-10-25 in [Terms review](#terms-review); the owner decided D15 on 2026-10-25: (a), accept the remaining risk ([G3 plan](../g3-plan.md#owner-decisions)); admission follows in G3 ([ADR 0007](../decisions/0007-g0-closure.md)).
 - A real webhook receiver that verifies signatures on the raw body, in place of the API copy, covering every delivery of a run, including redeliveries and deliveries caused by cleanup.
 - A reviewer identity separate from the App for approvals.
 - Token refresh for runs longer than an hour, and rate-limit behaviour under load.
