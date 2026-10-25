@@ -35,6 +35,8 @@ On `abf7034`, after the pass 2 fixes: `make verify` passed with 544 tests, cover
 
 On `e3b6e19`, after the pass 3 fixes: `make verify` passed with 546 tests, coverage 99.67% lines, 95.93% branches, 99.47% functions.
 
+After the delegated decision, `origin/dev` at `8b7382f` (with item 15) was merged in `1e26829` without conflicts; the dependency inventory was unchanged. `make verify` passed on the merge with 698 tests, coverage 99.26% lines, 93.17% branches, 99.06% functions, and strict OpenSpec validation (47 items).
+
 ### Required tests of contract section 12
 
 | Required test | Where |
