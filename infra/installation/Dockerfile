@@ -1,5 +1,5 @@
-# Control-plane and Linux worker images of the minimal local installation;
-# scripts/installation.sh passes the digest-pinned base and Node.js pins.
+# Control-plane and Linux worker images; scripts/installation.sh builds them
+# from a git archive of the tracked files with the pins of the Makefile.
 ARG BASE
 
 FROM ${BASE} AS node-amd64

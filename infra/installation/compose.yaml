@@ -1,11 +1,5 @@
 # Minimal local installation (G2 item 23); run it through the make targets,
-# which pass the pins and order the bootstrap (scripts/installation.sh).
-
-x-pins: &pins
-  BASE: ${TASKELITH_UBUNTU_BASE:?run through scripts/installation.sh}
-  NODE_VERSION: ${TASKELITH_NODE_VERSION:?run through scripts/installation.sh}
-  NODE_SHA256_AMD64: ${TASKELITH_NODE_SHA256_AMD64:?run through scripts/installation.sh}
-  NODE_SHA256_ARM64: ${TASKELITH_NODE_SHA256_ARM64:?run through scripts/installation.sh}
+# which build the images and order the bootstrap (scripts/installation.sh).
 
 x-postgres-url: &postgres-url
   postgres://taskelith:${TASKELITH_POSTGRES_PASSWORD:?set TASKELITH_POSTGRES_PASSWORD}@postgres:5432/taskelith
@@ -62,12 +56,8 @@ services:
       retries: 60
 
   control-plane:
-    image: taskelith-control-plane:local
-    build:
-      context: ../..
-      dockerfile: infra/installation/Dockerfile
-      target: control-plane
-      args: *pins
+    image: taskelith-control-plane:${TASKELITH_IMAGE_TAG:?run through scripts/installation.sh}
+    pull_policy: never
     environment:
       TASKELITH_POSTGRES_URL: *postgres-url
       TASKELITH_NATS_URL: nats://nats:4222
@@ -91,7 +81,8 @@ services:
 
   # One-shot administrative entry (installation contract section 4).
   admin:
-    image: taskelith-control-plane:local
+    image: taskelith-control-plane:${TASKELITH_IMAGE_TAG:?run through scripts/installation.sh}
+    pull_policy: never
     profiles: [admin]
     entrypoint: ["node", "apps/control-plane/dist/admin/admin-main.js"]
     environment:
@@ -101,12 +92,8 @@ services:
       - control-plane-data:/var/lib/taskelith
 
   worker:
-    image: taskelith-worker:local
-    build:
-      context: ../..
-      dockerfile: infra/installation/Dockerfile
-      target: worker
-      args: *pins
+    image: taskelith-worker:${TASKELITH_IMAGE_TAG:?run through scripts/installation.sh}
+    pull_policy: never
     profiles: [worker]
     environment:
       TASKELITH_CONTROL_PLANE_URL: http://control-plane:8080

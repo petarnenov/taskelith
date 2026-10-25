@@ -12,11 +12,11 @@ The control-plane and worker images SHALL build from the digest-pinned Ubuntu 24
 - **THEN** `make verify` or the image build fails
 
 ### Requirement: Unprivileged services with volume data
-The control plane, the worker, and NATS SHALL run as non-root users, and the data of PostgreSQL, NATS, the control plane, and the worker SHALL live on named volumes. The images SHALL contain no credentials and no data-root state.
+The control plane, the worker, and NATS SHALL run as non-root users, and the data of PostgreSQL, NATS, the control plane, and the worker SHALL live on named volumes. The images SHALL contain no credentials and no data-root state, and SHALL be built only from tracked files.
 
 #### Scenario: Fresh image
 - **WHEN** the control-plane or worker image is built
-- **THEN** it runs as `taskelith` and its data root is empty
+- **THEN** it runs as `taskelith`, its data root is empty, and an untracked file of the checkout is absent
 
 ### Requirement: Make-driven operation
 `make` targets SHALL build the images, bootstrap the installation, start and stop it, enroll the Linux worker container, and issue an enrollment token for a native worker. Bootstrap SHALL initialize the installation before the broker starts with the authority it wrote. Secrets SHALL come from the environment, never from the repository or the images.

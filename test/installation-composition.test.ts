@@ -5,7 +5,6 @@ import test from 'node:test';
 
 interface Mount {
   readonly type: string;
-  readonly source?: string;
   readonly target: string;
 }
 
@@ -17,7 +16,6 @@ interface Port {
 interface Service {
   readonly image: string;
   readonly user?: string;
-  readonly build?: { readonly args: Record<string, string> };
   readonly environment?: Record<string, string | null>;
   readonly volumes?: readonly Mount[];
   readonly ports?: readonly Port[];
@@ -27,8 +25,14 @@ interface Composition {
   readonly services: Record<string, Service>;
 }
 
+interface Stage {
+  readonly from: string;
+  readonly user?: string;
+}
+
 const DIGEST_PINNED = /^[^@\s]+@sha256:[0-9a-f]{64}$/;
 const PASSWORD = 'composition-test-password';
+const ROOT_USERS = new Set(['', 'root', '0']);
 
 function makeVariable(name: string): string {
   const match = new RegExp(`^${name} := (.+)$`, 'm').exec(readFileSync('Makefile', 'utf8'));
@@ -42,28 +46,48 @@ function resolvedComposition(file: string, environment: Record<string, string>):
   return JSON.parse(output) as Composition;
 }
 
+function dockerfileStages(source: string): Map<string, Stage> {
+  const stages = new Map<string, Stage>();
+  let current: { name: string; stage: Stage } | undefined;
+  for (const line of source.split('\n')) {
+    const from = /^FROM (\S+) AS (\S+)$/.exec(line);
+    const user = /^USER (\S+)$/.exec(line);
+    if (from) {
+      current = { name: from[2], stage: { from: from[1] } };
+      stages.set(current.name, current.stage);
+    } else if (user && current) {
+      current.stage = { ...current.stage, user: user[1] };
+      stages.set(current.name, current.stage);
+    }
+  }
+  return stages;
+}
+
+function effectiveUser(stages: Map<string, Stage>, name: string): string {
+  const stage = stages.get(name);
+  if (stage === undefined) return '';
+  return stage.user ?? effectiveUser(stages, stage.from);
+}
+
+function isRoot(user: string): boolean {
+  return ROOT_USERS.has(user.split(':')[0]);
+}
+
 const installation = resolvedComposition('infra/installation/compose.yaml', {
-  TASKELITH_UBUNTU_BASE: makeVariable('UBUNTU_BASE'),
-  TASKELITH_NODE_VERSION: readFileSync('.nvmrc', 'utf8').trim(),
-  TASKELITH_NODE_SHA256_AMD64: makeVariable('NODE_LINUX_X64_SHA256'),
-  TASKELITH_NODE_SHA256_ARM64: makeVariable('NODE_LINUX_ARM64_SHA256'),
+  TASKELITH_IMAGE_TAG: 'composition-test',
   TASKELITH_POSTGRES_PASSWORD: PASSWORD,
 });
 const services = installation.services;
 const dockerfile = readFileSync('infra/installation/Dockerfile', 'utf8');
+const stages = dockerfileStages(dockerfile);
 
-test('pulled images and the build base are pinned by digest', () => {
+test('pulled images and the image pins are pinned by digest and checksum', () => {
   for (const [name, service] of Object.entries(services)) {
-    if (service.build === undefined && !service.image.startsWith('taskelith-')) {
-      assert.match(service.image, DIGEST_PINNED, name);
-    }
+    if (!service.image.startsWith('taskelith-')) assert.match(service.image, DIGEST_PINNED, name);
   }
-  for (const name of ['control-plane', 'worker']) {
-    const args = services[name].build?.args;
-    assert.match(args?.BASE ?? '', DIGEST_PINNED, name);
-    assert.match(args?.NODE_SHA256_AMD64 ?? '', /^[0-9a-f]{64}$/, name);
-    assert.match(args?.NODE_SHA256_ARM64 ?? '', /^[0-9a-f]{64}$/, name);
-  }
+  assert.match(makeVariable('UBUNTU_BASE'), /^ubuntu:24\.04@sha256:[0-9a-f]{64}$/);
+  assert.match(makeVariable('NODE_LINUX_X64_SHA256'), /^[0-9a-f]{64}$/);
+  assert.match(makeVariable('NODE_LINUX_ARM64_SHA256'), /^[0-9a-f]{64}$/);
 });
 
 test('the installation uses the integration services images', () => {
@@ -74,20 +98,29 @@ test('the installation uses the integration services images', () => {
 });
 
 test('the Dockerfile builds only from the base and checks the Node.js tarballs', () => {
-  const stages = new Set(['${BASE}', 'node-${TARGETARCH}']);
-  for (const [, image, stage] of dockerfile.matchAll(/^FROM (\S+) AS (\S+)$/gm)) {
-    assert.ok(stages.has(image), `stage ${stage} starts from ${image}`);
-    stages.add(stage);
-  }
-  assert.equal(stages.size, 8);
+  const roots = new Set(['${BASE}', 'node-${TARGETARCH}']);
+  for (const [name, stage] of stages) assert.ok(roots.has(stage.from) || stages.has(stage.from), name);
+  assert.equal(dockerfile.match(/^FROM /gm)?.length, stages.size);
   const downloads = [...dockerfile.matchAll(/^ADD (.+)$/gm)].map(([, line]) => line);
   assert.equal(downloads.length, 2);
   for (const line of downloads) assert.match(line, /^--checksum=sha256:\$\{NODE_SHA256_(AMD64|ARM64)\} https:\/\/nodejs\.org\//);
 });
 
+test('the effective user of a stage follows its parents', () => {
+  const sample = dockerfileStages('FROM ${BASE} AS a\nUSER app\nFROM a AS b\nFROM b AS c\nUSER root\n');
+  assert.equal(effectiveUser(sample, 'b'), 'app');
+  assert.equal(effectiveUser(sample, 'c'), 'root');
+  assert.equal(effectiveUser(sample, '${BASE}'), '');
+  assert.equal(isRoot('0:0'), true);
+  assert.equal(isRoot('10002:10002'), false);
+});
+
 test('long-running services run unprivileged', () => {
-  assert.match(dockerfile, /^USER taskelith$/m);
-  assert.match(services.nats.user ?? '', /^[1-9]\d*:[1-9]\d*$/);
+  for (const target of ['control-plane', 'worker']) assert.equal(isRoot(effectiveUser(stages, target)), false, target);
+  for (const [name, service] of Object.entries(services)) {
+    if (service.image.startsWith('taskelith-')) assert.equal(service.user, undefined, name);
+  }
+  assert.equal(isRoot(services.nats.user ?? ''), false);
 });
 
 test('service data lives on named volumes', () => {

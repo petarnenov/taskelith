@@ -24,7 +24,7 @@ SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
 .PHONY: verify verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility \
-	test services-up services-down verify-linux-cgroup installation-build installation-bootstrap installation-start \
+	test services-up services-down verify-linux-cgroup installation-build installation-bootstrap installation-broker-config installation-start \
 	installation-stop installation-enroll installation-enrollment-token verify-installation
 
 # Uses the .nvmrc Node.js when nvm has it, so no 'nvm use' is needed first.
@@ -92,31 +92,35 @@ verify-linux-cgroup:
 		--build-arg NODE_SHA256=$(NODE_LINUX_X64_SHA256) --tag $(LINUX_CGROUP_IMAGE) tools/linux-cgroup
 	docker run --rm --privileged --cgroupns=private --network none --volume "$(CURDIR):/repo:ro" $(LINUX_CGROUP_IMAGE)
 
-# Minimal local installation (docs/local-installation.md); every target needs
-# TASKELITH_POSTGRES_PASSWORD. Builds the control-plane and worker images.
+# Minimal local installation (docs/local-installation.md); the targets after
+# this build need TASKELITH_POSTGRES_PASSWORD. Builds both images.
 installation-build:
 	@$(INSTALLATION_PINS) bash scripts/installation.sh build $(INSTALLATION)
 
 # Migrates and initializes once; prints the operator secret only this once.
+# Arguments reach the script through the environment, never as shell text.
 installation-bootstrap:
-	@$(INSTALLATION_PINS) TASKELITH_ACTOR='$(ACTOR)' TASKELITH_REASON='$(REASON)' \
-		bash scripts/installation.sh bootstrap $(INSTALLATION)
+	@TASKELITH_ACTOR="$$ACTOR" TASKELITH_REASON="$$REASON" bash scripts/installation.sh bootstrap $(INSTALLATION)
+
+# Installs the broker trust again, for example after a failed bootstrap.
+installation-broker-config:
+	@bash scripts/installation.sh broker-config $(INSTALLATION)
 
 installation-start:
-	@$(INSTALLATION_PINS) bash scripts/installation.sh start $(INSTALLATION)
+	@bash scripts/installation.sh start $(INSTALLATION)
 
 # Stops the containers and keeps their volumes.
 installation-stop:
-	@$(INSTALLATION_PINS) bash scripts/installation.sh stop $(INSTALLATION)
+	@bash scripts/installation.sh stop $(INSTALLATION)
 
 # Enrolls the Linux worker container; needs TASKELITH_OPERATOR_TOKEN.
 installation-enroll:
-	@$(INSTALLATION_PINS) bash scripts/installation.sh enroll $(INSTALLATION)
+	@bash scripts/installation.sh enroll $(INSTALLATION)
 
 # Prints a token for a native worker, for example a macOS one.
 installation-enrollment-token:
-	@$(INSTALLATION_PINS) TASKELITH_WORKER_PLATFORM='$(PLATFORM)' TASKELITH_WORKER_ARCHITECTURE='$(ARCHITECTURE)' \
-		TASKELITH_WORKER_HOSTNAME='$(WORKER_HOSTNAME)' bash scripts/installation.sh enrollment-token $(INSTALLATION)
+	@TASKELITH_WORKER_PLATFORM="$$PLATFORM" TASKELITH_WORKER_ARCHITECTURE="$$ARCHITECTURE" \
+		TASKELITH_WORKER_HOSTNAME="$$WORKER_HOSTNAME" bash scripts/installation.sh enrollment-token $(INSTALLATION)
 
 # Opt-in image build and bring-up on a throwaway project; kept out of
 # make verify, like verify-linux-cgroup.
