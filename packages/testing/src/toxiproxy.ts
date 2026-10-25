@@ -1,4 +1,5 @@
 const STREAMS = ['upstream', 'downstream'] as const;
+const REQUEST_TIMEOUT_MILLISECONDS = 5000;
 
 type ToxiproxyRequest = (method: string, path: string, body?: object) => Promise<unknown>;
 
@@ -27,6 +28,7 @@ export class Toxiproxy {
     url.pathname = `${url.pathname.replace(/\/$/, '')}${path}`;
     const response = await fetch(url, {
       method,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS),
       headers: body === undefined ? undefined : { 'content-type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
@@ -62,7 +64,7 @@ export class ToxiproxyProxy {
 
   async heal(): Promise<void> {
     const toxics = await this.#request('GET', `${this.#path}/toxics`) as { name: string }[];
-    for (const toxic of toxics) await this.#request('DELETE', `${this.#path}/toxics/${toxic.name}`);
+    for (const toxic of toxics) await this.#request('DELETE', `${this.#path}/toxics/${encodeURIComponent(toxic.name)}`);
     await this.#update({ enabled: true });
   }
 

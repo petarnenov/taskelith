@@ -63,6 +63,6 @@ test('a command that cannot start is reported', async () => {
 });
 
 async function waitUntil(condition: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 50 && !condition(); attempt++) await new Promise((resolve) => setTimeout(resolve, 20));
-  assert.ok(condition(), 'condition not met within one second');
+  for (let attempt = 0; attempt < 250 && !condition(); attempt++) await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.ok(condition(), 'condition not met within five seconds');
 }

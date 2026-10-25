@@ -42,7 +42,7 @@ test('the crash environment round-trips through the variable', () => {
 
 test('an armed child process dies by SIGKILL at the armed occurrence', async () => {
   const run = async (env: Record<string, string>) => {
-    const child = await ScenarioProcess.start(process.execPath, ['--experimental-strip-types', JOURNAL_WRITER], { env: { ...process.env, ...env } });
+    const child = await ScenarioProcess.start(process.execPath, ['--experimental-strip-types', JOURNAL_WRITER], { env: { ...process.env, [CRASH_POINT_VARIABLE]: '', ...env } });
     return { exit: await child.exited, stdout: child.stdout };
   };
   assert.deepEqual(await run({}), {

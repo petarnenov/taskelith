@@ -10,8 +10,8 @@ export interface ScenarioProcessOptions {
   readonly cwd?: string;
 }
 
-// A child that leads its own process group, so that a kill or pause reaches
-// its descendants too, as a crash or a suspended machine would.
+// Leads its own process group, so a kill or pause reaches its descendants;
+// `exited` waits for stdio, which a descendant holding stdout keeps open.
 export class ScenarioProcess {
   readonly pid: number;
   readonly exited: Promise<ProcessExit>;

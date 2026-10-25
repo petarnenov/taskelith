@@ -154,6 +154,13 @@ function checkTestHarnessImport({ rel, spec }: ImportEdge): string[] {
   return [`${rel}: product code cannot import the test harness "${spec}" (R03)`];
 }
 
+// At runtime the harness itself stands on the kernel and Node built-ins only.
+function checkTestHarnessSource({ rel, spec, typeOnly }: ImportEdge): string[] {
+  if (!rel.startsWith('packages/testing/src/') || typeOnly || spec.startsWith('.')) return [];
+  if (spec.startsWith('node:') || isBuiltin(spec) || spec === '@taskelith/kernel') return [];
+  return [`${rel}: the test harness may import only the kernel and Node built-ins at runtime, not "${spec}" (R03)`];
+}
+
 function checkWorkspaceEncapsulation({ rel, spec, target, relative: isRelative, workspaces }: ImportEdge): string[] {
   const violations: string[] = [];
   const owner = owningPackage(rel);
@@ -293,7 +300,7 @@ function checkWorkerOnlyReach(edges: ImportEdge[]): string[] {
 }
 
 const IMPORT_RULES = [
-  checkDevelopmentImport, checkTestHarnessImport, checkWorkspaceEncapsulation, checkKernelImport, checkPluginImport, checkPluginSdkImport, checkModuleImport,
+  checkDevelopmentImport, checkTestHarnessImport, checkTestHarnessSource, checkWorkspaceEncapsulation, checkKernelImport, checkPluginImport, checkPluginSdkImport, checkModuleImport,
   checkWebImport,
 ];
 

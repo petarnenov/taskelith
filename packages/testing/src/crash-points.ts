@@ -38,12 +38,14 @@ export class CrashPoints {
   reach(point: string): void {
     assertPointName(point);
     this.#reached.push(point);
-    if (this.#isArmedOccurrence(point)) crash(point, this.#armed!.action);
+    const armed = this.#armedCrashAt(point);
+    if (armed) crash(armed);
   }
 
-  #isArmedOccurrence(point: string): boolean {
-    if (this.#armed?.point !== point) return false;
-    return this.#reached.filter((reached) => reached === point).length === this.#armed.occurrence;
+  #armedCrashAt(point: string): ArmedCrash | undefined {
+    if (this.#armed?.point !== point) return undefined;
+    const occurrence = this.#reached.filter((reached) => reached === point).length;
+    return occurrence === this.#armed.occurrence ? this.#armed : undefined;
   }
 }
 
@@ -63,9 +65,13 @@ export function crashPointsFromEnvironment(env: NodeJS.ProcessEnv = process.env)
   return new CrashPoints({ point: point!, occurrence: Number(occurrence ?? 1), action: 'kill' });
 }
 
-function crash(point: string, action: CrashAction): void {
-  if (action === 'kill') process.kill(process.pid, 'SIGKILL');
-  throw new SimulatedCrash(point);
+function crash({ point, action }: ArmedCrash): void {
+  switch (action) {
+    case 'throw':
+      throw new SimulatedCrash(point);
+    case 'kill':
+      process.kill(process.pid, 'SIGKILL');
+  }
 }
 
 function assertArmed({ point, occurrence }: ArmedCrash): void {
