@@ -45,6 +45,7 @@ Reviewer: Codex (`gpt-6.1-sol`), reasoning effort medium, read-only sandbox, as 
   - Medium: the reported file was the first offender in string order, not in run order (`10_older` instead of `9_older` after `12_applied`). Resolved: the first pending file in node-pg-migrate's order is named; a test covers it.
   - Low: `proposal.md` presented the clock step as the established cause of the macOS failure. Resolved: it separates the reproduced mechanism from the inferred trigger.
   - Low: task 3.1 claimed a before-fix failure for a test added after that run. Resolved: every new test was run against the base implementation, as recorded above.
+- **Pass 2 — session `01a17471-ed08-7922-8126-352bf412d40b`, head `572cbb7`.** The header confirmed the model, reasoning effort medium, and the read-only sandbox. The snapshot was `54b452c1…aa9edd49` before and after the pass. The reviewer confirmed the resolution of each pass 1 finding and the agreement between the legacy subpath and the bundle, and found nothing else. Findings: 0 Critical, 0 High, 0 Medium, 0 Low. Only this record entry, task 3.3, and the remaining gates changed after the pass; `make verify` ran again in the `pre-push` hook of the handoff push.
 
 ## Limitations
 
@@ -53,5 +54,4 @@ Reviewer: Codex (`gpt-6.1-sol`), reasoning effort medium, read-only sandbox, as 
 
 ## Remaining gates
 
-- The independent review.
 - Coordinator integration into `dev` and archive.

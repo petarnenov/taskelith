@@ -13,4 +13,4 @@
 
 - [x] 3.1 Show that the new tests fail against the base implementation, except the pinning test for a missing file, and pass with the fix.
 - [x] 3.2 Run `make verify` on the Linux host.
-- [ ] 3.3 Pass the independent review and record it in `verification.md`.
+- [x] 3.3 Pass the independent review and record it in `verification.md`.
