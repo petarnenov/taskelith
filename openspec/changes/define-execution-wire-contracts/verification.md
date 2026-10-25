@@ -24,7 +24,14 @@ Recorded before pass 1.
 
 ## Checks
 
-In the worktree at `d224549`, `make verify` passed: 397 tests passed, 0 failed; coverage over the compiled product code 99.82% lines, 96.51% branches, 99.51% functions, with `contracts/protocol-version.js` and `scheduling/assignment.js` at 100%; "Every comment is within the comment length rule."; "Workspace and hexagonal boundary checks passed."; "Every product module is in the coverage report."; `make contract-compatibility` reported 0 breaking changes for both SDLC documents and both execution documents absent at the merge base `cb97aee`; "Every active OpenSpec change archives into strictly valid specs."; "Packed file allowlist and installed CLI verification passed." `npm run openspec -- validate define-execution-wire-contracts --strict` passed.
+`make verify` passed in the worktree before pass 1 and after each round of fixes:
+
+- At `d224549`, before pass 1: 397 tests passed, 0 failed; coverage 99.82% lines, 96.51% branches, 99.51% functions.
+- At `2f9a3f2`, after the pass-1 fixes: 399 tests passed, 0 failed; coverage 99.82% lines, 96.51% branches, 99.51% functions.
+- At `19072ce`, after the pass-2 fixes, the revision pass 3 reviewed: 400 tests passed, 0 failed; coverage over the compiled product code 99.82% lines, 96.51% branches, 99.51% functions, with `contracts/protocol-version.js` and `scheduling/assignment.js` at 100%. The run also printed "Every comment is within the comment length rule." and "Workspace and hexagonal boundary checks passed.", and "Every product module is in the coverage report." `make contract-compatibility` reported 0 breaking changes for `sdlc.openapi.json`, 34 changes for `sdlc.asyncapi.json` declared by version 0.2.0, and both execution documents absent at the merge base `cb97aee`. Finally it printed "Every active OpenSpec change archives into strictly valid specs." and "Packed file allowlist and installed CLI verification passed."
+- `npm run openspec -- validate define-execution-wire-contracts --strict` passed at each of these revisions.
+
+Before pass 3 this section recorded only the run at `d224549` (pass-3 finding 2).
 
 ## Independent review
 
@@ -47,3 +54,8 @@ Assigned reviewer: Codex CLI with `codex exec -m gpt-6.1-sol -c model_reasoning_
   5. Low: generation checked shared names only within each document kind. It now merges the schemas of every document once before the two bundles, with a test of a conflict between an OpenAPI and an AsyncAPI document.
   6. Low: the contract page and the spec said that only unrecorded processes, capacity, and admission pressure were about no attempt, although command rejections are too. Both, and the `ObservationMetadata` description, now name command rejections.
   7. Low: the evidence of an operator-resolved outcome allowed control characters, which `parseEvidenceReference` rejects. It is now `DisplayText`, with a negative test.
+
+- **Pass 3 — session `01a170a3-d64b-77a2-8068-fa108890b083`,** reviewed revision `19072ce`; the header reports `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`. Snapshot before and after: `74e2984e…0cb2`, equal. The reviewer confirmed pass-2 findings 1 and 4 to 7 fully resolved, and findings 2 and 3 in part, with the gaps raised below. Findings: 0 Critical, 0 High, 2 Medium, 1 Low. This was the third pass, so the findings go to the owner through the coordinator, with options:
+  1. Medium, **open:** a journal rolled back to before an applied acceptance yields an inventory whose `throughSequence` is below that acceptance, so the omission proves nothing, and with a recorded grant no re-send follows: the rollback stays undetected. `throughSequence` alone cannot tell a rollback from a delayed snapshot. Proposed fix: a control-plane inventory request with a fresh nonce, which the snapshot returns; in a snapshot with the current nonce, a `throughSequence` below the highest applied sequence of the journal, or an omitted accepted assignment, is a rollback that starts reconciliation and keeps ownership and reservation.
+  2. Medium, **record updated, pending the owner's decision:** this record listed `make verify` only for `d224549`, before the fixes. The section "Checks" above now lists the runs after each round, which took place at those revisions.
+  3. Low, **open:** the 403 response of `publishEvidence` still describes a worker that does not own the attempt at the current generation, which contradicts keeping older-generation evidence for audit. Proposed fix: 403 only for a producer that never held the attempt at the stated generation; a valid older-generation publication returns 200 or 201 with `ownershipCurrent` false.
