@@ -77,6 +77,7 @@ Recorded before pass 1.
 `make verify` ran in the worktree with every file tracked:
 - At `dc49bcd`, after the merge: 1025 tests passed, 0 failed. Coverage 99.25% lines, 91.61% branches, 99.01% functions. The comment, boundary, coverage-scope, dependency-inventory, contract-compatibility, OpenSpec, and package checks pass.
 - At `d0958be`, before pass 1: 1025 tests passed, 0 failed. Coverage 99.25% lines, 91.61% branches, 99.01% functions. Every other check passes.
+- At `e749b8d`, after the pass-1 fixes and the new spec scenarios: 1042 tests passed, 0 failed. Coverage 99.26% lines, 91.66% branches, 99.01% functions. Every other check passes.
 
 ## Independent review
 
