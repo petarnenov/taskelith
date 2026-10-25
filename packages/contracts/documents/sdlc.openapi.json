@@ -65,6 +65,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "The binding names a workflow, version, or digest the control plane does not know.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
           }
         }
       }

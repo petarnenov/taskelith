@@ -19,9 +19,8 @@ export interface CommandSetting {
 
 export type CommandPayload = (setting: CommandSetting) => JsonObject;
 
-// Writes a wire command for the assignment's worker to the outbox under the
-// request's identity: `CommandMetadata` with the SDLC binding, and the payload
-// at the protocol version the worker shares (execution wire contracts).
+// Writes the assignment's worker a wire command under the request's identity:
+// metadata with the SDLC binding, and a payload at the shared version.
 export async function appendWorkerCommand(
   tx: CapacityTransaction,
   identity: CommandIdentity,

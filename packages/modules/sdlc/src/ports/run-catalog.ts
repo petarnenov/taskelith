@@ -12,9 +12,8 @@ export interface RunEnvelope {
   readonly createdAt: Instant;
 }
 
-// The project and creation time of each run, and the run each admission
-// belongs to. `register` and `bindAdmission` fail with `conflict` when the
-// entry exists; a run must be stored before its envelope.
+// Each run's project and creation time, and each admission's run; writing an
+// entry again is `conflict`, and a run is stored before its envelope.
 export interface RunCatalog {
   register(envelope: RunEnvelope): Promise<Result<void>>;
   envelope(runId: WorkflowRunId): Promise<Result<RunEnvelope | undefined>>;

@@ -22,6 +22,7 @@ export {
   redriveMessageId,
   runQuarantineKeeper,
   type QuarantineRecord,
+  type QuarantineSource,
 } from './quarantine.js';
 export {
   ensureAdvisoryConsumer,

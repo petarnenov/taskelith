@@ -8,10 +8,12 @@ import {
   parseWorkerId,
   type HostConstraints,
   type InitializedInstallation,
+  type InstallationIdentity,
   type RotatedCredentials,
 } from '@taskelith/fleet';
 import { err, failure, instantFromEpochMilliseconds, ok, type Instant, type Result } from '@taskelith/kernel';
-import { connectSystemAccount, NatsBrokerCredentials, type TransportTls } from '@taskelith/nats';
+import { connectSystemAccount, NatsBrokerCredentials, type BrokerAuthority, type TransportTls } from '@taskelith/nats';
+import type { Logger, Metrics } from '@taskelith/observability';
 import {
   CommittingFleetRegistry,
   CommittingInstallationTable,
@@ -29,6 +31,8 @@ export interface AdministrationSettings {
   readonly nats: URL;
   readonly natsTls?: TransportTls;
   readonly now?: () => Instant;
+  readonly logger?: Logger;
+  readonly metrics?: Metrics;
 }
 
 export interface Initialization extends InitializedInstallation {
@@ -47,7 +51,10 @@ export class Administration {
   private constructor(settings: AdministrationSettings, namespace: ControlPlaneNamespace) {
     this.#settings = settings;
     this.#namespace = namespace;
-    this.#database = new PostgresDatabase(settings.postgres);
+    this.#database = new PostgresDatabase(settings.postgres, {
+      ...(settings.logger === undefined ? {} : { logger: settings.logger }),
+      ...(settings.metrics === undefined ? {} : { metrics: settings.metrics }),
+    });
     this.#operator = new OperatorCredentialService({
       credentials: new CommittingOperatorCredentials(this.#database), secrets: this.#secrets, clock: this.#clock,
     });
@@ -94,14 +101,33 @@ export class Administration {
     return this.#asOperator(operatorSecret, (enrollment) => enrollment.expireGraceWindows());
   }
 
+  // The service's database, operator credential, and verified installation,
+  // which the control-plane composition root shares with these commands.
+  get database(): PostgresDatabase {
+    return this.#database;
+  }
+
+  get operator(): OperatorCredentialService {
+    return this.#operator;
+  }
+
+  verifiedInstallation(): Promise<Result<InstallationIdentity>> {
+    return this.#installation().verifyAtStart();
+  }
+
+  brokerAuthority(): Result<BrokerAuthority> {
+    const authority = readBrokerAuthority(this.#namespace);
+    if (!authority.ok) return authority;
+    return authority.value === undefined ? err(failure('precondition-failed', 'the installation has no broker authority')) : ok(authority.value);
+  }
+
   // The enrollment service as the HTTP layer (item 16) uses it, with a
   // system connection for revocations that the caller closes.
   async enrollmentService(): Promise<Result<{ service: EnrollmentService; close(): Promise<void> }>> {
-    const identity = await this.#installation().verifyAtStart();
+    const identity = await this.verifiedInstallation();
     if (!identity.ok) return identity;
-    const authority = readBrokerAuthority(this.#namespace);
+    const authority = this.brokerAuthority();
     if (!authority.ok) return authority;
-    if (authority.value === undefined) return err(failure('precondition-failed', 'the installation has no broker authority'));
     const system = await connectSystemAccount({
       server: this.#settings.nats, creds: authority.value.systemUser(this.#epochSeconds()).creds,
       ...(this.#settings.natsTls === undefined ? {} : { tls: this.#settings.natsTls }),
