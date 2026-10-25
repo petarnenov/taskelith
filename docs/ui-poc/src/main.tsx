@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   ActionIcon,
@@ -8,6 +8,7 @@ import {
   Button,
   Center,
   Group,
+  Loader,
   MantineProvider,
   Menu,
   NavLink,
@@ -24,7 +25,8 @@ import {
   useMantineColorScheme,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { PocProvider, usePoc, type Screen } from './store';
+import { PERSONAS, PocProvider, usePoc, type Screen } from './store';
+import { LaterGate } from './ui';
 import { ChevronIcon, InboxIcon, LogoIcon, MoonIcon, SunIcon } from './icons';
 import { BoardScreen } from './screens/Board';
 import { SessionScreen } from './screens/Session';
@@ -39,18 +41,19 @@ import { StatesScreen } from './screens/States';
 
 const theme = createTheme({
   primaryColor: 'indigo',
+  respectReducedMotion: true,
   defaultRadius: 'md',
   fontFamily: "'IBM Plex Sans', system-ui, sans-serif",
   fontFamilyMonospace: "'IBM Plex Mono', ui-monospace, monospace",
   headings: { fontFamily: "'IBM Plex Sans', system-ui, sans-serif", fontWeight: '600' },
 });
 
-const NAV: { screen: Screen; label: string }[] = [
+const NAV: { screen: Screen; label: string; later?: string }[] = [
   { screen: 'board', label: 'Board' },
   { screen: 'session', label: 'Sessions' },
   { screen: 'reviews', label: 'Reviews' },
   { screen: 'workers', label: 'Workers' },
-  { screen: 'knowledge', label: 'Knowledge' },
+  { screen: 'knowledge', label: 'Knowledge', later: 'G5' },
   { screen: 'integrations', label: 'Integrations' },
   { screen: 'plugins', label: 'Plugins' },
   { screen: 'states', label: 'Board states' },
@@ -112,21 +115,29 @@ function NeedsYouButton() {
 }
 
 function AccountMenu() {
-  const { signOut } = usePoc();
+  const { signOut, persona, setPersona } = usePoc();
   return (
-    <Menu position="bottom-end" width={280} withArrow>
+    <Menu position="bottom-end" width={300} withArrow>
       <Menu.Target>
         <UnstyledButton aria-label="Account menu">
           <Avatar size={44} radius="xl" color="orange">
-            PP
+            {persona.initials}
           </Avatar>
         </UnstyledButton>
       </Menu.Target>
       <Menu.Dropdown>
-        <Menu.Label>Signed in as PP</Menu.Label>
+        <Menu.Label>Signed in as {persona.name}</Menu.Label>
         <Text size="xs" c="dimmed" px="sm" pb="xs">
-          installation-owner · project-maintainer of taskelith
+          {persona.roles.join(' · ')}
+          {persona.roles.includes('installation-owner') ? ' (installation-wide) and ' : ' of '}taskelith
         </Text>
+        <Menu.Divider />
+        <Menu.Label>Proof of concept: view as</Menu.Label>
+        {PERSONAS.map((p) => (
+          <Menu.Item key={p.id} onClick={() => setPersona(p.id)} disabled={p.id === persona.id}>
+            {p.name} · {p.roles.join(', ')}
+          </Menu.Item>
+        ))}
         <Menu.Divider />
         <Menu.Item>Account settings</Menu.Item>
         <Menu.Item>Change password</Menu.Item>
@@ -141,6 +152,8 @@ function AccountMenu() {
 
 function SignInScreen() {
   const { signIn } = usePoc();
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | undefined>();
   return (
     <Center mih="100vh" p="md">
       <Paper
@@ -152,7 +165,8 @@ function SignInScreen() {
         component="form"
         onSubmit={(event) => {
           event.preventDefault();
-          signIn();
+          if (password === '') setError('Invalid username or password.');
+          else signIn();
         }}
       >
         <Stack gap="md">
@@ -166,7 +180,17 @@ function SignInScreen() {
             You are signed out. Agents and merges keep running; only this browser session ended.
           </Text>
           <TextInput label="Username" placeholder="pp" autoComplete="username" />
-          <PasswordInput label="Password" placeholder="Any password" autoComplete="current-password" />
+          <PasswordInput
+            label="Password"
+            placeholder="Any password"
+            autoComplete="current-password"
+            value={password}
+            error={error}
+            onChange={(event) => {
+              setPassword(event.currentTarget.value);
+              setError(undefined);
+            }}
+          />
           <Button type="submit" h={44}>
             Sign in
           </Button>
@@ -176,14 +200,38 @@ function SignInScreen() {
   );
 }
 
+// The SPA asks the server for the current session before it shows anything;
+// a missing or expired session shows the sign-in screen.
+function useSessionCheck(): boolean {
+  const [checking, setChecking] = useState(true);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setChecking(false), SESSION_CHECK_DELAY);
+    return () => clearTimeout(timer);
+  }, []);
+  return checking;
+}
+
+const SESSION_CHECK_DELAY = 600;
+
 function Shell() {
   const { screen, go, signedIn } = usePoc();
+  const checking = useSessionCheck();
   const [opened, { toggle, close }] = useDisclosure(false);
   const Current = SCREEN_VIEWS[screen];
   const navigate = (to: Screen) => {
     go(to);
     close();
   };
+  if (checking) {
+    return (
+      <Center mih="100vh">
+        <Group gap="sm">
+          <Loader size="sm" />
+          <Text c="dimmed">Checking your session…</Text>
+        </Group>
+      </Center>
+    );
+  }
   if (!signedIn) return <SignInScreen />;
 
   return (
@@ -219,6 +267,7 @@ function Shell() {
                 color={activeNav(screen) === item.screen ? undefined : 'gray'}
                 aria-current={activeNav(screen) === item.screen ? 'page' : undefined}
                 onClick={() => go(item.screen)}
+                rightSection={item.later ? <LaterGate>{item.later}</LaterGate> : undefined}
               >
                 {item.label}
               </Button>
@@ -236,6 +285,7 @@ function Shell() {
           <NavLink
             key={item.screen}
             label={item.label}
+            rightSection={item.later ? <LaterGate>{item.later}</LaterGate> : undefined}
             active={activeNav(screen) === item.screen}
             href={'#' + item.screen}
             onClick={(event) => {
