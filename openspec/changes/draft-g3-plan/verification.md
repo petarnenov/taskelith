@@ -43,6 +43,8 @@ Assigned reviewer (by the coordinator): Codex (`gpt-6.1-sol`), reasoning effort 
   2. Medium: the SCM port did not limit a per-run credential to the permissions the run needs. Item 7 adds that limit and a conformance check that a credential without write permission cannot write.
   3. Low: D17 claimed that unstyled primitives reproduce the proof of concept's look exactly. It now states this as an expectation that item 1 confirms.
 
+- **Pass 3 — session `01a172a6-7d54-7110-a77c-25fc87770cbc`, head `fd85b3c`.** The header confirmed the model, reasoning effort medium, and the read-only sandbox; the snapshot was `432a6136…f470` before and after the pass. The reviewer confirmed all three pass-2 resolutions and reviewed the whole change again. Findings: 0 Critical, 0 High, 0 Medium, 0 Low. Only this record entry was added after the pass.
+
 ## Limitations
 
 - The plan assumes the G2 items as planned; the G2 closure ADR may change the starting point and carry deferrals into G3.
@@ -50,6 +52,5 @@ Assigned reviewer (by the coordinator): Codex (`gpt-6.1-sol`), reasoning effort 
 
 ## Remaining gates
 
-- Independent review pass 3.
 - Coordinator integration into `dev` and archive.
 - Finalization of the plan when G2 closes, and the owner's decisions D2 to D17.

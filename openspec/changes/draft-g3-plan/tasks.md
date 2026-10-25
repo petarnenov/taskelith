@@ -5,4 +5,4 @@
 ## 2. Verification and review
 
 - [x] 2.1 Run `make verify`, the OpenSpec strict validation, and the link and evidence checks.
-- [ ] 2.2 Obtain independent review (assigned Codex Sol medium by the coordinator) and record results.
+- [x] 2.2 Obtain independent review (assigned Codex Sol medium by the coordinator) and record results.
