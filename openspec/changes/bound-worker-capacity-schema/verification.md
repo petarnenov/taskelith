@@ -21,6 +21,7 @@ Ubuntu 24.04.5 LTS, Linux 6.8.0-147-generic, x86_64; Node.js v24.22.1 and npm 12
 - `make contract-compatibility` with the maximums and the old versions failed: `execution.openapi.json` had 3 breaking changes over 0.2.1 (`request-property-max-set (enrollWorker)` for `capacity/slots`, `capacity/cpuMillicores`, and `capacity/memoryMebibytes`), and `execution.asyncapi.json` 21 over 0.1.0 (the added maximums at each path of the `capacityDeclared` message). With 0.3.0 and 0.2.0 it passed: "Contract documents have no undeclared breaking change."
 - `node --experimental-strip-types --test packages/contracts/test/execution-contracts.test.ts` after `npm run build`: with the documents of `c84ca71`, 19 passed and 1 failed (the new test); with the change, 20 passed, 0 failed.
 - `npm run openspec -- validate bound-worker-capacity-schema --strict` passed.
+- `make verify` at `13ca8fe` passed (962 tests, 947 passed, 0 failed, 15 skipped on macOS-only tests; coverage 99.00% lines, 91.85% branches, 98.66% functions; contract compatibility passed; strict OpenSpec validation 54 passed, 0 failed), including the enrollment integration test against PostgreSQL.
 
 ## Independent review
 
