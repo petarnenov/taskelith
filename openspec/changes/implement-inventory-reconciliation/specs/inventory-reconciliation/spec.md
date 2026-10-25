@@ -62,6 +62,20 @@ The control plane SHALL store the parts of a snapshot until it is complete and t
 - **WHEN** a snapshot numbered 3 arrives without the current `requestId` after a part of snapshot 4 from the same journal
 - **THEN** it is discarded and never applied
 
+### Requirement: Inconsistent report
+A report whose parts disagree on `parts`, `journalId`, `requestId`, `snapshot`, or `throughSequence`, or that holds a part outside 1 to `parts`, SHALL be refused: its stored parts SHALL be deleted without any other effect, and the refusal SHALL be logged as a structured warning with its worker, journal, and `reportId`.
+
+#### Scenario: Part counts disagree
+- **WHEN** part 1 of a report says it has 2 parts and part 2 says it has 3
+- **THEN** the report is never applied, its parts are deleted, and the refusal is logged
+
+### Requirement: Pending snapshot bound
+Of a journal's pending reports that are not fresh, the control plane SHALL keep only the newest, and only while its `snapshot` is not below the highest received from the journal; this SHALL hold after each stored part and each new request. A fresh report SHALL be kept until its rollback check has run.
+
+#### Scenario: Repeated requests answered incompletely
+- **WHEN** ten requests in turn are each answered by one part of a two-part fresh report with a growing `snapshot`
+- **THEN** only the report answering the current request stays pending, and after a newer request it is kept only while no later snapshot arrives
+
 ### Requirement: Rollback check of a fresh snapshot
 A complete snapshot whose `requestId` is the worker's current request SHALL be checked against the request's bound before any other rule: a `throughSequence` below the bound's sequence of its journal, or the omission of an unfinished assignment the bound lists for that journal, SHALL be a rollback. A fresh snapshot below a `snapshot` already received SHALL be used only for this check. A snapshot that is not fresh SHALL never prove a rollback.
 
@@ -110,6 +124,13 @@ An observation or inventory report of an enrolled worker that is not revoked, wh
 - **WHEN** the previous journal's last capacity declaration had sequence 3 and the new incarnation declares its capacity at sequence 1
 - **THEN** the new declaration is applied
 
+### Requirement: Observation derived again
+An authenticated observation whose identity the inbox already holds, at a sequence its journal has not applied, SHALL record that sequence in its journal's cursor, confirm the grown prefix, and evaluate the journal's pending snapshots, without applying its effect again. At a sequence its journal already applied, it SHALL stay a duplicate, which confirms the prefix again when within it.
+
+#### Scenario: Acceptance derived again under a new incarnation
+- **WHEN** after a journal replacement re-sends an offer, the worker's acceptance arrives with the observation identity already applied from the previous journal at the new journal's sequence 2, followed by an observation at sequence 3
+- **THEN** the new journal's cursor confirms through 3 without applying the acceptance again, and a snapshot through sequence 3 is applied
+
 ### Requirement: Refused journals
 A journal seen from the worker before, a journal another worker holds, and any new journal of a revoked worker SHALL be refused without effect and without contact.
 
@@ -126,7 +147,7 @@ A journal seen from the worker before, a journal another worker holds, and any n
 - **THEN** it is refused, and neither worker's journal changes
 
 ### Requirement: Journal retirement after a rollback
-A sequence classified `rollback`, and a fresh snapshot that fails the rollback check, SHALL retire their journal as a journal loss: the worker SHALL become unreachable, its ownership and reservations SHALL be kept, and every later observation or report of that journal SHALL be refused without contact until a new incarnation replaces it.
+A sequence classified `rollback`, and a fresh snapshot that fails the rollback check, SHALL retire their journal as a journal loss: the worker SHALL become unreachable, its ownership and reservations SHALL be kept, and every later observation or report of that journal SHALL be refused without contact until a new incarnation replaces it. A journal replaced before its retirement commits SHALL NOT change the worker's reachability.
 
 #### Scenario: Rollback that repeats a sequence
 - **WHEN** an observation arrives at an applied sequence of its journal under a new observation identity
@@ -135,6 +156,10 @@ A sequence classified `rollback`, and a fresh snapshot that fails the rollback c
 #### Scenario: Observation after retirement
 - **WHEN** a worker publishes an observation at a new sequence of its retired journal
 - **THEN** it is not applied, and the worker stays unreachable
+
+#### Scenario: Replacement before the retirement
+- **WHEN** a new incarnation replaces the journal after a sequence rollback is found and before its retirement commits
+- **THEN** the worker stays reachable under the new journal, and no retirement is logged
 
 ### Requirement: Lost local history
 An assignment whose worker lost its local history SHALL keep its ownership and reservation. Its offer SHALL be re-sent while no grant was ever recorded for its attempt; otherwise every execution under it that is not terminal SHALL record `local-history-lost`, so that its attempt cannot end and no retry follows it until a terminal fact or an operator resolves it.
