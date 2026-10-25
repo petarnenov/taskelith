@@ -15,4 +15,4 @@
 
 - [x] 3.1 Unit and integration tests for every requirement scenario.
 - [x] 3.2 `make verify`.
-- [ ] 3.3 Independent review by the assigned reviewer, recorded in `verification.md`.
+- [x] 3.3 Independent review by the assigned reviewer, recorded in `verification.md`.
