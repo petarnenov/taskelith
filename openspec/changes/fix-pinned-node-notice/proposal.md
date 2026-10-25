@@ -4,7 +4,7 @@ After `fix-pinned-node-path-order`, `make setup` and `make doctor` run under the
 
 ## What Changes
 
-- The notice tells the user to run `nvm use` and check that `node -v` prints the pinned version, and otherwise to run the printed `export PATH="<directory>:$PATH"` line. The directory is that of the Node.js the checks ran under, which is the one the make targets put first.
+- The notice tells the user to run `nvm use` and check that `node -v` prints the pinned version, and otherwise to run the printed `export PATH='<directory>':"$PATH"` line, with the directory single-quoted so that the shell takes it literally. The directory is that of the Node.js the checks ran under, which is the one the make targets put first.
 - `scripts/doctor.ts` and `scripts/setup.ts` pass that directory to the notice.
 - The test of the notice and the README sentence on direct `npm` and `node` use follow the new text.
 

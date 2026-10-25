@@ -1,7 +1,7 @@
 ## 1. Fix
 
 - [x] 1.1 Make `shellNodeNotice` name `nvm use` with a `node -v` check and the `export PATH` line of the checks' Node.js directory, and pass that directory from `scripts/doctor.ts` and `scripts/setup.ts`.
-- [x] 1.2 Update the notice test and the README sentence.
+- [x] 1.2 Update the notice test, add a test that runs the printed line with `sh` for directories with special characters, and update the README sentence.
 - [x] 1.3 Update the two `development-environment` scenarios.
 
 ## 2. Verification

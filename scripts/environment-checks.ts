@@ -184,7 +184,11 @@ export interface NodeSelection {
 // also names the PATH line that the make targets use.
 export function shellNodeNotice({ shell, checks, checksDirectory }: NodeSelection): string | undefined {
   if (shell === checks) return undefined;
-  return `These checks ran under Node.js ${checks}, which make doctor and make verify select on their own; your shell uses ${shell || 'none'}. To run npm or node directly, run 'nvm use' and check that 'node -v' prints ${checks}; if it does not, another Node.js comes first in PATH, so run: export PATH="${checksDirectory}:$PATH"`;
+  return `These checks ran under Node.js ${checks}, which make doctor and make verify select on their own; your shell uses ${shell || 'none'}. To run npm or node directly, run 'nvm use' and check that 'node -v' prints ${checks}; if it does not, run: export PATH=${singleQuoted(checksDirectory)}:"$PATH"`;
+}
+
+function singleQuoted(text: string): string {
+  return `'${text.replaceAll("'", "'\\''")}'`;
 }
 
 export function formatReport(results: readonly CheckResult[]): string {

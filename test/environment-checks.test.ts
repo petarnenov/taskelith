@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import {
   checkEnvironment, collectFacts, formatReport, readPins, setupSteps, shellNodeNotice, stepCommand,
@@ -63,10 +64,25 @@ test('the checks tell a shell on another Node.js how to select the pin for direc
   assert.equal(shellNodeNotice({ ...pinned, shell: 'v24.22.1' }), undefined);
   assert.equal(
     shellNodeNotice({ ...pinned, shell: 'v24.21.0' }),
-    "These checks ran under Node.js v24.22.1, which make doctor and make verify select on their own; your shell uses v24.21.0. To run npm or node directly, run 'nvm use' and check that 'node -v' prints v24.22.1; if it does not, another Node.js comes first in PATH, so run: export PATH=\"/home/dev/.nvm/versions/node/v24.22.1/bin:$PATH\""
+    "These checks ran under Node.js v24.22.1, which make doctor and make verify select on their own; your shell uses v24.21.0. To run npm or node directly, run 'nvm use' and check that 'node -v' prints v24.22.1; if it does not, run: export PATH='/home/dev/.nvm/versions/node/v24.22.1/bin':\"$PATH\""
   );
-  assert.match(shellNodeNotice({ ...pinned, shell: undefined }) ?? '', /your shell uses none\./);
-  assert.match(shellNodeNotice({ ...pinned, shell: '' }) ?? '', /your shell uses none\./);
+  const withoutShellNode = shellNodeNotice({ ...pinned, shell: undefined });
+  assert.equal(withoutShellNode, shellNodeNotice({ ...pinned, shell: '' }));
+  assert.equal(
+    withoutShellNode,
+    "These checks ran under Node.js v24.22.1, which make doctor and make verify select on their own; your shell uses none. To run npm or node directly, run 'nvm use' and check that 'node -v' prints v24.22.1; if it does not, run: export PATH='/home/dev/.nvm/versions/node/v24.22.1/bin':\"$PATH\""
+  );
+});
+
+test('the PATH line of the notice puts the directory first literally, whatever characters it has', () => {
+  const directories = ['/Users/Dev Name/bin', '/home/dev$USER/bin', '/home/$(echo injected >&2)/bin', '/home/`id`/bin', '/home/"q"/bin', "/home/o'brien/bin"];
+  for (const checksDirectory of directories) {
+    const notice = shellNodeNotice({ shell: 'v24.21.0', checks: 'v24.22.1', checksDirectory }) ?? '';
+    const line = notice.slice(notice.indexOf('export PATH='));
+    const run = spawnSync('sh', ['-c', `${line}; printf %s "$PATH"`], { encoding: 'utf8', env: { PATH: '/usr/bin:/bin' } });
+    assert.equal(run.stderr, '', checksDirectory);
+    assert.equal(run.stdout, `${checksDirectory}:/usr/bin:/bin`);
+  }
 });
 
 test('setup installs npm before the dependencies and reinstalls them with the new npm', () => {
