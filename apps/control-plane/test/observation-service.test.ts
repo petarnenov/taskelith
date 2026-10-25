@@ -17,7 +17,7 @@ import {
   type ExecutionId,
   type WorkerId,
 } from '@taskelith/execution';
-import { fleetWorker, type EnrolledWorker } from '@taskelith/fleet';
+import { InMemoryFleetRegistry, fleetToken, fleetWorker, type EnrolledWorker } from '@taskelith/fleet';
 import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { InMemoryTaskLineage, type Assignment, type WorkerPlacementRecord } from '@taskelith/scheduling';
@@ -59,18 +59,23 @@ async function fixture(enrolled: EnrolledWorker = fleetWorker(WORKER, JOURNAL)) 
   const tasks = new InMemoryTaskRepository();
   const lineage = new InMemoryTaskLineage();
   const outbox = new InMemoryOutbox();
-  const capacity = inMemoryCapacity(tasks, lineage, [RECORD]);
+  const capacity = inMemoryCapacity(tasks, lineage, [RECORD], outbox);
+  const fleet = new InMemoryFleetRegistry(() => AT);
+  value(await fleet.addToken(fleetToken('token-1')));
+  value(await fleet.enroll(fleetToken('token-1').hash, enrolled));
   const transaction: ControlPlaneTransaction = {
     runs: new InMemoryWorkflowRunRepository(), catalog: new InMemoryRunCatalog(), admissions: new InMemoryAdmissionRepository(),
-    gates: new InMemoryGateRepository(), tasks, lineage, outbox, ...capacity,
+    gates: new InMemoryGateRepository(), tasks, lineage, ...capacity,
     evidence: new InMemoryEvidenceRecords(), producers: { heldGenerations: async () => ok([]) },
-    fleet: { worker: async (workerId) => ok(workerId === enrolled.workerId ? enrolled : undefined) },
+    fleet,
     revisions: new InMemoryCurrentRevisions(), launches: undefined as never,
     now: async () => AT,
   };
   const store: ControlPlaneStore = { transaction: (work) => work(transaction), readCommitted: (work) => work(transaction) };
   value(await new RunService(store, new WorkflowRegistry([{ definition, digest: DIGEST }])).createRun({ runId: 'run-1', projectId: 'project-1', binding }));
-  const service = new ObservationService(store, { newConfirmationId: () => `confirmation-${++confirmationIds}` });
+  const service = new ObservationService(store, {
+    newConfirmationId: () => `confirmation-${++confirmationIds}`, newRequestId: () => `request-${++confirmationIds}`,
+  });
   return { store, transaction, outbox, tasks: new TaskService(store), service };
 }
 
@@ -239,7 +244,7 @@ test('a refused effect is recorded again without it and logged; an outage is ret
   const stale = err(failure('conflict', 'stale', { reason: 'stale-ownership-generation' }));
   const store = scriptedStore([stale, ok('rejected'), err(failure('unavailable', 'down')), err(failure('unavailable', 'down'))]);
   const logs = new InMemoryLogSink();
-  const service = new ObservationService(store, { newConfirmationId: () => 'confirmation-x', logger: new Logger(logs, { now: () => AT }) });
+  const service = new ObservationService(store, { newConfirmationId: () => 'confirmation-x', newRequestId: () => 'request-x', logger: new Logger(logs, { now: () => AT }) });
   const accepted = message('execution.assignment.accepted', 1, { commandId: 'c', assignmentId: 's' }, { attemptId: 'a', ownershipGeneration: 2 });
   assert.equal(value(await service.apply(accepted)), 'rejected');
   assert.deepEqual(logs.records.map((record) => [record.event, record.fields.reason, record.correlation.observationId]), [
