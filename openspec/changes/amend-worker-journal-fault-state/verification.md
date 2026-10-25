@@ -27,6 +27,7 @@ Assigned reviewer: Codex CLI, `codex exec -m gpt-6.1-sol -c model_reasoning_effo
 
 - **Pass 1 — session `01a170d4-2999-7dd1-8746-8031ebc098a8`**, at `dde3033`. The output header reports model `gpt-6.1-sol`, reasoning effort medium, and sandbox read-only. Snapshot before and after: `dd63a812362772b48f2ae6d9382d8a4f96cdcc80737dc4dadd9223cef6350964`, unchanged. Findings: 0 Critical, 0 High, 1 Medium, 0 Low.
   1. Medium: the new scenario promised a refusal in the same boot unconditionally, although a stop that could not be recorded lets a restarted worker start, as section 7 and the qualification record say. The requirement now also requires reporting a stop it could not record, and the scenario applies to a recorded stop. Strict validation and `make verify` passed again with the same results.
+- **Pass 2 — session `01a170d6-656f-72d0-bd63-eae82011caf5`**, at `5e39013`. The output header reports model `gpt-6.1-sol`, reasoning effort medium, and sandbox read-only. Snapshot before and after: `7c32eb6338c2990a89c4741ec6f21019d40e5bf51b1a5f98aeaef7ac18fcf31d`, unchanged. The reviewer confirmed the pass-1 finding as resolved. Findings: 0 Critical, 0 High, 0 Medium, 0 Low.
 
 ## Limitations
 
@@ -34,4 +35,4 @@ Documentation only; no behavior changed, and no new test was added.
 
 ## Remaining gates
 
-Independent review; integration by the coordinating session (pull request into `dev`, merge); archival.
+Integration by the coordinating session (pull request into `dev`, merge); archival.
