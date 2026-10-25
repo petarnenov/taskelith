@@ -119,6 +119,18 @@ It ran from the worktree. The prompt and log were kept in the session's scratch 
 | H10 | With more than 100 projects whose first 100 tasks were blocked, every read chose the same 100, because the backoff filtered only after the limited read. | Fixed: the queue leaves out the tasks that are backing off before the ranking and the limit. A backoff entry is forgotten 60 seconds after its next try without a new failure, not when the task is missing from one page. The spec delta has the scenario "Blocked batch", and a PostgreSQL regression places project 101's task behind 100 blocked projects. |
 | L11 | This record said that no contract changed. | Fixed: the evidence names the compatible move to 0.3.1. |
 
+### Pass 3
+
+- Session `01a17452-d01f-7531-aef6-280732b72034`, 2026-10-25 20:29 to 20:32, on `48c4699`.
+- Snapshot `24aeb9ea…a23d90dd` before and after: unchanged.
+- Result: Critical 0, High 1, Medium 1, Low 0. L11 was confirmed resolved, and H10 partly resolved.
+- This was the third pass. The remaining findings go to the owner through the coordinator, under the review process.
+
+| # | Finding | Disposition |
+| --- | --- | --- |
+| H12 | There is still no rotation across projects between passes. With a batch of 100, a 5-second pass, and a 60-second maximum backoff, 1200 older blocked projects can fill every pass. The reviewer reproduced it in memory. | Open: owner decision. |
+| M13 | `forgetStale` drops the backoff of a task that still waits, for example after an outage longer than 60 seconds, which resets its exponent. The reviewer reproduced it. | Open: owner decision. |
+
 ## Limitations
 
 - **No reachable worker until 21b.** No production path marks a worker reachable before 21b, so only tests that seed reachable workers place anything. The HTTP test of `requestDelegation` therefore answers `awaiting-capacity`.
@@ -127,6 +139,7 @@ It ran from the worktree. The prompt and log were kept in the session's scratch 
 
 ## Remaining gates
 
+- The owner's decision on H12 and M13 after the third review pass.
 - Independent review.
 - Integration into `dev` and archiving, by the coordinator.
 - No deployment validation is claimed.
