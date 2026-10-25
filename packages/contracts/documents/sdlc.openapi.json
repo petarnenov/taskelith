@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Taskelith SDLC API",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Creates SDLC workflow runs, submits tasks for admission, and reads admissions. Authentication is defined with enrollment in G2."
   },
   "paths": {
@@ -268,7 +268,7 @@
       "Admission": {
         "type": "object",
         "additionalProperties": false,
-        "description": "A task admission record. The ownership generation is added with the execution module (G2).",
+        "description": "A task admission record. A used admission carries the ownership generation of the dispatch that used it.",
         "required": [
           "id",
           "taskId",
@@ -324,6 +324,9 @@
             "$ref": "#/components/schemas/AdmissionState"
           },
           "generation": {
+            "$ref": "#/components/schemas/Generation"
+          },
+          "ownershipGeneration": {
             "$ref": "#/components/schemas/Generation"
           },
           "changedAt": {

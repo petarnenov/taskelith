@@ -8,10 +8,12 @@ import {
   beginWorkflowProgress,
   openGate,
   parseArtifactRevision,
+  parseOwnershipGeneration,
   parseSemanticApproval,
   parseWorkflowDefinition,
   parseWorkflowRunBinding,
   recordGateEvidence,
+  useAdmission,
   type ArtifactRevision,
 } from '@taskelith/sdlc';
 
@@ -86,18 +88,39 @@ function eventMetadata(eventType: string) {
   return { eventId: 'event-1', eventType, schemaVersion: 1, occurredAt: AT, correlationId: 'correlation-1', producerId: 'control-plane-1', sequence: 1 };
 }
 
-test('the schemas both documents define are identical', () => {
-  const http = document('sdlc.openapi.json').components.schemas;
-  const messages = document('sdlc.asyncapi.json').components.schemas;
-  const shared = Object.keys(http).filter((name) => name in messages);
+const DOCUMENTS = ['sdlc.openapi.json', 'sdlc.asyncapi.json', 'execution.openapi.json', 'execution.asyncapi.json'];
 
-  assert.ok(shared.includes('Admission'));
-  for (const name of shared) assert.deepEqual(http[name], messages[name], name);
+test('a schema name means the same schema in every document that defines it', () => {
+  const documents = DOCUMENTS.map((name) => ({ name, schemas: document(name).components.schemas }));
+  const checked = new Set<string>();
+  for (const [index, left] of documents.entries()) {
+    for (const right of documents.slice(index + 1)) {
+      for (const name of Object.keys(left.schemas).filter((schema) => schema in right.schemas)) {
+        assert.deepEqual(left.schemas[name], right.schemas[name], `${name} in ${left.name} and ${right.name}`);
+        checked.add(name);
+      }
+    }
+  }
+
+  assert.ok(['Admission', 'CommandMetadata', 'ExitStatus', 'Failure'].every((name) => checked.has(name)));
 });
 
 test('an admission record of the domain is a valid wire admission in both documents', () => {
   const record = JSON.parse(JSON.stringify(admission()));
 
+  assert.ok(checkHttpSchema('Admission', record).ok);
+  assert.ok(checkMessageSchema('Admission', record).ok);
+});
+
+test('a used admission with its ownership generation is a valid wire admission in every document', () => {
+  const ownership = parseOwnershipGeneration(2);
+  assert.ok(ownership.ok);
+  const admitted = admission();
+  const used = useAdmission(admitted, admitted.generation, AT, ownership.value);
+  assert.ok(used.ok);
+  const record = JSON.parse(JSON.stringify(used.value));
+
+  assert.equal(record.ownershipGeneration, 2);
   assert.ok(checkHttpSchema('Admission', record).ok);
   assert.ok(checkMessageSchema('Admission', record).ok);
 });

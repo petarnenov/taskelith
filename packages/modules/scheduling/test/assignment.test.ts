@@ -112,6 +112,13 @@ test('a refusal ends the assignment and releases its reservation', () => {
   assert.equal(launchAssignment(refused).active, false);
 });
 
+test('an offer in a protocol version the worker lacks is refused and released', () => {
+  const assignment = offered();
+  const refused = value(refuseAssignment(assignment, assignment.generation, { workerId: WORKER, reason: 'protocol-not-supported' }, NONE, T1));
+  assert.deepEqual(refused.end, { reason: 'refused', refusal: 'protocol-not-supported', endedAt: T1 });
+  assert.equal(refused.reservation.state === 'released' && refused.reservation.releasedBy, 'refused');
+});
+
 test('ending while an execution can run keeps the reservation until its terminal fact', () => {
   const assignment = accepted();
   const cancelled = value(endAssignment(assignment, assignment.generation, 'cancelled', RUNNING, T1));

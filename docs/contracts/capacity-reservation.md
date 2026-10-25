@@ -200,6 +200,7 @@ The scheduler and the worker act on reasons, not text. Item 8 turns the worker's
 | Hard spend limit without provider enforcement | `spend-limit-not-enforceable` | Scheduler | Reject |
 | Worker's concurrent attempts full | `worker-slots-exhausted` | Worker | Release; place again |
 | Disk floor, journal backlog, or daemon overhead exceeded | `worker-admission-pressure` | Worker | Release if not acknowledged; place again after the pressure clears |
+| Offer in an execution protocol version the worker does not support | `protocol-not-supported` | Control plane, from the worker's command rejection | Release; place on a worker that supports a common version ([execution wire contracts](execution-wire-contracts.md)) |
 | Reservation released or held elsewhere | `capacity-not-reserved` | Launch authority | As the launch authorization contract states |
 
 ## 12. Required tests
