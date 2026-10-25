@@ -52,7 +52,9 @@ test('the file store creates once, replaces, appends, lists records only, and re
   assert.ok((await store.append('events', 'b\n')).ok);
   assert.deepEqual(await store.read('events'), { ok: true, value: 'a\nb\n' });
   writeFileSync(join(store.directory, '.intent.tmp-0001'), 'torn');
-  assert.deepEqual([...((await store.list()) as { value: string[] }).value].sort(), ['events', 'intent', 'launch']);
+  const listed = await store.list();
+  assert.ok(listed.ok);
+  assert.deepEqual([...listed.value].sort(), ['events', 'intent', 'launch']);
 
   assert.equal((await store.removeDirectory()).ok, false);
   for (const name of ['events', 'intent', 'launch', '.intent.tmp-0001', 'missing']) assert.ok((await store.remove(name)).ok);
