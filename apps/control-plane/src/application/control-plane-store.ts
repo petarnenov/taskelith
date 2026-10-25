@@ -1,5 +1,6 @@
 import type { Instant, Result } from '@taskelith/kernel';
 import type { AttemptId, EvidenceRecords, TaskRepository, WorkerId } from '@taskelith/execution';
+import type { EnrolledWorker } from '@taskelith/fleet';
 import type { TaskLineage } from '@taskelith/scheduling';
 import type { AdmissionRepository, GateRepository, Outbox, OwnershipGeneration, RunCatalog, WorkflowRunRepository } from '@taskelith/sdlc';
 
@@ -15,7 +16,13 @@ export interface ControlPlaneTransaction {
   readonly outbox: Outbox;
   readonly evidence: EvidenceRecords;
   readonly producers: EvidenceProducers;
+  readonly fleet: WorkerDirectory;
   now(): Promise<Instant>;
+}
+
+// An enrolled worker as the transaction reads it, revoked or not.
+export interface WorkerDirectory {
+  worker(workerId: WorkerId): Promise<Result<EnrolledWorker | undefined>>;
 }
 
 // The generations at which a worker held an attempt, from its assignments.

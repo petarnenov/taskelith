@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
@@ -9,10 +10,12 @@ import { checkHttpSchema, checkMessageSchema } from '@taskelith/contracts';
 import { adminMain, InstallationPublicationFence, serveUntilStopped, startControlPlane, type AdminIo, type RunningControlPlane } from '@taskelith/control-plane';
 import { ControlPlaneNamespace } from '@taskelith/control-plane-store';
 import { BrokerAuthority, connectSystemAccount, connectTransport, NatsBrokerCredentials, TRANSPORT_LIMITS, TransportAddress } from '@taskelith/nats';
+import { openAttempt, type AttemptId, type WorkerId } from '@taskelith/execution';
 import { PostgresDatabase } from '@taskelith/postgres';
+import { createAssignment, parseResourceRequest } from '@taskelith/scheduling';
 import { ok } from '@taskelith/kernel';
 import { InMemoryLogSink } from '@taskelith/observability';
-import { parseWorkflowDefinition } from '@taskelith/sdlc';
+import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
 import { integrationEndpoint, integrationSecret, value } from '@taskelith/testing';
 
 const POSTGRES = integrationEndpoint('TASKELITH_POSTGRES_URL');
@@ -231,6 +234,78 @@ describe('publication fence', () => {
     const redrive = await call('POST', '/quarantine/1/redrive', { bearer: operator });
     assert.equal(redrive.status, 503, 'a redrive waits for the same fence');
     await sql(database, 'UPDATE installation SET quarantined = false');
+  });
+});
+
+describe('evidence', () => {
+  // The placement loop is item 21's, so the test places task-1 itself.
+  async function placedWorker(journalId: string): Promise<{ bearer: string; workerId: string; attemptId: string; generation: number }> {
+    const issued = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operator });
+    const enrolled = await call('POST', '/workers/enrollments', { bearer: issued.enrollmentToken as string, body: {
+      journalId, host: { platform: 'linux', architecture: 'x64', hostname: journalId },
+      protocolVersions: { minimum: 1, maximum: 1 }, capacity: { slots: 1, cpuMillicores: 1000, memoryMebibytes: 1024, enforceableControls: [] },
+    } });
+    const workerId = enrolled.body.workerId as WorkerId;
+    const attemptId = `attempt-${journalId}` as AttemptId;
+    const store = new PostgresDatabase(database);
+    try {
+      const placed = await store.transaction(async (tx) => {
+        const task = await tx.tasks.get('task-1' as TaskId);
+        if (!task.ok) return task;
+        const at = await tx.now();
+        const attempted = openAttempt(task.value, task.value.ownershipGeneration, { id: attemptId }, at);
+        if (!attempted.ok) return attempted;
+        const replaced = await tx.tasks.replace(attempted.value, task.value.generation);
+        if (!replaced.ok) return replaced;
+        const scope = { projectId: 'project-1', runId: 'run-1', taskId: 'task-1', rootTaskId: 'task-1' } as never;
+        const requested = value(parseResourceRequest({ cpuMillicores: 100, memoryMebibytes: 128, hardControls: [] }));
+        const reservation = { id: `reservation-${journalId}` as never, scope, requested, providerCredentials: [] };
+        const generation = attempted.value.ownershipGeneration;
+        const added = await tx.assignments.add(createAssignment({ id: `assignment-${journalId}` as never, attemptId, workerId, ownershipGeneration: generation, reservation }, at));
+        return added.ok ? ok(generation) : added;
+      });
+      const credentials = enrolled.body.credentials as { controlPlane: string };
+      return { bearer: credentials.controlPlane, workerId, attemptId, generation: value(placed) };
+    } finally {
+      await store.close();
+    }
+  }
+
+  async function publish(bearer: string, record: Record<string, unknown>, content: Uint8Array<ArrayBuffer>): Promise<Answer> {
+    const form = new FormData();
+    form.append('record', new Blob([JSON.stringify(record)], { type: 'application/json' }));
+    form.append('content', new Blob([content], { type: 'application/octet-stream' }));
+    const response = await fetch(`http://127.0.0.1:${running.api.port}/evidence`, { method: 'POST', headers: { authorization: `Bearer ${bearer}` }, body: form });
+    return { status: response.status, body: await response.json() as Record<string, unknown>, correlationId: response.headers.get('x-correlation-id') };
+  }
+
+  test('a worker that holds the attempt publishes evidence, and the operator reads and downloads it', async () => {
+    const holder = await placedWorker('journal-evidence-1');
+    const content = new Uint8Array([0, 1, 2, 255, 13, 10]);
+    const hex = createHash('sha256').update(content).digest('hex');
+    const record = {
+      evidenceId: 'evidence-e2e-1', projectId: 'project-1', runId: 'run-1', taskId: 'task-1', attemptId: holder.attemptId,
+      ownershipGeneration: holder.generation, kind: 'execution-log', inputArtifacts: [], codeRevision: 'c0ffee',
+      validator: { name: 'runner', version: '1.0.0' }, outcome: 'exited-0', contentDigest: `sha256:${hex}`,
+      contentType: 'application/octet-stream', sizeBytes: content.length, capturedAt: '2026-10-25T09:00:00.000Z',
+    };
+    const created = await publish(holder.bearer, record, content);
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    assert.deepEqual([created.body.ownershipCurrent, created.body.producer], [true, { kind: 'worker', workerId: holder.workerId }]);
+    assert.equal((await publish(holder.bearer, record, content)).status, 200, 'a retry returns the stored record');
+    assert.equal((await publish(holder.bearer, { ...record, outcome: 'exited-1' }, content)).status, 409);
+    assert.equal((await publish(operator, record, content)).status, 401);
+    const stranger = await placedWorker('journal-evidence-2');
+    assert.equal((await publish(stranger.bearer, { ...record, evidenceId: 'evidence-e2e-2' }, content)).status, 403);
+
+    const read = await call('GET', '/evidence/evidence-e2e-1', { bearer: operator });
+    assert.deepEqual([read.status, read.body.contentDigest], [200, `sha256:${hex}`]);
+    const download = async () => fetch(`http://127.0.0.1:${running.api.port}/evidence/evidence-e2e-1/content`, { headers: { authorization: `Bearer ${operator}` } });
+    const downloaded = await download();
+    assert.deepEqual([downloaded.status, [...new Uint8Array(await downloaded.arrayBuffer())]], [200, [...content]]);
+    writeFileSync(join(dataRoot, 'control-plane', 'evidence', 'sha256', hex.slice(0, 2), hex), 'tampered');
+    assert.equal((await download()).status, 500, 'corrupt content is not served');
+    assert.equal((await call('GET', '/evidence/evidence-e2e-9', { bearer: operator })).status, 404);
   });
 });
 

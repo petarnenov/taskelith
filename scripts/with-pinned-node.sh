@@ -17,6 +17,14 @@ export INVOKING_NODE
 
 nvm_script="${NVM_DIR:-${HOME:-}/.nvm}/nvm.sh"
 
+# nvm use updates its PATH entry where it stands, so a Node.js earlier in
+# PATH would still win; the pinned bin directory goes first instead.
+put_pinned_node_first() {
+  pinned_node="$(nvm which "$NODE_PIN" 2>/dev/null)" || return 0
+  PATH="$(dirname "$pinned_node"):$PATH"
+  export PATH
+}
+
 # nvm install looks the version up online, so it runs only when missing; the
 # default alias makes new shells start with the pinned version.
 install_pinned_node() {
@@ -24,7 +32,10 @@ install_pinned_node() {
   . "$nvm_script" --no-use
   { nvm use --silent "$NODE_PIN" >/dev/null 2>&1 || nvm install "$NODE_PIN"; }
   install_status=$?
-  if [ "$install_status" -eq 0 ]; then nvm alias default "$NODE_PIN"; fi
+  if [ "$install_status" -eq 0 ]; then
+    nvm alias default "$NODE_PIN"
+    put_pinned_node_first
+  fi
   # nvm alias can exit 0 after a failed write, so the alias is read back.
   default_version="$(nvm version default 2>/dev/null)"
   set -eu
@@ -44,7 +55,7 @@ use_pinned_node() {
   unset NVM_SYMLINK_CURRENT
   set +eu
   . "$nvm_script" --no-use
-  nvm use --silent "$NODE_PIN" >/dev/null 2>&1
+  nvm use --silent "$NODE_PIN" >/dev/null 2>&1 && put_pinned_node_first
   set -eu
 }
 
@@ -54,7 +65,7 @@ case "$mode" in
     ;;
   use)
     # Without the pinned version, the shell's Node.js stays and checks fail.
-    if [ "$INVOKING_NODE" != "v$NODE_PIN" ] && [ -s "$nvm_script" ]; then use_pinned_node; fi
+    if [ -s "$nvm_script" ]; then use_pinned_node; fi
     ;;
   *)
     echo "$usage" >&2

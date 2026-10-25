@@ -4,6 +4,8 @@ import { redactFailure } from '@taskelith/secrets';
 
 // Every message of the execution and SDLC contracts is at most 1 MiB.
 export const MAX_BODY_BYTES = 1024 ** 2;
+// Provisional, in the operational targets: content per evidence publication.
+export const MAX_EVIDENCE_BYTES = 64 * 1024 ** 2;
 
 export interface JsonResponse {
   readonly status: number;
@@ -25,17 +27,27 @@ export function bearerToken(request: IncomingMessage): string | undefined {
   return match?.[1];
 }
 
-export async function readJsonBody(request: IncomingMessage): Promise<Result<unknown>> {
+export async function readBody(request: IncomingMessage, limit: number): Promise<Result<Buffer>> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of request) {
     size += (chunk as Buffer).length;
-    if (size > MAX_BODY_BYTES) return err(failure('invalid', `the request body exceeds ${MAX_BODY_BYTES} bytes`));
+    if (size > limit) return err(failure('invalid', `the request body exceeds ${limit} bytes`));
     chunks.push(chunk as Buffer);
   }
-  if (size === 0) return err(failure('invalid', 'the request has no JSON body'));
+  return ok(Buffer.concat(chunks));
+}
+
+export async function readJsonBody(request: IncomingMessage): Promise<Result<unknown>> {
+  const body = await readBody(request, MAX_BODY_BYTES);
+  if (!body.ok) return body;
+  if (body.value.length === 0) return err(failure('invalid', 'the request has no JSON body'));
+  return parseJson(body.value);
+}
+
+export function parseJson(bytes: Buffer): Result<unknown> {
   try {
-    return ok(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+    return ok(JSON.parse(bytes.toString('utf8')));
   } catch {
     return err(failure('invalid', 'the request body is not JSON'));
   }

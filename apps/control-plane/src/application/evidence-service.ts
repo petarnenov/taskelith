@@ -9,8 +9,8 @@ import {
   type EvidencePublication,
   type EvidenceRecord,
   type EvidenceStore,
-  type WorkerId,
 } from '@taskelith/execution';
+import { validGenerations, type WorkerPrincipal } from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import type { ContentDigest } from '@taskelith/sdlc';
 import type { ControlPlaneStore, ControlPlaneTransaction } from './control-plane-store.js';
@@ -42,14 +42,16 @@ export class EvidenceService {
 
   // The content is checked against its size here and its digest by the
   // content store; it is written only once the producer is authorized.
-  async publish(workerId: WorkerId, input: HttpSchemas['EvidencePublication'], content: Uint8Array): Promise<Result<Publication>> {
+  async publish(principal: WorkerPrincipal, input: HttpSchemas['EvidencePublication'], content: Uint8Array): Promise<Result<Publication>> {
     const publication = parseEvidencePublication(input);
     if (!publication.ok) return publication;
     if (content.length !== publication.value.sizeBytes) {
       return err(failure('invalid', `the content has ${content.length} bytes, not ${publication.value.sizeBytes}`, { field: 'sizeBytes' }));
     }
-    const producer: EvidenceProducer = Object.freeze({ kind: 'worker', workerId });
+    const producer: EvidenceProducer = Object.freeze({ kind: 'worker', workerId: principal.workerId });
     return this.#store.transaction(async (tx) => {
+      const credential = await checkCredential(tx, principal);
+      if (!credential.ok) return credential;
       const stored = await tx.evidence.get(publication.value.evidenceId);
       if (!stored.ok) return stored;
       if (stored.value !== undefined) return this.#repeat(tx, stored.value, publication.value, producer, content);
@@ -136,6 +138,17 @@ export class EvidenceService {
     const locked = await tx.evidence.lockDigest(digest);
     return locked.ok ? this.#contents.put(digest, content) : locked;
   }
+}
+
+// The bearer was checked before the transaction; a revocation or an ended
+// grace window since then refuses the write (trust model, section 4).
+async function checkCredential(tx: ControlPlaneTransaction, principal: WorkerPrincipal): Promise<Result<void>> {
+  const worker = await tx.fleet.worker(principal.workerId);
+  if (!worker.ok) return worker;
+  const valid = worker.value !== undefined && worker.value.revokedAt === undefined
+    && validGenerations(worker.value.credentials, await tx.now()).some((generation) => generation.generation === principal.generation);
+  if (valid) return ok(undefined);
+  return err(failure('forbidden', 'the worker credential is not valid', { reason: 'worker-not-authorized' }));
 }
 
 async function storedRecord(tx: ControlPlaneTransaction, evidenceIdText: string): Promise<Result<EvidenceRecord>> {

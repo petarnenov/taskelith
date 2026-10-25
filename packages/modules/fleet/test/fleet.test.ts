@@ -183,11 +183,11 @@ test('rotation keeps the old generation for the grace window, then revokes its b
   const rotated = value(await service.rotate(enrolled.workerId));
 
   assert.deepEqual([rotated.credentialGeneration, rotated.revocationsPublished], [2, true]);
-  assert.deepEqual(value(await service.authenticate(enrolled.workerId, rotated.credentials.controlPlane)), 2);
-  assert.deepEqual(value(await service.authenticate(enrolled.workerId, enrolled.credentials.controlPlane)), 1);
+  assert.deepEqual(value(await service.authenticateWorkerBearer(rotated.credentials.controlPlane)).generation, 2);
+  assert.deepEqual(value(await service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).generation, 1);
   assert.deepEqual(value(await service.expireGraceWindows()), 0);
   clock.advance(FLEET_LIMITS.rotationGraceMilliseconds);
-  assert.equal(failed(await service.authenticate(enrolled.workerId, enrolled.credentials.controlPlane)).details.reason, 'worker-not-authorized');
+  assert.equal(failed(await service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).details.reason, 'worker-not-authorized');
   assert.deepEqual(value(await service.expireGraceWindows()), 1);
   assert.deepEqual(broker.revoked, ['U-worker-1-1']);
 
@@ -205,7 +205,7 @@ test('a revocation the broker missed stays recorded and is published by the next
   const partial = value(await service.rotate(enrolled.workerId));
   assert.deepEqual([partial.credentialGeneration, partial.revocationsPublished], [4, false], 'a committed rotation keeps its secrets');
   assert.equal(failed(await service.revoke(enrolled.workerId)).code, 'unavailable');
-  assert.equal(failed(await service.authenticate(enrolled.workerId, enrolled.credentials.controlPlane)).code, 'forbidden');
+  assert.equal(failed(await service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).code, 'forbidden');
   assert.equal(failed(await service.rotate(enrolled.workerId)).details.reason, 'worker-not-authorized', 'a revoked worker gets no new generation');
 
   broker.down = false;
@@ -222,7 +222,7 @@ test('a publication that throws after a committed rotation still returns the new
   };
   const rotated = value(await service.rotate(enrolled.workerId));
   assert.deepEqual([rotated.credentialGeneration, rotated.revocationsPublished], [3, false]);
-  assert.equal(value(await service.authenticate(enrolled.workerId, rotated.credentials.controlPlane)), 3);
+  assert.equal(value(await service.authenticateWorkerBearer(rotated.credentials.controlPlane)).generation, 3);
 });
 
 test('revocation denies every credential of the worker at once', async () => {
@@ -232,9 +232,29 @@ test('revocation denies every credential of the worker at once', async () => {
   value(await service.revoke(enrolled.workerId));
 
   assert.deepEqual(broker.revoked.sort(), ['U-worker-1-1', 'U-worker-1-2']);
-  assert.equal(failed(await service.authenticate(enrolled.workerId, enrolled.credentials.controlPlane)).code, 'forbidden');
+  assert.equal(failed(await service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).code, 'forbidden');
   assert.equal(failed(await service.rotate(enrolled.workerId)).code, 'forbidden');
   const unknown = value(parseWorkerId('worker-9'));
   assert.equal(failed(await service.revoke(unknown)).code, 'not-found');
-  assert.equal(failed(await service.authenticate(unknown, 'x')).details.reason, 'worker-not-authorized');
+  assert.equal(failed(await service.authenticateWorkerBearer('x')).details.reason, 'worker-not-authorized');
+});
+
+test('a worker bearer names its own worker and generation, and nothing else authenticates', async () => {
+  const { clock, registry, service } = enrollment();
+  const first = value(await service.enroll(value(await service.issueToken({})), request()));
+  const second = value(await service.enroll(value(await service.issueToken({})), request('journal-2')));
+
+  assert.deepEqual(value(await service.authenticateWorkerBearer(first.credentials.controlPlane)), { workerId: first.workerId, generation: 1 });
+  assert.deepEqual(value(await service.authenticateWorkerBearer(second.credentials.controlPlane)), { workerId: second.workerId, generation: 1 });
+  for (const secret of ['enrollment-1', 'operator-1', '']) {
+    assert.equal(failed(await service.authenticateWorkerBearer(secret)).details.reason, 'worker-not-authorized', secret);
+  }
+  const unknown = failed(await service.authenticateWorkerBearer('worker-99'));
+  const rotated = value(await service.rotate(first.workerId));
+  clock.advance(FLEET_LIMITS.rotationGraceMilliseconds);
+  assert.deepEqual(failed(await service.authenticateWorkerBearer(first.credentials.controlPlane)), unknown, 'past the grace window');
+  value(await service.revoke(first.workerId));
+  assert.deepEqual(failed(await service.authenticateWorkerBearer(rotated.credentials.controlPlane)), unknown, 'revoked, current generation');
+  registry.workerByCredentialHash = async () => err(failure('unavailable', 'the store is down'));
+  assert.equal(failed(await service.authenticateWorkerBearer(second.credentials.controlPlane)).code, 'unavailable');
 });

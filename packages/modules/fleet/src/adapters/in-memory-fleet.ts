@@ -57,6 +57,13 @@ export class InMemoryFleetRegistry implements FleetRegistry {
     return settle(ok(this.#workers.get(workerId)));
   }
 
+  workerByCredentialHash(hash: SecretHash): Promise<Result<EnrolledWorker | undefined>> {
+    const holds = (worker: EnrolledWorker) => credentialGenerations(worker.credentials).some((generation) => generation.controlPlaneHash === hash);
+    const holders = [...this.#workers.values()].filter(holds);
+    if (holders.length > 1) return settle(err(failure('internal', 'a control-plane hash belongs to two workers')));
+    return settle(ok(holders[0]));
+  }
+
   rotate(workerId: WorkerId, expectedGeneration: number, next: CredentialGeneration, validUntil: Instant, at: Instant): Promise<Result<void>> {
     const worker = this.#workers.get(workerId);
     if (worker === undefined) return settle(err(failure('not-found', `no worker ${workerId}`)));

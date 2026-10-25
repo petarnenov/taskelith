@@ -43,6 +43,7 @@ Item 16 left the obligation to fill `evidence` in `readTaskResult`.
   - `ownershipCurrent` is the comparison with the task's ownership generation in the same SERIALIZABLE transaction that stores the record.
   - A producer that fails these checks is `forbidden` with reason `producer-not-authorized`, which the route maps to 403. A refused credential stays 401.
 - **Order of a publication.**
+  - The bearer check of `add-worker-bearer-authentication` holds only at the moment it runs. So the transaction reads the worker again, and refuses it with reason `worker-not-authorized` when it was revoked since then or its generation is no longer valid; the route answers that reason 401, as the trust model section 4 requires.
   - The size is checked before the transaction. The transaction then reads any stored record; a different one is 409, and the same one returns 200 after its content is written again.
   - Otherwise it authorizes, takes the digest's advisory lock, writes the content, and adds the record, so content from an unauthorized producer is never written.
   - Writing the content inside the transaction means a retried transaction writes it again, which is idempotent. A record that commits always has its content.
@@ -59,7 +60,8 @@ Item 16 left the obligation to fill `evidence` in `readTaskResult`.
 - **HTTP.**
   - `node:http` has no multipart reader. The built-in `Request.formData()` decodes a part without a filename as UTF-8 text, which would corrupt binary content, so a small RFC 7578 reader in the app parses the buffered body. The body is limited, and the parts must be exactly `record` (JSON, validated against `EvidencePublication`) and `content`.
   - A route can declare a binary response, sent as `application/octet-stream` with `nosniff`.
-  - `publishEvidence` answers 201 when it stores the record and 200 for a repeat.
+  - `publishEvidence` answers 201 when it stores the record and 200 for a repeat, through a `StatusAnswer` that the handler returns.
+  - A route can map a failure reason to its own status, before the mapping by code.
 
 ## Risks / Trade-offs
 

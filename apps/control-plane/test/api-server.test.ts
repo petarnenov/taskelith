@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { after, before, test } from 'node:test';
-import { ControlPlaneApi, createApiServer, type ApiHandlers } from '@taskelith/control-plane';
+import { ControlPlaneApi, ROUTES, StatusAnswer, createApiServer, type ApiHandlers, type ApiRequest, type RouteDefinition, type Upload } from '@taskelith/control-plane';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 
@@ -16,6 +16,7 @@ const handlers: ApiHandlers = {
     if (storeDown) return err(failure('unavailable', 'the credential store is down'));
     return secret === OPERATOR ? ok(undefined) : err(failure('forbidden', 'not the operator'));
   },
+  authenticateWorker: async () => err(failure('forbidden', 'no worker in these tests')),
   handle: async (operationId) => (answers[operationId] ?? (() => err(failure('internal', 'unset'))))(),
 };
 const server = createApiServer(handlers, { logger: new Logger(sink, { now: () => '2026-10-25T09:00:00.000Z' as never }) });
@@ -111,4 +112,131 @@ test('evidence content is sent as exact bytes, and a handler that returns no byt
   assert.equal((await call('GET', '/evidence/evidence-1/content')).status, 500);
   answers = { readEvidence: () => err(failure('not-found', 'no evidence')) };
   assert.equal((await call('GET', '/evidence/evidence-9')).status, 404);
+});
+
+test('a worker route reaches its operation with the principal of a valid worker bearer only, whatever it declares', async () => {
+  const WORKER = `tkwk_${'B'.repeat(43)}`;
+  const probe: RouteDefinition = {
+    operationId: 'probeWorker', method: 'GET', pattern: /^\/probe$/, security: 'workerCredential', response: 'TaskResult', success: 200,
+    statuses: { forbidden: 418, unavailable: 500 },
+  };
+  const seen: ApiRequest[] = [];
+  let workerStoreDown = false;
+  const workerServer = createApiServer({
+    ...handlers,
+    authenticateWorker: async (secret) => {
+      if (workerStoreDown) return err(failure('unavailable', 'connect ECONNREFUSED 10.0.0.5:5432'));
+      if (secret !== WORKER) return err(failure('forbidden', 'the worker credential is not valid', { reason: 'worker-not-authorized' }));
+      return ok({ workerId: 'worker-1' as never, generation: 2 });
+    },
+    handle: async (_operationId, request) => {
+      seen.push(request);
+      return ok({ state: 'pending', runId: 'r', taskId: 't' });
+    },
+  }, { routes: [...ROUTES, probe] });
+  await new Promise<void>((resolve) => workerServer.listen(0, '127.0.0.1', () => resolve()));
+  after(() => new Promise<void>((resolve) => workerServer.close(() => resolve())));
+  const url = `http://127.0.0.1:${(workerServer.address() as AddressInfo).port}/probe`;
+  const probeWith = async (bearer: string) => {
+    const response = await fetch(url, { headers: { authorization: `Bearer ${bearer}` } });
+    return { status: response.status, text: await response.text() };
+  };
+
+  assert.equal((await probeWith(WORKER)).status, 200);
+  assert.deepEqual(seen.map((request) => request.worker), [{ workerId: 'worker-1', generation: 2 }]);
+  for (const bearer of [OPERATOR, `tkwk_${'C'.repeat(43)}`]) {
+    const refused = await probeWith(bearer);
+    assert.equal(refused.status, 401);
+    assert.deepEqual(JSON.parse(refused.text), { code: 'forbidden', message: 'the worker credential is not valid', details: { reason: 'worker-not-authorized' } });
+  }
+  workerStoreDown = true;
+  const down = await probeWith(WORKER);
+  assert.deepEqual([down.status, JSON.parse(down.text).message], [503, 'the credential store is not available']);
+  assert.equal(seen.length, 1, 'no refused or unchecked request reaches the operation');
+});
+
+test('an operator route carries no worker principal', async () => {
+  const requests: ApiRequest[] = [];
+  answers = { readTaskResult: () => ok({ state: 'pending', runId: 'r', taskId: 't' }) };
+  const recording = createApiServer({ ...handlers, handle: async (operationId, request, bearer) => (requests.push(request), handlers.handle(operationId, request, bearer)) });
+  await new Promise<void>((resolve) => recording.listen(0, '127.0.0.1', () => resolve()));
+  after(() => new Promise<void>((resolve) => recording.close(() => resolve())));
+  const origin = `http://127.0.0.1:${(recording.address() as AddressInfo).port}`;
+  assert.equal((await fetch(`${origin}/runs/r/tasks/t/result`, { headers: { authorization: `Bearer ${OPERATOR}` } })).status, 200);
+  assert.deepEqual(requests.map((request) => 'worker' in request), [false]);
+});
+
+test('the API authenticates a worker bearer through enrollment', async () => {
+  const principal = { workerId: 'worker-1' as never, generation: 1 };
+  const api = new ControlPlaneApi({
+    runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, quarantine: undefined as never,
+    enrollment: { enroll: undefined as never, authenticateWorkerBearer: async (secret) => (secret === 'tkwk_x' ? ok(principal) : err(failure('forbidden', 'no'))) },
+  });
+  assert.deepEqual(await api.authenticateWorker('tkwk_x'), ok(principal));
+  assert.equal((await api.authenticateWorker('tkwk_y')).ok, false);
+});
+
+test('an evidence upload reaches its operation with the record and the exact content bytes', async () => {
+  const WORKER = `tkwk_${'D'.repeat(43)}`;
+  const uploads: Upload[] = [];
+  let answer: () => Result<unknown> = () => ok(undefined);
+  const uploadServer = createApiServer({
+    ...handlers,
+    authenticateWorker: async (secret) => (secret === WORKER ? ok({ workerId: 'worker-1' as never, generation: 1 }) : err(failure('forbidden', 'no'))),
+    handle: async (_operationId, request) => (uploads.push(request.body as Upload), answer()),
+  });
+  await new Promise<void>((resolve) => uploadServer.listen(0, '127.0.0.1', () => resolve()));
+  after(() => new Promise<void>((resolve) => uploadServer.close(() => resolve())));
+  const url = `http://127.0.0.1:${(uploadServer.address() as AddressInfo).port}/evidence`;
+  const content = Buffer.from([0xff, 0xfe, 0x00, 0x0d, 0x0a, 0x2d, 0x2d]);
+  const record = {
+    evidenceId: 'evidence-1', projectId: 'p', runId: 'r', taskId: 't', attemptId: 'a', ownershipGeneration: 1, kind: 'log', inputArtifacts: [],
+    codeRevision: 'c', validator: { name: 'v', version: '1' }, outcome: 'ok', contentDigest: `sha256:${'ab'.repeat(32)}`,
+    contentType: 'application/octet-stream', sizeBytes: content.length, capturedAt: '2026-10-25T09:00:00.000Z',
+  };
+  const stored = { ...record, producer: { kind: 'worker', workerId: 'worker-1' }, ownershipCurrent: true, publishedAt: '2026-10-25T09:00:01.000Z' };
+  const part = (name: string, type: string, bytes: Buffer) =>
+    Buffer.concat([Buffer.from(`--b0undary\r\nContent-Disposition: form-data; name="${name}"\r\nContent-Type: ${type}\r\n\r\n`), bytes, Buffer.from('\r\n')]);
+  const body = (...parts: Buffer[]) => Buffer.concat([Buffer.from('preamble\r\n'), ...parts, Buffer.from('--b0undary--\r\n')]);
+  const recordPart = part('record', 'application/json', Buffer.from(JSON.stringify(record)));
+  const contentPart = part('content', 'application/octet-stream', content);
+  const post = async (payload: Buffer, contentType = 'multipart/form-data; boundary=b0undary', bearer = WORKER) => {
+    const response = await fetch(url, { method: 'POST', headers: { authorization: `Bearer ${bearer}`, 'content-type': contentType }, body: new Uint8Array(payload) });
+    return { status: response.status, body: await response.json() as Record<string, unknown> };
+  };
+
+  answer = () => ok(stored);
+  assert.equal((await post(body(recordPart, contentPart))).status, 201);
+  assert.deepEqual([uploads[0]?.record, [...(uploads[0]?.content ?? [])]], [record, [...content]]);
+  answer = () => ok(new StatusAnswer(200, stored));
+  assert.equal((await post(body(contentPart, recordPart), 'multipart/form-data; charset=utf-8; boundary="b0undary"')).status, 200);
+  answer = () => err(failure('forbidden', 'never held', { reason: 'producer-not-authorized' }));
+  assert.equal((await post(body(recordPart, contentPart))).status, 403);
+  answer = () => err(failure('forbidden', 'revoked meanwhile', { reason: 'worker-not-authorized' }));
+  assert.equal((await post(body(recordPart, contentPart))).status, 401);
+  answer = () => err(failure('conflict', 'other values'));
+  assert.equal((await post(body(recordPart, contentPart))).status, 409);
+  assert.equal((await post(body(recordPart, contentPart), 'multipart/form-data; boundary=b0undary', OPERATOR)).status, 401);
+
+  const handled = uploads.length;
+  const invalid = [
+    [body(recordPart), undefined],
+    [body(recordPart, contentPart, part('extra', 'text/plain', Buffer.from('x'))), undefined],
+    [body(recordPart, recordPart), undefined],
+    [body(part('record', 'application/json', Buffer.from('{')), contentPart), undefined],
+    [body(part('record', 'application/json', Buffer.from('{}')), contentPart), undefined],
+    [body(recordPart, contentPart), 'application/json'],
+    [Buffer.from('no boundary at all'), undefined],
+    [Buffer.from('--b0undary\r\nContent-Disposition: form-data; name="record"\r\n\r\n{}'), undefined],
+    [Buffer.from('--b0undary\r\nContent-Disposition: form-data; name="record"'), undefined],
+    [Buffer.from('--b0undaryXX'), undefined],
+    [Buffer.from('--b0undary\r\nnot a header\r\n\r\n{}\r\n--b0undary--'), undefined],
+    [Buffer.from('--b0undary\r\nContent-Type: text/plain\r\n\r\n{}\r\n--b0undary--'), undefined],
+    [body(part('record', 'application/json', Buffer.alloc(1024 ** 2 + 1, 0x20)), contentPart), undefined],
+  ] as const;
+  for (const [payload, contentType] of invalid) {
+    const refused = await post(payload, contentType);
+    assert.deepEqual([refused.status, refused.body.code], [400, 'invalid'], payload.subarray(0, 60).toString());
+  }
+  assert.equal(uploads.length, handled, 'no invalid upload reaches the operation');
 });

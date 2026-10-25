@@ -32,6 +32,7 @@ function store(): ControlPlaneStore {
     runs: new InMemoryWorkflowRunRepository(), catalog: new InMemoryRunCatalog(), admissions: new InMemoryAdmissionRepository(),
     gates: new InMemoryGateRepository(), tasks: new InMemoryTaskRepository(), lineage: new InMemoryTaskLineage(), outbox: new InMemoryOutbox(),
     evidence: new InMemoryEvidenceRecords(), producers: { heldGenerations: async () => ({ ok: true, value: [] }) },
+    fleet: { worker: async () => ({ ok: true, value: undefined }) },
     now: async () => '2026-10-25T09:00:00.000Z' as never,
   };
   return { transaction: (work) => work(transaction) };

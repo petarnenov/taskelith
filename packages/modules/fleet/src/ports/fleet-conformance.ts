@@ -27,7 +27,7 @@ export function fleetToken(hash: string, constraints: EnrollmentToken['constrain
 }
 
 function generation(number: number, workerId = 'w1'): CredentialGeneration {
-  return Object.freeze({ generation: number, controlPlaneHash: `cp-${number}` as SecretHash, brokerUserKey: `U-${workerId}-${number}`, brokerIssuedAt: AT });
+  return Object.freeze({ generation: number, controlPlaneHash: `cp-${workerId}-${number}` as SecretHash, brokerUserKey: `U-${workerId}-${number}`, brokerIssuedAt: AT });
 }
 
 export function fleetWorker(workerId: string, journalId: string, overrides: Partial<EnrolledWorker> = {}): EnrolledWorker {
@@ -139,6 +139,39 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
       expectRead(problems, 'published', await registry.publishRevocations(push), 2);
       expectSame(problems, 'pushed', pushes, [['U-w1-1', 'U-w1-2']]);
       expectCode(problems, 'unknown', await registry.revoke(fleetWorker('w9', 'j9').workerId, AT), 'not-found');
+      return problems;
+    },
+  },
+  {
+    name: 'a control-plane hash finds its worker in the current or predecessor generation',
+    async check(registry) {
+      const problems: string[] = [];
+      const first = await enrolled(registry, 'w1', 'j1');
+      const second = await enrolled(registry, 'w2', 'j2');
+      const byHash = (hash: string) => registry.workerByCredentialHash(hash as SecretHash);
+      must(await registry.rotate(first.workerId, 1, generation(2), LATER, AT));
+      const rotated = must(await registry.worker(first.workerId));
+      expectRead(problems, 'current', await byHash('cp-w1-2'), rotated);
+      expectRead(problems, 'predecessor', await byHash('cp-w1-1'), rotated);
+      expectRead(problems, 'other worker', await byHash('cp-w2-1'), second);
+      must(await registry.expirePredecessors(LATER));
+      expectRead(problems, 'expired', await byHash('cp-w1-1'), undefined);
+      must(await registry.revoke(first.workerId, LATER));
+      expectRead(problems, 'revoked', await byHash('cp-w1-2'), must(await registry.worker(first.workerId)));
+      expectRead(problems, 'unknown', await byHash('cp-w9-1'), undefined);
+      return problems;
+    },
+  },
+  {
+    name: 'a control-plane hash that two workers hold authenticates neither',
+    async check(registry) {
+      const problems: string[] = [];
+      const first = await enrolled(registry, 'w1', 'j1');
+      must(await registry.rotate(first.workerId, 1, generation(2), LATER, AT));
+      must(await registry.addToken(fleetToken('t-w2')));
+      const shared = { ...generation(1, 'w2'), controlPlaneHash: 'cp-w1-1' as SecretHash };
+      must(await registry.enroll('t-w2' as SecretHash, fleetWorker('w2', 'j2', { credentials: { current: shared } })));
+      expectCode(problems, 'shared', await registry.workerByCredentialHash('cp-w1-1' as SecretHash), 'internal');
       return problems;
     },
   },

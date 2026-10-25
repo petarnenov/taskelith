@@ -75,18 +75,29 @@ export class PostgresFleetRegistry implements FleetRegistry {
     const journal = await this.#session.query('SELECT 1 FROM workers WHERE journal_id = $1', [worker.journalId]);
     if (journal.rowCount !== 0) return err(failure('conflict', 'the journal is enrolled', { reason: 'journal-enrolled' }));
     const { capacity } = worker;
+    const { current, previous } = worker.credentials;
     const inserted = await this.#session.query(
       `INSERT INTO workers (worker_id, enrolled, revoked, draining, reachable, slots, cpu_millicores, memory_mebibytes,
-         controls, journal_id, enrollment, protocol_version)
-       VALUES ($1, true, false, false, false, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT DO NOTHING`,
+         controls, journal_id, enrollment, protocol_version, control_plane_hash, previous_control_plane_hash, predecessor_valid_until)
+       VALUES ($1, true, false, false, false, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT DO NOTHING`,
       [worker.workerId, capacity.slots, capacity.cpuMillicores, capacity.memoryMebibytes, [...capacity.controls], worker.journalId,
-        encodeRecord(worker), worker.protocolVersion],
+        encodeRecord(worker), worker.protocolVersion, current.controlPlaneHash, previous?.controlPlaneHash ?? null, previous?.validUntil ?? null],
     );
     return inserted.rowCount === 0 ? err(failure('conflict', `worker ${worker.workerId} exists`)) : ok(undefined);
   }
 
   async worker(workerId: WorkerId): Promise<Result<EnrolledWorker | undefined>> {
     return ok(await this.#read(workerId, ''));
+  }
+
+  async workerByCredentialHash(hash: SecretHash): Promise<Result<EnrolledWorker | undefined>> {
+    const { rows } = await this.#session.query<{ enrollment: string }>(
+      `SELECT enrollment FROM workers WHERE (control_plane_hash = $1 OR previous_control_plane_hash = $1)
+       AND enrollment IS NOT NULL LIMIT 2`,
+      [hash],
+    );
+    if (rows.length > 1) return err(sharedHash());
+    return ok(rows[0] === undefined ? undefined : decodeRecord<EnrolledWorker>(rows[0].enrollment));
   }
 
   async rotate(
@@ -157,10 +168,14 @@ export class PostgresFleetRegistry implements FleetRegistry {
     }
   }
 
+  // The hash columns follow the record, so a dropped predecessor's goes.
   async #write(workerId: WorkerId, worker: EnrolledWorker): Promise<void> {
-    await this.#session.query('UPDATE workers SET enrollment = $2, predecessor_valid_until = $3 WHERE worker_id = $1', [
-      workerId, encodeRecord(worker), worker.credentials.previous?.validUntil ?? null,
-    ]);
+    const { current, previous } = worker.credentials;
+    await this.#session.query(
+      `UPDATE workers SET enrollment = $2, predecessor_valid_until = $3, control_plane_hash = $4, previous_control_plane_hash = $5
+       WHERE worker_id = $1`,
+      [workerId, encodeRecord(worker), previous?.validUntil ?? null, current.controlPlaneHash, previous?.controlPlaneHash ?? null],
+    );
   }
 
   async #read(workerId: WorkerId, lock: '' | 'FOR UPDATE'): Promise<EnrolledWorker | undefined> {
@@ -170,6 +185,12 @@ export class PostgresFleetRegistry implements FleetRegistry {
     );
     return rows[0] === undefined ? undefined : decodeRecord<EnrolledWorker>(rows[0].enrollment);
   }
+}
+
+// Each column is unique, but one hash may still be current for one worker
+// and predecessor for another; it then authenticates neither.
+function sharedHash() {
+  return failure('internal', 'a control-plane hash belongs to two workers');
 }
 
 // The row the scheduling guard reads gets the identity at initialization,

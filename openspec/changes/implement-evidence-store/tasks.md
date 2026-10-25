@@ -8,11 +8,11 @@
 
 - [x] 2.1 Add `EvidenceService` and fill `readTaskResult` with the task's evidence.
 - [x] 2.2 Add `readEvidence` and `downloadEvidence` with binary responses, and open the volume in the composition.
-- [ ] 2.3 Add `publishEvidence` with the multipart reader, on the worker authentication of `add-worker-bearer-authentication`.
+- [x] 2.3 Add `publishEvidence` with the multipart reader, on the worker authentication of `add-worker-bearer-authentication`.
 - [x] 2.4 Record the `evidence/` subtree in the installation contract.
 
 ## 3. Verification and review
 
-- [ ] 3.1 Add unit, conformance, and end-to-end tests.
+- [x] 3.1 Add unit, conformance, and end-to-end tests.
 - [ ] 3.2 Run `make verify` and record the results.
 - [ ] 3.3 Obtain independent review (Claude Code `claude-fable-5-1`, medium, read-only) and record the results.
