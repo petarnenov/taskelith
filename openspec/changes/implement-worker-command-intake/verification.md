@@ -104,6 +104,28 @@ After the pass 2 fixes, `make verify` passed again: 1117 tests, 1117 passed, 0 f
 
 After the pass 3 fixes, `make verify` passed: 1119 tests, 1119 passed, 0 failed; coverage 99.26% lines, 91.85% branches, 98.90% functions; every other step as above.
 
+## Merge of `origin/dev` (worker step 9)
+
+The coordinator returned the task because merging `origin/dev` at `21537cd`, which holds item 21b `implement-observation-consumption` (#220), conflicted. The merge commit is `dc4956d`.
+
+- **Conflicts:** only the `@taskelith/nats` imports of `apps/control-plane/src/composition/control-plane.ts` and of `control-plane-api.integration.test.ts`; both sides are kept. The start order is streams and the observation consumer (21b), then the command consumers at enrollment and their repair (20b), then the API and the loops.
+- **Interaction found by `make verify`:** 21b's test read the first confirmation of any worker, and 20b's earlier integration test now produces one for another worker first. The test now selects its own worker's confirmation by subject (`fda274f`, then the merge review's L1).
+- **Interaction found by the merge review:** 21b's confirmations share the worker's command subject, so 20b's integration test could no longer wait for an exact consumer sequence. It now waits for the three observations, which follow W1 of both offers, and then for an empty consumer.
+- `make verify` after the merge and `fda274f`: 1198 tests, 1198 passed, 0 failed; coverage 99.29% lines, 91.82% branches, 98.96% functions; contract compatibility, dependencies, 60 OpenSpec items, archive, and package checks passed.
+
+### Merge review pass 1
+
+- Reviewer: the same invocation, run in the worktree at `fda274f`, asked to review the merge and its interaction only.
+- Model confirmation: `claude-fable-5-1` in `modelUsage`. Session ID: `fa836dbe-ecba-432f-92da-1c94e6aa8b95`.
+- Snapshot: `e0c8dd60481ac973f1b8837bb870d937a0b5324c3ad6e9eecc7eae951aaad9fd` before and after; unchanged.
+- Findings: 0 Critical, 1 High, 1 Medium, 1 Low.
+
+| Finding | Resolution |
+| --- | --- |
+| H1: the intake integration test waited for an exact consumer sequence, which 21b's confirmations change | Fixed as above; the file passed three consecutive runs against the Compose services. |
+| M1: no record of the merge | Fixed: this section. |
+| L1: the confirmation was matched by a substring of the message | Fixed: it is matched by the outbox row's subject. |
+
 ## Limitations and remaining gates
 
 - No native acceptance on the matrix entries; the tests ran on macOS x86_64 with the Compose services.

@@ -429,13 +429,15 @@ describe('enrollment and quarantine', () => {
         const offer = intakeOffer(commandId, workerId, protocolVersion);
         value(await publisher.publish({ subject: value(address.commandSubject(workerId)), body: encodeJson(offer), messageId: commandId }));
       }
-      await waitFor(async () => {
-        const consumer = await broker.jsm.consumers.info(address.streamName('commands'), workerId);
-        return consumer.num_pending === 0 && consumer.num_ack_pending === 0 && consumer.delivered.consumer_seq === 2;
-      });
-      assert.deepEqual(value(worker.root.journal.snapshot()).intents.map((intent) => intent.assignmentId), ['assignment-offer-1']);
+      // The observations follow W1 of both offers; confirmations of them share
+      // the command subject, so only an empty consumer proves every ack.
       const types = await observationTypes(broker, value(address.observationSubject(workerId)), 3);
       assert.deepEqual(types, ['worker.capacity.declared', 'execution.assignment.accepted', 'execution.command.rejected']);
+      assert.deepEqual(value(worker.root.journal.snapshot()).intents.map((intent) => intent.assignmentId), ['assignment-offer-1']);
+      await waitFor(async () => {
+        const consumer = await broker.jsm.consumers.info(address.streamName('commands'), workerId);
+        return consumer.num_pending === 0 && consumer.num_ack_pending === 0;
+      });
     } finally {
       await worker.stop();
       await broker.close();
@@ -520,7 +522,8 @@ describe('enrollment and quarantine', () => {
       // Other tests' workers are confirmed too, so the row must be this one's.
       const published = async () => (await sql<{ published: boolean }>(database,
         `SELECT published_at IS NOT NULL AS published FROM outbox
-         WHERE event_type = 'execution.observations.confirmed' AND strpos(message, $1) > 0`, [workerId]))[0]?.published === true;
+         WHERE event_type = 'execution.observations.confirmed' AND (message::jsonb)->>'subject' = $1`,
+        [`workers.${workerId}.commands`]))[0]?.published === true;
       await waitFor(published);
       const [worker] = await sql<{ reachable: boolean }>(database, 'SELECT reachable FROM workers WHERE worker_id = $1', [workerId]);
       assert.equal(worker?.reachable, true);
