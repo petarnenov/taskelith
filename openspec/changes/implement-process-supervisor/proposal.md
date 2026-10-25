@@ -11,7 +11,8 @@ G2 item 15 in the [G2 work plan](../../../docs/g2-plan.md). The plan asks for th
   - the macOS termination proof;
   - Linux readers of `/proc` and the deadline clock, the cgroup v2 containment, and the self-check that proves the containment holds;
   - a macOS platform that fails closed;
-  - a Node spawner that starts the child in a new session and process group.
+  - a Node spawner that starts the child in a new session and process group;
+  - the detached supervisor program, a file record store and an execution lock on item 14's helpers, and the opt-in target `make verify-linux-cgroup` with its test-only image.
 - Amend the supervisor identity contract with the decisions this item needed, made on 2026-10-25 by a Claude Fable 5.1 subagent under the owner's delegation:
   - D-B (a): the execution `lock` is the exclusive SQLite lock of the worker journal contract; only the lock module opens the file, and children never inherit it.
   - D-C (a): on Linux, the child runs under a separate execution account.
@@ -21,7 +22,7 @@ G2 item 15 in the [G2 work plan](../../../docs/g2-plan.md). The plan asks for th
 
 Excluded:
 - the worker runtime that drives these steps and turns facts into observations (item 20);
-- the journal and its durable file helpers (item 14), which this item reuses;
+- the journal and its durable file helpers (item 14), which this item imports from `@taskelith/worker-journal`;
 - the harness port and the real executed program (G3);
 - the container image, its execution account, capabilities, and init (item 23);
 - native acceptance on every matrix entry (item 25).

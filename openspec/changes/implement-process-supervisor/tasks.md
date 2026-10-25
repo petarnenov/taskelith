@@ -12,8 +12,8 @@
 
 ## 3. Integration with item 14
 
-- [ ] 3.1 Implement the `RecordStore` and `ExecutionLock` adapters on item 14's durable file helpers and `ExclusiveFileLock`.
-- [ ] 3.2 Add the supervisor program and real-process tests of the crash windows.
+- [x] 3.1 Implement the `RecordStore` and `ExecutionLock` adapters on item 14's durable file helpers and `ExclusiveFileLock`.
+- [x] 3.2 Add the supervisor program and real-process tests of the crash windows.
 - [x] 3.3 Add the opt-in Linux cgroup target and record whether it is reliable enough for CI.
 
 ## 4. Verification and review

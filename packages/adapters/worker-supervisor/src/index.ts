@@ -1,5 +1,7 @@
 export { darwinPlatform, DarwinDeadlineClock, DarwinProcessInspector } from './darwin.js';
 export { encodeEvent, parseEvents } from './event-log.js';
+export { SqliteExecutionLock } from './execution-lock.js';
+export { FileRecordStore } from './file-record-store.js';
 export {
   LinuxContainment,
   LinuxDeadlineClock,
@@ -64,6 +66,18 @@ export {
   type RecoveryEvidence,
   type SupervisorLiveness,
 } from './recovery.js';
+export { supervisorMain } from './supervisor-main.js';
+export {
+  hostPlatform,
+  parseProgramArguments,
+  runSupervisorProgram,
+  startDetachedSupervisor,
+  SUPERVISOR_MAIN,
+  SUPERVISOR_TIMING,
+  supervisorCommand,
+  type ProgramArguments,
+  type ProgramOptions,
+} from './supervisor-program.js';
 export {
   adoptExecution,
   highestSupervisor,
