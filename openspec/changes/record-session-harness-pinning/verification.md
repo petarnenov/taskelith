@@ -22,7 +22,14 @@ Branch `record-session-harness-pinning` from `origin/dev` at `d99423c`. macOS x8
 
 ## Review
 
-Pending.
+Pass 1 (Codex CLI):
+- Invocation: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, at head `b28a38f`; the prompt and output were kept outside the worktree. The prompt named `AGENTS.md`, ADR 0004, the governance review process, ADR 0005, the amendment convention, the G3 plan, both qualification records, and the `harness-account-pools` specification with its delta.
+- Model confirmation: the output header shows `model: gpt-6.1-sol`, `reasoning effort: medium`, and `sandbox: read-only`. Session ID `01a174cf-8322-7a02-ab17-3b4cce299408`.
+- Snapshot: `ea92a673c8c7fa8c44e821cbbce9c7937aeb75d3ca65709f33379b7ea23db049` before and after the pass.
+- Findings: 0 Critical, 0 High, 2 Medium, 1 Low.
+  1. Medium: the revoked-slot scenario still allowed the session to continue on another slot after an explicit decision, against the owner's rule. Resolution: explicit reconciliation drains or ends the session and never moves it; its work may continue only in a new session (ADR 0005 decision 5, the delta's requirement and scenarios, and `design.md`).
+  2. Medium: the plan item 5 clause and both qualification sentences shortened the binding to "until the session is closed". Resolution: all three now say until its work is finished and the session and its agent are closed.
+  3. Low: "Remaining gates" omitted `make verify`. Resolution: added.
 
 ## Limitations
 
@@ -30,4 +37,4 @@ Documentation only; nothing is implemented.
 
 ## Remaining gates
 
-Independent review, handoff, integration, and archive.
+`make verify` on the final head, independent review, handoff, integration, and archive.
