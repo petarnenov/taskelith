@@ -69,7 +69,8 @@ Recorded before pass 1.
 
 `make verify` ran in the worktree before pass 1:
 
-- (to be recorded)
+- At `c513957`, before pass 1, with every file tracked: 819 tests passed, 0 failed; coverage 99.18% lines, 92.33% branches, 99.07% functions. The comment, boundary, coverage-scope, dependency-inventory, OpenSpec (50 of 50), and package checks pass.
+- `npm run openspec -- validate implement-installation-bootstrap-and-enrollment --strict` passed.
 
 ## Independent review
 
