@@ -21,7 +21,7 @@
 - Every task that develops Taskelith is bound to a change of the selected SDLC framework, without exception. OpenSpec is the default and the framework of this repository until a project-maintainer selects another ([ADR 0004](docs/decisions/0004-first-class-engineering-principles.md) principle 8 as amended by [ADR 0008](docs/decisions/0008-product-ui-and-integration-authority.md)). Every project, Taskelith included, selects its framework through replaceable SDLC plugins.
 - Use the pinned local CLI through `npm run openspec -- ...`.
 - Record scope, requirements, verification evidence, and remaining gates. Do not claim independent review or deployment validation that did not occur.
-- Follow the [independent review process](docs/governance.md#independent-review-process): authorized read-only reviewers, one reviewer per task, at most three passes, and Low-only passes fixed without another review.
+- Follow the [independent review process](docs/governance.md#independent-review-process): authorized read-only reviewers, one reviewer per task with a replacement when that reviewer is unavailable, at most three passes, and Low-only passes fixed without another review.
 - When several agent sessions work in parallel, follow the [agent task protocol](docs/agent-task-protocol.md): workers develop and hand off one task at a time, and the coordinator integrates and archives it.
 - Publication and deployment require owner authorization. The initial repository/package publication is explicitly authorized by the bootstrap request.
 
