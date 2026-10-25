@@ -7,6 +7,7 @@ Status: G2 item 23, first part (`compose-minimal-local-installation-images`). Th
 - [`infra/installation/compose.yaml`](../infra/installation/compose.yaml): PostgreSQL and NATS with the digest-pinned images of the integration services, the control plane, a one-shot administrative entry, and the Linux worker. Each service keeps its data on a named volume.
 - [`infra/installation/Dockerfile`](../infra/installation/Dockerfile): the control-plane and worker images, built on the digest-pinned Ubuntu 24.04 base with Node.js from its checksummed release tarball for linux/amd64 or linux/arm64. Both run as the unprivileged `taskelith` user (uid 10001) with the data root `/var/lib/taskelith`, and contain no credentials or state: the build context is a `git archive` of the tracked files with their uncommitted edits, so untracked and ignored files never reach an image.
 - [`scripts/installation.sh`](../scripts/installation.sh): the steps the `make` targets run.
+- The `worker-harnesses` target of the same Dockerfile: a worker image variant with the pinned Claude Code and Codex packages, installed from [`infra/installation/harnesses/`](../infra/installation/harnesses/package-lock.json) by `npm ci --ignore-scripts` against the lockfile's integrity hashes, owned by root, with `DISABLE_AUTOUPDATER=1`. It exists for harness qualification; the composition runs the default `worker` image, which contains no harness. Both harnesses stay `candidate` ([Claude Code](qualification/claude-code.md#linux-worker-image), [Codex](qualification/codex.md#linux-worker-image)).
 
 The Compose project is named per worktree (`taskelith-<id>-installation`), like the integration services, and the images are tagged with the project name, so worktrees never replace each other's images.
 
@@ -31,6 +32,7 @@ The control-plane API is on `http://127.0.0.1:8080` and NATS on `nats://127.0.0.
 ## Checks
 
 - `make verify` validates the resolved composition and the Dockerfile: digest pins, checksummed Node.js tarballs, unprivileged services, named data volumes, localhost-only ports, and secrets from the environment.
+- `make qualify-harnesses OUT=<dir>` (opt-in, outside `make verify`) builds the `worker-harnesses` variant for each platform in `PLATFORMS` (default `linux/amd64 linux/arm64`) and runs the credential-free harness steps in it without a network, writing `steps.txt`, `changes.txt`, and `image.txt` per architecture to a directory outside the worktree. `make verify` checks the variant's pins without building it.
 - `make verify-installation` (opt-in, outside `make verify`) builds the images, bootstraps, starts, and enrolls the Linux worker on a throwaway project with a random database password and ephemeral ports, restarts the composition, and removes it with its volumes and images. It also checks that the images run as `taskelith`, ship an empty data root, and do not contain an untracked file it creates for the build.
 
 ## Limits

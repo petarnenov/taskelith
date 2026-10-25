@@ -1,6 +1,6 @@
 # Codex harness qualification
 
-Date: 2026-10-24. Status: macOS x86_64 evidence for the second harness (G4) selected in [ADR 0003](../decisions/0003-first-integrations-and-plugin-kernel.md). Codex stays `candidate` in the [dependency register](../dependencies.md). Linux, macOS arm64, provider terms, repeated runs, and independent adoption evidence remain open. No plugin code exists yet.
+Date: 2026-10-24. Status: macOS x86_64 evidence for the second harness (G4) selected in [ADR 0003](../decisions/0003-first-integrations-and-plugin-kernel.md). Codex stays `candidate` in the [dependency register](../dependencies.md). Linux x86_64 evidence without credentials in the worker image was added on 2026-10-25 ([Linux worker image](#linux-worker-image)); Linux capability scenarios, Linux arm64, macOS arm64, provider terms, repeated runs, and independent adoption evidence remain open. No plugin code exists yet.
 
 Sources: outside the [Provider terms review](#provider-terms-review), a link labeled "docs" is an unversioned page retrieved on 2026-10-24, and every other external source is pinned to an exact package version or tag. The terms review cites dated Wayback Machine snapshots and unversioned pages accessed on 2026-10-25; its source table gives each snapshot and each stated effective or updated date. Times are UTC unless marked local (UTC+03:00).
 
@@ -10,6 +10,8 @@ Sources: outside the [Provider terms review](#provider-terms-review), a link lab
 | --- | --- |
 | Package | `@openai/codex@0.164.0`, the npm `latest` dist-tag, published 2026-10-23 ([npm](https://www.npmjs.com/package/@openai/codex/v/0.164.0)) |
 | Harness binary | The platform package `@openai/codex@0.164.0-darwin-x64`, installed under the npm alias `@openai/codex-darwin-x64`, reports `codex-cli 0.164.0`; SHA-256 `d7e19691e0c1945612475ee8ab32e59ead55472e976b5cea1682d827d34dbba1` |
+| Linux binary | `@openai/codex@0.164.0-linux-x64`, under the alias `@openai/codex-linux-x64`, reports `codex-cli 0.164.0`; SHA-256 `b93f6811d3f653f0fb83be4050d857fb9abbb111dfa2ce160563327daff7f306` ([Linux worker image](#linux-worker-image)) |
+| Lockfile integrity | Worker image variant, `infra/installation/harnesses/package-lock.json`: `@openai/codex` `sha512-TWj7UGyPRe3Pj/A3ddNAxs1te3a/W/xAd+J0LHrrFTmsSfahGMOLF/vn88D3QCIgAT3B1rm1y/Z3NYE0rx6cZQ==`; `@openai/codex-linux-x64` `sha512-XLAoaWsGOT2khzl+P4FYDPTkzAr9W0VFXFaVkqlFdkM0soa1gH/4S0wSD57Ek3HHwkirAEGz2/Mwehseh+l5Mg==`; `@openai/codex-linux-arm64` `sha512-LL5iTQjyDL4YRX44EWqhIfEQ5uGnmgxkQBJSxjZSeJ8L1Og83pdlzUJW/PRJ76oaVwOVgh6HXwuPEiBNEHU4lg==` |
 | Interface | `codex app-server`: JSON-RPC over stdio, one JSON message per line. The protocol schema was generated from the pinned binary (`codex app-server generate-json-schema`) |
 | Platforms in scope | Native packages for Linux x64/arm64 and macOS x64/arm64; Windows packages also exist but are out of scope |
 | Maintenance | Frequent releases and alpha prereleases on npm. The vendor calls app-server experimental: "The app-server command and WebSocket transport are experimental and aren't supported for production workloads" ([docs](https://learn.chatgpt.com/docs/app-server); the earlier address `developers.openai.com/codex/app-server` redirects there) |
@@ -175,10 +177,35 @@ The findings agree with the Claude Code qualification, so the harness-neutral po
 - Outcomes: the port's terminal outcomes map from turn statuses `completed`, `interrupted`, and `failed`.
 - Isolation: each run gets its own harness home and temporary directory, created and removed by the worker, inside a container on Linux.
 
+## Linux worker image
+
+Run: `make qualify-harnesses OUT=<dir> PLATFORMS=linux/amd64` at revision `1dea608`. The run finished at 2026-10-25T21:58:04Z on macOS 26.6.2 (x86_64) with Docker Desktop (engine 29.5.2). The script builds the `worker-harnesses` target of `infra/installation/Dockerfile` from a `git archive` of the tracked files on `ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac` with Node.js 24.22.1. The image ID was `sha256:07a8a3e2ced594c630d6a9275735e3786140dbe36d9505e1918741dd0718e6ca`. `npm ci --ignore-scripts` installed the harnesses from `infra/installation/harnesses/package-lock.json`, checking every tarball against its `sha512` integrity. The steps in `infra/installation/harnesses/qualify.sh` ran once, as the `taskelith` user, with `--network none`, `DISABLE_AUTOUPDATER=1` and `DISABLE_TELEMETRY=1`, and a home under the data root with dedicated `CLAUDE_CONFIG_DIR` and `CODEX_HOME` directories. The `CODEX_HOME` holds a `config.toml` with `check_for_update_on_startup = false`. `docker diff` of the container then listed every changed path.
+
+Scope: on 2026-10-25 the owner decided that only steps needing no credentials run, because no subscription login is authorized for this item ([G2 plan](../g2-plan.md) item 26). The installed tarballs are the qualified ones: the darwin-x64 platform tarballs at the pinned versions match their lockfile integrity, and they contain binaries with the SHA-256 values in [Pinned version](#pinned-version). `npm audit --package-lock-only` on the harness lockfile reported no vulnerability on 2026-10-25.
+
+| Architecture | Result |
+| --- | --- |
+| linux/amd64 | Native on the x86_64 host; the results are below |
+| linux/arm64, emulated | Not run. Under Docker Desktop's QEMU on this host, GNU tar 1.35 in the pinned base failed on every entry of the Node.js tarball with "Cannot mkdir: Invalid argument" or "Cannot open: Invalid argument", while a plain `mkdir` in the same emulated container worked. So the `node-arm64` stage, which the default images share, does not build under this emulation |
+| linux/arm64, native | Not run. No local arm64 Linux host exists; D11 names the GitHub-hosted runner `ubuntu-24.04-arm`, and no workflow was added, because a workflow change is an owner question |
+
+Results on linux/amd64:
+
+| Step | Result |
+| --- | --- |
+| Platform | `Linux x86_64`, Ubuntu 24.04.5 LTS, Node.js v24.22.1, user `taskelith` |
+| Binary | `@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex`, SHA-256 `b93f6811d3f653f0fb83be4050d857fb9abbb111dfa2ce160563327daff7f306`, reports `codex-cli 0.164.0`. The Linux binary is linked against musl and starts on the glibc base |
+| Login state | `codex login status` exited 1 with `Not logged in`, so the image holds no credential |
+| App-server schema | `codex app-server generate-json-schema` succeeded; the SHA-256 over the sorted file hashes is `fc9256ad0eac370b62b095b8ea218d086d78f954a142f9e1a2e0fee58802c147` |
+| Self-update | Writing to the binary was refused for the `taskelith` user, and the SHA-256 of the whole harness tree (`1249b21fd8433f5c8d31f942941ecb35973b143d3592b67838d4bb28bcf2e896`, shared with Claude Code) was the same before and after the steps |
+| Changed paths | Only inside `CODEX_HOME`: its `config.toml` and `tmp/arg0-linux`, a helper directory Codex creates at startup. Under `/tmp`, Codex refuses to create it and warns. Nothing changed outside the qualification home |
+
+Not run, because they need a login: multi-turn chat, correlation, resume, approvals, interruption, outcomes, the pending approval across a crash, and egress with analytics on and off. They stay open for the Codex admission in G4.
+
 ## Remaining before admission
 
 - The review of OpenAI's data-handling terms, and of whether its terms allow pooled subscriptions for automated use (ADR 0005), is recorded on 2026-10-25 in [Provider terms review](#provider-terms-review), from Wayback Machine snapshots because the live pages returned HTTP 403; the owner decided D15 on 2026-10-25: (a), accept the remaining risk ([G3 plan](../g3-plan.md#owner-decisions)); admission remains subject to the other qualification gates in G4 ([ADR 0007](../decisions/0007-g0-closure.md)).
-- Linux x64 and arm64 in the planned worker container image (G2, [ADR 0007](../decisions/0007-g0-closure.md)), and macOS arm64.
+- Linux in the worker image ([Linux worker image](#linux-worker-image)): the scenarios that need a login on linux/amd64, which the owner did not authorize for G2 item 26; linux/arm64, natively, for example on D11's runner `ubuntu-24.04-arm` or an Apple Silicon host. Also macOS arm64.
 - Non-permission input requests, and repeated runs.
 - The cause of the temporary-directory fallback after a crash.
 - Whether plugin-catalog polling and MCP traffic can be disabled.
