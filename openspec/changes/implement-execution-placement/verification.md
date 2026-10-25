@@ -79,6 +79,7 @@ Recorded before pass 1.
 - At `d0958be`, before pass 1: 1025 tests passed, 0 failed. Coverage 99.25% lines, 91.61% branches, 99.01% functions. Every other check passes.
 - At `e749b8d`, after the pass-1 fixes and the new spec scenarios: 1042 tests passed, 0 failed. Coverage 99.26% lines, 91.66% branches, 99.01% functions. Every other check passes.
 - At `b330696`, after the pass-2 fix: 1046 tests passed, 0 failed. Coverage 99.27% lines, 91.68% branches, 99.02% functions. Every other check passes.
+- On `645355b` with this record, after the fixes of H12 and M13: 1054 tests passed, 0 failed. Coverage 99.26% lines, 91.72% branches, 99.02% functions. Every other check passes.
 
 ## Independent review
 
@@ -124,12 +125,18 @@ It ran from the worktree. The prompt and log were kept in the session's scratch 
 - Session `01a17452-d01f-7531-aef6-280732b72034`, 2026-10-25 20:29 to 20:32, on `48c4699`.
 - Snapshot `24aeb9ea…a23d90dd` before and after: unchanged.
 - Result: Critical 0, High 1, Medium 1, Low 0. L11 was confirmed resolved, and H10 partly resolved.
-- This was the third pass. The remaining findings go to the owner through the coordinator, under the review process.
+- This was the third pass, so the remaining findings went to the owner through the coordinator, under the review process.
+- **Decision.** On 2026-10-25 the owner was away and had delegated owner decisions to a Claude Fable 5.1 consul. The consul, not the owner, chose option A: fix H12 and M13, with one exceptional fourth pass limited to the diff of those fixes.
+- **Conditions of the fourth pass:**
+  - findings outside that diff go to 21b and do not block this change;
+  - Low findings are fixed without review;
+  - a Medium finding on the fixes is fixed and recorded as unreviewed;
+  - a High finding on the fixes holds the change for the owner.
 
 | # | Finding | Disposition |
 | --- | --- | --- |
-| H12 | There is still no rotation across projects between passes. With a batch of 100, a 5-second pass, and a 60-second maximum backoff, 1200 older blocked projects can fill every pass. The reviewer reproduced it in memory. | Open: owner decision. |
-| M13 | `forgetStale` drops the backoff of a task that still waits, for example after an outage longer than 60 seconds, which resets its exponent. The reviewer reproduced it. | Open: owner decision. |
+| H12 | There is still no rotation across projects between passes. With a batch of 100, a 5-second pass, and a 60-second maximum backoff, 1200 older blocked projects can fill every pass. The reviewer reproduced it in memory. | Fixed in `645355b`: a project rotation cursor kept between passes, applied before the limit in both adapters, so each project with a waiting task that is not backing off is read within ⌈P/limit⌉ passes. A test with 1200 blocked projects covers it. |
+| M13 | `forgetStale` drops the backoff of a task that still waits, for example after an outage longer than 60 seconds, which resets its exponent. The reviewer reproduced it. | Fixed in `645355b`: a backoff is forgotten only on success, or when the queue (`stillWaiting`) or the task's transaction confirms the task no longer waits. A test keeps the cap across an outage of more than 60 seconds. |
 
 ## Limitations
 
@@ -139,7 +146,7 @@ It ran from the worktree. The prompt and log were kept in the session's scratch 
 
 ## Remaining gates
 
-- The owner's decision on H12 and M13 after the third review pass.
+- Review pass 4, the exception, on the fixes of H12 and M13.
 - Independent review.
 - Integration into `dev` and archiving, by the coordinator.
 - No deployment validation is claimed.
