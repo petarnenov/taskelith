@@ -63,18 +63,26 @@ The control plane SHALL store the parts of a snapshot until it is complete and t
 - **THEN** it is discarded and never applied
 
 ### Requirement: Inconsistent report
-A report whose parts disagree on `parts`, `journalId`, `requestId`, `snapshot`, or `throughSequence`, or that holds a part outside 1 to `parts`, SHALL be refused: its stored parts SHALL be deleted without any other effect, and the refusal SHALL be logged as a structured warning with its worker, journal, and `reportId`.
+A part that disagrees with its report's stored parts on `parts`, `journalId`, `requestId`, `snapshot`, or `throughSequence`, or lies outside 1 to `parts`, SHALL refuse the report: its stored parts SHALL be deleted, the part SHALL NOT be stored, the journal's highest received `snapshot` and other pending reports SHALL stay unchanged, and the refusal SHALL be logged with its worker, journal, and `reportId`.
 
 #### Scenario: Part counts disagree
 - **WHEN** part 1 of a report says it has 2 parts and part 2 says it has 3
 - **THEN** the report is never applied, its parts are deleted, and the refusal is logged
 
+#### Scenario: Snapshot numbers disagree
+- **WHEN** the two parts of a fresh report carry `snapshot` 100 and 1, and a fresh snapshot 2 answering the same request then omits an unfinished assignment
+- **THEN** the report is refused, and snapshot 2 is applied and re-sends the omitted assignment's offer
+
 ### Requirement: Pending snapshot bound
-Of a journal's pending reports that are not fresh, the control plane SHALL keep only the newest, and only while its `snapshot` is not below the highest received from the journal; this SHALL hold after each stored part and each new request. A fresh report SHALL be kept until its rollback check has run.
+Each journal SHALL keep only its newest pending fresh report and its newest pending report that is not fresh, the latter only while its `snapshot` is not below the highest received from the journal; this SHALL hold after each stored part and each new request. The fresh report kept SHALL have its rollback check once complete.
 
 #### Scenario: Repeated requests answered incompletely
 - **WHEN** ten requests in turn are each answered by one part of a two-part fresh report with a growing `snapshot`
 - **THEN** only the report answering the current request stays pending, and after a newer request it is kept only while no later snapshot arrives
+
+#### Scenario: One request answered several times
+- **WHEN** five reports with growing `snapshot` each answer the current request with one part of two
+- **THEN** only the newest of them stays pending
 
 ### Requirement: Rollback check of a fresh snapshot
 A complete snapshot whose `requestId` is the worker's current request SHALL be checked against the request's bound before any other rule: a `throughSequence` below the bound's sequence of its journal, or the omission of an unfinished assignment the bound lists for that journal, SHALL be a rollback. A fresh snapshot below a `snapshot` already received SHALL be used only for this check. A snapshot that is not fresh SHALL never prove a rollback.
