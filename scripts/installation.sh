@@ -73,9 +73,11 @@ broker_config() {
 }
 
 start() {
+  local worker
   compose up --detach --wait --wait-timeout 120 postgres nats control-plane
+  worker="$(compose --profile worker ps --all --quiet worker)"
   # Recreates an enrolled worker from a rebuilt image; its volume stays.
-  if [ -n "$(compose --profile worker ps --all --quiet worker)" ]; then
+  if [ -n "$worker" ]; then
     compose --profile worker up --detach --no-deps --wait --wait-timeout 120 worker
   fi
 }

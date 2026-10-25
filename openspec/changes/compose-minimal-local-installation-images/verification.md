@@ -6,7 +6,7 @@ Obligations of earlier items addressed here: the `make` targets that run the adm
 
 ## Revision and environment
 
-- Base: `origin/dev` at `4968758`. Branch `compose-minimal-local-installation-images`; first review of `152c35b`, fixes in `e00debc` and the record in `bb2af6b`; second review of `bb2af6b`, fixes in `69c0046`.
+- Base: `origin/dev` at `4968758`. Branch `compose-minimal-local-installation-images`; first review of `152c35b`, fixes in `e00debc` and the record in `bb2af6b`; second review of `bb2af6b`, fixes in `69c0046` and the record in `e7cb71b`; third review of `e7cb71b`, and its Low fix after it, unreviewed.
 - Host: Ubuntu 24.04.5 LTS, kernel 6.8.0-147-generic, x86_64; Docker 27.3.1 with Compose v2.29.7; Node.js 24.22.1 from `.nvmrc`.
 
 ## Author self-check and evidence check
@@ -27,6 +27,8 @@ Obligations of earlier items addressed here: the `make` targets that run the adm
 | `make verify-installation` after the first-review fixes | passed on 2026-10-25 with the same steps; containers, volumes, images, and the sentinel file were removed afterwards. Two earlier attempts during the fixes failed in the script's own clean-up (an unbound variable in the EXIT trap, then volumes left behind by it); the check now removes the project before and after. |
 | `make verify-installation` after the second-review fixes (`69c0046`) | passed on 2026-10-25: built, bootstrapped, started, enrolled, restarted, removed; no container, volume, image, or sentinel file left |
 | `make verify` after the second-review fixes (`69c0046`) | passed; 1096 tests, 1081 passed, 15 skipped, 0 failed; coverage 99.06 % lines, 91.65 % branches, 98.65 % functions |
+| `make verify-installation` after the third-review fix | passed on 2026-10-25: built, bootstrapped, started, enrolled, restarted, removed; nothing left |
+| `make verify` after the third-review fix | run by the `pre-push` hook on the pushed head; the handoff reports its result |
 
 `make verify-installation` builds both images from a `git archive` of the tracked files, checks that they run as `taskelith`, have an empty data root, and lack an untracked sentinel file, then bootstraps with a random database password, repeats the broker configuration step, starts the composition, enrolls the Linux worker container until it stores its identity, stops and starts the composition, which recreates the enrolled worker without its token, checks that PostgreSQL, NATS, the control plane, and the worker run, and fails unless it then removes the project, its volumes, and its images. Docker reused cached layers from the earlier runs. Docker reports two `InvalidDefaultArgInFrom` warnings, because `BASE` has no default; the build always passes it.
 
@@ -68,6 +70,18 @@ Reviewer assigned by the coordinator: Codex CLI, `gpt-6.1-sol`, reasoning effort
 | 3 | Low | `check_image` accepted a failed `find` or a Docker error as proof. | The `find` result is assigned, so a failure stops the script; the sentinel check runs `test ! -e` and requires success. |
 | 4 | Low | The volume test accepted anonymous volumes. | The test requires the expected volume name as the mount source, its top-level declaration, and the admin entry's `control-plane-data` mount. |
 
+### Pass 3
+
+- Invocation and prompt as in pass 2, naming both earlier sessions, asking for confirmation of the pass 2 resolutions (`bb2af6b..HEAD`) and a review of `4968758...e7cb71b`.
+- Confirmation: model `gpt-6.1-sol`, reasoning effort medium, sandbox read-only, session `01a174b6-6ee3-7a42-a4ff-7a728bb92b42`.
+- Snapshot: `cc06318800da1a35240c6757278d800c04897c3cee21791ef1ed6a92fa71aa24` before and after; unchanged.
+- The reviewer confirmed all four pass 2 findings resolved and found the deferrals (execution smoke, TLS, arm64 run) honestly recorded. It could not run Docker or the Node.js tests in its sandbox.
+- New findings: Critical 0, High 0, Medium 0, Low 1.
+
+| # | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| 1 | Low | `installation-start` lost the exit status of `compose ps` inside the `if` test, so a failed query skipped the worker and succeeded. | The result is assigned first, so `set -e` stops on a failure. Unreviewed fix: a Low-only pass is fixed without another review. |
+
 ## Limitations
 
 - Only linux/amd64 was built and run. The linux/arm64 path (the `node-arm64` stage and checksum) is not built or run yet.
@@ -79,5 +93,5 @@ Reviewer assigned by the coordinator: Codex CLI, `gpt-6.1-sol`, reasoning effort
 
 ## Remaining gates
 
-- The third and last review pass, and the coordinator's integration and archive.
+- The coordinator's integration and archive.
 - Item 23b.
