@@ -1,6 +1,6 @@
 # Bootstrap governance policy
 
-Policy version: 3 (2026-10-24: version 2 added the independent review process; version 3 adds auto-merge as integration authority and the selectable SDLC framework, [ADR 0008](decisions/0008-product-ui-and-integration-authority.md)). Status: repository bootstrap policy; runtime enforcement is not implemented.
+Policy version: 4 (2026-10-24: version 2 added the independent review process; version 3 added auto-merge as integration authority and the selectable SDLC framework, [ADR 0008](decisions/0008-product-ui-and-integration-authority.md); 2026-10-25: version 4 adds the decision council as delegated approval authority up to the integration branch, [ADR 0014](decisions/0014-decision-council-and-delegated-approval.md)). Status: repository bootstrap policy; runtime enforcement is not implemented.
 
 Owner acceptance: Petar Nenov accepted the SDLC policy on 2026-10-24 in the project conversation. On 2026-10-24, the owner explicitly authorized a separate Codex reviewer agent (`gpt-6.1-sol` with `model_reasoning_effort = "medium"`) for independent review of the current and subsequent G0 changes, and later the same day the further reviewers listed under [Independent review process](#independent-review-process). Integration and release authorization remain distinct.
 
@@ -11,6 +11,8 @@ The owner, Petar Nenov, defines scope and accepts product and architecture decis
 The implementer records author checks. An independent reviewer must be a person or separately authorized agent that did not author the change; self-review is never independent review. The owner may explicitly accept a documented review exception for bounded bootstrap work. Never infer an exception from silence or mark the review as passed because an exception was granted.
 
 The owner or an explicitly authorized integrator controls merging and pushing. Finishing local work does not itself authorize integration. In a project managed by Taskelith, an enabled auto-merge setting, which only a project-maintainer changes, is that explicit authorization: pushing to the task's own branch is covered by a standing rule, a change whose gates have all passed is merged without a further human step, and where an earlier rule conflicts with auto-merge, auto-merge wins ([ADR 0008](decisions/0008-product-ui-and-integration-authority.md) decisions 2 and 3). Release authority follows [the release policy](releases.md): qualifying changes integrated into main may publish automatically after verification. Deployment requires separate owner authorization.
+
+In a managed project, a decision council constituted under [ADR 0014](decisions/0014-decision-council-and-delegated-approval.md) may exercise the delegated approval authority up to an integration branch: it approves an intent, ratifies verification and independent review, and approves merges into the project's integration branch. It can never waive verification evidence, approve its own work, change policy or project settings, release an operator hold, merge into `main`, or release or deploy. Promotion from the integration branch to `main` remains the owner's decision, and the owner can disable the council at any time, returning approvals to the human roles.
 
 ## Independent review process
 
@@ -42,7 +44,7 @@ Every task, including inspection, documentation, maintenance, emergency work, an
 | Implement | Task checklist and changes within the recorded scope. Material scope expansion returns to proposal. |
 | Verify | Exact commands, results, environment, relevant revision or reviewed diff, limitations, and remaining gates in `verification.md`. Run `make verify`, which includes `npm test` and strict validation of all OpenSpec artifacts. |
 | Review | Record author review separately from independent findings, reviewer identity, reviewed revision, and resolution. Structural validation is not semantic approval. |
-| Accept and integrate | Owner acceptance or explicit delegated authority (in a managed project, an enabled auto-merge setting), required review or recorded exception, and current verification. Record the integrated revision when integration occurs. |
+| Accept and integrate | Owner acceptance or explicit delegated authority (in a managed project, an enabled auto-merge setting and, where constituted, a decision-council approval under [ADR 0014](decisions/0014-decision-council-and-delegated-approval.md)), required review or recorded exception, and current verification. Record the integrated revision when integration occurs. |
 | Close | Reconcile tasks and evidence; archive using the pinned CLI only after acceptance/integration gates are satisfied. Local completion may leave these gates pending. |
 
 The proposal, design, capability specification, tasks, and verification record form the bootstrap evidence set. Reference the originating issue when one exists; no issue is required merely to duplicate an already recorded owner request. Task checkboxes show progress, not approval authority.
