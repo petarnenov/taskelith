@@ -330,13 +330,15 @@ describe('heartbeat receiver', () => {
   test('receivers in one queue group share every worker heartbeat, which no stream keeps', async () => {
     const { address, transport } = await installation([]);
     const received: ReceivedHeartbeat[][] = [[], []];
-    for (const heartbeats of received) {
-      const receiver = new HeartbeatReceiver({ connection: transport.connection, address, queue: 'control-plane' }, async (heartbeat) => {
+    // Stopped before the test ends, because a closed connection fails them.
+    const controller = new AbortController();
+    const runs = received.map((heartbeats) => new HeartbeatReceiver(
+      { connection: transport.connection, address, queue: 'control-plane' },
+      async (heartbeat) => {
         heartbeats.push(heartbeat);
         return ok(undefined);
-      });
-      running((signal) => receiver.run(signal));
-    }
+      },
+    ).run(controller.signal));
     await transport.connection.flush();
     const workers = ['worker-1', 'worker-2', 'worker-3', 'worker-4'];
     for (const worker of workers) transport.connection.publish(expectOk(address.heartbeatSubject(worker)), encodeJson(heartbeat(worker)));
@@ -344,6 +346,16 @@ describe('heartbeat receiver', () => {
     await waitFor(() => received.flat().length === workers.length);
     assert.deepEqual(received.flat().map((h) => h.body['workerId']).sort(), workers);
     await assert.rejects(transport.jsm.streams.find(expectOk(address.heartbeatSubject('worker-1'))), /no stream matches subject/);
+    controller.abort();
+    await Promise.all(runs);
+  });
+
+  test('a connection that closes without a stop fails the receiver', async () => {
+    const { address, transport } = await installation([]);
+    const run = new HeartbeatReceiver({ connection: transport.connection, address, queue: 'control-plane' }, async () => ok(undefined))
+      .run(new AbortController().signal);
+    await transport.close();
+    await assert.rejects(run, /^Error: the heartbeat subscription closed/);
   });
 
   test('a stop ends the receiver', async () => {
