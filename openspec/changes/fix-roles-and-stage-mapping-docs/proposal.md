@@ -13,7 +13,7 @@ A review of the Mantine UI proof of concept against the implemented backend, don
 
 ### Modified Capabilities
 
-None. Both are documentation corrections under existing requirements, so the change sets `skip_specs: true`.
+None. The records fall under the unchanged requirements of `sdlc-framework-mapping` ("Native framework mapping") and `delivery-planning` ("Gate work plan"), so the change sets `skip_specs: true`.
 
 ## Impact
 

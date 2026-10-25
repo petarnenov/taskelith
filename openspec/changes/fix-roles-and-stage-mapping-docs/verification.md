@@ -12,11 +12,19 @@ Started on 2026-10-25 by the UI worker (Desi) on the owner's request, after a re
 
 ## Checks
 
-In the worktree, Node v24.22.1: `npm run openspec -- validate fix-roles-and-stage-mapping-docs --strict` and `make verify`.
+Environment: macOS 26 (Darwin 25.6.0, x86_64), Node.js v24.22.1, npm 12.2.1, in the worktree, before pass 1 at `60d0a4a` and again after the pass-1 fixes: `npm run openspec -- validate fix-roles-and-stage-mapping-docs --strict` passed; `make verify` passed (strict OpenSpec validation 51 passed, 0 failed; archive dry run and package verification passed).
 
 ## Independent review
 
-Pending.
+Reviewer: Claude Code with `claude-fable-5-1`, effort medium, run from the worktree as `claude -p "<prompt>" --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json`, with the prompt and output outside the worktree.
+
+- **Pass 1 — session `9b677dbb-7b3e-4417-b9bf-d47a8c85b57f`, head `60d0a4a`.** The JSON `modelUsage` confirmed `claude-fable-5-1`; the snapshot (`git ls-files -co --exclude-standard | xargs shasum -a 256 | shasum -a 256`) was `fe13ea06…636b` before and after the pass. The reviewer confirmed the role list against the trust model, both stage graphs against the code, and `skip_specs`. Findings: 0 Critical, 0 High, 2 Medium, 4 Low. All accepted and resolved (unreviewed until pass 2):
+  1. Medium: the table and the note contradicted each other. The two affected cells point to the note, and the gap sentence excludes the rows the note supersedes.
+  2. Medium: the checks named no results or environment. This section records both.
+  3. Low: `clarify` was called an agent step inside `specify`. The note says it is not a stage and stays an agent command outside the workflow.
+  4. Low: the G4 adapter was said to implement the fixture today. The note says the test-only normaliser passes it today and the adapter will (ADR 0010).
+  5. Low: "two places" while more differences were listed. The note says the graphs differ for both frameworks.
+  6. Low: the proposal named no capability. It names the unchanged requirements of `sdlc-framework-mapping` and `delivery-planning`.
 
 ## Limitations
 
