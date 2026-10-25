@@ -95,6 +95,7 @@ Recorded before pass 1.
 
 `make verify` ran in the worktree with every file tracked:
 - At `cb83f79`, before pass 1: 1131 tests passed, 0 failed. Coverage was 99.27% lines, 91.75% branches, and 99.09% functions. The comment, boundary, coverage-scope, dependency-inventory, contract-compatibility, OpenSpec strict, archive dry-run, and package checks pass.
+- At `e95b8e3`, after the pass-1 fixes: 1150 tests passed, 0 failed. Coverage was 99.27% lines, 91.74% branches, and 99.06% functions. Every other check passes.
 
 ## Independent review
 
@@ -104,7 +105,26 @@ The reviewer is Codex CLI with model `gpt-6.1-sol` and reasoning effort `medium`
 
 It runs from the worktree, with the prompt and log in the session's scratch directory. A SHA-256 snapshot of every tracked and untracked file is taken before and after each pass.
 
-Pending.
+### Pass 1
+
+- **Session:** `01a174a1-0545-71d0-8659-17e1d13afd7f`, 2026-10-25 21:54 to 22:00, on `9aed3e5`, reviewing `8b451e3..9aed3e5`. The output header confirms `gpt-6.1-sol`, reasoning effort `medium`, and the `read-only` sandbox.
+- **Snapshot:** `215d9531…1641084c4ef`, unchanged.
+- **Reviewer's own checks:** it ran 34 unit and conformance tests, the comment check, and `git diff --check`, all passing. It did not run `make verify` or the integration suites.
+- **Result:** Critical 0, High 3, Medium 6, Low 0. The author accepted all nine findings.
+- **Fixes:** `11021e3` holds the code and tests, and `e95b8e3` the design and spec delta. The design gained decision 15, "Retry backoff", and the delta gained the requirements "Confirmation sent again", "Refusal after a grant", "Retry backoff", and "Report sequence fences".
+- **Consequence of H2:** a refusal after a grant marks the attempt cancelled with `launch-revoked`, as cancellation does, so the attempt gets no automatic retry.
+
+| # | Finding | Disposition |
+| --- | --- | --- |
+| H1 | A lost confirmation is never sent again. A republished observation is an inbox duplicate, so a worker whose confirmation expired never prunes. | Fixed in `11021e3`: an authenticated duplicate at or below `confirmedThrough` appends the current confirmation again under a fresh event identity. |
+| H2 | A refusal of an assignment whose execution can run keeps the reservation but leaves its grant live, with no cancellation. | Fixed in `11021e3`: `refuseInTransaction` acts as an invalidating writer, as cancellation does. It revokes the grants with `attempt-not-launchable` and appends the cancellation command. |
+| H3 | The migration's backfill of `offer_command_id` corrupts valid JSON escapes in identifiers. | Fixed in `11021e3`: use the `\` protection of the placement migration, with tests for backslash, literal `\u0000`, quotes, and unsupported escapes. |
+| M4 | Marking and clearing a capacity refusal have no common sequence fence, so a late refusal or an older declaration wins. | Fixed in `11021e3`: one refusal watermark for every mark and clear. |
+| M5 | A late protocol rejection overwrites a newer declared protocol window, and the reverse. | Fixed in `11021e3`: a shared protocol watermark for declarations and rejections. |
+| M6 | An automatic retry is placed at once, bypassing the backoff of capacity reservation sections 5 and 12. | Fixed in `11021e3`: placement waits until the retried attempt's end plus `placementBackoff` of the retry number. |
+| M7 | The in-memory `WorkerReports` loses an update under concurrency. | Fixed in `11021e3`: atomic read, check, and write, with a concurrent conformance case. |
+| M8 | The in-memory `WorkerReports` advances its watermark even when the worker is missing. | Fixed in `11021e3`: advance only with a successful update, with a conformance case. |
+| M9 | The in-memory assignment repository accepts a duplicate `offerCommandId`, which PostgreSQL rejects. | Fixed in `11021e3`: `conflict`, with a conformance case. |
 
 ## Limitations
 
