@@ -1,5 +1,5 @@
 import { err, failure, ok, type EventId, type Result } from '@taskelith/kernel';
-import type { AssignmentId, Inbox, InboxOutcome, Task, TaskRepository } from '@taskelith/execution';
+import { unknownExecutionCount, type AssignmentId, type Inbox, type InboxOutcome, type Task, type TaskRepository } from '@taskelith/execution';
 import type { Assignment, AssignmentRepository } from '@taskelith/scheduling';
 import type {
   AdmissionId,
@@ -121,7 +121,7 @@ export class PostgresTaskRepository implements TaskRepository {
       entity: 'task',
       idOf: (task) => task.id,
       generationOf: (task) => task.generation,
-      columnsOf: (task) => ({ admission_id: task.admissionId }),
+      columnsOf: (task) => ({ admission_id: task.admissionId, unknown_executions: unknownExecutionCount(task) }),
       decode: decodeTask,
     });
   }
@@ -152,9 +152,11 @@ export class PostgresAssignmentRepository implements AssignmentRepository {
       entity: 'assignment',
       idOf: (assignment) => assignment.id,
       generationOf: (assignment) => assignment.generation,
-      columnsOf: ({ attemptId, workerId, reservation }) => ({
+      columnsOf: ({ attemptId, workerId, state, changedAt, reservation }) => ({
         attempt_id: attemptId,
         worker_id: workerId,
+        state,
+        changed_at: changedAt,
         reservation_state: reservation.state,
         project_id: reservation.scope.projectId,
         run_id: reservation.scope.runId,

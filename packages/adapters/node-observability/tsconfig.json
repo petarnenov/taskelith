@@ -1,0 +1,9 @@
+{
+  "extends": "../../../tsconfig.package.json",
+  "references": [
+    { "path": "../../kernel" },
+    { "path": "../../modules/observability" },
+    { "path": "../../modules/sdlc" },
+    { "path": "../../testing" }
+  ]
+}

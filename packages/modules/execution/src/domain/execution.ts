@@ -98,6 +98,12 @@ export function isTerminalExecution(execution: Execution): boolean {
   return EXECUTION_TRANSITIONS[execution.state].length === 0;
 }
 
+// The control plane does not know whether such an execution still runs; it
+// keeps its ownership and capacity until reconciled.
+export function isUnknownExecution(execution: Execution): boolean {
+  return !isTerminalExecution(execution) && execution.evidence.length > 0;
+}
+
 export function authorizedExecution(grant: LaunchGrant): Execution {
   return Object.freeze({
     id: grant.executionId,

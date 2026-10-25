@@ -7,6 +7,7 @@ import {
   PostgresTaskLineage,
   databaseNow,
 } from './capacity-repositories.js';
+import { PostgresSignalReadings } from './control-plane-signals.js';
 import {
   PostgresAdmissionRepository,
   PostgresAssignmentRepository,
@@ -16,6 +17,7 @@ import {
   PostgresTaskRepository,
   PostgresWorkflowRunRepository,
 } from './repositories.js';
+import { PostgresFleetRegistry, PostgresInstallationTable, PostgresOperatorCredentials } from './fleet-repositories.js';
 import type { Session } from './session.js';
 
 // One SERIALIZABLE transaction: every repository and the outbox and inbox
@@ -33,6 +35,10 @@ export class PostgresTransaction {
   readonly quotas: PostgresQuotaSettings;
   readonly lineage: PostgresTaskLineage;
   readonly ledger: PostgresCapacityLedger;
+  readonly fleet: PostgresFleetRegistry;
+  readonly installationTable: PostgresInstallationTable;
+  readonly operatorCredentials: PostgresOperatorCredentials;
+  readonly signals: PostgresSignalReadings;
   readonly #session: Session;
 
   constructor(session: Session) {
@@ -49,6 +55,10 @@ export class PostgresTransaction {
     this.quotas = new PostgresQuotaSettings(session);
     this.lineage = new PostgresTaskLineage(session);
     this.ledger = new PostgresCapacityLedger(session);
+    this.fleet = new PostgresFleetRegistry(session);
+    this.installationTable = new PostgresInstallationTable(session);
+    this.operatorCredentials = new PostgresOperatorCredentials(session);
+    this.signals = new PostgresSignalReadings(session);
   }
 
   now(): Promise<Instant> {

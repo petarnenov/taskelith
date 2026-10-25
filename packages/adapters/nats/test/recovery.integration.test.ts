@@ -3,8 +3,8 @@ import { join } from 'node:path';
 import { after, afterEach, test } from 'node:test';
 import type { NatsConnection } from '@nats-io/nats-core';
 import { ok } from '@taskelith/kernel';
-import { encodeJson, JetStreamPublisher, workerCommandConsumer } from '@taskelith/nats';
-import { acquireProcessLock, crashEnvironment, integrationEndpoint, ScenarioProcess, Toxiproxy } from '@taskelith/testing';
+import { connectWorkerTransport, encodeJson, JetStreamPublisher, workerCommandConsumer } from '@taskelith/nats';
+import { acquireProcessLock, crashEnvironment, integrationEndpoint, integrationSecret, ScenarioProcess, Toxiproxy } from '@taskelith/testing';
 import { offer } from './messages.ts';
 import { connected, expectOk, installation, NATS_URL, recordingHandler, running, TEST_LIMITS, waitFor } from './nats-fixtures.ts';
 
@@ -68,7 +68,9 @@ test('a publication during a lost connection is unavailable, and its retry after
 
 test('a worker consumer resumes after a lost connection and receives what was published meanwhile', async () => {
   const { address, transport } = await installation(['worker-1']);
-  const proxied = await connected(PROXY_URL, address, 'worker-1');
+  const proxied = expectOk(await connectWorkerTransport({
+    server: PROXY_URL, address, workerId: 'worker-1', creds: integrationSecret('integration.creds'),
+  }));
   after(() => proxied.close());
   const subject = expectOk(address.commandSubject('worker-1'));
   const direct = new JetStreamPublisher(transport.js);
