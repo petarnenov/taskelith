@@ -77,6 +77,11 @@ The stages come from [governance "Lifecycle and records"](governance.md#lifecycl
 
 Every **(gap)** row needs an explicit platform-managed gate or closure record, shown in the UI as platform-managed rather than native (architecture section 6).
 
+Note of 2026-10-25: the table places native artifacts by lifecycle stage as observed before G1. The frozen port's stage graphs differ in two places; the OpenSpec plugin's stage graph and the SpecKit mapping fixture, which the G4 SpecKit adapter implements, are authoritative ([ADR 0009](decisions/0009-frozen-sdlc-framework-port.md)):
+
+- OpenSpec: writing `tasks.md` is the `tasks` stage, with the specification obligation, so it belongs to "Specify and design"; "Implement" is only the `apply` stage, which executes `tasks.md`. `specs` and `design` are separate stages (`packages/plugins/sdlc-openspec/src/openspec-framework.ts`).
+- SpecKit: the `specify` stage covers both intake and specification, so "Propose and inspect" is native rather than a gap; "Specify and design" holds `specify`, the platform-managed gates `review-spec` and `review-plan`, `plan`, and `tasks`; "Implement" is the `implement` stage; `clarify` is an agent step inside `specify`, not a stage (`packages/plugins/sdlc-speckit/test/speckit-mapping-cases.ts`).
+
 ## Mismatches that affect the port
 
 - **Work-item identity.** OpenSpec uses a kebab-case change name and dates the archive directory; SpecKit uses `NNN-short-name` (or a timestamp prefix), optionally equal to a branch name. The plugin must map both to stable platform identifiers.
