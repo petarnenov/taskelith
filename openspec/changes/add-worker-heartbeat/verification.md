@@ -1,0 +1,77 @@
+# Verification
+
+Change `add-worker-heartbeat`, part of G2 items 20 and 21.
+
+## Scope and source
+
+- **Source:** the coordinator's brief of 2026-10-26, which moves this change ahead of item 20d and carries coordinator decision Q1 (a) of item 20 ([proposal](proposal.md)).
+- **Scope:** the heartbeat contract and the control-plane side: the message and subject, the worker's publish permission, the documentation, the provisional targets, the authenticated consumer, and the bounded lost-contact check.
+- **Excluded:** the worker's heartbeat publisher and its own detection of lost contact (20d); contact from inventory reports (21c); reconciling a lost worker's attempts.
+- **Branch:** `add-worker-heartbeat`, from `origin/dev` at `aba18f5`.
+
+## Environment
+
+- Linux 6.8.0-147-generic, Node.js v24.22.1 and npm 11.19.1 as `make verify` selects them, Docker with the Compose services of `scripts/services.sh` (PostgreSQL, NATS, Toxiproxy).
+
+## Author self-check
+
+Checked before the first pass against `AGENTS.md`, ADR 0004, the governance review process, and the specifications the change touches. The written record came after pass 1, which pass 1 found (M6).
+
+- **Scope.** Only the brief's items; the worker publisher stays in 20d. Two additions follow from the brief's "any contact": a duplicate observation records contact (pass 1 M4), and the shared producer authentication.
+- **Architecture.** The subject and the permission are in the NATS adapter. The receiver is an adapter that hands a parsed body to the application's `HeartbeatService`. The lost-contact write is a `WorkerReports` port method with in-memory and PostgreSQL adapters and a conformance case.
+- **Contract first.** `execution.asyncapi.json` 0.4.0 declares the message before any code uses it, and the compatibility check passes.
+- **Comments.** Every comment is at most two lines of 80 characters (`npm run verify:comments`).
+- **Evidence check.** The change adds no external link; every link it adds is repository-relative.
+
+## Checks
+
+| Check | Revision | Result |
+| --- | --- | --- |
+| `make verify` | `bd8f15f` | Failed: the type check of the tests rejected a subscription callback that returned a number. Fixed in `6c5145a`. |
+| `make verify` | `6c5145a` | Passed: 1219 tests, 1204 passed, 0 failed, 15 skipped (macOS only); coverage of all files 99.13% lines, 91.59% branches, 98.67% functions. |
+| `make verify` | `4b9bbc1` | Passed: 1222 tests, 1207 passed, 0 failed, 15 skipped (macOS only); coverage 99.13% lines, 91.61% branches, 98.67% functions; `execution.asyncapi.json` has 2 breaking changes against `aba18f5`, declared by 0.4.0; OpenSpec 60 items valid; the archive dry run, dependency inventory, and package checks passed. |
+| `make contract-compatibility` with the version left at 0.3.0 | before `bd8f15f` | Failed as expected: `add /components/messages/workerHeartbeat` and `add /components/schemas/WorkerHeartbeat` need a new minor version. |
+| `apps/control-plane/test/heartbeat.integration.test.ts`, 5 consecutive runs | `4b9bbc1` working tree | 5 of 5 tests passed in each run, including both orders of the race between a heartbeat and the check. |
+
+Tests the change adds:
+- contract: `WorkerHeartbeat` accepts the minimal heartbeat and refuses an extra field, another `messageType`, and a missing `workerId`, `journalId`, or `sentAt`;
+- transport: the heartbeat subject and its parser, the worker's publish permission, the schema table of the heartbeat channel, the receiver's handling, drops, bound, and stop;
+- NATS: two receivers in one queue group share four heartbeats, no stream matches the subject, and a stop ends the receiver; a worker user publishes only on its own heartbeat subject;
+- scheduling: the `markContactLost` conformance case, run in memory and in PostgreSQL;
+- control plane: a heartbeat records contact at the database time; a heartbeat on another worker's subject, without a subject worker, of another journal, of a revoked worker, or of an unknown worker is `forbidden` and records nothing; a stale worker turns unreachable after the timeout with an injected clock, and contact makes it reachable again; the batch bound; a duplicate observation restores contact; PostgreSQL contact, timeout, observation contact, revocation, and both race orders.
+
+## Independent review
+
+Reviewer assigned by the coordinator: Codex CLI, `gpt-6.1-sol`, reasoning effort medium, read-only sandbox, with a cap of three passes.
+
+### Pass 1
+
+- **Invocation:** `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, prompt outside the worktree.
+- **Model confirmation:** the output header shows model `gpt-6.1-sol`, reasoning effort medium, sandbox read-only.
+- **Session:** `01a1752b-d9d1-7ef2-8a79-a6780590a713`.
+- **Revision:** `6c5145a`.
+- **Snapshot:** `5f9a42c65f4217a92d1f4d28513ef86ab493ef2ddf2dde605ebd6c82230acdf3` before and after; unchanged.
+- **Result:** 1 High, 5 Medium, 3 Low.
+
+| # | Finding | Disposition |
+| --- | --- | --- |
+| H1 | The receiver checks `getPending()` only when it takes a message, so the client's queue grows without limit while a handler waits. | Fixed in `4b9bbc1`: a subscription callback puts arrivals into the receiver's own queue of at most `1,000` and drops the rest, with a test of a waiting handler and a burst. |
+| M2 | After a stop, the receiver still handles the heartbeats already buffered. | Fixed in `4b9bbc1`: the loop checks the stop before each heartbeat and unsubscribes in `finally`, with a test of a stop while a handler waits and heartbeats are queued. |
+| M3 | An inventory report does not record contact, although the new requirement counts it. | Not changed: contact from an inventory report is 21c's, as the brief's "reachability that 21b and 21c record" and 21b's proposal state. The requirement, design, contract page, and targets now say that inventory contact counts once 21c consumes it. |
+| M4 | A duplicate observation does not record contact, so a worker that republishes after a lost confirmation can turn unreachable. | Fixed in `4b9bbc1`: `ObservationService` records contact before the inbox check, with a unit test and an `observation-consumption` delta. |
+| M5 | No test covers the race between a contact and the lost-contact update. | Fixed in `4b9bbc1`: two PostgreSQL tests hold one transaction at a barrier until the other waits for the row lock, in both orders; the worker ends reachable in both. |
+| M6 | `verification.md` with the author self-check and evidence check is missing before the first pass. | Fixed: this record. The self-check took place but was not written before pass 1. |
+| L7 | The `40s` detection bound ignores the batch and the check's duration, and the restart note assumes one batch. | Fixed in `4b9bbc1`: the targets and the design state the extra interval per further `100` silent workers, the check's duration, and the restart in batches. |
+| L8 | The contract page still says that a worker publishes only on its observation subject. | Fixed in `4b9bbc1`. |
+| L9 | The contract page's rule that a malformed message goes to quarantine contradicts the heartbeat receiver. | Fixed in `4b9bbc1`: a malformed heartbeat is dropped and logged. |
+
+## Limitations
+
+- No worker sends heartbeats before 20d, so the end-to-end path from a real worker is untested; the NATS tests publish heartbeats with a worker user's credentials.
+- Credentials issued before this change lack the heartbeat permission until the next rotation (design, risks).
+- The `10s`, `30s`, `100`, and `1,000` values are provisional; G6 verifies them.
+
+## Remaining gates
+
+- Review pass 2 of the fixes.
+- Coordinator integration into `dev` and archive.

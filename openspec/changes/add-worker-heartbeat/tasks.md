@@ -16,5 +16,5 @@
 ## 4. Verification and review
 
 - [x] 4.1 Add contract, transport, broker permission, conformance, unit, and PostgreSQL tests.
-- [ ] 4.2 Run `make verify` and record the results.
+- [x] 4.2 Run `make verify` and record the results.
 - [ ] 4.3 Obtain independent review (Codex `gpt-6.1-sol`, medium, read-only) and record the results.
