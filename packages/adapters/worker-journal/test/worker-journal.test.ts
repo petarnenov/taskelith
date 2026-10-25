@@ -401,15 +401,15 @@ test('a format 1 journal is migrated to format 2 and keeps its records', () => {
   const raw = new DatabaseSync(paths.journal);
   raw.exec('PRAGMA locking_mode = EXCLUSIVE');
   for (const column of ['declared_capacity', 'capacity_declarations', 'inventory_snapshots']) raw.exec(`ALTER TABLE journal_meta DROP COLUMN ${column}`);
-  for (const column of ['cpu_millicores', 'memory_mebibytes', 'hard_controls']) raw.exec(`ALTER TABLE launch_intent DROP COLUMN ${column}`);
+  for (const column of ['recovery_epoch', 'cpu_millicores', 'memory_mebibytes', 'hard_controls']) raw.exec(`ALTER TABLE launch_intent DROP COLUMN ${column}`);
   raw.exec('DROP TABLE assignment_end');
   raw.exec('PRAGMA user_version = 1');
   raw.close();
   root = value(openWorkerRoot(rootOptions(paths.dataRoot)));
   journal = root.journal;
   const [migrated] = value(journal.snapshot()).intents;
-  assert.deepEqual([migrated?.assignmentId, migrated?.ended, migrated?.requested], [
-    intent().assignmentId, false, { cpuMillicores: 0, memoryMebibytes: 0, hardControls: [] },
+  assert.deepEqual([migrated?.assignmentId, migrated?.ended, migrated?.recoveryEpoch, migrated?.requested], [
+    intent().assignmentId, false, BINDING.recoveryEpoch, { cpuMillicores: 0, memoryMebibytes: 0, hardControls: [] },
   ]);
   value(journal.recordCommand(end(1)));
   assert.equal(value(journal.takeInventory()).snapshot, 1);
@@ -428,7 +428,7 @@ test('a migration that fails part way leaves the format 1 journal complete', () 
   root.close();
   const raw = new DatabaseSync(paths.journal);
   raw.exec('PRAGMA locking_mode = EXCLUSIVE');
-  for (const column of ['cpu_millicores', 'memory_mebibytes', 'hard_controls']) raw.exec(`ALTER TABLE launch_intent DROP COLUMN ${column}`);
+  for (const column of ['recovery_epoch', 'cpu_millicores', 'memory_mebibytes', 'hard_controls']) raw.exec(`ALTER TABLE launch_intent DROP COLUMN ${column}`);
   raw.exec('PRAGMA user_version = 1');
   raw.close();
   // journal_meta still has the format 2 columns, so the first ALTER fails.

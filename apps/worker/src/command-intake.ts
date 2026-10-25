@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { SUPPORTED_PROTOCOL_VERSIONS, supportsProtocolVersion, type MessageSchemas } from '@taskelith/contracts';
 import {
+  parseRecoveryEpoch,
   parseSequence,
   type CommandId,
   type CommandRejectionReason,
@@ -10,7 +11,8 @@ import {
   type WorkerJournal,
 } from '@taskelith/execution';
 import type { WorkerCapacity } from '@taskelith/fleet';
-import { err, failure, ok, type CorrelationId, type Instant, type Result } from '@taskelith/kernel';
+import { err, failure, ok, parseIdentifier, type CorrelationId, type Instant, type Result } from '@taskelith/kernel';
+import { parseGeneration, parseOwnershipGeneration } from '@taskelith/sdlc';
 import { encodeJson, type DeliveredMessage, type Publication, type PublishOutcome } from '@taskelith/nats';
 import { refusalOf } from './assignment-admission.js';
 import { inventoryParts } from './observation-messages.js';
@@ -87,19 +89,16 @@ export class CommandIntake {
 
   // The admission reads the journal outside W1, which is safe because one
   // consumer journals this worker's commands one at a time.
-  #offer(source: JournaledSource, { metadata, payload }: Offer): Result<JournaledCommand> {
-    const { attemptId, ownershipGeneration, sdlc } = metadata;
-    const { assignmentId, reservation } = payload;
-    const intent = {
-      assignmentId, attemptId, ownershipGeneration,
-      admissionId: sdlc.admissionId, admissionGeneration: sdlc.admissionGeneration, requested: reservation.requested,
-    } as unknown as LaunchIntent;
+  #offer(source: JournaledSource, offer: Offer): Result<JournaledCommand> {
+    const intent = intentOf(offer);
+    if (!intent.ok) return intent;
     const journal = this.#options.journal.snapshot();
     if (!journal.ok) return journal;
-    const reason = refusalOf(intent.requested, journal.value, this.#options.capacity);
-    if (reason === undefined) return ok({ ...source, outcome: 'accepted', kind: 'assignment', intent });
-    const assignment = { assignmentId: intent.assignmentId, attemptId: intent.attemptId, ownershipGeneration: intent.ownershipGeneration };
-    return ok({ ...source, outcome: 'rejected', kind: metadata.commandType, rejection: { kind: 'assignment-refused', assignment, reason } });
+    const reason = refusalOf(intent.value.requested, journal.value, this.#options.capacity);
+    if (reason === undefined) return ok({ ...source, outcome: 'accepted', kind: 'assignment', intent: intent.value });
+    const { assignmentId, attemptId, ownershipGeneration } = intent.value;
+    const rejection = { kind: 'assignment-refused' as const, assignment: { assignmentId, attemptId, ownershipGeneration }, reason };
+    return ok({ ...source, outcome: 'rejected', kind: offer.metadata.commandType, rejection });
   }
 
   // A confirmation of another journal, or beyond what this journal assigned,
@@ -126,6 +125,25 @@ export class CommandIntake {
     }
     return ok(undefined);
   }
+}
+
+function intentOf({ metadata, payload }: Offer): Result<LaunchIntent> {
+  const parsed = {
+    assignmentId: parseIdentifier('AssignmentId', payload.assignmentId),
+    attemptId: parseIdentifier('AttemptId', metadata.attemptId),
+    ownershipGeneration: parseOwnershipGeneration(metadata.ownershipGeneration),
+    admissionId: parseIdentifier('AdmissionId', metadata.sdlc.admissionId),
+    admissionGeneration: parseGeneration(metadata.sdlc.admissionGeneration),
+    recoveryEpoch: parseRecoveryEpoch(payload.recoveryEpoch),
+  };
+  const values: Record<string, unknown> = {};
+  for (const [field, result] of Object.entries(parsed)) {
+    if (!result.ok) return result;
+    values[field] = result.value;
+  }
+  const { cpuMillicores, memoryMebibytes, hardControls } = payload.reservation.requested;
+  const requested = Object.freeze({ cpuMillicores, memoryMebibytes, hardControls: Object.freeze([...hardControls]) });
+  return ok(Object.freeze({ ...values, requested }) as LaunchIntent);
 }
 
 // The reader validated the body against the schema its type names.

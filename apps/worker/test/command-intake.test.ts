@@ -131,7 +131,7 @@ function assertSchema(name: keyof MessageSchemas & string, body: unknown): void 
 test('an accepted offer is journaled with its acceptance before it is acknowledged', async () => {
   value(await deliver(offer(1)));
   const [intent] = value(root.journal.snapshot()).intents;
-  assert.deepEqual([intent?.assignmentId, intent?.requested], ['assignment-1', { cpuMillicores: 1000, memoryMebibytes: 1024, hardControls: [] }]);
+  assert.deepEqual([intent?.assignmentId, intent?.recoveryEpoch, intent?.requested], ['assignment-1', 1, { cpuMillicores: 1000, memoryMebibytes: 1024, hardControls: [] }]);
   const [accepted] = await published();
   assertSchema('AssignmentAcceptedObservation', accepted);
   assert.deepEqual(accepted?.payload, { commandId: 'execution.assignment.offer-1', assignmentId: 'assignment-1' });
@@ -216,7 +216,18 @@ test('a redelivered offer is a duplicate even when the slots are now full', asyn
   assert.equal((await published()).length, 2);
 });
 
-test('a failed W1 commit leaves the command unacknowledged, and its redelivery is journaled once', async () => {
+test('a failed W1 commit records nothing, and the redelivered command is journaled once', async () => {
+  onCommitPoint = (point) => {
+    if (point === 'W1.before') throw new Error('crash before W1');
+  };
+  await assert.rejects(deliver(offer(1)), /crash before W1/);
+  assert.equal(value(root.journal.snapshot()).intents.length, 0);
+  onCommitPoint = () => undefined;
+  assert.deepEqual(value(await deliver(offer(1))), { kind: 'recorded' });
+  assert.equal(value(root.journal.snapshot()).intents.length, 1);
+});
+
+test('a crash after W1 and before the acknowledgement makes the redelivery a duplicate', async () => {
   onCommitPoint = (point) => {
     if (point === 'W1.after') throw new Error('crash after W1');
   };
@@ -224,6 +235,16 @@ test('a failed W1 commit leaves the command unacknowledged, and its redelivery i
   onCommitPoint = () => undefined;
   assert.deepEqual(value(await deliver(offer(1))), { kind: 'duplicate' });
   assert.equal(value(root.journal.snapshot()).intents.length, 1);
+});
+
+// The consumer redelivers a failed command up to max_deliver, and the
+// broker then quarantines it (item 12), so it never blocks the worker.
+test('a reused commandId with other content fails, so the command is not acknowledged', async () => {
+  value(await deliver(offer(1)));
+  const changed = offer(1, { cpuMillicores: 500 });
+  assert.equal(failed(await deliver(changed)).code, 'conflict');
+  value(await deliver(offer(2)));
+  assert.equal(value(root.journal.snapshot()).intents.length, 2);
 });
 
 test('the publisher publishes due entries in order under their identity and stops at a failure', async () => {

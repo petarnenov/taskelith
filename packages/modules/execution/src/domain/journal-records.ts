@@ -31,6 +31,8 @@ export interface LaunchIntent {
   readonly ownershipGeneration: OwnershipGeneration;
   readonly admissionId: AdmissionId;
   readonly admissionGeneration: Generation;
+  // The epoch the offer names, which the worker's launch requests carry.
+  readonly recoveryEpoch: RecoveryEpoch;
   readonly requested: ResourceRequest;
 }
 

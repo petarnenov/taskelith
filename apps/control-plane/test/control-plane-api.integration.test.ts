@@ -7,14 +7,21 @@ import { after, before, describe, test } from 'node:test';
 import pg from 'pg';
 import { createAccount } from '@nats-io/nkeys';
 import { checkHttpSchema, checkMessageSchema } from '@taskelith/contracts';
-import { adminMain, InstallationPublicationFence, serveUntilStopped, startControlPlane, type AdminIo, type RunningControlPlane } from '@taskelith/control-plane';
+import {
+  adminMain,
+  InstallationPublicationFence,
+  serveUntilStopped,
+  startControlPlane,
+  type AdminIo,
+  type ControlPlaneSettings,
+  type RunningControlPlane,
+} from '@taskelith/control-plane';
 import { ControlPlaneNamespace } from '@taskelith/control-plane-store';
 import {
   BrokerAuthority,
   connectSystemAccount,
   connectTransport,
   encodeJson,
-  ensureWorkerConsumer,
   JetStreamPublisher,
   NatsBrokerCredentials,
   readObservationSubjectMessage,
@@ -90,13 +97,15 @@ const definition = value(parseWorkflowDefinition({
 const logs = new InMemoryLogSink();
 let running: RunningControlPlane;
 
+const SETTINGS: ControlPlaneSettings = {
+  dataRoot, ownerUid, postgres: database, nats: NATS, api: { host: '127.0.0.1', port: 0 },
+  workflows: [{ definition, digest: DIGEST }], logSink: logs, sweepMilliseconds: 200, shutdownMilliseconds: 1000,
+  // The test server keeps JetStream in a small tmpfs.
+  transportLimits: { ...TRANSPORT_LIMITS, streamMaxBytes: 64 * 1024 ** 2, retryInitialMilliseconds: 100, retryMaxMilliseconds: 200, idlePollMilliseconds: 50 },
+};
+
 before(async () => {
-  running = value(await startControlPlane({
-    dataRoot, ownerUid, postgres: database, nats: NATS, api: { host: '127.0.0.1', port: 0 },
-    workflows: [{ definition, digest: DIGEST }], logSink: logs, sweepMilliseconds: 200, shutdownMilliseconds: 1000,
-    // The test server keeps JetStream in a small tmpfs.
-    transportLimits: { ...TRANSPORT_LIMITS, streamMaxBytes: 64 * 1024 ** 2, retryInitialMilliseconds: 100, retryMaxMilliseconds: 200, idlePollMilliseconds: 50 },
-  }));
+  running = value(await startControlPlane(SETTINGS));
 });
 
 after(async () => {
@@ -414,7 +423,7 @@ describe('enrollment and quarantine', () => {
     const { workerId } = worker.identity;
     const broker = value(await connectTransport({ server: NATS, address, creds: authority.user('intake-test', Math.floor(Date.now() / 1000)).creds }));
     try {
-      value(await ensureWorkerConsumer(broker.jsm, address, workerId));
+      // Enrollment created the worker's consumer; nothing here creates it.
       const publisher = new JetStreamPublisher(broker.js);
       for (const [commandId, protocolVersion] of [['offer-1', 1], ['offer-2', 2]] as const) {
         const offer = intakeOffer(commandId, workerId, protocolVersion);
@@ -429,6 +438,22 @@ describe('enrollment and quarantine', () => {
       assert.deepEqual(types, ['worker.capacity.declared', 'execution.assignment.accepted', 'execution.command.rejected']);
     } finally {
       await worker.stop();
+      await broker.close();
+    }
+  });
+
+  test('a restart ensures the command consumer of every active worker', async () => {
+    const { workerId } = await enrolledWorker('journal-consumer-repair');
+    const broker = value(await connectTransport({ server: NATS, address, creds: authority.user('repair-test', Math.floor(Date.now() / 1000)).creds }));
+    const stream = address.streamName('commands');
+    try {
+      assert.equal((await broker.jsm.consumers.info(stream, workerId)).name, workerId);
+      await broker.jsm.consumers.delete(stream, workerId);
+      await running.stop();
+      running = value(await startControlPlane(SETTINGS));
+      assert.equal((await broker.jsm.consumers.info(stream, workerId)).name, workerId);
+      assert.ok(logs.records.some((record) => record.event === 'fleet.command-consumers.repaired'));
+    } finally {
       await broker.close();
     }
   });

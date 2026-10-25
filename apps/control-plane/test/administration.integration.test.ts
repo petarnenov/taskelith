@@ -15,9 +15,9 @@ import {
   connectWorkerTransport,
   encodeJson,
   ensureStreams,
-  ensureWorkerConsumer,
   JetStreamPublisher,
   NatsBrokerCredentials,
+  NatsCommandConsumers,
   TRANSPORT_LIMITS,
   TransportAddress,
 } from '@taskelith/nats';
@@ -112,16 +112,6 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
 
   const administration = value(Administration.open({ dataRoot, ownerUid, postgres: database, nats: NATS }));
   after(() => administration.close());
-  const enrollment = value(await administration.enrollmentService());
-  after(() => enrollment.close());
-  const enrolled = value(await enrollment.service.enroll(token, {
-    journalId: value(parseIdentifier('JournalId', 'journal-1')),
-    host: { platform: 'linux', architecture: 'x64', hostname: 'build-1' },
-    protocolVersions: { minimum: 1, maximum: 1 },
-    capacity: { slots: 2, cpuMillicores: 4000, memoryMebibytes: 8192, controls: ['cpu-limit'] },
-  }));
-  assert.equal(enrolled.installationId, identity.installationId);
-
   const address = value(TransportAddress.of(identity.installationId));
   const creds = authority.user('control-plane', Math.floor(Date.now() / 1000)).creds;
   const controlPlane = value(await connectTransport({ server: NATS, address, creds }));
@@ -133,7 +123,15 @@ test('initialization, enrollment, rotation, revocation, and the operator reset w
   });
   // The test server keeps JetStream in a small tmpfs.
   value(await ensureStreams(controlPlane.jsm, address, { ...TRANSPORT_LIMITS, streamMaxBytes: 64 * 1024 ** 2 }));
-  value(await ensureWorkerConsumer(controlPlane.jsm, address, enrolled.workerId));
+  const enrollment = value(await administration.enrollmentService(new NatsCommandConsumers(controlPlane.jsm, address)));
+  after(() => enrollment.close());
+  const enrolled = value(await enrollment.service.enroll(token, {
+    journalId: value(parseIdentifier('JournalId', 'journal-1')),
+    host: { platform: 'linux', architecture: 'x64', hostname: 'build-1' },
+    protocolVersions: { minimum: 1, maximum: 1 },
+    capacity: { slots: 2, cpuMillicores: 4000, memoryMebibytes: 8192, controls: ['cpu-limit'] },
+  }));
+  assert.equal(enrolled.installationId, identity.installationId);
   value(await new JetStreamPublisher(controlPlane.js).publish({
     subject: value(address.commandSubject(enrolled.workerId)), body: encodeJson({ hello: 'worker' }), messageId: 'command-1',
   }));

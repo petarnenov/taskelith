@@ -91,6 +91,13 @@ export class PostgresFleetRegistry implements FleetRegistry {
     return ok(await this.#read(workerId, ''));
   }
 
+  async activeWorkerIds(): Promise<Result<readonly WorkerId[]>> {
+    const { rows } = await this.#session.query<{ worker_id: WorkerId }>(
+      'SELECT worker_id FROM workers WHERE enrollment IS NOT NULL AND NOT revoked ORDER BY worker_id',
+    );
+    return ok(Object.freeze(rows.map((row) => row.worker_id)));
+  }
+
   async workerByCredentialHash(hash: SecretHash): Promise<Result<EnrolledWorker | undefined>> {
     const { rows } = await this.#session.query<{ enrollment: string }>(
       `SELECT enrollment FROM workers WHERE (control_plane_hash = $1 OR previous_control_plane_hash = $1)

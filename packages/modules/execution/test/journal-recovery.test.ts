@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseGeneration, parseOwnershipGeneration } from '@taskelith/sdlc';
 import {
+  parseRecoveryEpoch,
   planJournalRecovery,
   type AuthorizationOutcome,
   type ExecutionState,
@@ -19,6 +20,7 @@ const INTENT: JournaledIntent = {
   ownershipGeneration: value(parseOwnershipGeneration(1)),
   admissionId: id('AdmissionId', 'admission-1'),
   admissionGeneration: value(parseGeneration(1)),
+  recoveryEpoch: value(parseRecoveryEpoch(1)),
   requested: { cpuMillicores: 1000, memoryMebibytes: 1024, hardControls: [] },
   commandId: id('CommandId', 'offer-1'),
   ended: false,

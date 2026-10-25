@@ -71,6 +71,7 @@ function toIntent(row: Row): JournaledIntent {
     ownershipGeneration: storedInteger(row, 'ownership_generation'),
     admissionId: storedText(row, 'admission_id'),
     admissionGeneration: storedInteger(row, 'admission_generation'),
+    recoveryEpoch: storedInteger(row, 'recovery_epoch'),
     requested: Object.freeze(requested),
     commandId: storedText(row, 'command_id'),
     ended: row.ended === 1,

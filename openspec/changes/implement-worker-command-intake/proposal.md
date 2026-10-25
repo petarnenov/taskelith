@@ -11,6 +11,7 @@
 - The worker declares its capacity with `worker.capacity.declared` at its first start and whenever the capacity or the protocol window changes.
 - A publication loop publishes due outbox entries with `dueForPublication` and `markPublished`; `execution.observations.confirmed` prunes through `confirmThrough`; `worker.inventory.requested` is answered with a `worker.inventory.reported` snapshot.
 - The journal moves to format 2, which stores an offer's requested resources, assignment ends, the last capacity declaration, and the inventory snapshot counter, and migrates format 1 forward.
+- Enrollment ensures the worker's durable command consumer before it uses the token, and a control-plane start ensures the consumer of every active worker (coordinator decision on review pass 1, H1).
 - The `EnrollmentRequest` description in `execution.openapi.json` no longer says that the worker created its journal before enrolling (20a review pass 1, L4; description only).
 
 ## Capabilities
@@ -23,11 +24,15 @@ None.
 
 - `worker-runtime`: command intake, capacity declaration, observation publication, confirmation, and the inventory answer.
 - `worker-journal-adapter`: journal format 2 with its migration, and the intake records.
+- `installation-enrollment`: the worker's command consumer at enrollment and at control-plane start.
 
 ## Impact
 
 - `apps/worker`: command intake, observation publisher, and their wiring in `startWorker`.
 - `@taskelith/execution`: journal record and observation fact types.
 - `@taskelith/worker-journal`: format 2, migration, and the new journal methods.
+- `@taskelith/fleet`: the `WorkerCommandConsumers` port and `FleetRegistry.activeWorkerIds`, with the in-memory and PostgreSQL registries.
+- `@taskelith/nats`: `NatsCommandConsumers`, and `runPublicationLoop` shared by both publishers.
+- `apps/control-plane`: the consumer at enrollment and its repair at start.
 - `@taskelith/contracts`: one description in `execution.openapi.json`.
 - No new third-party dependency.

@@ -10,6 +10,7 @@
 - `worker.capacity.declared`, the outbox publication loop, confirmations, and the inventory answer.
 
 **Non-Goals:**
+- deleting a revoked worker's command consumer (follow-up);
 - launches, the authorization retry loop, evidence, and the wire mapping of execution facts (20c);
 - the inventory report on every reconnect, start reconciliation, the heartbeat, and the offline mode (20d);
 - admission pressure, the disk floor, the backlog limit, and `requestDelegation` (20e);
@@ -34,11 +35,11 @@
 
 ### D3: admission from the journal, outside W1
 
-`refusalOf` checks the offer's request against the per-attempt ceiling (2000 millicores, 4096 MiB, the scheduler's constants), the declared enforceable controls, the slot count, and the CPU and memory left. It counts once per attempt every intent that has not ended and every intent with an execution that is not terminal, uncertain ones included. The check reads a snapshot before W1. That is safe because one pull consumer delivers this worker's commands one at a time, and only intake adds intents. A redelivered accepted offer is computed against a journal that already counts it, but W1 returns `duplicate` for its digest, so it is never refused afterwards.
+The offer is parsed into a `LaunchIntent` with the typed parsers, and the intent keeps the offer's `recoveryEpoch`, which 20c's launch requests carry (wire contracts section 4). `refusalOf` checks the offer's request against the per-attempt ceiling (2000 millicores, 4096 MiB, the scheduler's constants), the declared enforceable controls, the slot count, and the CPU and memory left. It counts once per attempt every intent that has not ended and every intent with an execution that is not terminal, uncertain ones included. The check reads a snapshot before W1. That is safe because one pull consumer delivers this worker's commands one at a time, and only intake adds intents. A redelivered accepted offer is computed against a journal that already counts it, but W1 returns `duplicate` for its digest, so it is never refused afterwards.
 
 ### D4: journal format 2
 
-The admission needs each intent's request, the inventory needs the command and the end of each assignment, and the declaration and snapshot numbers must survive restarts. Format 2 adds the request columns to `launch_intent`, the `assignment_end` table, and the declaration and snapshot counters to `journal_meta`. A start migrates format 1 forward in one transaction (contract section 10); its intents get a zero request, since no format 1 journal holds a G2 offer.
+The admission needs each intent's request, the inventory needs the command and the end of each assignment, and the declaration and snapshot numbers must survive restarts. Format 2 adds the request and `recovery_epoch` columns to `launch_intent`, the `assignment_end` table, and the declaration and snapshot counters to `journal_meta`. A start migrates format 1 forward in one transaction (contract section 10); its intents get a zero request and the journal's recovery epoch, since no format 1 journal holds a G2 offer.
 
 ### D5: capacity declaration
 
@@ -50,12 +51,22 @@ Each start journals `worker.capacity.declared` when the configured capacity or t
 - **Confirmation.** A confirmation of another worker or journal, or beyond the last assigned sequence, prunes nothing and is acknowledged. A journal failure is returned, so the message is redelivered.
 - **Inventory.** `takeInventory` increments the snapshot counter and reads the snapshot with the last assigned sequence in one transaction. The answer is published in parts of at most 256 assignments and executions with one random `reportId`, and a failed part fails the request, whose redelivery takes a new snapshot.
 
-### D7: wiring
+### D7: the worker's command consumer (coordinator decision, review pass 1 H1)
+
+The worker's broker user may read its consumer but not create it, and before this change nothing in production created it. The coordinator chose to create it at enrollment, with a repair at start:
+
+- `EnrollmentService.enroll` calls the Fleet port `WorkerCommandConsumers.ensure` once the `workerId` is drawn and before the registry uses the token. A failure answers `unavailable`, which the API maps to 503, and the token stays unused. If the commit fails after the consumer exists, the consumer belongs to no worker; that is harmless, and no cleanup is built.
+- `startControlPlane` ensures the consumer of every enrolled, non-revoked worker once, after the streams, and logs each failure and a summary; a lost consumer therefore heals on the next start. The work is one idempotent call per active worker.
+- Deleting the consumer when a worker is revoked is out of scope and recorded as a follow-up.
+- The administration tool builds an enrollment service that refuses to enroll, since only the API enrolls.
+
+### D8: wiring
 
 `startWorker` declares the capacity, connects, and then runs the consumer and the publisher until `stop`, which aborts both and waits for them before it closes the connection and the journal. Test limits can shorten the transport timers.
 
 ## Risks / Trade-offs
 
 - **Admission outside W1.** Correct only while one consumer journals commands. 20c adds launches, which change executions but never add intents, so the count can only fall between the read and W1.
+- **Outbox reads.** `dueForPublication` reads the whole outbox on every idle poll. Within the backlog limit of 10,000 entries that is bounded; a batch limit belongs with the backlog limit in 20e (review pass 1, L5).
 - **Unmapped execution facts.** Until 20c, an execution fact in the outbox would stop publication; no code before 20c journals one.
 - **Contract description.** The `EnrollmentRequest` description in `execution.openapi.json` now states the enrollment order of 20a's D1. It is a description-only change that the coordinator approved, and `make contract-compatibility` reports no breaking change, so the document version is unchanged.

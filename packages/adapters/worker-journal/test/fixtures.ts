@@ -56,6 +56,7 @@ export function intent(number = 1): LaunchIntent {
     ownershipGeneration: value(parseOwnershipGeneration(1)),
     admissionId: id('AdmissionId', `admission-${number}`),
     admissionGeneration: value(parseGeneration(1)),
+    recoveryEpoch: value(parseRecoveryEpoch(1)),
     requested: { cpuMillicores: 1000, memoryMebibytes: 1024, hardControls: [] },
   };
 }

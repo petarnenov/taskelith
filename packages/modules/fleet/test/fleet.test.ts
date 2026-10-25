@@ -13,6 +13,7 @@ import {
   installationIdentity,
   parseWorkerId,
   type BrokerCredentials,
+  type WorkerCommandConsumers,
   type BrokerRevocation,
   type EnrollmentRequest,
 } from '@taskelith/fleet';
@@ -62,6 +63,17 @@ class MutableClock {
 }
 
 // Keeps the last published revocation list, as the broker's account does.
+class RecordingConsumers implements WorkerCommandConsumers {
+  readonly ensured: string[] = [];
+  down = false;
+
+  async ensure(workerId: string) {
+    if (this.down) return err(failure('unavailable', 'the broker is down'));
+    this.ensured.push(workerId);
+    return ok(undefined);
+  }
+}
+
 class RecordingBroker implements BrokerCredentials {
   readonly issued: string[] = [];
   revoked: string[] = [];
@@ -124,13 +136,14 @@ test('a database copy without its record, or a mismatch, keeps the installation 
 function enrollment() {
   const clock = new MutableClock();
   const broker = new RecordingBroker();
+  const consumers = new RecordingConsumers();
   const registry = new InMemoryFleetRegistry(() => clock.now());
   const service = new EnrollmentService({
     installation: value(installationIdentity('install-1', 1)),
     serverProtocolVersions: { minimum: 1, maximum: 1 },
-    registry, secrets: countingSecrets(), ids: countingIds(), broker, clock,
+    registry, secrets: countingSecrets(), ids: countingIds(), broker, commandConsumers: consumers, clock,
   });
-  return { clock, broker, registry, service };
+  return { clock, broker, consumers, registry, service };
 }
 
 function request(journalId = 'journal-1', overrides: Partial<EnrollmentRequest> = {}): EnrollmentRequest {
@@ -156,6 +169,19 @@ test('a token enrolls one worker with both credentials of generation 1', async (
   assert.equal(value(await registry.worker(enrolled.workerId))?.credentials.current.brokerUserKey, 'U-worker-1-1');
   const reuse = failed(await service.enroll(token, request('journal-2')));
   assert.deepEqual([reuse.code, reuse.details.reason], ['forbidden', 'token-invalid']);
+});
+
+test('enrollment ensures the command consumer first; without it the token stays unused', async () => {
+  const { consumers, registry, service } = enrollment();
+  const token = value(await service.issueToken({}));
+  consumers.down = true;
+  const refused = failed(await service.enroll(token, request()));
+  assert.equal(refused.code, 'unavailable');
+  assert.deepEqual(value(await registry.activeWorkerIds()), []);
+  consumers.down = false;
+  const enrolled = value(await service.enroll(token, request()));
+  assert.deepEqual(consumers.ensured, [enrolled.workerId]);
+  assert.deepEqual(value(await registry.activeWorkerIds()), [enrolled.workerId]);
 });
 
 test('enrollment refuses an unknown or expired token, another host, no common version, and a known journal', async () => {

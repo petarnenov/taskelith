@@ -112,7 +112,9 @@ async function connectBroker(settings: WorkerSettings, dependencies: WorkerDepen
   if (!address.ok) return address;
   const observationSubject = address.value.observationSubject(identity.workerId);
   if (!observationSubject.ok) return observationSubject;
-  const { controls: enforceableControls, ...capacity } = settings.capacity;
+  // Sorted, so a reordered configuration declares nothing new.
+  const { controls, ...capacity } = settings.capacity;
+  const enforceableControls = [...controls].sort();
   const declared = root.journal.recordCapacity({ ...capacity, enforceableControls, protocolVersions: SUPPORTED_PROTOCOL_VERSIONS });
   if (!declared.ok) return declared;
   const transport = await dependencies.connect({

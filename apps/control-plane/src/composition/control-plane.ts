@@ -6,6 +6,7 @@ import { err, failure, ok, type Result } from '@taskelith/kernel';
 import {
   connectTransport,
   ensureAdvisoryConsumer,
+  NatsCommandConsumers,
   ensureStreams,
   JetStreamPublisher,
   OutboxPublisher,
@@ -20,7 +21,8 @@ import {
 import { EventLoopLagMonitor, JsonLinesLogSink, runPeriodically, SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { LocalEvidenceVolume } from '@taskelith/evidence-volume';
 import { InMemoryMetrics, Logger, sampleControlPlane, type LogSink } from '@taskelith/observability';
-import { PostgresControlPlaneSignals, PostgresOutboxRelay } from '@taskelith/postgres';
+import type { FleetRegistry, WorkerCommandConsumers } from '@taskelith/fleet';
+import { CommittingFleetRegistry, PostgresControlPlaneSignals, PostgresOutboxRelay } from '@taskelith/postgres';
 import { Administration, type AdministrationSettings } from '../admin/administration.js';
 import { createApiServer } from '../api/api-server.js';
 import { ControlPlaneApi } from '../api/control-plane-api.js';
@@ -103,10 +105,12 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   const limits = settings.transportLimits ?? TRANSPORT_LIMITS;
   const topology = await prepareTopology(broker.value, address.value, limits);
   if (!topology.ok) return topology;
-  const enrollment = await admin.value.enrollmentService();
+  const commandConsumers = new NatsCommandConsumers(broker.value.jsm, address.value, limits);
+  const enrollment = await admin.value.enrollmentService(commandConsumers);
   if (!enrollment.ok) return enrollment;
   cleanup.push(() => enrollment.value.close());
   const database = admin.value.database;
+  await repairCommandConsumers(new CommittingFleetRegistry(database), commandConsumers, logger);
   const volume = LocalEvidenceVolume.open({ dataRoot: settings.dataRoot, ownerUid: settings.ownerUid });
   if (!volume.ok) return volume;
   const fence = new InstallationPublicationFence(database);
@@ -227,6 +231,21 @@ function listen(server: Server, endpoint: ApiEndpoint): Promise<Result<ApiEndpoi
       resolve(ok({ host: bound.address, port: bound.port }));
     });
   });
+}
+
+// Ensures the consumer of every active worker once, so one lost to a crash
+// or a broker reset heals on restart; a failure is logged, not retried.
+async function repairCommandConsumers(registry: FleetRegistry, consumers: WorkerCommandConsumers, logger: Logger): Promise<void> {
+  const workers = await registry.activeWorkerIds();
+  if (!workers.ok) return logFailure(logger, 'fleet.command-consumers.unlisted', workers);
+  let failed = 0;
+  for (const workerId of workers.value) {
+    const ensured = await consumers.ensure(workerId);
+    if (ensured.ok) continue;
+    failed += 1;
+    logger.warn('fleet.command-consumer.failed', { workerId, code: ensured.error.code, message: ensured.error.message });
+  }
+  logger.info('fleet.command-consumers.repaired', { workers: workers.value.length, failed });
 }
 
 function logFailure(logger: Logger, event: string, result: Result<unknown>): void {

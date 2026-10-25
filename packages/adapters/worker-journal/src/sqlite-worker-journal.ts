@@ -364,14 +364,15 @@ function recordIntent(database: JournalDatabase, commandId: CommandId, intent: L
   const { requested } = intent;
   database.prepare(`INSERT INTO launch_intent
     (assignment_id, command_id, attempt_id, ownership_generation, admission_id, admission_generation,
-     cpu_millicores, memory_mebibytes, hard_controls)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+     recovery_epoch, cpu_millicores, memory_mebibytes, hard_controls)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     intent.assignmentId,
     commandId,
     intent.attemptId,
     intent.ownershipGeneration,
     intent.admissionId,
     intent.admissionGeneration,
+    intent.recoveryEpoch,
     requested.cpuMillicores,
     requested.memoryMebibytes,
     JSON.stringify(requested.hardControls),

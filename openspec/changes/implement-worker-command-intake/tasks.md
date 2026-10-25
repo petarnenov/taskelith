@@ -10,11 +10,15 @@
 - [x] 2.2 Add the observation publisher, the confirmation, and the inventory answer.
 - [x] 2.3 Declare the capacity and run the consumer and the publisher from `startWorker`.
 
-## 3. Contract
+## 3. Control plane
 
-- [x] 3.1 Correct the `EnrollmentRequest` description and run `make contract-compatibility`.
+- [x] 3.1 Ensure the worker's command consumer at enrollment and at start (review pass 1, H1).
 
-## 4. Verification and review
+## 4. Contract
 
-- [ ] 4.1 Run `make verify`.
-- [ ] 4.2 Run the independent review and record it in `verification.md`.
+- [x] 4.1 Correct the `EnrollmentRequest` description and run `make contract-compatibility`.
+
+## 5. Verification and review
+
+- [x] 5.1 Run `make verify`.
+- [ ] 5.2 Run the independent review and record it in `verification.md`.

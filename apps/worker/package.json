@@ -18,6 +18,7 @@
     "@taskelith/nats": "0.0.0",
     "@taskelith/node-observability": "0.0.0",
     "@taskelith/scheduling": "0.0.0",
+    "@taskelith/sdlc": "0.0.0",
     "@taskelith/secrets": "0.0.0",
     "@taskelith/worker-control-plane-client": "0.0.0",
     "@taskelith/worker-journal": "0.0.0"
