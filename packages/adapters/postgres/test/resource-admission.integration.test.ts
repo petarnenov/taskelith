@@ -281,3 +281,12 @@ test('a fourth level of delegation is rejected at creation', async () => {
   })));
   assert.deepEqual(decision, { outcome: 'rejected', reason: 'delegation-depth-exceeded' });
 });
+
+test('releases of an unknown assignment are not found and write nothing', async () => {
+  const request = { assignmentId: id('AssignmentId', 'assignment-x') as AssignmentId, commandId: id('EventId', 'x'), correlationId: id('CorrelationId', 'x') };
+  for (const release of [service.cancelAssignment(request), service.releaseAfterTerminalFact(request), service.supersede(request)]) {
+    const result = await release;
+    assert.equal(!result.ok && result.error.code, 'not-found');
+  }
+  assert.deepEqual(await counts(), { held: 0, assignments: 0, charges: 0, outbox: 0 });
+});

@@ -38,7 +38,7 @@ Placement SHALL charge the project quota, the attempt's run quota, and its root'
 - **THEN** the new reservation is held and the attempt's charge is not repeated
 
 ### Requirement: Justified release
-Cancelling an assignment SHALL end it and release its reservation with an assignment-ended command when no execution under it can run, and otherwise keep the reservation, request the attempt's cancellation, and write a cancellation command; `releaseAfterTerminalFact` SHALL release only once nothing under the assignment can run, and every release SHALL revoke the grants of a non-terminal owning execution under it with `capacity-not-reserved`.
+Cancelling an assignment SHALL end it and release its reservation with an assignment-ended command when no execution under it can run, and otherwise keep the reservation, request the attempt's cancellation, and write a cancellation command; `releaseAfterTerminalFact` SHALL release only once nothing under the assignment can run, and every release SHALL read the executions under the assignment in its own transaction and release only when none of them can run.
 
 #### Scenario: Cancellation with a running execution
 - **WHEN** an assignment with an authorized execution is cancelled, and that execution is later recorded as not started

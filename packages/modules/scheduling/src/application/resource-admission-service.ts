@@ -1,10 +1,8 @@
-import { err, failure, ok, parseEventMetadata, parseIdentifier, type CorrelationId, type EventId, type Instant, type Result } from '@taskelith/kernel';
+import { err, failure, ok, parseEventMetadata, type CorrelationId, type EventId, type Instant, type Result } from '@taskelith/kernel';
 import {
   activeAttempt,
   executionsUnderAssignment,
-  isLaunchAffected,
   requestCancellation,
-  revokeLaunch,
   type AssignmentId,
   type AttemptId,
   type Task,
@@ -101,7 +99,7 @@ export class ResourceAdmissionService {
       const stored = await tx.assignments.replace(ended.value, assignment.generation);
       if (!stored.ok) return stored;
       const follow = ended.value.reservation.state === 'released'
-        ? await releaseFollowUps(tx, ended.value, task, request, at)
+        ? await releaseFollowUps(tx, ended.value, request, at)
         : await cancelExecution(tx, ended.value, task, request, at);
       return follow.ok ? ok(ended.value) : follow;
     });
@@ -118,8 +116,7 @@ export class ResourceAdmissionService {
       if (!released.ok) return released;
       const stored = await tx.assignments.replace(released.value, assignment.generation);
       if (!stored.ok) return stored;
-      const invalidated = await invalidateLaunches(tx, released.value, task, request, at);
-      return invalidated.ok ? ok(released.value) : invalidated;
+      return ok(released.value);
     });
   }
 
@@ -137,7 +134,7 @@ export class ResourceAdmissionService {
       if (!superseded.ok) return superseded;
       const stored = await tx.assignments.replace(superseded.value, assignment.generation);
       if (!stored.ok) return stored;
-      const follow = await releaseFollowUps(tx, superseded.value, task, request, at);
+      const follow = await releaseFollowUps(tx, superseded.value, request, at);
       return follow.ok ? ok(superseded.value) : follow;
     });
   }
@@ -251,27 +248,13 @@ function elapsed(from: Instant, to: Instant): number {
   return Date.parse(to) - Date.parse(from);
 }
 
-// A release tells the worker the assignment ended and runs the invalidating
-// read of the launch authorization contract, section 5.
-async function releaseFollowUps(tx: CapacityTransaction, assignment: Assignment, task: Task, request: ReleaseRequest, at: Instant): Promise<Result<void>> {
+// Tells the worker its assignment ended. The release itself followed the
+// invalidating read by assignment (launch authorization section 5).
+async function releaseFollowUps(tx: CapacityTransaction, assignment: Assignment, request: ReleaseRequest, at: Instant): Promise<Result<void>> {
   const ended = await appendCommand(tx, request, 'scheduling.assignment.ended', assignment.workerId, at, {
     assignmentId: assignment.id, attemptId: assignment.attemptId, reason: assignment.end?.reason ?? 'released',
   });
-  if (!ended.ok) return ended;
-  const revocationId = parseIdentifier('EventId', `${request.commandId}.revocation`);
-  if (!revocationId.ok) return revocationId;
-  return invalidateLaunches(tx, assignment, task, { ...request, commandId: revocationId.value }, at);
-}
-
-// Revokes the grants of a non-terminal owning execution under the released
-// assignment and sends its cancellation; under section 6 it finds none.
-async function invalidateLaunches(tx: CapacityTransaction, assignment: Assignment, task: Task, request: ReleaseRequest, at: Instant): Promise<Result<void>> {
-  if (!executionsUnderAssignment(task, assignment.id).nonTerminal || !isLaunchAffected(task, assignment.attemptId)) return ok(undefined);
-  const revoked = revokeLaunch(task, assignment.attemptId, 'capacity-not-reserved', at);
-  if (!revoked.ok) return revoked;
-  const stored = await tx.tasks.replace(revoked.value, task.generation);
-  if (!stored.ok) return stored;
-  return appendCommand(tx, request, 'execution.attempt.cancel', assignment.workerId, at, { attemptId: assignment.attemptId, reason: 'capacity-not-reserved' });
+  return ended;
 }
 
 // The end of an assignment with a running execution is that execution's
