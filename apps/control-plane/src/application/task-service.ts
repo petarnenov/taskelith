@@ -1,5 +1,5 @@
 import type { HttpSchemas } from '@taskelith/contracts';
-import type { EvidenceRecord, Task } from '@taskelith/execution';
+import { activeAttempt, type EvidenceRecord, type Task } from '@taskelith/execution';
 import { err, failure, ok, parseIdentifier, type CorrelationId, type Result } from '@taskelith/kernel';
 import type { AdmissionId, ArtifactRevision } from '@taskelith/sdlc';
 import type { ControlPlaneStore, ControlPlaneTransaction } from './control-plane-store.js';
@@ -67,8 +67,8 @@ export class TaskService {
     });
   }
 
-  // Pending until an attempt ends; then the outcome of the last ended attempt
-  // with every evidence record of the task, current or not.
+  // Pending while an attempt is active, such as a retry; then the outcome of
+  // the last ended attempt with every evidence record of the task.
   readTaskResult(runIdText: string, taskIdText: string): Promise<Result<TaskResult>> {
     return this.#store.transaction(async (tx) => {
       const taskId = parseIdentifier('TaskId', taskIdText);
@@ -108,7 +108,7 @@ function sameRevisions(stored: readonly ArtifactRevision[], requested: readonly 
 
 function resultOf(runId: string, task: Task, evidence: readonly EvidenceRecord[]): TaskResult {
   const ended = task.attempts.filter((attempt) => attempt.outcome !== undefined).at(-1);
-  if (ended === undefined || ended.outcome === undefined) return { state: 'pending', runId, taskId: task.id };
+  if (activeAttempt(task) !== undefined || ended?.outcome === undefined) return { state: 'pending', runId, taskId: task.id };
   const outcome = JSON.parse(JSON.stringify(ended.outcome)) as Extract<TaskResult, { state: 'ended' }>['outcome'];
   return { state: 'ended', runId, taskId: task.id, attemptId: ended.id, ownershipGeneration: ended.outcome.ownershipGeneration, outcome, evidence: evidence.map(viewOf) };
 }
