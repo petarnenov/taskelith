@@ -175,7 +175,7 @@ Probe `ses_e8c9cafe5ffe3qR85hcuq1YDfx`, on the rebuilt configuration:
 - allowed: `git diff HEAD~1 --stat` and `ls docs`;
 - no file was created. A 15 minute limit stopped the run before its last command.
 
-The pass 4 fixes are not independently reviewed. The owner decides on the remaining gate.
+The pass 4 fixes are not independently reviewed. On 2026-10-25 the owner decided to merge with them recorded as unreviewed fixes.
 
 ## Limitations
 
