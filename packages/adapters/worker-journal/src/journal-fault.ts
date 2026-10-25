@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { err, failure, ok, type Failure, type Result } from '@taskelith/kernel';
-import { replaceFile, syncPath } from './durable-file.js';
+import { replaceFile, syncPath } from '@taskelith/data-root';
 import { rootFailure } from './journal-failure.js';
 
 // After a flush failure the worker stays stopped until the host restarts

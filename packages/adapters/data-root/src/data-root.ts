@@ -1,7 +1,7 @@
 import { isAbsolute, join, resolve } from 'node:path';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 
-// Where a worker looks for its `dataRoot` (storage contract, "Root
+// Where a process looks for its `dataRoot` (storage contract, "Root
 // selection"); `explicit` is the command or programmatic configuration.
 export interface DataRootSources {
   readonly explicit?: string;

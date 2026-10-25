@@ -1,21 +1,21 @@
 import { existsSync, lstatSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import { err, ok, type Result } from '@taskelith/kernel';
-import { rootFailure } from './journal-failure.js';
+import { dataRootFailure } from './data-root-failure.js';
 
 const GROUP_OR_OTHER_WRITE = 0o022;
 
 // No component from `dataRoot` down to `target` may be a symbolic link,
-// owned by another account, or writable by group or others (section 2).
+// owned by another account, or group- or other-writable (journal sec. 2).
 export function checkControlPath(dataRoot: string, target: string, ownerUid: number): Result<void> {
   const below = relative(dataRoot, target);
-  if (below.startsWith('..')) return err(rootFailure('unsafe-path', `${target} is outside the data root`, { path: target }));
+  if (below.startsWith('..')) return err(dataRootFailure('unsafe-path', `${target} is outside the data root`, { path: target }));
   let current = dataRoot;
   for (const component of ['', ...below.split(sep).filter((part) => part !== '')]) {
     current = join(current, component);
     if (!existsSync(current) && !isDanglingLink(current)) return ok(undefined);
     const problem = componentProblem(current, ownerUid);
-    if (problem !== undefined) return err(rootFailure('unsafe-path', `${current} ${problem}`, { path: current }));
+    if (problem !== undefined) return err(dataRootFailure('unsafe-path', `${current} ${problem}`, { path: current }));
   }
   return ok(undefined);
 }
@@ -41,7 +41,7 @@ function componentProblem(path: string, ownerUid: number): string | undefined {
 export function refuseCheckout(dataRoot: string): Result<void> {
   for (let directory = dataRoot; ; directory = dirname(directory)) {
     if (existsSync(join(directory, '.git'))) {
-      return err(rootFailure('inside-checkout', `data root ${dataRoot} is inside the Git working tree ${directory}`, {
+      return err(dataRootFailure('inside-checkout', `data root ${dataRoot} is inside the Git working tree ${directory}`, {
         path: dataRoot,
         checkout: directory,
       }));

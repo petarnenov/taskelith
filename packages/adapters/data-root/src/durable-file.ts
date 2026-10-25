@@ -13,7 +13,7 @@ import {
 } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
-import { rootFailure } from './journal-failure.js';
+import { dataRootFailure } from './data-root-failure.js';
 
 // The durable file rule of the worker journal contract, section 4. On macOS
 // Node's fsync uses F_FULLFSYNC first, as section 3 describes.
@@ -29,7 +29,7 @@ export function syncPath(path: string): Result<void> {
     fsyncSync(descriptor);
     return ok(undefined);
   } catch (error) {
-    return err(rootFailure('flush-failure', `cannot flush ${path}: ${(error as Error).message}`, { path }));
+    return err(dataRootFailure('flush-failure', `cannot flush ${path}: ${(error as Error).message}`, { path }));
   } finally {
     if (descriptor !== undefined) closeSync(descriptor);
   }
@@ -73,7 +73,7 @@ function publish(path: string, content: string, place: (temporary: string) => vo
   try {
     writeFileSync(temporary, content, { mode: PRIVATE_FILE, flag: 'wx' });
   } catch (error) {
-    return err(rootFailure('flush-failure', `cannot write ${temporary}: ${(error as Error).message}`, { path }));
+    return err(dataRootFailure('flush-failure', `cannot write ${temporary}: ${(error as Error).message}`, { path }));
   }
   const synced = syncPath(temporary);
   if (!synced.ok) return synced;
