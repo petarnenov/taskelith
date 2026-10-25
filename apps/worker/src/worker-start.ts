@@ -1,8 +1,16 @@
+import { randomUUID } from 'node:crypto';
 import { SUPPORTED_PROTOCOL_VERSIONS } from '@taskelith/contracts';
 import type { JournalId } from '@taskelith/execution';
 import { parseInstallationId, type Enrollment, type EnrollmentClient } from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
-import { TransportAddress, type TransportConnection, type WorkerTransportEndpoint } from '@taskelith/nats';
+import {
+  JetStreamPublisher,
+  TransportAddress,
+  workerCommandConsumer,
+  type TransportConnection,
+  type TransportLimits,
+  type WorkerTransportEndpoint,
+} from '@taskelith/nats';
 import {
   claimWorkerRoot,
   failureReason,
@@ -15,6 +23,8 @@ import {
   type WorkerRoot,
   type WorkerRootOptions,
 } from '@taskelith/worker-journal';
+import { CommandIntake } from './command-intake.js';
+import { runObservationPublisher } from './observation-publisher.js';
 import type { WorkerSettings } from './settings.js';
 
 export interface WorkerDependencies {
@@ -23,10 +33,12 @@ export interface WorkerDependencies {
   readonly newJournalId: () => string;
   readonly clock: JournalClock;
   readonly probe?: VolumeProbe;
+  // Shorter transport timers for tests.
+  readonly limits?: TransportLimits;
 }
 
-// A started worker: it holds the root lock and its broker connection, and
-// listens on no port, since every connection is outbound.
+// A started worker: it holds the root lock and its broker connection, reads
+// its commands, and publishes its observations; it listens on no port.
 export interface RunningWorker {
   readonly identity: WorkerIdentity;
   readonly root: WorkerRoot;
@@ -98,30 +110,78 @@ async function connectBroker(settings: WorkerSettings, dependencies: WorkerDepen
   if (!credentials.ok) return credentials;
   const address = TransportAddress.of(identity.installationId);
   if (!address.ok) return address;
+  const observationSubject = address.value.observationSubject(identity.workerId);
+  if (!observationSubject.ok) return observationSubject;
+  const declared = declareCapacity(settings, root);
+  if (!declared.ok) return declared;
   const transport = await dependencies.connect({
     server: settings.natsUrl, creds: credentials.value.broker, address: address.value, workerId: identity.workerId,
     ...(settings.natsTls === undefined ? {} : { tls: settings.natsTls }),
   });
   if (!transport.ok) return transport;
-  return ok(runningWorker(root, transport.value));
+  const loops = startLoops({ settings, dependencies, root, transport: transport.value, address: address.value, observationSubject: observationSubject.value });
+  return ok(runningWorker(root, transport.value, loops));
 }
 
-function runningWorker(root: WorkerRoot, transport: TransportConnection): RunningWorker {
+// Sorted, so a reordered configuration declares nothing new.
+function declareCapacity(settings: WorkerSettings, root: WorkerRoot): Result<void> {
+  const { controls, ...capacity } = settings.capacity;
+  const enforceableControls = [...controls].sort();
+  return root.journal.recordCapacity({ ...capacity, enforceableControls, protocolVersions: SUPPORTED_PROTOCOL_VERSIONS });
+}
+
+interface LoopContext {
+  readonly settings: WorkerSettings;
+  readonly dependencies: WorkerDependencies;
+  readonly root: WorkerRoot;
+  readonly transport: TransportConnection;
+  readonly address: TransportAddress;
+  readonly observationSubject: string;
+}
+
+interface Loops {
+  readonly finished: Promise<void>;
+  abort(): void;
+}
+
+// The command consumer and the observation publisher, until aborted.
+function startLoops(context: LoopContext): Loops {
+  const { settings, dependencies, root, transport, address, observationSubject } = context;
+  const { journal } = root;
+  const publisher = new JetStreamPublisher(transport.js);
+  const publish = publisher.publish.bind(publisher);
+  const now = () => dependencies.clock.now();
+  const intake = new CommandIntake({
+    journal, capacity: settings.capacity, publish, observationSubject, newReportId: randomUUID, now,
+  });
+  const options = dependencies.limits === undefined ? {} : { limits: dependencies.limits };
+  const consumer = workerCommandConsumer(transport.js, address, root.identity.workerId, intake.handle, options);
+  const controller = new AbortController();
+  const finished = Promise.all([
+    consumer.run(controller.signal),
+    runObservationPublisher({ journal, publish, observationSubject, now }, controller.signal, dependencies.limits),
+  ]).then(() => undefined);
+  return { finished, abort: () => controller.abort() };
+}
+
+function runningWorker(root: WorkerRoot, transport: TransportConnection, loops: Loops): RunningWorker {
   let finish: () => void = () => undefined;
   const stopped = new Promise<void>((resolve) => {
     finish = resolve;
   });
   let stopping: Promise<void> | undefined;
   const stop = () => {
-    stopping ??= closeAll(root, transport).finally(finish);
+    stopping ??= closeAll(root, transport, loops).finally(finish);
     return stopping;
   };
   return Object.freeze({ identity: root.identity, root, transport, stopped, stop });
 }
 
-async function closeAll(root: WorkerRoot, transport: TransportConnection): Promise<void> {
+// The loops stop before the connection and the journal they use close.
+async function closeAll(root: WorkerRoot, transport: TransportConnection, loops: Loops): Promise<void> {
+  loops.abort();
   try {
-    await transport.close();
+    await loops.finished.finally(() => transport.close());
   } finally {
     root.close();
   }

@@ -11,6 +11,8 @@
     { "path": "../../packages/kernel" },
     { "path": "../../packages/modules/execution" },
     { "path": "../../packages/modules/fleet" },
+    { "path": "../../packages/modules/scheduling" },
+    { "path": "../../packages/modules/sdlc" },
     { "path": "../../packages/testing" }
   ]
 }

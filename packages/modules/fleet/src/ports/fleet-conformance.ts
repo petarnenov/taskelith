@@ -79,6 +79,19 @@ export const FLEET_REGISTRY_CONFORMANCE: readonly ConformanceCase<FleetRegistry>
     },
   },
   {
+    name: 'the active workers are the enrolled ones that are not revoked',
+    async check(registry) {
+      const problems: string[] = [];
+      await enrolled(registry, 'w2', 'j2');
+      await enrolled(registry, 'w1', 'j1');
+      await enrolled(registry, 'w3', 'j3');
+      must(await registry.revoke('w3' as WorkerId, AT));
+      const active = must(await registry.activeWorkerIds());
+      if (active.join(',') !== 'w1,w2') problems.push(`active workers are ${active.join(',')}, expected w1,w2`);
+      return problems;
+    },
+  },
+  {
     name: 'an expired token enrolls nothing at the moment of use',
     async check(registry) {
       const problems: string[] = [];

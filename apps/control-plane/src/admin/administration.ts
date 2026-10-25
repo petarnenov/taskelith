@@ -10,6 +10,7 @@ import {
   type InitializedInstallation,
   type InstallationIdentity,
   type RotatedCredentials,
+  type WorkerCommandConsumers,
 } from '@taskelith/fleet';
 import { err, failure, instantFromEpochMilliseconds, ok, type Instant, type Result } from '@taskelith/kernel';
 import { connectSystemAccount, NatsBrokerCredentials, type BrokerAuthority, type TransportTls } from '@taskelith/nats';
@@ -123,7 +124,9 @@ export class Administration {
 
   // The enrollment service as the HTTP layer (item 16) uses it, with a
   // system connection for revocations that the caller closes.
-  async enrollmentService(): Promise<Result<{ service: EnrollmentService; close(): Promise<void> }>> {
+  async enrollmentService(
+    commandConsumers: WorkerCommandConsumers,
+  ): Promise<Result<{ service: EnrollmentService; close(): Promise<void> }>> {
     const identity = await this.verifiedInstallation();
     if (!identity.ok) return identity;
     const authority = this.brokerAuthority();
@@ -140,6 +143,7 @@ export class Administration {
       secrets: this.#secrets,
       ids: new RandomIdentifiers(),
       broker: new NatsBrokerCredentials(authority.value, system.value.connection),
+      commandConsumers,
       clock: this.#clock,
     });
     return ok({ service, close: () => system.value.close() });
@@ -148,7 +152,7 @@ export class Administration {
   async #asOperator<T>(operatorSecret: string, command: (enrollment: EnrollmentService) => Promise<Result<T>>): Promise<Result<T>> {
     const authenticated = await this.#operator.authenticate(operatorSecret);
     if (!authenticated.ok) return authenticated;
-    const enrollment = await this.enrollmentService();
+    const enrollment = await this.enrollmentService(NO_ENROLLMENT);
     if (!enrollment.ok) return enrollment;
     try {
       return await command(enrollment.value.service);
@@ -174,6 +178,11 @@ export class Administration {
     return Math.floor(Date.parse(this.#clock.now()) / 1000);
   }
 }
+
+// The administration tool never enrolls; only the API service does.
+const NO_ENROLLMENT: WorkerCommandConsumers = {
+  ensure: async () => err(failure('unavailable', 'the administration tool does not enroll workers')),
+};
 
 function withWorkerId<T>(text: string, command: (workerId: WorkerId) => Promise<Result<T>>): Promise<Result<T>> {
   const workerId = parseWorkerId(text);

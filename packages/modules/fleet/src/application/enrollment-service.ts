@@ -17,6 +17,7 @@ import {
 import { FLEET_LIMITS, type FleetLimits } from '../domain/fleet-limits.js';
 import { parseWorkerId, type InstallationIdentity } from '../domain/installation.js';
 import type { BrokerCredentials } from '../ports/broker-credentials.js';
+import type { WorkerCommandConsumers } from '../ports/command-consumers.js';
 import type { FleetRegistry } from '../ports/fleet-registry.js';
 import type { IdentifierSource } from '../ports/identifier-source.js';
 
@@ -45,6 +46,7 @@ export interface EnrollmentServiceDependencies {
   readonly secrets: Secrets;
   readonly ids: IdentifierSource;
   readonly broker: BrokerCredentials;
+  readonly commandConsumers: WorkerCommandConsumers;
   readonly clock: Clock;
   readonly limits?: FleetLimits;
 }
@@ -83,6 +85,10 @@ export class EnrollmentService {
     }
     const workerId = parseWorkerId(this.#deps.ids.newWorkerId());
     if (!workerId.ok) return workerId;
+    // Before the token is used; a commit that fails after it leaves an
+    // unused consumer of an unknown worker, which is harmless.
+    const consumer = await this.#deps.commandConsumers.ensure(workerId.value);
+    if (!consumer.ok) return err(failure('unavailable', `the worker's command consumer is not ready: ${consumer.error.message}`));
     const issued = await this.#issueGeneration(workerId.value, 1);
     if (!issued.ok) return issued;
     const worker: EnrolledWorker = Object.freeze({
