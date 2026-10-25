@@ -19,7 +19,8 @@ export const LAUNCH_REJECTION_REASONS = Object.freeze([
 
 export type LaunchRejectionReason = (typeof LAUNCH_REJECTION_REASONS)[number];
 
-// Only these are retried by the worker with the same operation.
+// Only these are retried by the worker, each time under a new operationId;
+// a rejection is final for its operation (contract section 6).
 export const RETRYABLE_LAUNCH_REJECTIONS: readonly LaunchRejectionReason[] = Object.freeze(['quarantined', 'unavailable']);
 
 export interface LaunchRejection {

@@ -14,6 +14,7 @@ import {
   startProducerCursor,
   type ObservationId,
   type ObservationPosition,
+  type LaunchParameters,
   type ProducerCursor,
   type Sequence,
 } from '@taskelith/execution';
@@ -42,12 +43,17 @@ test('the execution transition table allows exactly the transitions of the launc
   assert.equal(isTerminalExecution(authorized().task.attempts[0]!.executions[0]!), false);
 });
 
-test('a grant keeps its parameters when the issuing input changes later', () => {
-  const issue = { ...grantIssue(), parameters: { ...PARAMETERS } };
-  const { grant } = authorized(undefined, {}, issue);
-  (issue.parameters as { ttlMilliseconds: number }).ttlMilliseconds = 3_600_000;
+test('only parsed launch parameters are launch parameters, and a spread copy is not', () => {
+  // @ts-expect-error a spread copy with replaced values is not parsed
+  const spread: LaunchParameters = { ...PARAMETERS, ttlMilliseconds: Number.POSITIVE_INFINITY, skewMilliseconds: -1 };
+  assert.equal(spread.ttlMilliseconds, Number.POSITIVE_INFINITY);
+  assert.ok(Object.isFrozen(PARAMETERS));
+  assert.throws(() => {
+    (PARAMETERS as { ttlMilliseconds: number }).ttlMilliseconds = 3_600_000;
+  }, TypeError);
+  const { grant } = authorized(undefined, {}, grantIssue());
+  assert.equal(grant.parameters, PARAMETERS);
   assert.equal(isGrantExpired(grant, T3), true);
-  assert.ok(Object.isFrozen(grant.parameters));
 });
 
 test('exit statuses are a code, a signal name, or unknown', () => {

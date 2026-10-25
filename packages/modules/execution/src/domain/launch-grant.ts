@@ -16,21 +16,34 @@ export interface LaunchParametersInput {
   readonly skewMilliseconds: number;
 }
 
-declare const launchParametersBrand: unique symbol;
-
 // The protocol parameters every grant carries (operational targets: `30s`
-// and `5s`); only parseLaunchParameters creates them, skew below the ttl.
-export type LaunchParameters = LaunchParametersInput & { readonly [launchParametersBrand]: true };
+// and `5s`); only parsing creates them, and a spread copy is not one.
+export class LaunchParameters {
+  // Makes the type nominal: an object literal or spread copy lacks it.
+  readonly #nominal = true;
+  readonly ttlMilliseconds: number;
+  readonly skewMilliseconds: number;
+
+  private constructor(ttlMilliseconds: number, skewMilliseconds: number) {
+    this.ttlMilliseconds = ttlMilliseconds;
+    this.skewMilliseconds = skewMilliseconds;
+    Object.freeze(this);
+  }
+
+  static parse(input: LaunchParametersInput): Result<LaunchParameters> {
+    const { ttlMilliseconds, skewMilliseconds } = input;
+    if (!isPositiveInteger(ttlMilliseconds) || !isPositiveInteger(skewMilliseconds)) {
+      return err(failure('invalid', 'launch ttl and skew must be positive integers of milliseconds'));
+    }
+    if (skewMilliseconds >= ttlMilliseconds) {
+      return err(failure('invalid', 'launch skew must be shorter than the launch ttl'));
+    }
+    return ok(new LaunchParameters(ttlMilliseconds, skewMilliseconds));
+  }
+}
 
 export function parseLaunchParameters(input: LaunchParametersInput): Result<LaunchParameters> {
-  const { ttlMilliseconds, skewMilliseconds } = input;
-  if (!isPositiveInteger(ttlMilliseconds) || !isPositiveInteger(skewMilliseconds)) {
-    return err(failure('invalid', 'launch ttl and skew must be positive integers of milliseconds'));
-  }
-  if (skewMilliseconds >= ttlMilliseconds) {
-    return err(failure('invalid', 'launch skew must be shorter than the launch ttl'));
-  }
-  return ok(Object.freeze({ ttlMilliseconds, skewMilliseconds }) as LaunchParameters);
+  return LaunchParameters.parse(input);
 }
 
 export const GRANT_STATES = Object.freeze(['granted', 'revoked'] as const);

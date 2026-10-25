@@ -255,7 +255,7 @@ function newGrant(request: LaunchRequest, admission: TaskAdmission, reliedOn: re
     artifacts: admission.artifacts,
     policyRevision: admission.policyRevision,
     issuedAt: issue.issuedAt,
-    parameters: Object.freeze({ ...issue.parameters }),
+    parameters: issue.parameters,
     state: 'granted',
   });
 }
