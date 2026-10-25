@@ -4,7 +4,7 @@
 
 Task assigned by the coordinator (Niki) on 2026-10-25, after the owner approved drafting the G3 plan the same day: draft `docs/g3-plan.md` in the shape of the G2 plan, marked as a draft that authorizes no implementation and is finalized when G2 closes, documentation only, with UI items marked. Base revision: `da3040c` on `dev`. Scope: `docs/g3-plan.md` (new) and this change. Prepared in the git worktree `../taskelith-worktrees/draft-g3-plan` on branch `draft-g3-plan`. Sources: the G3 row of `docs/architecture.md` section 13 and sections 6, 7, 11, 14, and 15; ADR 0003, ADR 0005, ADR 0006, ADR 0007, ADR 0008, and ADR 0010; the `product-ui` and `delivery-planning` specifications; the Claude Code and GitHub qualification records; the capacity reservation, supervisor identity, and execution wire contracts; the trust contract; and `docs/g2-plan.md`.
 
-During the task the owner decided D1 in the project conversation on 2026-10-25: the SPA uses React, Vite, Vitest, React Router, and TanStack Query (React Query) at their latest versions; it follows the UI proof of concept's design, and a component library that fits that design may be added for one look and feel. The plan records D1 as decided and adds D17 for the choice of that library, which stays open; the owner asked for a comparison of candidate libraries to decide it.
+During the task the owner decided D1 in the project conversation on 2026-10-25: the SPA uses React, Vite, Vitest, React Router, and TanStack Query (React Query) at their latest versions; it follows the UI proof of concept's design, and a component library that fits that design may be added for one look and feel. The plan records D1 as decided and adds D17 for the choice of that library; the owner asked for a comparison of candidate libraries to decide it. After the final review pass, on 2026-10-25, the owner chose Mantine for D17, to recreate the proof of concept as closely as possible with only what Mantine offers and without customizations; the plan records D17 as decided.
 
 The change adds no requirement: the `delivery-planning` requirement "Gate work plan" applies from G1 onward, so `.openspec.yaml` sets `skip_specs: true`, as the agent task protocol allows for documentation under an existing requirement.
 
@@ -45,6 +45,8 @@ Assigned reviewer (by the coordinator): Codex (`gpt-6.1-sol`), reasoning effort 
 
 - **Pass 3 — session `01a172a6-7d54-7110-a77c-25fc87770cbc`, head `fd85b3c`.** The header confirmed the model, reasoning effort medium, and the read-only sandbox; the snapshot was `432a6136…f470` before and after the pass. The reviewer confirmed all three pass-2 resolutions and reviewed the whole change again. Findings: 0 Critical, 0 High, 0 Medium, 0 Low. Only this record entry was added after the pass.
 
+- **Unreviewed after pass 3.** Recording the owner's D17 decision changed `docs/g3-plan.md` (status line, items 1 and 28, the decision table), `proposal.md`, and this record. It records an owner decision and fixes no finding; the review cap of three passes is spent, so it is unreviewed. `make verify` passed afterwards.
+
 ## Limitations
 
 - The plan assumes the G2 items as planned; the G2 closure ADR may change the starting point and carry deferrals into G3.
@@ -53,4 +55,4 @@ Assigned reviewer (by the coordinator): Codex (`gpt-6.1-sol`), reasoning effort 
 ## Remaining gates
 
 - Coordinator integration into `dev` and archive.
-- Finalization of the plan when G2 closes, and the owner's decisions D2 to D17.
+- Finalization of the plan when G2 closes, and the owner's decisions D2 to D16.
