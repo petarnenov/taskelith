@@ -2,6 +2,7 @@ import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { activeAttempt, placementNeed, type Task } from '@taskelith/execution';
 import { checkGeneration, checkNextGeneration, type Generation, type TaskId } from '@taskelith/sdlc';
 import type { Assignment } from '../domain/assignment.js';
+import type { ProjectId } from '../domain/capacity-reservation.js';
 import type { DelegationId, DelegationRecord } from '../domain/delegation-request.js';
 import type { WaitingPlacement } from '../domain/fair-order.js';
 import type { DelegationRequests } from '../ports/delegation-requests.js';
@@ -22,14 +23,25 @@ export class InMemoryPlacementQueue implements PlacementQueue {
     this.#assignments = assignments;
   }
 
-  async waiting(limit: number, excluding: readonly TaskId[]): Promise<readonly WaitingPlacement<TaskId>[]> {
+  async waiting(limit: number, excluding: readonly TaskId[], after: ProjectId | undefined): Promise<readonly WaitingPlacement<TaskId>[]> {
     const excluded = new Set(excluding);
+    const waiting = await this.#linkedWaiting((task) => !excluded.has(task.id));
+    return Object.freeze(rankedByProject(waiting, after).slice(0, limit));
+  }
+
+  async stillWaiting(taskIds: readonly TaskId[]): Promise<readonly TaskId[]> {
+    const asked = new Set(taskIds);
+    const waiting = await this.#linkedWaiting((task) => asked.has(task.id));
+    return Object.freeze(waiting.map((entry) => entry.item).sort(byCodeUnits));
+  }
+
+  async #linkedWaiting(selected: (task: Task) => boolean): Promise<WaitingPlacement<TaskId>[]> {
     const waiting: WaitingPlacement<TaskId>[] = [];
-    for (const task of this.#tasks().filter((candidate) => !excluded.has(candidate.id) && this.#waits(candidate))) {
+    for (const task of this.#tasks().filter((candidate) => selected(candidate) && this.#waits(candidate))) {
       const link = await this.#lineage.get(task.id);
       if (link !== undefined) waiting.push(Object.freeze({ projectId: link.projectId, waitingSince: task.changedAt, item: task.id }));
     }
-    return Object.freeze(rankedByProject(waiting).slice(0, limit));
+    return waiting;
   }
 
   #waits(task: Task): boolean {
@@ -40,8 +52,8 @@ export class InMemoryPlacementQueue implements PlacementQueue {
 }
 
 // As the database queue: each task's rank within its project, oldest first,
-// orders the batch before the limit, so no project fills it alone.
-function rankedByProject(waiting: readonly WaitingPlacement<TaskId>[]): WaitingPlacement<TaskId>[] {
+// then the projects after `after` first, wrapping, order it before the limit.
+function rankedByProject(waiting: readonly WaitingPlacement<TaskId>[], after: ProjectId | undefined): WaitingPlacement<TaskId>[] {
   const ranks = new Map<WaitingPlacement<TaskId>, number>();
   const counts = new Map<string, number>();
   for (const entry of [...waiting].sort(byWaitingSince)) {
@@ -49,7 +61,9 @@ function rankedByProject(waiting: readonly WaitingPlacement<TaskId>[]): WaitingP
     counts.set(entry.projectId, rank);
     ranks.set(entry, rank);
   }
-  return [...waiting].sort((left, right) => ranks.get(left)! - ranks.get(right)! || byWaitingSince(left, right));
+  const wrapped = (entry: WaitingPlacement<TaskId>) => (after !== undefined && byCodeUnits(entry.projectId, after) <= 0 ? 1 : 0);
+  return [...waiting].sort((left, right) => ranks.get(left)! - ranks.get(right)! || wrapped(left) - wrapped(right)
+    || byCodeUnits(left.projectId, right.projectId) || byWaitingSince(left, right));
 }
 
 function byWaitingSince(left: WaitingPlacement<TaskId>, right: WaitingPlacement<TaskId>): number {

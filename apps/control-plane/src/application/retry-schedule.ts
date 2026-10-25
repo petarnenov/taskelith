@@ -1,4 +1,4 @@
-import { PLACEMENT_BACKOFF_MAX_MILLISECONDS, placementBackoff, type RetryTiming } from '@taskelith/scheduling';
+import { placementBackoff, type RetryTiming } from '@taskelith/scheduling';
 
 // The clock in epoch milliseconds and the jitter draw in [0, 1), so tests
 // control both.
@@ -35,14 +35,13 @@ export class RetrySchedule<Key> {
     this.#delays.set(key, { tries, dueAt: this.#timing.now() + placementBackoff(tries, this.#timing.draw()) });
   }
 
-  succeeded(key: Key): void {
-    this.#delays.delete(key);
+  // Keys whose next try has passed without a new failure.
+  pastDue(): readonly Key[] {
+    return [...this.#delays.keys()].filter((key) => this.due(key));
   }
 
-  // Forgets a key due longer ago than the longest delay without a new
-  // failure: one still failing is tried and fails again before that.
-  forgetStale(): void {
-    const staleBefore = this.#timing.now() - PLACEMENT_BACKOFF_MAX_MILLISECONDS;
-    for (const [key, delay] of this.#delays) if (delay.dueAt < staleBefore) this.#delays.delete(key);
+  // On a success, or once the key no longer waits; never by age alone.
+  forget(key: Key): void {
+    this.#delays.delete(key);
   }
 }

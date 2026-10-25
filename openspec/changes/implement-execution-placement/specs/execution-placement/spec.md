@@ -15,6 +15,17 @@ A task SHALL wait for placement while it has no attempt, or while its active att
 - **WHEN** the active attempt of a task holds a reservation
 - **THEN** the task is not read as waiting
 
+### Requirement: Project rotation
+Each waiting read SHALL take each project's oldest task before any project's next, and SHALL start with the projects after the last project the previous read returned, wrapping around, so that every project with a waiting task is read within a bounded number of passes.
+
+#### Scenario: Many blocked projects
+- **WHEN** 1200 older projects each have a blocked waiting task and a later project has a placeable one
+- **THEN** that task is placed within about 1200 / 100 passes
+
+#### Scenario: Wrap-around
+- **WHEN** a read starts after the last project in id order
+- **THEN** it reads the projects from the first one again
+
 ### Requirement: Placement transaction
 The control plane SHALL place each waiting task in its own SERIALIZABLE transaction. The transaction SHALL open the first attempt, or claim the ownership for a new placement of the active attempt, and SHALL reserve the default attempt request on a candidate. When no candidate accepts, the transaction SHALL roll back, so that the task keeps waiting unchanged.
 
@@ -44,6 +55,17 @@ A task that no candidate accepts SHALL wait before its next try, and a pass afte
 #### Scenario: Placed after waiting
 - **WHEN** a task that waited is placed
 - **THEN** its wait is cleared
+
+### Requirement: Backoff forgetting
+The control plane SHALL forget a task's wait only when the task is placed or no longer waits for placement, never by the age of the wait alone.
+
+#### Scenario: Outage longer than the cap
+- **WHEN** a task's wait has reached 60 seconds, a store outage lasts longer than 60 seconds, and the task is not placed again
+- **THEN** its next wait is still 60 seconds
+
+#### Scenario: No longer waiting
+- **WHEN** the next try of a task has passed and the task no longer waits for placement
+- **THEN** its wait is forgotten
 
 ### Requirement: Candidate order
 The candidates SHALL be the workers eligible for placement, fewest held reservations first. A reason about the worker SHALL move the try to the next candidate, and any other reason SHALL end it.

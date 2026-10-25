@@ -151,20 +151,18 @@ export class PostgresPlacementQueue implements PlacementQueue {
     this.#session = session;
   }
 
-  async waiting(limit: number, excluding: readonly TaskId[]): Promise<readonly WaitingPlacement<TaskId>[]> {
+  async waiting(limit: number, excluding: readonly TaskId[], after: ProjectId | undefined): Promise<readonly WaitingPlacement<TaskId>[]> {
     const { rows } = await this.#session.query<WaitingRow>(
       `SELECT id, project_id, placement_waiting_since FROM (
          SELECT tasks.id, task_lineage.project_id, tasks.placement_waiting_since,
            row_number() OVER (PARTITION BY task_lineage.project_id
              ORDER BY tasks.placement_waiting_since, tasks.id COLLATE "C") AS project_rank
-         FROM tasks JOIN task_lineage ON task_lineage.task_id = tasks.id
-         WHERE tasks.awaits_placement AND tasks.id <> ALL($2::text[])
-           AND NOT EXISTS (SELECT 1 FROM assignments
-           WHERE assignments.attempt_id = tasks.active_attempt_id AND ${HELD})
+         FROM ${LINKED_WAITING} AND tasks.id <> ALL($2::text[])
        ) AS waiting
-       ORDER BY project_rank, placement_waiting_since, project_id COLLATE "C", id COLLATE "C"
+       ORDER BY project_rank, (project_id COLLATE "C" <= $3::text) IS TRUE, project_id COLLATE "C",
+         placement_waiting_since, id COLLATE "C"
        LIMIT $1`,
-      [limit, excluding],
+      [limit, excluding, after ?? null],
     );
     return Object.freeze(rows.map((row) => Object.freeze({
       projectId: row.project_id as ProjectId,
@@ -172,7 +170,20 @@ export class PostgresPlacementQueue implements PlacementQueue {
       item: row.id as TaskId,
     })));
   }
+
+  async stillWaiting(taskIds: readonly TaskId[]): Promise<readonly TaskId[]> {
+    const { rows } = await this.#session.query<{ id: string }>(
+      `SELECT tasks.id FROM ${LINKED_WAITING} AND tasks.id = ANY($1::text[]) ORDER BY tasks.id COLLATE "C"`,
+      [taskIds],
+    );
+    return Object.freeze(rows.map((row) => row.id as TaskId));
+  }
 }
+
+// The tasks the placement queue reads, open for further conditions.
+const LINKED_WAITING = `tasks JOIN task_lineage ON task_lineage.task_id = tasks.id
+  WHERE tasks.awaits_placement
+    AND NOT EXISTS (SELECT 1 FROM assignments WHERE assignments.attempt_id = tasks.active_attempt_id AND ${HELD})`;
 
 interface LineageRow {
   readonly task_id: string;

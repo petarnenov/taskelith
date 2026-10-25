@@ -270,7 +270,7 @@ function rootLink(taskId: TaskId, project: string): TaskLineageLink {
 
 export const PLACEMENT_QUEUE_CONFORMANCE: readonly ConformanceCase<PlacementQueueConformanceTarget>[] = Object.freeze([
   {
-    name: 'waiting tasks without a held reservation are read oldest first, with their project',
+    name: 'waiting tasks without a held reservation are read by project, oldest first in each',
     async check({ queue, tasks, lineage, assignments }: PlacementQueueConformanceTarget) {
       const problems: string[] = [];
       const fresh = queuedTask('task-a', at(2));
@@ -289,9 +289,9 @@ export const PLACEMENT_QUEUE_CONFORMANCE: readonly ConformanceCase<PlacementQueu
       expectSuccess(problems, 'release', await assignments.replace(ending, releasedAssignment.generation));
       expectSuccess(problems, 'add held', await assignments.add(assignment('assignment-c', 'attempt-c', reserved.id, RUN, 100)));
       const entry = (task: Task, project: string) => ({ projectId: project, waitingSince: task.changedAt, item: task.id });
-      const all = [entry(released, 'project-2'), entry(fresh, 'project-1'), entry(later, 'project-1')];
-      expectSame(problems, 'waiting', await queue.waiting(10, []), all);
-      expectSame(problems, 'limited', await queue.waiting(2, []), all.slice(0, 2));
+      const all = [entry(fresh, 'project-1'), entry(released, 'project-2'), entry(later, 'project-1')];
+      expectSame(problems, 'waiting', await queue.waiting(10, [], undefined), all);
+      expectSame(problems, 'limited', await queue.waiting(2, [], undefined), all.slice(0, 2));
       return problems;
     },
   },
@@ -306,8 +306,8 @@ export const PLACEMENT_QUEUE_CONFORMANCE: readonly ConformanceCase<PlacementQueu
       expectSuccess(problems, `link ${newer.id}`, await lineage.add(rootLink(newer.id, 'project-b')));
       const entry = (task: Task, project: string) => ({ projectId: project, waitingSince: task.changedAt, item: task.id });
       const first = [entry(older[0]!, 'project-a'), entry(newer, 'project-b')];
-      expectSame(problems, 'limited', await queue.waiting(2, []), first);
-      expectSame(problems, 'all', await queue.waiting(10, []), [...first, entry(older[1]!, 'project-a'), entry(older[2]!, 'project-a')]);
+      expectSame(problems, 'limited', await queue.waiting(2, [], undefined), first);
+      expectSame(problems, 'all', await queue.waiting(10, [], undefined), [...first, entry(older[1]!, 'project-a'), entry(older[2]!, 'project-a')]);
       return problems;
     },
   },
@@ -322,8 +322,48 @@ export const PLACEMENT_QUEUE_CONFORMANCE: readonly ConformanceCase<PlacementQueu
         expectSuccess(problems, `link ${task.id}`, await lineage.add(rootLink(task.id, project)));
       }
       const excluding = backingOff.map((task) => task.id);
-      const read = await queue.waiting(2, excluding);
+      const read = await queue.waiting(2, excluding, undefined);
       expectSame(problems, 'excluded', read, [{ projectId: 'project-c', waitingSince: next.changedAt, item: next.id }]);
+      return problems;
+    },
+  },
+  {
+    name: 'a read starts after the given project and wraps around, oldest first in each',
+    async check({ queue, tasks, lineage }: PlacementQueueConformanceTarget) {
+      const problems: string[] = [];
+      const placed = [
+        [queuedTask('task-a1', at(0)), 'project-a'], [queuedTask('task-b1', at(1)), 'project-b'],
+        [queuedTask('task-c1', at(2)), 'project-c'], [queuedTask('task-c2', at(3)), 'project-c'],
+      ] as const;
+      for (const [task, project] of placed) {
+        expectSuccess(problems, `add ${task.id}`, await tasks.add(task));
+        expectSuccess(problems, `link ${task.id}`, await lineage.add(rootLink(task.id, project)));
+      }
+      const entry = ([task, project]: (typeof placed)[number]) => ({ projectId: project, waitingSince: task.changedAt, item: task.id });
+      const [a1, b1, c1, c2] = placed.map(entry);
+      const afterB = id('ProjectId', 'project-b') as ProjectId;
+      expectSame(problems, 'after b', await queue.waiting(10, [], afterB), [c1, a1, b1, c2]);
+      expectSame(problems, 'limited after b', await queue.waiting(2, [], afterB), [c1, a1]);
+      const afterC = id('ProjectId', 'project-c') as ProjectId;
+      expectSame(problems, 'after the last', await queue.waiting(2, [], afterC), [a1, b1]);
+      return problems;
+    },
+  },
+  {
+    name: 'only the given tasks that still wait are answered, in id order',
+    async check({ queue, tasks, lineage, assignments }: PlacementQueueConformanceTarget) {
+      const problems: string[] = [];
+      const waiting = queuedTask('task-b', at(0));
+      const reserved = queuedTask('task-a', at(0), [activeAttemptOf('attempt-a')]);
+      const other = queuedTask('task-c', at(0));
+      for (const task of [waiting, reserved, other]) {
+        expectSuccess(problems, `add ${task.id}`, await tasks.add(task));
+        expectSuccess(problems, `link ${task.id}`, await lineage.add(rootLink(task.id, 'project-a')));
+      }
+      expectSuccess(problems, 'add held', await assignments.add(assignment('assignment-a', 'attempt-a', reserved.id, RUN, 100)));
+      const unknown = id('TaskId', 'task-unknown') as TaskId;
+      expectSame(problems, 'still waiting', await queue.stillWaiting([unknown, other.id, reserved.id, waiting.id]), [waiting.id, other.id]);
+      expectSame(problems, 'none asked', await queue.stillWaiting([]), []);
       return problems;
     },
   },

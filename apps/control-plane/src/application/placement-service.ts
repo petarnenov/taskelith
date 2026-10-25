@@ -7,7 +7,7 @@ import {
   type Task,
   type WorkerId,
 } from '@taskelith/execution';
-import { err, failure, ok, type Identifier, type Instant, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Failure, type Identifier, type Instant, type Result } from '@taskelith/kernel';
 import {
   DEFAULT_ATTEMPT_REQUEST,
   fairPlacementOrder,
@@ -15,7 +15,9 @@ import {
   triesNextCandidate,
   type Assignment,
   type CapacityReason,
+  type PlacementQueue,
   type PlacementRequest,
+  type ProjectId,
 } from '@taskelith/scheduling';
 import type { TaskId } from '@taskelith/sdlc';
 import type { ControlPlaneStore, ControlPlaneTransaction } from './control-plane-store.js';
@@ -35,6 +37,8 @@ export class PlacementService {
   readonly #store: ControlPlaneStore;
   readonly #tasks: RetrySchedule<TaskId>;
   readonly #passes: RetrySchedule<typeof PASS>;
+  // The last project read; the next read starts after it.
+  #after: ProjectId | undefined;
 
   constructor(store: ControlPlaneStore, timing: BackoffTiming) {
     this.#store = store;
@@ -43,11 +47,11 @@ export class PlacementService {
   }
 
   // A pass that backs off after an outage reads nothing. A task not placed
-  // is not read again until due, and a placed one is reset.
+  // is not read until due; its backoff ends once it is placed or not waiting.
   async placeWaiting(): Promise<Result<PlacementPass>> {
     if (!this.#passes.due(PASS)) return ok({ waiting: 0, placed: 0 });
     const pass = await this.#placeDue();
-    if (pass.ok) this.#passes.succeeded(PASS);
+    if (pass.ok) this.#passes.forget(PASS);
     else if (isOutage(pass.error.code)) this.#passes.failed(PASS);
     return pass;
   }
@@ -55,28 +59,44 @@ export class PlacementService {
   // Each task in its own transaction, in fair order across projects; one
   // that no candidate accepts rolls back and keeps waiting unchanged.
   async #placeDue(): Promise<Result<PlacementPass>> {
-    this.#tasks.forgetStale();
-    const backingOff = this.#tasks.notDue();
+    const checked = this.#tasks.pastDue();
     const read = await this.#store.readCommitted(async (tx) => ok({
       anyCandidate: (await tx.workers.candidates()).length > 0,
-      waiting: await tx.placements.waiting(PLACEMENT_BATCH, backingOff),
+      waiting: await tx.placements.waiting(PLACEMENT_BATCH, this.#tasks.notDue(), this.#after),
+      stillWaiting: await stillWaitingAmong(tx.placements, checked),
     }));
     if (!read.ok) return read;
-    const { anyCandidate, waiting } = read.value;
+    const { anyCandidate, waiting, stillWaiting } = read.value;
+    this.#forgetUnless(checked, stillWaiting);
+    this.#after = waiting.at(-1)?.projectId ?? this.#after;
     let placed = 0;
     for (const taskId of fairPlacementOrder(waiting)) {
       const outcome = anyCandidate ? await this.#store.transaction((tx) => placeTask(tx, taskId)) : NO_CANDIDATE;
-      if (outcome.ok) {
-        this.#tasks.succeeded(taskId);
-        placed++;
-      } else if (isOutage(outcome.error.code)) return outcome;
+      if (!outcome.ok && isOutage(outcome.error.code)) return outcome;
+      if (outcome.ok) placed++;
+      if (outcome.ok || noLongerWaits(outcome.error)) this.#tasks.forget(taskId);
       else this.#tasks.failed(taskId);
     }
     return ok({ waiting: waiting.length, placed });
   }
+
+  #forgetUnless(checked: readonly TaskId[], stillWaiting: readonly TaskId[]): void {
+    const waits = new Set(stillWaiting);
+    for (const taskId of checked) if (!waits.has(taskId)) this.#tasks.forget(taskId);
+  }
+}
+
+// In batches, so that the backoff of many tasks never makes one huge query.
+async function stillWaitingAmong(queue: PlacementQueue, taskIds: readonly TaskId[]): Promise<readonly TaskId[]> {
+  const waiting: TaskId[] = [];
+  for (let start = 0; start < taskIds.length; start += PLACEMENT_BATCH) {
+    waiting.push(...await queue.stillWaiting(taskIds.slice(start, start + PLACEMENT_BATCH)));
+  }
+  return waiting;
 }
 
 const PASS = 'pass';
+const NOT_WAITING = 'not-waiting';
 const NO_CANDIDATE: Result<never> = err(failure('precondition-failed', 'no candidate worker exists', { reason: 'no-candidate' }));
 
 // Reads the candidates in the task's transaction, so that each placement,
@@ -93,7 +113,7 @@ async function placeTask(tx: ControlPlaneTransaction, taskId: TaskId): Promise<R
 // was placed at the current one, so each placement has its own generation.
 async function claimPlacement(tx: ControlPlaneTransaction, task: Task): Promise<Result<Task>> {
   const need = placementNeed(task);
-  if (need === undefined) return err(failure('precondition-failed', `task ${task.id} does not wait for placement`, { task: task.id }));
+  if (need === undefined) return err(failure('precondition-failed', `task ${task.id} does not wait for placement`, { task: task.id, reason: NOT_WAITING }));
   const at = await tx.now();
   const next = need.kind === 'open-attempt'
     ? openAttempt(task, task.ownershipGeneration, { id: attemptIdOf(task) }, at)
@@ -149,6 +169,10 @@ function attemptIdOf(task: Task): AttemptId {
 // the ownership generation, so that a rerun transaction reuses them.
 function derivedId<Kind extends string>(prefix: string, taskId: TaskId, attemptNumber: number, generation: number): Identifier<Kind> {
   return `${prefix}${createHash('sha256').update(JSON.stringify([taskId, attemptNumber, generation])).digest('hex')}` as Identifier<Kind>;
+}
+
+function noLongerWaits(error: Failure): boolean {
+  return error.details.reason === NOT_WAITING;
 }
 
 // A pass stops when the store fails; a task that is not placed does not.
