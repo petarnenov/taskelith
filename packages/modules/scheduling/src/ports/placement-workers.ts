@@ -24,6 +24,8 @@ export interface PlacementWorkers {
   get(workerId: WorkerId): Promise<WorkerPlacementRecord | undefined>;
   // The slots of every worker eligible for new placement.
   eligibleSlots(): Promise<number>;
+  // The eligible workers, fewest held reservations first, then by identity.
+  candidates(): Promise<readonly WorkerId[]>;
 }
 
 export function isEligibleForPlacement(worker: WorkerPlacementRecord): boolean {

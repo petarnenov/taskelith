@@ -1,5 +1,5 @@
 import type { Result } from '@taskelith/kernel';
-import type { AssignmentId } from '@taskelith/execution';
+import type { AssignmentId, AttemptId } from '@taskelith/execution';
 import type { Generation } from '@taskelith/sdlc';
 import type { Assignment } from '../domain/assignment.js';
 
@@ -9,4 +9,6 @@ export interface AssignmentRepository {
   get(id: AssignmentId): Promise<Result<Assignment>>;
   add(assignment: Assignment): Promise<Result<void>>;
   replace(assignment: Assignment, expectedGeneration: Generation): Promise<Result<void>>;
+  // Every assignment of the attempt, held or not, in no specified order.
+  listByAttempt(attemptId: AttemptId): Promise<readonly Assignment[]>;
 }

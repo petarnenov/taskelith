@@ -22683,6 +22683,7 @@
         "@taskelith/sdlc@0.0.0",
         "@taskelith/secrets@0.0.0",
         "@taskelith/testing@0.0.0",
+        "@taskelith/worker@0.0.0",
         "@types/pg@8.23.1",
         "pg@8.23.1"
       ]
@@ -22840,6 +22841,7 @@
       "dependsOn": [
         "@taskelith/contracts@0.0.0",
         "@taskelith/execution@0.0.0",
+        "@taskelith/fleet@0.0.0",
         "@taskelith/kernel@0.0.0",
         "@taskelith/sdlc@0.0.0",
         "@taskelith/testing@0.0.0"
@@ -22871,7 +22873,19 @@
     },
     {
       "ref": "@taskelith/worker@0.0.0",
-      "dependsOn": []
+      "dependsOn": [
+        "@taskelith/contracts@0.0.0",
+        "@taskelith/data-root@0.0.0",
+        "@taskelith/execution@0.0.0",
+        "@taskelith/fleet@0.0.0",
+        "@taskelith/kernel@0.0.0",
+        "@taskelith/nats@0.0.0",
+        "@taskelith/node-observability@0.0.0",
+        "@taskelith/secrets@0.0.0",
+        "@taskelith/testing@0.0.0",
+        "@taskelith/worker-control-plane-client@0.0.0",
+        "@taskelith/worker-journal@0.0.0"
+      ]
     },
     {
       "ref": "@tufjs/canonical-json@2.0.0",

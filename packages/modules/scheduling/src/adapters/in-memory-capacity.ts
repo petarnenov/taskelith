@@ -16,9 +16,12 @@ import type { TaskLineage } from '../ports/task-lineage.js';
 
 export class InMemoryPlacementWorkers implements PlacementWorkers {
   readonly #workers: ReadonlyMap<WorkerId, WorkerPlacementRecord>;
+  readonly #assignments: () => readonly Assignment[];
 
-  constructor(workers: readonly WorkerPlacementRecord[]) {
+  // The assignments supply the held reservations that order the candidates.
+  constructor(workers: readonly WorkerPlacementRecord[], assignments: () => readonly Assignment[] = () => []) {
     this.#workers = new Map(workers.map((worker) => [worker.workerId, worker]));
+    this.#assignments = assignments;
   }
 
   async get(workerId: WorkerId): Promise<WorkerPlacementRecord | undefined> {
@@ -28,6 +31,19 @@ export class InMemoryPlacementWorkers implements PlacementWorkers {
   async eligibleSlots(): Promise<number> {
     return [...this.#workers.values()].filter(isEligibleForPlacement).reduce((slots, worker) => slots + worker.slots, 0);
   }
+
+  async candidates(): Promise<readonly WorkerId[]> {
+    const held = (workerId: WorkerId) => this.#assignments()
+      .filter((assignment) => assignment.workerId === workerId && assignment.reservation.state === 'held').length;
+    const eligible = [...this.#workers.keys()].filter((workerId) => isEligibleForPlacement(this.#workers.get(workerId)!));
+    return Object.freeze(eligible.sort((left, right) => held(left) - held(right) || byCodeUnits(left, right)));
+  }
+}
+
+// The order of PostgreSQL's "C" collation, which the database adapters use.
+export function byCodeUnits(left: string, right: string): number {
+  if (left === right) return 0;
+  return left < right ? -1 : 1;
 }
 
 // `undefined` is an installation without its record, which admits nothing.
