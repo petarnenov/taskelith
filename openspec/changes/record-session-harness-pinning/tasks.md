@@ -7,5 +7,5 @@
 
 ## 2. Verification and review
 
-- [ ] 2.1 Run strict validation and `make verify`.
-- [ ] 2.2 Obtain independent review (Codex CLI with `gpt-6.1-sol`, medium effort, as assigned) and record the results.
+- [x] 2.1 Run strict validation and `make verify`.
+- [x] 2.2 Obtain independent review (Codex CLI with `gpt-6.1-sol`, medium effort, as assigned) and record the results.

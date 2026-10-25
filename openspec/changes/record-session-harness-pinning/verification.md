@@ -18,7 +18,7 @@ Branch `record-session-harness-pinning` from `origin/dev` at `d99423c`. macOS x8
 | Check | Result |
 | --- | --- |
 | `npm run openspec -- validate record-session-harness-pinning --strict` | Passed before review |
-| `make verify` | Pending |
+| `make verify` | Passed before pass 1 (`b28a38f`) and before pass 2 (`bbf0748`); the `pre-push` hook runs it on the final head |
 
 ## Review
 
@@ -31,10 +31,18 @@ Pass 1 (Codex CLI):
   2. Medium: the plan item 5 clause and both qualification sentences shortened the binding to "until the session is closed". Resolution: all three now say until its work is finished and the session and its agent are closed.
   3. Low: "Remaining gates" omitted `make verify`. Resolution: added.
 
+Pass 2 (Codex CLI):
+- Invocation as in pass 1, at head `bbf0748`; the prompt named pass 1's session and asked the reviewer to confirm each resolution, judge the reconciliation reading in `design.md` against the owner's rule, and review the whole change again.
+- Model confirmation: `model: gpt-6.1-sol`, `reasoning effort: medium`, `sandbox: read-only` in the output header. Session ID `01a174d2-ba90-76c1-b56a-22f4a3f38c02`.
+- Snapshot: `90540a0d0f9b537341b9589f2a57deb00ff5572fc2728c6cdf8d87e6a0058759` before and after the pass.
+- Findings: 0 Critical, 0 High, 0 Medium, 0 Low. All three pass-1 resolutions were confirmed, and the reconciliation reading was judged faithful to the owner's rule.
+
+After pass 2, only this file and `tasks.md` changed, to record the pass; that change is not reviewed.
+
 ## Limitations
 
 Documentation only; nothing is implemented.
 
 ## Remaining gates
 
-`make verify` on the final head, independent review, handoff, integration, and archive.
+Handoff, integration, and archive.
