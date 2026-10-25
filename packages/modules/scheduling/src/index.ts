@@ -53,3 +53,57 @@ export type { Outbox, OutboxMessage } from './ports/outbox.js';
 // The outbox ports are structurally identical, so they share one suite.
 export { OUTBOX_CONFORMANCE } from '@taskelith/sdlc';
 export { ASSIGNMENT_REPOSITORY_CONFORMANCE } from './ports/repository-conformance.js';
+export { admitDelegation, type DelegationRequest } from './application/delegation-admission.js';
+export {
+  ResourceAdmissionService,
+  type PlacementOutcome,
+  type PlacementRequest,
+  type ReleaseRequest,
+} from './application/resource-admission-service.js';
+export {
+  ADMISSION_PRESSURE_SUPERSESSION_BOUND_MILLISECONDS,
+  DEFAULT_PROJECT_QUOTA,
+  DEFAULT_RUN_QUOTA,
+  DELEGATION_CAPACITY_WAIT_BOUND_MILLISECONDS,
+  MAX_ATTEMPT_CPU_MILLICORES,
+  MAX_ATTEMPT_MEMORY_MEBIBYTES,
+  MAX_AUTOMATIC_RETRIES,
+  MAX_DELEGATION_DEPTH,
+  MAX_TREE_ATTEMPTS,
+  PLACEMENT_BACKOFF_INITIAL_MILLISECONDS,
+  PLACEMENT_BACKOFF_MAX_MILLISECONDS,
+  PLACEMENT_RETRY_ATTEMPTS,
+  UNACKNOWLEDGED_SUPERSESSION_BOUND_MILLISECONDS,
+} from './domain/capacity-limits.js';
+export {
+  REJECTING_REASONS,
+  WAITING_REASONS,
+  isWaitingReason,
+  type CapacityReason,
+  type RejectingReason,
+  type WaitingReason,
+} from './domain/capacity-reasons.js';
+export {
+  decideDelegation,
+  type DelegationDecision,
+  type DelegationSnapshot,
+  type TaskLineageLink,
+  type WaitingParentUnits,
+} from './domain/delegation-admission.js';
+export { fairPlacementOrder, type WaitingPlacement } from './domain/fair-order.js';
+export { placementBackoff } from './domain/placement-backoff.js';
+export {
+  decidePlacement,
+  type AttemptStanding,
+  type ChargeStanding,
+  type PlacementDecision,
+  type PlacementSnapshot,
+  type QuotaStanding,
+  type WorkerStanding,
+} from './domain/placement-decision.js';
+export type { CapacityCharge, CapacityLedger, OpenDelegation, WorkerOccupancy } from './ports/capacity-ledger.js';
+export type { CapacityStore, CapacityTransaction } from './ports/capacity-store.js';
+export type { InstallationGuard } from './ports/installation-guard.js';
+export { isEligibleForPlacement, type PlacementWorkers, type WorkerPlacementRecord } from './ports/placement-workers.js';
+export type { QuotaSettings } from './ports/quota-settings.js';
+export type { TaskLineage } from './ports/task-lineage.js';
