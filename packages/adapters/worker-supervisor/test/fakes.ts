@@ -118,6 +118,9 @@ export class FakeHost {
   processes: ProcessEntry[] = [];
   clockReadable = true;
   listingAvailable = true;
+  // Runs after each listing, as a process that races the listing would.
+  afterListing: () => void = () => undefined;
+  listings = 0;
   containmentPopulated: boolean | undefined = undefined;
   readonly containmentLog: string[] = [];
   // How many more times a containment step, such as 'admit', fails.
@@ -160,7 +163,12 @@ export class FakeHost {
       inspector: {
         bootId: () => ok(this.bootId),
         identity: (pid) => ok(this.processes.find((entry) => entry.identity.pid === pid)?.identity),
-        listing: () => (this.listingAvailable ? ok([...this.processes]) : err(failure('unavailable', 'no listing'))),
+        listing: () => {
+          this.listings += 1;
+          const listing = this.listingAvailable ? ok([...this.processes]) : err(failure('unavailable', 'no listing'));
+          this.afterListing();
+          return listing;
+        },
       },
       containment: (executionId) => (this.name === 'linux' ? ok(containment(executionId)) : undefined),
       namespaceIncarnation: () => (this.name === 'linux' ? ok(this.namespace) : undefined),

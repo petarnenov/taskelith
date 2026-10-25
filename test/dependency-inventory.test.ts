@@ -34,6 +34,36 @@ test('bundled legacy licenses retain text hashes and expose missing coverage', (
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test('a package for one platform is recorded from the lockfile, installed or not', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-license-platform-'));
+  try {
+    const installed = 'node_modules/@scope/tool-darwin-arm64';
+    mkdirSync(join(root, installed), { recursive: true });
+    writeFileSync(join(root, installed, 'package.json'), JSON.stringify({ name: '@scope/tool-darwin-arm64', version: '9.9.9' }));
+    const locked = (os: string, cpu: string) => ({ version: '1.0.0', integrity: `sha512-${os}`, optional: true, license: 'MIT', os: [os], cpu: [cpu] });
+    const result = collectLicenses(root, {
+      [installed]: locked('darwin', 'arm64'),
+      'node_modules/@scope/tool-linux-x64': locked('linux', 'x64'),
+      'node_modules/@scope/tool-any': { version: '1.0.0', optional: true, os: ['linux'] },
+    });
+    assert.deepEqual(result[0], {
+      path: 'node_modules/@scope/tool-any', name: '@scope/tool-any', version: '1.0.0', integrity: null,
+      development: false, bundled: false, optional: true, declaration: null, declarationField: null,
+      manifestSha256: null, licenseFiles: [], platform: { os: ['linux'], cpu: [] }, inspected: false,
+      gaps: ['missing-license-declaration', 'license-text-not-inspected'],
+    });
+    assert.deepEqual(result.map(pkg => [pkg.name, pkg.version, pkg.declaration, pkg.gaps]), [
+      ['@scope/tool-any', '1.0.0', null, ['missing-license-declaration', 'license-text-not-inspected']],
+      ['@scope/tool-darwin-arm64', '1.0.0', 'MIT', ['license-text-not-inspected']],
+      ['@scope/tool-linux-x64', '1.0.0', 'MIT', ['license-text-not-inspected']],
+    ]);
+    const review = { path: 'node_modules/@scope/tool-any', version: '1.0.0', manifestSha256: 'lockfile', status: 'declaration-only' as const, finding: 'f', evidence: ['e'] };
+    const reviews = result.map(pkg => ({ ...review, path: pkg.path }));
+    assert.doesNotThrow(() => checkLicenseReviews(result, reviews));
+    assert.throws(() => checkLicenseReviews(result, reviews.slice(1)), /unreviewed/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('workspace packages are first-party and skipped, while their installed dependencies are inventoried', () => {
   const root = mkdtempSync(join(tmpdir(), 'taskelith-license-workspace-'));
   try {

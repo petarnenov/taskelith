@@ -3,6 +3,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { darwinPlatform } from './darwin.js';
+import { loadDarwinNative } from './darwin-native.js';
 import { SqliteExecutionLock } from './execution-lock.js';
 import { FileRecordStore } from './file-record-store.js';
 import { linuxPlatform } from './linux.js';
@@ -66,7 +67,7 @@ export function startDetachedProcess(command: Command): Promise<Result<void>> {
 }
 
 export function hostPlatform(containmentParent: string | undefined, host: NodeJS.Platform = process.platform): Result<Platform> {
-  if (host === 'darwin') return ok(darwinPlatform());
+  if (host === 'darwin') return ok(darwinPlatform(loadDarwinNative()));
   if (host !== 'linux') return err(failure('unavailable', `no supervisor platform for ${host}`));
   if (containmentParent === undefined) return err(failure('invalid', `Linux needs ${CONTAINMENT_PARENT}`));
   return ok(linuxPlatform({ containmentParent }));
