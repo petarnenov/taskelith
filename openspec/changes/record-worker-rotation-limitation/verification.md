@@ -35,3 +35,7 @@ Findings: Critical 0, High 0, Medium 1, Low 0.
 ## Remaining gates
 
 Integration into `dev` and the archive.
+
+### Pass 2
+
+Session `01a17486-571b-7223-ac71-4e8c192c5e49`, model `gpt-6.1-sol`, reasoning effort `medium`, read-only sandbox. It ran at `ba300da`, and the snapshots before and after were equal (`97f491ac…bc6e`). It confirmed the pass 1 fix in all three places and found no problems: Critical 0, High 0, Medium 0, Low 0.
