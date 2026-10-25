@@ -1,4 +1,7 @@
 export { InMemoryAdmissionRepository } from './adapters/in-memory-admission-repository.js';
+export { InMemoryGateRepository } from './adapters/in-memory-gate-repository.js';
+export { InMemoryOutbox } from './adapters/in-memory-outbox.js';
+export { InMemoryWorkflowRunRepository } from './adapters/in-memory-workflow-run-repository.js';
 export { TaskAdmissionService, type CreatedRevisionOutcome } from './application/task-admission-service.js';
 export {
   isSameArtifactRevision,
@@ -62,7 +65,14 @@ export {
   type GateInput,
   type GateState,
 } from './domain/gate.js';
-export { FIRST_GENERATION, checkGeneration, nextGeneration, parseGeneration, type Generation } from './domain/generation.js';
+export {
+  FIRST_GENERATION,
+  checkGeneration,
+  checkNextGeneration,
+  nextGeneration,
+  parseGeneration,
+  type Generation,
+} from './domain/generation.js';
 export {
   FIRST_OWNERSHIP_GENERATION,
   nextOwnershipGeneration,
@@ -121,6 +131,7 @@ export {
   type WorkflowRunBinding,
   type WorkflowRunBindingInput,
 } from './domain/workflow-run-binding.js';
+export { beginWorkflowRun, type WorkflowRun, type WorkflowRunId, type WorkflowRunInput } from './domain/workflow-run.js';
 export {
   OPTIONAL_SDLC_OPERATIONS,
   SDLC_FRAMEWORK_PORT_VERSION,
@@ -154,4 +165,24 @@ export {
   type SdlcConformanceReport,
 } from './ports/sdlc-framework-conformance.js';
 export type { AdmissionRepository } from './ports/admission-repository.js';
+export {
+  expectCode,
+  expectOneWinner,
+  expectRaceWinnerStored,
+  expectRead,
+  expectSame,
+  expectSuccess,
+  isSameData,
+  type ConformanceCase,
+} from './ports/conformance-case.js';
+export type { GateRepository } from './ports/gate-repository.js';
+export { isJsonObject, type JsonObject, type JsonValue, type Outbox, type OutboxMessage } from './ports/outbox.js';
+export {
+  ADMISSION_REPOSITORY_CONFORMANCE,
+  GATE_REPOSITORY_CONFORMANCE,
+  OUTBOX_CONFORMANCE,
+  WORKFLOW_RUN_REPOSITORY_CONFORMANCE,
+  type OutboxConformanceTarget,
+} from './ports/repository-conformance.js';
+export type { WorkflowRunRepository } from './ports/workflow-run-repository.js';
 export type { Clock } from './ports/clock.js';

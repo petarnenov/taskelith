@@ -1,0 +1,29 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {
+  ADMISSION_REPOSITORY_CONFORMANCE,
+  GATE_REPOSITORY_CONFORMANCE,
+  InMemoryAdmissionRepository,
+  InMemoryGateRepository,
+  InMemoryOutbox,
+  InMemoryWorkflowRunRepository,
+  OUTBOX_CONFORMANCE,
+  WORKFLOW_RUN_REPOSITORY_CONFORMANCE,
+  type ConformanceCase,
+} from '@taskelith/sdlc';
+
+function runSuite<Port>(adapter: string, cases: readonly ConformanceCase<Port>[], create: () => Port): void {
+  for (const conformance of cases) {
+    test(`${adapter}: ${conformance.name}`, async () => {
+      assert.deepEqual(await conformance.check(create()), []);
+    });
+  }
+}
+
+runSuite('in-memory admissions', ADMISSION_REPOSITORY_CONFORMANCE, () => new InMemoryAdmissionRepository());
+runSuite('in-memory runs', WORKFLOW_RUN_REPOSITORY_CONFORMANCE, () => new InMemoryWorkflowRunRepository());
+runSuite('in-memory gates', GATE_REPOSITORY_CONFORMANCE, () => new InMemoryGateRepository());
+runSuite('in-memory outbox', OUTBOX_CONFORMANCE, () => {
+  const outbox = new InMemoryOutbox();
+  return { outbox, stored: async () => outbox.messages };
+});
