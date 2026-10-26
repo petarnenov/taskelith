@@ -156,7 +156,7 @@ A worker SHALL start no launch without a grant, whatever the state of its broker
 - **THEN** the operation is journaled `expired`, and the same execution is authorized again only once the worker is online
 
 ### Requirement: Cancellation forwarding
-A cancellation of an attempt SHALL stop its intent's launch; one of an execution SHALL stop only that execution, and a launch only while it runs it. Either SHALL seal an execution before its supervisor starts and write the `cancel` file of a started one. Its evidence SHALL be recorded once no launch it stops is live and every execution it names is `exited`, `not-started`, or rejected without a grant, and at once when there is none.
+A cancellation of an attempt SHALL stop its intent's launch; one of an execution SHALL stop only that execution, a launch only while it runs it, and a retry or relaunch only as the intent's last. Either SHALL seal an execution before its supervisor starts and write the `cancel` file of a started one. Its evidence SHALL be recorded once no launch it stops is live and every execution it names is `exited`, `not-started`, or rejected without a grant, and at once when there is none.
 
 #### Scenario: Cancelled after W4
 - **WHEN** a cancellation names an execution whose supervisor runs
@@ -173,6 +173,14 @@ A cancellation of an attempt SHALL stop its intent's launch; one of an execution
 #### Scenario: Attempt cancelled while an execution runs
 - **WHEN** a cancellation names the attempt of an intent whose launch runs an execution
 - **THEN** the launch stops and the running execution gets `cancel`
+
+#### Scenario: Superseded execution cancelled before a restart
+- **WHEN** the worker starts with a journaled cancellation of a superseded execution of an intent whose last execution awaits a retry or ended `not-started`
+- **THEN** the worker retries the last execution's authorization or launches the intent again
+
+#### Scenario: Last execution cancelled before a restart
+- **WHEN** the worker starts with a journaled cancellation of an intent's last execution, sealed `not-started` before its supervisor started
+- **THEN** the worker launches the intent no more, and a new attempt is left to the control plane
 
 ### Requirement: Launch settings
 A worker SHALL launch only when `TASKELITH_WORKER_COMMAND` names its program; on Linux a launch SHALL also need the containment parent and the execution account. On Linux the worker SHALL read the containment parent whenever it is set, with or without the command. Without the command it SHALL accept assignments and launch none.
@@ -346,3 +354,18 @@ On a journal write refused for lack of space a worker SHALL empty the buffered l
 #### Scenario: Unrecorded process refused for space
 - **WHEN** the commit of an unrecorded process found at start is refused for lack of space twice
 - **THEN** no pass tries it within the backoff, and the outbox then holds one `unrecorded-process` with its containment's identity, without a second scan or a reported failure
+
+### Requirement: Assignment ended by a launch rejection
+A worker SHALL end an acknowledged assignment locally once it journaled a launch authorization rejection with `assignment-not-active`, as an assignment end does: it SHALL stop counting it except through an execution that still holds a slot, SHALL launch nothing more for it, and SHALL report it as ended, also after a restart. A later assignment end SHALL be journaled once and SHALL change and publish nothing more.
+
+#### Scenario: Rejected as not active
+- **WHEN** a worker with one slot journals an `assignment-not-active` rejection for its only assignment, and another offer arrives
+- **THEN** it accepts the offer, and the first assignment is ended
+
+#### Scenario: Rejected as not active after a grant
+- **WHEN** a worker with one slot journals an `assignment-not-active` rejection for an assignment whose execution is still `authorized`, and another offer arrives
+- **THEN** it refuses the offer with `worker-slots-exhausted` until that execution is sealed `not-started`
+
+#### Scenario: Late assignment end
+- **WHEN** an assignment end arrives for an assignment ended by such a rejection
+- **THEN** it is journaled once, its outbox gains no entry, and recovery plans nothing for the assignment
