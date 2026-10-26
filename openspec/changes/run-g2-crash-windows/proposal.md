@@ -8,7 +8,7 @@ G2 work item 24, `run-g2-failure-scenarios` ([docs/g2-plan.md](../../../docs/g2-
 - **Crash points, test-side.** The worker journal's existing commit-point hook arms W1 to W6, through a module resolution hook in the worker process; a wrapper of the supervision port arms CP1 to CP4, CP10, and CP12; the launch supervisor is the real supervisor program with its existing crash-point option, armed for CP5 to CP9 and CP11. An armed point kills its process with `SIGKILL`.
 - **Crash window scenarios.** For each window W1 to W6 (each before and after its commit) and CP1 to CP12: crash, restart, and check that the control plane and the worker journal hold exactly one execution beyond `not-started`, with the outcome the recovery tables assign, that the scripted child spawned at most once, and that no process of the scenario is left.
 - **Duplicate delivery.** The offer the control plane published is published again, while the child runs and after its result, and the scenario checks one launch intent, one execution, one spawn, and one result.
-- **Records.** Each scenario records its result through the recorder of 24a with target `harness-composition`; this change directory carries `results.jsonl`.
+- **Records.** Each scenario records its result as 24a's "Recorded scenario results" requires, with target `harness-composition`; this change directory carries `results.jsonl`.
 
 ## Capabilities
 
