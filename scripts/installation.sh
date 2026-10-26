@@ -4,7 +4,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: installation.sh build|bootstrap|broker-config|start|stop|enroll|enrollment-token|verify|smoke|check-containment PROJECT" >&2
+  echo "usage: installation.sh build|bootstrap|broker-config|start|stop|enroll|enrollment-token|verify|smoke|check-containment|scenario-fresh-composition|scenario-worker-disk-loss|scenario-worker-kill PROJECT" >&2
   exit 2
 }
 
@@ -291,6 +291,10 @@ smoke() {
   remove_throwaway "submitted, assigned, executed, stored the result, removed"
 }
 
+# The G2 failure scenarios (item 24a), defined apart so tests can load them.
+# shellcheck source=installation-scenarios.sh
+source "$repository/scripts/installation-scenarios.sh"
+
 case "$command" in
   build) build ;;
   bootstrap) bootstrap ;;
@@ -302,5 +306,8 @@ case "$command" in
   verify) verify ;;
   smoke) smoke ;;
   check-containment) check_containment ;;
+  scenario-fresh-composition) fresh_composition_scenario ;;
+  scenario-worker-disk-loss) disk_loss_scenario ;;
+  scenario-worker-kill) worker_kill_scenario ;;
   *) usage ;;
 esac
