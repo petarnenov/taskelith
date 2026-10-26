@@ -43,6 +43,7 @@ Bug B4, found by the crash scenario 24c of G2 item 24: an `execution.exited` fro
 - `npm run verify:archive`: `Every active OpenSpec change archives into strictly valid specs.`
 - `make verify` at `6debc49`..`439871d` (first run): failed (exit 2) in `check:boundaries` on a type error in the new control-plane test helper `observationEvidence` (`unknown[]` instead of a tuple array); fixed in `dd9914d`.
 - `make verify` at `dd9914d`: passed (exit 0); 1800 tests, 1798 passed, 0 failed, 2 Linux-only tests skipped on macOS; coverage 99.27% lines, 91.89% branches, 98.89% functions; `Contract documents have no undeclared breaking change.`; OpenSpec `Totals: 69 passed, 0 failed`; `Every active OpenSpec change archives into strictly valid specs.`; `Packed file allowlist and installed CLI verification passed.`
+- `make verify` at `6190c7c` (after the review pass 1 fixes): passed (exit 0); 1800 tests, 1798 passed, 0 failed, 2 Linux-only tests skipped on macOS; coverage 99.27% lines, 91.90% branches, 98.89% functions; contract, OpenSpec (69 passed), archive, and package checks passed. The M1 and L1 fixes are unreviewed.
 
 ## Review pass 1
 
