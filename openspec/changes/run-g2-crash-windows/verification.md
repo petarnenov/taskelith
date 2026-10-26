@@ -27,6 +27,7 @@ G2 work item 24, second part (24b), `run-g2-crash-windows`, assigned by the coor
 | Evidence run of `1868a99`: `TASKELITH_TEST_SEED=2776760789 TASKELITH_SCENARIO_RESULTS=openspec/changes/run-g2-crash-windows/results.jsonl node --experimental-strip-types --test apps/control-plane/test/crash-windows.integration.test.ts` against `make services-up` | 27 tests passed (16 scenarios passed, 11 expected failures on D1); `results.jsonl` holds 27 lines, 16 `passed` and 11 `failed`, all target `harness-composition`, arch `x64`, commit `1868a99`, seed `2776760789`; the CP4 record names "CP4 after the claim", the CP9 record the adopter's `supervisor.2`, and each D1 record E2's answer before E1's published `not-started` |
 | `make verify` of `40aab95` | Passed: 1787 tests, 1785 passed, 0 failed, 2 skipped (the Linux-only scan tests); coverage of all files 99.27% lines, 92.07% branches, 99.03% functions; OpenSpec 69 passed; `verify:archive` and `verify:package` passed |
 | `make verify` of `814231e`, after the merge `1baa1a1` | Passed: 1814 tests, 1812 passed, 0 failed, 2 skipped; coverage of all files 99.28% lines, 92.07% branches, 99.03% functions; OpenSpec 69 passed; `verify:archive` and `verify:package` passed. The run before it failed once in 24a's timed stub test "the restart and the reconciliation share one deadline from the restart", which then passed five times alone and in this run |
+| `make verify` of `216d175`, after the fixes of review pass 1 and the merge `4dce961` | Passed: 1814 tests, 1812 passed, 0 failed, 2 skipped; coverage of all files 99.28% lines, 92.07% branches, 99.03% functions; OpenSpec 70 passed; `verify:archive` and `verify:package` passed |
 | `make verify-linux-cgroup` | not run: this change adds no test there |
 
 ## Windows and results
@@ -122,5 +123,5 @@ No window changed its expected outcome. Pass 2 is pending.
 
 - Eleven windows are expected failures on D1 until `fix-launch-recovery-reauthorization` lands (CP5 possibly also until `fix-unclaimed-launch-liveness` lands); their `failed` rows stay in `results.jsonl`.
 - The control plane runs in the test process; the scenarios crash the worker and the supervisor only.
-- The hold of `not-started` applies to the eleven D1 windows only; `fix-launch-recovery-reauthorization` keeps it so that its rerun meets the same order.
+- The hold of `not-started` applies to the eleven D1 windows only; whether `fix-launch-recovery-reauthorization` keeps it is for that change to decide.
 - Remaining gates: review pass 2, integration by the coordinator, the archive, and, in the follow-up changes, the fix of D1 (`fix-launch-recovery-reauthorization`) with a new evidence run and the fix of O1 (`fix-unclaimed-launch-liveness`).
