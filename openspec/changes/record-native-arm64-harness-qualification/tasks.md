@@ -11,4 +11,4 @@
 ## 3. Checks
 
 - [x] 3.1 Strict OpenSpec validation, `make verify`, and `verification.md`
-- [ ] 3.2 Independent review (pending)
+- [x] 3.2 Independent review: pass 1 by OpenCode `kimi-k3.1-pro#high`, no findings

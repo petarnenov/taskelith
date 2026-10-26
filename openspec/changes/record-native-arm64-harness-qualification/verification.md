@@ -28,10 +28,24 @@ Out of scope, per the brief: any login, subscription, or model call, and every s
 | `npm run openspec -- validate record-native-arm64-harness-qualification --strict` | valid |
 | `npm run verify:comments` | passed, as part of `make verify` |
 | `make verify` at `bb0574f` | passed; 1403 tests, 1403 passed, 0 failed; coverage 99.24 % lines, 91.37 % branches, 98.72 % functions; archive dry run valid; package verification passed |
+| `make verify` at the head that records review pass 1 | run after that commit; the coordinator states its result in the handoff, and the `pre-push` hook runs it again on the pushed head |
 
 ## Independent review
 
-Pending. Reviewer to be assigned by the coordinator: OpenCode, `kimi-k3.1-pro#high`. No pass has run.
+Reviewer assigned by the coordinator, Niki, in the brief: OpenCode CLI, `opencode-go/kimi-k3.1-pro` with variant `high`, agent `reviewer`.
+
+Invocation, from the worktree, with the prompt and log outside it:
+
+```bash
+opencode run --standalone --agent reviewer -m 'opencode-go/kimi-k3.1-pro#high' --format json \
+  --title record-native-arm64-harness-qualification "$(cat <prompt-file>)" < /dev/null > <log>
+```
+
+### Pass 1
+
+- Session `ses_e8a23f376ffeFMD7wUWtGhnHXe`, on `aaec981` (diff `60341e0..aaec981`). The stored assistant messages of the session record agent `reviewer`, model `kimi-k3.1-pro`, provider `opencode-go`, and variant `high`.
+- Snapshot (`git ls-files -co --exclude-standard | xargs shasum -a 256 | shasum -a 256`) before and after: `cc133108d3cde3cc7ba7fb946eac60ddc1488e38562eca18ce3f6d820b8e0f9a`, equal. No external evidence directory was shared with the reviewer.
+- Findings: 0 Critical, 0 High, 0 Medium, 0 Low. The reviewer confirmed that the status is stated honestly, that the records agree with each other, that this record is complete, and that `skip_specs` is justified. No fixes were needed.
 
 ## Limitations
 
@@ -42,6 +56,5 @@ Pending. Reviewer to be assigned by the coordinator: OpenCode, `kimi-k3.1-pro#hi
 
 ## Remaining gates
 
-- Independent review by OpenCode `kimi-k3.1-pro#high`, pending.
 - Coordinator integration, merge into `dev`, and archive.
 - The scenarios that need a login on Linux, on linux/amd64 and linux/arm64: G3 item 35 for Claude Code, and the G4 admission for Codex.
