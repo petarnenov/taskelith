@@ -99,6 +99,24 @@ test('a correlation that carries a secret is replaced, so no log line holds it',
   assert.doesNotMatch(JSON.stringify(sink.records), /tkop_/);
 });
 
+test('every response closes its connection, so no idle socket is reused', async () => {
+  answers = { readTaskResult: () => ok({ state: 'pending', runId: 'r', taskId: 't' }) };
+  let connections = 0;
+  const counted = () => { connections++; };
+  server.on('connection', counted);
+  try {
+    const headers = { authorization: `Bearer ${OPERATOR}` };
+    for (let request = 0; request < 2; request++) {
+      const response = await fetch(`${base}/runs/r/tasks/t/result`, { headers });
+      await response.arrayBuffer();
+      assert.equal(response.headers.get('connection'), 'close');
+    }
+    assert.equal(connections, 2);
+  } finally {
+    server.off('connection', counted);
+  }
+});
+
 test('a redrive sequence that is not a positive safe integer is 400 before the broker', async () => {
   let redriven = 0;
   const api = new ControlPlaneApi({
