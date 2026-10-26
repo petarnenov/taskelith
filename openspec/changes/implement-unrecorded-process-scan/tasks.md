@@ -12,12 +12,12 @@
 - [x] 2.3 Orchestrator: scan once after the record listing; leftovers unchanged
 - [x] 2.4 Launch host wiring in `main.ts` and `worker-start.ts`
 - [x] 2.5 Wire mapping with the AsyncAPI schema check
-- [x] 2.6 Tests: the observation, once per journal incarnation, leftovers unchanged, failures, no scan on macOS
+- [x] 2.6 Tests: the observation, one identity per journal incarnation, leftovers unchanged, failures, no scan on macOS
 
 ## 3. Records and checks
 
 - [x] 3.1 proposal.md, design.md, spec delta (worker-journal)
 - [x] 3.2 `npm run openspec -- validate implement-unrecorded-process-scan --strict`
 - [x] 3.3 `make verify`
-- [ ] 3.4 Independent review (coordinator)
+- [x] 3.4 Independent review pass 1 (Claude Code Fable); findings M1 and L1 to L6 fixed
 - [ ] 3.5 verification.md review passes and handoff

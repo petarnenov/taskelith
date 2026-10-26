@@ -6,7 +6,7 @@ The [supervisor identity contract](../../../docs/contracts/supervisor-identity.m
 
 The task stopped at its specification gate: the leftover's fate is open (D5 defers it, while `worker-runtime` "Reconciliation logs" requires keeping it), a leftover directory is a record without a journal row and so not the contract's case, and no `observationId` source exists for the fact. The owner's away delegate chose option A (OpenCode run `20261026T110406Z-opencode-12993`), relayed by the coordinator:
 
-1. An additive identity rule: `['unrecorded-process', journalId, containment]`, reported once per journal incarnation, in the worker journal contract section 6 and the wire contracts' observation identity rule, with the matching spec delta; no other contract or spec change.
+1. An additive identity rule: `['unrecorded-process', journalId, containment]`, decided as "emitted once per journal incarnation" and recorded as one identity per journal incarnation (D3), in the worker journal contract section 6 and the wire contracts' observation identity rule, with the matching spec delta; no other contract or spec change.
 2. The Linux scan of the cgroups under the containment parent; each populated containment without a `worker/executions/<id>` directory is reported through the existing wire mapping.
 3. Leftover directories keep today's behaviour: logged as `worker.execution.leftover`, kept, never removed, never reported as an unrecorded process. **Their fate stays open as a separate future task.**
 4. macOS: no scan.
@@ -29,7 +29,7 @@ The coordinator named section 3 of the wire contracts; the observation identity 
 
 `ContainmentScan` (`apps/worker`) returns the populated containments with their members as `ExecutionProcess`. Its adapter, `containmentScan`, wraps `LinuxContainmentScan` of `@taskelith/worker-supervisor`, which reads `cgroup.events` and `cgroup.procs` of each directory under the parent and each member's `/proc/<pid>/stat`. A child creates no cgroup (section 8, the Linux self-check), so `cgroup.procs` holds the whole set. A containment removed since the listing, or a member that exited, is left out; a missing parent holds no containment.
 
-### D3: once per journal incarnation without a format change
+### D3: one identity per journal incarnation, without a format change
 
 `recordUnrecordedProcess` journals nothing while the outbox holds an entry with the same identity. After confirmation the entry is pruned, so a later start can derive it again; it keeps its identity, and the control plane records a known identity at a new sequence without its effect (`observation-consumption`, 21c decision 2), and the reconciliation queue records a duplicate nothing (`launch-reconciliation` "Reconciliation queue"). A table of reported containments would also stop this repeat, but it needs a journal format step, which the decision excluded.
 
@@ -47,4 +47,7 @@ No containment exists on macOS. [Worker journal](../../../docs/contracts/worker-
 
 - **Only with a launch command.** The scan runs where the launch host is built, which needs `TASKELITH_WORKER_COMMAND` (start reconciliation, review pass 2, M-B); decoupling is the 20d2 obligation.
 - **Leftovers still accumulate** and are logged on every start until the separate task decides them.
+- **Members of descendant cgroups are not listed.** `populated` counts descendants, but only the containment's own `cgroup.procs` is read, without recursion; the self-check makes such cgroups impossible for a child (D2).
+- **A malformed containment never stops the scan.** One whose `cgroup.events` has no populated line is skipped, not reported; a populated one whose `cgroup.procs` holds a line that is not a decimal process ID, or whose member cannot be read, is reported with no processes.
+- **The worker's own cgroup is not excluded.** If the containment parent were the parent of the worker's home cgroup, the home would be scanned like a containment; a check for this belongs to a future self-check task.
 - **A leftover with a populated containment** is only logged, never reported, by decision 3; the future task on leftovers owns it.

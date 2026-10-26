@@ -4,7 +4,7 @@ On Linux a worker that lost its execution records still has their containments i
 
 ## What Changes
 
-- **Identity rule (contract, additive).** `execution.unrecorded-process` takes its `observationId` from `journalId` and the containment, so it is reported once per journal incarnation (worker journal contract section 6, wire contracts section 5).
+- **Identity rule (contract, additive).** `execution.unrecorded-process` takes its `observationId` from `journalId` and the containment, so it has one identity per journal incarnation: a derivation after confirmation is published again under that identity, and the receiver applies it without effect (worker journal contract section 6, wire contracts section 5).
 - **Linux scan.** On the first pass after start, a worker with a launch host on Linux lists the cgroups under its containment parent and journals each populated one without a `worker/executions/<id>` directory as `unrecorded-process`, with its members, published through the existing AsyncAPI mapping.
 - **Leftovers unchanged.** A record directory that no journal row names is still logged as `worker.execution.leftover` and kept; it is never reported as an unrecorded process. Its fate stays open.
 - **macOS.** No scan: surviving processes cannot be found there.
