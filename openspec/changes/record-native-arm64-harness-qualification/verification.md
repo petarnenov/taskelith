@@ -26,7 +26,8 @@ Out of scope, per the brief: any login, subscription, or model call, and every s
 | Step results on linux/arm64 | every step matched its expected exit status and output: environment, environment names (none contains `KEY`, `TOKEN`, or `SECRET`), platform `Linux aarch64`, Ubuntu 24.04.5 LTS, Node.js v24.22.1, user `taskelith`; Claude Code binary `@anthropic-ai/claude-agent-sdk-linux-arm64/claude`, SHA-256 `fdd22e6cbb734d580f5664c48df4294eeec850218ff07f186f9af30426396ee1`, `2.1.308 (Claude Code)`, `-musl` package absent, `auth status` exit 1 with `"loggedIn": false`; Codex binary `@openai/codex-linux-arm64/vendor/aarch64-unknown-linux-musl/bin/codex`, SHA-256 `8813c8d8a4cea2eeba271b72ab22f49628b184b24ab18dbef06b4ce41e9a8d39`, `codex-cli 0.164.0`, `login status` exit 1 with `Not logged in`; app-server schema 320 files, digest `fc9256ad0eac370b62b095b8ea218d086d78f954a142f9e1a2e0fee58802c147` (equal to linux/amd64); both writes refused with `Permission denied`; harness tree unchanged |
 | Credential search of the image as root | no `auth.json` or `.credentials.json` |
 | `npm run openspec -- validate record-native-arm64-harness-qualification --strict` | valid |
-| `make verify` | see below |
+| `npm run verify:comments` | passed, as part of `make verify` |
+| `make verify` at `bb0574f` | passed; 1403 tests, 1403 passed, 0 failed; coverage 99.24 % lines, 91.37 % branches, 98.72 % functions; archive dry run valid; package verification passed |
 
 ## Independent review
 
