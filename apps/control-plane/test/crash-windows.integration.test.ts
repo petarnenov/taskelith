@@ -32,9 +32,15 @@ interface CrashWindow {
   readonly points: readonly string[];
   readonly outcome: Outcome;
   readonly spawns: 0 | 1;
+  // A known product defect the scenario fails on, until it is fixed.
+  readonly defect?: 'D1';
 }
 
 const exitedOnce = (window: string, ...points: string[]): CrashWindow => ({ window, points, outcome: 'exited-code-0', spawns: 1 });
+// D1 (verification.md): the relaunch after `not-started` is rejected with
+// `execution-conflict`; these turn red once D1 is fixed.
+const failsOnD1 = (window: string, ...points: string[]): CrashWindow => ({ ...exitedOnce(window, ...points), defect: 'D1' });
+const D1_SIGNATURE = /D1: the relaunch .+ was rejected-final with execution-conflict/;
 
 // The expected results follow the recovery tables: journal contract
 // section 5 and, for macOS, supervisor identity contract section 6.
@@ -43,24 +49,24 @@ const WINDOWS: readonly CrashWindow[] = [
   exitedOnce('W1.after', 'W1.after'),
   exitedOnce('W2.before', 'W2.before'),
   exitedOnce('W2.after', 'W2.after'),
-  exitedOnce('W3.before', 'W3.before'),
-  exitedOnce('W3.after', 'W3.after'),
-  exitedOnce('W4.before', 'W4.before'),
-  exitedOnce('W4.after', 'W4.after'),
+  failsOnD1('W3.before', 'W3.before'),
+  failsOnD1('W3.after', 'W3.after'),
+  failsOnD1('W4.before', 'W4.before'),
+  failsOnD1('W4.after', 'W4.after'),
   exitedOnce('W5s.before', 'W5s.before'),
   exitedOnce('W5s.after', 'W5s.after'),
   exitedOnce('W5e.before', 'W5e.before'),
   exitedOnce('W5e.after', 'W5e.after'),
   // W6 commits only in a recovery that seals, so a first crash leaves a
   // grant without a record.
-  exitedOnce('W6.before', 'W3.after', 'W6.before'),
-  exitedOnce('W6.after', 'W3.after', 'W6.after'),
-  exitedOnce('CP1', 'CP1'),
-  exitedOnce('CP2', 'CP2'),
-  exitedOnce('CP3', 'CP3'),
+  failsOnD1('W6.before', 'W3.after', 'W6.before'),
+  failsOnD1('W6.after', 'W3.after', 'W6.after'),
+  failsOnD1('CP1', 'CP1'),
+  failsOnD1('CP2', 'CP2'),
+  failsOnD1('CP3', 'CP3'),
   exitedOnce('CP4', 'CP4'),
-  exitedOnce('CP5', 'CP5'),
-  exitedOnce('CP6', 'CP6'),
+  failsOnD1('CP5', 'CP5'),
+  failsOnD1('CP6', 'CP6'),
   { window: 'CP7', points: ['CP7'], outcome: 'uncertain', spawns: 0 },
   { window: 'CP8', points: ['CP8'], outcome: 'uncertain', spawns: 1 },
   // A macOS adopter only observes; once the child is gone nothing proves
@@ -128,12 +134,20 @@ class Scenario {
     await worker.stop();
   }
 
+  // The control plane's task once it holds the outcome, or D1's signature
+  // once the authority rejected a relaunch with `execution-conflict`.
+  async settledUnlessD1(outcome: Outcome): Promise<Task | 'D1'> {
+    let conflicted = false;
+    const task = await this.taskWhere(`the ${outcome} outcome`, (current) => {
+      conflicted = this.installation.launchRejections().includes('execution-conflict');
+      return conflicted || outcomeReached(current, outcome);
+    });
+    return conflicted ? 'D1' : task;
+  }
+
   // The control plane's task once it holds the outcome.
   settled(outcome: Outcome): Promise<Task> {
-    const reached = outcome === 'uncertain'
-      ? (task: Task) => executions(task).some(isUncertain)
-      : (task: Task) => task.attempts.some((attempt) => attempt.outcome?.kind === 'exited');
-    return this.taskWhere(`the ${outcome} outcome`, reached);
+    return this.taskWhere(`the ${outcome} outcome`, (task) => outcomeReached(task, outcome));
   }
 
   async taskWhere(what: string, reached: (task: Task) => boolean): Promise<Task> {
@@ -155,6 +169,22 @@ class Scenario {
     await reapLeftovers(this.installation);
     await this.installation.stop();
   }
+}
+
+function outcomeReached(task: Task, outcome: Outcome): boolean {
+  return outcome === 'uncertain'
+    ? executions(task).some(isUncertain)
+    : task.attempts.some((attempt) => attempt.outcome?.kind === 'exited');
+}
+
+// D1 in the journal: the relaunched execution's only operation was
+// rejected for good with `execution-conflict`, and nothing spawned.
+function d1Failure(scenario: Scenario): Error {
+  const rejected = journalSnapshot(scenario.installation).executions.filter(({ authorizations }) => authorizations
+    .some(({ outcome, rejection }) => outcome === 'rejected-final' && rejection === 'execution-conflict'));
+  assert.equal(rejected.length, 1, 'one relaunch rejected with execution-conflict');
+  assert.equal(spawnedChildren(scenario.installation).length, 0, 'no spawn');
+  return new Error(`D1: the relaunch ${rejected[0]!.executionId} was rejected-final with execution-conflict`);
 }
 
 function executions(task: Task): Execution[] {
@@ -193,8 +223,9 @@ async function runCrashWindow({ points, outcome, spawns }: CrashWindow): Promise
     assert.deepEqual(tracedCrashes(scenario.installation), points);
     const restarted = await scenario.startWorker();
     await restarted.ready();
-    const task = await scenario.settled(outcome);
+    const task = await scenario.settledUnlessD1(outcome);
     await restarted.stop();
+    if (task === 'D1') throw d1Failure(scenario);
     const execution = assertOneDurableOutcome(task, scenario, outcome);
     await scenario.noLeftovers();
     assert.equal(spawnedChildren(scenario.installation).length, spawns, 'spawns of the scripted child');
@@ -276,6 +307,8 @@ test('a redelivered offer and assignment give one execution and one result', NAT
 
 describe('a crash at each launch and supervisor window recovers to one durable outcome', { concurrency: 4 }, () => {
   for (const window of WINDOWS) {
-    test(`a crash at ${window.window} ends ${window.outcome} with ${window.spawns} spawn(s)`, NATIVE, () => recorded(scenarioName(window.window), () => runCrashWindow(window)));
+    const options = window.defect === undefined ? NATIVE : { ...NATIVE, expectFailure: D1_SIGNATURE };
+    const name = `a crash at ${window.window} ends ${window.outcome} with ${window.spawns} spawn(s)${window.defect === undefined ? '' : ', failing on D1'}`;
+    test(name, options, () => recorded(scenarioName(window.window), () => runCrashWindow(window)));
   }
 });

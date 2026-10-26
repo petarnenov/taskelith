@@ -12,7 +12,7 @@ import { ControlPlaneNamespace } from '@taskelith/control-plane-store';
 import type { JournalSnapshot, Task } from '@taskelith/execution';
 import { BrokerAuthority, connectSystemAccount, connectTransport, NatsBrokerCredentials, TRANSPORT_LIMITS, TransportAddress, type ControlPlaneConnection } from '@taskelith/nats';
 import { SYSTEM_CLOCK } from '@taskelith/node-observability';
-import { NO_LOGS } from '@taskelith/observability';
+import { InMemoryLogSink } from '@taskelith/observability';
 import { PostgresDatabase } from '@taskelith/postgres';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
 import { CRASH_POINT_VARIABLE, crashEnvironment, integrationEndpoint, integrationSecret, ScenarioProcess, SEED_VARIABLE, value } from '@taskelith/testing';
@@ -83,10 +83,12 @@ export class HarnessInstallation {
   readonly #identity: Identity;
   readonly #running: RunningControlPlane;
   readonly #store: PostgresDatabase;
+  readonly #logs: InMemoryLogSink;
 
-  private constructor(identity: Identity, running: RunningControlPlane) {
+  private constructor(identity: Identity, running: RunningControlPlane, logs: InMemoryLogSink) {
     this.#identity = identity;
     this.#running = running;
+    this.#logs = logs;
     this.#store = new PostgresDatabase(identity.database);
   }
 
@@ -102,8 +104,9 @@ export class HarnessInstallation {
     const environment = { TASKELITH_DATA_DIR: dataRoot, TASKELITH_POSTGRES_URL: database.href, TASKELITH_NATS_URL: NATS.href };
     const initialized = await admin(environment, ['init', '--actor', 'root@test', '--reason', 'crash scenario']) as { identity: { installationId: string }; operatorSecret: string };
     const address = value(TransportAddress.of(initialized.identity.installationId));
-    const running = value(await startControlPlane(controlPlaneSettings(dataRoot, database)));
-    return new HarnessInstallation({ database, base, authority, address, operator: initialized.operatorSecret }, running);
+    const logs = new InMemoryLogSink();
+    const running = value(await startControlPlane(controlPlaneSettings(dataRoot, database, logs)));
+    return new HarnessInstallation({ database, base, authority, address, operator: initialized.operatorSecret }, running, logs);
   }
 
   get base(): string {
@@ -129,6 +132,11 @@ export class HarnessInstallation {
   async submitTask(taskId: string): Promise<void> {
     await this.#operatorCall('/runs', { runId: RUN_ID, projectId: 'crash-project', binding: BINDING });
     await this.#operatorCall(`/runs/${RUN_ID}/tasks`, { taskId, kind: 'planning', stageId: 'specs' });
+  }
+
+  // The reasons of the launch rejections the control plane observed.
+  launchRejections(): string[] {
+    return this.#logs.records.filter(({ event }) => event === 'execution.launch.rejected').map(({ fields }) => String(fields.reason));
   }
 
   async task(taskId: string): Promise<Task> {
@@ -173,10 +181,10 @@ async function registeredAuthority(dataRoot: string): Promise<BrokerAuthority> {
   return authority;
 }
 
-function controlPlaneSettings(dataRoot: string, database: URL): ControlPlaneSettings {
+function controlPlaneSettings(dataRoot: string, database: URL, logs: InMemoryLogSink): ControlPlaneSettings {
   return {
     dataRoot, ownerUid, postgres: database, nats: NATS, api: { host: '127.0.0.1', port: 0 },
-    workflows: [{ definition: WORKFLOW, digest: DIGEST }], logSink: NO_LOGS,
+    workflows: [{ definition: WORKFLOW, digest: DIGEST }], logSink: logs,
     sweepMilliseconds: 200, placementMilliseconds: 200, shutdownMilliseconds: 1000, transportLimits: LIMITS,
   };
 }
