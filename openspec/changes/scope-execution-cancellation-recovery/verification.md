@@ -13,7 +13,7 @@ This change is the follow-up that the change `scope-execution-cancellation` left
 
 The contracts are explicit, so no contract changes:
 - `docs/contracts/execution-wire-contracts.md:46`: a cancellation with `executionId` targets only that execution; without it, the attempt.
-- `docs/contracts/launch-authorization.md:92`: an `unauthorized-start` cancellation is for that execution only, never for another execution of the attempt.
+- `docs/contracts/launch-authorization.md:99`: an `unauthorized-start` cancellation is for that execution only, never for another execution of the attempt.
 
 ## Environment
 
@@ -49,6 +49,22 @@ Reviewer: OpenCode CLI, model `opencode-go/kimi-k3.1-pro`, variant `high`, assig
   1. `design.md:8` cited `launch-authorization.md:91`; the quoted rule is on line 92.
   2. `verification.md:16` had the same citation.
   - **Fixed, unreviewed:** both citations now name line 92. Under the review process a Low-only pass is fixed without another review.
+
+### Merge of `origin/dev` with D1
+
+- **Merge:** `505a832` merges `origin/dev` at `2ee7adc` with `fix-launch-recovery-reauthorization` (D1). `journal-recovery.ts` merged automatically and keeps both D1's `lastSealedExecution` and this change's per-execution rule; `journal-recovery.test.ts` conflicted and keeps both sides' tests.
+- **Checks:** `journal-recovery.test.ts` and `launch-orchestrator.test.ts` after `npm run build`: 60 tests, 60 pass. `make verify` at `505a832`: 1921 tests, 1918 pass, 1 fail, 2 skipped; the failure was `packages/adapters/worker-control-plane-client/test/http-evidence-publisher.test.ts` ("generated asynchronous activity after the test ended"), a file neither this change nor D1 touches, which then passed six of six runs alone. The `pre-push` hook runs `make verify` again.
+
+### Review pass 2 (conflict resolution)
+
+- **Revision:** `505a832`, under worker step 9.
+- **Invocation:** as pass 1; the prompt names pass 1's session, asks to confirm its resolutions, and to review the merge.
+- **Model confirmation:** set by `-m`, as in pass 1 (see Limitations).
+- **Session:** `ses_e85f6a7b4ffe7TIFILtU8PVQM1`.
+- **Snapshot:** `5549d8c0394904fedd610147d8c9f372372c0422775ffbcca890a4f71a4a3e26` before and after; unchanged.
+- **Findings:** 0 Critical, 0 High, 0 Medium, 2 Low. The reviewer confirmed pass 1's resolutions, found the resolution functionally sound with no test lost, and found the delta still valid against the merged worker-runtime spec.
+  1. `design.md:8` and 2. `verification.md:16` cited `launch-authorization.md:92`; after the merge the rule is on line 99.
+  - **Fixed, unreviewed:** both citations now name line 99 (Low-only pass).
 
 ## Limitations
 
