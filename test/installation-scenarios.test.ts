@@ -241,19 +241,22 @@ probe_answer() {
 worker_exec() {
   case "$*" in
     *'/proc/self/status'*) printf "\${PROBE_STATUS:-$GOOD_STATUS}" ;;
-    *'pgrep -o -u 10003'*) printf "\${EXECUTION_STATUS:-$GOOD_STATUS}" | tr -s ' \\t\\n' ' ' | sed 's/ $//'
-      echo; echo "\${CGROUP:-0::/executions/e1}" ;;
+    *'pgrep -o -u 10003'*)
+      if [ -n "\${UNREADABLE_ONCE:-}" ] && [ ! -e "$stubs/read-once" ]; then : > "$stubs/read-once"; return 1; fi
+      printf "\${EXECUTION_STATUS:-$GOOD_STATUS}"; echo cgroup:; echo "\${CGROUP:-0::/executions/e1}" ;;
     'uname -m') echo "\${MACHINE:-aarch64}" ;;
     *'unshare -U true'*) probe_answer user 'unshare: unshare failed: Operation not permitted' ;;
     *'unshare -Urm'*) probe_answer mount 'unshare: unshare failed: Operation not permitted' ;;
     *' 435 0 0') probe_answer clone3 'errno 38' ;;
-    *" \$(clone_number_of "\${MACHINE:-aarch64}") 268435473 0 0 0 0") probe_answer clone 'errno 1' ;;
+    *" \$(clone_number_of "\${MACHINE:-aarch64}") 268435473 0 0 0 0") probe_answer clone "errno \${CLONE_ERRNO:-1}" ;;
     *nsenter*) probe_answer setns "nsenter: reassociate to namespace 'ns/user' failed: Operation not permitted" ;;
     'test -d /sys/fs/cgroup/executions') [ -z "\${NO_PARENT:-}" ] ;;
     *'mkdir /sys/fs/cgroup/executions/probe'*) [ -z "\${NO_CGROUP_WRITE:-}" ] ;;
     *) echo "unexpected worker_exec $*" >&2; return 1 ;;
   esac
 }
+# The retried read takes about a second; the deadline leaves a wide margin.
+START_SECONDS=12
 clone_number_of() { if [ "$1" = x86_64 ]; then echo 56; else echo 220; fi; }
 check_containment() { :; }
 applied_profile() { [ -z "\${NO_PROFILE:-}" ] && echo d1gest; }
@@ -298,6 +301,18 @@ test('a probe that fails otherwise than the profile refuses it fails the confine
     assert.equal(run.status, 1, probe);
     assert.match(run.stderr, /failed otherwise than '.*': errno 22 Invalid argument/, probe);
   }
+});
+
+test('an errno probe must answer its exact errno, not one that starts with it', () => {
+  const run = confinement('CLONE_ERRNO=13');
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /the probe to clone into a new user namespace failed otherwise than 'errno 1': errno 13/);
+});
+
+test('a read of the execution that fails at first is retried', () => {
+  const run = confinement('UNREADABLE_ONCE=1');
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.records, /^passed: .* ran in '0::\/executions\/e1' with status 'Uid: 10003 10003 10003 10003 CapEff: 0{16} CapBnd: 0{14}e0 NoNewPrivs: 1 Seccomp: 2 Seccomp_filters: 1'/);
 });
 
 test('a worker container without the worker profile fails the confinement', () => {

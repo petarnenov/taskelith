@@ -378,8 +378,8 @@ worker_exec() {
   compose --profile worker exec -T worker "$@"
 }
 
-# Runs a command as the execution account, below the worker's setpriv: uid
-# and gid 10003, no capability, and the worker's bounding set.
+# Runs a command through a setpriv equal to the worker's, as the execution
+# account: uid and gid 10003, no capability, the worker's bounding set.
 as_execution() {
   worker_exec setpriv --bounding-set=-all,+setuid,+setgid,+kill --inh-caps=-all \
     --reuid=10003 --regid=10003 --clear-groups -- "$@"
@@ -396,20 +396,46 @@ probe_status() {
 # The status fields and the cgroup of the running execution, the oldest
 # process of the execution account, on two lines.
 execution_identity() {
-  worker_exec bash -c 'pid="$(pgrep -o -u 10003)" && grep -E "$1" "/proc/$pid/status" \
-    | tr -s " \t\n" " " | sed "s/ $//" && echo && cat "/proc/$pid/cgroup"' identity "$STATUS_FIELDS"
+  local raw
+  raw="$(worker_exec bash -c 'pid="$(pgrep -o -u 10003)" && grep -E "$1" "/proc/$pid/status" \
+    && echo cgroup: && cat "/proc/$pid/cgroup"' identity "$STATUS_FIELDS")" || return 1
+  printf '%s\n' "$raw" | sed '/^cgroup:$/,$d' | one_line
+  echo
+  printf '%s\n' "$raw" | sed '1,/^cgroup:$/d'
 }
 
-# The command after LABEL and EXPECTED must fail as the execution account
-# with output that contains EXPECTED.
-expect_refused() {
-  local label="$1" expected="$2" output
-  shift 2
+# Writes the execution's identity to FILE once both of its lines are read.
+capture_identity() {
+  execution_identity > "$1" && [ "$(grep -c . "$1")" -eq 2 ]
+}
+
+# The command after LABEL, a matcher, and EXPECTED must fail as the
+# execution account with output that the matcher accepts.
+refused_probe() {
+  local label="$1" matcher="$2" expected="$3" output
+  shift 3
   if output="$(as_execution "$@" 2>&1)"; then fail_scenario "the execution account could $label: $output"; fi
-  case "$output" in
-    *"$expected"*) echo "installation.sh: $scenario: refused to $label: $output" >&2 ;;
-    *) fail_scenario "the probe to $label failed otherwise than '$expected': $output" ;;
-  esac
+  if ! "$matcher" "$output" "$expected"; then
+    fail_scenario "the probe to $label failed otherwise than '$expected': $output"
+  fi
+  echo "installation.sh: $scenario: refused to $label: $output" >&2
+}
+
+contains() {
+  [[ "$1" == *"$2"* ]]
+}
+
+equals() {
+  [ "$1" = "$2" ]
+}
+
+expect_refused() {
+  refused_probe "$1" contains "$2" "${@:3}"
+}
+
+# The syscall probe's output must be exactly "errno ERRNO".
+expect_errno() {
+  refused_probe "$1" equals "errno $2" "${@:3}"
 }
 
 clone_number() {
@@ -421,16 +447,16 @@ clone_number() {
 }
 
 # Every namespace call of the profile, as the execution account; without
-# the profile, clone3 and setns answer EINVAL and the others succeed.
+# it, clone3 and setns answer EINVAL, which tells it from a host limit.
 probe_namespaces() {
   local clone
   clone="$(clone_number)"
   expect_refused "create a user namespace" "unshare failed: Operation not permitted" unshare -U true
   expect_refused "mount a tmpfs in new user and mount namespaces" "unshare failed: Operation not permitted" \
     unshare -Urm mount -t tmpfs none /mnt
-  expect_refused "call clone3, which the profile answers with ENOSYS" "errno 38" \
+  expect_errno "call clone3, which the profile answers with ENOSYS" 38 \
     perl -e "$SYSCALL_PROBE" "$CLONE3_NUMBER" 0 0
-  expect_refused "clone into a new user namespace" "errno 1" \
+  expect_errno "clone into a new user namespace" 1 \
     perl -e "$SYSCALL_PROBE" "$clone" "$CLONE_NEWUSER_FLAGS" 0 0 0 0
   expect_refused "enter a user namespace with setns" "failed: Operation not permitted" \
     nsenter --user=/proc/self/ns/user true
@@ -459,7 +485,7 @@ platform() {
 # The execution account cannot create a namespace in the worker container,
 # while the delegation and the executions still work.
 namespace_confinement_scenario() {
-  local task=namespace-task digest execution identity status cgroup probe row
+  local task=namespace-task digest execution identity status cgroup probe row identity_file
   begin_scenario worker-namespace-confinement
   scenario_project
   step "checking the worker's containment and its seccomp profile"
@@ -467,9 +493,13 @@ namespace_confinement_scenario() {
   digest="$(applied_profile)"
   step "running a task and reading its execution"
   scenario_tool submit "$url" "$smoke_directory/workflows.json" "$task"
+  identity_file="$(mktemp)"
+  await_condition "$START_SECONDS" capture_identity "$identity_file" \
+    || fail_scenario "the execution's status and cgroup could not be read"
+  identity="$(cat "$identity_file")"
+  rm -f "$identity_file"
   await_condition "$START_SECONDS" has_started "$task" || fail_scenario "the execution did not start"
   execution="$(task_executions "$task" | cut -d ' ' -f 1)"
-  identity="$(execution_identity)"
   status="$(printf '%s\n' "$identity" | sed -n 1p)"
   cgroup="$(printf '%s\n' "$identity" | sed -n 2p)"
   expect_equal "the execution's cgroup" "$cgroup" "0::/executions/$execution"
