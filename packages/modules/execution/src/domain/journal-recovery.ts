@@ -29,10 +29,11 @@ export function planJournalRecovery(snapshot: JournalSnapshot): readonly Recover
 // An ended assignment launches nothing more, like a cancelled one.
 function recoverIntent(intent: JournaledIntent, snapshot: JournalSnapshot): RecoveryAction[] {
   const executions = snapshot.executions.filter((execution) => execution.assignmentId === intent.assignmentId);
-  const cancelled = intent.ended || isCancelled(intent, executions, snapshot.cancellations);
-  const actions = executions.flatMap((execution) => recoverExecution(execution, cancelled));
+  const cancelled = (execution?: JournaledExecution): boolean => isCancelled(intent, execution, snapshot.cancellations);
+  const stopped = intent.ended || cancelled(executions.at(-1));
+  const actions = executions.flatMap((execution) => recoverExecution(execution, stopped || cancelled(execution)));
   const rejectedFinally = executions.some((execution) => execution.authorizations.some(({ outcome }) => outcome === 'rejected-final'));
-  if (!cancelled && !rejectedFinally && executions.every((execution) => endsWithoutProcess(execution))) {
+  if (!stopped && !rejectedFinally && executions.every((execution) => endsWithoutProcess(execution))) {
     actions.push({ kind: 'continue-launch', assignmentId: intent.assignmentId });
   }
   return actions;
@@ -66,12 +67,14 @@ function lastOutcome(execution: JournaledExecution): AuthorizationOutcome | unde
   return execution.authorizations.at(-1)?.outcome;
 }
 
+// An execution target stops only the execution it names; it stops the intent
+// when that is the intent's last execution, the one a relaunch would follow.
 function isCancelled(
   intent: JournaledIntent,
-  executions: readonly JournaledExecution[],
+  execution: JournaledExecution | undefined,
   cancellations: readonly JournaledCancellation[],
 ): boolean {
   return cancellations.some(({ target }) => target.kind === 'attempt'
     ? target.attemptId === intent.attemptId
-    : executions.some((execution) => execution.executionId === target.executionId));
+    : target.executionId === execution?.executionId);
 }
