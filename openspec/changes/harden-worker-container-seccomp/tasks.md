@@ -21,4 +21,5 @@
 - [x] 3.6 Update `docs/local-installation.md`: the profile, its pinned source, the refresh procedure, and the scenario
 - [x] 3.7 Run `make verify`
 - [ ] 3.8 `make verify-linux-cgroup` on the x86_64 iMac (coordinator)
-- [ ] 3.9 Independent review
+- [x] 3.9 Independent review pass 1 (0 Critical, 0 High, 3 Medium, 11 Low), all findings fixed, the scenario and the smoke rerun, and `make verify` passed
+- [ ] 3.10 Independent review pass 2

@@ -6,7 +6,7 @@ G2 work item 25, first part (25a), `harden-worker-container-seccomp`, assigned b
 
 ## Revision and environment
 
-- Base: `origin/dev` at `3321cf2`. Branch `harden-worker-container-seccomp`. Phase 1 (reproduction and options): `535d5a8`. Phase 2 (option b1): `039ec49` (profile, derivation, Compose) and `a13894c` (scenario), the commit both evidence records name; the evidence runs ran on that tree with only `results.jsonl` and documents changed afterwards. Documents: `9338411` and this commit.
+- Base: `origin/dev` at `3321cf2`. Branch `harden-worker-container-seccomp`. Phase 1 (reproduction and options): `535d5a8`. Phase 2 (option b1): `039ec49` (profile, derivation, Compose) and `a13894c` (scenario), with documents in `9338411` and `d8d36ca` (self-check), the head that review pass 1 reviewed. Review pass 1 fixes: `c39cf68` (derivation guard, applied profile) and `28ce9d9` (scenario probes), the commit both current evidence records name; the evidence runs ran on that tree, and only `results.jsonl` and the documents of the following docs commit changed after it. The records of `a13894c` were replaced.
 - Host: Apple Silicon Mac, macOS 26.6.2 (build 25G83, Darwin 25.6.0), `arm64`; Node.js 24.22.1 from `.nvmrc`, via `nvm use`.
 - Engine: Docker Desktop, Docker Engine 29.6.1 (server `GitCommit 8ec5ab3`), server architecture `aarch64`, kernel 6.12.76-linuxkit, `SecurityOptions: name=seccomp,profile=builtin name=cgroupns`; Docker Compose v5.2.0. Images built for linux/arm64 by `scripts/installation.sh build` with the `make installation-build` pins (Ubuntu 24.04 digest, Node.js 24.22.1 tarball SHA-256).
 
@@ -28,19 +28,19 @@ G2 work item 25, first part (25a), `harden-worker-container-seccomp`, assigned b
 The worker container ran with the item 23b security settings (`--cap-drop ALL`, `--cap-add CHOWN,DAC_OVERRIDE,KILL,SETGID,SETPCAP,SETUID,SYS_ADMIN`, `--security-opt apparmor=unconfined --security-opt no-new-privileges=true`, `--cgroupns private`, `--init`). A faithful execution was reproduced as a child of the worker's `setpriv`:
 
 ```
-setpriv --bounding-set=-all,+setuid,+setgid,+kill --reuid=10003 --regid=10003 --clear-groups -- bash -c '…'
+docker exec rr-worker setpriv --bounding-set=-all,+setuid,+setgid,+kill --reuid=10003 --regid=10003 --clear-groups -- bash -c '<commands>'
 ```
 
-Execution state: `Uid 10003`, `CapBnd 00000000000000e0`, `CapEff 0`, `NoNewPrivs 1`, `Seccomp 2`, `Seccomp_filters 1`.
+`rr-worker` was the probe container. Execution state: `Uid 10003`, `CapBnd 00000000000000e0`, `CapEff 0`, `NoNewPrivs 1`, `Seccomp 2`, `Seccomp_filters 1`. The commands, run in that one `bash -c`, and their outputs in summary; [design.md](design.md#reproduction-2026-10-26-apple-silicon-macos-docker-desktop) records each output in full.
 
-```
-cat /proc/sys/user/max_user_namespaces   → 31337
-unshare -U true                          → rc=0
-unshare -m true                          → Operation not permitted (rc=1)
-unshare -Urm 'mount -t tmpfs none /mnt'  → MOUNTED; tmpfs on /mnt (rc=0)
-unshare -UrmpniC --fork …                → all namespaces + tmpfs ok (rc=0)
-mount --bind /tmp /mnt                   → must be superuser (rc=32)
-```
+| Command | Output |
+| --- | --- |
+| `cat /proc/sys/user/max_user_namespaces` | `31337` |
+| `unshare -U true 2>&1; echo "rc=$?"` | `rc=0` |
+| `unshare -m true 2>&1; echo "rc=$?"` | `unshare: unshare failed: Operation not permitted`, `rc=1` |
+| `unshare -Urm bash -c "mount -t tmpfs none /mnt && echo MOUNTED && mount \| grep /mnt" 2>&1; echo "rc=$?"` | `MOUNTED`, `none on /mnt type tmpfs (rw,relatime,uid=10003,gid=10003)`, `rc=0` |
+| `unshare -UrmpniC --fork bash -c "echo ALLNS-ok; mount -t tmpfs none /mnt && echo tmpfs-ok" 2>&1; echo "rc=$?"` | `ALLNS-ok`, `tmpfs-ok`, `rc=0` |
+| `mount --bind /tmp /mnt 2>&1; echo "rc=$?"` | `mount: /mnt: must be superuser to use mount.`, `rc=32` |
 
 Result: the escape reproduces (user namespace + tmpfs mount) despite no capabilities, `no_new_privs=1`, and an active seccomp filter. Docker's default profile (option a) is in effect and does not block it while the container holds `CAP_SYS_ADMIN`.
 
@@ -65,36 +65,76 @@ On 2026-10-26 the owner's delegate decided option b1, on behalf of the owner (aw
 
 ## Phase 2: commands and results
 
-Each scenario ran at commit `a13894c` on 2026-10-26 with `TASKELITH_SCENARIO_RESULTS=openspec/changes/harden-worker-container-seccomp/results.jsonl`, on a fresh throwaway project that it removed before it recorded the pass; both exited 0. The records are in [results.jsonl](results.jsonl).
+Each scenario ran at commit `28ce9d9` on 2026-10-26 with `TASKELITH_SCENARIO_RESULTS=openspec/changes/harden-worker-container-seccomp/results.jsonl`, on a fresh throwaway project that it removed before it recorded the pass; both exited 0. The records are in [results.jsonl](results.jsonl); they replace the records of `a13894c` (seeds 1907525133 and 2972196964, both passed), made before the review pass 1 fixes.
 
 | Command | Seed | Result |
 |---|---|---|
-| `make scenario-worker-namespace-confinement` | 1907525133 | passed |
-| `make scenario-fresh-composition` (runs `make installation-smoke` with the profile) | 2972196964 | passed |
+| `make scenario-worker-namespace-confinement` | 3630930604 | passed |
+| `make scenario-fresh-composition` (runs `make installation-smoke` with the profile) | 3458861485 | passed |
 
-Native acceptance row of the confinement scenario, as recorded: OS Docker Desktop (host Darwin 25.6.0, arm64); architecture aarch64; kernel 6.12.76-linuxkit; file system `ext2/ext3` (the worker data root, as `stat -f -c %T` names the ext family's magic number), storage driver overlay2; Docker engine 29.6.1; worker image `sha256:f05cd6248b954f52e4ba8a2ee780b43b48d6504e8c03c7484ce04e44bc51b129`; seccomp profile SHA-256 `10f28c01…0e13c36`. As uid 10003 with status `Uid: 10003 10003 10003 10003 CapEff: 0000000000000000 CapBnd: 00000000000000e0 NoNewPrivs: 1 Seccomp: 2`:
+Native acceptance row of the confinement scenario, as recorded: OS Docker Desktop (host Darwin 25.6.0, arm64); architecture aarch64; kernel 6.12.76-linuxkit; file system `ext2/ext3` (the worker data root, as `stat -f -c %T` names the ext family's magic number), storage driver overlay2; Docker engine 29.6.1; Docker Compose 5.2.0; worker image `sha256:b758341ba7aa8eab291ad4d932495f3cc8f9aafc2889a540974e584004d555d9`; applied seccomp profile SHA-256 `4c5d107dfd1a29cc77b7121dfd324c217e44edf7c63779da3d4c65fde006aed1`, the `seccomp=` value of the worker container's `HostConfig.SecurityOpt`, equal to `worker.json` (it is the SHA-256 of `worker.json` in compact form, as Docker's CLI sends it).
 
-```
-unshare -U true                           → unshare: unshare failed: Operation not permitted
-unshare -Urm mount -t tmpfs none /mnt     → unshare: unshare failed: Operation not permitted
-```
+The execution `9c951886-dba1-4496-9219-ad0610749a39`, as the control plane held it, ran in `0::/executions/9c951886-dba1-4496-9219-ad0610749a39` with status `Uid: 10003 10003 10003 10003 CapEff: 0000000000000000 CapBnd: 00000000000000e0 NoNewPrivs: 1 Seccomp: 2 Seccomp_filters: 1` and exited 0. The probes ran as the execution account below the worker's `setpriv` with the same status, each through `docker compose exec -T worker setpriv --bounding-set=-all,+setuid,+setgid,+kill --inh-caps=-all --reuid=10003 --regid=10003 --clear-groups -- <command>`:
 
-The worker kept `KILL`, `SETGID`, and `SETUID` only (`check_containment`), `executions/` existed and took a cgroup write, and a task's execution ran in `0::/executions/bed986a0-db70-4951-837e-55f4721eb7e6` and exited 0. The fresh composition stored the smoke task as ended, exited with code 0 and a proven start. Afterwards no container, image, or volume of either project remained.
+| Command | Output |
+| --- | --- |
+| `unshare -U true` | `unshare: unshare failed: Operation not permitted` |
+| `unshare -Urm mount -t tmpfs none /mnt` | `unshare: unshare failed: Operation not permitted` |
+| `perl -e "$SYSCALL_PROBE" 435 0 0` (`clone3`) | `errno 38` |
+| `perl -e "$SYSCALL_PROBE" 220 268435473 0 0 0 0` (`clone`, `CLONE_NEWUSER \| SIGCHLD`) | `errno 1` |
+| `nsenter --user=/proc/self/ns/user true` (`setns`) | `nsenter: reassociate to namespace 'ns/user' failed: Operation not permitted` |
+
+`SYSCALL_PROBE` is the Perl program in `scripts/installation-scenarios.sh`. The worker kept `KILL`, `SETGID`, and `SETUID` only (`check_containment`), and `executions/` existed and took a cgroup write. The fresh composition stored the smoke task as ended, exited with code 0 and a proven start. Afterwards no container, image, or volume of either project remained.
+
+Discrimination, checked before the reruns with a probe container of the base image (`cap_add: [SETUID, SETGID, KILL, SETPCAP, SYS_ADMIN]`, `apparmor=unconfined`, `no-new-privileges=true`) as uid 10003 below the same `setpriv`, with the worker profile and then without any (Docker's default profile with `SYS_ADMIN`):
+
+| Probe | With `worker.json` | Without |
+| --- | --- | --- |
+| `clone3` (435) | `errno 38` | `errno 22` |
+| `clone` with `CLONE_NEWUSER` | `errno 1` | `created` |
+| `nsenter --user=/proc/self/ns/user true` | `nsenter: reassociate to namespace 'ns/user' failed: Operation not permitted` | `nsenter: reassociate to namespace 'ns/user' failed: Invalid argument` |
+| `unshare -U true` | `unshare failed: Operation not permitted` | succeeds |
+| `clone` with `SIGCHLD` only | `created` | `created` |
 
 ## Gates
 
 - `npm run openspec -- validate harden-worker-container-seccomp --strict`: PASS.
-- `make verify`: PASS on 2026-10-26, on the tree of this documentation commit (code at `a13894c` plus these documents): 1802 tests, 1800 passed, 0 failed, 2 skipped (the existing Linux-only skips); coverage 99.26 % lines, 91.88 % branches, 98.89 % functions; the comment rule, the archive dry run, and the package check passed.
+- `make verify`: PASS on 2026-10-26, run on the working tree of `28ce9d9` with exactly the documents and `results.jsonl` of the docs commit that follows it (nothing else changed): 1811 tests, 1809 passed, 0 failed, 2 skipped (the existing Linux-only skips); coverage 99.27 % lines, 91.89 % branches, 98.89 % functions; the comment rule, the archive dry run, and the package check passed. Before review pass 1 it passed the same way on the tree of `9338411` (1802 tests, 1800 passed, 2 skipped).
 - `make scenario-worker-namespace-confinement` and `make scenario-fresh-composition`: PASS (above).
 - `make verify-linux-cgroup`: N/A on this host — the target requires an `x86_64` Docker host (its guard, and the `tools/linux-cgroup` image pins linux-x64 Node); this host is aarch64, and the tooling is unchanged. The coordinator runs it on the x86_64 iMac. It starts its own `--privileged` container without Compose, which disables seccomp, so it covers the supervisor's cgroup code, not the worker profile; on x86_64 the profile is checked by `make scenario-worker-namespace-confinement`.
 
 ## Remaining gates / open items
 
 - `make verify-linux-cgroup` and, for the profile on x86_64, `make scenario-worker-namespace-confinement` on the x86_64 iMac (coordinator).
-- Independent review: pending.
+- Independent review: pass 2 pending.
 - An `x86_64` Linux host with AppArmor or SELinux is not yet observed (Docker Desktop aarch64 only).
 - The profile follows the engine; a newer engine's default profile is adopted by the refresh procedure in `docs/local-installation.md`.
 
 ## Independent review
+
+### Pass 1
+
+Claude Code, model `claude-opus-5-5` (confirmed in `modelUsage`), effort high, permission mode `plan`, editing tools disallowed. Session `788ca58c-86d8-480b-baae-23d86aa9fb68`, reviewed HEAD `d8d36ca`. The SHA-256 snapshot before and after was `1c52c8bc4ed9cf9f2b09b8604d4d498fc79a3b1d6f9ad051885010ede9ac2e3f`, unchanged. Invocation: `claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json < /dev/null`.
+
+The reviewer confirmed the pin (both upstream SHA-256 values match), that the derivation differs from upstream only by the carve-out, and that nothing the worker needs is newly refused. Findings: 0 Critical, 0 High, 3 Medium, 11 Low. All were fixed in `c39cf68`, `28ce9d9`, and the following docs commit; the fixes are unreviewed until pass 2.
+
+| ID | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| M1 | Medium | The scenario could pass when the profile is not what refuses: `unshare -U` gives `EPERM` on hosts with `unprivileged_userns_clone=0` or an LSM policy even if Compose ignored `security_opt`; `profile_digest` hashed the working-tree file, not the applied profile. | `applied_profile` reads `docker inspect --format '{{json .HostConfig.SecurityOpt}}'` of the worker container, and `appliedProfileDigest` in `scripts/worker-seccomp-profile.ts` requires exactly one `seccomp=` value equal to `worker.json` and returns the SHA-256 of the applied text, which the record carries. As uid 10003, `clone3` must answer `ENOSYS`. The `unshare` probes match `unshare failed: Operation not permitted`. |
+| M2 | Medium | The spec claims `setns` and `clone`/`clone3` namespace creation are refused, but only `unshare(2)` was probed. | `probe_namespaces` adds `clone3` (Perl `syscall(435, 0, 0)`, `errno 38`), `clone` with `CLONE_NEWUSER \| SIGCHLD` (220 on aarch64, 56 on x86_64, `errno 1`), and `setns` (`nsenter --user=/proc/self/ns/user true`, `Operation not permitted`; without seccomp `Invalid argument`). The spec delta adds the scenarios "Every namespace call refused by the profile" and "Profile not applied". |
+| M3 | Medium | Nothing guarded against a refreshed upstream that adds an unconditional `clone` allowance. | `workerProfile` throws `ProfileShapeError` when any `SCMP_ACT_ALLOW` rule without `args` still names a namespace call, whatever its `includes`; the test lists `clone` with `clone3`, `setns`, and `unshare`, and a new test feeds an unconditional `clone` allowance. |
+| L1 | Low | `design.md`: the mask is `0x7E020000` (2114060288, with `CLONE_NEWNS`), not `0x7E000000`. | Corrected, with the flags it covers. |
+| L2 | Low | `design.md`: `clone3` missing from the calls `SYS_ADMIN` unlocks. | Added. |
+| L3 | Low | `proposal.md` promised "the exact commands and outputs", but `design.md` showed outputs the commands shown do not produce, and `verification.md` abbreviated commands with "…". | `design.md` and `verification.md` now give the exact commands of the phase 1 block with their full outputs, and the phase 2 probes with their commands; `proposal.md` says "the commands and their outputs". |
+| L4 | Low | The probe's status was compared with a constant, not with the real execution. | The scenario reads the running execution's `Uid`, `CapEff`, `CapBnd`, `NoNewPrivs`, `Seccomp`, and `Seccomp_filters` from `/proc/<pid>/status` and requires the probe's to equal them, and still requires uid 10003 with no effective capability. |
+| L5 | Low | Any `0::/executions/?*` cgroup was accepted. | The cgroup must equal `0::/executions/<executionId>` with the execution ID from `task_executions`. |
+| L6 | Low | No stub case had the first probe refused and `-Urm` succeed; `NO_DELEGATION` also failed `test -d`, so the cgroup write branch was never reached. | Stub tests now let each probe succeed (`ESCAPE`) or fail otherwise (`OTHER`), with a case for a refused user namespace and a succeeding `-Urm`; `NO_PARENT` and `NO_CGROUP_WRITE` are separate. Added cases for a missing profile, unequal and non-execution statuses, a wrong cgroup, x86_64, and an unknown architecture. |
+| L7 | Low | The CLI `check` mode was unused. | Removed; the CLI has `write` (`make worker-seccomp-profile`) and `applied`, which the scenario uses. |
+| L8 | Low | `docs/local-installation.md` lost the note that x86_64 Linux hosts with AppArmor or SELinux remain open. | Restored in the seccomp section. |
+| L9 | Low | `verification.md` did not name the exact revision `make verify` ran at. | The gate names it. |
+| L10 | Low | The profile will refuse a harness's own user-namespace sandbox (for example bubblewrap) in the `worker-harnesses` variant. | Recorded as an open question in `design.md`. |
+| L11 | Low | The recorded row lacked the Compose version. | `platform` adds `docker compose version --short`. |
+
+### Pass 2
 
 Pending.

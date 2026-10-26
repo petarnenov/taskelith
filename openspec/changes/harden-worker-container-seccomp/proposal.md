@@ -6,7 +6,7 @@ This change (item 25a) reproduces that risk under the real containment, evaluate
 
 ## What Changes
 
-- **Reproduction evidence.** `design.md` records the exact commands and outputs showing that, for a uid-10003 execution with `CapBnd` `e0` (no `SYS_ADMIN`), `no_new_privileges=1`, and an active seccomp filter, `unshare -U` and `unshare -Urm` followed by `mount -t tmpfs` succeed, and the current seccomp/capability/`no_new_privs` state of both the worker process and an execution.
+- **Reproduction evidence.** `design.md` records the commands and their outputs showing that, for a uid-10003 execution with `CapBnd` `e0` (no `SYS_ADMIN`), `no_new_privileges=1`, and an active seccomp filter, `unshare -U` and `unshare -Urm` followed by `mount -t tmpfs` succeed, and the current seccomp/capability/`no_new_privs` state of both the worker process and an execution.
 - **Options.** `design.md` evaluates each option against cost, risk, reversibility, the worker's own needs (cgroup delegation, supervisor, journal, NATS), and whether it needs product code, with the tested effect of each.
 - **Decision.** The owner's delegate chose option b1 on 2026-10-26 (away run `20261026T170116Z-opencode-68419`).
 - **Seccomp profile (phase 2).** `infra/installation/seccomp/docker-default.json`, a byte-for-byte copy of Docker Engine 29.6.1's default profile pinned by moby commit and SHA-256, and `infra/installation/seccomp/worker.json`, derived from it by `scripts/worker-seccomp-profile.ts` (`make worker-seccomp-profile`) with only the `CAP_SYS_ADMIN` carve-out of `unshare`, `setns`, `clone`, and `clone3` removed. A test in `make verify` proves the copy and the derivation. The Compose `worker` service adds `seccomp=./seccomp/worker.json`.
