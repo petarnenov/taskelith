@@ -244,19 +244,23 @@ api_url() {
 }
 
 # The capabilities of the worker process: KILL, SETGID, and SETUID only.
-WORKER_CAPABILITIES='CapEff: 00000000000000e0 CapBnd: 00000000000000e0 CapAmb: 0000000000000000'
+WORKER_CAPABILITIES='CapInh: 0000000000000000 CapPrm: 00000000000000e0 CapEff: 00000000000000e0 CapBnd: 00000000000000e0 CapAmb: 0000000000000000'
 
 # The execution account (uid 10003) cannot move a process into the worker's
 # cgroup, and the worker process holds exactly its three capabilities.
 check_containment() {
-  local capabilities
-  if compose --profile worker exec -T --user 10003:10003 worker \
-    bash -c 'echo $$ > /sys/fs/cgroup/init/cgroup.procs' 2>/dev/null; then
+  local refusal capabilities
+  if refusal="$(compose --profile worker exec -T --user 10003:10003 worker \
+    bash -c 'echo $$ > /sys/fs/cgroup/init/cgroup.procs' 2>&1)"; then
     echo "installation.sh: the execution account can write the worker's cgroup.procs" >&2
     exit 1
   fi
+  case "$refusal" in
+    *"Permission denied"*) ;;
+    *) echo "installation.sh: the cgroup.procs probe failed: $refusal" >&2; exit 1 ;;
+  esac
   capabilities="$(compose --profile worker exec -T worker bash -c \
-    'grep -E "^Cap(Bnd|Eff|Amb):" "/proc/$(pgrep -o -f "^node apps/worker/dist/main.js")/status"' \
+    'grep -E "^Cap(Inh|Prm|Eff|Bnd|Amb):" "/proc/$(pgrep -o -f "^node apps/worker/dist/main.js")/status"' \
     | tr -s ' \t\n' ' ' | sed 's/ $//')"
   if [ "$capabilities" != "$WORKER_CAPABILITIES" ]; then
     echo "installation.sh: the worker process has other capabilities: $capabilities" >&2
