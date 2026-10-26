@@ -814,7 +814,7 @@ describe('starts', () => {
   });
 });
 
-function observationEvidence(): unknown[] {
+function observationEvidence(): (readonly unknown[])[] {
   return logs.records.filter((record) => record.event === 'execution.observation.evidence')
     .map((record) => [record.fields.observationType, record.fields.recoveryEpoch, record.fields.quarantined]);
 }
