@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
-import { SPACE_REFUSAL_REASON, type WorkerJournal } from '@taskelith/execution';
+import { launchRejection, SPACE_REFUSAL_REASON, type WorkerJournal } from '@taskelith/execution';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { id, value } from '@taskelith/testing';
@@ -536,4 +536,67 @@ test('a live launch whose seal lost to a claim commits W4 and uncertain despite 
   assert.deepEqual([first?.recordWritten, first?.uncertain], [true, true]);
   assert.equal(authority.requests.length, 1, 'an uncertain execution ends the launch');
   assert.deepEqual([failures, spaceBackoffs().length], [[], 3]);
+});
+
+// A launch of this process that runs its execution to a clean exit.
+function launchToExit(answers: FakeAuthority['answers']): void {
+  value(journal.recordCommand(offer()));
+  authority.answers = answers;
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+}
+
+function onlyExecution() {
+  const executions = value(journal.snapshot()).executions;
+  assert.equal(executions.length, 1, 'the same execution is kept');
+  return executions[0]!;
+}
+
+test('a W2 refused for space is retried before any request, for the same operation', async () => {
+  launchToExit([granted()]);
+  spaceRefusals = new Map([['beginAuthorization', 2]]);
+  const pendingAtRequest: boolean[] = [];
+  authority.onRequest = () => {
+    pendingAtRequest.push(value(journal.snapshot()).executions.length === 1);
+  };
+  await startOnce();
+  assert.deepEqual(pendingAtRequest, [true], 'the one request followed the commit of W2');
+  const execution = onlyExecution();
+  assert.deepEqual([execution.state, execution.authorizations.length], ['exited', 1]);
+  assert.equal(authority.requests[0]?.operationId, execution.authorizations[0]?.operationId);
+  assert.deepEqual([failures, spaceBackoffs()], [[], [7_500, 15_000]]);
+});
+
+test('a grant refused for space is retried, and the supervisor starts only after it commits', async () => {
+  launchToExit([granted()]);
+  spaceRefusals = new Map([['recordGrant', 2]]);
+  await startOnce();
+  const execution = onlyExecution();
+  assert.deepEqual([execution.state, execution.authorizations.map(({ outcome }) => outcome)], ['exited', ['granted']]);
+  assert.deepEqual(supervisions.all[0]?.calls.slice(0, 2), ['prepare', 'start']);
+  assert.deepEqual([failures, spaceBackoffs().length, authority.requests.length], [[], 2, 1]);
+});
+
+test('a W4 refused for space is retried before the supervisor starts, not left unhandled', async () => {
+  launchToExit([granted()]);
+  let startedBeforeW4 = false;
+  spaceRefusals = new Map([['recordExecutionRecordWritten', 2]]);
+  onSpaceRefused = () => {
+    startedBeforeW4 ||= supervisions.all[0]?.calls.includes('start') === true;
+  };
+  await startOnce();
+  const execution = onlyExecution();
+  assert.deepEqual([execution.state, execution.recordWritten, startedBeforeW4], ['exited', true, false]);
+  assert.deepEqual([failures, spaceBackoffs().length], [[], 2]);
+});
+
+test('a rejection and an expiry refused for space are retried, and the execution is authorized again', async () => {
+  launchToExit([ok({ kind: 'rejected', rejection: launchRejection('quarantined', 'restore') }), ok({ kind: 'expired' }), granted()]);
+  spaceRefusals = new Map([['recordLaunchRejection', 1], ['recordAuthorizationExpired', 2]]);
+  await startOnce();
+  const execution = onlyExecution();
+  assert.equal(execution.state, 'exited');
+  assert.deepEqual(execution.authorizations.map(({ outcome }) => outcome), ['rejected-retryable', 'expired', 'granted']);
+  assert.deepEqual([failures, spaceBackoffs().length, authority.requests.length], [[], 3, 3]);
 });
