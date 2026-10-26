@@ -117,3 +117,10 @@ The exit that the journal port's `recordExit` takes SHALL allow the termination 
 #### Scenario: Recovery evidence with a known status passed to the journal
 - **WHEN** code passes `recordExit` an exit with `namespace-ended` and an exit code
 - **THEN** type checking fails
+
+### Requirement: Writes refused for lack of space
+A write that SQLite refuses for lack of space SHALL roll back as a whole, leave the journal usable, fail with the reason `disk-full`, and call the hook the journal and the worker root accept for it, once per refusal.
+
+#### Scenario: Full disk at commit
+- **WHEN** the commit of a command is refused with `SQLITE_FULL`
+- **THEN** the journal holds no intent, the hook is called once, and the next write commits
