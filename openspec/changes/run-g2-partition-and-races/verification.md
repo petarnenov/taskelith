@@ -1,11 +1,11 @@
 ## Scope and source
 
-G2 work item 24, third part (24c), `run-g2-partition-and-races`, assigned by the coordinator on 2026-10-26: partition and reconnect through Toxiproxy (worker to NATS, control plane to PostgreSQL), the cancellation races a to h, and a stale ownership generation and a stale recovery epoch with two workers and seeded ordering. The owner's delegate decided that the scenarios run on test-side compositions of the real modules against the `make` services, with target `harness-composition`, without a crash seam in product code, an operator cancel API, a contract change, or a Compose override. The coordinator asked this change to adopt the 24a recorder (commit `3f9777d`, cherry-picked as `2fbbfe4`) and its requirements "Scenario result records" and "Opt-in scenario results file". Excluded: product fixes, the Compose scenarios (24a), and the process-launch crash windows and duplicate delivery, which the coordinator decided stay with 24b. Sources: [docs/g2-plan.md](../../../docs/g2-plan.md) item 24; [launch authorization](../../../docs/contracts/launch-authorization.md); [execution wire contracts](../../../docs/contracts/execution-wire-contracts.md); [worker journal](../../../docs/contracts/worker-journal.md); the [24a change](../run-g2-failure-scenarios-composition/proposal.md).
+G2 work item 24, third part (24c), `run-g2-partition-and-races`, assigned by the coordinator on 2026-10-26: partition and reconnect through Toxiproxy (worker to NATS, control plane to PostgreSQL), the cancellation races a to h, and a stale ownership generation and a stale recovery epoch with two workers and seeded ordering. The owner's delegate decided that the scenarios run on test-side compositions of the real modules against the `make` services, with target `harness-composition`, without a crash seam in product code, an operator cancel API, a contract change, or a Compose override. The coordinator asked this change to adopt the 24a recorder (commit `3f9777d`, cherry-picked as `2fbbfe4`) and its requirements "Scenario result records" and "Opt-in scenario results file". Excluded: product fixes, the Compose scenarios (24a), and the process-launch crash windows and duplicate delivery, which the coordinator decided stay with 24b. Sources: [docs/g2-plan.md](../../../docs/g2-plan.md) item 24; [launch authorization](../../../docs/contracts/launch-authorization.md); [execution wire contracts](../../../docs/contracts/execution-wire-contracts.md); [worker journal](../../../docs/contracts/worker-journal.md); the [24a change](../archive/2026-10-26-run-g2-failure-scenarios-composition/proposal.md).
 
 ## Revision and environment
 
-- Base: `origin/dev` at `f9ba7a5` with the cherry-picked 24a recorder, then `origin/dev` at `3321cf2` merged (`3c66b09`), which carries the 24a change itself. Branch `run-g2-partition-and-races`. Evidence runs at `739b51b`, the commit every record of `results.jsonl` names; only `verification.md` and `results.jsonl` change after it.
-- Host: Linux 6.8.0-147-generic, x86_64, 8 CPUs; Docker 27.3.1; Node.js 24.22.1 from `.nvmrc`.
+- Base: `origin/dev` at `f9ba7a5` with the cherry-picked 24a recorder, then `origin/dev` merged twice: `3321cf2` (`3c66b09`) and `c7f546a` (`5c6f2a8`), which archives the 24a change, so its active directory left this branch with that merge. Branch `run-g2-partition-and-races`. Evidence runs at `17ea7e7`, the commit every record of `results.jsonl` names; only `verification.md` and `results.jsonl` change after it.
+- Host: Linux 6.8.0-147-generic, x86_64, 8 CPUs; Docker 27.3.1; Node.js 24.22.1 from `.nvmrc` through `scripts/with-pinned-node.sh`, for the evidence runs and `make verify`.
 - Services: `make services-up` (PostgreSQL, NATS, Toxiproxy with routes `postgres` and `nats`). No delegated cgroup v2 subtree, so workers launch through the test-side process-group launch host (design decision 3).
 
 ## Author self-check and evidence check
@@ -29,7 +29,7 @@ G2 work item 24, third part (24c), `run-g2-partition-and-races`, assigned by the
 | `cancel-after-w4` (c) | Cancel once W4 or the start is journaled | W4 or start | passed (both, `SIGTERM`) |
 | `cancel-during-admission-pressure` (d) | Disk floor crossed after W1, cancel, relief | relief 0, 500, or 1000 ms later | passed (500 and 1000 ms) |
 | `cancel-crash-before-ack` (e) | Worker process `SIGKILL`s itself instead of acking the cancellation; restarted in-process | restart before or after the ack wait | passed (both; redelivery acked once) |
-| `invalidation-racing-grant` (f) | Held request and cancel released at offsets within 25 ms, 3 rounds | offsets | passed (seed `20261026` had a granted-then-revoked round) |
+| `invalidation-racing-grant` (f) | Held request and cancel released at offsets within 25 ms, 3 rounds | offsets | passed (seed `7` had a granted-then-revoked round) |
 | adopting macOS supervisor ignores a cancel (g) | Skipped | — | N/A on Linux: adoption is macOS observe-only, and the Linux process-group platform reports the record unusable; native acceptance item 25 covers it |
 | `unauthorized-start-cancels-only-that-execution` (h) | W2 to W5s of a new execution under the owning grant, written through the worker's journal | ids | expected failure B2 |
 | `rejected-launch-frees-slot` | One-slot worker, request held, cancel, release | ids | expected failure B3 |
@@ -45,8 +45,8 @@ Each is a node:test `todo` that runs, records `failed`, and does not fail `make 
 
 - Reproducer: `TASKELITH_TEST_SEED=7 node --experimental-strip-types --no-warnings --test --test-name-pattern="inventory exchange" test/g2-partition.test.ts`; seed `20261026` reproduces too.
 - Steps: the worker's broker route is cut until the control plane marks the worker lost (3 s), a task is submitted, the route is healed, the task exits, and the test counts `worker.inventory.requested` outbox rows over two 3 s windows.
-- Expected: at most 1 further request in 3 s after the task ended. Observed: 79 in both evidence runs; 76 to 80 in other runs; one diagnostic run counted 264, 525, and 789 rows at 10 s intervals, each request answered by a report with a new `requestId` and a higher `snapshot`.
-- Rate: intermittent. Failed in every evidence run (4 of 4 at seeds `20261026` and `7`) and in 4 of 6 consecutive reruns of the filter alone (seeds alternating); the 2 passing reruns sent at most 1 request.
+- Expected: at most 1 further request in 3 s after the task ended. Observed: 80 (seed `20261026`) and 78 (seed `7`) in the evidence runs; 76 to 80 in other runs; one diagnostic run counted 264, 525, and 789 rows at 10 s intervals, each request answered by a report with a new `requestId` and a higher `snapshot`.
+- Rate: intermittent. Failed in every evidence run of this change (6 of 6 at seeds `20261026` and `7`) and in 4 of 6 consecutive reruns of the filter alone (seeds alternating); the 2 passing reruns sent at most 1 request.
 - Hypothesis, unconfirmed: `receivePart` (`apps/control-plane/src/application/inventory-reconciliation.ts:70` to `88`, the `unsolicited` test at line 86) treats a report answering a superseded request, whose `snapshot` is still the highest, as unsolicited and requests again; once two requests are outstanding (a reconnect report and a request for an omitted unfinished assignment, in separate transactions), every answer is stale and the loop sustains itself.
 
 ### B2: an execution cancellation stops the whole intent
@@ -86,7 +86,7 @@ Each is a node:test `todo` that runs, records `failed`, and does not fail `make 
 | --- | --- |
 | `npm run openspec -- validate run-g2-partition-and-races --strict` | valid |
 | `npm run verify:comments` | every comment within the rule |
-| `make verify` | passed on 2026-10-26 at `739b51b` plus this change's `verification.md` and `results.jsonl`: 1805 tests, 1784 passed, 17 skipped, 4 todo, 0 failed, 0 cancelled; coverage 99.22 % lines, 92.00 % branches, 98.86 % functions; OpenSpec 69 items valid; the archive dry run of every active change is strictly valid |
+| `make verify` | passed on 2026-10-26 at `17ea7e7` plus this change's `verification.md` and `results.jsonl`: 1805 tests, 1784 passed, 17 skipped, 4 todo, 0 failed, 0 cancelled; coverage 99.22 % lines, 91.99 % branches, 98.86 % functions; OpenSpec 69 items valid; the archive dry run of every active change is strictly valid |
 
 ## Independent review
 
