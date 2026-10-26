@@ -31,7 +31,7 @@ The coordinator named section 3 of the wire contracts; the observation identity 
 
 ### D3: one identity per journal incarnation, without a format change
 
-`recordUnrecordedProcess` journals nothing while the outbox holds an entry with the same identity. After confirmation the entry is pruned, so a later start can derive it again; it keeps its identity, and the control plane records a known identity at a new sequence without its effect (`observation-consumption`, 21c decision 2), and the reconciliation queue records a duplicate nothing (`launch-reconciliation` "Reconciliation queue"). A table of reported containments would also stop this repeat, but it needs a journal format step, which the decision excluded.
+`recordUnrecordedProcess` journals nothing while the outbox holds an entry with the same identity. After confirmation the entry is pruned, so a later start can derive it again; it keeps its identity. On the normal path the control plane's inbox classifies the known identity, and its position at the new sequence is recorded without its effect (`observation-consumption`, 21c decision 2; `apps/control-plane/src/application/observation-service.ts`, `#record` and `#recordKnown`). Only if the inbox no longer holds the identity does the reconciliation queue's duplicate rule guard a second time (`launch-reconciliation` "Reconciliation queue": a duplicate records nothing). A table of reported containments would also stop this repeat, but it needs a journal format step, which the decision excluded.
 
 - **Alternative:** journal format 4 with a reported-containment table. Rejected: a contract and format change outside the decided scope.
 

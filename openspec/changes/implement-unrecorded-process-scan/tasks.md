@@ -19,5 +19,6 @@
 - [x] 3.1 proposal.md, design.md, spec delta (worker-journal)
 - [x] 3.2 `npm run openspec -- validate implement-unrecorded-process-scan --strict`
 - [x] 3.3 `make verify`
-- [x] 3.4 Independent review pass 1 (Claude Code Fable); findings M1 and L1 to L6 fixed
-- [ ] 3.5 verification.md review passes and handoff
+- [x] 3.4 Independent review pass 1 (Claude Code Fable); findings M1, L1, L2, L4, L6 fixed; L3 and L5 recorded as accepted risks in design.md
+- [x] 3.5 Review pass 2 (Claude Code Fable), Low only; findings L1 to L4 fixed without another review
+- [ ] 3.6 Handoff and integration by the coordinator
