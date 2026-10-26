@@ -215,18 +215,22 @@ function isUncertain(execution: Execution): boolean {
   return execution.evidence.some((evidence) => evidence.kind === 'uncertain');
 }
 
-// The relaunch E2 was granted before the sealed E1's `not-started` went
-// out, so E2's report alone ended E1 at the authority (defect D1).
-function assertRelaunchBeforeNotStarted(scenario: Scenario, relaunch: Execution): void {
+// The authority granted E1, then E2 before E1's `not-started` went out, so
+// E2's report alone ended E1 at the authority (defect D1).
+async function assertRelaunchBeforeNotStarted(scenario: Scenario, relaunch: Execution): Promise<void> {
   const { installation } = scenario;
   assert.deepEqual(installation.launchRejections(), [], 'no launch rejection');
   const sealed = journalSnapshot(installation).executions.filter(({ state }) => state === 'not-started');
   assert.equal(sealed.length, 1, `one sealed execution: ${JSON.stringify(sealed)}`);
   const [first] = sealed as [JournaledExecution];
   const order = establishedOrder(installation);
+  const granted = order.indexOf(`answered ${first.executionId} granted`);
   const answered = order.indexOf(`answered ${relaunch.id} granted`);
   const published = order.indexOf(`published not-started ${first.executionId}`);
-  assert.ok(answered >= 0 && published > answered, `E2 granted before E1's not-started went out: ${order.join('; ')}`);
+  assert.ok(granted >= 0 && answered > granted && published > answered, `E1 granted, then E2, then E1's not-started out: ${order.join('; ')}`);
+  const task = await installation.task(TASK_ID);
+  const known = executions(task).find(({ id }) => id === first.executionId);
+  assert.equal(known?.state, 'not-started', `the control plane holds E1 not-started: ${JSON.stringify(executions(task))}`);
 }
 
 // The control plane agrees with the worker's journal on every execution it
@@ -290,7 +294,7 @@ async function runCrashWindow(window: CrashWindow, signal: AbortSignal): Promise
     await scenario.settled(outcome);
     await restarted.stop();
     const execution = await recoveredExecution(scenario, outcome);
-    if (window.holdsNotStarted === true) assertRelaunchBeforeNotStarted(scenario, execution);
+    if (window.holdsNotStarted === true) await assertRelaunchBeforeNotStarted(scenario, execution);
     await scenario.noLeftovers();
     assert.equal(spawnedChildren(installation).length, spawns, 'spawns of the scripted child');
     const order = establishedOrder(installation);
