@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Launch rejections that reconcile or only record
-A launch rejected with `stale-recovery-epoch` or `execution-conflict` SHALL request the worker's inventory. A launch rejected with `assignment-not-active`, `stale-ownership-generation`, `attempt-not-launchable`, or `operation-mismatch` SHALL change no assignment or task. Every launch rejection of the producer's own assignment, and every stale one, SHALL clear the producer's capacity refusal.
+A launch rejected with `stale-recovery-epoch` or `execution-conflict` SHALL request the worker's inventory. A launch rejected with `assignment-not-active`, `stale-ownership-generation`, `attempt-not-launchable`, or `operation-mismatch` SHALL change no assignment or task. Every launch rejection of the producer's own assignment, at the current or a stale generation, SHALL clear the producer's capacity refusal.
 
 #### Scenario: Execution conflict
 - **WHEN** a worker reports a launch rejected with `execution-conflict`

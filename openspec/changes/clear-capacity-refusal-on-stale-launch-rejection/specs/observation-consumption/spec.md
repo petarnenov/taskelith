@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Stale ownership generation
-An observation about an attempt SHALL be rejected without effect, with the reason `stale-ownership-generation`, when its ownership generation differs from its task's, or, for an acceptance or refusal, from its assignment's. A rejected observation SHALL still be recorded in the inbox and the cursor. A stale launch rejection, `not-started`, or exit SHALL still clear its producer's capacity refusal, and change nothing else.
+An observation about an attempt SHALL be rejected without effect, with the reason `stale-ownership-generation`, when its ownership generation differs from its task's, or, for an acceptance or refusal, from its assignment's. A rejected observation SHALL still be recorded in the inbox and the cursor. A stale launch rejection, `not-started`, or exit of a producer's own assignment SHALL still clear its capacity refusal under the epoch gate, and nothing else.
 
 #### Scenario: Late acceptance after a refusal
 - **WHEN** an assignment was refused, its attempt was placed again at the next generation, and an acceptance at the earlier generation arrives
@@ -14,6 +14,14 @@ An observation about an attempt SHALL be rejected without effect, with the reaso
 #### Scenario: Stale not-started after a refusal for slots
 - **WHEN** a worker refuses the next generation's offer with `worker-slots-exhausted` and then reports a `not-started` at the earlier generation
 - **THEN** it changes no task, and the worker is eligible for placement again
+
+#### Scenario: Stale fact of another worker's assignment
+- **WHEN** a worker marked refused reports a launch rejection or a `not-started` at an earlier generation about another worker's assignment
+- **THEN** it is rejected, and the reporting worker stays marked refused
+
+#### Scenario: Epoch change before the stale fact is recorded
+- **WHEN** a stale `not-started` is refused for its generation, and the recovery epoch changes or restore quarantine begins before it is recorded
+- **THEN** it is recorded as rejected, and the worker stays marked refused
 
 ### Requirement: Acceptance and refusal
 An acceptance SHALL accept its assignment. A refusal SHALL end its assignment and release its reservation unless an execution under it can run, leaving the attempt to be placed again. A refusal with `worker-slots-exhausted` or `worker-capacity-exhausted` SHALL make the worker ineligible for placement until its next capacity declaration or slot-freeing observation, and one with `worker-admission-pressure` SHALL record the worker's admission pressure.
