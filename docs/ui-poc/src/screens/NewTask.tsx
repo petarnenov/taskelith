@@ -438,7 +438,6 @@ export function NewTaskScreen() {
                     aria-labelledby={'choice-' + choice.id}
                     orientation="vertical"
                     fullWidth
-                    size="xs"
                     value={values[choice.id]}
                     onChange={(v) => setValues({ ...values, [choice.id]: v })}
                     data={choice.options.map((o) => ({

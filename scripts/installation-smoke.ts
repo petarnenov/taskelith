@@ -65,13 +65,34 @@ export function parsedBody(text: string): unknown {
   }
 }
 
+// A submitted task: its run binds the smoke workflow.
+export interface SmokeTask {
+  readonly runId: string;
+  readonly taskId: string;
+}
+
+const SMOKE: SmokeTask = { runId: SMOKE_RUN, taskId: SMOKE_TASK };
+
 // Returns the ended task result once its attempt exited with code 0.
 export async function runSmoke(api: OperatorApi, workflow: SmokeWorkflow, clock: SmokeClock): Promise<unknown> {
-  await expectStatus(api.post('/runs', { runId: SMOKE_RUN, projectId: SMOKE_PROJECT, binding: bindingOf(workflow) }), 201, 'creating the run');
-  await expectStatus(api.post(`/runs/${SMOKE_RUN}/tasks`, { taskId: SMOKE_TASK, kind: 'planning', stageId: SMOKE_STAGE }), 201, 'submitting the task');
-  const result = await awaitEndedResult(api, clock);
+  await submitTask(api, workflow, SMOKE);
+  return awaitExitedWithZero(api, SMOKE, clock);
+}
+
+// Creates the task's run and submits the task, as the smoke does.
+export async function submitTask(api: OperatorApi, workflow: SmokeWorkflow, task: SmokeTask): Promise<void> {
+  await expectStatus(api.post('/runs', { runId: task.runId, projectId: SMOKE_PROJECT, binding: bindingOf(workflow) }), 201, 'creating the run');
+  await expectStatus(api.post(`/runs/${task.runId}/tasks`, { taskId: task.taskId, kind: 'planning', stageId: SMOKE_STAGE }), 201, 'submitting the task');
+}
+
+export async function awaitExitedWithZero(api: OperatorApi, task: SmokeTask, clock: SmokeClock): Promise<unknown> {
+  const result = await awaitEndedResult(api, task, clock);
   if (!exitedWithZero(result)) throw new SmokeFailure(`the task did not exit with code 0: ${JSON.stringify(result)}`);
   return result;
+}
+
+export function resultPath(task: SmokeTask): string {
+  return `/runs/${task.runId}/tasks/${task.taskId}/result`;
 }
 
 function bindingOf(workflow: SmokeWorkflow): Record<string, string> {
@@ -88,10 +109,10 @@ async function expectStatus(answer: Promise<Answer>, status: number, step: strin
   return answered;
 }
 
-async function awaitEndedResult(api: OperatorApi, clock: SmokeClock): Promise<unknown> {
+async function awaitEndedResult(api: OperatorApi, task: SmokeTask, clock: SmokeClock): Promise<unknown> {
   const deadline = clock.now() + RESULT_DEADLINE_MILLISECONDS;
   for (;;) {
-    const { body } = await expectStatus(api.get(`/runs/${SMOKE_RUN}/tasks/${SMOKE_TASK}/result`), 200, 'reading the result');
+    const { body } = await expectStatus(api.get(resultPath(task)), 200, 'reading the result');
     if ((body as { state?: unknown }).state === 'ended') return body;
     if (clock.now() >= deadline) throw new SmokeFailure(`the task did not end within ${RESULT_DEADLINE_MILLISECONDS} ms`);
     await clock.sleep(POLL_MILLISECONDS);
@@ -103,7 +124,7 @@ function exitedWithZero(result: unknown): boolean {
   return outcome?.kind === 'exited' && outcome.status?.kind === 'code' && outcome.status.code === 0 && outcome.startProven === true;
 }
 
-const SYSTEM_SMOKE_CLOCK: SmokeClock = { now: Date.now, sleep: (milliseconds) => delay(milliseconds) };
+export const SYSTEM_SMOKE_CLOCK: SmokeClock = { now: Date.now, sleep: (milliseconds) => delay(milliseconds) };
 
 // usage: installation-smoke.ts API_URL WORKFLOWS_FILE, with the operator
 // secret in TASKELITH_OPERATOR_TOKEN.

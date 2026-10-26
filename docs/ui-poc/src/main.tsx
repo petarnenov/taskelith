@@ -20,13 +20,13 @@ import {
   Title,
   Tooltip,
   UnstyledButton,
-  createTheme,
   useComputedColorScheme,
   useMantineColorScheme,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { PERSONAS, PocProvider, usePoc, type Screen } from './store';
 import { LaterGate } from './ui';
+import { TARGET_SIZE, theme } from './theme';
 import { ChevronIcon, InboxIcon, LogoIcon, MoonIcon, SunIcon } from './icons';
 import { BoardScreen } from './screens/Board';
 import { SessionScreen } from './screens/Session';
@@ -38,15 +38,6 @@ import { InboxScreen } from './screens/Inbox';
 import { IntegrationsScreen } from './screens/Integrations';
 import { PluginsScreen } from './screens/Plugins';
 import { StatesScreen } from './screens/States';
-
-const theme = createTheme({
-  primaryColor: 'indigo',
-  respectReducedMotion: true,
-  defaultRadius: 'md',
-  fontFamily: "'IBM Plex Sans', system-ui, sans-serif",
-  fontFamilyMonospace: "'IBM Plex Mono', ui-monospace, monospace",
-  headings: { fontFamily: "'IBM Plex Sans', system-ui, sans-serif", fontWeight: '600' },
-});
 
 const NAV: { screen: Screen; label: string; later?: string }[] = [
   { screen: 'board', label: 'Board' },
@@ -84,7 +75,6 @@ function ColorSchemeToggle() {
     <Tooltip label={'Switch to ' + next + ' theme'}>
       <ActionIcon
         variant="default"
-        size={44}
         aria-label={'Switch to ' + next + ' theme'}
         onClick={() => setColorScheme(next)}
       >
@@ -100,7 +90,6 @@ function NeedsYouButton() {
     <Button
       variant={screen === 'inbox' ? 'filled' : 'light'}
       color={needsYouCount ? 'orange' : 'teal'}
-      h={44}
       leftSection={<InboxIcon />}
       aria-current={screen === 'inbox' ? 'page' : undefined}
       aria-label={'Needs you: ' + needsYouCount + ' items'}
@@ -120,7 +109,7 @@ function AccountMenu() {
     <Menu position="bottom-end" width={300} withArrow>
       <Menu.Target>
         <UnstyledButton aria-label="Account menu">
-          <Avatar size={44} radius="xl" color="orange">
+          <Avatar size={TARGET_SIZE} radius="xl" color="orange">
             {persona.initials}
           </Avatar>
         </UnstyledButton>
@@ -191,7 +180,7 @@ function SignInScreen() {
               setError(undefined);
             }}
           />
-          <Button type="submit" h={44}>
+          <Button type="submit">
             Sign in
           </Button>
         </Stack>
@@ -242,14 +231,14 @@ function Shell() {
     >
       <AppShell.Header px="md">
         <Group h="100%" gap="sm" wrap="nowrap">
-          <Burger opened={opened} onClick={toggle} hiddenFrom="xl" size="sm" aria-label="Toggle navigation" />
+          <Burger opened={opened} onClick={toggle} hiddenFrom="xl" aria-label="Toggle navigation" />
           <Group gap={8} wrap="nowrap">
             <LogoIcon />
             <Text fw={700} size="lg" visibleFrom="xs">
               Taskelith
             </Text>
           </Group>
-          <Button variant="default" h={44} rightSection={<ChevronIcon />} visibleFrom="sm">
+          <Button variant="default" rightSection={<ChevronIcon />} visibleFrom="sm">
             <Text span c="dimmed" size="sm" mr={6}>
               Project
             </Text>
@@ -261,7 +250,6 @@ function Shell() {
             {NAV.map((item) => (
               <Button
                 key={item.screen}
-                h={44}
                 px="sm"
                 variant={activeNav(screen) === item.screen ? 'light' : 'subtle'}
                 color={activeNav(screen) === item.screen ? undefined : 'gray'}
