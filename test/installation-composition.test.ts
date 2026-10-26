@@ -18,6 +18,11 @@ interface Port {
 interface Service {
   readonly image: string;
   readonly user?: string;
+  readonly cgroup?: string;
+  readonly cap_drop?: readonly string[];
+  readonly cap_add?: readonly string[];
+  readonly security_opt?: readonly string[];
+  readonly init?: boolean;
   readonly environment?: Record<string, string | null>;
   readonly volumes?: readonly Mount[];
   readonly ports?: readonly Port[];
@@ -44,8 +49,9 @@ function makeVariable(name: string): string {
   return match[1];
 }
 
-function resolvedComposition(file: string, environment: Record<string, string>): Composition {
-  const output = execFileSync('docker', ['compose', '--file', file, '--profile', 'setup', '--profile', 'admin',
+function resolvedComposition(files: string | readonly string[], environment: Record<string, string>): Composition {
+  const fileArguments = (typeof files === 'string' ? [files] : files).flatMap((file) => ['--file', file]);
+  const output = execFileSync('docker', ['compose', ...fileArguments, '--profile', 'setup', '--profile', 'admin',
     '--profile', 'worker', 'config', '--format', 'json'], { env: { ...process.env, ...environment }, encoding: 'utf8' });
   return JSON.parse(output) as Composition;
 }
@@ -77,10 +83,8 @@ function isRoot(user: string): boolean {
   return ROOT_USERS.has(user.split(':')[0]);
 }
 
-const installation = resolvedComposition('infra/installation/compose.yaml', {
-  TASKELITH_IMAGE_TAG: 'composition-test',
-  TASKELITH_POSTGRES_PASSWORD: PASSWORD,
-});
+const COMPOSITION_ENVIRONMENT = { TASKELITH_IMAGE_TAG: 'composition-test', TASKELITH_POSTGRES_PASSWORD: PASSWORD };
+const installation = resolvedComposition('infra/installation/compose.yaml', COMPOSITION_ENVIRONMENT);
 const services = installation.services;
 const dockerfile = readFileSync('infra/installation/Dockerfile', 'utf8');
 const stages = dockerfileStages(dockerfile);
@@ -119,12 +123,43 @@ test('the effective user of a stage follows its parents', () => {
   assert.equal(isRoot('10002:10002'), false);
 });
 
-test('long-running services run unprivileged', () => {
+// The capabilities the worker entrypoint drops to before the worker runs.
+const ENTRYPOINT_CAPABILITIES = ['CHOWN', 'DAC_OVERRIDE', 'KILL', 'SETGID', 'SETPCAP', 'SETUID', 'SYS_ADMIN'];
+
+test('long-running services run unprivileged; only the worker entrypoint starts as root', () => {
   for (const target of ['control-plane', 'worker', 'worker-harnesses']) assert.equal(isRoot(effectiveUser(stages, target)), false, target);
   for (const [name, service] of Object.entries(services)) {
-    if (service.image.startsWith('taskelith-')) assert.equal(service.user, undefined, name);
+    if (service.image.startsWith('taskelith-') && name !== 'worker') assert.equal(service.user, undefined, name);
   }
   assert.equal(isRoot(services.nats.user ?? ''), false);
+  const worker = services.worker;
+  assert.equal(worker.user, '0:0');
+  assert.deepEqual([worker.cap_drop, [...(worker.cap_add ?? [])].sort()], [['ALL'], ENTRYPOINT_CAPABILITIES]);
+  assert.deepEqual([worker.cgroup, worker.init], ['private', true]);
+  assert.ok(worker.security_opt?.includes('no-new-privileges=true'));
+  assert.match(dockerfile, /^ENTRYPOINT \["bash", "\/opt\/taskelith\/infra\/installation\/worker-entrypoint\.sh"\]$/m);
+  const entrypoint = readFileSync('infra/installation/worker-entrypoint.sh', 'utf8');
+  assert.match(entrypoint, /^exec setpriv --bounding-set=-all,\+setuid,\+setgid,\+kill --inh-caps=-all --no-new-privs -- "\$@"$/m);
+});
+
+test('the worker image always names its containment parent and execution account', () => {
+  const environment = /^ENV (TASKELITH_CONTAINMENT_PARENT=.+)$/m.exec(dockerfile)?.[1].split(' ') ?? [];
+  assert.deepEqual(environment, [
+    'TASKELITH_CONTAINMENT_PARENT=/sys/fs/cgroup/executions', 'TASKELITH_EXECUTION_UID=10003', 'TASKELITH_EXECUTION_GID=10003',
+  ]);
+  assert.match(dockerfile, /^RUN useradd --uid 10003 --user-group .* taskelith-exec$/m);
+});
+
+test('the smoke adds only its workflow and the scripted process', () => {
+  const smoke = resolvedComposition(['infra/installation/compose.yaml', 'infra/installation/smoke/compose.yaml'], COMPOSITION_ENVIRONMENT);
+  const added = (name: string) => Object.entries(smoke.services[name].environment ?? {})
+    .filter(([variable]) => !Object.hasOwn(services[name].environment ?? {}, variable));
+  assert.deepEqual(added('control-plane'), [['TASKELITH_WORKFLOWS', '/opt/taskelith/infra/installation/smoke/workflows.json']]);
+  const [[variable, command] = []] = added('worker');
+  assert.equal(variable, 'TASKELITH_WORKER_COMMAND');
+  assert.equal((JSON.parse(command ?? '[]') as string[])[0], '/usr/local/bin/node');
+  assert.deepEqual(Object.keys(smoke.services).sort(), Object.keys(services).sort());
+  assert.equal(services.worker.environment?.TASKELITH_WORKER_COMMAND, undefined, 'only the smoke launches');
 });
 
 test('service data lives on named volumes', () => {
