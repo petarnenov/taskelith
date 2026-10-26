@@ -1,12 +1,27 @@
 # Verification: harden-worker-container-seccomp (25a)
 
-G2 work item 25, first part (25a): decide a seccomp profile for the item 23b worker container and check userns/mount under the execution account ([docs/g2-plan.md](../../../docs/g2-plan.md) item 25; item 23b residual risk `compose-installation-end-to-end` verification.md finding M2). Phase 1 reproduced the risk, evaluated the options, and recommended option (b). Phase 2 implements option b1, which the owner's delegate chose.
+## Scope and source
 
-## Environment
+G2 work item 25, first part (25a), `harden-worker-container-seccomp`, assigned by the coordinator on 2026-10-26: reproduce under the real containment the item 23b residual risk that the execution account (uid 10003) can create a user namespace and mount inside the worker container, evaluate the options, and, after the owner's decision, harden the worker container. Scope: only the private worker image and the Compose composition; excluded: product code (`apps/worker`, the supervisor adapters), contract changes, changes to `make verify-linux-cgroup` or other tooling, and the rest of item 25 (native acceptance on the other matrix entries). Sources: [docs/g2-plan.md](../../../docs/g2-plan.md) item 25; the [item 23b archive](../archive/2026-10-26-compose-installation-end-to-end/verification.md) (review finding M2 and the accepted residual risk); the [24a change](../run-g2-failure-scenarios-composition/verification.md) for the scenario and recorder style.
 
-- Host: Apple Silicon macOS (Darwin 25.6.0), Docker Desktop (arm64 Linux VM). `docker info` → `aarch64 / Docker Desktop`, server 29.6.1, `SecurityOptions: name=seccomp,profile=builtin name=cgroupns`.
-- Node.js 24.22.1 (`.nvmrc`), via `nvm use`.
-- Worker image built by `scripts/installation.sh build` with the `make installation-build` pins (Ubuntu 24.04 digest, Node 24.22.1 tarball SHA-256).
+## Revision and environment
+
+- Base: `origin/dev` at `3321cf2`. Branch `harden-worker-container-seccomp`. Phase 1 (reproduction and options): `535d5a8`. Phase 2 (option b1): `039ec49` (profile, derivation, Compose) and `a13894c` (scenario), the commit both evidence records name; the evidence runs ran on that tree with only `results.jsonl` and documents changed afterwards. Documents: `9338411` and this commit.
+- Host: Apple Silicon Mac, macOS 26.6.2 (build 25G83, Darwin 25.6.0), `arm64`; Node.js 24.22.1 from `.nvmrc`, via `nvm use`.
+- Engine: Docker Desktop, Docker Engine 29.6.1 (server `GitCommit 8ec5ab3`), server architecture `aarch64`, kernel 6.12.76-linuxkit, `SecurityOptions: name=seccomp,profile=builtin name=cgroupns`; Docker Compose v5.2.0. Images built for linux/arm64 by `scripts/installation.sh build` with the `make installation-build` pins (Ubuntu 24.04 digest, Node.js 24.22.1 tarball SHA-256).
+
+## Author self-check and evidence check
+
+- AGENTS.md: English only; implements only the decided option b1; no product code, OpenAPI, AsyncAPI, JSON schema, contracts document, or npm dependency change, and the published package is unchanged (`verify:package` passed). Changed: `infra/installation/compose.yaml` (one `security_opt` entry), the new `infra/installation/seccomp/` (upstream copy and derived profile), the new `scripts/worker-seccomp-profile.ts` and its test, the scenario in `scripts/installation-scenarios.sh` and `scripts/installation.sh` with stub tests, two `make` targets, `test/installation-composition.test.ts`, and `docs/local-installation.md`. Commits use `build`, `test`, and `docs` without attribution; nothing was pushed.
+- Comment rule: every new or changed comment in `.ts`, `.sh`, `.yaml`, and `Makefile` files has at most two lines of at most 80 characters; `npm run verify:comments` passes. The JSON profiles carry no comments.
+- ADR 0004: Clean Code and SOLID (the derivation is one small pure function with shape checks, separate from file I/O; the scenario reuses the 24a helpers); hexagonal architecture and microkernel are untouched (no product module changes); Docker (the hardening is a container setting); contract-first OpenAPI (no API change); Makefile-driven operation (`make scenario-worker-namespace-confinement`, `make worker-seccomp-profile`); SDLC through this OpenSpec change; coverage stays above 75 % (99.26 % lines, 91.88 % branches, 98.89 % functions).
+- Specs touched: `local-installation`, with two added requirements, "Execution namespace confinement" and "Pinned worker seccomp profile"; the existing "Unprivileged services with volume data" and "Delegated worker containment" still hold (the scenario and the smoke check them). `npm run openspec -- validate harden-worker-container-seccomp --strict` passes, and the archive dry run of `make verify` passes.
+- Docker hygiene: the runs removed only their own throwaway projects (`down --volumes`) and the two images built by hand for the phase 1 probe; no prune; no other project's container, image, or volume was touched.
+- Evidence check: the change's external links are
+  - `https://github.com/moby/moby/blob/8ec5ab355a34b2a0e2b3238d67bdefe77fefa982/vendor/github.com/moby/profiles/seccomp/default.json` (in `design.md`, this file, and `docs/local-installation.md`): pinned to a commit;
+  - `https://github.com/moby/profiles/blob/seccomp/v0.2.3/seccomp/default.json` (same files): pinned to the tag `seccomp/v0.2.3`;
+  - `https://raw.githubusercontent.com/moby/moby/8ec5ab355a34b2a0e2b3238d67bdefe77fefa982/vendor/github.com/moby/profiles/seccomp/default.json` (`UPSTREAM_URL` in `scripts/worker-seccomp-profile.ts`): pinned to a commit.
+  The `http://127.0.0.1:8080` addresses in `docs/local-installation.md` predate this change and are local, not external. Every other link is relative to the repository. No link needed a fix.
 
 ## Phase 1: reproduction commands and outputs
 
