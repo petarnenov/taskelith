@@ -25,3 +25,22 @@ test('a push is delete-only when it has refs and every one is a deletion', () =>
   assert.equal(isDeleteOnlyPush(''), false);
   assert.equal(isDeleteOnlyPush('\n  \n'), false);
 });
+
+test('a malformed ref line never makes a push delete-only', () => {
+  const zeros = none;
+  const malformed = [
+    `x ${zeros}`,
+    `(delete) ${zeros}`,
+    `(delete) ${zeros} refs/heads/old`,
+    `(delete) ${zeros} refs/heads/old ${other} extra`,
+    `(delete) ${'0'.repeat(39)} refs/heads/old ${other}`,
+    `(delete) ${'0'.repeat(41)} refs/heads/old ${other}`,
+    `(delete) ${zeros} refs/heads/old ${'g'.repeat(40)}`,
+    `(delete) ${zeros} refs/heads/old ${'b'.repeat(39)}`,
+  ];
+  for (const line of malformed) {
+    assert.equal(isDeleteOnlyPush(`${line}\n`), false, line);
+    assert.equal(isDeleteOnlyPush(`(delete) ${zeros} refs/heads/old ${other}\n${line}\n`), false, line);
+  }
+  assert.equal(isDeleteOnlyPush(`  (delete)\t${zeros}   refs/heads/old  ${other}  \n`), true);
+});

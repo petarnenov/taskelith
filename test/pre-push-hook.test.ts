@@ -38,7 +38,7 @@ function withHookFixture(body: (root: string, head: string) => void): void {
     }
     writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'fixture', type: 'module' }));
     mkdirSync(join(root, 'bin'));
-    writeFileSync(join(root, 'bin', 'make'), `#!/bin/sh\necho "${FAKE_VERIFY_OUTPUT}: $*"\n`);
+    writeFileSync(join(root, 'bin', 'make'), `#!/bin/sh\necho "${FAKE_VERIFY_OUTPUT}: $*"\nexit "$FAKE_VERIFY_STATUS"\n`);
     chmodSync(join(root, 'bin', 'make'), 0o755);
     git(root, 'init', '-q', '-b', 'feature');
     git(root, 'add', '-A');
@@ -49,7 +49,7 @@ function withHookFixture(body: (root: string, head: string) => void): void {
   }
 }
 
-function runHook(root: string, updates: string): HookRun {
+function runHook(root: string, updates: string, verifyStatus = 0): HookRun {
   const run = spawnSync('sh', ['.githooks/pre-push', 'origin', 'https://example.invalid/fixture.git'], {
     cwd: root,
     encoding: 'utf8',
@@ -58,6 +58,7 @@ function runHook(root: string, updates: string): HookRun {
       ...fixtureEnv,
       PATH: [join(root, 'bin'), dirname(process.execPath), '/usr/bin', '/bin'].join(':'),
       NVM_DIR: join(root, 'no-nvm'),
+      FAKE_VERIFY_STATUS: String(verifyStatus),
     },
   });
   return { status: run.status, verified: run.stdout.includes(`${FAKE_VERIFY_OUTPUT}: verify`), stdout: run.stdout };
@@ -79,13 +80,27 @@ test('a push that only deletes remote refs skips make verify', () => {
   });
 });
 
+function verifiedPushes(head: string): string[] {
+  const update = `refs/heads/feature ${head} refs/heads/feature ${none}\n`;
+  return [deletion('refs/heads/old') + update, update, ''];
+}
+
 test('a mixed, a normal, and an empty push run make verify', () => {
   withHookFixture((root, head) => {
-    const update = `refs/heads/feature ${head} refs/heads/feature ${none}\n`;
-    for (const updates of [deletion('refs/heads/old') + update, update, '']) {
+    for (const updates of verifiedPushes(head)) {
       const run = runHook(root, updates);
       assert.equal(run.status, 0);
       assert.equal(run.verified, true, `make verify did not run for ${JSON.stringify(updates)}`);
+    }
+  });
+});
+
+test('a failing make verify blocks a mixed, a normal, and an empty push', () => {
+  withHookFixture((root, head) => {
+    for (const updates of verifiedPushes(head)) {
+      const run = runHook(root, updates, 2);
+      assert.equal(run.verified, true, `make verify did not run for ${JSON.stringify(updates)}`);
+      assert.notEqual(run.status, 0, `the push was not blocked for ${JSON.stringify(updates)}`);
     }
   });
 });

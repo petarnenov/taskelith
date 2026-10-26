@@ -1,7 +1,8 @@
 // Node built-ins only, like the other hook helpers.
 
-// Any length, so that SHA-256 repositories match too.
 const DELETION = /^0+$/;
+// A SHA-1 or SHA-256 object name.
+const OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
 // Exit status of check-pre-push.ts that tells .githooks/pre-push to skip
 // make verify; Node.js, sh, and the wrappers use no such status.
@@ -21,8 +22,14 @@ export function unverifiedPushRefs(updates: string, head: string): string[] {
     .map(([localRef]) => localRef);
 }
 
-// A push without any ref is not delete-only, so it still runs make verify.
+function isDeletion(fields: readonly string[]): boolean {
+  if (fields.length !== 4) return false;
+  const [, localSha, , remoteSha] = fields;
+  return OBJECT_ID.test(localSha) && OBJECT_ID.test(remoteSha) && DELETION.test(localSha);
+}
+
+// Empty or malformed input is not delete-only, so it still runs make verify.
 export function isDeleteOnlyPush(updates: string): boolean {
   const refs = pushedRefs(updates);
-  return refs.length > 0 && refs.every(([, localSha]) => DELETION.test(localSha));
+  return refs.length > 0 && refs.every(isDeletion);
 }
