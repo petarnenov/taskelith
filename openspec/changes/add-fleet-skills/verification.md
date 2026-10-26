@@ -22,7 +22,8 @@ The change adds no external link. Its external facts are the Claude Code help te
 
 ## Checks
 
-PENDING
+- `npm run openspec -- validate add-fleet-skills --strict`: passed ("Change 'add-fleet-skills' is valid") on `b8ee1595`, before review pass 1, and on `a8e73db3`, after the pass 1 fixes.
+- `make verify`: passed (exit 0) on `b8ee1595` and on `a8e73db3`: 1951 tests, 1949 passed, 0 failed, 2 skipped; coverage of all files 99.29% lines, 92.11% (on `a8e73db3` 92.10%) branches, 99.04% functions; OpenSpec validation 70 passed, 0 failed; comment length, archive dry run, and package checks passed.
 
 ## Independent review
 
