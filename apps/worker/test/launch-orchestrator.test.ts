@@ -8,7 +8,7 @@ import {
 } from '@taskelith/execution';
 import { err, failure, ok } from '@taskelith/kernel';
 import { value } from '@taskelith/testing';
-import { LaunchOrchestrator } from '@taskelith/worker';
+import { LaunchOrchestrator, LIVENESS_POLLS } from '@taskelith/worker';
 import type { WorkerRoot } from '@taskelith/worker-journal';
 import {
   CLEAN_EXIT,
@@ -23,6 +23,8 @@ import {
   offer,
   temporaryJournal,
   unavailable,
+  type FakeSupervision,
+  type ScriptedFacts,
 } from './launch-fakes.ts';
 
 let root: WorkerRoot;
@@ -76,6 +78,24 @@ async function until(condition: () => boolean): Promise<void> {
   assert.ok(condition(), 'the condition never held');
 }
 
+// Bounds a watch that never decides, so a failing test still ends.
+function stopAfterReads(supervision: FakeSupervision, reads: number): void {
+  const read = supervision.read.bind(supervision);
+  supervision.read = async () => {
+    if (callCount(supervision, 'read') >= reads) controller.abort();
+    return read();
+  };
+}
+
+// Runs the change before the fake answers the recovery.
+function onRecover(supervision: FakeSupervision, change: () => void): void {
+  const recover = supervision.recover.bind(supervision);
+  supervision.recover = async (round) => {
+    change();
+    return recover(round);
+  };
+}
+
 function stopAfterRequests(count: number): void {
   authority.onRequest = () => {
     if (authority.requests.length >= count) controller.abort();
@@ -88,6 +108,15 @@ function facts(): ObservationFact[] {
 
 function factKinds(): string[] {
   return facts().map((fact) => fact.kind).filter((kind) => kind !== 'assignment-accepted');
+}
+
+// Reads without a launch record, as after a supervisor lost before CP7.
+function unclaimed(polls: number): ScriptedFacts[] {
+  return Array.from({ length: polls }, () => ({ problems: [] }));
+}
+
+function callCount(supervision: FakeSupervision | undefined, call: string): number {
+  return supervision?.calls.filter((made) => made === call).length ?? 0;
 }
 
 function executions() {
@@ -329,6 +358,59 @@ test('a supervisor that cannot start is recovered from its record', async () => 
   await launchOnce();
   assert.deepEqual(supervisions.all[0]?.calls, ['prepare', 'start', 'recover']);
   assert.deepEqual(executions().map(({ state }) => state), ['not-started', 'exited']);
+});
+
+test('a live unclaimed launch is not checked for liveness before its spawn deadline', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  // At the 100 ms poll, 100 reads stay well before the 25 s deadline.
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [...unclaimed(100), { problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  await launchOnce();
+  assert.equal(callCount(supervisions.all[0], 'recover'), 0);
+  assert.deepEqual(executions().map(({ state }) => state), ['exited']);
+});
+
+test('a supervisor lost before its claim is sealed past the deadline, and the intent is launched again', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  let launches = 0;
+  let recoveredAt: number | undefined;
+  supervisions.onCreated = (supervision) => {
+    launches += 1;
+    if (launches > 1) {
+      supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+      return;
+    }
+    stopAfterReads(supervision, 400);
+    onRecover(supervision, () => {
+      recoveredAt = clock.milliseconds;
+      supervision.facts = [{ problems: [], launch: { kind: 'seal', by: 'worker', reason: 'recovery' } }];
+    });
+  };
+  await launchOnce();
+  const [lost] = supervisions.all;
+  const deadline = lost?.plan?.deadline.milliseconds ?? 0;
+  assert.deepEqual(lost?.rounds, ['first']);
+  assert.ok(recoveredAt !== undefined && recoveredAt >= deadline && recoveredAt < deadline + LIVENESS_POLLS * 100);
+  assert.deepEqual(executions().map(({ state }) => state), ['not-started', 'exited']);
+});
+
+test('a supervisor still live at the unclaimed check keeps the watch going', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.recovery = { fact: 'observe' };
+    stopAfterReads(supervision, 400);
+    onRecover(supervision, () => {
+      supervision.facts = [{ problems: [], process: PROCESS }, { problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+    });
+  };
+  await launchOnce();
+  assert.deepEqual(supervisions.all[0]?.rounds, ['first']);
+  assert.deepEqual(executions().map(({ state }) => state), ['exited']);
+  assert.deepEqual(factKinds(), ['execution-started', 'execution-exited']);
 });
 
 test('a recovered exit is reported, and a recovery that adopts keeps observing', async () => {
