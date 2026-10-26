@@ -6,7 +6,7 @@ Independent review findings live as prose in each change's `verification.md`. Th
 
 **Goals:** a bounded line format with a JSON Schema; a controlled vocabulary that grows by one line; validation in `make verify`; an index and a checklist over archived findings; protocol steps that write the record and use the checklist.
 
-**Non-Goals:** a database, an owner-facing UI, backfilling archived changes, the coordinator and worker skills that are not on `dev` yet, and automated extraction of findings from reviewer output.
+**Non-Goals:** a database, an owner-facing UI, backfilling archived changes, changes to the fleet skills beyond the findings lines, and automated extraction of findings from reviewer output.
 
 ## Decisions
 

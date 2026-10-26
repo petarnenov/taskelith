@@ -17,4 +17,6 @@ On start:
 
 Then follow "Coordinator steps" of the `taskelith-task-protocol` skill and `docs/agent-task-protocol.md`. Keep one integration at a time on a machine.
 
+Every brief carries the output of `npm run findings -- checklist` for the task's capabilities and files, as `docs/agent-task-protocol.md` coordinator step 1 requires.
+
 To step down, follow "Changing the coordinator" in `docs/fleet.md`.

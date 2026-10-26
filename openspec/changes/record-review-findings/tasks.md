@@ -16,6 +16,7 @@
 - [x] 3.2 Add the record to the review prompt rule in `docs/governance.md`.
 - [x] 3.3 Update the `taskelith-task-protocol` skill.
 - [x] 3.4 Add the `review-process` and `agent-task-protocol` requirements.
+- [x] 3.5 After merging `dev` (`add-fleet-skills`), update the `taskelith-worker` handoff list and the `taskelith-coordinator` brief rule.
 
 ## 4. Verify
 
