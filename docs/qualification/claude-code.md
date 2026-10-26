@@ -1,6 +1,6 @@
 # Claude Code harness qualification
 
-Date: 2026-10-24. Status: macOS x86_64 evidence for the first harness (G3) selected in [ADR 0003](../decisions/0003-first-integrations-and-plugin-kernel.md). Claude Code stays `candidate` in the [dependency register](../dependencies.md). Linux x86_64 evidence without credentials in the worker image was added on 2026-10-25 ([Linux worker image](#linux-worker-image)); Linux capability scenarios, Linux arm64, macOS arm64, provider alternatives, repeated runs, and independent adoption evidence remain open. No plugin code exists yet.
+Date: 2026-10-24. Status: macOS x86_64 evidence for the first harness (G3) selected in [ADR 0003](../decisions/0003-first-integrations-and-plugin-kernel.md). Claude Code stays `candidate` in the [dependency register](../dependencies.md). Linux evidence without credentials in the worker image was added for x86_64 on 2026-10-25 and for arm64 on 2026-10-26 ([Linux worker image](#linux-worker-image)); Linux capability scenarios, macOS arm64, provider alternatives, repeated runs, and independent adoption evidence remain open. No plugin code exists yet.
 
 Sources: outside the [Provider terms review](#provider-terms-review), a link labeled "docs" is an unversioned page retrieved on 2026-10-24, and every other external source is pinned to an exact package version or tag. The terms review cites unversioned pages accessed on 2026-10-25 and one dated Wayback Machine snapshot; its source table gives each effective or modified date where the page states one.
 
@@ -170,15 +170,17 @@ Proposal for the port design, not yet decided: each plugin manifest declares its
 
 Run: `make qualify-harnesses OUT=<dir>` at revision `c0f7bf8`, finished at 2026-10-25T22:59:40Z on macOS 26.6.2 (x86_64) with Docker Desktop (engine 29.5.2). The script builds the `worker-harnesses` target of `infra/installation/Dockerfile` from a `git archive` of the tracked files on `ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac` with Node.js 24.22.1. The linux/amd64 image ID was `sha256:15e680d4e7debcc494182ec5cee264c1636792619bd7083f78a9def265ca2505`. The run's `image.txt` records the SHA-256 of the Dockerfile (`2abdb24b…`), the harness manifest (`2a3472f9…`) and lockfile (`5cec02e4…`), `qualify.sh` (`9e3ccb05…`), and `scripts/harness-qualification.sh` (`c1c1a661…`), and the steps record the environment and the names of all its variables, none of which contains `KEY`, `TOKEN`, or `SECRET`. `npm ci --ignore-scripts` installed the harnesses from `infra/installation/harnesses/package-lock.json`, checking every tarball against its `sha512` integrity. The steps in `infra/installation/harnesses/qualify.sh` ran once, as the `taskelith` user, with `--network none`. They ran with `DISABLE_AUTOUPDATER=1` and `DISABLE_TELEMETRY=1`, and a home under the data root with dedicated `CLAUDE_CONFIG_DIR` and `CODEX_HOME` directories; the `CODEX_HOME` holds a `config.toml` with `check_for_update_on_startup = false`. Each step has an expected exit status, and the login and write steps also an expected output; every step matched.
 
+Native linux/arm64 run, an addendum of 2026-10-26: `make qualify-harnesses OUT=<dir> PLATFORMS=linux/arm64` at revision `60341e0`, finished at 2026-10-26T01:34:56Z on macOS 26.6.2 on Apple Silicon (Apple M3, arm64) with Docker Desktop (engine 29.6.1, linux/arm64; Compose 5.2.0), without emulation. The build used the same base and Node.js 24.22.1, with its checksummed linux-arm64 tarball. The linux/arm64 image ID was `sha256:14a88bbd15c8c1161241e733da36df68f809414ecaa6ac47f31bbe4c0df9965b`. The input hashes in its `image.txt` equal those of the linux/amd64 run above, so the Dockerfile, the harness manifest and lockfile, and both scripts are the ones qualified there. The same steps ran in the same way, the variable names again contain no `KEY`, `TOKEN`, or `SECRET`, and every step matched its expected exit status and output.
+
 Host side-effect check: the compared directories are the qualification home, which holds both configuration directories, and `/opt/harnesses`, the installed harness binaries. Before and after the steps, `qualify.sh` listed their entries with type, mode, and link target, plus the SHA-256 of every file. `docker diff` also listed every changed path in the container, except the generated schema files, which are hashed in the steps. Only the steps run in the container, so every difference is proven to come from them; which step wrote each file was not isolated where the table says so, and none is unexplained.
 
-Scope: on 2026-10-25 the owner decided that only steps needing no credentials run, because no subscription login is authorized for this item ([G2 plan](../g2-plan.md) item 26). The lockfile's tarballs are the qualified ones: its darwin-x64 tarballs, which match their lockfile integrity, contain binaries with the SHA-256 values that the macOS series qualified ([Pinned version](#pinned-version)), and the image installs the linux-x64 tarballs from the same lockfile. `npm audit --package-lock-only` on the harness lockfile reported no vulnerability on 2026-10-25.
+Scope: on 2026-10-25 the owner decided that only steps needing no credentials run, because no subscription login is authorized for this item ([G2 plan](../g2-plan.md) item 26). The lockfile's tarballs are the qualified ones: its darwin-x64 tarballs, which match their lockfile integrity, contain binaries with the SHA-256 values that the macOS series qualified ([Pinned version](#pinned-version)), and the image installs the linux-x64 or linux-arm64 tarballs from the same lockfile. `npm audit --package-lock-only` on the harness lockfile reported no vulnerability on 2026-10-25.
 
 | Architecture | Result |
 | --- | --- |
 | linux/amd64 | Native on the x86_64 host; the results are below |
-| linux/arm64, emulated | Not run. The build failed in the `node-arm64` stage, which the default images share. Under Docker Desktop's QEMU on this host, GNU tar 1.35 in the pinned base failed on every entry of the Node.js tarball with "Cannot mkdir: Invalid argument" or "Cannot open: Invalid argument", while a plain `mkdir` in the same emulated container worked |
-| linux/arm64, native | Not run. No local arm64 Linux host was available; D11 names the GitHub-hosted runner `ubuntu-24.04-arm`, and by the coordinator's decision this item adds no workflow |
+| linux/arm64, emulated | Not run. The build failed in the `node-arm64` stage, which the default images share. Under Docker Desktop's QEMU on the x86_64 host, GNU tar 1.35 in the pinned base failed on every entry of the Node.js tarball with "Cannot mkdir: Invalid argument" or "Cannot open: Invalid argument", while a plain `mkdir` in the same emulated container worked |
+| linux/arm64, native | Native on an Apple Silicon host on 2026-10-26; the results are below |
 
 Results on linux/amd64:
 
@@ -190,12 +192,22 @@ Results on linux/amd64:
 | Self-update | Writing to the binary was refused for the `taskelith` user, and the listing of `/opt/harnesses` was identical before and after the steps |
 | Side effects | Only in the dedicated configuration directory: `.claude.json` (mode 600) and `backups/.claude.json.backup.<timestamp>` (mode 600, in a directory of mode 755), written by the two Claude Code steps; which of them wrote them was not isolated. Apart from the steps' own outputs (the listings under `/tmp`, the schema directory, the Codex `config.toml`, and the mount point of `qualify.sh`), nothing changed in `/opt/harnesses` or elsewhere in the container |
 
-Not run, because they need a login: multi-turn chat, prompt correlation, resume, permission requests, interruption, outcomes, the pending approval across a crash, and egress with telemetry on and off. They stay open for G3 item 35 ([G3 plan](../g3-plan.md)).
+Results on linux/arm64:
+
+| Step | Result |
+| --- | --- |
+| Platform | `Linux aarch64`, Ubuntu 24.04.5 LTS, Node.js v24.22.1, user `taskelith` |
+| Binary | `@anthropic-ai/claude-agent-sdk-linux-arm64/claude`, SHA-256 `fdd22e6cbb734d580f5664c48df4294eeec850218ff07f186f9af30426396ee1`, reports `2.1.308 (Claude Code)`. Only the glibc package was installed; the `-musl` package is absent |
+| Credentials | A search of the whole image as root found no `.credentials.json` or `auth.json`. `claude auth status` exited 1 with `"loggedIn": false` and `"authMethod": "none"` for the qualification home |
+| Self-update | Writing to the binary was refused for the `taskelith` user, and the listing of `/opt/harnesses` was identical before and after the steps |
+| Side effects | The same as on linux/amd64: only `.claude.json` (mode 600) and `backups/.claude.json.backup.<timestamp>` (mode 600, in a directory of mode 755) in the dedicated configuration directory, apart from the steps' own outputs |
+
+Not run on either architecture, because they need a login: multi-turn chat, prompt correlation, resume, permission requests, interruption, outcomes, the pending approval across a crash, and egress with telemetry on and off. They stay open for G3 item 35 ([G3 plan](../g3-plan.md)).
 
 ## Remaining before admission
 
 - Inventory, SBOM, and license evidence for the packages of the harness lockfile (`infra/installation/harnesses/package-lock.json`), which the root dependency inventory does not cover.
-- Linux in the worker image ([Linux worker image](#linux-worker-image)): the scenarios that need a login on linux/amd64, which the owner did not authorize for G2 item 26; linux/arm64, natively, for example on D11's runner `ubuntu-24.04-arm` or an Apple Silicon host. Also macOS arm64, with `DISABLE_AUTOUPDATER=1` and a check that nothing outside the configuration directory changes.
+- Linux in the worker image ([Linux worker image](#linux-worker-image)): the scenarios that need a login on linux/amd64 and linux/arm64, which the owner did not authorize for G2 item 26. Also macOS arm64, with `DISABLE_AUTOUPDATER=1` and a check that nothing outside the configuration directory changes.
 - Non-permission input requests, which no scenario tested.
 - The subscription mechanism for account slots (a long-lived subscription token or a per-slot device login), its load, limit, and reset signals, and whether an agent can read an injected credential ([ADR 0005](../decisions/0005-harness-subscription-account-pools.md)).
 - An alternative provider or gateway path, if the owner wants one, authenticated only through a subscription (ADR 0005).
