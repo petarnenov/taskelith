@@ -22,7 +22,7 @@ macOS 26.6.2 (x86_64), Node 24.22.1 from `.nvmrc` through nvm, Docker Desktop.
   - "Secrets in a cause message": `a cause message keeps no URL, bearer value, secret pair, or token`;
   - "Long cause chain": `a long or cyclic cause chain is bounded in links and length`;
   - "No cause": `an error without a cause or code is named alone, without a cause code` and `a thrown value that is not an error is unknown; names and codes must be identifiers`;
-  - "Logged authorization failure": `a request without an answer is logged with its cause before it is repeated` in `apps/worker/test/launch-orchestrator.test.ts`.
+  - "Logged authorization failure" (requirement "Journaled launch authorization"): `a request without an answer is logged with its cause, never over its known fields, before it is repeated` at `apps/worker/test/launch-orchestrator.test.ts:169`.
 - The client tests are in `packages/adapters/worker-control-plane-client/test/control-plane-failure-cause.test.ts`.
 - The comment length rule holds (`npm run verify:comments`).
 
