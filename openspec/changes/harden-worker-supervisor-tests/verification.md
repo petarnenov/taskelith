@@ -58,10 +58,10 @@ OpenCode, `opencode-go/kimi-k3.1-pro` (`high`, set by `-m`), session `ses_e8804e
 
 OpenCode, `opencode-go/kimi-k3.1-pro` (`high`, set by `-m`), session `ses_e87f3733dffeed5VrZzES2bFaq`, at `6a043ec`. The snapshot was identical before and after the pass (`b84c4363…`). This was the last allowed pass. The reviewer confirmed the resolutions of M2', M3', and L1', and accepted M1' as the design records it. Findings: 0 Critical, 0 High, 1 Medium, 2 Low.
 
-- **M1 (pending coordinator decision):** `ps()` in `process-reaper.ts` treats exit code 1 as an empty listing for the full `ps -axww` scan as well, so a failing scan passes the teardown silently. The proposed fix allows exit code 1 only for the per-process check and adds a regression test. Not changed; the coordinator brings it to the owner.
+- **M1 (fixed, unreviewed, `002e86b`):** `ps()` in `process-reaper.ts` treated exit code 1 as an empty listing for the full `ps -axww` scan as well, so a failing scan passed the teardown silently. The coordinator brought it to the owner's away delegate (OpenCode, run `20261026T115732Z-opencode-80873`), which chose option A: fix it without another review; this is the delegate's decision, not the owner's. Exit code 1 now means "gone" only for the per-process check (`psOne`); every other `ps` failure, exit code 1 of the full listing included, joins the `AggregateError`. Regression test (macOS only, since Linux scans `/proc`): a `ps` on `PATH` that exits with 1 makes `reap()` reject; it fails against the previous reaper. `process-reaper.test.ts` passes 3 of 3 and `darwin-supervisor.test.ts` 11 of 11.
 - **L1 (fixed, unreviewed):** tasks 1.2 and 1.3 described the record-based reaper. They now describe the marker scan, the check before each kill, the tracked scenarios, and the bounded waits; tasks 1.6 and 1.7 record passes 2 and 3.
 - **L2 (fixed, unreviewed):** the L1' resolution said that every process joins the cleanup list before its spawn is awaited, which holds for the detached processes only. It now says that a `ScenarioProcess` joins right after `ScenarioProcess.start` resolves.
-- **Checks after the fixes:** `npm run verify:comments`, `npm run verify:archive`, and `npm run openspec -- validate harden-worker-supervisor-tests --strict` pass. The fixes touch records only, so `make verify` was not run again; it last passed at `708e59c`.
+- **Checks after the record fixes:** `npm run verify:comments`, `npm run verify:archive`, and `npm run openspec -- validate harden-worker-supervisor-tests --strict` pass.
 
 ## Limitations and remaining gates
 
@@ -70,5 +70,5 @@ OpenCode, `opencode-go/kimi-k3.1-pro` (`high`, set by `-m`), session `ses_e87f37
 - PID reuse is mitigated, not eliminated (M1'): a gap between the last command-line check and `process.kill` remains.
 - `/proc` reads on Linux have no timeout.
 - The record fixes after pass 3 are unreviewed, as the Low-only rule allows.
-- Pass 3 M1 (a failing full `ps` scan passes the teardown) is open, pending a coordinator decision.
-- Remaining gates: that decision, integration into `dev`, and archive.
+- The pass 3 M1 fix is unreviewed, as the delegate's decision allows.
+- Remaining gates: integration into `dev` and archive.
