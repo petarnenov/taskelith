@@ -1,5 +1,6 @@
+import type { HarnessPluginId } from '@taskelith/execution';
 import type { Result } from '@taskelith/kernel';
-import type { AccountSlot, HarnessPluginId } from '../domain/account-slot.js';
+import type { AccountSlot } from '../domain/account-slot.js';
 import type { ProjectId, ProviderCredentialId } from '../domain/capacity-reservation.js';
 import type { SlotSecret } from '../domain/slot-secret.js';
 

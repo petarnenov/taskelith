@@ -4,21 +4,21 @@ Date: 2026-10-26. Status: proposed contract for G3 ([G3 work plan](../g3-plan.md
 
 ## 1. Purpose and parties
 
-The account pool is a capability of the Scheduling module, because a slot is a provider credential unit of a capacity reservation (capacity reservation contract section 2) and is selected inside the reservation transaction (section 4 of that contract). No type, value, schema, or test of the pool names a harness or vendor ([ADR 0003](../decisions/0003-first-integrations-and-plugin-kernel.md) decision 8, ADR 0005 decision 8): a harness appears only as an opaque harness plugin identifier, and a subscription mechanism only as the opaque identifier that the plugin's manifest declares.
+The account pool is a capability of the Scheduling module, because a slot is a provider credential unit of a capacity reservation (capacity reservation contract section 2) and is selected inside the reservation transaction (section 4 of that contract). No type, value, schema, or test of the pool names a harness or vendor ([ADR 0003](../decisions/0003-first-integrations-and-plugin-kernel.md) decision 8, ADR 0005 decision 8): a harness appears only as an opaque harness plugin identifier, and a subscription mechanism only as the opaque identifier of one that the plugin declares in its agent harness port `capabilities`.
 
 | Port | Owner | Implemented by |
 | --- | --- | --- |
 | `AccountSlots`: slot records, read and written inside the reservation transaction | Scheduling | The item 12 PostgreSQL adapter in the `control-plane/` namespace |
 | `SlotCredentials`: encrypted slot credential material | Scheduling | The item 12 adapter; the encryption and key management choice belongs to item 12 |
 
-Harness plugins never call these ports. A plugin declares its subscription mechanisms and reports load, limit, and reset signals through the agent harness port (item 3); the control plane turns those signals into slot updates (section 5). A plugin receives a slot's credential only through the run that reserved the slot (section 7).
+Harness plugins never call these ports. A plugin declares its subscription mechanisms in its `capabilities` and reports load, limit, and reset signals through the agent harness port (item 3); the control plane turns those signals into slot updates (section 5). A plugin receives a slot's credential only through the run that reserved the slot (section 7).
 
 This item adds the port types, the contract values, and a conformance suite for both ports. It adds no adapter, no selection or scheduler code, no encryption, and no wire schema.
 
 ## 2. Common rules
 
 1. **Authorization.** The Access module checks the caller's role before a port is called ([trust model](../trust-model.md) section 3); a port never decides authorization itself. Slots are installation resources: adding a slot, changing its allowed projects or concurrency limit, storing or rotating its credential, and revoking, reinstating, or removing it are `installation-owner` commands. A `project-viewer` reads the pool state of its own project, never a credential; a slot shared with other projects is shown without their names (a requirement on items 9 and 33).
-2. **Opaque identities.** A slot is identified by a `ProviderCredentialId`, the identifier that a reservation records in `providerCredentials`. The harness is a `HarnessPluginId` and the mechanism a `SubscriptionMechanismId`, both opaque to the pool. Wherever this contract orders by `id`, it means the code point order of the identifier's characters, as PostgreSQL's `COLLATE "C"` orders text, so that every replica and adapter agrees.
+2. **Opaque identities.** A slot is identified by a `ProviderCredentialId`, the identifier that a reservation records in `providerCredentials`. The harness is a `HarnessPluginId` and the mechanism a `SubscriptionMechanismId`, both opaque to the pool. `HarnessPluginId` is the Execution module's type (`@taskelith/execution`), whose value is the harness plugin's manifest `id`; the agent harness port identifies a plugin by the same type ([agent harness port contract](agent-harness-port.md) section 4.1). `SubscriptionMechanismId` stays the pool's own opaque type: its values are drawn from the subscription mechanisms that the plugin declares through the agent harness port, and they are validated outside the pool. Wherever this contract orders by `id`, it means the code point order of the identifier's characters, as PostgreSQL's `COLLATE "C"` orders text, so that every replica and adapter agrees.
 3. **Compare-and-set.** Every slot change replaces the record at an expected revision, inside the transaction that decides it, and fails with `conflict` when the revision has moved. A slot's revision starts at `1` and grows by one with each change.
 4. **Failures.** Every operation that can fail for a domain reason returns a kernel `Result`: `invalid` for malformed input, `not-found`, and `conflict` for a duplicate or a lost compare-and-set. A read without a domain failure, such as `pool`, returns its value, as the capacity ledger does. A store that cannot be reached rejects the operation's promise, which aborts the reservation transaction.
 5. **Secrecy.** A slot credential never enters a log, a prompt, a lesson, an error payload, an event, an outbox record, a view, or a wire response (ADR 0005 decision 6). Only `SlotCredentials` holds it, and only the delivery to the reserving run reveals it.
@@ -31,7 +31,7 @@ This item adds the port types, the contract values, and a conformance suite for 
 | --- | --- |
 | `id` | The slot's `ProviderCredentialId` |
 | `harnessId` | The harness plugin the slot belongs to; never changes |
-| `mechanismId` | One subscription mechanism that the plugin's manifest declares. The control plane's add-slot command checks it against the manifest through the agent harness port (item 3) before `add`, and rejects a mechanism the plugin does not declare as a subscription, such as an API key, with `invalid`; `add` itself treats it as opaque |
+| `mechanismId` | One subscription mechanism that the plugin declares in its agent harness port `capabilities` (section 2, rule 2). The control plane's add-slot command checks it against that declaration before `add`, and rejects a mechanism the plugin does not declare as a subscription, such as an API key, with `invalid`; `add` itself treats it as opaque |
 | `allowedProjects` | The projects the slot may serve, at least one, without duplicates |
 | `concurrencyLimit` | The slot's provider credential concurrency (capacity reservation contract section 2), a positive integer, by default `DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY` (`4`) |
 | `state` | `active`, `revoked`, or `removed` (section 8) |
