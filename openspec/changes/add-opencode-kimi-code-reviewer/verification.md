@@ -30,14 +30,15 @@ The coordinator session briefed an implementation subagent, which made the chang
 - Other documents that name OpenCode, Codex, or Claude Code (`docs/architecture.md`, `docs/foundation.md`, `docs/dependencies.md`, ADRs 0003, 0007, 0013, and 0014, and `docs/integration-candidates.md`) refer to harnesses, not reviewers, and are unchanged.
 - The modified requirement has 449 characters and three scenarios.
 - The change adds no external link. All content is English.
-- The OpenCode CLI (kimi-k2.7-code) invocation was not run by this change, so it is not yet confirmed by a run.
+- The OpenCode CLI (kimi-k2.7-code) invocation is confirmed only by the smoke test below, not yet by a review.
 
 ## Tests of the new invocations
 
-Both were run by the coordinator on 2026-10-26; this change's subagent ran neither.
+All three were run by the coordinator on 2026-10-26; this change's subagent ran none of them.
 
 - **Codex CLI (gpt-6-astra).** `codex exec -m gpt-6-astra -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>` ran as session `01a177ef-24bc-7741-b608-11cfcfb91b99`, and the output header showed sandbox `read-only` and reasoning effort `medium`. The model id `GPT-6-Astra` in capitals was rejected with `model_not_found`, so the documents use the lowercase id.
 - **Claude Code (claude-opus-5-5).** `claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json < /dev/null` replied OK as session `6ec3c3df-4df2-4b9c-95c7-5937ea3219dd`, and its `modelUsage` contained only `claude-opus-5-5`.
+- **OpenCode CLI (kimi-k2.7-code).** The documented invocation, with the prompt "Reply with exactly: OK", replied OK as session `ses_e880aebe4ffeb2R5tScWe6kdeX`; its stored assistant message records `"model":{"id":"kimi-k2.7-code","providerID":"opencode-go","variant":"default"}`.
 
 ## Checks
 
