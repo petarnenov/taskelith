@@ -17,7 +17,7 @@ The port belongs to the Execution module, which owns sessions, attempts, and app
 ## 2. Common rules
 
 1. **Neutrality.** No type, value, or test of the Execution module names a harness, vendor, model, or native field. Native identifiers appear only as opaque strings: the native session ID and the native request ID.
-2. **Plain data.** The port exchanges plain data with string, number, and boolean fields, as the frozen SDLC framework port does ([ADR 0009](../decisions/0009-frozen-sdlc-framework-port.md)). Plugin output is untrusted: the host parses the capability declaration with `parseAgentHarnessCapabilities` and every event with `parseHarnessEvent`, which read own data properties only and reject an unknown field, a missing field, an unknown value, or an accessor as `invalid`. Labels such as IDs and versions are 1 to 128 characters; free text in an event is at most 65,536 characters (`MAX_HARNESS_TEXT_LENGTH`), and a plugin splits longer output into several events.
+2. **Plain data.** The port exchanges plain data with string, number, and boolean fields, as the frozen SDLC framework port does ([ADR 0009](../decisions/0009-frozen-sdlc-framework-port.md)). Plugin output is untrusted: the host parses the capability declaration with `parseAgentHarnessCapabilities`, every operation result with `parseOperationResult`, and every event with `parseHarnessEvent`. They accept own data properties of plain objects and arrays only, and reject an unknown field, a missing field, an unknown value, or an accessor as `invalid`; a result must be exactly a kernel `Result`, with a kernel failure code and string details. These checks reject malformed shapes; they are not isolation, since a proxy's traps still run plugin code, and in-process plugins are trusted code (architecture section 7). Labels such as IDs and versions are 1 to 128 characters; free text in an event is at most 65,536 characters (`MAX_HARNESS_TEXT_LENGTH`), and a plugin splits longer output into several events.
 3. **Results, never throws.** Every operation returns a kernel `Result`. An operation that throws, or returns anything other than a `Result`, breaks the contract. The failure codes are those of section 9.3.
 4. **Credentials.** The slot credential reaches the plugin only in the start or resume request of the run that reserved the slot (ADR 0005 decision 6). It never enters an event, a failure message or detail, a log, a prompt, or a terminal program.
 5. **Generations.** A session's **generation** counts its native processes. The host starts a session at generation 1 and uses the next generation for every resume. Every later request names the generation it was made for; a request for a generation other than the session's current one fails with `precondition-failed`, so a response, a turn, or an interrupt meant for an earlier process is never applied to a later one.
@@ -59,9 +59,9 @@ An operation that needs an undeclared capability fails with `unavailable`, whate
 
 ### 4.2 Pinned binaries and self-update
 
-`binaries` pins one harness binary per supported platform: the platform, the exact version, and the SHA-256 digest of the binary, 64 lowercase hex digits. The platforms are `linux-x64`, `linux-arm64`, `darwin-x64`, and `darwin-arm64`, each at most once; a platform without a pinned binary is not supported. Obligations:
+`binaries` pins one harness binary per supported platform: the platform, the exact version, the binary's `path` inside the plugin's installed package (relative, without `.` or `..` segments), and the SHA-256 digest of the binary, 64 lowercase hex digits. The platforms are `linux-x64`, `linux-arm64`, `darwin-x64`, and `darwin-arm64`, each at most once; a platform without a pinned binary is not supported. Obligations:
 
-- The host verifies the binary's digest against the declaration before it starts a session and refuses a mismatch. The plugin runs only the pinned binary, never a newer one found on the host.
+- The host resolves the worker platform's `path` inside the installed plugin package, verifies the file's digest against the declaration, and refuses a mismatch. It then passes the verified file's absolute path as `binaryPath` in every start and resume request, and the plugin runs exactly that file, never another one found on the host. Item 18 keeps the verified file unchanged between the check and the start, for example in the read-only worker image.
 - The plugin disables the harness's self-update in every session it starts. A harness that cannot disable it is not admitted.
 - A harness run writes only inside the session's working directory, its state directory, and the execution's temporary directory. The harness qualification checks this with before-and-after listings, as the `harness-qualification` specification requires.
 - An upgrade is a new pinned version, a new declaration, and a new qualification run.
@@ -74,7 +74,7 @@ On macOS the supervisor's termination evidence rests on the child's process grou
 
 | Operation | Request | Result |
 | --- | --- | --- |
-| `startSession` | The host's `sessionId`, generation 1, the working directory, the state directory, and the slot credential | The native session ID |
+| `startSession` | The host's `sessionId`, generation 1, the verified `binaryPath`, the working directory, the state directory, and the slot credential | The native session ID |
 | `resumeSession` | As start, with the native session ID and the next generation | The same native session ID |
 | `events` | The native session ID and generation | An async iterable of the generation's events |
 | `closeSession` | The native session ID and generation | Nothing |
@@ -84,6 +84,7 @@ On macOS the supervisor's termination evidence rests on the child's process grou
 - **Close.** Closing stops the harness and its processes, ends a running turn as `interrupted`, and ends the stream with `session-ended` of reason `closed`. Closing an ended session at its generation returns success and changes nothing. After close, every operation of that generation fails with `precondition-failed`.
 - **Resume.** Only an ended session resumes, at a generation above its last one; otherwise the resume fails with `precondition-failed`. A resumed session keeps its native session ID and its history, including the turn IDs it has seen. A native request that was pending when the earlier process ended does not survive into the new generation: a response to it fails with `not-found` (section 7.3).
 - **Unknown session.** A native session ID the plugin does not know fails with `not-found`.
+- **Host restart.** The port is called inside the execution, and its single subscriber is the host's relay there. How a restarted worker service reconnects to that relay, with its own cursor, is item 18's. A host that loses the relay and cannot reconnect never subscribes a second time: it closes the generation, or the supervisor ends the execution, and the session resumes at the next generation, so no turn or response is replayed.
 
 ## 6. Turns and prompt correlation
 
@@ -91,7 +92,7 @@ On macOS the supervisor's termination evidence rests on the child's process grou
 
 - **One turn at a time.** Turns are serialized: submitting while a turn runs fails with `precondition-failed`. No harness declares concurrent turns in G3.
 - **No second submission.** A turn ID the native session has seen, in any generation, fails with `conflict` and is not sent again. A host that cannot tell whether a turn reached the harness before a crash reconciles it through the timeline; it never resubmits the turn under a new ID.
-- **Accepted means started.** Success means the harness accepted the turn. Exactly one `turn-ended` event follows for it, unless the session ends first, in which case the turn ends as `interrupted` before `session-ended` when the plugin can observe it, and the host reconciles it otherwise.
+- **Accepted means started.** Success means the harness accepted the turn. Exactly one `turn-ended` event follows for it before `session-ended`: `interrupted` when the session is closed, and `failed` with `harness-exited` when the harness process ends during the turn. Only when the plugin itself is lost with the process, so that nothing can be observed, does the host reconcile the turn without an event.
 - **Interruption.** `interrupt` names the running turn. The turn ends as `interrupted`. Interrupting a turn that is not running fails with `precondition-failed`. Whether interruption also stops a command the harness already started is a qualification result per harness; the host treats the turn's side effects as unknown until the turn has ended.
 
 ## 7. Native requests
@@ -117,7 +118,8 @@ A `permission-request` may carry an `operation`, the plugin's classification of 
 `respond` answers one request: the native session ID, the generation, the native request ID, and the response.
 
 - The first valid response is applied; a second one for the same request fails with `conflict` and changes nothing.
-- A response whose kind does not match the request, or whose value is not one the port defines, fails with `invalid`.
+- A response of an unknown kind fails with `invalid`; a known kind whose capability is undeclared fails with `unavailable` (section 3).
+- A response whose kind does not match the request, or whose fields are not those the port defines, fails with `invalid`.
 - An unknown native request ID fails with `not-found`; so does a request of an earlier generation, which is never re-delivered or answered in a later one.
 - A response at a generation other than the current one fails with `precondition-failed`.
 
@@ -163,7 +165,7 @@ A `failed` turn carries exactly one failure, and no other outcome carries one:
 
 | Code | When |
 | --- | --- |
-| `invalid` | A malformed request or response, a response of the wrong kind, an undeclared credential mechanism, or a generation that is not a positive integer |
+| `invalid` | A malformed request or response, a response of an unknown or the wrong kind, an undeclared credential mechanism, an empty binary path, or a generation that is not a positive integer |
 | `not-found` | An unknown native session, or an unknown or expired native request |
 | `conflict` | A second start of one session, a second subscriber, a repeated turn ID, or a second response |
 | `precondition-failed` | A generation that is not current, an ended session, a turn already running, no running turn to interrupt, or a resume of a running session |
@@ -173,27 +175,38 @@ A `failed` turn carries exactly one failure, and no other outcome carries one:
 
 ## 10. Conformance suite
 
-`runAgentHarnessConformance(harness, fixture)` is the harness-neutral suite. It has no test runner: a plugin's tests call it with their own fixture and assert that the report has no findings, as the SDLC framework suite does. The fixture gives the working and state directories, the credential, a timeout, and the prompts that make the harness answer, ask for a permission once, run until interrupted, and, when declared, ask for input once and request a delegation once. The suite parses the declaration first and stops with a `capabilities` finding if it is invalid. It then runs these scenarios, each in its own session:
+`runAgentHarnessConformance(harness, fixture)` is the harness-neutral suite. It has no test runner: a plugin's tests call it with their own fixture and assert that the report has no findings, as the SDLC framework suite does. The fixture gives:
+
+- the working and state directories, the verified binary path, and the credential;
+- prompts that make the harness state a fact (`remember`) and repeat it (`recall`), with the text the recall must contain (`recalled`); ask for one permission for an observable action (`permission`); and run until interrupted (`longRunning`);
+- when declared, a prompt that asks for input once and one that requests a delegation once, each repeating the answer it receives in its output;
+- optionally, prompts that reach the harness's turn limit and its account limit, where the plugin's test can reproduce them;
+- two probes: `actionRuns`, how often the permission prompt's action has run, and `endHarness`, which ends the harness process from outside, as a crash would;
+- a timeout from 1 to 600,000 ms, 5,000 by default, which bounds every operation, every probe, and every wait for an event as a whole.
+
+The suite parses the declaration first and stops with a `capabilities` finding if it is invalid, or with a `fixture` finding if the timeout is. It then runs these scenarios, each in its own session:
 
 | Scenario | Checks |
 | --- | --- |
-| Chat with prompt correlation | Two turns complete under their turn IDs; a second subscriber, a repeated turn ID, and an unknown session are rejected; close ends the stream with `session-ended` `closed`, and a turn after close is rejected |
+| Chat with prompt correlation | `remember` and `recall` complete under their turn IDs, and the recall contains the fact; a second subscriber, a repeated turn ID, and an unknown session are rejected; close ends the stream with `session-ended` `closed`, and a turn after close is rejected |
 | Serialized turns and interruption | A second turn while one runs is rejected; interrupting the running turn ends it as `interrupted`; interrupting an idle or ended turn is rejected |
-| Permission request with a single response | The request arrives with a native request ID; a stale generation is rejected; one deny is applied; a second response and an unknown request are rejected; the turn ends |
-| Input request | One answer is applied and a second rejected (when declared) |
-| Delegation result by correlation | One result is applied and a second rejected (when declared) |
-| Resume without replaying a pending request | After close and resume, the earlier generation's pending request is `not-found`, the earlier generation is rejected, a turn ID of the earlier generation is a `conflict`, and a new turn completes (when declared) |
+| Permission request with a single response | Two requests in one generation have distinct native request IDs; a stale generation, an unknown response kind, and a malformed decision are rejected; a deny is applied once and its action does not run; a second response and an unknown request are rejected; an allow runs the action exactly once |
+| Exit observation | Ending the harness during a turn ends the turn as `failed` with `harness-exited`, then the session as `exited` or `failed`, and a later turn is rejected |
+| Turn and account limits | When the fixture gives the prompts: the turn ends as `turn-limit-reached`, or as `account-limit-reached` with a `limit` signal when declared |
+| Input request | One answer is applied and reaches the harness's output; a second is rejected (when declared) |
+| Delegation result by correlation | One result is applied and its summary reaches the harness's output; a second is rejected (when declared) |
+| Resume without replaying a pending request | After close and resume, the earlier generation's pending request is `not-found`, the earlier generation is rejected, a turn ID of the earlier generation is a `conflict`, no event names a turn of the earlier generation, and a recall in the new generation still contains the fact (when declared) |
 | Terminal only while the session runs | A running session returns a terminal program; after close the call is rejected (when declared) |
 
-An undeclared optional capability's scenario is replaced by a check that its operation fails with `unavailable`. Throughout, every event is parsed and checked: an unknown turn ID, a reused native request ID within a generation, a second `turn-ended` for a turn, and any event after `session-ended` are findings. Each finding names its scenario and one check: `capabilities`, `fixture`, `threw`, `result`, `outcome`, `event`, `timeout`, or `undeclared-capability`.
+An undeclared optional capability's scenario is replaced by a check that its operation fails with `unavailable`. Throughout, every result and event is parsed and checked: an unknown turn ID, a turn of an earlier generation, a reused native request ID within a generation, a second `turn-ended` for a turn, a turn without `turn-ended` before `session-ended`, a closed session's running turn that does not end as `interrupted`, and any event after `session-ended` are findings. An event read that times out abandons the stream, so no later read overlaps it. Each finding names its scenario and one check: `capabilities`, `fixture`, `threw`, `result`, `outcome`, `event`, `timeout`, or `undeclared-capability`.
 
-`ScriptedAgentHarness` is the scripted test harness: an in-memory `AgentHarness` that plays a script of steps per prompt text (output, a permission, input, or delegation request, an account signal, waiting for an interruption, and a turn outcome). The Execution module's tests run the suite against it with every capability and with only the required ones, and run it against broken variants to show that each check reports its rule. Item 18 uses it to test the host without a real harness. It is a test double: no installation runs it.
+`ScriptedAgentHarness` is the scripted test harness: an in-memory `AgentHarness` that plays a script of steps per prompt text (output, a permission, input, or delegation request, an account signal, waiting for an interruption, and a turn outcome). An allowed permission counts as its action (`actionRuns`), an input or delegation answer is echoed as output, and `exitHarness` simulates the end of the native process. The Execution module's tests run the suite against it with every capability and with only the required ones, and against broken variants to show that each check reports its rule. Item 18 uses it to test the host without a real harness. It is a test double: no installation runs it.
 
 ## 11. Required tests
 
 The items that implement this port add, through `make`:
 
-- Item 19: the suite run against the first plugin with its pinned binary and a real slot credential, with no findings, on every platform the plugin pins; the egress test; the host side-effect check with before-and-after listings; and on macOS, a check that every process of a session stays in its process group.
+- Item 19: the suite run against the first plugin with its pinned binary and a real slot credential, with no findings, on every platform the plugin pins, with the limit prompts wherever the harness can reach its limits on purpose; the egress test; the host side-effect check with before-and-after listings; and on macOS, a check that every process of a session stays in its process group.
 - Item 18: host tests over the scripted harness that every event is parsed before use, a request is persisted before it is shown, a response is consumed once, an unresolved request after a restart is never answered automatically or replayed, a binary whose digest does not match is refused, and a `limit` signal leads to the handoff and the slot's cooldown; with the crash points of each path.
 - Items 38 and 39: a delegation result delivered once across a redelivery and a restart, and a terminal refused for an ended session and never recovered after a restart.
 - G4: the second harness passes the same suite before the port is frozen in the plugin SDK.

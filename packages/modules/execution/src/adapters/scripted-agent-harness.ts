@@ -10,6 +10,7 @@ import {
   type HarnessFailure,
   type InterruptRequest,
   type RespondRequest,
+  type ResponseData,
   type ResumeSessionRequest,
   type SessionHandleData,
   type SessionRequest,
@@ -38,12 +39,21 @@ export interface ScriptedAgentHarnessOptions {
   readonly terminal?: TerminalProgramData;
 }
 
-type RequestKind = 'permission' | 'input' | 'delegation-result';
+type RequestKind = ResponseData['kind'];
+
+type TurnEnd = Extract<HarnessEventData, { kind: 'turn-ended' }>;
 
 interface PendingRequest {
   readonly kind: RequestKind;
   answered: boolean;
-  readonly answer: () => void;
+  readonly answer: (response: ResponseData) => void;
+}
+
+interface RunningTurn {
+  readonly turnId: string;
+  stopped?: TurnEnd;
+  readonly stop: (end: TurnEnd) => void;
+  readonly done: Promise<void>;
 }
 
 interface NativeSession {
@@ -52,11 +62,12 @@ interface NativeSession {
   readonly turnIds: Set<string>;
   generation: number;
   ended: boolean;
+  closing?: Promise<void>;
   subscribed: boolean;
   queue: EventQueue;
   pending: Map<string, PendingRequest>;
   requestCount: number;
-  running?: { readonly turnId: string; readonly stop: () => void; readonly done: Promise<void> };
+  running?: RunningTurn;
 }
 
 const RESPONSE_CAPABILITY: Readonly<Record<RequestKind, HarnessCapability>> = Object.freeze({
@@ -70,11 +81,25 @@ export class ScriptedAgentHarness implements AgentHarness {
   readonly #script: ScriptedAgentHarnessOptions['script'];
   readonly #terminal: TerminalProgramData | undefined;
   readonly #sessions = new Map<string, NativeSession>();
+  #actionRuns = 0;
 
   constructor(options: ScriptedAgentHarnessOptions) {
     this.capabilities = options.capabilities;
     this.#script = options.script;
     this.#terminal = options.terminal;
+  }
+
+  // How often an allowed permission request's action ran, for the
+  // conformance fixture's observation.
+  actionRuns(): number {
+    return this.#actionRuns;
+  }
+
+  // Ends the native process from outside, as a crash would.
+  async exitHarness(nativeSessionId: string): Promise<void> {
+    const session = this.#sessions.get(nativeSessionId);
+    if (session === undefined || session.ended) return;
+    await this.#end(session, { kind: 'session-ended', reason: 'exited', exitCode: 1 }, 'harness-exited');
   }
 
   async startSession(request: StartSessionRequest): Promise<Result<SessionHandleData>> {
@@ -106,7 +131,7 @@ export class ScriptedAgentHarness implements AgentHarness {
       return fail('precondition-failed', 'only an ended session resumes, at a newer generation');
     }
     Object.assign(session, {
-      generation: request.generation, ended: false, subscribed: false, queue: new EventQueue(), pending: new Map(), requestCount: 0,
+      generation: request.generation, ended: false, closing: undefined, subscribed: false, queue: new EventQueue(), requestCount: 0,
     });
     return ok({ nativeSessionId: session.nativeSessionId });
   }
@@ -132,13 +157,15 @@ export class ScriptedAgentHarness implements AgentHarness {
   async interrupt(request: InterruptRequest): Promise<Result<void>> {
     const session = this.#current(request);
     if (!session.ok) return session;
-    if (session.value.running?.turnId !== request.turnId) return fail('precondition-failed', 'the turn is not running');
-    session.value.running.stop();
+    const running = session.value.running;
+    if (running?.turnId !== request.turnId || running.stopped !== undefined) return fail('precondition-failed', 'the turn is not running');
+    running.stop({ kind: 'turn-ended', turnId: running.turnId, outcome: 'interrupted' });
     return ok(undefined);
   }
 
   async respond(request: RespondRequest): Promise<Result<void>> {
     const kind = request.response.kind;
+    if (!Object.hasOwn(RESPONSE_CAPABILITY, kind)) return fail('invalid', 'unknown response kind');
     if (!this.#declares(RESPONSE_CAPABILITY[kind])) return fail('unavailable', `${kind} responses are not declared`);
     const session = this.#current(request);
     if (!session.ok) return session;
@@ -148,7 +175,7 @@ export class ScriptedAgentHarness implements AgentHarness {
     if (pending.kind !== kind) return fail('invalid', 'the response does not match the request');
     if (pending.answered) return fail('conflict', 'the request was already answered');
     pending.answered = true;
-    pending.answer();
+    pending.answer(request.response);
     return ok(undefined);
   }
 
@@ -163,18 +190,32 @@ export class ScriptedAgentHarness implements AgentHarness {
     const session = this.#sessions.get(request.nativeSessionId);
     if (session === undefined) return fail('not-found', 'unknown native session');
     if (request.generation !== session.generation) return fail('precondition-failed', 'stale generation');
-    if (session.ended) return ok(undefined);
-    session.ended = true;
-    const running = session.running;
-    running?.stop();
-    await running?.done;
-    session.queue.push({ kind: 'session-ended', reason: 'closed' });
-    session.queue.end();
+    await (session.closing ?? this.#end(session, { kind: 'session-ended', reason: 'closed' }, undefined));
     return ok(undefined);
+  }
+
+  // Ends the generation once: a running turn first, then the stream. Every
+  // concurrent caller waits for the same end.
+  #end(session: NativeSession, ended: HarnessEventData, turnFailure: HarnessFailure | undefined): Promise<void> {
+    session.ended = true;
+    session.closing = (async () => {
+      const running = session.running;
+      if (running !== undefined && running.stopped === undefined) {
+        running.stop(turnFailure === undefined
+          ? { kind: 'turn-ended', turnId: running.turnId, outcome: 'interrupted' }
+          : { kind: 'turn-ended', turnId: running.turnId, outcome: 'failed', failure: turnFailure });
+      }
+      await running?.done;
+      session.pending = new Map();
+      session.queue.push(ended);
+      session.queue.end();
+    })();
+    return session.closing;
   }
 
   #checkStart(request: StartSessionRequest): Result<never> | undefined {
     if (!Number.isInteger(request.generation) || request.generation < 1) return fail('invalid', 'generation must be a positive integer');
+    if (request.binaryPath.length === 0) return fail('invalid', 'the binary path is empty');
     if (!this.capabilities.subscriptionMechanisms.includes(request.credential.mechanism)) {
       return fail('invalid', 'the credential mechanism is not declared');
     }
@@ -192,14 +233,23 @@ export class ScriptedAgentHarness implements AgentHarness {
     return this.capabilities.supported.includes(capability);
   }
 
+  // A stop wins over an outcome the script reached but has not published,
+  // so an accepted interrupt always ends the turn as the stop says.
   #play(session: NativeSession, turnId: string, steps: readonly ScriptStep[]): void {
-    let stop!: () => void;
-    const stopped = new Promise<'stopped'>((resolve) => { stop = () => resolve('stopped'); });
-    const done = this.#playSteps(session, turnId, steps, stopped).then((outcome) => {
-      session.running = undefined;
-      session.queue.push(outcome);
-    });
-    session.running = { turnId, stop, done };
+    let resolveStop!: (value: 'stopped') => void;
+    const stopped = new Promise<'stopped'>((resolve) => { resolveStop = resolve; });
+    const running: RunningTurn = {
+      turnId,
+      stop: (end) => {
+        running.stopped = end;
+        resolveStop('stopped');
+      },
+      done: this.#playSteps(session, turnId, steps, stopped).then((outcome) => {
+        session.running = undefined;
+        session.queue.push(running.stopped ?? outcome);
+      }),
+    };
+    session.running = running;
   }
 
   async #playSteps(
@@ -207,28 +257,42 @@ export class ScriptedAgentHarness implements AgentHarness {
     turnId: string,
     steps: readonly ScriptStep[],
     stopped: Promise<'stopped'>,
-  ): Promise<HarnessEventData> {
-    const interrupted: HarnessEventData = { kind: 'turn-ended', turnId, outcome: 'interrupted' };
+  ): Promise<TurnEnd> {
+    const completed: TurnEnd = { kind: 'turn-ended', turnId, outcome: 'completed' };
     for (const step of steps) {
       if ('end' in step) return { kind: 'turn-ended', turnId, outcome: step.end, ...(step.failure ? { failure: step.failure } : {}) };
-      if ('waitForInterrupt' in step) return (await stopped, interrupted);
+      if ('waitForInterrupt' in step) return (await stopped, completed);
       if ('output' in step) session.queue.push({ kind: 'output', turnId, text: step.output });
       else if ('usage' in step) session.queue.push({ kind: 'account-signal', signal: 'usage', usage: step.usage });
       else if ('limit' in step) session.queue.push({ kind: 'account-signal', signal: 'limit', ...step.limit });
-      else if (await Promise.race([this.#ask(session, turnId, step), stopped]) === 'stopped') return interrupted;
+      else {
+        const answer = await Promise.race([this.#ask(session, turnId, step), stopped]);
+        if (answer === 'stopped') return completed;
+        this.#apply(session, turnId, answer);
+      }
     }
-    return { kind: 'turn-ended', turnId, outcome: 'completed' };
+    return completed;
+  }
+
+  // An allowed permission runs its action; input and delegation results are
+  // echoed, so a test can see that the answer reached the harness.
+  #apply(session: NativeSession, turnId: string, response: ResponseData): void {
+    if (response.kind === 'permission') {
+      if (response.decision === 'allow') this.#actionRuns += 1;
+      return;
+    }
+    const text = response.kind === 'input' ? response.text : `${response.delegationId} ${response.outcome}: ${response.summary}`;
+    session.queue.push({ kind: 'output', turnId, text });
   }
 
   #ask(
     session: NativeSession,
     turnId: string,
     step: Extract<ScriptStep, { permission: string } | { input: string } | { delegation: string }>,
-  ): Promise<'answered'> {
+  ): Promise<ResponseData> {
     session.requestCount += 1;
     const nativeRequestId = `request-${session.generation}-${session.requestCount}`;
-    return new Promise((resolve) => {
-      const answer = (): void => resolve('answered');
+    return new Promise((answer) => {
       if ('permission' in step) {
         session.pending.set(nativeRequestId, { kind: 'permission', answered: false, answer });
         session.queue.push({
@@ -245,11 +309,15 @@ export class ScriptedAgentHarness implements AgentHarness {
   }
 }
 
-function isValidResponse(response: RespondRequest['response']): boolean {
+function isValidResponse(response: ResponseData): boolean {
   switch (response.kind) {
-    case 'permission': return (PERMISSION_DECISIONS as readonly string[]).includes(response.decision);
+    case 'permission':
+      return (PERMISSION_DECISIONS as readonly string[]).includes(response.decision)
+        && (response.message === undefined || typeof response.message === 'string');
     case 'input': return typeof response.text === 'string';
-    case 'delegation-result': return (DELEGATION_OUTCOMES as readonly string[]).includes(response.outcome);
+    case 'delegation-result':
+      return (DELEGATION_OUTCOMES as readonly string[]).includes(response.outcome)
+        && typeof response.delegationId === 'string' && response.delegationId.length > 0 && typeof response.summary === 'string';
   }
 }
 

@@ -17,12 +17,15 @@ Architecture section 7 lists the capabilities the first real agent adapter must 
 ## Decisions
 
 1. **Port in the Execution module.** Architecture section 6 names `AgentHarness` as a port and gives Execution the ownership of sessions, attempts, and approvals, so the port, its parsers, and its suite live there. A separate module would change the architecture, and the plugin SDK would freeze the port before the second harness has checked it.
-2. **Plain data at the plugin boundary.** As with the frozen SDLC framework port, requests, results, and events are plain data that the module parses. The parsers read own data properties only, so an accessor or a proxy in plugin output cannot run plugin code, and an unknown field is rejected, so an event cannot carry data the port does not define, such as a credential.
+2. **Plain data at the plugin boundary.** As with the frozen SDLC framework port, requests, results, and events are plain data that the module parses. The parsers accept own data properties only and reject an accessor, and an unknown field is rejected, so an event cannot carry data the port does not define, such as a credential. They check shapes; they do not isolate plugin code, whose proxy traps still run, which matches the trust model for in-process plugins.
 3. **Generations instead of trusting native IDs.** The host numbers each native process of a session, and every request names the generation. A response, interrupt, or turn for an earlier process fails, and a native request ID is keyed with its generation, so a reused native ID never receives an earlier answer.
 4. **Pull-based events.** `events` returns an async iterable with one subscriber per generation that ends after `session-ended`. The host controls its reading pace, and the conformance suite can apply a timeout to every wait.
 5. **Classification by the plugin, scope by the host.** The plugin classifies a permission request only as a harness-neutral `push` to a full ref, and only when the action does exactly that. The host decides whether the ref is the task's branch, which the plugin does not know, and maps it to the standing rule operation `push-to-task-branch`.
 6. **Delegation and terminal as optional capabilities.** D13 (c) implements both in G3, but a later harness may lack them. The delegation result is the response to the native delegation request, so the single-response rule gives delivery once by correlation; the terminal is a program description that the host runs, so the plugin starts no process outside the host's control.
 7. **The scripted harness in the module's adapters.** Like the in-memory adapters, `ScriptedAgentHarness` is exported so that item 18's host tests can use it; it is a test double that no installation runs.
+
+8. **Probes in the fixture.** Whether a denied action ran, whether an answer reached the harness, and whether a harness exit is observed cannot be seen through the port alone. The fixture supplies an action counter and a way to end the harness, and the prompts make the harness repeat what it received, so the suite checks effects, not only result codes.
+9. **The host verifies, the plugin runs the verified file.** The declaration locates each pinned binary inside the plugin package, and every start carries the path the host checked, so the checked file and the started file are the same.
 
 ## Risks / Trade-offs
 

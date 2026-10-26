@@ -59,22 +59,34 @@ A delegation's result SHALL return to the parent attempt as the single response 
 - **THEN** the call fails with `precondition-failed`
 
 ### Requirement: Terminal outcomes and error mapping
-Every accepted turn SHALL end with exactly one outcome of `completed`, `interrupted`, `turn-limit-reached`, `account-limit-reached`, or `failed`, a failed turn SHALL carry exactly one failure kind, every session SHALL end with exactly one `session-ended` event, and operations SHALL return kernel Results and never throw.
+Every accepted turn SHALL end with exactly one `turn-ended` event before `session-ended`, with an outcome of `completed`, `interrupted`, `turn-limit-reached`, `account-limit-reached`, or `failed`, unless the plugin is lost with the harness process, when the host reconciles the turn; a failed turn SHALL carry exactly one failure kind, every session SHALL end with exactly one `session-ended` event, and operations SHALL return kernel Results and never throw.
+
+#### Scenario: Harness exits during a turn
+- **WHEN** the harness process ends while a turn runs
+- **THEN** the turn ends as `failed` with `harness-exited`, then the session ends as `exited` or `failed`
 
 #### Scenario: Error result and exception for one turn
 - **WHEN** a harness reports an error result and also raises an error for the same turn
 - **THEN** the plugin reports one `turn-ended` event
 
 ### Requirement: Pinned binaries and process groups
-A plugin SHALL pin each supported platform's binary by version and SHA-256 digest, the host SHALL refuse a binary whose digest does not match, the plugin SHALL disable self-update, and a macOS platform SHALL be pinned only when qualification shows that the harness keeps every process in its process group.
+A plugin SHALL pin each supported platform's binary by version, path in its package, and SHA-256 digest, the host SHALL refuse a binary whose digest does not match and SHALL pass the verified binary's path to every start and resume, the plugin SHALL run only that binary and disable self-update, and a macOS platform SHALL be pinned only when qualification shows that the harness keeps every process in its process group.
 
 #### Scenario: Digest mismatch
 - **WHEN** the binary on the worker does not match the declared digest
 - **THEN** the host refuses to start the session
 
 ### Requirement: Harness-neutral conformance suite
-The Execution module SHALL provide a conformance suite without a test runner that every harness plugin's tests run with their own prompts, covering chat with prompt correlation, serialized turns and interruption, a permission request with a single response, and, when declared, input requests, delegation, resume, and the terminal, and the module's tests SHALL run it against a scripted test harness with no findings.
+The Execution module SHALL provide a conformance suite without a test runner that every harness plugin's tests run with their own prompts and probes, checking effects through the harness's output and the fixture's probes and not only result codes, with every operation and wait under a deadline; the module's tests SHALL run it against a scripted test harness with no findings.
+
+#### Scenario: Context kept
+- **WHEN** a harness answers a recall turn without the fact stated in an earlier turn of the session
+- **THEN** the suite reports an `outcome` finding
 
 #### Scenario: Broken harness
 - **WHEN** a harness accepts a second response to one request
+- **THEN** the suite reports an `outcome` finding
+
+#### Scenario: Denied action runs
+- **WHEN** a harness runs the action of a denied permission request
 - **THEN** the suite reports an `outcome` finding

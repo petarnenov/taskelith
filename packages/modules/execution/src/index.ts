@@ -257,6 +257,7 @@ export {
 export {
   parseAgentHarnessCapabilities,
   parseHarnessEvent,
+  parseOperationResult,
   type ClassifiedOperation,
   type HarnessEvent,
   type HarnessRequestKind,

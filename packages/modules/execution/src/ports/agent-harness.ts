@@ -74,9 +74,12 @@ export type ClassifiedOperationKind = (typeof CLASSIFIED_OPERATION_KINDS)[number
 
 export const MAX_HARNESS_TEXT_LENGTH = 65_536;
 
+// `path` locates the binary inside the plugin's installed package, so the
+// host can check its digest before it hands the path to a start or resume.
 export interface PinnedBinaryData {
   readonly platform: string;
   readonly version: string;
+  readonly path: string;
   readonly sha256: string;
 }
 
@@ -95,10 +98,11 @@ export interface SlotCredentialData {
 }
 
 // `generation` counts the native processes of one session, starting at 1;
-// every start or resume uses the next one.
+// `binaryPath` is the checked binary, the only one the plugin may run.
 export interface StartSessionRequest {
   readonly sessionId: string;
   readonly generation: number;
+  readonly binaryPath: string;
   readonly workingDirectory: string;
   readonly stateDirectory: string;
   readonly credential: SlotCredentialData;

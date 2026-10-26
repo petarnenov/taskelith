@@ -1,4 +1,4 @@
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { err, failure, isFailureCode, ok, type Failure, type Result } from '@taskelith/kernel';
 import {
   ACCOUNT_SIGNALS,
   CLASSIFIED_OPERATION_KINDS,
@@ -11,6 +11,7 @@ import {
   SUBSCRIPTION_MECHANISMS,
   TURN_OUTCOMES,
   type AccountSignal,
+  type AgentHarnessOperation,
   type ClassifiedOperationKind,
   type HarnessCapability,
   type HarnessFailure,
@@ -20,12 +21,13 @@ import {
   type TurnOutcome,
 } from './agent-harness.js';
 
-// The module's parsers of plugin data, apart from the port types. Each reads
-// own data properties only, so a getter or a proxy cannot run plugin code.
+// The module's parsers of plugin data. They accept own data properties only;
+// a proxy's traps still run, so they reject shapes, not hostile code.
 
 export interface PinnedBinary {
   readonly platform: HarnessPlatform;
   readonly version: string;
+  readonly path: string;
   readonly sha256: string;
 }
 
@@ -63,6 +65,11 @@ type Fields = Readonly<Record<string, unknown>>;
 
 const SHA256 = /^[0-9a-f]{64}$/;
 const MAX_LABEL_LENGTH = 128;
+const MAX_PATH_LENGTH = 1024;
+const MAX_FAILURE_MESSAGE_LENGTH = 4096;
+const BRANCH_PREFIX = 'refs/heads/';
+// Rules of git check-ref-format for one branch name, without its prefix.
+const BAD_BRANCH = /(?:^|\/)\.|\.\.|@\{|\/\/|[\x00-\x20\x7f~^:?*[\\]|\.lock(?:\/|$)|[/.]$|^@$/;
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
 
 export function parseAgentHarnessCapabilities(raw: unknown): Result<ParsedAgentHarnessCapabilities> {
@@ -109,6 +116,79 @@ export function parseHarnessEvent(raw: unknown, capabilities: ParsedAgentHarness
       default: return invalid('event.kind', 'is not an event kind');
     }
   });
+}
+
+// A plugin's operation result: exactly a kernel Result, whose value has the
+// shape its operation defines. The outer Result fails when it is malformed.
+export function parseOperationResult(operation: AgentHarnessOperation, raw: unknown): Result<Result<unknown>> {
+  return guarded<Result<unknown>>('result', () => {
+    const fields = readFields('result', raw, ['ok'], ['value', 'error']);
+    if (!fields.ok) return fields;
+    if (fields.value.ok === false) {
+      if (Object.hasOwn(fields.value, 'value')) return invalid('result.value', 'is not a field of a failure');
+      const failed = readFailure(fields.value.error);
+      return failed.ok ? ok(err(failed.value)) : failed;
+    }
+    if (fields.value.ok !== true) return invalid('result.ok', 'must be a boolean');
+    if (Object.hasOwn(fields.value, 'error')) return invalid('result.error', 'is not a field of a success');
+    const value = readOperationValue(operation, fields.value.value);
+    return value.ok ? ok(ok(value.value)) : value;
+  });
+}
+
+function readFailure(raw: unknown): Result<Failure> {
+  const fields = readFields('result.error', raw, ['code', 'message', 'details']);
+  if (!fields.ok) return fields;
+  const { code, message } = fields.value;
+  if (typeof code !== 'string' || !isFailureCode(code)) return invalid('result.error.code', 'must be a kernel failure code');
+  if (typeof message !== 'string' || message.length > MAX_FAILURE_MESSAGE_LENGTH) {
+    return invalid('result.error.message', `must be a string of at most ${MAX_FAILURE_MESSAGE_LENGTH} characters`);
+  }
+  const details = readFields('result.error.details', fields.value.details, [], ownKeysOf(fields.value.details));
+  if (!details.ok) return details;
+  const entries = Object.entries(details.value);
+  if (entries.some(([, value]) => typeof value !== 'string')) return invalid('result.error.details', 'must hold strings');
+  return ok(failure(code, message, Object.fromEntries(entries) as Record<string, string>));
+}
+
+function readOperationValue(operation: AgentHarnessOperation, raw: unknown): Result<unknown> {
+  switch (operation) {
+    case 'startSession':
+    case 'resumeSession': {
+      const fields = readFields('result.value', raw, ['nativeSessionId']);
+      if (!fields.ok) return fields;
+      const nativeSessionId = readLabel('result.value.nativeSessionId', fields.value.nativeSessionId);
+      return nativeSessionId.ok ? ok(Object.freeze({ nativeSessionId: nativeSessionId.value })) : nativeSessionId;
+    }
+    case 'terminalProgram': return readTerminalProgram(raw);
+    case 'events': return readAsyncIterable(raw);
+    default: return raw === undefined ? ok(undefined) : invalid('result.value', `must be absent for ${operation}`);
+  }
+}
+
+function readTerminalProgram(raw: unknown): Result<unknown> {
+  const fields = readFields('result.value', raw, ['argv', 'workingDirectory']);
+  if (!fields.ok) return fields;
+  const argv = readArray('result.value.argv', fields.value.argv);
+  if (!argv.ok) return argv;
+  if (argv.value.length === 0 || argv.value.some((item) => typeof item !== 'string' || item.length > MAX_PATH_LENGTH)) {
+    return invalid('result.value.argv', 'must be a non-empty list of strings');
+  }
+  const workingDirectory = fields.value.workingDirectory;
+  if (typeof workingDirectory !== 'string' || workingDirectory.length === 0 || workingDirectory.length > MAX_PATH_LENGTH) {
+    return invalid('result.value.workingDirectory', 'must be a path');
+  }
+  return ok(Object.freeze({ argv: Object.freeze([...argv.value]), workingDirectory }));
+}
+
+function readAsyncIterable(raw: unknown): Result<unknown> {
+  if (typeof raw !== 'object' || raw === null) return invalid('result.value', 'must be an async iterable');
+  const iterate: unknown = (raw as Partial<AsyncIterable<unknown>>)[Symbol.asyncIterator];
+  return typeof iterate === 'function' ? ok(raw) : invalid('result.value', 'must be an async iterable');
+}
+
+function ownKeysOf(raw: unknown): string[] {
+  return typeof raw === 'object' && raw !== null ? Reflect.ownKeys(raw).filter((key) => typeof key === 'string') : [];
 }
 
 export function capabilityOfRequest(kind: HarnessRequestKind): HarnessCapability {
@@ -163,10 +243,15 @@ function readOperation(raw: unknown): Result<ClassifiedOperation> {
   if (!fields.ok) return fields;
   const kind = readValue('event.operation.kind', fields.value.kind, CLASSIFIED_OPERATION_KINDS);
   if (!kind.ok) return kind;
-  const ref = readLabel('event.operation.ref', fields.value.ref);
-  if (!ref.ok) return ref;
-  if (!ref.value.startsWith('refs/heads/')) return invalid('event.operation.ref', 'must be a full branch ref');
-  return ok(Object.freeze({ kind: kind.value, ref: ref.value }));
+  const ref = fields.value.ref;
+  if (!isBranchRef(ref)) return invalid('event.operation.ref', 'must be a valid full branch ref');
+  return ok(Object.freeze({ kind: kind.value, ref }));
+}
+
+function isBranchRef(ref: unknown): ref is string {
+  if (typeof ref !== 'string' || ref.length > MAX_PATH_LENGTH || !ref.startsWith(BRANCH_PREFIX)) return false;
+  const branch = ref.slice(BRANCH_PREFIX.length);
+  return branch.length > 0 && !BAD_BRANCH.test(branch);
 }
 
 function parseAccountSignal(raw: unknown, capabilities: ParsedAgentHarnessCapabilities): Result<HarnessEvent> {
@@ -193,10 +278,18 @@ function parseLimit(raw: unknown, capabilities: ParsedAgentHarnessCapabilities):
   const resetsAt = fields.value.resetsAt;
   if (resetsAt === undefined) return ok(Object.freeze({ kind: 'account-signal', signal: 'limit' }));
   if (!capabilities.accountSignals.includes('reset-time')) return invalid('event.resetsAt', 'reset-time is not declared');
-  if (typeof resetsAt !== 'string' || !ISO_INSTANT.test(resetsAt) || Number.isNaN(Date.parse(resetsAt))) {
+  if (!isCalendarInstant(resetsAt)) {
     return invalid('event.resetsAt', 'must be an ISO 8601 UTC instant');
   }
   return ok(Object.freeze({ kind: 'account-signal', signal: 'limit', resetsAt }));
+}
+
+// Date.parse rolls 30 February over to March, so the instant must also
+// read back with the same date and time.
+function isCalendarInstant(text: unknown): text is string {
+  if (typeof text !== 'string' || !ISO_INSTANT.test(text)) return false;
+  const time = Date.parse(text);
+  return !Number.isNaN(time) && new Date(time).toISOString().slice(0, 19) === text.slice(0, 19);
 }
 
 function parseTurnEnded(raw: unknown): Result<HarnessEvent> {
@@ -241,18 +334,25 @@ function readBinaries(raw: unknown): Result<readonly PinnedBinary[]> {
   const binaries: PinnedBinary[] = [];
   for (const [index, item] of items.value.entries()) {
     const path = `capabilities.binaries[${index}]`;
-    const fields = readFields(path, item, ['platform', 'version', 'sha256']);
+    const fields = readFields(path, item, ['platform', 'version', 'path', 'sha256']);
     if (!fields.ok) return fields;
     const platform = readValue(`${path}.platform`, fields.value.platform, HARNESS_PLATFORMS);
     if (!platform.ok) return platform;
     if (binaries.some((binary) => binary.platform === platform.value)) return invalid(`${path}.platform`, 'is pinned twice');
     const version = readLabel(`${path}.version`, fields.value.version);
     if (!version.ok) return version;
-    const { sha256 } = fields.value;
+    const { path: binaryPath, sha256 } = fields.value;
+    if (!isPackagePath(binaryPath)) return invalid(`${path}.path`, 'must be a relative path inside the plugin package');
     if (typeof sha256 !== 'string' || !SHA256.test(sha256)) return invalid(`${path}.sha256`, 'must be 64 lowercase hex digits');
-    binaries.push(Object.freeze({ platform: platform.value, version: version.value, sha256 }));
+    binaries.push(Object.freeze({ platform: platform.value, version: version.value, path: binaryPath, sha256 }));
   }
   return ok(Object.freeze(binaries));
+}
+
+function isPackagePath(path: unknown): path is string {
+  return typeof path === 'string' && path.length > 0 && path.length <= MAX_PATH_LENGTH && !path.startsWith('/')
+    && path.split('/').every((segment) => segment !== '' && segment !== '.' && segment !== '..')
+    && !/[\x00-\x1f\\]/.test(path);
 }
 
 function readValues<Value extends string>(path: string, raw: unknown, allowed: readonly Value[]): Result<readonly Value[]> {
