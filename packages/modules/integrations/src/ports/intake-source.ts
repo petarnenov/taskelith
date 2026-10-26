@@ -13,7 +13,7 @@ export const MAX_INTAKE_BODY_BYTES = 256 * 1024;
 export interface IntakeSourceDescription {
   readonly sourceKind: string;
   readonly label: string;
-  readonly writeBack: boolean;
+  readonly supportsWriteBack: boolean;
 }
 
 export interface IntakeRequest {

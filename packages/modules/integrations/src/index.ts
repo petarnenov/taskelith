@@ -10,6 +10,7 @@ export {
   type BranchName,
   type CodeHead,
   type IntegratedRevision,
+  type MergeClaim,
   type MergeEnqueue,
   type MergeQueue,
   type MergeRequest,

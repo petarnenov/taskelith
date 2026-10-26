@@ -1,5 +1,5 @@
 import type { Identifier, Instant, Result } from '@taskelith/kernel';
-import type { IdempotencyKey, PrincipalId } from '@taskelith/execution';
+import type { PrincipalId } from '@taskelith/execution';
 import type { Generation, ProjectId, TaskId, WorkflowRunId } from '@taskelith/sdlc';
 
 export type MergeRequestId = Identifier<'MergeRequestId'>;
@@ -26,7 +26,13 @@ export type MergeRequestState = (typeof MERGE_REQUEST_STATES)[number];
 // At most one request per target branch is in one of these states.
 export const IN_FLIGHT_MERGE_STATES = Object.freeze(['merging', 'resolving-conflict'] as const);
 
-export const WITHDRAWAL_REASONS = Object.freeze(['gate-not-passed', 'auto-merge-off', 'cancelled'] as const);
+export const WITHDRAWAL_REASONS = Object.freeze([
+  'gate-not-passed',
+  'auto-merge-off',
+  'cancelled',
+  'manual-merge',
+  'maintainer-withdrew',
+] as const);
 
 export type WithdrawalReason = (typeof WITHDRAWAL_REASONS)[number];
 
@@ -34,8 +40,7 @@ export interface AutoMergeSetting {
   readonly projectId: ProjectId;
   readonly enabled: boolean;
   readonly revision: Generation;
-  readonly changedBy?: PrincipalId;
-  readonly changedAt?: Instant;
+  readonly lastChange?: { readonly by: PrincipalId; readonly at: Instant };
 }
 
 export interface AutoMergeChange {
@@ -73,19 +78,22 @@ export interface MergeEnqueue {
   readonly taskId: TaskId;
   readonly targetBranch: BranchName;
   readonly head: CodeHead;
-  readonly idempotencyKey: IdempotencyKey;
 }
 
 export type MergeTransition =
-  | { readonly to: 'merging' | 'resolving-conflict' | 'returned-to-specify' | 'escalated' }
+  | { readonly to: 'queued' | 'merging' | 'resolving-conflict' | 'returned-to-specify' | 'escalated' }
   | { readonly to: 'merged'; readonly integratedRevision: IntegratedRevision }
   | { readonly to: 'withdrawn'; readonly reason: WithdrawalReason };
 
-// Serial per target branch: `claimNext` returns nothing while a request of
-// that branch is in flight; every transition compares the revision.
+export type MergeClaim =
+  | { readonly outcome: 'claimed'; readonly request: MergeRequest }
+  | { readonly outcome: 'branch-busy' | 'queue-empty' };
+
+// Serial per target branch; enqueueing is idempotent per run and head, and
+// every transition compares the revision. `forRun` fails as `not-found`.
 export interface MergeQueue {
   enqueue(request: MergeEnqueue): Promise<Result<MergeRequest>>;
-  claimNext(projectId: ProjectId, targetBranch: BranchName): Promise<Result<MergeRequest | undefined>>;
+  claimNext(projectId: ProjectId, targetBranch: BranchName): Promise<Result<MergeClaim>>;
   transition(id: MergeRequestId, expectedRevision: Generation, change: MergeTransition): Promise<Result<MergeRequest>>;
-  forRun(runId: WorkflowRunId): Promise<Result<MergeRequest | undefined>>;
+  forRun(runId: WorkflowRunId): Promise<Result<MergeRequest>>;
 }

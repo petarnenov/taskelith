@@ -1,13 +1,10 @@
 import type { Identifier, Instant, Result } from '@taskelith/kernel';
 import type { GateId, OwnershipGeneration, ProjectId, StageId, TaskId, WorkflowRunId } from '@taskelith/sdlc';
-import type { AttemptId } from '../domain/identifiers.js';
+import type { AttemptId, IdempotencyKey, NativeRequestId, PrincipalId } from '../domain/identifiers.js';
 import type { ViewStamp } from './board-read-model.js';
 
 export type NeedsYouItemId = Identifier<'NeedsYouItemId'>;
 export type NeedsYouSourceId = Identifier<'NeedsYouSourceId'>;
-export type NativeRequestId = Identifier<'NativeRequestId'>;
-export type PrincipalId = Identifier<'PrincipalId'>;
-export type IdempotencyKey = Identifier<'IdempotencyKey'>;
 
 export const NEEDS_YOU_KINDS = Object.freeze([
   'permission-request',
@@ -57,18 +54,26 @@ export interface NeedsYouResolution {
   readonly answer: NeedsYouAnswer;
 }
 
-export interface NeedsYouItem {
+interface NeedsYouItemFields {
   readonly id: NeedsYouItemId;
   readonly projectId: ProjectId;
-  readonly kind: NeedsYouKind;
   readonly sourceId: NeedsYouSourceId;
   readonly subject: NeedsYouSubject;
   readonly title: string;
   readonly createdAt: Instant;
-  readonly answeredBy: AnsweringRole;
-  readonly escalationReason?: EscalationReason;
-  readonly resolution?: NeedsYouResolution;
+  readonly answerableBy: AnsweringRole;
 }
+
+export type NeedsYouItemState =
+  | { readonly state: 'open' }
+  | { readonly state: 'resolved'; readonly resolution: NeedsYouResolution };
+
+export type NeedsYouItem = NeedsYouItemFields &
+  NeedsYouItemState &
+  (
+    | { readonly kind: Exclude<NeedsYouKind, 'escalation'> }
+    | { readonly kind: 'escalation'; readonly escalationReason: EscalationReason }
+  );
 
 export interface AnswerRequest {
   readonly itemId: NeedsYouItemId;

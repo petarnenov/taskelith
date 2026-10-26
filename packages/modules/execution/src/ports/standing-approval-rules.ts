@@ -1,7 +1,6 @@
 import type { Identifier, Instant, Result } from '@taskelith/kernel';
 import type { OwnershipGeneration, PolicyRevision, ProjectId } from '@taskelith/sdlc';
-import type { AttemptId } from '../domain/identifiers.js';
-import type { NativeRequestId, PrincipalId } from './needs-you.js';
+import type { AttemptId, NativeRequestId, PrincipalId } from '../domain/identifiers.js';
 
 export type StandingRuleId = Identifier<'StandingRuleId'>;
 
@@ -41,7 +40,7 @@ export interface StandingRuleUse {
   readonly usedAt: Instant;
 }
 
-// Recording, revoking, and each use are audited; a use is recorded in the
+// Idempotent by rule identifier, and audited; a use is recorded in the
 // transaction that answers the request, and never by a revoked rule.
 export interface StandingApprovalRules {
   active(projectId: ProjectId, operation: StandingRuleOperation): Promise<Result<readonly StandingRule[]>>;

@@ -102,7 +102,7 @@ export interface BoardCard {
   readonly framework: Pick<WorkflowRunBinding, 'pluginId' | 'pluginVersion'>;
   readonly column: BoardColumn;
   readonly stage: CurrentStage;
-  readonly gate: GateState;
+  readonly gate?: GateState;
   readonly waitingFor?: WaitingReason;
   readonly session: SessionActivity;
   readonly integration: MergeGateState;

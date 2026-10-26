@@ -12,11 +12,15 @@ The board, inbox, and standing rule ports SHALL belong to the Execution module, 
 - **THEN** it implements `IntakeSource` and `WriteBack` in a plugin, and neither module changes
 
 ### Requirement: Board columns from the framework mapping
-The board SHALL have the columns propose, specify, implement, verify, review, and archived, and SHALL derive each stage's column from the obligations and graph order the frozen SDLC framework port returns, placing a review stage before any implementation stage in specify, and keeping a card whose current stage is the Close stage in review with its merge gate state until it is integrated.
+The board SHALL have the columns propose, specify, implement, verify, review, and archived, and SHALL derive each stage's column from the obligations and graph order the frozen SDLC framework port returns, placing a review stage before any implementation stage in specify, and keeping a card whose current stage is the Close stage in review with its merge gate state until its change is merged, when it moves to archived.
 
 #### Scenario: Specification review stage
 - **WHEN** a workflow has a review stage that precedes every implementation stage
 - **THEN** a card at that stage is in the specify column
+
+#### Scenario: Merged while closing
+- **WHEN** a card's merge request is merged and its Close stage still runs
+- **THEN** the card is in the archived column
 
 #### Scenario: Platform-managed stage
 - **WHEN** the card's current stage has the platform-managed origin

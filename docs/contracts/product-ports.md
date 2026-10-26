@@ -4,7 +4,7 @@ Date: 2026-10-26. Status: proposed contract for G3 ([G3 work plan](../g3-plan.md
 
 ## 1. Purpose and parties
 
-The SPA reads centrally aggregated views and sends commands through the control plane ([architecture section 11](../architecture.md#11-spa-authentication-and-live-traffic)). This contract defines the module-owned ports behind those views and commands. It names no intake source, SCM, harness, or SDLC framework: each enters through a plugin or adapter, under [ADR 0003](../decisions/0003-first-integrations-and-plugin-kernel.md) decision 8 and [ADR 0004](../decisions/0004-first-class-engineering-principles.md) principle 4.
+The SPA reads centrally aggregated views and sends commands through the control plane ([architecture section 11](../architecture.md#11-spa-authentication-and-live-traffic)). This contract defines the module-owned ports behind those views and commands. The ports and their types name no intake source, SCM, harness, or SDLC framework: each enters through a plugin or adapter, under [ADR 0003](../decisions/0003-first-integrations-and-plugin-kernel.md) decision 8 and [ADR 0004](../decisions/0004-first-class-engineering-principles.md) principle 4.
 
 | Port | Owner | Implemented by |
 | --- | --- | --- |
@@ -29,7 +29,7 @@ A task created without an external source, from a description, involves no `Inta
 4. **No vendor names.** No type, value, or test of either module names a source, SCM, harness, or framework. A framework's native step appears only as the native stage identifier the SDLC framework port returned. A source's issue identifier appears only as an opaque reference.
 5. **Untrusted plugin data.** `IntakeSource` and `WriteBack` are implemented by plugins, so their inputs and outputs are plain data with string fields that the Integrations module parses and bounds, as the frozen SDLC framework port does ([ADR 0009](../decisions/0009-frozen-sdlc-framework-port.md)). The other ports are internal and use the modules' branded types.
 6. **Failures.** Every operation returns a kernel `Result`. Callers branch on the kernel failure codes: `invalid` for malformed input, `not-found`, `conflict` for a duplicate or a lost compare-and-set, `precondition-failed` for a changed state, `forbidden`, and `unavailable` for a source or store that cannot be reached.
-7. **Idempotency.** Every command that a client or a plugin call can repeat carries an idempotency key. A repeat with the same key and the same input returns the first outcome; the same key with different input fails with `conflict`.
+7. **Idempotency.** Every command that a client or a plugin call can repeat is idempotent by one named means: an idempotency key (inbox answers and write-back calls), a compare-and-set on an expected revision (the auto-merge setting and merge request transitions), or a natural key (a standing rule by its identifier, a merge request by its run and head). A repeat with the same key and the same input returns the first outcome; the same key with different input fails with `conflict`. A lost compare-and-set fails with `conflict`.
 8. **Approver port.** Approvals run through the decision body that a gate names, never through a hard-coded human call ([ADR 0013](../decisions/0013-intents-campaigns-and-proposal-graphs.md) and [ADR 0014](../decisions/0014-decision-council-and-delegated-approval.md) forward-compatibility obligations). In G3 the approvers are a `project-maintainer` and the independent reviewer that delegated spec approval names; the council is not constituted in G3.
 
 ## 3. Board read model
@@ -53,12 +53,13 @@ The column of a workflow stage is derived from the stage's obligations and its p
 
 1. A stage with the `implementation` obligation is in `implement`.
 2. A stage with the `verification` obligation is in `verify`.
-3. A stage with the `review` obligation is in `review` if an implementation stage precedes it in the graph, and in `specify` otherwise, because a review of a specification belongs to Specify and design.
+3. A stage with the `review` obligation is in `review` if a stage with the `implementation` obligation is among its transitive dependencies in `dependsOn`, and in `specify` otherwise, because a review of a specification belongs to Specify and design.
 4. A stage with the `intake` obligation and no other rule above is in `propose`, even if it also has the `specification` obligation.
 5. A stage with the `specification` obligation and no rule above is in `specify`.
-6. A stage with the `closure` obligation is the Close stage. While it is the current stage, the card stays in `review` and shows its merge gate state (section 3.4); once the closure stage has completed, the card is in `archived`.
+6. A stage with the `closure` obligation is the Close stage. While it is the current stage and the change is not merged, the card stays in `review` and shows its merge gate state (section 3.4). Once its merge request is `merged`, the card is in `archived`, even while the Close stage still runs, as the product UI scenario "Merge" requires.
+7. A stage with no obligation is rejected by the SDLC module's parser before it reaches the board, so the rules above cover every stage.
 
-A stage that matches more than one rule takes the first rule that matches. A card's column is the column of the earliest stage in the graph's order that has not completed. For the frozen OpenSpec plugin, `proposal` is in Propose, `specs`, `design`, and `tasks` are in Specify, `apply` is in Implement, `verify` and `review` are platform-managed stages in Verify and Review, and `archive` is the Close stage. For the SpecKit mapping fixture, `specify` is in Propose, `review-spec`, `plan`, `review-plan`, and `tasks` are in Specify, and `close` is a platform-managed Close stage.
+A stage that matches more than one rule takes the first rule that matches. A card's column is the column of the first stage that has not completed, in a topological order of `dependsOn` with ties broken by the order in which the port returned the stages. For the frozen OpenSpec plugin, `proposal` is in Propose, `specs`, `design`, and `tasks` are in Specify, `apply` is in Implement, `verify` and `review` are platform-managed stages in Verify and Review, and `archive` is the Close stage. For the SpecKit mapping fixture, `specify` is in Propose, `review-spec`, `plan`, `review-plan`, and `tasks` are in Specify, and `close` is a platform-managed Close stage.
 
 A card names the current stage's native identifier when its origin is `native`, and shows "platform-managed" when its origin is `platform-managed`.
 
@@ -72,7 +73,7 @@ A card names the current stage's native identifier when its origin is `native`, 
 | `framework` | The run binding's plugin identifier and version |
 | `column` | Section 3.2 |
 | `stage` | The current stage: its identifier, origin, and state |
-| `gate` | The most urgent gate state of the current stage, in the order `blocked`, `failed`, `stale`, `pending`, `passed` |
+| `gate` | The most urgent gate state of the current stage, in the order `blocked`, `failed`, `stale`, `pending`, `passed`; absent when the stage has no gate |
 | `waitingFor` | Why the card does not move, when it waits: a person, a stage admission, a reviewer, capacity, or the merge queue |
 | `session` | The session activity of section 3.6, or `none` |
 | `integration` | The merge gate state of section 3.4 |
@@ -92,6 +93,8 @@ The board shows the merge gate with these values, which item 15 derives from the
 | `returned-to-specify` | A spec conflict sent it back | `returned-to-specify` |
 | `escalated` | Waits for a maintainer | `escalated` |
 | `integrated` | Merged | `merged` |
+
+A `withdrawn` request maps to `awaiting-manual-merge` for the reasons `auto-merge-off` and `manual-merge`, and to `not-ready` for the reasons `gate-not-passed`, `cancelled`, and `maintainer-withdrew`.
 
 ### 3.5 Board view and board states
 
@@ -129,7 +132,7 @@ Every item that waits on a person is one inbox item. The item kinds in G3:
 | `spec-approval` | A spec gate that requires a maintainer (item 22) | `project-maintainer` | `approve` or `reject`, with a reason |
 | `escalation` | Auto-merge or the conflict flow (items 23 and 24) | `project-maintainer` | `retry`, `return-to-specify`, `merge-manually`, or `withdraw` |
 
-An item records its identifier, project, kind, the source that owns it, its subject (the task, and the run, stage, gate, attempt, and native request it concerns, when they exist), a title, its creation time, the role that may answer, and its state, `open` or `resolved`, with the resolver, the time, and the outcome once resolved. Escalation reasons are `conflict-budget-spent` (three conflict attempts failed), `spec-reconciliation-failed` (a reconciled specification failed again), and `no-reviewer` (no reviewer was available after three attempts).
+An item records its identifier, project, kind, the source that owns it, its subject (the task, and the run, stage, gate, attempt, and native request it concerns, when they exist), a title, its creation time, the role that may answer it (`answerableBy`), and its state, `open` or `resolved`, with the resolver, the time, and the answer once resolved. Only an `escalation` item carries an escalation reason. Escalation reasons are `conflict-budget-spent` (three conflict attempts failed), `spec-reconciliation-failed` (a reconciled specification failed again), and `no-reviewer` (no reviewer was available after three attempts).
 
 ### 4.2 Answers
 
@@ -155,21 +158,22 @@ A project-maintainer records standing rules that Taskelith uses to answer native
 
 ### 6.1 Intake and write-back
 
-`IntakeSource` turns a source reference that a user gives, such as a link, into a task draft. It declares its source kind, a label, and whether it supports write-back. `fetch` returns the item's opaque external identifier, title, body, and link, and may suggest a work type. The Integrations module parses the result, rejecting a title over 200 characters or a body over 256 KiB as `invalid`, then fills the draft's changeable defaults from the project: work type (the suggestion or `feature`), framework (the project default, OpenSpec unless another is selected), implementer, reviewer, and spec approver (`delegated-reviewer` or `project-maintainer`, by the project's spec approval policy). The user may change every default before the task is created.
+`IntakeSource` turns a source reference that a user gives, such as a link, into a task draft. It declares its source kind, a label, and whether it supports write-back (`supportsWriteBack`). `fetch` returns the item's opaque external identifier, title, body, and link, and may suggest a work type. The Integrations module parses the result, rejecting a title over 200 characters or a body over 256 KiB as `invalid`, then fills the draft's changeable defaults from the project: work type (the suggestion or `feature`), framework (the project default, OpenSpec unless another is selected), implementer, reviewer, and spec approver (`delegated-reviewer` or `project-maintainer`, by the project's spec approval policy). The user may change every default before the task is created.
 
 `WriteBack` reports to the source the task's progress (its column and gate state), the change request link once one exists, and the resolution on merge. Each call carries an idempotency key; a repeat with the same key is a no-op at the source. A write-back failure is retried and recorded, and never blocks a gate or a merge. Comments and reopenings at the source become lesson feedback in G5 (ADR 0008 decision 6); this contract defines no feedback operation.
 
 ### 6.2 Auto-merge setting
 
-Each project has one auto-merge setting, on by default, with the maintainer who last changed it, the time, and a revision. Only a project-maintainer changes it, by compare-and-set on the revision. While it is on, it is the explicit integration authorization that governance requires. Changing the setting records or revokes the push rule of section 5 in the same PostgreSQL transaction; this is a deliberate cross-module transaction between Integrations and Execution, as architecture section 6 requires to be documented. Auto-merge never merges into `main`, releases, or deploys.
+Each project has one auto-merge setting, on by default, with a revision and, from its first change on, the maintainer who last changed it and the time. Only a project-maintainer changes it, by compare-and-set on the revision. While it is on, it is the explicit integration authorization that governance requires. Changing the setting records or revokes the push rule of section 5 in the same PostgreSQL transaction; this is a deliberate cross-module transaction between Integrations and Execution, as architecture section 6 requires to be documented. Auto-merge never merges into `main`, releases, or deploys.
 
 ### 6.3 Merge queue
 
 A merge request names the change's run and task, the target branch, and the code head that its gates passed at. The target branch is the project's integration branch for a standalone change; it is a field, not a constant, so that an intent's integration branch can become a target later (ADR 0013 decision 7).
 
-- **Entry.** A change enters the queue when every gate before its Close stage has passed at the current head and auto-merge is on. Enqueueing is idempotent per run and head.
-- **One at a time.** At most one request per target branch is `merging` or `resolving-conflict`; the next is claimed only after it has merged or left the flow.
+- **Entry.** A change enters the queue when every gate before its Close stage has passed at the current head and auto-merge is on. Enqueueing is idempotent per run and head: a repeat returns the existing request.
+- **One at a time.** At most one request per target branch is `merging` or `resolving-conflict`; the next is claimed only after it has merged or left the flow. A claim that takes nothing reports whether the branch is busy or the queue is empty.
 - **States.** `queued`, `merging`, `resolving-conflict`, `returned-to-specify`, `escalated`, `merged`, and `withdrawn`. A gate that goes stale or fails (`gate-not-passed`), the setting turning off (`auto-merge-off`), or the task's cancellation (`cancelled`) withdraws a queued request, with that reason.
+- **Escalation answers.** A maintainer's answer to an escalation moves its request: `retry` puts it back to `queued` with a new budget of three attempts; `return-to-specify` moves it to `returned-to-specify`; `merge-manually` withdraws it with the reason `manual-merge`, and the maintainer merges outside auto-merge; `withdraw` withdraws it with the reason `maintainer-withdrew`. Each answer is audited.
 - **Conflicts.** The conflict flow of ADR 0008 decision 3 has a budget of three attempts, counted per request. Each attempt resolves in the task's workspace, runs verification and the task's independent review again on the new head, and makes the old head's evidence stale. A spec conflict returns the task to Specify. A spent budget, a reconciled specification that fails again, or no reviewer after three attempts escalates to a maintainer through the inbox. Review never falls back to the implementer.
 - **Merge.** Merging uses the SCM port with the project's merge method. A merged request records the integrated revision; the change is then closed and archived through its framework's Close stage, and its agent session is stopped. Each step is idempotent and has a crash point, so that a restart completes it without merging twice.
 
@@ -177,11 +181,11 @@ A merge request names the change's run and task, the target branch, and the code
 
 The items that implement these ports add, through `make`:
 
-- A board mapping test over the frozen OpenSpec plugin's stage graph and the SpecKit mapping fixture, asserting the columns of section 3.2, and a test that a workflow whose stage matches no rule fails as `invalid` rather than defaulting to a column.
+- A board mapping test over the frozen OpenSpec plugin's stage graph and the SpecKit mapping fixture, asserting the columns of section 3.2, including a card in `archived` once its merge request is `merged` while its Close stage still runs.
 - An inbox test that a duplicate answer, an answer for a newer attempt generation, and an answer by a role that may not answer are rejected without a change, and that a resolved item leaves the counts.
 - A standing rule test that a revoked rule, a rule of an older policy revision, and an unclassified request never answer a request, and that every use is audited.
 - An auto-merge test that turning the setting off revokes the push rule in the same transaction and withdraws queued requests, and that two ready changes for one target branch merge one after the other.
-- A conflict flow test that the budget stops at three attempts, that a spec conflict returns to Specify, and that escalation creates exactly one inbox item.
+- A conflict flow test that the budget stops at three attempts, that a spec conflict returns to Specify, that escalation creates exactly one inbox item, and that each escalation answer moves the request as section 6.3 states.
 - A crash point test for each merge, closure, and session-stop step.
 - An intake test with a scripted source that returns over-long, missing, and malformed fields, and a write-back test that a failing source neither blocks a merge nor loses the retry.
 

@@ -20,7 +20,11 @@ const CONTRACT_VALUES = [
     ['queued', 'merging', 'resolving-conflict', 'returned-to-specify', 'escalated', 'merged', 'withdrawn'],
   ],
   ['IN_FLIGHT_MERGE_STATES', IN_FLIGHT_MERGE_STATES, ['merging', 'resolving-conflict']],
-  ['WITHDRAWAL_REASONS', WITHDRAWAL_REASONS, ['gate-not-passed', 'auto-merge-off', 'cancelled']],
+  [
+    'WITHDRAWAL_REASONS',
+    WITHDRAWAL_REASONS,
+    ['gate-not-passed', 'auto-merge-off', 'cancelled', 'manual-merge', 'maintainer-withdrew'],
+  ],
   ['SPEC_APPROVERS', SPEC_APPROVERS, ['delegated-reviewer', 'project-maintainer']],
 ] as const;
 
