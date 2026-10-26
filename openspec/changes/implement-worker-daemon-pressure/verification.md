@@ -31,7 +31,7 @@ Every value comes from an existing document or constant; none was invented.
 - **Causes:** a resident set above `512 MiB` is `daemon-memory`, a lag above `200 ms` `event-loop-lag`, the limit itself is within it, an unreadable value is `unmeasurable-limit`, and the causes keep the contract order with the disk floor and the backlog (`admission-pressure.test.ts`).
 - **Reporting:** a refresh reads the fake sensor and journals each change until the overhead subsides, and only the disk floor sheds logs (`admission-pressure.test.ts`); the started worker reports the overhead through the watch and runs the sensor until the stop (`worker-start.test.ts`).
 - **Production sensor:** the resident set is read and a throwing read is a failure; the watch closes a lag window each interval and disables the histogram on stop (`daemon-overhead.test.ts`); the lag window reads the open window until the first close and then the last closed one (`node-observability.test.ts`).
-- **Writes refused for space:** the adapter rolls back, calls the hook once, and answers a space refusal (`worker-journal.test.ts`); a W1 refused for space is not acknowledged and its redelivery is journaled (`command-intake.test.ts`); a W5s and W5e refused for space are derived again after backoffs of 7.5 s, 15 s, and 30 s and committed once, a recovered `not-started` is recovered again in the same round, and a stop ends the retries with the fact left in the record, none of them reported as a failure (`start-reconciliation.test.ts`).
+- **Writes refused for space (see the review passes for the orchestrator's writes):** the adapter rolls back, calls the hook once, and answers a space refusal (`worker-journal.test.ts`); a W1 refused for space is not acknowledged and its redelivery is journaled (`command-intake.test.ts`); a W5s and W5e refused for space are derived again after backoffs of 7.5 s, 15 s, and 30 s and committed once, a recovered `not-started` is recovered again in the same round, and a stop ends the retries with the fact left in the record, none of them reported as a failure (`start-reconciliation.test.ts`).
 - **Comment rule:** `npm run verify:comments` passes.
 - **OpenSpec:** `npm run openspec -- validate implement-worker-daemon-pressure --strict` passes; every requirement is under 400 characters.
 - **make verify:** passed at `9739dbe` (1656 tests, 0 failures; coverage 99.24% lines, 91.77% branches, 98.73% functions).
@@ -48,6 +48,14 @@ OpenCode, `opencode-go/kimi-k3.1-pro` (`high`), read-only reviewer agent, sessio
 - **make verify:** passed at `1974fb0` (1665 tests, 0 failures; coverage 99.24% lines, 91.77% branches, 98.71% functions).
 
 ## Review pass 2
+
+OpenCode, `opencode-go/kimi-k3.1-pro` (`high`), read-only reviewer agent, session `ses_e87b72227ffeGF3fpiBZy1pf8L`, invoked as in pass 1 with a pass-2 prompt. The model was set by `-m` only, as in pass 1 (a limitation). The snapshots before and after the pass matched (`dd9e48c9172f56a3004d1555e15a1e98ef97a47f52e189122e952134de432eb1`). Findings: 0 Critical, 1 High, 0 Medium, 0 Low; the five findings of pass 1 were confirmed resolved.
+
+- **High (fixed, `1aa532c`, tests `d71bb12`; `f4d74bf`, tests `8965e31`):** W2, W3 for a grant, a rejection, or an expiry, and the W4 before the supervisor starts ended the launch on any failure, a refusal for space included. A W3 or W4 left an execution of this process that no later pass reconciled until a restart, and a refused W2 was replaced by a new execution. Each is now retried unchanged by `commitWrite` (renamed from `commitFact` of pass 1) for the same execution and operation, after the 5 s to 60 s backoff with jitter, until it commits or the worker stops, and is not reported. What it precedes waits for the commit: no request before W2, no use of a grant before its W3, no supervisor start before W4 (journal contract section 5); no contract change was needed. The exclusion is removed from the design and from the limitations below. Tests: each write refused and then committed without a restart; the one request follows W2 for the same operation, the supervisor starts only after W3 and W4, and a rejection and an expiry keep the same execution.
+- **Same pass, found by the author:** the cancellation evidence and the removal of a confirmed record, which each pass derives again, reported a refusal for space as a failure and were tried again at every pass. `HeldWrites` now holds each back for the same backoff without delaying the pass. Tests: both held back within the backoff and committed after it.
+- **make verify:** {VERIFY}
+
+## Review pass 3
 
 Pending.
 

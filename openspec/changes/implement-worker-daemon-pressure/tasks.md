@@ -19,6 +19,6 @@
 - [x] 3.2 `npm run openspec -- validate implement-worker-daemon-pressure --strict`
 - [x] 3.3 `make verify`
 - [x] 3.4 Review pass 1 (OpenCode kimi-k3.1-pro): space retry of the orchestrator's facts at start and after a launch's own seal, an empty or unreadable lag window as unmeasurable, the histogram enabled only by the watch
-- [x] 3.4b Review pass 2 (OpenCode kimi-k3.1-pro): space retry of W2, W3, and the W4 before the supervisor starts
+- [x] 3.4b Review pass 2 (OpenCode kimi-k3.1-pro): space retry of W2, W3, and the W4 before the supervisor starts; the pass-driven writes held back for the backoff
 - [ ] 3.4c Review pass 3
 - [ ] 3.5 Handoff to the coordinator
