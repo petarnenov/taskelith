@@ -88,10 +88,10 @@ A push SHALL name the remote task branch head the caller expects, SHALL fail wit
 - **THEN** the push fails with `conflict` and the remote keeps the other party's head
 
 ### Requirement: Head evidence snapshot
-`snapshot` SHALL return the clean head with bytes holding exactly the entries of its tree, each file with its mode and content and each link with its target, without `.git`, commit metadata, ignored or untracked files, or a credential, and equal for equal trees in any workspace and for any commit, for storage under their SHA-256 digest with kind `code-head-snapshot`.
+`snapshot` SHALL return the workspace's current clean head, with all three parts, and bytes holding exactly the entries of its tree, each file with its mode and content and each link with its target, without `.git`, commit metadata, ignored or untracked files, or a credential, and equal for equal trees in any workspace and for any commit, for storage under their SHA-256 digest with kind `code-head-snapshot`.
 
 #### Scenario: Same head in two workspaces
-- **WHEN** the same head is snapshotted in the implementation workspace and in a review workspace
+- **WHEN** a pushed head is snapshotted in the implementation workspace and in a fresh review workspace at that head
 - **THEN** both snapshots have the same bytes
 
 #### Scenario: Empty commit
@@ -99,10 +99,14 @@ A push SHALL name the remote task branch head the caller expects, SHALL fail wit
 - **THEN** both snapshots have the same bytes
 
 ### Requirement: Cleanup never removes a control record
-`remove` and `sweep` SHALL touch only workspace layout entries directly under `worker/workspaces/`, SHALL never follow a symbolic link inside an entry or an entry that is itself a link, SHALL never remove the journal, identity, credential files, lock, fault record, execution records, or logs, and removing an absent workspace SHALL succeed.
+`remove` and `sweep` SHALL touch only workspace layout entries directly under `worker/workspaces/`, SHALL never follow a symbolic link inside an entry or an entry that is itself a link, SHALL never remove the journal, identity, credential files, lock, fault record, execution records, or logs; `remove` SHALL refuse a dirty workspace with `precondition-failed` and reason `workspace-dirty` and keep it, and removing an absent workspace SHALL succeed.
+
+#### Scenario: Dirty workspace
+- **WHEN** a workspace with an untracked file is removed
+- **THEN** the removal fails with `precondition-failed` and the workspace and its file remain
 
 #### Scenario: Link to a control record
-- **WHEN** a workspace containing a symbolic link to `worker/identity` is removed
+- **WHEN** a clean workspace containing an ignored symbolic link to `worker/identity` is removed
 - **THEN** the workspace is gone, every control record is unchanged, and another attempt's workspace remains
 
 #### Scenario: Linked leftover
@@ -110,7 +114,7 @@ A push SHALL name the remote task branch head the caller expects, SHALL fail wit
 - **THEN** the link is removed and every execution record is unchanged
 
 ### Requirement: Workspace conformance suite
-Every workspace adapter SHALL pass `WORKSPACE_CONFORMANCE` through a `WorkspaceFixture` that its test supplies, and the suite SHALL report an adapter that stores a credential, calls the remote before its scope check, checks a task name for one target only, accepts a mismatched tree, misses untracked files, snapshots commit metadata or loses modes and links, removes beyond its workspace, or follows links when it sweeps.
+Every workspace adapter SHALL pass `WORKSPACE_CONFORMANCE` through a `WorkspaceFixture` that its test supplies, and the suite SHALL report an adapter that stores a credential, calls the remote before its scope check, checks a task name for one target only, accepts a mismatched tree, misses untracked files, snapshots commit metadata, a stale tree, or lost modes and links, removes a dirty workspace or beyond its workspace, or follows links when it sweeps.
 
 #### Scenario: Defective removal
 - **WHEN** the suite runs against an adapter whose removal deletes other workspaces

@@ -39,7 +39,8 @@ export interface WorkspaceLifecycle {
   prepare(request: PrepareWorkspace): Promise<Result<Workspace>>;
   // Ready workspaces only, in code point order of the attempt.
   list(): Promise<readonly AttemptId[]>;
-  // Removing an absent workspace succeeds; nothing outside it is touched.
+  // Refuses a dirty workspace (`workspace-dirty`); an absent one succeeds.
+  // Nothing outside the workspace is touched.
   remove(attemptId: AttemptId): Promise<Result<void>>;
   // Removes leftovers of an interrupted prepare or remove.
   sweep(): Promise<void>;

@@ -2,7 +2,7 @@ import { parseIdentifier, type Result } from '@taskelith/kernel';
 import type { AttemptId } from '@taskelith/execution';
 import { expectCode, expectSame, expectSuccess, type ConformanceCase, type ProjectId, type TaskId } from '@taskelith/sdlc';
 import { isSameCodeHead, parseGitObjectId, type CodeHeadIdentity, type GitObjectId, type RepositoryId } from '../domain/code-head.js';
-import type { Workspace, WorkspaceCredential, WorkspaceStatus, WorkspaceTarget } from '../domain/workspace.js';
+import type { HeadSnapshot, Workspace, WorkspaceCredential, WorkspaceStatus, WorkspaceTarget } from '../domain/workspace.js';
 import type { TreeEntry, WorkspaceFixture } from './workspace-fixture.js';
 import type { PrepareWorkspace } from './workspace-provider.js';
 
@@ -47,12 +47,31 @@ function expectReason(problems: string[], label: string, result: Result<unknown>
   if (!result.ok) expectSame(problems, `${label} reason`, result.error.details.reason, reason);
 }
 
+// A prepared workspace, whose head must be the commit and tree it holds.
 async function prepared(problems: string[], fixture: WorkspaceFixture, overrides: Partial<PrepareWorkspace> = {}) {
-  return value(problems, `prepare ${overrides.attemptId ?? FIRST}`, await fixture.provider.prepare(request(fixture, overrides)));
+  const attemptId = overrides.attemptId ?? FIRST;
+  const workspace = value(problems, `prepare ${attemptId}`, await fixture.provider.prepare(request(fixture, overrides)));
+  if (workspace === undefined) return undefined;
+  const { commit, tree } = workspace.head;
+  expectSame(problems, `prepared head of ${attemptId}`, { commit, tree }, await fixture.nativeHead(attemptId));
+  return workspace;
 }
 
+// The status, whose head must be the commit and tree that Git reports.
 async function status(problems: string[], fixture: WorkspaceFixture, attemptId: AttemptId): Promise<WorkspaceStatus | undefined> {
-  return value(problems, `inspect ${attemptId}`, await fixture.provider.inspect(attemptId));
+  const current = value(problems, `inspect ${attemptId}`, await fixture.provider.inspect(attemptId));
+  if (current === undefined) return undefined;
+  const { commit, tree } = current.head;
+  expectSame(problems, `head of ${attemptId}`, { commit, tree }, await fixture.nativeHead(attemptId));
+  return current;
+}
+
+// A snapshot whose head must be the workspace's current head.
+async function snapshotOf(problems: string[], fixture: WorkspaceFixture, attemptId: AttemptId, label: string): Promise<HeadSnapshot | undefined> {
+  const current = await status(problems, fixture, attemptId);
+  const taken = value(problems, label, await fixture.provider.snapshot(attemptId));
+  if (current !== undefined && taken !== undefined) sameHead(problems, `${label} head`, taken.head, current.head);
+  return taken;
 }
 
 async function expectDirty(problems: string[], fixture: WorkspaceFixture, attemptId: AttemptId, reasons: readonly string[]) {
@@ -169,19 +188,20 @@ const CREDENTIAL_USE: readonly ConformanceCase<WorkspaceFixture>[] = [
     async check(fixture) {
       const problems: string[] = [];
       const { read, write, foreign } = fixture.credentials;
-      const refused = async (label: string, result: Promise<Result<unknown>>) => {
+      // The operation starts only after the count is read.
+      const refused = async (label: string, operation: () => Promise<Result<unknown>>) => {
         const before = await fixture.remoteCalls();
-        expectReason(problems, label, await result, 'forbidden', 'credential-out-of-scope');
+        expectReason(problems, label, await operation(), 'forbidden', 'credential-out-of-scope');
         expectSame(problems, `${label} remote calls`, (await fixture.remoteCalls()) - before, 0);
       };
-      await refused('prepare with a foreign credential', fixture.provider.prepare(request(fixture, { credential: foreign })));
+      await refused('prepare with a foreign credential', () => fixture.provider.prepare(request(fixture, { credential: foreign })));
       if ((await prepared(problems, fixture)) === undefined) return problems;
       await fixture.writeFile(FIRST, 'change.txt', 'change\n');
       await fixture.commitAll(FIRST, 'change');
       const push = { attemptId: FIRST, expectedRemoteHead: null };
-      await refused('push with read-only', fixture.provider.push({ ...push, credential: read }));
-      await refused('push with a foreign writer', fixture.provider.push({ ...push, credential: foreign }));
-      await refused('remote head with a foreign credential', fixture.provider.readRemoteHead({ attemptId: FIRST, credential: foreign }));
+      await refused('push with read-only', () => fixture.provider.push({ ...push, credential: read }));
+      await refused('push with a foreign writer', () => fixture.provider.push({ ...push, credential: foreign }));
+      await refused('remote head with a foreign credential', () => fixture.provider.readRemoteHead({ attemptId: FIRST, credential: foreign }));
       expectSame(problems, 'nothing pushed', await fixture.remoteHead(TASK_BRANCH), undefined);
       expectSuccess(problems, 'push with write', await fixture.provider.push({ ...push, credential: write }));
       expectSame(problems, 'secrets in the workspace', secretsIn(await fixture.workspaceText(FIRST), [read, write, foreign]), []);
@@ -306,9 +326,13 @@ const SNAPSHOTS: readonly ConformanceCase<WorkspaceFixture>[] = [
       await fixture.writeExecutable(FIRST, 'run.sh', 'echo run\n');
       await fixture.writeLink(FIRST, 'latest', 'change.txt');
       await fixture.commitAll(FIRST, 'tree');
+      const credential = fixture.credentials.write;
+      // Published, so that a fresh clone can open the same head.
+      const pushed = value(problems, 'push', await fixture.provider.push({ attemptId: FIRST, credential, expectedRemoteHead: null }));
       await fixture.writeFile(FIRST, fixture.ignoredPath, 'ignored\n');
-      const first = value(problems, 'snapshot', await fixture.provider.snapshot(FIRST));
-      if (first === undefined) return problems;
+      const first = await snapshotOf(problems, fixture, FIRST, 'snapshot');
+      if (first === undefined || pushed === undefined) return problems;
+      sameHead(problems, 'snapshot of the pushed head', first.head, pushed);
       const expected = sortedTree({
         ...fixture.baseTree,
         'change.txt': { type: 'file', mode: '100644', content: 'change\n' },
@@ -316,19 +340,19 @@ const SNAPSHOTS: readonly ConformanceCase<WorkspaceFixture>[] = [
         latest: { type: 'link', target: 'change.txt' },
       });
       expectSame(problems, 'tree', sortedTree(await fixture.readSnapshot(first.content)), expected);
-      await fixture.commitAll(FIRST, 'empty');
-      const recommitted = value(problems, 'snapshot after an empty commit', await fixture.provider.snapshot(FIRST));
-      if (recommitted === undefined) return problems;
-      expectSame(problems, 'other commit', recommitted.head.commit !== first.head.commit, true);
-      expectSame(problems, 'same bytes for the same tree', sameBytes(recommitted.content, first.content), true);
       const review = await prepared(problems, fixture, { attemptId: SECOND, target: { kind: 'at-head', head: first.head } });
-      const elsewhere = value(problems, 'snapshot elsewhere', await fixture.provider.snapshot(SECOND));
+      const elsewhere = await snapshotOf(problems, fixture, SECOND, 'snapshot elsewhere');
       if (review === undefined || elsewhere === undefined) return problems;
       expectSame(problems, 'same bytes elsewhere', sameBytes(elsewhere.content, first.content), true);
+      await fixture.commitAll(FIRST, 'empty');
+      const recommitted = await snapshotOf(problems, fixture, FIRST, 'snapshot after an empty commit');
+      if (recommitted === undefined) return problems;
+      expectSame(problems, 'other commit, same tree', [recommitted.head.commit !== first.head.commit, recommitted.head.tree === first.head.tree], [true, true]);
+      expectSame(problems, 'same bytes for the same tree', sameBytes(recommitted.content, first.content), true);
       await fixture.writeFile(FIRST, 'untracked.txt', 'untracked\n');
       expectReason(problems, 'dirty', await fixture.provider.snapshot(FIRST), 'precondition-failed', 'workspace-dirty');
       await fixture.commitAll(FIRST, 'more');
-      const changed = value(problems, 'snapshot after a change', await fixture.provider.snapshot(FIRST));
+      const changed = await snapshotOf(problems, fixture, FIRST, 'snapshot after a change');
       if (changed !== undefined) expectSame(problems, 'other bytes', sameBytes(changed.content, first.content), false);
       return problems;
     },
@@ -337,18 +361,22 @@ const SNAPSHOTS: readonly ConformanceCase<WorkspaceFixture>[] = [
 
 const CLEANUP: readonly ConformanceCase<WorkspaceFixture>[] = [
   {
-    name: 'removes only its own workspace and never a control record',
+    name: 'removes only its own clean workspace, keeps a dirty one, and never a control record',
     async check(fixture) {
       const problems: string[] = [];
       const before = await fixture.controlRecords();
       if ((await prepared(problems, fixture)) === undefined) return problems;
       if ((await prepared(problems, fixture, { attemptId: SECOND })) === undefined) return problems;
-      await fixture.linkToControlRecord(FIRST, 'link-to-record');
+      // An ignored link leaves the workspace clean.
+      await fixture.linkToControlRecord(FIRST, fixture.ignoredPath);
+      await expectDirty(problems, fixture, FIRST, []);
+      await fixture.writeFile(SECOND, 'unsaved.txt', 'unsaved\n');
+      expectReason(problems, 'remove a dirty workspace', await fixture.provider.remove(SECOND), 'precondition-failed', 'workspace-dirty');
+      await expectDirty(problems, fixture, SECOND, ['untracked']);
       expectSuccess(problems, 'remove', await fixture.provider.remove(FIRST));
       expectSuccess(problems, 'remove again', await fixture.provider.remove(FIRST));
       expectCode(problems, 'removed', await fixture.provider.inspect(FIRST), 'not-found');
       expectSame(problems, 'listed', await fixture.provider.list(), [SECOND]);
-      expectSuccess(problems, 'other kept', await fixture.provider.inspect(SECOND));
       expectSame(problems, 'control records', await fixture.controlRecords(), before);
       return problems;
     },
@@ -360,7 +388,10 @@ const CLEANUP: readonly ConformanceCase<WorkspaceFixture>[] = [
       const before = await fixture.controlRecords();
       if ((await prepared(problems, fixture)) === undefined) return problems;
       if ((await prepared(problems, fixture, { attemptId: SECOND })) === undefined) return problems;
+      // A committed link leaves the workspace clean, as a removal needs.
       await fixture.linkToControlRecord(FIRST, 'link-to-record');
+      await fixture.commitAll(FIRST, 'link');
+      await expectDirty(problems, fixture, FIRST, []);
       await fixture.interruptRemove(FIRST);
       await fixture.interruptPrepare(THIRD);
       await fixture.leaveLinkedLeftover(attempt('attempt-4'));

@@ -70,6 +70,11 @@ export class FakeGitService {
     return this.commits.get(commit)?.entries ?? {};
   }
 
+  // A new clone reaches only commits that a remote branch holds.
+  published(commit: string): boolean {
+    return [...this.branches.values()].some((head) => this.descends(head, commit));
+  }
+
   descends(commit: string, ancestor: string): boolean {
     for (let current: string | null = commit; current !== null; current = this.commits.get(current)?.parent ?? null) {
       if (current === ancestor) return true;
@@ -96,6 +101,9 @@ export interface DoubleDefects {
   readonly ignoresUntracked?: boolean;
   readonly removesWorkspacesRoot?: boolean;
   readonly callsRemoteBeforeScope?: boolean;
+  readonly callsRemoteBeforeScopeInPrepare?: boolean;
+  readonly snapshotsStaleTree?: boolean;
+  readonly removesDirty?: boolean;
   readonly acceptsMismatchedTree?: boolean;
   readonly checksTaskOnlyOnBranch?: boolean;
   readonly snapshotsCommit?: boolean;
@@ -126,6 +134,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     if (target.kind === 'at-head' && target.head.repository !== request.binding.repository) {
       return err(failure('invalid', 'the head belongs to another repository'));
     }
+    if (this.defects.callsRemoteBeforeScopeInPrepare) this.service.calls += 1;
     const scope = this.scope(request.credential, request.binding.repository, 'read-code');
     if (!scope.ok) return scope;
     this.service.calls += 1;
@@ -158,6 +167,10 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     if (!name.ok) return name;
     const target = join(this.root, name.value);
     if (!(await exists(target))) return ok(undefined);
+    const current = await this.inspect(attemptId);
+    if (!current.ok) return current;
+    const clean = cleanHead(current.value);
+    if (!clean.ok && !this.defects.removesDirty) return clean;
     if (this.defects.removesWorkspacesRoot) {
       await rm(this.root, { recursive: true });
       await mkdir(this.root);
@@ -205,7 +218,15 @@ export class TempDirWorkspaces implements WorkspaceProvider {
       entries = Object.fromEntries(Object.entries(entries).map(([path, entry]) => [path, file(entry.type === 'file' ? entry.content : entry.target)]));
     }
     if (this.defects.snapshotsCommit) entries = { ...entries, COMMIT: file(head.value.commit) };
-    return ok({ head: head.value, contentType: SNAPSHOT_TYPE, content: new TextEncoder().encode(canonical(entries)) });
+    const content = new TextEncoder().encode(canonical(entries));
+    return ok({ head: this.defects.snapshotsStaleTree ? this.staleHead(head.value) : head.value, contentType: SNAPSHOT_TYPE, content });
+  }
+
+  // The head with its parent's tree, as a cache that missed a commit would.
+  private staleHead(head: CodeHeadIdentity): CodeHeadIdentity {
+    const parent = this.service.commits.get(head.commit)?.parent ?? head.commit;
+    const tree = this.service.commits.get(parent)?.tree ?? head.tree;
+    return mustParse(parseCodeHeadIdentity({ repository: head.repository, commit: head.commit, tree }));
   }
 
   async readRemoteHead(request: RemoteHeadRequest): Promise<Result<GitObjectId | null>> {
@@ -262,7 +283,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
   private startCommit(request: PrepareWorkspace, taskBranch: string): string | undefined {
     if (request.target.kind === 'at-head') {
       const { commit } = request.target.head;
-      return this.service.commits.has(commit) ? commit : undefined;
+      return this.service.commits.has(commit) && this.service.published(commit) ? commit : undefined;
     }
     if (!this.service.branches.has(request.binding.baseBranch)) return undefined;
     return this.service.branches.get(taskBranch) ?? this.service.branches.get(request.binding.baseBranch);
@@ -413,6 +434,10 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
       service.branches.set(branch, service.commit(entries, parent));
     },
     remoteCalls: async () => service.calls,
+    nativeHead: async (attemptId) => {
+      const { commit } = await readState(await checkout(attemptId));
+      return { commit, tree: service.commits.get(commit)?.tree ?? '' };
+    },
     workspaceText: async (attemptId) => allText(dirname(await checkout(attemptId))),
     controlRecords: async () => {
       const worker = join(dataRoot, 'worker');

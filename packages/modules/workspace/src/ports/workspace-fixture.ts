@@ -43,6 +43,8 @@ export interface WorkspaceFixture {
   advanceRemote(branch: string): Promise<void>;
   // Remote operations the service has seen so far, of any kind.
   remoteCalls(): Promise<number>;
+  // The workspace's head commit and its tree, read natively.
+  nativeHead(attemptId: AttemptId): Promise<{ readonly commit: string; readonly tree: string }>;
   // Every byte under the workspace's directory, read as text.
   workspaceText(attemptId: AttemptId): Promise<string>;
   // Every control record kind of the worker journal contract section 2,
@@ -52,7 +54,7 @@ export interface WorkspaceFixture {
   readSnapshot(content: Uint8Array): Promise<Readonly<Record<string, TreeEntry>>>;
   // A staging entry holding a symbolic link to a control record.
   interruptPrepare(attemptId: AttemptId): Promise<void>;
-  // The workspace renamed to its removing entry, not yet deleted.
+  // The clean workspace renamed to its removing entry, not yet deleted.
   interruptRemove(attemptId: AttemptId): Promise<void>;
   // A staging entry that is itself a link to a control record directory.
   leaveLinkedLeftover(attemptId: AttemptId): Promise<void>;
