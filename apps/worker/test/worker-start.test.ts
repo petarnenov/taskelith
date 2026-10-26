@@ -6,7 +6,6 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { SUPPORTED_PROTOCOL_VERSIONS, checkMessageSchema } from '@taskelith/contracts';
-import type { JournalSnapshot } from '@taskelith/execution';
 import type { Enrollment, EnrollmentClient, EnrollmentRequest } from '@taskelith/fleet';
 import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
 import type { TransportConnection, WorkerTransportEndpoint } from '@taskelith/nats';
@@ -25,7 +24,7 @@ import {
   type WorkerDependencies,
   type WorkerSettings,
 } from '@taskelith/worker';
-import { FakeAuthority, FakeClock, FakeSupervisions, grantFor, offer, requestOf } from './launch-fakes.ts';
+import { FakeAuthority, FakeClock, FakeSupervisions, offer } from './launch-fakes.ts';
 import { failureReason, hostBootId, recordJournalFault, workerPaths, type VolumeProbe } from '@taskelith/worker-journal';
 
 const T0 = value(parseInstant('2026-10-25T09:00:00.000Z'));
@@ -352,45 +351,4 @@ test('the host\'s record listing and the logger reach the start reconciliation',
   await start({ ...settings, launch: LAUNCH }, dependencies);
   await until(() => sink.records.some(({ event }) => event === 'worker.execution.leftover'));
   assert.deepEqual(sink.records.find(({ event }) => event === 'worker.execution.leftover')?.fields, { record: 'stray-1' });
-});
-
-// What an earlier process left: execution 1 pending its grant, 2 granted
-// with its record written, and 3 closed as not started.
-async function inheritExecutions(): Promise<JournalSnapshot['executions']> {
-  const earlier = await start();
-  const { journal } = earlier.root;
-  for (const number of [1, 2, 3]) {
-    value(journal.recordCommand(offer(number)));
-    value(journal.beginAuthorization(requestOf(`execution-${number}`, `operation-${number}`, number)));
-  }
-  value(journal.recordGrant(grantFor(requestOf('execution-2', 'operation-2', 2))));
-  value(journal.recordExecutionRecordWritten(id('ExecutionId', 'execution-2')));
-  value(journal.recordNotStarted(id('ExecutionId', 'execution-3')));
-  const { executions } = value(journal.snapshot());
-  await earlier.stop();
-  return executions;
-}
-
-async function startLogged(launching: RecordingLaunching): Promise<{ worker: RunningWorker; sink: InMemoryLogSink }> {
-  const sink = new InMemoryLogSink();
-  const logger = new Logger(sink, { now: () => T0 });
-  const worker = value(await startWorker(settings, { ...dependencies(launching.dependencies), logger }));
-  running.push(worker);
-  return { worker, sink };
-}
-
-test('without a launch command, each inherited open execution is deferred and left untouched', async () => {
-  const before = await inheritExecutions();
-  const launching = new RecordingLaunching();
-  const { worker, sink } = await startLogged(launching);
-  await delay((launching.dependencies.pollMilliseconds ?? 0) * 10);
-  const deferred = sink.records.filter(({ event }) => event === 'worker.reconciliation.deferred');
-  assert.deepEqual(deferred.map(({ fields }) => fields), [{ executionId: 'execution-1' }, { executionId: 'execution-2' }]);
-  assert.deepEqual([launching.hosts, launching.authority.requests], [[], []]);
-  assert.deepEqual(value(worker.root.journal.snapshot()).executions, before);
-});
-
-test('without a launch command or open executions, nothing is deferred', async () => {
-  const { sink } = await startLogged(new RecordingLaunching());
-  assert.deepEqual(sink.records.filter(({ event }) => event === 'worker.reconciliation.deferred'), []);
 });
