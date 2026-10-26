@@ -573,7 +573,7 @@ class Launch {
     // W4 commits before the supervisor starts (journal contract section 5).
     if (!(await this.#commitWrite(executionId, () => this.#options.journal.recordExecutionRecordWritten(executionId)))) return 'end';
     if (this.#cancelled) return this.#sealWritten(executionId, supervision);
-    const target = this.#target(executionId, supervision, grant);
+    const target = this.#target(executionId, supervision, grant, deadline);
     const started = await supervision.start();
     const watched = started.ok ? await this.#context.watch.observe(target) : await this.#context.watch.reconcile(target);
     return watched === 'not-started' ? this.#afterNotStarted() : 'end';
@@ -581,9 +581,9 @@ class Launch {
 
   // A cancel wakes the watch to forward it at once; a stop leaves the
   // execution to the next start.
-  #target(executionId: ExecutionId, supervision: ExecutionSupervision, grant: LaunchGrant): WatchTarget {
+  #target(executionId: ExecutionId, supervision: ExecutionSupervision, grant: LaunchGrant, spawnDeadline: DeadlineReading): WatchTarget {
     return {
-      executionId, supervision, launchAuthId: grant.launchAuthId, stopping: this.#stopping, wake: this.#signal,
+      executionId, supervision, launchAuthId: grant.launchAuthId, spawnDeadline, stopping: this.#stopping, wake: this.#signal,
       cancelReason: () => this.#cancelReason,
       cancellations: () => this.#context.cancellations(executionId),
     };

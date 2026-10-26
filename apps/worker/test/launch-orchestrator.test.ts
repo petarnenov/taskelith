@@ -8,7 +8,7 @@ import {
 } from '@taskelith/execution';
 import { err, failure, ok } from '@taskelith/kernel';
 import { value } from '@taskelith/testing';
-import { LaunchOrchestrator, LIVENESS_POLLS, UNCLAIMED_LIVENESS_POLLS } from '@taskelith/worker';
+import { LaunchOrchestrator, LIVENESS_POLLS } from '@taskelith/worker';
 import type { WorkerRoot } from '@taskelith/worker-journal';
 import {
   CLEAN_EXIT,
@@ -84,6 +84,15 @@ function stopAfterReads(supervision: FakeSupervision, reads: number): void {
   supervision.read = async () => {
     if (callCount(supervision, 'read') >= reads) controller.abort();
     return read();
+  };
+}
+
+// Runs the change before the fake answers the recovery.
+function onRecover(supervision: FakeSupervision, change: () => void): void {
+  const recover = supervision.recover.bind(supervision);
+  supervision.recover = async (round) => {
+    change();
+    return recover(round);
   };
 }
 
@@ -351,38 +360,40 @@ test('a supervisor that cannot start is recovered from its record', async () => 
   assert.deepEqual(executions().map(({ state }) => state), ['not-started', 'exited']);
 });
 
-test('an unclaimed launch record is not checked for liveness before the bound', async () => {
+test('a live unclaimed launch is not checked for liveness before its spawn deadline', async () => {
   value(journal.recordCommand(offer()));
   authority.answers = [granted()];
+  // At the 100 ms poll, 100 reads stay well before the 25 s deadline.
   supervisions.onCreated = (supervision) => {
-    supervision.facts = [...unclaimed(UNCLAIMED_LIVENESS_POLLS - 1), { problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+    supervision.facts = [...unclaimed(100), { problems: [], process: PROCESS, exit: CLEAN_EXIT }];
   };
   await launchOnce();
   assert.equal(callCount(supervisions.all[0], 'recover'), 0);
   assert.deepEqual(executions().map(({ state }) => state), ['exited']);
 });
 
-test('a supervisor lost before its claim is sealed after the bound, and the intent is launched again', async () => {
+test('a supervisor lost before its claim is sealed past the deadline, and the intent is launched again', async () => {
   value(journal.recordCommand(offer()));
   authority.answers = [granted()];
   let launches = 0;
+  let recoveredAt: number | undefined;
   supervisions.onCreated = (supervision) => {
     launches += 1;
     if (launches > 1) {
       supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
       return;
     }
-    stopAfterReads(supervision, UNCLAIMED_LIVENESS_POLLS + LIVENESS_POLLS);
-    const recover = supervision.recover.bind(supervision);
-    supervision.recover = async (round) => {
+    stopAfterReads(supervision, 400);
+    onRecover(supervision, () => {
+      recoveredAt = clock.milliseconds;
       supervision.facts = [{ problems: [], launch: { kind: 'seal', by: 'worker', reason: 'recovery' } }];
-      return recover(round);
-    };
+    });
   };
   await launchOnce();
   const [lost] = supervisions.all;
+  const deadline = lost?.plan?.deadline.milliseconds ?? 0;
   assert.deepEqual(lost?.rounds, ['first']);
-  assert.equal(callCount(lost, 'read'), UNCLAIMED_LIVENESS_POLLS + 1);
+  assert.ok(recoveredAt !== undefined && recoveredAt >= deadline && recoveredAt < deadline + LIVENESS_POLLS * 100);
   assert.deepEqual(executions().map(({ state }) => state), ['not-started', 'exited']);
 });
 
@@ -391,9 +402,10 @@ test('a supervisor still live at the unclaimed check keeps the watch going', asy
   authority.answers = [granted()];
   supervisions.onCreated = (supervision) => {
     supervision.recovery = { fact: 'observe' };
-    supervision.facts = [
-      ...unclaimed(UNCLAIMED_LIVENESS_POLLS), { problems: [], process: PROCESS }, { problems: [], process: PROCESS, exit: CLEAN_EXIT },
-    ];
+    stopAfterReads(supervision, 400);
+    onRecover(supervision, () => {
+      supervision.facts = [{ problems: [], process: PROCESS }, { problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+    });
   };
   await launchOnce();
   assert.deepEqual(supervisions.all[0]?.rounds, ['first']);

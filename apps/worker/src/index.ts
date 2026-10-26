@@ -50,5 +50,5 @@ export {
   type ConnectionReportOptions,
   type InventoryReportOptions,
 } from './inventory-report.js';
-export { ExecutionWatch, LIVENESS_POLLS, UNCLAIMED_LIVENESS_POLLS, WATCH_POLL_MILLISECONDS, type WatchOptions, type WatchTarget, type Watched } from './execution-watch.js';
+export { ExecutionWatch, LIVENESS_POLLS, WATCH_POLL_MILLISECONDS, type WatchOptions, type WatchTarget, type Watched } from './execution-watch.js';
 export { launchFailureLine, productionDependencies, serveUntilStopped, workerMain, type ServiceProcess } from './main.js';
