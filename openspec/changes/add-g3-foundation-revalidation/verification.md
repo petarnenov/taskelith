@@ -13,7 +13,7 @@ Out of scope: starting item 0, re-reviewing any artifact, and changing any other
 
 - The seven items named by the decision are archived under `openspec/changes/archive/` (`2026-10-25-qualify-g3-dependencies`, `2026-10-25-review-g3-provider-terms`, `2026-10-26-define-agent-harness-port`, `2026-10-26-define-account-pool-contract`, `2026-10-26-define-git-workspace-contract`, `2026-10-26-define-scm-port`, `2026-10-26-define-product-ports`), so "merged" is accurate for each; no other G3 item is archived.
 - Item 0's row carries every per-artifact check of the decision; its "Depends on" is the G2 closure, as the introduction states, and its UI column is "—".
-- The wave rule still holds: item 0 depends on no G3 item; items 26 and 27 depend only on item 0 and stay in wave 1; every later wave depends on wave 1 items that do not depend on item 0, or on item 0 through them. The longest chain keeps its length of twelve items, because item 4 depends on item 3 and item 0, which are both one step from the start.
+- The wave rule still holds: item 0 depends on no G3 item; items 26 and 27 depend only on item 0 and stay in wave 1; every later item depends on item 0, which is in wave 0, and on its listed items, which are in earlier waves as before. The longest chain keeps its length of twelve items: item 0, like item 3, depends on no G3 item, so a chain that starts at item 0 instead of item 3 is no longer.
 - `docs/g3-dependencies.md` is the item 1 evaluation and lists no waves or item dependencies; no other document lists G3 waves or cites "items without G3 dependencies". No document cites a renumbered item, because no item was renumbered.
 - No external link was added, so the evidence check has nothing to pin.
 
