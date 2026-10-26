@@ -405,6 +405,16 @@ function withFailingReports(tx: PostgresTransaction): ControlPlaneTransaction {
   return { ...tx, now: () => tx.now(), reports: reports as never };
 }
 
+// The assignment lookup of the transaction fails as a store that went down
+// would; listing still works.
+function withFailingAssignmentLookup(tx: PostgresTransaction): ControlPlaneTransaction {
+  const assignments = {
+    get: async () => err(failure('unavailable', 'the store is down')),
+    listByAttempt: (attemptId: AttemptId) => tx.assignments.listByAttempt(attemptId),
+  };
+  return { ...tx, now: () => tx.now(), assignments: assignments as never };
+}
+
 describe('acceptance and refusal', () => {
   test('a late acceptance at an earlier generation is rejected, logged, and still confirmed', async () => {
     await enroll();
@@ -1006,6 +1016,131 @@ describe('launch rejections', () => {
     assert.equal(value(await launchRejected(2, at, 'execution-conflict', at.generation + 1)), 'rejected');
     assert.equal(value(await launchRejected(3, at, 'assignment-not-active', at.generation + 1)), 'rejected');
     assert.deepEqual([rejectionLogs(), await messages('worker.inventory.requested')], [[], []]);
+  });
+});
+
+describe('capacity refusal after a slot-freeing observation', () => {
+  // B5: the worker refuses the next generation's offer for slots before the
+  // earlier generation's launch is rejected, which frees the slot.
+  async function refusedAtNextGeneration(refusalSequence = 4): Promise<Placed> {
+    await enroll();
+    value(await declare(1));
+    const first = await placed();
+    value(await accept(2, first));
+    value(await refuse(3, first, 'resource-ceiling-exceeded'));
+    const second = await placeAgain(first.taskId);
+    assert.equal(second.generation, first.generation + 1);
+    value(await refuse(refusalSequence, second, 'worker-slots-exhausted'));
+    assert.ok((await worker()).capacity_refused_since instanceof Date);
+    return first;
+  }
+
+  test('a stale launch rejection clears the refusal and changes nothing else', async () => {
+    const first = await refusedAtNextGeneration();
+    const before = await stored(first.taskId);
+    assert.equal(value(await launchRejected(5, first, 'assignment-not-active')), 'rejected');
+    assert.equal((await worker()).capacity_refused_since, null);
+    assert.deepEqual(await stored(first.taskId), before);
+    assert.deepEqual(await confirmations(), [1, 2, 3, 4, 5]);
+    assert.deepEqual(rejectionLogs(), []);
+    assert.equal(value(await placement.placeWaiting()).placed, 1);
+  });
+
+  test('a stale launch rejection older than the refusal keeps it', async () => {
+    const first = await refusedAtNextGeneration(5);
+    assert.equal(value(await launchRejected(4, first, 'assignment-not-active')), 'rejected');
+    assert.ok((await worker()).capacity_refused_since instanceof Date);
+  });
+
+  test('a stale not-started clears the refusal too', async () => {
+    const first = await refusedAtNextGeneration();
+    const sent = { sequence: 5, attemptId: first.attemptId, ownershipGeneration: first.generation };
+    const notStarted = await observe('execution.not-started', sent, { executionId: 'execution-x', recoveryEpoch: 1 });
+    assert.equal(value(notStarted), 'rejected');
+    assert.equal((await worker()).capacity_refused_since, null);
+  });
+
+  test('a stale acceptance keeps the refusal', async () => {
+    const first = await refusedAtNextGeneration();
+    assert.equal(value(await accept(5, first)), 'rejected');
+    assert.ok((await worker()).capacity_refused_since instanceof Date);
+  });
+
+  test('a stale fact about another worker\'s assignment keeps the producer\'s refusal', async () => {
+    const first = await refusedAtNextGeneration();
+    await enroll('worker-b', 'journal-b');
+    await sql(`UPDATE workers SET capacity_refused_since = now() WHERE worker_id = 'worker-b'`);
+    const fromB = { workerId: 'worker-b', journalId: 'journal-b', attemptId: first.attemptId, ownershipGeneration: first.generation };
+    const rejected = await observe('execution.launch.rejected', { ...fromB, sequence: 1 }, {
+      executionId: `execution-${first.attemptId}`, assignmentId: first.assignment.id, operationId: 'operation-b', reason: 'assignment-not-active',
+    });
+    assert.equal(value(rejected), 'rejected');
+    const notStarted = await observe('execution.not-started', { ...fromB, sequence: 2 }, { executionId: 'execution-b', recoveryEpoch: 1 });
+    assert.equal(value(notStarted), 'rejected');
+    assert.ok((await worker('worker-b')).capacity_refused_since instanceof Date);
+  });
+
+  // The installation changes after the first transaction refused the fact.
+  function changingAfterRefusal(change: string): ControlPlaneStore {
+    let changed = false;
+    return {
+      transaction: async (work) => {
+        const result = await database.transaction(work);
+        if (!changed) {
+          changed = true;
+          await sql(change);
+        }
+        return result;
+      },
+      readCommitted: (work) => database.readCommitted(work),
+    };
+  }
+
+  for (const change of ['UPDATE installation SET recovery_epoch = 2', 'UPDATE installation SET quarantined = true']) {
+    test(`a stale not-started keeps the refusal after \`${change}\` between its transactions`, async () => {
+      const first = await refusedAtNextGeneration();
+      const sent = { sequence: 5, attemptId: first.attemptId, ownershipGeneration: first.generation };
+      service = observationService(changingAfterRefusal(change));
+      const notStarted = await observe('execution.not-started', sent, { executionId: 'execution-x', recoveryEpoch: 1 });
+      assert.equal(value(notStarted), 'rejected');
+      assert.ok((await worker()).capacity_refused_since instanceof Date);
+    });
+  }
+
+  test('a failed lookup while a stale launch rejection is recorded leaves it unconfirmed, and its redelivery clears the refusal', async () => {
+    const first = await refusedAtNextGeneration();
+    let opened = 0;
+    const failingOnce: ControlPlaneStore = {
+      transaction: (work) => {
+        const failing = ++opened === 2;
+        return database.transaction((tx) => work(failing ? withFailingAssignmentLookup(tx) : tx));
+      },
+      readCommitted: (work) => database.readCommitted(work),
+    };
+    service = observationService(failingOnce);
+    const sent = { sequence: 5, observationId: 'rejection-5', attemptId: first.attemptId, ownershipGeneration: first.generation };
+    const rejection = () => observe('execution.launch.rejected', sent, {
+      executionId: `execution-${first.attemptId}`, assignmentId: first.assignment.id, operationId: 'operation-5', reason: 'assignment-not-active',
+    });
+    assert.equal(failed(await rejection()).code, 'unavailable');
+    assert.deepEqual(await confirmations(), [1, 2, 3, 4]);
+    assert.ok((await worker()).capacity_refused_since instanceof Date);
+    assert.equal(value(await rejection()), 'rejected');
+    assert.equal((await worker()).capacity_refused_since, null);
+    assert.deepEqual(await confirmations(), [1, 2, 3, 4, 5]);
+  });
+
+  test('a launch rejection at the current generation clears the refusal', async () => {
+    await enroll();
+    value(await declare(1));
+    const first = await placed('task-1');
+    value(await accept(2, first));
+    const second = await placed('task-2');
+    value(await refuse(3, second, 'worker-slots-exhausted'));
+    assert.ok((await worker()).capacity_refused_since instanceof Date);
+    assert.equal(value(await launchRejected(4, first, 'assignment-not-active')), 'applied');
+    assert.equal((await worker()).capacity_refused_since, null);
+    assert.deepEqual(rejectionLogs(), [['assignment-not-active', first.assignment.id]]);
   });
 });
 

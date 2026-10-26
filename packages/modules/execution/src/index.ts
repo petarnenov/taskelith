@@ -151,6 +151,7 @@ export {
   LAUNCH_REJECTION_REASONS,
   RETRYABLE_LAUNCH_REJECTIONS,
   REVOCATION_REASONS,
+  endsAssignment,
   launchRejection,
   type LaunchRejection,
   type LaunchRejectionReason,
