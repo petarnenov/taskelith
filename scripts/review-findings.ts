@@ -145,7 +145,7 @@ const SECRET_PATTERNS: readonly RegExp[] = [
   /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/,
   /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/,
   /-----BEGIN [A-Z ]*(?:PRIVATE KEY|NKEY SEED|USER JWT)-----/,
-  /\bS[OAU][A-Z2-7]{56}\b/,
+  /\bS[OAUNCX][A-Z2-7]{56}\b/,
   /\b(?:A(?:KIA|SIA)[0-9A-Z]{16}|xox[abpr]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9_-]{20,})/,
   /\b[a-z][a-z0-9+.-]*:\/\/[^\s/?#@]+@/i,
 ];

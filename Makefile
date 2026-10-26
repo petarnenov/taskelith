@@ -68,7 +68,7 @@ dependency-inventory:
 # The review findings tool: ARGS is validate, index [--json], or checklist
 # [--capability <a,b>] [--files <globs>] [--top <n>] (agent task protocol).
 findings:
-	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run --silent findings -- $(ARGS)
+	@set -f; NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run --silent findings -- $(ARGS)
 
 # Runs npm test with the .nvmrc Node.js against its own services, which stop
 # also when tests fail; fails closed without Docker.
