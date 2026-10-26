@@ -24,6 +24,8 @@ G2 work item 23, second part (23b), `compose-installation-end-to-end`, assigned 
 | `make verify` | passed; 1714 tests, 1712 passed, 2 skipped, 0 failed; coverage 99.27 % lines, 91.87 % branches, 98.98 % functions |
 | `make installation-smoke` after the pass 1 fixes | passed on 2026-10-26: the containment check passed (the write under uid 10003 was refused; the worker process had `CapEff` and `CapBnd` `00000000000000e0`, `CapAmb` 0), the stored result was `ended`, `exited`, code 0, `startProven` true, and the project was removed with its volumes and images. A comment was shortened afterwards. |
 | `make verify` after the pass 1 fixes | passed; 1719 tests, 1717 passed, 2 skipped, 0 failed; coverage 99.28 % lines, 91.88 % branches, 98.98 % functions |
+| `make installation-smoke` after the pass 2 fixes | passed on 2026-10-26: the probe was refused with `Permission denied`, the worker process had `CapInh` 0, `CapPrm`, `CapEff`, and `CapBnd` `00000000000000e0`, and `CapAmb` 0; the result was `ended`, `exited`, code 0, `startProven` true; the project was removed with its volumes and images |
+| `make verify` after the pass 2 fixes | passed; 1720 tests, 1718 passed, 2 skipped, 0 failed; coverage 99.27 % lines, 91.88 % branches, 98.98 % functions |
 
 Excerpt of the smoke output:
 
@@ -35,6 +37,8 @@ installation.sh: submitted, assigned, executed, stored the result, removed
 ## Privilege decision
 
 The worker runs as root with three capabilities inside its container (design decision 3), which replaces the 23a requirement that it run as `taskelith` and reverses 23a review finding 6. On 2026-10-26 the coordinator brought the options to the owner's delegate, who accepted option A, the root worker with the `SETUID`, `SETGID`, and `KILL` bounding set as implemented, on behalf of the owner (away run `20261026T134624Z-opencode-35455`). Observed in the worker container: `CapPrm`, `CapEff`, and `CapBnd` `00000000000000e0` (`KILL`, `SETGID`, `SETUID`), `CapAmb` `0000000000000000`. Item 25 covers Linux hosts with AppArmor or SELinux and linux/arm64. The coordinator reports the reversal to the owner.
+
+The residual risk of the worker container's `SYS_ADMIN` and `apparmor=unconfined` (review pass 1 finding M2: an execution under `taskelith-exec` can create a user namespace and mount inside it) was accepted on 2026-10-26 by the owner's delegate, on behalf of the owner, as known until item 25 (away run `20261026T142254Z-opencode-30870`). The item 25 row of [docs/g2-plan.md](../../../docs/g2-plan.md) now carries it: decide a seccomp profile and check userns/mount under the execution account.
 
 ## Independent review
 
@@ -58,8 +62,27 @@ Reviewer assigned by the coordinator: Claude Code, `claude-fable-5-1`, effort me
 | L4 | Low | The smoke client lost the status on a non-JSON body, and its requests had no timeout. | It reads the text, parses JSON with the text as fallback, and sets `AbortSignal.timeout` of 10 s; tested. |
 | L5 | Low | The entrypoint tests took about 12 s. | The fakes are written once per file, since a new executable starts slowly the first time on macOS, and the refusals run in parallel: about 3 s. |
 
+### Pass 2
+
+- Invocation as in pass 1.
+- Confirmation: `claude-fable-5-1` in the JSON `modelUsage`, which also lists `claude-opus-5-5`, used internally by the harness; session `8fcb261e-a6bf-424c-a79c-37fa8c00d447`.
+- Snapshot: `74c8ac9e…` before and after; unchanged.
+- Reviewed: `311c40d...144e43a`, after confirming the pass 1 resolutions.
+- Findings: Critical 0, High 0, Medium 1, Low 5.
+
+| # | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| M-A | Medium | The acceptance of the pass 1 M2 residual risk (`SYS_ADMIN`, user namespaces) and its hand-off to item 25 were not recorded as a decision. | Resolved by the delegate's acceptance on behalf of the owner (away run `20261026T142254Z-opencode-30870`), recorded under "Privilege decision", and by the item 25 row of `docs/g2-plan.md`, which now carries it. |
+| L-A | Low | The `cgroup.procs` probe counted any `docker exec` failure as a refusal. | The probe keeps the output (`2>&1`) and passes only on `Permission denied`; any other failure fails the smoke with the output. The fake `docker` prints the refusal, and a new test covers an exec that fails for another reason. |
+| L-B | Low | The capability check skipped `CapInh` and `CapPrm`. | It now requires `CapInh` 0 and `CapPrm` `00000000000000e0` too; the fixture and two new variants cover them. |
+| L-C | Low | "until its entrypoint has dropped them" was inaccurate: Docker's init keeps the container's seven capabilities for the container's lifetime. | `docs/local-installation.md` and the design risks say so, and why it is acceptable: a passive reaper, under another user ID than an execution, which lacks `CAP_SYS_PTRACE` to reach it. |
+| L-D | Low | The design risk repeated "Item 25 qualifies the container settings". | One sentence remains. |
+| L-E | Low | `verify-installation` was said to check that the images "run as `taskelith`". | It checks that the images' default `USER` is `taskelith`; the worker service overrides it (see "Worker container"). |
+
+Reviewer's note outside the diff: `checkLinuxContainment` is not wired in `apps/worker`; the coordinator tracks it under G3 item 27.
+
 ## Limitations and remaining gates
 
-- `SYS_ADMIN` and `apparmor=unconfined` let an execution create a user namespace and mount inside it (design risks, review finding M2); item 25 decides whether a seccomp profile is needed.
+- `SYS_ADMIN` and `apparmor=unconfined` let an execution create a user namespace and mount inside it (design risks, review finding M2); accepted by the owner's delegate as known until item 25, which decides whether a seccomp profile is needed.
 - The smoke and the bring-up check ran on Docker Desktop x86_64 only; Linux hosts with AppArmor or SELinux, and linux/arm64, are not yet observed. Item 25 qualifies the container settings.
 - Independent review and integration remain.
