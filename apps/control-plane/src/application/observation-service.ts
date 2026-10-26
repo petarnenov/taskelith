@@ -5,7 +5,7 @@ import { err, failure, ok, parseEventMetadata, type Failure, type Instant, type 
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import type { ControlPlaneStore, ControlPlaneTransaction } from './control-plane-store.js';
 import { evaluateSnapshots } from './inventory-reconciliation.js';
-import { authenticateProducer, retireJournal, type ReconciliationContext } from './journal-reconciliation.js';
+import { authenticateObserver, retireJournal, type ProducerStanding, type ReconciliationContext } from './journal-reconciliation.js';
 import { OBSERVATION_EFFECTS, type ObservationEffect } from './observation-effects.js';
 import { isNotConsumed, notConsumed, parseObservation, type Observation, type ObservationMessage } from './observation.js';
 import { PendingLog } from './pending-log.js';
@@ -70,11 +70,11 @@ export class ObservationService {
     tx: ControlPlaneTransaction, context: ReconciliationContext, observation: Observation, effect: ObservationEffect,
     outcome: 'applied' | 'rejected',
   ): Promise<Result<ObservationOutcome>> {
-    const authentic = await authenticateProducer(tx, producerOf(observation), context);
-    if (!authentic.ok) return authentic;
+    const standing = await authenticateObserver(tx, producerOf(observation), context);
+    if (!standing.ok) return standing;
     const { workerId, journalId } = observation.position;
     // A duplicate is contact too, so a republishing worker stays reachable.
-    const contact = await tx.reports.recordContact(workerId, await tx.now());
+    const contact = await recordProducer(tx, observation, standing.value, context);
     if (!contact.ok) return contact;
     const inbox = await tx.inbox.accept(OBSERVATION_CONSUMER, observation.messageId);
     if (!inbox.ok) return inbox;
@@ -147,8 +147,22 @@ export class ObservationService {
 }
 
 async function recordContactOf(tx: ControlPlaneTransaction, context: ReconciliationContext, observation: Observation): Promise<Result<void>> {
-  const authentic = await authenticateProducer(tx, producerOf(observation), context);
-  return authentic.ok ? tx.reports.recordContact(observation.position.workerId, await tx.now()) : authentic;
+  const standing = await authenticateObserver(tx, producerOf(observation), context);
+  if (!standing.ok) return standing;
+  return standing.value === 'enrolled' ? tx.reports.recordContact(observation.position.workerId, await tx.now()) : ok(undefined);
+}
+
+// Item 21d D3: a revoked worker makes no contact, so placement never
+// reaches it again; each of its accepted observations is logged instead.
+async function recordProducer(
+  tx: ControlPlaneTransaction, observation: Observation, standing: ProducerStanding, context: ReconciliationContext,
+): Promise<Result<void>> {
+  const { workerId, journalId, sequence, observationId } = observation.position;
+  if (standing === 'enrolled') return tx.reports.recordContact(workerId, await tx.now());
+  context.log.warn({ workerId, observationId, correlationId: observation.correlationId }, 'execution.revoked-worker.observation', {
+    journalId, type: observation.type, sequence,
+  });
+  return ok(undefined);
 }
 
 // A replacement committed since the rollback was found already retired the
@@ -170,7 +184,7 @@ async function recordPosition(
 ): Promise<Result<void>> {
   const { workerId, journalId } = observation.position;
   const at = await tx.now();
-  const effected = await effect(tx, observation, at, context.log);
+  const effected = await effect(tx, observation, at, context);
   if (!effected.ok) return effected;
   const advanced = await advanceCursor(tx, observation, cursor, at);
   if (!advanced.ok) return advanced;

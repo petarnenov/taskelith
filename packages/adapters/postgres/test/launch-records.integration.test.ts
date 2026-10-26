@@ -35,7 +35,7 @@ test('the task repository indexes each grant with its assignment\'s run, and kee
   const grant = authorized.attempts[0]!.executions[0]!.grants[0]!;
   const runId = offered.reservation.scope.runId as never;
   assert.deepEqual(await liveOf({ kind: 'run', runId }), [grant.launchAuthId]);
-  const revoked = value(revokeLaunch(authorized, grant.attemptId, 'gate-not-passed', AT));
+  const revoked = value(revokeLaunch(authorized, grant.attemptId, { grants: 'gate-not-passed', cancellation: 'launch-revoked' }, AT));
   value(await database.transaction((tx) => tx.tasks.replace(revoked, authorized.generation)));
   assert.deepEqual(await liveOf({ kind: 'run', runId }), []);
   assert.equal(value(await database.transaction((tx) => tx.launches.byOperation(grant.workerId, grant.operationId)))?.launchAuthId, grant.launchAuthId);

@@ -190,7 +190,7 @@ test('a retry after revocation, quarantine, a worker revocation, or with changed
   const { task, grant } = authorized();
   const request = launchRequest(placedTask());
   const context = { installation: { recoveryEpoch: EPOCH, quarantined: false }, workerAuthorized: true };
-  const revoked = value(revokeLaunch(task, ATTEMPT, 'policy-revision-changed', T2));
+  const revoked = value(revokeLaunch(task, ATTEMPT, { grants: 'policy-revision-changed', cancellation: 'launch-revoked' }, T2));
   const revokedGrant = revoked.attempts[0]!.executions[0]!.grants[0]!;
   assert.deepEqual(replayLaunchOperation(revoked, revokedGrant, request, context, T2), { kind: 'revoked', reason: 'policy-revision-changed' });
   const quarantined = replayLaunchOperation(task, grant, request, { ...context, installation: { recoveryEpoch: EPOCH, quarantined: true } }, T2);
@@ -214,20 +214,32 @@ test('a retry of a grant whose execution has ended returns no grant', () => {
 test('an invalidating writer finds an expired grant, revokes it, and requests cancellation', () => {
   const { task } = authorized();
   assert.equal(isLaunchAffected(task, ATTEMPT), true);
-  const revoked = value(revokeLaunch(task, ATTEMPT, 'artifact-revision-changed', T4));
+  const revoked = value(revokeLaunch(task, ATTEMPT, { grants: 'artifact-revision-changed', cancellation: 'launch-revoked' }, T4));
   const attempt = revoked.attempts[0]!;
   assert.equal(attempt.executions[0]!.grants[0]!.state, 'revoked');
   assert.deepEqual(attempt.cancellation, { reason: 'launch-revoked', requestedAt: T4 });
   assert.equal(attemptPhase(attempt), 'launch-authorized');
-  const again = value(revokeLaunch(revoked, ATTEMPT, 'policy-revision-changed', T4));
+  const again = value(revokeLaunch(revoked, ATTEMPT, { grants: 'policy-revision-changed', cancellation: 'launch-revoked' }, T4));
   const grant = again.attempts[0]!.executions[0]!.grants[0]!;
   assert.equal(grant.state === 'revoked' && grant.revokedFor, 'artifact-revision-changed');
   assert.equal(again.attempts[0]!.cancellation?.reason, 'launch-revoked');
+});
+
+test('the attempt keeps the cancellation reason its writer names', () => {
+  const { task } = authorized();
+  const ended = value(revokeLaunch(task, ATTEMPT, { grants: 'attempt-not-launchable', cancellation: 'assignment-ended' }, T4));
+  assert.deepEqual(ended.attempts[0]!.cancellation, { reason: 'assignment-ended', requestedAt: T4 });
+});
+
+test('an earlier cancellation request wins over the reason of a later writer', () => {
+  const requested = value(requestCancellation(authorized().task, ATTEMPT, 'requested', T2));
+  const ended = value(revokeLaunch(requested, ATTEMPT, { grants: 'attempt-not-launchable', cancellation: 'assignment-ended' }, T4));
+  assert.deepEqual(ended.attempts[0]!.cancellation, { reason: 'requested', requestedAt: T2 });
 });
 
 test('an invalidating writer with an empty predicate affects nothing', () => {
   const task = placedTask();
   assert.equal(isLaunchAffected(task, ATTEMPT), false);
   assert.equal(isLaunchAffected(task, attemptId('attempt-9')), false);
-  assert.equal(failed(revokeLaunch(task, ATTEMPT, 'policy-revision-changed', T1)).code, 'precondition-failed');
+  assert.equal(failed(revokeLaunch(task, ATTEMPT, { grants: 'policy-revision-changed', cancellation: 'launch-revoked' }, T1)).code, 'precondition-failed');
 });

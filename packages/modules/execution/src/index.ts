@@ -110,6 +110,7 @@ export {
   type SnapshotAssembly,
 } from './domain/inventory.js';
 export { planJournalRecovery, type RecoveryAction } from './domain/journal-recovery.js';
+export { unknownExecutionsOf, type UnknownExecution, type UnrecordedProcess } from './domain/reconciliation.js';
 export {
   authorizeLaunch,
   checkLaunchPreconditions,
@@ -192,6 +193,7 @@ export {
   type EvidenceReport,
   type ExecutionReport,
   type ExitReport,
+  type LaunchRevocation,
   type ObservationResult,
   type PlacementNeed,
   type Task,
@@ -201,6 +203,7 @@ export { InMemoryEvidenceRecords } from './adapters/in-memory-evidence.js';
 export { InMemoryInbox } from './adapters/in-memory-inbox.js';
 export { InMemoryInventoryReports, InMemoryInventoryRequests } from './adapters/in-memory-inventory.js';
 export { InMemoryProducerCursors } from './adapters/in-memory-producer-cursors.js';
+export { InMemoryReconciliationQueue, InMemoryUnrecordedProcesses } from './adapters/in-memory-reconciliation.js';
 export { InMemoryTaskRepository } from './adapters/in-memory-task-repository.js';
 export { EVIDENCE_RECORDS_CONFORMANCE, EVIDENCE_STORE_CONFORMANCE } from './ports/evidence-conformance.js';
 export type { EvidencePublisher } from './ports/evidence-publisher.js';
@@ -213,6 +216,8 @@ export type { Outbox, OutboxMessage } from './ports/outbox.js';
 export type { InventoryReports } from './ports/inventory-reports.js';
 export type { InventoryRequests } from './ports/inventory-requests.js';
 export type { ProducerCursors, ProducerJournal } from './ports/producer-cursors.js';
+export type { ReconciliationQueue } from './ports/reconciliation-queue.js';
+export type { UnrecordedProcesses } from './ports/unrecorded-processes.js';
 // The outbox ports are structurally identical, so they share one suite.
 export { OUTBOX_CONFORMANCE } from '@taskelith/sdlc';
 export {
@@ -221,8 +226,10 @@ export {
   INVENTORY_REQUESTS_CONFORMANCE,
   LAUNCH_RECORDS_CONFORMANCE,
   PRODUCER_CURSORS_CONFORMANCE,
+  RECONCILIATION_QUEUE_CONFORMANCE,
   TASK_REPOSITORY_CONFORMANCE,
   type LaunchRecordsConformanceTarget,
+  type ReconciliationQueueConformanceTarget,
 } from './ports/repository-conformance.js';
 export type { TaskRepository } from './ports/task-repository.js';
 export type { WorkerJournal } from './ports/worker-journal.js';
