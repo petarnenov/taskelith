@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-26. Author verification is recorded below; review pass 1 is recorded, with its two High findings accepted as G2 limitations by the owner's delegate; review pass 2 is pending.
+Date: 2026-10-26. Author verification is recorded below; review pass 1 is recorded, with its two High findings accepted as G2 limitations by the owner's delegate; review pass 2 found no problems.
 
 ## Scope and source
 
@@ -56,7 +56,13 @@ Codex CLI, model `gpt-6-astra`, reasoning effort medium, read-only sandbox, all 
 
 ## Review pass 2
 
-Pending: independent review by Codex CLI, model `gpt-6-astra`, reasoning effort medium, read-only sandbox, naming pass 1's session and findings.
+Codex CLI, model `gpt-6-astra`, reasoning effort medium, read-only sandbox, all confirmed in the output header; session `01a17985-2848-71a3-8cc5-d7d7462ade53`; run by the worker session with the same invocation as pass 1, naming pass 1's session and findings. Revision reviewed: `4c80440`. The snapshots before and after the pass matched (`853eeaf961ed5636cc059b2d8ae8687ff955de43742dbf5f01c045f3aa6880ee`).
+
+- Pass 1 H1 and H2: confirmed accurately recorded as accepted G2 limitations.
+- Pass 1 M1: confirmed fixed (the repeat with the same `observationId` is a duplicate; the spec deltas promise no replay).
+- Pass 1 L1: confirmed fixed (the `worker-journal` delta migrates formats 2 through 3 to 4).
+- New findings: 0 Critical, 0 High, 0 Medium, 0 Low.
+- Note, not a finding: the pass 2 prompt still described the protocol version as open, by mistake; decision A was already in. The reviewer observed that design D2, this record, and the wire contracts' section 5 bullet state the approved version 1 exception while section 3 requires the next version for a new required field, and suggested a pointer from section 3 to the exception. No change was made: the records match decision A, and section 3 stays untouched as the coordinator asked.
 
 ## Limitations and remaining gates
 
