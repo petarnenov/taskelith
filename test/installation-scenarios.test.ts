@@ -370,3 +370,121 @@ test('a failed cleanup of the confinement is recorded as failed', () => {
   assert.equal(run.status, 1);
   assert.equal(run.records, 'failed: failed while cleaning up\n');
 });
+
+// The lifecycle of the Linux worker container (item 25b): stop and start
+// move the container's state; the identity digest lives in a file.
+const LIFECYCLE_STUBS = `
+GOOD_STATUS='Uid:\\t10003\\t10003\\t10003\\t10003\\nCapEff:\\t0000000000000000\\n'
+echo 1d > "$stubs/identity"
+stop() { echo 'exited 0 ${NEW_START}' > "$stubs/state"; }
+start() {
+  if [ -z "\${NO_RESTART:-}" ]; then echo 'running 0 ${NEW_START}' > "$stubs/state"; fi
+  if [ -n "\${IDENTITY_AFTER:-}" ]; then echo "$IDENTITY_AFTER" > "$stubs/identity"; fi
+}
+worker_exec() {
+  case "$*" in
+    *sha256sum*) echo "$(cat "$stubs/identity")  /var/lib/taskelith/worker/identity" ;;
+    *'pgrep -o -u 10003'*) printf "\${EXECUTION_STATUS:-$GOOD_STATUS}"; echo cgroup:; echo 0::/executions/e1 ;;
+    *) echo "unexpected worker_exec $*" >&2; return 1 ;;
+  esac
+}
+sql() {
+  case "$1" in
+    *'FROM workers'*) echo w-old ;;
+    *'FROM assignments'*) printf 'ended released\\nended released\\n' ;;
+    *) echo 'e1 started certain' ;;
+  esac
+}
+api_url() { echo http://stub; }
+check_containment() { :; }
+platform() { echo 'OS Stub'; }
+START_SECONDS=12
+`;
+const LIFECYCLE = { state: `running 0 ${OLD_START}`, stateAfterStart: '', logs: [PLANNED, ONLINE] };
+
+function lifecycle(variables = ''): StubbedRun {
+  return withStubs(LIFECYCLE, `${LIFECYCLE_STUBS}\n${variables} worker_lifecycle_scenario`);
+}
+
+test('a worker that keeps its identity across a restart passes the lifecycle', () => {
+  const run = lifecycle();
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.records, /^passed: OS Stub: a fresh installation enrolled worker w-old, whose task ran as uid 10003/);
+  assert.match(run.stderr, /cleaning up/);
+});
+
+test('a worker whose identity changes across the restart fails the lifecycle', () => {
+  const run = lifecycle('IDENTITY_AFTER=2e');
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /the worker identity after the restart: expected '1d', got '2e'/);
+});
+
+test('a worker that does not come back fails the lifecycle', () => {
+  const run = lifecycle('NO_RESTART=1');
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /did not reach its reconciliation and the broker/);
+});
+
+test('an execution that does not run as the execution account fails the lifecycle', () => {
+  const run = lifecycle(String.raw`EXECUTION_STATUS='Uid:\t0\t0\t0\t0\n'`);
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /does not run as the execution account/);
+  assert.equal(run.records, 'failed: failed while running a task on the installed worker\n');
+});
+
+test('a failed cleanup of the lifecycle is recorded as failed', () => {
+  const run = lifecycle('CLEANUP_FAILS=1');
+  assert.equal(run.status, 1);
+  assert.equal(run.records, 'failed: failed while cleaning up\n');
+});
+
+// A stand-in for the native worker: a process that exits with STOP_STATUS
+// on SIGTERM, an identity file, and the two log lines of its start.
+const NATIVE_STUBS = `
+fresh_project() { :; }
+build() { :; }
+bootstrap_operator() { :; }
+start() { :; }
+api_url() { echo http://stub; }
+compose() { case "$*" in 'port nats 4222') echo 127.0.0.1:4222 ;; esac; }
+enrollment_token() { echo '{"enrollmentToken":"t"}'; }
+field() { cat > /dev/null; echo t; }
+start_native_worker() {
+  mkdir -p "$native_root/worker"
+  chmod 700 "$native_root/worker"
+  if [ ! -e "$native_root/worker/identity" ] || [ -n "\${NEW_IDENTITY:-}" ]; then echo "id-$1" > "$native_root/worker/identity"; fi
+  printf '%s\\n' '{"event":"worker.reconciliation.planned"}' '{"event":"worker.contact.online"}' > "$(native_log "$1")"
+  STOP_STATUS="\${STOP_STATUS:-0}" bash -c 'trap "exit $STOP_STATUS" TERM; while :; do sleep 0.1; done' &
+  native_worker_pid=$!
+}
+sql() {
+  case "$1" in
+    *'FROM workers'*) echo w-native ;;
+    *'FROM assignments'*) printf 'ended released\\nended released\\n' ;;
+  esac
+}
+STOP_SECONDS=12
+`;
+
+function nativeLifecycle(variables = ''): StubbedRun {
+  return withStubs(LIFECYCLE, `${NATIVE_STUBS}\n${variables} native_worker_lifecycle_scenario`);
+}
+
+test('a native worker that keeps its identity across a restart passes the lifecycle', () => {
+  const run = nativeLifecycle();
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.records, /^passed: native .* worker of this checkout under user .*, data root '.*\/data root with spaces' on .* GiB free, worker\/ mode 0700, .* it enrolled as w-native/);
+});
+
+test('a native worker whose identity changes across the restart fails the lifecycle', () => {
+  const run = nativeLifecycle('NEW_IDENTITY=1');
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /the worker identity after the restart: expected '[0-9a-f]+', got '[0-9a-f]+'/);
+});
+
+test('a native worker that does not exit 0 on SIGTERM fails the lifecycle', () => {
+  const run = nativeLifecycle('STOP_STATUS=1');
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /the native worker's exit status: expected '0', got '1'/);
+  assert.equal(run.records, 'failed: failed while stopping the native worker\n');
+});
