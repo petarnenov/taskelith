@@ -385,6 +385,8 @@ class Launch {
   async #authorize(executionId: ExecutionId, reportsNotStarted: boolean): Promise<Authorized> {
     await this.#awaitAdmission();
     if (this.#stopping.aborted) return { kind: 'end' };
+    // A new execution has no journal row yet, so a cancel ends it here.
+    if (this.#cancelled) return reportsNotStarted ? { kind: 'abandon' } : { kind: 'end' };
     const operationId = this.#newId('OperationId');
     const reading = this.#options.clock.read();
     if (operationId === undefined || !reading.ok) return { kind: 'end' };

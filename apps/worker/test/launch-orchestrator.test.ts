@@ -146,6 +146,20 @@ test('under admission pressure no authorization is journaled or requested until 
   assert.equal(executions()[0]?.state, 'exited');
 });
 
+test('a cancellation during the wait for pressure ends the launch without an operation or a seal', async () => {
+  value(journal.recordCommand(offer()));
+  pressure.causes = ok(['disk-floor']);
+  const launched = launchOnce();
+  await until(() => pressure.refreshes >= 2);
+  value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));
+  await orchestrator.pass(controller.signal);
+  await launched;
+  assert.deepEqual([authority.requests.length, executions().length, supervisions.all.length], [0, 0, 0]);
+  await launchOnce();
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
+  assert.deepEqual(factKinds(), []);
+});
+
 test('pressure that arises between requests holds the retry of the same operation', async () => {
   value(journal.recordCommand(offer()));
   authority.answers = [unavailable(), granted()];
