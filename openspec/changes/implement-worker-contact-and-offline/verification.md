@@ -49,6 +49,22 @@ Reviewer: assigned by the coordinator, Claude Code Fable (`claude-fable-5-1`, ef
 - On 2026-10-26 from 13:03 to 13:11 the invocation `claude -p "$(cat <prompt-file>)" --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json`, run from the worktree at `7eaa72e`, exited 1 with `Error: No messages returned from query`, no JSON output, no session, and no model usage. Snapshot before and after: `f66567b8a65c1a10881ba12ccf1c86463f77f29e1649a91a993a616f262305e5`, unchanged. The attempt produced no pass.
 - Under "Unavailable reviewer" (`docs/governance.md`) the worker proposed the next reviewer in the rotation that is not paused, and the coordinator assigned Codex CLI (`gpt-6.1-sol`, reasoning effort medium, read-only sandbox) as the replacement. Its first pass is pass 1.
 
+### Pass 1
+
+- Invocation, from the worktree: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, with the prompt file and log outside the worktree. The prompt named `AGENTS.md`, ADR 0004, the governance review process, `docs/g2-plan.md` item 20, the worker specs, the execution wire, heartbeat, and enrollment contracts, the operational targets, the 20d archive, and the coordinator's answers to OQ1 and OQ2, and asked for every instance with severity, file and line, and a fix, and counts per severity. The read-only sandbox ran no tests; the pass was static.
+- Session `01a177eb-20ea-7730-b939-621b5b69e692`. Model confirmation: the output header records model `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`.
+- Reviewed revision: `8d18b2e` against `8a9abb6`.
+- Snapshot before and after: `b2b35bd21acc0471c91c26da166e37c4b5ceb4cdc5dd24e9f5de5190fe9f2a71`, unchanged.
+- Findings: Critical 0, High 1, Medium 4, Low 0. All were resolved by the implementation subagent and checked by the worker, in `40b5808`.
+
+| # | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| 1 | High | A failed session leaves `stopped` unsettled and the orchestrator running, and a stop can close the journal before every task ended; `#hold` and `serveConnection` fail fast through `Promise.all` | `TaskGroup`: the first failure aborts the group, `settled` waits for every task, the root closes last, and `stopped` settles on a self-termination too; `main.ts` shuts down after it; tests of a session that fails while the orchestrator runs |
+| 2 | Medium | Contact can be lost between the end of the offline wait and W2 | `#authorize` rechecks `offline` in a loop with no `await` between the last check and W2; a test that loses contact in a microtask before the continuation |
+| 3 | Medium | No heartbeat at once on a reconnect | Heartbeats run as link-up work and restart on each reconnect; the requirement says each connection and reconnection; the test expects the heartbeat before time advances |
+| 4 | Medium | A multipart inventory report continues after a disconnect or stop, and its task is never awaited | The signal is checked before each part; link-up work joins the link's task group and is awaited; a test with a held publish aborted between two parts |
+| 5 | Medium | The status watcher accumulates promise reactions | Each wait for the next status adds and removes its own abort listener; a test that the listener count stays flat over 100 statuses |
+
 ## Limitations and remaining gates
 
 - The coordinator answered OQ1 and OQ2 on 2026-10-26 (`design.md`): a maximum offline duration for running executions stays open for a later stage, and item 23b must make the Linux worker image always set `TASKELITH_CONTAINMENT_PARENT`.
