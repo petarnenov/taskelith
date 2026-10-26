@@ -17,8 +17,8 @@
 
 ## 4. Evidence and records
 
-- [ ] 4.1 Run `make native-acceptance` on macOS 26 arm64 and Linux arm64 under Docker Desktop and commit `results.jsonl`
-- [ ] 4.2 Write `acceptance.md`, the acceptance table
-- [ ] 4.3 Update `docs/local-installation.md`, `docs/worker-platforms.md`, and the Ubuntu register row
-- [ ] 4.4 Run `make verify` and record `verification.md`
+- [x] 4.1 Run `make native-acceptance` on macOS 26 arm64 and Linux arm64 under Docker Desktop and commit `results.jsonl`
+- [x] 4.2 Write `acceptance.md`, the acceptance table
+- [x] 4.3 Update `docs/local-installation.md`, `docs/worker-platforms.md`, and the Ubuntu register row
+- [x] 4.4 Run `make verify` and record `verification.md`
 - [ ] 4.5 Independent review (pending; assigned by the coordinator)
