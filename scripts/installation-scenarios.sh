@@ -635,8 +635,14 @@ volume_of() {
   echo "$kind at '$mount_point' with $(df -Pk "$1" | tail -n 1 | awk '{ print int($4 / 1048576) }') GiB free"
 }
 
+# SHA-256 of the identity file; minimal Linux systems may lack shasum.
 native_identity() {
-  shasum -a 256 "$native_root/worker/identity" | cut -d ' ' -f 1
+  local identity="$native_root/worker/identity"
+  if command -v sha256sum >/dev/null; then
+    sha256sum "$identity"
+  else
+    shasum -a 256 "$identity"
+  fi | cut -d ' ' -f 1
 }
 
 # Octal permission bits of PATH on macOS or Linux.
