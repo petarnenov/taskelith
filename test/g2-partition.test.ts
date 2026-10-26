@@ -14,6 +14,7 @@ const SEED = seedFromEnvironment();
 console.log(`g2 partition scenarios: ${rerunHint(SEED)}`);
 const INVENTORY_LOOP = 'product bug B1: inventory request loop after a reconnect (openspec/changes/run-g2-partition-and-races/verification.md)';
 const SETTLE_MILLISECONDS = 3_000;
+const TRAIL_REPORTS = 4;
 
 // One intent per offered assignment, however often it was offered.
 async function assertOneIntentPerAssignment(installation: ScenarioInstallation, worker: ScenarioWorker): Promise<number> {
@@ -78,7 +79,8 @@ describe('worker to NATS', () => {
         const settled = await inventoryRequests(installation);
         await delayMilliseconds(SETTLE_MILLISECONDS);
         const later = await inventoryRequests(installation);
-        assert.ok(later - settled <= 1, `${later - settled} inventory requests in ${SETTLE_MILLISECONDS} ms after the task ended`);
+        const trail = later - settled <= 1 ? '' : `; last (requestId, snapshot): ${await inventoryTrail(installation, TRAIL_REPORTS)}`;
+        assert.ok(later - settled <= 1, `${later - settled} inventory requests in ${SETTLE_MILLISECONDS} ms after the task ended${trail}`);
         return `${later} inventory requests in all`;
       } finally {
         await worker.stop();
@@ -197,9 +199,11 @@ describe('control plane to PostgreSQL', () => {
         const startAndExit = 2;
         await waitFor(() => lastDeliveries(installation) === startAndExit, REDELIVERY_BUDGET_MILLISECONDS + 20_000, 'the start and the exit quarantined');
         await postgres.heal();
-        await waitFor(async () => (await quarantined(installation)).length === startAndExit, 20_000, 'the quarantine is listed');
+        // The API answers again once its database connection is back.
+        const listed = () => quarantined(installation).catch(() => []);
+        await waitFor(async () => (await listed()).length === startAndExit, 20_000, 'the quarantine is listed');
         const records = await quarantined(installation);
-        assert.deepEqual(records.map(({ reason, deliveries }) => [reason, deliveries]), records.map(() => ['max-deliveries', 5]));
+        assert.deepEqual(records.map(({ reason, deliveries }) => [reason, deliveries]), records.map(() => ['max-deliveries', SCENARIO_LIMITS.maxDeliver]));
         const beforeRedrive = (await installation.result('task-pg-beyond')).state;
         const ordered = exitFirst ? [...records].reverse() : records;
         for (const { sequence } of ordered) assert.equal((await installation.call('POST', `/quarantine/${sequence}/redrive`)).status, 200);
@@ -219,7 +223,22 @@ async function inventoryRequests(installation: ScenarioInstallation): Promise<nu
 
 async function quarantined(installation: ScenarioInstallation): Promise<{ sequence: number; reason: string; deliveries: number }[]> {
   const listed = await installation.call('GET', '/quarantine');
-  return listed.status === 200 ? listed.body.records as { sequence: number; reason: string; deliveries: number }[] : [];
+  assert.equal(listed.status, 200, JSON.stringify(listed.body));
+  return listed.body.records as { sequence: number; reason: string; deliveries: number }[];
+}
+
+// The last reports' (requestId, snapshot) pairs, oldest first.
+async function inventoryTrail(installation: ScenarioInstallation, count: number): Promise<string> {
+  const reports = (await installation.observations()).flatMap(({ body }) => findMessage(body, 'worker.inventory.reported'));
+  return reports.slice(-count).map(({ requestId, snapshot }) => `(${String(requestId ?? 'none').slice(0, 8)}, ${snapshot})`).join(' ');
+}
+
+// The message of one type inside an envelope, wherever it is nested.
+function findMessage(node: unknown, messageType: string): Record<string, unknown>[] {
+  if (typeof node !== 'object' || node === null) return [];
+  const record = node as Record<string, unknown>;
+  if (record.messageType === messageType) return [record];
+  return Object.values(record).flatMap((child) => findMessage(child, messageType));
 }
 
 // Observations whose last allowed delivery failed.
