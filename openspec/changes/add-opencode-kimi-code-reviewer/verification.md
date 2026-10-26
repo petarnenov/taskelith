@@ -46,12 +46,16 @@ Node v24.22.1, in the worktree:
 
 - `npm run openspec -- validate add-opencode-kimi-code-reviewer --strict`: `Change 'add-opencode-kimi-code-reviewer' is valid`.
 - An archive of the change in a scratch copy of `openspec/`, then `openspec validate --all --strict`: 67 passed, 0 failed.
-- `make verify`: passed on the working tree before the commit, with 1612 tests passed and 0 failed, 68 strictly valid OpenSpec items, the archive dry run, and the package check. Only this line changed after it.
+- `make verify`: passed at commit ac61a40, run by the coordinator after review pass 1, with 68 strictly valid OpenSpec items, the archive dry run, and the package check. After it, only this file changed, recording the review and this result; strict validation was rerun on it.
 
 ## Independent review
 
-Pending. The coordinator session runs it with a Codex CLI reviewer and records it here. No review has taken place yet.
+Reviewer by rotation: Codex CLI (gpt-6.1-sol), run by the coordinator session from the worktree.
+
+- **Pass 1** on ac61a40, 2026-10-26: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, session `01a177f5-9ef8-7351-84e9-10095c069906`; the output header confirmed model `gpt-6.1-sol`, sandbox `read-only`, and reasoning effort `medium`. The SHA-256 snapshots before and after the pass were identical. The reviewer checked the order with a script and found the same-harness reviewers apart, including the wrap. Findings: Critical 0, High 0, Medium 0, Low 1.
+  - Low: the `make verify` line said that only that line changed after the run, which ac61a40 made untrue. Fixed by rerunning `make verify` at ac61a40 and rewriting the line.
+- The pass had only a Low finding, so it was fixed without another review, as the governance policy allows.
 
 ## Remaining gates
 
-Independent review, then integration into `dev` and the archive by the coordinator. Promotion to `main` is a separate owner decision.
+Integration into `dev` and the archive by the coordinator. Promotion to `main` is a separate owner decision.
