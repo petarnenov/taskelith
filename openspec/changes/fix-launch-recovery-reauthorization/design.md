@@ -6,7 +6,7 @@ Defect D1 of G2 item 24b, decided by the owner's delegate in away run `20261026T
 
 **Goals:** a new execution of a launch is granted although the sealed predecessor's observation has not reached the authority; one transaction; no new rejection reason; an additive, optional API field.
 
-**Non-Goals:** the 24b harness and its evidence (tasks group 4); the 24c cancellation path of the launch orchestrator; ordering the worker's outbox before a relaunch.
+**Non-Goals:** changes to the 24b harness beyond its D1 windows (tasks group 4); the 24c cancellation path of the launch orchestrator; ordering the worker's outbox before a relaunch.
 
 ## Decisions
 

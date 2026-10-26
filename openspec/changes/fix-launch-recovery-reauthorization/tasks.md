@@ -23,7 +23,7 @@
 
 ## 4. After G2 24b is in dev (branch `run-g2-crash-windows`)
 
-- [ ] 4.1 Merge `origin/dev`
-- [ ] 4.2 Flip the 11 D1 expected-failure windows of `apps/control-plane/test/crash-windows.integration.test.ts` back to passing
-- [ ] 4.3 Remove the D1 order barrier if it is no longer needed
-- [ ] 4.4 Rerun the evidence with seed `2776760789` into this change's own `results.jsonl`, and record it in verification.md
+- [x] 4.1 Merge `origin/dev`
+- [x] 4.2 Flip the 11 D1 expected-failure windows of `apps/control-plane/test/crash-windows.integration.test.ts` back to passing
+- [x] 4.3 Decide on the D1 order barrier: kept as the race the fix wins, with an order assertion
+- [x] 4.4 Rerun the evidence with seed `2776760789` into this change's own `results.jsonl`, and record it in verification.md

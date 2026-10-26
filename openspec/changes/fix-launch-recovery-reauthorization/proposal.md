@@ -27,4 +27,4 @@ None.
 - `packages/contracts/documents/execution.openapi.json`; `docs/contracts/launch-authorization.md`, `docs/contracts/worker-journal.md`.
 - Tests in the execution module, the worker, and the control plane (unit, API, and PostgreSQL integration).
 - The published `taskelith` package does not bundle these workspaces, so the commits are `chore`, `test`, and `docs`. No new dependency.
-- Out of scope until the G2 24b harness is in `dev`: its D1 expected failures, its D1 order barrier, and its evidence rerun (tasks group 4). The worker's cancellation path of 24c is not touched.
+- G2 24b crash windows (`crash-windows.integration.test.ts`): the 11 windows that failed on D1 pass again, with the hold on the sealed execution's `not-started` kept to prove the race is won (tasks group 4). The worker's cancellation path of 24c is not touched.
