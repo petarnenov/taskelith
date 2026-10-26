@@ -12,6 +12,6 @@
 
 ## 3. Verification and review
 
-- [ ] 3.1 Run `make verify`
-- [ ] 3.2 Independent review by the assigned reviewer (OpenCode, `opencode-go/kimi-k3.1-pro#high`)
-- [ ] 3.3 Record the evidence in `verification.md`
+- [x] 3.1 Run `make verify`
+- [x] 3.2 Independent review by the assigned reviewer (OpenCode, `opencode-go/kimi-k3.1-pro#high`)
+- [x] 3.3 Record the evidence in `verification.md`

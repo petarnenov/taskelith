@@ -10,7 +10,7 @@
 
 ## Way of working
 
-- The coordinator's addendum of 2026-10-26 (owner rule "Subagent execution", being recorded in `require-subagent-task-execution`) arrived during review pass 2. Everything up to and including commit `434df46` (the contract, the port types, the suite, the tests, the pass 1 fixes in `da9378a`, and the merge of `origin/dev`) was written in the worker session itself, before the rule applied. From the pass 2 fixes on, the worktree changes were made by an implementation subagent that the worker briefed with the task, scope, rules, and findings; the worker checked its result before review and handoff. Messages to the coordinator, the independent review, and this record stayed in the worker session.
+- The coordinator's addendum of 2026-10-26 (owner rule "Subagent execution", being recorded in `require-subagent-task-execution`) arrived during review pass 2. Everything up to and including commit `434df46` (the contract, the port types, the suite, the tests, the pass 1 fixes in `da9378a`, and the merge of `origin/dev`) was written in the worker session itself, before the rule applied. From the pass 2 fixes on, the worktree changes were made by an implementation subagent that the worker briefed with the task, scope, rules, and findings; the worker checked its result before review and handoff. Messages to the coordinator, the independent review, and this record stayed in the worker session. The pass 3 fixes in `14be30e` were also made by the implementation subagent and checked by the worker.
 
 ## Environment
 
@@ -31,7 +31,8 @@
 | `7cccca8` | `make verify` | Passed: 1431 tests, 0 failed; coverage over all files 99.21% lines, 91.30% branches, 98.76% functions; agent harness files at least 96.62% lines and 82.42% branches; 64 OpenSpec items valid; archive dry run valid; package verification passed |
 | `7cccca8` | `npm run openspec -- validate define-agent-harness-port --strict` | Valid |
 | `434df46` (pass 1 fixes and the `origin/dev` merge) | `make verify` | Passed: 1434 tests, 0 failed; coverage over all files 99.27% lines, 91.61% branches, 98.74% functions; agent harness files at least 99.50% lines, 92.34% branches, and 98.25% functions; archive dry run and package verification passed |
-| Pass 2 fixes (run by the implementation subagent on the uncommitted tree that became the next commit; the worker checked the log and the diff) | `make verify`; `npm run openspec -- validate define-agent-harness-port --strict` | Passed: 1436 tests, 0 failed; coverage over all files 99.26% lines, 91.65% branches, 98.74% functions; agent harness files at least 99.34% lines, 92.91% branches, and 98.53% functions; comment check, archive dry run, and package verification passed; change valid |
+| `7894646` (pass 2 fixes, run by the implementation subagent on the uncommitted tree that became the next commit; the worker checked the log and the diff) | `make verify`; `npm run openspec -- validate define-agent-harness-port --strict` | Passed: 1436 tests, 0 failed; coverage over all files 99.26% lines, 91.65% branches, 98.74% functions; agent harness files at least 99.34% lines, 92.91% branches, and 98.53% functions; comment check, archive dry run, and package verification passed; change valid |
+| `14be30e` (pass 3 fixes, run by the implementation subagent on the uncommitted tree that became `14be30e`; the worker checked the log and the diff) | `make verify`; `npm run openspec -- validate define-agent-harness-port --strict` | Passed: 1444 tests, 0 failed; coverage over all files 99.26% lines, 91.71% branches, 98.75% functions; agent harness files at least 99.46% lines, 92.86% branches, and 98.78% functions; comment check, 64 OpenSpec items valid, archive dry run, and package verification passed; change valid |
 
 ## Independent review
 
@@ -73,7 +74,7 @@ Reviewer: OpenCode CLI, assigned by the coordinator (Codex went to another task,
 - Reviewed revision: `434df46` against `1ccbd79`. The prompt named the pass 1 session and asked the reviewer to confirm each pass 1 resolution first.
 - Snapshot before and after: `b200941c5bc1d506366f342a84eff670364e58971c9178dade0cc1632be7d5ad`, unchanged.
 - Pass 1 confirmation: 17 resolved; 3 partly resolved (3, 6, and 12), whose remaining parts are pass 2 findings 1, 6, and 5.
-- Findings: Critical 0, High 3, Medium 5, Low 6. All were resolved by the implementation subagent and checked by the worker, in the commit after `434df46`.
+- Findings: Critical 0, High 3, Medium 5, Low 6. All were addressed by the implementation subagent and checked by the worker, in `7894646`. Pass 3 found findings 3 and 5 only partly resolved; their remainders are pass 3 findings 1 and 5, resolved in `14be30e`.
 
 | # | Severity | Finding | Resolution |
 | --- | --- | --- | --- |
@@ -91,6 +92,41 @@ Reviewer: OpenCode CLI, assigned by the coordinator (Codex went to another task,
 | 12 | Low | Resume keeps the first working directory | A resume updates the working directory; tested through the terminal program |
 | 13 | Low | The proposal omits the result parser | The proposal names `parseOperationResult` |
 | 14 | Low | The close rule contradicts itself | Contract section 5 states the exceptions: a repeated close, and a resume at the next generation |
+
+### Pass 3
+
+- Session `ses_e889b287fffe2Ay1iPdyLKfdQf`. Model confirmation: provider `opencode-go`, model `kimi-k3.1-pro`, variant `high`, agent `reviewer`, in the stored assistant messages. The event log holds one transient provider error (`ECONNRESET`); the session recovered and ran to its full report.
+- Reviewed revision: `7894646` against `1ccbd79`, after confirming the pass 2 resolutions. This was the last regular pass.
+- Snapshot before and after: `ef6eca56d174d9fc983170ddf24588e5475e73024eaae8d7ac0d9c7bf2a4a567`, unchanged.
+- Pass 2 confirmation: 12 resolved; 2 partly resolved (3 and 5), whose remaining parts are pass 3 findings 1 and 5.
+- Findings: Critical 0, High 1, Medium 8, Low 2.
+- Decision: Critical, High, or Medium findings remained after the third pass, so the worker stopped and sent the options to the coordinator for the owner (`docs/governance.md`). The owner was away, and the decision was made on the owner's delegation by the delegate harness (OpenCode, `kimi-k2.7-code`), run `20261026T091412Z-opencode-52674` on the coordinator's machine, not by the owner: fix all eleven findings, then one exceptional OpenCode pass 4 with the same reviewer, limited to the diff from `7894646` to the fixed revision, confirming each fix. All eleven were resolved by the implementation subagent and checked by the worker, in `14be30e`.
+
+| # | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| 1 | High | A resume before a close begins can interleave with it in the scripted harness | A resume of a running generation fails at once with `precondition-failed`; a resume after the end has begun waits for that end and checks that the generation was not replaced; contract section 5; tests in both orders in one tick |
+| 2 | Medium | A response after its turn was interrupted is accepted and discarded | A turn's unanswered requests expire when it ends; a response to one is `not-found` and runs no action, a second response to an answered one stays `conflict`; contract section 7.3, spec delta, a permission scenario check, and a broken test harness |
+| 3 | Medium | A `__proto__` key in failure details bypasses validation | `readFields` collects into an object without a prototype; tested with a JSON-parsed `__proto__` key |
+| 4 | Medium | A malformed iterator result breaks the suite | An iterator result that is not an object with an optional boolean `done` is an `event` finding, a throwing accessor a `threw` finding; a broken test harness per case |
+| 5 | Medium | Hardcoded unknown IDs can collide with a conforming harness | The suite picks unknown IDs that the harness has not issued in the run; a test harness that issues exactly those IDs passes |
+| 6 | Medium | The scripted harness throws or misreports malformed requests | Every operation checks the request shape, the generation, and label and path bounds first and returns `invalid`, after only `unavailable`; contract section 2 rule 3; tested for every operation |
+| 7 | Medium | A 128-character session ID gives an over-long native session ID | Native session IDs come from a counter; tested |
+| 8 | Medium | The scripted harness does not split long output | All output, the fallback, and the echoes are split at `MAX_HARNESS_TEXT_LENGTH`; tested |
+| 9 | Medium | The suite lacks session and error rule checks | A tenth scenario, "Session and request rules", with the codes of contract sections 5 and 9.3; a broken test harness per rule |
+| 10 | Low | A blank `recalled` makes the context checks meaningless | A `fixture` finding |
+| 11 | Low | Parser limits and the `resetsAt` grammar are undocumented | A bounds table in contract section 2, applied in both directions; the `resetsAt` grammar documented, UTC with `Z` only |
+
+### Pass 4 (exceptional)
+
+- Permission and scope: granted by the delegated decision recorded under pass 3, as the one pass beyond the limit of three; limited to the diff `7894646..14be30e`, confirming each pass 3 resolution and reporting problems the diff introduces.
+- Session `ses_e88758cc6ffea6enNO3zSBDxOI`. Model confirmation: provider `opencode-go`, model `kimi-k3.1-pro`, variant `high`, agent `reviewer`, in the stored assistant messages. No provider errors.
+- Snapshot before and after: `41cff9f816530582b15200e0943dc9c9b98394ae2015679cf6bc3b2315dcbdfe`, unchanged.
+- Pass 3 confirmation: all 11 resolved, with file and line evidence.
+- Findings: Critical 0, High 0, Medium 0, Low 0. No unreviewed fixes follow.
+
+## Open obligation for item 39
+
+- A terminal runs in its own session under a pseudo-terminal and so leaves the session's process group. On macOS, where the supervisor's termination evidence rests on that process group, the host offers no terminal until item 39 extends the supervisor identity contract to the terminal's process group (contract sections 4.3, 8, and 11).
 
 ## Limitations
 
