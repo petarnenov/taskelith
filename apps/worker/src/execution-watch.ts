@@ -1,4 +1,12 @@
-import type { CommandId, ExecutionExit, ExecutionId, LaunchAuthId, WorkerJournal } from '@taskelith/execution';
+import {
+  isSpaceRefusal,
+  launchRetryDelay,
+  type CommandId,
+  type ExecutionExit,
+  type ExecutionId,
+  type LaunchAuthId,
+  type WorkerJournal,
+} from '@taskelith/execution';
 import type { Result } from '@taskelith/kernel';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import type { ExecutionSupervision, RecoveryRound, SupervisedFacts } from './execution-supervision-port.js';
@@ -13,6 +21,8 @@ export interface WatchOptions {
   readonly journal: WorkerJournal;
   // Resolves after the delay, or early once the signal aborts.
   readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>;
+  // A jitter draw in [0, 1), for the backoff after a refusal for space.
+  readonly draw: () => number;
   readonly pollMilliseconds?: number;
   readonly logger?: Logger;
   // Told of a journal or record failure; the worker keeps running.
@@ -38,6 +48,12 @@ export interface WatchTarget {
 // How a watch ended: sealed without a spawn, or anything else.
 export type Watched = 'not-started' | 'ended';
 
+// A commit refused for lack of space rolled back; the fact stays in the
+// record and is derived again after the backoff (journal contract sec. 7).
+const SPACE_REFUSED = 'space-refused';
+
+type Step = Watched | typeof SPACE_REFUSED;
+
 // What one watch has committed of an execution's record.
 interface Committed {
   started: boolean;
@@ -59,16 +75,22 @@ export class ExecutionWatch {
   // Start reconciliation of a record a previous process journaled (W4):
   // the recovery table decides, and nothing is spawned (journal section 5).
   async reconcile(target: WatchTarget): Promise<Watched> {
-    for (let round: RecoveryRound = 'first'; !target.stopping.aborted; round = 'after-retry') {
+    let round: RecoveryRound = 'first';
+    for (let refusals = 1; !target.stopping.aborted;) {
       const recovered = await target.supervision.recover(round);
       if (!this.#reported(recovered)) return 'ended';
-      const { fact } = recovered.value;
-      this.#logger.info('worker.execution.recovered', { executionId: target.executionId, fact, round });
-      if (fact === 'uncertain') return this.#uncertain(target.executionId, recovered.value.reason);
-      if (fact === 'not-started') return this.#notStarted(target.executionId);
+      const decision = recovered.value;
+      this.#logger.info('worker.execution.recovered', { executionId: target.executionId, fact: decision.fact, round });
+      if (decision.fact === 'retry') {
+        round = 'after-retry';
+        await this.#options.sleep(this.#poll, target.stopping);
+        continue;
+      }
       // An exit is read back with the spawn it ends, so W5s precedes W5e.
-      if (fact !== 'retry') return this.observe(target);
-      await this.#options.sleep(this.#poll, target.stopping);
+      if (decision.fact !== 'uncertain' && decision.fact !== 'not-started') return this.observe(target);
+      const step = decision.fact === 'uncertain' ? this.#uncertain(target.executionId, decision.reason) : this.#notStarted(target.executionId);
+      if (step !== SPACE_REFUSED) return step;
+      await this.#backOff(target, refusals++, target.stopping);
     }
     return 'ended';
   }
@@ -79,27 +101,33 @@ export class ExecutionWatch {
     let forwarded = false;
     let round: RecoveryRound = 'first';
     const committed: Committed = { started: false, survivors: false, notApplied: new Set() };
-    for (let polls = 1; !target.stopping.aborted; polls += 1) {
+    for (let polls = 1, refusals = 1; !target.stopping.aborted; polls += 1) {
       const reason = target.cancelReason();
       if (reason !== undefined && !forwarded) forwarded = cancelFiled(await target.supervision.cancel(reason));
+      // Once cancelled, the wake signal stays aborted and cannot wake it.
+      const pause = reason === undefined ? target.wake : target.stopping;
       const facts = await target.supervision.read();
       if (!this.#reported(facts)) return 'ended';
-      const decided = this.#commitFacts(target, facts.value, committed);
-      if (decided !== undefined) return decided;
-      if (facts.value.launch?.kind === 'claim' && polls % LIVENESS_POLLS === 0) {
+      let decided = this.#commitFacts(target, facts.value, committed);
+      if (decided === undefined && facts.value.launch?.kind === 'claim' && polls % LIVENESS_POLLS === 0) {
         const checked = await this.#checkLiveness(target, round);
-        if (checked !== 'observe' && checked !== 'retry') return checked;
-        round = checked === 'retry' ? 'after-retry' : 'first';
+        if (checked === 'observe' || checked === 'retry') round = checked === 'retry' ? 'after-retry' : 'first';
+        else decided = checked;
       }
-      // Once cancelled, the wake signal stays aborted and cannot wake it.
-      await this.#options.sleep(this.#poll, reason === undefined ? target.wake : target.stopping);
+      if (decided === SPACE_REFUSED) {
+        await this.#backOff(target, refusals++, pause);
+        continue;
+      }
+      if (decided !== undefined) return decided;
+      refusals = 1;
+      await this.#options.sleep(this.#poll, pause);
     }
     return 'ended';
   }
 
   // The facts of one read, in the order the supervisor wrote them; each
   // is committed once per watch.
-  #commitFacts(target: WatchTarget, facts: SupervisedFacts, committed: Committed): Watched | undefined {
+  #commitFacts(target: WatchTarget, facts: SupervisedFacts, committed: Committed): Step | undefined {
     const { executionId } = target;
     const { journal } = this.#options;
     if (facts.problems.length > 0) {
@@ -112,27 +140,31 @@ export class ExecutionWatch {
       if (target.launchAuthId === undefined || claimed !== target.launchAuthId) {
         return this.#uncertain(executionId, 'the record was claimed under another grant');
       }
-      if (!this.#reported(journal.recordStart(executionId, target.launchAuthId, facts.process))) return 'ended';
+      const started = this.#committed(journal.recordStart(executionId, target.launchAuthId, facts.process));
+      if (started !== true) return started;
       committed.started = true;
     }
-    if (!this.#commitEvidence(target, facts, committed)) return undefined;
+    const evidence = this.#commitEvidence(target, facts, committed);
+    if (evidence !== true) return evidence === SPACE_REFUSED ? evidence : undefined;
     return facts.exit === undefined ? undefined : this.#exited(executionId, facts.exit);
   }
 
   // The evidence beside the facts; the exit waits until all of it is
   // committed, so none is lost once the execution is terminal.
-  #commitEvidence(target: WatchTarget, facts: SupervisedFacts, committed: Committed): boolean {
+  #commitEvidence(target: WatchTarget, facts: SupervisedFacts, committed: Committed): boolean | typeof SPACE_REFUSED {
     const { executionId } = target;
     const { journal } = this.#options;
     if (!committed.survivors && facts.survivors !== undefined) {
-      committed.survivors = this.#reported(journal.recordTerminationUnproven(executionId, facts.survivors));
-      if (!committed.survivors) return false;
+      const survivors = this.#committed(journal.recordTerminationUnproven(executionId, facts.survivors));
+      if (survivors !== true) return survivors === SPACE_REFUSED ? survivors : false;
+      committed.survivors = true;
     }
     if (!facts.cancellationNotApplied) return true;
     const commands = target.cancellations();
     if (!this.#reported(commands)) return false;
     for (const commandId of commands.value.filter((command) => !committed.notApplied.has(command))) {
-      if (!this.#reported(journal.recordCancellationNotApplied(commandId, executionId))) return false;
+      const notApplied = this.#committed(journal.recordCancellationNotApplied(commandId, executionId));
+      if (notApplied !== true) return notApplied === SPACE_REFUSED ? notApplied : false;
       committed.notApplied.add(commandId);
     }
     return true;
@@ -140,7 +172,7 @@ export class ExecutionWatch {
 
   // A live or newly adopting supervisor keeps the watch going; anything
   // else was decided by the recovery table and is read back next poll.
-  async #checkLiveness(target: WatchTarget, round: RecoveryRound): Promise<Watched | 'observe' | 'retry'> {
+  async #checkLiveness(target: WatchTarget, round: RecoveryRound): Promise<Step | 'observe' | 'retry'> {
     const recovered = await target.supervision.recover(round);
     if (!this.#reported(recovered)) return 'ended';
     const { fact } = recovered.value;
@@ -149,19 +181,33 @@ export class ExecutionWatch {
     return fact === 'uncertain' ? this.#uncertain(target.executionId, recovered.value.reason) : 'observe';
   }
 
-  #notStarted(executionId: ExecutionId): Watched {
-    return this.#reported(this.#options.journal.recordNotStarted(executionId)) ? 'not-started' : 'ended';
+  #notStarted(executionId: ExecutionId): Step {
+    const recorded = this.#committed(this.#options.journal.recordNotStarted(executionId));
+    return recorded === true ? 'not-started' : recorded;
   }
 
-  #exited(executionId: ExecutionId, exit: ExecutionExit): Watched {
-    this.#reported(this.#options.journal.recordExit(executionId, exit));
-    return 'ended';
+  #exited(executionId: ExecutionId, exit: ExecutionExit): Step {
+    return this.#committed(this.#options.journal.recordExit(executionId, exit)) === SPACE_REFUSED ? SPACE_REFUSED : 'ended';
   }
 
-  #uncertain(executionId: ExecutionId, reason: string): Watched {
+  #uncertain(executionId: ExecutionId, reason: string): Step {
     this.#logger.warn('worker.execution.uncertain', { executionId, reason });
-    this.#reported(this.#options.journal.recordUncertain(executionId));
+    return this.#committed(this.#options.journal.recordUncertain(executionId)) === SPACE_REFUSED ? SPACE_REFUSED : 'ended';
+  }
+
+  // A refusal for space is retried, not reported; any other failure is.
+  #committed(result: Result<void>): true | 'ended' | typeof SPACE_REFUSED {
+    if (result.ok) return true;
+    if (isSpaceRefusal(result.error)) return SPACE_REFUSED;
+    this.#options.onFailure?.(result.error);
     return 'ended';
+  }
+
+  // Within [5 s, 60 s], the backoff of the operational targets.
+  async #backOff(target: WatchTarget, refusals: number, signal: AbortSignal): Promise<void> {
+    const delayMilliseconds = launchRetryDelay(refusals, this.#options.draw());
+    this.#logger.warn('worker.journal.space-refused', { executionId: target.executionId, refusals, delayMilliseconds });
+    await this.#options.sleep(delayMilliseconds, signal);
   }
 
   get #poll(): number {

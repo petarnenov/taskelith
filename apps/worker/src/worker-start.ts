@@ -19,6 +19,7 @@ import {
   readVolumeSpace,
   readWorkerCredentials,
   truncateBufferedLogs,
+  workerPaths,
   type JournalClock,
   type VolumeProbe,
   type VolumeSpaceReader,
@@ -27,8 +28,9 @@ import {
   type WorkerRoot,
   type WorkerRootOptions,
 } from '@taskelith/worker-journal';
-import { AdmissionPressure } from './admission-pressure.js';
+import { AdmissionPressure, shedBufferedLogs } from './admission-pressure.js';
 import { CommandIntake } from './command-intake.js';
+import type { DaemonOverheadSource } from './daemon-overhead.js';
 import type { DeadlineClock, RecordListing, SupervisionFactory } from './execution-supervision-port.js';
 import { LaunchOrchestrator, openExecutions } from './launch-orchestrator.js';
 import { runObservationPublisher } from './observation-publisher.js';
@@ -42,6 +44,8 @@ export interface WorkerDependencies {
   readonly probe?: VolumeProbe;
   // The free space of the data root's volume, for the disk floor.
   readonly space?: VolumeSpaceReader;
+  // The daemon's memory and event-loop delay, for the daemon overhead.
+  readonly daemon: DaemonOverheadSource;
   readonly pressurePollMilliseconds?: number;
   // Shorter transport timers for tests.
   readonly limits?: TransportLimits;
@@ -92,9 +96,13 @@ export async function startWorker(settings: WorkerSettings, dependencies: Worker
   return connected;
 }
 
+// A journal write refused for lack of space sheds the buffered logs; the
+// command is redelivered, and the watch derives the fact again.
 function rootOptions(settings: WorkerSettings, dependencies: WorkerDependencies): WorkerRootOptions {
   const { clock, probe } = dependencies;
-  return { dataRoot: settings.dataRoot, clock, ...(probe === undefined ? {} : { probe }) };
+  const truncateLogs = () => truncateBufferedLogs(workerPaths(settings.dataRoot).logs);
+  const onSpaceRefused = () => shedBufferedLogs(truncateLogs, dependencies.logger ?? SILENT_LOGGER);
+  return { dataRoot: settings.dataRoot, clock, onSpaceRefused, ...(probe === undefined ? {} : { probe }) };
 }
 
 // The first start claims the root before it asks the control plane, so a
@@ -170,7 +178,8 @@ async function connectBroker(settings: WorkerSettings, dependencies: WorkerDepen
 function admissionPressure(settings: WorkerSettings, dependencies: WorkerDependencies, root: WorkerRoot): AdmissionPressure {
   const space = dependencies.space ?? readVolumeSpace;
   return new AdmissionPressure({
-    journal: root.journal, space: () => space(settings.dataRoot), truncateLogs: () => truncateBufferedLogs(root.paths.logs),
+    journal: root.journal, space: () => space(settings.dataRoot), daemon: dependencies.daemon,
+    truncateLogs: () => truncateBufferedLogs(root.paths.logs),
     ...(dependencies.logger === undefined ? {} : { logger: dependencies.logger }),
   });
 }
@@ -229,8 +238,8 @@ interface Loops {
   abort(): void;
 }
 
-// The command consumer, the observation publisher, the pressure watch, and
-// the launches, until aborted.
+// The command consumer, the observation publisher, the pressure watch and
+// its sensor, and the launches, until aborted.
 function startLoops(context: LoopContext): Loops {
   const { settings, dependencies, root, transport, address, observationSubject, pressure, launcher } = context;
   const { journal } = root;
@@ -248,6 +257,7 @@ function startLoops(context: LoopContext): Loops {
     consumer.run(controller.signal),
     runObservationPublisher({ journal, publish, observationSubject, now }, controller.signal, dependencies.limits),
     pressure.watch(controller.signal, dependencies.pressurePollMilliseconds),
+    dependencies.daemon.watch(controller.signal),
     launcher?.run(controller.signal),
   ]).then(() => undefined);
   return { finished, abort: () => controller.abort() };
