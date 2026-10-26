@@ -168,6 +168,7 @@ export {
   type Sequence,
   type SequenceClass,
 } from './domain/observation-sequence.js';
+export { isQuarantineEvidence } from './domain/observation-epoch.js';
 export {
   START_DECISIONS,
   decideStartObservation,

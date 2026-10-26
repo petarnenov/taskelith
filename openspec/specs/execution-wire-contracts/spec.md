@@ -50,7 +50,7 @@ Every observation SHALL carry a deterministic `observationId`, its fixed type, s
 - **THEN** validation fails at the sequence
 
 ### Requirement: Execution observations
-The AsyncAPI document SHALL define observations for assignment acceptance and refusal, command rejection, non-retryable launch rejection, and the supervisor facts. The facts are `started`, `exited`, `not-started`, `uncertain`, `termination-unproven`, and `unrecorded-process`. It SHALL also define a cancellation that was not applied, capacity declaration, and admission pressure.
+The AsyncAPI document SHALL define observations for assignment acceptance and refusal, command rejection, non-retryable launch rejection, and the supervisor facts. The facts are `started`, `exited`, `not-started`, `uncertain`, `termination-unproven`, and `unrecorded-process`. It SHALL also define a cancellation that was not applied, capacity declaration, and admission pressure. Each fact and unapplied cancellation SHALL carry its recovery epoch.
 
 #### Scenario: Refusal for the protocol
 - **WHEN** an assignment refusal names `protocol-not-supported`
@@ -70,6 +70,10 @@ The AsyncAPI document SHALL define observations for assignment acceptance and re
 
 #### Scenario: Exit code out of range
 - **WHEN** an exit observation has exit code 256
+- **THEN** validation fails
+
+#### Scenario: Fact without its epoch
+- **WHEN** an exit, `not-started`, `uncertain`, `termination-unproven`, unrecorded process, or unapplied cancellation omits `recoveryEpoch`
 - **THEN** validation fails
 
 ### Requirement: Confirmation and inventory

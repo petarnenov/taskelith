@@ -32,13 +32,13 @@ test('an unrecorded process is journaled with its containment and members', () =
   value(journal.recordUnrecordedProcess(CONTAINMENT, [MEMBER]));
   const [entry, ...rest] = unrecorded();
   assert.deepEqual(rest, []);
-  assert.deepEqual(entry?.fact, { kind: 'unrecorded-process', containment: CONTAINMENT, processes: [MEMBER] });
+  assert.deepEqual(entry?.fact, { kind: 'unrecorded-process', containment: CONTAINMENT, recoveryEpoch: journal.binding.recoveryEpoch, processes: [MEMBER] });
 });
 
 test('its identity comes from the journal and the containment alone', () => {
   value(journal.recordUnrecordedProcess(CONTAINMENT, [MEMBER]));
   const [entry] = unrecorded();
-  const moved = { kind: 'unrecorded-process' as const, containment: CONTAINMENT, processes: [] };
+  const moved = { kind: 'unrecorded-process' as const, containment: CONTAINMENT, recoveryEpoch: journal.binding.recoveryEpoch, processes: [] };
   assert.equal(entry?.position.observationId, observationIdOf(moved, journal.binding.journalId));
   const otherJournal = 'f'.repeat(32) as JournalId;
   assert.notEqual(observationIdOf(moved, otherJournal), entry?.position.observationId);

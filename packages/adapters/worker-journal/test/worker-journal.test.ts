@@ -118,10 +118,10 @@ test('execution facts name the assignment of their launch intent, from the journ
   value(journal.recordStart(EXECUTION, id('LaunchAuthId', 'launch-auth-1'), PROCESS));
   value(journal.recordExit(EXECUTION, exitWith({ kind: 'code', code: 0 })));
   const { assignmentId, attemptId, ownershipGeneration, recoveryEpoch } = intent(1);
-  const subject = { executionId: EXECUTION, assignmentId, attemptId, ownershipGeneration };
+  const subject = { executionId: EXECUTION, assignmentId, attemptId, ownershipGeneration, recoveryEpoch };
   const launchAuthId = id('LaunchAuthId', 'launch-auth-1');
   const [, started, exited] = value(journal.dueForPublication(T0)).map((entry) => entry.fact);
-  assert.deepEqual(started, { kind: 'execution-started', ...subject, launchAuthId, recoveryEpoch, process: PROCESS });
+  assert.deepEqual(started, { kind: 'execution-started', ...subject, launchAuthId, process: PROCESS });
   assert.deepEqual(exited, { kind: 'execution-exited', ...subject, exit: exitWith({ kind: 'code', code: 0 }) });
 });
 
@@ -466,9 +466,17 @@ test('each inventory gets a higher snapshot number and the last sequence it refl
   assert.equal(value(journal.takeInventory()).snapshot, 3);
 });
 
+// Undoes format 4: the stored facts lose the epoch format 4 added.
+function asFormat3(raw: DatabaseSync): void {
+  raw.exec(`UPDATE outbox SET fact = json_remove(fact, '$.recoveryEpoch')
+    WHERE json_extract(fact, '$.kind') NOT IN ('execution-started')`);
+  raw.exec('PRAGMA user_version = 3');
+}
+
 // Undoes format 3, as a format 2 journal stores its records; the widened
 // CHECK stays, which the migration's rebuild replaces anyway.
 function asFormat2(raw: DatabaseSync): void {
+  asFormat3(raw);
   for (const column of ['terminal_sequence', 'record_removed', 'termination_unproven']) raw.exec(`ALTER TABLE execution DROP COLUMN ${column}`);
   raw.exec('DROP TABLE cancellation_not_applied');
   raw.exec('PRAGMA user_version = 2');
@@ -508,6 +516,22 @@ test('a format 2 journal is migrated: a sealed pending operation expires and con
   assert.deepEqual(outcomes, ['granted', 'expired']);
   // The exit (2) was confirmed and pruned; the seal (3) is still unconfirmed.
   assert.deepEqual(value(journal.removableRecords()), [EXECUTION]);
+});
+
+test('a format 3 journal is migrated: each stored execution fact takes its intent\'s epoch', () => {
+  value(journal.recordCommand(assignment()));
+  launchUntilWritten();
+  value(journal.recordUncertain(EXECUTION));
+  value(journal.recordExit(EXECUTION, exitWith({ kind: 'code', code: 0 })));
+  value(journal.recordUnrecordedProcess('/sys/fs/cgroup/taskelith/lost-1', []));
+  reopenRaw((raw) => {
+    asFormat3(raw);
+    raw.exec('UPDATE launch_intent SET recovery_epoch = 5');
+  });
+  const epochs = value(journal.dueForPublication(T0)).map(({ fact }) => [fact.kind, 'recoveryEpoch' in fact ? fact.recoveryEpoch : undefined]);
+  assert.deepEqual(epochs, [
+    ['assignment-accepted', undefined], ['execution-uncertain', 5], ['execution-exited', 5], ['unrecorded-process', BINDING.recoveryEpoch],
+  ]);
 });
 
 test('an expired operation is closed and its execution authorized again under a new operation', () => {
@@ -562,7 +586,7 @@ test('termination unproven and a cancellation not applied are each reported once
   assert.deepEqual(facts.map(({ kind }) => kind), ['termination-unproven', 'cancellation-not-applied']);
   assert.deepEqual(facts[1], {
     kind: 'cancellation-not-applied', executionId: EXECUTION, assignmentId: intent().assignmentId, attemptId: intent().attemptId,
-    ownershipGeneration: intent().ownershipGeneration, commandId: cancellation.commandId,
+    ownershipGeneration: intent().ownershipGeneration, recoveryEpoch: intent().recoveryEpoch, commandId: cancellation.commandId,
   });
 });
 

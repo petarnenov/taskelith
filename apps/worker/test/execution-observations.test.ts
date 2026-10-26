@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 import { checkMessageSchema, type MessageSchemas } from '@taskelith/contracts';
-import { launchRejection, type AssignmentRefusal, type ExecutionExit, type JournaledCommand, type WorkerJournal } from '@taskelith/execution';
+import { launchRejection, parseRecoveryEpoch, type AssignmentRefusal, type ExecutionExit, type JournaledCommand, type WorkerJournal } from '@taskelith/execution';
 import { ok, type Result } from '@taskelith/kernel';
 import type { Publication, PublishOutcome } from '@taskelith/nats';
 import { id, value } from '@taskelith/testing';
@@ -67,7 +67,8 @@ test('an exit is published with its termination evidence, and a spawn failure as
   value(journal.recordExit(EXECUTION, CLEAN_EXIT));
   const body = await publishedAs('ExecutionExitedObservation');
   assert.deepEqual(body.payload, {
-    executionId: EXECUTION, status: { kind: 'code', code: 0 }, startProven: true, spawnFailed: false, terminationEvidence: 'process-group-empty',
+    executionId: EXECUTION, recoveryEpoch: 1, status: { kind: 'code', code: 0 }, startProven: true, spawnFailed: false,
+    terminationEvidence: 'process-group-empty',
   });
 });
 
@@ -77,7 +78,7 @@ test('a spawn failure is published with its failure and never-spawned', async ()
   value(journal.recordExit(EXECUTION, exit));
   const body = await publishedAs('ExecutionExitedObservation');
   assert.deepEqual(body.payload, {
-    executionId: EXECUTION, status: { kind: 'unknown' }, startProven: false, spawnFailed: true, spawnFailure: 'ENOENT',
+    executionId: EXECUTION, recoveryEpoch: 1, status: { kind: 'unknown' }, startProven: false, spawnFailed: true, spawnFailure: 'ENOENT',
     terminationEvidence: 'never-spawned',
   });
 });
@@ -96,7 +97,7 @@ for (const termination of ['boot-changed', 'namespace-ended'] as const) {
     launched();
     value(journal.recordExit(EXECUTION, { status: { kind: 'unknown' }, startProven: true, termination }));
     assert.deepEqual((await publishedAs('ExecutionExitedObservation')).payload, {
-      executionId: EXECUTION, status: { kind: 'unknown' }, startProven: true, spawnFailed: false, terminationEvidence: termination,
+      executionId: EXECUTION, recoveryEpoch: 1, status: { kind: 'unknown' }, startProven: true, spawnFailed: false, terminationEvidence: termination,
     });
   });
 }
@@ -104,16 +105,32 @@ for (const termination of ['boot-changed', 'namespace-ended'] as const) {
 test('uncertain and not-started are published about their execution', async () => {
   launched();
   value(journal.recordUncertain(EXECUTION));
-  assert.deepEqual((await publishedAs('ExecutionUncertainObservation')).payload, { executionId: EXECUTION });
+  assert.deepEqual((await publishedAs('ExecutionUncertainObservation')).payload, { executionId: EXECUTION, recoveryEpoch: 1 });
   value(journal.recordNotStarted(EXECUTION));
-  assert.deepEqual((await publishedAs('ExecutionNotStartedObservation')).payload, { executionId: EXECUTION });
+  assert.deepEqual((await publishedAs('ExecutionNotStartedObservation')).payload, { executionId: EXECUTION, recoveryEpoch: 1 });
 });
 
 test('an unproven termination is published with its survivors, even with none listable', async () => {
   launched();
   value(journal.recordTerminationUnproven(EXECUTION, []));
   const body = await publishedAs('TerminationUnprovenObservation');
-  assert.deepEqual(body.payload, { executionId: EXECUTION, survivors: [] });
+  assert.deepEqual(body.payload, { executionId: EXECUTION, recoveryEpoch: 1, survivors: [] });
+});
+
+test('every execution observation carries the epoch of its launch intent, not the journal\'s', async () => {
+  const intent = { ...intentOf(2), recoveryEpoch: value(parseRecoveryEpoch(3)) };
+  const { commandId, digest, correlationId } = offer(2);
+  value(journal.recordCommand({ commandId, digest, correlationId, outcome: 'accepted', kind: 'assignment', intent }));
+  const executionId = id('ExecutionId', 'execution-2');
+  const request = { ...intent, workerId: journal.binding.workerId, executionId, operationId: id('OperationId', 'operation-2'), reportsNotStarted: false };
+  value(journal.beginAuthorization(request));
+  value(journal.recordGrant(grantFor(request)));
+  value(journal.recordExecutionRecordWritten(executionId));
+  value(journal.recordUncertain(executionId));
+  assert.equal(((await publishedAs('ExecutionUncertainObservation')).payload as Record<string, unknown>).recoveryEpoch, 3);
+  value(journal.recordExit(executionId, CLEAN_EXIT));
+  assert.equal(((await publishedAs('ExecutionExitedObservation')).payload as Record<string, unknown>).recoveryEpoch, 3);
+  assert.equal(journal.binding.recoveryEpoch, 1);
 });
 
 test('a final launch rejection is published with its operation and reason', async () => {

@@ -48,24 +48,25 @@ export function observationMessage(entry: OutboxEntry): Result<ObservationMessag
       return ok({ metadata: aboutAttempt(entry, 'execution.started', fact), payload });
     }
     case 'execution-exited':
-      return ok({ metadata: aboutAttempt(entry, 'execution.exited', fact), payload: exitedPayload(fact.executionId, fact.exit) });
+      return ok({ metadata: aboutAttempt(entry, 'execution.exited', fact), payload: { ...observedExecution(fact), ...exitedPayload(fact.exit) } });
     case 'execution-not-started':
-      return ok({ metadata: aboutAttempt(entry, 'execution.not-started', fact), payload: { executionId: fact.executionId } });
+      return ok({ metadata: aboutAttempt(entry, 'execution.not-started', fact), payload: observedExecution(fact) });
     case 'execution-uncertain':
-      return ok({ metadata: aboutAttempt(entry, 'execution.uncertain', fact), payload: { executionId: fact.executionId } });
+      return ok({ metadata: aboutAttempt(entry, 'execution.uncertain', fact), payload: observedExecution(fact) });
     case 'termination-unproven': {
-      const payload = { executionId: fact.executionId, survivors: fact.survivors.slice(0, PROCESSES_MAXIMUM) };
+      const payload = { ...observedExecution(fact), survivors: fact.survivors.slice(0, PROCESSES_MAXIMUM) };
       return ok({ metadata: aboutAttempt(entry, 'execution.termination-unproven', fact), payload });
     }
     case 'cancellation-not-applied': {
-      const { commandId, executionId } = fact;
+      const { commandId } = fact;
       const metadata = { ...aboutAttempt(entry, 'execution.cancellation.not-applied', fact), causationId: commandId };
-      return ok({ metadata, payload: { commandId, executionId, reason: 'adopting-supervisor' } });
+      return ok({ metadata, payload: { commandId, ...observedExecution(fact), reason: 'adopting-supervisor' } });
     }
     case 'unrecorded-process': {
       const metadata = metadataOf(entry, 'execution.unrecorded-process', { correlationId: entry.position.observationId });
       const containment = displayText(fact.containment, 'an unnamed containment');
-      return ok({ metadata, payload: { containment, processes: fact.processes.slice(0, PROCESSES_MAXIMUM) } });
+      const processes = fact.processes.slice(0, PROCESSES_MAXIMUM);
+      return ok({ metadata, payload: { containment, recoveryEpoch: fact.recoveryEpoch, processes } });
     }
   }
 }
@@ -79,14 +80,20 @@ function refusalOf(refusal: AssignmentRefusal): Record<string, unknown> {
   return { reason: refusal.reason, retryable: false };
 }
 
+// The execution and the epoch every execution observation is checked by
+// (launch authorization section 7).
+function observedExecution(subject: ExecutionSubject): Record<string, unknown> {
+  return { executionId: subject.executionId, recoveryEpoch: subject.recoveryEpoch };
+}
+
 // Only a failed spawn names its failure; every other exit names evidence.
-function exitedPayload(executionId: string, exit: ExecutionExit): Record<string, unknown> {
+function exitedPayload(exit: ExecutionExit): Record<string, unknown> {
   const { status, startProven, spawnFailure, termination } = exit;
   if (termination === 'never-spawned') {
     const failure = displayText(spawnFailure ?? SPAWN_FAILED, SPAWN_FAILED);
-    return { executionId, status, startProven: false, spawnFailed: true, spawnFailure: failure, terminationEvidence: termination };
+    return { status, startProven: false, spawnFailed: true, spawnFailure: failure, terminationEvidence: termination };
   }
-  return { executionId, status, startProven, spawnFailed: false, terminationEvidence: termination };
+  return { status, startProven, spawnFailed: false, terminationEvidence: termination };
 }
 
 const DISPLAY_TEXT_MAXIMUM = 1024;
