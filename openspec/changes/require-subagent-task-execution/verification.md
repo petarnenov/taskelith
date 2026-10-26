@@ -22,7 +22,8 @@ The change adds no external link or external fact; its only source is the owner'
 
 - `npm run openspec -- validate require-subagent-task-execution --strict`: passed on `4270811`, before review pass 1.
 - `make verify`: passed (exit 0) on `4270811`, before review pass 1.
-- Final revision: `make verify` and strict validation — results recorded below after the pass 2 fixes.
+- `npm run openspec -- validate require-subagent-task-execution --strict`: passed ("Change 'require-subagent-task-execution' is valid") on `b6de140`, after the pass 2 fixes.
+- `make verify`: passed (exit 0) on `b6de140`, after the pass 2 fixes.
 
 ## Independent review
 
@@ -59,7 +60,5 @@ The coordinator wrote the first revision (`eece60a` and `4270811`) directly in i
 
 ## Remaining gates
 
-- Resolution of the pass 2 findings.
-- The final `make verify` and strict validation, with their results recorded.
 - Review pass 3, the last pass under the three-pass cap.
 - Integration and archive by the coordinator.
