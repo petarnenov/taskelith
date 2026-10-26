@@ -27,7 +27,8 @@ UV_PIN := 0.13.5
 	test services-up services-down verify-linux-cgroup installation-build installation-bootstrap installation-broker-config installation-start \
 	installation-stop installation-enroll installation-enrollment-token verify-installation installation-smoke qualify-harnesses \
 	scenario-fresh-composition scenario-worker-disk-loss scenario-worker-kill \
-	scenario-worker-namespace-confinement worker-seccomp-profile
+	scenario-worker-namespace-confinement worker-seccomp-profile linux-test-image linux-test-suites \
+	scenario-worker-lifecycle scenario-native-worker-lifecycle native-acceptance
 
 # Uses the .nvmrc Node.js when nvm has it, so no 'nvm use' is needed first.
 verify:
@@ -82,17 +83,35 @@ services-down:
 contract-compatibility:
 	node --experimental-strip-types scripts/check-contract-compatibility.ts
 
-# Opt-in privileged cgroup v2 tests of the worker supervisor; kept out of
-# make verify, which stays unprivileged. x86_64 Docker hosts only.
-verify-linux-cgroup:
-	@if [ "$$(docker info --format '{{.Architecture}}')" != "x86_64" ]; then \
-		echo "make verify-linux-cgroup: needs an x86_64 Docker host; the image pins the linux-x64 Node.js." >&2; \
-		exit 1; \
-	fi
-	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run build
+# The test image of the Linux tests, with the Node.js of the Docker host's
+# architecture (x86_64 or aarch64).
+linux-test-image:
+	@case "$$(docker info --format '{{.Architecture}}')" in \
+		x86_64) node_arch=x64; node_sha256=$(NODE_LINUX_X64_SHA256) ;; \
+		aarch64|arm64) node_arch=arm64; node_sha256=$(NODE_LINUX_ARM64_SHA256) ;; \
+		*) echo "make linux-test-image: no pinned Node.js for this Docker host" >&2; exit 1 ;; \
+	esac; \
 	docker build --quiet --build-arg BASE=$(UBUNTU_BASE) --build-arg NODE_VERSION=$(NODE_PIN) \
-		--build-arg NODE_SHA256=$(NODE_LINUX_X64_SHA256) --tag $(LINUX_CGROUP_IMAGE) tools/linux-cgroup
-	docker run --rm --privileged --cgroupns=private --network none --volume "$(CURDIR):/repo:ro" $(LINUX_CGROUP_IMAGE)
+		--build-arg NODE_ARCH="$$node_arch" --build-arg NODE_SHA256="$$node_sha256" \
+		--tag $(LINUX_CGROUP_IMAGE) tools/linux-cgroup >/dev/null
+
+# Opt-in privileged cgroup v2 tests of the worker supervisor; kept out of
+# make verify, which stays unprivileged. PATTERN selects tests by name.
+verify-linux-cgroup:
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run build
+	@$(MAKE) --no-print-directory linux-test-image
+	docker run --rm --privileged --cgroupns=private --network none --volume "$(CURDIR):/repo:ro" $(LINUX_CGROUP_IMAGE) \
+		$(if $(PATTERN),--test-name-pattern='$(PATTERN)')
+
+# Opt-in: runs the test files of SUITES in the Linux test image, without
+# privileges or network, as an unprivileged user, on a fresh volume.
+linux-test-suites:
+	@if [ -z "$(SUITES)" ]; then echo "make linux-test-suites: set SUITES to test files" >&2; exit 2; fi
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run build
+	@$(MAKE) --no-print-directory linux-test-image
+	docker run --rm --network none --user 2000:2000 --volume /tmp --volume "$(CURDIR):/repo:ro" --workdir /repo \
+		--entrypoint node $(LINUX_CGROUP_IMAGE) --experimental-strip-types --test \
+		$(if $(PATTERN),--test-name-pattern='$(PATTERN)') $(SUITES)
 
 # Minimal local installation (docs/local-installation.md); the targets after
 # this build need TASKELITH_POSTGRES_PASSWORD. Builds both images.
@@ -151,6 +170,21 @@ scenario-worker-kill:
 # Opt-in item 25a check of the worker's seccomp profile.
 scenario-worker-namespace-confinement:
 	@$(SCENARIO_RUN) scenario-worker-namespace-confinement $(INSTALLATION)-scenario
+
+# Opt-in item 25b: install, start, stop, and restart of the Linux worker
+# container, and of a native worker on this host against the installation.
+scenario-worker-lifecycle:
+	@$(SCENARIO_RUN) scenario-worker-lifecycle $(INSTALLATION)-scenario
+
+scenario-native-worker-lifecycle:
+	@$(SCENARIO_RUN) scenario-native-worker-lifecycle $(INSTALLATION)-scenario
+
+# Opt-in item 25b: runs the native acceptance proofs of this host's matrix
+# entries (ENTRIES: macos, linux) and records each into RESULTS.
+native-acceptance:
+	@if [ -z "$(RESULTS)" ]; then echo "make native-acceptance: set RESULTS to a results.jsonl file" >&2; exit 2; fi
+	@NODE_PIN=$(NODE_PIN) $(INSTALLATION_PINS) LINUX_TEST_IMAGE=$(LINUX_CGROUP_IMAGE) SERVICES=taskelith-$(SERVICES_ID)-acceptance \
+		ENTRIES="$(ENTRIES)" bash scripts/with-pinned-node.sh use bash scripts/native-acceptance.sh "$(RESULTS)"
 
 # Rederives the worker's seccomp profile from the pinned Docker default.
 worker-seccomp-profile:
