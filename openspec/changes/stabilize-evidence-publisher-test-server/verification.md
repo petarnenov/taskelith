@@ -33,7 +33,7 @@ The change adds no external link.
   `Error: Test hook "before" at packages/adapters/worker-control-plane-client/test/http-evidence-publisher.test.ts:46:1 generated asynchronous activity after the test ended. This activity created the error "Error: aborted" and would have caused the test to fail, but instead triggered an unhandledRejection event.`
 - After the fix (`5565846`): the same command passed with `tests 5, pass 5, fail 0`. Under load, 10 rounds of 8 parallel runs of the file, 80 runs in total, all passed.
 - `npm run openspec -- validate stabilize-evidence-publisher-test-server --strict` passed.
-- `make verify`: see the final result below.
+- `make verify` passed on the final tree at `c0e6a70`: 1930 tests, 1928 passed, 0 failed, 2 skipped; coverage of all files was 99.28% lines, 92.06% branches, and 99.04% functions. The next commit only adds this result line.
 
 ## Independent review
 
@@ -62,5 +62,3 @@ The change adds no external link.
 
 - Independent review (pass 2 pending).
 - Integration into dev by the coordinator (single pull request).
-
-## Final make verify
