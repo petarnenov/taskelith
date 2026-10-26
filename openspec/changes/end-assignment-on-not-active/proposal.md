@@ -4,7 +4,7 @@ The [capacity reservation contract](../../../docs/contracts/capacity-reservation
 
 ## What Changes
 
-- **Local end.** A journaled launch rejection with `assignment-not-active` ends its assignment in the journal snapshot, exactly as a journaled assignment-ended command does: the assignment is no longer counted, never launched again, and reported as `ended`.
+- **Local end.** A journaled launch rejection with `assignment-not-active` ends its assignment in the journal snapshot, exactly as a journaled assignment-ended command does: the assignment is counted only through an execution that still holds a slot, never launched again, and reported as `ended`.
 - **Domain rule.** `endsAssignment(reason)` in the execution domain names the rejection that ends an assignment; the SQLite worker journal applies it when it reads the snapshot.
 - **Late end.** An `execution.assignment.end` that arrives after the local end is journaled once, changes nothing, and publishes nothing.
 - **Tests and spec.** Regression tests for the local end, the late end command, and a reopen; a worker-runtime requirement for the local end.
