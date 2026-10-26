@@ -86,3 +86,12 @@ The change adds no external link.
 ## Final checks
 
 `make verify` passed on the final tree at `c20ba72`, after the pass 2 fixes: 1931 tests, 1929 passed, 0 failed, 2 skipped; coverage of all files was 99.28% lines, 92.08% branches, and 99.04% functions. The next commit only records this result and removes its placeholder.
+
+## Archive checks
+
+Worker step 7, run by the worker session after review pass 2 and its fixes. The checked state is the tree of the archive commit, which is the working tree these checks ran on after `npm run openspec -- archive stabilize-evidence-publisher-test-server --yes` (base `6f08a63`).
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `make verify`: exit 0; 1931 tests, 1929 pass, 0 fail, 2 skipped; coverage lines 99.29%, branches 92.08%, functions 99.04%.
+- `npm run openspec -- validate --archived --no-interactive`: the line of `change/2026-10-27-stabilize-evidence-publisher-test-server` passes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: empty, as intended for a change with `skip_specs: true`.
