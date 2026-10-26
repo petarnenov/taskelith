@@ -17,7 +17,7 @@
 - [x] 3.3 Control-plane tests (`api-server.test.ts`; PostgreSQL integration in `launch-authority.integration.test.ts`)
 - [x] 3.4 Show that the new tests fail on the base revision's code
 - [x] 3.5 proposal.md, design.md, spec deltas, `validate --strict`
-- [ ] 3.6 `make verify`
+- [x] 3.6 `make verify`
 - [ ] 3.7 Independent review
 - [ ] 3.8 Handoff to the coordinator
 
