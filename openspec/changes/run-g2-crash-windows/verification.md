@@ -4,13 +4,13 @@ G2 work item 24, second part (24b), `run-g2-crash-windows`, assigned by the coor
 
 ## Revision and environment
 
-- Base: `origin/dev` at `f9ba7a5`, plus `d060900` (24a's recorder, Maki's `3f9777d`), and `origin/dev` merged in as `d1df5ad`, as `1baa1a1` after 24a landed (PR #288, `3321cf2`), as `4dce961` after 24a's archive (`8829a02`), and by the coordinator as `4c66055` (`1fcf840`, the archive of `align-ui-poc-with-design-rules`). Branch `run-g2-crash-windows`. `40aab95` added the tsconfig references of the two worker adapters and keeps `NODE_V8_COVERAGE` out of the composed worker, whose crashed children otherwise left an empty coverage file that failed the coverage report of `make verify`. The fixes of review pass 1 are `97272c9` and `1868a99`, those of review pass 2 `a70939f`; the final evidence run is of `a70939f`, which holds the final test code.
+- Base: `origin/dev` at `f9ba7a5`, plus `d060900` (24a's recorder, Maki's `3f9777d`), and `origin/dev` merged in as `d1df5ad`, as `1baa1a1` after 24a landed (PR #288, `3321cf2`), as `4dce961` after 24a's archive (`8829a02`), by the coordinator as `4c66055` (`1fcf840`, the archive of `align-ui-poc-with-design-rules`) and `8d7e2f0` (`3486a89`, the G3 plan and the archive of `add-g3-foundation-revalidation`), and as `8790ec1` (`62d324e`, which brings and archives `fix-unclaimed-launch-liveness`, the fix of O1). Branch `run-g2-crash-windows`. `40aab95` added the tsconfig references of the two worker adapters and keeps `NODE_V8_COVERAGE` out of the composed worker, whose crashed children otherwise left an empty coverage file that failed the coverage report of `make verify`. The fixes of review pass 1 are `97272c9` and `1868a99`, those of review pass 2 `a70939f`, and the unreviewed fixes after review pass 3 `2e72767`; the final evidence run is of `8790ec1`, which holds the final test code and the fix of O1.
 - Host: macOS 26 (Darwin 25.6.0), x86_64 (2020 Intel iMac); Docker Desktop, engine 29.5.2; Node.js 24.22.1 from `.nvmrc`. Services: `make services-up` (PostgreSQL 18.6, NATS 2.15.1, Toxiproxy) of this worktree; another worktree ran `make verify` on the same host during some runs.
 
 ## Author self-check and evidence check
 
 - No product code, contract, OpenAPI, AsyncAPI, JSON schema, Compose file, or third-party dependency changes. `apps/control-plane` gains the workspace development dependencies `@taskelith/worker-journal` and `@taskelith/worker-supervisor`; `make dependency-inventory` changed only the lockfile digest and the two workspace edges in `docs/dependencies`.
-- Evidence freshness: the merge `1baa1a1` brought 24a's Compose scenarios and change documents and resolved the add/add conflicts in 24a's change directory to `dev`'s version; the merge `4dce961` brought 24a's archive, which removed `openspec/changes/run-g2-failure-scenarios-composition/` (`openspec list` shows only this change and `align-ui-poc-with-design-rules`). Neither changed anything under `apps/` or `packages/`, so `scenario-results.ts` equals `dev`'s. The merge `4c66055` only moved `align-ui-poc-with-design-rules` into the archive and touched no evidence input. The evidence was rerun on `a70939f`, after the fixes of review pass 2.
+- Evidence freshness: the merge `1baa1a1` brought 24a's Compose scenarios and change documents and resolved the add/add conflicts in 24a's change directory to `dev`'s version; the merge `4dce961` brought 24a's archive, which removed `openspec/changes/run-g2-failure-scenarios-composition/` (`openspec list` shows only this change and `align-ui-poc-with-design-rules`). Neither changed anything under `apps/` or `packages/`, so `scenario-results.ts` equals `dev`'s. The merge `4c66055` only moved `align-ui-poc-with-design-rules` into the archive, and `8d7e2f0` brought only documents and an archive; neither touched an evidence input. The merge `8790ec1` brought the fix of O1 into `apps/worker/src` (`execution-watch.ts`, `launch-orchestrator.ts`), an evidence input, so the evidence was rerun on `8790ec1`, after the unreviewed fixes of `2e72767`; an earlier run of `2e72767` gave the same 16 passed and 11 D1 rows. No archived change directory came back under `openspec/changes/`: `openspec list` shows only `run-g2-crash-windows`.
 - Spec delta after 24a landed: 24a created `g2-failure-scenarios`, now in `openspec/specs/` with its seven requirements, among them "Recorded scenario results"; this delta adds four other requirements and cites that one instead of restating the record fields or the target per scenario. Archived on top of 24a's spec, the capability holds eleven requirements and stays strictly valid.
 - `scenario-results.ts` of 24a is used unchanged; no defect was found in it. Its API has no helper that records `failed` and rethrows, so the scenario file does that in `recorded`.
 - Every armed point was reached: each scenario asserts the crash trace and, for a worker point, the worker's `SIGKILL` status before the restart. The W points, CP10, and CP12 are reached only at the journal's commits, so their crashes also show that the resolution hook reached the journal; CP10 and CP12 also check the journaled `started` or `exited` state before the restart.
@@ -24,11 +24,12 @@ G2 work item 24, second part (24b), `run-g2-crash-windows`, assigned by the coor
 | --- | --- |
 | `npm run openspec -- validate run-g2-crash-windows --strict` | valid |
 | `npm run verify:archive` | passed; before 24a's archive both archive orders gave strictly valid specs, and after the merge `4dce961` this change archives onto 24a's spec with eleven requirements |
-| Evidence run of `a70939f`: `TASKELITH_TEST_SEED=2776760789 TASKELITH_SCENARIO_RESULTS=openspec/changes/run-g2-crash-windows/results.jsonl node --experimental-strip-types --test apps/control-plane/test/crash-windows.integration.test.ts` against `make services-up` | 27 tests passed (16 scenarios passed, 11 expected failures on D1); `results.jsonl` holds 27 lines, 16 `passed` and 11 `failed`, all target `harness-composition`, arch `x64`, commit `a70939f`, seed `2776760789`; the CP4 record names "CP4 after the claim", the CP9 record the adopter's `supervisor.2`, and each D1 record E2's answer before E1's published `not-started` |
+| Evidence run of `8790ec1`: `TASKELITH_TEST_SEED=2776760789 TASKELITH_SCENARIO_RESULTS=openspec/changes/run-g2-crash-windows/results.jsonl node --experimental-strip-types --test apps/control-plane/test/crash-windows.integration.test.ts` against `make services-up` | 27 tests passed (16 scenarios passed, 11 expected failures on D1); `results.jsonl` holds 27 lines, 16 `passed` and 11 `failed`, all target `harness-composition`, arch `x64`, commit `8790ec1`, seed `2776760789`, 27 distinct scenarios, no teardown hang; the CP4 record names "CP4 after the claim", the CP9 record the adopter's `supervisor.2`, and each D1 record E2's answer before E1's published `not-started` |
 | `make verify` of `40aab95` | Passed: 1787 tests, 1785 passed, 0 failed, 2 skipped (the Linux-only scan tests); coverage of all files 99.27% lines, 92.07% branches, 99.03% functions; OpenSpec 69 passed; `verify:archive` and `verify:package` passed |
 | `make verify` of `814231e`, after the merge `1baa1a1` | Passed: 1814 tests, 1812 passed, 0 failed, 2 skipped; coverage of all files 99.28% lines, 92.07% branches, 99.03% functions; OpenSpec 69 passed; `verify:archive` and `verify:package` passed. The run before it failed once in 24a's timed stub test "the restart and the reconciliation share one deadline from the restart", which then passed five times alone and in this run |
 | `make verify` of `216d175`, after the fixes of review pass 1 and the merge `4dce961` | Passed: 1814 tests, 1812 passed, 0 failed, 2 skipped; coverage of all files 99.28% lines, 92.07% branches, 99.03% functions; OpenSpec 70 passed; `verify:archive` and `verify:package` passed |
 | `make verify` of `6530760`, after the fixes of review pass 2 and the merge `4c66055` | Passed: 1814 tests, 1812 passed, 0 failed, 2 skipped; coverage of all files 99.28% lines, 92.07% branches, 99.03% functions; OpenSpec 69 passed; `verify:archive` and `verify:package` passed |
+| `make verify` of `8790ec1`, the final test code, after the unreviewed fixes `2e72767` and the merge `8790ec1`; the change documents are its only later edits | Passed: 1817 tests, 1815 passed, 0 failed, 2 skipped; coverage of all files 99.28% lines, 92.06% branches, 99.03% functions; OpenSpec 69 passed; `verify:archive` and `verify:package` passed |
 | `make verify-linux-cgroup` | not run: this change adds no test there |
 
 ## Windows and results
@@ -95,7 +96,7 @@ Seed `2776760789` for every row, on macOS natively.
 
 ## Observation O1: a live worker does not notice a supervisor that died before its claim
 
-With CP5 armed and the worker kept running, the execution stayed `authorized` with no observation for 30 s; only the worker's restart sealed it. `ExecutionWatch.observe` checks the supervisor's liveness only for a claimed launch record (`apps/worker/src/execution-watch.ts:114`). The scenarios restart the worker after every supervisor crash, so none of them fails on it. The coordinator took O1 to the owner's delegate, who decided (A) in away run `20261026T161148Z-opencode-90873`: it is a defect to fix in G2, where the watch also checks liveness for an authorized but unclaimed launch record after a bound. The fix belongs to a separate change, `fix-unclaimed-launch-liveness`, assigned to another worker; it is not implemented here.
+With CP5 armed and the worker kept running, the execution stayed `authorized` with no observation for 30 s; only the worker's restart sealed it. `ExecutionWatch.observe` checks the supervisor's liveness only for a claimed launch record (`apps/worker/src/execution-watch.ts:114`). The scenarios restart the worker after every supervisor crash, so none of them fails on it. The coordinator took O1 to the owner's delegate, who decided (A) in away run `20261026T161148Z-opencode-90873`: it is a defect to fix in G2, where the watch also checks liveness for an authorized but unclaimed launch record after a bound. The fix came in a separate change, `fix-unclaimed-launch-liveness`, which `dev` archived in `62d324e` and which this branch merged as `8790ec1`; it is not implemented here.
 
 ## Independent review
 
@@ -144,15 +145,41 @@ Confirmation of pass 1:
 | # | Severity | Finding | Resolution |
 | --- | --- | --- | --- |
 | 1 | Medium | The D1 path raised the expected failure before the bound check, and its order check could pass after an earlier release by the bound or a retried publication | `d1Failure` checks that no barrier ran into its bound before it raises D1, and the order check takes E1's first release, published or by the bound, which must be a publication after E2's answer (`a70939f`) |
-| 2 | Medium | `waitFor` awaited a check before its signal or deadline, and the database clients and the operator requests had no timeout | Every check of a wait and every database, broker, HTTP, and `ps` operation is bounded by 20 s and the scenario's signal; the harness's PostgreSQL clients carry connection, query, and statement timeouts; the HTTP calls take the signal; the start registers each release before it awaits the acquisition; teardown bounds each release on its own (`a70939f`; design decision 11) |
+| 2 | Medium | `waitFor` awaited a check before its signal or deadline, and the database clients and the operator requests had no timeout | Every wait gives up a check or operation after 20 s or once the scenario's signal aborts; the harness's own PostgreSQL clients carry connection, query, and statement timeouts, the HTTP calls take the signal, and `ps` has a timeout; the start registers each release before it awaits the acquisition (`a70939f`). As pass 3 found, giving up did not stop every operation: the task store had no query timeout, a late broker connection was left open, and the teardown nested its bounds; the unreviewed fixes after pass 3 address these |
 | 3 | Medium | Stream deletion swallowed every error | Only an absent stream is accepted; every stream is tried and the other errors are raised together after the connection closes (`a70939f`) |
 | 4 | Low | The proposal still named the supervision wrapper for CP10 and CP12 and listed `g2-failure-scenarios` as new | The proposal names the journal hooks for CP10 and CP12 and lists the capability as modified; the delta drops its Purpose, which the capability on `dev` already has, and validates and archives strictly into eleven requirements |
 
-No window changed its expected outcome. Pass 3 is pending.
+No window changed its expected outcome.
+
+### Review pass 3
+
+- Reviewer: Codex CLI, model `gpt-6-astra`, reasoning effort medium, read-only sandbox, with the invocation of pass 1. The output header confirmed model `gpt-6-astra`, sandbox read-only, reasoning effort medium. Session `01a17947-d533-74a0-9a94-30ac8bd7d797`.
+- Revision `8d7e2f0046d341322e23174f40a778663760170b`. Worktree snapshot `d0e30d8a2bc15f4e99006c1975245e07339d63b06777e534434c627aefd0d9eb` before and after the review, unchanged.
+- Counts: Critical 0, High 0, Medium 2, Low 0.
+
+Confirmation of pass 2:
+
+| # | Pass 3 verdict |
+| --- | --- |
+| 1 | Resolved |
+| 2 | Partly: waits, the harness's SQL clients, and the HTTP calls are bounded; the two findings below remain |
+| 3 | Resolved |
+| 4 | Resolved |
+
+Decision ([governance](../../../docs/governance.md#independent-review-process), at most three passes): Medium findings remained after the third pass, so the options went to the owner's delegate, who chose option A, fix them without review, recorded as unreviewed fixes, in away run `20261026T173845Z-opencode-14187`. No further pass runs.
+
+| # | Severity | Finding | Resolution (UNREVIEWED) |
+| --- | --- | --- | --- |
+| 1 | Medium | A wait that gave up left the operation running: the harness's task store had no query timeout, and a broker connection that resolved after the abort stayed open | UNREVIEWED fix in `2e72767`: the task store is a `PostgresDatabase` with `queryTimeoutMilliseconds` of 20 s, which also bounds its connection checkout. `bounded` takes a `late` disposal for what an abandoned operation still yields: a late broker connection, of `connectBroker` or of the stream cleanup, is closed, and a late control plane start is stopped, once only, with the start's own release. The wait itself still raises its error. The in-process administration calls and the system-account registration do not take the signal; a wait gives them up, and they end by their own timeouts |
+| 2 | Medium | `Scenario.stop()` wrapped the installation's whole release stack in one 20 s step, so the caller could finish before the inner releases, and the nested bounds did not fit the runner's reserve | UNREVIEWED fix in `2e72767`: the scenario and its installation share one release stack: the installation's releases, then the leftover reaping, then each worker's kill, run last first. `releaseAll` gives the whole cleanup one deadline of 22 s inside the 30 s reserve, each step at most 8 s of what is left and one more 1 s try once it passed, collects every step's error, and returns only after the last step, so the scenario's result is recorded after its cleanup |
+
+## Unreviewed fixes
+
+The two resolutions of review pass 3 above are unreviewed fixes (option A of the owner's delegate, away run `20261026T173845Z-opencode-14187`). The author checked them with the evidence run of `8790ec1` (27 rows, 16 passed, 11 D1, no teardown hang) and with `make verify`.
 
 ## Limitations and remaining gates
 
-- Eleven windows are expected failures on D1 until `fix-launch-recovery-reauthorization` lands (CP5 possibly also until `fix-unclaimed-launch-liveness` lands); their `failed` rows stay in `results.jsonl`.
+- Eleven windows are expected failures on D1 until `fix-launch-recovery-reauthorization` lands; their `failed` rows stay in `results.jsonl`. The fix of O1 is in the evidence of `8790ec1`; CP5 still restarts the worker after the supervisor's crash, so it does not exercise that fix, and it still fails on D1.
 - The control plane runs in the test process; the scenarios crash the worker and the supervisor only.
 - The hold of `not-started` applies to the eleven D1 windows only; whether `fix-launch-recovery-reauthorization` keeps it is for that change to decide.
-- Remaining gates: review pass 3, integration by the coordinator, the archive, and, in the follow-up changes, the fix of D1 (`fix-launch-recovery-reauthorization`) with a new evidence run and the fix of O1 (`fix-unclaimed-launch-liveness`).
+- Remaining gates: integration by the coordinator and the archive. The fix of D1 and its new evidence run belong to `fix-launch-recovery-reauthorization`.
