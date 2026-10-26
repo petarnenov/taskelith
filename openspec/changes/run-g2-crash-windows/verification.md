@@ -28,6 +28,7 @@ G2 work item 24, second part (24b), `run-g2-crash-windows`, assigned by the coor
 | `make verify` of `40aab95` | Passed: 1787 tests, 1785 passed, 0 failed, 2 skipped (the Linux-only scan tests); coverage of all files 99.27% lines, 92.07% branches, 99.03% functions; OpenSpec 69 passed; `verify:archive` and `verify:package` passed |
 | `make verify` of `814231e`, after the merge `1baa1a1` | Passed: 1814 tests, 1812 passed, 0 failed, 2 skipped; coverage of all files 99.28% lines, 92.07% branches, 99.03% functions; OpenSpec 69 passed; `verify:archive` and `verify:package` passed. The run before it failed once in 24a's timed stub test "the restart and the reconciliation share one deadline from the restart", which then passed five times alone and in this run |
 | `make verify` of `216d175`, after the fixes of review pass 1 and the merge `4dce961` | Passed: 1814 tests, 1812 passed, 0 failed, 2 skipped; coverage of all files 99.28% lines, 92.07% branches, 99.03% functions; OpenSpec 70 passed; `verify:archive` and `verify:package` passed |
+| `make verify` of `6530760`, after the fixes of review pass 2 and the merge `4c66055` | Passed: 1814 tests, 1812 passed, 0 failed, 2 skipped; coverage of all files 99.28% lines, 92.07% branches, 99.03% functions; OpenSpec 69 passed; `verify:archive` and `verify:package` passed |
 | `make verify-linux-cgroup` | not run: this change adds no test there |
 
 ## Windows and results
