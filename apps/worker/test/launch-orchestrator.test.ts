@@ -402,7 +402,7 @@ test('a cancellation after W4 writes the cancel file; evidence waits for the exi
   supervisions.onCreated = (supervision) => {
     supervision.facts = [{ problems: [], process: PROCESS }];
     void exited.then(() => {
-      supervision.facts = [{ problems: [], process: PROCESS, exit: { ...CLEAN_EXIT, status: { kind: 'signal', signal: 'SIGTERM' } } }];
+      supervision.facts = [{ problems: [], process: PROCESS, exit: { status: { kind: 'signal', signal: 'SIGTERM' }, startProven: true, termination: 'process-group-empty' } }];
     });
   };
   await orchestrator.pass(controller.signal);
