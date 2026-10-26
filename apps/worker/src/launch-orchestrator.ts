@@ -42,7 +42,10 @@ export const LAUNCH_POLL_MILLISECONDS = 1_000;
 
 export interface LaunchOrchestratorOptions {
   readonly journal: WorkerJournal;
-  readonly authority: LaunchAuthorityClient;
+  // Without one, nothing is launched or authorized again; the rest runs.
+  readonly authority?: LaunchAuthorityClient;
+  // Resolves once no new authorization waits; at once without one.
+  readonly contact?: LaunchContact;
   readonly supervision: SupervisionFactory;
   readonly clock: DeadlineClock;
   // Under admission pressure no launch authorization is requested.
@@ -61,6 +64,12 @@ export interface LaunchOrchestratorOptions {
   readonly logger?: Logger;
   // Told of a launch or pass that threw; the worker keeps running.
   readonly onFailure?: (error: unknown) => void;
+}
+
+// The worker's contact: no authorization operation begins while offline.
+export interface LaunchContact {
+  readonly offline: boolean;
+  whenOnline(signal: AbortSignal): Promise<void>;
 }
 
 // Launches each accepted, launchable intent under a current grant, forwards
@@ -158,13 +167,14 @@ export class LaunchOrchestrator {
   // An execution left before its terminal fact, by a stop or an earlier
   // process, is reconciled once and never launched again.
   #launch(assignmentId: string, snapshot: JournalSnapshot, signal: AbortSignal, resume?: ExecutionId): boolean {
+    const { authority } = this.#options;
     const intent = snapshot.intents.find((candidate) => candidate.assignmentId === assignmentId);
     const unsettled = snapshot.executions.some((execution) => execution.assignmentId === assignmentId
       && execution.executionId !== resume && execution.state !== 'not-started');
-    if (intent === undefined || unsettled || this.#launches.has(assignmentId)) return false;
+    if (authority === undefined || intent === undefined || unsettled || this.#launches.has(assignmentId)) return false;
     // Registered before it runs, so a cancellation always finds it.
     const launch = new Launch({
-      options: this.#options, watch: this.#watch, intent, stopping: signal,
+      options: this.#options, authority, watch: this.#watch, intent, stopping: signal,
       cancellations: (executionId) => this.#cancellationsOf(assignmentId, executionId),
       ...(resume === undefined ? {} : { resume }),
     });
@@ -178,7 +188,13 @@ export class LaunchOrchestrator {
   #resume(executionId: ExecutionId, snapshot: JournalSnapshot, signal: AbortSignal): void {
     const execution = snapshot.executions.find((candidate) => candidate.executionId === executionId);
     if (execution === undefined || this.#inherited?.has(executionId) !== true) return;
+    if (this.#options.authority === undefined) return this.#deferResume(executionId);
     if (this.#launch(execution.assignmentId, snapshot, signal, executionId)) this.#claimInherited(executionId);
+  }
+
+  // Without a launch command its journal rows wait for a start with one.
+  #deferResume(executionId: ExecutionId): void {
+    if (this.#claimInherited(executionId)) this.#logger.info('worker.reconciliation.deferred', { executionId, reason: 'no launch command' });
   }
 
   // A pending W2 or an unused grant is sealed; a journaled record goes to
@@ -329,6 +345,7 @@ type Executed = 'relaunch' | 'end';
 // whose last operation closed without a grant.
 interface LaunchContext {
   readonly options: LaunchOrchestratorOptions;
+  readonly authority: LaunchAuthorityClient;
   readonly watch: ExecutionWatch;
   readonly intent: JournaledIntent;
   readonly stopping: AbortSignal;
@@ -396,12 +413,18 @@ class Launch {
     }
   }
 
-  // W2, then the requests of one operation until a decision (design D2).
+  // W2, then one operation's requests until a decision (design D2). W2
+  // follows the last contact and pressure checks with no await between.
   async #authorize(executionId: ExecutionId, reportsNotStarted: boolean): Promise<Authorized> {
-    await this.#awaitAdmission();
+    const { contact } = this.#options;
+    while (!this.#signal.aborted) {
+      if (contact?.offline === true) await contact.whenOnline(this.#signal);
+      else if (this.#pressured()) await this.#pressurePause();
+      else break;
+    }
     if (this.#stopping.aborted) return { kind: 'end' };
-    // A new execution has no journal row yet, so a cancel ends it here.
-    if (this.#cancelled) return reportsNotStarted ? { kind: 'abandon' } : { kind: 'end' };
+    // A cancel before W2 begins no operation, as one during a back-off.
+    if (this.#cancelled) return { kind: reportsNotStarted ? 'abandon' : 'end' };
     const operationId = this.#newId('OperationId');
     const reading = this.#options.clock.read();
     if (operationId === undefined || !reading.ok) return { kind: 'end' };
@@ -411,7 +434,7 @@ class Launch {
     for (;;) {
       if (this.#stopping.aborted) return { kind: 'end' };
       if (this.#cancelled) return { kind: 'abandon' };
-      const answer = await this.#options.authority.authorize(sent);
+      const answer = await this.#context.authority.authorize(sent);
       if (this.#stopping.aborted) return { kind: 'end' };
       if (!answer.ok) {
         if (!this.#beforeDeadline(reading.value, DEFAULT_PARAMETERS)) return this.#expired(operationId);
@@ -437,9 +460,11 @@ class Launch {
   // Capacity reservation section 8: the launch waits, keeping its
   // reservation, until the pressure clears or the launch stops.
   async #awaitAdmission(): Promise<void> {
-    while (!this.#signal.aborted && this.#pressured()) {
-      await this.#options.sleep(this.#options.pollMilliseconds ?? LAUNCH_POLL_MILLISECONDS, this.#signal);
-    }
+    while (!this.#signal.aborted && this.#pressured()) await this.#pressurePause();
+  }
+
+  #pressurePause(): Promise<void> {
+    return this.#options.sleep(this.#options.pollMilliseconds ?? LAUNCH_POLL_MILLISECONDS, this.#signal);
   }
 
   // Pressure that cannot be refreshed counts as pressure.

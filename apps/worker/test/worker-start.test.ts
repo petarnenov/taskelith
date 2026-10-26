@@ -25,6 +25,7 @@ import {
   type WorkerDependencies,
   type WorkerSettings,
 } from '@taskelith/worker';
+import { ManualTimers, StatusStream } from './contact-fakes.ts';
 import { FakeAuthority, FakeClock, FakeSupervisions, grantFor, offer, requestOf } from './launch-fakes.ts';
 import {
   failureReason,
@@ -61,12 +62,24 @@ class FakeEnrollment implements EnrollmentClient {
 class FakeBroker {
   readonly endpoints: WorkerTransportEndpoint[] = [];
   readonly published: Array<{ subject: string; messageId: string | undefined; body: Record<string, unknown> }> = [];
+  // Core NATS publications, outside any stream.
+  readonly core: Array<{ subject: string; body: Record<string, unknown> }> = [];
+  // The status events of each connection, in connection order.
+  readonly statuses: StatusStream[] = [];
   closed = 0;
   answer: Result<void> = ok(undefined);
 
   connect = async (endpoint: WorkerTransportEndpoint): Promise<Result<TransportConnection>> => {
     this.endpoints.push(endpoint);
     if (!this.answer.ok) return this.answer;
+    const statuses = new StatusStream();
+    this.statuses.push(statuses);
+    const connection = {
+      status: () => statuses,
+      publish: (subject: string, data: Uint8Array) => {
+        this.core.push({ subject, body: JSON.parse(new TextDecoder().decode(data)) as Record<string, unknown> });
+      },
+    } as unknown as TransportConnection['connection'];
     const js = {
       consumers: { get: async () => Promise.reject(new Error('no consumer')) },
       publish: async (subject: string, data: Uint8Array, options: { msgID?: string }) => {
@@ -74,8 +87,9 @@ class FakeBroker {
         return { duplicate: false };
       },
     } as unknown as TransportConnection['js'];
-    return ok({ connection: {} as TransportConnection['connection'], js, close: async () => {
+    return ok({ connection, js, close: async () => {
       this.closed += 1;
+      statuses.end();
     } });
   };
 
@@ -83,12 +97,22 @@ class FakeBroker {
     for (let wait = 0; this.published.length < count && wait < 100; wait += 1) await delay(20);
     return this.published;
   }
+
+  // The bodies published on the observation subject with that type.
+  ofType(type: string): Array<Record<string, unknown>> {
+    return this.published.map(({ body }) => body).filter((body) => typeOf(body) === type);
+  }
+}
+
+function typeOf(body: Record<string, unknown>): unknown {
+  return body.messageType ?? (body.metadata as Record<string, unknown> | undefined)?.observationType;
 }
 
 let base: string;
 let settings: WorkerSettings;
 let enrollment: FakeEnrollment;
 let broker: FakeBroker;
+let timers: ManualTimers;
 let space: VolumeSpace;
 const running: RunningWorker[] = [];
 
@@ -102,6 +126,7 @@ beforeEach(() => {
   };
   enrollment = new FakeEnrollment();
   broker = new FakeBroker();
+  timers = new ManualTimers();
   space = AMPLE_SPACE;
 });
 
@@ -113,14 +138,15 @@ afterEach(async () => {
 function dependencies(launching?: LaunchingDependencies): WorkerDependencies {
   return {
     enrollment, connect: broker.connect, newJournalId: () => 'c'.repeat(32), clock: { now: () => T0 },
-    probe: TEST_VOLUME, space: () => ok(space), pressurePollMilliseconds: 10, ...(launching === undefined ? {} : { launching }),
+    sleep: timers.sleep, draw: () => 0, probe: TEST_VOLUME, space: () => ok(space), pressurePollMilliseconds: 10,
+    ...(launching === undefined ? {} : { launching }),
   };
 }
 
 // Launch dependencies that record what the worker asked of them.
 class RecordingLaunching {
   readonly credentials: string[] = [];
-  readonly hosts: Array<{ launch: LaunchSettings; executions: string }> = [];
+  readonly hosts: Array<{ launch: LaunchSettings | undefined; executions: string }> = [];
   readonly authority = new FakeAuthority();
   hostAnswer: Result<LaunchHost> = ok({ clock: new FakeClock(), supervision: new FakeSupervisions().factory });
 
@@ -129,8 +155,8 @@ class RecordingLaunching {
       this.credentials.push(credential);
       return this.authority;
     },
-    host: (launch, executions) => {
-      this.hosts.push({ launch, executions });
+    host: (hostSettings, executions) => {
+      this.hosts.push({ launch: hostSettings.launch, executions });
       return this.hostAnswer;
     },
     sleep: (milliseconds, signal) => delay(milliseconds, undefined, { signal }).catch(() => undefined),
@@ -163,7 +189,8 @@ test('the first start enrolls with the token, stores the credentials, and connec
 
 test('the worker declares its capacity once per change and publishes it on its observation subject', async () => {
   const first = await start();
-  const [declared] = await broker.publications(1);
+  await until(() => broker.ofType('worker.capacity.declared').length > 0);
+  const declared = broker.published.find(({ body }) => typeOf(body) === 'worker.capacity.declared');
   assert.equal(declared?.subject, `taskelith.${ENROLLMENT.installationId}.workers.${ENROLLMENT.workerId}.observations`);
   assert.equal(checkMessageSchema('CapacityDeclaredObservation', declared?.body).ok, true);
   assert.deepEqual(declared?.body.payload, {
@@ -187,10 +214,10 @@ function pressureFacts(worker: RunningWorker): unknown[] {
 
 test('each start reports its admission pressure once, and a clear one too', async () => {
   const first = await start();
-  const published = await broker.publications(2);
-  const reported = published.find(({ body }) => (body.metadata as Record<string, unknown>).observationType === 'worker.admission-pressure.changed');
-  assert.equal(checkMessageSchema('AdmissionPressureChangedObservation', reported?.body).ok, true);
-  assert.deepEqual(reported?.body.payload, { causes: [] });
+  await until(() => broker.ofType('worker.admission-pressure.changed').length === 1);
+  const [reported] = broker.ofType('worker.admission-pressure.changed');
+  assert.equal(checkMessageSchema('AdmissionPressureChangedObservation', reported).ok, true);
+  assert.deepEqual(reported?.payload, { causes: [] });
   assert.deepEqual(pressureFacts(first), [[]]);
   await first.stop();
   assert.deepEqual(pressureFacts(await start()), [[], []]);
@@ -279,12 +306,73 @@ test('a journal fault stops the start before any request or connection', async (
   assert.equal(broker.endpoints.length, 1);
 });
 
-test('a broker that cannot be reached fails the start and releases the root', async () => {
+test('a broker that cannot be reached at the start leaves the worker running offline until it connects', async () => {
   broker.answer = err(failure('unavailable', 'connect failed'));
-  assert.equal(failed(await startWorker(settings, dependencies())).code, 'unavailable');
+  const worker = await start();
+  await until(() => timers.waiting.includes(5_000));
+  assert.deepEqual([broker.endpoints.length, broker.published, broker.core], [1, [], []]);
   broker.answer = ok(undefined);
-  await start();
-  assert.equal(enrollment.calls.length, 1);
+  timers.elapse(5_000);
+  await until(() => broker.ofType('worker.inventory.reported').length > 0 && broker.core.length > 0);
+  assert.equal(broker.endpoints.length, 2);
+  await worker.stop();
+  assert.equal(broker.closed, 1);
+});
+
+test('each connection reports the inventory unsolicited and sends heartbeats on the heartbeat subject', async () => {
+  const worker = await start();
+  await until(() => broker.ofType('worker.inventory.reported').length === 1 && broker.core.length === 1);
+  const [report] = broker.ofType('worker.inventory.reported');
+  assert.equal(checkMessageSchema('InventoryReported', report).ok, true);
+  assert.equal(report?.requestId, undefined);
+  const [heartbeat] = broker.core;
+  assert.equal(heartbeat?.subject, `taskelith.${ENROLLMENT.installationId}.workers.${ENROLLMENT.workerId}.heartbeats`);
+  assert.equal(checkMessageSchema('WorkerHeartbeat', heartbeat?.body).ok, true);
+  assert.deepEqual([heartbeat?.body.workerId, heartbeat?.body.journalId], [worker.identity.workerId, worker.identity.journalId]);
+  broker.statuses[0]?.push('disconnect');
+  broker.statuses[0]?.push('reconnect');
+  await until(() => broker.ofType('worker.inventory.reported').length === 2 && broker.core.length === 2);
+  assert.deepEqual(timers.waiting, [10_000]);
+});
+
+// The fault a flush failure leaves on the journal (contract section 7).
+function stopJournal(worker: RunningWorker): void {
+  const fault = failure('unavailable', 'journal I/O error', { reason: 'flush-failure' });
+  Object.defineProperty(worker.root.journal, 'fault', { value: fault });
+}
+
+test('a journal stopped after the connection sends no heartbeat or inventory, at an interval or a reconnect', async () => {
+  const worker = await start();
+  await until(() => broker.core.length === 1 && timers.waiting.includes(10_000));
+  stopJournal(worker);
+  timers.elapse(10_000);
+  broker.statuses[0]?.push('disconnect');
+  broker.statuses[0]?.push('reconnect');
+  await until(() => timers.waiting.includes(5_000) && timers.waiting.includes(10_000));
+  timers.elapse(10_000);
+  await until(() => timers.waiting.includes(10_000));
+  assert.deepEqual([broker.core.length, broker.ofType('worker.inventory.reported').length], [1, 1]);
+});
+
+test('a runtime failure stops the launches, then closes the root, and settles stopped', async () => {
+  const launchFailures: unknown[] = [];
+  const launching = { ...new RecordingLaunching().dependencies, onFailure: (error: unknown) => launchFailures.push(error) };
+  const failing = { ...dependencies(launching), connect: async (endpoint: WorkerTransportEndpoint) => {
+    const connected = await broker.connect(endpoint);
+    return connected.ok ? ok({ ...connected.value, close: async () => Promise.reject(new Error('close failed')) }) : connected;
+  } };
+  const worker = value(await startWorker({ ...settings, launch: LAUNCH }, failing));
+  const host: ServiceProcess = { on: () => undefined, off: () => undefined };
+  const lines: string[] = [];
+  const served = serveUntilStopped(worker, host, (line) => lines.push(line));
+  await until(() => broker.statuses.length === 1);
+  broker.statuses[0]?.end();
+  await served;
+  assert.equal(host.exitCode, 1);
+  assert.match(lines.join('\n'), /stopping the worker failed: Error: close failed/);
+  assert.deepEqual(launchFailures, []);
+  await assert.rejects(worker.stop(), /close failed/);
+  assert.equal((await start()).identity.workerId, ENROLLMENT.workerId);
 });
 
 test('stop closes the connection and the root once, and a signal stops a served worker', async () => {
@@ -313,6 +401,7 @@ test('a close that fails still stops a served worker without a rejection', async
   const host: ServiceProcess = { on: (signal, listener) => listeners.set(signal, listener), off: () => undefined };
   const lines: string[] = [];
   const served = serveUntilStopped(worker, host, (line) => lines.push(line));
+  await until(() => broker.core.length === 1);
   listeners.get('SIGINT')?.();
   listeners.get('SIGTERM')?.();
   await served;
@@ -347,7 +436,7 @@ test('a worker without a launch command accepts an assignment and never launches
   value(worker.root.journal.recordCommand(offer()));
   // Several poll intervals pass: a running orchestrator would have asked.
   await delay((launching.dependencies.pollMilliseconds ?? 0) * 10);
-  assert.deepEqual([launching.credentials, launching.hosts, launching.authority.requests], [[], [], []]);
+  assert.deepEqual([launching.credentials, launching.authority.requests], [[], []]);
   assert.equal(value(worker.root.journal.snapshot()).intents.length, 1);
   assert.deepEqual(value(worker.root.journal.snapshot()).executions, []);
 });
@@ -363,6 +452,19 @@ test('with a launch command, an accepted assignment is authorized with the store
   assert.equal(launching.authority.requests[0]?.assignmentId, 'assignment-1');
   await until(() => value(worker.root.journal.snapshot()).executions[0]?.authorizations[0]?.outcome === 'rejected-final');
   await worker.stop();
+});
+
+test('a launching worker begins no authorization before its first broker connection', async () => {
+  broker.answer = err(failure('unavailable', 'connect failed'));
+  const launching = new RecordingLaunching();
+  launching.authority.answers = [ok({ kind: 'rejected', rejection: { reason: 'gate-not-passed', retryable: false, message: 'gate' } })];
+  const worker = await start({ ...settings, launch: LAUNCH }, launching.dependencies);
+  value(worker.root.journal.recordCommand(offer()));
+  await delay((launching.dependencies.pollMilliseconds ?? 0) * 10);
+  assert.deepEqual([launching.authority.requests, value(worker.root.journal.snapshot()).executions], [[], []]);
+  broker.answer = ok(undefined);
+  timers.elapse(5_000);
+  await until(() => launching.authority.requests.length > 0);
 });
 
 test('a launch host that cannot be built fails the start', async () => {
@@ -429,18 +531,55 @@ async function startLogged(launching: RecordingLaunching): Promise<{ worker: Run
   return { worker, sink };
 }
 
-test('without a launch command, each inherited open execution is deferred and left untouched', async () => {
+test('without a launch command, inherited executions are reconciled and none is launched', async () => {
+  await inheritExecutions();
+  const launching = new RecordingLaunching();
+  const { worker, sink } = await startLogged(launching);
+  await until(() => value(worker.root.journal.snapshot()).executions.every(({ state }) => state === 'not-started'));
+  assert.deepEqual(launching.hosts, [{ launch: undefined, executions: workerPaths(settings.dataRoot).executions }]);
+  assert.deepEqual([launching.credentials, launching.authority.requests], [[], []]);
+  assert.deepEqual(sink.records.filter(({ event }) => event === 'worker.reconciliation.deferred'), []);
+});
+
+test('without a launch command, the start reconciliation reports unrecorded processes', async () => {
+  const launching = new RecordingLaunching();
+  const containment = '/sys/fs/cgroup/taskelith/lost-1';
+  launching.hostAnswer = ok({
+    clock: new FakeClock(), supervision: new FakeSupervisions().factory, records: async () => ok([]),
+    containments: () => ok([{ name: 'lost-1', containment, processes: [] }]),
+  });
+  const { worker } = await startLogged(launching);
+  const unrecorded = () => value(worker.root.journal.dueForPublication(T0)).map(({ fact }) => fact)
+    .filter((fact) => fact.kind === 'unrecorded-process');
+  await until(() => unrecorded().length > 0);
+  assert.deepEqual(unrecorded(), [{ kind: 'unrecorded-process', containment, processes: [] }]);
+  assert.deepEqual(launching.hosts.map(({ launch }) => launch), [undefined]);
+});
+
+test('without a supervision host, each inherited open execution is deferred and left untouched', async () => {
   const before = await inheritExecutions();
   const launching = new RecordingLaunching();
+  launching.hostAnswer = err(failure('invalid', 'Linux needs a containment parent'));
   const { worker, sink } = await startLogged(launching);
   await delay((launching.dependencies.pollMilliseconds ?? 0) * 10);
   const deferred = sink.records.filter(({ event }) => event === 'worker.reconciliation.deferred');
-  assert.deepEqual(deferred.map(({ fields }) => fields), [{ executionId: 'execution-1' }, { executionId: 'execution-2' }]);
-  assert.deepEqual([launching.hosts, launching.authority.requests], [[], []]);
+  assert.deepEqual(deferred.map(({ fields }) => fields), [
+    { executionId: 'execution-1', reason: 'Linux needs a containment parent' },
+    { executionId: 'execution-2', reason: 'Linux needs a containment parent' },
+  ]);
+  assert.deepEqual(launching.authority.requests, []);
   assert.deepEqual(value(worker.root.journal.snapshot()).executions, before);
 });
 
-test('without a launch command or open executions, nothing is deferred', async () => {
+test('without launch dependencies, each inherited open execution is deferred', async () => {
+  await inheritExecutions();
+  const sink = new InMemoryLogSink();
+  running.push(value(await startWorker(settings, { ...dependencies(), logger: new Logger(sink, { now: () => T0 }) })));
+  const reasons = sink.records.filter(({ event }) => event === 'worker.reconciliation.deferred').map(({ fields }) => fields.reason);
+  assert.deepEqual(reasons, ['no supervision host', 'no supervision host']);
+});
+
+test('without open executions, nothing is deferred', async () => {
   const { sink } = await startLogged(new RecordingLaunching());
   assert.deepEqual(sink.records.filter(({ event }) => event === 'worker.reconciliation.deferred'), []);
 });

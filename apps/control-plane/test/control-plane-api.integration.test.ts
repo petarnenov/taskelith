@@ -22,6 +22,7 @@ import {
   connectSystemAccount,
   connectTransport,
   encodeJson,
+  INVENTORY_REPORTED,
   JetStreamPublisher,
   NatsBrokerCredentials,
   readObservationSubjectMessage,
@@ -130,15 +131,17 @@ function intakeOffer(commandId: string, workerId: string, protocolVersion: numbe
   return { metadata, payload };
 }
 
-// Reads the worker's observation subject from its start, through an ordered
-// consumer, until `count` observations arrived; each must pass its schema.
+// Reads the worker's subject until `count` journaled observations passed
+// their schema; the connections' inventory reports are skipped.
 async function observationTypes(broker: ControlPlaneConnection, subject: string, count: number): Promise<string[]> {
   const consumer = await broker.js.consumers.get(address.streamName('observations'), { filter_subjects: [subject] });
   const types: string[] = [];
   const deadline = Date.now() + 15_000;
   while (types.length < count && Date.now() < deadline) {
     const message = await consumer.next({ expires: 1000 });
-    if (message !== null) types.push(value(readObservationSubjectMessage(message.data)).type);
+    if (message === null) continue;
+    const { type } = value(readObservationSubjectMessage(message.data));
+    if (type !== INVENTORY_REPORTED) types.push(type);
   }
   return types;
 }
@@ -394,15 +397,19 @@ describe('enrollment and quarantine', () => {
       ...productionDependencies(settings), probe: () => ok({ platform: 'darwin' as const, filesystem: 'apfs', local: true }),
     });
     const lines: string[] = [];
+    // Contact proves that the worker connected with its broker credential.
+    const lastContact = async (workerId: string) => (await sql<{ last_contact_at: Date | null }>(database,
+      'SELECT last_contact_at FROM workers WHERE worker_id = $1', [workerId]))[0]?.last_contact_at?.getTime() ?? 0;
     const first = await workerMain({ ...environment, TASKELITH_ENROLLMENT_TOKEN: issued.enrollmentToken as string }, (line) => lines.push(line), dependencies);
     assert.ok(first, lines.join('\n'));
-    await first.transport.connection.flush();
+    await waitFor(async () => (await lastContact(first.identity.workerId)) > 0);
     const [row] = await sql<{ journal_id: string }>(database, 'SELECT journal_id FROM workers WHERE worker_id = $1', [first.identity.workerId]);
     assert.equal(row?.journal_id, first.identity.journalId);
     await first.stop();
+    const contactBefore = await lastContact(first.identity.workerId);
     const again = await workerMain(environment, (line) => lines.push(line), dependencies);
     assert.ok(again, lines.join('\n'));
-    await again.transport.connection.flush();
+    await waitFor(async () => (await lastContact(again.identity.workerId)) > contactBefore);
     assert.equal(again.identity.workerId, first.identity.workerId);
     await again.stop();
   });

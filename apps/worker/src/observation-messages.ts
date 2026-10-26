@@ -120,9 +120,10 @@ function metadataOf(entry: OutboxEntry, observationType: string, correlation: Re
   };
 }
 
+// An unsolicited report, as on each connection, names no request.
 export interface InventoryAnswer {
   readonly reportId: string;
-  readonly requestId: string;
+  readonly requestId?: string;
   readonly reportedAt: Instant;
 }
 

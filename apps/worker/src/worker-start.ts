@@ -28,11 +28,16 @@ import {
   type WorkerRootOptions,
 } from '@taskelith/worker-journal';
 import { AdmissionPressure } from './admission-pressure.js';
+import { BrokerSession, type BrokerLink } from './broker-session.js';
 import { CommandIntake } from './command-intake.js';
 import type { ContainmentScan, DeadlineClock, RecordListing, SupervisionFactory } from './execution-supervision-port.js';
+import { runHeartbeats, type HeartbeatOptions } from './heartbeat-publisher.js';
+import { reportInventoryOnConnection } from './inventory-report.js';
 import { LaunchOrchestrator, openExecutions } from './launch-orchestrator.js';
 import { runObservationPublisher } from './observation-publisher.js';
-import type { LaunchSettings, WorkerSettings } from './settings.js';
+import type { WorkerSettings } from './settings.js';
+import { runTogether, TaskGroup } from './task-group.js';
+import { WorkerContact } from './worker-contact.js';
 
 export interface WorkerDependencies {
   readonly enrollment: EnrollmentClient;
@@ -45,7 +50,10 @@ export interface WorkerDependencies {
   readonly pressurePollMilliseconds?: number;
   // Shorter transport timers for tests.
   readonly limits?: TransportLimits;
-  // Used only when the settings name a launch command.
+  // The broker retries, the heartbeats, and the lost-contact timer.
+  readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>;
+  readonly draw: () => number;
+  // Reconciliation needs only the host; launches need a command too.
   readonly launching?: LaunchingDependencies;
   readonly logger?: Logger;
 }
@@ -54,7 +62,7 @@ export interface WorkerDependencies {
 // worker's control-plane credential, and the supervision of one host.
 export interface LaunchingDependencies {
   readonly authority: (credential: string) => LaunchAuthorityClient;
-  readonly host: (launch: LaunchSettings, executions: string) => Result<LaunchHost>;
+  readonly host: (settings: WorkerSettings, executions: string) => Result<LaunchHost>;
   readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>;
   readonly draw: () => number;
   readonly newId: () => string;
@@ -70,27 +78,27 @@ export interface LaunchHost {
   readonly containments?: ContainmentScan;
 }
 
-// A started worker: it holds the root lock and its broker connection, reads
-// its commands, and publishes its observations; it listens on no port.
+// A started worker: it holds the root lock and keeps a broker connection,
+// reads its commands, and publishes its observations; it listens on no port.
 export interface RunningWorker {
   readonly identity: WorkerIdentity;
   readonly root: WorkerRoot;
-  readonly transport: TransportConnection;
-  // Settles once the worker has stopped; `stop` may be called repeatedly.
+  // Settles once the worker has stopped, by `stop` or by a runtime
+  // failure, which `stop` rejects with; it may be called repeatedly.
   readonly stopped: Promise<void>;
   stop(): Promise<void>;
 }
 
 // Opens the enrolled root, or enrolls with the configured token first, then
-// connects to the broker with the stored broker credential.
+// starts offline and connects to the broker with the stored credential.
 export async function startWorker(settings: WorkerSettings, dependencies: WorkerDependencies): Promise<Result<RunningWorker>> {
   const options = rootOptions(settings, dependencies);
   const opened = openWorkerRoot(options);
   const root = !opened.ok && failureReason(opened.error) === 'not-enrolled' ? await enroll(settings, dependencies, options) : opened;
   if (!root.ok) return root;
-  const connected = await connectBroker(settings, dependencies, root.value);
-  if (!connected.ok) root.value.close();
-  return connected;
+  const started = startRuntime(settings, dependencies, root.value);
+  if (!started.ok) root.value.close();
+  return started;
 }
 
 function rootOptions(settings: WorkerSettings, dependencies: WorkerDependencies): WorkerRootOptions {
@@ -137,35 +145,48 @@ function rootEnrollment(enrollment: Enrollment, journalId: JournalId): Result<Wo
   return ok({ installationId: installationId.value, workerId, journalId, recoveryEpoch, credentialGeneration, credentials });
 }
 
-async function connectBroker(settings: WorkerSettings, dependencies: WorkerDependencies, root: WorkerRoot): Promise<Result<RunningWorker>> {
+// The launches, reconciliation, and pressure watch run at once; the
+// broker's work runs while a connection is up.
+function startRuntime(settings: WorkerSettings, dependencies: WorkerDependencies, root: WorkerRoot): Result<RunningWorker> {
   const { identity } = root;
   const credentials = readWorkerCredentials(root.paths, identity);
   if (!credentials.ok) return credentials;
   const address = TransportAddress.of(identity.installationId);
   if (!address.ok) return address;
-  const observationSubject = address.value.observationSubject(identity.workerId);
-  if (!observationSubject.ok) return observationSubject;
+  const subjects = workerSubjects(address.value, identity.workerId);
+  if (!subjects.ok) return subjects;
+  const controller = new AbortController();
+  const tasks = new TaskGroup(controller.signal);
+  const logger = dependencies.logger ?? SILENT_LOGGER;
+  const contact = new WorkerContact({ sleep: dependencies.sleep, stopping: tasks.signal, logger });
   const pressure = admissionPressure(settings, dependencies, root);
-  const launcher = launchOrchestrator(settings, dependencies, root, credentials.value.controlPlane, pressure);
+  const credential = credentials.value.controlPlane;
+  const launcher = launchOrchestrator({ settings, dependencies, root, credential, contact, pressure });
   if (!launcher.ok) return launcher;
-  if (launcher.value === undefined) {
-    const deferred = deferReconciliation(root, dependencies.logger ?? SILENT_LOGGER);
-    if (!deferred.ok) return deferred;
-  }
   const declared = declareCapacity(settings, root);
   if (!declared.ok) return declared;
   const pressured = pressure.refresh();
   if (!pressured.ok) return pressured;
-  const transport = await dependencies.connect({
-    server: settings.natsUrl, creds: credentials.value.broker, address: address.value, workerId: identity.workerId,
-    ...(settings.natsTls === undefined ? {} : { tls: settings.natsTls }),
-  });
-  if (!transport.ok) return transport;
-  const loops = startLoops({
-    settings, dependencies, root, transport: transport.value, address: address.value, observationSubject: observationSubject.value, pressure,
+  const session = brokerSession({
+    settings, dependencies, root, address: address.value, subjects: subjects.value, contact, pressure, broker: credentials.value.broker,
     ...(launcher.value === undefined ? {} : { launcher: launcher.value }),
   });
-  return ok(runningWorker(root, transport.value, loops));
+  tasks.add(session.run(tasks.signal));
+  tasks.add(pressure.watch(tasks.signal, dependencies.pressurePollMilliseconds));
+  if (launcher.value !== undefined) tasks.add(launcher.value.run(tasks.signal));
+  return ok(runningWorker(root, { finished: tasks.settled(), abort: () => controller.abort() }));
+}
+
+interface WorkerSubjects {
+  readonly observations: string;
+  readonly heartbeats: string;
+}
+
+function workerSubjects(address: TransportAddress, workerId: string): Result<WorkerSubjects> {
+  const observations = address.observationSubject(workerId);
+  if (!observations.ok) return observations;
+  const heartbeats = address.heartbeatSubject(workerId);
+  return heartbeats.ok ? ok({ observations: observations.value, heartbeats: heartbeats.value }) : heartbeats;
 }
 
 function admissionPressure(settings: WorkerSettings, dependencies: WorkerDependencies, root: WorkerRoot): AdmissionPressure {
@@ -176,35 +197,41 @@ function admissionPressure(settings: WorkerSettings, dependencies: WorkerDepende
   });
 }
 
-// Only a worker whose settings name a launch command launches anything.
-function launchOrchestrator(
-  settings: WorkerSettings,
-  dependencies: WorkerDependencies,
-  root: WorkerRoot,
-  credential: string,
-  pressure: AdmissionPressure,
-): Result<LaunchOrchestrator | undefined> {
-  const { launch } = settings;
+interface OrchestratorContext {
+  readonly settings: WorkerSettings;
+  readonly dependencies: WorkerDependencies;
+  readonly root: WorkerRoot;
+  readonly credential: string;
+  readonly contact: WorkerContact;
+  readonly pressure: AdmissionPressure;
+}
+
+// The host reconciles and removes records with or without a launch
+// command; only a command adds the launch authority.
+function launchOrchestrator(context: OrchestratorContext): Result<LaunchOrchestrator | undefined> {
+  const { settings, dependencies, root, credential, contact, pressure } = context;
   const { launching } = dependencies;
-  if (launch === undefined || launching === undefined) return ok(undefined);
-  const host = launching.host(launch, root.paths.executions);
-  if (!host.ok) return host;
-  const { sleep, draw, newId, pollMilliseconds, logger, onFailure } = launching;
+  const logger = dependencies.logger ?? SILENT_LOGGER;
+  if (launching === undefined) return deferReconciliation(root, logger, 'no supervision host');
+  const host = launching.host(settings, root.paths.executions);
+  if (!host.ok) return settings.launch === undefined ? deferReconciliation(root, logger, host.error.message) : host;
+  const { sleep, draw, newId, pollMilliseconds, onFailure } = launching;
   const { supervision, clock, records, containments } = host.value;
   return ok(new LaunchOrchestrator({
-    journal: root.journal, authority: launching.authority(credential), supervision, clock, pressure, sleep, draw, newId,
+    journal: root.journal, supervision, clock, pressure, sleep, draw, newId, contact,
+    ...(settings.launch === undefined ? {} : { authority: launching.authority(credential) }),
     ...(pollMilliseconds === undefined ? {} : { pollMilliseconds }), ...(records === undefined ? {} : { records }),
     ...(containments === undefined ? {} : { containments }),
-    ...(logger === undefined ? {} : { logger }), ...(onFailure === undefined ? {} : { onFailure }),
+    ...(launching.logger === undefined ? {} : { logger: launching.logger }), ...(onFailure === undefined ? {} : { onFailure }),
   }));
 }
 
-// Without a launch host nothing can be sealed, so the open executions wait,
-// untouched, for a start that names a launch command.
-function deferReconciliation(root: WorkerRoot, logger: Logger): Result<void> {
+// Without a supervision host nothing can be sealed or recovered, so the
+// open executions wait, untouched, for a start that has one.
+function deferReconciliation(root: WorkerRoot, logger: Logger, reason: string): Result<undefined> {
   const snapshot = root.journal.snapshot();
   if (!snapshot.ok) return snapshot;
-  for (const executionId of openExecutions(snapshot.value)) logger.info('worker.reconciliation.deferred', { executionId });
+  for (const executionId of openExecutions(snapshot.value)) logger.info('worker.reconciliation.deferred', { executionId, reason });
   return ok(undefined);
 }
 
@@ -215,64 +242,122 @@ function declareCapacity(settings: WorkerSettings, root: WorkerRoot): Result<voi
   return root.journal.recordCapacity({ ...capacity, enforceableControls, protocolVersions: SUPPORTED_PROTOCOL_VERSIONS });
 }
 
-interface LoopContext {
+interface SessionContext {
   readonly settings: WorkerSettings;
   readonly dependencies: WorkerDependencies;
   readonly root: WorkerRoot;
-  readonly transport: TransportConnection;
   readonly address: TransportAddress;
-  readonly observationSubject: string;
+  readonly subjects: WorkerSubjects;
+  readonly contact: WorkerContact;
   readonly pressure: AdmissionPressure;
+  readonly broker: string;
   readonly launcher?: LaunchOrchestrator;
 }
 
-interface Loops {
-  readonly finished: Promise<void>;
-  abort(): void;
+interface TransportLink extends BrokerLink {
+  readonly transport: TransportConnection;
 }
 
-// The command consumer, the observation publisher, the pressure watch, and
-// the launches, until aborted.
-function startLoops(context: LoopContext): Loops {
-  const { settings, dependencies, root, transport, address, observationSubject, pressure, launcher } = context;
-  const { journal } = root;
+function brokerSession(context: SessionContext): BrokerSession<TransportLink> {
+  const { settings, dependencies, root, address, subjects, contact, broker } = context;
+  const { sleep, draw, limits } = dependencies;
+  const logger = dependencies.logger ?? SILENT_LOGGER;
+  const endpoint = {
+    server: settings.natsUrl, creds: broker, address, workerId: root.identity.workerId,
+    ...(settings.natsTls === undefined ? {} : { tls: settings.natsTls }),
+  };
+  return new BrokerSession<TransportLink>({
+    connect: async () => {
+      const connected = await dependencies.connect(endpoint);
+      return connected.ok ? ok(transportLink(connected.value)) : connected;
+    },
+    serve: (link, signal) => serveConnection(context, link.transport, signal),
+    linkUp: (link, signal) => runTogether(signal, [
+      (upSignal) => reportInventoryOnConnection({
+        ...observationPublishing(context, link.transport), newReportId: randomUUID, sleep, draw, logger,
+        ...(limits === undefined ? {} : { limits }),
+      }, upSignal),
+      (upSignal) => runHeartbeats(heartbeatOptions(context, link.transport), upSignal),
+    ]),
+    contact, sleep, draw, logger,
+  });
+}
+
+function transportLink(transport: TransportConnection): TransportLink {
+  return { transport, statuses: transport.connection.status(), close: () => transport.close() };
+}
+
+function observationPublishing(context: SessionContext, transport: TransportConnection) {
   const publisher = new JetStreamPublisher(transport.js);
-  const publish = publisher.publish.bind(publisher);
-  const now = () => dependencies.clock.now();
+  const { journal } = context.root;
+  return {
+    journal, publish: publisher.publish.bind(publisher), observationSubject: context.subjects.observations,
+    now: () => context.dependencies.clock.now(), journalFault: () => journal.fault,
+  };
+}
+
+// The command consumer and the observation publisher of one connection,
+// until its signal aborts.
+async function serveConnection(context: SessionContext, transport: TransportConnection, signal: AbortSignal): Promise<void> {
+  const { settings, dependencies, root, address, launcher } = context;
+  const publishing = observationPublishing(context, transport);
   const intake = new CommandIntake({
-    journal, capacity: settings.capacity, pressure, publish, observationSubject, newReportId: randomUUID, now,
+    ...publishing, capacity: settings.capacity, pressure: context.pressure, newReportId: randomUUID,
     ...(launcher === undefined ? {} : { onRecorded: launcher.notify }),
   });
   const options = dependencies.limits === undefined ? {} : { limits: dependencies.limits };
   const consumer = workerCommandConsumer(transport.js, address, root.identity.workerId, intake.handle, options);
-  const controller = new AbortController();
-  const finished = Promise.all([
-    consumer.run(controller.signal),
-    runObservationPublisher({ journal, publish, observationSubject, now }, controller.signal, dependencies.limits),
-    pressure.watch(controller.signal, dependencies.pressurePollMilliseconds),
-    launcher?.run(controller.signal),
-  ]).then(() => undefined);
-  return { finished, abort: () => controller.abort() };
+  await runTogether(signal, [
+    (served) => consumer.run(served),
+    (served) => runObservationPublisher(publishing, served, dependencies.limits),
+  ]);
 }
 
-function runningWorker(root: WorkerRoot, transport: TransportConnection, loops: Loops): RunningWorker {
-  let finish: () => void = () => undefined;
-  const stopped = new Promise<void>((resolve) => {
-    finish = resolve;
-  });
-  let stopping: Promise<void> | undefined;
-  const stop = () => {
-    stopping ??= closeAll(root, transport, loops).finally(finish);
-    return stopping;
+// Restarted on each link-up, so a reconnect sends one at once; a stopped
+// journal stops them, as it stops every publication.
+function heartbeatOptions(context: SessionContext, transport: TransportConnection): HeartbeatOptions {
+  const { dependencies, root, subjects, contact } = context;
+  const canSend = () => contact.connected && root.journal.fault === undefined;
+  return {
+    binding: root.identity, subject: subjects.heartbeats, send: coreSender(transport), canSend,
+    now: () => dependencies.clock.now(), sleep: dependencies.sleep,
+    ...(dependencies.logger === undefined ? {} : { logger: dependencies.logger }),
   };
-  return Object.freeze({ identity: root.identity, root, transport, stopped, stop });
 }
 
-// The loops stop before the connection and the journal they use close.
-async function closeAll(root: WorkerRoot, transport: TransportConnection, loops: Loops): Promise<void> {
-  loops.abort();
+// Core NATS publishes without an acknowledgement; a throw loses only this
+// message.
+function coreSender(transport: TransportConnection): (subject: string, body: Uint8Array) => Result<void> {
+  return (subject, body) => {
+    try {
+      transport.connection.publish(subject, body);
+      return ok(undefined);
+    } catch (error) {
+      return err(failure('unavailable', `the broker refused a publication: ${(error as Error).message}`));
+    }
+  };
+}
+
+interface Runtime {
+  readonly finished: Promise<void>;
+  abort(): void;
+}
+
+function runningWorker(root: WorkerRoot, runtime: Runtime): RunningWorker {
+  const closed = closeAfter(root, runtime.finished);
+  const stopped = closed.catch(() => undefined);
+  const stop = () => {
+    runtime.abort();
+    return closed;
+  };
+  return Object.freeze({ identity: root.identity, root, stopped, stop });
+}
+
+// Every task of the runtime ended, after a stop or a failure; the journal
+// they use closes last.
+async function closeAfter(root: WorkerRoot, finished: Promise<void>): Promise<void> {
   try {
-    await loops.finished.finally(() => transport.close());
+    await finished;
   } finally {
     root.close();
   }
