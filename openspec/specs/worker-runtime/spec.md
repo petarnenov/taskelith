@@ -95,11 +95,15 @@ A worker SHALL commit W2 before the first request of an operation and W3 with ea
 - **THEN** the worker journals the rejection with its `execution.launch.rejected` observation and never requests again for the intent
 
 ### Requirement: Launch deadline
-A worker SHALL hand a grant to its supervisor only before the deadline computed from its suspend-inclusive clock read before the operation's first request, in the same boot. An execution whose grant cannot be used, or whose deadline passed without a decision, SHALL be sealed and reported `not-started`, and a new execution with a new `operationId` SHALL be authorized.
+A worker SHALL hand a grant to its supervisor only before the deadline from its suspend-inclusive clock read before the operation's first request, in the same boot. An operation past its deadline without a decision, or answered `expired`, SHALL be journaled `expired`, and the same execution SHALL be authorized again reporting it has not started. An unusable grant's execution SHALL be sealed and reported `not-started`.
 
 #### Scenario: Grant after the deadline
 - **WHEN** a grant arrives after the deadline
 - **THEN** the worker journals it, never writes `intent`, seals the execution, reports `not-started`, and requests a new execution
+
+#### Scenario: Deadline without a decision
+- **WHEN** the deadline passes without a decision
+- **THEN** the worker journals the operation `expired`, seals nothing, reports no `not-started`, and requests the same execution with `reportsNotStarted`
 
 ### Requirement: Launch through the supervisor
 After a usable grant a worker SHALL write `intent`, commit W4, and only then start the supervisor. It SHALL commit W5s for a spawned `handle` only when the claim names the launch's own grant, W5e for an `exit`, and W6 for a launch record the supervisor sealed; an unreadable record, or a spawn without that claim, SHALL be reported `uncertain` once.
@@ -116,8 +120,8 @@ After a usable grant a worker SHALL write `intent`, commit W4, and only then sta
 A worker SHALL start no launch without a grant, whatever the state of its broker connection.
 
 #### Scenario: Authority unreachable
-- **WHEN** the launch authority cannot be reached
-- **THEN** no supervisor is started, and each abandoned execution is reported `not-started`
+- **WHEN** the launch authority cannot be reached for several deadlines
+- **THEN** no supervisor is started, no `not-started` is reported, and each deadline ends one operation of the same execution
 
 ### Requirement: Cancellation forwarding
 A cancellation of an attempt or of any execution of an intent SHALL stop the intent's launch, sealing an execution before its supervisor starts, and SHALL write the `cancel` file of a started one. Its evidence SHALL be recorded once no launch of the intent is live and every execution is `exited`, `not-started`, or rejected without a grant, and at once when there is none.
@@ -139,3 +143,53 @@ The worker's control-plane client SHALL publish an evidence record and its conte
 #### Scenario: Unavailable control plane
 - **WHEN** the control plane answers 503
 - **THEN** the publication fails with `unavailable`, and a repeat with the same `evidenceId` is idempotent
+
+### Requirement: Start reconciliation
+On its first pass after a start, a worker with `TASKELITH_WORKER_COMMAND` SHALL reconcile each execution an earlier process left open once and SHALL spawn nothing for it: a pending W2 or an unused grant is sealed and reported `not-started`, an operation of an execution without a grant that expired or was rejected as retryable is authorized again, and a journaled record goes to the supervisor's recovery table.
+
+#### Scenario: Pending W2 on start
+- **WHEN** the worker starts with a W2 that has no outcome
+- **THEN** it seals the execution, reports `not-started`, and launches the intent under a new execution
+
+#### Scenario: Recovery asks to retry
+- **WHEN** the recovery table answers that the supervisor's liveness is not yet decided
+- **THEN** the worker waits one poll interval and asks once more with the round after the retry
+
+#### Scenario: Uncertain recovery
+- **WHEN** the recovery table answers `uncertain`
+- **THEN** the worker reports `execution.uncertain` once, logs the reason, and never reconciles that execution again in the process
+
+### Requirement: Deferred reconciliation without a launch command
+A worker started without `TASKELITH_WORKER_COMMAND` SHALL reconcile and remove nothing: it SHALL log each execution an earlier process left open once as `worker.reconciliation.deferred` and SHALL leave its journal rows and record for a later start with the command.
+
+#### Scenario: Open execution without the command
+- **WHEN** the worker starts without `TASKELITH_WORKER_COMMAND` and the journal holds an open execution
+- **THEN** it logs `worker.reconciliation.deferred` once with the execution's identifier, seals nothing, and journals nothing for it
+
+### Requirement: Supervisor liveness
+While a claimed record has no terminal fact, a worker SHALL check its supervisor's liveness every tenth poll and SHALL let the recovery table decide an execution whose supervisor is gone.
+
+#### Scenario: Supervisor lost
+- **WHEN** the liveness check finds no live supervisor and the recovery table answers `uncertain`
+- **THEN** the worker reports `execution.uncertain` and logs `worker.supervisor.lost`
+
+### Requirement: Execution record removal
+A worker with `TASKELITH_WORKER_COMMAND` SHALL remove an execution record only after the journal reports its terminal fact confirmed, SHALL journal the removal after the directory is gone, and SHALL keep a record whose supervisor still holds its lock for a later pass.
+
+#### Scenario: Held record
+- **WHEN** the terminal fact is confirmed and the supervisor still holds the record's lock
+- **THEN** the record is kept, and a later pass removes it once
+
+### Requirement: Execution evidence observations
+A worker SHALL report the survivors of an unproven termination as `execution.termination-unproven` and a cancellation its supervisor did not apply as `cancellation.not-applied`, each once, beside the execution's other facts. It SHALL map every recovery termination evidence, including `boot-changed` and `namespace-ended`, to `execution.exited`.
+
+#### Scenario: Survivors after the exit
+- **WHEN** the supervisor records survivors and then the exit
+- **THEN** the worker reports `execution.termination-unproven` once, before `execution.exited`
+
+### Requirement: Reconciliation logs
+A worker SHALL log its start reconciliation as structured records: the plan of its first pass, each recovery decision, each uncertain execution with its reason, a lost supervisor, each removed or kept record, and each record directory no journal row names, which it SHALL keep.
+
+#### Scenario: Leftover record
+- **WHEN** the executions directory holds a record that no journal row names
+- **THEN** the worker logs `worker.execution.leftover` once and leaves the record in place
