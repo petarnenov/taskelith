@@ -86,12 +86,18 @@ test('below the floor each refresh truncates the buffered logs and logs what it 
 });
 
 test('a change that fails to commit is reported again by the next refresh', () => {
-  const failing = recordingWith(journal, () => err(failure('unavailable', 'the journal is stopped')));
-  const stopped = new AdmissionPressure({ journal: failing, space: () => space, truncateLogs: () => ok(0) });
-  assert.equal(failed(stopped.refresh()).message, 'the journal is stopped');
-  const working = new AdmissionPressure({ journal, space: () => space, truncateLogs: () => ok(0) });
-  assert.deepEqual(value(working.refresh()), []);
+  let attempts = 0;
+  const failingOnce = recordingWith(journal, (causes) => {
+    attempts += 1;
+    return attempts === 1 ? err(failure('unavailable', 'the journal is stopped')) : journal.recordAdmissionPressure(causes);
+  });
+  const retried = new AdmissionPressure({ journal: failingOnce, space: () => space, truncateLogs: () => ok(0) });
+  assert.equal(failed(retried.refresh()).message, 'the journal is stopped');
+  assert.deepEqual(reported(), []);
+  assert.deepEqual(value(retried.refresh()), []);
   assert.deepEqual(reported(), [[]]);
+  assert.deepEqual(value(retried.refresh()), []);
+  assert.deepEqual([reported(), attempts], [[[]], 2]);
 });
 
 test('the watch refreshes until aborted and logs a refresh that failed', async () => {
