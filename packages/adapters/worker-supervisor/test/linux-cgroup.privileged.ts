@@ -32,7 +32,7 @@ const ROOT = mkdtempSync(join(tmpdir(), 'taskelith-executions-'));
 // The execution account passes through to its spawn counter only.
 chmodSync(ROOT, 0o711);
 const platform = linuxPlatform({ containmentParent: PARENT });
-const reaper = new ProcessReaper(platform.inspector);
+const reaper = new ProcessReaper(ROOT);
 const BOUNDED = { timeout: REAL_PROCESS_TEST_TIMEOUT };
 
 interface Execution {
@@ -62,7 +62,6 @@ async function prepare(executionId: string, body: string): Promise<Execution> {
     startSupervisor: async () => ({ ok: true, value: undefined }),
     crashPoint: () => undefined,
   };
-  reaper.watch(store);
   const now = platform.clock.read();
   const incarnation = platform.namespaceIncarnation();
   assert.ok(now.ok && incarnation?.ok);
@@ -110,7 +109,7 @@ async function recordedExit(execution: Execution): Promise<ExitRecord> {
 
 // The child starts a descendant in its own session, which leaves the child's
 // process group but not its containment.
-const ESCAPE = `require('node:child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 1500)'], { detached: true, stdio: 'ignore' }).unref();`;
+const ESCAPE = `require('node:child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 1500)', ${JSON.stringify(ROOT)}], { detached: true, stdio: 'ignore' }).unref();`;
 
 test.afterEach(() => reaper.reap());
 test.after(() => rmSync(ROOT, { recursive: true, force: true }));

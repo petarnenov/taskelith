@@ -30,7 +30,7 @@ const DARWIN = { skip: process.platform !== 'darwin', timeout: REAL_PROCESS_TEST
 const SCENARIO = new URL('./fixtures/supervisor-scenario.ts', import.meta.url).pathname;
 const ROOT = mkdtempSync(join(tmpdir(), 'taskelith-darwin-'));
 const platform = darwinPlatform(loadDarwinNative());
-const reaper = new ProcessReaper(platform.inspector);
+const reaper = new ProcessReaper(ROOT);
 
 interface Execution {
   readonly directory: string;
@@ -50,7 +50,6 @@ async function prepare(executionId: string, body: string): Promise<Execution> {
     startSupervisor: async () => ({ ok: true, value: undefined }),
     crashPoint: () => undefined,
   };
-  reaper.watch(worker.store);
   const now = platform.clock.read();
   assert.ok(now.ok, JSON.stringify(now));
   const { namespaceIncarnation: _linuxOnly, ...record } = intent({
@@ -100,9 +99,9 @@ async function recordedEvents(execution: Execution) {
 }
 
 // A descendant in its own session leaves the child's process group.
-const ESCAPE = `require('node:child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 1500)'], { detached: true, stdio: 'ignore' }).unref();`;
+const ESCAPE = `require('node:child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 1500)', ${JSON.stringify(ROOT)}], { detached: true, stdio: 'ignore' }).unref();`;
 // A descendant in the child's group, which a group signal reaches.
-const MEMBER = `require('node:child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], { stdio: 'ignore' }).unref();`;
+const MEMBER = `require('node:child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)', ${JSON.stringify(ROOT)}], { stdio: 'ignore' }).unref();`;
 
 test.afterEach(() => reaper.reap());
 test.after(() => rmSync(ROOT, { recursive: true, force: true }));
