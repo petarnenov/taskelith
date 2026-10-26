@@ -411,23 +411,30 @@ function clearRefusal(tx: ControlPlaneTransaction, observation: Observation): Pr
   return tx.reports.clearCapacityRefusal(workerId, sequence);
 }
 
-type Holding = (tx: ControlPlaneTransaction, observation: Observation) => Promise<boolean>;
+type Holding = (tx: ControlPlaneTransaction, observation: Observation) => Promise<Result<boolean>>;
 
-// The clear, only for a fact about an assignment the producer holds.
+// The clear, only for a fact about an assignment the producer holds; a
+// failed lookup fails the effect, so the observation is delivered again.
 function clearOwnRefusal(holds: Holding): ObservationEffect {
-  return async (tx, observation) => ((await holds(tx, observation)) ? clearRefusal(tx, observation) : ok(undefined));
+  return async (tx, observation) => {
+    const held = await holds(tx, observation);
+    if (!held.ok) return held;
+    return held.value ? clearRefusal(tx, observation) : ok(undefined);
+  };
 }
 
-// The assignment the payload names, of the observed attempt.
+// The assignment the payload names, of the observed attempt; only an
+// unknown one is not held.
 const namedAssignmentHeld: Holding = async (tx, observation) => {
   const { assignmentId } = observation.payload as Payload<'LaunchRejectedPayload'>;
   const named = await tx.assignments.get(assignmentId as AssignmentId);
-  return named.ok && named.value.attemptId === observation.attemptId && named.value.workerId === observation.position.workerId;
+  if (!named.ok) return named.error.code === 'not-found' ? ok(false) : named;
+  return ok(named.value.attemptId === observation.attemptId && named.value.workerId === observation.position.workerId);
 };
 
 // Any assignment of the observed attempt.
-const attemptAssignmentHeld: Holding = async (tx, observation) => (
-  (await tx.assignments.listByAttempt(observation.attemptId!)).some(({ workerId }) => workerId === observation.position.workerId)
+const attemptAssignmentHeld: Holding = async (tx, observation) => ok(
+  (await tx.assignments.listByAttempt(observation.attemptId!)).some(({ workerId }) => workerId === observation.position.workerId),
 );
 
 // Capacity reservation section 8: the facts that prove a worker's slot free,
