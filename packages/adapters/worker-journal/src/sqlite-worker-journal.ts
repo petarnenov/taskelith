@@ -22,7 +22,6 @@ import type {
   OperationId,
   OutboxBacklog,
   OutboxEntry,
-  RecoveryEpoch,
   Sequence,
   WorkerJournal,
 } from '@taskelith/execution';
@@ -150,7 +149,7 @@ export class SqliteWorkerJournal implements WorkerJournal {
       database.prepare('UPDATE authorization_request SET outcome = ?, rejection_reason = ? WHERE operation_id = ?')
         .run(outcome, rejection.reason, operationId);
       if (rejection.retryable) return ok(undefined);
-      const { subject } = subjectOf(database, pending.value);
+      const subject = subjectOf(database, pending.value);
       this.#append(database, { kind: 'launch-rejected', ...subject, operationId, reason: rejection.reason });
       return ok(undefined);
     });
@@ -183,8 +182,7 @@ export class SqliteWorkerJournal implements WorkerJournal {
       const granted = database.prepare(`SELECT 1 FROM authorization_request
         WHERE execution_id = ? AND launch_auth_id = ? AND outcome = 'granted'`).get(executionId, launchAuthId);
       if (granted === undefined) return err(failure('precondition-failed', `${launchAuthId} is not a grant of ${executionId}`));
-      const { subject, recoveryEpoch } = subjectOf(database, executionId);
-      const fact = { kind: 'execution-started' as const, ...subject, launchAuthId, recoveryEpoch, process };
+      const fact = { kind: 'execution-started' as const, ...subjectOf(database, executionId), launchAuthId, process };
       this.#moveExecution(database, executionId, 'started', fact);
       return ok(undefined);
     });
@@ -198,8 +196,7 @@ export class SqliteWorkerJournal implements WorkerJournal {
       if (execution.value.state !== 'authorized' && execution.value.state !== 'started') {
         return err(notInState(executionId, 'authorized or started'));
       }
-      const { subject } = subjectOf(database, executionId);
-      this.#moveExecution(database, executionId, 'exited', { kind: 'execution-exited', ...subject, exit });
+      this.#moveExecution(database, executionId, 'exited', { kind: 'execution-exited', ...subjectOf(database, executionId), exit });
       return ok(undefined);
     });
   }
@@ -213,8 +210,7 @@ export class SqliteWorkerJournal implements WorkerJournal {
       // The seal leaves no use for an operation still waiting for its answer.
       database.prepare(`UPDATE authorization_request SET outcome = 'expired' WHERE execution_id = ? AND outcome = 'pending'`)
         .run(executionId);
-      const { subject } = subjectOf(database, executionId);
-      this.#moveExecution(database, executionId, 'not-started', { kind: 'execution-not-started', ...subject });
+      this.#moveExecution(database, executionId, 'not-started', { kind: 'execution-not-started', ...subjectOf(database, executionId) });
       return ok(undefined);
     });
   }
@@ -229,7 +225,7 @@ export class SqliteWorkerJournal implements WorkerJournal {
       }
       const evidenceCounter = storedInteger<number>(execution, 'uncertain_count') + 1;
       database.prepare('UPDATE execution SET uncertain_count = ? WHERE execution_id = ?').run(evidenceCounter, executionId);
-      this.#append(database, { kind: 'execution-uncertain', ...subjectOf(database, executionId).subject, evidenceCounter });
+      this.#append(database, { kind: 'execution-uncertain', ...subjectOf(database, executionId), evidenceCounter });
       return ok(undefined);
     });
   }
@@ -240,7 +236,7 @@ export class SqliteWorkerJournal implements WorkerJournal {
       if (!written.ok) return written;
       if (written.value.termination_unproven === 1) return ok(undefined);
       database.prepare('UPDATE execution SET termination_unproven = 1 WHERE execution_id = ?').run(executionId);
-      this.#append(database, { kind: 'termination-unproven', ...subjectOf(database, executionId).subject, survivors });
+      this.#append(database, { kind: 'termination-unproven', ...subjectOf(database, executionId), survivors });
       return ok(undefined);
     });
   }
@@ -255,14 +251,14 @@ export class SqliteWorkerJournal implements WorkerJournal {
       const inserted = database.prepare('INSERT OR IGNORE INTO cancellation_not_applied (command_id, execution_id) VALUES (?, ?)')
         .run(commandId, executionId);
       if (inserted.changes === 0) return ok(undefined);
-      this.#append(database, { kind: 'cancellation-not-applied', ...subjectOf(database, executionId).subject, commandId });
+      this.#append(database, { kind: 'cancellation-not-applied', ...subjectOf(database, executionId), commandId });
       return ok(undefined);
     });
   }
 
   recordUnrecordedProcess(containment: string, processes: readonly ExecutionProcess[]): Result<void> {
     return this.#connection.transact((database) => {
-      const fact: ObservationFact = { kind: 'unrecorded-process', containment, processes };
+      const fact: ObservationFact = { kind: 'unrecorded-process', containment, recoveryEpoch: this.binding.recoveryEpoch, processes };
       const observationId = observationIdOf(fact, this.binding.journalId);
       if (database.prepare('SELECT 1 FROM outbox WHERE observation_id = ?').get(observationId)) return ok(undefined);
       this.#append(database, fact);
@@ -496,22 +492,17 @@ function mayAuthorizeAgain(execution: Row, last: Row | undefined, request: Launc
   return execution.state === 'authorized' && settled && request.reportsNotStarted;
 }
 
-// The journal, not the caller, names the assignment an execution fact is
-// about, from the launch intent the execution belongs to.
-function subjectOf(database: JournalDatabase, executionId: ExecutionId): {
-  readonly subject: ExecutionSubject;
-  readonly recoveryEpoch: RecoveryEpoch;
-} {
+// The journal, not the caller, names the assignment and the epoch of an
+// execution fact, from the launch intent the execution belongs to.
+function subjectOf(database: JournalDatabase, executionId: ExecutionId): ExecutionSubject {
   const row = database.prepare(`SELECT intent.assignment_id, intent.attempt_id, intent.ownership_generation, intent.recovery_epoch
     FROM execution JOIN launch_intent AS intent USING (assignment_id) WHERE execution.execution_id = ?`).get(executionId);
   if (row === undefined) throw new TypeError(`execution ${executionId} has no launch intent`);
   return {
-    subject: {
-      executionId,
-      assignmentId: storedText(row, 'assignment_id'),
-      attemptId: storedText(row, 'attempt_id'),
-      ownershipGeneration: storedInteger(row, 'ownership_generation'),
-    },
+    executionId,
+    assignmentId: storedText(row, 'assignment_id'),
+    attemptId: storedText(row, 'attempt_id'),
+    ownershipGeneration: storedInteger(row, 'ownership_generation'),
     recoveryEpoch: storedInteger(row, 'recovery_epoch'),
   };
 }

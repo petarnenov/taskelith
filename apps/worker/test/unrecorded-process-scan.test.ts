@@ -79,7 +79,9 @@ test('a populated containment without a record directory is reported once per st
   assert.equal(scans, 1);
   assert.deepEqual(unrecordedContainments(), [`${PARENT}/lost-1`]);
   const [entry] = value(journal.dueForPublication(T0)).filter(({ fact }) => fact.kind === 'unrecorded-process');
-  assert.deepEqual(entry?.fact, { kind: 'unrecorded-process', containment: `${PARENT}/lost-1`, processes: [MEMBER] });
+  assert.deepEqual(entry?.fact, {
+    kind: 'unrecorded-process', containment: `${PARENT}/lost-1`, recoveryEpoch: journal.binding.recoveryEpoch, processes: [MEMBER],
+  });
 });
 
 test('a leftover record is still only logged and kept, never an unrecorded process', async () => {
@@ -163,13 +165,13 @@ test('an unrecorded process refused for lack of space is journaled once after th
   clock.milliseconds += 60_000;
   await pass();
   const entries = value(journal.dueForPublication(T0)).filter(({ fact }) => fact.kind === 'unrecorded-process');
-  const fact = { kind: 'unrecorded-process' as const, containment: `${PARENT}/lost-1`, processes: [MEMBER] };
+  const fact = { kind: 'unrecorded-process' as const, containment: `${PARENT}/lost-1`, recoveryEpoch: journal.binding.recoveryEpoch, processes: [MEMBER] };
   assert.deepEqual(entries.map((entry) => [entry.fact, entry.position.observationId]),
     [[fact, observationIdOf(fact, journal.binding.journalId)]]);
   assert.deepEqual([scans, failures, backoffs().length], [1, [], 2]);
 });
 
-test('an unrecorded process is published as its AsyncAPI observation', async () => {
+test('an unrecorded process is published as its AsyncAPI observation with the journal\'s epoch', async () => {
   value(journal.recordUnrecordedProcess(`${PARENT}/lost\u0007-1`, [MEMBER]));
   const published: unknown[] = [];
   const publish = async (publication: Publication): Promise<Result<PublishOutcome>> => {
@@ -180,7 +182,7 @@ test('an unrecorded process is published as its AsyncAPI observation', async () 
   const body = published.at(-1) as { metadata: Record<string, unknown>; payload: unknown };
   const checked = checkMessageSchema('UnrecordedProcessObservation', body);
   assert.equal(checked.ok, true, checked.ok ? '' : checked.error.join('; '));
-  assert.deepEqual(body.payload, { containment: `${PARENT}/lost -1`, processes: [MEMBER] });
+  assert.deepEqual(body.payload, { containment: `${PARENT}/lost -1`, recoveryEpoch: journal.binding.recoveryEpoch, processes: [MEMBER] });
   assert.equal(body.metadata['correlationId'], body.metadata['observationId']);
   assert.equal('attemptId' in body.metadata, false);
 });

@@ -1,4 +1,4 @@
-// Journal format 3: the records of the worker journal contract, section 5.
+// Journal format 4: the records of the worker journal contract, section 5.
 export const JOURNAL_SCHEMA = `
 CREATE TABLE journal_meta (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -132,4 +132,16 @@ CREATE TABLE cancellation_not_applied (
   execution_id TEXT NOT NULL REFERENCES execution (execution_id),
   PRIMARY KEY (command_id, execution_id)
 ) STRICT;
+`;
+
+// Format 3 to 4 (contract section 10); each stored execution fact takes its
+// intent's recovery epoch, and an unrecorded process the journal's.
+export const MIGRATION_FROM_FORMAT_3 = `
+UPDATE outbox SET fact = json_set(fact, '$.recoveryEpoch', COALESCE(
+  (SELECT intent.recovery_epoch FROM execution JOIN launch_intent AS intent USING (assignment_id)
+    WHERE execution.execution_id = json_extract(outbox.fact, '$.executionId')),
+  (SELECT recovery_epoch FROM journal_meta)))
+  WHERE json_extract(fact, '$.recoveryEpoch') IS NULL AND json_extract(fact, '$.kind') IN (
+    'launch-rejected', 'execution-exited', 'execution-not-started', 'execution-uncertain',
+    'termination-unproven', 'cancellation-not-applied', 'unrecorded-process');
 `;
