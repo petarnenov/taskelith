@@ -43,7 +43,7 @@ On Linux a launch also needs `TASKELITH_CONTAINMENT_PARENT`, the absolute path o
 
 ## Broker storage
 
-JetStream reserves the byte limit of each stream on the broker's disk when the stream is created. The installation fixes the broker's file store at 8 GiB (`max_file_store` in [`nats-server.conf`](../infra/installation/nats-server.conf)) and sets `TASKELITH_STREAM_MAX_BYTES` of the control plane to 1 GiB, so its five streams reserve 5 GiB. These are provisional local values ([operational targets](operational-targets.md) section 2). The `nats-data` volume needs 8 GiB of free disk; under Docker Desktop that is free space in its virtual machine's disk. With less, the control plane fails to start, and its error names the bytes the streams reserve.
+JetStream reserves the byte limit of each stream on the broker's disk when the stream is created. The installation fixes the broker's file store at 8 GiB (`max_file_store` in [`nats-server.conf`](../infra/installation/nats-server.conf)) and sets `TASKELITH_STREAM_MAX_BYTES` of the control plane to 1 GiB, so its five streams reserve 5 GiB. These are provisional local values ([operational targets](operational-targets.md) section 2). The `nats-data` volume needs 8 GiB of free disk; under Docker Desktop that is free space in its virtual machine's disk. The broker checks the reservations against the fixed store, not the disk: with less free disk the installation still starts, and broker writes fail later when the disk fills. If the reservations exceed the store, the control plane fails to start, and its error names the bytes the streams reserve.
 
 ## Limits
 
