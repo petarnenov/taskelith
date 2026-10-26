@@ -32,18 +32,19 @@ import type {
   SupervisionFactory,
 } from './execution-supervision-port.js';
 
-// The program every launch runs and the platform settings it runs under.
+// The program every launch runs and the account it runs as.
 export interface LaunchProgram {
   readonly command: Command;
   readonly executionAccount?: ExecutionAccount;
-  readonly containmentParent?: string;
   readonly supervisorVersion: string;
 }
 
+// Without a program the records are recovered and removed, never prepared.
 export interface FileSupervisionOptions {
   readonly executions: string;
   readonly platform: Platform;
-  readonly program: LaunchProgram;
+  readonly containmentParent?: string;
+  readonly program?: LaunchProgram;
 }
 
 // Each execution's record in `worker/executions/<executionId>/`.
@@ -60,7 +61,7 @@ class FileExecutionSupervision implements ExecutionSupervision {
     this.#executionId = executionId;
     this.#options = options;
     const directory = join(options.executions, executionId);
-    const { containmentParent } = options.program;
+    const { containmentParent } = options;
     this.#dependencies = {
       store: new FileRecordStore(directory),
       lock: new SqliteExecutionLock(directory),
@@ -73,7 +74,9 @@ class FileExecutionSupervision implements ExecutionSupervision {
   }
 
   async prepare(plan: LaunchPlan): Promise<Result<void>> {
-    const { command, executionAccount, supervisorVersion } = this.#options.program;
+    const { program } = this.#options;
+    if (program === undefined) return err(failure('precondition-failed', 'no launch command is configured'));
+    const { command, executionAccount, supervisorVersion } = program;
     const incarnation = this.#options.platform.namespaceIncarnation();
     if (incarnation !== undefined && !incarnation.ok) return incarnation;
     return prepareRecord(this.#dependencies, {

@@ -14,13 +14,17 @@ import {
   currentHost,
   readWorkerSettings,
   type Environment,
-  type LaunchSettings,
   type WorkerSettings,
 } from './settings.js';
 import { startWorker, type LaunchHost, type LaunchingDependencies, type RunningWorker, type WorkerDependencies } from './worker-start.js';
 
 // A journal identity is 128 random bits (worker journal contract sec. 8).
 const JOURNAL_ID_BYTES = 16;
+
+// Resolves after the delay, or early once the signal aborts.
+function sleep(milliseconds: number, signal: AbortSignal): Promise<void> {
+  return delay(milliseconds, undefined, { signal }).catch(() => undefined);
+}
 
 export function productionDependencies(settings: WorkerSettings): WorkerDependencies {
   const logger = new Logger(new JsonLinesLogSink(process.stderr), SYSTEM_CLOCK);
@@ -29,6 +33,8 @@ export function productionDependencies(settings: WorkerSettings): WorkerDependen
     connect: connectWorkerTransport,
     newJournalId: () => randomBytes(JOURNAL_ID_BYTES).toString('hex'),
     clock: SYSTEM_CLOCK,
+    sleep,
+    draw: Math.random,
     launching: productionLaunching(settings, logger),
     logger,
   };
@@ -44,8 +50,8 @@ function productionLaunching(settings: WorkerSettings, logger: Logger): Launchin
   const endpoint = { baseUrl: settings.controlPlaneUrl, timeoutMilliseconds: CONTROL_PLANE_TIMEOUT_MILLISECONDS };
   return {
     authority: (credential) => new HttpLaunchAuthorityClient({ ...endpoint, credential }),
-    host: (launch, executions) => launchHost(launch, executions, supervisorVersion()),
-    sleep: (milliseconds, signal) => delay(milliseconds, undefined, { signal }).catch(() => undefined),
+    host: (hostSettings, executions) => supervisionHost(hostSettings, executions, supervisorVersion()),
+    sleep,
     draw: Math.random,
     newId: randomUUID,
     logger,
@@ -84,18 +90,22 @@ function isFailure(value: unknown): value is Failure {
     && typeof details === 'object' && details !== null && Object.values(details).every((detail) => typeof detail === 'string');
 }
 
-function launchHost(launch: LaunchSettings, executions: string, version: string): Result<LaunchHost> {
-  const platform = hostPlatform(launch.containmentParent);
+// The platform alone recovers and removes records; a launch command adds
+// the program each launch runs.
+function supervisionHost(settings: WorkerSettings, executions: string, version: string): Result<LaunchHost> {
+  const { containmentParent, launch } = settings;
+  const platform = hostPlatform(containmentParent);
   if (!platform.ok) return platform;
-  const { command, containmentParent, executionAccount } = launch;
-  const program = {
-    command, supervisorVersion: version,
-    ...(containmentParent === undefined ? {} : { containmentParent }),
-    ...(executionAccount === undefined ? {} : { executionAccount }),
+  const program = launch === undefined ? undefined : {
+    command: launch.command, supervisorVersion: version,
+    ...(launch.executionAccount === undefined ? {} : { executionAccount: launch.executionAccount }),
   };
   return ok({
     clock: platform.value.clock,
-    supervision: fileSupervision({ executions, platform: platform.value, program }),
+    supervision: fileSupervision({
+      executions, platform: platform.value,
+      ...(containmentParent === undefined ? {} : { containmentParent }), ...(program === undefined ? {} : { program }),
+    }),
     records: fileRecordListing(executions),
   });
 }

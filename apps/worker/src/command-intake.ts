@@ -13,9 +13,9 @@ import {
 import type { WorkerCapacity } from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type CorrelationId, type Instant, type Result } from '@taskelith/kernel';
 import { parseGeneration, parseOwnershipGeneration } from '@taskelith/sdlc';
-import { encodeJson, type DeliveredMessage, type Publication, type PublishOutcome } from '@taskelith/nats';
+import type { DeliveredMessage, Publication, PublishOutcome } from '@taskelith/nats';
 import { refusalOf } from './assignment-admission.js';
-import { inventoryParts } from './observation-messages.js';
+import { publishInventory } from './inventory-report.js';
 
 type Offer = MessageSchemas['AssignmentOfferCommand'];
 type Cancellation = MessageSchemas['CancellationCommand'];
@@ -117,17 +117,9 @@ export class CommandIntake {
 
   // A failed part fails the answer; the redelivered request takes a new
   // snapshot, which replaces this one.
-  async #answerInventory(request: InventoryRequest): Promise<Result<unknown>> {
-    if (request.workerId !== this.#workerId) return ok(undefined);
-    const { journal, newReportId, now, observationSubject: subject, publish } = this.#options;
-    const inventory = journal.takeInventory();
-    if (!inventory.ok) return inventory;
-    const answer = { reportId: newReportId(), requestId: request.requestId, reportedAt: now() };
-    for (const part of inventoryParts(journal.binding, inventory.value, answer)) {
-      const sent = await publish({ subject, body: encodeJson(part), messageId: `${part.reportId}.${part.part}` });
-      if (!sent.ok) return sent;
-    }
-    return ok(undefined);
+  #answerInventory(request: InventoryRequest): Promise<Result<unknown>> {
+    if (request.workerId !== this.#workerId) return Promise.resolve(ok(undefined));
+    return publishInventory(this.#options, request.requestId);
   }
 }
 

@@ -72,12 +72,23 @@ test('without a launch command the worker has no launch settings', () => {
 });
 
 test('the launch command, and on Linux the containment parent and execution account, come from the environment', () => {
-  assert.deepEqual(value(readWorkerSettings({ ...BASE, ...LINUX_LAUNCH }, FACTS)).launch, {
-    command: { executable: '/usr/bin/scripted', arguments: ['--exit', '0'] }, containmentParent: '/sys/fs/cgroup/taskelith',
-    executionAccount: { uid: 2000, gid: 2001 },
+  const linux = value(readWorkerSettings({ ...BASE, ...LINUX_LAUNCH }, FACTS));
+  assert.deepEqual(linux.launch, {
+    command: { executable: '/usr/bin/scripted', arguments: ['--exit', '0'] }, executionAccount: { uid: 2000, gid: 2001 },
   });
+  assert.equal(linux.containmentParent, '/sys/fs/cgroup/taskelith');
   const darwin = value(readWorkerSettings({ ...BASE, TASKELITH_WORKER_COMMAND: '["/bin/true"]' }, { ...FACTS, platform: 'darwin' }));
   assert.deepEqual(darwin.launch, { command: { executable: '/bin/true', arguments: [] } });
+});
+
+test('the containment parent is read on Linux without a launch command, and only on Linux', () => {
+  const parent = { TASKELITH_CONTAINMENT_PARENT: '/sys/fs/cgroup/taskelith' };
+  const linux = value(readWorkerSettings({ ...BASE, ...parent }, FACTS));
+  assert.deepEqual([linux.containmentParent, 'launch' in linux], ['/sys/fs/cgroup/taskelith', false]);
+  assert.equal('containmentParent' in value(readWorkerSettings({ ...BASE, ...parent }, { ...FACTS, platform: 'darwin' })), false);
+  assert.equal('containmentParent' in value(readWorkerSettings({ ...BASE, TASKELITH_CONTAINMENT_PARENT: '' }, FACTS)), false);
+  const relative = failed(readWorkerSettings({ ...BASE, TASKELITH_CONTAINMENT_PARENT: 'cgroup' }, FACTS));
+  assert.equal(relative.details.variable, 'TASKELITH_CONTAINMENT_PARENT');
 });
 
 test('an invalid launch setting fails startup and names only its variable', () => {

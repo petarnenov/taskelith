@@ -33,7 +33,9 @@ The control-plane API is on `http://127.0.0.1:8080` and NATS on `nats://127.0.0.
 
 A worker launches accepted assignments only when `TASKELITH_WORKER_COMMAND` names the program each launch runs, as a JSON array of the executable and its arguments, for example `["/usr/local/bin/scripted-process","--exit","0"]`. In G2 this is a test-only scripted process; the harness invocation comes with G3. Without it the worker accepts assignments and launches none.
 
-On Linux a launch also needs `TASKELITH_CONTAINMENT_PARENT`, the absolute path of the delegated cgroup that holds each execution's containment, and `TASKELITH_EXECUTION_UID` and `TASKELITH_EXECUTION_GID`, the account the child runs as, which owns no cgroup of the worker. A missing or invalid value fails the worker's start and names the variable.
+On Linux a launch also needs `TASKELITH_CONTAINMENT_PARENT`, the absolute path of the delegated cgroup that holds each execution's containment, and `TASKELITH_EXECUTION_UID` and `TASKELITH_EXECUTION_GID`, the account the child runs as, which owns no cgroup of the worker. A missing or invalid value fails the worker's start and names the variable. A Linux worker without a launch command still reads `TASKELITH_CONTAINMENT_PARENT` when it is set, so that it reconciles the executions an earlier start left and removes their records; without it, those executions wait for a start that has it, and each is logged as `worker.reconciliation.deferred`.
+
+A worker whose broker is unreachable still starts: it retries the connection, and while offline it begins no launch authorization (see the [execution wire contracts](contracts/execution-wire-contracts.md) section 6 for the heartbeat and the inventory report it sends on each connection).
 
 ## Checks
 

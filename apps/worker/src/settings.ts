@@ -22,15 +22,16 @@ export interface WorkerSettings {
   readonly enrollmentToken?: string;
   readonly host: WorkerHost;
   readonly capacity: WorkerCapacity;
+  // Linux: the delegated cgroup of every execution, launched or recovered.
+  readonly containmentParent?: string;
   // Without it the worker accepts assignments but launches none.
   readonly launch?: LaunchSettings;
 }
 
 // The program a launch runs (a test-only scripted process in G2) and, on
-// Linux, the delegated cgroup and the account the child runs as.
+// Linux, the account the child runs as.
 export interface LaunchSettings {
   readonly command: Command;
-  readonly containmentParent?: string;
   readonly executionAccount?: ExecutionAccount;
 }
 
@@ -64,11 +65,14 @@ export function readWorkerSettings(environment: Environment, facts: HostFacts): 
   if (!host.ok) return host;
   const capacity = readCapacity(environment, facts);
   if (!capacity.ok) return capacity;
-  const launch = readLaunch(environment, facts.platform);
+  const containmentParent = readContainmentParent(environment, facts.platform);
+  if (!containmentParent.ok) return containmentParent;
+  const launch = readLaunch(environment, facts.platform, containmentParent.value);
   if (!launch.ok) return launch;
   const token = environment.TASKELITH_ENROLLMENT_TOKEN;
   return ok({
     dataRoot: dataRoot.value, controlPlaneUrl: controlPlaneUrl.value, natsUrl: natsUrl.value, host: host.value, capacity: capacity.value,
+    ...(containmentParent.value === undefined ? {} : { containmentParent: containmentParent.value }),
     ...(launch.value === undefined ? {} : { launch: launch.value }),
     ...(ca.value === undefined ? {} : { natsTls: { ca: ca.value } }),
     ...(token === undefined || token === '' ? {} : { enrollmentToken: token }),
@@ -125,21 +129,33 @@ function readCount(environment: Environment, variable: string, fallback: number)
   return err(failure('invalid', `${variable} must be a positive integer`, { variable }));
 }
 
-// The launch settings; the Linux ones are read only on Linux.
-function readLaunch(environment: Environment, platform: NodeJS.Platform): Result<LaunchSettings | undefined> {
+const CONTAINMENT_PARENT_INVALID = failure('invalid', 'TASKELITH_CONTAINMENT_PARENT must be an absolute path', {
+  variable: 'TASKELITH_CONTAINMENT_PARENT',
+});
+
+// Read only on Linux; reconciliation needs it even without a command.
+function readContainmentParent(environment: Environment, platform: NodeJS.Platform): Result<string | undefined> {
+  const parent = environment.TASKELITH_CONTAINMENT_PARENT;
+  if (platform !== 'linux' || parent === undefined || parent === '') return ok(undefined);
+  return parent.startsWith('/') ? ok(parent) : err(CONTAINMENT_PARENT_INVALID);
+}
+
+// The launch settings; a Linux launch needs the containment parent too.
+function readLaunch(
+  environment: Environment,
+  platform: NodeJS.Platform,
+  containmentParent: string | undefined,
+): Result<LaunchSettings | undefined> {
   const command = readCommand(environment.TASKELITH_WORKER_COMMAND);
   if (!command.ok) return command;
   if (command.value === undefined) return ok(undefined);
   if (platform !== 'linux') return ok({ command: command.value });
-  const parent = environment.TASKELITH_CONTAINMENT_PARENT;
-  if (parent === undefined || !parent.startsWith('/')) {
-    return err(failure('invalid', 'TASKELITH_CONTAINMENT_PARENT must be an absolute path', { variable: 'TASKELITH_CONTAINMENT_PARENT' }));
-  }
+  if (containmentParent === undefined) return err(CONTAINMENT_PARENT_INVALID);
   const uid = readAccountId(environment, 'TASKELITH_EXECUTION_UID');
   if (!uid.ok) return uid;
   const gid = readAccountId(environment, 'TASKELITH_EXECUTION_GID');
   if (!gid.ok) return gid;
-  return ok({ command: command.value, containmentParent: parent, executionAccount: { uid: uid.value, gid: gid.value } });
+  return ok({ command: command.value, executionAccount: { uid: uid.value, gid: gid.value } });
 }
 
 const COMMAND_INVALID = failure('invalid', 'TASKELITH_WORKER_COMMAND must be a JSON array of the executable and its arguments', {
