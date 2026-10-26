@@ -87,11 +87,12 @@ test('an effective grant beyond the request is allowed, but not write-code', asy
   assert.deepEqual(cases(escalated), [
     'read-only credential outcome',
     'change request and status credentials outcome',
+    'refreshed credential outcome',
     'credential isolation outcome',
   ]);
   const escalations = escalated.filter((line) => line.endsWith('issueRunCredential granted write-code to a request without it'));
-  assert.equal(escalations.length, 5);
-  assert.match(escalated[4]!, /^credential isolation outcome: write-code .* after another run got write-code must fail with forbidden$/);
+  assert.equal(escalations.length, 6);
+  assert.match(escalated[5]!, /^credential isolation outcome: write-code .* after another run got write-code must fail with forbidden$/);
 });
 
 test('a reported permission that the service does not grant is reported', async () => {
@@ -101,12 +102,13 @@ test('a reported permission that the service does not grant is reported', async 
       return ok({ ...credential, permissions: [...new Set([...credential.permissions, 'write-statuses'])] });
     },
   }));
-  assert.deepEqual(cases(lines), [
-    'read-only credential outcome',
-    'write credential outcome',
-    'change request and status credentials outcome',
+  assert.deepEqual(lines.map((line) => line.replace(/cred-\d+/, 'cred')), [
+    'read-only credential outcome: write-statuses with credential cred to acme/project must succeed',
+    'write credential outcome: write-statuses with credential cred to acme/project must succeed',
+    'change request and status credentials outcome: write-statuses with credential cred to acme/project must succeed',
+    'refreshed credential outcome: refreshRunCredential granted ["read-code"] for ["read-code","write-statuses"]',
+    'refreshed credential outcome: refreshRunCredential changed the permissions',
   ]);
-  assert.ok(lines.every((line) => /: write-statuses with credential cred-\d+ to acme\/project must succeed$/.test(line)));
 });
 
 test('a read-only credential whose secret does not work is reported', async () => {
@@ -133,6 +135,11 @@ test('a refresh that changes the permissions or moves the expiry back is reporte
     },
   }));
   assert.deepEqual(lines.map((line) => line.split(' ').slice(3, 5).join(' ')), [
+    'refreshRunCredential granted',
+    'refreshRunCredential changed',
+    'refreshRunCredential must',
+    'write-code with',
+    'write-statuses with',
     'refreshRunCredential granted',
     'refreshRunCredential changed',
     'refreshRunCredential must',

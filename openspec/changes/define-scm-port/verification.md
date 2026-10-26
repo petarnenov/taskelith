@@ -135,7 +135,11 @@ On 2026-10-26 the owner, through the coordinator, chose to fix findings 1 to 4 a
 
 | # | Severity | Finding | Resolution |
 | --- | --- | --- | --- |
-| 1 | Medium | The refresh case now refreshes only a credential with every permission, so a provider that widens a refreshed credential to every permission, in its result and on the service, passes; pass 3's fix replaced the `read-code` and `write-code` grant. | Open: brought to the owner through the coordinator. |
+| 1 | Medium | The refresh case now refreshes only a credential with every permission, so a provider that widens a refreshed credential to every permission, in its result and on the service, passes; pass 3's fix replaced the `read-code` and `write-code` grant. | The refresh case refreshes a read-only credential as well as the one with every permission; each must keep its effective permissions and gets the native probes. New defective variant: a refresh that widens a credential to every permission, in its result and on the service. Checked in pass 5. |
+
+### Owner decision after pass 4
+
+On 2026-10-26 the owner, through the coordinator, chose to fix pass 4 finding 1 and permitted one more exceptional pass by the same reviewer, limited to confirming that fix and checking that its diff introduces nothing new.
 
 ## Final checks
 
@@ -150,7 +154,6 @@ Pending.
 
 ## Remaining gates
 
-- The owner's decision on pass 4 finding 1.
 
 
 - Integration into `dev` and the archive by the coordinator.

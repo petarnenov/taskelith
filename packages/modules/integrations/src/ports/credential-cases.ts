@@ -44,22 +44,8 @@ export async function checkChangeRequestAndStatusCredentials(
 // A refresh keeps the grant, extends it, and replaces the secret; the old
 // secret must stop working, and the new one gets the native probes again.
 export async function checkRefreshedCredential(run: ConformanceCase, fixture: SourceControlConformanceFixture): Promise<void> {
-  const original = await issueCredential(run, fixture, 'conformance-refresh', SCM_PERMISSIONS);
-  const refreshed = await succeeds(
-    run,
-    'refreshRunCredential',
-    () => fixture.provider.refreshRunCredential({ credentialId: original.credentialId }),
-    readRunCredential,
-  );
-  checkGrant(run, 'refreshRunCredential', grantOf(original), refreshed);
-  run.expect(isSameSet(refreshed.permissions, original.permissions), 'refreshRunCredential changed the permissions');
-  run.expect(refreshed.secret !== original.secret, 'refreshRunCredential must return a new secret');
-  run.expect(
-    Date.parse(refreshed.expiresAt) > Date.parse(original.expiresAt),
-    `refreshRunCredential must extend expiresAt beyond ${original.expiresAt}, not return ${refreshed.expiresAt}`,
-  );
-  await expectEnded(run, fixture, original, 'after its refresh');
-  await expectGrantedAccess(run, fixture, refreshed);
+  await expectRefreshed(run, fixture, 'conformance-refresh-read-only', READ_ONLY);
+  await expectRefreshed(run, fixture, 'conformance-refresh', SCM_PERMISSIONS);
 }
 
 // The access before the revocation shows that the refusals after it come
@@ -89,6 +75,30 @@ export async function checkCredentialIsolation(run: ConformanceCase, fixture: So
   await revoke(run, fixture, laterReader);
   await expectEnded(run, fixture, laterReader, 'after its revocation');
   await expectAllowed(run, fixture, { permission: 'write-code', credential: laterWriter, repository: project, when: afterRevocation });
+}
+
+async function expectRefreshed(
+  run: ConformanceCase,
+  fixture: SourceControlConformanceFixture,
+  runId: string,
+  permissions: readonly string[],
+): Promise<void> {
+  const original = await issueCredential(run, fixture, runId, permissions);
+  const refreshed = await succeeds(
+    run,
+    'refreshRunCredential',
+    () => fixture.provider.refreshRunCredential({ credentialId: original.credentialId }),
+    readRunCredential,
+  );
+  checkGrant(run, 'refreshRunCredential', grantOf(original), refreshed);
+  run.expect(isSameSet(refreshed.permissions, original.permissions), 'refreshRunCredential changed the permissions');
+  run.expect(refreshed.secret !== original.secret, 'refreshRunCredential must return a new secret');
+  run.expect(
+    Date.parse(refreshed.expiresAt) > Date.parse(original.expiresAt),
+    `refreshRunCredential must extend expiresAt beyond ${original.expiresAt}, not return ${refreshed.expiresAt}`,
+  );
+  await expectEnded(run, fixture, original, 'after its refresh');
+  await expectGrantedAccess(run, fixture, refreshed);
 }
 
 async function issueCredential(

@@ -38,6 +38,7 @@ export interface ScmDefects {
   readonly refusesPermission?: string;
   readonly grantsOnPaper?: string;
   readonly onlyPendingBlocksFor?: string;
+  readonly refreshWidens?: boolean;
 }
 
 // The service's own configuration, which a conforming plugin respects.
@@ -163,7 +164,8 @@ export class InMemoryScm {
     const previous = stored.credential;
     const secret = this.defects.refreshKeepsSecret ? previous.secret : `secret-${this.next()}`;
     const expiresAt = this.defects.refreshKeepsExpiry ? previous.expiresAt : extendedExpiry(previous.expiresAt);
-    const credential = { ...previous, secret, expiresAt };
+    const permissions = this.defects.refreshWidens ? [...SCM_PERMISSIONS] : previous.permissions;
+    const credential = { ...previous, secret, expiresAt, permissions };
     if (!this.defects.refreshKeepsOldSecret) stored.ended = true;
     this.credentials.set(secret, { credential, ended: false, unscoped: Boolean(this.defects.refreshUnscopes) });
     return ok(credential);

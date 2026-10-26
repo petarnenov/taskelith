@@ -34,6 +34,7 @@ test('a read-only credential that can write is reported', async () => {
   assert.deepEqual(cases(lines), [
     'read-only credential outcome',
     'change request and status credentials outcome',
+    'refreshed credential outcome',
     'credential isolation outcome',
   ]);
   assert.match(lines[0]!, /^read-only credential outcome: write-code with credential cred-\d+ to acme\/project must fail with forbidden$/);
@@ -60,26 +61,33 @@ test('a credential not limited to the project repositories is reported', async (
 
 test('a refreshed credential that the service widened is reported', async () => {
   const lines = await defective({ refreshUnscopes: true });
-  assert.deepEqual(headings(lines), Array(4).fill('refreshed credential outcome'));
+  assert.deepEqual(headings(lines), Array(5).fill('refreshed credential outcome'));
   assert.ok(lines.every((line) => line.endsWith('to acme/other must fail with forbidden')));
 });
 
 test('a refresh that does not extend the expiry is reported', async () => {
   const lines = await defective({ refreshKeepsExpiry: true });
-  assert.deepEqual(headings(lines), ['refreshed credential outcome']);
+  assert.deepEqual(headings(lines), Array(2).fill('refreshed credential outcome'));
   assert.match(lines[0]!, /refreshRunCredential must extend expiresAt beyond/);
 });
 
 test('a refresh that returns the same secret with a later expiry is reported', async () => {
   const lines = await defective({ refreshKeepsSecret: true });
   assert.equal(lines[0], 'refreshed credential outcome: refreshRunCredential must return a new secret');
-  assert.match(lines[2]!, /write-code with credential cred-\d+ to acme\/project after its refresh must fail with forbidden/);
+  assert.match(lines[4]!, /write-code with credential cred-\d+ to acme\/project after its refresh must fail with forbidden/);
 });
 
 test('a refresh that leaves the previous secret working is reported', async () => {
   const lines = await defective({ refreshKeepsOldSecret: true });
-  assert.deepEqual(headings(lines), Array(4).fill('refreshed credential outcome'));
+  assert.deepEqual(headings(lines), Array(5).fill('refreshed credential outcome'));
   assert.ok(lines.every((line) => line.endsWith('after its refresh must fail with forbidden')));
+});
+
+test('a refresh that widens a credential to every permission is reported', async () => {
+  assert.deepEqual(await defective({ refreshWidens: true }), [
+    'refreshed credential outcome: refreshRunCredential granted write-code to a request without it',
+    'refreshed credential outcome: refreshRunCredential changed the permissions',
+  ]);
 });
 
 test('one secret shared between runs is reported', async () => {
@@ -106,6 +114,7 @@ test('a credential that reads outside the project is reported', async () => {
 test('a refreshed or revoked credential that still reads is reported', async () => {
   const lines = await defective({ endedCanRead: true });
   assert.deepEqual(lines.map((line) => line.replace(/cred-\d+/, 'cred')), [
+    'refreshed credential outcome: read-code with credential cred to acme/project after its refresh must fail with forbidden',
     'refreshed credential outcome: read-code with credential cred to acme/project after its refresh must fail with forbidden',
     'revoked credential outcome: read-code with credential cred to acme/project after its revocation must fail with forbidden',
     'credential isolation outcome: read-code with credential cred to acme/project after its revocation must fail with forbidden',
