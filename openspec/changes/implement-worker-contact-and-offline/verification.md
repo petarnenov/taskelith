@@ -17,12 +17,13 @@ macOS x86_64, Node v24.22.1 (`.nvmrc`), Docker with the Compose services of `mak
 
 ## Author self-check
 
-- **Heartbeat:** a schema-valid `worker.heartbeat` at once and every `10s`, only while connected; a refused send is logged and replaced (`worker-contact.test.ts`); the wired worker publishes it on its own heartbeat subject over core NATS on each connection (`worker-start.test.ts`).
-- **Status watcher:** `disconnect` ends the link-up work and marks the link down; `reconnect` restores it and reports again; a closed link is closed and replaced; a failed serve or close reaches the caller after the link is closed (`worker-contact.test.ts`).
-- **Offline mode and deadlines:** offline from the start until the first connection; a link down for the `30s` timeout makes the worker offline, a link up within it does not; offline, no operation begins, an operation begun online runs to its deadline and expires, and the next one for the same execution waits for contact and reports `reportsNotStarted`; a stop while waiting journals nothing; a cancellation while waiting ends the launch without a request (`worker-contact.test.ts`, `offline-launch.test.ts`, `worker-start.test.ts`).
-- **Inventory on reconnect:** an unsolicited, schema-valid snapshot without `requestId` on each connection and reconnection, retried with the transport backoff, and ended with the link (`inventory-report.test.ts`, `worker-start.test.ts`).
+- **Heartbeat:** a schema-valid `worker.heartbeat` at once and every `10s`, only while connected; a refused send is logged and replaced (`worker-contact.test.ts`); the wired worker publishes it on its own heartbeat subject over core NATS on each connection, and on a reconnect at once, before any interval passes (`worker-start.test.ts`).
+- **Status watcher:** `disconnect` ends the link-up work and marks the link down; `reconnect` restores it and reports again; a closed link is closed and replaced; a failed serve or close reaches the caller after the link is closed; a failed serve aborts the link-up work and the link closes only after it ended; a hundred status events leave the abort listeners unchanged (`worker-contact.test.ts`).
+- **Offline mode and deadlines:** offline from the start until the first connection; a link down for the `30s` timeout makes the worker offline, a link up within it does not; offline, no operation begins, an operation begun online runs to its deadline and expires, and the next one for the same execution waits for contact and reports `reportsNotStarted`; contact lost before a wait's continuation runs makes the launch wait again with no W2; a stop while waiting journals nothing; a cancellation while waiting ends the launch without a request (`worker-contact.test.ts`, `offline-launch.test.ts`, `worker-start.test.ts`).
+- **Inventory on reconnect:** an unsolicited, schema-valid snapshot without `requestId` on each connection and reconnection, retried with the transport backoff, and ended with the link, including between two parts of a report (`inventory-report.test.ts`, `worker-start.test.ts`).
 - **First connect:** a broker unreachable at the start leaves the worker running and offline; it retries after 5 s and 10 s and connects; a launching worker begins no authorization before it (`worker-contact.test.ts`, `worker-start.test.ts`).
 - **Decoupled reconciliation:** without a launch authority the orchestrator seals a pending W2, recovers a written record, removes the record once its terminal fact is confirmed, defers only the re-authorization of an expired operation, and requests nothing (`offline-launch.test.ts`); the worker builds the host without a command and reconciles (`worker-start.test.ts`); a host that cannot be built defers with its reason, and only a launching worker fails its start then; the supervision adapter seals and removes without a program and refuses `prepare` (`execution-supervision.test.ts`); the containment parent is read on Linux without a command (`worker-settings.test.ts`).
+- **Runtime failure:** a session that fails while the orchestrator runs stops the orchestrator, closes the root last, settles `stopped`, and is reported with exit status 1; `stop` then rejects with the failure (`worker-start.test.ts`).
 - **Timers:** every new test drives time through injected sleeps (`ManualTimers`) or the deadline clock; none sleeps for real. The wiring tests in `worker-start.test.ts` keep their existing bounded polling.
 - **Comment rule:** `npm run verify:comments` passes.
 - **Shared test:** `apps/control-plane/test/control-plane-api.integration.test.ts` waits for the worker's recorded contact instead of flushing `RunningWorker.transport`, which no longer exists, and skips the unsolicited inventory reports when it reads the journaled observations.
@@ -32,12 +33,12 @@ macOS x86_64, Node v24.22.1 (`.nvmrc`), Docker with the Compose services of `mak
 
 | Check | Result |
 | --- | --- |
-| `make verify` at `e9a5341` | passed |
-| Tests | 1637 tests, 0 failures |
-| Coverage (all) | 99.31% lines, 91.76% branches, 98.96% functions |
-| Coverage (changed worker files) | `worker-contact.js`, `heartbeat-publisher.js` 100/100/100; `broker-session.js` 100/96.67/100; `inventory-report.js` 100/86.67/100; `worker-start.js` 99.14/90.00/96.55; `launch-orchestrator.js` 98.50/90.61/95.00; `settings.js` 100/100/100; `execution-supervision.js` 97.25/84.91/89.47; `command-intake.js` 99.23/87.04/100; `main.js` 90.91/82.93/85.00 (lines/branches/functions, %) |
+| `make verify` at `40b5808` (pass 1 fixes) | passed; earlier at `e9a5341` |
+| Tests | 1642 tests, 0 failures |
+| Coverage (all) | 99.32% lines, 91.79% branches, 98.99% functions |
+| Coverage (changed worker files) | `worker-contact.js`, `heartbeat-publisher.js`, `task-group.js` 100/100/100; `broker-session.js` 100/96.77/100; `inventory-report.js` 100/90.91/100; `worker-start.js` 99.17/90.65/100; `launch-orchestrator.js` 98.51/90.74/95.00; `settings.js` 100/100/100; `execution-supervision.js` 97.25/84.91/89.47; `command-intake.js` 99.23/87.04/100; `main.js` 90.98/82.93/85.00 (lines/branches/functions, %) |
 | `npm run openspec -- validate implement-worker-contact-and-offline --strict` | valid |
-| `npm run verify:comments` | passes at `e9a5341`; at `7eaa72e` it reported one comment of three lines in `worker-contact.ts`, shortened in `e9a5341` |
+| `npm run verify:comments` | passes at `40b5808` and `e9a5341`; at `7eaa72e` it reported one comment of three lines in `worker-contact.ts`, shortened in `e9a5341` |
 
 ## Independent review
 
