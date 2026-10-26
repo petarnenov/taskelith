@@ -7,6 +7,7 @@ import {
   REPORTED_SEALS_LIMIT,
   unconfirmedSealedExecutions,
   type AuthorizationOutcome,
+  type ExecutionId,
   type ExecutionState,
   type JournaledCancellation,
   type JournaledExecution,
@@ -110,6 +111,33 @@ test('a cancellation is forwarded until its evidence is recorded and stops the l
 test('a cancelled execution with an unused grant is sealed and not relaunched', () => {
   const cancellation: JournaledCancellation = { commandId: COMMAND, target: { kind: 'execution', executionId: EXECUTION }, evidenceRecorded: true };
   assert.deepEqual(plan([execution(['granted'], 'authorized')], [cancellation]), [seal]);
+});
+
+const SUPERSEDED = id('ExecutionId', 'execution-0');
+const superseded: JournaledExecution = { ...execution(['granted'], 'not-started'), executionId: SUPERSEDED };
+const executionCancellation = (executionId: ExecutionId): JournaledCancellation => ({
+  commandId: COMMAND,
+  target: { kind: 'execution', executionId },
+  evidenceRecorded: true,
+});
+
+test('a cancellation of a superseded execution leaves the last one to be retried or relaunched', () => {
+  const cancellation = executionCancellation(SUPERSEDED);
+  assert.deepEqual(plan([superseded, execution(['rejected-retryable'])], [cancellation]), [{ kind: 'retry-authorization', executionId: EXECUTION }]);
+  assert.deepEqual(plan([superseded, execution(['pending'])], [cancellation]), [seal, continueLaunch]);
+  assert.deepEqual(plan([superseded, execution(['granted'], 'not-started')], [cancellation]), [continueLaunch]);
+});
+
+test('a cancelled last execution sealed before its start ends the intent', () => {
+  const cancellation = executionCancellation(EXECUTION);
+  assert.deepEqual(plan([superseded, execution(['granted'], 'not-started')], [cancellation]), []);
+  assert.deepEqual(plan([superseded, execution(['granted'], 'authorized')], [cancellation]), [seal]);
+  assert.deepEqual(plan([superseded, execution(['rejected-retryable'])], [cancellation]), []);
+});
+
+test('an attempt cancellation still stops every execution of its intent', () => {
+  assert.deepEqual(plan([superseded, execution(['pending'])], [attemptCancellation(true)]), [seal]);
+  assert.deepEqual(plan([superseded, execution(['rejected-retryable'])], [attemptCancellation(true)]), []);
 });
 
 function unconfirmed(executions: JournaledExecution[]) {

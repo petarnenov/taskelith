@@ -6,14 +6,15 @@ import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import type { ControlPlaneStore, ControlPlaneTransaction } from './control-plane-store.js';
 import { evaluateSnapshots } from './inventory-reconciliation.js';
 import { authenticateObserver, retireJournal, type ProducerStanding, type ReconciliationContext } from './journal-reconciliation.js';
-import { OBSERVATION_EFFECTS, type ObservationEffect } from './observation-effects.js';
+import { OBSERVATION_EFFECTS, rejectedEffect, type ObservationEffect } from './observation-effects.js';
 import { isNotConsumed, notConsumed, parseObservation, type Observation, type ObservationMessage } from './observation.js';
 import { PendingLog } from './pending-log.js';
 
 // The durable consumer of every worker's observations, and its inbox.
 export const OBSERVATION_CONSUMER = 'control-plane-observations';
 
-// `rejected`: recorded and confirmed without effect, as the domain refused it.
+// `rejected`: recorded and confirmed as the domain refused it, with only the
+// evidence that `rejectedEffect` keeps.
 export type ObservationOutcome = 'applied' | 'rejected' | 'duplicate';
 
 const CONFIRMATION = 'execution.observations.confirmed';
@@ -61,7 +62,8 @@ export class ObservationService {
     if (isNotConsumed(applied.error)) return this.#leaveUnconsumed(observation);
     if (!DOMAIN_REFUSALS.has(applied.error.code)) return applied;
     this.#logRejection(observation, applied.error);
-    return this.#transaction('committed', (tx, context) => this.#record(tx, context, observation, NO_EFFECT, 'rejected'));
+    const evidence = rejectedEffect(observation, applied.error) ?? NO_EFFECT;
+    return this.#transaction('committed', (tx, context) => this.#record(tx, context, observation, evidence, 'rejected'));
   }
 
   // Decision 1 with contact before the inbox, and the pending snapshots that
