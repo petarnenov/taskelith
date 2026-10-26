@@ -75,10 +75,14 @@ export class LinuxProcessInspector implements ProcessInspector {
   }
 
   identity(pid: number): Result<ProcessIdentity | undefined> {
-    const boot = this.bootId();
-    if (!boot.ok) return boot;
-    const entry = this.#entry(pid, boot.value);
+    const entry = this.entry(pid);
     return entry.ok ? ok(entry.value?.identity) : entry;
+  }
+
+  // A running process with its group, or undefined if none has the ID.
+  entry(pid: number): Result<ProcessEntry | undefined> {
+    const boot = this.bootId();
+    return boot.ok ? this.#entry(pid, boot.value) : boot;
   }
 
   // Not one instant on Linux: termination evidence there is the containment.
@@ -159,9 +163,7 @@ export class LinuxContainment implements Containment {
 
   populated(): Result<boolean> {
     const text = required(join(this.path, 'cgroup.events'));
-    if (!text.ok) return text;
-    const match = /^populated ([01])$/m.exec(text.value);
-    return match === null ? err(failure('unavailable', 'cgroup.events has no populated line')) : ok(match[1] === '1');
+    return text.ok ? parsePopulated(text.value) : text;
   }
 
   kill(): Result<void> {
@@ -175,6 +177,79 @@ export class LinuxContainment implements Containment {
     } catch (error) {
       return err(failure('unavailable', `cannot remove ${this.path}: ${(error as Error).message}`));
     }
+  }
+}
+
+// `cgroup.events` counts descendant cgroups too.
+function parsePopulated(events: string): Result<boolean> {
+  const match = /^populated ([01])$/m.exec(events);
+  return match === null ? err(failure('unavailable', 'cgroup.events has no populated line')) : ok(match[1] === '1');
+}
+
+// A populated containment, by its directory name, with its members.
+export interface PopulatedCgroup {
+  readonly name: string;
+  readonly path: string;
+  readonly processes: readonly ProcessEntry[];
+}
+
+// The populated containments under the delegated parent; a child creates no
+// cgroup (supervisor identity 8), so `cgroup.procs` holds the whole set.
+export class LinuxContainmentScan {
+  readonly #parent: string;
+  readonly #inspector: LinuxProcessInspector;
+
+  constructor(parent: string, inspector: LinuxProcessInspector) {
+    this.#parent = parent;
+    this.#inspector = inspector;
+  }
+
+  populated(): Result<readonly PopulatedCgroup[]> {
+    const names = this.#names();
+    if (!names.ok) return names;
+    const found: PopulatedCgroup[] = [];
+    for (const name of names.value) {
+      const path = join(this.#parent, name);
+      const populated = this.#populated(path);
+      if (!populated.ok) return populated;
+      if (!populated.value) continue;
+      const processes = this.#members(path);
+      if (!processes.ok) return processes;
+      found.push({ name, path, processes: processes.value });
+    }
+    return ok(found);
+  }
+
+  // A containment removed since the listing is empty.
+  #populated(path: string): Result<boolean> {
+    const text = readText(join(path, 'cgroup.events'));
+    if (!text.ok) return text;
+    return text.value === undefined ? ok(false) : parsePopulated(text.value);
+  }
+
+  // A missing parent holds no containment.
+  #names(): Result<readonly string[]> {
+    try {
+      return ok(readdirSync(this.#parent, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map(({ name }) => name));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return ok([]);
+      return err(failure('unavailable', `cannot list ${this.#parent}: ${(error as Error).message}`));
+    }
+  }
+
+  // A member that exits before it is read is left out.
+  #members(path: string): Result<readonly ProcessEntry[]> {
+    const text = readText(join(path, 'cgroup.procs'));
+    if (!text.ok) return text;
+    const members: ProcessEntry[] = [];
+    for (const line of (text.value ?? '').split('\n').filter((member) => member !== '')) {
+      const pid = Number(line);
+      if (!Number.isSafeInteger(pid) || pid < 1) return err(failure('invalid', `${path}/cgroup.procs names no process`));
+      const entry = this.#inspector.entry(pid);
+      if (!entry.ok) return entry;
+      if (entry.value !== undefined) members.push(entry.value);
+    }
+    return ok(members);
   }
 }
 

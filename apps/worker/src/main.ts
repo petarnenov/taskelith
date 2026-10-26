@@ -8,7 +8,7 @@ import { connectWorkerTransport } from '@taskelith/nats';
 import { redactFailure, redactSecrets } from '@taskelith/secrets';
 import { HttpEnrollmentClient, HttpLaunchAuthorityClient } from '@taskelith/worker-control-plane-client';
 import { hostPlatform } from '@taskelith/worker-supervisor';
-import { fileRecordListing, fileSupervision } from './execution-supervision.js';
+import { containmentScan, fileRecordListing, fileSupervision } from './execution-supervision.js';
 import {
   CONTROL_PLANE_TIMEOUT_MILLISECONDS,
   currentHost,
@@ -93,10 +93,12 @@ function launchHost(launch: LaunchSettings, executions: string, version: string)
     ...(containmentParent === undefined ? {} : { containmentParent }),
     ...(executionAccount === undefined ? {} : { executionAccount }),
   };
+  const containments = containmentScan(platform.value, containmentParent);
   return ok({
     clock: platform.value.clock,
     supervision: fileSupervision({ executions, platform: platform.value, program }),
     records: fileRecordListing(executions),
+    ...(containments === undefined ? {} : { containments }),
   });
 }
 

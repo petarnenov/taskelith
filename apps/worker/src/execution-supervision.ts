@@ -4,6 +4,8 @@ import type { ExecutionId, ExecutionProcess } from '@taskelith/execution';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import {
   FileRecordStore,
+  LinuxContainmentScan,
+  LinuxProcessInspector,
   parseLaunch,
   prepareRecord,
   readReportedFacts,
@@ -23,6 +25,7 @@ import {
   type WorkerSupervisionDependencies,
 } from '@taskelith/worker-supervisor';
 import type {
+  ContainmentScan,
   ExecutionSupervision,
   LaunchPlan,
   RecordListing,
@@ -149,5 +152,20 @@ export function fileRecordListing(executions: string): RecordListing {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return ok(Object.freeze([]));
       return err(failure('unavailable', `cannot list ${executions}: ${(error as Error).message}`));
     }
+  };
+}
+
+// No containment exists on macOS, so surviving processes cannot be found
+// there (worker journal contract, section 11).
+export function containmentScan(platform: Platform, containmentParent: string | undefined): ContainmentScan | undefined {
+  if (platform.name !== 'linux' || containmentParent === undefined) return undefined;
+  const scan = new LinuxContainmentScan(containmentParent, new LinuxProcessInspector());
+  return () => {
+    const found = scan.populated();
+    if (!found.ok) return found;
+    return ok(Object.freeze(found.value.map(({ name, path, processes }) => ({
+      name, containment: path,
+      processes: processes.map(({ identity, processGroupId }) => ({ platform: 'linux' as const, ...identity, processGroupId })),
+    }))));
   };
 }
