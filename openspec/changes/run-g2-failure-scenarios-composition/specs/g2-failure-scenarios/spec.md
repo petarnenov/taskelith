@@ -11,22 +11,48 @@ Every G2 failure scenario SHALL record its result through the harness's scenario
 - **THEN** that file gains the scenario's result with its seed, rerun hint, host, architecture, commit, target, and outcome
 
 ### Requirement: Fresh-composition happy path
-From a fresh Compose installation, an admitted task SHALL be submitted, assigned to the enrolled worker, and executed, and the control plane SHALL persist its ended result; the scenario SHALL run on an arm64 host.
+`make scenario-fresh-composition` SHALL run the installation smoke on a fresh throwaway Compose project: an admitted task is submitted, assigned to the enrolled Linux worker, and executed, and the control plane persists its result, which SHALL be `ended` and exited with code 0 and a proven start. The scenario SHALL be run on an arm64 host.
 
 #### Scenario: Happy path on Apple Silicon
 - **WHEN** the scenario runs on an arm64 macOS host against a freshly built and started installation
-- **THEN** the stored result of the task is `ended` with an exited outcome, and the result is recorded with architecture `arm64` and target `compose-installation`
+- **THEN** the stored result of the task is `ended`, exited with code 0 and a proven start, and the result is recorded with architecture `arm64` and target `compose-installation`
+
+#### Scenario: Smoke fails
+- **WHEN** the installation smoke fails
+- **THEN** the scenario records the outcome `failed` and fails
+
+### Requirement: Missing journal in Compose
+`make scenario-worker-disk-loss` SHALL first kill the worker container of a fresh Compose project while an execution of a task is `started`, delete the journal and keep the identity, deleting only files inside that project's worker volume, and start the worker again. The worker SHALL refuse to start with `journal-loss` and SHALL create no journal.
+
+#### Scenario: Journal missing with an identity
+- **WHEN** the killed worker's journal is deleted, its identity is kept, and the worker is started
+- **THEN** it logs `journal-loss` and stops, and its data root still holds the identity and no journal
 
 ### Requirement: Worker disk loss
-When the worker of the Compose installation loses its persistent volume during an attempt, a new worker SHALL be enrolled, and the old attempt SHALL be reported `uncertain`, never retried blindly.
+The same scenario SHALL then delete the whole data root, revoke the lost worker, and enroll a new worker. The new worker SHALL have a new identity; the old execution SHALL stay `started` with `uncertain` evidence, its assignment `accepted` with its reservation held, and its task's result `pending`; and a new task SHALL exit with code 0 on the new worker, whose assignment ends and releases its reservation.
 
-#### Scenario: Disk loss and re-enrolment
-- **WHEN** the worker's volume is removed during an attempt and a new worker is enrolled
-- **THEN** the old attempt is `uncertain`, the new worker is enrolled under a new identity, and the result is recorded with target `compose-installation`
+#### Scenario: Data root lost and a new worker enrolled
+- **WHEN** the worker's whole data root is deleted, the lost worker is revoked, and a new worker is enrolled
+- **THEN** the old execution is `started` with `uncertain` evidence, its assignment keeps its reservation, its task stays pending, a new task exits with code 0 on the new worker, and the result is recorded with target `compose-installation`
 
 ### Requirement: Untimed worker kill
-When the worker container of the Compose installation is killed by `SIGKILL` at an untimed moment of an attempt and restarted, reconciliation SHALL end the attempt consistently, with no attempt left running without an owner.
+`make scenario-worker-kill` SHALL send `SIGKILL` to the worker container of a fresh Compose project at a moment derived from the seed, from 0 to 25 seconds after a task's submission, with no crash point, and SHALL restart it. Within two minutes, at least one execution of the task SHALL exist, and each SHALL be `exited` or `not-started` or carry `uncertain` evidence.
 
 #### Scenario: Kill and reconcile
-- **WHEN** the worker container receives `SIGKILL` during an attempt and is restarted
-- **THEN** the attempt's state after reconciliation is consistent with the worker's journal, and the result is recorded with target `compose-installation`
+- **WHEN** the worker container receives `SIGKILL` during or before an attempt and is restarted
+- **THEN** each execution of the task ended or is uncertain within two minutes
+
+#### Scenario: No consistent state
+- **WHEN** an execution of the task stays neither terminal nor uncertain for two minutes
+- **THEN** the scenario records the outcome `failed` with the step it failed in, and fails
+
+### Requirement: Kill reconciliation agrees with the journal
+After the reconciliation of the untimed kill, the state and certainty of each execution in the control plane SHALL equal those in a copy of the stopped worker's journal, and the record's `detail` SHALL name the kill delay, the executions before the kill and after the reconciliation, the task result, and the worker's `worker.execution` log events.
+
+#### Scenario: Agreement recorded
+- **WHEN** the control plane and the journal agree after the kill
+- **THEN** the result is recorded with target `compose-installation`, the outcome `passed`, and the observed state in `detail`
+
+#### Scenario: Disagreement
+- **WHEN** the control plane and the journal disagree on an execution
+- **THEN** the scenario records the outcome `failed` and fails
