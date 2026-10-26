@@ -1,26 +1,37 @@
 import { createHash } from 'node:crypto';
 import { SUPPORTED_PROTOCOL_VERSIONS, commonProtocolVersion, type MessageSchemas } from '@taskelith/contracts';
 import {
+  decideStartObservation,
   endAttempt,
   openAttempt,
   parseExitStatus,
+  parseRecoveryEpoch,
   recordExecutionEvidence,
   recordExit,
   recordNotStarted,
+  recordStartObservation,
   type AssignmentId,
   type AttemptId,
   type ExecutionEvidenceKind,
   type ExecutionId,
   type ExecutionReport,
+  type LaunchAuthId,
+  type LaunchGrant,
   type ObservationResult,
+  type StartContext,
+  type StartDecision,
+  type StartObservation,
+  type StartRecord,
   type Task,
 } from '@taskelith/execution';
 import { err, failure, ok, type EventId, type Instant, type Result } from '@taskelith/kernel';
 import {
   acceptAssignment,
   automaticRetryOf,
+  cancelExecutionInTransaction,
   refuseInTransaction,
   releaseInTransaction,
+  supersedeUngrantedInTransaction,
   type Assignment,
   type HardControl,
   type Refusal,
@@ -28,13 +39,17 @@ import {
 } from '@taskelith/scheduling';
 import { nextAttemptIdOf } from './attempt-identities.js';
 import type { ControlPlaneTransaction } from './control-plane-store.js';
+import { requestInventory } from './inventory-reconciliation.js';
+import type { ReconciliationContext } from './journal-reconciliation.js';
+import { grantIn, installationState } from './launch-authority.js';
 import type { Observation } from './observation.js';
-import type { PendingLog } from './pending-log.js';
 import { closeDelegationOf } from './task-ending.js';
 
 // What each consumed observation type changes, inside the transaction that
 // records it; a domain refusal makes the observation `rejected`.
-export type ObservationEffect = (tx: ControlPlaneTransaction, observation: Observation, at: Instant, log: PendingLog) => Promise<Result<void>>;
+export type ObservationEffect = (
+  tx: ControlPlaneTransaction, observation: Observation, at: Instant, context: ReconciliationContext,
+) => Promise<Result<void>>;
 
 type Payload<Name extends keyof MessageSchemas> = MessageSchemas[Name];
 
@@ -47,6 +62,14 @@ interface TerminalFact {
 }
 
 const OFFER = 'execution.assignment.offer';
+
+// Item 21d D2: the launch rejections that release the assignment, and those
+// that request the worker's inventory; any other one is only recorded.
+const RELEASING_REJECTIONS: ReadonlySet<string> = new Set([
+  'worker-not-authorized', 'stale-recovery-epoch', 'capacity-not-reserved', 'admission-not-current', 'gate-not-passed',
+  'artifact-revision-changed', 'policy-revision-changed',
+]);
+const RECONCILING_REJECTIONS: ReadonlySet<string> = new Set(['stale-recovery-epoch', 'execution-conflict']);
 
 async function acceptance(tx: ControlPlaneTransaction, observation: Observation, at: Instant): Promise<Result<void>> {
   const { assignmentId } = observation.payload as Payload<'AssignmentAcceptedPayload'>;
@@ -148,14 +171,126 @@ function executionEvidence(kind: ExecutionEvidenceKind): ObservationEffect {
   };
 }
 
-// 21c decision 13: no domain effect, and never current work.
-async function unrecordedProcess(_tx: ControlPlaneTransaction, observation: Observation, _at: Instant, log: PendingLog): Promise<Result<void>> {
+// 21c decision 13 and 21d D5: never current work; recorded for the
+// reconciliation queue beside its warning.
+async function unrecordedProcess(
+  tx: ControlPlaneTransaction, observation: Observation, at: Instant, context: ReconciliationContext,
+): Promise<Result<void>> {
   const { containment, processes } = observation.payload as Payload<'UnrecordedProcessPayload'>;
-  const { workerId, observationId } = observation.position;
-  log.warn({ workerId, observationId, correlationId: observation.correlationId }, 'execution.unrecorded-process', {
+  const { workerId, journalId, observationId } = observation.position;
+  context.log.warn({ workerId, observationId, correlationId: observation.correlationId }, 'execution.unrecorded-process', {
     containment, processCount: processes.length,
   });
-  return ok(undefined);
+  return tx.unrecordedProcesses.record({ workerId, journalId, observationId, containment, processCount: processes.length, recordedAt: at });
+}
+
+// Item 21d D1: decided as launch authorization section 7 requires, by the
+// grant its `launchAuthId` names; only an unauthorized start sends a command.
+async function start(tx: ControlPlaneTransaction, observation: Observation, at: Instant, context: ReconciliationContext): Promise<Result<void>> {
+  const payload = observation.payload as Payload<'ExecutionStartedPayload'>;
+  const loaded = await attemptTask(tx, observation);
+  if (!loaded.ok) return loaded;
+  const recoveryEpoch = parseRecoveryEpoch(payload.recoveryEpoch);
+  if (!recoveryEpoch.ok) return recoveryEpoch;
+  const launchAuthId = payload.launchAuthId as LaunchAuthId;
+  const reported: StartObservation = {
+    workerId: observation.position.workerId, launchAuthId, executionId: payload.executionId as ExecutionId, recoveryEpoch: recoveryEpoch.value,
+  };
+  const startContext = await startContextOf(tx, launchAuthId);
+  if (!startContext.ok) return startContext;
+  const task = loaded.value;
+  const recorded = recordStart(task, reported, startContext.value, at);
+  if (!recorded.ok) return recorded;
+  if (recorded.value.task !== task) {
+    const stored = await tx.tasks.replace(recorded.value.task, task.generation);
+    if (!stored.ok) return stored;
+  }
+  return followStart(tx, observation, recorded.value.decision, context);
+}
+
+async function startContextOf(tx: ControlPlaneTransaction, launchAuthId: LaunchAuthId): Promise<Result<Omit<StartContext, 'task'>>> {
+  const installation = await installationState(tx);
+  if (!installation.ok) return installation;
+  const grant = await namedGrant(tx, launchAuthId);
+  if (!grant.ok) return grant;
+  return ok({ installation: installation.value, ...(grant.value === undefined ? {} : { grant: grant.value }) });
+}
+
+// The grant the authority recorded under that identity, if any.
+async function namedGrant(tx: ControlPlaneTransaction, launchAuthId: LaunchAuthId): Promise<Result<LaunchGrant | undefined>> {
+  const recorded = await tx.launches.byLaunchAuthId(launchAuthId);
+  if (!recorded.ok || recorded.value === undefined) return recorded.ok ? ok(undefined) : recorded;
+  const task = await tx.tasks.get(recorded.value.taskId);
+  return task.ok ? ok(grantIn(task.value, launchAuthId)) : task;
+}
+
+// An execution the task does not hold is decided without being recorded.
+function recordStart(task: Task, observation: StartObservation, context: Omit<StartContext, 'task'>, at: Instant): Result<StartRecord> {
+  const held = task.attempts.some((attempt) => attempt.executions.some(({ id }) => id === observation.executionId));
+  if (held) return recordStartObservation(task, observation, context, at);
+  return ok(Object.freeze({ decision: decideStartObservation(observation, { ...context, task }), task }));
+}
+
+async function followStart(
+  tx: ControlPlaneTransaction, observation: Observation, decision: StartDecision, context: ReconciliationContext,
+): Promise<Result<void>> {
+  if (decision === 'started' || decision === 'historical' || decision === 'duplicate') return ok(undefined);
+  const { executionId, launchAuthId, assignmentId } = observation.payload as Payload<'ExecutionStartedPayload'>;
+  const { workerId, observationId } = observation.position;
+  context.log.warn({ workerId, observationId, correlationId: observation.correlationId }, 'execution.start.evidence', {
+    decision, executionId, launchAuthId,
+  });
+  return decision === 'unauthorized-start' ? cancelUnauthorizedStart(tx, observation, assignmentId as AssignmentId, executionId as ExecutionId) : ok(undefined);
+}
+
+// The cancellation goes to the reporting worker, under its assignment.
+async function cancelUnauthorizedStart(
+  tx: ControlPlaneTransaction, observation: Observation, assignmentId: AssignmentId, executionId: ExecutionId,
+): Promise<Result<void>> {
+  const current = await currentAssignment(tx, observation, assignmentId);
+  if (!current.ok) return current;
+  if (current.value.workerId !== observation.position.workerId) {
+    return err(failure('forbidden', `assignment ${assignmentId} is held by another worker`, { assignment: assignmentId }));
+  }
+  return cancelExecutionInTransaction(tx, commandIdentity(observation, assignmentId), executionId);
+}
+
+// Item 21d D2: the authority recorded no grant; each reason acts as launch
+// authorization section 9 says, and a re-admission is a release in G2.
+async function launchRejection(
+  tx: ControlPlaneTransaction, observation: Observation, _at: Instant, context: ReconciliationContext,
+): Promise<Result<void>> {
+  const { assignmentId, executionId, reason } = observation.payload as Payload<'LaunchRejectedPayload'>;
+  const { workerId, observationId } = observation.position;
+  context.log.warn({ workerId, observationId, correlationId: observation.correlationId }, 'execution.launch.rejected', {
+    assignmentId, executionId, reason,
+  });
+  if (RELEASING_REJECTIONS.has(reason)) {
+    const released = await releaseRejected(tx, observation, assignmentId as AssignmentId);
+    if (!released.ok) return released;
+  }
+  return RECONCILING_REJECTIONS.has(reason) ? requestInventory(tx, workerId, context) : ok(undefined);
+}
+
+// An assignment that already ended is not released again.
+async function releaseRejected(tx: ControlPlaneTransaction, observation: Observation, assignmentId: AssignmentId): Promise<Result<void>> {
+  const current = await currentAssignment(tx, observation, assignmentId);
+  if (!current.ok) return current;
+  if (current.value.state === 'ended') return ok(undefined);
+  const superseded = await supersedeUngrantedInTransaction(tx, commandIdentity(observation, assignmentId));
+  return superseded.ok ? ok(undefined) : superseded;
+}
+
+// Item 21d D3: a revoked worker takes no new work, so an observation that
+// would give it some is refused.
+function forWorkingProducer(effect: ObservationEffect): ObservationEffect {
+  return async (tx, observation, at, context) => {
+    const { workerId } = observation.position;
+    const worker = await tx.fleet.worker(workerId);
+    if (!worker.ok) return worker;
+    if (worker.value?.revokedAt === undefined) return effect(tx, observation, at, context);
+    return err(failure('forbidden', `worker ${workerId} is revoked and takes no new work`, { worker: workerId, reason: 'worker-revoked' }));
+  };
 }
 
 export const OBSERVATION_EFFECTS: Readonly<Record<string, ObservationEffect>> = Object.freeze({
@@ -163,13 +298,15 @@ export const OBSERVATION_EFFECTS: Readonly<Record<string, ObservationEffect>> = 
   'execution.termination-unproven': executionEvidence('termination-unproven'),
   'execution.cancellation.not-applied': executionEvidence('cancellation-not-applied'),
   'execution.unrecorded-process': unrecordedProcess,
-  'execution.assignment.accepted': acceptance,
+  'execution.assignment.accepted': forWorkingProducer(acceptance),
   'execution.assignment.refused': refusal,
   'execution.command.rejected': commandRejection,
+  'execution.started': start,
+  'execution.launch.rejected': launchRejection,
   'execution.exited': exit,
   'execution.not-started': notStarted,
-  'worker.capacity.declared': capacityDeclaration,
-  'worker.admission-pressure.changed': pressureChange,
+  'worker.capacity.declared': forWorkingProducer(capacityDeclaration),
+  'worker.admission-pressure.changed': forWorkingProducer(pressureChange),
 });
 
 // The assignment the payload names, of the observed attempt, at the

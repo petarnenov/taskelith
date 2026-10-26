@@ -4,6 +4,9 @@ import pg from 'pg';
 import { checkMessageSchema } from '@taskelith/contracts';
 import {
   DelegationService,
+  HeartbeatService,
+  InventoryService,
+  LaunchRevokingFleetRegistry,
   ObservationService,
   PlacementService,
   RunService,
@@ -16,7 +19,6 @@ import {
   openAttempt,
   requestCancellation,
   type AttemptId,
-  type Execution,
   type ExecutionId,
   type LaunchGrant,
   type Task,
@@ -29,6 +31,7 @@ import { PostgresDatabase, migrate, type PostgresTransaction } from '@taskelith/
 import type { Assignment } from '@taskelith/scheduling';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
 import { failed, integrationEndpoint, value } from '@taskelith/testing';
+import { issueGrant, launchAuthority } from './launch-fixtures.ts';
 
 const POSTGRES = integrationEndpoint('TASKELITH_POSTGRES_URL');
 const databaseName = `taskelith_observation_${process.pid}`;
@@ -70,7 +73,7 @@ const binding = {
 const TABLES = [
   'workflow_runs', 'gates', 'admissions', 'tasks', 'assignments', 'outbox', 'inbox', 'task_lineage', 'capacity_charges', 'delegations',
   'capacity_quotas', 'workers', 'installation', 'enrollment_tokens', 'delegation_requests', 'current_revisions', 'producer_cursors',
-  'inventory_requests', 'inventory_report_parts',
+  'inventory_requests', 'inventory_report_parts', 'launch_authorizations', 'launch_rejections', 'broker_revocations', 'unrecorded_processes',
 ];
 const CORRELATION = 'correlation-1' as CorrelationId;
 const WORKER = 'worker-a';
@@ -80,6 +83,7 @@ const JOURNAL = 'journal-a';
 const clock = { skew: 0 };
 const TIMING = { now: () => Date.now() + clock.skew, draw: () => 0 };
 const tasks = new TaskService(database);
+const authority = launchAuthority(database, undefined, new WorkflowRegistry([{ definition, digest: DIGEST }]));
 let logs: InMemoryLogSink;
 let service: ObservationService;
 let placement: PlacementService;
@@ -191,29 +195,41 @@ function refuse(sequence: number, at: Placed, reason: string) {
   });
 }
 
-// Tests seed the grant's execution until item 21d wires launch authority.
-async function seedExecution(at: Placed, executionId = `execution-${at.attemptId.slice(0, 8)}`, grants: readonly LaunchGrant[] = []): Promise<ExecutionId> {
-  const execution: Execution = {
-    id: executionId as ExecutionId, assignmentId: at.assignment.id, workerId: WORKER as WorkerId, state: 'authorized',
-    grants, evidence: [], unauthorizedStarts: [],
-  };
-  value(await database.transaction(async (tx) => {
-    const task = await tx.tasks.get(at.taskId);
-    if (!task.ok) return task;
-    const attempts = task.value.attempts.map((attempt) => (attempt.id === at.attemptId ? { ...attempt, executions: [...attempt.executions, execution] } : attempt));
-    return tx.tasks.replace({ ...task.value, attempts, generation: (task.value.generation + 1) as never }, task.value.generation);
-  }));
-  return execution.id;
+// The grant of the attempt's execution, issued by the launch authority.
+function grant(at: Placed, executionId = `execution-${at.attemptId}`): Promise<LaunchGrant> {
+  const target = { taskId: at.taskId, attemptId: at.attemptId, generation: at.generation, assignmentId: at.assignment.id };
+  return issueGrant(authority, database, target, WORKER as WorkerId, executionId);
 }
 
-// A live grant of the execution, as launch authority would record it.
-function grantOf(at: Placed, executionId: string): LaunchGrant {
-  return {
-    launchAuthId: `launch-${executionId}`, operationId: `operation-${executionId}`, executionId, attemptId: at.attemptId,
-    assignmentId: at.assignment.id, workerId: WORKER, ownershipGeneration: at.generation, recoveryEpoch: 1, admissionId: 'admission-1',
-    admissionGeneration: 1, reliedOnGates: [], artifacts: [], policyRevision: 'r', issuedAt: '2026-10-25T09:00:00.000Z',
-    parameters: { ttlMilliseconds: 30_000, skewMilliseconds: 5_000 }, state: 'granted',
-  } as unknown as LaunchGrant;
+async function launch(at: Placed, executionId?: string): Promise<ExecutionId> {
+  return (await grant(at, executionId)).executionId;
+}
+
+const PROCESS = { platform: 'linux', bootId: 'boot-1', pid: 42, startTime: 7, processGroupId: 42 };
+
+interface Start {
+  readonly executionId: string;
+  readonly launchAuthId: string;
+  readonly recoveryEpoch?: number;
+  readonly workerId?: string;
+  readonly journalId?: string;
+  readonly generation?: number;
+}
+
+function started(sequence: number, at: Placed, start: Start) {
+  const { workerId, journalId, generation = at.generation } = start;
+  const sent = { sequence, attemptId: at.attemptId, ownershipGeneration: generation, ...(workerId === undefined ? {} : { workerId }),
+    ...(journalId === undefined ? {} : { journalId }) };
+  return observe('execution.started', sent, {
+    executionId: start.executionId, assignmentId: at.assignment.id, launchAuthId: start.launchAuthId, recoveryEpoch: start.recoveryEpoch ?? 1,
+    process: PROCESS,
+  });
+}
+
+function launchRejected(sequence: number, at: Placed, reason: string, generation = at.generation) {
+  return observe('execution.launch.rejected', { sequence, attemptId: at.attemptId, ownershipGeneration: generation }, {
+    executionId: `execution-${at.attemptId}`, assignmentId: at.assignment.id, operationId: `operation-${sequence}`, reason,
+  });
 }
 
 function exit(sequence: number, at: Placed, executionId: ExecutionId, code: number, startProven = true) {
@@ -317,10 +333,10 @@ describe('consumption', () => {
     assert.equal(failed(await observe('worker.admission-pressure.changed', { sequence: 1, workerId: 'worker-x' }, { causes: [] })).details.reason, 'not-consumed');
   });
 
-  test('a start before item 21d counts as contact but is not applied or recorded', async () => {
+  test('an observation type no effect consumes counts as contact but is not applied or recorded', async () => {
     await enroll();
-    const started = failed(await observe('execution.started', { sequence: 1, attemptId: 'attempt-1', ownershipGeneration: 2 }, {}));
-    assert.equal(started.details.reason, 'not-consumed');
+    const unknown = failed(await observe('execution.unknown', { sequence: 1, attemptId: 'attempt-1', ownershipGeneration: 2 }, {}));
+    assert.equal(unknown.details.reason, 'not-consumed');
     assert.equal((await worker()).reachable, true);
     assert.equal(await cursor(), undefined);
     const inventory = failed(await service.apply({ subjectWorkerId: WORKER, type: 'worker.inventory.reported', body: { messageType: 'worker.inventory.reported' } }));
@@ -339,7 +355,7 @@ describe('consumption', () => {
     await enroll();
     value(await declare(1));
     const at = await placed();
-    const executionId = await seedExecution(at);
+    const executionId = await launch(at);
     const before = [await stored(at.taskId), await sql('SELECT * FROM inbox'), await cursor(), await sql('SELECT event_id FROM outbox')];
     const failing: ControlPlaneStore = {
       transaction: (work) => database.transaction((tx) => work(withFailingReports(tx))),
@@ -431,7 +447,7 @@ describe('refusal after a grant', () => {
     value(await declare(1));
     const at = await placed();
     value(await accept(2, at));
-    const executionId = await seedExecution(at, 'execution-granted', [grantOf(at, 'execution-granted')]);
+    const executionId = await launch(at, 'execution-granted');
     assert.equal(value(await refusal(at)), 'applied');
     return { at, executionId };
   }
@@ -470,7 +486,7 @@ describe('outcomes', () => {
     value(await declare(1));
     const at = await placed();
     value(await accept(2, at));
-    const executionId = await seedExecution(at);
+    const executionId = await launch(at);
     await sql('UPDATE workers SET capacity_refused_since = now()');
     assert.equal(value(await exit(3, at, executionId, 0)), 'applied');
     const task = await stored(at.taskId);
@@ -493,7 +509,7 @@ describe('outcomes', () => {
     let at = await placed();
     let sequence = 2;
     for (let retry = 0; retry < 2; retry++) {
-      value(await exit(sequence++, at, await seedExecution(at), 1));
+      value(await exit(sequence++, at, await launch(at), 1));
       const task = await stored(at.taskId);
       assert.deepEqual([task.attempts.length, task.attempts.at(-1)!.retryOf], [retry + 2, at.attemptId]);
       const answer = await result(at.taskId);
@@ -507,7 +523,7 @@ describe('outcomes', () => {
     }
     const charges = await sql<{ automatic_retry: boolean }>('SELECT automatic_retry FROM capacity_charges ORDER BY automatic_retry');
     assert.deepEqual(charges.map((charge) => charge.automatic_retry), [false, true, true]);
-    value(await exit(sequence, at, await seedExecution(at), 1));
+    value(await exit(sequence, at, await launch(at), 1));
     const task = await stored(at.taskId);
     assert.equal(task.attempts.length, 3, 'no third retry');
     const answer = await result(at.taskId);
@@ -518,7 +534,7 @@ describe('outcomes', () => {
     await enroll();
     value(await declare(1));
     const at = await placed();
-    value(await exit(2, at, await seedExecution(at), 1, false));
+    value(await exit(2, at, await launch(at), 1, false));
     const task = await stored(at.taskId);
     assert.deepEqual([task.attempts.length, task.attempts[0]!.outcome?.kind], [1, 'exited']);
   });
@@ -527,14 +543,14 @@ describe('outcomes', () => {
     await enroll();
     value(await declare(1));
     const at = await placed();
-    const executionId = await seedExecution(at);
+    const executionId = await launch(at);
     const notStarted = (sequence: number, observationId?: string) => observe('execution.not-started', {
       sequence, attemptId: at.attemptId, ownershipGeneration: at.generation, ...(observationId === undefined ? {} : { observationId }),
     }, { executionId });
     value(await notStarted(2));
     assert.equal((await stored(at.taskId)).attempts[0]!.outcome, undefined);
     assert.equal((await heldAssignment(at.attemptId)).state, 'offered');
-    const second = await seedExecution(at, 'execution-second');
+    const second = await launch(at, 'execution-second');
     value(await database.transaction(async (tx) => {
       const task = await tx.tasks.get(at.taskId);
       if (!task.ok) return task;
@@ -560,7 +576,7 @@ describe('outcomes', () => {
     const isWaiting = async () => value(await database.transaction(async (tx) => ok(await tx.ledger.isWaitingParent(parent.attemptId))));
     assert.equal(await isWaiting(), true);
     const child = await placeAgain('task-child');
-    value(await exit(2, child, await seedExecution(child), 0));
+    value(await exit(2, child, await launch(child), 0));
     assert.equal(await isWaiting(), false);
     const [row] = await sql<{ closed_at: Date | null }>('SELECT closed_at FROM delegations');
     assert.ok(row?.closed_at instanceof Date);
@@ -570,7 +586,7 @@ describe('outcomes', () => {
     await enroll();
     value(await declare(1));
     const at = await placed();
-    const executionId = await seedExecution(at);
+    const executionId = await launch(at);
     assert.equal(value(await exit(2, { ...at, generation: at.generation + 1 }, executionId, 0)), 'rejected');
     assert.equal(value(await exit(3, { ...at, attemptId: 'attempt-x' as AttemptId }, executionId, 0)), 'rejected');
     assert.equal(value(await exit(4, at, 'execution-x' as ExecutionId, 0)), 'rejected');
@@ -584,7 +600,7 @@ describe('placement after outcomes', () => {
     await enroll();
     value(await declare(1));
     const at = await placed();
-    value(await exit(2, at, await seedExecution(at), 1, false));
+    value(await exit(2, at, await launch(at), 1, false));
     const retryId = 'attempt-retry' as AttemptId;
     value(await database.transaction(async (tx) => {
       const task = await tx.tasks.get(at.taskId);
@@ -640,7 +656,7 @@ describe('capacity and pressure', () => {
     value(await declare(1));
     const first = await placed('task-1');
     const second = await placed('task-2');
-    const executionId = await seedExecution(first);
+    const executionId = await launch(first);
     value(await refuse(3, second, 'worker-slots-exhausted'));
     value(await exit(2, first, executionId, 0));
     assert.ok((await worker()).capacity_refused_since instanceof Date);
@@ -683,5 +699,227 @@ describe('capacity and pressure', () => {
     assert.deepEqual(value(await database.readCommitted(async (tx) => ok(await tx.workers.candidates()))), []);
     value(await pressure(4, []));
     assert.equal((await worker()).admission_pressure_since, null);
+  });
+});
+
+function startEvidence(): unknown[] {
+  return logs.records.filter((record) => record.event === 'execution.start.evidence').map((record) => record.fields.decision);
+}
+
+describe('starts', () => {
+  test('a start under the grant the authority issued moves the execution to started; a repeat changes nothing', async () => {
+    await enroll();
+    value(await declare(1));
+    const at = await placed();
+    value(await accept(2, at));
+    const issued = await grant(at);
+    assert.equal(value(await started(3, at, issued)), 'applied');
+    const execution = (await stored(at.taskId)).attempts[0]!.executions[0]!;
+    assert.deepEqual([execution.state, execution.start?.kind, execution.start?.launchAuthId], ['started', 'current', issued.launchAuthId]);
+    const before = await stored(at.taskId);
+    assert.equal(value(await started(4, at, issued)), 'applied', 'the recorded fact again');
+    assert.deepEqual(await stored(at.taskId), before);
+    assert.deepEqual(await confirmations(), [1, 2, 3, 4]);
+    assert.deepEqual([await messages('execution.cancellation.request'), startEvidence()], [[], []]);
+  });
+
+  test('a start under a grant the authority never issued cancels that execution only', async () => {
+    await enroll();
+    value(await declare(1));
+    const at = await placed();
+    const issued = await grant(at);
+    const before = await stored(at.taskId);
+    assert.equal(value(await started(2, at, { executionId: 'execution-rogue', launchAuthId: 'launch-unknown' })), 'applied');
+    assert.deepEqual(await stored(at.taskId), before, 'no execution of the attempt changes');
+    const [cancellation] = await messages('execution.cancellation.request');
+    assert.ok(checkMessageSchema('CancellationCommand', cancellation).ok, JSON.stringify(cancellation));
+    assert.deepEqual((cancellation as { payload: unknown }).payload, { protocolVersion: 1, reason: 'launch-revoked', executionId: 'execution-rogue' });
+    assert.deepEqual(startEvidence(), ['unauthorized-start']);
+    assert.equal(issued.state, 'granted');
+  });
+
+  test('a start of a held execution under an unknown grant keeps the evidence and cancels it', async () => {
+    await enroll();
+    value(await declare(1));
+    const at = await placed();
+    const issued = await grant(at);
+    assert.equal(value(await started(2, at, { executionId: issued.executionId, launchAuthId: 'launch-unknown' })), 'applied');
+    const execution = (await stored(at.taskId)).attempts[0]!.executions[0]!;
+    assert.deepEqual([execution.state, execution.unauthorizedStarts.map((start) => start.launchAuthId)], ['authorized', ['launch-unknown']]);
+    assert.equal(((await messages('execution.cancellation.request'))[0] as { payload: { executionId: string } }).payload.executionId, issued.executionId);
+  });
+
+  test('a start under another worker\'s grant writes nothing to its execution and is kept as evidence', async () => {
+    await enroll();
+    value(await declare(1));
+    const at = await placed();
+    const issued = await grant(at);
+    await enroll('worker-b', 'journal-b');
+    const before = await stored(at.taskId);
+    assert.equal(value(await started(1, at, { ...issued, workerId: 'worker-b', journalId: 'journal-b' })), 'applied');
+    assert.deepEqual(await stored(at.taskId), before);
+    assert.deepEqual([startEvidence(), await messages('execution.cancellation.request')], [['foreign'], []]);
+  });
+
+  test('a start at another recovery epoch is kept as evidence, and one at another generation is rejected', async () => {
+    await enroll();
+    value(await declare(1));
+    const at = await placed();
+    const issued = await grant(at);
+    const before = await stored(at.taskId);
+    assert.equal(value(await started(2, at, { ...issued, recoveryEpoch: 2 })), 'applied');
+    assert.equal(value(await started(3, at, { ...issued, generation: at.generation + 1 })), 'rejected');
+    assert.deepEqual(await stored(at.taskId), before);
+    assert.deepEqual([startEvidence(), await messages('execution.cancellation.request')], [['quarantine-evidence'], []]);
+  });
+});
+
+function rejectionLogs(): unknown[] {
+  return logs.records.filter((record) => record.event === 'execution.launch.rejected').map((record) => [record.fields.reason, record.fields.assignmentId]);
+}
+
+describe('launch rejections', () => {
+  test('a rejection that releases supersedes the assignment, so its attempt is placed again', async () => {
+    await enroll();
+    value(await declare(1));
+    const at = await placed();
+    value(await accept(2, at));
+    assert.equal(value(await launchRejected(3, at, 'capacity-not-reserved')), 'applied');
+    const superseded = value(await database.transaction((tx) => tx.assignments.get(at.assignment.id)));
+    assert.deepEqual([superseded.end?.reason, superseded.reservation.state], ['superseded', 'released']);
+    const [end] = await messages('execution.assignment.end');
+    assert.deepEqual((end as { payload: unknown }).payload, { protocolVersion: 1, assignmentId: at.assignment.id, reason: 'superseded' });
+    assert.equal(value(await launchRejected(4, at, 'gate-not-passed')), 'applied', 'an ended assignment is not released again');
+    assert.equal((await messages('execution.assignment.end')).length, 1);
+    assert.deepEqual(rejectionLogs(), [['capacity-not-reserved', at.assignment.id], ['gate-not-passed', at.assignment.id]]);
+    clock.skew = 60_000;
+    const again = await placeAgain(at.taskId);
+    assert.equal(again.attemptId, at.attemptId);
+    assert.notEqual(again.assignment.id, at.assignment.id);
+  });
+
+  test('a stale recovery epoch releases and requests the inventory; an execution conflict only requests it', async () => {
+    await enroll();
+    value(await declare(1));
+    const first = await placed('task-1');
+    const second = await placed('task-2');
+    assert.equal(value(await launchRejected(2, first, 'execution-conflict')), 'applied');
+    assert.equal(value(await database.transaction((tx) => tx.assignments.get(first.assignment.id))).state, 'offered');
+    assert.equal(value(await launchRejected(3, second, 'stale-recovery-epoch')), 'applied');
+    assert.equal(value(await database.transaction((tx) => tx.assignments.get(second.assignment.id))).end?.reason, 'superseded');
+    const requests = await messages('worker.inventory.requested');
+    assert.deepEqual(requests.map((request) => request.workerId), [WORKER, WORKER]);
+  });
+
+  test('a rejection the current owner decides is only recorded, and a stale one that releases is rejected', async () => {
+    await enroll();
+    value(await declare(1));
+    const at = await placed();
+    const before = value(await database.transaction((tx) => tx.assignments.get(at.assignment.id)));
+    for (const [sequence, reason] of ['assignment-not-active', 'stale-ownership-generation', 'attempt-not-launchable', 'operation-mismatch'].entries()) {
+      assert.equal(value(await launchRejected(sequence + 2, at, reason)), 'applied', reason);
+    }
+    assert.equal(value(await launchRejected(6, at, 'worker-not-authorized', at.generation + 1)), 'rejected');
+    assert.deepEqual(value(await database.transaction((tx) => tx.assignments.get(at.assignment.id))), before);
+    assert.deepEqual(rejectionLogs().map((logged) => (logged as unknown[])[0]), ['assignment-not-active', 'stale-ownership-generation', 'attempt-not-launchable', 'operation-mismatch']);
+    assert.deepEqual([await messages('execution.assignment.end'), await messages('worker.inventory.requested')], [[], []]);
+  });
+});
+
+async function queue() {
+  return value(await database.transaction(async (tx) => ok({
+    worker: await tx.reconciliation.unknownExecutionsOfWorker(WORKER as WorkerId),
+    task: await tx.reconciliation.unknownExecutionsOfTask('task-1' as TaskId),
+    processes: await tx.reconciliation.unrecordedProcessesOfWorker(WORKER as WorkerId),
+  })));
+}
+
+describe('a revoked worker', () => {
+  const fleet = new LaunchRevokingFleetRegistry(database);
+  const revoke = (workerId = WORKER) => fleet.revoke(workerId as WorkerId, '2026-10-25T09:00:00.000Z' as Instant);
+
+  test('keeps a started execution uncertain with its reservation, until its in-flight exit settles it', async () => {
+    await enroll();
+    value(await declare(1));
+    const at = await placed();
+    value(await accept(2, at));
+    const issued = await grant(at);
+    value(await started(3, at, issued));
+    value(await revoke());
+    const kept = value(await database.transaction((tx) => tx.assignments.get(at.assignment.id)));
+    assert.deepEqual([kept.state, kept.reservation.state], ['accepted', 'held']);
+    const waiting = await queue();
+    assert.deepEqual([waiting.worker, waiting.task].map((listed) => listed.map(({ execution }) => [execution.id, execution.state])), [
+      [[issued.executionId, 'started']], [[issued.executionId, 'started']],
+    ]);
+    const contact = (await worker()).last_contact_at;
+    assert.equal(value(await exit(4, at, issued.executionId, 0)), 'applied');
+    const attempt = (await stored(at.taskId)).attempts[0]!;
+    assert.deepEqual([attempt.executions[0]!.state, attempt.outcome?.kind, attempt.outcome?.cancelled], ['exited', 'exited', true]);
+    assert.equal(value(await database.transaction((tx) => tx.assignments.get(at.assignment.id))).reservation.state, 'released');
+    assert.deepEqual((await queue()).worker, []);
+    assert.deepEqual((await worker()).last_contact_at, contact, 'no contact is recorded');
+    assert.deepEqual(value(await database.readCommitted(async (tx) => ok(await tx.workers.candidates()))), []);
+    const [observed] = logs.records.filter((record) => record.event === 'execution.revoked-worker.observation');
+    assert.deepEqual([observed?.correlation.workerId, observed?.fields.journalId, observed?.fields.type, observed?.fields.sequence], [
+      WORKER, JOURNAL, 'execution.exited', 4,
+    ]);
+  });
+
+  test('gets no new work, and its new journal, heartbeat, and inventory report are refused', async () => {
+    await enroll();
+    value(await declare(1));
+    value(await revoke());
+    const contact = (await worker()).last_contact_at;
+    assert.equal(value(await declare(2, { slots: 5 })), 'rejected');
+    assert.equal(value(await pressure(3, ['disk-floor'])), 'rejected');
+    assert.deepEqual([(await worker()).slots, (await worker()).admission_pressure_since], [2, null]);
+    assert.deepEqual(await confirmations(), [1, 2, 3]);
+    const refused = logs.records.filter((record) => record.event === 'execution.observation.rejected').map((record) => record.fields.reason);
+    assert.deepEqual(refused, ['worker-revoked', 'worker-revoked']);
+    const replaced = failed(await observe('worker.admission-pressure.changed', { sequence: 1, journalId: 'journal-new' }, { causes: [] }));
+    assert.equal(replaced.details.reason, 'not-consumed');
+    assert.equal(value(await database.transaction((tx) => tx.fleet.worker(WORKER as WorkerId)))?.journalId, JOURNAL);
+    const heartbeat = await new HeartbeatService(database).record({ subjectWorkerId: WORKER, body: { workerId: WORKER, journalId: JOURNAL } });
+    assert.equal(failed(heartbeat).code, 'forbidden');
+    const inventory = new InventoryService(database, { newRequestId: () => 'request-revoked' });
+    const reported = await inventory.apply({ subjectWorkerId: WORKER, type: 'worker.inventory.reported', body: {
+      messageType: 'worker.inventory.reported', schemaVersion: 1, protocolVersion: 1, reportId: 'report-1', snapshot: 1, part: 1, parts: 1,
+      reportedAt: '2026-10-25T09:00:00.000Z', workerId: WORKER, journalId: JOURNAL, throughSequence: 3, assignments: [], executions: [],
+    } });
+    assert.equal(failed(reported).details.reason, 'not-consumed');
+    assert.deepEqual((await worker()).last_contact_at, contact, 'no contact is recorded');
+  });
+
+  test('frees an accepted assignment without a grant, so its attempt is placed on another worker', async () => {
+    await enroll();
+    value(await declare(1));
+    const at = await placed();
+    value(await accept(2, at));
+    await enroll('worker-b', 'journal-b');
+    value(await observe('worker.capacity.declared', { sequence: 1, workerId: 'worker-b', journalId: 'journal-b' }, {
+      capacity: CAPACITY, protocolVersions: { minimum: 1, maximum: 1 },
+    }));
+    value(await revoke());
+    const superseded = value(await database.transaction((tx) => tx.assignments.get(at.assignment.id)));
+    assert.deepEqual([superseded.end?.reason, superseded.reservation.state], ['superseded', 'released']);
+    value(await revoke());
+    assert.equal((await messages('execution.assignment.end')).length, 1, 'a repeated revocation frees nothing again');
+    const again = await placeAgain(at.taskId);
+    assert.deepEqual([again.attemptId, again.assignment.workerId], [at.attemptId, 'worker-b']);
+  });
+});
+
+describe('reconciliation queue', () => {
+  test('lists each unrecorded process a worker reports, once', async () => {
+    await enroll();
+    const processes = [PROCESS, { ...PROCESS, pid: 43 }];
+    const unrecorded = { sequence: 1, observationId: 'unrecorded-1' };
+    assert.equal(value(await observe('execution.unrecorded-process', unrecorded, { containment: 'cgroup taskelith/x', processes })), 'applied');
+    assert.equal(value(await observe('execution.unrecorded-process', unrecorded, { containment: 'cgroup taskelith/x', processes })), 'duplicate');
+    const listed = (await queue()).processes;
+    assert.deepEqual(listed.map(({ journalId, observationId, containment, processCount }) => [journalId, observationId, containment, processCount]), [
+      [JOURNAL, 'unrecorded-1', 'cgroup taskelith/x', 2],
+    ]);
   });
 });
