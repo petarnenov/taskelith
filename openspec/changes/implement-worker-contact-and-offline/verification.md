@@ -33,11 +33,12 @@ macOS 26.6.2 (Darwin 25.6.0), arm64, Node v24.22.1 (`.nvmrc`), Docker with the C
 
 | Check | Result |
 | --- | --- |
-| `make verify` at `edcca02` (final: the pass 3 fixes and the merge of `origin/dev` `a698f11`) | passed: 1682 tests, 0 failures; coverage over all files 99.30% lines, 91.85% branches, 99.01% functions; comment, dependency, archive dry run, and package checks passed |
+| `make verify` at `596ac4e` (final: the second merge of `origin/dev`, `32976aa`) | passed: 1699 tests, 1697 passed, 0 failures, 2 skipped (the Linux-only containment scan tests from `dev`, on macOS); coverage over all files 99.28% lines, 91.88% branches, 98.98% functions; comment, dependency, archive dry run, and package checks passed |
+| `make verify` at `edcca02` (the pass 3 fixes and the merge of `origin/dev` `a698f11`) | passed: 1682 tests, 0 failures; coverage over all files 99.30% lines, 91.85% branches, 99.01% functions; comment, dependency, archive dry run, and package checks passed |
 | `make verify` at `9bc0cfe` (pass 2 fixes) | passed: 1646 tests, 0 failures; 99.32% lines, 91.81% branches, 98.99% functions; earlier passed at `40b5808` and `e9a5341` |
 | Coverage (changed worker files, at `9bc0cfe`) | `worker-contact.js`, `heartbeat-publisher.js`, `task-group.js` 100/100/100; `broker-session.js` 100/96.77/100; `inventory-report.js` 100/90.91/100; `worker-start.js` 99.17/90.65/100; `launch-orchestrator.js` 98.52/90.87/95.00; `settings.js` 100/100/100; `execution-supervision.js` 97.25/84.91/89.47; `command-intake.js` 99.23/87.04/100; `main.js` 90.98/82.93/85.00 (lines/branches/functions, %) |
-| `npm run openspec -- validate implement-worker-contact-and-offline --strict` | valid at `edcca02`, the final revision, which holds the last spec edit of `15b846a` |
-| `npm run verify:comments` | passes at `edcca02`, `9bc0cfe`, `40b5808`, and `e9a5341`; at `7eaa72e` it reported one comment of three lines in `worker-contact.ts`, shortened in `e9a5341` |
+| `npm run openspec -- validate implement-worker-contact-and-offline --strict` | valid at `596ac4e`, the final revision, and at `edcca02`, after the last review-driven spec edit of `15b846a` |
+| `npm run verify:comments` | passes at `596ac4e`, `edcca02`, `9bc0cfe`, `40b5808`, and `e9a5341`; at `7eaa72e` it reported one comment of three lines in `worker-contact.ts`, shortened in `e9a5341` |
 
 ## Independent review
 
@@ -97,7 +98,10 @@ Reviewer: assigned by the coordinator, Claude Code Fable (`claude-fable-5-1`, ef
 | 2 | Medium | A stop cannot interrupt a pending broker connection attempt, so `stopped` can hang with the root lock held | The attempt is awaited unless the stop aborts first; a connection that arrives late is closed and a late failure is only logged; tests of a stop during a pending attempt, with a late link and with a late failure; the test that stopped during the back-off is renamed |
 | 3 | Low | No checks recorded for the final spec revision | `make verify` and the strict validation recorded for `edcca02`, the final revision (Checks) |
 
-## Merge of `origin/dev`
+## Merges of `origin/dev`
+
+### First merge
+
 
 - At the coordinator's request, `origin/dev` at `a698f11`, which holds 20e (`implement-worker-admission-pressure`, #270 and #271), was merged in `edcca02`. This is integration work, not a review pass.
 - Conflicts: `apps/worker/src/command-intake.ts` (imports only), `apps/worker/src/launch-orchestrator.ts`, `apps/worker/src/worker-start.ts`, and the tests `apps/worker/test/command-intake.test.ts` and `apps/worker/test/worker-start.test.ts`; `observation-messages.ts` and the control-plane integration test merged cleanly.
@@ -106,6 +110,13 @@ Reviewer: assigned by the coordinator, Claude Code Fable (`claude-fable-5-1`, ef
   - `pressure.watch` runs with the launches among the runtime's tasks rather than in the per-connection loops, because in this change the runtime runs without a connection; it refreshes and journals pressure and publishes nothing itself.
   - Tests: the offline launch tests take the pressure option 20e made required and test W2 waiting until the worker is both online and under no pressure; the 20e start test finds its observation by type, since the connection's inventory report may come first.
 - The spec deltas do not overlap: 20e modified only "Worker-side admission limits" and added requirements, and the requirements this change modifies are unchanged on `dev` since `8a9abb6`; the archive dry run passed.
+
+### Second merge
+
+- At the coordinator's request, `origin/dev` at `32976aa`, which holds the unrecorded-process scan (#272 and #273), was merged in `596ac4e`. Integration work, not a review pass. The coordinator approved the two points of the first merge before it.
+- Conflict: `apps/worker/src/worker-start.ts` only. The orchestrator's construction of this change is kept, and the host's `containments` from `dev` are passed to it; `main.ts`, `launch-orchestrator.ts`, `observation-messages.ts`, the supervision port and adapter, and `index.ts` merged cleanly. No code of either side changed its logic.
+- The scan runs at the end of `#beginReconciliation`, which runs with or without a launch command and does not use the launch authority; `main.ts` builds the containment scan from the settings' containment parent, not from the launch command. A new test, "without a launch command, the start reconciliation reports unrecorded processes", starts a worker without a launch command and finds the `unrecorded-process` fact in the journal.
+- Spec: `dev` changed only `worker-journal`. The "Start reconciliation" requirement of this change's `worker-runtime` delta now states that on Linux it reports unrecorded processes, with the scenario "Unrecorded process without a launch command", as the coordinator asked; `design.md` says the scan comes from `dev` and this change only runs it without a command.
 
 ## Limitations and remaining gates
 
