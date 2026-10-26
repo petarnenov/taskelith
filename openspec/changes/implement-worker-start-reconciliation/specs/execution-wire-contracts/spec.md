@@ -6,3 +6,7 @@ In document version 0.5.0, an `execution.exited` observation that is not a spawn
 #### Scenario: Exit proven by a changed boot
 - **WHEN** an exit observation reports `boot-changed` with status `unknown` and an unproven start
 - **THEN** validation succeeds
+
+#### Scenario: Recovery evidence with a known status
+- **WHEN** an exit observation reports `boot-changed` or `namespace-ended` with an exit code or a signal
+- **THEN** validation fails

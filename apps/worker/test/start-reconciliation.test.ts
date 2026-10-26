@@ -148,7 +148,7 @@ test('a written record is recovered, never started: an exit found by recovery is
   launchNothingNew();
   supervisions.onCreated = (supervision) => {
     supervision.recovery = { fact: 'exited', exit: { ...CLEAN_EXIT, startProven: false } };
-    supervision.facts = [{ problems: [], exit: { ...CLEAN_EXIT, startProven: false, termination: 'boot-changed' } }];
+    supervision.facts = [{ problems: [], exit: { status: { kind: 'unknown' }, startProven: false, termination: 'boot-changed' } }];
   };
   await startOnce();
   assert.deepEqual(inheritedSupervision().calls, ['recover', 'read']);

@@ -1535,10 +1535,59 @@
               },
               "terminationEvidence": {
                 "type": "string",
-                "description": "containment-empty on Linux, process-group-empty on macOS; boot-changed or namespace-ended from recovery on start.",
+                "description": "containment-empty on Linux, process-group-empty on macOS.",
                 "enum": [
                   "containment-empty",
-                  "process-group-empty",
+                  "process-group-empty"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Recovery on start proved the end without an exit status.",
+            "required": [
+              "executionId",
+              "status",
+              "startProven",
+              "spawnFailed",
+              "terminationEvidence"
+            ],
+            "properties": {
+              "executionId": {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              "status": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ExitStatus"
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "kind"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "unknown"
+                      }
+                    }
+                  }
+                ]
+              },
+              "startProven": {
+                "type": "boolean"
+              },
+              "spawnFailed": {
+                "type": "boolean",
+                "const": false
+              },
+              "terminationEvidence": {
+                "type": "string",
+                "description": "boot-changed, or namespace-ended on Linux.",
+                "enum": [
                   "boot-changed",
                   "namespace-ended"
                 ]

@@ -210,6 +210,9 @@ test('recovery on start may prove an unknown exit by a changed boot or an ended 
   for (const terminationEvidence of ['boot-changed', 'namespace-ended']) {
     assert.ok(checkMessageSchema('ExecutionExitedPayload', { ...recovered, terminationEvidence }).ok);
     assert.ok(!checkMessageSchema('ExecutionExitedPayload', { ...recovered, spawnFailed: true, spawnFailure: 'x', terminationEvidence }).ok);
+    for (const status of [{ kind: 'code', code: 0 }, { kind: 'signal', signal: 'SIGKILL' }]) {
+      assert.ok(!checkMessageSchema('ExecutionExitedPayload', { ...recovered, status, terminationEvidence }).ok);
+    }
   }
   assert.ok(!checkMessageSchema('ExecutionExitedPayload', { ...recovered, terminationEvidence: 'host-rebooted' }).ok);
 });
