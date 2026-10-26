@@ -73,7 +73,7 @@ While adding these tests, a stubbed run that hit an unbound variable exited 0 wi
 
 ### Pass 3
 
-Pending.
+Codex CLI, model `gpt-6.1-sol`, reasoning effort medium, sandbox read-only, session `01a178ff-ee7c-7b30-ae4a-938a9a286e75`, reviewed `HEAD` `c615c98`, with the same invocation as pass 1. The SHA-256 snapshot of the worktree was `1fa84adf6cbd472b730d1643eb859207f2f93def359a12fa29692a1e345673ae` before and after the pass, unchanged. It confirmed M1 to M5 and L1 as resolved, including the shared reconciliation deadline, the `failed` record of a failed cleanup, and the trap fix in `8e1c4d8`, which the prompt named. New findings: 0 Critical, 0 High, 0 Medium, 0 Low. The reviewer did not run the Docker scenarios or `make verify`; the recorded runs remain author evidence. No fixes followed this pass, so the change has no unreviewed fixes.
 
 ## Limitations and remaining gates
 
@@ -81,4 +81,4 @@ Pending.
 - The kill moment is reproducible from the seed, but what the worker is doing at that moment depends on the services' timing; on this host placement took more than ten seconds after the submission, so kills before about 7 to 11 s found no execution.
 - The disk loss deletes the data root's files rather than replacing the volume; a host disk failure is modelled, not reproduced. A new journal incarnation without re-enrolment has no operator action in G2, so the scenario re-enrolls.
 - The Linux supervisor crash windows run in 24b on the x86_64 iMac; multi-arch tooling for `make verify-linux-cgroup` is a follow-up.
-- Remaining gates: independent review pass 3, integration by the coordinator, and the archive.
+- Remaining gates: integration by the coordinator and the archive.

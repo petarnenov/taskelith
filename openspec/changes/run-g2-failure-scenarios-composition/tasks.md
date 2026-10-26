@@ -13,4 +13,4 @@
 ## 3. Records
 
 - [x] 3.1 Run `make verify` and the scenario evidence runs
-- [ ] 3.2 Independent review and `verification.md` (pass 1 and pass 2 findings fixed; pass 3 pending)
+- [x] 3.2 Independent review and `verification.md` (pass 1 and pass 2 findings fixed; pass 3 clean)
