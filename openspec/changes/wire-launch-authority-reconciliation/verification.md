@@ -25,24 +25,66 @@ This is part 21d, the last part, of item 21 of the [G2 work plan](../../../docs/
 - **Q5 / D5:** the `ReconciliationQueue` read port and the `unrecorded_processes` table, with no HTTP or CLI surface. The worker produces `execution.unrecorded-process` later, in a separate follow-up.
 - **Q6 / D6:** `revokeLaunch` takes the attempt's cancellation reason.
 
-**Coordinator-approved deviation (2026-10-26).** D4 as first written also superseded assignments whose executions are all `not-started` or `exited`. Capacity reservation contract section 6, enforced by `supersedeAssignment`, forbids superseding an assignment that held a grant. The coordinator chose option (a): align D4 and the spec with section 6, and add a test that revocation never supersedes such an assignment. Its consequence is a known limitation, recorded below.
+**D4 revised (coordinator, 2026-10-26).** D4 as first written also superseded assignments whose executions are all `not-started` or `exited`. Capacity reservation contract section 6, enforced by `supersedeAssignment`, forbids superseding an assignment that held a grant.
+- The coordinator first chose (a): keep such an assignment.
+- The author then found that a `not-started` without a cancellation keeps its attempt and reservation for another launch, which a revoked worker never requests. The coordinator changed the decision to (b), because those tasks would stay stuck (a liveness defect). The coordinator recorded it as delegated through its away run `20261026T002925Z-opencode-77279`.
+- (b): such an assignment's attempt is ended with `endAttempt`, and `releaseInTransaction` ends the assignment with `attempt-ended`. Supersession stays for assignments that never held a grant, so section 6 is untouched.
+- Tests: granted and `not-started` is ended and released; granted and `authorized` or `started` keeps its reservation; never granted is superseded.
+- **Author addition:** an attempt ended this way follows the same 21b terminal path as an observed end (`followAttemptEnd`, extracted to `task-ending.ts`). Otherwise the task would keep no active attempt and its delegation would stay open. It is reported to the coordinator.
 
 ## Obligations met
 
-PENDING (filled after review).
+Each obligation of the proposal maps to its tests (all in the `make verify` run below):
+- Start observations (D1): `apps/control-plane/test/observation.integration.test.ts` and `observation-service.test.ts`. These cover current, duplicate, foreign, quarantine, historical and unauthorized starts, and the cancellation that names only that execution.
+- Launch rejections (D2): the same integration file, for each action class and for the stale-generation fence on every reason.
+- Revoked worker (D3, D4): `describe('a revoked worker')`. It covers:
+  - the in-flight exit;
+  - no new work;
+  - a refused new journal, heartbeat, and inventory report;
+  - never-granted supersession;
+  - granted `not-started` ended with a retry;
+  - an `authorized` or `started` execution kept;
+  - maximum-length assignment identities;
+  - a delegated child's delegation closed when no retry is left.
+- Reconciliation queue (D5): `describe('reconciliation queue')`, the conformance suites in `packages/modules/execution/src/ports/repository-conformance.ts` for the in-memory and PostgreSQL adapters, and the migration test.
+- Retired journal refusal (decision 7): `apps/control-plane/test/launch-authority.integration.test.ts`.
+- Live grants (decision 8): control-plane tests issue grants through `LaunchAuthority.authorize` (`issueGrant` in `launch-fixtures.ts`); no seeded grant remains in `observation.integration.test.ts` or `inventory.integration.test.ts`.
+- B8 (D6): `packages/modules/execution/test/launch-authorization.test.ts`, `packages/adapters/postgres/test/resource-admission.integration.test.ts`, and `observation.integration.test.ts`, including an earlier cancellation that wins.
 
 ## Checks
 
-PENDING.
+- `npm run openspec -- validate wire-launch-authority-reconciliation --strict`: valid.
+- `make verify` at `5664361` (before review pass 1): exit 0; 1387 tests, 1387 pass; coverage lines 99.22%, branches 91.40%, functions 98.71%.
+- `make verify` after the pass 1 fixes: see pass 1 below.
+
+Environment: macOS (Darwin 25.6.0), Node from `.nvmrc`, Docker test services started by `make verify`.
 
 ## Independent review
 
-PENDING.
+Reviewer: OpenCode CLI, agent `reviewer`, model `opencode-go/kimi-k3.1-pro`, variant `high` (owner's choice of 2026-10-26, assigned by the coordinator). Prompts, logs, and snapshots are kept outside the worktree.
+
+### Pass 1
+
+- **Revision:** `5664361`.
+- **Invocation:** `opencode run --standalone --agent reviewer -m 'opencode-go/kimi-k3.1-pro#high' --format json --title wire-launch-authority-reconciliation "$(cat <prompt-file>)" < /dev/null > <log>`, from the worktree. The prompt carried the git-restriction paragraph.
+- **Model confirmation:** all 16 stored messages of the session record `{"id":"kimi-k3.1-pro","providerID":"opencode-go","variant":"high"}`.
+- **Session:** `ses_e8a63cf68ffeGlYcKCh2h3QTsx`.
+- **Snapshot:** `9acd6344fb94f9b15d8d0e60566c41b90d9a93c7cbecfe91612961ab71f57e62` before and after; unchanged.
+- **Findings:** 0 Critical, 0 High, 3 Medium, 0 Low.
+  1. **M1:** in `observation-effects.ts`, only the releasing launch rejections passed the ownership-generation fence. A stale `execution-conflict` was applied and could replace the current inventory request.
+     - **Fixed** in `c960afa`: every rejection is fenced before any log or effect.
+     - Test: a stale `execution-conflict` and a stale `assignment-not-active` are `rejected`, with no inventory request.
+  2. **M2:** `revokeLaunch` keeps an earlier attempt cancellation, so after a `requested` cancellation the attempt says `requested` while the command says `assignment-ended`.
+     - **Author resolution, not the proposed fix:** the first cancellation request and its time decide the outcome, so overwriting it would change the attempt's history; the later command only repeats the cancellation.
+     - The spec and D6 now say so, and `723bea6` adds regression tests in the domain and the integration suite.
+  3. **M3:** in `worker-revocation.ts`, `${assignment.id}.revocation` exceeds the 128-character identifier limit for a long valid assignment identity, so the whole revocation rolled back.
+     - **Fixed** in `76389be`: a fixed-length identity, `v` followed by SHA-256.
+     - Test: two maximum-length assignment identities, one on each release path.
+- **D4 (b)** is implemented with the fixes, in `76389be` and `2354209`. Pass 2 reviews the combined diff.
 
 ## Limitations
 
 - Re-admission becomes a release, and re-admission waits for a later writer of admissions (D2). A release under a stale admission can be placed and rejected again; each round costs one final, recorded rejection.
-- A revoked worker's assignment that held a grant, with only a `not-started` execution and no cancellation, keeps its reservation until an operator or a later change releases it (D4 deviation).
 - An inventory request for `stale-recovery-epoch` or `execution-conflict` is recorded for a revoked worker as well, although its revoked broker user cannot read it.
 - When a releasing launch rejection fails the stale-generation check, its transaction rolls back, so only `execution.observation.rejected` is logged, not `execution.launch.rejected`.
 - No HTTP or CLI surface reads the reconciliation queue.

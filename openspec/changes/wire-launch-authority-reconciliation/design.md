@@ -22,7 +22,7 @@ Coordinator decisions of 2026-10-26 (Niki), recorded as D1 to D6:
    - **release:** `worker-not-authorized`, `stale-recovery-epoch`, `capacity-not-reserved`, `admission-not-current`, `gate-not-passed`, `artifact-revision-changed`, `policy-revision-changed`. The assignment is superseded without a grant (end reason `superseded`), so placement can reassign the attempt. `stale-recovery-epoch` also requests the worker's inventory.
    - **record only:** `assignment-not-active`, `stale-ownership-generation`, `attempt-not-launchable`, `operation-mismatch`. The current owner decides.
    - **inventory request:** `execution-conflict` requests the worker's inventory to reconcile the owning execution.
-   - The generation check of 21b applies. An assignment that already ended is not released again.
+   - The generation check of 21b applies to every reason, before any log or effect, so a stale rejection is rejected and requests no inventory (review pass 1, M1). An assignment that already ended is not released again.
    - G2 limitations: re-admission becomes a release, and re-admission itself waits for a later writer of admissions.
 
 3. **Observations of a revoked worker (D3, Q3).** `authenticateProducer` accepts a revoked worker under these conditions:
@@ -33,14 +33,19 @@ Coordinator decisions of 2026-10-26 (Niki), recorded as D1 to D6:
    - every accepted observation is logged as `execution.revoked-worker.observation` with the worker, journal, type, and sequence.
    - Heartbeats and inventory reports of a revoked worker stay refused. Its broker user is revoked, so only observations published before the revocation arrive.
 
-4. **Attempts of a revoked worker (D4, Q4).** In the revocation's transaction, after `invalidateWorkerLaunches`, every active assignment of the worker whose attempt owns no execution that could run and that never held a grant is superseded as in decision 2. Capacity reservation contract section 6 forbids superseding an assignment that held a grant, so one whose executions are all `not-started` or `exited` is not superseded (coordinator-approved deviation from the first D4 text, 2026-10-26). An exit, or a not-started after a cancellation, ends the attempt and releases it through the 21b path. A not-started without a cancellation keeps the attempt and its reservation for another launch, which a revoked worker never requests, so that reservation stays held until an operator or a later change releases it (known G2 limitation). An attempt with an `authorized` or `started` execution keeps its ownership and reservation, uncertain, until an observation or an operator settles it ("uncertain, never dead").
+4. **Attempts of a revoked worker (D4, Q4).** In the revocation's transaction, after `invalidateWorkerLaunches`, every unfinished assignment of the worker whose attempt has no `authorized` or `started` execution is freed (coordinator decision D4 (b), 2026-10-26, which replaced the first D4 text):
+   - **Never granted:** superseded as in decision 2.
+   - **Granted, every execution terminal** (`not-started` or `exited`): capacity reservation contract section 6 forbids superseding an assignment that held a grant. So the attempt is ended with `endAttempt`, and `releaseInTransaction` ends the assignment with `attempt-ended`, releases its reservation, and writes its end command. The end then follows the 21b terminal path (`followAttemptEnd`, shared with the observation effects): an automatic retry under the retry rules, otherwise the delegation is closed.
+   - Each command identity is `v` followed by the SHA-256 of the assignment and the release kind, so its length is fixed (review pass 1, M3), and a repeated revocation finds no unfinished assignment to free.
+
+   An attempt with an `authorized` or `started` execution keeps its ownership and reservation, uncertain, until an observation or an operator settles it ("uncertain, never dead").
 
 5. **Reconciliation queue (D5, Q5).**
    - A `ReconciliationQueue` read port in Execution lists the unknown executions (`isUnknownExecution`), for a worker or a task, from the tasks whose `unknown_executions` is above zero. It also lists the unrecorded processes recorded for a worker.
    - An `UnrecordedProcesses` port records each consumed `execution.unrecorded-process`, with its worker, journal, containment, process count, observation identity, and time, next to the existing structured warning. An inbox duplicate records nothing.
    - The migration adds the table `unrecorded_processes`. Neither port has an HTTP or CLI surface in 21d. The worker produces the observation later (item 20 follow-up).
 
-6. **B8 (D6, Q6).** `revokeLaunch(task, attemptId, reason, at)` sets the attempt's cancellation reason from a new parameter. Item 18's `revokeRunningLaunch` passes `assignment-ended`, matching its command (contract section 11). The invalidation helper passes `launch-revoked`.
+6. **B8 (D6, Q6).** `revokeLaunch(task, attemptId, reason, at)` sets the attempt's cancellation reason from a new parameter. Item 18's `revokeRunningLaunch` passes `assignment-ended`, matching its command (contract section 11). The invalidation helper passes `launch-revoked`. An attempt whose cancellation was already requested keeps it: its first request and time decide the outcome, and the later command only repeats the cancellation (author resolution of review pass 1, M2).
 
 7. **Journal-lost worker.** `LaunchAuthority.isCurrentWorker` also requires that the worker's enrolled journal has no `retired_at` in its producer cursor, as `isCurrentProducer` does. Otherwise the request is rejected with `worker-not-authorized` and recorded as a final rejection; a replay is refused the same way. A worker whose journal was never seen has no cursor and is not refused.
 

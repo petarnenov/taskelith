@@ -12,7 +12,7 @@ The control plane SHALL serve `authorizeLaunch` to an authenticated worker and S
 - **THEN** it is rejected with `worker-not-authorized`, and the rejection is recorded
 
 ### Requirement: Invalidating writers
-An invalidating writer SHALL, in its own transaction, read the live grants of its predicate, revoke them, and write one cancellation request per affected attempt. A worker revocation SHALL do so and SHALL record the worker's executions as uncertain for reconciliation. The attempt's cancellation reason SHALL match its command: `assignment-ended` for the cancellation of an ended assignment, `launch-revoked` for every other writer.
+An invalidating writer SHALL, in its own transaction, read the live grants of its predicate, revoke them, and write one cancellation request per affected attempt. A worker revocation SHALL do so and SHALL record the worker's executions as uncertain for reconciliation. A writer that records the attempt's cancellation SHALL record the reason of its command: `assignment-ended` for the cancellation of an ended assignment, `launch-revoked` for every other writer. An attempt that already has a cancellation SHALL keep it, because its first request decides the outcome.
 
 #### Scenario: Worker revocation after a grant
 - **WHEN** a worker is revoked after a grant
@@ -21,3 +21,7 @@ An invalidating writer SHALL, in its own transaction, read the live grants of it
 #### Scenario: Ended assignment with a running launch
 - **WHEN** a cancellation ends an assignment whose execution is authorized
 - **THEN** both the command and the attempt record the reason `assignment-ended`
+
+#### Scenario: Earlier cancellation
+- **WHEN** a refusal revokes the launch of an attempt whose cancellation was already requested
+- **THEN** the command carries `assignment-ended`, and the attempt keeps its earlier `requested` cancellation
