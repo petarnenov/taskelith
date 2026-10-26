@@ -12,9 +12,9 @@ Scope history, all on 2026-10-26, passed on by the coordinator:
 
 Base revision: `64155ab` on `dev`. Prepared in the git worktree `../taskelith-worktrees/align-ui-poc-with-design-rules` on branch `align-ui-poc-with-design-rules`. Scope: `docs/ui-poc/src/theme.ts` (new, moved out of `src/main.tsx`), `src/main.tsx`, `src/screens/Board.tsx`, `src/screens/NewTask.tsx`, `docs/ui-poc/README.md`, one consequence in `docs/decisions/0011-mantine-ui-proof-of-concept.md`, and this change.
 
-Outside the repository: republishing the proof of concept as version 7 of the private artifact `M8VnvLLCrAMiBPrkKezGzk` was authorized by the owner's direct assignment of this task on 2026-10-26. The coordinator publishes it; this change records the build that version 7 is to match.
+Outside the repository: republishing the proof of concept as version 7 of the private artifact `M8VnvLLCrAMiBPrkKezGzk` was authorized by the owner's direct assignment of this task on 2026-10-26. The worker session published it before handoff (below).
 
-Republish: pending.
+Republish: done on 2026-10-26 by the worker session before handoff. The build of `506baf5` (921,114 bytes, SHA-256 `9041699f6b8670e6cb937843016a33971be29563ffc14406e67c9d9847cc7e3a`) was published to <https://claude.ai/artifact/M8VnvLLCrAMiBPrkKezGzk> as version 7 (version id `1793031884-519b`), under the authorization of the owner's direct assignment.
 
 ## Environment
 
@@ -108,7 +108,7 @@ Assigned by the coordinator: Claude Code with `claude-opus-5-5`, effort high, in
   4. The README's "Departures from 'only Mantine'" missed the two board call-site `mih` props. Added.
   5. Hover-only tooltip badges were not counted as targets. The README and the measurement now claim 44 px for controls only, and the badges are under Limitations and a remaining gate for item 28.
   6. The README did not say where the contrast figures were measured. It names the version 6 build, whose colors this source keeps, and resting states.
-  7. The republication of version 7: the coordinator publishes it before the handoff; the line under "Scope and source" records it.
+  7. The README called version 7 published before it was. The worker session published version 7 before the handoff; the line under "Scope and source" records it.
   8. `design.md` said that the sizes do not enlarge the text, but `lg` inputs enlarge their text, label, and description. Corrected there and in the README.
   9. `src/theme.tsx` holds no JSX. It is renamed to `src/theme.ts`, with the imports and documents updated.
 
@@ -123,4 +123,4 @@ Assigned by the coordinator: Claude Code with `claude-opus-5-5`, effort high, in
 ## Remaining gates
 
 - Item 28: text contrast of at least 4.5:1, open in the proof of concept with Mantine's default colors, and whether hover-only tooltip badges count as targets.
-- Coordinator integration into `dev`, archive, and the republication of the artifact as version 7.
+- Coordinator integration into `dev` and archive.
