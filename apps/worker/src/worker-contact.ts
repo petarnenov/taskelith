@@ -14,9 +14,8 @@ export interface WorkerContactOptions {
   readonly lostContactMilliseconds?: number;
 }
 
-// The worker's own view of its contact. It is offline from its start until
-// a broker connection is up, and once a connection stays down past the
-// timeout, until one is up again.
+// Offline from the start until a broker connection is up, and after a
+// connection stays down past the timeout, until one is up again.
 export class WorkerContact implements LaunchContact {
   readonly #options: WorkerContactOptions;
   readonly #logger: Logger;
