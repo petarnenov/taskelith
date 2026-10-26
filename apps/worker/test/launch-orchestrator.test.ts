@@ -433,7 +433,7 @@ test('a cancellation after a final rejection records its evidence', async () => 
   assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
 });
 
-test('a cancellation of an execution with a pending W2 and no live launch waits for the next start's seal', async () => {
+test('a cancellation of an execution with a pending W2 and no live launch waits for the seal of the next start', async () => {
   value(journal.recordCommand(offer()));
   authority.answers = [unavailable()];
   stopAfterRequests(1);
