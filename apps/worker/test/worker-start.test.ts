@@ -541,6 +541,21 @@ test('without a launch command, inherited executions are reconciled and none is 
   assert.deepEqual(sink.records.filter(({ event }) => event === 'worker.reconciliation.deferred'), []);
 });
 
+test('without a launch command, the start reconciliation reports unrecorded processes', async () => {
+  const launching = new RecordingLaunching();
+  const containment = '/sys/fs/cgroup/taskelith/lost-1';
+  launching.hostAnswer = ok({
+    clock: new FakeClock(), supervision: new FakeSupervisions().factory, records: async () => ok([]),
+    containments: () => ok([{ name: 'lost-1', containment, processes: [] }]),
+  });
+  const { worker } = await startLogged(launching);
+  const unrecorded = () => value(worker.root.journal.dueForPublication(T0)).map(({ fact }) => fact)
+    .filter((fact) => fact.kind === 'unrecorded-process');
+  await until(() => unrecorded().length > 0);
+  assert.deepEqual(unrecorded(), [{ kind: 'unrecorded-process', containment, processes: [] }]);
+  assert.deepEqual(launching.hosts.map(({ launch }) => launch), [undefined]);
+});
+
 test('without a supervision host, each inherited open execution is deferred and left untouched', async () => {
   const before = await inheritExecutions();
   const launching = new RecordingLaunching();

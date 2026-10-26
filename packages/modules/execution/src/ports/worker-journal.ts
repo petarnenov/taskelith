@@ -43,6 +43,9 @@ export interface WorkerJournal {
   recordTerminationUnproven(executionId: ExecutionId, survivors: readonly ExecutionProcess[]): Result<void>;
   recordCancellationNotApplied(commandId: CommandId, executionId: ExecutionId): Result<void>;
   recordCancellationEvidence(commandId: CommandId): Result<void>;
+  // Linux: a populated containment without an execution record; skipped
+  // while its observation is still in the outbox.
+  recordUnrecordedProcess(containment: string, processes: readonly ExecutionProcess[]): Result<void>;
   // Journals a declaration only when it differs from the last one.
   recordCapacity(capacity: DeclaredCapacity): Result<void>;
   // The current causes of admission pressure; an empty list clears it.

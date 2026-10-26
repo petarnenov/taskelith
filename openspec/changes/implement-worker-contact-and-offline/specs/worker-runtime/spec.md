@@ -38,7 +38,7 @@ A worker SHALL launch only when `TASKELITH_WORKER_COMMAND` names its program; on
 - **THEN** its settings hold the containment parent and no launch settings
 
 ### Requirement: Start reconciliation
-On its first pass after a start, a worker with a supervision host SHALL reconcile each execution an earlier process left open once and SHALL spawn nothing for it: a pending W2 or an unused grant is sealed and reported `not-started`, an operation of an execution without a grant that expired or was rejected as retryable is authorized again when a launch command is set, and a journaled record goes to the supervisor's recovery table.
+On its first pass after a start, a worker with a supervision host SHALL reconcile each execution an earlier process left open once and SHALL spawn nothing for it: a pending W2 or an unused grant is sealed and reported `not-started`, an operation of an execution without a grant that expired or was rejected as retryable is authorized again when a launch command is set, and a journaled record goes to the recovery table. On Linux it SHALL then report unrecorded processes.
 
 #### Scenario: Pending W2 on start
 - **WHEN** the worker starts with a W2 that has no outcome
@@ -55,6 +55,10 @@ On its first pass after a start, a worker with a supervision host SHALL reconcil
 #### Scenario: Reconciliation without a launch command
 - **WHEN** a worker without `TASKELITH_WORKER_COMMAND` starts with a pending W2, a written record, and an expired operation without a grant
 - **THEN** it seals the first and reports it `not-started`, sends the record to the recovery table, logs `worker.reconciliation.deferred` once for the expired one with the reason `no launch command`, and requests no authorization
+
+#### Scenario: Unrecorded process without a launch command
+- **WHEN** a Linux worker without `TASKELITH_WORKER_COMMAND` starts and a populated containment has no execution record
+- **THEN** it journals the containment as `unrecorded-process` on that first pass
 
 ### Requirement: Execution record removal
 A worker with a supervision host SHALL remove an execution record only after the journal reports its terminal fact confirmed, SHALL journal the removal after the directory is gone, and SHALL keep a record whose supervisor still holds its lock for a later pass.

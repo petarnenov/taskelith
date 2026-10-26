@@ -63,6 +63,16 @@ export type SupervisionFactory = (executionId: ExecutionId) => ExecutionSupervis
 // The execution records on disk, by their directory names.
 export type RecordListing = () => Promise<Result<readonly string[]>>;
 
+// A populated containment, named like the record of its execution.
+export interface PopulatedContainment {
+  readonly name: string;
+  readonly containment: string;
+  readonly processes: readonly ExecutionProcess[];
+}
+
+// Linux only: the populated containments of this worker.
+export type ContainmentScan = () => Result<readonly PopulatedContainment[]>;
+
 // A launch record that is a claim proves a supervisor may have spawned.
 export function sealWon(launch: LaunchRecord): Result<void> {
   return launch.kind === 'seal' ? ok(undefined) : err(failure('conflict', 'a supervisor claimed the launch record'));

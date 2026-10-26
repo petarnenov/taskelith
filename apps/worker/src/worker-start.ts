@@ -30,7 +30,7 @@ import {
 import { AdmissionPressure } from './admission-pressure.js';
 import { BrokerSession, type BrokerLink } from './broker-session.js';
 import { CommandIntake } from './command-intake.js';
-import type { DeadlineClock, RecordListing, SupervisionFactory } from './execution-supervision-port.js';
+import type { ContainmentScan, DeadlineClock, RecordListing, SupervisionFactory } from './execution-supervision-port.js';
 import { runHeartbeats, type HeartbeatOptions } from './heartbeat-publisher.js';
 import { reportInventoryOnConnection } from './inventory-report.js';
 import { LaunchOrchestrator, openExecutions } from './launch-orchestrator.js';
@@ -75,6 +75,7 @@ export interface LaunchHost {
   readonly clock: DeadlineClock;
   readonly supervision: SupervisionFactory;
   readonly records?: RecordListing;
+  readonly containments?: ContainmentScan;
 }
 
 // A started worker: it holds the root lock and keeps a broker connection,
@@ -215,11 +216,12 @@ function launchOrchestrator(context: OrchestratorContext): Result<LaunchOrchestr
   const host = launching.host(settings, root.paths.executions);
   if (!host.ok) return settings.launch === undefined ? deferReconciliation(root, logger, host.error.message) : host;
   const { sleep, draw, newId, pollMilliseconds, onFailure } = launching;
-  const { supervision, clock, records } = host.value;
+  const { supervision, clock, records, containments } = host.value;
   return ok(new LaunchOrchestrator({
     journal: root.journal, supervision, clock, pressure, sleep, draw, newId, contact,
     ...(settings.launch === undefined ? {} : { authority: launching.authority(credential) }),
     ...(pollMilliseconds === undefined ? {} : { pollMilliseconds }), ...(records === undefined ? {} : { records }),
+    ...(containments === undefined ? {} : { containments }),
     ...(launching.logger === undefined ? {} : { logger: launching.logger }), ...(onFailure === undefined ? {} : { onFailure }),
   }));
 }

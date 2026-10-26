@@ -5,7 +5,7 @@
 ## Coordinator decisions (2026-10-26)
 
 - **Scope (20d Q1 A).** The heartbeat, the `status()` watcher, lost contact and offline mode, the inventory on every reconnect, and the failed-first-connect change; plus the 20d obligation to decouple the supervision host from the launch command.
-- **Exclusions.** The `unrecorded-process` scan; admission pressure, the disk floor, and the backlog limit (20e, in parallel); any contract change.
+- **Exclusions.** The `unrecorded-process` scan itself (`implement-unrecorded-process-scan`, merged from `dev`; this change only runs it without a launch command); admission pressure, the disk floor, and the backlog limit (20e, in parallel); any contract change.
 
 ## Goals / Non-Goals
 
