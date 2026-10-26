@@ -116,7 +116,7 @@ test('recovery reports a recorded exit, and a missing record is uncertain', asyn
   assert.deepEqual(value(await supervision().recover('first')), { fact: 'uncertain', reason: 'the journaled record is missing or damaged' });
 });
 
-test('read reports the first survivors with their groups, an older entry with the child group, and a cancel not applied', async () => {
+test('read reports the first survivors with their groups, leaves out an older entry without one, and a cancel not applied', async () => {
   value(await supervision().prepare(PLAN));
   const directory = join(executions, EXECUTION);
   writeFileSync(join(directory, RECORD_FILES.handle), encodeRecord({
@@ -131,7 +131,6 @@ test('read reports the first survivors with their groups, an older entry with th
   const facts = value(await supervision().read());
   assert.deepEqual(facts.survivors, [
     { platform: 'darwin', bootId: BOOT, pid: 43, startTime: 8, processGroupId: 50 },
-    { platform: 'darwin', bootId: BOOT, pid: 44, startTime: 9, processGroupId: 42 },
   ]);
   assert.equal(facts.cancellationNotApplied, true);
 });
@@ -156,3 +155,21 @@ test('the record listing names directories only, and a missing directory lists n
   assert.deepEqual(value(await fileRecordListing(join(executions, 'absent'))()), []);
   assert.equal((await fileRecordListing(join(executions, 'stray-file'))()).ok, false);
 });
+
+test('a record without a survivors event reports no survivors fact', async () => {
+  value(await supervision().prepare(PLAN));
+  assert.equal(value(await supervision().read()).survivors, undefined);
+});
+
+const UNLISTABLE_SURVIVORS = [
+  { name: 'no listable process', processes: [] },
+  { name: 'only entries an older supervisor wrote without groups', processes: [{ bootId: BOOT, pid: 44, startTime: 9 }] },
+];
+
+for (const { name, processes } of UNLISTABLE_SURVIVORS) {
+  test(`a survivors event with ${name} still reports an empty survivors fact`, async () => {
+    value(await supervision().prepare(PLAN));
+    writeFileSync(join(executions, EXECUTION, RECORD_FILES.events), encodeEvent({ kind: 'survivors', processes }));
+    assert.deepEqual(value(await supervision().read()).survivors, []);
+  });
+}

@@ -14,7 +14,7 @@ A worker SHALL read the current journal format and every earlier format it lists
 ## ADDED Requirements
 
 ### Requirement: Expired operation
-W3 SHALL record an operation as `expired` when its deadline passed without a decision or the authority answered `expired`; such an operation, like a retryable rejection, SHALL allow a new operation for the same execution, and W6 SHALL expire the operations of the execution that have no outcome.
+W3 SHALL record an operation as `expired` when its deadline passed without a decision or the authority answered `expired`; such an operation of an execution without a grant, like a retryable rejection, SHALL allow a new operation for that execution, and W6 SHALL expire the operations of the execution that have no outcome.
 
 #### Scenario: Restart after an expired operation
 - **WHEN** the worker restarts with an execution whose last operation expired and no W4

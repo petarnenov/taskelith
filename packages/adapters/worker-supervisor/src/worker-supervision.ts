@@ -108,7 +108,8 @@ async function readEvents(store: RecordStore): Promise<Result<Result<readonly Ev
 export type RecoveryResult =
   | { readonly fact: 'not-started' }
   | { readonly fact: 'exited'; readonly exit: ExitRecord }
-  | { readonly fact: 'adopted' }
+  // A live supervisor keeps watching, or a new one was started to adopt.
+  | { readonly fact: 'adopted'; readonly supervisor: 'live' | 'started' }
   | { readonly fact: 'retry' }
   | { readonly fact: 'uncertain'; readonly reason: string };
 
@@ -143,11 +144,11 @@ async function applyDecision(
     case 'write-unknown-exit':
       return writeExit(dependencies, { status: { kind: 'unknown' }, startProven: decision.startProven, termination: decision.termination });
     case 'adopt-supervisor':
-      return ok({ fact: 'adopted' });
+      return ok({ fact: 'adopted', supervisor: 'live' });
     case 'adopt-containment':
     case 'adopt-child': {
       const started = await dependencies.startSupervisor('adopt');
-      return started.ok ? ok({ fact: 'adopted' }) : started;
+      return started.ok ? ok({ fact: 'adopted', supervisor: 'started' }) : started;
     }
     case 'retry-liveness':
       return ok({ fact: 'retry' });

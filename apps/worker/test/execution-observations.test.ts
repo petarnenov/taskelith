@@ -109,6 +109,13 @@ test('uncertain and not-started are published about their execution', async () =
   assert.deepEqual((await publishedAs('ExecutionNotStartedObservation')).payload, { executionId: EXECUTION });
 });
 
+test('an unproven termination is published with its survivors, even with none listable', async () => {
+  launched();
+  value(journal.recordTerminationUnproven(EXECUTION, []));
+  const body = await publishedAs('TerminationUnprovenObservation');
+  assert.deepEqual(body.payload, { executionId: EXECUTION, survivors: [] });
+});
+
 test('a final launch rejection is published with its operation and reason', async () => {
   authorize('operation-1');
   value(journal.recordLaunchRejection(id('OperationId', 'operation-1'), launchRejection('gate-not-passed', 'gate')));

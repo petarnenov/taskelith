@@ -23,12 +23,14 @@ import { startWorker, type LaunchHost, type LaunchingDependencies, type RunningW
 const JOURNAL_ID_BYTES = 16;
 
 export function productionDependencies(settings: WorkerSettings): WorkerDependencies {
+  const logger = new Logger(new JsonLinesLogSink(process.stderr), SYSTEM_CLOCK);
   return {
     enrollment: new HttpEnrollmentClient({ baseUrl: settings.controlPlaneUrl, timeoutMilliseconds: CONTROL_PLANE_TIMEOUT_MILLISECONDS }),
     connect: connectWorkerTransport,
     newJournalId: () => randomBytes(JOURNAL_ID_BYTES).toString('hex'),
     clock: SYSTEM_CLOCK,
-    launching: productionLaunching(settings),
+    launching: productionLaunching(settings, logger),
+    logger,
   };
 }
 
@@ -38,7 +40,7 @@ function supervisorVersion(): string {
   return (JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }).version;
 }
 
-function productionLaunching(settings: WorkerSettings): LaunchingDependencies {
+function productionLaunching(settings: WorkerSettings, logger: Logger): LaunchingDependencies {
   const endpoint = { baseUrl: settings.controlPlaneUrl, timeoutMilliseconds: CONTROL_PLANE_TIMEOUT_MILLISECONDS };
   return {
     authority: (credential) => new HttpLaunchAuthorityClient({ ...endpoint, credential }),
@@ -46,7 +48,7 @@ function productionLaunching(settings: WorkerSettings): LaunchingDependencies {
     sleep: (milliseconds, signal) => delay(milliseconds, undefined, { signal }).catch(() => undefined),
     draw: Math.random,
     newId: randomUUID,
-    logger: new Logger(new JsonLinesLogSink(process.stderr), SYSTEM_CLOCK),
+    logger,
     onFailure: reportLaunchFailure,
   };
 }

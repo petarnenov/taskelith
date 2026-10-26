@@ -105,14 +105,13 @@ class FileExecutionSupervision implements ExecutionSupervision {
     const launch = text.value === undefined ? undefined : parseLaunch(text.value);
     const { handle, exit, survivors, cancellationNotApplied, problems } = facts.value;
     const platform = this.#options.platform.name;
-    const group = handle?.kind === 'spawned' ? handle.processGroupId : undefined;
     return ok({
       problems,
       cancellationNotApplied,
       ...(launch?.ok ? { launch: launch.value } : {}),
       ...(handle?.kind === 'spawned' ? { process: { platform, ...handle.process, processGroupId: handle.processGroupId } } : {}),
       ...(exit === undefined ? {} : { exit }),
-      ...(survivors === undefined || group === undefined ? {} : { survivors: survivors.map((survivor) => survivorOf(survivor, platform, group)) }),
+      ...(survivors === undefined ? {} : { survivors: reportableSurvivors(survivors, platform) }),
     });
   }
 
@@ -120,7 +119,9 @@ class FileExecutionSupervision implements ExecutionSupervision {
   async recover(round: RecoveryRound): Promise<Result<SupervisedRecovery>> {
     const recovered = await recoverExecution(this.#dependencies, 'record', round === 'after-retry');
     if (!recovered.ok) return recovered;
-    return ok(recovered.value.fact === 'adopted' ? { fact: 'observe' } : recovered.value);
+    const { value } = recovered;
+    if (value.fact !== 'adopted') return ok(value);
+    return ok(value.supervisor === 'live' ? { fact: 'observe' } : { fact: 'adopted' });
   }
 
   async remove(): Promise<Result<void>> {
@@ -130,10 +131,12 @@ class FileExecutionSupervision implements ExecutionSupervision {
   }
 }
 
-// An entry an earlier supervisor wrote names no group: the child's, then.
-function survivorOf(survivor: SurvivingProcess, platform: 'linux' | 'darwin', childGroup: number): ExecutionProcess {
-  const { bootId, pid, startTime, processGroupId } = survivor;
-  return { platform, bootId, pid, startTime, processGroupId: processGroupId ?? childGroup };
+// A group-less entry of an older supervisor is left out, never guessed;
+// the termination stays unproven even when no entry is left.
+function reportableSurvivors(survivors: readonly SurvivingProcess[], platform: 'linux' | 'darwin'): ExecutionProcess[] {
+  return survivors.flatMap(({ bootId, pid, startTime, processGroupId }) => processGroupId === undefined
+    ? []
+    : [{ platform, bootId, pid, startTime, processGroupId }]);
 }
 
 // Directories only; anything else in `executions/` is no record.

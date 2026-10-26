@@ -480,6 +480,7 @@ test('a record is removable once its terminal fact is confirmed, and removed onc
   assert.deepEqual(value(journal.removableRecords()), []);
   value(journal.confirmThrough(value(parseSequence(2))));
   assert.deepEqual(value(journal.removableRecords()), []);
+  assert.equal(failed(journal.recordRecordRemoved(EXECUTION)).code, 'precondition-failed');
   value(journal.confirmThrough(value(parseSequence(3))));
   assert.deepEqual(value(journal.removableRecords()), [EXECUTION]);
   value(journal.recordRecordRemoved(EXECUTION));

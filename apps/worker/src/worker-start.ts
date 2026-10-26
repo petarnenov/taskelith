@@ -3,7 +3,7 @@ import { SUPPORTED_PROTOCOL_VERSIONS } from '@taskelith/contracts';
 import type { JournalId, LaunchAuthorityClient } from '@taskelith/execution';
 import { parseInstallationId, type Enrollment, type EnrollmentClient } from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
-import type { Logger } from '@taskelith/observability';
+import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import {
   JetStreamPublisher,
   TransportAddress,
@@ -26,7 +26,7 @@ import {
 } from '@taskelith/worker-journal';
 import { CommandIntake } from './command-intake.js';
 import type { DeadlineClock, RecordListing, SupervisionFactory } from './execution-supervision-port.js';
-import { LaunchOrchestrator } from './launch-orchestrator.js';
+import { LaunchOrchestrator, openExecutions } from './launch-orchestrator.js';
 import { runObservationPublisher } from './observation-publisher.js';
 import type { LaunchSettings, WorkerSettings } from './settings.js';
 
@@ -40,6 +40,7 @@ export interface WorkerDependencies {
   readonly limits?: TransportLimits;
   // Used only when the settings name a launch command.
   readonly launching?: LaunchingDependencies;
+  readonly logger?: Logger;
 }
 
 // What launches need beyond the journal: the launch authority with the
@@ -138,6 +139,10 @@ async function connectBroker(settings: WorkerSettings, dependencies: WorkerDepen
   if (!observationSubject.ok) return observationSubject;
   const launcher = launchOrchestrator(settings, dependencies, root, credentials.value.controlPlane);
   if (!launcher.ok) return launcher;
+  if (launcher.value === undefined) {
+    const deferred = deferReconciliation(root, dependencies.logger ?? SILENT_LOGGER);
+    if (!deferred.ok) return deferred;
+  }
   const declared = declareCapacity(settings, root);
   if (!declared.ok) return declared;
   const transport = await dependencies.connect({
@@ -171,6 +176,15 @@ function launchOrchestrator(
     ...(pollMilliseconds === undefined ? {} : { pollMilliseconds }), ...(records === undefined ? {} : { records }),
     ...(logger === undefined ? {} : { logger }), ...(onFailure === undefined ? {} : { onFailure }),
   }));
+}
+
+// Without a launch host nothing can be sealed, so the open executions wait,
+// untouched, for a start that names a launch command.
+function deferReconciliation(root: WorkerRoot, logger: Logger): Result<void> {
+  const snapshot = root.journal.snapshot();
+  if (!snapshot.ok) return snapshot;
+  for (const executionId of openExecutions(snapshot.value)) logger.info('worker.reconciliation.deferred', { executionId });
+  return ok(undefined);
 }
 
 // Sorted, so a reordered configuration declares nothing new.

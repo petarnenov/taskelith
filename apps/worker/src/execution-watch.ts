@@ -32,7 +32,7 @@ export interface WatchTarget {
   // The cancellation to forward to the supervisor, if any.
   readonly cancelReason: () => string | undefined;
   // The cancellations a not-applied report answers.
-  readonly cancellations: () => readonly CommandId[];
+  readonly cancellations: () => Result<readonly CommandId[]>;
 }
 
 // How a watch ended: sealed without a spawn, or anything else.
@@ -42,7 +42,7 @@ export type Watched = 'not-started' | 'ended';
 interface Committed {
   started: boolean;
   survivors: boolean;
-  notApplied: boolean;
+  readonly notApplied: Set<CommandId>;
 }
 
 // Follows execution records to their terminal facts and commits each fact
@@ -78,7 +78,7 @@ export class ExecutionWatch {
   async observe(target: WatchTarget): Promise<Watched> {
     let forwarded = false;
     let round: RecoveryRound = 'first';
-    const committed: Committed = { started: false, survivors: false, notApplied: false };
+    const committed: Committed = { started: false, survivors: false, notApplied: new Set() };
     for (let polls = 1; !target.stopping.aborted; polls += 1) {
       const reason = target.cancelReason();
       if (reason !== undefined && !forwarded) forwarded = cancelFiled(await target.supervision.cancel(reason));
@@ -115,14 +115,27 @@ export class ExecutionWatch {
       if (!this.#reported(journal.recordStart(executionId, target.launchAuthId, facts.process))) return 'ended';
       committed.started = true;
     }
+    if (!this.#commitEvidence(target, facts, committed)) return undefined;
+    return facts.exit === undefined ? undefined : this.#exited(executionId, facts.exit);
+  }
+
+  // The evidence beside the facts; the exit waits until all of it is
+  // committed, so none is lost once the execution is terminal.
+  #commitEvidence(target: WatchTarget, facts: SupervisedFacts, committed: Committed): boolean {
+    const { executionId } = target;
+    const { journal } = this.#options;
     if (!committed.survivors && facts.survivors !== undefined) {
       committed.survivors = this.#reported(journal.recordTerminationUnproven(executionId, facts.survivors));
+      if (!committed.survivors) return false;
     }
-    if (!committed.notApplied && facts.cancellationNotApplied) {
-      const commands = target.cancellations();
-      committed.notApplied = commands.every((commandId) => this.#reported(journal.recordCancellationNotApplied(commandId, executionId)));
+    if (!facts.cancellationNotApplied) return true;
+    const commands = target.cancellations();
+    if (!this.#reported(commands)) return false;
+    for (const commandId of commands.value.filter((command) => !committed.notApplied.has(command))) {
+      if (!this.#reported(journal.recordCancellationNotApplied(commandId, executionId))) return false;
+      committed.notApplied.add(commandId);
     }
-    return facts.exit === undefined ? undefined : this.#exited(executionId, facts.exit);
+    return true;
   }
 
   // A live or newly adopting supervisor keeps the watch going; anything

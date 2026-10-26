@@ -62,7 +62,7 @@ test('a seal that loses to a claim is decided again from the claim', async () =>
   const winner = await sealLaunch(setup.worker);
   assert.ok(winner.ok);
   assert.equal(winner.value.kind, 'claim');
-  assert.deepEqual(await fact(setup, 'intent'), { fact: 'adopted' });
+  assert.deepEqual(await fact(setup, 'intent'), { fact: 'adopted', supervisor: 'started' });
   assert.deepEqual(setup.started, ['adopt']);
 });
 
@@ -79,7 +79,7 @@ test('a live supervisor is adopted only while its recorded identity is alive', a
   setup.store.files.set('launch', CLAIM);
   setup.store.files.set('supervisor.1', encodeRecord({ serial: 1, process: identity(SUPERVISOR_PID) }));
   setup.lock.held = true;
-  assert.deepEqual(await fact(setup), { fact: 'adopted' });
+  assert.deepEqual(await fact(setup), { fact: 'adopted', supervisor: 'live' });
 
   setup.fake.end(SUPERVISOR_PID);
   assert.deepEqual(await fact(setup), { fact: 'retry' });

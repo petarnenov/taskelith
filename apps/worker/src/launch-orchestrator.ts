@@ -20,7 +20,7 @@ import {
   type RecoveryAction,
   type WorkerJournal,
 } from '@taskelith/execution';
-import { parseIdentifier, type Result } from '@taskelith/kernel';
+import { ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import {
   sealWon,
@@ -125,7 +125,7 @@ export class LaunchOrchestrator {
   // The first pass logs the plan and the records no journal row names; the
   // open executions it finds are the inherited ones.
   async #beginReconciliation(snapshot: JournalSnapshot, actions: readonly RecoveryAction[]): Promise<void> {
-    this.#inherited = new Set(snapshot.executions.filter((execution) => !isTerminal(execution)).map(({ executionId }) => executionId));
+    this.#inherited = new Set(openExecutions(snapshot));
     const counts: Record<string, number> = {};
     for (const { kind } of actions) counts[kind] = (counts[kind] ?? 0) + 1;
     this.#logger.info('worker.reconciliation.planned', { inherited: this.#inherited.size, ...counts });
@@ -202,13 +202,13 @@ export class LaunchOrchestrator {
   }
 
   // The journaled cancellations that name an execution or its attempt.
-  #cancellationsOf(assignmentId: string, executionId: ExecutionId): readonly CommandId[] {
+  #cancellationsOf(assignmentId: string, executionId: ExecutionId): Result<readonly CommandId[]> {
     const snapshot = this.#options.journal.snapshot();
-    if (!reported(this.#options, snapshot)) return [];
+    if (!snapshot.ok) return snapshot;
     const intent = snapshot.value.intents.find((candidate) => candidate.assignmentId === assignmentId);
-    return snapshot.value.cancellations.filter(({ target }) => target.kind === 'execution'
+    return ok(snapshot.value.cancellations.filter(({ target }) => target.kind === 'execution'
       ? target.executionId === executionId
-      : target.attemptId === intent?.attemptId).map(({ commandId }) => commandId);
+      : target.attemptId === intent?.attemptId).map(({ commandId }) => commandId));
   }
 
   // Item 4: only after the terminal fact is confirmed; a supervisor still
@@ -268,6 +268,11 @@ function targetedAssignments(target: CancellationTarget, snapshot: JournalSnapsh
   return new Set(named.map(({ assignmentId }) => assignmentId));
 }
 
+// The executions not yet terminal: at a start, those an earlier process left.
+export function openExecutions(snapshot: JournalSnapshot): ExecutionId[] {
+  return snapshot.executions.filter((execution) => !isTerminal(execution)).map(({ executionId }) => executionId);
+}
+
 function isTerminal(execution: JournaledExecution): boolean {
   return execution.state === 'exited' || execution.state === 'not-started';
 }
@@ -309,7 +314,7 @@ interface LaunchContext {
   readonly watch: ExecutionWatch;
   readonly intent: JournaledIntent;
   readonly stopping: AbortSignal;
-  readonly cancellations: (executionId: ExecutionId) => readonly CommandId[];
+  readonly cancellations: (executionId: ExecutionId) => Result<readonly CommandId[]>;
   readonly resume?: ExecutionId;
 }
 
