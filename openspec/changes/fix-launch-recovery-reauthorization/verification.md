@@ -51,6 +51,7 @@ Claude Code claude-opus-5-5 pending.
 
 ## Limitations and remaining gates
 
-- The double fault of design "Risks" (a crash after a relaunch's W2 whose request never arrived, while the predecessor's observation is also undelivered) still ends the launch.
+- The double fault of design "Risks" (a crash after a relaunch's W2 whose request never arrived, while the predecessor's observation is also undelivered) still ends the launch. Follow-up candidate: "reportsNotStartedFor for every unconfirmed sealed execution of the intent". The owner's delegate decided the single-reference shape, and the coordinator keeps the follow-up out of this change.
+- The reported `operationId` is not a match condition (design D2, deviation from the brief, accepted by the coordinator).
 - The fix is shown with fake supervisions and a fake authority in the worker, and with the real authority on PostgreSQL in the control plane; the end-to-end 24b crash windows wait for tasks group 4.
 - Remaining gates: tasks group 4 once G2 24b is in `dev`, the independent review, the coordinator's integration into `dev`, and the archive of this change.

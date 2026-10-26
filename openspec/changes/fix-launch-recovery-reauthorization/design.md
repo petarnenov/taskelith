@@ -29,6 +29,13 @@ The operation need not name a grant of the execution. W6 closes a pending operat
 
 `execution-conflict` is the reason contract section 9 already gives the ownership rule; the report is part of that rule, so no new reason is needed.
 
+**Deviation from the brief.** The coordinator's brief said to "validate that the operation matches" the operation that authorized the execution. This change does not require that match: the attempt, worker, and state checks already bind the seal to the worker's own unspawned execution, and an exact match would send the W6 case above back into `rejected-final`. The coordinator accepted this deviation. The rules are:
+
+- An unknown `operationId` is accepted; the attempt, worker, and state checks still apply.
+- An execution already `not-started` is idempotent: accepted, nothing changes.
+- An unknown execution is a no-op.
+- A mismatch (an operation that granted another execution), a `started` or `exited` execution, or a report naming the requested execution itself is `execution-conflict`.
+
 ### D3. Idempotency
 
 - **Transport retry** of the same `operationId`: answered from the recorded grant (contract section 6), which already holds the sealed execution; nothing is applied twice.
@@ -43,5 +50,5 @@ Every new execution of a `Launch`, at a start's continue-launch and at a runtime
 
 ## Risks / Trade-offs
 
-- A crash after a relaunch's W2 and before its request reached the authority, while the predecessor's observation is also still undelivered: the next start reports the newest sealed execution, which the authority never granted, and the older owner still blocks it. The single reference of option (b) cannot name both; this double fault ends the launch as before the fix. Reporting the older execution instead would fail the more likely case of a granted, sealed newest one.
+- A crash after a relaunch's W2 and before its request reached the authority, while the predecessor's observation is also still undelivered: the next start reports the newest sealed execution, which the authority never granted, and the older owner still blocks it. The single reference of option (b) cannot name both; this double fault ends the launch as before the fix. Reporting the older execution instead would fail the more likely case of a granted, sealed newest one. Follow-up candidate: "reportsNotStartedFor for every unconfirmed sealed execution of the intent". The owner's delegate decided the single-reference shape, and the coordinator keeps the follow-up out of this change.
 - The weaker operation check (D2) accepts an operation the authority never recorded; the execution, attempt, worker, and state checks still bind the report to the worker's own unspawned execution.

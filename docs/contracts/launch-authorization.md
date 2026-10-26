@@ -54,7 +54,7 @@ An attempt has at most one owning execution at a time. Expiry of an authorizatio
   - moves an `authorized` execution to `not-started`, as its observation would, when the execution belongs to the request's attempt and worker and the operation granted no other execution. An operation the authority never recorded is accepted, because its request may have been lost before a decision;
   - rejects every other case with `execution-conflict`: a `started` or `exited` execution, one of another attempt or worker, or an operation that granted another execution.
 
-  The observation, when it arrives later, is a duplicate. The report is not an expected value, so section 6 does not compare it on a transport retry.
+  The reported `operationId` is advisory evidence, not a match condition: only an operation that granted another execution conflicts. The observation, when it arrives later, is a duplicate. The report is not an expected value, so section 6 does not compare it on a transport retry.
 
 This section places two obligations on the supervisor identity contract (item 4) and the worker journal contract (item 5): a single, claimed spawn per execution identity, and an irreversible seal before `not-started` is reported.
 
