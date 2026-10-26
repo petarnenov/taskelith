@@ -10,4 +10,4 @@
 - [x] 2.1 Settings test for the variable, integration test for the refused reservation, and a composition test that the reservations fit the file store
 - [x] 2.2 Record the local values in `docs/operational-targets.md` and the storage requirement in `docs/local-installation.md`
 - [x] 2.3 Run `make verify` and `make verify-installation`, including a run with a small file store
-- [ ] 2.4 Independent review and `verification.md`
+- [x] 2.4 Independent review and `verification.md`

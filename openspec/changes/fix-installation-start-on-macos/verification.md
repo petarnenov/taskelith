@@ -12,7 +12,7 @@ Decisions:
 
 ## Revision and environment
 
-- Base: `origin/dev` at `85797b8`. Branch `fix-installation-start-on-macos`. The fix is in `fbce516`, which pass 1 reviewed. The pass 1 fixes and this record are in the next commit, which pass 2 reviews.
+- Base: `origin/dev` at `85797b8`. Branch `fix-installation-start-on-macos`. The fix is in `fbce516`, which pass 1 reviewed. The pass 1 fixes and this record are in `96874d8` and `5295b81`, which pass 2 reviewed. The record of pass 2 is in the next commit, unreviewed.
 - Host: Linux 6.8.0 x86_64 with Docker Engine and Compose; Node.js 24.22.1 from `.nvmrc`. Bash 5.2; no Bash 3.2 was available.
 
 ## Author self-check and evidence check
@@ -51,6 +51,13 @@ codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only \
   2. Medium: `verification.md` was missing. Fixed: this record.
   3. Low: `docs/local-installation.md` said that with less than 8 GiB of free disk the start fails; the broker checks the fixed store, not the disk. Fixed: the section now says the installation starts and broker writes fail later when the disk fills.
 
+### Pass 2
+
+- Session `01a17595-2fa1-7772-96af-54cfca443a7b`, 2026-10-26, on `5295b81`. The output header shows model `gpt-6.1-sol`, reasoning effort `medium`, and sandbox `read-only`.
+- Snapshot before and after: `4fa5f61e…` both times, unchanged.
+- The reviewer confirmed the resolution of the three pass 1 findings and found no new problem in the whole change.
+- Findings: Critical 0, High 0, Medium 0, Low 0.
+
 ## Limitations
 
 - The fix has not yet run on the reporting iMac; the coordinator has Desi re-run `make verify-installation` on this branch before integration.
@@ -59,6 +66,5 @@ codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only \
 
 ## Remaining gates
 
-- Review pass 2.
 - Desi's run of `make verify-installation` on the iMac against this branch.
 - Integration and archive by the coordinator.
