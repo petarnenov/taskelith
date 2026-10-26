@@ -21,4 +21,4 @@
 - [x] 4.2 Write `acceptance.md`, the acceptance table
 - [x] 4.3 Update `docs/local-installation.md`, `docs/worker-platforms.md`, and the Ubuntu register row
 - [x] 4.4 Run `make verify` and record `verification.md`
-- [ ] 4.5 Independent review (pending; assigned by the coordinator)
+- [x] 4.5 Independent review: pass 1 (OpenCode CLI, kimi-k2.7-code) found 9 Low findings, fixed as unreviewed fixes; no pass 2
