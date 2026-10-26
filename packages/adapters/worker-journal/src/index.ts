@@ -9,7 +9,7 @@ export {
   syncPath,
   type DataRootSources,
 } from '@taskelith/data-root';
-export { truncateBufferedLogs } from './buffered-logs.js';
+export { NODE_LOG_FILE_SYSTEM, truncateBufferedLogs, type LogFileSystem } from './buffered-logs.js';
 export { ExclusiveFileLock, LOCK_APPLICATION_ID } from './exclusive-file-lock.js';
 export { JOURNAL_APPLICATION_ID, JOURNAL_FORMAT } from './journal-database.js';
 export { checkJournalFault, hostBootId, recordJournalFault } from './journal-fault.js';
