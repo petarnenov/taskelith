@@ -1,0 +1,90 @@
+import { isFailureCode, type Failure, type Result } from '@taskelith/kernel';
+
+// Readers for untrusted plugin output: each reads a field once and returns a
+// frozen copy of the declared fields, or the problems it found.
+
+export type FieldCheck = (value: unknown) => string | undefined;
+
+export type RecordShape = Readonly<Record<string, FieldCheck>>;
+
+export type Reading<Value> = Result<Value, readonly string[]>;
+
+export const text: FieldCheck = (value) => (typeof value === 'string' ? undefined : 'must be a string');
+
+export const identifier: FieldCheck = (value) =>
+  typeof value === 'string' && value.length > 0 ? undefined : 'must be a non-empty string';
+
+export const texts: FieldCheck = (value) =>
+  Array.isArray(value) && value.every((item) => typeof item === 'string') ? undefined : 'must be an array of strings';
+
+const present: FieldCheck = (value) => (value === undefined ? 'is missing' : undefined);
+
+export const flag: FieldCheck = (value) => (typeof value === 'boolean' ? undefined : 'must be a boolean');
+
+export function oneOf(values: readonly string[]): FieldCheck {
+  return (value) =>
+    typeof value === 'string' && values.includes(value) ? undefined : `must be one of ${values.join(', ')}`;
+}
+
+export function optional(check: FieldCheck): FieldCheck {
+  return (value) => (value === undefined ? undefined : check(value));
+}
+
+export function readRecord<Value>(label: string, value: unknown, shape: RecordShape): Reading<Value> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return { ok: false, error: [`${label} must be an object`] };
+  }
+  const fields = readFields(value as Record<string, unknown>, Object.keys(shape));
+  if (!fields.ok) return { ok: false, error: [`${label} could not be read: ${fields.error}`] };
+  const problems = Object.entries(shape).flatMap(([name, check]) => {
+    const problem = check(fields.value[name]);
+    return problem === undefined ? [] : [`${label}.${name} ${problem}`];
+  });
+  if (problems.length > 0) return { ok: false, error: problems };
+  return { ok: true, value: Object.freeze(fields.value) as Value };
+}
+
+// A plugin getter may throw; arrays are copied so that later changes by the
+// plugin cannot alter what the suite checked.
+function readFields(record: Record<string, unknown>, names: readonly string[]): Result<Record<string, unknown>, string> {
+  try {
+    const entries = names
+      .map((name) => [name, record[name]] as const)
+      .filter(([, value]) => value !== undefined)
+      .map(([name, value]) => [name, Array.isArray(value) ? Object.freeze([...value]) : value]);
+    return { ok: true, value: Object.fromEntries(entries) };
+  } catch (error) {
+    return { ok: false, error: describe(error) };
+  }
+}
+
+// A kernel Result: `ok` true with a value, or `ok` false with a failure
+// whose code is a kernel failure code.
+export function readResult(raw: unknown): Reading<Result<unknown>> {
+  const envelope = readRecord<{ ok: unknown }>('result', raw, { ok: flag });
+  if (!envelope.ok) return envelope;
+  if (envelope.value.ok === true) return readValue(raw as { value?: unknown });
+  const failed = readRecord<{ error: unknown }>('result', raw, { error: present });
+  if (!failed.ok) return failed;
+  const error = readRecord<Failure>('result.error', failed.value.error, { code: text, message: text });
+  if (!error.ok) return error;
+  if (!isFailureCode(error.value.code)) return { ok: false, error: [`result.error.code ${error.value.code} is not a kernel failure code`] };
+  return { ok: true, value: { ok: false, error: error.value } };
+}
+
+function readValue(raw: { value?: unknown }): Reading<Result<unknown>> {
+  try {
+    return { ok: true, value: { ok: true, value: raw.value } };
+  } catch (error) {
+    return { ok: false, error: [`result.value could not be read: ${describe(error)}`] };
+  }
+}
+
+export function describe(value: unknown): string {
+  try {
+    if (value instanceof Error) return `${value.name}: ${value.message}`;
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return 'an unprintable value';
+  }
+}
