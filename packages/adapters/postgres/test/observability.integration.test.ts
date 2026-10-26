@@ -88,9 +88,14 @@ test('outbox lag reads the oldest append, which need not be the lowest position'
 });
 
 test('a clock that stamped a row in the future never reads as a negative age', async () => {
-  assert.ok((await database.transaction((tx) => tx.outbox.append(command('offer-1')))).ok);
+  assert.ok((await database.transaction(async (tx) => {
+    const added = await tx.assignments.add(assignment('assignment-1'));
+    return added.ok ? tx.outbox.append(command('offer-1')) : added;
+  })).ok);
   await query(url, "UPDATE outbox SET appended_at = now() + interval '1 hour'");
-  assert.equal(value(await signals.read()).outboxLagSeconds, 0);
+  await query(url, "UPDATE assignments SET changed_at = now() + interval '1 hour'");
+  const read = value(await signals.read());
+  assert.deepEqual([read.outboxLagSeconds, read.assignmentAgeSeconds], [0, 0]);
 });
 
 test('the snapshot reads in a read-only transaction, where a write is a defect', async () => {

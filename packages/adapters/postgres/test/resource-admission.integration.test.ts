@@ -133,7 +133,8 @@ test('a placement stamps the assignment change time on the database clock', asyn
   }
   const [row] = await query<{ gap: number }>(url, `SELECT extract(epoch FROM o.appended_at - a.changed_at)::float8 AS gap
     FROM assignments a, outbox o WHERE a.id = 'assignment-clock' AND o.event_id = 'offer-clock'`);
-  assert.ok(Math.abs(row!.gap) < 1, String(row!.gap));
+  assert.ok(row, 'the assignment and its offer row exist');
+  assert.ok(Math.abs(row.gap) < 1, String(row.gap));
 });
 
 test('two replicas placing the same attempt leave one assignment and one held reservation', async () => {
