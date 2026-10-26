@@ -8,6 +8,8 @@
 
 - [x] 2.1 Measure dimmed text contrast on every surface in both color schemes.
 - [x] 2.2 Set the dimmed color through the `cssVariablesResolver` in both color schemes.
+- [x] 2.3 Measure every visible text, placeholder, and disabled text on its background in both color schemes.
+- [x] 2.4 Make text on filled colors readable with `primaryShade`, `autoContrast`, and `luminanceThreshold`, and colored, placeholder, disabled, error, and separator text with the resolver and theme defaults.
 
 ## 3. Documentation and build
 
@@ -17,4 +19,4 @@
 ## 4. Verify
 
 - [x] 4.1 Run `npm run openspec -- validate align-ui-poc-with-design-rules --strict` and `make verify`.
-- [ ] 4.2 Independent review and record it in `verification.md`.
+- [ ] 4.2 Independent review and record it in `verification.md` (pass 1 recorded).

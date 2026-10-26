@@ -2,13 +2,11 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   ActionIcon,
-  Anchor,
   AppShell,
   Avatar,
   Burger,
   Button,
   Center,
-  CloseButton,
   Group,
   Loader,
   MantineProvider,
@@ -16,23 +14,19 @@ import {
   NavLink,
   Paper,
   PasswordInput,
-  SegmentedControl,
   Stack,
   Text,
-  Textarea,
   TextInput,
   Title,
   Tooltip,
   UnstyledButton,
-  rem,
-  type CSSVariablesResolver,
-  createTheme,
   useComputedColorScheme,
   useMantineColorScheme,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { PERSONAS, PocProvider, usePoc, type Screen } from './store';
 import { LaterGate, TARGET_SIZE } from './ui';
+import { resolveCssVariables, theme } from './theme';
 import { ChevronIcon, InboxIcon, LogoIcon, MoonIcon, SunIcon } from './icons';
 import { BoardScreen } from './screens/Board';
 import { SessionScreen } from './screens/Session';
@@ -44,43 +38,6 @@ import { InboxScreen } from './screens/Inbox';
 import { IntegrationsScreen } from './screens/Integrations';
 import { PluginsScreen } from './screens/Plugins';
 import { StatesScreen } from './screens/States';
-
-// Mantine 9.7.3's default segment padding above and below the label.
-const SEGMENT_PADDING_Y = 3;
-const SEGMENT_LINE_HEIGHT = TARGET_SIZE - 2 * SEGMENT_PADDING_Y;
-
-const theme = createTheme({
-  primaryColor: 'indigo',
-  respectReducedMotion: true,
-  defaultRadius: 'md',
-  fontFamily: "'IBM Plex Sans', system-ui, sans-serif",
-  fontFamilyMonospace: "'IBM Plex Mono', ui-monospace, monospace",
-  headings: { fontFamily: "'IBM Plex Sans', system-ui, sans-serif", fontWeight: '600' },
-  components: {
-    ActionIcon: ActionIcon.extend({ defaultProps: { size: 'xl' } }),
-    Anchor: Anchor.extend({
-      defaultProps: { display: 'inline-block', miw: TARGET_SIZE, lh: rem(TARGET_SIZE) },
-    }),
-    Burger: Burger.extend({ defaultProps: { size: 'lg' } }),
-    Button: Button.extend({ defaultProps: { mih: TARGET_SIZE } }),
-    CloseButton: CloseButton.extend({ defaultProps: { size: 'xl' } }),
-    MenuItem: Menu.Item.extend({ defaultProps: { mih: TARGET_SIZE } }),
-    NavLink: NavLink.extend({ defaultProps: { mih: TARGET_SIZE } }),
-    PasswordInput: PasswordInput.extend({
-      defaultProps: { size: 'lg', visibilityToggleButtonProps: { miw: TARGET_SIZE, mih: TARGET_SIZE } },
-    }),
-    SegmentedControl: SegmentedControl.extend({ defaultProps: { lh: rem(SEGMENT_LINE_HEIGHT) } }),
-    TextInput: TextInput.extend({ defaultProps: { size: 'lg' } }),
-    Textarea: Textarea.extend({ defaultProps: { size: 'lg' } }),
-  },
-});
-
-// Mantine's dimmed gray.6 and dark.2 fall below 4.5:1 on their surfaces.
-const resolveCssVariables: CSSVariablesResolver = () => ({
-  variables: {},
-  light: { '--mantine-color-dimmed': 'var(--mantine-color-gray-7)' },
-  dark: { '--mantine-color-dimmed': 'var(--mantine-color-dark-1)' },
-});
 
 const NAV: { screen: Screen; label: string; later?: string }[] = [
   { screen: 'board', label: 'Board' },
@@ -174,7 +131,8 @@ function AccountMenu() {
         <Menu.Item>Account settings</Menu.Item>
         <Menu.Item>Change password</Menu.Item>
         <Menu.Divider />
-        <Menu.Item color="red" onClick={signOut}>
+        {/* A colored menu item uses shade 6; c keeps the readable ink. */}
+        <Menu.Item color="red" c="red" onClick={signOut}>
           Sign out
         </Menu.Item>
       </Menu.Dropdown>
