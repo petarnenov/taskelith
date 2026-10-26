@@ -6,6 +6,9 @@ export type ExecutionId = Identifier<'ExecutionId'>;
 export type LaunchAuthId = Identifier<'LaunchAuthId'>;
 export type OperationId = Identifier<'OperationId'>;
 export type WorkerId = Identifier<'WorkerId'>;
+export type PrincipalId = Identifier<'PrincipalId'>;
+export type IdempotencyKey = Identifier<'IdempotencyKey'>;
+export type NativeRequestId = Identifier<'NativeRequestId'>;
 
 declare const recoveryEpochBrand: unique symbol;
 
