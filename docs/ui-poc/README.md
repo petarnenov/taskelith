@@ -21,11 +21,11 @@ Ten screens in one Mantine `AppShell`, with static sample data and simulated liv
 | Plugins | `src/screens/Plugins.tsx` | `SimpleGrid`, `Card`, `List` |
 | Board states | `src/screens/States.tsx` | `Stepper`, `EmptyState`, `Skeleton`, `Alert` |
 
-Shared parts: `src/main.tsx` (theme, shell, navigation, the session check, the account menu, and the sign-in screen), `src/store.tsx` (screen, sign-in, persona and role capabilities, server-confirmed answers, and the event cursor), `src/ui.tsx` (the session status derived from execution facts, the role-aware button, the later-gate marker, gate colors, page header, diff block, facts list), and `src/icons.tsx`.
+Shared parts: `src/main.tsx` (theme, shell, navigation, the session check, the account menu, and the sign-in screen), `src/store.tsx` (screen, sign-in, persona and role capabilities, server-confirmed answers, and the event cursor), `src/ui.tsx` (the session status derived from execution facts, the role-aware button, the later-gate marker, gate colors, the 44 px target size, page header, diff block, facts list), and `src/icons.tsx`.
 
 The account menu behind the operator's avatar names the signed-in operator and their roles, switches the proof of concept between three personas (installation-owner and project-maintainer, project-operator, project-viewer), and offers account settings, a password change, and "Sign out". Signing out shows the sign-in screen of G3 decision D2 (a), password login with a server-side session; agents and merges keep running. In the proof of concept "Sign out" and "Sign in" work and accept any input; "Account settings" and "Change password" are inert and belong to G3 item 10 `implement-operator-login-and-roles`.
 
-The theme is Mantine's default with `primaryColor: 'indigo'`, `defaultRadius: 'md'`, and IBM Plex Sans and Mono. Dark is the default color scheme and light is supported, both through Mantine's color scheme manager. The theme sets `respectReducedMotion`, so no indicator spins when the system asks for reduced motion. Below Mantine's `xl` breakpoint the navigation moves into the `AppShell` navbar behind a `Burger`.
+The theme is Mantine's default with `primaryColor: 'indigo'`, `defaultRadius: 'md'`, and IBM Plex Sans and Mono. Its component default props and a CSS variables resolver meet the specification's design rules, as "Design rules" below describes. Dark is the default color scheme and light is supported, both through Mantine's color scheme manager. The theme sets `respectReducedMotion`, so no indicator spins when the system asks for reduced motion. Below Mantine's `xl` breakpoint the navigation moves into the `AppShell` navbar behind a `Burger`.
 
 ## Alignment with the implemented backend
 
@@ -46,21 +46,19 @@ Reconciling an attempt in an uncertain state belongs to `project-maintainer` and
 ## Departures from "only Mantine"
 
 - Mantine has no icon set, so `src/icons.tsx` draws seven small inline SVG icons. No other UI library is used.
-- Emphasis borders and column backgrounds use Mantine style props (`bd`, `bg`) with Mantine's CSS variables. There is no custom CSS and no Styles API override.
+- Emphasis borders and column backgrounds use Mantine style props (`bd`, `bg`) with Mantine's CSS variables, and the theme's default props use style props (`mih`, `miw`, `lh`, `display`) for touch targets. There is no custom CSS and no Styles API override.
 - Where Mantine cannot match the earlier design canvas, Mantine's version stands, for example its upper-case badges.
 
-## Departures from the product UI specification
+## Design rules
 
-The specification's requirement "Design rules" wins over these, and item 28 resolves them:
+The specification's requirement "Design rules" asks for interactive targets of at least 44 px and text contrast of at least 4.5:1 in both color schemes. Since 2026-10-26 (change `align-ui-poc-with-design-rules`) the proof of concept meets both with Mantine's own theme settings in `src/main.tsx`; `TARGET_SIZE` in `src/ui.tsx` holds the 44 px.
 
-- **Touch targets.** Most controls use Mantine's default sizes, below the required 44 px: a default `Button` is 36 px, `size="xs"` is 30 px, `size="compact-xs"` is about 22 px, and `Anchor` links are as tall as their text. Only the header controls and the sign-in button are 44 px.
-- **Contrast.** `c="dimmed"` text in the light color scheme is Mantine's `gray.6` on white, about 3.4:1, below the required 4.5:1.
-
-Both can be met with Mantine's own theme settings, for example component default sizes and the theme's dimmed color, which D17 allows.
+- **Touch targets.** The theme's `components` set default props: `Button`, `Menu.Item`, and `NavLink` get `mih` 44 px, so every size, including `xs` and `compact-xs`, is at least 44 px tall; `ActionIcon` and `CloseButton` default to size `xl` (44 px) and `Burger` to `lg` (44 px); `TextInput`, `PasswordInput`, and `Textarea` default to size `lg` (50 px), and the password visibility toggle gets `miw` and `mih` 44 px; `SegmentedControl` gets a line height that makes each segment 44 px; `Anchor` is an inline block with `miw` and a line height of 44 px. The board card's title and "Open session" are `UnstyledButton`s with `mih` 44 px, because a theme default for `UnstyledButton` would reach every Mantine component built on it. The explicit `size="xs"` on the new task's vertical segmented controls is removed, so they use the theme's 44 px.
+- **Contrast.** The `MantineProvider` takes a `cssVariablesResolver` that sets `--mantine-color-dimmed` to `gray.7` (`#495057`) in the light color scheme and to `dark.1` (`#b8b8b8`) in the dark one, replacing Mantine's `gray.6` and `dark.2`. Measured on the surfaces the build shows dimmed text on, the lowest ratio is 6.45:1 in the light scheme and 5.55:1 in the dark scheme, up from 2.62:1 and 2.87:1; on the page background it is 8.18:1 and 7.83:1, up from 3.32:1 and 4.04:1.
 
 ## Published build
 
-The build is published as a private claude.ai artifact, <https://claude.ai/artifact/M8VnvLLCrAMiBPrkKezGzk> (unversioned private page; version 6 matches this source), as one HTML file of 920,512 bytes with SHA-256 `8791c89f4997a5a1afcb9354a03a8a7f4606cf0fd16f2011c693062f75310282`. All code and Mantine's styles are inlined; only the IBM Plex fonts load from Google Fonts, so a viewer's browser contacts Google, and offline the page falls back to the system fonts. The owner shares the artifact from its Share menu. The earlier design canvas, <https://claude.ai/artifact/Q84QABcHZZ1ow9B7UcZdNS> (unversioned private page), which [ADR 0008](../decisions/0008-product-ui-and-integration-authority.md) was decided on, is marked as superseded.
+The build is published as a private claude.ai artifact, <https://claude.ai/artifact/M8VnvLLCrAMiBPrkKezGzk> (unversioned private page; version 7 matches this source), as one HTML file of 921,275 bytes with SHA-256 `2c57b5b4a9833a11d91a79804f77df2e38731c918e6a66141da96d60653378a2`. All code and Mantine's styles are inlined; only the IBM Plex fonts load from Google Fonts, so a viewer's browser contacts Google, and offline the page falls back to the system fonts. The owner shares the artifact from its Share menu. The earlier design canvas, <https://claude.ai/artifact/Q84QABcHZZ1ow9B7UcZdNS> (unversioned private page), which [ADR 0008](../decisions/0008-product-ui-and-integration-authority.md) was decided on, is marked as superseded.
 
 ## Rebuilding
 

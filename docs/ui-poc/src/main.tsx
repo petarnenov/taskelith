@@ -2,11 +2,13 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   ActionIcon,
+  Anchor,
   AppShell,
   Avatar,
   Burger,
   Button,
   Center,
+  CloseButton,
   Group,
   Loader,
   MantineProvider,
@@ -14,19 +16,23 @@ import {
   NavLink,
   Paper,
   PasswordInput,
+  SegmentedControl,
   Stack,
   Text,
+  Textarea,
   TextInput,
   Title,
   Tooltip,
   UnstyledButton,
+  rem,
+  type CSSVariablesResolver,
   createTheme,
   useComputedColorScheme,
   useMantineColorScheme,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { PERSONAS, PocProvider, usePoc, type Screen } from './store';
-import { LaterGate } from './ui';
+import { LaterGate, TARGET_SIZE } from './ui';
 import { ChevronIcon, InboxIcon, LogoIcon, MoonIcon, SunIcon } from './icons';
 import { BoardScreen } from './screens/Board';
 import { SessionScreen } from './screens/Session';
@@ -39,6 +45,9 @@ import { IntegrationsScreen } from './screens/Integrations';
 import { PluginsScreen } from './screens/Plugins';
 import { StatesScreen } from './screens/States';
 
+// A segment's 3 px top and bottom padding plus this line make the target.
+const SEGMENT_LINE_HEIGHT = TARGET_SIZE - 6;
+
 const theme = createTheme({
   primaryColor: 'indigo',
   respectReducedMotion: true,
@@ -46,6 +55,30 @@ const theme = createTheme({
   fontFamily: "'IBM Plex Sans', system-ui, sans-serif",
   fontFamilyMonospace: "'IBM Plex Mono', ui-monospace, monospace",
   headings: { fontFamily: "'IBM Plex Sans', system-ui, sans-serif", fontWeight: '600' },
+  components: {
+    ActionIcon: ActionIcon.extend({ defaultProps: { size: 'xl' } }),
+    Anchor: Anchor.extend({
+      defaultProps: { display: 'inline-block', miw: TARGET_SIZE, lh: rem(TARGET_SIZE) },
+    }),
+    Burger: Burger.extend({ defaultProps: { size: 'lg' } }),
+    Button: Button.extend({ defaultProps: { mih: TARGET_SIZE } }),
+    CloseButton: CloseButton.extend({ defaultProps: { size: 'xl' } }),
+    MenuItem: Menu.Item.extend({ defaultProps: { mih: TARGET_SIZE } }),
+    NavLink: NavLink.extend({ defaultProps: { mih: TARGET_SIZE } }),
+    PasswordInput: PasswordInput.extend({
+      defaultProps: { size: 'lg', visibilityToggleButtonProps: { miw: TARGET_SIZE, mih: TARGET_SIZE } },
+    }),
+    SegmentedControl: SegmentedControl.extend({ defaultProps: { lh: rem(SEGMENT_LINE_HEIGHT) } }),
+    TextInput: TextInput.extend({ defaultProps: { size: 'lg' } }),
+    Textarea: Textarea.extend({ defaultProps: { size: 'lg' } }),
+  },
+});
+
+// Mantine's dimmed gray.6 and dark.2 fall below 4.5:1 on their surfaces.
+const resolveCssVariables: CSSVariablesResolver = () => ({
+  variables: {},
+  light: { '--mantine-color-dimmed': 'var(--mantine-color-gray-7)' },
+  dark: { '--mantine-color-dimmed': 'var(--mantine-color-dark-1)' },
 });
 
 const NAV: { screen: Screen; label: string; later?: string }[] = [
@@ -84,7 +117,6 @@ function ColorSchemeToggle() {
     <Tooltip label={'Switch to ' + next + ' theme'}>
       <ActionIcon
         variant="default"
-        size={44}
         aria-label={'Switch to ' + next + ' theme'}
         onClick={() => setColorScheme(next)}
       >
@@ -100,7 +132,7 @@ function NeedsYouButton() {
     <Button
       variant={screen === 'inbox' ? 'filled' : 'light'}
       color={needsYouCount ? 'orange' : 'teal'}
-      h={44}
+     
       leftSection={<InboxIcon />}
       aria-current={screen === 'inbox' ? 'page' : undefined}
       aria-label={'Needs you: ' + needsYouCount + ' items'}
@@ -120,7 +152,7 @@ function AccountMenu() {
     <Menu position="bottom-end" width={300} withArrow>
       <Menu.Target>
         <UnstyledButton aria-label="Account menu">
-          <Avatar size={44} radius="xl" color="orange">
+          <Avatar size={TARGET_SIZE} radius="xl" color="orange">
             {persona.initials}
           </Avatar>
         </UnstyledButton>
@@ -191,7 +223,7 @@ function SignInScreen() {
               setError(undefined);
             }}
           />
-          <Button type="submit" h={44}>
+          <Button type="submit">
             Sign in
           </Button>
         </Stack>
@@ -242,14 +274,14 @@ function Shell() {
     >
       <AppShell.Header px="md">
         <Group h="100%" gap="sm" wrap="nowrap">
-          <Burger opened={opened} onClick={toggle} hiddenFrom="xl" size="sm" aria-label="Toggle navigation" />
+          <Burger opened={opened} onClick={toggle} hiddenFrom="xl" aria-label="Toggle navigation" />
           <Group gap={8} wrap="nowrap">
             <LogoIcon />
             <Text fw={700} size="lg" visibleFrom="xs">
               Taskelith
             </Text>
           </Group>
-          <Button variant="default" h={44} rightSection={<ChevronIcon />} visibleFrom="sm">
+          <Button variant="default" rightSection={<ChevronIcon />} visibleFrom="sm">
             <Text span c="dimmed" size="sm" mr={6}>
               Project
             </Text>
@@ -261,7 +293,7 @@ function Shell() {
             {NAV.map((item) => (
               <Button
                 key={item.screen}
-                h={44}
+               
                 px="sm"
                 variant={activeNav(screen) === item.screen ? 'light' : 'subtle'}
                 color={activeNav(screen) === item.screen ? undefined : 'gray'}
@@ -303,7 +335,7 @@ function Shell() {
 }
 
 createRoot(document.getElementById('root')!).render(
-  <MantineProvider theme={theme} defaultColorScheme="dark">
+  <MantineProvider theme={theme} cssVariablesResolver={resolveCssVariables} defaultColorScheme="dark">
     <PocProvider>
       <Shell />
     </PocProvider>

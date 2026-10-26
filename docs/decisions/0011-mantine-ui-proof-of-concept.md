@@ -24,4 +24,4 @@ The rework rebuilt the same ten screens as a React application with Mantine 9.7.
 - The `product-ui` specification gains a requirement naming the reference proof of concept.
 - Item 28 of the G3 work plan names `docs/ui-poc/` as its starting point.
 - The proof of concept's departures from "only Mantine" (seven inline SVG icons, because Mantine has no icon set, and Mantine style props with Mantine's CSS variables for emphasis) are listed in its README; item 28 decides whether they stay, within D17.
-- The proof of concept departs from the `product-ui` requirement "Design rules": most controls are below 44 px, and dimmed text in the light color scheme is below 4.5:1. Its README lists both; the requirement wins, and item 28 meets it with Mantine's theme settings.
+- When this decision was taken, the proof of concept departed from the `product-ui` requirement "Design rules": most controls were below 44 px, and dimmed text in the light color scheme was below 4.5:1. On 2026-10-26 the change `align-ui-poc-with-design-rules` met both with Mantine's theme settings, as the proof of concept's README records.
