@@ -7,7 +7,6 @@ import {
   MAX_INTAKE_BODY_BYTES,
   MAX_INTAKE_TITLE_LENGTH,
   MERGE_REQUEST_STATES,
-  SPEC_APPROVERS,
   WITHDRAWAL_REASONS,
 } from '@taskelith/integrations';
 
@@ -25,7 +24,6 @@ const CONTRACT_VALUES = [
     WITHDRAWAL_REASONS,
     ['gate-not-passed', 'auto-merge-off', 'cancelled', 'manual-merge', 'maintainer-withdrew'],
   ],
-  ['SPEC_APPROVERS', SPEC_APPROVERS, ['delegated-reviewer', 'project-maintainer']],
 ] as const;
 
 for (const [name, actual, expected] of CONTRACT_VALUES) {

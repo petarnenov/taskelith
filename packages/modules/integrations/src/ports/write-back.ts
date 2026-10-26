@@ -11,7 +11,7 @@ export interface SourceItemRef {
 
 export interface ProgressReport extends SourceItemRef {
   readonly column: string;
-  readonly gate: string;
+  readonly gate?: string;
 }
 
 export interface ChangeRequestLink extends SourceItemRef {

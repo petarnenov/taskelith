@@ -1,10 +1,5 @@
 import type { Result } from '@taskelith/kernel';
 
-// Who approves a draft's specification, by the project's spec approval policy.
-export const SPEC_APPROVERS = Object.freeze(['delegated-reviewer', 'project-maintainer'] as const);
-
-export type SpecApprover = (typeof SPEC_APPROVERS)[number];
-
 export const MAX_INTAKE_TITLE_LENGTH = 200;
 export const MAX_INTAKE_BODY_BYTES = 256 * 1024;
 

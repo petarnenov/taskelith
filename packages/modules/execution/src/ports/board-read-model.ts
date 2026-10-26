@@ -18,6 +18,7 @@ import type {
   WorkItemId,
 } from '@taskelith/sdlc';
 import type { AttemptId } from '../domain/identifiers.js';
+import type { WorkType } from '../domain/task-defaults.js';
 
 // Board columns are the lifecycle stages under short labels; Accept and
 // integrate is the merge gate between `review` and `archived`.
@@ -31,17 +32,6 @@ export const BOARD_COLUMNS = Object.freeze([
 ] as const);
 
 export type BoardColumn = (typeof BOARD_COLUMNS)[number];
-
-export const WORK_TYPES = Object.freeze([
-  'feature',
-  'bug',
-  'improvement',
-  'documentation',
-  'maintenance',
-  'emergency',
-] as const);
-
-export type WorkType = (typeof WORK_TYPES)[number];
 
 // The view's own merge gate values; Integrations' merge request states map
 // onto them (product ports contract section 3.4).
@@ -88,7 +78,7 @@ export type SessionActivity =
   | { readonly state: Exclude<SessionActivityState, 'worker-unreachable'> }
   | { readonly state: 'worker-unreachable'; readonly lastContactAt: Instant };
 
-export interface CurrentStage {
+export interface StageSummary {
   readonly stageId: StageId;
   readonly origin: StageOrigin;
   readonly state: StageState;
@@ -101,7 +91,7 @@ export interface BoardCard {
   readonly workType: WorkType;
   readonly framework: Pick<WorkflowRunBinding, 'pluginId' | 'pluginVersion'>;
   readonly column: BoardColumn;
-  readonly stage: CurrentStage;
+  readonly stage: StageSummary;
   readonly gate?: GateState;
   readonly waitingFor?: WaitingReason;
   readonly session: SessionActivity;
@@ -130,7 +120,7 @@ export interface GateView {
   readonly blockReason?: BlockReason;
 }
 
-export interface StageView extends CurrentStage {
+export interface StageView extends StageSummary {
   readonly column: BoardColumn;
   readonly gates: readonly GateView[];
 }

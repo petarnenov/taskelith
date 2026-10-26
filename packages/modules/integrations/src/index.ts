@@ -10,6 +10,7 @@ export {
   type BranchName,
   type CodeHead,
   type IntegratedRevision,
+  type ManualMerge,
   type MergeClaim,
   type MergeEnqueue,
   type MergeQueue,
@@ -17,17 +18,17 @@ export {
   type MergeRequestId,
   type MergeRequestState,
   type MergeTransition,
+  type Revision,
+  type SettingChange,
   type WithdrawalReason,
 } from './ports/auto-merge.js';
 export {
   MAX_INTAKE_BODY_BYTES,
   MAX_INTAKE_TITLE_LENGTH,
-  SPEC_APPROVERS,
   type IntakeItemData,
   type IntakeRequest,
   type IntakeSource,
   type IntakeSourceDescription,
-  type SpecApprover,
 } from './ports/intake-source.js';
 export type {
   ChangeRequestLink,

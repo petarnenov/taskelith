@@ -18,6 +18,7 @@
 - The board column rule was checked by hand against the OpenSpec plugin's stage graph (`packages/plugins/sdlc-openspec/src/openspec-framework.ts`) and the SpecKit mapping fixture (`packages/plugins/sdlc-speckit/test/speckit-mapping-cases.ts`).
 - No module type, value, or test names a source, SCM, harness, or framework; `@taskelith/integrations` imports only kernel, sdlc, and execution, the last type-only.
 - Every comment is within the comment length rule.
+- Evidence check: every document, ADR, specification, and source file that the contract cites was read at the base revision, and each relative link in `docs/contracts/product-ports.md` resolves to an existing file.
 
 ## Checks
 
@@ -25,7 +26,7 @@
 | --- | --- | --- |
 | `07f73f6` (contract text edit made during the run, doc only) | `make verify` | Passed: 1390 tests, 0 failed; coverage over all files 99.23% lines, 91.51% branches, 98.69% functions; 62 OpenSpec items valid; archive dry run valid; package verification passed |
 | `07f73f6` | `npm run openspec -- validate define-product-ports --strict` | Valid |
-| Fixes after pass 1 (commit after `07f73f6`) | `make verify` | Passed: 1390 tests, 0 failed; coverage 99.23% lines, 91.52% branches, 98.69% functions; archive dry run and package verification passed |
+| `e4110d2` (fixes after pass 1) | `make verify` | Passed: 1390 tests, 0 failed; coverage 99.23% lines, 91.52% branches, 98.69% functions; archive dry run and package verification passed |
 
 ## Independent review
 
@@ -54,6 +55,35 @@
 | 13 | Low | `writeBack: boolean` was unclear | Renamed `supportsWriteBack` |
 | 14 | Low | The setting's change author before the first change was unstated | `lastChange` is absent until the first change, in the contract and the type |
 | 15 | Low | `escalationReason` was optional on every kind | `NeedsYouItem` is a union by kind; only `escalation` carries it |
+
+### Pass 2
+
+- Reviewer and invocation as in pass 1, with the prompt naming pass 1's session and asking for each finding's resolution first.
+- Model confirmation: `claude-fable-5-1` in `modelUsage`. Session ID `3a33b886-ca99-4989-b4ed-fb4b3aec4ab6`.
+- Reviewed revision: `e4110d2` against `origin/dev`.
+- Snapshot before and after: `087bcdbde6b6b3b491e3f9b456a6fcb92d7f52670ca8589de4d633c9f24df9ea`, unchanged.
+- All 15 pass 1 findings confirmed resolved.
+- New findings: Critical 0, High 0, Medium 4, Low 13.
+
+| # | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| M1 | Medium | A manual merge had no path to `integrated` and `archived` | Section 6.3 "Manual merge" and `MergeQueue.recordManualMerge`; detection belongs to items 7 and 23 |
+| M2 | Medium | `forRun` was ambiguous with one request per head | Renamed `latestForRun`; the contract says it returns the most recently enqueued request |
+| M3 | Medium | "Spec approvals (SDLC)" inverted the dependency | The item 22 adapter over SDLC gate records, outside the SDLC module |
+| M4 | Medium | `SPEC_APPROVERS` lived in Integrations | Moved with `WORK_TYPES` to Execution's `domain/task-defaults.ts` (design decision 5) |
+| L1 | Low | `ProgressReport.gate` was required | Optional |
+| L2 | Low | The SpecKit enumeration was incomplete | Completed |
+| L3 | Low | "The `Access` adapter" | "The Access module" |
+| L4 | Low | `CurrentStage` was the base of every stage view | Renamed `StageSummary` |
+| L5 | Low | `WORK_TYPES` lived in the view port | Moved to `domain/task-defaults.ts` |
+| L6 | Low | The budget per request contradicted `retry` | `retry` resets the conflict attempts to zero |
+| L7 | Low | Withdrawal was defined only for `queued` | Setting off or cancellation withdraws `queued`, `escalated`, and `returned-to-specify` requests; an in-flight request finishes its step first |
+| L8 | Low | An anonymous `{ by, at }` object | Named `SettingChange` |
+| L9 | Low | The G3 plan status contradicted itself | "except the wave 1 contracts" |
+| L10 | Low | `verification.md` named no revision for the second run and omitted the evidence check | Revision `e4110d2` named; evidence check recorded |
+| L11 | Low | `revoke` and `recordUse` had no named idempotency means | Rule 2.7: by rule identifier, and by rule and native request |
+| L12 | Low | SDLC's `Generation` versioned Integrations records | Integrations' own `Revision` |
+| L13 | Low | "The current stage" was undefined for parallel stages | "The stage whose column the card shows" |
 
 ## Owner decisions
 

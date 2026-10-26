@@ -20,8 +20,9 @@ ADR 0008 decision 6 places the board, inbox, intake, write-back, and auto-merge 
 2. **Board columns derived from the frozen port.** The column of a stage follows from its obligations and its place in the stage graph, so no new framework operation is needed. A review stage before any implementation stage belongs to Specify, matching the framework mapping note of 2026-10-25. The Close stage keeps the card in Review with its merge gate state until integration.
 3. **The board's own merge gate values.** Execution cannot import Integrations, so the view defines its merge gate values and the contract maps the merge request states onto them, the usual boundary translation from a domain state to a view state.
 4. **`NeedsYou` names.** Execution already exports `Inbox` for consumer message deduplication. The new ports are `NeedsYouInbox` and `NeedsYouSource`, not `InboxSource`, to keep the two apart.
-5. **Plain data for plugin-facing ports.** `IntakeSource` and `WriteBack` use string fields that the module parses, as the frozen SDLC framework port does. The internal ports use branded identifiers.
-6. **Opaque placeholders.** `NativeRequestId`, `CodeHead`, and `BranchName` are opaque identifiers here. Items 3, 4, and 6 define their structure, and may replace these types with their own in a follow-up change.
+5. **Task defaults in Execution.** The work types and spec approvers are attributes of a task, which items 22 and 30 need too, so they live in Execution's domain and Integrations imports them; no module imports Integrations.
+6. **Plain data for plugin-facing ports.** `IntakeSource` and `WriteBack` use string fields that the module parses, as the frozen SDLC framework port does. The internal ports use branded identifiers.
+7. **Opaque placeholders and own revisions.** Integrations versions its records with its own `Revision`, not SDLC's `Generation`. `NativeRequestId`, `CodeHead`, and `BranchName` are opaque identifiers here. Items 3, 4, and 6 define their structure, and may replace these types with their own in a follow-up change.
 
 ## Risks / Trade-offs
 

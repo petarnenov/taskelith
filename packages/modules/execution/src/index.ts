@@ -211,25 +211,29 @@ export {
   MERGE_GATE_STATES,
   SESSION_ACTIVITIES,
   WAITING_REASONS,
-  WORK_TYPES,
   type AdmissionView,
   type Board,
   type BoardCard,
   type BoardColumn,
   type BoardReadModel,
-  type CurrentStage,
   type EvidenceFreshness,
   type GateView,
   type MergeGateState,
   type SessionActivity,
   type SessionActivityState,
+  type StageSummary,
   type StageView,
   type TaskDetail,
   type TraceLink,
   type ViewStamp,
   type WaitingReason,
-  type WorkType,
 } from './ports/board-read-model.js';
+export {
+  SPEC_APPROVERS,
+  WORK_TYPES,
+  type SpecApprover,
+  type WorkType,
+} from './domain/task-defaults.js';
 export { EVIDENCE_RECORDS_CONFORMANCE, EVIDENCE_STORE_CONFORMANCE } from './ports/evidence-conformance.js';
 export type { EvidencePublisher } from './ports/evidence-publisher.js';
 export type { EvidenceRecords } from './ports/evidence-records.js';

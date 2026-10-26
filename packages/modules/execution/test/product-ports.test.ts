@@ -9,6 +9,7 @@ import {
   MERGE_GATE_STATES,
   NEEDS_YOU_KINDS,
   SESSION_ACTIVITIES,
+  SPEC_APPROVERS,
   STANDING_RULE_OPERATIONS,
   STANDING_RULE_ORIGINS,
   WAITING_REASONS,
@@ -54,6 +55,7 @@ const CONTRACT_VALUES = [
   ['ANSWERING_ROLES', ANSWERING_ROLES, ['project-operator', 'project-maintainer']],
   ['STANDING_RULE_OPERATIONS', STANDING_RULE_OPERATIONS, ['push-to-task-branch']],
   ['STANDING_RULE_ORIGINS', STANDING_RULE_ORIGINS, ['maintainer', 'auto-merge']],
+  ['SPEC_APPROVERS', SPEC_APPROVERS, ['delegated-reviewer', 'project-maintainer']],
 ] as const;
 
 for (const [name, actual, expected] of CONTRACT_VALUES) {
