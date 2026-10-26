@@ -4,7 +4,7 @@ Date: 2026-10-26. The author's verification and the independent review are recor
 
 ## Scope and source
 
-This change fixes bug B2, found by Zaki's G2 item 24c, scenario h: a cancellation that names one execution stopped the whole intent, including the owning execution. The coordinating session (Niki) assigned it and ran it in a briefed subagent ([subagent execution](../../../docs/agent-task-protocol.md#subagent-execution)).
+This change fixes bug B2, found by Zaki's G2 item 24c, scenario h: a cancellation that names one execution stopped the whole intent, including the owning execution. The coordinating session (Niki) assigned it to the worker session (Desi), which ran it in a briefed subagent ([subagent execution](../../../docs/agent-task-protocol.md#subagent-execution)).
 - **Base revision:** `cd2f909` on `dev`.
 - **Scope:** the cancellation path of `apps/worker/src/launch-orchestrator.ts` (`#forward` and `Launch.runs`), its tests, and the worker-runtime delta.
 - **Out of scope:** the recovery plan's reading of execution-target cancellations (design, Risks), the relaunch path of the launch orchestrator, which another change covers, and the scenario h test of item 24c, which stays a `todo`.
@@ -37,7 +37,7 @@ macOS (Darwin 25.6.0), Node from `.nvmrc`, Docker test services started by `make
 
 ## Review
 
-Reviewer: Codex CLI, model `gpt-6.1-sol`, reasoning effort medium, read-only sandbox, assigned by the coordinator. The coordinator ran the pass; the prompt and the log are kept outside the worktree.
+Reviewer: Codex CLI, model `gpt-6.1-sol`, reasoning effort medium, read-only sandbox, assigned by the coordinator. The worker session ran each pass; the prompt and the log are kept outside the worktree.
 
 ### Review pass 1
 
@@ -54,6 +54,19 @@ Reviewer: Codex CLI, model `gpt-6.1-sol`, reasoning effort medium, read-only san
   2. **F2:** this file claimed only one line changed after the `make verify` at `4a41344`, but the merge `413c5e6` changed worker observations and the journal schema and implementation.
      - **Fixed:** the claim is corrected, and the merge's and the final tree's `make verify` results are recorded under Checks and results.
 
+### Review pass 2
+
+- **Revision:** `b9b267e`.
+- **Invocation:** as pass 1; the prompt names pass 1's session and asks to confirm each finding's resolution before reviewing the whole change again.
+- **Model confirmation:** the output header names model `gpt-6.1-sol`, reasoning effort `medium`, and sandbox `read-only`.
+- **Session:** `01a179b1-fac7-7182-9101-1478bf7efb21`.
+- **Snapshot:** `1aae3899426d070e54e305b1408648d151e3ddcf846e095efd47843bb33c72c0` before and after; unchanged.
+- **Findings:** 0 Critical, 0 High, 0 Medium, 0 Low. The reviewer confirmed F1 and F2 resolved.
+
+### After the review
+
+The session then merged `origin/dev`, which brought only the archive of `gate-stale-epoch-observations` (specs it promotes, none of them worker-runtime), and recorded pass 2. Neither changes this change's requirements, contracts, implementation, or verification inputs, so the review stands; `make verify` runs again in the `pre-push` hook.
+
 ## Limitations
 
 - The fix is tested through `LaunchOrchestrator` with a real SQLite journal and fake supervisors; scenario 24c itself was not run.
@@ -61,5 +74,5 @@ Reviewer: Codex CLI, model `gpt-6.1-sol`, reasoning effort medium, read-only san
 
 ## Remaining gates
 
-- Independent review pass 2, and the coordinator's integration into `dev` and archive of this change.
+- The coordinator's integration into `dev` and archive of this change.
 - No deployment validation was done; none is claimed.
