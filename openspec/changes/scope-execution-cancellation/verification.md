@@ -30,7 +30,7 @@ macOS (Darwin 25.6.0), Node from `.nvmrc`, Docker test services started by `make
 - **Fails on the old code.** With `apps/worker/src/launch-orchestrator.ts` restored from `cd2f909`, `npm run build`, then `node --experimental-strip-types --test --test-name-pattern='execution cancellation files|superseded|attempt cancellation still' apps/worker/test/launch-orchestrator.test.ts`: 1 pass, 2 fail. `cancellation names a superseded execution: the running one goes on, and evidence is recorded` failed with `actual: 1`, `expected: 0`: the running execution got `cancel`. `an execution cancellation files \`cancel\` only for that execution, with evidence at its exit` failed with `actual: 1`, `expected: 0`: the other open execution got `cancel`. The attempt-target test passed. The new source was then restored and rebuilt; the restore was not committed.
 - **Passes on the new code.** `node --experimental-strip-types --test apps/worker/test/launch-orchestrator.test.ts` after `npm run build`: 44 tests, 44 pass.
 - `npm run openspec -- validate scope-execution-cancellation --strict`: valid.
-- `make verify`: see the session's record below.
+- `make verify` at `4a41344` (the fix and these records before this result): exit 0; 1862 tests, 1860 pass, 0 fail, 2 skipped; coverage lines 99.28%, branches 92.09%, functions 99.03%. No flaky rerun was needed. Only this line changed later.
 
 ## Review
 
@@ -43,5 +43,5 @@ To be filled by the session.
 
 ## Remaining gates
 
-- `make verify` on the final revision, the independent review, and the coordinator's integration into `dev` and archive of this change.
+- The independent review, and the coordinator's integration into `dev` and archive of this change.
 - No deployment validation was done; none is claimed.
