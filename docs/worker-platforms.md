@@ -27,3 +27,5 @@ Linux workers ship as digest-pinned OCI images ([ADR 0004](decisions/0004-first-
 Record OS/distribution version, CPU architecture, runtime/native dependency versions, filesystem, service mode, scenario inputs, and exact source revision with each result. Tests on a Linux VM/container cannot establish native macOS acceptance; a macOS host does not prove Linux recovery. Label tests as unit, integration, native worker, or fleet drills accurately. Keep unresolved scenarios visible before the G3 fresh-install and G6 operational gates.
 
 No service installation, native package, worker enrollment, native acceptance result, or Windows support is introduced by recording this contract.
+
+`make native-acceptance` (G2 item 25b, [local installation](local-installation.md#checks)) runs the G2 rows above on the matrix entries of the host it runs on and records each proof with these facts; the acceptance tables of the changes that run it record the outcomes and the rows that stay open.
