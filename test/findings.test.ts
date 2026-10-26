@@ -127,6 +127,11 @@ test('a usage error prints the usage and exits with 2', () => {
   assert.deepEqual(result, { exitCode: 2, stdout: '', stderr: `--top must be 1 to 10\n${USAGE}` });
 });
 
+test('make findings passes a glob through without shell expansion', () => {
+  const output = execFileSync('make', ['--no-print-directory', 'findings', 'ARGS=checklist --files scripts/*.ts --top 3'], { encoding: 'utf8' });
+  assert.match(output, /^Review checklist \(files scripts\/\*\.ts\)/);
+});
+
 test('the npm script validates this repository', () => {
   const output = execFileSync(process.execPath, ['--experimental-strip-types', 'scripts/findings.ts', 'validate'], { encoding: 'utf8' });
   assert.match(output, /^Every findings file is valid: \d+ file\(s\)\.\n$/);

@@ -63,11 +63,14 @@ test('the vocabulary parses without problems and holds the seeded categories', (
 });
 
 test('one added vocabulary line admits a finding with the new category', () => {
-  const text = `${readFileSync(VOCABULARY_PATH, 'utf8')}supply-chain A dependency is unpinned or unreviewed.\n`;
+  const known = new Set(vocabulary.categories.map(({ id }) => id));
+  let added = 'added-category';
+  for (let suffix = 1; known.has(added); suffix += 1) added = `added-category-${suffix}`;
+  const text = `${readFileSync(VOCABULARY_PATH, 'utf8')}${added} A category added by this test.\n`;
   const extended = parseVocabulary(text);
   assert.deepEqual(extended.problems, []);
   const extendedRules = { checkSchema, categories: new Set(extended.categories.map(({ id }) => id)) };
-  const source = { path: 'findings.jsonl', change: 'demo-change', text: `${JSON.stringify(finding({ category: 'supply-chain' }))}\n` };
+  const source = { path: 'findings.jsonl', change: 'demo-change', text: `${JSON.stringify(finding({ category: added }))}\n` };
   assert.deepEqual(parseFindings(source, extendedRules).problems, []);
   assert.equal(parseFindings(source, rules).problems.length, 1);
 });
@@ -197,6 +200,15 @@ test('secret-like values are rejected wherever they appear', () => {
   assert.deepEqual(secretLikeStrings(finding()), []);
   const plain = [null, 3, true, 'https://example.com/a@b', 'https://example.com/?to=a@b', 'mail a@b.c', 'ASIA1234'];
   assert.deepEqual(secretLikeStrings(plain), []);
+});
+
+test('NATS operator, account, user, server, cluster, and curve seeds are rejected', () => {
+  const seed = (prefix: string) => `S${prefix}${'A'.repeat(56)}`;
+  const lines = ['O', 'A', 'U', 'N', 'C', 'X'].map((prefix) => JSON.stringify(finding({ resolution: `Removed ${seed(prefix)}.` })));
+  const messages = messagesOf(lines);
+  assert.deepEqual(messages, lines.map((_, index) => `findings.jsonl:${index + 1}: holds a secret-like value; describe it instead`));
+  for (const message of messages) assert.ok(!message.includes('A'.repeat(56)), message);
+  assert.deepEqual(messagesOf([JSON.stringify(finding({ resolution: `Kept S${'A'.repeat(20)}.` }))]), []);
 });
 
 test('an archived directory name drops its date prefix', () => {
