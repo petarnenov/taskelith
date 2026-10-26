@@ -491,6 +491,21 @@ describe('refusal after a grant', () => {
     assert.deepEqual((await stored(at.taskId)).attempts.map((each) => each.outcome?.kind), ['not-started']);
   });
 
+  test('a refusal after an earlier cancellation keeps that cancellation and still sends assignment-ended', async () => {
+    const { at } = await refusedAfterGrant(async (placedAt) => {
+      value(await database.transaction(async (tx) => {
+        const task = await tx.tasks.get(placedAt.taskId);
+        if (!task.ok) return task;
+        const cancelled = requestCancellation(task.value, placedAt.attemptId, 'requested', await tx.now());
+        return cancelled.ok ? tx.tasks.replace(cancelled.value, task.value.generation) : cancelled;
+      }));
+      return refuse(3, placedAt, 'resource-ceiling-exceeded');
+    });
+    assert.equal((await stored(at.taskId)).attempts[0]!.cancellation?.reason, 'requested', 'the first request wins');
+    const [cancellation] = await messages('execution.cancellation.request');
+    assert.equal((cancellation as { payload: { reason: string } }).payload.reason, 'assignment-ended');
+  });
+
   test('a protocol rejection of an offer whose execution is authorized revokes the grant the same way', async () => {
     const { at } = await refusedAfterGrant((placedAt) => observe('execution.command.rejected', { sequence: 3 }, {
       commandId: placedAt.assignment.offerCommandId, commandType: 'execution.assignment.offer', reason: 'protocol-not-supported',

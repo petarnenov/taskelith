@@ -231,6 +231,12 @@ test('the attempt keeps the cancellation reason its writer names', () => {
   assert.deepEqual(ended.attempts[0]!.cancellation, { reason: 'assignment-ended', requestedAt: T4 });
 });
 
+test('an earlier cancellation request wins over the reason of a later writer', () => {
+  const requested = value(requestCancellation(authorized().task, ATTEMPT, 'requested', T2));
+  const ended = value(revokeLaunch(requested, ATTEMPT, { grants: 'attempt-not-launchable', cancellation: 'assignment-ended' }, T4));
+  assert.deepEqual(ended.attempts[0]!.cancellation, { reason: 'requested', requestedAt: T2 });
+});
+
 test('an invalidating writer with an empty predicate affects nothing', () => {
   const task = placedTask();
   assert.equal(isLaunchAffected(task, ATTEMPT), false);
