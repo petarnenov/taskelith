@@ -27,7 +27,6 @@ import { Gate, waitFor } from './g2-scenarios/waiting.ts';
 const SEED = seedFromEnvironment();
 console.log(`g2 cancellation races: ${rerunHint(SEED)}`);
 const SLOT_LEAK = 'product bug B3: a finally rejected launch keeps its worker slot (openspec/changes/run-g2-partition-and-races/verification.md)';
-const SCOPE_BUG = 'product bug B2: an execution cancellation stops the whole intent (openspec/changes/run-g2-partition-and-races/verification.md)';
 const LONG_RUN_MILLISECONDS = 20_000;
 const CANCELLED_REASONS = ['assignment-not-active', 'attempt-not-launchable'];
 
@@ -314,9 +313,8 @@ describe('cancellation races', () => {
     skip: 'N/A on Linux: adoption is macOS observe-only; native acceptance item 25 covers it',
   }, () => undefined);
 
-  // Expected to fail: the worker forwards a cancellation naming one
-  // execution to the whole intent, so the owning execution is stopped too.
-  test('h. an unauthorized start cancels only that execution', { timeout: 90_000, todo: SCOPE_BUG }, async () => {
+  // Guards the B2 fix (#304): a cancel naming one execution stops only it.
+  test('h. an unauthorized start cancels only that execution', { timeout: 90_000 }, async () => {
     const random = new SeededRandom(SEED);
     await recordScenario({ scenario: 'unauthorized-start-cancels-only-that-execution', seed: SEED }, () => withInstallation({ postgres: 'direct' }, async (installation) => {
       const worker = await startedWorker(installation, 'unauthorized-start', random, { runMilliseconds: 6_000 });
