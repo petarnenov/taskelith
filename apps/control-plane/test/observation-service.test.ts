@@ -197,7 +197,7 @@ async function exitWith({ transaction, service }: Fixture, placed: PlacedAttempt
   value(await transaction.tasks.replace({ ...task, attempts, generation: (task.generation + 1) as never }, task.generation));
   const attemptOf = { attemptId: placed.attemptId, ownershipGeneration: placed.generation };
   return service.apply(message('execution.exited', exit.sequence, {
-    executionId, status: { kind: 'code', code: exit.code }, startProven: true, spawnFailed: false, terminationEvidence: 'containment-empty',
+    executionId, recoveryEpoch: 1, status: { kind: 'code', code: exit.code }, startProven: true, spawnFailed: false, terminationEvidence: 'containment-empty',
   }, attemptOf));
 }
 
@@ -275,7 +275,7 @@ test('what no effect consumes, or cannot authenticate, is not consumed', async (
 
 test('an unrecorded process is recorded once for the reconciliation queue', async () => {
   const { service, transaction } = await fixture();
-  const unrecorded = message('execution.unrecorded-process', 1, { containment: 'cgroup x', processes: [{ pid: 7, startedAt: AT }] });
+  const unrecorded = message('execution.unrecorded-process', 1, { containment: 'cgroup x', recoveryEpoch: 1, processes: [{ pid: 7, startedAt: AT }] });
   assert.equal(value(await service.apply(unrecorded)), 'applied');
   assert.equal(value(await service.apply(unrecorded)), 'duplicate');
   const recorded = await transaction.reconciliation.unrecordedProcessesOfWorker(WORKER);

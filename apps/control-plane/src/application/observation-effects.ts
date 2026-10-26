@@ -3,6 +3,7 @@ import { SUPPORTED_PROTOCOL_VERSIONS, commonProtocolVersion, type MessageSchemas
 import {
   decideStartObservation,
   endAttempt,
+  isQuarantineEvidence,
   parseExitStatus,
   parseRecoveryEpoch,
   recordExecutionEvidence,
@@ -168,15 +169,15 @@ function executionEvidence(kind: ExecutionEvidenceKind): ObservationEffect {
   };
 }
 
-// 21c decision 13 and 21d D5: never current work; recorded for the
-// reconciliation queue beside its warning.
+// 21c decision 13 and 21d D5: never current work, at any epoch; recorded
+// for the reconciliation queue beside its warning, with its epoch.
 async function unrecordedProcess(
   tx: ControlPlaneTransaction, observation: Observation, at: Instant, context: ReconciliationContext,
 ): Promise<Result<void>> {
-  const { containment, processes } = observation.payload as Payload<'UnrecordedProcessPayload'>;
+  const { containment, recoveryEpoch, processes } = observation.payload as Payload<'UnrecordedProcessPayload'>;
   const { workerId, journalId, observationId } = observation.position;
   context.log.warn({ workerId, observationId, correlationId: observation.correlationId }, 'execution.unrecorded-process', {
-    containment, processCount: processes.length,
+    containment, recoveryEpoch, processCount: processes.length,
   });
   return tx.unrecordedProcesses.record({ workerId, journalId, observationId, containment, processCount: processes.length, recordedAt: at });
 }
@@ -284,6 +285,24 @@ function releaseRejected(tx: ControlPlaneTransaction, observation: Observation, 
   return freeIdleAssignment(tx, assignment, commandIdentity(observation, assignment.id));
 }
 
+// Launch authorization section 7: an execution observation of another epoch,
+// or received in quarantine, is kept as evidence and applies nothing.
+function atCurrentEpoch(effect: ObservationEffect): ObservationEffect {
+  return async (tx, observation, at, context) => {
+    const recoveryEpoch = parseRecoveryEpoch((observation.payload as { readonly recoveryEpoch: number }).recoveryEpoch);
+    if (!recoveryEpoch.ok) return recoveryEpoch;
+    const installation = await installationState(tx);
+    if (!installation.ok) return installation;
+    if (!isQuarantineEvidence(recoveryEpoch.value, installation.value)) return effect(tx, observation, at, context);
+    const { workerId, observationId } = observation.position;
+    context.log.warn({ workerId, observationId, correlationId: observation.correlationId }, 'execution.observation.evidence', {
+      observationType: observation.type, recoveryEpoch: recoveryEpoch.value,
+      currentEpoch: installation.value.recoveryEpoch, quarantined: installation.value.quarantined,
+    });
+    return ok(undefined);
+  };
+}
+
 // Item 21d D3: a revoked worker takes no new work, so an observation that
 // would give it some is refused.
 function forWorkingProducer(effect: ObservationEffect): ObservationEffect {
@@ -297,17 +316,17 @@ function forWorkingProducer(effect: ObservationEffect): ObservationEffect {
 }
 
 export const OBSERVATION_EFFECTS: Readonly<Record<string, ObservationEffect>> = Object.freeze({
-  'execution.uncertain': executionEvidence('uncertain'),
-  'execution.termination-unproven': executionEvidence('termination-unproven'),
-  'execution.cancellation.not-applied': executionEvidence('cancellation-not-applied'),
+  'execution.uncertain': atCurrentEpoch(executionEvidence('uncertain')),
+  'execution.termination-unproven': atCurrentEpoch(executionEvidence('termination-unproven')),
+  'execution.cancellation.not-applied': atCurrentEpoch(executionEvidence('cancellation-not-applied')),
   'execution.unrecorded-process': unrecordedProcess,
   'execution.assignment.accepted': forWorkingProducer(acceptance),
   'execution.assignment.refused': refusal,
   'execution.command.rejected': commandRejection,
   'execution.started': start,
   'execution.launch.rejected': launchRejection,
-  'execution.exited': exit,
-  'execution.not-started': notStarted,
+  'execution.exited': atCurrentEpoch(exit),
+  'execution.not-started': atCurrentEpoch(notStarted),
   'worker.capacity.declared': forWorkingProducer(capacityDeclaration),
   'worker.admission-pressure.changed': forWorkingProducer(pressureChange),
 });

@@ -70,6 +70,14 @@ Before it accepts an offer, a worker SHALL refuse it with `resource-ceiling-exce
 - **WHEN** a worker below its disk floor receives an offer within its slots and capacity
 - **THEN** it journals a retryable `worker-admission-pressure` refusal naming `disk-floor`, records no launch intent, and acknowledges the offer
 
+#### Scenario: Launch rejected finally before a grant
+- **WHEN** a worker with one slot journaled a final launch authorization rejection for an execution that never received a grant, its assignment then ends, and another offer arrives
+- **THEN** the rejected execution holds no slot, and the worker accepts the offer
+
+#### Scenario: Ended assignment with a live execution
+- **WHEN** a worker with one slot holds an ended assignment whose execution is `authorized`, `started`, uncertain without a terminal state, or without a grant and with an operation that is not closed, and another offer arrives
+- **THEN** it refuses the offer with `worker-slots-exhausted`
+
 ### Requirement: Capacity declaration
 A worker SHALL journal `worker.capacity.declared` at its first start and whenever its slots, CPU, memory, enforceable controls, or protocol window differ from its last declaration.
 
@@ -144,11 +152,23 @@ A worker SHALL start no launch without a grant, whatever the state of its broker
 - **THEN** the operation is journaled `expired`, and the same execution is authorized again only once the worker is online
 
 ### Requirement: Cancellation forwarding
-A cancellation of an attempt or of any execution of an intent SHALL stop the intent's launch, sealing an execution before its supervisor starts, and SHALL write the `cancel` file of a started one. Its evidence SHALL be recorded once no launch of the intent is live and every execution is `exited`, `not-started`, or rejected without a grant, and at once when there is none.
+A cancellation of an attempt SHALL stop its intent's launch; one of an execution SHALL stop only that execution, and a launch only while it runs it. Either SHALL seal an execution before its supervisor starts and write the `cancel` file of a started one. Its evidence SHALL be recorded once no launch it stops is live and every execution it names is `exited`, `not-started`, or rejected without a grant, and at once when there is none.
 
 #### Scenario: Cancelled after W4
 - **WHEN** a cancellation names an execution whose supervisor runs
 - **THEN** the worker writes `cancel`, and records the evidence only after the exit is journaled
+
+#### Scenario: Another execution of the intent
+- **WHEN** a cancellation names a superseded execution of an intent whose launch runs another one
+- **THEN** the running execution keeps running and gets no `cancel`, nothing is launched again, and the evidence is recorded once the named execution is settled
+
+#### Scenario: Cancel file of the named execution only
+- **WHEN** a cancellation names one of two open executions of an intent with written records and no live launch
+- **THEN** only the named one gets `cancel`, and the evidence is recorded at its exit while the other still runs
+
+#### Scenario: Attempt cancelled while an execution runs
+- **WHEN** a cancellation names the attempt of an intent whose launch runs an execution
+- **THEN** the launch stops and the running execution gets `cancel`
 
 ### Requirement: Launch settings
 A worker SHALL launch only when `TASKELITH_WORKER_COMMAND` names its program; on Linux a launch SHALL also need the containment parent and the execution account. On Linux the worker SHALL read the containment parent whenever it is set, with or without the command. Without the command it SHALL accept assignments and launch none.

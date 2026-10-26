@@ -20,7 +20,9 @@ import {
   T0,
   cancellation,
   granted,
+  grantFor,
   offer,
+  requestOf,
   temporaryJournal,
   unavailable,
   type FakeSupervision,
@@ -502,28 +504,93 @@ test('a cancellation after W4 writes the cancel file; evidence waits for the exi
   assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
 });
 
-test('cancellation names a superseded execution: the launch stops before evidence is recorded', async () => {
+// A sealed execution, then a second one whose supervisor runs.
+async function supersededThenRunning() {
   value(journal.recordCommand(offer()));
-  authority.answers = [granted(), unavailable()];
+  authority.answers = [granted()];
   let launches = 0;
   supervisions.onCreated = (supervision) => {
     launches += 1;
-    if (launches === 1) supervision.facts = [{ problems: [], launch: { kind: 'seal', by: 'supervisor', reason: 'deadline-passed' } }];
+    supervision.facts = launches === 1
+      ? [{ problems: [], launch: { kind: 'seal', by: 'supervisor', reason: 'deadline-passed' } }]
+      : [{ problems: [], process: PROCESS }];
+  };
+  await orchestrator.pass(controller.signal);
+  await until(() => executions()[1]?.state === 'started');
+  const [superseded, running] = executions();
+  return { superseded: superseded?.executionId ?? '', running: running?.executionId ?? '' };
+}
+
+test('cancellation names a superseded execution: the running one goes on, and evidence is recorded', async () => {
+  const { superseded, running } = await supersededThenRunning();
+
+  value(journal.recordCommand(cancellation(1, { executionId: superseded })));
+  await orchestrator.pass(controller.signal);
+  for (let turn = 0; turn < 50; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(callCount(supervisions.byExecution.get(running), 'cancel'), 0);
+  assert.equal(executions()[1]?.state, 'started');
+  assert.equal(executions().length, 2);
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
+});
+
+test('a cancellation journaled right after its execution ended leaves the next one launched', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  let launches = 0;
+  supervisions.onCreated = (supervision) => {
+    launches += 1;
+    supervision.facts = launches === 1
+      ? [{ problems: [], launch: { kind: 'seal', by: 'supervisor', reason: 'deadline-passed' } }]
+      : [{ problems: [], process: PROCESS }];
+  };
+  // The pass decides before the launch resumes after the W6 commit.
+  const recordNotStarted = journal.recordNotStarted.bind(journal);
+  journal.recordNotStarted = (executionId) => {
+    const committed = recordNotStarted(executionId);
+    journal.recordNotStarted = recordNotStarted;
+    value(journal.recordCommand(cancellation(1, { executionId })));
+    void orchestrator.pass(controller.signal);
+    return committed;
   };
   await orchestrator.pass(controller.signal);
   await until(() => authority.requests.length >= 2);
-  const [superseded, current] = executions();
-  assert.equal(superseded?.state, 'not-started');
-  assert.notEqual(current?.executionId, superseded?.executionId);
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
+});
 
-  value(journal.recordCommand(cancellation(1, { executionId: superseded?.executionId ?? '' })));
+test('an attempt cancellation still stops the running execution of its intent', async () => {
+  const { running } = await supersededThenRunning();
+
+  value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));
   await orchestrator.pass(controller.signal);
+  await until(() => supervisions.byExecution.get(running)?.cancelled !== undefined);
   assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, false);
-  await orchestrator.settled();
-  assert.equal(executions()[1]?.state, 'not-started');
+});
+
+test('an execution cancellation files `cancel` only for that execution, with evidence at its exit', async () => {
+  value(journal.recordCommand(offer()));
+  const [named, other] = ['a', 'b'].map((name) => {
+    const request = requestOf(`execution-${name}`, `operation-${name}`);
+    const { launchAuthId } = grantFor(request);
+    value(journal.beginAuthorization(request));
+    value(journal.recordGrant(grantFor(request)));
+    value(journal.recordExecutionRecordWritten(request.executionId));
+    const supervision = supervisions.factory(request.executionId);
+    supervision.recovery = { fact: 'observe' };
+    supervision.facts = [{ problems: [], process: PROCESS, launch: { kind: 'claim', launchAuthId, supervisor: 1 } }];
+    return supervision;
+  });
+  value(journal.recordCommand(cancellation(1, { executionId: 'execution-a' })));
+  await orchestrator.pass(controller.signal);
+  assert.equal(callCount(named, 'cancel'), 1);
+  assert.equal(callCount(other, 'cancel'), 0);
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, false);
+
+  if (named !== undefined) named.facts = [{ ...named.facts[0], problems: [], exit: CLEAN_EXIT }];
+  await until(() => executions().find(({ executionId }) => executionId === 'execution-a')?.state === 'exited');
   await orchestrator.pass(controller.signal);
   assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
-  assert.equal(executions().length, 2);
+  assert.equal(callCount(other, 'cancel'), 0);
+  assert.notEqual(executions().find(({ executionId }) => executionId === 'execution-b')?.state, 'exited');
 });
 
 test('a cancellation names an execution a stopped launch left open: its cancel file is written', async () => {
