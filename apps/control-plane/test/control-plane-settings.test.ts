@@ -12,6 +12,7 @@ import {
   serveUntilStopped,
   WorkflowRegistry,
 } from '@taskelith/control-plane';
+import { TRANSPORT_LIMITS } from '@taskelith/nats';
 import { parseWorkflowDefinition, parseWorkflowRunBinding } from '@taskelith/sdlc';
 import { failed, value } from '@taskelith/testing';
 
@@ -35,6 +36,16 @@ test('the API binds loopback on the default port unless configured', () => {
   assert.equal(failed(readControlPlaneSettings({ ...BASE, TASKELITH_NATS_CA: join(directory, 'missing.pem') }, 'linux', 501)).details.variable, 'TASKELITH_NATS_CA');
   writeFileSync(join(directory, 'ca.pem'), 'PEM');
   assert.deepEqual(value(readControlPlaneSettings({ ...BASE, TASKELITH_NATS_CA: join(directory, 'ca.pem') }, 'linux', 501)).natsTls, { ca: 'PEM' });
+});
+
+test('the streams take the target byte limit unless configured', () => {
+  assert.equal(value(readControlPlaneSettings(BASE, 'linux', 501)).transportLimits, TRANSPORT_LIMITS);
+  const configured = value(readControlPlaneSettings({ ...BASE, TASKELITH_STREAM_MAX_BYTES: '1073741824' }, 'linux', 501));
+  assert.deepEqual(configured.transportLimits, { ...TRANSPORT_LIMITS, streamMaxBytes: 1024 ** 3 });
+  for (const text of ['0', '-1', '1.5', 'many', '9007199254740992']) {
+    const failure = failed(readControlPlaneSettings({ ...BASE, TASKELITH_STREAM_MAX_BYTES: text }, 'linux', 501));
+    assert.equal(failure.details.variable, 'TASKELITH_STREAM_MAX_BYTES', text);
+  }
 });
 
 test('the known workflows come from a JSON file', () => {

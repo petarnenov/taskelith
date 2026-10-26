@@ -61,6 +61,8 @@ services:
     environment:
       TASKELITH_POSTGRES_URL: *postgres-url
       TASKELITH_NATS_URL: nats://nats:4222
+      # 1 GiB per stream fits the broker's file store (nats-server.conf).
+      TASKELITH_STREAM_MAX_BYTES: "1073741824"
     volumes:
       - control-plane-data:/var/lib/taskelith
     # Plain HTTP on localhost only: TLS is G3 work.
