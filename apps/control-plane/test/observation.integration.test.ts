@@ -257,8 +257,8 @@ function launchRejected(sequence: number, at: Placed, reason: string, generation
 
 function exit(sequence: number, at: Placed, executionId: ExecutionId, code: number, startProven = true) {
   const payload = startProven
-    ? { executionId, status: { kind: 'code', code }, startProven: true, spawnFailed: false, terminationEvidence: 'containment-empty' }
-    : { executionId, status: { kind: 'unknown' }, startProven: false, spawnFailed: true, spawnFailure: 'spawn failed', terminationEvidence: 'never-spawned' };
+    ? { executionId, recoveryEpoch: 1, status: { kind: 'code', code }, startProven: true, spawnFailed: false, terminationEvidence: 'containment-empty' }
+    : { executionId, recoveryEpoch: 1, status: { kind: 'unknown' }, startProven: false, spawnFailed: true, spawnFailure: 'spawn failed', terminationEvidence: 'never-spawned' };
   return observe('execution.exited', { sequence, attemptId: at.attemptId, ownershipGeneration: at.generation }, payload);
 }
 
@@ -389,7 +389,9 @@ describe('consumption', () => {
         observationId: 'exit-1', observationType: 'execution.exited', schemaVersion: 1, protocolVersion: 1, occurredAt: '2026-10-25T09:00:00.000Z',
         correlationId: 'c', workerId: WORKER, journalId: JOURNAL, sequence: 2, attemptId: at.attemptId, ownershipGeneration: at.generation,
       },
-      payload: { executionId, status: { kind: 'code', code: 0 }, startProven: true, spawnFailed: false, terminationEvidence: 'containment-empty' },
+      payload: {
+        executionId, recoveryEpoch: 1, status: { kind: 'code', code: 0 }, startProven: true, spawnFailed: false, terminationEvidence: 'containment-empty',
+      },
     } });
     assert.equal(failed(outcome).code, 'unavailable');
     assert.deepEqual([await stored(at.taskId), await sql('SELECT * FROM inbox'), await cursor(), await sql('SELECT event_id FROM outbox')], before);
@@ -485,7 +487,7 @@ describe('refusal after a grant', () => {
     assert.deepEqual(await sql('SELECT live FROM launch_authorizations'), [{ live: false }]);
     const [cancellation] = await messages('execution.cancellation.request');
     assert.equal((cancellation as { payload: { reason: string } }).payload.reason, 'assignment-ended');
-    value(await observe('execution.not-started', { sequence: 4, attemptId: at.attemptId, ownershipGeneration: at.generation }, { executionId }));
+    value(await observe('execution.not-started', { sequence: 4, attemptId: at.attemptId, ownershipGeneration: at.generation }, { executionId, recoveryEpoch: 1 }));
     const released = value(await database.transaction((tx) => tx.assignments.get(at.assignment.id)));
     assert.equal(released.reservation.state, 'released');
     assert.deepEqual((await stored(at.taskId)).attempts.map((each) => each.outcome?.kind), ['not-started']);
@@ -584,7 +586,7 @@ describe('outcomes', () => {
     const executionId = await launch(at);
     const notStarted = (sequence: number, observationId?: string) => observe('execution.not-started', {
       sequence, attemptId: at.attemptId, ownershipGeneration: at.generation, ...(observationId === undefined ? {} : { observationId }),
-    }, { executionId });
+    }, { executionId, recoveryEpoch: 1 });
     value(await notStarted(2));
     assert.equal((await stored(at.taskId)).attempts[0]!.outcome, undefined);
     assert.equal((await heldAssignment(at.attemptId)).state, 'offered');
@@ -595,7 +597,7 @@ describe('outcomes', () => {
       const cancelled = requestCancellation(task.value, at.attemptId, 'requested', await tx.now());
       return cancelled.ok ? tx.tasks.replace(cancelled.value, task.value.generation) : cancelled;
     }));
-    value(await observe('execution.not-started', { sequence: 3, attemptId: at.attemptId, ownershipGeneration: at.generation }, { executionId: second }));
+    value(await observe('execution.not-started', { sequence: 3, attemptId: at.attemptId, ownershipGeneration: at.generation }, { executionId: second, recoveryEpoch: 1 }));
     const ended = (await stored(at.taskId)).attempts[0]!.outcome;
     assert.deepEqual([ended?.kind, ended?.cancelled], ['not-started', true]);
     assert.equal(value(await database.transaction((tx) => tx.assignments.get(at.assignment.id))).reservation.state, 'released');
@@ -812,6 +814,81 @@ describe('starts', () => {
   });
 });
 
+function observationEvidence(): unknown[] {
+  return logs.records.filter((record) => record.event === 'execution.observation.evidence')
+    .map((record) => [record.fields.observationType, record.fields.recoveryEpoch, record.fields.quarantined]);
+}
+
+describe('execution observations outside the current epoch', () => {
+  function exitAt(sequence: number, at: Placed, executionId: ExecutionId, recoveryEpoch: number) {
+    return observe('execution.exited', { sequence, attemptId: at.attemptId, ownershipGeneration: at.generation }, {
+      executionId, recoveryEpoch, status: { kind: 'code', code: 0 }, startProven: true, spawnFailed: false, terminationEvidence: 'containment-empty',
+    });
+  }
+
+  async function launchedAttempt(): Promise<{ readonly at: Placed; readonly executionId: ExecutionId }> {
+    await enroll();
+    value(await declare(1));
+    const at = await placed();
+    value(await accept(2, at));
+    return { at, executionId: await launch(at) };
+  }
+
+  test('an exit at an older epoch is kept as evidence and ends nothing; one at the current epoch still ends the attempt', async () => {
+    const { at, executionId } = await launchedAttempt();
+    await sql('UPDATE installation SET recovery_epoch = 2');
+    const before = await stored(at.taskId);
+    assert.equal(value(await exitAt(3, at, executionId, 1)), 'applied');
+    assert.deepEqual(await stored(at.taskId), before);
+    assert.equal((await heldAssignment(at.attemptId)).reservation.state, 'held');
+    assert.deepEqual([await messages('execution.assignment.end'), observationEvidence()], [[], [['execution.exited', 1, false]]]);
+    assert.equal(value(await exitAt(4, at, executionId, 2)), 'applied');
+    assert.equal((await stored(at.taskId)).attempts[0]!.outcome?.kind, 'exited');
+    assert.equal((await messages('execution.assignment.end')).length, 1);
+    assert.deepEqual(await confirmations(), [1, 2, 3, 4]);
+  });
+
+  test('a newer epoch than the current one is evidence too', async () => {
+    const { at, executionId } = await launchedAttempt();
+    const before = await stored(at.taskId);
+    assert.equal(value(await exitAt(3, at, executionId, 2)), 'applied');
+    assert.deepEqual([await stored(at.taskId), observationEvidence()], [before, [['execution.exited', 2, false]]]);
+  });
+
+  test('in restore quarantine every current-epoch execution observation is kept as evidence and changes nothing', async () => {
+    const { at, executionId } = await launchedAttempt();
+    await sql('UPDATE installation SET quarantined = true');
+    const before = await stored(at.taskId);
+    const sent = (sequence: number) => ({ sequence, attemptId: at.attemptId, ownershipGeneration: at.generation });
+    const observed = [
+      await observe('execution.uncertain', sent(3), { executionId, recoveryEpoch: 1 }),
+      await observe('execution.termination-unproven', sent(4), { executionId, recoveryEpoch: 1, survivors: [] }),
+      await observe('execution.cancellation.not-applied', sent(5), { commandId: 'cancel-1', executionId, recoveryEpoch: 1, reason: 'adopting-supervisor' }),
+      await observe('execution.not-started', sent(6), { executionId, recoveryEpoch: 1 }),
+      await exitAt(7, at, executionId, 1),
+    ];
+    assert.deepEqual(observed.map(value), ['applied', 'applied', 'applied', 'applied', 'applied']);
+    assert.deepEqual(await stored(at.taskId), before);
+    assert.deepEqual(observationEvidence().map(([type]) => type), [
+      'execution.uncertain', 'execution.termination-unproven', 'execution.cancellation.not-applied', 'execution.not-started', 'execution.exited',
+    ]);
+    assert.ok(observationEvidence().every(([, epoch, quarantined]) => epoch === 1 && quarantined === true));
+    await sql('UPDATE installation SET quarantined = false');
+    assert.equal(value(await exitAt(8, at, executionId, 1)), 'applied');
+    assert.equal((await stored(at.taskId)).attempts[0]!.outcome?.kind, 'exited');
+  });
+
+  test('an unrecorded process at an older epoch is still recorded for the reconciliation queue', async () => {
+    await enroll();
+    await sql('UPDATE installation SET recovery_epoch = 2');
+    const processes = [PROCESS];
+    assert.equal(value(await observe('execution.unrecorded-process', { sequence: 1 }, { containment: 'cgroup taskelith/x', recoveryEpoch: 1, processes })), 'applied');
+    assert.deepEqual((await queue()).processes.map(({ containment }) => containment), ['cgroup taskelith/x']);
+    const [warning] = logs.records.filter((record) => record.event === 'execution.unrecorded-process');
+    assert.equal(warning?.fields.recoveryEpoch, 1);
+  });
+});
+
 function rejectionLogs(): unknown[] {
   return logs.records.filter((record) => record.event === 'execution.launch.rejected').map((record) => [record.fields.reason, record.fields.assignmentId]);
 }
@@ -886,7 +963,7 @@ describe('launch rejections', () => {
       const at = await placed();
       value(await accept(2, at));
       const executionId = await launch(at, 'execution-a');
-      value(await observe('execution.not-started', { sequence: 3, attemptId: at.attemptId, ownershipGeneration: at.generation }, { executionId }));
+      value(await observe('execution.not-started', { sequence: 3, attemptId: at.attemptId, ownershipGeneration: at.generation }, { executionId, recoveryEpoch: 1 }));
       assert.equal(value(await launchRejected(4, at, reason)), 'applied');
       const ended = value(await database.transaction((tx) => tx.assignments.get(at.assignment.id)));
       assert.deepEqual([ended.end?.reason, ended.reservation.state], ['attempt-ended', 'released']);
@@ -1020,7 +1097,7 @@ describe('a revoked worker', () => {
     value(await declare(1));
     const at = await placed();
     const executionId = await launch(at);
-    value(await observe('execution.not-started', { sequence: 2, attemptId: at.attemptId, ownershipGeneration: at.generation }, { executionId }));
+    value(await observe('execution.not-started', { sequence: 2, attemptId: at.attemptId, ownershipGeneration: at.generation }, { executionId, recoveryEpoch: 1 }));
     value(await revoke());
     const [first, retry] = (await stored(at.taskId)).attempts;
     assert.deepEqual([first?.outcome?.kind, first?.outcome?.cancelled], ['not-started', false]);
@@ -1050,7 +1127,7 @@ describe('a revoked worker', () => {
       child = await placeAgain('task-child');
     }
     const executionId = await launch(child);
-    value(await observe('execution.not-started', { sequence, attemptId: child.attemptId, ownershipGeneration: child.generation }, { executionId }));
+    value(await observe('execution.not-started', { sequence, attemptId: child.attemptId, ownershipGeneration: child.generation }, { executionId, recoveryEpoch: 1 }));
     value(await revoke());
     const attempts = (await stored('task-child')).attempts;
     assert.deepEqual([attempts.length, attempts.at(-1)?.outcome?.kind], [3, 'not-started'], 'no third retry');
@@ -1066,7 +1143,7 @@ describe('a revoked worker', () => {
     const granted = await placedAs('task-2', 'g'.repeat(MAX_IDENTIFIER_LENGTH));
     const executionId = await launch(granted);
     value(await observe('execution.not-started', { sequence: 2, attemptId: granted.attemptId, ownershipGeneration: granted.generation }, {
-      executionId,
+      executionId, recoveryEpoch: 1,
     }));
     value(await revoke());
     const reasons = await Promise.all([ungranted, granted].map(async ({ assignment }) => {
@@ -1082,8 +1159,8 @@ describe('reconciliation queue', () => {
     await enroll();
     const processes = [PROCESS, { ...PROCESS, pid: 43 }];
     const unrecorded = { sequence: 1, observationId: 'unrecorded-1' };
-    assert.equal(value(await observe('execution.unrecorded-process', unrecorded, { containment: 'cgroup taskelith/x', processes })), 'applied');
-    assert.equal(value(await observe('execution.unrecorded-process', unrecorded, { containment: 'cgroup taskelith/x', processes })), 'duplicate');
+    assert.equal(value(await observe('execution.unrecorded-process', unrecorded, { containment: 'cgroup taskelith/x', recoveryEpoch: 1, processes })), 'applied');
+    assert.equal(value(await observe('execution.unrecorded-process', unrecorded, { containment: 'cgroup taskelith/x', recoveryEpoch: 1, processes })), 'duplicate');
     const listed = (await queue()).processes;
     assert.deepEqual(listed.map(({ journalId, observationId, containment, processCount }) => [journalId, observationId, containment, processCount]), [
       [JOURNAL, 'unrecorded-1', 'cgroup taskelith/x', 2],
