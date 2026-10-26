@@ -11,7 +11,7 @@ import { InMemoryLogSink } from '@taskelith/observability';
 import { BrokerAuthority, connectSystemAccount, connectTransport, NatsBrokerCredentials, TRANSPORT_LIMITS, TransportAddress } from '@taskelith/nats';
 import { PostgresDatabase } from '@taskelith/postgres';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
-import { integrationEndpoint, integrationSecret, value } from '@taskelith/testing';
+import { integrationEndpoint, integrationSecret, requestFailure, value } from '@taskelith/testing';
 import { waitFor } from './waiting.ts';
 
 const DIGEST = `sha256:${'ab'.repeat(32)}`;
@@ -146,9 +146,13 @@ export class ScenarioInstallation {
   }
 
   async call(method: string, path: string, body?: unknown): Promise<Answer> {
-    const response = await fetch(new URL(path.replace(/^\//, ''), this.apiUrl), {
+    const url = new URL(path.replace(/^\//, ''), this.apiUrl);
+    const sent = Date.now();
+    const response = await fetch(url, {
       method, headers: { 'content-type': 'application/json', authorization: `Bearer ${this.#operator}` },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }).catch((error: unknown) => {
+      throw requestFailure('control plane', method, url, sent, error);
     });
     return { status: response.status, body: await response.json() as Record<string, unknown> };
   }
