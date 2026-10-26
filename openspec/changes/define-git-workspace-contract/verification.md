@@ -10,7 +10,8 @@
 ## Revision
 
 - Implementation commit: `b51cd00`, on branch `define-git-workspace-contract`, created from `origin/dev` at `d22d727`; first records commit `6f8861e`.
-- Fixes after review pass 1: `652854e`; this record is updated in the commit that follows it.
+- Fixes after review pass 1: `652854e`, recorded in `1719c3a`.
+- Fixes after review pass 2: `37f5bd3`; this record is updated in the commit that follows it.
 
 ## Environment
 
@@ -36,6 +37,7 @@ The task was developed by an implementation subagent briefed by the worker sessi
 | --- | --- | --- |
 | `b51cd00` (tree before commit) | `make verify` | Passed: 1539 tests, 0 failed; coverage over all files 99.25% lines, 91.42% branches, 98.76% functions (the workspace module: domain files 100%; `workspace-conformance.js` 100% lines and functions, 61.40% branches, from its early returns after a failed step); 66 OpenSpec items valid; comment check, contract compatibility, dependency inventory, archive dry run, and package verification passed |
 | `b51cd00` | `npm run openspec -- validate define-git-workspace-contract --strict` | `Change 'define-git-workspace-contract' is valid` |
+| `37f5bd3` (fixes after pass 2, tree before commit) | `make verify`; `npm run openspec -- validate define-git-workspace-contract --strict` | Passed: 1548 tests, 0 failed; coverage over all files 99.25% lines, 91.41% branches, 98.77% functions (`workspace-conformance.js` 100% lines and functions, 73.12% branches); 66 OpenSpec items valid; comment check, archive dry run, and package verification passed; change valid |
 | `652854e` (fixes after pass 1, tree before commit) | `make verify`; `npm run openspec -- validate define-git-workspace-contract --strict` | Passed: 1545 tests, 0 failed; coverage over all files 99.24% lines, 91.40% branches, 98.77% functions (`workspace-conformance.js` 100% lines and functions, 65.38% branches); 66 OpenSpec items valid; comment check, boundary checks, archive dry run, and package verification passed; change valid |
 
 The first `make verify` run failed only on the stale dependency inventory after `npm install` linked the new package; `make dependency-inventory` regenerated it, and the second run passed.
@@ -59,14 +61,28 @@ Reviewer for all passes: Codex CLI v0.164.0, model `gpt-6.1-sol`, reasoning effo
   - L1 contradictory wording on a failed prepare: contract section 9, the spec, and the port comment now say that a refusal creates no new workspace and leaves an existing one unchanged, and the suite checks that a second prepare keeps the first workspace's untracked file.
 - Resolution commit: `652854e`.
 
+### Pass 2
+
+- Model confirmation: `gpt-6.1-sol` with reasoning effort medium, Codex CLI v0.164.0, as the coordinator reported from the Codex run. Session ID `01a17794-71fd-7283-9556-a08f0adbc17c`.
+- Reviewed revision: `origin/dev...1719c3a`. The prompt named pass 1's session and findings.
+- Snapshot before and after: `30ddb81b020c4627831490ae5a24979825baf0f47f82433716926cad80e3f389`, unchanged.
+- Pass 1 confirmations: M1, M2, M5, M6, and L1 correct and complete; M3's content fix correct, with a test problem raised as finding 2 below; M4 incomplete, raised as finding 1 below.
+- Findings: 0 Critical, 0 High, 4 Medium, 0 Low.
+  - M1 the remote-call count was read after the operation had started, so a remote call in the synchronous part of `prepare` went unseen: the suite's refusal helper now takes a function, reads the count, and only then calls it; a defective variant that calls the remote before the scope check of a prepare alone, which pass 1's general variant hid, is reported. The suite has no other place that receives an operation already started.
+  - M2 the snapshot case opened a fresh `at-head` workspace at an unpublished local commit, which a correct adapter with separate clones cannot reach: the case pushes the commit before it snapshots it and before it opens the review workspace at it, and checks that the snapshot head is the pushed head; the double now lets a new clone reach only commits that a remote branch holds, as Git does, so the suite cannot again depend on unpublished commits. The other `at-head` uses open pushed or base heads.
+  - M3 not every snapshot's head was checked in full: every snapshot is now compared with the workspace's current head, repository, commit, and tree, and the head that `inspect` and `prepare` return is compared with the commit and tree the fixture reads natively (new helper `nativeHead`), so a stale tree is found wherever the port returns a head; a defective variant that returns a stale tree with a snapshot is reported. Contract section 12 and the spec say so.
+  - M4 cleanup allowed removing a dirty workspace, against architecture invariant 7: `remove` now refuses a dirty workspace with `precondition-failed` and reason `workspace-dirty` and keeps it (contract sections 3, 9, and 11, the spec, and the port comment); discarding a dirty workspace on an operator's decision is recorded as a later, separately defined policy and not implemented. The removal case uses an ignored link to a control record, which keeps the workspace clean, and checks that a workspace with an untracked file is refused and kept; the sweep case removes a workspace whose link to a control record is committed. Design decision 3 and contract section 3 explain why `sweep` stays within invariant 7: a staging entry is an incomplete clone no attempt has used, and a removing entry was clean when `remove` renamed it after the attempt's terminal fact. A defective variant that removes a dirty workspace is reported.
+- Resolution commit: `37f5bd3`.
+
 ## Limitations
 
 - The suite runs only against a test-only double; the Git adapter (item 16) runs it against real Git.
+- Discarding a dirty workspace on an operator's explicit decision is not defined here; a later change defines that policy.
 - The snapshot format is not fixed here; item 16 chooses it.
 - `CodeHeadIdentity` is not yet joined to the evidence record's `codeRevision` or the merge queue's `CodeHead`; item 17 does that (contract section 14).
 
 ## Remaining gates
 
-- Independent review pass 2 of the pass 1 resolutions (Codex, `gpt-6.1-sol`, medium effort, read-only), with fixes and a final `make verify`.
+- Independent review pass 3 of the pass 2 resolutions (Codex, `gpt-6.1-sol`, medium effort, read-only), the last allowed pass, with fixes and a final `make verify`.
 - Integration into `dev` by the coordinator.
 - Archive of the change after the merge.
