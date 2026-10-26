@@ -159,8 +159,8 @@ A worker SHALL read the current journal format and every earlier format it lists
 - **THEN** it fails startup and leaves the journal unchanged
 
 #### Scenario: Two formats behind
-- **WHEN** a worker supporting format 3 opens a format 1 journal
-- **THEN** it migrates the journal through format 2 to format 3 in one transaction
+- **WHEN** a worker supporting format 4 opens a format 2 journal
+- **THEN** it migrates the journal through format 3 to format 4 in one transaction
 
 ### Requirement: Worker subtree rules
 The `worker/` subtree SHALL be created only by enrollment and closed to other accounts; its control records SHALL be owned by the worker's account, SHALL have no symbolic link on their path from the data root, and SHALL be on a local persistent filesystem. Workspace content SHALL follow its own rules, and workspace removal SHALL never delete a control record.
