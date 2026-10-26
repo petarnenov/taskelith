@@ -100,7 +100,7 @@ Reviewer: OpenCode CLI, agent `reviewer`, model `opencode-go/kimi-k3.1-pro`, var
      - **Fixed** in `a859c1f`: `freeIdleAssignment` (`assignment-freeing.ts`) is the one freeing rule for revocation and releasing rejections. It supersedes a never-granted assignment, ends a granted one with only terminal executions as `attempt-ended` with `followAttemptEnd`, and keeps one with an `authorized` or `started` execution.
      - Tests: `capacity-not-reserved` and `stale-recovery-epoch` after an earlier `not-started` each end the attempt, release the assignment, and open a retry; the latter also sends its inventory request.
   2. **L1:** no successful `make verify` was recorded for the final revision. **Fixed** by recording the `a79732c` run above and the run after the pass 2 fix below.
-- **Checks after the fix:** `make verify` at `a859c1f`, run by the author: exit 0; 1396 tests, 1396 pass; coverage 99.22 / 91.35 / 98.71.
+- **Checks after the fix:** `make verify` at `8c64c94` (the fix `a859c1f` plus this record): exit 0; 1396 tests, 1396 pass; coverage 99.22 / 91.36 / 98.71. Later commits change only this file.
 
 ## Limitations
 
