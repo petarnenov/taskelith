@@ -55,9 +55,19 @@ Codex, `gpt-6.1-sol` (`medium`, model and effort confirmed from the session head
 
 ## Review pass 3
 
-Pending; the last allowed pass.
+Codex, `gpt-6.1-sol` (`medium`, model and effort confirmed from the session header), read-only, session `01a177fb-3f8b-7f91-9d73-a900f7ef9d66`, invoked as in pass 1, at `c235ca5`. The snapshots before and after the pass matched (`2cd80136a2476b529dc5221e8f2d5a79024cb3748d868e962bc41dc525d300a7`). Findings: 0 Critical, 0 High, 0 Medium, 0 Low.
+
+- **Pass 2 High:** acceptably mitigated within the trusted-host boundary of the [trust model](../../../docs/trust-model.md). The race is not eliminated: the reviewer reproduced the coordinated double-swap bypass in an in-memory harness, as design D6 documents. The check is not atomic containment and does not protect against a malicious process with the worker account's file system authority.
+- **Pass 1 High 2, Medium, Low:** remain resolved.
+- **Whole change:** nothing more found.
+- The reviewer ran `npm run verify:comments`, the strict OpenSpec validation, `git diff --check`, and in-memory checks; being read-only, it did not run `make verify`.
+- **make verify:** VERIFY4.
+
+The review is complete in three passes with no open findings; the residual race is accepted by the reviewer under the trust model.
 
 ## Limitations and remaining gates
+
+- Remaining gates: the coordinator's integration into `dev` (likely after 20d2, with a conflict expected in `apps/worker/src/worker-start.ts` and the control-plane integration test), the archive of this change, and the 20e2 follow-up.
 
 - Log truncation keeps the residual race of design D6, open only to a local process that can already write the worker data root.
 - The daemon overhead causes (`daemon-memory`, `event-loop-lag`) and the retry of a write refused for lack of space belong to 20e2.
