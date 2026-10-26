@@ -93,6 +93,14 @@ test('a quoted secret, a Basic credential, and a short JWT are redacted whole', 
   assert.equal(cause, 'Error: password=[redacted]; Authorization: [redacted], then [redacted] ends');
 });
 
+test('a quoted or JSON authorization, a colon pair, and standard base64 are redacted', async () => {
+  const base64 = 'QUJDREVGR0hJSktMTU5PUFFSU1RVVldY/+abcdefghij==';
+  const message = `{"authorization":"Basic dXNlcjpwYXNz"} password: hunter2 'token': 'two words' blob ${base64}`;
+  const { cause } = (await failureOf(new Error(message))).details;
+  for (const secret of ['dXNlcjpwYXNz', 'hunter2', 'two words', 'QUJD']) assert.ok(!cause?.includes(secret), `${secret} leaked into ${cause}`);
+  assert.equal(cause, `Error: {"authorization":"[redacted]"} password: [redacted] 'token': [redacted] blob [redacted]`);
+});
+
 test('a secret cut by a length limit leaves no part of itself', async () => {
   const token = `tken_${'B'.repeat(48)}`;
   for (const prefix of ['x'.repeat(2_030), 'x '.repeat(75), 'y '.repeat(1_009)]) {
@@ -160,4 +168,32 @@ test('a thrown value that is not an error is unknown; names and codes must be id
   const odd = Object.assign(new Error(''), { name: 'not a name', code: 'free text code' });
   assert.deepEqual((await failureOf(odd)).details, { cause: 'Error' });
   assert.deepEqual((await failureOf(fetchFailed('plain cause'))).details, { cause: 'TypeError: fetch failed' });
+});
+
+test('a code of 32 or more characters is not a code, so no seed passes as one', async () => {
+  const seed = `SU${'A'.repeat(56)}`;
+  assert.deepEqual((await failureOf(Object.assign(new Error(''), { code: seed }))).details, { cause: 'Error' });
+  const longest = 'UNABLE_TO_VERIFY_LEAF_SIGNATURE';
+  assert.equal((await failureOf(fetchFailed(Object.assign(new Error('tls'), { code: longest })))).details.causeCode, longest);
+});
+
+test('a thrown value whose getters throw is unknown, not a rejection', async () => {
+  const hostile = new Proxy({}, { get: () => { throw new Error('trap'); } });
+  assert.deepEqual((await failureOf(hostile)).details, { cause: 'unknown' });
+  const getter = Object.defineProperty(new Error('x'), 'message', { get: () => { throw new Error('trap'); } });
+  assert.deepEqual((await failureOf(getter)).details, { cause: 'unknown' });
+});
+
+test('a schema violation naming a 2000-character property is bounded', async () => {
+  const enrollment = {
+    installationId: 'a'.repeat(32), workerId: `w${'b'.repeat(32)}`, credentialGeneration: 1, recoveryEpoch: 1,
+    protocolVersions: { minimum: 1, maximum: 1 }, credentials: { controlPlane: `tkwk_${'C'.repeat(43)}`, broker: 'creds' },
+    ['name '.repeat(400)]: 1,
+  };
+  const fetch = () => Promise.resolve(new Response(JSON.stringify(enrollment), { status: 201 }));
+  const client = new HttpEnrollmentClient({ baseUrl: new URL('http://control-plane.test/'), timeoutMilliseconds: 500, fetch });
+  const failure = failed(await client.enroll(TOKEN, REQUEST));
+  assert.equal(failure.code, 'internal');
+  assert.match(failure.details.violation ?? '', /must NOT have additional properties "name name/);
+  assert.ok((failure.details.violation?.length ?? 0) <= 160, failure.details.violation);
 });
