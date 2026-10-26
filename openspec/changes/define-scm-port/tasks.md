@@ -1,6 +1,6 @@
 ## 1. Module and port
 
-- [x] 1.1 Add the `@taskelith/integrations` module package with its root export and `./port` entry.
+- [x] 1.1 Add the `./port` entry to `@taskelith/integrations`, merged with item 8's skeleton of the module.
 - [x] 1.2 Add the draft `SourceControlProvider` port and its capabilities.
 
 ## 2. Conformance suite
@@ -10,7 +10,7 @@
 
 ## 3. Records
 
-- [x] 3.1 Record the GitHub and Forgejo mapping in `design.md`.
+- [x] 3.1 Write `docs/contracts/source-control.md`, with the GitHub and Forgejo mapping.
 
 ## 4. Verification and review
 

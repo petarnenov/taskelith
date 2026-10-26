@@ -9,11 +9,13 @@ Goals:
 - A small, SCM-neutral port that the GitHub plugin can implement and that Forgejo can map onto.
 - A conformance suite that every SCM plugin passes with its own credential against its service.
 
-Non-goals: the GitHub plugin, SCM I/O, the module's use cases (credential delivery to a run, webhook deduplication, merge orchestration), the plugin SDK re-export, and wire contracts.
+Non-goals: the GitHub plugin, item 8's product ports, SCM I/O, the module's use cases (credential delivery to a run, webhook deduplication, merge orchestration), the plugin SDK re-export, and wire contracts.
 
 ## Decisions
 
-- **Module.** `@taskelith/integrations` is the architecture's integrations module. Its skeleton matches the other modules, and its `./port` entry exports only the port types and constants, like `@taskelith/sdlc/port`. Item 8 adds its own ports to the same module.
+- **Module.** The ports belong to `@taskelith/integrations`, the architecture's integrations module, which item 8 (`define-product-ports`) added while this change was in progress. This change merges the two skeletons: it adds a `./port` entry that exports only the plugin-facing port types and constants, like `@taskelith/sdlc/port`, and keeps item 8's root exports and dependencies.
+- **Names next to item 8.** Item 8's `MergeQueue` already exports `MergeRequest` for a queued merge, so the port's merge input is `ChangeRequestMerge`. Like item 8's `IntakeSource` and `WriteBack`, the plugin-facing port uses plain strings; item 8's branded `BranchName` and `CodeHead` stay internal to the module.
+- **Contract document.** `docs/contracts/source-control.md` holds the contract, the SCM mapping, and the conformance suite's checks, as `docs/contracts/product-ports.md` does for item 8.
 - **Three ports.** Credential issuance, change requests, and webhook verification have different clients: the launch path, the integration flow, and the HTTP receiver. Each client depends on its own port (ADR 0004 principle 2). `SourceControlProvider` combines them with the capabilities for the plugin to implement.
 - **Draft version.** The port is `0.1.0`. ADR 0009 froze the SDLC port only after both frameworks ran through it; here only GitHub will run before Forgejo is added. The plugin SDK re-export and the plugin API version change belong to item 20, which first needs the port from a plugin.
 - **Plain data.** Requests and results are plain strings and arrays, as in the SDLC port. The suite checks every result at run time, because plugin output is untrusted. Enumerated values (`SCM_PERMISSIONS`, `MERGE_METHODS`, `COMMIT_STATUS_STATES`, `CHANGE_REQUEST_STATES`, `WEBHOOK_EVENT_KINDS`, `REVIEW_EVIDENCE_KINDS`) are typed as `string` in results, so that an unknown value is a finding rather than a type lie.
@@ -26,23 +28,7 @@ Non-goals: the GitHub plugin, SCM I/O, the module's use cases (credential delive
 
 ## SCM mapping
 
-The GitHub column follows the GitHub qualification record. The Forgejo column is the author's understanding of Forgejo's model, written without consulting a source for this change and without a pinned version; it is an assumption, not evidence. The Forgejo plugin must confirm each row at its pinned version, with sources, before admission (ADR 0006 decision 4). The unconfirmed conditions are, per row: how a plugin creates a token for the bot user, and with which authentication; the available token scopes; whether a token can expire or only be deleted; whether branch protection can deny a merge override to the bot user; the merge API's method values and whether it can require the expected head; and the names of the signature and delivery headers.
-
-| Port element | GitHub.com | Forgejo |
-| --- | --- | --- |
-| Run credential | Installation access token from the installation's App, requested with `repositories` and `permissions` | Access token of a per-project bot user that is a collaborator only on the project's repositories, with token scopes |
-| Permissions | `contents` read or write, `pull_requests` write, `statuses` write | Token scopes are coarser (repository read or write); the plugin reports the effective set |
-| Refresh | A new installation token before the hour expires | A new token, then revocation of the old one; expiry is enforced by revocation |
-| Revocation | Revoke the installation token | Delete the access token |
-| Merge protection binding the plugin | Protected branch with required status checks and `enforce_admins: true` | Branch protection with required status checks, with the bot user given no merge override |
-| Change request | Pull request; number as an opaque string | Pull request; index as an opaque string |
-| Commit status | Commit status API with a context | Commit status API with a context |
-| Merge with method and expected head | Merge API with `merge_method` and `sha` | Merge API with `Do` (merge, squash, or rebase) and the head commit |
-| Review evidence (D8 (a)) | Required commit status posted by the App | Required commit status posted by the bot user |
-| Webhook signature | HMAC-SHA256 of the raw body in `X-Hub-Signature-256` | HMAC-SHA256 of the raw body in the signature header |
-| Delivery identifier | `X-GitHub-Delivery` | The delivery header's GUID |
-
-The gaps are recorded, not hidden: Forgejo's coarser token scopes make the effective permissions a superset for some runs, and its credential refresh is a revocation flow rather than a service expiry.
+The GitHub and Forgejo mapping is in section 7 of the [contract](../../../docs/contracts/source-control.md#7-scm-mapping). The Forgejo column is an unsourced assumption that the Forgejo plugin must confirm at a pinned version before admission.
 
 ## Risks / Trade-offs
 

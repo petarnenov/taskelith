@@ -4,13 +4,15 @@ Date: 2026-10-26. Author verification and independent review are recorded below.
 
 ## Scope and source
 
-G3 item 7 of the [G3 work plan](../../../docs/g3-plan.md). The coordinating session (Niki) assigned it on 2026-10-26, after the owner started the first wave of G3 contracts (items 3, 5, 6, 7, and 8), and placed the port in the new `@taskelith/integrations` module, which item 8 also adds to. Base revision: `c89cf6c` on `dev`. Prepared in its own git worktree from a fresh `origin/dev`.
+G3 item 7 of the [G3 work plan](../../../docs/g3-plan.md). The coordinating session (Niki) assigned it on 2026-10-26, after the owner started the first wave of G3 contracts (items 3, 5, 6, 7, and 8), and placed the port in the `@taskelith/integrations` module, which item 8 also adds to. Base revision: `c89cf6c` on `dev`. Prepared in its own git worktree from a fresh `origin/dev`. After pass 2, `origin/dev` at `cd2805e`, which contains item 8 (`define-product-ports`), was merged into the branch (`21d7166`); see [Merge of dev](#merge-of-dev).
 
 Scope:
 
-- the new module package `packages/modules/integrations/`: the port (`src/ports/source-control.ts`), the port entry (`src/port.ts`), the root export (`src/index.ts`), the conformance suite and its helpers under `src/ports/`, and the tests with a test-only in-memory SCM under `test/`;
-- the workspace entries in `package-lock.json` and the regenerated `docs/dependencies/licenses.json` and `docs/dependencies/sbom.cdx.json`;
+- the contract `docs/contracts/source-control.md`;
+- in the module package `packages/modules/integrations/`, which item 8 created: the port (`src/ports/source-control.ts`), the port entry (`src/port.ts`) and its `./port` export, the root export additions (`src/index.ts`), the conformance suite and its helpers under `src/ports/`, and the tests with a test-only in-memory SCM under `test/`;
 - this change.
+
+`package-lock.json` and the dependency inventory end up equal to `dev`'s, because item 8's skeleton already has the package's dependencies.
 
 Excluded, as the plan row states: the GitHub plugin (item 20). Also excluded: the plugin SDK re-export and the plugin API version, wire contracts, and the module's use cases (see `design.md`).
 
@@ -34,7 +36,19 @@ Linux 6.8.0 x86_64, Node.js from `.nvmrc` through `nvm use`, the pinned `@fissio
   - Forgejo: the mapping in `design.md`.
 - Comments: every comment the change adds is at most two lines of at most 80 characters; `npm run verify:comments` passes.
 - Honest status: the port is a draft, `0.1.0`. `design.md` states that the Forgejo mapping is an unsourced assumption, lists its unconfirmed conditions, and states that the suite has run only against a test-only fake.
-- Evidence check: the change cites only repository documents. The GitHub column of the mapping follows the GitHub qualification record. No external source was consulted.
+- Evidence check: the change, the contract included, has no external link; it links only repository documents, and each relative link resolves to an existing file. The GitHub column of the mapping follows the GitHub qualification record. No external source was consulted.
+
+## Merge of dev
+
+Item 8 added `@taskelith/integrations` in `dev` while this change was in review, so the merge conflicted in the package skeleton (`package.json`, `tsconfig.json`, `src/index.ts`) and in `package-lock.json`. Resolution:
+
+- `package.json`: item 8's dependencies and dev dependencies with this change's `./port` export; `tsconfig.json`: item 8's references.
+- `src/index.ts`: item 8's exports followed by this change's.
+- `package-lock.json`: `dev`'s, then `npm install --package-lock-only --ignore-scripts`, which changed nothing; `make dependency-inventory` regenerated the inventory to `dev`'s.
+- Naming aligned with item 8: the port's `MergeRequest` collided with item 8's queue record and became `ChangeRequestMerge`.
+- The contract document that item 8's precedent and the coordinator's brief call for, `docs/contracts/source-control.md`, was added; the GitHub and Forgejo mapping moved there from `design.md`.
+
+These changes alter the contract and its inputs, so pass 3 reviews the whole change again ([evidence freshness](../../../docs/governance.md#evidence-freshness)).
 
 ## Checks
 
@@ -98,7 +112,7 @@ Pending.
 - The conformance suite has run only against a test-only in-memory SCM and its defective variants; item 20 runs it against GitHub.com with the plugin's own credential.
 - The Forgejo mapping is unverified.
 - The suite does not wait for a credential's original expiry; item 20 records a run that outlives it.
-- The reviewer has no network access, so the GitHub and Forgejo facts were reviewed against the repository's records only.
+- The Forgejo and GitHub mapping was reviewed against repository records ([ADR 0006](../../../docs/decisions/0006-github-first-scm.md) and the [GitHub qualification](../../../docs/qualification/github.md)) without network access, because the assigned reviewer has none.
 
 ## Remaining gates
 
