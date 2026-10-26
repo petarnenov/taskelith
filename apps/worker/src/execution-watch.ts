@@ -17,6 +17,10 @@ export const WATCH_POLL_MILLISECONDS = 1_000;
 // checked, so a dead one is adopted or decided (design D3).
 export const LIVENESS_POLLS = 10;
 
+// A record still unclaimed this many polls after the start is past the
+// launch deadline, so recovery may seal it (fix-unclaimed-launch-liveness).
+export const UNCLAIMED_LIVENESS_POLLS = 3 * LIVENESS_POLLS;
+
 export interface WatchOptions {
   readonly journal: WorkerJournal;
   // Resolves after the delay, or early once the signal aborts.
@@ -98,7 +102,7 @@ export class ExecutionWatch {
   }
 
   // Reads the record at the poll interval until a terminal fact (CP10 and
-  // CP12); a claimed record's supervisor is checked for liveness.
+  // CP12); a supervisor that may be gone is checked for liveness.
   async observe(target: WatchTarget): Promise<Watched> {
     let forwarded = false;
     let round: RecoveryRound = 'first';
@@ -111,7 +115,7 @@ export class ExecutionWatch {
       const facts = await target.supervision.read();
       if (!this.#reported(facts)) return 'ended';
       let decided = this.#commitFacts(target, facts.value, committed);
-      if (decided === undefined && facts.value.launch?.kind === 'claim' && polls % LIVENESS_POLLS === 0) {
+      if (decided === undefined && livenessDue(facts.value.launch, polls)) {
         const checked = await this.#checkLiveness(target, round);
         if (checked === 'observe' || checked === 'retry') round = checked === 'retry' ? 'after-retry' : 'first';
         else decided = checked;
@@ -213,6 +217,13 @@ export class ExecutionWatch {
     if (!result.ok) this.#options.onFailure?.(result.error);
     return result.ok;
   }
+}
+
+// A claim is checked every LIVENESS_POLLS polls, a missing launch record
+// only after the bound; a seal is decided before any check.
+function livenessDue(launch: SupervisedFacts['launch'], polls: number): boolean {
+  if (polls % LIVENESS_POLLS !== 0) return false;
+  return launch === undefined ? polls >= UNCLAIMED_LIVENESS_POLLS : launch.kind === 'claim';
 }
 
 // A `cancel` file that already exists was forwarded before.
