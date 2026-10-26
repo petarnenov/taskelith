@@ -14,4 +14,4 @@
 
 - [x] 3.1 Proposal, design, worker-runtime delta, `verification.md`
 - [x] 3.2 `npm run openspec -- validate scope-execution-cancellation-recovery --strict` and `make verify`
-- [ ] 3.3 Independent review pass 1
+- [x] 3.3 Independent review pass 1; its two Low findings fixed

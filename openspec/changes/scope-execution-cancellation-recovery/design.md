@@ -5,7 +5,7 @@
 ## Contract rule followed
 
 - `docs/contracts/execution-wire-contracts.md:46` (section 4): "A cancellation without `executionId` targets the attempt; with it, only that execution."
-- `docs/contracts/launch-authorization.md:91` (section 7): the authority writes "a cancellation command for that execution only, never for another execution of the attempt".
+- `docs/contracts/launch-authorization.md:92` (section 7): the authority writes "a cancellation command for that execution only, never for another execution of the attempt".
 - `docs/contracts/worker-journal.md:107` (section 5, "Recovery on start") continues the launch of an intent "not cancelled"; read with the two rules above, an execution target cancels the intent only through the execution it stops.
 
 ## Decisions

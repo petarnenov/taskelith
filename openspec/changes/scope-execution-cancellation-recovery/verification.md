@@ -13,7 +13,7 @@ This change is the follow-up that the change `scope-execution-cancellation` left
 
 The contracts are explicit, so no contract changes:
 - `docs/contracts/execution-wire-contracts.md:46`: a cancellation with `executionId` targets only that execution; without it, the attempt.
-- `docs/contracts/launch-authorization.md:91`: an `unauthorized-start` cancellation is for that execution only, never for another execution of the attempt.
+- `docs/contracts/launch-authorization.md:92`: an `unauthorized-start` cancellation is for that execution only, never for another execution of the attempt.
 
 ## Environment
 
@@ -38,12 +38,24 @@ macOS (Darwin 25.6.0), Node from `.nvmrc`, Docker test services started by `make
 
 Reviewer: OpenCode CLI, model `opencode-go/kimi-k3.1-pro`, variant `high`, assigned by the coordinator. The session runs each pass and records it here.
 
+### Review pass 1
+
+- **Revision:** `ba81358`.
+- **Invocation:** `opencode run --standalone --agent reviewer -m 'opencode-go/kimi-k3.1-pro#high' --format json --title scope-execution-cancellation-recovery "$(cat <prompt-file>)" < /dev/null > <log>`.
+- **Model confirmation:** set by `-m`. A standalone run stores its session outside `~/.local/share/opencode/opencode.db`, and its JSON events carry no model field, so the stored messages could not be checked (see Limitations).
+- **Session:** `ses_e862ae469ffeP27r4h5PwzHaVt`.
+- **Snapshot:** `c897aeaad0fd3b87bd0fa71f61c33127204b404018f3165d9c37cd5734ee7bb7` before and after; unchanged.
+- **Findings:** 0 Critical, 0 High, 0 Medium, 2 Low. The reviewer found no functional problem and confirmed the choice of the "Cancellation forwarding" requirement.
+  1. `design.md:8` cited `launch-authorization.md:91`; the quoted rule is on line 92.
+  2. `verification.md:16` had the same citation.
+  - **Fixed, unreviewed:** both citations now name line 92. Under the review process a Low-only pass is fixed without another review.
+
 ## Limitations
 
+- The reviewer's model could not be confirmed from stored messages, because the standalone OpenCode run stores none in the global database; only the `-m` argument sets it.
 - The fix is tested on `planJournalRecovery` with journal snapshots built in the test; no worker was restarted against a real journal for it, and scenario 24c was not run.
 
 ## Remaining gates
 
-- The independent review.
 - The coordinator's integration into `dev` and archive of this change.
 - No deployment validation was done; none is claimed.
