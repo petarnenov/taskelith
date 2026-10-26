@@ -185,3 +185,36 @@ export { isEligibleForPlacement, type PlacementWorkers, type WorkerPlacementReco
 export type { QuotaSettings } from './ports/quota-settings.js';
 export type { TaskLineage } from './ports/task-lineage.js';
 export type { CapacityDeclaration, WorkerReports } from './ports/worker-reports.js';
+export {
+  COOLDOWN_SOURCES,
+  DEFAULT_SLOT_CONCURRENCY,
+  FIRST_SLOT_REVISION,
+  SLOT_COOLDOWN_DEFAULT_MINUTES,
+  SLOT_HEALTH,
+  SLOT_INELIGIBILITY_REASONS,
+  SLOT_STATES,
+  type AccountSlot,
+  type CooldownSource,
+  type HarnessPluginId,
+  type SlotCooldown,
+  type SlotHealth,
+  type SlotIneligibilityReason,
+  type SlotState,
+  type SlotUsage,
+  type SubscriptionMechanismId,
+} from './domain/account-slot.js';
+export {
+  NO_SLOT_POLICIES,
+  SLOT_REJECTING_REASONS,
+  SLOT_REQUEST_KINDS,
+  SLOT_WAITING_REASON,
+  type HarnessSlot,
+  type NoSlotPolicy,
+  type SlotRejectingReason,
+  type SlotRequest,
+  type SlotRequestKind,
+  type SlotSelection,
+} from './domain/slot-selection.js';
+export { REDACTED, SlotSecret } from './domain/slot-secret.js';
+export type { AccountSlots, SlotCredentials } from './ports/account-pool.js';
+export { ACCOUNT_SLOTS_CONFORMANCE, SLOT_CREDENTIALS_CONFORMANCE } from './ports/account-pool-conformance.js';

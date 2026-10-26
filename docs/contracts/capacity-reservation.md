@@ -173,7 +173,7 @@ A task policy may require a control as **hard**: a CPU, memory, or disk limit, o
 - **Cooldown and revocation.** Cooldown makes a slot ineligible for new reservations and releases no held one. A revoked or removed slot follows section 6: its in-flight attempts are drained or reconciled, and their reservations are released only by a justifying fact.
 - **Neutrality.** Reservation code, types, schemas, and tests name no harness or vendor (ADR 0005 decision 8).
 
-G2 implements the `providerCredentials` field and the credential concurrency check with no credential in use; G3 adds the account pool port and its slots.
+G2 implements the `providerCredentials` field and the credential concurrency check with no credential in use; G3 adds the account pool port and its slots, which the [account pool contract](account-pool.md) defines.
 
 ## 11. Rejection and waiting reasons
 
