@@ -37,6 +37,13 @@ Questions that belong to the owner (see Roles) go to the coordinator with option
 4. **Clean up.** Update the main clone with `git pull --ff-only`. Remove the coordinator's worktrees and local branches for both, and delete both remote branches from the main clone ([releases](releases.md#parallel-work-with-worktrees)). Remove a worker's worktree only on the worker's own machine, by the worker (worker step 8).
 5. **Release the worker.** Tell the worker that its task is merged, so that it cleans up and clears its context, and assign the next task.
 
+## Subagent execution
+
+The owner set this rule on 2026-10-26; it applies to tasks assigned from that day on.
+
+- **Implementation in a subagent.** A session that develops a task, a worker or the coordinator, delegates the work of the worktree (code, tests, documentation, and OpenSpec artifacts) to a subagent that it briefs with the task, its scope, and the rules that apply. The session reviews and checks the subagent's result itself before review and handoff.
+- **Protocol in the session.** The session keeps the protocol steps: messages to the coordinator or the owner, owner questions, the independent review, whose results the subagent may record as the session provides them, and the handoff. A subagent does not hand off, open pull requests, or decide owner questions.
+
 ## Context size
 
 The owner set this rule on 2026-10-25. When a session's context approaches 150,000 tokens, the session tells the owner and recommends `/compact` or `/clear`, because only the owner can run them in the session's window. It warns before the limit, not after.
