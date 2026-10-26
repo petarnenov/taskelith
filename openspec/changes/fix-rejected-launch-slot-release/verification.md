@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-26. The author's verification is recorded below; the independent review is pending.
+Date: 2026-10-26. The author's verification and the independent review are recorded below.
 
 ## Scope and source
 
@@ -17,7 +17,7 @@ The capacity reservation contract is explicit, so no contract changes:
 - `docs/contracts/capacity-reservation.md:98`: an execution for which no launch authorization was ever granted keeps no reservation held.
 - `docs/contracts/launch-authorization.md:47` and `docs/contracts/worker-journal.md:81`: an execution has no state before a grant; `authorized` and `started` are the non-terminal states.
 
-Counting a pending request without a grant is stricter than the contract wording (design D2).
+After review pass 1 the worker frees a slot only on proof (design D1): a terminal state, or no grant, no uncertainty, and every operation closed without a grant. This is stricter than the contract wording, which counts only non-terminal executions.
 
 ## Author self-check
 
@@ -39,9 +39,28 @@ Environment: macOS (Darwin 25.6.0), Node v24.22.1 from `.nvmrc`, Docker test ser
 
 ## Independent review
 
+Reviewer: Codex CLI, model `gpt-6.1-sol`, reasoning effort medium, read-only sandbox, assigned by the coordinator. The coordinator ran the pass; the prompt and the log are kept outside the worktree.
+
 ### Review pass 1
 
-Pending: independent review by Codex CLI `gpt-6.1-sol` (effort medium, read-only sandbox).
+- **Revision:** `b567709`, diff `3486a89..b567709`.
+- **Invocation:** `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`.
+- **Model confirmation:** the output header names model `gpt-6.1-sol`, reasoning effort `medium`, and sandbox `read-only`.
+- **Session:** `01a17950-f09a-7762-8657-c6ae4f2b9ef4`.
+- **Snapshot:** `6cf292941431a06136dbb4f8b4a01e5889fd96849e5a6da9c5d2b450b0ef5580` before and after; unchanged.
+- **Findings:** 0 Critical, 0 High, 1 Medium, 0 Low. The reviewer accepted the rest: B3 is fixed, design D2 (a pending request holds) is justified, a retryable rejection or expiry may free a slot under an ended assignment, the modified requirement is copied completely, and the scenarios are accurate.
+  1. **M1:** `holdsSlot` (`assignment-admission.ts:37`) freed a slot whenever an execution lacked a recognized active state. Under an ended assignment it admitted a new offer for three cases: no state with `uncertain` evidence and a closed operation; no state with a `granted` operation or no operation at all; an unknown state. The SQLite adapter normally prevents these, but the predicate turned the absence of evidence into proof of free capacity.
+     - **Fixed** in `bd2fc16`: a slot is freed only by a terminal state, or by no state, no `uncertain` evidence, and a non-empty history closed without a grant (`rejected-final`, `rejected-retryable`, `expired`). Everything else holds.
+     - **Author deviation from the proposed order:** a terminal state frees the slot even with `uncertain` evidence. The journal never clears `uncertain_count` after a terminal fact, and that fact is what releases a reservation (capacity reservation section 6). Holding first on `uncertain` would keep an exited execution's slot forever, a new defect. Design D2 records this. Pass 2 should confirm it.
+     - **Tests** (`command-intake.test.ts`, over a journal view whose snapshot shows the given execution): `an ended assignment keeps its slot for` an uncertain execution without a grant and a closed operation, an execution without a state and a granted operation, an execution without a state or an operation, and an execution in an unknown state; `... frees its slot for` an exited execution with uncertainty evidence, and an execution whose operations were rejected retryably and expired.
+     - **Fails on the pass 1 code:** with the source of `b567709` restored and rebuilt, `--test-name-pattern='its slot for'` gave 2 pass, 4 fail: all four "keeps" tests failed. On the fixed source all 13 slot tests pass.
+     - The design (D1, D2), proposal, tasks, and the scenario "Ended assignment with a live execution" were updated to match.
+- **Merge:** `origin/dev` at `62d324e` (with the merged and archived `fix-unclaimed-launch-liveness`) was merged in `a082ad2`, without conflicts. That change modifies only the worker-runtime requirement "Supervisor liveness"; the text of "Worker-side admission limits" on `dev` is unchanged, so this delta still copies it exactly.
+- **Checks after the fix and the merge:** `make verify` at `a082ad2` (with this file's pass 1 record uncommitted): exit 0; 1800 tests, 1798 pass, 0 fail, 2 skipped; coverage lines 99.27%, branches 91.92%, functions 98.95%. No stale dependency inventory was reported and no flaky rerun was needed. Later commits change only this file.
+
+### Review pass 2
+
+Pending: independent review by the same reviewer of the fix `bd2fc16` and the merge.
 
 ## Limitations
 
@@ -50,6 +69,6 @@ Pending: independent review by Codex CLI `gpt-6.1-sol` (effort medium, read-only
 
 ## Remaining gates
 
-- Independent review pass 1.
+- Independent review pass 2.
 - The coordinator's integration into `dev` and the archive of this change.
 - No deployment validation was done; none is claimed.
