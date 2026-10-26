@@ -1056,6 +1056,47 @@ describe('capacity refusal after a slot-freeing observation', () => {
     assert.ok((await worker()).capacity_refused_since instanceof Date);
   });
 
+  test('a stale fact about another worker\'s assignment keeps the producer\'s refusal', async () => {
+    const first = await refusedAtNextGeneration();
+    await enroll('worker-b', 'journal-b');
+    await sql(`UPDATE workers SET capacity_refused_since = now() WHERE worker_id = 'worker-b'`);
+    const fromB = { workerId: 'worker-b', journalId: 'journal-b', attemptId: first.attemptId, ownershipGeneration: first.generation };
+    const rejected = await observe('execution.launch.rejected', { ...fromB, sequence: 1 }, {
+      executionId: `execution-${first.attemptId}`, assignmentId: first.assignment.id, operationId: 'operation-b', reason: 'assignment-not-active',
+    });
+    assert.equal(value(rejected), 'rejected');
+    const notStarted = await observe('execution.not-started', { ...fromB, sequence: 2 }, { executionId: 'execution-b', recoveryEpoch: 1 });
+    assert.equal(value(notStarted), 'rejected');
+    assert.ok((await worker('worker-b')).capacity_refused_since instanceof Date);
+  });
+
+  // The installation changes after the first transaction refused the fact.
+  function changingAfterRefusal(change: string): ControlPlaneStore {
+    let changed = false;
+    return {
+      transaction: async (work) => {
+        const result = await database.transaction(work);
+        if (!changed) {
+          changed = true;
+          await sql(change);
+        }
+        return result;
+      },
+      readCommitted: (work) => database.readCommitted(work),
+    };
+  }
+
+  for (const change of ['UPDATE installation SET recovery_epoch = 2', 'UPDATE installation SET quarantined = true']) {
+    test(`a stale not-started keeps the refusal after \`${change}\` between its transactions`, async () => {
+      const first = await refusedAtNextGeneration();
+      const sent = { sequence: 5, attemptId: first.attemptId, ownershipGeneration: first.generation };
+      service = observationService(changingAfterRefusal(change));
+      const notStarted = await observe('execution.not-started', sent, { executionId: 'execution-x', recoveryEpoch: 1 });
+      assert.equal(value(notStarted), 'rejected');
+      assert.ok((await worker()).capacity_refused_since instanceof Date);
+    });
+  }
+
   test('a launch rejection at the current generation clears the refusal', async () => {
     await enroll();
     value(await declare(1));
