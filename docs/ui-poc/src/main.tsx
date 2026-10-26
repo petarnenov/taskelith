@@ -132,7 +132,6 @@ function NeedsYouButton() {
     <Button
       variant={screen === 'inbox' ? 'filled' : 'light'}
       color={needsYouCount ? 'orange' : 'teal'}
-     
       leftSection={<InboxIcon />}
       aria-current={screen === 'inbox' ? 'page' : undefined}
       aria-label={'Needs you: ' + needsYouCount + ' items'}
@@ -293,7 +292,6 @@ function Shell() {
             {NAV.map((item) => (
               <Button
                 key={item.screen}
-               
                 px="sm"
                 variant={activeNav(screen) === item.screen ? 'light' : 'subtle'}
                 color={activeNav(screen) === item.screen ? undefined : 'gray'}

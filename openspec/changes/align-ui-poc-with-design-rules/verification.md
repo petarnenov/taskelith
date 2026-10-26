@@ -16,7 +16,7 @@ macOS 26.6.2 (Darwin 25.6.0, x86_64), Node.js v24.22.1 and npm 12.2.1 selected b
 
 - Only Mantine: the change uses the theme's `components` default props, Mantine sizes, Mantine style props (`mih`, `miw`, `lh`, `display`), and the `MantineProvider` `cssVariablesResolver`. It adds no CSS, no `styles`, `classNames`, or `vars`, and no component.
 - The rebuild of the unchanged source at `64155ab` reproduced version 6 byte for byte: 920,512 bytes, SHA-256 `8791c89f4997a5a1afcb9354a03a8a7f4606cf0fd16f2011c693062f75310282`. That build is the "before" of the measurements.
-- The new build is 921,275 bytes with SHA-256 `2c57b5b4a9833a11d91a79804f77df2e38731c918e6a66141da96d60653378a2`; `tsc -p .` passed on the reference source.
+- The new build is 921,275 bytes with SHA-256 `2c57b5b4a9833a11d91a79804f77df2e38731c918e6a66141da96d60653378a2`; `tsc -p .` passed on the reference source. After the coordinator's check, two whitespace-only lines left in JSX by the removed `h={44}` props were deleted and `TARGET_SIZE` was moved above the `LaterGate` comment; the rebuild from that final source gave the same size and SHA-256, because esbuild drops whitespace and comments.
 - Screenshots of the board, the session screen, and the new task screen at 1600 × 1000 in the dark scheme show no clipped or overlapping control.
 - Comment rule: the three new comments are one line each and within 80 characters; `npm run verify:comments` passed.
 - Evidence check: no new external link. The artifact link in the README stays marked as an unversioned private page.

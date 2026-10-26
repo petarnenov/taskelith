@@ -186,11 +186,11 @@ export const GATE: Record<GateState, { label: string; color: MantineColor }> = {
   stale: { label: 'Stale', color: 'orange' },
 };
 
-// Marks what the proof of concept shows ahead of the backend, with the gate or
-// plan item that adds it.
 // The product UI design rules require interactive targets of at least 44 px.
 export const TARGET_SIZE = 44;
 
+// Marks what the proof of concept shows ahead of the backend, with the gate or
+// plan item that adds it.
 export function LaterGate({ children }: { children: ReactNode }) {
   return (
     <Tooltip label="Not built yet; shown as the target design">
