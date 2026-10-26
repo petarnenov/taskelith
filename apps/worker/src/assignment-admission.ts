@@ -1,4 +1,4 @@
-import type { AssignmentRefusalReason, AttemptId, JournalSnapshot, ResourceRequest } from '@taskelith/execution';
+import type { AssignmentRefusalReason, AttemptId, JournaledExecution, JournalSnapshot, ResourceRequest } from '@taskelith/execution';
 
 type CapacityRefusalReason = Exclude<AssignmentRefusalReason, 'worker-admission-pressure'>;
 import type { WorkerCapacity } from '@taskelith/fleet';
@@ -23,14 +23,19 @@ export function refusalOf(requested: ResourceRequest, journal: JournalSnapshot, 
 // Once per attempt: every assignment that has not ended, and every one with
 // an execution that is not terminal, uncertain ones included.
 function countedAttempts(journal: JournalSnapshot): ResourceRequest[] {
-  const running = new Set(journal.executions
-    .filter((execution) => execution.state !== 'exited' && execution.state !== 'not-started')
-    .map((execution) => execution.assignmentId));
+  const running = new Set(journal.executions.filter(holdsSlot).map((execution) => execution.assignmentId));
   const counted = new Map<AttemptId, ResourceRequest>();
   for (const intent of journal.intents) {
     if (!intent.ended || running.has(intent.assignmentId)) counted.set(intent.attemptId, intent.requested);
   }
   return [...counted.values()];
+}
+
+// Authorized or started, or without a grant while one may still come; a
+// finally rejected launch never started and holds nothing.
+function holdsSlot(execution: JournaledExecution): boolean {
+  if (execution.state === undefined) return execution.authorizations.some(({ outcome }) => outcome === 'pending');
+  return execution.state === 'authorized' || execution.state === 'started';
 }
 
 function sum(requests: readonly ResourceRequest[], resource: 'cpuMillicores' | 'memoryMebibytes'): number {
