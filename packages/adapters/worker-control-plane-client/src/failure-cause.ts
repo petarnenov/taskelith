@@ -1,22 +1,25 @@
+import { REDACTED, redactText } from '@taskelith/observability';
+
 // The bounds of a described cause chain (design decision 5).
 const MAX_CAUSE_LINKS = 4;
-const MAX_CAUSE_MESSAGE = 160;
+const MAX_CODE_DEPTH = 16;
 const MAX_CAUSE_LENGTH = 512;
-const MAX_RAW_MESSAGE = 2_048;
+const MAX_FAILURE_TEXT = 160;
 
 const LINK_SEPARATOR = ' <- ';
 const ELLIPSIS = '…';
-const REDACTED = '[redacted]';
 
 const NAME = /^[A-Za-z][A-Za-z0-9_$]{0,63}$/;
 const CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
 
-// Applied in order; a URL goes whole, user information and query included.
-const MESSAGE_SECRETS: readonly (readonly [RegExp, string])[] = [
-  [/[\u0000-\u001f\u007f]+/g, ' '],
+// Line breaks, then rules the logger's `redactText` lacks (decision 4).
+const BEFORE_REDACT_TEXT: readonly (readonly [RegExp, string])[] = [
+  [/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' '],
   [/\b[a-z][a-z0-9+.-]*:\/\/\S*/gi, '[url]'],
-  [/\bbearer\s+\S+/gi, `Bearer ${REDACTED}`],
-  [/\b(password|passwd|pwd|secret|token|api[_-]?key|authorization)(\s*[=:]\s*)\S+/gi, `$1$2${REDACTED}`],
+  [/\b((?:proxy-)?authorization)(\s*[=:]\s*)[^;,]*/gi, `$1$2${REDACTED}`],
+];
+const AFTER_REDACT_TEXT: readonly (readonly [RegExp, string])[] = [
+  [/eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*/g, REDACTED],
   [/[A-Za-z0-9_+=-]{32,}/g, REDACTED],
 ];
 
@@ -35,17 +38,27 @@ interface CauseLink {
 // Describes a thrown value and its causes, bounded and without secrets,
 // for a failure's details (design decisions 1 to 4).
 export function describeFailureCause(thrown: unknown): FailureCause {
-  const links = causeChain(thrown).map(describeLink);
-  if (links.length === 0) return { cause: 'unknown' };
-  const cause = truncate(links.map(renderLink).join(LINK_SEPARATOR), MAX_CAUSE_LENGTH);
-  const causeCode = links.map(({ code }) => code).filter((code) => code !== undefined).at(-1);
+  const chain = causeChain(thrown);
+  if (chain.length === 0) return { cause: 'unknown' };
+  const rendered = chain.slice(0, MAX_CAUSE_LINKS).map(describeLink).map(renderLink);
+  const cause = truncate(rendered.join(LINK_SEPARATOR), MAX_CAUSE_LENGTH);
+  const causeCode = chain.map(codeOf).filter((code) => code !== undefined).at(-1);
   return causeCode === undefined ? { cause } : { cause, causeCode };
 }
 
-// Follows `cause`, or an aggregate's first error, without revisiting one.
+// One line of text without secrets, cut only after the whole text is
+// redacted, and unable to fake a link of a cause chain.
+export function sanitizeFailureText(text: string): string {
+  const redacted = AFTER_REDACT_TEXT.reduce(replace, redactText(BEFORE_REDACT_TEXT.reduce(replace, text)));
+  const oneLine = redacted.replace(/\s+/g, ' ').trim().replaceAll('<-', '< -');
+  return truncate(oneLine, MAX_FAILURE_TEXT);
+}
+
+// Follows `cause`, or an aggregate's first error, without revisiting one;
+// deeper than it renders, so the root's code survives a long chain.
 function causeChain(thrown: unknown): object[] {
   const chain: object[] = [];
-  for (let link = thrown; isObject(link) && !chain.includes(link) && chain.length < MAX_CAUSE_LINKS; link = nextCause(link)) {
+  for (let link = thrown; isObject(link) && !chain.includes(link) && chain.length < MAX_CODE_DEPTH; link = nextCause(link)) {
     chain.push(link);
   }
   return chain;
@@ -57,12 +70,17 @@ function nextCause(link: object): unknown {
   return Array.isArray(errors) ? errors[0] : undefined;
 }
 
+function codeOf(link: object): string | undefined {
+  const { code } = link as { code?: unknown };
+  return typeof code === 'string' && CODE.test(code) ? code : undefined;
+}
+
 function describeLink(link: object): CauseLink {
-  const { name, code, message } = link as { name?: unknown; code?: unknown; message?: unknown };
+  const { name, message } = link as { name?: unknown; message?: unknown };
   return {
     name: typeof name === 'string' && NAME.test(name) ? name : 'Error',
-    code: typeof code === 'string' && CODE.test(code) ? code : undefined,
-    message: typeof message === 'string' ? sanitizeMessage(message) : '',
+    code: codeOf(link),
+    message: typeof message === 'string' ? sanitizeFailureText(message) : '',
   };
 }
 
@@ -71,13 +89,8 @@ function renderLink({ name, code, message }: CauseLink): string {
   return message === '' ? coded : `${coded}: ${message}`;
 }
 
-// Cut only after the replacements, so no secret is split below a match.
-function sanitizeMessage(message: string): string {
-  const replaced = MESSAGE_SECRETS.reduce(
-    (text, [pattern, replacement]) => text.replace(pattern, replacement),
-    message.slice(0, MAX_RAW_MESSAGE),
-  );
-  return truncate(replaced.replace(/\s+/g, ' ').trim(), MAX_CAUSE_MESSAGE);
+function replace(text: string, [pattern, replacement]: readonly [RegExp, string]): string {
+  return text.replace(pattern, replacement);
 }
 
 function truncate(text: string, limit: number): string {

@@ -544,9 +544,10 @@ class Launch {
     }
   }
 
-  // The details name the cause, such as the code of a lost connection.
+  // The details name the cause, such as the code of a lost connection;
+  // they never replace the known fields.
   #authorizationFailed(executionId: ExecutionId, operationId: OperationId, { code, message, details }: Failure): void {
-    this.#context.logger.warn('worker.launch.authorization-failed', { executionId, operationId, code, message, ...details });
+    this.#context.logger.warn('worker.launch.authorization-failed', { ...details, executionId, operationId, code, message });
   }
 
   // Capacity reservation section 8: the launch waits, keeping its
