@@ -26,6 +26,7 @@ macOS 26.6.2 (Darwin 25.6.0, arm64), Node.js v24.22.1 from `.nvmrc`, npm as pinn
 - Sample run on a scratch fixture with two archived changes and five findings: `validate`, `index`, and `checklist --capability review-process --files 'scripts/**' --top 5` printed the expected counts, shares, and three checklist items.
 - `make verify` failed first on `830e47a` only because the dependency inventory hashes `package.json`, which gained the `findings` and `verify:findings` scripts; `make dependency-inventory` regenerated `docs/dependencies/licenses.json`, whose only change is that hash (commit `1434376`).
 - `make verify` passed on `1434376`: `npm run verify:findings` valid; 1,978 tests, 1,976 passed, 0 failed, 2 skipped; coverage 99.28 % lines, 92.09 % branches, 99.04 % functions; 0 breaking contract changes; dependency inventory verified (731 paths); strict OpenSpec validation 70 passed, 0 failed; archive dry run and package verification passed.
+- After the coordinator's merge of `origin/dev` (`ccfc372`), the fleet skill lines, and the root `ajv` declaration, `make verify` passed on `bec4d52` (its working tree differed only by removing a blank line in this record): `npm run verify:findings` valid; 1,978 tests, 1,976 passed, 0 failed, 2 skipped; coverage 99.28 % lines, 92.09 % branches, 99.04 % functions; 0 breaking contract changes against `1847570`; dependency inventory verified (731 paths); strict OpenSpec validation 70 passed, 0 failed; archive dry run and package verification passed.
 
 ## Independent review
 
@@ -34,7 +35,6 @@ Pending: Codex CLI (gpt-6.1-sol).
 ## Limitations
 
 - Follow-up: `scripts/integration-broker.ts` also imports an undeclared root dependency, `@nats-io/nkeys`; it is left unchanged by this change.
-
 - The secret patterns are heuristics for common token shapes, not a guarantee.
 - The checklist starts empty, because no archived change has findings yet.
 - Branches with active changes that predate this change need an empty `findings.jsonl` after they merge `dev`.
