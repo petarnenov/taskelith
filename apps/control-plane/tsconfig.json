@@ -17,6 +17,8 @@
     { "path": "../../packages/adapters/nats" },
     { "path": "../../packages/adapters/postgres" },
     { "path": "../../packages/adapters/secrets" },
+    { "path": "../../packages/adapters/worker-journal" },
+    { "path": "../../packages/adapters/worker-supervisor" },
     { "path": "../worker" }
   ]
 }
