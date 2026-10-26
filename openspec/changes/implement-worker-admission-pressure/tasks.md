@@ -19,5 +19,6 @@
 - [x] 3.1 proposal.md, design.md, spec deltas (worker-runtime, worker-journal-adapter)
 - [x] 3.2 `npm run openspec -- validate implement-worker-admission-pressure --strict`
 - [x] 3.3 `make verify`
-- [ ] 3.4 Independent review, at most 3 passes (the session runs it)
+- [x] 3.4 Review pass 1 (Codex): no-follow and single-link truncation, cancellation before W2, one-instance retry test, 20e2 non-goals, D2 rationale
+- [ ] 3.4b Further review passes, at most 3 in total (the session runs them)
 - [ ] 3.5 Handoff to the coordinator

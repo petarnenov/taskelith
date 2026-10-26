@@ -8,8 +8,7 @@ The coordinator split item 20 (Non-Goals of the archived `implement-worker-start
 
 **Non-Goals:**
 
-- The daemon overhead limit (`daemon-memory`, `event-loop-lag`); the causes are in the domain list, and a measurement adds one cause function (open question for the coordinator).
-- The retry of a write refused for lack of space (worker journal contract section 7).
+- 20e2 (item 20, G2), decided by the coordinator: the daemon overhead causes (`daemon-memory`, `event-loop-lag`) with injected sensors, and the retry with log truncation of a write refused for lack of space (`SQLITE_FULL`, worker journal contract section 7).
 - Contact, heartbeat, offline mode, reconnect inventory (20d2); `unrecorded-process`.
 - Any contract, AsyncAPI, OpenAPI, or journal format change; configuration variables for the limits.
 
@@ -23,7 +22,9 @@ A pressure change is a journal fact, published by the existing observation publi
 
 The worker keeps the last reported causes in memory, so the first refresh of each process journals the current causes, empty ones included. That clears any pressure an earlier process left at the control plane. The fact's declaration number is the sequence it takes, which is unique in the journal.
 
-- **Alternative:** persist the last causes in `journal_meta`, as the capacity declaration does. It needs journal format 4, and the worker journal contract section 10 lists each format, so it is a contract change.
+The coordinator accepted this decision: one pressure observation after every start, possibly empty, and no journal format 4. The control plane applies each observation once by its `observationId`, so a repeated one changes nothing.
+
+- **Alternative:** persist the last causes in `journal_meta`, as the capacity declaration does. It needs journal format 4, and the worker journal contract section 10 lists each format, so it would be a contract change; it was avoided for that reason.
 
 ### D3: refusal order
 
@@ -35,11 +36,11 @@ The limits an offer can never meet on this worker (ceiling, controls) and the ca
 
 ### D5: the launch waits
 
-`Launch` waits at the poll interval while `refresh()` reports causes or fails, before it journals W2, and after the back-off of a request without a decision, before the deadline check. A cancellation or a stop ends the wait. A launch never ends because of pressure, because an ended launch of this process is not resumed until the next start.
+`Launch` waits at the poll interval while `refresh()` reports causes or fails, before it journals W2, and after the back-off of a request without a decision, before the deadline check. A cancellation or a stop ends the wait. A cancellation before W2 of a new execution ends the launch with no operation and no seal, since nothing of it is journaled; an execution journaled before is sealed and reported `not-started`, as any cancelled launch is. A launch never ends because of pressure alone, because an ended launch of this process is not resumed until the next start.
 
 ### D6: disk floor and logs
 
-The floor is `max(5 GiB, 10% of the volume)` from `statfs` (`bavail`, so only blocks an unprivileged writer may use). Each refresh below the floor empties the regular files under `worker/logs/` in place; links are not followed and directories are kept.
+The floor is `max(5 GiB, 10% of the volume)` from `statfs` (`bavail`, so only blocks an unprivileged writer may use). Each refresh below the floor empties the regular files under `worker/logs/` in place and keeps the directories. A link is never followed: the root and each directory are checked with `lstat`, and each file is opened with `O_NOFOLLOW`, checked through its descriptor to be a regular file with one link, and truncated through that descriptor, so neither a swapped entry nor a hard link to the journal loses content.
 
 ### D7: backlog
 

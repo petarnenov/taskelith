@@ -25,7 +25,7 @@ A worker SHALL measure its disk floor and journal backlog at start, at least eve
 - **THEN** it journals one `worker.admission-pressure.changed` with no causes, which clears any pressure an earlier process reported
 
 ### Requirement: Disk floor
-A worker SHALL report `disk-floor` while the free space of its data root's volume is below 5 GiB or 10% of the volume, whichever is larger. Below the floor it SHALL empty the regular files under `worker/logs/`, following no link, and SHALL remove no journal, inbox, or outbox record.
+A worker SHALL report `disk-floor` while the free space of its data root's volume is below 5 GiB or 10% of the volume, whichever is larger. Below the floor it SHALL empty the regular files under `worker/logs/` that have no other link, following no link, and SHALL remove no journal, inbox, or outbox record.
 
 #### Scenario: Buffered logs below the floor
 - **WHEN** a worker measures its volume below the floor while `worker/logs/` holds stream logs
@@ -51,6 +51,10 @@ Under admission pressure a worker SHALL journal no new launch authorization oper
 #### Scenario: Accepted assignment under pressure
 - **WHEN** an accepted assignment is due to launch while the worker reports `journal-backlog`
 - **THEN** no W2 is journaled and no request is sent until the pressure clears, and then the launch proceeds
+
+#### Scenario: Cancellation during the wait
+- **WHEN** an attempt whose launch waits under pressure before its first operation is cancelled
+- **THEN** the launch ends with no W2, no seal, and no `not-started`, and the cancellation's evidence is recorded
 
 #### Scenario: Pressure between retries
 - **WHEN** pressure arises after a request without a decision
