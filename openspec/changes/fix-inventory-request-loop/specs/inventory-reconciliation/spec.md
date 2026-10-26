@@ -44,7 +44,7 @@ An omitted assignment whose acceptance was applied from the snapshot's journal a
 
 #### Scenario: Superseded answer omits an offer
 - **WHEN** a snapshot answering a request that is no longer current omits an offered assignment with no applied acceptance and no grant
-- **THEN** the offer is re-sent, and no inventory request is appended, because the current request is outstanding and its fresh answer handles the omission
+- **THEN** the offer is re-sent, and no inventory request is appended
 
 #### Scenario: Omitted offer under overlapping requests
 - **WHEN** two requests are outstanding, and the worker answers each in turn with a growing `snapshot` that omits an offered assignment with no applied acceptance and no grant

@@ -28,4 +28,12 @@
 
 - [x] 6.1 `npm run openspec -- validate fix-inventory-request-loop --strict`
 - [x] 6.2 `make verify` passes
-- [ ] 6.3 Independent review and its record in `verification.md`
+- [x] 6.3 Independent review pass 1 and its record in `verification.md`
+
+## 7. Review pass 1 fixes (Low only, not reviewed again)
+
+- [x] 7.1 Drop the untestable rationale from scenario "Superseded answer omits an offer"; reword wire contract section 6 and the design to "a newer request was sent"
+- [x] 7.2 Correct the self-check on scenario "Offer not yet received", and record `make verify` for the merge `943f358` and the review pass
+- [x] 7.3 Tests: exact counts in the refused-offer test, the comment of `answerInTurn`, and the G2 trigger as a regression test
+- [x] 7.4 Extract `isUnsolicited` next to `isFreshReport` and use it in `receivePart` and `applySnapshot`
+- [x] 7.5 `make verify` passes after the fixes

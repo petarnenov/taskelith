@@ -23,8 +23,10 @@ The specification already disagrees with the code: scenario "Unsolicited report"
 Only a part without a `requestId` is unsolicited:
 
 ```ts
-const unsolicited = part.requestId === undefined && !pending.some((stored) => stored.reportId === part.reportId);
+const unsolicited = isUnsolicited(part) && !pending.some((stored) => stored.reportId === part.reportId);
 ```
+
+`isUnsolicited` (`packages/modules/execution/src/domain/inventory.ts`, next to `isFreshReport`) names the rule: a report is unsolicited when it carries no `requestId`. Decision 2 uses it too.
 
 An answer to a superseded request is stored, filtered, and applied exactly as before; it only no longer requests inventory by itself. The coordinator chose this option on 2026-10-26.
 
@@ -33,11 +35,10 @@ An answer to a superseded request is stored, filtered, and applied exactly as be
 Option A left the request of `applySnapshot` for an unclassifiable omission, which fired for every snapshot that is not fresh. The author showed that it still loops (see "Residual risk" below), and the coordinator chose option 1 on 2026-10-26: only an unsolicited snapshot, one without a `requestId`, requests inventory for such an omission.
 
 ```ts
-const unsolicited = snapshot.requestId === undefined;
-return unclassified && unsolicited ? requestInventory(tx, snapshot.workerId, context) : ok(undefined);
+return unclassified && isUnsolicited(snapshot) ? requestInventory(tx, snapshot.workerId, context) : ok(undefined);
 ```
 
-- An answer to a superseded request still re-sends the offer while no grant is recorded. It requests nothing, because a newer request is outstanding: the worker answers it with a fresh snapshot, taken after that request arrived, and a fresh snapshot handles the omission (scenario "Fresh snapshot omits an undelivered offer").
+- An answer to a superseded request still re-sends the offer while no grant is recorded. It requests nothing, because a newer request was sent: the worker answers it with a fresh snapshot, taken after that request arrived, and a fresh snapshot handles the omission (scenario "Fresh snapshot omits an undelivered offer").
 - An unsolicited snapshot, sent at a reconnect, still requests inventory as before (scenario "Offer not yet received").
 - A fresh snapshot is unchanged: it never requested inventory for an omission.
 - `applySnapshot` no longer takes the `fresh` flag, which only this condition read.
