@@ -112,7 +112,7 @@ The gaps are recorded, not hidden: Forgejo's coarser token scopes make the effec
 ## 10. Not in this contract
 
 - SCM plugins and their I/O: item 20 for GitHub; Forgejo later.
-- The Git workspace and its use of the run credential: item 6.
+- The Git workspace and its use of the run credential: item 6, the [Git workspace contract](git-workspace.md).
 - The module's use cases: credential delivery to a run, webhook deduplication, and merge orchestration (items 21 and 23).
 - The plugin SDK re-export and the plugin API version: item 20.
 - Wire schemas, including the webhook receiver's HTTP operation: item 9.
