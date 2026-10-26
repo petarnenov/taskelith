@@ -45,8 +45,9 @@ import { IntegrationsScreen } from './screens/Integrations';
 import { PluginsScreen } from './screens/Plugins';
 import { StatesScreen } from './screens/States';
 
-// A segment's 3 px top and bottom padding plus this line make the target.
-const SEGMENT_LINE_HEIGHT = TARGET_SIZE - 6;
+// Mantine 9.7.3's default segment padding above and below the label.
+const SEGMENT_PADDING_Y = 3;
+const SEGMENT_LINE_HEIGHT = TARGET_SIZE - 2 * SEGMENT_PADDING_Y;
 
 const theme = createTheme({
   primaryColor: 'indigo',
