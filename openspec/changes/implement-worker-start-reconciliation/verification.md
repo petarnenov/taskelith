@@ -48,3 +48,17 @@ OpenCode, `opencode-go/kimi-k3.1-pro` (`high`), session `ses_e8a481f5dffeAk3XIDR
 - **M3 (fixed):** `cancellation.not-applied` is deduplicated per `commandId`, so a cancellation journaled later in the same watch gets its own report. Test added.
 - **L1 (fixed):** the supervisor adapter now tells a live supervisor (`observe`) from a newly started adopter (`adopted`), and the liveness check logs `worker.supervisor.lost` for the latter. Test added.
 - **L2 (fixed):** the worker journal and execution wire contracts now state the `observationId` source of `cancellation.not-applied` (`executionId`, the fact, and `commandId`), which the implementation already used. This is a documentation fix only; no schema changed.
+
+## Between passes 1 and 2
+
+- **Subagent rule:** the owner's rule of 2026-10-26 (implementation work through a briefed subagent, checked by the worker) reached this task after the pass-1 fixes (`c906a5b`), the merge of `origin/dev` (`cd2805e`), and the inventory regeneration (`f5d150b`), which the worker made directly. Every later fix was made by an implementation subagent and checked by the worker.
+- **Merge:** `origin/dev` at `cd2805e` merged without conflicts; it touched no file of this change. `make dependency-inventory` was regenerated (`f5d150b`).
+- **Unreviewed fix (`64a87f7`):** `make verify` at `f5d150b` hung for about two hours in `darwin-supervisor.test.ts`. `c906a5b` had changed the `adopted` recovery result but missed the macOS restart assertion, which then failed and left the live supervisor running, so the runner never finished. The assertion now expects `supervisor: 'live'`, as the Linux test does. Pass 2 confirmed it.
+- **make verify:** passed at `64a87f7` (1454 tests, 0 failures; coverage 99.22% lines, 91.38% branches, 98.71% functions).
+
+## Review pass 2
+
+OpenCode, `opencode-go/kimi-k3.1-pro` (`high`, set by `-m` in the invocation, which the OpenCode log records for the run), session `ses_e886938a4ffe3UmL7n41l5giz4`, at `64a87f7`. The snapshot was identical before and after the pass (`35338e82…`). The reviewer confirmed the resolutions of H1, M1, M2, M3, L1, and L2, and accepted the reasoning that declined H2. Findings: 0 Critical, 0 High, 2 Medium, 0 Low. The reviewer's shell policy refused `npm run verify:comments` and the strict OpenSpec validation; the author ran both.
+
+- **M-A (fixed, `c44a59e`):** the M2 fix dropped the whole `termination-unproven` fact when a survivors event listed no process, or only group-less legacy entries, although macOS reports an empty list when no process listing can be taken. The fact is now left out only when no survivors event exists; otherwise it carries the reportable survivors, possibly none. Tests: adapter reads, the watch reports it once, and the wire message is valid.
+- **M-B (fixed, option B):** without `TASKELITH_WORKER_COMMAND` no orchestrator is built, so the start reconciliation and record removal did not run, while the delta read as unconditional. The coordinator brought the options to the owner's away delegate (OpenCode `kimi-k2.7-code`, run `20261026T095212Z-opencode-38865`), which chose B; this is the delegate's decision, not the owner's. Both requirements now apply to a worker configured to launch; without the command the worker logs each inherited open execution once as `worker.reconciliation.deferred` and leaves it. Obligation for 20d2 `implement-worker-contact-and-offline`: build the supervision host without the launch command, so that reconciliation and removal run without it.
