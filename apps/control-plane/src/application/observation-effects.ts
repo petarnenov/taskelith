@@ -3,7 +3,6 @@ import { SUPPORTED_PROTOCOL_VERSIONS, commonProtocolVersion, type MessageSchemas
 import {
   decideStartObservation,
   endAttempt,
-  openAttempt,
   parseExitStatus,
   parseRecoveryEpoch,
   recordExecutionEvidence,
@@ -27,7 +26,6 @@ import {
 import { err, failure, ok, type EventId, type Instant, type Result } from '@taskelith/kernel';
 import {
   acceptAssignment,
-  automaticRetryOf,
   cancelExecutionInTransaction,
   refuseInTransaction,
   releaseInTransaction,
@@ -37,13 +35,12 @@ import {
   type Refusal,
   type ReleaseRequest,
 } from '@taskelith/scheduling';
-import { nextAttemptIdOf } from './attempt-identities.js';
 import type { ControlPlaneTransaction } from './control-plane-store.js';
 import { requestInventory } from './inventory-reconciliation.js';
 import type { ReconciliationContext } from './journal-reconciliation.js';
 import { grantIn, installationState } from './launch-authority.js';
 import type { Observation } from './observation.js';
-import { closeDelegationOf } from './task-ending.js';
+import { followAttemptEnd } from './task-ending.js';
 
 // What each consumed observation type changes, inside the transaction that
 // records it; a domain refusal makes the observation `rejected`.
@@ -378,7 +375,7 @@ async function recordTerminalFact(tx: ControlPlaneTransaction, observation: Obse
   if (!cleared.ok) return cleared;
   const released = await releaseAssignments(tx, observation, next.value);
   if (!released.ok) return released;
-  return hasEnded(task, attemptId) || !hasEnded(next.value, attemptId) ? ok(undefined) : followEnd(tx, next.value, attemptId, at);
+  return hasEnded(task, attemptId) || !hasEnded(next.value, attemptId) ? ok(undefined) : followAttemptEnd(tx, next.value, attemptId, at);
 }
 
 // Stores each change that changes the task, one generation at a time.
@@ -406,14 +403,6 @@ async function releaseAssignments(tx: ControlPlaneTransaction, observation: Obse
     if (!released.ok) return released;
   }
   return ok(undefined);
-}
-
-// An automatic retry opens under the next derived attempt identity; a task
-// without one is terminal, and its delegation closes.
-async function followEnd(tx: ControlPlaneTransaction, task: Task, attemptId: AttemptId, at: Instant): Promise<Result<void>> {
-  if (!automaticRetryOf(task, attemptId)) return closeDelegationOf(tx, task.id, at);
-  const retry = openAttempt(task, task.ownershipGeneration, { id: nextAttemptIdOf(task), retryOf: attemptId }, at);
-  return retry.ok ? tx.tasks.replace(retry.value, task.generation) : retry;
 }
 
 function holdsExecution(task: Task, attemptId: AttemptId, executionId: ExecutionId): boolean {

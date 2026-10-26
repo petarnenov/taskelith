@@ -9,6 +9,7 @@ import {
   type ReleaseRequest,
 } from '@taskelith/scheduling';
 import type { ControlPlaneTransaction } from './control-plane-store.js';
+import { followAttemptEnd } from './task-ending.js';
 
 // In a worker revocation's transaction: its grants are revoked and its
 // executions uncertain, then each attempt that can run nothing is freed.
@@ -35,15 +36,22 @@ async function releaseIdle(tx: ControlPlaneTransaction, assignment: Assignment, 
   return superseded.ok ? ok(undefined) : superseded;
 }
 
-// The release of an ended attempt ends its assignment as `attempt-ended`.
+// The release of an ended attempt ends its assignment as `attempt-ended`,
+// and the end is followed as an observed one is (21b).
 async function endIdleAttempt(tx: ControlPlaneTransaction, task: Task, assignment: Assignment, correlationId: CorrelationId): Promise<Result<void>> {
-  if (activeAttempt(task)?.id === assignment.attemptId) {
-    const ended = endAttempt(task, assignment.attemptId, await tx.now());
-    if (!ended.ok) return ended;
-    const stored = await tx.tasks.replace(ended.value, task.generation);
-    if (!stored.ok) return stored;
-  }
-  const released = await releaseInTransaction(tx, revocationRequest(assignment.id, 'attempt-ended', correlationId));
+  const request = revocationRequest(assignment.id, 'attempt-ended', correlationId);
+  if (activeAttempt(task)?.id !== assignment.attemptId) return release(tx, request);
+  const at = await tx.now();
+  const ended = endAttempt(task, assignment.attemptId, at);
+  if (!ended.ok) return ended;
+  const stored = await tx.tasks.replace(ended.value, task.generation);
+  if (!stored.ok) return stored;
+  const released = await release(tx, request);
+  return released.ok ? followAttemptEnd(tx, ended.value, assignment.attemptId, at) : released;
+}
+
+async function release(tx: ControlPlaneTransaction, request: ReleaseRequest): Promise<Result<void>> {
+  const released = await releaseInTransaction(tx, request);
   return released.ok ? ok(undefined) : released;
 }
 

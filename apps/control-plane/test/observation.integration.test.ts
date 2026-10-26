@@ -968,15 +968,16 @@ describe('a revoked worker', () => {
     assert.deepEqual(await messages('execution.assignment.end'), []);
   });
 
-  test('ends the attempt of an assignment that held a grant whose executions are terminal, once', async () => {
+  test('ends the attempt of an assignment that held a grant whose executions are terminal, once, and retries it', async () => {
     await enroll();
     value(await declare(1));
     const at = await placed();
     const executionId = await launch(at);
     value(await observe('execution.not-started', { sequence: 2, attemptId: at.attemptId, ownershipGeneration: at.generation }, { executionId }));
     value(await revoke());
-    const outcome = (await stored(at.taskId)).attempts[0]!.outcome;
-    assert.deepEqual([outcome?.kind, outcome?.cancelled], ['not-started', false]);
+    const [first, retry] = (await stored(at.taskId)).attempts;
+    assert.deepEqual([first?.outcome?.kind, first?.outcome?.cancelled], ['not-started', false]);
+    assert.deepEqual([retry?.retryOf, retry?.outcome], [at.attemptId, undefined], 'an automatic retry opens');
     const ended = value(await database.transaction((tx) => tx.assignments.get(at.assignment.id)));
     assert.deepEqual([ended.state, ended.end?.reason, ended.reservation.state], ['ended', 'attempt-ended', 'released']);
     value(await revoke());
@@ -984,6 +985,31 @@ describe('a revoked worker', () => {
     assert.deepEqual(ends.map((end) => (end as { payload: unknown }).payload), [
       { protocolVersion: 1, assignmentId: at.assignment.id, reason: 'attempt-ended' },
     ]);
+  });
+
+  test('closes a delegated child\'s delegation when its ended attempt has no retry left', async () => {
+    await enroll(WORKER, JOURNAL, 3);
+    value(await declare(1, { slots: 3 }));
+    const parent = await placed('task-parent');
+    value(await new DelegationService(database).requestDelegation({ workerId: WORKER as WorkerId, generation: 1 }, {
+      delegationId: 'delegation-1', attemptId: parent.attemptId, ownershipGeneration: parent.generation, runId: 'run-1',
+      child: { taskId: 'task-child', kind: 'planning', stageId: 'specs' },
+    }, CORRELATION));
+    let child = await placeAgain('task-child');
+    let sequence = 2;
+    for (let retry = 0; retry < 2; retry++) {
+      value(await exit(sequence++, child, await launch(child), 1));
+      clock.skew += 60_000;
+      child = await placeAgain('task-child');
+    }
+    const executionId = await launch(child);
+    value(await observe('execution.not-started', { sequence, attemptId: child.attemptId, ownershipGeneration: child.generation }, { executionId }));
+    value(await revoke());
+    const attempts = (await stored('task-child')).attempts;
+    assert.deepEqual([attempts.length, attempts.at(-1)?.outcome?.kind], [3, 'not-started'], 'no third retry');
+    assert.equal(value(await database.transaction(async (tx) => ok(await tx.ledger.isWaitingParent(parent.attemptId)))), false);
+    const [row] = await sql<{ closed_at: Date | null }>('SELECT closed_at FROM delegations');
+    assert.ok(row?.closed_at instanceof Date);
   });
 
   test('frees assignments whose identifiers have the maximum length', async () => {
