@@ -18,7 +18,7 @@
 - [x] 3.4 Show that the new tests fail on the base revision's code
 - [x] 3.5 proposal.md, design.md, spec deltas, `validate --strict`
 - [x] 3.6 `make verify`
-- [ ] 3.7 Independent review: pass 1 (1 Medium, 7 Low, fixed); pass 2 pending
+- [x] 3.7 Independent review (Claude Code, claude-opus-5-5): pass 1 (1 Medium, 7 Low, fixed), pass 2 (6 Low, fixed unreviewed)
 - [ ] 3.8 Handoff to the coordinator
 
 ## 4. After G2 24b is in dev (branch `run-g2-crash-windows`)

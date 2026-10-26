@@ -23,7 +23,7 @@ None.
 ## Impact
 
 - `packages/modules/execution`: `launch-authorization.ts` (`LaunchRequest.reportsNotStartedFor`, `SealedExecution`, `recordReportedSeal`), `journal-recovery.ts` (`lastSealedExecution`), `index.ts`.
-- `apps/control-plane`: `api/launch-wire.ts`. `apps/worker`: `launch-orchestrator.ts` (`Launch.#newExecution`, `LaunchedExecution`).
+- `apps/control-plane`: `api/launch-wire.ts`. `apps/worker`: `launch-orchestrator.ts` (`Launch.#nextExecution`, `LaunchedExecution`).
 - `packages/contracts/documents/execution.openapi.json`; `docs/contracts/launch-authorization.md`, `docs/contracts/worker-journal.md`.
 - Tests in the execution module, the worker, and the control plane (unit, API, and PostgreSQL integration).
 - Upgrade order: the control plane is upgraded before its workers, or both together, because a control plane without the field answers 400 `invalid` (contract section 11).

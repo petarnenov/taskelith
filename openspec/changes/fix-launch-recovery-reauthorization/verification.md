@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-26. Author verification and review pass 1 are recorded below; review pass 2 is pending.
+Date: 2026-10-26. Author verification and review passes 1 and 2 are recorded below; the Low-only fixes after pass 2 are unreviewed.
 
 ## Scope and source
 
@@ -19,18 +19,18 @@ Defect D1, found by the crash-window scenarios of G2 item 24b: after a crash pas
 - Spec interaction with `fix-rejected-launch-slot-release`: its `worker-runtime` delta modifies "Worker-side admission limits" only, not this change's "Journaled launch authorization" or "Start reconciliation". In two scratch copies of `openspec/`, archiving theirs then ours and ours then theirs both succeeded and left strictly valid specs (`68 passed, 0 failed`). Each order kept both changes' modifications: this change's requirement sentence, the "Relaunch after a seal" and "Pending W2 on start" texts, and the launch-authorization scenarios, and their two new scenarios. The resulting `worker-runtime/spec.md` was identical in both orders. `verify:archive` passes.
 - Third merge, by the coordinator: `origin/dev` at `cd2f909` as `f16791e`. It only archives `fix-rejected-launch-slot-release` and updates `openspec/specs/worker-runtime/spec.md` ("Worker-side admission limits"), the base of this change's `worker-runtime` delta, which modifies other requirements. After it, `validate --strict` and `verify:archive` passed, and `npm run openspec -- list` shows only this change. `make verify` at `405f04d` (review pass 1 fixes on top of it) passed (exit 0) on its first run: 1873 tests, 1871 passed, 0 failed, 2 skipped; `execution.openapi.json: 0 breaking change(s) against cd2f90920f92`.
 - Fourth merge: `origin/dev` at `4f0c16e` (B4, `gate-stale-epoch-observations`, merged in #302 and archived in #303) as `e247a0c`, a merge commit, without conflicts. B4 adds the "Other execution observations" item of launch authorization contract section 7, `recoveryEpoch` on every execution observation (wire contract section 5, AsyncAPI 0.6.0), and journal format 4. Both sides' meaning is kept: section 4 "Reported seal" and section 11 of this change sit beside B4's section 7 item, and the worker journal section 5 rows of this change beside B4's format 4 paragraph. Format 4 adds the recovery epoch to outbox facts only; `JournaledExecution` and the snapshot fields `lastSealedExecution` and the harness read (`state`, `assignmentId`, `authorizations`, `intents`) are unchanged, and the journal, recovery, launch, and worker tests pass after the merge. B4's archived deltas add "Execution observations outside the current epoch" to `launch-authorization` and modify no requirement this change modifies; it is archived, so `verify:archive` alone applies, and it passes. `make contract-compatibility`: 0 breaking changes against `4f0c16eb7e8b` for all four documents. B4 changes the observation path the crash windows use, so the evidence was rerun on `e247a0c`. `npm run openspec -- list` shows only this change.
- x86_64, Node v24.22.1, npm 12.2.1, Docker with the Compose services of `make verify`.
+- Environment: macOS 26.6.2 x86_64, Node v24.22.1, npm 12.2.1, Docker with the Compose services of `make verify`.
 - Dependencies: no package added.
 - Contracts: `execution.openapi.json` adds the optional `reportsNotStartedFor` property and the `SealedExecution` schema; `make contract-compatibility` checks it is not breaking. No AsyncAPI, journal format, or operational-target change.
 
 ## Author self-check
 
-- **Domain** (`packages/modules/execution/src/domain/launch-authorization.ts`): `LaunchRequest.reportsNotStartedFor?: SealedExecution` (:44); `authorizeLaunch` calls `recordReportedSeal` (:117) after every section 2 check and before `applyOwnershipRule`. `recordReportedSeal` (:262) and `sealConflict` (:279) apply the rules of design D2 with the existing `execution-conflict`; no new reason.
+- **Domain** (`packages/modules/execution/src/domain/launch-authorization.ts`): `LaunchRequest.reportsNotStartedFor?: SealedExecution` (:44); `authorizeLaunch` calls `recordReportedSeal` (:117) after every section 2 check and before `applyOwnershipRule`. `recordReportedSeal` (:262) and `sealConflict` (:278) apply the rules of design D2 with the existing `execution-conflict`; no new reason.
 - **Transaction:** the sealed execution and the new grant are one task value, stored by the single `tx.tasks.replace` of `LaunchAuthority.#decide`; `indexLaunchGrants` updates both executions' `live` flags in that write. Unchanged code in `launch-authority.ts`.
 - **Wire** (`apps/control-plane/src/api/launch-wire.ts:26-40`): the optional field is parsed into identifiers; an invalid one is `invalid`. The replay comparison `isSameOperation` does not compare it, like `reportsNotStarted` (design D3).
 - **Worker** (`apps/worker/src/launch-orchestrator.ts:373`, `:424-441`): `Launch.#nextExecution` reads the journal snapshot and reports `lastSealedExecution` (`journal-recovery.ts:32`) for every new or resumed execution (a resumed one since review pass 1). The cancellation path (`#forward`, `:299-316` before the change) is untouched.
 - **Tests:**
-  - Domain: "a new execution reporting the sealed owner ends it not-started and is authorized in one decision"; "a reported seal whose not-started arrived first, or of an execution never granted, is accepted"; "a reported seal of a started execution, of another execution's operation, or of the new one conflicts"; "a reported seal of another worker's execution conflicts and changes nothing"; "a transport retry of a relaunch replays its grant without a second seal"; `journal-recovery.test.ts` "a new execution reports the intent's last sealed one with its last granted, else last, operation".
+  - Domain: "a new execution reporting the sealed owner ends it not-started and is authorized in one decision"; "a reported seal whose not-started arrived first, or of an execution never granted, is accepted"; "a reported seal of a started or exited execution conflicts, although the rule alone would grant after an exit" (:185); "a reported seal of another attempt's execution, or naming another execution's operation, conflicts" (:196); "a report naming the requested execution itself conflicts, known or never granted" (:209); "a reported seal of another worker's execution conflicts and changes nothing" (:218); "a transport retry of a relaunch replays its grant without a second seal"; `journal-recovery.test.ts` "a new execution reports the intent's last sealed one with its last granted, else last, operation".
   - Worker: `start-reconciliation.test.ts` "a pending/granted W2 sealed on start is reported with the new execution, which runs to its exit", against a fake authority that applies the ownership rule (`grantedToOwner`); `launch-orchestrator.test.ts` "a grant that arrives after the deadline is journaled and never used" (the second request reports the first execution and its operation) and "a supervisor that seals reports not-started, and the intent is launched again" (with `grantedToOwner`).
   - Control plane: `api-server.test.ts` "authorizeLaunch passes a reported sealed execution to the authority and refuses an invalid one"; `launch-authority.integration.test.ts` (PostgreSQL) "a new execution that reports the sealed owner is granted, and the owner ends not-started in the same commit", with a crash before the commit that leaves neither change, then the grant, the owner's grant no longer live, and a replay.
 - **Fail on the base code:** the source files (`packages/modules/execution/src`, `apps/worker/src`, `apps/control-plane/src`, `packages/contracts/documents`) stashed back to `62d324e`, rebuilt, and the new tests run:
@@ -64,6 +64,7 @@ Defect D1, found by the crash-window scenarios of G2 item 24b: after a crash pas
 
 - `make verify` at `3a82a27` (after the second merge), first run: failed (exit 2) on the same intermittent test, "a worker journals its commands before it acknowledges them and publishes its observations" (`the control plane did not answer`, cause `TypeError`, `control-plane-api.integration.test.ts:433`); 1870 tests, 1867 passed. Second run: passed (exit 0); 1870 tests, 1868 passed, 0 failed, 2 Linux-only tests skipped; coverage 99.28% lines, 92.08% branches, 99.03% functions; `execution.openapi.json: 0 breaking change(s) against 9cec6bb82c80`; OpenSpec `70 passed, 0 failed`; `Every active OpenSpec change archives into strictly valid specs.`; `Packed file allowlist and installed CLI verification passed.`
 - `make verify` at `e247a0c` (after review pass 1 and the merge of B4): passed (exit 0) on the first run; 1883 tests, 1881 passed, 0 failed, 2 Linux-only tests skipped; coverage 99.28% lines, 92.06% branches, 99.04% functions; `execution.openapi.json` and `execution.asyncapi.json`: 0 breaking changes against `4f0c16eb7e8b`; OpenSpec `69 passed, 0 failed`; `Every active OpenSpec change archives into strictly valid specs.`; `Packed file allowlist and installed CLI verification passed.`
+- After the Low-only fixes of review pass 2 (documents only): `npm run openspec -- validate fix-launch-recovery-reauthorization --strict`: `Change 'fix-launch-recovery-reauthorization' is valid`; `npm run verify:comments`: `Every comment is within the comment length rule.`; `npm run verify:archive`: `Every active OpenSpec change archives into strictly valid specs.` No `make verify`, since no code, test, or contract document for code generation changed; the last `make verify` is that of `e247a0c`.
 
 ## Review
 
@@ -82,11 +83,33 @@ Claude Code, model `claude-opus-5-5`, effort `high`, plan mode, with `Edit`, `Wr
 
 ### Review pass 2
 
-Pending.
+Claude Code, model `claude-opus-5-5`, with the reviewer settings, invocation, and model confirmation of pass 1. Session `fd988aed-fa28-4e18-9ca4-cbe43a6b506a`. Revision reviewed: `17e62c2121170396c33f62eb173a9d7d4dce1075`. The snapshots before and after the pass matched (`3e817428e7be3455b9dbd7fc6d03371ad6b035fc231fc7f513abd41acd0b03af`). The prompt named pass 1's session and findings. Findings: 0 Critical, 0 High, 0 Medium, 6 Low. The reviewer did not rerun tests or `make verify`, and confirmed the B4 composition (the request's epoch check precedes the seal; `atCurrentEpoch(notStarted)` is unchanged).
+
+| Pass 1 finding | Status | Where |
+| --- | --- | --- |
+| 1 Medium, resumed execution sent no report | Resolved | `launch-orchestrator.ts:434-443`; `start-reconciliation.test.ts:250` |
+| 2 Self-reference to a never-granted execution | Resolved | `launch-authorization.ts:265`; `launch-authorization.test.ts:209` |
+| 3 Untested refusal branches | Resolved | `launch-authorization.test.ts:185`, `:196`, `:209`, `:218` |
+| 4 Crash windows did not require E1's grant | Resolved | `crash-windows.integration.test.ts:220-234` |
+| 5 `grantOfOperation` ignored the worker | Resolved | `launch-authorization.ts:291-294` |
+| 6 Missing merge record | Resolved (broke the environment line, L3) | `verification.md` |
+| 7 "Refused seal report" wording | Resolved | `specs/launch-authorization/spec.md:26-28` |
+| 8 Upgrade order | Resolved | contract section 11; `proposal.md` |
+
+Each Low below was fixed after pass 2 and is **UNREVIEWED**. Under the Low-only rule of the [review process](../../../docs/governance.md#independent-review-process) no further review follows.
+
+- **L1 (UNREVIEWED fix):** the limitation was described as a double fault, but after a runtime seal one crash suffices. Design "Risks" and "Limitations" below now read "a crash between a relaunch's W2 and sending its request while the previous execution's not-started is still undelivered (one crash after a runtime seal, two at start)", keeping the follow-up candidate.
+- **L2 (UNREVIEWED fix):** contract section 4 now says the operation is looked up "among the worker's own grants in the request's task", as the code and design do.
+- **L3 (UNREVIEWED fix):** the environment line under Evidence is restored.
+- **L4 (UNREVIEWED fix):** the self-check cites the current domain test names (`launch-authorization.test.ts:185`, `:196`, `:209`, `:218`) and `sealConflict` at `:278`.
+- **L5 (UNREVIEWED fix):** `proposal.md` names `Launch.#nextExecution`.
+- **L6 (UNREVIEWED fix, no code change):** contract section 4 states that the seal relies on the request's epoch check (section 2) and on section 5 cancelling the attempt on an ownership change or quarantine, so the report is no path around section 7's epoch gate; design "Risks" notes the possible defensive check if a quarantine writer arrives.
+
+Checks after these fixes (documents only, so no `make verify`): `npm run openspec -- validate fix-launch-recovery-reauthorization --strict`, `npm run verify:comments`, and `npm run verify:archive`; results under Checks and results.
 
 ## Limitations and remaining gates
 
-- The double fault of design "Risks" (a crash after a relaunch's W2 whose request never arrived, while the predecessor's observation is also undelivered) still ends the launch. Follow-up candidate: "reportsNotStartedFor for every unconfirmed sealed execution of the intent". The owner's delegate decided the single-reference shape, and the coordinator keeps the follow-up out of this change.
+- The limitation of design "Risks", a crash between a relaunch's W2 and sending its request while the previous execution's not-started is still undelivered (one crash after a runtime seal, two at start), still ends the launch. Follow-up candidate: "reportsNotStartedFor for every unconfirmed sealed execution of the intent". The owner's delegate decided the single-reference shape, and the coordinator keeps the follow-up out of this change.
 - The reported `operationId` is not a match condition (design D2, deviation from the brief, accepted by the coordinator).
 - The intermittent control-plane integration failure of the first `make verify` run after each merge was not investigated; it passed on each rerun.
-- Remaining gates: review pass 2, the coordinator's integration into `dev`, and the archive of this change.
+- Remaining gates: the coordinator's integration into `dev`, and the archive of this change.
