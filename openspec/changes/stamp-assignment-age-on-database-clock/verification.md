@@ -27,7 +27,8 @@ A G2 follow-up found during B6 `stabilize-observability-lag-test`: the snapshot 
 ## Checks
 
 - `npm run openspec -- validate stamp-assignment-age-on-database-clock --strict`: valid.
-- `make verify` at `2520ab2`: exit 0; 1937 tests, 1935 pass, 0 fail, 2 skipped; coverage lines 99.29%, branches 92.10%, functions 99.04%; contract compatibility, dependency inventory, `validate --all --strict` (70 passed), archive dry run, and package verification passed. No flaky rerun was needed. This file is the only later change.
+- `make verify` at `2520ab2`: exit 0; 1937 tests, 1935 pass, 0 fail, 2 skipped; coverage lines 99.29%, branches 92.10%, functions 99.04%; contract compatibility, dependency inventory, `validate --all --strict` (70 passed), archive dry run, and package verification passed. No flaky rerun was needed.
+- `make verify` at `b93a6c0` (after the pass 1 fixes and their record): exit 0; 1937 tests, 1935 pass, 0 fail, 2 skipped; coverage lines 99.29%, branches 92.11%, functions 99.04%; `validate --all --strict` 70 passed; no flaky rerun was needed. This line is the only later change.
 
 Environment: macOS (Darwin 25.6.0), Node from `.nvmrc`, Docker test services started by `make verify` and `scripts/services.sh`.
 
