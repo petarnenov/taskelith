@@ -16,6 +16,7 @@ import {
 } from '@mantine/core';
 import { usePoc } from '../store';
 import { GATE, LaterGate, PageHeader, SessionBadge, deriveSessionStatus } from '../ui';
+import { TARGET_SIZE } from '../theme';
 import { PlusIcon } from '../icons';
 import { COLUMNS, conflictFiles, mergeSteps, type Run } from './board-data';
 import {
@@ -165,7 +166,7 @@ function MergeProgress({ run, onOpenSession }: { run: BoardRun; onOpenSession: (
           <Text size="xs" fw={600} c="indigo">
             {step.label}
           </Text>
-          <UnstyledButton onClick={onOpenSession}>
+          <UnstyledButton mih={TARGET_SIZE} onClick={onOpenSession}>
             <Text size="xs" c="indigo" td="underline">
               Open session
             </Text>
@@ -212,7 +213,7 @@ function RunCard({
     <Card withBorder padding="sm" radius="md" bd={cardBorder(run, selected)}>
       <Stack gap={8}>
         <Group justify="space-between" align="flex-start" gap="xs">
-          <UnstyledButton onClick={onOpen} aria-label={'Open details for ' + run.title}>
+          <UnstyledButton mih={TARGET_SIZE} onClick={onOpen} aria-label={'Open details for ' + run.title}>
             <Text fw={600} size="sm">
               {run.title}
             </Text>
