@@ -29,7 +29,7 @@ import {
 } from '@taskelith/worker-journal';
 import { AdmissionPressure } from './admission-pressure.js';
 import { CommandIntake } from './command-intake.js';
-import type { DeadlineClock, RecordListing, SupervisionFactory } from './execution-supervision-port.js';
+import type { ContainmentScan, DeadlineClock, RecordListing, SupervisionFactory } from './execution-supervision-port.js';
 import { LaunchOrchestrator, openExecutions } from './launch-orchestrator.js';
 import { runObservationPublisher } from './observation-publisher.js';
 import type { LaunchSettings, WorkerSettings } from './settings.js';
@@ -67,6 +67,7 @@ export interface LaunchHost {
   readonly clock: DeadlineClock;
   readonly supervision: SupervisionFactory;
   readonly records?: RecordListing;
+  readonly containments?: ContainmentScan;
 }
 
 // A started worker: it holds the root lock and its broker connection, reads
@@ -189,10 +190,11 @@ function launchOrchestrator(
   const host = launching.host(launch, root.paths.executions);
   if (!host.ok) return host;
   const { sleep, draw, newId, pollMilliseconds, logger, onFailure } = launching;
-  const { supervision, clock, records } = host.value;
+  const { supervision, clock, records, containments } = host.value;
   return ok(new LaunchOrchestrator({
     journal: root.journal, authority: launching.authority(credential), supervision, clock, pressure, sleep, draw, newId,
     ...(pollMilliseconds === undefined ? {} : { pollMilliseconds }), ...(records === undefined ? {} : { records }),
+    ...(containments === undefined ? {} : { containments }),
     ...(logger === undefined ? {} : { logger }), ...(onFailure === undefined ? {} : { onFailure }),
   }));
 }

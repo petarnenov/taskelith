@@ -14,6 +14,7 @@ export { SqliteExecutionLock } from './execution-lock.js';
 export { FileRecordStore } from './file-record-store.js';
 export {
   LinuxContainment,
+  LinuxContainmentScan,
   LinuxDeadlineClock,
   linuxPlatform,
   LinuxProcessInspector,
@@ -21,6 +22,7 @@ export {
   parseProcStat,
   parseUptime,
   type LinuxPlatformOptions,
+  type PopulatedCgroup,
   type ProcStat,
 } from './linux.js';
 export { checkLinuxContainment, type LinuxSelfCheckOptions } from './linux-self-check.js';
