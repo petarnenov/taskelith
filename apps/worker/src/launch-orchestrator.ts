@@ -317,7 +317,17 @@ export class LaunchOrchestrator {
   // An execution target stops a launch only while it runs that execution.
   #targetedLaunches(target: CancellationTarget, snapshot: JournalSnapshot): Launch[] {
     const launches = [...targetedAssignments(target, snapshot)].flatMap((assignmentId) => this.#launches.get(assignmentId) ?? []);
-    return target.kind === 'attempt' ? launches : launches.filter((launch) => launch.runs(target.executionId));
+    if (target.kind === 'attempt') return launches;
+    return launches.filter((launch) => launch.runs(target.executionId) && !this.#endedNow(target.executionId));
+  }
+
+  // Read with no await before the cancel: an end may have committed while
+  // its launch has not yet returned from it.
+  #endedNow(executionId: ExecutionId): boolean {
+    const current = this.#options.journal.snapshot();
+    if (!reported(this.#options, current)) return false;
+    const execution = current.value.executions.find((candidate) => candidate.executionId === executionId);
+    return execution !== undefined && isTerminal(execution);
   }
 
   #runs(execution: JournaledExecution): boolean {
