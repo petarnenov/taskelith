@@ -17,6 +17,6 @@
 
 - [x] 3.1 proposal.md, design.md, spec deltas (worker-runtime, worker-journal-adapter)
 - [x] 3.2 `npm run openspec -- validate implement-worker-daemon-pressure --strict`
-- [ ] 3.3 `make verify`
+- [x] 3.3 `make verify`
 - [ ] 3.4 Independent review
 - [ ] 3.5 Handoff to the coordinator
