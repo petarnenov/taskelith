@@ -13,6 +13,7 @@ import {
   leftoverProcesses,
   reapLeftovers,
   releaseChild,
+  releasedOnFailure,
   Releases,
   spawnedChildren,
   tracedCrashes,
@@ -134,23 +135,22 @@ class Scenario {
   readonly #token: string;
   readonly #options: ScenarioOptions;
   readonly #workers: ComposedWorker[] = [];
+  // The installation's releases, then the reaping, then the workers' kills.
+  readonly #releases: Releases;
 
-  private constructor(installation: HarnessInstallation, token: string, options: ScenarioOptions) {
+  private constructor(installation: HarnessInstallation, token: string, options: ScenarioOptions, releases: Releases) {
     this.installation = installation;
     this.#token = token;
     this.#options = options;
+    this.#releases = releases;
   }
 
   static async start(options: ScenarioOptions): Promise<Scenario> {
-    const installation = await HarnessInstallation.start(options.signal);
-    try {
-      return new Scenario(installation, await installation.enrollmentToken(), options);
-    } catch (error) {
-      await installation.stop().catch((cleanup: unknown) => {
-        throw new AggregateError([error, cleanup], 'a failed start could not release its installation');
-      });
-      throw error;
-    }
+    const releases = new Releases();
+    const installation = await HarnessInstallation.start(options.signal, releases);
+    releases.add(() => reapLeftovers(installation));
+    const token = await releasedOnFailure(releases, () => installation.enrollmentToken());
+    return new Scenario(installation, token, options, releases);
   }
 
   async startWorker(armed?: string): Promise<ComposedWorker> {
@@ -161,6 +161,7 @@ class Scenario {
     };
     const worker = await ComposedWorker.start(run, this.#token);
     this.#workers.push(worker);
+    this.#releases.add(() => worker.kill());
     return worker;
   }
 
@@ -207,12 +208,9 @@ class Scenario {
     await this.wait('no process of the scenario', async () => (await leftoverProcesses(this.installation)).length === 0, LEFTOVER_MILLISECONDS);
   }
 
-  async stop(): Promise<void> {
-    const releases = new Releases();
-    releases.add(() => this.installation.stop());
-    releases.add(() => reapLeftovers(this.installation));
-    for (const worker of this.#workers) releases.add(() => worker.kill());
-    await releases.releaseAll();
+  // Ends once every release ran, before the scenario's result is recorded.
+  stop(): Promise<void> {
+    return this.#releases.releaseAll();
   }
 }
 

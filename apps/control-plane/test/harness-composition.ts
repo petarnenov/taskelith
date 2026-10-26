@@ -32,9 +32,13 @@ const RUN_ID = 'crash-run';
 const POLL_MILLISECONDS = 100;
 export const SETTLE_MILLISECONDS = 60_000;
 const STOP_MILLISECONDS = 15_000;
-// Each database, broker, HTTP, or ps operation and each release ends
-// within this, so a blocked one cannot hold a scenario past its deadline.
+// A wait gives up a database, broker, HTTP, or ps operation after this.
 const OPERATION_MILLISECONDS = 20_000;
+// The whole cleanup shares one deadline inside the runner's reserve; a
+// step gets at most RELEASE_STEP, and one more try once it passed.
+const CLEANUP_MILLISECONDS = 22_000;
+const RELEASE_STEP_MILLISECONDS = 8_000;
+const LAST_TRY_MILLISECONDS = 1_000;
 // The scripted child runs until the test releases it, at most this long.
 const CHILD_BOUND_MILLISECONDS = 30_000;
 const STREAM_KINDS = ['commands', 'observations', 'sdlc', 'quarantine', 'advisories'] as const;
@@ -76,7 +80,7 @@ export interface WaitOptions {
 export async function waitFor(what: string | (() => string), condition: () => Promise<boolean>, options: WaitOptions = {}): Promise<void> {
   const deadline = Date.now() + (options.timeout ?? SETTLE_MILLISECONDS);
   const description = () => (typeof what === 'string' ? what : what());
-  while (!(await bounded(() => `a check while waiting for ${description()}`, condition, options.signal))) {
+  while (!(await bounded(() => `a check while waiting for ${description()}`, condition, { signal: options.signal }))) {
     options.signal?.throwIfAborted();
     if (Date.now() > deadline) throw new Error(`timed out waiting for ${description()}`);
     await delay(POLL_MILLISECONDS, undefined, options.signal === undefined ? {} : { signal: options.signal });
@@ -93,21 +97,31 @@ function settledUnlessAborted<T>(promise: Promise<T>, signal: AbortSignal): Prom
   });
 }
 
-// The operation's result, unless it takes longer than an operation may or
-// the signal aborts; the operation gets the combined signal to stop early.
-export async function bounded<T>(what: string | (() => string), operation: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
-  const timeout = AbortSignal.timeout(OPERATION_MILLISECONDS);
-  const combined = signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
+export interface Bound<T> {
+  readonly signal?: AbortSignal | undefined;
+  readonly milliseconds?: number;
+  // Disposes of what the operation yields after the wait gave it up.
+  readonly late?: (value: T) => unknown;
+}
+
+// The operation's result, unless the bound passes or the signal aborts
+// first; the operation gets the combined signal to stop early.
+export async function bounded<T>(what: string | (() => string), operation: (signal: AbortSignal) => Promise<T>, bound: Bound<T> = {}): Promise<T> {
+  const timeout = AbortSignal.timeout(bound.milliseconds ?? OPERATION_MILLISECONDS);
+  const combined = bound.signal === undefined ? timeout : AbortSignal.any([bound.signal, timeout]);
+  const running = operation(combined);
   try {
-    return await settledUnlessAborted(operation(combined), combined);
+    return await settledUnlessAborted(running, combined);
   } catch (error) {
     if (!combined.aborted) throw error;
-    throw new Error(`${typeof what === 'string' ? what : what()} did not end: ${String(combined.reason)}`, { cause: error });
+    const description = typeof what === 'string' ? what : what();
+    if (bound.late !== undefined) void running.then(bound.late).catch((late: unknown) => process.emitWarning(`disposing late of ${description} failed: ${String(late)}`));
+    throw new Error(`${description} did not end: ${String(combined.reason)}`, { cause: error });
   }
 }
 
-// What a scenario acquired, released last first; every release runs, each
-// bounded, and their errors come back together.
+// What a scenario acquired, released last first under one deadline; every
+// release runs, and their errors come back together.
 export class Releases {
   readonly #releases: Array<() => unknown> = [];
 
@@ -116,16 +130,27 @@ export class Releases {
   }
 
   async releaseAll(): Promise<void> {
+    const deadline = Date.now() + CLEANUP_MILLISECONDS;
+    const budget = () => Math.max(Math.min(RELEASE_STEP_MILLISECONDS, deadline - Date.now()), LAST_TRY_MILLISECONDS);
     const errors: unknown[] = [];
     for (let release = this.#releases.pop(); release !== undefined; release = this.#releases.pop()) {
       try {
-        await bounded('a release', async () => release());
+        await bounded('a release', async () => release(), { milliseconds: budget() });
       } catch (error) {
         errors.push(error);
       }
     }
     if (errors.length > 0) throw new AggregateError(errors, 'a release failed');
   }
+}
+
+// A release that runs its work once, however often it is called.
+function once(work: () => Promise<void>): () => Promise<void> {
+  let running: Promise<void> | undefined;
+  return () => {
+    running ??= work();
+    return running;
+  };
 }
 
 // Runs the releases of a failed acquisition, then rethrows its error.
@@ -161,21 +186,19 @@ export class HarnessInstallation {
   readonly #store: PostgresDatabase;
   readonly #logs: InMemoryLogSink;
   readonly #apiPort: number;
-  readonly #releases: Releases;
   // The scenario's signal, which ends every operation but the releases.
   readonly #signal: AbortSignal;
 
-  private constructor(identity: Identity, store: PostgresDatabase, logs: InMemoryLogSink, apiPort: number, releases: Releases, signal: AbortSignal) {
+  private constructor(identity: Identity, store: PostgresDatabase, logs: InMemoryLogSink, apiPort: number, signal: AbortSignal) {
     this.#identity = identity;
     this.#store = store;
     this.#logs = logs;
     this.#apiPort = apiPort;
-    this.#releases = releases;
     this.#signal = signal;
   }
 
-  static start(signal: AbortSignal): Promise<HarnessInstallation> {
-    const releases = new Releases();
+  // Its releases join the caller's, who releases them when done with it.
+  static start(signal: AbortSignal, releases: Releases): Promise<HarnessInstallation> {
     return releasedOnFailure(releases, () => HarnessInstallation.#acquire(releases, signal));
   }
 
@@ -185,29 +208,30 @@ export class HarnessInstallation {
     installations += 1;
     const databaseName = `taskelith_crash_${process.pid}_${installations}`;
     releases.add(() => sql(POSTGRES, `DROP DATABASE IF EXISTS ${databaseName} WITH (FORCE)`));
-    await bounded('the database creation', () => sql(POSTGRES, `CREATE DATABASE ${databaseName}`), signal);
+    await bounded('the database creation', () => sql(POSTGRES, `CREATE DATABASE ${databaseName}`), { signal });
     const database = new URL(POSTGRES);
     database.pathname = `/${databaseName}`;
     const base = mkdtempSync(join(tmpdir(), 'taskelith-crash-'));
     releases.add(() => rmSync(base, { recursive: true, force: true }));
     const dataRoot = join(base, 'control-plane');
-    const authority = await bounded('the broker account', () => registeredAuthority(dataRoot), signal);
+    const authority = await bounded('the broker account', () => registeredAuthority(dataRoot), { signal });
     const environment = { TASKELITH_DATA_DIR: dataRoot, TASKELITH_POSTGRES_URL: database.href, TASKELITH_NATS_URL: NATS.href };
     const init = ['init', '--actor', 'root@test', '--reason', 'crash scenario'];
-    const initialized = await bounded('the installation init', () => admin(environment, init), signal) as { identity: { installationId: string }; operatorSecret: string };
+    const initialized = await bounded('the installation init', () => admin(environment, init), { signal }) as { identity: { installationId: string }; operatorSecret: string };
     const address = value(TransportAddress.of(initialized.identity.installationId));
     releases.add(() => deleteStreams(authority, address));
     const logs = new InMemoryLogSink();
     const starting = startControlPlane(controlPlaneSettings(dataRoot, database, logs));
-    releases.add(async () => {
+    const stopStarted = once(async () => {
       const started = await starting;
       if (started.ok) await started.value.stop();
     });
-    const running: RunningControlPlane = value(await bounded('the control plane start', () => starting, signal));
-    const store = new PostgresDatabase(database);
+    releases.add(stopStarted);
+    const running: RunningControlPlane = value(await bounded('the control plane start', () => starting, { signal, late: stopStarted }));
+    const store = new PostgresDatabase(database, { queryTimeoutMilliseconds: OPERATION_MILLISECONDS });
     releases.add(() => store.close());
     const identity = { database, base, authority, address, operator: initialized.operatorSecret };
-    return new HarnessInstallation(identity, store, logs, running.api.port, releases, signal);
+    return new HarnessInstallation(identity, store, logs, running.api.port, signal);
   }
 
   get base(): string {
@@ -226,7 +250,7 @@ export class HarnessInstallation {
     const { database, base, operator } = this.#identity;
     const environment = { TASKELITH_DATA_DIR: join(base, 'control-plane'), TASKELITH_POSTGRES_URL: database.href, TASKELITH_NATS_URL: NATS.href };
     const issue = () => admin({ ...environment, TASKELITH_OPERATOR_TOKEN: operator }, ['issue-enrollment-token']);
-    const issued = await bounded('the enrollment token', issue, this.#signal);
+    const issued = await bounded('the enrollment token', issue, { signal: this.#signal });
     return issued.enrollmentToken as string;
   }
 
@@ -245,17 +269,13 @@ export class HarnessInstallation {
 
   async task(taskId: string): Promise<Task> {
     const read = () => this.#store.transaction((tx) => tx.tasks.get(taskId as TaskId));
-    return value(await bounded(`the read of task ${taskId}`, read, this.#signal));
+    return value(await bounded(`the read of task ${taskId}`, read, { signal: this.#signal }));
   }
 
   // A broker connection of the operator's side, for the commands stream.
   connectBroker(name: string): Promise<ControlPlaneConnection> {
-    return bounded(`the broker connection ${name}`, () => brokerConnection(this.#identity.authority, this.address, name), this.#signal);
-  }
-
-  // Runs on after the scenario's signal aborted; each release is bounded.
-  stop(): Promise<void> {
-    return this.#releases.releaseAll();
+    const connect = () => brokerConnection(this.#identity.authority, this.address, name);
+    return bounded(`the broker connection ${name}`, connect, { signal: this.#signal, late: (connection) => connection.close() });
   }
 
   async #operatorCall(path: string, body: unknown): Promise<void> {
@@ -264,7 +284,7 @@ export class HarnessInstallation {
         method: 'POST', headers: { authorization: `Bearer ${this.#identity.operator}`, 'content-type': 'application/json' }, body: JSON.stringify(body), signal,
       });
       assert.equal(response.status, 201, `POST ${path}: ${await response.text()}`);
-    }, this.#signal);
+    }, { signal: this.#signal });
   }
 }
 
@@ -275,7 +295,8 @@ function brokerConnection(authority: BrokerAuthority, address: TransportAddress,
 
 // Tries every stream; only an absent one is no error.
 async function deleteStreams(authority: BrokerAuthority, address: TransportAddress): Promise<void> {
-  const broker = await brokerConnection(authority, address, 'cleanup');
+  const connect = () => brokerConnection(authority, address, 'cleanup');
+  const broker = await bounded('the cleanup connection', connect, { late: (connection) => connection.close() });
   const errors: unknown[] = [];
   try {
     for (const kind of STREAM_KINDS) {
