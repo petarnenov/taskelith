@@ -48,4 +48,9 @@ Facts stored in a format 3 outbox have no epoch, and the worker would publish th
 ## Risks / Trade-offs
 
 - **Protocol version 1 kept (D2).** A worker built before this change would have its execution observations quarantined as malformed. No such worker exists outside development clones, and the bounded pre-release exception of D2 ends at the first release of an execution package or the G2 closure.
-- **Evidence only in the inbox and the log.** An evidence observation is not stored apart from the inbox entry and the warning; quarantine reconciliation (G6) defines how it reads them.
+- **Evidence only in the inbox and the log.** A gated observation, as a `quarantine-evidence` start, keeps only its inbox entry and a warning log, and its journal identity check and snapshot evaluation still run. The owner's delegate accepted both as G2 limitations in away run `20261026T184026Z-opencode-69502`; durable evidence content and deferred reconciliation go to G6 quarantine reconciliation.
+
+## Follow-up candidates
+
+1. A durable evidence store for stale and quarantine observations, starts included.
+2. Restructuring `ObservationService.#record` so that the identity checks and the reconciliation are separate from the effects while the gate is closed.
