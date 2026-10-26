@@ -73,11 +73,17 @@ OpenCode, `opencode-go/kimi-k3.1-pro` (`high`), read-only reviewer agent, sessio
 
 ## Review pass 3
 
-Pending; it reviews the merged state.
+OpenCode, `opencode-go/kimi-k3.1-pro` (`high`), read-only reviewer agent, session `ses_e87a00282ffeJ2WIkjxWFTuWep`, invoked as in pass 1 with a pass-3 prompt, on the merged state. The model was set by `-m` only, as in pass 1 (a limitation). The snapshots before and after the pass matched (`06a0adbf396e25c0619f26a2d07dd17d2290b34bbfe1ff13c9dd6775cae673a2`). Findings: 0 Critical, 0 High, 0 Medium, 1 Low. The reviewer's read-only shell refused its attempts to run the OpenSpec validation and the comment check, so it did not run them.
+
+- **Pass 2 High:** confirmed resolved (`launch-orchestrator.ts` W2, W3, and W4 through `commitWrite`, `space-retry.ts`, and the tests of `start-reconciliation.test.ts`).
+- **Low (fixed in `6833e4b`, not reviewed again under the [review pass cap](../../../docs/governance.md#independent-review-process)):** the failed-close test of `daemon-overhead.test.ts` waited a fixed 30 ms and assumed that a close had failed by then, which a slow runner could miss. `ScriptedHistogram` now counts its failed reads, and the test waits for the first failed close before it makes the histogram readable again.
+- **make verify:** {VERIFY}
+
+The review is complete in three passes; the Low fix of pass 3 is unreviewed, as the governance rule allows for a Low-only pass.
 
 ## Limitations and remaining gates
 
 - An unrecorded-process fact (from `dev`) refused for space at start is reported and waits for the next start's scan.
-- Remaining gates: review pass 3 of the merged state, the coordinator's integration into `dev`, and the archive of this change.
+- Remaining gates: the coordinator's integration into `dev` and the archive of this change; no further review.
 - Each start reports `unmeasurable-limit` until its first refresh after the event-loop histogram has a sample, within 5 seconds (design, Risks).
 - The worker's event-loop lag is not published as a metric.
