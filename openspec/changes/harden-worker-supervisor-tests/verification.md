@@ -50,9 +50,18 @@ OpenCode, `opencode-go/kimi-k3.1-pro` (`high`, set by `-m`), session `ses_e8804e
 - **M1' (mitigated, `708e59c`):** a process ID could be reused between the scan and the kill. Each listed process's command line is now read again (`ps -p` on macOS, `/proc/<pid>/cmdline` on Linux) just before `SIGKILL`, and the kill is skipped when it no longer names the root. A gap between that check and `process.kill` remains; Node offers no pidfd-based kill. Design D1 and its risks state this.
 - **M2' (fixed, `708e59c`):** `execFileSync('ps')` had no timeout and blocked the event loop. `ps` now runs through asynchronous `execFile` with a timeout of the remaining reaper budget; a timeout is collected into the `AggregateError`.
 - **M3' (fixed, `708e59c`):** a tracked process that never closed passed the teardown. `closed()` now returns an error after 5 s, which joins the `AggregateError`. Test: a marked scenario whose unmarked group member holds its stdout makes `reap()` reject with that error.
-- **L1' (fixed, `708e59c`):** the reaper test's cleanup missed processes. Every process joins a list before its spawn is awaited, all are created inside `try`, and `finally` kills each and waits at most 5 s for it.
+- **L1' (fixed, `708e59c`):** the reaper test's cleanup missed processes. A detached process joins the cleanup list before its spawn is awaited, and a `ScenarioProcess` right after `ScenarioProcess.start` resolves, which happens only once it has spawned; all are created inside `try`, and `finally` kills each and waits at most 5 s for it.
 - **Checks after the fixes:** `process-reaper.test.ts` passes 2 of 2; `darwin-supervisor.test.ts` passed 11 of 11 in four runs (14.6 to 21.9 s under a load average of 8 to 11); the restart assertion made wrong failed the test and ended the run after 2 s with no process left (not committed); `make verify` at `708e59c` passed in 170 s (1615 tests, 1615 pass, 0 fail, 0 cancelled, 0 skipped; coverage 99.26% lines, 91.68% branches, 98.80% functions; archive dry run and package verification passed).
 - **Found while fixing:** the first version of the new reaper test hung because an `async` helper returned the exit promise, which `await` then waited for; the helper now returns it inside an object.
+
+## Review pass 3
+
+OpenCode, `opencode-go/kimi-k3.1-pro` (`high`, set by `-m`), session `ses_e87f3733dffeed5VrZzES2bFaq`, at `6a043ec`. The snapshot was identical before and after the pass (`b84c4363…`). This was the last allowed pass. The reviewer confirmed the resolutions of M2', M3', and L1', and accepted M1' as the design records it. Findings: 0 Critical, 0 High, 1 Medium, 2 Low.
+
+- **M1 (pending coordinator decision):** `ps()` in `process-reaper.ts` treats exit code 1 as an empty listing for the full `ps -axww` scan as well, so a failing scan passes the teardown silently. The proposed fix allows exit code 1 only for the per-process check and adds a regression test. Not changed; the coordinator brings it to the owner.
+- **L1 (fixed, unreviewed):** tasks 1.2 and 1.3 described the record-based reaper. They now describe the marker scan, the check before each kill, the tracked scenarios, and the bounded waits; tasks 1.6 and 1.7 record passes 2 and 3.
+- **L2 (fixed, unreviewed):** the L1' resolution said that every process joins the cleanup list before its spawn is awaited, which holds for the detached processes only. It now says that a `ScenarioProcess` joins right after `ScenarioProcess.start` resolves.
+- **Checks after the fixes:** `npm run verify:comments`, `npm run verify:archive`, and `npm run openspec -- validate harden-worker-supervisor-tests --strict` pass. The fixes touch records only, so `make verify` was not run again; it last passed at `708e59c`.
 
 ## Limitations and remaining gates
 
@@ -60,5 +69,6 @@ OpenCode, `opencode-go/kimi-k3.1-pro` (`high`, set by `-m`), session `ses_e8804e
 - Other real-process tests that leave a long-running process on a failed assertion (the lock holder in `file-adapters.test.ts`, the sleeper in `worker-supervision.test.ts`) start no supervisor and end within 60 s; they are not changed.
 - PID reuse is mitigated, not eliminated (M1'): a gap between the last command-line check and `process.kill` remains.
 - `/proc` reads on Linux have no timeout.
-- The fixes of pass 2 are not reviewed yet.
-- Remaining gates: review pass 3 (the last allowed), integration into `dev`, and archive.
+- The record fixes after pass 3 are unreviewed, as the Low-only rule allows.
+- Pass 3 M1 (a failing full `ps` scan passes the teardown) is open, pending a coordinator decision.
+- Remaining gates: that decision, integration into `dev`, and archive.
