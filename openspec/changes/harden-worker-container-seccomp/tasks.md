@@ -22,4 +22,8 @@
 - [x] 3.7 Run `make verify`
 - [ ] 3.8 `make verify-linux-cgroup` on the x86_64 iMac (coordinator)
 - [x] 3.9 Independent review pass 1 (0 Critical, 0 High, 3 Medium, 11 Low), all findings fixed, the scenario and the smoke rerun, and `make verify` passed
-- [ ] 3.10 Independent review pass 2
+- [x] 3.10 Independent review pass 2 (0 Critical, 0 High, 0 Medium, 13 Low), the Low findings fixed without another pass as unreviewed fixes, the scenario and the smoke rerun, and `make verify` passed; no pass 3
+
+## 4. Integration (coordinator)
+
+- [ ] 4.1 Integrate into `dev` and archive the change

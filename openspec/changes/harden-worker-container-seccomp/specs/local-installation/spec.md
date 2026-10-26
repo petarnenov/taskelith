@@ -4,12 +4,12 @@
 The worker Compose service SHALL run with a seccomp profile under which no process of the worker container, the execution account's included, can call `unshare` or `setns` or create a namespace through `clone` or `clone3`. `mount` and the other calls SHALL stay as Docker's default profile grants them to a container with `CAP_SYS_ADMIN`.
 
 #### Scenario: Execution account refused a namespace
-- **WHEN** `make scenario-worker-namespace-confinement` runs, as the execution account below the worker's `setpriv`, `unshare -U` and `unshare -Urm` with `mount -t tmpfs` in the worker container
+- **WHEN** `make scenario-worker-namespace-confinement` runs, as the execution account through a `setpriv` equal to the worker's, whose status fields equal those of a running execution, `unshare -U` and `unshare -Urm` with `mount -t tmpfs` in the worker container
 - **THEN** both are refused with `EPERM`, and the scenario records its result with the OS, architecture, kernel, file system, versions, and the SHA-256 of the profile the container runs with
 
 #### Scenario: Every namespace call refused by the profile
 - **WHEN** the scenario calls, as the execution account with the status of a running execution, `clone3`, `clone` with `CLONE_NEWUSER`, and `setns` into a user namespace
-- **THEN** `clone3` answers `ENOSYS` and the other two are refused with `EPERM`, results that the kernel without the profile does not give, so a host-wide user namespace limit cannot pass for the profile
+- **THEN** `clone3` answers `ENOSYS` and the other two are refused with `EPERM`; `clone3` with `ENOSYS` and `setns` with `EPERM` instead of `EINVAL` tell the profile from a host-wide user namespace limit, while `clone` with `EPERM` only proves the refusal
 
 #### Scenario: Profile not applied
 - **WHEN** the worker container's inspected security options name no seccomp profile, or one other than the tracked worker profile
