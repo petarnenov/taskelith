@@ -54,3 +54,12 @@ Reproduction (scratch file, not committed): a role whose `search_path` puts a sc
 ## Remaining gates
 
 - Integration into dev by the coordinator (single pull request).
+
+## Archive checks
+
+Worker step 7, run by the worker session after review pass 1 and its fixes. The checked state is the tree of the archive commit, which is the working tree these checks ran on after `npm run openspec -- archive stabilize-observability-lag-test --yes` (base `bfed9cc`).
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `make verify`: exit 0; 1929 tests, 1927 pass, 0 fail, 2 skipped; coverage lines 99.28%, branches 92.07%, functions 99.04%.
+- `npm run openspec -- validate --archived --no-interactive`: the line of `change/2026-10-27-stabilize-observability-lag-test` passes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: empty, as intended for a change with `skip_specs: true`.
