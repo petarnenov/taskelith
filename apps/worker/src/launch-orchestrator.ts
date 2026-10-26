@@ -52,7 +52,8 @@ export interface LaunchOrchestratorOptions {
   readonly pollMilliseconds?: number;
   // The records on disk, for the leftovers a start reports.
   readonly records?: RecordListing;
-  // Linux only, for the unrecorded processes a start reports.
+  // Linux only, for the unrecorded processes a start reports; it runs only
+  // after a successful `records` listing.
   readonly containments?: ContainmentScan;
   readonly logger?: Logger;
   // Told of a launch or pass that threw; the worker keeps running.

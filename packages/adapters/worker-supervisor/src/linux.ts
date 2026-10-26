@@ -204,6 +204,8 @@ export class LinuxContainmentScan {
     this.#inspector = inspector;
   }
 
+  // One unreadable containment never hides the others: one of unknown state
+  // is skipped, and a populated one with unreadable members has none listed.
   populated(): Result<readonly PopulatedCgroup[]> {
     const names = this.#names();
     if (!names.ok) return names;
@@ -211,11 +213,9 @@ export class LinuxContainmentScan {
     for (const name of names.value) {
       const path = join(this.#parent, name);
       const populated = this.#populated(path);
-      if (!populated.ok) return populated;
-      if (!populated.value) continue;
+      if (!populated.ok || !populated.value) continue;
       const processes = this.#members(path);
-      if (!processes.ok) return processes;
-      found.push({ name, path, processes: processes.value });
+      found.push({ name, path, processes: processes.ok ? processes.value : [] });
     }
     return ok(found);
   }
@@ -243,7 +243,7 @@ export class LinuxContainmentScan {
     if (!text.ok) return text;
     const members: ProcessEntry[] = [];
     for (const line of (text.value ?? '').split('\n').filter((member) => member !== '')) {
-      const pid = Number(line);
+      const pid = /^\d+$/.test(line) ? Number(line) : 0;
       if (!Number.isSafeInteger(pid) || pid < 1) return err(failure('invalid', `${path}/cgroup.procs names no process`));
       const entry = this.#inspector.entry(pid);
       if (!entry.ok) return entry;
