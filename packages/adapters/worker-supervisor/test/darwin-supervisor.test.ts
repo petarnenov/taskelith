@@ -22,13 +22,15 @@ import {
   type WorkerSupervisionDependencies,
 } from '@taskelith/worker-supervisor';
 import { intent } from './fakes.ts';
+import { ProcessReaper, REAL_PROCESS_TEST_TIMEOUT } from './process-reaper.ts';
 
 // Real processes under the macOS native readers; the Linux counterpart is
 // linux-cgroup.privileged.ts.
-const DARWIN = { skip: process.platform !== 'darwin' };
+const DARWIN = { skip: process.platform !== 'darwin', timeout: REAL_PROCESS_TEST_TIMEOUT };
 const SCENARIO = new URL('./fixtures/supervisor-scenario.ts', import.meta.url).pathname;
 const ROOT = mkdtempSync(join(tmpdir(), 'taskelith-darwin-'));
 const platform = darwinPlatform(loadDarwinNative());
+const reaper = new ProcessReaper(platform.inspector);
 
 interface Execution {
   readonly directory: string;
@@ -48,6 +50,7 @@ async function prepare(executionId: string, body: string): Promise<Execution> {
     startSupervisor: async () => ({ ok: true, value: undefined }),
     crashPoint: () => undefined,
   };
+  reaper.watch(worker.store);
   const now = platform.clock.read();
   assert.ok(now.ok, JSON.stringify(now));
   const { namespaceIncarnation: _linuxOnly, ...record } = intent({
@@ -59,10 +62,10 @@ async function prepare(executionId: string, body: string): Promise<Execution> {
   return { directory, spawns, worker };
 }
 
-function startSupervisor(execution: Execution, mode: SupervisorMode, crashPoint?: string): Promise<ScenarioProcess> {
-  return ScenarioProcess.start(process.execPath, ['--experimental-strip-types', SCENARIO, mode, execution.directory], {
+async function startSupervisor(execution: Execution, mode: SupervisorMode, crashPoint?: string): Promise<ScenarioProcess> {
+  return reaper.track(await ScenarioProcess.start(process.execPath, ['--experimental-strip-types', SCENARIO, mode, execution.directory], {
     env: { ...process.env, ...(crashPoint === undefined ? {} : crashEnvironment(crashPoint)) },
-  });
+  }));
 }
 
 function spawnCount(execution: Execution): number {
@@ -101,6 +104,7 @@ const ESCAPE = `require('node:child_process').spawn(process.execPath, ['-e', 'se
 // A descendant in the child's group, which a group signal reaches.
 const MEMBER = `require('node:child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], { stdio: 'ignore' }).unref();`;
 
+test.afterEach(() => reaper.reap());
 test.after(() => rmSync(ROOT, { recursive: true, force: true }));
 
 test('on macOS the supervisor program launches the child and proves its exit', DARWIN, async () => {

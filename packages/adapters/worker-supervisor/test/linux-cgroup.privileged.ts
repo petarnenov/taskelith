@@ -19,6 +19,7 @@ import {
   type WorkerSupervisionDependencies,
 } from '@taskelith/worker-supervisor';
 import { intent } from './fakes.ts';
+import { ProcessReaper, REAL_PROCESS_TEST_TIMEOUT } from './process-reaper.ts';
 
 // Runs only in the privileged container of make verify-linux-cgroup, where
 // the namespace's cgroup root is writable and a leaf holds every process.
@@ -31,6 +32,8 @@ const ROOT = mkdtempSync(join(tmpdir(), 'taskelith-executions-'));
 // The execution account passes through to its spawn counter only.
 chmodSync(ROOT, 0o711);
 const platform = linuxPlatform({ containmentParent: PARENT });
+const reaper = new ProcessReaper(platform.inspector);
+const BOUNDED = { timeout: REAL_PROCESS_TEST_TIMEOUT };
 
 interface Execution {
   readonly directory: string;
@@ -59,6 +62,7 @@ async function prepare(executionId: string, body: string): Promise<Execution> {
     startSupervisor: async () => ({ ok: true, value: undefined }),
     crashPoint: () => undefined,
   };
+  reaper.watch(store);
   const now = platform.clock.read();
   const incarnation = platform.namespaceIncarnation();
   assert.ok(now.ok && incarnation?.ok);
@@ -73,12 +77,12 @@ async function prepare(executionId: string, body: string): Promise<Execution> {
   return { directory, spawns, worker };
 }
 
-function startSupervisor(execution: Execution, mode: SupervisorMode, crashPoint?: string): Promise<ScenarioProcess> {
-  return ScenarioProcess.start(
+async function startSupervisor(execution: Execution, mode: SupervisorMode, crashPoint?: string): Promise<ScenarioProcess> {
+  return reaper.track(await ScenarioProcess.start(
     process.execPath,
     ['--experimental-strip-types', SCENARIO, mode, execution.directory, '--containment-parent', PARENT],
     { env: { ...process.env, ...(crashPoint === undefined ? {} : crashEnvironment(crashPoint)) } },
-  );
+  ));
 }
 
 function spawnCount(execution: Execution): number {
@@ -108,13 +112,14 @@ async function recordedExit(execution: Execution): Promise<ExitRecord> {
 // process group but not its containment.
 const ESCAPE = `require('node:child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 1500)'], { detached: true, stdio: 'ignore' }).unref();`;
 
+test.afterEach(() => reaper.reap());
 test.after(() => rmSync(ROOT, { recursive: true, force: true }));
 
 test('the self-check proves a delegated containment that the execution account cannot leave', () => {
   assert.deepEqual(checkLinuxContainment({ cgroupRoot: CGROUP, containmentParent: PARENT, home: HOME, account: ACCOUNT }), { ok: true, value: undefined });
 });
 
-test('the execution stays started until the containment empties, also after a descendant escapes its group', async () => {
+test('the execution stays started until the containment empties, also after a descendant escapes its group', BOUNDED, async () => {
   const execution = await prepare('execution-escape', ESCAPE);
   const started = Date.now();
   const supervisor = await startSupervisor(execution, 'launch');
@@ -125,7 +130,7 @@ test('the execution stays started until the containment empties, also after a de
   assert.equal(spawnCount(execution), 1);
 });
 
-test('a child cannot move itself out of its containment', async () => {
+test('a child cannot move itself out of its containment', BOUNDED, async () => {
   const body = `try { require('node:fs').writeFileSync('${HOME}/cgroup.procs', String(process.pid)); process.exit(0); }
 catch (error) { process.exit(error.code === 'EACCES' || error.code === 'EPERM' ? 13 : 1); }`;
   const execution = await prepare('execution-move', body);
@@ -134,7 +139,7 @@ catch (error) { process.exit(error.code === 'EACCES' || error.code === 'EPERM' ?
   assert.deepEqual((await recordedExit(execution)).status, { kind: 'code', code: 13 });
 });
 
-test('cancellation kills the whole containment, descendants included', async () => {
+test('cancellation kills the whole containment, descendants included', BOUNDED, async () => {
   const execution = await prepare('execution-cancel', `${ESCAPE} setTimeout(() => {}, 60000);`);
   const supervisor = await startSupervisor(execution, 'launch');
   await delay(500);
@@ -149,7 +154,7 @@ test('cancellation kills the whole containment, descendants included', async () 
 const AFTER_CRASH = { CP5: 'not-started', CP6: 'not-started', CP7: 'exited', CP8: 'adopted', CP9: 'adopted', CP11: 'exited' } as const;
 
 for (const [point, fact] of Object.entries(AFTER_CRASH)) {
-  test(`a supervisor killed at ${point} recovers as section 6 assigns and never spawns twice`, async () => {
+  test(`a supervisor killed at ${point} recovers as section 6 assigns and never spawns twice`, BOUNDED, async () => {
     const execution = await prepare(`execution-${point.toLowerCase()}`, 'setTimeout(() => {}, 800)');
     const supervisor = await startSupervisor(execution, 'launch', point);
     assert.deepEqual(await supervisor.exited, { code: null, signal: 'SIGKILL' });
@@ -165,7 +170,7 @@ for (const [point, fact] of Object.entries(AFTER_CRASH)) {
   });
 }
 
-test('a worker restart adopts a live supervisor and leaves its process set running', async () => {
+test('a worker restart adopts a live supervisor and leaves its process set running', BOUNDED, async () => {
   const execution = await prepare('execution-restart', 'setTimeout(() => {}, 1000)');
   const supervisor = await startSupervisor(execution, 'launch');
   // The worker recovers only after it started the supervisor (section 6).
@@ -176,7 +181,7 @@ test('a worker restart adopts a live supervisor and leaves its process set runni
   assert.deepEqual((await recordedExit(execution)).status, { kind: 'code', code: 0 });
 });
 
-test('a supervisor and then its adopter are killed: each recovery adopts again, and the exit is unknown', async () => {
+test('a supervisor and then its adopter are killed: each recovery adopts again, and the exit is unknown', BOUNDED, async () => {
   const execution = await prepare('execution-twice', 'setTimeout(() => {}, 2500)');
   const launcher = await startSupervisor(execution, 'launch');
   await until(() => existsSync(join(execution.directory, 'handle')));
@@ -196,7 +201,7 @@ test('a supervisor and then its adopter are killed: each recovery adopts again, 
   assert.equal(spawnCount(execution), 1);
 });
 
-test('a recorded execution whose directory is deleted is uncertain, not not-started', async () => {
+test('a recorded execution whose directory is deleted is uncertain, not not-started', BOUNDED, async () => {
   const execution = await prepare('execution-deleted', 'process.exit(0)');
   rmSync(execution.directory, { recursive: true, force: true });
 
