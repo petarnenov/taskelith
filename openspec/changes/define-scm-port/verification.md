@@ -124,6 +124,19 @@ Reviewer assigned by the coordinator: Codex CLI, `gpt-6.1-sol`, reasoning effort
 
 On 2026-10-26 the owner, through the coordinator, chose to fix findings 1 to 4 and permitted one exceptional fourth pass by the same reviewer, limited to confirming those four fixes and checking that nothing else in the diff regresses. Finding 5 stays an unreviewed fix.
 
+### Pass 4 (owner-permitted, limited)
+
+- Invocation: as in pass 1, with a prompt limited to the owner's scope: confirm pass 3 findings 1 to 4, and check the diff since pass 3, without the records, for regressions.
+- Reviewed revision: `123c4a8`. `make verify` passed on it before the pass (1476 tests, 1461 passed, 0 failed, 15 skipped; coverage of all files 99.08% lines, 91.40% branches, 98.50% functions).
+- Confirmation: `model: gpt-6.1-sol`, `sandbox: read-only`, `reasoning effort: medium`, session ID `01a17741-b7d7-7533-971b-1c78533f5043`.
+- Snapshot: `a9f38b1eaa735109d918900a6576f0381a46a0cd6c007bda8f5ee009b8b571f7` before and after; unchanged.
+- Pass 3 findings 1 to 4: resolved; the reviewer reproduced each defect again and the suite now reports it.
+- Findings: Critical 0, High 0, Medium 1, Low 0.
+
+| # | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| 1 | Medium | The refresh case now refreshes only a credential with every permission, so a provider that widens a refreshed credential to every permission, in its result and on the service, passes; pass 3's fix replaced the `read-code` and `write-code` grant. | Open: brought to the owner through the coordinator. |
+
 ## Final checks
 
 Pending.
@@ -136,6 +149,8 @@ Pending.
 - The Forgejo and GitHub mapping was reviewed against repository records ([ADR 0006](../../../docs/decisions/0006-github-first-scm.md) and the [GitHub qualification](../../../docs/qualification/github.md)) without network access, because the assigned reviewer has none.
 
 ## Remaining gates
+
+- The owner's decision on pass 4 finding 1.
 
 
 - Integration into `dev` and the archive by the coordinator.
