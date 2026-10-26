@@ -36,10 +36,11 @@ export interface LaunchIntent {
   readonly requested: ResourceRequest;
 }
 
-// An intent as journaled: an ended assignment is never launched or counted
-// (capacity reservation contract, section 8).
+// An intent as journaled.
 export interface JournaledIntent extends LaunchIntent {
   readonly commandId: CommandId;
+  // Ended by its end command or a rejection for which endsAssignment holds;
+  // never launched, counted only by a live execution (capacity section 8).
   readonly ended: boolean;
 }
 

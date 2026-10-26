@@ -23,6 +23,12 @@ export type LaunchRejectionReason = (typeof LAUNCH_REJECTION_REASONS)[number];
 // a rejection is final for its operation (contract section 6).
 export const RETRYABLE_LAUNCH_REJECTIONS: readonly LaunchRejectionReason[] = Object.freeze(['quarantined', 'unavailable']);
 
+// The worker ends the assignment of such a rejection locally, as an
+// assignment-ended command does (capacity reservation section 8).
+export function endsAssignment(reason: LaunchRejectionReason): boolean {
+  return reason === 'assignment-not-active';
+}
+
 export interface LaunchRejection {
   readonly reason: LaunchRejectionReason;
   readonly retryable: boolean;
