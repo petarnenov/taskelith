@@ -362,3 +362,161 @@ worker_kill_scenario() {
   expect_equal "the journal's executions" "$journal" "$(task_executions "$task")"
   finish_passed "killed and restarted the worker, reconciled, removed" "on $(engine): SIGKILL after a planned pause of $pause ms, measured $measured ms from the submission's answer to the kill's return; executions just after the kill '${before:-none}'; the restarted worker reached its reconciliation and stayed up; the control plane then held executions '$after' and the result '$result', as the worker journal did; worker events: ${events:-none}"
 }
+
+# The status fields an execution and the probes must share (item 25a).
+STATUS_FIELDS='^(Uid|CapEff|CapBnd|NoNewPrivs|Seccomp|Seccomp_filters):'
+# clone flags CLONE_NEWUSER | SIGCHLD.
+CLONE_NEWUSER_FLAGS=268435473
+CLONE3_NUMBER=435
+# Calls the syscall of its arguments: prints "errno N", or "created" when
+# a child was cloned, which exits at once.
+SYSCALL_PROBE='require POSIX; my ($n, @a) = map { $_ + 0 } @ARGV; $! = 0;
+my $r = syscall($n, @a); if ($r < 0) { print "errno ", 0 + $!; exit 1 }
+if ($r == 0) { POSIX::_exit(0) } waitpid($r, 0); print "created"; exit 0'
+
+worker_exec() {
+  compose --profile worker exec -T worker "$@"
+}
+
+# Runs a command through a setpriv equal to the worker's, as the execution
+# account: uid and gid 10003, no capability, the worker's bounding set.
+as_execution() {
+  worker_exec setpriv --bounding-set=-all,+setuid,+setgid,+kill --inh-caps=-all \
+    --reuid=10003 --regid=10003 --clear-groups -- "$@"
+}
+
+one_line() {
+  tr -s ' \t\n' ' ' | sed 's/ $//'
+}
+
+probe_status() {
+  as_execution grep -E "$STATUS_FIELDS" /proc/self/status | one_line
+}
+
+# The status fields and the cgroup of the running execution, the oldest
+# process of the execution account, on two lines.
+execution_identity() {
+  local raw
+  raw="$(worker_exec bash -c 'pid="$(pgrep -o -u 10003)" && grep -E "$1" "/proc/$pid/status" \
+    && echo cgroup: && cat "/proc/$pid/cgroup"' identity "$STATUS_FIELDS")" || return 1
+  printf '%s\n' "$raw" | sed '/^cgroup:$/,$d' | one_line
+  echo
+  printf '%s\n' "$raw" | sed '1,/^cgroup:$/d'
+}
+
+# Writes the execution's identity to FILE once both of its lines are read.
+capture_identity() {
+  execution_identity > "$1" && [ "$(grep -c . "$1")" -eq 2 ]
+}
+
+# The command after LABEL, a matcher, and EXPECTED must fail as the
+# execution account with output that the matcher accepts.
+refused_probe() {
+  local label="$1" matcher="$2" expected="$3" output
+  shift 3
+  if output="$(as_execution "$@" 2>&1)"; then fail_scenario "the execution account could $label: $output"; fi
+  if ! "$matcher" "$output" "$expected"; then
+    fail_scenario "the probe to $label failed otherwise than '$expected': $output"
+  fi
+  echo "installation.sh: $scenario: refused to $label: $output" >&2
+}
+
+contains() {
+  [[ "$1" == *"$2"* ]]
+}
+
+equals() {
+  [ "$1" = "$2" ]
+}
+
+expect_refused() {
+  refused_probe "$1" contains "$2" "${@:3}"
+}
+
+# The syscall probe's output must be exactly "errno ERRNO".
+expect_errno() {
+  refused_probe "$1" equals "errno $2" "${@:3}"
+}
+
+clone_number() {
+  case "$(worker_exec uname -m)" in
+    aarch64) echo 220 ;;
+    x86_64) echo 56 ;;
+    *) fail_scenario "no clone syscall number for $(worker_exec uname -m)" ;;
+  esac
+}
+
+# Every namespace call of the profile, as the execution account; without
+# it, clone3 and setns answer EINVAL, which tells it from a host limit.
+probe_namespaces() {
+  local clone
+  clone="$(clone_number)"
+  expect_refused "create a user namespace" "unshare failed: Operation not permitted" unshare -U true
+  expect_refused "mount a tmpfs in new user and mount namespaces" "unshare failed: Operation not permitted" \
+    unshare -Urm mount -t tmpfs none /mnt
+  expect_errno "call clone3, which the profile answers with ENOSYS" 38 \
+    perl -e "$SYSCALL_PROBE" "$CLONE3_NUMBER" 0 0
+  expect_errno "clone into a new user namespace" 1 \
+    perl -e "$SYSCALL_PROBE" "$clone" "$CLONE_NEWUSER_FLAGS" 0 0 0 0
+  expect_refused "enter a user namespace with setns" "failed: Operation not permitted" \
+    nsenter --user=/proc/self/ns/user true
+}
+
+# The digest of the profile the worker container runs with, once it equals
+# the tracked worker profile.
+applied_profile() {
+  node --experimental-strip-types "$repository/scripts/worker-seccomp-profile.ts" applied \
+    "$(docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$(worker_container)")"
+}
+
+# The native acceptance row's platform: OS, architecture, kernel, file
+# system, and versions.
+platform() {
+  local os kernel architecture version driver filesystem image
+  IFS='|' read -r os kernel architecture version driver <<< "$(docker info --format \
+    '{{.OperatingSystem}}|{{.KernelVersion}}|{{.Architecture}}|{{.ServerVersion}}|{{.Driver}}')"
+  filesystem="$(worker_exec stat -f -c %T /var/lib/taskelith)"
+  image="$(docker image inspect --format '{{.Id}}' "$worker_image")"
+  echo "OS $os; architecture $architecture; kernel $kernel; file system $filesystem" \
+    "(worker data root), storage driver $driver; Docker engine $version;" \
+    "Docker Compose $(docker compose version --short); worker image $image"
+}
+
+# The execution account cannot create a namespace in the worker container,
+# while the delegation and the executions still work.
+namespace_confinement_scenario() {
+  local task=namespace-task digest execution identity status cgroup probe row identity_file
+  begin_scenario worker-namespace-confinement
+  scenario_project
+  step "checking the worker's containment and its seccomp profile"
+  check_containment
+  digest="$(applied_profile)"
+  step "running a task and reading its execution"
+  scenario_tool submit "$url" "$smoke_directory/workflows.json" "$task"
+  identity_file="$(mktemp)"
+  await_condition "$START_SECONDS" capture_identity "$identity_file" \
+    || fail_scenario "the execution's status and cgroup could not be read"
+  identity="$(cat "$identity_file")"
+  rm -f "$identity_file"
+  await_condition "$START_SECONDS" has_started "$task" || fail_scenario "the execution did not start"
+  execution="$(task_executions "$task" | cut -d ' ' -f 1)"
+  status="$(printf '%s\n' "$identity" | sed -n 1p)"
+  cgroup="$(printf '%s\n' "$identity" | sed -n 2p)"
+  expect_equal "the execution's cgroup" "$cgroup" "0::/executions/$execution"
+  step "probing namespaces as the execution account"
+  probe="$(probe_status)"
+  expect_equal "the probe's status" "$probe" "$status"
+  case "$probe" in
+    "Uid: 10003 10003 10003 10003 CapEff: 0000000000000000 "*) ;;
+    *) fail_scenario "the probe does not run as the execution account: $probe" ;;
+  esac
+  probe_namespaces
+  step "checking the cgroup delegation"
+  worker_exec test -d /sys/fs/cgroup/executions || fail_scenario "the containment parent is missing"
+  worker_exec bash -c 'mkdir /sys/fs/cgroup/executions/probe && rmdir /sys/fs/cgroup/executions/probe' \
+    || fail_scenario "the containment parent refused a cgroup write"
+  step "awaiting the task's exit"
+  scenario_tool await-exit "$url" "$task" >/dev/null
+  row="$(platform)"
+  finish_passed "refused the execution account's namespaces, ran a task, removed" "$row; applied seccomp profile sha256 $digest, equal to infra/installation/seccomp/worker.json: the execution $execution ran in '$cgroup' with status '$status' and exited 0; as the execution account with the same status, unshare -U and unshare -Urm with mount -t tmpfs were refused with EPERM, clone3 answered ENOSYS, clone with CLONE_NEWUSER and setns were refused with EPERM; the worker kept KILL, SETGID, and SETUID only; executions/ existed and took a cgroup write"
+}

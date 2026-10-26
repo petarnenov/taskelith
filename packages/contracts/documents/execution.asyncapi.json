@@ -2,7 +2,7 @@
   "asyncapi": "3.0.0",
   "info": {
     "title": "Taskelith execution messages",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "description": "Commands to workers and observations from workers over NATS JetStream (G2 decision D3 (a)), and worker heartbeats over core NATS outside any stream. Operations are described from the control plane. Each command, observation, and report is first published with the Nats-Msg-Id header set to its commandId, its observationId, or its reportId and part, and a redrive sets a new one; the identity in the body never changes. A confirmation and a heartbeat are idempotent and have no header. Every message has a JSON encoding of at most 1 MiB. A worker reads the command metadata and payload.protocolVersion first, which keep their meaning across protocol versions, and rejects a command whose version it does not support."
   },
   "defaultContentType": "application/json",
@@ -1479,6 +1479,7 @@
             "description": "The spawn failed, so no process of the execution ever ran.",
             "required": [
               "executionId",
+              "recoveryEpoch",
               "status",
               "startProven",
               "spawnFailed",
@@ -1488,6 +1489,9 @@
             "properties": {
               "executionId": {
                 "$ref": "#/components/schemas/Identifier"
+              },
+              "recoveryEpoch": {
+                "$ref": "#/components/schemas/RecoveryEpoch"
               },
               "status": {
                 "$ref": "#/components/schemas/ExitStatus"
@@ -1514,6 +1518,7 @@
             "additionalProperties": false,
             "required": [
               "executionId",
+              "recoveryEpoch",
               "status",
               "startProven",
               "spawnFailed",
@@ -1522,6 +1527,9 @@
             "properties": {
               "executionId": {
                 "$ref": "#/components/schemas/Identifier"
+              },
+              "recoveryEpoch": {
+                "$ref": "#/components/schemas/RecoveryEpoch"
               },
               "status": {
                 "$ref": "#/components/schemas/ExitStatus"
@@ -1549,6 +1557,7 @@
             "description": "Recovery on start proved the end without an exit status.",
             "required": [
               "executionId",
+              "recoveryEpoch",
               "status",
               "startProven",
               "spawnFailed",
@@ -1557,6 +1566,9 @@
             "properties": {
               "executionId": {
                 "$ref": "#/components/schemas/Identifier"
+              },
+              "recoveryEpoch": {
+                "$ref": "#/components/schemas/RecoveryEpoch"
               },
               "status": {
                 "allOf": [
@@ -1640,11 +1652,15 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "executionId"
+          "executionId",
+          "recoveryEpoch"
         ],
         "properties": {
           "executionId": {
             "$ref": "#/components/schemas/Identifier"
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
           }
         }
       },
@@ -1692,11 +1708,15 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "executionId"
+          "executionId",
+          "recoveryEpoch"
         ],
         "properties": {
           "executionId": {
             "$ref": "#/components/schemas/Identifier"
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
           }
         }
       },
@@ -1745,11 +1765,15 @@
         "additionalProperties": false,
         "required": [
           "executionId",
+          "recoveryEpoch",
           "survivors"
         ],
         "properties": {
           "executionId": {
             "$ref": "#/components/schemas/Identifier"
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
           },
           "survivors": {
             "type": "array",
@@ -1805,11 +1829,15 @@
         "additionalProperties": false,
         "required": [
           "containment",
+          "recoveryEpoch",
           "processes"
         ],
         "properties": {
           "containment": {
             "$ref": "#/components/schemas/DisplayText"
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
           },
           "processes": {
             "type": "array",
@@ -1856,6 +1884,7 @@
         "required": [
           "commandId",
           "executionId",
+          "recoveryEpoch",
           "reason"
         ],
         "properties": {
@@ -1864,6 +1893,9 @@
           },
           "executionId": {
             "$ref": "#/components/schemas/Identifier"
+          },
+          "recoveryEpoch": {
+            "$ref": "#/components/schemas/RecoveryEpoch"
           },
           "reason": {
             "type": "string",

@@ -210,9 +210,11 @@ export type ExecutionExit = ExitEnd & {
   readonly spawnFailure?: string;
 };
 
-// The execution an execution fact is about, with its assignment.
+// The execution an execution fact is about, with its assignment and the
+// recovery epoch of its launch intent (launch authorization section 7).
 export interface ExecutionSubject extends AssignmentRef {
   readonly executionId: ExecutionId;
+  readonly recoveryEpoch: RecoveryEpoch;
 }
 
 // The facts a worker reports; the worker maps them to wire messages.
@@ -236,7 +238,6 @@ export type ObservationFact =
   })
   | ({ readonly kind: 'execution-started' } & ExecutionSubject & {
     readonly launchAuthId: LaunchAuthId;
-    readonly recoveryEpoch: RecoveryEpoch;
     readonly process: ExecutionProcess;
   })
   | ({ readonly kind: 'execution-exited' } & ExecutionSubject & { readonly exit: ExecutionExit })
@@ -244,7 +245,12 @@ export type ObservationFact =
   | ({ readonly kind: 'execution-uncertain' } & ExecutionSubject & { readonly evidenceCounter: number })
   | ({ readonly kind: 'termination-unproven' } & ExecutionSubject & { readonly survivors: readonly ExecutionProcess[] })
   | ({ readonly kind: 'cancellation-not-applied' } & ExecutionSubject & { readonly commandId: CommandId })
-  | { readonly kind: 'unrecorded-process'; readonly containment: string; readonly processes: readonly ExecutionProcess[] };
+  | {
+    readonly kind: 'unrecorded-process';
+    readonly containment: string;
+    readonly recoveryEpoch: RecoveryEpoch;
+    readonly processes: readonly ExecutionProcess[];
+  };
 
 // The unconfirmed outbox entries and the bytes they store.
 export interface OutboxBacklog {

@@ -568,7 +568,8 @@ test('without a launch command, the start reconciliation reports unrecorded proc
   const unrecorded = () => value(worker.root.journal.dueForPublication(T0)).map(({ fact }) => fact)
     .filter((fact) => fact.kind === 'unrecorded-process');
   await until(() => unrecorded().length > 0);
-  assert.deepEqual(unrecorded(), [{ kind: 'unrecorded-process', containment, processes: [] }]);
+  const { recoveryEpoch } = worker.root.journal.binding;
+  assert.deepEqual(unrecorded(), [{ kind: 'unrecorded-process', containment, recoveryEpoch, processes: [] }]);
   assert.deepEqual(launching.hosts.map(({ launch }) => launch), [undefined]);
 });
 
