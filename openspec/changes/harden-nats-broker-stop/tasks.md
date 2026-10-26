@@ -7,3 +7,4 @@
 ## 2. Records
 
 - [x] 2.1 Proposal, design, tasks, `verification.md`, `make verify`
+- [x] 2.2 Review pass 1: `nats-transport` delta instead of `skip_specs` (M1), evidence check recorded (L1)

@@ -8,7 +8,7 @@ This change was first assigned together with excluding the worker's home cgroup 
 
 - **Prompt broker stop.** `abortableDelay` resolves at once when its signal has already aborted, as it does when the signal aborts during the wait. A unit test proves that a stop during an idle publication round ends `runPublicationLoop` without the pause.
 
-No contract, schema, wire message, or requirement changes.
+No contract, schema, or wire message changes. The `nats-transport` requirement "Outbox publication" gains one sentence and one scenario for the stop.
 
 ## Capabilities
 
@@ -18,7 +18,7 @@ None.
 
 ### Modified Capabilities
 
-None. `skip_specs: true`: no requirement of `nats-transport` states how fast a loop stops, and the fix only removes a needless wait, so no requirement needs to record it (design D1). Recording stop latency would add a requirement beyond what the specs require, which this task excludes.
+- `nats-transport`: the requirement "Outbox publication" states that a stop ends the publication loop without waiting for the next poll, with a scenario for a stop during a publication round (design D1).
 
 ## Impact
 
