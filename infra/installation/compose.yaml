@@ -97,6 +97,16 @@ services:
     image: taskelith-worker:${TASKELITH_IMAGE_TAG:?run through scripts/installation.sh}
     pull_policy: never
     profiles: [worker]
+    # Root only for the entrypoint, which delegates the private cgroup
+    # namespace and keeps SETUID, SETGID, and KILL for the worker.
+    user: "0:0"
+    cgroup: private
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, KILL, SETGID, SETPCAP, SETUID, SYS_ADMIN]
+    # The remount of /sys/fs/cgroup needs no AppArmor profile in its way.
+    security_opt: ["apparmor=unconfined", "no-new-privileges=true"]
+    # Reaps executions whose supervisor ended first.
+    init: true
     environment:
       TASKELITH_CONTROL_PLANE_URL: http://control-plane:8080
       TASKELITH_NATS_URL: nats://nats:4222

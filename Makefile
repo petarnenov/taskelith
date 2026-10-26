@@ -25,7 +25,7 @@ UV_PIN := 0.13.5
 
 .PHONY: verify verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility \
 	test services-up services-down verify-linux-cgroup installation-build installation-bootstrap installation-broker-config installation-start \
-	installation-stop installation-enroll installation-enrollment-token verify-installation qualify-harnesses
+	installation-stop installation-enroll installation-enrollment-token verify-installation installation-smoke qualify-harnesses
 
 # Uses the .nvmrc Node.js when nvm has it, so no 'nvm use' is needed first.
 verify:
@@ -126,6 +126,11 @@ installation-enrollment-token:
 # make verify, like verify-linux-cgroup.
 verify-installation:
 	@$(INSTALLATION_PINS) bash scripts/installation.sh verify $(INSTALLATION)-verify
+
+# Opt-in end-to-end smoke on a throwaway project: submit, assign, execute,
+# and store the result of a test-only scripted process.
+installation-smoke:
+	@NODE_PIN=$(NODE_PIN) $(INSTALLATION_PINS) bash scripts/with-pinned-node.sh use bash scripts/installation.sh smoke $(INSTALLATION)-smoke
 
 # Opt-in: builds the worker-harnesses variant per platform (PLATFORMS, default
 # linux/amd64 linux/arm64) and runs the credential-free steps, into OUT.
