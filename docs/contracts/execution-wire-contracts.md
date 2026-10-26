@@ -6,7 +6,7 @@ Date: 2026-10-25. Status: proposed wire contract for G2 ([G2 work plan](../g2-pl
 
 | Document | Version | Content |
 | --- | --- | --- |
-| [`execution.asyncapi.json`](../../packages/contracts/documents/execution.asyncapi.json) | 0.5.0 | Commands to a worker and observations from it, over NATS JetStream, and its heartbeats over core NATS |
+| [`execution.asyncapi.json`](../../packages/contracts/documents/execution.asyncapi.json) | 0.6.0 | Commands to a worker and observations from it, over NATS JetStream, and its heartbeats over core NATS |
 | [`execution.openapi.json`](../../packages/contracts/documents/execution.openapi.json) | 0.3.1 | Enrollment, launch authorization, delegation with its 500 and 503 failures (item 21), task results, evidence with its 400, 500, and 503 failures (item 19), and the quarantine with its redrive (item 16), over HTTPS; G2 serves it as plain HTTP on loopback, and TLS is G3 item 26 (D11) |
 
 Both live in `@taskelith/contracts` beside the SDLC documents. The package generates one type and one validator per schema name from all four documents, so a name that several documents define must name the same schema; the build and the package tests fail otherwise. The execution documents reuse `CommandMetadata`, the identifiers, `ArtifactRevision`, and `Admission` of the SDLC documents. `Admission` gains the optional `ownershipGeneration` that a used admission carries ([`sdlc-task-admission`](../../openspec/specs/sdlc-task-admission/spec.md)), which the SDLC documents declare with version 0.2.0.
@@ -42,7 +42,7 @@ Each command is a `CommandMetadata` envelope that also requires `attemptId`, `wo
 | Cancellation | `execution.cancellation.request` | A cancellation request, a revocation after authorization (launch authorization section 5), an `unauthorized-start` for that execution only, or an assignment end while an execution under it can run |
 | Assignment end | `execution.assignment.end` | The cancellation and supersession transactions (capacity reservation section 6) |
 
-- An offer names the `recoveryEpoch` the worker uses in its launch requests and start observations. The admission and its generation are `metadata.sdlc.admissionId` and `metadata.sdlc.admissionGeneration`, which the worker journals with the launch intent ([worker journal](worker-journal.md) section 5).
+- An offer names the `recoveryEpoch` the worker uses in its launch requests and in the observations about its executions. The admission and its generation are `metadata.sdlc.admissionId` and `metadata.sdlc.admissionGeneration`, which the worker journals with the launch intent ([worker journal](worker-journal.md) section 5).
 - A cancellation without `executionId` targets the attempt; with it, only that execution. A cancellation is never proof of termination.
 - What an offer executes is not part of G2: item 15 runs a test-only scripted process chosen by the worker's test configuration, and the harness invocation joins the offer with the agent harness port in G3.
 
@@ -68,6 +68,7 @@ The schemas also fix the dependencies between fields:
 - A refusal is `retryable` exactly when its reason is `worker-admission-pressure`, and then it names at least one `pressureCauses` entry, such as `journal-backlog` or `disk-floor`; no other refusal names causes.
 - An exit with `spawnFailed` has `startProven` false, a `spawnFailure`, and the termination evidence `never-spawned`; an exit without `spawnFailed` has no `spawnFailure` and another termination evidence. That it is `containment-empty` on Linux and `process-group-empty` on macOS is the worker's rule; recovery on start may instead prove the end by `boot-changed` or, on Linux, `namespace-ended` (supervisor identity section 6), with status `unknown`.
 - `execution.started` carries the child's process identity; the control plane checks its `launchAuthId`, `executionId`, and `recoveryEpoch` as launch authorization section 7 states.
+- Every other execution observation carries `recoveryEpoch` too: `execution.exited`, `execution.not-started`, `execution.uncertain`, `execution.termination-unproven`, and `execution.cancellation.not-applied` the epoch of the launch intent their execution belongs to, and `execution.unrecorded-process` the epoch of the worker's journal. The control plane checks it, and the quarantine state, as launch authorization section 7 states for these observations.
 
 ## 6. Confirmation and inventory
 
