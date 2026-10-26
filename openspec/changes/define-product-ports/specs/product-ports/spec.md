@@ -12,7 +12,7 @@ The board, inbox, and standing rule ports SHALL belong to the Execution module, 
 - **THEN** it implements `IntakeSource` and `WriteBack` in a plugin, and neither module changes
 
 ### Requirement: Board columns from the framework mapping
-The board SHALL have the columns propose, specify, implement, verify, review, and archived, and SHALL derive each stage's column from the obligations and graph order the frozen SDLC framework port returns, placing a review stage before any implementation stage in specify, and keeping a card whose current stage is the Close stage in review with its merge gate state until its change is merged, when it moves to archived.
+The board SHALL have the columns propose, specify, implement, verify, review, and archived, and SHALL derive each stage's column from the obligations and graph order the frozen SDLC framework port returns, placing a review stage before any implementation stage in specify, and keeping a card whose current stage, the first stage not completed, is the Close stage in review with its merge gate state until its change is merged, when it moves to archived.
 
 #### Scenario: Specification review stage
 - **WHEN** a workflow has a review stage that precedes every implementation stage
@@ -52,7 +52,7 @@ The auto-merge setting SHALL be on by default and changed by compare-and-set, re
 
 #### Scenario: Auto-merge turned off
 - **WHEN** a project-maintainer turns auto-merge off
-- **THEN** the push standing rule is revoked in the same transaction and queued requests are withdrawn
+- **THEN** the push standing rule is revoked in the same transaction and queued, escalated, and returned-to-specify requests are withdrawn
 
 ### Requirement: Untrusted intake and write-back data
 `IntakeSource` and `WriteBack` SHALL exchange plain data that the Integrations module parses and bounds, every write-back call SHALL carry an idempotency key, and a write-back failure SHALL be retried and never block a gate or a merge.

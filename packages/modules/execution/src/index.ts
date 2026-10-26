@@ -263,6 +263,7 @@ export {
   type NeedsYouSourceId,
   type NeedsYouSubject,
   type SourcePage,
+  type TaskCount,
 } from './ports/needs-you.js';
 export type { Outbox, OutboxMessage } from './ports/outbox.js';
 export type { InventoryReports } from './ports/inventory-reports.js';

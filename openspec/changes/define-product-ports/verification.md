@@ -27,6 +27,8 @@
 | `07f73f6` (contract text edit made during the run, doc only) | `make verify` | Passed: 1390 tests, 0 failed; coverage over all files 99.23% lines, 91.51% branches, 98.69% functions; 62 OpenSpec items valid; archive dry run valid; package verification passed |
 | `07f73f6` | `npm run openspec -- validate define-product-ports --strict` | Valid |
 | `e4110d2` (fixes after pass 1) | `make verify` | Passed: 1390 tests, 0 failed; coverage 99.23% lines, 91.52% branches, 98.69% functions; archive dry run and package verification passed |
+| `8083da3` (fixes after pass 2) | `make verify` | Passed before pass 3: 1390 tests, 0 failed; coverage 99.23% lines, 91.52% branches, 98.69% functions |
+| Final commit, the head handed off (unreviewed Low fixes after pass 3) | `make verify`; `npm run openspec -- validate define-product-ports --strict` | Passed: 1390 tests, 0 failed; coverage 99.23% lines, 91.51% branches, 98.69% functions; archive dry run and package verification passed; change valid. The `pre-push` hook ran `make verify` again on push |
 
 ## Independent review
 
@@ -84,6 +86,25 @@
 | L11 | Low | `revoke` and `recordUse` had no named idempotency means | Rule 2.7: by rule identifier, and by rule and native request |
 | L12 | Low | SDLC's `Generation` versioned Integrations records | Integrations' own `Revision` |
 | L13 | Low | "The current stage" was undefined for parallel stages | "The stage whose column the card shows" |
+
+### Pass 3
+
+- Reviewer and invocation as in pass 1, with the prompt naming the pass 1 and pass 2 sessions and asking for each pass 2 finding's resolution first. This was the last allowed pass.
+- Model confirmation: `claude-fable-5-1` in `modelUsage`. Session ID `125c58da-cba8-4c03-8997-240c3db65ba7`.
+- Reviewed revision: `8083da3` against `origin/dev`.
+- Snapshot before and after: `09bc4faa9713213034ba08ac054ab1f7c0601ae60d24171fb2aad617b347bc0c`, unchanged.
+- Pass 2 findings: all resolved, L13 partially (Low 2 below).
+- New findings: Critical 0, High 0, Medium 0, Low 7. Under the review process, Low-only findings are fixed without another pass; the fixes below are **unreviewed**.
+
+| # | Severity | Finding | Resolution (unreviewed) |
+| --- | --- | --- | --- |
+| 1 | Low | No check recorded for the fixed revision, and task 3.1 unchecked | `make verify` and strict validation run on the final revision (Checks table); tasks 3.1 to 3.3 checked |
+| 2 | Low | "Current stage" was still used without a definition | Section 3.2 defines the current stage once, and every use means it; the delta says the same |
+| 3 | Low | `recordManualMerge` had no named idempotency means | Rule 2.7 and section 6.3: by run and head, a repeat returns the merged request |
+| 4 | Low | The delta and the required tests narrowed withdrawal to `queued` | Both name queued, escalated, and returned-to-specify requests |
+| 5 | Low | Design decision 5 claimed an import that does not exist | Item 25's intake parser imports them |
+| 6 | Low | `byTask` was a `ReadonlyMap`, which JSON does not carry | An array of `TaskCount` |
+| 7 | Low | `answerableBy` left no room for the council | Section 4.1: the least human role in G3; the council adds its deciding body by a contract change |
 
 ## Owner decisions
 

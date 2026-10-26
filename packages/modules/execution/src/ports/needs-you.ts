@@ -105,9 +105,14 @@ export interface NeedsYouList extends ViewStamp {
   readonly items: readonly NeedsYouItem[];
 }
 
+export interface TaskCount {
+  readonly taskId: TaskId;
+  readonly count: number;
+}
+
 export interface NeedsYouCounts extends ViewStamp {
   readonly total: number;
-  readonly byTask: ReadonlyMap<TaskId, number>;
+  readonly byTask: readonly TaskCount[];
 }
 
 // Open items newest first, aggregated over every source; it never answers an
