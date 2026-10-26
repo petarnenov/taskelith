@@ -10,17 +10,19 @@ const LINK_SEPARATOR = ' <- ';
 const ELLIPSIS = '…';
 
 const NAME = /^[A-Za-z][A-Za-z0-9_$]{0,63}$/;
-const CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
+// Below the 32 characters of a token run, so no seed passes as a code.
+const CODE = /^[A-Z][A-Z0-9_]{0,30}$/;
 
 // Line breaks, then rules the logger's `redactText` lacks (decision 4).
 const BEFORE_REDACT_TEXT: readonly (readonly [RegExp, string])[] = [
   [/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' '],
   [/\b[a-z][a-z0-9+.-]*:\/\/\S*/gi, '[url]'],
-  [/\b((?:proxy-)?authorization)(\s*[=:]\s*)[^;,]*/gi, `$1$2${REDACTED}`],
+  [/\b((?:proxy-)?authorization)(["']?\s*[=:]\s*["']?)[^;,"']*/gi, `$1$2${REDACTED}`],
+  [/\b(password|passwd|pwd|secret|token|api[_-]?key)(["']?\s*:\s*)("(?:[^"\\]|\\.)*"?|'(?:[^'\\]|\\.)*'?|\S+)/gi, `$1$2${REDACTED}`],
 ];
 const AFTER_REDACT_TEXT: readonly (readonly [RegExp, string])[] = [
   [/eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*/g, REDACTED],
-  [/[A-Za-z0-9_+=-]{32,}/g, REDACTED],
+  [/[A-Za-z0-9_+=/-]{32,}/g, REDACTED],
 ];
 
 // A type, not an interface, so it is a failure's details record.
@@ -38,7 +40,15 @@ interface CauseLink {
 // Describes a thrown value and its causes, bounded and without secrets,
 // for a failure's details (design decisions 1 to 4).
 export function describeFailureCause(thrown: unknown): FailureCause {
-  const chain = causeChain(thrown);
+  try {
+    return describeChain(causeChain(thrown));
+  } catch {
+    return { cause: 'unknown' };
+  }
+}
+
+// A getter or proxy of the thrown value may throw; the caller catches it.
+function describeChain(chain: readonly object[]): FailureCause {
   if (chain.length === 0) return { cause: 'unknown' };
   const rendered = chain.slice(0, MAX_CAUSE_LINKS).map(describeLink).map(renderLink);
   const cause = truncate(rendered.join(LINK_SEPARATOR), MAX_CAUSE_LENGTH);
@@ -49,17 +59,27 @@ export function describeFailureCause(thrown: unknown): FailureCause {
 // One line of text without secrets, cut only after the whole text is
 // redacted, and unable to fake a link of a cause chain.
 export function sanitizeFailureText(text: string): string {
-  const redacted = AFTER_REDACT_TEXT.reduce(replace, redactText(BEFORE_REDACT_TEXT.reduce(replace, text)));
-  const oneLine = redacted.replace(/\s+/g, ' ').trim().replaceAll('<-', '< -');
-  return truncate(oneLine, MAX_FAILURE_TEXT);
+  return truncate(toChainSafeLine(redactAll(text)), MAX_FAILURE_TEXT);
+}
+
+function redactAll(text: string): string {
+  const prepared = BEFORE_REDACT_TEXT.reduce(replace, text);
+  return AFTER_REDACT_TEXT.reduce(replace, redactText(prepared));
+}
+
+function toChainSafeLine(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().replaceAll('<-', '< -');
 }
 
 // Follows `cause`, or an aggregate's first error, without revisiting one;
 // deeper than it renders, so the root's code survives a long chain.
 function causeChain(thrown: unknown): object[] {
   const chain: object[] = [];
-  for (let link = thrown; isObject(link) && !chain.includes(link) && chain.length < MAX_CODE_DEPTH; link = nextCause(link)) {
+  let link = thrown;
+  while (isObject(link) && !chain.includes(link)) {
     chain.push(link);
+    if (chain.length === MAX_CODE_DEPTH) break;
+    link = nextCause(link);
   }
   return chain;
 }

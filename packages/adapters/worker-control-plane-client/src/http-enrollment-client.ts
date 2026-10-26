@@ -3,6 +3,7 @@ import { parseRecoveryEpoch } from '@taskelith/execution';
 import { parseInstallationId, parseWorkerId, type Enrollment, type EnrollmentClient, type EnrollmentRequest } from '@taskelith/fleet';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { postJson, statusFailure, type ControlPlaneEndpoint } from './control-plane-http.js';
+import { sanitizeFailureText } from './failure-cause.js';
 
 // `enrollWorker` over HTTP. An `unavailable` answer may still have used the
 // token, so a retry can fail with `token-invalid`.
@@ -19,7 +20,7 @@ export class HttpEnrollmentClient implements EnrollmentClient {
     if (answered.value.status !== 201) return err(statusFailure('enrollWorker', answered.value));
     const { body } = answered.value;
     const checked = checkHttpSchema('Enrollment', body);
-    if (!checked.ok) return err(failure('internal', 'the enrollment violates its schema', { violation: checked.error[0] ?? '' }));
+    if (!checked.ok) return err(failure('internal', 'the enrollment violates its schema', { violation: sanitizeFailureText(checked.error[0] ?? '') }));
     return parseEnrollment(body as HttpSchemas['Enrollment']);
   }
 }
