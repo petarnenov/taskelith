@@ -5,7 +5,8 @@
 scenario_directory="$repository/infra/installation/scenarios"
 # An untimed kill lands at most this long after the task's submission.
 KILL_WINDOW_MILLISECONDS=25000
-# Deadlines in seconds; each covers its probes, not only the pauses.
+# Deadlines in seconds; each covers its probes, not only the pauses. The
+# restart's phase is part of the reconciliation's, counted from the restart.
 START_SECONDS=60
 REFUSAL_SECONDS=60
 RESTART_SECONDS=60
@@ -56,12 +57,23 @@ fresh_composition_scenario() {
 finish_scenario() {
   local status="$1"
   trap - EXIT
-  if [ "$status" -ne 0 ]; then
-    compose --profile worker logs --no-color control-plane worker >&2 || true
-    record_scenario failed "failed while $scenario_step" || true
-  fi
+  # Only an unfinished scenario gets here, since finish_passed disarms the
+  # trap; bash can pass status 0 after an expansion error under set -u.
+  if [ "$status" -eq 0 ]; then status=1; fi
+  compose --profile worker logs --no-color control-plane worker >&2 || true
+  record_scenario failed "failed while $scenario_step" || true
   remove_leftovers
   exit "$status"
+}
+
+# Removes the project, then records the pass with DETAIL; the failure trap
+# stays armed until both succeeded, so a failed cleanup is recorded.
+finish_passed() {
+  step "cleaning up"
+  remove_project || fail_scenario "the throwaway project was not fully removed"
+  record_scenario passed "$2"
+  trap - EXIT
+  echo "installation.sh: $1"
 }
 
 # A fresh project with an enrolled worker and the scenarios' longer process.
@@ -108,11 +120,17 @@ bounded_probe() {
   return "$status"
 }
 
-# Probes once a second until it succeeds or SECONDS of the monotonic clock
-# have passed, probes included; fails at the deadline.
+# Probes for at most SECONDS of the monotonic clock, probes included.
 await_condition() {
-  local deadline remaining
-  deadline="$(($(monotonic_milliseconds) + $1 * 1000))"
+  local seconds="$1"
+  shift
+  await_until "$(($(monotonic_milliseconds) + seconds * 1000))" "$@"
+}
+
+# Probes once a second until it succeeds or the monotonic clock reaches
+# DEADLINE in milliseconds; fails at the deadline.
+await_until() {
+  local deadline="$1" remaining
   shift
   for (( ; ; )); do
     remaining="$((deadline - $(monotonic_milliseconds)))"
@@ -273,8 +291,7 @@ disk_loss_scenario() {
   scenario_tool submit "$url" "$smoke_directory/workflows.json" "$next_task"
   scenario_tool await-exit "$url" "$next_task" >/dev/null
   expect_equal "the new worker's assignments" "$(worker_assignments "$new_worker")" "ended released"
-  remove_throwaway "lost the worker's data root, enrolled a new worker, removed"
-  record_scenario passed "on $(engine): worker killed with its attempt started; with the journal gone and the identity kept it logged the journal-loss refusal and exited with a failure, and created no journal; after the data root was lost and the worker revoked, a new worker enrolled, the old execution stayed started with uncertain evidence and its reservation held, the task pending; a new task exited 0 on the new worker"
+  finish_passed "lost the worker's data root, enrolled a new worker, removed" "on $(engine): worker killed with its attempt started; with the journal gone and the identity kept it logged the journal-loss refusal and exited with a failure, and created no journal; after the data root was lost and the worker revoked, a new worker enrolled, the old execution stayed started with uncertain evidence and its reservation held, the task pending; a new task exited 0 on the new worker"
 }
 
 # "id state certainty" per execution of the stopped worker's journal, read
@@ -298,22 +315,25 @@ execution_events() {
     | { grep -o '"event":"worker\.execution\.[a-z.-]*"' || true; } | cut -d '"' -f 4 | sort -u | paste -sd ',' -
 }
 
-# After the kill, a new worker process must reach its start reconciliation
-# and keep running while every execution of TASK ends or becomes uncertain.
+# A new worker process reconciles and keeps running while TASK's executions
+# end or become uncertain, both by one deadline from the monotonic RESTART.
 await_restarted_reconciliation() {
-  local task="$1" killed_start="$2" restarted
-  await_condition "$RESTART_SECONDS" back_since "$killed_start" \
+  local task="$1" killed_start="$2" restart="$3" total phase restarted
+  total="$((restart + RECONCILIATION_SECONDS * 1000))"
+  phase="$((restart + RESTART_SECONDS * 1000))"
+  await_until "$((phase < total ? phase : total))" back_since "$killed_start" \
     || fail_scenario "no new worker process reached its reconciliation and the broker"
   restarted="$(started_at)"
-  await_condition "$RECONCILIATION_SECONDS" is_reconciled "$task" \
-    || fail_scenario "the task's executions did not end or become uncertain"
+  await_until "$total" is_reconciled "$task" \
+    || fail_scenario "the task's executions did not end or become uncertain in time"
   running_since "$restarted" || fail_scenario "the restarted worker did not keep running"
 }
 
 # SIGKILL of the worker container at an untimed moment of an attempt; the
 # pause is planned from the seed, the interval measured.
 worker_kill_scenario() {
-  local task=worker-kill-task pause container killed_start submitted measured before after result journal restarted events
+  local task=worker-kill-task pause container killed_start submitted measured before restart after result journal
+  local restarted events
   begin_scenario worker-kill
   scenario_project
   pause="$((seed % KILL_WINDOW_MILLISECONDS))"
@@ -327,9 +347,10 @@ worker_kill_scenario() {
   measured="$(($(monotonic_milliseconds) - submitted))"
   before="$(execution_states "$task")"
   step "restarting the worker"
+  restart="$(monotonic_milliseconds)"
   compose --profile worker start worker >&2
   step "awaiting the new worker process and the reconciliation"
-  await_restarted_reconciliation "$task" "$killed_start"
+  await_restarted_reconciliation "$task" "$killed_start" "$restart"
   restarted="$(started_at)"
   after="$(execution_states "$task")"
   result="$(task_result "$task")"
@@ -339,6 +360,5 @@ worker_kill_scenario() {
   journal="$(journal_executions)"
   echo "installation.sh: $scenario: journal $(printf '%s' "$journal" | paste -sd ',' -)" >&2
   expect_equal "the journal's executions" "$journal" "$(task_executions "$task")"
-  remove_throwaway "killed and restarted the worker, reconciled, removed"
-  record_scenario passed "on $(engine): SIGKILL after a planned pause of $pause ms, measured $measured ms from the submission's answer to the kill's return; executions just after the kill '${before:-none}'; the restarted worker reached its reconciliation and stayed up; the control plane then held executions '$after' and the result '$result', as the worker journal did; worker events: ${events:-none}"
+  finish_passed "killed and restarted the worker, reconciled, removed" "on $(engine): SIGKILL after a planned pause of $pause ms, measured $measured ms from the submission's answer to the kill's return; executions just after the kill '${before:-none}'; the restarted worker reached its reconciliation and stayed up; the control plane then held executions '$after' and the result '$result', as the worker journal did; worker events: ${events:-none}"
 }

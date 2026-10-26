@@ -40,7 +40,7 @@ The same scenario SHALL then delete the whole data root, revoke the lost worker,
 - **THEN** the old execution is `started` with `uncertain` evidence, its assignment keeps its reservation, its task stays pending, a new task exits with code 0 on the new worker, and the result is recorded with target `compose-installation`
 
 ### Requirement: Untimed worker kill
-`make scenario-worker-kill` SHALL send `SIGKILL` to the worker container of a fresh Compose project after a pause derived from the seed, from 0 to 25 seconds after a task's submission was answered, with no crash point and no blocking step between the pause and the kill, and SHALL restart it. Within two minutes at least one execution of the task SHALL exist, and each SHALL be `exited` or `not-started` or carry `uncertain` evidence.
+`make scenario-worker-kill` SHALL send `SIGKILL` to the worker container of a fresh Compose project after a pause derived from the seed, from 0 to 25 seconds after a task's submission was answered, with no blocking step between the pause and the kill, and SHALL restart it. Within two minutes of the restart, on the monotonic clock, at least one execution of the task SHALL exist, and each SHALL be `exited` or `not-started` or carry `uncertain` evidence.
 
 #### Scenario: Kill and reconcile
 - **WHEN** the worker container receives `SIGKILL` during or before an attempt and is restarted
@@ -51,7 +51,11 @@ The same scenario SHALL then delete the whole data root, revoke the lost worker,
 - **THEN** the scenario records the outcome `failed` with the step it failed in, and fails
 
 ### Requirement: Restarted worker proven
-Before it waits for the executions of the untimed kill, the scenario SHALL wait at most one minute for a new worker process: the container runs with a start time other than the killed one's, and that process logged `worker.reconciliation.planned` and `worker.contact.online`. Before the journal comparison, the same process SHALL still run.
+Before it waits for the executions of the untimed kill, the scenario SHALL wait for a new worker process at most one minute, and never past the two minutes from the restart: the container runs with a start time other than the killed one's, and that process logged `worker.reconciliation.planned` and `worker.contact.online`. Before the journal comparison, the same process SHALL still run.
+
+#### Scenario: Phases within bounds, total over two minutes
+- **WHEN** the new worker process appears within one minute and the executions reconcile within two minutes of that, but more than two minutes after the restart
+- **THEN** the scenario records the outcome `failed` and fails
 
 #### Scenario: Restart failed after the execution ended
 - **WHEN** the execution had ended before the kill and the restarted worker exits, or never logs its reconciliation

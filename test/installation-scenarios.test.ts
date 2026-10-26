@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -29,26 +29,55 @@ interface BashRun {
   readonly elapsed: number;
 }
 
-// Stubs replace the Docker and PostgreSQL boundaries after the library loads.
+// Stubs replace Docker, PostgreSQL, the operator tool, and the project's
+// steps after the library loads; their state lives in files under $stubs.
 function stubbed({ state, stateAfterStart, logs, executions = '' }: Stubs, directory: string): string {
-  const stateFile = join(directory, 'state');
   return `
-printf '%s\\n' '${state}' > '${stateFile}'
+stubs='${directory}'
+printf '%s\\n' '${state}' > "$stubs/state"
+printf '%s\\n' '${executions}' > "$stubs/executions"
+echo w-old > "$stubs/worker"
 compose() {
   case "$*" in
-    *' start worker') printf '%s\\n' '${stateAfterStart}' > '${stateFile}' ;;
+    *' start worker') printf '%s\\n' '${stateAfterStart}' > "$stubs/state" ;;
     *' logs '*) printf '%s\\n' ${logs.map((line) => `'${line}'`).join(' ')} ;;
     *' ps '*) echo worker-container ;;
+    *revoke-worker*) echo 'e1 started uncertain' > "$stubs/executions" ;;
   esac
 }
 docker() {
   case "$1" in
-    inspect) cat '${stateFile}' ;;
+    inspect) cat "$stubs/state" ;;
+    info) echo 'Stub Engine 1 aarch64' ;;
   esac
 }
-sql() { printf '%s\\n' '${executions}' | sed '/^$/d'; }
-in_worker_volume() { return 0; }
+sql() {
+  case "$1" in
+    *'FROM workers'*) cat "$stubs/worker" ;;
+    *"worker_id = 'w-old'"*) echo 'accepted held' ;;
+    *'FROM assignments'*) echo 'ended released' ;;
+    *) sed '/^$/d' "$stubs/executions" ;;
+  esac
+}
+in_worker_volume() {
+  if [ "$1" = bash ]; then sed '/^$/d' "$stubs/executions"; fi
+}
+scenario_tool() {
+  case "$1" in
+    seed) echo 1 ;;
+    result) echo pending ;;
+    record) echo "$4: $5" >> "$stubs/records" ;;
+  esac
+}
+scenario_project() {
+  trap 'finish_scenario $?' EXIT
+  url=http://stub
+}
+enroll() { echo w-new > "$stubs/worker"; }
+remove_project() { [ -z "\${CLEANUP_FAILS:-}" ]; }
+remove_leftovers() { :; }
 scenario=test
+smoke_directory="$stubs"
 START_SECONDS=2 REFUSAL_SECONDS=2 RESTART_SECONDS=2 RECONCILIATION_SECONDS=2
 `;
 }
@@ -62,10 +91,16 @@ ${script}`], { encoding: 'utf8', timeout: BASH_TIMEOUT_MILLISECONDS });
   return { status: result.status, stdout: result.stdout, stderr: result.stderr, elapsed: performance.now() - started };
 }
 
-function withStubs(stubs: Stubs, script: string): BashRun {
+interface StubbedRun extends BashRun {
+  readonly records: string;
+}
+
+function withStubs(stubs: Stubs, script: string): StubbedRun {
   const directory = mkdtempSync(join(tmpdir(), 'taskelith-scenarios-'));
   try {
-    return bash(`${stubbed(stubs, directory)}\n${script}`);
+    const run = bash(`${stubbed(stubs, directory)}\n${script}`);
+    const records = existsSync(join(directory, 'records')) ? readFileSync(join(directory, 'records'), 'utf8') : '';
+    return { ...run, records };
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -118,27 +153,78 @@ test('a worker that exits without the refusal fails the journal check', () => {
 
 test('a restarted worker that reconciled and stays up passes the kill check', () => {
   const stubs = { state: `running 0 ${NEW_START}`, stateAfterStart: '', logs: [PLANNED, ONLINE], executions: 'e1 started uncertain' };
-  const run = withStubs(stubs, `await_restarted_reconciliation worker-kill-task '${OLD_START}'`);
+  const run = withStubs(stubs, `await_restarted_reconciliation worker-kill-task '${OLD_START}' "$(monotonic_milliseconds)"`);
   assert.equal(run.status, 0, run.stderr);
 });
 
 test('an execution that had ended does not hide a restart that failed', () => {
   const stubs = { state: `exited 1 ${NEW_START}`, stateAfterStart: '', logs: [PLANNED], executions: 'e1 exited certain' };
-  const run = withStubs(stubs, `await_restarted_reconciliation worker-kill-task '${OLD_START}'`);
+  const run = withStubs(stubs, `await_restarted_reconciliation worker-kill-task '${OLD_START}' "$(monotonic_milliseconds)"`);
   assert.equal(run.status, 1);
   assert.match(run.stderr, /no new worker process reached its reconciliation/);
 });
 
 test('the killed process itself never counts as the restarted worker', () => {
   const stubs = { state: `running 0 ${OLD_START}`, stateAfterStart: '', logs: [PLANNED, ONLINE], executions: 'e1 exited certain' };
-  const run = withStubs(stubs, `await_restarted_reconciliation worker-kill-task '${OLD_START}'`);
+  const run = withStubs(stubs, `await_restarted_reconciliation worker-kill-task '${OLD_START}' "$(monotonic_milliseconds)"`);
   assert.equal(run.status, 1);
   assert.match(run.stderr, /no new worker process reached its reconciliation/);
 });
 
 test('an execution left running without uncertainty fails the kill check', () => {
   const stubs = { state: `running 0 ${NEW_START}`, stateAfterStart: '', logs: [PLANNED, ONLINE], executions: 'e1 started certain' };
-  const run = withStubs(stubs, `await_restarted_reconciliation worker-kill-task '${OLD_START}'`);
+  const run = withStubs(stubs, `await_restarted_reconciliation worker-kill-task '${OLD_START}' "$(monotonic_milliseconds)"`);
   assert.equal(run.status, 1);
   assert.match(run.stderr, /did not end or become uncertain/);
+});
+
+// The restart becomes visible after 0.5 s and the reconciliation 2.8 s
+// later: each phase meets its own bound, and only the total tells.
+function phasedRestart(reconciliationSeconds: number): StubbedRun {
+  const stubs = { state: `exited 137 ${OLD_START}`, stateAfterStart: '', logs: [PLANNED, ONLINE], executions: 'e1 started certain' };
+  return withStubs(stubs, `RESTART_SECONDS=2 RECONCILIATION_SECONDS=${reconciliationSeconds}
+restart="$(monotonic_milliseconds)"
+( sleep 0.5; echo 'running 0 ${NEW_START}' > "$stubs/state"; sleep 2.8; echo 'e1 exited certain' > "$stubs/executions" ) &
+await_restarted_reconciliation worker-kill-task '${OLD_START}' "$restart"`);
+}
+
+test('the restart and the reconciliation share one deadline from the restart', () => {
+  const late = phasedRestart(3);
+  assert.equal(late.status, 1);
+  assert.match(late.stderr, /did not end or become uncertain in time/);
+  assert.equal(phasedRestart(5).status, 0);
+});
+
+const DISK_LOSS = { state: `running 0 ${OLD_START}`, stateAfterStart: `exited 1 ${NEW_START}`, logs: [REFUSAL], executions: 'e1 started certain' };
+const KILL = { state: `running 0 ${OLD_START}`, stateAfterStart: `running 0 ${NEW_START}`, logs: [PLANNED, ONLINE], executions: 'e1 exited certain' };
+
+test('the disk loss records its pass only after the cleanup', () => {
+  const run = withStubs(DISK_LOSS, 'disk_loss_scenario');
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.records, /^passed: on Stub Engine 1 aarch64: worker killed/);
+  assert.match(run.stderr, /cleaning up/);
+});
+
+test('a failed cleanup of the disk loss is recorded as failed', () => {
+  const run = withStubs(DISK_LOSS, 'CLEANUP_FAILS=1 disk_loss_scenario');
+  assert.equal(run.status, 1);
+  assert.equal(run.records, 'failed: failed while cleaning up\n');
+});
+
+test('the worker kill records its pass only after the cleanup', () => {
+  const run = withStubs(KILL, 'worker_kill_scenario');
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.records, /^passed: on Stub Engine 1 aarch64: SIGKILL after a planned pause of 1 ms/);
+});
+
+test('a failed cleanup of the worker kill is recorded as failed', () => {
+  const run = withStubs(KILL, 'CLEANUP_FAILS=1 worker_kill_scenario');
+  assert.equal(run.status, 1);
+  assert.equal(run.records, 'failed: failed while cleaning up\n');
+});
+
+test('an error the scenario did not expect is recorded as failed', () => {
+  const run = withStubs(DISK_LOSS, 'unset smoke_directory; disk_loss_scenario');
+  assert.equal(run.status, 1);
+  assert.equal(run.records, 'failed: failed while submitting a task and awaiting its start\n');
 });
