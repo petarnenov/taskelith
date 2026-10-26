@@ -405,6 +405,16 @@ function withFailingReports(tx: PostgresTransaction): ControlPlaneTransaction {
   return { ...tx, now: () => tx.now(), reports: reports as never };
 }
 
+// The assignment lookup of the transaction fails as a store that went down
+// would; listing still works.
+function withFailingAssignmentLookup(tx: PostgresTransaction): ControlPlaneTransaction {
+  const assignments = {
+    get: async () => err(failure('unavailable', 'the store is down')),
+    listByAttempt: (attemptId: AttemptId) => tx.assignments.listByAttempt(attemptId),
+  };
+  return { ...tx, now: () => tx.now(), assignments: assignments as never };
+}
+
 describe('acceptance and refusal', () => {
   test('a late acceptance at an earlier generation is rejected, logged, and still confirmed', async () => {
     await enroll();
@@ -1096,6 +1106,29 @@ describe('capacity refusal after a slot-freeing observation', () => {
       assert.ok((await worker()).capacity_refused_since instanceof Date);
     });
   }
+
+  test('a failed lookup while a stale launch rejection is recorded leaves it unconfirmed, and its redelivery clears the refusal', async () => {
+    const first = await refusedAtNextGeneration();
+    let opened = 0;
+    const failingOnce: ControlPlaneStore = {
+      transaction: (work) => {
+        const failing = ++opened === 2;
+        return database.transaction((tx) => work(failing ? withFailingAssignmentLookup(tx) : tx));
+      },
+      readCommitted: (work) => database.readCommitted(work),
+    };
+    service = observationService(failingOnce);
+    const sent = { sequence: 5, observationId: 'rejection-5', attemptId: first.attemptId, ownershipGeneration: first.generation };
+    const rejection = () => observe('execution.launch.rejected', sent, {
+      executionId: `execution-${first.attemptId}`, assignmentId: first.assignment.id, operationId: 'operation-5', reason: 'assignment-not-active',
+    });
+    assert.equal(failed(await rejection()).code, 'unavailable');
+    assert.deepEqual(await confirmations(), [1, 2, 3, 4]);
+    assert.ok((await worker()).capacity_refused_since instanceof Date);
+    assert.equal(value(await rejection()), 'rejected');
+    assert.equal((await worker()).capacity_refused_since, null);
+    assert.deepEqual(await confirmations(), [1, 2, 3, 4, 5]);
+  });
 
   test('a launch rejection at the current generation clears the refusal', async () => {
     await enroll();
