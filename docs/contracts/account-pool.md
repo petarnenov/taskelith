@@ -17,8 +17,8 @@ This item adds the port types, the contract values, and a conformance suite for 
 
 ## 2. Common rules
 
-1. **Authorization.** The Access module checks the caller's role before a port is called ([trust model](../trust-model.md) section 3); a port never decides authorization itself. Slots are installation resources: adding a slot, changing its allowed projects or concurrency limit, storing or rotating its credential, and revoking, reinstating, or removing it are `installation-owner` commands. A `project-viewer` reads the pool state of its own project, never a credential and never another project's slots.
-2. **Opaque identities.** A slot is identified by a `ProviderCredentialId`, the identifier that a reservation records in `providerCredentials`. The harness is a `HarnessPluginId` and the mechanism a `SubscriptionMechanismId`, both opaque to the pool.
+1. **Authorization.** The Access module checks the caller's role before a port is called ([trust model](../trust-model.md) section 3); a port never decides authorization itself. Slots are installation resources: adding a slot, changing its allowed projects or concurrency limit, storing or rotating its credential, and revoking, reinstating, or removing it are `installation-owner` commands. A `project-viewer` reads the pool state of its own project, never a credential; a slot shared with other projects is shown without their names (a requirement on items 9 and 33).
+2. **Opaque identities.** A slot is identified by a `ProviderCredentialId`, the identifier that a reservation records in `providerCredentials`. The harness is a `HarnessPluginId` and the mechanism a `SubscriptionMechanismId`, both opaque to the pool. Wherever this contract orders by `id`, it means the code point order of the identifier's characters, as PostgreSQL's `COLLATE "C"` orders text, so that every replica and adapter agrees.
 3. **Compare-and-set.** Every slot change replaces the record at an expected revision, inside the transaction that decides it, and fails with `conflict` when the revision has moved. A slot's revision starts at `1` and grows by one with each change.
 4. **Failures.** Every operation that can fail for a domain reason returns a kernel `Result`: `invalid` for malformed input, `not-found`, and `conflict` for a duplicate or a lost compare-and-set. A read without a domain failure, such as `pool`, returns its value, as the capacity ledger does. A store that cannot be reached rejects the operation's promise, which aborts the reservation transaction.
 5. **Secrecy.** A slot credential never enters a log, a prompt, a lesson, an error payload, an event, an outbox record, a view, or a wire response (ADR 0005 decision 6). Only `SlotCredentials` holds it, and only the delivery to the reserving run reveals it.
@@ -76,7 +76,7 @@ Which harnesses a task may use, and in which order, comes from the project's def
 
 ### 4.2 Least-loaded rule
 
-Among the eligible slots of the requested pool, the slot with the fewest held reservations wins. Remaining ties go to the lowest usage fraction, then to the least recently reserved slot, then to the lowest `id`, so that the rule is deterministic. The usage step applies only when every tied slot has a usage report whose window ends after `now`; otherwise it is skipped. A slot never reserved counts as least recently reserved. Selecting a slot sets its `lastReservedAt` to `now` in the same transaction.
+Among the eligible slots of the requested pool, the slot with the fewest held reservations wins. Remaining ties go to the lowest usage fraction, then to the least recently reserved slot, then to the lowest `id` (section 2, rule 2), so that the rule is deterministic. The usage step applies only when every tied slot has a usage report whose window ends after `now`; otherwise it is skipped. A slot never reserved counts as least recently reserved. Every `reserved` outcome, of any request kind, sets the slot's `lastReservedAt` to `now` in the same transaction.
 
 ### 4.3 Session affinity
 
@@ -100,7 +100,7 @@ If the limited slot is revoked or removed while the request waits, step 2 no lon
 
 ### 4.5 No eligible slot
 
-For a `new-session` request with no eligible slot in its pool, the policy decides: `wait` waits with `provider-concurrency-exhausted`, and `reject` rejects with `no-eligible-slot`. A slot outside the pool is never used. The reason values that this contract adds, `session-slot-withdrawn` and `no-eligible-slot`, are listed in the capacity reservation contract section 11, and item 12 adds them to its reason constants.
+For a `new-session` request with no eligible slot in its pool, the policy decides: `wait` waits with `provider-concurrency-exhausted`, and `reject` rejects with `no-eligible-slot`. A slot outside the pool is never used. The reason values that this contract adds, `session-slot-withdrawn` and `no-eligible-slot`, are listed in the capacity reservation contract section 11. Item 12 derives the module's rejecting reasons from `SLOT_REJECTING_REASONS` instead of copying them; the waiting reason is already the capacity contract's `provider-concurrency-exhausted`, and the type system checks it against the waiting reasons.
 
 ### 4.6 Outcomes
 
@@ -128,23 +128,24 @@ Read and written inside the reservation transaction; item 12 adds it to `Capacit
 | `add(slot)` | Stores a new slot; `conflict` when the identifier exists, and `invalid` when the revision is not `1` |
 | `get(id)` | The slot in any state; `not-found` when it was never added |
 | `pool(projectId, harness)` | The project's pool for the harness (section 3.1), ordered by `id`; empty when there is none |
-| `replace(slot, expectedRevision)` | Replaces the slot when its stored revision equals `expectedRevision`; `conflict` when it does not, `invalid` when the new revision is not `expectedRevision` plus one, and `not-found` for an unknown slot |
+| `replace(slot, expectedRevision)` | Replaces the slot when its stored revision equals `expectedRevision`. Checked in this order: `not-found` for an unknown slot, `invalid` for a new revision other than `expectedRevision` plus one, a harness change, or a slot leaving `removed`, then `conflict` when the stored revision differs |
 
-`replace` does not let a slot change its `harness` or leave `removed`: such a change fails with `invalid`.
 
 ### 6.2 `SlotCredentials`
 
 | Operation | Contract |
 | --- | --- |
-| `store(slotId, secret)` | Stores or replaces the slot's credential, encrypted at rest; a rotation replaces it |
+| `store(slotId, secret)` | Stores or replaces the slot's credential, encrypted at rest; a rotation replaces it. It has no domain failure: the slot command checks that the slot exists and is not removed before it stores |
 | `reveal(slotId)` | The credential for delivery to the reserving run; `not-found` when none is stored |
-| `destroy(slotId)` | Destroys the stored credential; destroying a missing one succeeds, so that a retry is safe |
+| `destroy(slotId)` | Destroys the stored credential; destroying a missing one succeeds, so that a retry is safe, and it has no domain failure |
+
+`SlotCredentials` is not part of `CapacityTransaction`, because its key and possibly its store live outside the database (section 7).
 
 A `SlotSecret` reveals its text only through its `reveal()` method. Its string and JSON forms are `[redacted]`, so that a logged or serialized secret discloses nothing. The adapter encrypts the material at rest with a key that is not stored in the same database; this item states the requirement and leaves the algorithm and the key management to item 12.
 
 ## 7. Credential delivery
 
-A credential is revealed only to deliver it to the run that reserved its slot. The delivery checks, in the transaction that reveals it, that the reservation is `held`, names the slot in `providerCredentials`, and belongs to the attempt that the worker launches, and that the slot is `active`. The worker receives the credential with the launch of that attempt, inside the worker container on Linux, and the harness plugin injects it into its harness (item 18). The worker keeps no copy when the run ends, and no later run reuses it. A credential is never sent to another run, another worker, or another plugin.
+A credential is revealed only to deliver it to the run that reserved its slot. The delivery checks, in a capacity transaction, that the reservation is `held`, names the slot in `providerCredentials`, and belongs to the attempt that the worker launches, and that the slot is `active`; it reveals the credential only after that transaction commits, and sends it only with a valid launch authorization for that attempt ([launch authorization contract](launch-authorization.md)). The worker receives the credential with the launch of that attempt, inside the worker container on Linux, and the harness plugin injects it into its harness (item 18). The worker keeps no copy when the run ends, and no later run reuses it. A credential is never sent to another run, another worker, or another plugin.
 
 ## 8. Revocation, reinstatement, and removal
 
@@ -168,6 +169,7 @@ The item 12 implementation adds:
 - The conformance suites run against its PostgreSQL adapter.
 - A selection test for each rule of section 4: the fewest held reservations, the usage tie-breaker only with every tied slot reporting, the least recently reserved slot, a resumed session that waits or is rejected and never moves, an `after-limit` request that never chooses another slot of the limited harness and falls back to the limited slot after its cooldown, and both policies for no eligible slot.
 - A cooldown test for a reported reset, the default, an extension, and a reset signal.
+- A delivery test that no credential is revealed for a released reservation, a reservation that names another slot, another attempt, or a revoked or removed slot.
 - A concurrency test that two transactions racing for the last unit of a slot reserve it at most once.
 - A secrecy test that a failing run's error payload, its logs, and the outbox contain no slot credential, and a neutrality test that the pool's code and tests name no harness or vendor.
 

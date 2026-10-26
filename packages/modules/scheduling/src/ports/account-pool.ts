@@ -9,19 +9,19 @@ export interface AccountSlots {
   // `conflict` for a known identifier, `invalid` for a revision other than 1.
   add(slot: AccountSlot): Promise<Result<void>>;
   get(id: ProviderCredentialId): Promise<Result<AccountSlot>>;
-  // The active slots of the harness allowed for the project, by identifier.
+  // Active slots of the harness allowed for the project, by code point of id.
   pool(projectId: ProjectId, harness: HarnessPluginId): Promise<readonly AccountSlot[]>;
-  // Compare-and-set; `invalid` for a revision other than the expected one
-  // plus one, a harness change, or a slot leaving removed.
+  // Compare-and-set: `not-found`, then `invalid` for a bad revision step,
+  // harness change, or slot leaving removed, then `conflict` (section 6.1).
   replace(slot: AccountSlot, expectedRevision: number): Promise<Result<void>>;
 }
 
-// Encrypted at rest with a key kept outside the slot store; the algorithm
-// and key management belong to the implementing adapter (G3 item 12).
+// Encrypted at rest with a key kept outside the slot store; not part of
+// CapacityTransaction (contract sections 6.2 and 7).
 export interface SlotCredentials {
-  store(slotId: ProviderCredentialId, secret: SlotSecret): Promise<Result<void>>;
+  store(slotId: ProviderCredentialId, secret: SlotSecret): Promise<void>;
   // Only for delivery to the run that reserved the slot (contract section 7).
   reveal(slotId: ProviderCredentialId): Promise<Result<SlotSecret>>;
   // Succeeds for a missing credential, so that a retry is safe.
-  destroy(slotId: ProviderCredentialId): Promise<Result<void>>;
+  destroy(slotId: ProviderCredentialId): Promise<void>;
 }

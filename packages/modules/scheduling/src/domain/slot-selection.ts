@@ -1,10 +1,11 @@
 import type { Instant } from '@taskelith/kernel';
 import type { HarnessPluginId } from './account-slot.js';
+import type { WaitingReason } from './capacity-reasons.js';
 import type { ProjectId, ProviderCredentialId } from './capacity-reservation.js';
 
 export const SLOT_REQUEST_KINDS = Object.freeze(['new-session', 'resumed-session', 'after-limit'] as const);
 export const NO_SLOT_POLICIES = Object.freeze(['wait', 'reject'] as const);
-export const SLOT_WAITING_REASON = 'provider-concurrency-exhausted';
+export const SLOT_WAITING_REASON = 'provider-concurrency-exhausted' satisfies WaitingReason;
 export const SLOT_REJECTING_REASONS = Object.freeze(['no-eligible-slot', 'session-slot-withdrawn'] as const);
 
 export type SlotRequestKind = (typeof SLOT_REQUEST_KINDS)[number];
@@ -19,7 +20,7 @@ export interface HarnessSlot {
 // Contract section 4.1; `alternatives` keeps the project's preference order.
 export type SlotRequest = { readonly projectId: ProjectId } & (
   | { readonly kind: 'new-session'; readonly harness: HarnessPluginId; readonly whenNoSlot: NoSlotPolicy }
-  | { readonly kind: 'resumed-session'; readonly session: HarnessSlot }
+  | { readonly kind: 'resumed-session'; readonly pinned: HarnessSlot }
   | { readonly kind: 'after-limit'; readonly limited: HarnessSlot; readonly alternatives: readonly HarnessPluginId[] }
 );
 

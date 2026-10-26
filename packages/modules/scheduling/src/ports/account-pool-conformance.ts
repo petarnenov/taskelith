@@ -54,6 +54,8 @@ const POOL_FIXTURES: readonly AccountSlot[] = Object.freeze([
   slot('slot-e-other-harness', { harness: OTHER_HARNESS }),
   slot('slot-f-revoked', { state: 'revoked' }),
   slot('slot-g-removed', { state: 'removed' }),
+  // Before `slot-a-plain` in code point order, after it in a locale order.
+  slot('slot-Z-upper'),
 ]);
 
 const ids = (slots: readonly AccountSlot[]) => slots.map((stored) => stored.id);
@@ -72,13 +74,13 @@ export const ACCOUNT_SLOTS_CONFORMANCE: readonly ConformanceCase<AccountSlots>[]
     },
   },
   {
-    name: 'a pool holds the active slots of its harness allowed for its project, by identifier',
+    name: 'a pool holds the active slots of its harness allowed for its project, in code point order',
     async check(slots: AccountSlots) {
       const problems: string[] = [];
       for (const stored of POOL_FIXTURES) expectSuccess(problems, `add ${stored.id}`, await slots.add(stored));
       const pool = await slots.pool(PROJECT, HARNESS);
-      expectSame(problems, 'pool', ids(pool), ['slot-a-plain', 'slot-b-cooling', 'slot-c-shared']);
-      expectSame(problems, 'records', pool, [POOL_FIXTURES[1], POOL_FIXTURES[2], POOL_FIXTURES[0]]);
+      expectSame(problems, 'pool', ids(pool), ['slot-Z-upper', 'slot-a-plain', 'slot-b-cooling', 'slot-c-shared']);
+      expectSame(problems, 'records', pool, [POOL_FIXTURES[7], POOL_FIXTURES[1], POOL_FIXTURES[2], POOL_FIXTURES[0]]);
       expectSame(problems, 'other project', ids(await slots.pool(OTHER_PROJECT, HARNESS)), ['slot-c-shared', 'slot-d-other-project']);
       expectSame(problems, 'other harness', ids(await slots.pool(PROJECT, OTHER_HARNESS)), ['slot-e-other-harness']);
       const none = id('ProjectId', 'project-none') as ProjectId;
@@ -98,6 +100,7 @@ export const ACCOUNT_SLOTS_CONFORMANCE: readonly ConformanceCase<AccountSlots>[]
       expectCode(problems, 'stale', await slots.replace(next(stored, { health: 'unhealthy' }), stored.revision), 'conflict');
       expectCode(problems, 'skipped revision', await slots.replace({ ...cooled, revision: cooled.revision + 2 }, cooled.revision), 'invalid');
       expectCode(problems, 'future expectation', await slots.replace({ ...cooled, revision: 6 }, 5), 'conflict');
+      expectCode(problems, 'skip at a stale revision', await slots.replace({ ...cooled, revision: 9 }, 5), 'invalid');
       expectCode(problems, 'unknown', await slots.replace(next(slot('slot-unknown'), {}), FIRST_SLOT_REVISION), 'not-found');
       expectRead(problems, 'unchanged', await slots.get(stored.id), cooled);
       return problems;
@@ -129,7 +132,7 @@ export const ACCOUNT_SLOTS_CONFORMANCE: readonly ConformanceCase<AccountSlots>[]
       expectSuccess(problems, 'remove', await slots.replace(removed, revoked.revision));
       expectCode(problems, 'leave removed', await slots.replace(next(removed, { state: 'active' }), removed.revision), 'invalid');
       expectRead(problems, 'tombstone', await slots.get(stored.id), removed);
-      expectSame(problems, 'not in a pool', await slots.pool(PROJECT, HARNESS), []);
+      expectSame(problems, 'not in a pool', ids(await slots.pool(PROJECT, HARNESS)), []);
       return problems;
     },
   },
@@ -143,10 +146,12 @@ function expectRevealed(problems: string[], label: string, result: Result<SlotSe
   else expectSame(problems, label, result.value.reveal(), text);
 }
 
-// The form util.inspect and console.log print, without importing them.
-function inspected(value: SlotSecret): string {
+const SECRET_TEXT = 'secret-material';
+
+// The custom form that util.inspect and console.log print, if any.
+function customInspection(value: SlotSecret): string | undefined {
   const custom: unknown = (value as unknown as Record<symbol, unknown>)[Symbol.for('nodejs.util.inspect.custom')];
-  return typeof custom === 'function' ? String(custom.call(value)) : 'no inspection form: secret-material';
+  return typeof custom === 'function' ? String(custom.call(value)) : undefined;
 }
 
 export const SLOT_CREDENTIALS_CONFORMANCE: readonly ConformanceCase<SlotCredentials>[] = Object.freeze([
@@ -155,14 +160,15 @@ export const SLOT_CREDENTIALS_CONFORMANCE: readonly ConformanceCase<SlotCredenti
     async check(credentials: SlotCredentials) {
       const problems: string[] = [];
       expectCode(problems, 'none yet', await credentials.reveal(CREDENTIAL_SLOT), 'not-found');
-      expectSuccess(problems, 'store', await credentials.store(CREDENTIAL_SLOT, secret('first-material')));
+      await credentials.store(CREDENTIAL_SLOT, secret('first-material'));
       expectRevealed(problems, 'stored', await credentials.reveal(CREDENTIAL_SLOT), 'first-material');
-      expectSuccess(problems, 'rotate', await credentials.store(CREDENTIAL_SLOT, secret('second-material')));
+      await credentials.store(CREDENTIAL_SLOT, secret('second-material'));
       expectRevealed(problems, 'rotated', await credentials.reveal(CREDENTIAL_SLOT), 'second-material');
       expectCode(problems, 'other slot', await credentials.reveal(UNKNOWN_SLOT), 'not-found');
-      expectSuccess(problems, 'destroy', await credentials.destroy(CREDENTIAL_SLOT));
+      await credentials.destroy(CREDENTIAL_SLOT);
       expectCode(problems, 'destroyed', await credentials.reveal(CREDENTIAL_SLOT), 'not-found');
-      expectSuccess(problems, 'destroy again', await credentials.destroy(CREDENTIAL_SLOT));
+      await credentials.destroy(CREDENTIAL_SLOT);
+      expectCode(problems, 'destroyed twice', await credentials.reveal(CREDENTIAL_SLOT), 'not-found');
       return problems;
     },
   },
@@ -170,11 +176,14 @@ export const SLOT_CREDENTIALS_CONFORMANCE: readonly ConformanceCase<SlotCredenti
     name: 'a revealed credential prints and serializes as redacted',
     async check(credentials: SlotCredentials) {
       const problems: string[] = [];
-      expectSuccess(problems, 'store', await credentials.store(CREDENTIAL_SLOT, secret('secret-material')));
+      await credentials.store(CREDENTIAL_SLOT, secret(SECRET_TEXT));
       const revealed = await credentials.reveal(CREDENTIAL_SLOT);
       if (!revealed.ok) return [...problems, `reveal: ${revealed.error.message}`];
-      const forms = [String(revealed.value), `${revealed.value}`, JSON.stringify({ revealed: revealed.value }), inspected(revealed.value)];
-      for (const form of forms) if (form.includes('secret-material')) problems.push(`form discloses the credential: ${form}`);
+      const forms = [String(revealed.value), `${revealed.value}`, JSON.stringify({ revealed: revealed.value })];
+      for (const form of forms) if (form.includes(SECRET_TEXT)) problems.push(`form discloses the credential: ${form}`);
+      const inspection = customInspection(revealed.value);
+      if (inspection === undefined) problems.push('no custom inspection form, so util.inspect may disclose it');
+      else if (inspection.includes(SECRET_TEXT)) problems.push(`inspection discloses the credential: ${inspection}`);
       return problems;
     },
   },

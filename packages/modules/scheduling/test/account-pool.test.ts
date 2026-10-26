@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { inspect } from 'node:util';
 import { err, failure, ok, parseIdentifier, parseInstant, type Result } from '@taskelith/kernel';
+import type { ConformanceCase } from '@taskelith/sdlc';
 import {
   ACCOUNT_SLOTS_CONFORMANCE,
   COOLDOWN_SOURCES,
@@ -137,7 +138,7 @@ class InMemoryAccountSlots implements AccountSlots {
   async pool(projectId: ProjectId, harness: HarnessPluginId): Promise<readonly AccountSlot[]> {
     return [...this.#slots.values()]
       .filter((slot) => slot.state === 'active' && slot.harness === harness && slot.allowedProjects.includes(projectId))
-      .sort((left, right) => left.id.localeCompare(right.id));
+      .sort((left, right) => (left.id < right.id ? -1 : 1));
   }
 
   async replace(slot: AccountSlot, expectedRevision: number): Promise<Result<void>> {
@@ -156,9 +157,8 @@ class InMemoryAccountSlots implements AccountSlots {
 class InMemorySlotCredentials implements SlotCredentials {
   readonly #secrets = new Map<ProviderCredentialId, SlotSecret>();
 
-  async store(slotId: ProviderCredentialId, secret: SlotSecret): Promise<Result<void>> {
+  async store(slotId: ProviderCredentialId, secret: SlotSecret): Promise<void> {
     this.#secrets.set(slotId, secret);
-    return ok(undefined);
   }
 
   async reveal(slotId: ProviderCredentialId): Promise<Result<SlotSecret>> {
@@ -166,9 +166,8 @@ class InMemorySlotCredentials implements SlotCredentials {
     return secret === undefined ? err(failure('not-found', 'no credential for the slot')) : ok(secret);
   }
 
-  async destroy(slotId: ProviderCredentialId): Promise<Result<void>> {
+  async destroy(slotId: ProviderCredentialId): Promise<void> {
     this.#secrets.delete(slotId);
-    return ok(undefined);
   }
 }
 
@@ -200,12 +199,22 @@ class LeakingSlotCredentials extends InMemorySlotCredentials {
   }
 }
 
+async function failingCases<Port>(cases: readonly ConformanceCase<Port>[], port: () => Port): Promise<string[]> {
+  const failing: string[] = [];
+  for (const conformance of cases) if ((await conformance.check(port())).length > 0) failing.push(conformance.name);
+  return failing;
+}
+
 test('the account slots suite rejects an adapter without compare-and-set', async () => {
-  const problems = await Promise.all(ACCOUNT_SLOTS_CONFORMANCE.map((conformance) => conformance.check(new LenientAccountSlots())));
-  assert.ok(problems.flat().length > 0);
+  assert.deepEqual(await failingCases(ACCOUNT_SLOTS_CONFORMANCE, () => new LenientAccountSlots()), [
+    'replace is a compare-and-set that moves the revision by one',
+    'of concurrent replaces at one revision exactly one wins',
+    'a slot keeps its harness, and a removed slot stays removed',
+  ]);
 });
 
 test('the slot credentials suite rejects an adapter that discloses a credential', async () => {
-  const problems = await Promise.all(SLOT_CREDENTIALS_CONFORMANCE.map((conformance) => conformance.check(new LeakingSlotCredentials())));
-  assert.ok(problems.flat().some((problem) => problem.includes('discloses')));
+  assert.deepEqual(await failingCases(SLOT_CREDENTIALS_CONFORMANCE, () => new LeakingSlotCredentials()), [
+    'a revealed credential prints and serializes as redacted',
+  ]);
 });

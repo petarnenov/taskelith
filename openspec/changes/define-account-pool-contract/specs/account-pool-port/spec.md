@@ -30,7 +30,7 @@ A slot SHALL be eligible when it is not removed, not revoked, allowed for the pr
 - **THEN** its ineligibility reason is `revoked`
 
 ### Requirement: Selection request kinds
-A selection SHALL be a `new-session`, `resumed-session`, or `after-limit` request; a resumed session SHALL consider only its own slot, and an `after-limit` request SHALL try the other allowed harnesses in the project's order before the limited slot, never another slot of the limited harness.
+A selection SHALL be a `new-session`, `resumed-session`, or `after-limit` request; a resumed session SHALL consider only its own slot, and an `after-limit` request SHALL try the other allowed harnesses in the project's order before the limited slot, never another slot of the limited harness; an `after-limit` request whose alternatives include the limited harness or name a harness twice SHALL be `invalid`.
 
 #### Scenario: Resumed session on a revoked slot
 - **WHEN** a resumed session's slot is revoked
@@ -39,6 +39,10 @@ A selection SHALL be a `new-session`, `resumed-session`, or `after-limit` reques
 #### Scenario: Limit without another eligible harness
 - **WHEN** an `after-limit` request finds no eligible slot on another harness and the limited slot is still cooling down
 - **THEN** the selection waits with `provider-concurrency-exhausted`, and no other slot of the limited harness is chosen
+
+#### Scenario: Limited harness among the alternatives
+- **WHEN** an `after-limit` request lists the limited harness among its alternatives
+- **THEN** the request is rejected as `invalid` and no slot is reserved
 
 #### Scenario: Resumed session on a slot that no longer allows its project
 - **WHEN** a resumed session's slot no longer lists the session's project
@@ -66,14 +70,18 @@ Revoking a slot SHALL take it out of every pool and stop revealing its credentia
 - **THEN** it rejoins its pools with its stored credential, health, cooldown, and usage
 
 ### Requirement: Slot store compare-and-set
-`AccountSlots` SHALL store a new slot only at revision 1, SHALL replace a slot only at its expected revision with the next revision, failing with `conflict` for another stored revision and `invalid` for another new revision, and SHALL return a project's pool for a harness as its active allowed slots ordered by identifier.
+`AccountSlots` SHALL store a new slot only at revision 1, SHALL replace a slot only at its expected revision with the next revision, failing with `conflict` for another stored revision and `invalid` for another new revision, and SHALL return a project's pool for a harness as its active allowed slots in the code point order of their identifiers.
 
 #### Scenario: Concurrent replaces
 - **WHEN** two replaces of one slot run at the same expected revision
 - **THEN** exactly one succeeds and the other fails with `conflict`
 
 ### Requirement: Redacted slot credentials
-`SlotCredentials` SHALL store each slot credential encrypted at rest and reveal it only for delivery to the run that reserved the slot, destroying a missing credential SHALL succeed, and a `SlotSecret` SHALL disclose its text only through `reveal()`.
+`SlotCredentials` SHALL store each slot credential encrypted at rest and reveal it only for delivery to the run that reserved the slot, after checking that its reservation is held, names the slot, and belongs to the launched attempt, and that the slot is active; destroying a missing credential SHALL succeed, and a `SlotSecret` SHALL disclose its text only through `reveal()`.
+
+#### Scenario: Credential for another attempt
+- **WHEN** a worker launches an attempt whose reservation does not name the slot
+- **THEN** no credential of the slot is revealed or sent
 
 #### Scenario: Logged credential
 - **WHEN** a revealed credential is converted to a string, serialized as JSON, or inspected
