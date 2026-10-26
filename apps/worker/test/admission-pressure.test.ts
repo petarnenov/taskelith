@@ -4,9 +4,9 @@ import type { AdmissionPressureCause, OutboxBacklog, WorkerJournal } from '@task
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { failed, value } from '@taskelith/testing';
-import { ADMISSION_LIMITS, AdmissionPressure, pressureCauses } from '@taskelith/worker';
+import { ADMISSION_LIMITS, AdmissionPressure, pressureCauses, type PressureReadings } from '@taskelith/worker';
 import type { VolumeSpace } from '@taskelith/worker-journal';
-import { T0, temporaryJournal } from './launch-fakes.ts';
+import { FakeDaemon, T0, temporaryJournal } from './launch-fakes.ts';
 
 const GIBIBYTE = 2 ** 30;
 const MEBIBYTE = 2 ** 20;
@@ -17,6 +17,7 @@ const UNREADABLE = err(failure('unavailable', 'statfs failed'));
 let journal: WorkerJournal;
 let remove: () => void;
 let space: Result<VolumeSpace>;
+let daemon: FakeDaemon;
 let truncations: Result<number>[];
 let sink: InMemoryLogSink;
 let pressure: AdmissionPressure;
@@ -26,17 +27,24 @@ beforeEach(() => {
   remove = temporary.remove;
   journal = temporary.root.journal;
   space = AMPLE;
+  daemon = new FakeDaemon();
   truncations = [];
   sink = new InMemoryLogSink();
   pressure = new AdmissionPressure({
-    journal, space: () => space, truncateLogs: () => truncations.shift() ?? ok(0), logger: new Logger(sink, { now: () => T0 }),
+    journal, space: () => space, daemon, truncateLogs: () => truncations.shift() ?? ok(0), logger: new Logger(sink, { now: () => T0 }),
   });
 });
 
 afterEach(() => remove());
 
 function causes(spaceRead: Result<VolumeSpace>, backlog: Result<OutboxBacklog> = EMPTY_OUTBOX): AdmissionPressureCause[] {
-  return pressureCauses(spaceRead, backlog, ADMISSION_LIMITS);
+  return overheadCauses({ space: spaceRead, backlog });
+}
+
+const QUIET: PressureReadings = { space: AMPLE, backlog: EMPTY_OUTBOX, residentBytes: ok(0), eventLoopLagMilliseconds: ok(0) };
+
+function overheadCauses(readings: Partial<PressureReadings>): AdmissionPressureCause[] {
+  return pressureCauses({ ...QUIET, ...readings }, ADMISSION_LIMITS);
 }
 
 function reported(): unknown[] {
@@ -61,6 +69,35 @@ test('a limit that cannot be measured counts as exceeded, and causes keep the co
   assert.deepEqual(causes(UNREADABLE, UNREADABLE), ['unmeasurable-limit']);
   const full = ok({ availableBytes: 0, totalBytes: 100 * GIBIBYTE });
   assert.deepEqual(causes(full, ok({ entries: 10_001, bytes: 0 })), ['disk-floor', 'journal-backlog']);
+  const everything = { space: full, backlog: ok({ entries: 10_001, bytes: 0 }), residentBytes: ok(2 ** 40), eventLoopLagMilliseconds: UNREADABLE };
+  assert.deepEqual(overheadCauses(everything), ['disk-floor', 'journal-backlog', 'daemon-memory', 'unmeasurable-limit']);
+});
+
+test('the daemon overhead is at most 512 MiB resident and a 200 ms event-loop lag p99', () => {
+  assert.deepEqual(overheadCauses({ residentBytes: ok(512 * MEBIBYTE) }), []);
+  assert.deepEqual(overheadCauses({ residentBytes: ok(512 * MEBIBYTE + 1) }), ['daemon-memory']);
+  assert.deepEqual(overheadCauses({ eventLoopLagMilliseconds: ok(200) }), []);
+  assert.deepEqual(overheadCauses({ eventLoopLagMilliseconds: ok(200.5) }), ['event-loop-lag']);
+  assert.deepEqual(overheadCauses({ residentBytes: ok(2 ** 40), eventLoopLagMilliseconds: ok(1_000) }), ['daemon-memory', 'event-loop-lag']);
+});
+
+test('a daemon overhead that cannot be measured counts as exceeded', () => {
+  assert.deepEqual(overheadCauses({ residentBytes: UNREADABLE }), ['unmeasurable-limit']);
+  assert.deepEqual(overheadCauses({ eventLoopLagMilliseconds: UNREADABLE }), ['unmeasurable-limit']);
+});
+
+test('a refresh reads the daemon sensor and reports its causes until they subside', () => {
+  assert.deepEqual(value(pressure.refresh()), []);
+  daemon.resident = ok(600 * MEBIBYTE);
+  daemon.lag = ok(250);
+  assert.deepEqual(value(pressure.refresh()), ['daemon-memory', 'event-loop-lag']);
+  daemon.lag = err(failure('unavailable', 'no histogram'));
+  assert.deepEqual(value(pressure.refresh()), ['daemon-memory', 'unmeasurable-limit']);
+  daemon.resident = ok(100 * MEBIBYTE);
+  daemon.lag = ok(20);
+  assert.deepEqual(value(pressure.refresh()), []);
+  assert.deepEqual(reported(), [[], ['daemon-memory', 'event-loop-lag'], ['daemon-memory', 'unmeasurable-limit'], []]);
+  assert.deepEqual(truncations, [], 'only the disk floor sheds logs');
 });
 
 test('the first refresh reports the causes, and a later one only when they change', () => {
@@ -91,7 +128,7 @@ test('a change that fails to commit is reported again by the next refresh', () =
     attempts += 1;
     return attempts === 1 ? err(failure('unavailable', 'the journal is stopped')) : journal.recordAdmissionPressure(causes);
   });
-  const retried = new AdmissionPressure({ journal: failingOnce, space: () => space, truncateLogs: () => ok(0) });
+  const retried = new AdmissionPressure({ journal: failingOnce, space: () => space, daemon, truncateLogs: () => ok(0) });
   assert.equal(failed(retried.refresh()).message, 'the journal is stopped');
   assert.deepEqual(reported(), []);
   assert.deepEqual(value(retried.refresh()), []);
@@ -108,7 +145,7 @@ test('the watch refreshes until aborted and logs a refresh that failed', async (
     if (refreshes >= 3) controller.abort();
     return err(failure('unavailable', 'the journal is stopped'));
   });
-  const watched = new AdmissionPressure({ journal: failing, space: () => space, truncateLogs: () => ok(0), logger: new Logger(sink, { now: () => T0 }) });
+  const watched = new AdmissionPressure({ journal: failing, space: () => space, daemon, truncateLogs: () => ok(0), logger: new Logger(sink, { now: () => T0 }) });
   await watched.watch(controller.signal, 1);
   assert.equal(refreshes, 3);
   assert.equal(sink.records.filter((record) => record.event === 'worker.admission-pressure.unreported').length, 3);
