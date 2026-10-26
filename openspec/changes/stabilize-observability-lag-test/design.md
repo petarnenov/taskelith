@@ -17,7 +17,7 @@ Make the age assertions deterministic and exact without changing the adapter, we
 - **Pin the database clock, not the bound.** PostgreSQL resolves an unqualified function through `search_path`, and searches `pg_catalog` in the stated position when the path names it. A role whose path is `pinned_clock, pg_catalog, "$user", public` reads `pinned_clock.now()`, an immutable function returning `AT`. The adapter's SQL is unchanged and still says `now()`, so the test proves that the ages use the database's `now()`: an age taken from the host clock or `clock_timestamp()` would not read the exact values.
 - **Stamp relative to the same instant.** The rows are stamped `AT` less 30, 90, and 60 seconds with a bound parameter, so the expected ages follow from the data alone.
 - **Equality, not tolerance.** A lowered bound would encode a guess about the size of clock steps; with a pinned clock there is nothing to tolerate.
-- **A second database only for the age tests.** The conformance, read-only, latency, and connection tests keep reading on the real server clock. The future-stamp test stays as it is: a row an hour ahead reads zero whether or not the clock steps by milliseconds.
+- **A second pool with pinned-clock credentials in the same test database, only for the age tests.** The conformance, read-only, latency, and connection tests keep reading on the real server clock. The future-stamp test stays as it is: a row an hour ahead reads zero whether or not the clock steps by milliseconds.
 
 ## Risks / Trade-offs
 

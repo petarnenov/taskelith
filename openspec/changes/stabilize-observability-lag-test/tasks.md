@@ -12,4 +12,4 @@
 
 - [x] 3.1 Run the test file repeatedly.
 - [x] 3.2 Run `npm run openspec -- validate stabilize-observability-lag-test --strict` and `make verify`.
-- [ ] 3.3 Independent review and record it in `verification.md`.
+- [x] 3.3 Independent review and record it in `verification.md`.

@@ -22,15 +22,29 @@ Reproduction (scratch file, not committed): a role whose `search_path` puts a sc
 
 ## Checks
 
-- Failing before: the reproduction above, run as `node --experimental-strip-types --test <scratch test>` against `make services-up`, printed `lag 29.998023` and the assertion failure.
+- Failing before, reproducible from this record. Against `make services-up` (its exported `TASKELITH_POSTGRES_URL` and `TASKELITH_POSTGRES_PROXY_URL`), a temporary test file in `packages/adapters/postgres/test/`, deleted afterwards, did the following:
+  - Setup with the file's helpers: `url = await createMigratedDatabase()`, `role = await sentinelCredentials(url)`, then as the administrator on `url`:
+    - `CREATE SCHEMA clock`
+    - `CREATE TABLE clock.reading (at timestamptz NOT NULL)`
+    - `INSERT INTO clock.reading VALUES ('2026-10-25T09:00:00.000000Z')`
+    - `CREATE FUNCTION clock.now() RETURNS timestamptz LANGUAGE sql STABLE AS $$ SELECT at FROM clock.reading $$`
+    - `GRANT USAGE ON SCHEMA clock TO <role>`, `GRANT SELECT ON clock.reading TO <role>`
+    - `ALTER ROLE <role> SET search_path = clock, pg_catalog, "$user", public`
+  - The test opened `database = new PostgresDatabase(role)`, appended `command('offer-1')` in `database.transaction`, stamped it through the role with `UPDATE outbox SET appended_at = now() - interval '30 seconds'`, stepped the clock back as the administrator with `UPDATE clock.reading SET at = at - interval '1977 microseconds'`, read `new PostgresControlPlaneSignals(database).read()`, and asserted the old `outboxLagSeconds >= 30`.
+  - Command: `node --experimental-strip-types --test packages/adapters/postgres/test/zz-repro-clock-step.integration.test.ts`. Output: `lag 29.998023` and `AssertionError [ERR_ASSERTION]: 29.998023`.
 - Passing after: `node --experimental-strip-types --test packages/adapters/postgres/test/observability.integration.test.ts`: 8 of 8 tests passed, and 0 failures in 30 consecutive runs.
 - `npm run verify:comments`: every comment is within the rule.
 - `npm run openspec -- validate stabilize-observability-lag-test --strict`: valid.
-- `make verify` passed: 1,929 tests, 1,927 passed, 0 failed, 2 skipped; coverage 99.28 % lines, 92.07 % branches, 99.04 % functions; strict OpenSpec validation 70 passed, 0 failed; archive dry run and package verification passed.
+- `make verify` passed on `b96d8d0`: 1,929 tests, 1,927 passed, 0 failed, 2 skipped; coverage 99.28 % lines, 92.07 % branches, 99.04 % functions; strict OpenSpec validation 70 passed, 0 failed; archive dry run and package verification passed.
+- After the pass-1 fixes, `make verify` passed again: 1,929 tests, 1,927 passed, 0 failed, 2 skipped; coverage 99.28 % lines, 92.08 % branches, 99.04 % functions; strict OpenSpec validation 70 passed, 0 failed; archive dry run and package verification passed.
 
 ## Independent review
 
-Pending.
+- **Failed attempt, not a pass.** Claude Code (claude-opus-5-5, effort high), 2026-10-27 about 00:21-00:25 local, on `b96d8d0`, ended with `Error: No messages returned from query` and empty JSON output; no session was created and the snapshot was unchanged. As the process allows for an unavailable reviewer, the coordinator assigned Codex CLI (gpt-6.1-sol) as the replacement.
+- **Pass 1 — Codex CLI, model `gpt-6.1-sol`, reasoning effort medium, read-only sandbox, session `01a17a52-073b-71c1-89a0-9d74b6b43624`, revision `b96d8d0` (diff `370fa59..b96d8d0`).** Invocation: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`. The header confirmed the model, reasoning effort, and read-only sandbox; the snapshot was `20c53e126efba433ec71e9c4e3c32ce8cc853dec15db36821cfaf5291fae1838` before and after the pass. The reviewer confirmed the diagnosis, the isolation of the pinned-clock role and schema, the shadowing through the explicit `pg_catalog` position, the absence of an injection issue, and `skip_specs`. Findings: 0 Critical, 0 High, 0 Medium, 3 Low. Because the pass found only Low findings, they were resolved without another review pass, as the review process allows; these fixes are unreviewed:
+  1. Low (`design.md`): "A second database" was inaccurate. Accepted: it now reads "A second pool with pinned-clock credentials in the same test database".
+  2. Low (`verification.md`): the failing-before evidence cited a scratch test that the record did not reproduce. Accepted: the checks now give the setup SQL, the stamping, the 1977 µs step back, the read, the command, and its output.
+  3. Low (`verification.md`): list the archive and the step 7 checks as remaining gates. Declined: `docs/agent-task-protocol.md` worker step 6 says that before step 7 the remaining gates name only `Integration into dev by the coordinator (single pull request)`, and step 7 adds its own checks to the moved record.
 
 ## Limitations
 
@@ -39,5 +53,4 @@ Pending.
 
 ## Remaining gates
 
-- Independent review (pending).
 - Integration into dev by the coordinator (single pull request).
