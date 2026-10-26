@@ -466,3 +466,74 @@ test('a stop ends the retries of a fact refused for lack of space, which stays i
   assert.deepEqual(factKinds(), ['execution-started']);
   assert.deepEqual([failures, spaceBackoffs().length], [[], 3]);
 });
+
+for (const refusals of [1, 3]) {
+  test(`a pending W2 sealed on start commits not-started after ${refusals} refusal(s) for space`, async () => {
+    inherit('pending');
+    launchNothingNew();
+    spaceRefusals = new Map([['recordNotStarted', refusals]]);
+    await startOnce();
+    assert.equal(inherited()?.state, 'not-started');
+    assert.deepEqual(factKinds(), ['execution-not-started']);
+    assert.deepEqual([failures, spaceBackoffs()], [[], [7_500, 15_000, 30_000].slice(0, refusals)]);
+  });
+
+  test(`an unused grant lost to a claim commits W4 and uncertain after ${refusals} refusal(s) for space`, async () => {
+    inherit('granted');
+    launchNothingNew();
+    spaceRefusals = new Map([['recordExecutionRecordWritten', refusals], ['recordUncertain', refusals]]);
+    supervisions.onCreated = (supervision) => {
+      supervision.launch = claimedBy(1);
+    };
+    await startOnce();
+    assert.deepEqual([inherited()?.recordWritten, inherited()?.uncertain], [true, true]);
+    assert.deepEqual([failures, spaceBackoffs().length], [[], 2 * refusals]);
+  });
+
+  test(`a recovered uncertain is committed after ${refusals} refusal(s) for space`, async () => {
+    inherit('written');
+    launchNothingNew();
+    spaceRefusals = new Map([['recordUncertain', refusals]]);
+    supervisions.onCreated = (supervision) => {
+      supervision.recovery = { fact: 'uncertain', reason: 'the record is damaged' };
+    };
+    await startOnce();
+    assert.equal(inherited()?.uncertain, true);
+    assert.deepEqual(factKinds(), ['execution-uncertain']);
+    assert.deepEqual([failures, spaceBackoffs().length], [[], refusals]);
+  });
+}
+
+// A launch of this process whose supervisor cannot be prepared, so it
+// seals its own execution; the next launch stops at its request.
+function launchThatSeals(seal?: ReturnType<typeof claimedBy>): void {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  authority.onRequest = () => {
+    if (authority.requests.length >= 2) controller.abort();
+  };
+  supervisions.onCreated = (supervision) => {
+    supervision.prepareResult = err(failure('unavailable', 'no record directory'));
+    if (seal !== undefined) supervision.launch = seal;
+  };
+}
+
+test('a live launch commits not-started after its own seal despite refusals for space', async () => {
+  launchThatSeals();
+  spaceRefusals = new Map([['recordNotStarted', 2]]);
+  await startOnce();
+  const [first] = value(journal.snapshot()).executions;
+  assert.equal(first?.state, 'not-started');
+  assert.equal(authority.requests.length, 2, 'the launch went on with a new execution');
+  assert.deepEqual([failures, spaceBackoffs()], [[], [7_500, 15_000]]);
+});
+
+test('a live launch whose seal lost to a claim commits W4 and uncertain despite refusals for space', async () => {
+  launchThatSeals({ kind: 'claim', launchAuthId: id('LaunchAuthId', 'grant-id-2'), supervisor: 1 });
+  spaceRefusals = new Map([['recordExecutionRecordWritten', 1], ['recordUncertain', 2]]);
+  await startOnce();
+  const [first] = value(journal.snapshot()).executions;
+  assert.deepEqual([first?.recordWritten, first?.uncertain], [true, true]);
+  assert.equal(authority.requests.length, 1, 'an uncertain execution ends the launch');
+  assert.deepEqual([failures, spaceBackoffs().length], [[], 3]);
+});
