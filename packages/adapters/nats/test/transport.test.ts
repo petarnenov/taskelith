@@ -23,6 +23,7 @@ import {
   readObservationSubjectMessage,
   redriveMessageId,
   retryDelayMilliseconds,
+  runPublicationLoop,
   streamConfigs,
   TRANSPORT_LIMITS,
   TransportAddress,
@@ -92,6 +93,20 @@ test('retry delays double from the initial delay to the maximum, each up to a qu
   assert.equal(retryDelayMilliseconds(9, TRANSPORT_LIMITS, noJitter), 60_000);
   assert.equal(retryDelayMilliseconds(9, TRANSPORT_LIMITS, () => 1), 45_000);
   assert.equal(retryDelayMilliseconds(1, TRANSPORT_LIMITS, () => 1), 3750);
+});
+
+test('a stop during an idle publication round ends the loop without the pause', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const stop = new AbortController();
+  let rounds = 0;
+  const loop = runPublicationLoop(async () => {
+    rounds += 1;
+    stop.abort();
+    return ok(0);
+  }, stop.signal);
+  const nextTurn = new Promise<string>((resolve) => setImmediate(() => resolve('paused')));
+  assert.equal(await Promise.race([loop.then(() => 'ended'), nextTurn]), 'ended');
+  assert.equal(rounds, 1);
 });
 
 test('a redrive counts from the first message identity', () => {
