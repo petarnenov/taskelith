@@ -311,3 +311,37 @@ test('a refused effect is recorded again without it and logged; an outage is ret
   assert.equal(failed(await service.apply(message('execution.started', 2, {}))).code, 'unavailable', 'contact failed');
   assert.equal(store.opened, 4);
 });
+
+// The first transaction refuses as a rolled-back store would; the others run.
+function refusingOnce(store: ControlPlaneStore, refusal: Result<never>): ControlPlaneStore {
+  let refused = false;
+  return {
+    ...store,
+    transaction: (work) => {
+      if (refused) return store.transaction(work);
+      refused = true;
+      return Promise.resolve(refusal);
+    },
+  };
+}
+
+const REFUSED_EVIDENCE = [
+  ['execution.launch.rejected', 'stale-ownership-generation', true],
+  ['execution.exited', 'stale-ownership-generation', true],
+  ['execution.assignment.accepted', 'stale-ownership-generation', false],
+  ['execution.launch.rejected', undefined, false],
+] as const;
+
+for (const [type, reason, clears] of REFUSED_EVIDENCE) {
+  test(`a rejected ${type} for ${reason ?? 'another reason'} ${clears ? 'clears' : 'keeps'} the capacity refusal`, async () => {
+    const { store, transaction, service } = await fixture();
+    value(await service.apply(message('worker.capacity.declared', 1, DECLARATION)));
+    value(await transaction.reports.markCapacityRefused(WORKER, 2 as never, AT));
+    assert.deepEqual(await transaction.workers.candidates(), []);
+    const refusal = err(failure('conflict', 'refused', reason === undefined ? {} : { reason }));
+    const refusing = new ObservationService(refusingOnce(store, refusal), { newConfirmationId: () => 'confirmation-r', newRequestId: () => 'request-r' });
+    const observed = message(type, 3, {}, { attemptId: 'attempt-a', ownershipGeneration: 2 });
+    assert.equal(value(await refusing.apply(observed)), 'rejected');
+    assert.deepEqual(await transaction.workers.candidates(), clears ? [WORKER] : []);
+  });
+}

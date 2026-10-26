@@ -1009,6 +1009,67 @@ describe('launch rejections', () => {
   });
 });
 
+describe('capacity refusal after a slot-freeing observation', () => {
+  // B5: the worker refuses the next generation's offer for slots before the
+  // earlier generation's launch is rejected, which frees the slot.
+  async function refusedAtNextGeneration(refusalSequence = 4): Promise<Placed> {
+    await enroll();
+    value(await declare(1));
+    const first = await placed();
+    value(await accept(2, first));
+    value(await refuse(3, first, 'resource-ceiling-exceeded'));
+    const second = await placeAgain(first.taskId);
+    assert.equal(second.generation, first.generation + 1);
+    value(await refuse(refusalSequence, second, 'worker-slots-exhausted'));
+    assert.ok((await worker()).capacity_refused_since instanceof Date);
+    return first;
+  }
+
+  test('a stale launch rejection clears the refusal and changes nothing else', async () => {
+    const first = await refusedAtNextGeneration();
+    const before = await stored(first.taskId);
+    assert.equal(value(await launchRejected(5, first, 'assignment-not-active')), 'rejected');
+    assert.equal((await worker()).capacity_refused_since, null);
+    assert.deepEqual(await stored(first.taskId), before);
+    assert.deepEqual(await confirmations(), [1, 2, 3, 4, 5]);
+    assert.deepEqual(rejectionLogs(), []);
+    assert.equal(value(await placement.placeWaiting()).placed, 1);
+  });
+
+  test('a stale launch rejection older than the refusal keeps it', async () => {
+    const first = await refusedAtNextGeneration(5);
+    assert.equal(value(await launchRejected(4, first, 'assignment-not-active')), 'rejected');
+    assert.ok((await worker()).capacity_refused_since instanceof Date);
+  });
+
+  test('a stale not-started clears the refusal too', async () => {
+    const first = await refusedAtNextGeneration();
+    const sent = { sequence: 5, attemptId: first.attemptId, ownershipGeneration: first.generation };
+    const notStarted = await observe('execution.not-started', sent, { executionId: 'execution-x', recoveryEpoch: 1 });
+    assert.equal(value(notStarted), 'rejected');
+    assert.equal((await worker()).capacity_refused_since, null);
+  });
+
+  test('a stale acceptance keeps the refusal', async () => {
+    const first = await refusedAtNextGeneration();
+    assert.equal(value(await accept(5, first)), 'rejected');
+    assert.ok((await worker()).capacity_refused_since instanceof Date);
+  });
+
+  test('a launch rejection at the current generation clears the refusal', async () => {
+    await enroll();
+    value(await declare(1));
+    const first = await placed('task-1');
+    value(await accept(2, first));
+    const second = await placed('task-2');
+    value(await refuse(3, second, 'worker-slots-exhausted'));
+    assert.ok((await worker()).capacity_refused_since instanceof Date);
+    assert.equal(value(await launchRejected(4, first, 'assignment-not-active')), 'applied');
+    assert.equal((await worker()).capacity_refused_since, null);
+    assert.deepEqual(rejectionLogs(), [['assignment-not-active', first.assignment.id]]);
+  });
+});
+
 async function queue() {
   return value(await database.transaction(async (tx) => ok({
     worker: await tx.reconciliation.unknownExecutionsOfWorker(WORKER as WorkerId),
