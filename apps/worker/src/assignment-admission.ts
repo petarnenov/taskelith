@@ -1,10 +1,12 @@
 import type { AssignmentRefusalReason, AttemptId, JournalSnapshot, ResourceRequest } from '@taskelith/execution';
+
+type CapacityRefusalReason = Exclude<AssignmentRefusalReason, 'worker-admission-pressure'>;
 import type { WorkerCapacity } from '@taskelith/fleet';
 import { MAX_ATTEMPT_CPU_MILLICORES, MAX_ATTEMPT_MEMORY_MEBIBYTES } from '@taskelith/scheduling';
 
 // The worker-side limits of capacity reservation section 8 for a new offer;
 // undefined admits it.
-export function refusalOf(requested: ResourceRequest, journal: JournalSnapshot, capacity: WorkerCapacity): AssignmentRefusalReason | undefined {
+export function refusalOf(requested: ResourceRequest, journal: JournalSnapshot, capacity: WorkerCapacity): CapacityRefusalReason | undefined {
   if (requested.cpuMillicores > MAX_ATTEMPT_CPU_MILLICORES || requested.memoryMebibytes > MAX_ATTEMPT_MEMORY_MEBIBYTES) {
     return 'resource-ceiling-exceeded';
   }

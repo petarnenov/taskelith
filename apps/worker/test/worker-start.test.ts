@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
@@ -27,11 +27,20 @@ import {
 } from '@taskelith/worker';
 import { ManualTimers, StatusStream } from './contact-fakes.ts';
 import { FakeAuthority, FakeClock, FakeSupervisions, grantFor, offer, requestOf } from './launch-fakes.ts';
-import { failureReason, hostBootId, recordJournalFault, workerPaths, type VolumeProbe } from '@taskelith/worker-journal';
+import {
+  failureReason,
+  hostBootId,
+  recordJournalFault,
+  workerPaths,
+  type VolumeProbe,
+  type VolumeSpace,
+} from '@taskelith/worker-journal';
 
 const T0 = value(parseInstant('2026-10-25T09:00:00.000Z'));
 const AN_HOUR_LATER = value(parseInstant('2026-10-25T10:00:00.000Z'));
 const TEST_VOLUME: VolumeProbe = () => ({ ok: true, value: { platform: 'darwin', filesystem: 'apfs', local: true } });
+const GIBIBYTE = 2 ** 30;
+const AMPLE_SPACE: VolumeSpace = { availableBytes: 50 * GIBIBYTE, totalBytes: 100 * GIBIBYTE };
 const TOKEN = `tken_${'T'.repeat(43)}`;
 const ENROLLMENT: Enrollment = {
   installationId: 'a'.repeat(32), workerId: id('WorkerId', `w${'b'.repeat(32)}`), credentialGeneration: 1, recoveryEpoch: 1 as Enrollment['recoveryEpoch'],
@@ -104,6 +113,7 @@ let settings: WorkerSettings;
 let enrollment: FakeEnrollment;
 let broker: FakeBroker;
 let timers: ManualTimers;
+let space: VolumeSpace;
 const running: RunningWorker[] = [];
 
 beforeEach(() => {
@@ -117,6 +127,7 @@ beforeEach(() => {
   enrollment = new FakeEnrollment();
   broker = new FakeBroker();
   timers = new ManualTimers();
+  space = AMPLE_SPACE;
 });
 
 afterEach(async () => {
@@ -127,7 +138,8 @@ afterEach(async () => {
 function dependencies(launching?: LaunchingDependencies): WorkerDependencies {
   return {
     enrollment, connect: broker.connect, newJournalId: () => 'c'.repeat(32), clock: { now: () => T0 },
-    sleep: timers.sleep, draw: () => 0, probe: TEST_VOLUME, ...(launching === undefined ? {} : { launching }),
+    sleep: timers.sleep, draw: () => 0, probe: TEST_VOLUME, space: () => ok(space), pressurePollMilliseconds: 10,
+    ...(launching === undefined ? {} : { launching }),
   };
 }
 
@@ -186,12 +198,51 @@ test('the worker declares its capacity once per change and publishes it on its o
   });
   await first.stop();
   // Past the republication bound, every unconfirmed entry is due again.
-  const outbox = (worker: RunningWorker) => value(worker.root.journal.dueForPublication(AN_HOUR_LATER)).map((entry) => entry.fact.kind);
+  const outbox = (worker: RunningWorker) => value(worker.root.journal.dueForPublication(AN_HOUR_LATER))
+    .map((entry) => entry.fact.kind).filter((kind) => kind === 'capacity-declared');
   const second = await start();
   assert.deepEqual(outbox(second), ['capacity-declared']);
   await second.stop();
   const third = await start({ ...settings, capacity: { ...settings.capacity, slots: 3 } });
   assert.deepEqual(outbox(third), ['capacity-declared', 'capacity-declared']);
+});
+
+function pressureFacts(worker: RunningWorker): unknown[] {
+  return value(worker.root.journal.dueForPublication(AN_HOUR_LATER))
+    .flatMap(({ fact }) => (fact.kind === 'admission-pressure-changed' ? [fact.causes] : []));
+}
+
+test('each start reports its admission pressure once, and a clear one too', async () => {
+  const first = await start();
+  await until(() => broker.ofType('worker.admission-pressure.changed').length === 1);
+  const [reported] = broker.ofType('worker.admission-pressure.changed');
+  assert.equal(checkMessageSchema('AdmissionPressureChangedObservation', reported).ok, true);
+  assert.deepEqual(reported?.payload, { causes: [] });
+  assert.deepEqual(pressureFacts(first), [[]]);
+  await first.stop();
+  assert.deepEqual(pressureFacts(await start()), [[], []]);
+});
+
+test('below the disk floor the worker reports pressure and truncates only its buffered logs', async () => {
+  const paths = workerPaths(settings.dataRoot);
+  await (await start()).stop();
+  mkdirSync(join(paths.logs, 'stream'), { recursive: true });
+  writeFileSync(join(paths.logs, 'stream', 'attempt-1.log'), 'buffered output');
+  space = { availableBytes: 4 * GIBIBYTE, totalBytes: 100 * GIBIBYTE };
+  const worker = await start();
+  assert.deepEqual(pressureFacts(worker).at(-1), ['disk-floor']);
+  assert.equal(readFileSync(join(paths.logs, 'stream', 'attempt-1.log'), 'utf8'), '');
+  assert.equal(existsSync(paths.journal), true);
+});
+
+test('the pressure watch reports a change while nothing else asks', async () => {
+  const worker = await start();
+  space = { availableBytes: 0, totalBytes: 100 * GIBIBYTE };
+  for (let wait = 0; pressureFacts(worker).length < 2 && wait < 100; wait += 1) await delay(10);
+  assert.deepEqual(pressureFacts(worker), [[], ['disk-floor']]);
+  space = AMPLE_SPACE;
+  for (let wait = 0; pressureFacts(worker).length < 3 && wait < 100; wait += 1) await delay(10);
+  assert.deepEqual(pressureFacts(worker), [[], ['disk-floor'], []]);
 });
 
 test('the worker listens on no port: every connection is outbound', async () => {

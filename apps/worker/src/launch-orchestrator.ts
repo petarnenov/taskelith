@@ -22,6 +22,7 @@ import {
 } from '@taskelith/execution';
 import { ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
+import type { AdmissionCheck } from './admission-pressure.js';
 import {
   sealWon,
   type DeadlineClock,
@@ -46,6 +47,8 @@ export interface LaunchOrchestratorOptions {
   readonly contact?: LaunchContact;
   readonly supervision: SupervisionFactory;
   readonly clock: DeadlineClock;
+  // Under admission pressure no launch authorization is requested.
+  readonly pressure: AdmissionCheck;
   // Resolves after the delay, or early once the signal aborts.
   readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>;
   // A jitter draw in [0, 1).
@@ -395,11 +398,15 @@ class Launch {
     }
   }
 
-  // W2, then one operation's requests until a decision (design D2); W2
-  // follows the last offline check with no await, as contact can change.
+  // W2, then one operation's requests until a decision (design D2). W2
+  // follows the last contact and pressure checks with no await between.
   async #authorize(executionId: ExecutionId, reportsNotStarted: boolean): Promise<Authorized> {
     const { contact } = this.#options;
-    while (contact?.offline === true && !this.#signal.aborted) await contact.whenOnline(this.#signal);
+    while (!this.#signal.aborted) {
+      if (contact?.offline === true) await contact.whenOnline(this.#signal);
+      else if (this.#pressured()) await this.#pressurePause();
+      else break;
+    }
     if (this.#stopping.aborted) return { kind: 'end' };
     // A cancel before W2 begins no operation, as one during a back-off.
     if (this.#cancelled) return { kind: reportsNotStarted ? 'abandon' : 'end' };
@@ -417,6 +424,7 @@ class Launch {
       if (!answer.ok) {
         if (!this.#beforeDeadline(reading.value, DEFAULT_PARAMETERS)) return this.#expired(operationId);
         await this.#backOff();
+        await this.#awaitAdmission();
         if (!this.#beforeDeadline(reading.value, DEFAULT_PARAMETERS)) return this.#expired(operationId);
         continue;
       }
@@ -432,6 +440,22 @@ class Launch {
           return this.#rejected(operationId, outcome.rejection);
       }
     }
+  }
+
+  // Capacity reservation section 8: the launch waits, keeping its
+  // reservation, until the pressure clears or the launch stops.
+  async #awaitAdmission(): Promise<void> {
+    while (!this.#signal.aborted && this.#pressured()) await this.#pressurePause();
+  }
+
+  #pressurePause(): Promise<void> {
+    return this.#options.sleep(this.#options.pollMilliseconds ?? LAUNCH_POLL_MILLISECONDS, this.#signal);
+  }
+
+  // Pressure that cannot be refreshed counts as pressure.
+  #pressured(): boolean {
+    const causes = this.#options.pressure.refresh();
+    return !reported(this.#options, causes) || causes.value.length > 0;
   }
 
   // W3; a grant past the deadline, or of a cancelled launch, is never used.

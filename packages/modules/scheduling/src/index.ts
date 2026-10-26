@@ -195,7 +195,6 @@ export {
   parseAccountSlot,
   type AccountSlot,
   type CooldownSource,
-  type HarnessPluginId,
   type SlotCooldown,
   type SlotHealth,
   type SlotIneligibilityReason,

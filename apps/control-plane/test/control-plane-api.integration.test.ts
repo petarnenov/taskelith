@@ -423,6 +423,8 @@ describe('enrollment and quarantine', () => {
     const limits = { ...TRANSPORT_LIMITS, retryInitialMilliseconds: 100, retryMaxMilliseconds: 200, idlePollMilliseconds: 50 };
     const dependencies = (settings: Parameters<typeof productionDependencies>[0]) => ({
       ...productionDependencies(settings), probe: () => ok({ platform: 'darwin' as const, filesystem: 'apfs', local: true }), limits,
+      // A host disk below the floor would refuse the offers.
+      space: () => ok({ availableBytes: 2 ** 40, totalBytes: 2 ** 41 }),
     });
     const lines: string[] = [];
     const worker = await workerMain(environment, (line) => lines.push(line), dependencies);
@@ -438,8 +440,10 @@ describe('enrollment and quarantine', () => {
       }
       // The observations follow W1 of both offers; confirmations of them share
       // the command subject, so only an empty consumer proves every ack.
-      const types = await observationTypes(broker, value(address.observationSubject(workerId)), 3);
-      assert.deepEqual(types, ['worker.capacity.declared', 'execution.assignment.accepted', 'execution.command.rejected']);
+      const types = await observationTypes(broker, value(address.observationSubject(workerId)), 4);
+      assert.deepEqual(types, [
+        'worker.capacity.declared', 'worker.admission-pressure.changed', 'execution.assignment.accepted', 'execution.command.rejected',
+      ]);
       assert.deepEqual(value(worker.root.journal.snapshot()).intents.map((intent) => intent.assignmentId), ['assignment-offer-1']);
       await waitFor(async () => {
         const consumer = await broker.jsm.consumers.info(address.streamName('commands'), workerId);

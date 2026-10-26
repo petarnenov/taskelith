@@ -1,12 +1,8 @@
+import type { HarnessPluginId } from '@taskelith/execution';
 import { parseIdentifier, parseInstant, type Instant, type Result } from '@taskelith/kernel';
 import { expectCode, expectOneWinner, expectRead, expectSame, expectSuccess, type ConformanceCase } from '@taskelith/sdlc';
 import { DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY } from '../domain/capacity-limits.js';
-import {
-  FIRST_SLOT_REVISION,
-  type AccountSlot,
-  type HarnessPluginId,
-  type SubscriptionMechanismId,
-} from '../domain/account-slot.js';
+import { FIRST_SLOT_REVISION, type AccountSlot, type SubscriptionMechanismId } from '../domain/account-slot.js';
 import type { ProjectId, ProviderCredentialId } from '../domain/capacity-reservation.js';
 import { SlotSecret } from '../domain/slot-secret.js';
 import type { AccountSlots, SlotCredentials } from './account-pool.js';

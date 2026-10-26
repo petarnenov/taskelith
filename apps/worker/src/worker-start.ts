@@ -16,14 +16,18 @@ import {
   claimWorkerRoot,
   failureReason,
   openWorkerRoot,
+  readVolumeSpace,
   readWorkerCredentials,
+  truncateBufferedLogs,
   type JournalClock,
   type VolumeProbe,
+  type VolumeSpaceReader,
   type WorkerEnrollment,
   type WorkerIdentity,
   type WorkerRoot,
   type WorkerRootOptions,
 } from '@taskelith/worker-journal';
+import { AdmissionPressure } from './admission-pressure.js';
 import { BrokerSession, type BrokerLink } from './broker-session.js';
 import { CommandIntake } from './command-intake.js';
 import type { DeadlineClock, RecordListing, SupervisionFactory } from './execution-supervision-port.js';
@@ -41,6 +45,9 @@ export interface WorkerDependencies {
   readonly newJournalId: () => string;
   readonly clock: JournalClock;
   readonly probe?: VolumeProbe;
+  // The free space of the data root's volume, for the disk floor.
+  readonly space?: VolumeSpaceReader;
+  readonly pressurePollMilliseconds?: number;
   // Shorter transport timers for tests.
   readonly limits?: TransportLimits;
   // The broker retries, the heartbeats, and the lost-contact timer.
@@ -137,8 +144,8 @@ function rootEnrollment(enrollment: Enrollment, journalId: JournalId): Result<Wo
   return ok({ installationId: installationId.value, workerId, journalId, recoveryEpoch, credentialGeneration, credentials });
 }
 
-// The launches and reconciliation run at once; the broker's work runs
-// while a connection is up.
+// The launches, reconciliation, and pressure watch run at once; the
+// broker's work runs while a connection is up.
 function startRuntime(settings: WorkerSettings, dependencies: WorkerDependencies, root: WorkerRoot): Result<RunningWorker> {
   const { identity } = root;
   const credentials = readWorkerCredentials(root.paths, identity);
@@ -151,15 +158,20 @@ function startRuntime(settings: WorkerSettings, dependencies: WorkerDependencies
   const tasks = new TaskGroup(controller.signal);
   const logger = dependencies.logger ?? SILENT_LOGGER;
   const contact = new WorkerContact({ sleep: dependencies.sleep, stopping: tasks.signal, logger });
-  const launcher = launchOrchestrator({ settings, dependencies, root, credential: credentials.value.controlPlane, contact });
+  const pressure = admissionPressure(settings, dependencies, root);
+  const credential = credentials.value.controlPlane;
+  const launcher = launchOrchestrator({ settings, dependencies, root, credential, contact, pressure });
   if (!launcher.ok) return launcher;
   const declared = declareCapacity(settings, root);
   if (!declared.ok) return declared;
+  const pressured = pressure.refresh();
+  if (!pressured.ok) return pressured;
   const session = brokerSession({
-    settings, dependencies, root, address: address.value, subjects: subjects.value, contact, broker: credentials.value.broker,
+    settings, dependencies, root, address: address.value, subjects: subjects.value, contact, pressure, broker: credentials.value.broker,
     ...(launcher.value === undefined ? {} : { launcher: launcher.value }),
   });
   tasks.add(session.run(tasks.signal));
+  tasks.add(pressure.watch(tasks.signal, dependencies.pressurePollMilliseconds));
   if (launcher.value !== undefined) tasks.add(launcher.value.run(tasks.signal));
   return ok(runningWorker(root, { finished: tasks.settled(), abort: () => controller.abort() }));
 }
@@ -176,18 +188,27 @@ function workerSubjects(address: TransportAddress, workerId: string): Result<Wor
   return heartbeats.ok ? ok({ observations: observations.value, heartbeats: heartbeats.value }) : heartbeats;
 }
 
+function admissionPressure(settings: WorkerSettings, dependencies: WorkerDependencies, root: WorkerRoot): AdmissionPressure {
+  const space = dependencies.space ?? readVolumeSpace;
+  return new AdmissionPressure({
+    journal: root.journal, space: () => space(settings.dataRoot), truncateLogs: () => truncateBufferedLogs(root.paths.logs),
+    ...(dependencies.logger === undefined ? {} : { logger: dependencies.logger }),
+  });
+}
+
 interface OrchestratorContext {
   readonly settings: WorkerSettings;
   readonly dependencies: WorkerDependencies;
   readonly root: WorkerRoot;
   readonly credential: string;
   readonly contact: WorkerContact;
+  readonly pressure: AdmissionPressure;
 }
 
 // The host reconciles and removes records with or without a launch
 // command; only a command adds the launch authority.
 function launchOrchestrator(context: OrchestratorContext): Result<LaunchOrchestrator | undefined> {
-  const { settings, dependencies, root, credential, contact } = context;
+  const { settings, dependencies, root, credential, contact, pressure } = context;
   const { launching } = dependencies;
   const logger = dependencies.logger ?? SILENT_LOGGER;
   if (launching === undefined) return deferReconciliation(root, logger, 'no supervision host');
@@ -196,7 +217,7 @@ function launchOrchestrator(context: OrchestratorContext): Result<LaunchOrchestr
   const { sleep, draw, newId, pollMilliseconds, onFailure } = launching;
   const { supervision, clock, records } = host.value;
   return ok(new LaunchOrchestrator({
-    journal: root.journal, supervision, clock, sleep, draw, newId, contact,
+    journal: root.journal, supervision, clock, pressure, sleep, draw, newId, contact,
     ...(settings.launch === undefined ? {} : { authority: launching.authority(credential) }),
     ...(pollMilliseconds === undefined ? {} : { pollMilliseconds }), ...(records === undefined ? {} : { records }),
     ...(launching.logger === undefined ? {} : { logger: launching.logger }), ...(onFailure === undefined ? {} : { onFailure }),
@@ -226,6 +247,7 @@ interface SessionContext {
   readonly address: TransportAddress;
   readonly subjects: WorkerSubjects;
   readonly contact: WorkerContact;
+  readonly pressure: AdmissionPressure;
   readonly broker: string;
   readonly launcher?: LaunchOrchestrator;
 }
@@ -278,7 +300,7 @@ async function serveConnection(context: SessionContext, transport: TransportConn
   const { settings, dependencies, root, address, launcher } = context;
   const publishing = observationPublishing(context, transport);
   const intake = new CommandIntake({
-    ...publishing, capacity: settings.capacity, newReportId: randomUUID,
+    ...publishing, capacity: settings.capacity, pressure: context.pressure, newReportId: randomUUID,
     ...(launcher === undefined ? {} : { onRecorded: launcher.notify }),
   });
   const options = dependencies.limits === undefined ? {} : { limits: dependencies.limits };

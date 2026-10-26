@@ -11,6 +11,7 @@ import { readCommandSubjectMessage, type DeliveredMessage, type Publication, typ
 import { failed, id, value } from '@taskelith/testing';
 import { CommandIntake, publishDueObservations, type ObservationPublisherOptions } from '@taskelith/worker';
 import { enrollWorkerRoot, type CommitPointHook, type WorkerEnrollment, type WorkerRoot } from '@taskelith/worker-journal';
+import { FakePressure } from './launch-fakes.ts';
 
 const T0 = value(parseInstant('2026-10-25T09:00:00.000Z'));
 const WORKER = 'worker-1';
@@ -41,6 +42,7 @@ let base: string;
 let root: WorkerRoot;
 let broker: FakeBroker;
 let intake: CommandIntake;
+let pressure: FakePressure;
 let onCommitPoint: CommitPointHook = () => undefined;
 
 beforeEach(() => {
@@ -49,6 +51,7 @@ beforeEach(() => {
   const options = { dataRoot: join(base, 'data'), clock: { now: () => T0 }, probe, onCommitPoint: (point: Parameters<CommitPointHook>[0]) => onCommitPoint(point) };
   root = value(enrollWorkerRoot(options, ENROLLMENT));
   broker = new FakeBroker();
+  pressure = new FakePressure();
   intake = newIntake(CAPACITY);
 });
 
@@ -61,7 +64,7 @@ afterEach(() => {
 function newIntake(capacity: WorkerCapacity): CommandIntake {
   let reports = 0;
   return new CommandIntake({
-    journal: root.journal, capacity, publish: broker.publish, observationSubject: SUBJECT,
+    journal: root.journal, capacity, pressure, publish: broker.publish, observationSubject: SUBJECT,
     newReportId: () => `report-${(reports += 1)}`, now: () => T0, journalFault: () => root.journal.fault,
   });
 }
@@ -176,6 +179,35 @@ test('offers beyond the slots, the ceiling, a control, or the capacity are refus
     assertSchema('AssignmentRefusedObservation', body);
     assert.equal((body.payload as { retryable: boolean }).retryable, false);
   }
+});
+
+test('under admission pressure an offer is refused as retryable with its causes, and admitted once it clears', async () => {
+  pressure.causes = ok(['disk-floor', 'journal-backlog']);
+  value(await deliver(offer(1)));
+  pressure.causes = ok([]);
+  value(await deliver(offer(2)));
+  const [refused, accepted] = await published();
+  assertSchema('AssignmentRefusedObservation', refused);
+  assert.deepEqual(refused?.payload, {
+    commandId: 'execution.assignment.offer-1', assignmentId: 'assignment-1', reason: 'worker-admission-pressure', retryable: true,
+    pressureCauses: ['disk-floor', 'journal-backlog'],
+  });
+  assert.equal((accepted?.metadata as { observationType: string }).observationType, 'execution.assignment.accepted');
+  assert.deepEqual(value(root.journal.snapshot()).intents.map((intent) => intent.assignmentId), ['assignment-2']);
+});
+
+test('a limit the offer can never meet is refused before admission pressure is asked', async () => {
+  pressure.causes = ok(['disk-floor']);
+  value(await deliver(offer(1, { cpuMillicores: 2001 })));
+  const [refused] = await published();
+  assert.equal((refused?.payload as { reason: string }).reason, 'resource-ceiling-exceeded');
+  assert.equal(pressure.refreshes, 0);
+});
+
+test('pressure that cannot be refreshed journals nothing, so the offer is not acknowledged', async () => {
+  pressure.causes = err(failure('unavailable', 'the journal is stopped'));
+  assert.equal(failed(await deliver(offer(1))).message, 'the journal is stopped');
+  assert.deepEqual(await published(), []);
 });
 
 test('an ended assignment frees its slot, and an end that arrives before its offer ends it', async () => {

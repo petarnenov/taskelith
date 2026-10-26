@@ -37,7 +37,7 @@ The port belongs to the Execution module, which owns sessions, attempts, and app
 
 ## 3. Declared capabilities
 
-A plugin declares `capabilities` as plain data: `supported`, `subscriptionMechanisms`, `accountSignals`, and `binaries`. A capability is declared only when the harness supports it natively and the plugin passes its conformance scenario.
+A plugin declares `capabilities` as plain data: `supported`, `subscriptionMechanisms`, `accountSignals`, and `binaries`. These `capabilities` are the declaration that ADR 0005 decision 2 calls the plugin's manifest; the port reads them from the plugin, not from a separate manifest field. A capability is declared only when the harness supports it natively and the plugin passes its conformance scenario.
 
 | Capability | Required | Meaning |
 | --- | --- | --- |
@@ -57,7 +57,7 @@ An operation that needs an undeclared capability fails with `unavailable`, whate
 
 ### 4.1 Subscription mechanisms and account signals
 
-`subscriptionMechanisms` names one or more of `subscription-token` (a long-lived token per slot, injected per run) and `device-login` (a login whose state is stored per slot and handed over as the session's state directory). Every slot uses one mechanism its harness declares (ADR 0005 decision 2), and a start or resume request whose credential names an undeclared mechanism fails with `invalid`. The plugin injects the credential into its harness for this session only, and that harness's qualification shows whether the agent's own commands can read it (ADR 0005 risks).
+`subscriptionMechanisms` names one or more of `subscription-token` (a long-lived token per slot, injected per run) and `device-login` (a login whose state is stored per slot and handed over as the session's state directory). Every slot uses one mechanism its harness declares in `capabilities` (ADR 0005 decision 2), and a start or resume request whose credential names an undeclared mechanism fails with `invalid`. A harness plugin is identified by a `HarnessPluginId`, the Execution module's identifier type, whose value is the plugin's manifest `id`; the account pool names a slot's harness with the same type, and draws a slot's `mechanismId` from the mechanisms declared here ([account pool contract](account-pool.md) section 2). The plugin injects the credential into its harness for this session only, and that harness's qualification shows whether the agent's own commands can read it (ADR 0005 risks).
 
 `accountSignals` names the signals the plugin reports, as `account-signal` events:
 

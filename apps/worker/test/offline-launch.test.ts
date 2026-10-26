@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 import type { WorkerJournal } from '@taskelith/execution';
+import { ok } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { id, value } from '@taskelith/testing';
 import {
@@ -16,6 +17,7 @@ import {
   CLEAN_EXIT,
   FakeAuthority,
   FakeClock,
+  FakePressure,
   FakeSupervisions,
   PROCESS,
   T0,
@@ -38,6 +40,7 @@ let sink: InMemoryLogSink;
 let timers: ManualTimers;
 let controller: AbortController;
 let contact: WorkerContact;
+let pressure: FakePressure;
 let options: LaunchOrchestratorOptions;
 
 beforeEach(() => {
@@ -50,9 +53,10 @@ beforeEach(() => {
   timers = new ManualTimers();
   controller = new AbortController();
   contact = new WorkerContact({ sleep: timers.sleep, stopping: controller.signal });
+  pressure = new FakePressure();
   let ids = 0;
   options = {
-    journal, authority, contact, supervision: supervisions.factory, clock, draw: () => 0.5, newId: () => `id-${(ids += 1)}`,
+    journal, authority, contact, pressure, supervision: supervisions.factory, clock, draw: () => 0.5, newId: () => `id-${(ids += 1)}`,
     // The launch's own delays advance the deadline clock and yield.
     sleep: async (milliseconds, signal) => {
       if (signal.aborted) return;
@@ -93,6 +97,30 @@ test('an offline worker begins no authorization until its contact is online', as
   await orchestrator.settled();
   assert.equal(authority.requests.length, 1);
   assert.deepEqual(supervisions.all[0]?.plan?.deadline.milliseconds, reading + 60_000 + 25_000);
+  assert.deepEqual(executions().map(({ state }) => state), ['exited']);
+});
+
+test('W2 waits until the worker is online and under no pressure at once', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  pressure.causes = ok(['disk-floor']);
+  const orchestrator = new LaunchOrchestrator(options);
+  await orchestrator.pass(controller.signal);
+  await flush();
+  contact.linkUp();
+  await flush();
+  assert.ok(pressure.refreshes > 0);
+  contact.linkDown();
+  timers.elapse(LOST_CONTACT_MILLISECONDS);
+  pressure.causes = ok([]);
+  await flush();
+  assert.deepEqual([contact.offline, authority.requests, executions()], [true, [], []]);
+  contact.linkUp();
+  await orchestrator.settled();
+  assert.equal(authority.requests.length, 1);
   assert.deepEqual(executions().map(({ state }) => state), ['exited']);
 });
 

@@ -9,6 +9,15 @@ export {
   type LaunchSettings,
   type WorkerSettings,
 } from './settings.js';
+export {
+  ADMISSION_LIMITS,
+  ADMISSION_PRESSURE_POLL_MILLISECONDS,
+  AdmissionPressure,
+  pressureCauses,
+  type AdmissionCheck,
+  type AdmissionLimits,
+  type AdmissionPressureOptions,
+} from './admission-pressure.js';
 export { CommandIntake, type CommandIntakeOptions } from './command-intake.js';
 export { publishDueObservations, runObservationPublisher, type ObservationPublisherOptions } from './observation-publisher.js';
 export { startWorker, type LaunchHost, type LaunchingDependencies, type RunningWorker, type WorkerDependencies } from './worker-start.js';
