@@ -75,19 +75,22 @@ test('a failed check prints the control-plane log before it removes the project'
   assert.ok(logs < (removals[removals.length - 1] ?? -1), 'before the last removal');
 });
 
-const WORKER_CAPABILITIES = 'CapEff:\t00000000000000e0\nCapBnd:\t00000000000000e0\nCapAmb:\t0000000000000000\n';
+const WORKER_CAPABILITIES = 'CapInh:\t0000000000000000\nCapPrm:\t00000000000000e0\nCapEff:\t00000000000000e0\n'
+  + 'CapBnd:\t00000000000000e0\nCapAmb:\t0000000000000000\n';
+const REFUSED = 'bash: line 1: /sys/fs/cgroup/init/cgroup.procs: Permission denied';
 
-// `exec --user` exits with FAKE_WRITE; the other `exec` prints FAKE_CAPS.
+// `exec --user` prints FAKE_WRITE_OUTPUT and exits with FAKE_WRITE; the
+// other `exec` prints FAKE_CAPS.
 const containmentDocker = `#!/bin/sh
 printf '%s\\n' "$*" >> "$FAKE_DOCKER_CALLS"
 case " $* " in
-  *" exec "*"--user 10003:10003"*) exit "$FAKE_WRITE" ;;
+  *" exec "*"--user 10003:10003"*) echo "$FAKE_WRITE_OUTPUT" >&2; exit "$FAKE_WRITE" ;;
   *" exec "*) printf '%s' "$FAKE_CAPS" ;;
 esac
 exit 0
 `;
 
-function checkContainment(write: number, capabilities: string): Outcome {
+function checkContainment(write: number, capabilities: string, writeOutput = REFUSED): Outcome {
   const root = mkdtempSync(join(tmpdir(), 'taskelith-containment-'));
   try {
     writeFileSync(join(root, 'docker'), containmentDocker);
@@ -96,7 +99,8 @@ function checkContainment(write: number, capabilities: string): Outcome {
     writeFileSync(calls, '');
     const run = spawnSync('bash', [script, 'check-containment', 'installation-script-test'], {
       encoding: 'utf8',
-      env: { PATH: [root, '/usr/bin', '/bin'].join(':'), FAKE_DOCKER_CALLS: calls, FAKE_WRITE: String(write), FAKE_CAPS: capabilities },
+      env: { PATH: [root, '/usr/bin', '/bin'].join(':'), FAKE_DOCKER_CALLS: calls, FAKE_WRITE: String(write), FAKE_CAPS: capabilities,
+        FAKE_WRITE_OUTPUT: writeOutput },
     });
     return { status: run.status, stderr: run.stderr, calls: readFileSync(calls, 'utf8').trim().split('\n') };
   } finally {
@@ -117,9 +121,21 @@ test('the containment check fails when the execution account can write the worke
 });
 
 test('the containment check fails when the worker process has other capabilities', () => {
-  for (const capabilities of [WORKER_CAPABILITIES.replace('CapAmb:\t0000000000000000', 'CapAmb:\t00000000000000e0'), 'CapEff:\t000001ffffffffff\n', '']) {
+  const variants = [
+    WORKER_CAPABILITIES.replace('CapAmb:\t0000000000000000', 'CapAmb:\t00000000000000e0'),
+    WORKER_CAPABILITIES.replace('CapInh:\t0000000000000000', 'CapInh:\t00000000000000e0'),
+    WORKER_CAPABILITIES.replace('CapPrm:\t00000000000000e0', 'CapPrm:\t000001ffffffffff'),
+    'CapEff:\t000001ffffffffff\n', '',
+  ];
+  for (const capabilities of variants) {
     const outcome = checkContainment(1, capabilities);
     assert.equal(outcome.status, 1, JSON.stringify(capabilities));
     assert.match(outcome.stderr, /other capabilities/);
   }
+});
+
+test('the containment check fails when the probe fails for another reason than a refusal', () => {
+  const outcome = checkContainment(1, WORKER_CAPABILITIES, 'service "worker" is not running');
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /cgroup\.procs probe failed: service "worker" is not running/);
 });
