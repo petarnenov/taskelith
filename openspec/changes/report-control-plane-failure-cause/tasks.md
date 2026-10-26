@@ -21,3 +21,11 @@
 - [x] 4.2 Archive dry run in a scratch copy, then `validate --all --strict`
 - [x] 4.3 `make verify` passes
 - [ ] 4.4 Independent review and its record in `verification.md`
+
+## 5. Review pass 1 fixes
+
+- [x] 5.1 Redact the whole text with the logger's `redactText` plus the client's rules, then cut (findings 1 to 3, 6, 9)
+- [x] 5.2 Known log fields after the details; bounded server message and reason (finding 4)
+- [x] 5.3 Walk 16 links for `causeCode` (finding 5); accept a reset in the port test (finding 7)
+- [x] 5.4 Spec: define the token run; move the log rule to "Journaled launch authorization" (finding 8)
+- [x] 5.5 `make verify` passes after the fixes
