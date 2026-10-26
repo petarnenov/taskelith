@@ -6,8 +6,8 @@ Scope history, all on 2026-10-26: after the first review pass the owner widened 
 
 ## What Changes
 
-- `docs/ui-poc/src/theme.tsx`, moved out of `src/main.tsx`: the theme's `components` set default props so that every interactive target is at least 44 px (`Button`, `Menu.Item`, `NavLink`, `ActionIcon`, `CloseButton`, `Burger`, `TextInput`, `PasswordInput`, `Textarea`, `SegmentedControl`, `Anchor`), and `TARGET_SIZE` holds the 44 px. Colors stay Mantine's defaults.
-- `docs/ui-poc/src/main.tsx`: explicit 44 px props that the theme now covers are removed.
+- `docs/ui-poc/src/theme.ts`, moved out of `src/main.tsx`: the theme's `components` set default props so that every interactive target is at least 44 px (`Button`, `Menu.Item`, `NavLink`, `ActionIcon`, `CloseButton`, `Burger`, `TextInput`, `PasswordInput`, `Textarea`, `SegmentedControl`, `Anchor`), and `TARGET_SIZE` holds the 44 px. Colors stay Mantine's defaults.
+- `docs/ui-poc/src/main.tsx`: explicit 44 px props that the theme now covers are removed, and the header's `Burger` drops `size="sm"`.
 - `docs/ui-poc/src/screens/Board.tsx`: the board card's title and "Open session" buttons get `mih` 44 px.
 - `docs/ui-poc/src/screens/NewTask.tsx`: the vertical segmented controls drop `size="xs"`.
 - `docs/ui-poc/README.md`: the section "Departures from the product UI specification" becomes "Design rules": the touch targets are met, and contrast is an open departure for item 28 with the measured default ratios; the published build is version 7 with its new size and SHA-256.
