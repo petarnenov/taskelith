@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
-import { setTimeout as delay } from 'node:timers/promises';
 import { describe, test } from 'node:test';
-import type { Execution, LaunchAuthorizationRequest, LaunchOutcome, OperationId } from '@taskelith/execution';
+import type { Execution, LaunchOutcome, OperationId } from '@taskelith/execution';
 import type { Result } from '@taskelith/kernel';
-import { SeededRandom, integrationEndpoint, rerunHint, seedFromEnvironment } from '@taskelith/testing';
+import { SeededRandom, integrationEndpoint, rerunHint, seedFromEnvironment, value } from '@taskelith/testing';
 import { assignmentsOf, supersedeAssignment } from './g2-scenarios/invalidation-writers.ts';
 import { OrderedAuthority } from './g2-scenarios/ordered-authority.ts';
 import type { ScenarioInstallation } from './g2-scenarios/scenario-installation.ts';
@@ -17,8 +16,7 @@ import { Gate, waitFor } from './g2-scenarios/waiting.ts';
 const SEED = seedFromEnvironment();
 console.log(`g2 stale generation scenarios: ${rerunHint(SEED)}`);
 const B4 = 'product bug B4 (away run 20261026T164615Z-opencode-20899): an old-epoch exit ends its task (openspec/changes/run-g2-partition-and-races/verification.md)';
-// How long the old-epoch observations have to reach the control plane.
-const EVIDENCE_WAIT_MILLISECONDS = 3_000;
+const EPOCH_TASKS = ['task-epoch-1', 'task-epoch-2'];
 
 type WorkerOverrides = Partial<Omit<ScenarioWorkerOptions, 'name' | 'random'>>;
 
@@ -120,8 +118,7 @@ async function advanceEpochBetweenRequests(installation: ScenarioInstallation, r
   const a = await heldWorker(installation, 'epoch-a', random);
   const b = await heldWorker(installation, 'epoch-b', random);
   try {
-    await installation.submitTask('task-epoch-1');
-    await installation.submitTask('task-epoch-2');
+    for (const taskId of EPOCH_TASKS) await installation.submitTask(taskId);
     await waitFor(() => a.authority.sent.length === 1 && b.authority.sent.length === 1, 20_000, 'both request authorization');
     const [early, late] = aFirst ? [a, b] : [b, a];
     early.authority.beforeRequest.open();
@@ -134,7 +131,8 @@ async function advanceEpochBetweenRequests(installation: ScenarioInstallation, r
     assert.ok(journaledUnder(late.worker, lateAssignment).every(({ recordWritten }) => !recordWritten), 'no record after the rejection');
     const earlyRequest = early.authority.sent[0]!;
     await waitFor(() => journaledUnder(early.worker, earlyRequest.assignmentId).some(({ state }) => state === 'exited'), 20_000, 'the earlier exit');
-    await delay(EVIDENCE_WAIT_MILLISECONDS);
+    await waitFor(() => keptAsEvidence(installation, early.authority.grants[0]!), 20_000, 'the old-epoch start kept as evidence');
+    await waitFor(() => value(early.worker.running.root.journal.backlog()).entries === 0, 20_000, 'every observation confirmed');
     const taskId = await taskOfAttempt(installation, earlyRequest.attemptId);
     const executions = (await installation.task(taskId)).attempts.flatMap((attempt) => attempt.executions);
     return { order: `${aFirst ? 'A' : 'B'} granted before the epoch advanced`, earlyWorkerId: early.worker.workerId, taskId, executions };
@@ -156,7 +154,16 @@ function newOperationId(random: SeededRandom): OperationId {
   return `e0000000-0000-4000-8000-${hex}` as OperationId;
 }
 
-async function taskOfAttempt(installation: ScenarioInstallation, attemptId: LaunchAuthorizationRequest['attemptId']): Promise<string> {
-  const [row] = await installation.query<{ record: string }>('SELECT record FROM assignments WHERE attempt_id = $1', [attemptId]);
-  return (JSON.parse(row!.record) as { reservation: { scope: { taskId: string } } }).reservation.scope.taskId;
+// The control plane's log of a start it kept as quarantine evidence.
+function keptAsEvidence(installation: ScenarioInstallation, granted: LaunchOutcome): boolean {
+  const executionId = granted.kind === 'granted' ? granted.grant.executionId : undefined;
+  return installation.logs.records.some(({ event, fields }) =>
+    event === 'execution.start.evidence' && fields.decision === 'quarantine-evidence' && fields.executionId === executionId);
+}
+
+async function taskOfAttempt(installation: ScenarioInstallation, attemptId: string): Promise<string> {
+  for (const taskId of EPOCH_TASKS) {
+    if ((await installation.task(taskId)).attempts.some(({ id }) => id === attemptId)) return taskId;
+  }
+  throw new Error(`no scenario task holds attempt ${attemptId}`);
 }
