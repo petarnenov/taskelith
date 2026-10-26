@@ -27,6 +27,7 @@ const EXECUTION = id('ExecutionId', 'inherited-1');
 let root: WorkerRoot;
 let journal: WorkerJournal;
 let remove: () => void;
+let clock: FakeClock;
 let authority: FakeAuthority;
 let pressure: FakePressure;
 let supervisions: FakeSupervisions;
@@ -45,7 +46,7 @@ let orchestrator: LaunchOrchestrator;
 beforeEach(() => {
   ({ root, remove } = temporaryJournal());
   journal = root.journal;
-  const clock = new FakeClock();
+  clock = new FakeClock();
   authority = new FakeAuthority();
   pressure = new FakePressure();
   supervisions = new FakeSupervisions();
@@ -599,4 +600,37 @@ test('a rejection and an expiry refused for space are retried, and the execution
   assert.equal(execution.state, 'exited');
   assert.deepEqual(execution.authorizations.map(({ outcome }) => outcome), ['rejected-retryable', 'expired', 'granted']);
   assert.deepEqual([failures, spaceBackoffs().length, authority.requests.length], [[], 3, 3]);
+});
+
+test('cancellation evidence refused for space is held back for its backoff, then committed', async () => {
+  value(journal.recordCommand(offer()));
+  value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));
+  spaceRefusals = new Map([['recordCancellationEvidence', 1]]);
+  const recorded = () => value(journal.snapshot()).cancellations[0]?.evidenceRecorded;
+  await startOnce();
+  await startOnce();
+  assert.equal(recorded(), false, 'no pass tries it again within the backoff');
+  clock.milliseconds += 7_500;
+  await startOnce();
+  assert.equal(recorded(), true);
+  assert.deepEqual([failures, spaceBackoffs(), authority.requests.length], [[], [7_500], 0]);
+});
+
+test('a record removal refused for space is held back for its backoff, then committed', async () => {
+  inherit('written');
+  launchNothingNew();
+  supervisions.onCreated = (supervision) => {
+    supervision.recovery = { fact: 'not-started' };
+  };
+  await startOnce();
+  value(journal.confirmThrough(value(journal.dueForPublication(T0)).at(-1)!.position.sequence));
+  spaceRefusals = new Map([['recordRecordRemoved', 1]]);
+  await startOnce();
+  await startOnce();
+  const removals = () => inheritedSupervision().calls.filter((call) => call === 'remove').length;
+  assert.deepEqual([removals(), value(journal.removableRecords())], [1, [EXECUTION]]);
+  clock.milliseconds += 7_500;
+  await startOnce();
+  assert.deepEqual([removals(), value(journal.removableRecords())], [2, []]);
+  assert.deepEqual([failures, spaceBackoffs()], [[], [7_500]]);
 });
