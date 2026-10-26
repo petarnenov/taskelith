@@ -1,5 +1,5 @@
 import type { HttpSchemas } from '@taskelith/contracts';
-import { parseRecoveryEpoch, type LaunchAuthorizationRequest, type LaunchOutcome } from '@taskelith/execution';
+import { parseRecoveryEpoch, type LaunchAuthorizationRequest, type LaunchOutcome, type SealedExecution } from '@taskelith/execution';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import { parseGeneration, parseOwnershipGeneration } from '@taskelith/sdlc';
 
@@ -23,7 +23,19 @@ export function parseLaunchAuthorizationRequest(body: HttpSchemas['LaunchAuthori
   }
   // The domain re-authorizes an execution on this flag, so it is checked too.
   if (typeof body.reportsNotStarted !== 'boolean') return err(failure('invalid', 'reportsNotStarted must be a boolean'));
-  return ok(Object.freeze({ ...values, reportsNotStarted: body.reportsNotStarted }) as LaunchAuthorizationRequest);
+  const sealed = parseSealedExecution(body.reportsNotStartedFor);
+  if (!sealed.ok) return sealed;
+  const reported = sealed.value === undefined ? {} : { reportsNotStartedFor: sealed.value };
+  return ok(Object.freeze({ ...values, reportsNotStarted: body.reportsNotStarted, ...reported }) as LaunchAuthorizationRequest);
+}
+
+function parseSealedExecution(body: HttpSchemas['SealedExecution'] | undefined): Result<SealedExecution | undefined> {
+  if (body === undefined) return ok(undefined);
+  const executionId = parseIdentifier('ExecutionId', body.executionId);
+  if (!executionId.ok) return executionId;
+  const operationId = parseIdentifier('OperationId', body.operationId);
+  if (!operationId.ok) return operationId;
+  return ok(Object.freeze({ executionId: executionId.value, operationId: operationId.value }));
 }
 
 // A grant's parameters are flat on the wire, and its state is the outcome.

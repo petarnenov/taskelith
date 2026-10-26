@@ -1208,6 +1208,27 @@
           "reportsNotStarted": {
             "type": "boolean",
             "description": "The supervisor launch record of this execution shows that no spawn was claimed; required to authorize the same execution again."
+          },
+          "reportsNotStartedFor": {
+            "$ref": "#/components/schemas/SealedExecution"
+          }
+        }
+      },
+      "SealedExecution": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "An earlier execution of the attempt whose launch record the worker sealed; the authority records its not-started before the ownership rule, in the same transaction.",
+        "required": [
+          "executionId",
+          "operationId"
+        ],
+        "properties": {
+          "executionId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "operationId": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The last operation the worker journaled as granted for that execution, else its last operation."
           }
         }
       },

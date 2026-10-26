@@ -11,7 +11,7 @@ import {
   type WorkflowDefinition,
 } from '@taskelith/sdlc';
 import { attemptPhase, owningExecution, type Attempt } from './attempt.js';
-import { authorizedExecution, isTerminalExecution, withGrant } from './execution.js';
+import { authorizedExecution, isTerminalExecution, moveExecution, withGrant, type Execution } from './execution.js';
 import type {
   AssignmentId,
   AttemptId,
@@ -40,6 +40,14 @@ export interface LaunchRequest {
   readonly admissionGeneration: Generation;
   // From the supervisor's launch record; lets an execution be re-authorized.
   readonly reportsNotStarted: boolean;
+  // An earlier execution of the attempt that the worker sealed (section 4).
+  readonly reportsNotStartedFor?: SealedExecution;
+}
+
+// A sealed execution and an operation the worker journaled for it.
+export interface SealedExecution {
+  readonly executionId: ExecutionId;
+  readonly operationId: OperationId;
 }
 
 // The scheduler's assignment and reservation as the authority reads them.
@@ -106,7 +114,9 @@ export function authorizeLaunch(
   const inputs = checkInputs(admission.value, context) ?? checkReservation(request, context);
   if (inputs !== undefined) return err(inputs);
   const grant = newGrant(request, admission.value, reliedOn.value, issue);
-  const owned = applyOwnershipRule(task, attempt, request, grant);
+  const sealed = recordReportedSeal(task, attempt, request);
+  if (!sealed.ok) return sealed;
+  const owned = applyOwnershipRule(task, sealed.value, request, grant);
   if (!owned.ok) return owned;
   return ok(Object.freeze({ task: withAttempt(task, owned.value, issue.issuedAt), grant }));
 }
@@ -245,6 +255,38 @@ function applyOwnershipRule(task: Task, attempt: Attempt, request: LaunchRequest
   }
   const holder = owning === undefined ? 'the requested identity was used before' : `execution ${owning.id} is ${owning.state}`;
   return err(launchRejection('execution-conflict', `attempt ${attempt.id} cannot launch ${request.executionId}: ${holder}`));
+}
+
+// A reported seal ends its execution `not-started` in the same transaction;
+// an execution never granted has nothing to end (section 4).
+function recordReportedSeal(task: Task, attempt: Attempt, request: LaunchRequest): Result<Attempt, LaunchRejection> {
+  const report = request.reportsNotStartedFor;
+  if (report === undefined) return ok(attempt);
+  const located = locateExecution(task, report.executionId);
+  if (located === undefined) return ok(attempt);
+  const { execution } = located;
+  const conflict = sealConflict(task, located.attempt, execution, request, report);
+  if (conflict !== undefined) {
+    return err(launchRejection('execution-conflict', `execution ${execution.id} cannot be reported sealed: ${conflict}`));
+  }
+  if (execution.state === 'not-started') return ok(attempt);
+  const sealed = moveExecution(execution, 'not-started');
+  return sealed.ok ? ok(withExecution(attempt, sealed.value)) : err(launchRejection('execution-conflict', sealed.error.message));
+}
+
+// The operation may be one whose request never reached the authority, so
+// only an operation that granted another execution conflicts.
+function sealConflict(task: Task, owner: Attempt, execution: Execution, request: LaunchRequest, report: SealedExecution): string | undefined {
+  if (owner.id !== request.attemptId || execution.workerId !== request.workerId) return 'it is not of this attempt and worker';
+  if (execution.state !== 'authorized' && execution.state !== 'not-started') return `it is ${execution.state}`;
+  const named = grantOfOperation(task, report.operationId);
+  if (named !== undefined && named.executionId !== execution.id) return `operation ${report.operationId} granted another execution`;
+  return undefined;
+}
+
+function grantOfOperation(task: Task, operationId: OperationId): LaunchGrant | undefined {
+  return task.attempts.flatMap((attempt) => attempt.executions).flatMap((execution) => execution.grants)
+    .find((grant) => grant.operationId === operationId);
 }
 
 function checkSameOperation(recorded: LaunchGrant, request: LaunchRequest): Check {

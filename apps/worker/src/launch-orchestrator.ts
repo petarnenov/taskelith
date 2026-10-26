@@ -1,4 +1,5 @@
 import {
+  lastSealedExecution,
   launchRejection,
   launchRetryDelay,
   parseLaunchParameters,
@@ -18,6 +19,7 @@ import {
   type LaunchRequest,
   type OperationId,
   type RecoveryAction,
+  type SealedExecution,
   type WorkerJournal,
 } from '@taskelith/execution';
 import { ok, parseIdentifier, type Result } from '@taskelith/kernel';
@@ -367,6 +369,13 @@ type Authorized =
 // How one execution ended: launch another, or stop launching the intent.
 type Executed = 'relaunch' | 'end';
 
+// The execution a launch authorizes: a resumed one was authorized before.
+interface LaunchedExecution {
+  readonly executionId: ExecutionId;
+  readonly authorizedBefore: boolean;
+  readonly reportsNotStartedFor?: SealedExecution;
+}
+
 // What one intent's launches work with; `resume` continues an execution
 // whose last operation closed without a grant.
 interface LaunchContext {
@@ -412,19 +421,30 @@ class Launch {
   async run(): Promise<void> {
     let resume = this.#context.resume;
     while (!this.#signal.aborted) {
-      const executionId = resume ?? this.#newId('ExecutionId');
-      if (executionId === undefined) return;
-      if ((await this.#execute(executionId, resume !== undefined)) === 'end') return;
+      const execution = resume === undefined ? this.#newExecution() : { executionId: resume, authorizedBefore: true };
+      if (execution === undefined) return;
+      if ((await this.#execute(execution)) === 'end') return;
       resume = undefined;
       await this.#backOff();
     }
   }
 
+  // A new execution reports the intent's last sealed one, whose `not-started`
+  // may not have reached the authority yet (journal section 5).
+  #newExecution(): LaunchedExecution | undefined {
+    const executionId = this.#newId('ExecutionId');
+    const snapshot = this.#options.journal.snapshot();
+    if (executionId === undefined || !reported(this.#options, snapshot)) return undefined;
+    const sealed = lastSealedExecution(snapshot.value, this.#intent.assignmentId);
+    return { executionId, authorizedBefore: false, ...(sealed === undefined ? {} : { reportsNotStartedFor: sealed }) };
+  }
+
   // An execution authorized again reports that it has not started, so a
   // grant the authority recorded for an earlier operation is renewed.
-  async #execute(executionId: ExecutionId, authorizedBefore: boolean): Promise<Executed> {
-    for (let reportsNotStarted = authorizedBefore; ; reportsNotStarted = true) {
-      const authorized = await this.#authorize(executionId, reportsNotStarted);
+  async #execute(execution: LaunchedExecution): Promise<Executed> {
+    const { executionId } = execution;
+    for (let reportsNotStarted = execution.authorizedBefore; ; reportsNotStarted = true) {
+      const authorized = await this.#authorize(execution, reportsNotStarted);
       switch (authorized.kind) {
         case 'end':
           return 'end';
@@ -442,7 +462,8 @@ class Launch {
 
   // W2, then one operation's requests until a decision (design D2). W2
   // follows the last contact and pressure checks with no await between.
-  async #authorize(executionId: ExecutionId, reportsNotStarted: boolean): Promise<Authorized> {
+  async #authorize(execution: LaunchedExecution, reportsNotStarted: boolean): Promise<Authorized> {
+    const { executionId } = execution;
     const { contact } = this.#options;
     while (!this.#signal.aborted) {
       if (contact?.offline === true) await contact.whenOnline(this.#signal);
@@ -455,7 +476,7 @@ class Launch {
     const operationId = this.#newId('OperationId');
     const reading = this.#options.clock.read();
     if (operationId === undefined || !reading.ok) return { kind: 'end' };
-    const request = this.#request(executionId, operationId, reportsNotStarted);
+    const request = this.#request(execution, operationId, reportsNotStarted);
     // No request leaves before W2 commits (journal contract section 5).
     if (!(await this.#commitWrite(executionId, () => this.#options.journal.beginAuthorization(request)))) return { kind: 'end' };
     const { workerId: _worker, ...sent } = request;
@@ -602,12 +623,13 @@ class Launch {
     return 'end';
   }
 
-  #request(executionId: ExecutionId, operationId: OperationId, reportsNotStarted: boolean): LaunchRequest {
+  #request(execution: LaunchedExecution, operationId: OperationId, reportsNotStarted: boolean): LaunchRequest {
     const { workerId } = this.#options.journal.binding;
     const { recoveryEpoch, assignmentId, attemptId, ownershipGeneration, admissionId, admissionGeneration } = this.#intent;
+    const { executionId, reportsNotStartedFor } = execution;
     return {
       operationId, workerId, recoveryEpoch, assignmentId, attemptId, ownershipGeneration, executionId, admissionId, admissionGeneration,
-      reportsNotStarted,
+      reportsNotStarted, ...(reportsNotStartedFor === undefined ? {} : { reportsNotStartedFor }),
     };
   }
 

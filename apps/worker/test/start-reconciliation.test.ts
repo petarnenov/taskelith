@@ -17,6 +17,7 @@ import {
   cancellation,
   grantFor,
   granted,
+  grantedToOwner,
   offer,
   requestOf,
   temporaryJournal,
@@ -152,6 +153,20 @@ test('a pending W2 is sealed on start and reported not-started; the intent is la
   assert.equal(inherited()?.state, 'not-started');
   assert.deepEqual(value(journal.snapshot()).executions.map(({ state }) => state), ['not-started', 'exited']);
 });
+
+for (const until of ['pending', 'granted'] as const) {
+  test(`a ${until} W2 sealed on start is reported with the new execution, which runs to its exit`, async () => {
+    inherit(until);
+    authority.answers = [grantedToOwner(EXECUTION)];
+    supervisions.onCreated = (supervision) => {
+      supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+    };
+    await startOnce();
+    await startOnce();
+    assert.deepEqual(authority.requests[0]?.reportsNotStartedFor, { executionId: EXECUTION, operationId: 'operation-1' });
+    assert.deepEqual(value(journal.snapshot()).executions.map(({ state }) => state), ['not-started', 'exited']);
+  });
+}
 
 test('an unused grant is sealed on start, and the seal lost to a claim is reported uncertain', async () => {
   inherit('granted');
