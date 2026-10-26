@@ -4,6 +4,7 @@
 - [x] 1.2 `ProcessReaper`: kill recorded supervisors and children with a matching identity, then tracked scenarios, with a bounded wait
 - [x] 1.3 macOS and Linux privileged tests: track scenarios, watch record stores, reap after each test, bound each test
 - [x] 1.4 Prove a fast failure with the same wrong assertion and with a stuck wait (not committed)
+- [x] 1.5 Review pass 1: reap by a command-line marker, fail the teardown on errors, reaper regression test
 
 ## 2. Narrowed exit types
 

@@ -4,7 +4,7 @@ The [start reconciliation change](../archive/2026-10-26-implement-worker-start-r
 
 ## What Changes
 
-- **Reaped real-process tests.** The macOS supervisor tests and the privileged Linux cgroup tests kill, after each test, every supervisor they started and every supervisor and child that the execution record names, and each test has a run-time bound. A failed assertion or a wait that never ends then fails the test instead of hanging the suite.
+- **Reaped real-process tests.** The macOS supervisor tests and the privileged Linux cgroup tests kill, after each test, every live process they started, directly or through a supervisor, found by a marker on its command line, and each test has a run-time bound. A failed assertion or a wait that never ends then fails the test instead of hanging the suite.
 - **Narrowed exit types.** `ExecutionExit`, which the journal port's `recordExit` takes, and the supervisor's `ExitRecord` become unions in which `boot-changed` and `namespace-ended` carry only status `unknown`, as the supervisor's `readExit` already requires. The reader builds the narrowed type. Type-level negative tests (`@ts-expect-error`) keep the combination unrepresentable.
 
 No runtime behaviour, contract, schema, or wire message changes.
