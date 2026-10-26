@@ -9,6 +9,7 @@ export {
   syncPath,
   type DataRootSources,
 } from '@taskelith/data-root';
+export { truncateBufferedLogs } from './buffered-logs.js';
 export { ExclusiveFileLock, LOCK_APPLICATION_ID } from './exclusive-file-lock.js';
 export { JOURNAL_APPLICATION_ID, JOURNAL_FORMAT } from './journal-database.js';
 export { checkJournalFault, hostBootId, recordJournalFault } from './journal-fault.js';
@@ -24,7 +25,17 @@ export {
   type JournalHooks,
   type WritePoint,
 } from './sqlite-worker-journal.js';
-export { checkVolume, parseDfMountPoint, parseMacMountOptions, probeVolume, type VolumeDescription, type VolumeProbe } from './volume.js';
+export {
+  checkVolume,
+  parseDfMountPoint,
+  parseMacMountOptions,
+  probeVolume,
+  readVolumeSpace,
+  type VolumeDescription,
+  type VolumeProbe,
+  type VolumeSpace,
+  type VolumeSpaceReader,
+} from './volume.js';
 export {
   credentialReferencesOf,
   readWorkerCredentials,

@@ -60,11 +60,14 @@ export {
   type WorkerId,
 } from './domain/identifiers.js';
 export {
+  ADMISSION_PRESSURE_CAUSES,
   ASSIGNMENT_REFUSAL_REASONS,
   AUTHORIZATION_OUTCOMES,
   COMMAND_REJECTION_REASONS,
   TERMINATION_EVIDENCE_KINDS,
+  type AdmissionPressureCause,
   type AssignmentRef,
+  type AssignmentRefusal,
   type AssignmentRefusalReason,
   type AuthorizationOutcome,
   type CancellationTarget,
@@ -88,6 +91,7 @@ export {
   type JournalSnapshot,
   type LaunchIntent,
   type ObservationFact,
+  type OutboxBacklog,
   type OutboxEntry,
   type ProtocolWindow,
   type ResourceRequest,

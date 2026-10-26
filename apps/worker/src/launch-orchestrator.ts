@@ -22,6 +22,7 @@ import {
 } from '@taskelith/execution';
 import { ok, parseIdentifier, type Result } from '@taskelith/kernel';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
+import type { AdmissionCheck } from './admission-pressure.js';
 import {
   sealWon,
   type DeadlineClock,
@@ -43,6 +44,8 @@ export interface LaunchOrchestratorOptions {
   readonly authority: LaunchAuthorityClient;
   readonly supervision: SupervisionFactory;
   readonly clock: DeadlineClock;
+  // Under admission pressure no launch authorization is requested.
+  readonly pressure: AdmissionCheck;
   // Resolves after the delay, or early once the signal aborts.
   readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>;
   // A jitter draw in [0, 1).
@@ -380,6 +383,8 @@ class Launch {
 
   // W2, then the requests of one operation until a decision (design D2).
   async #authorize(executionId: ExecutionId, reportsNotStarted: boolean): Promise<Authorized> {
+    await this.#awaitAdmission();
+    if (this.#stopping.aborted) return { kind: 'end' };
     const operationId = this.#newId('OperationId');
     const reading = this.#options.clock.read();
     if (operationId === undefined || !reading.ok) return { kind: 'end' };
@@ -394,6 +399,7 @@ class Launch {
       if (!answer.ok) {
         if (!this.#beforeDeadline(reading.value, DEFAULT_PARAMETERS)) return this.#expired(operationId);
         await this.#backOff();
+        await this.#awaitAdmission();
         if (!this.#beforeDeadline(reading.value, DEFAULT_PARAMETERS)) return this.#expired(operationId);
         continue;
       }
@@ -409,6 +415,20 @@ class Launch {
           return this.#rejected(operationId, outcome.rejection);
       }
     }
+  }
+
+  // Capacity reservation section 8: the launch waits, keeping its
+  // reservation, until the pressure clears or the launch stops.
+  async #awaitAdmission(): Promise<void> {
+    while (!this.#signal.aborted && this.#pressured()) {
+      await this.#options.sleep(this.#options.pollMilliseconds ?? LAUNCH_POLL_MILLISECONDS, this.#signal);
+    }
+  }
+
+  // Pressure that cannot be refreshed counts as pressure.
+  #pressured(): boolean {
+    const causes = this.#options.pressure.refresh();
+    return !reported(this.#options, causes) || causes.value.length > 0;
   }
 
   // W3; a grant past the deadline, or of a cancelled launch, is never used.
