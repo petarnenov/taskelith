@@ -836,6 +836,22 @@ describe('launch rejections', () => {
     assert.notEqual(again.assignment.id, at.assignment.id);
   });
 
+  test('a rejection naming another worker\'s assignment is refused and changes nothing of it', async () => {
+    await enroll();
+    value(await declare(1));
+    const at = await placed();
+    value(await accept(2, at));
+    await enroll('worker-b', 'journal-b');
+    const foreign = await observe('execution.launch.rejected', {
+      sequence: 1, workerId: 'worker-b', journalId: 'journal-b', attemptId: at.attemptId, ownershipGeneration: at.generation,
+    }, { executionId: `execution-${at.attemptId}`, assignmentId: at.assignment.id, operationId: 'operation-b', reason: 'capacity-not-reserved' });
+    assert.equal(value(foreign), 'rejected');
+    const kept = value(await database.transaction((tx) => tx.assignments.get(at.assignment.id)));
+    assert.deepEqual([kept.state, kept.end, kept.reservation.state], ['accepted', undefined, 'held']);
+    assert.deepEqual([(await stored(at.taskId)).attempts.length, (await stored(at.taskId)).attempts[0]!.outcome], [1, undefined]);
+    assert.deepEqual([await messages('execution.assignment.end'), rejectionLogs()], [[], []]);
+  });
+
   test('a stale recovery epoch releases and requests the inventory; an execution conflict only requests it', async () => {
     await enroll();
     value(await declare(1));

@@ -244,12 +244,19 @@ async function followStart(
 async function cancelUnauthorizedStart(
   tx: ControlPlaneTransaction, observation: Observation, assignmentId: AssignmentId, executionId: ExecutionId,
 ): Promise<Result<void>> {
+  const current = await reportersAssignment(tx, observation, assignmentId);
+  if (!current.ok) return current;
+  return cancelExecutionInTransaction(tx, commandIdentity(observation, assignmentId), executionId);
+}
+
+// The current assignment, only when the reporting worker holds it.
+async function reportersAssignment(tx: ControlPlaneTransaction, observation: Observation, assignmentId: AssignmentId): Promise<Result<Assignment>> {
   const current = await currentAssignment(tx, observation, assignmentId);
   if (!current.ok) return current;
   if (current.value.workerId !== observation.position.workerId) {
     return err(failure('forbidden', `assignment ${assignmentId} is held by another worker`, { assignment: assignmentId }));
   }
-  return cancelExecutionInTransaction(tx, commandIdentity(observation, assignmentId), executionId);
+  return current;
 }
 
 // Item 21d D2: the authority recorded no grant; each reason acts as launch
@@ -258,7 +265,7 @@ async function launchRejection(
   tx: ControlPlaneTransaction, observation: Observation, _at: Instant, context: ReconciliationContext,
 ): Promise<Result<void>> {
   const { assignmentId, executionId, reason } = observation.payload as Payload<'LaunchRejectedPayload'>;
-  const current = await currentAssignment(tx, observation, assignmentId as AssignmentId);
+  const current = await reportersAssignment(tx, observation, assignmentId as AssignmentId);
   if (!current.ok) return current;
   const { workerId, observationId } = observation.position;
   context.log.warn({ workerId, observationId, correlationId: observation.correlationId }, 'execution.launch.rejected', {
