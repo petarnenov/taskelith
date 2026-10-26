@@ -1,4 +1,8 @@
 #!/bin/sh
 # Blocks the push unless the repository checks pass; `make hooks` enables it.
-NODE_PIN="$(cat .nvmrc)" bash scripts/with-pinned-node.sh use bash scripts/run-node-script.sh scripts/check-pre-push.ts || exit 1
+NODE_PIN="$(cat .nvmrc)" bash scripts/with-pinned-node.sh use bash scripts/run-node-script.sh scripts/check-pre-push.ts
+checks=$?
+# 100 is DELETE_ONLY_PUSH_STATUS of scripts/pre-push-checks.ts.
+if [ "$checks" -eq 100 ]; then exit 0; fi
+if [ "$checks" -ne 0 ]; then exit 1; fi
 exec make verify
