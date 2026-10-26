@@ -85,14 +85,18 @@ export const TERMINATION_EVIDENCE = Object.freeze([
 export type TerminationEvidence = (typeof TERMINATION_EVIDENCE)[number];
 
 // Recovery proves the end without seeing the exit, so the status is unknown.
-const RECOVERY_TERMINATION_EVIDENCE: readonly TerminationEvidence[] = ['boot-changed', 'namespace-ended'];
+const RECOVERY_TERMINATION_EVIDENCE = ['boot-changed', 'namespace-ended'] as const satisfies readonly TerminationEvidence[];
 
-export interface ExitRecord {
-  readonly status: ExitStatus;
+type RecoveryTerminationEvidence = (typeof RECOVERY_TERMINATION_EVIDENCE)[number];
+
+type ExitEnd =
+  | { readonly status: ExitStatus; readonly termination: Exclude<TerminationEvidence, RecoveryTerminationEvidence> }
+  | { readonly status: { readonly kind: 'unknown' }; readonly termination: RecoveryTerminationEvidence };
+
+export type ExitRecord = ExitEnd & {
   readonly startProven: boolean;
   readonly spawnFailure?: string;
-  readonly termination: TerminationEvidence;
-}
+};
 
 export interface CancelRecord {
   readonly reason: string;
@@ -208,17 +212,22 @@ function readExit(fields: Fields): ExitRecord | undefined {
   const status = isFields(fields.status) ? parseExitStatus(fields.status as { kind: string }) : undefined;
   const termination = TERMINATION_EVIDENCE.find((known) => known === fields.termination);
   if (!status?.ok || typeof fields.startProven !== 'boolean' || !termination || !optionalText(fields.spawnFailure)) return undefined;
-  if (!statusFitsTermination(status.value, termination)) return undefined;
+  const end = readExitEnd(status.value, termination);
+  if (!end) return undefined;
   return {
-    status: status.value,
+    ...end,
     startProven: fields.startProven,
     ...(fields.spawnFailure === undefined ? {} : { spawnFailure: fields.spawnFailure as string }),
-    termination,
   };
 }
 
-function statusFitsTermination(status: ExitStatus, termination: TerminationEvidence): boolean {
-  return status.kind === 'unknown' || !RECOVERY_TERMINATION_EVIDENCE.includes(termination);
+function readExitEnd(status: ExitStatus, termination: TerminationEvidence): ExitEnd | undefined {
+  if (!isRecoveryEvidence(termination)) return { status, termination };
+  return status.kind === 'unknown' ? { status, termination } : undefined;
+}
+
+function isRecoveryEvidence(termination: TerminationEvidence): termination is RecoveryTerminationEvidence {
+  return (RECOVERY_TERMINATION_EVIDENCE as readonly TerminationEvidence[]).includes(termination);
 }
 
 const CANCELLATION_STEPS = ['terminate-sent', 'kill-sent', 'containment-killed', 'not-applied'] as const;
