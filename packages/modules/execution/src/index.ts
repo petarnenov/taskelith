@@ -203,11 +203,74 @@ export {
   type TaskOutcomeFact,
 } from './domain/task.js';
 export { InMemoryEvidenceRecords } from './adapters/in-memory-evidence.js';
+export {
+  ScriptedAgentHarness,
+  type ScriptStep,
+  type ScriptedAgentHarnessOptions,
+} from './adapters/scripted-agent-harness.js';
 export { InMemoryInbox } from './adapters/in-memory-inbox.js';
 export { InMemoryInventoryReports, InMemoryInventoryRequests } from './adapters/in-memory-inventory.js';
 export { InMemoryProducerCursors } from './adapters/in-memory-producer-cursors.js';
 export { InMemoryReconciliationQueue, InMemoryUnrecordedProcesses } from './adapters/in-memory-reconciliation.js';
 export { InMemoryTaskRepository } from './adapters/in-memory-task-repository.js';
+export {
+  ACCOUNT_SIGNALS,
+  AGENT_HARNESS_PORT_VERSION,
+  CLASSIFIED_OPERATION_KINDS,
+  DELEGATION_OUTCOMES,
+  HARNESS_CAPABILITIES,
+  HARNESS_FAILURES,
+  HARNESS_PLATFORMS,
+  MAX_HARNESS_TEXT_LENGTH,
+  PERMISSION_DECISIONS,
+  REQUIRED_HARNESS_CAPABILITIES,
+  SESSION_END_REASONS,
+  SUBSCRIPTION_MECHANISMS,
+  TURN_OUTCOMES,
+  type AccountSignal,
+  type AgentHarness,
+  type AgentHarnessCapabilities,
+  type AgentHarnessOperation,
+  type ClassifiedOperationData,
+  type ClassifiedOperationKind,
+  type DelegationOutcome,
+  type HarnessCapability,
+  type HarnessEventData,
+  type HarnessFailure,
+  type HarnessPlatform,
+  type InterruptRequest,
+  type PermissionDecision,
+  type PinnedBinaryData,
+  type RespondRequest,
+  type ResponseData,
+  type ResumeSessionRequest,
+  type SessionEndReason,
+  type SessionHandleData,
+  type SessionRequest,
+  type SlotCredentialData,
+  type StartSessionRequest,
+  type SubscriptionMechanism,
+  type TerminalProgramData,
+  type TurnOutcome,
+  type TurnRequest,
+} from './ports/agent-harness.js';
+export {
+  parseAgentHarnessCapabilities,
+  parseHarnessEvent,
+  type ClassifiedOperation,
+  type HarnessEvent,
+  type HarnessRequestKind,
+  type ParsedAgentHarnessCapabilities,
+  type PinnedBinary,
+} from './ports/agent-harness-data.js';
+export {
+  runAgentHarnessConformance,
+  type AgentHarnessConformanceCheck,
+  type AgentHarnessConformanceFinding,
+  type AgentHarnessConformanceFixture,
+  type AgentHarnessConformancePrompts,
+  type AgentHarnessConformanceReport,
+} from './ports/agent-harness-conformance.js';
 export {
   BOARD_COLUMNS,
   EVIDENCE_FRESHNESS,
