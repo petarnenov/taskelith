@@ -820,52 +820,62 @@ function observationEvidence(): (readonly unknown[])[] {
 }
 
 describe('execution observations outside the current epoch', () => {
-  function exitAt(sequence: number, at: Placed, executionId: ExecutionId, recoveryEpoch: number) {
-    return observe('execution.exited', { sequence, attemptId: at.attemptId, ownershipGeneration: at.generation }, {
+  function exitAt(sequence: number, at: Placed, executionId: ExecutionId, recoveryEpoch: number, observationId?: string) {
+    const sent = { sequence, attemptId: at.attemptId, ownershipGeneration: at.generation, ...(observationId === undefined ? {} : { observationId }) };
+    return observe('execution.exited', sent, {
       executionId, recoveryEpoch, status: { kind: 'code', code: 0 }, startProven: true, spawnFailed: false, terminationEvidence: 'containment-empty',
     });
   }
 
-  async function launchedAttempt(): Promise<{ readonly at: Placed; readonly executionId: ExecutionId }> {
-    await enroll();
-    value(await declare(1));
-    const at = await placed();
-    value(await accept(2, at));
-    return { at, executionId: await launch(at) };
+  interface Launched {
+    readonly at: Placed;
+    readonly executionId: ExecutionId;
   }
 
-  test('an exit at an older epoch is kept as evidence and ends nothing; one at the current epoch still ends the attempt', async () => {
-    const { at, executionId } = await launchedAttempt();
+  // Two accepted attempts with granted executions, at sequences 1 to 3.
+  async function launchedAttempts(): Promise<readonly [Launched, Launched]> {
+    await enroll();
+    value(await declare(1));
+    const first = await placed('task-1');
+    const second = await placed('task-2');
+    value(await accept(2, first));
+    value(await accept(3, second));
+    return [{ at: first, executionId: await launch(first) }, { at: second, executionId: await launch(second) }];
+  }
+
+  test('an exit at an older epoch is kept as evidence and ends nothing; an exit at the current epoch still ends its attempt', async () => {
+    const [stale, current] = await launchedAttempts();
     await sql('UPDATE installation SET recovery_epoch = 2');
-    const before = await stored(at.taskId);
-    assert.equal(value(await exitAt(3, at, executionId, 1)), 'applied');
-    assert.deepEqual(await stored(at.taskId), before);
-    assert.equal((await heldAssignment(at.attemptId)).reservation.state, 'held');
+    const before = await stored(stale.at.taskId);
+    assert.equal(value(await exitAt(4, stale.at, stale.executionId, 1)), 'applied');
+    assert.deepEqual(await stored(stale.at.taskId), before);
+    assert.equal((await heldAssignment(stale.at.attemptId)).reservation.state, 'held');
     assert.deepEqual([await messages('execution.assignment.end'), observationEvidence()], [[], [['execution.exited', 1, false]]]);
-    assert.equal(value(await exitAt(4, at, executionId, 2)), 'applied');
-    assert.equal((await stored(at.taskId)).attempts[0]!.outcome?.kind, 'exited');
+    assert.equal(value(await exitAt(5, current.at, current.executionId, 2)), 'applied');
+    assert.equal((await stored(current.at.taskId)).attempts[0]!.outcome?.kind, 'exited');
+    assert.equal((await stored(stale.at.taskId)).attempts[0]!.outcome, undefined);
     assert.equal((await messages('execution.assignment.end')).length, 1);
-    assert.deepEqual(await confirmations(), [1, 2, 3, 4]);
+    assert.deepEqual(await confirmations(), [1, 2, 3, 4, 5]);
   });
 
   test('a newer epoch than the current one is evidence too', async () => {
-    const { at, executionId } = await launchedAttempt();
+    const [{ at, executionId }] = await launchedAttempts();
     const before = await stored(at.taskId);
-    assert.equal(value(await exitAt(3, at, executionId, 2)), 'applied');
+    assert.equal(value(await exitAt(4, at, executionId, 2)), 'applied');
     assert.deepEqual([await stored(at.taskId), observationEvidence()], [before, [['execution.exited', 2, false]]]);
   });
 
-  test('in restore quarantine every current-epoch execution observation is kept as evidence and changes nothing', async () => {
-    const { at, executionId } = await launchedAttempt();
+  test('in restore quarantine every current-epoch execution observation is kept as evidence; a repeat after it is not replayed', async () => {
+    const [{ at, executionId }, current] = await launchedAttempts();
     await sql('UPDATE installation SET quarantined = true');
     const before = await stored(at.taskId);
     const sent = (sequence: number) => ({ sequence, attemptId: at.attemptId, ownershipGeneration: at.generation });
     const observed = [
-      await observe('execution.uncertain', sent(3), { executionId, recoveryEpoch: 1 }),
-      await observe('execution.termination-unproven', sent(4), { executionId, recoveryEpoch: 1, survivors: [] }),
-      await observe('execution.cancellation.not-applied', sent(5), { commandId: 'cancel-1', executionId, recoveryEpoch: 1, reason: 'adopting-supervisor' }),
-      await observe('execution.not-started', sent(6), { executionId, recoveryEpoch: 1 }),
-      await exitAt(7, at, executionId, 1),
+      await observe('execution.uncertain', sent(4), { executionId, recoveryEpoch: 1 }),
+      await observe('execution.termination-unproven', sent(5), { executionId, recoveryEpoch: 1, survivors: [] }),
+      await observe('execution.cancellation.not-applied', sent(6), { commandId: 'cancel-1', executionId, recoveryEpoch: 1, reason: 'adopting-supervisor' }),
+      await observe('execution.not-started', sent(7), { executionId, recoveryEpoch: 1 }),
+      await exitAt(8, at, executionId, 1, 'exit-in-quarantine'),
     ];
     assert.deepEqual(observed.map(value), ['applied', 'applied', 'applied', 'applied', 'applied']);
     assert.deepEqual(await stored(at.taskId), before);
@@ -874,8 +884,10 @@ describe('execution observations outside the current epoch', () => {
     ]);
     assert.ok(observationEvidence().every(([, epoch, quarantined]) => epoch === 1 && quarantined === true));
     await sql('UPDATE installation SET quarantined = false');
-    assert.equal(value(await exitAt(8, at, executionId, 1)), 'applied');
-    assert.equal((await stored(at.taskId)).attempts[0]!.outcome?.kind, 'exited');
+    assert.equal(value(await exitAt(8, at, executionId, 1, 'exit-in-quarantine')), 'duplicate', 'no automatic replay');
+    assert.deepEqual(await stored(at.taskId), before);
+    assert.equal(value(await exitAt(9, current.at, current.executionId, 1)), 'applied');
+    assert.equal((await stored(current.at.taskId)).attempts[0]!.outcome?.kind, 'exited');
   });
 
   test('an unrecorded process at an older epoch is still recorded for the reconciliation queue', async () => {
