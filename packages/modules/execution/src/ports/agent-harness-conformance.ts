@@ -8,7 +8,7 @@ import {
   type HarnessRequestKind,
   type ParsedAgentHarnessCapabilities,
 } from './agent-harness-data.js';
-import { DELEGATION_OUTCOMES } from './agent-harness.js';
+import { DELEGATION_OUTCOMES, SUBSCRIPTION_MECHANISMS } from './agent-harness.js';
 import type {
   AgentHarness,
   AgentHarnessOperation,
@@ -16,6 +16,7 @@ import type {
   HarnessCapability,
   HarnessEventData,
   ResponseData,
+  ResumeSessionRequest,
   SessionRequest,
   SlotCredentialData,
   StartSessionRequest,
@@ -70,7 +71,7 @@ type Outcome = { readonly ok: true; readonly value: unknown } | { readonly ok: f
 
 type TurnEnded = Extract<HarnessEvent, { kind: 'turn-ended' }>;
 
-type ReadStep = IteratorResult<HarnessEventData> | 'timeout' | 'threw';
+type ReadStep = { readonly done: true } | { readonly done: false; readonly value: unknown } | 'timeout' | 'threw';
 
 type DelegationResult = Extract<ResponseData, { kind: 'delegation-result' }>;
 
@@ -100,12 +101,13 @@ export async function runAgentHarnessConformance(
   const capabilities = readCapabilities(harness);
   if (!capabilities.ok) return report(0, 'capabilities', capabilities.message);
   const timeoutMs = fixture.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_TIMEOUT_MS) {
-    return report(0, 'fixture', `timeoutMs must be an integer from 1 to ${MAX_TIMEOUT_MS}`);
-  }
+  const problem = fixtureProblem(fixture, timeoutMs);
+  if (problem !== undefined) return report(0, 'fixture', problem);
   const findings: AgentHarnessConformanceFinding[] = [];
+  const issued = new Set<string>();
   for (const [index, scenario] of SCENARIOS.entries()) {
-    const probe = new Probe({ harness, capabilities: capabilities.value, fixture, timeoutMs, scenario: scenario.name, index, findings });
+    const context = { harness, capabilities: capabilities.value, fixture, timeoutMs, scenario: scenario.name, index, findings, issued };
+    const probe = new Probe(context);
     try {
       if (scenario.needs === undefined || probe.declares(scenario.needs)) await scenario.run(probe);
       else await undeclared(probe, scenario.needs);
@@ -114,6 +116,15 @@ export async function runAgentHarnessConformance(
     }
   }
   return { scenarios: SCENARIOS.length, findings };
+}
+
+// A blank `recalled` would be in every output, so recall checks nothing.
+function fixtureProblem(fixture: AgentHarnessConformanceFixture, timeoutMs: number): string | undefined {
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_TIMEOUT_MS) {
+    return `timeoutMs must be an integer from 1 to ${MAX_TIMEOUT_MS}`;
+  }
+  if (typeof fixture.recalled !== 'string' || fixture.recalled.trim() === '') return 'recalled must not be blank';
+  return undefined;
 }
 
 function report(scenarios: number, check: 'capabilities' | 'fixture', message: string): AgentHarnessConformanceReport {
@@ -139,6 +150,7 @@ const SCENARIOS: readonly Scenario[] = Object.freeze([
   { name: 'delegation result by correlation', needs: 'delegation', run: delegation },
   { name: 'resume without replaying a pending request', needs: 'resume', run: resume },
   { name: 'terminal only while the session runs', needs: 'terminal', run: terminal },
+  { name: 'session and request rules', run: sessionRules },
 ]);
 
 async function chat(probe: Probe): Promise<void> {
@@ -149,7 +161,8 @@ async function chat(probe: Probe): Promise<void> {
   if (!(await probe.turn(session, 'turn-2', probe.prompts.recall, 'completed'))) return;
   probe.expectOutput('turn-2', [probe.recalled], 'the recall turn does not contain the remembered fact');
   probe.expect('repeated turn ID', await probe.submit(session, 'turn-1', probe.prompts.recall), 'conflict');
-  probe.expect('unknown native session', await probe.call('submitTurn', { ...session, nativeSessionId: 'unknown', turnId: 'x', text: 'x' }), 'not-found');
+  const unknown = { ...session, nativeSessionId: probe.unusedId('unknown'), turnId: 'x', text: 'x' };
+  probe.expect('unknown native session', await probe.call('submitTurn', unknown), 'not-found');
   await probe.close(session);
   probe.expect('turn after close', await probe.submit(session, 'turn-3', probe.prompts.recall), 'precondition-failed');
 }
@@ -184,7 +197,8 @@ async function permission(probe: Probe): Promise<void> {
     ['extra response field', { ...deny, scope: 'always' }],
   ]);
   await answerOnce(probe, session, denied, deny);
-  probe.expect('unknown native request', await probe.call('respond', { ...session, nativeRequestId: 'unknown-request', response: deny }), 'not-found');
+  const unknown = { ...session, nativeRequestId: probe.unusedId('unknown-request'), response: deny };
+  probe.expect('unknown native request', await probe.call('respond', unknown), 'not-found');
   await probe.turnEnd('turn-1');
   await probe.expectActionRuns(before, 'a denied action ran');
   if (!probe.succeeded('submit', await probe.submit(session, 'turn-2', probe.prompts.permission))) return;
@@ -193,7 +207,22 @@ async function permission(probe: Probe): Promise<void> {
   probe.succeeded('allow', await probe.call('respond', { ...session, nativeRequestId: allowed, response: { kind: 'permission', decision: 'allow' } }));
   await probe.turnEnd('turn-2');
   await probe.expectActionRuns(before + 1, 'an allowed action did not run exactly once');
+  await expireWithTurn(probe, session);
   await probe.close(session);
+}
+
+// A request of an interrupted turn expires with it: a late answer is
+// `not-found` and its action does not run.
+async function expireWithTurn(probe: Probe, session: SessionRequest): Promise<void> {
+  const before = await probe.actionRuns();
+  if (before === undefined || !probe.succeeded('submit', await probe.submit(session, 'turn-3', probe.prompts.permission))) return;
+  const request = await probe.request('permission-request');
+  if (request === undefined) return;
+  if (!probe.succeeded('interrupt', await probe.call('interrupt', { ...session, turnId: 'turn-3' }))) return;
+  if ((await probe.turnEnd('turn-3', 'interrupted')) === undefined) return;
+  const late = { ...session, nativeRequestId: request, response: { kind: 'permission', decision: 'allow' } } as const;
+  probe.expect('response after the turn ended', await probe.call('respond', late), 'not-found');
+  await probe.expectActionRuns(before, 'a response after the turn ended ran the action');
 }
 
 async function exitObservation(probe: Probe): Promise<void> {
@@ -319,6 +348,70 @@ async function expectFenced(probe: Probe, earlier: SessionRequest): Promise<void
   if (probe.declares('terminal')) fenced('terminal', await probe.call('terminalProgram', earlier));
 }
 
+// The codes the contract names for a host's mistakes: a malformed request,
+// a second start, an unknown session, and a resume out of order.
+async function sessionRules(probe: Probe): Promise<void> {
+  await rejectStarts(probe);
+  const session = await probe.start();
+  if (session === undefined) return;
+  probe.expect('second start of the session', await probe.call('startSession', probe.startRequest(1)), 'conflict');
+  await rejectUnknownSession(probe, session);
+  for (const generation of MALFORMED_GENERATIONS) await rejectGeneration(probe, { ...session, generation });
+  const resumes = probe.declares('resume');
+  if (resumes) {
+    const running = probe.resumeRequest(session, 2);
+    probe.expect('resume of a running session', await probe.call('resumeSession', running), 'precondition-failed');
+  }
+  if (!(await probe.endHarness(session)) || !(await probe.sessionEnd(['exited', 'failed']))) return;
+  probe.succeeded('close after the harness exited', await probe.call('closeSession', session));
+  if (!resumes) return;
+  const skipped = probe.resumeRequest(session, 3);
+  probe.expect('resume that skips a generation', await probe.call('resumeSession', skipped), 'precondition-failed');
+  const malformed = probe.resumeRequest(session, 0);
+  probe.expect('resume at generation 0', await probe.call('resumeSession', malformed), 'invalid');
+  const resumed = await probe.resume(session);
+  if (resumed !== undefined) await probe.close(resumed);
+}
+
+const MALFORMED_GENERATIONS = Object.freeze([0, 1.5]);
+
+async function rejectStarts(probe: Probe): Promise<void> {
+  const base = { ...probe.startRequest(1), sessionId: `${probe.startRequest(1).sessionId}-rejected` };
+  const cases: readonly (readonly [string, StartSessionRequest])[] = [
+    ['start at generation 2', { ...base, generation: 2 }],
+    ...MALFORMED_GENERATIONS.map((generation) => [`start at generation ${generation}`, { ...base, generation }] as const),
+    ['start with an undeclared mechanism', { ...base, credential: { ...base.credential, mechanism: probe.undeclaredMechanism() } }],
+    ['start with an empty binary path', { ...base, binaryPath: '' }],
+  ];
+  for (const [label, request] of cases) probe.expect(label, await probe.call('startSession', request), 'invalid');
+}
+
+async function rejectUnknownSession(probe: Probe, session: SessionRequest): Promise<void> {
+  const unknown = { ...session, nativeSessionId: probe.unusedId('unknown') };
+  const notFound = (label: string, outcome: Outcome | undefined): void =>
+    probe.expect(`${label} of an unknown session`, outcome, 'not-found');
+  const deny: ResponseData = { kind: 'permission', decision: 'deny' };
+  notFound('events', await probe.call('events', unknown));
+  notFound('interrupt', await probe.call('interrupt', { ...unknown, turnId: 'turn-1' }));
+  notFound('response', await probe.call('respond', { ...unknown, nativeRequestId: probe.unusedId('unknown-request'), response: deny }));
+  notFound('close', await probe.call('closeSession', unknown));
+  if (probe.declares('terminal')) notFound('terminal', await probe.call('terminalProgram', unknown));
+  if (probe.declares('resume')) notFound('resume', await probe.call('resumeSession', probe.resumeRequest(unknown, 2)));
+}
+
+// A generation that is not a positive integer is malformed, not stale.
+async function rejectGeneration(probe: Probe, malformed: SessionRequest): Promise<void> {
+  const invalid = (label: string, outcome: Outcome | undefined): void =>
+    probe.expect(`${label} at generation ${malformed.generation}`, outcome, 'invalid');
+  const deny: ResponseData = { kind: 'permission', decision: 'deny' };
+  invalid('events', await probe.call('events', malformed));
+  invalid('turn', await probe.call('submitTurn', { ...malformed, turnId: 'turn-malformed', text: probe.prompts.recall }));
+  invalid('interrupt', await probe.call('interrupt', { ...malformed, turnId: 'turn-1' }));
+  invalid('response', await probe.call('respond', { ...malformed, nativeRequestId: probe.unusedId('unknown-request'), response: deny }));
+  if (probe.declares('terminal')) invalid('terminal', await probe.call('terminalProgram', malformed));
+  invalid('close', await probe.call('closeSession', malformed));
+}
+
 async function terminal(probe: Probe): Promise<void> {
   const session = await probe.start();
   if (session === undefined) return;
@@ -334,7 +427,7 @@ async function undeclared(probe: Probe, capability: HarnessCapability): Promise<
   const unavailable = (outcome: Outcome | undefined): void =>
     probe.expect(`${capability} is not declared`, outcome, 'unavailable', 'undeclared-capability');
   if (capability === 'resume') {
-    unavailable(await probe.call('resumeSession', { ...probe.startRequest(2), nativeSessionId: 'undeclared' }));
+    unavailable(await probe.call('resumeSession', probe.resumeRequest(session, 2)));
   } else if (capability === 'terminal') {
     unavailable(await probe.call('terminalProgram', session));
   } else if (capability === 'delegation') {
@@ -361,6 +454,7 @@ interface ProbeContext {
   readonly scenario: string;
   readonly index: number;
   readonly findings: AgentHarnessConformanceFinding[];
+  readonly issued: Set<string>;
 }
 
 // One scenario's view of the harness: it calls operations under a deadline,
@@ -388,14 +482,30 @@ class Probe {
     return { sessionId, generation, binaryPath, workingDirectory, stateDirectory, credential: { ...credential } };
   }
 
+  resumeRequest(session: SessionRequest, generation: number): ResumeSessionRequest {
+    return { ...this.startRequest(generation), nativeSessionId: session.nativeSessionId };
+  }
+
+  // An ID the harness has not issued in this run, so a check that needs an
+  // unknown session or request never names a real one.
+  unusedId(base: string): string {
+    let candidate = base;
+    for (let suffix = 2; this.#context.issued.has(candidate); suffix += 1) candidate = `${base}-${suffix}`;
+    return candidate;
+  }
+
+  undeclaredMechanism(): string {
+    const declared: readonly string[] = this.#context.capabilities.subscriptionMechanisms;
+    return SUBSCRIPTION_MECHANISMS.find((mechanism) => !declared.includes(mechanism)) ?? 'undeclared-mechanism';
+  }
+
   async start(): Promise<SessionRequest | undefined> {
     return this.#open('startSession', await this.call('startSession', this.startRequest(1)), 1);
   }
 
   async resume(previous: SessionRequest): Promise<SessionRequest | undefined> {
     const generation = previous.generation + 1;
-    const request = { ...this.startRequest(generation), nativeSessionId: previous.nativeSessionId };
-    const outcome = await this.call('resumeSession', request);
+    const outcome = await this.call('resumeSession', this.resumeRequest(previous, generation));
     if (outcome?.ok && (outcome.value as { nativeSessionId: string }).nativeSessionId !== previous.nativeSessionId) {
       this.report('result', 'resumeSession must keep the native session ID');
     }
@@ -504,7 +614,11 @@ class Probe {
     if (raw === TIMED_OUT) return undefined;
     const parsed = parseOperationResult(operation, raw);
     if (!parsed.ok) return (this.report('result', `${operation}: ${parsed.error.message}`), undefined);
-    return parsed.value.ok ? { ok: true, value: parsed.value.value } : { ok: false, code: parsed.value.error.code };
+    if (!parsed.value.ok) return { ok: false, code: parsed.value.error.code };
+    if (operation === 'startSession' || operation === 'resumeSession') {
+      this.#context.issued.add((parsed.value.value as { nativeSessionId: string }).nativeSessionId);
+    }
+    return { ok: true, value: parsed.value.value };
   }
 
   succeeded(label: string, outcome: Outcome | undefined): boolean {
@@ -607,8 +721,8 @@ class Probe {
   // a pending one; its return() is requested but not awaited.
   async #read(events: AsyncIterator<HarnessEventData>, remainingMs: number): Promise<ReadStep> {
     try {
-      const step = await this.#withDeadline(Promise.resolve(events.next()), undefined, remainingMs);
-      if (step !== TIMED_OUT) return step;
+      const step: unknown = await this.#withDeadline(Promise.resolve(events.next()), undefined, remainingMs);
+      if (step !== TIMED_OUT) return this.#stepOf(step, events);
       this.#abandon(events);
       return 'timeout';
     } catch (error) {
@@ -616,6 +730,19 @@ class Probe {
       this.#abandon(events);
       return 'threw';
     }
+  }
+
+  // An iterator result is an object with an optional boolean `done`; a
+  // throwing accessor is caught by the read as a throw.
+  #stepOf(raw: unknown, events: AsyncIterator<HarnessEventData>): ReadStep {
+    const step = typeof raw === 'object' && raw !== null ? raw as Partial<IteratorResult<unknown>> : undefined;
+    const done: unknown = step?.done;
+    if (step === undefined || (done !== undefined && typeof done !== 'boolean')) {
+      this.report('event', 'the events returned a malformed iterator result');
+      this.#abandon(events);
+      return 'threw';
+    }
+    return done === true ? { done: true } : { done: false, value: step.value };
   }
 
   #abandon(events: AsyncIterator<HarnessEventData>): void {
@@ -655,6 +782,7 @@ class Probe {
     if ('nativeRequestId' in event) {
       if (this.#requests.has(event.nativeRequestId)) this.report('event', `native request ${event.nativeRequestId} was reused`);
       this.#requests.add(event.nativeRequestId);
+      this.#context.issued.add(event.nativeRequestId);
     }
     this.#record(event, turn);
     return event;

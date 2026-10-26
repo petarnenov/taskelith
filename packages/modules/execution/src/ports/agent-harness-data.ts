@@ -401,12 +401,13 @@ function readArray(path: string, raw: unknown): Result<readonly unknown[]> {
   return items.length === raw.length ? ok(items) : invalid(path, 'must have no holes');
 }
 
-// Exactly the named fields, as own data properties of a plain object.
+// Exactly the named fields, as own data properties of a plain object. No
+// prototype, so a __proto__ key is a field like any other.
 function readFields(path: string, raw: unknown, required: readonly string[], optional: readonly string[] = []): Result<Fields> {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return invalid(path, 'must be an object');
   const prototype: unknown = Object.getPrototypeOf(raw);
   if (prototype !== Object.prototype && prototype !== null) return invalid(path, 'must be a plain object');
-  const fields: Record<string, unknown> = {};
+  const fields: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
   for (const key of Reflect.ownKeys(raw)) {
     if (typeof key !== 'string' || !(required.includes(key) || optional.includes(key))) {
       return invalid(path, `${String(key)} is not a defined field`);

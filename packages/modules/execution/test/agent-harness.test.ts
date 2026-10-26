@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type FailureCode, type Result } from '@taskelith/kernel';
 import {
   ACCOUNT_SIGNALS,
   AGENT_HARNESS_PORT_VERSION,
@@ -9,6 +9,7 @@ import {
   HARNESS_CAPABILITIES,
   HARNESS_FAILURES,
   HARNESS_PLATFORMS,
+  MAX_HARNESS_TEXT_LENGTH,
   PERMISSION_DECISIONS,
   REQUIRED_HARNESS_CAPABILITIES,
   SESSION_END_REASONS,
@@ -21,6 +22,7 @@ import {
   runAgentHarnessConformance,
   type AgentHarnessCapabilities,
   type AgentHarnessConformanceFixture,
+  type AgentHarnessOperation,
   type HarnessEventData,
   type ParsedAgentHarnessCapabilities,
   type RespondRequest,
@@ -149,7 +151,7 @@ test('the scripted harness passes the suite with every capability', async () => 
   const harness = new ScriptedAgentHarness(OPTIONS);
   const report = await runAgentHarnessConformance(harness, fixtureFor(harness));
   assert.deepEqual(report.findings, []);
-  assert.equal(report.scenarios, 9);
+  assert.equal(report.scenarios, 10);
 });
 
 test('the scripted harness passes the suite with only the required capabilities', async () => {
@@ -213,6 +215,9 @@ test('harness events are parsed against the declaration', () => {
     ['usage above one', { kind: 'account-signal', signal: 'usage', usage: 2 }, capabilities],
     ['bad reset time', { kind: 'account-signal', signal: 'limit', resetsAt: 'tomorrow' }, capabilities],
     ['30 February', { kind: 'account-signal', signal: 'limit', resetsAt: '2026-02-30T00:00:00Z' }, capabilities],
+    ['reset time with an offset', { kind: 'account-signal', signal: 'limit', resetsAt: '2026-10-26T12:00:00+00:00' }, capabilities],
+    ['reset time without seconds', { kind: 'account-signal', signal: 'limit', resetsAt: '2026-10-26T12:00Z' }, capabilities],
+    ['long ref', push(`refs/heads/${'a'.repeat(1015)}`), capabilities],
     ['failure on success', { kind: 'turn-ended', turnId: 't', outcome: 'completed', failure: 'internal' }, capabilities],
     ['failed without failure', { kind: 'turn-ended', turnId: 't', outcome: 'failed' }, capabilities],
     ['unknown outcome', { kind: 'turn-ended', turnId: 't', outcome: 'success' }, capabilities],
@@ -262,6 +267,8 @@ test('operation results are parsed as exact kernel Results', () => {
     ['non-string detail', 'respond', { ok: false, error: { code: 'internal', message: 'x', details: { a: 1 } } }],
     ['long message', 'respond', { ok: false, error: { code: 'internal', message: 'x'.repeat(4097), details: {} } }],
     ['long native session ID', 'startSession', ok({ nativeSessionId: 'x'.repeat(129) })],
+    ['long argv element', 'terminalProgram', ok({ argv: ['x'.repeat(1025)], workingDirectory: '/w' })],
+    ['long working directory', 'terminalProgram', ok({ argv: ['sh'], workingDirectory: `/${'w'.repeat(1024)}` })],
     ['extra handle field', 'resumeSession', ok({ nativeSessionId: 'n', token: 't' })],
     ['empty argv', 'terminalProgram', ok({ argv: [], workingDirectory: '/w' })],
     ['argv of numbers', 'terminalProgram', ok({ argv: [1], workingDirectory: '/w' })],
@@ -271,6 +278,23 @@ test('operation results are parsed as exact kernel Results', () => {
     ['events null', 'events', ok(null)],
   ];
   for (const [name, operation, raw] of malformed) assert.equal(code(parseOperationResult(operation, raw)), 'invalid', name);
+  assert.equal(code(parseOperationResult('startSession', ok({ nativeSessionId: 'x'.repeat(128) }))), 'ok');
+  assert.equal(code(parseOperationResult('terminalProgram', ok({ argv: ['x'.repeat(1024)], workingDirectory: '/w' }))), 'ok');
+});
+
+test('a __proto__ failure detail is a field like any other', () => {
+  const failed = (details: string): unknown =>
+    JSON.parse(`{"ok":false,"error":{"code":"internal","message":"x","details":${details}}}`);
+  const kept = parseOperationResult('respond', failed('{"__proto__":"a","b":"c"}'));
+  assert.ok(kept.ok && !kept.value.ok);
+  assert.deepEqual(Object.entries(kept.value.error.details), [['__proto__', 'a'], ['b', 'c']]);
+  assert.equal(Object.getPrototypeOf(kept.value.error.details), Object.prototype);
+  assert.equal(code(parseOperationResult('respond', failed('{"__proto__":1}'))), 'invalid');
+  assert.equal(code(parseOperationResult('respond', failed('{"__proto__":{"a":"b"}}'))), 'invalid');
+  const bare = Object.assign(Object.create(null) as Record<string, string>, { a: 'b' });
+  const nullPrototype = parseOperationResult('respond', { ok: false, error: { code: 'internal', message: 'x', details: bare } });
+  assert.ok(nullPrototype.ok && !nullPrototype.value.ok);
+  assert.deepEqual({ ...nullPrototype.value.error.details }, { a: 'b' });
 });
 
 test('the scripted harness keeps its own rules outside the suite', async () => {
@@ -366,6 +390,113 @@ test('the scripted harness resumes only after an unfinished close', async () => 
   assert.deepEqual(await drain(fresh), ['session-ended']);
   assert.deepEqual(await drain(events), ['turn-ended:interrupted', 'session-ended']);
   assert.equal(harness.actionRuns(), 1);
+});
+
+test('the scripted harness never lets a resume overlap a close', async () => {
+  const harness = new ScriptedAgentHarness(OPTIONS);
+  const { session, events } = await started(harness);
+  await harness.submitTurn({ ...session, turnId: 't1', text: 'long' });
+  const resume = { ...START, generation: 2, nativeSessionId: session.nativeSessionId };
+  const early = harness.resumeSession(resume);
+  const closed = harness.closeSession(session);
+  assert.deepEqual([code(await early), code(await closed)], ['precondition-failed', 'ok']);
+  assert.deepEqual(await drain(events), ['output', 'turn-ended:interrupted', 'session-ended']);
+  const next = { ...session, generation: 2 };
+  const reclosed = harness.closeSession(session);
+  const resumed = harness.resumeSession(resume);
+  assert.deepEqual([code(await reclosed), code(await resumed)], ['ok', 'ok']);
+  assert.equal(code(await harness.closeSession(next)), 'ok');
+});
+
+test('a request expires with its turn', async () => {
+  const harness = new ScriptedAgentHarness(OPTIONS);
+  const { session, events } = await started(harness);
+  const allow = { kind: 'permission', decision: 'allow' } as const;
+  await harness.submitTurn({ ...session, turnId: 't1', text: 'permission' });
+  const answered = (await events.next()).value as HarnessEventData;
+  assert.ok(answered.kind === 'permission-request');
+  assert.equal(code(await harness.respond({ ...session, nativeRequestId: answered.nativeRequestId, response: allow })), 'ok');
+  assert.deepEqual([(await events.next()).value?.kind, (await events.next()).value?.kind], ['output', 'turn-ended']);
+  assert.equal(code(await harness.respond({ ...session, nativeRequestId: answered.nativeRequestId, response: allow })), 'conflict');
+  await harness.submitTurn({ ...session, turnId: 't2', text: 'permission' });
+  const interrupted = (await events.next()).value as HarnessEventData;
+  assert.ok(interrupted.kind === 'permission-request');
+  assert.equal(code(await harness.interrupt({ ...session, turnId: 't2' })), 'ok');
+  assert.equal(code(await harness.respond({ ...session, nativeRequestId: interrupted.nativeRequestId, response: allow })), 'not-found');
+  assert.equal(code(await harness.closeSession(session)), 'ok');
+  assert.deepEqual(await drain(events), ['turn-ended:interrupted', 'session-ended']);
+  assert.equal(harness.actionRuns(), 1);
+});
+
+test('the scripted harness rejects a malformed request as invalid', async () => {
+  const harness = new ScriptedAgentHarness(OPTIONS);
+  const { session } = await started(harness);
+  const call = (operation: AgentHarnessOperation, request: unknown): Promise<Result<unknown>> =>
+    (harness[operation] as (request: unknown) => Promise<Result<unknown>>).call(harness, request);
+  const operations: readonly AgentHarnessOperation[] = [
+    'startSession', 'resumeSession', 'events', 'submitTurn', 'interrupt', 'respond', 'terminalProgram', 'closeSession',
+  ];
+  const allow = { kind: 'permission', decision: 'allow' };
+  const full = { ...START, ...session, turnId: 'tx', text: 'x', nativeRequestId: 'r', response: allow };
+  for (const operation of operations) {
+    for (const request of [null, 'request', { ...full, generation: 0 }, { ...full, generation: 1.5 }, { ...full, generation: Number.NaN }]) {
+      assert.equal(code(await call(operation, request)), 'invalid', `${operation} ${JSON.stringify(request)?.slice(0, 40)}`);
+    }
+    assert.equal(code(await call(operation, { ...full, nativeSessionId: 'n'.repeat(129) })), operation === 'startSession' ? 'conflict' : 'invalid', operation);
+  }
+  const malformed: readonly [AgentHarnessOperation, unknown][] = [
+    ['startSession', { ...START, sessionId: '' }],
+    ['startSession', { ...START, sessionId: 's'.repeat(129) }],
+    ['startSession', { ...START, workingDirectory: 'w'.repeat(1025) }],
+    ['startSession', { ...START, stateDirectory: 7 }],
+    ['startSession', { ...START, credential: null }],
+    ['startSession', { ...START, credential: { mechanism: 'subscription-token' } }],
+    ['submitTurn', { ...session, turnId: '', text: 'x' }],
+    ['submitTurn', { ...session, turnId: 't'.repeat(129), text: 'x' }],
+    ['submitTurn', { ...session, turnId: 't', text: null }],
+    ['interrupt', { ...session, turnId: '' }],
+    ['respond', { ...session, nativeRequestId: '', response: allow }],
+    ['respond', { ...session, nativeRequestId: 'r', response: null }],
+    ['respond', { ...session, nativeRequestId: 'r' }],
+  ];
+  for (const [operation, request] of malformed) {
+    assert.equal(code(await call(operation, request)), 'invalid', `${operation} ${JSON.stringify(request)?.slice(0, 60)}`);
+  }
+  assert.equal(code(await harness.closeSession(session)), 'ok');
+});
+
+test('the scripted harness keeps a native session ID within a label', async () => {
+  const harness = new ScriptedAgentHarness(OPTIONS);
+  const handle = await harness.startSession({ ...START, sessionId: 's'.repeat(128) });
+  assert.equal(code(parseOperationResult('startSession', handle)), 'ok');
+  assert.ok(handle.ok);
+  assert.equal(code(await harness.closeSession({ nativeSessionId: handle.value.nativeSessionId, generation: 1 })), 'ok');
+});
+
+test('the scripted harness splits long output into several events', async () => {
+  const harness = new ScriptedAgentHarness(OPTIONS);
+  const { session, events } = await started(harness);
+  const outputsOf = async (turnId: string): Promise<string[]> => {
+    const outputs: string[] = [];
+    for (let event = (await events.next()).value; event.kind !== 'turn-ended'; event = (await events.next()).value) {
+      assert.equal(code(parseHarnessEvent(event, parsed())), 'ok', event.kind);
+      if (event.kind === 'output' && event.turnId === turnId) outputs.push(event.text);
+    }
+    return outputs;
+  };
+  const long = 'x'.repeat(2 * MAX_HARNESS_TEXT_LENGTH + 1);
+  await harness.submitTurn({ ...session, turnId: 't1', text: long });
+  const fallback = await outputsOf('t1');
+  assert.deepEqual([fallback.length, fallback.join('')], [3, long]);
+  await harness.submitTurn({ ...session, turnId: 't2', text: 'delegate' });
+  const request = (await events.next()).value as HarnessEventData;
+  assert.ok(request.kind === 'delegation-request');
+  const summary = 's'.repeat(MAX_HARNESS_TEXT_LENGTH);
+  const result = { kind: 'delegation-result', delegationId: 'd'.repeat(128), outcome: 'completed', summary } as const;
+  assert.equal(code(await harness.respond({ ...session, nativeRequestId: request.nativeRequestId, response: result })), 'ok');
+  const echo = await outputsOf('t2');
+  assert.deepEqual([echo.length, echo.join('')], [2, `${result.delegationId} completed: ${summary}`]);
+  assert.equal(code(await harness.closeSession(session)), 'ok');
 });
 
 // Broken harnesses, each breaking one rule, to show the suite finds it.
@@ -513,6 +644,130 @@ class UniterableEventsHarness extends ScriptedAgentHarness {
   }
 }
 
+// It accepts a late answer to any request it has issued.
+class LateAnswerHarness extends ScriptedAgentHarness {
+  readonly #issued = new Set<string>();
+
+  override async events(request: SessionRequest): Promise<Result<AsyncIterable<HarnessEventData>>> {
+    const events = await super.events(request);
+    if (!events.ok) return events;
+    const source = events.value;
+    const issued = this.#issued;
+    return ok((async function* record() {
+      for await (const event of source) {
+        if ('nativeRequestId' in event) issued.add(event.nativeRequestId);
+        yield event;
+      }
+    })());
+  }
+
+  override async respond(request: RespondRequest): Promise<Result<void>> {
+    const result = await super.respond(request);
+    const late = !result.ok && result.error.code === 'not-found' && this.#issued.has(request.nativeRequestId);
+    return late ? ok(undefined) : result;
+  }
+}
+
+// Its events yield a malformed iterator result instead of an event.
+class MalformedStepHarness extends ScriptedAgentHarness {
+  readonly #step: () => unknown;
+
+  constructor(step: () => unknown) {
+    super(OPTIONS);
+    this.#step = step;
+  }
+
+  override async events(request: SessionRequest): Promise<Result<AsyncIterable<HarnessEventData>>> {
+    const events = await super.events(request);
+    const next = async (): Promise<IteratorResult<HarnessEventData>> => this.#step() as IteratorResult<HarnessEventData>;
+    return events.ok ? ok({ [Symbol.asyncIterator]: () => ({ next }) }) : events;
+  }
+}
+
+// It answers one operation's failure code with another one.
+class MiscodedHarness extends ScriptedAgentHarness {
+  constructor(operation: AgentHarnessOperation, from: FailureCode, to: FailureCode) {
+    super(OPTIONS);
+    const original = this[operation] as (request: unknown) => Promise<Result<unknown>>;
+    const miscoded = async (request: unknown): Promise<Result<unknown>> => {
+      const result = await original.call(this, request);
+      return !result.ok && result.error.code === from ? err(failure(to, 'miscoded')) : result;
+    };
+    Object.defineProperty(this, operation, { value: miscoded });
+  }
+}
+
+// It refuses to close a session whose harness exited on its own.
+class ExitedCloseHarness extends ScriptedAgentHarness {
+  readonly #exited = new Set<string>();
+
+  override async exitHarness(nativeSessionId: string): Promise<void> {
+    this.#exited.add(nativeSessionId);
+    await super.exitHarness(nativeSessionId);
+  }
+
+  override async closeSession(request: SessionRequest): Promise<Result<void>> {
+    return this.#exited.has(request.nativeSessionId) ? err(failure('precondition-failed', 'exited')) : super.closeSession(request);
+  }
+}
+
+// It issues the IDs that the suite once used for an unknown session or
+// request, which a harness may choose.
+class CollidingIdsHarness extends ScriptedAgentHarness {
+  protected override nativeSessionIdFor(count: number): string {
+    return count === 1 ? 'unknown' : `unknown-${count}`;
+  }
+
+  protected override nativeRequestIdFor(_generation: number, count: number): string {
+    return count === 1 ? 'unknown-request' : `unknown-request-${count}`;
+  }
+}
+
+test('the suite reports a late answer, a malformed iterator result, and a miscoded rule', async () => {
+  const messages = async (harness: ScriptedAgentHarness): Promise<string[]> =>
+    (await findingsOf(harness)).map((finding) => finding.message);
+  const has = (found: readonly string[], label: string): boolean => found.some((message) => message.startsWith(label));
+  assert.ok(has(await messages(new LateAnswerHarness(OPTIONS)), 'response after the turn ended'));
+  const throwing = (field: string) => () => Object.defineProperty({}, field, { get: () => { throw new Error(field); } });
+  const steps: readonly [string, () => unknown][] = [
+    ['null', () => null], ['undefined', () => undefined], ['a string', () => 'event'],
+    ['a non-boolean done', () => ({ done: 'yes', value: undefined })], ['throwing done', throwing('done')], ['throwing value', throwing('value')],
+  ];
+  for (const [name, step] of steps) {
+    const checks = await checksOf(new MalformedStepHarness(step));
+    assert.ok(checks.has('event') || checks.has('threw'), name);
+  }
+  const cases: readonly [string, AgentHarnessOperation, FailureCode, FailureCode][] = [
+    ['second start of the session', 'startSession', 'conflict', 'invalid'],
+    ['start at generation 2', 'startSession', 'invalid', 'precondition-failed'],
+    ['start with an undeclared mechanism', 'startSession', 'invalid', 'precondition-failed'],
+    ['start with an empty binary path', 'startSession', 'invalid', 'precondition-failed'],
+    ['resume of a running session', 'resumeSession', 'precondition-failed', 'conflict'],
+    ['resume that skips a generation', 'resumeSession', 'precondition-failed', 'conflict'],
+    ['resume of an unknown session', 'resumeSession', 'not-found', 'precondition-failed'],
+    ['resume at generation 0', 'resumeSession', 'invalid', 'precondition-failed'],
+    ['events of an unknown session', 'events', 'not-found', 'precondition-failed'],
+    ['interrupt of an unknown session', 'interrupt', 'not-found', 'precondition-failed'],
+    ['response of an unknown session', 'respond', 'not-found', 'precondition-failed'],
+    ['terminal of an unknown session', 'terminalProgram', 'not-found', 'precondition-failed'],
+    ['close of an unknown session', 'closeSession', 'not-found', 'precondition-failed'],
+    ['events at generation 0', 'events', 'invalid', 'precondition-failed'],
+    ['turn at generation 1.5', 'submitTurn', 'invalid', 'precondition-failed'],
+    ['interrupt at generation 0', 'interrupt', 'invalid', 'precondition-failed'],
+    ['response at generation 1.5', 'respond', 'invalid', 'precondition-failed'],
+    ['terminal at generation 0', 'terminalProgram', 'invalid', 'precondition-failed'],
+    ['close at generation 1.5', 'closeSession', 'invalid', 'precondition-failed'],
+  ];
+  for (const [label, operation, from, to] of cases) {
+    assert.ok(has(await messages(new MiscodedHarness(operation, from, to)), label), label);
+  }
+  assert.ok(has(await messages(new ExitedCloseHarness(OPTIONS)), 'close after the harness exited'));
+});
+
+test('the suite never names an ID the harness issued as unknown', async () => {
+  assert.deepEqual(await findingsOf(new CollidingIdsHarness(OPTIONS)), []);
+});
+
 test('the suite reports each broken rule', async () => {
   const cases: readonly [string, ScriptedAgentHarness, string, Partial<AgentHarnessConformanceFixture>?][] = [
     ['throwing operation', new ThrowingHarness(OPTIONS), 'threw'],
@@ -542,16 +797,16 @@ test('the suite reports each broken rule', async () => {
 test('the suite closes a session that a scenario left open', async () => {
   const passing = new CountedCloseHarness(OPTIONS);
   assert.deepEqual(await findingsOf(passing), []);
-  assert.equal(passing.closed.filter((id) => id === 'scripted-conformance-1').length, 2);
-  assert.ok(!passing.closed.includes('scripted-conformance-4'));
+  assert.equal(passing.closed.filter((id) => id === 'scripted-1').length, 2);
+  assert.ok(!passing.closed.includes('scripted-4'));
   const stuck = new CountedCloseHarness({ ...OPTIONS, script: { ...SCRIPT, remember: [{ waitForInterrupt: true }] } });
   const findings = await findingsOf(stuck);
   assert.ok(findings.some((finding) => finding.scenario === 'chat with prompt correlation' && finding.check === 'timeout'));
-  assert.ok(stuck.closed.includes('scripted-conformance-1'));
+  assert.ok(stuck.closed.includes('scripted-1'));
   const unclosable = new FailingCloseHarness(OPTIONS);
   const ended: string[] = [];
   await findingsOf(unclosable, { endHarness: async (session) => { ended.push(session.nativeSessionId); } });
-  assert.ok(ended.includes('scripted-conformance-1'));
+  assert.ok(ended.includes('scripted-1'));
 });
 
 test('the suite reports a broken fixture', async () => {
@@ -564,6 +819,11 @@ test('the suite reports a broken fixture', async () => {
   assert.ok((await checksOf(brokenProbe, { actionRuns: async () => { throw new Error('gone'); } })).has('fixture'));
   for (const runs of [0.5, -1, 2 ** 53]) {
     assert.ok((await checksOf(new ScriptedAgentHarness(OPTIONS), { actionRuns: async () => runs })).has('fixture'), String(runs));
+  }
+  for (const recalled of ['', '  \n']) {
+    assert.deepEqual(await findingsOf(new ScriptedAgentHarness(OPTIONS), { recalled }), [
+      { scenario: 'fixture', check: 'fixture', message: 'recalled must not be blank' },
+    ]);
   }
   for (const timeoutMs of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 1.5]) {
     assert.deepEqual(await findingsOf(new ScriptedAgentHarness(OPTIONS), { timeoutMs }), [

@@ -11,6 +11,33 @@ The `AgentHarness` port SHALL belong to the Execution module, and no type, value
 - **WHEN** a plugin emits an event with a field the port does not define
 - **THEN** the parser rejects it as `invalid`
 
+#### Scenario: Values outside the contract's bounds
+- **WHEN** a plugin returns a native session ID over 128 characters, a terminal path over 1,024 characters, or a failure message over 4,096 characters
+- **THEN** the parser rejects it as `invalid`
+
+#### Scenario: Reset time with an offset
+- **WHEN** a `limit` event carries `resetsAt` with an offset such as `+00:00` instead of a final `Z`
+- **THEN** the parser rejects it as `invalid`
+
+#### Scenario: A __proto__ failure detail
+- **WHEN** a failure's details hold a `__proto__` key
+- **THEN** the parser keeps it as a field when its value is a string and rejects it as `invalid` otherwise
+
+### Requirement: Malformed requests
+A harness plugin SHALL reject a malformed request, one that is not an object, lacks a field, or has a field of the wrong type or outside the contract's bounds, with `invalid` before it checks any session state, and SHALL never throw for one; only an undeclared capability's `unavailable` SHALL come first.
+
+#### Scenario: Malformed generation
+- **WHEN** the host names generation 0 or 1.5 in a request for a known session
+- **THEN** the call fails with `invalid`, not `precondition-failed`
+
+#### Scenario: Null response
+- **WHEN** the host responds with a null response
+- **THEN** the call fails with `invalid` and does not throw
+
+#### Scenario: Longest session ID
+- **WHEN** the host starts a session with a 128-character session ID
+- **THEN** the plugin returns a native session ID of at most 128 characters
+
 ### Requirement: Declared capabilities
 A harness plugin SHALL declare its supported capabilities, including at least chat, prompt correlation, permission requests, interruption, and exit observation, its subscription mechanisms, its account signals, and one pinned binary per supported platform; an operation of an undeclared capability SHALL fail with `unavailable`, and an event of an undeclared request kind or signal SHALL be rejected.
 
@@ -34,11 +61,15 @@ Every turn SHALL carry a host-generated turn ID that the plugin maps to its nati
 - **THEN** the call fails with `precondition-failed`
 
 ### Requirement: Native requests with a single response
-Every permission, input, and delegation request SHALL carry a native request ID unique within its generation; the first valid response SHALL be applied, a second SHALL fail with `conflict`, a request of an earlier generation SHALL never be answered in a later one, and a request that cannot be classified as a harness-neutral operation SHALL match no standing rule.
+Every permission, input, and delegation request SHALL carry a native request ID unique within its generation; the first valid response SHALL be applied, a second SHALL fail with `conflict`, a request SHALL expire when its turn or generation ends, a request of an earlier generation SHALL never be answered in a later one, and a request that cannot be classified as a harness-neutral operation SHALL match no standing rule.
 
 #### Scenario: Second response
 - **WHEN** a second response arrives for an answered request
 - **THEN** it fails with `conflict` and changes nothing
+
+#### Scenario: Response after the turn ended
+- **WHEN** the host answers a request whose turn was interrupted before the answer
+- **THEN** the response fails with `not-found` and is not applied
 
 #### Scenario: Pending request after resume
 - **WHEN** a session resumes after a process ended with a request pending
@@ -54,6 +85,10 @@ A session SHALL start at generation 1 exactly, a start at another generation SHA
 #### Scenario: Resume that skips a generation
 - **WHEN** the host resumes a session that ended at generation 1 at generation 3
 - **THEN** the resume fails with `precondition-failed`
+
+#### Scenario: Resume before a close
+- **WHEN** the host resumes a running session and then closes it in the same tick
+- **THEN** the resume fails with `precondition-failed`, and the close ends the generation
 
 #### Scenario: Close at an earlier generation
 - **WHEN** the host closes a resumed session at its earlier generation
@@ -109,6 +144,22 @@ The Execution module SHALL provide a conformance suite without a test runner tha
 
 #### Scenario: Broken harness
 - **WHEN** a harness accepts a second response to one request
+- **THEN** the suite reports an `outcome` finding
+
+#### Scenario: Blank recalled text
+- **WHEN** the fixture's `recalled` text is blank
+- **THEN** the suite stops with a `fixture` finding
+
+#### Scenario: Malformed iterator result
+- **WHEN** a harness's events yield null, a non-object, a non-boolean `done`, or a throwing accessor instead of an iterator result
+- **THEN** the suite reports an `event` or `threw` finding and returns its report
+
+#### Scenario: Native IDs the suite once used
+- **WHEN** a harness issues `unknown` as a native session ID and `unknown-request` as a native request ID
+- **THEN** the suite picks other IDs for its unknown session and request checks and reports no finding
+
+#### Scenario: Wrong code for a host mistake
+- **WHEN** a harness answers a second start, an unknown session, a malformed generation, or a resume out of order with a code other than the contract's
 - **THEN** the suite reports an `outcome` finding
 
 #### Scenario: Denied action runs
