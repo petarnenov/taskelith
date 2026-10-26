@@ -50,10 +50,33 @@ function messagesOf(lines: readonly string[]): string[] {
   return parseLines(lines).problems.map(formatProblem);
 }
 
-test('the seeded vocabulary parses without problems', () => {
+const SEEDED_CATEGORIES = [
+  'stale-citation', 'evidence-mismatch', 'contract-drift', 'spec-wording', 'requirement-length',
+  'missing-fail-before-test', 'test-flakiness', 'clock-mixing', 'concurrency-race', 'error-handling',
+  'redaction', 'scope', 'naming', 'docs', 'process',
+];
+
+test('the vocabulary parses without problems and holds the seeded categories', () => {
   assert.deepEqual(vocabulary.problems, []);
-  assert.equal(vocabulary.categories.length, 15);
-  assert.ok(vocabulary.categories.some(({ id }) => id === 'missing-fail-before-test'));
+  const ids = vocabulary.categories.map(({ id }) => id);
+  for (const seeded of SEEDED_CATEGORIES) assert.ok(ids.includes(seeded), seeded);
+});
+
+test('one added vocabulary line admits a finding with the new category', () => {
+  const text = `${readFileSync(VOCABULARY_PATH, 'utf8')}supply-chain A dependency is unpinned or unreviewed.\n`;
+  const extended = parseVocabulary(text);
+  assert.deepEqual(extended.problems, []);
+  const extendedRules = { checkSchema, categories: new Set(extended.categories.map(({ id }) => id)) };
+  const source = { path: 'findings.jsonl', change: 'demo-change', text: `${JSON.stringify(finding({ category: 'supply-chain' }))}\n` };
+  assert.deepEqual(parseFindings(source, extendedRules).problems, []);
+  assert.equal(parseFindings(source, rules).problems.length, 1);
+});
+
+test('a category id may have 64 characters but not 65', () => {
+  const id = (length: number) => `a${'b'.repeat(length - 1)}`;
+  const { categories, problems } = parseVocabulary(`${id(64)} Long.\n${id(65)} Too long.\n`);
+  assert.deepEqual(categories.map((category) => category.id.length), [64]);
+  assert.deepEqual(problems.map(formatProblem), [`${VOCABULARY_PATH}:2: category id is 65 characters (max 64)`]);
 });
 
 test('a vocabulary line needs an id and a description, and ids are unique', () => {
@@ -83,27 +106,39 @@ test('a valid line becomes a finding, with optional fields omitted', () => {
 
 test('every problem names the file and line', () => {
   assert.deepEqual(messagesOf(['{', '', '[]']), [
-    `findings.jsonl:1: not a JSON value: ${errorOf('{')}`,
+    'findings.jsonl:1: not a JSON value',
     'findings.jsonl:2: empty line; a change without findings has an empty file',
     'findings.jsonl:3: / must be object',
   ]);
 });
 
-function errorOf(text: string): string {
-  try {
-    JSON.parse(text);
-    return '';
-  } catch (error) {
-    return (error as Error).message;
-  }
-}
+const TOKEN = `ghp_${'a'.repeat(36)}`;
+
+test('no diagnostic repeats a token from the input', () => {
+  const lines = [
+    `{"title": "${TOKEN}`,
+    `{"title": ${TOKEN}}`,
+    JSON.stringify({ ...finding(), [TOKEN]: 'x' }),
+    JSON.stringify({ ...finding(), [`unknown_${'b'.repeat(10)}`]: 'x' }),
+    JSON.stringify({ ...finding(), title: 7, resolution: `Removed ${TOKEN}.`, extra: TOKEN }),
+  ];
+  const messages = messagesOf(lines);
+  assert.deepEqual(messages, [
+    'findings.jsonl:1: not a JSON value',
+    'findings.jsonl:2: not a JSON value',
+    'findings.jsonl:3: holds a secret-like value; describe it instead',
+    'findings.jsonl:4: / must NOT have additional properties',
+    'findings.jsonl:5: holds a secret-like value; describe it instead',
+  ]);
+  for (const message of messages) assert.ok(!message.includes(TOKEN) && !message.includes('unknown_'), message);
+});
 
 test('unknown properties, missing fields, and wrong enums are rejected', () => {
   const unknown = { ...finding(), reviewerText: 'pasted' };
   const { title: _title, ...untitled } = finding();
   const messages = messagesOf([JSON.stringify(unknown), JSON.stringify(untitled), JSON.stringify(finding({ outcome: 'won' as never }))]);
   assert.deepEqual(messages, [
-    'findings.jsonl:1: / must NOT have additional properties "reviewerText"',
+    'findings.jsonl:1: / must NOT have additional properties',
     "findings.jsonl:2: / must have required property 'title'",
     'findings.jsonl:3: /outcome must be equal to one of the allowed values',
   ]);
@@ -121,6 +156,16 @@ test('strings are bounded and single-line, and paths stay inside the repository'
   assert.match(messages[1], /:2: \/resolution must match pattern/);
   assert.match(messages[2], /:3: \/file must match pattern/);
   assert.match(messages[3], /:4: \/file must match pattern/);
+});
+
+test('title and resolution reject C1 controls and Unicode line separators', () => {
+  for (const character of ['\u0085', '\u009b', '\u2028', '\u2029', '\u007f']) {
+    const messages = messagesOf([JSON.stringify(finding({ title: `a${character}b` })), JSON.stringify(finding({ resolution: `a${character}b` }))]);
+    assert.equal(messages.length, 2, JSON.stringify(character));
+    assert.match(messages[0], /:1: \/title must match pattern/);
+    assert.match(messages[1], /:2: \/resolution must match pattern/);
+  }
+  assert.deepEqual(messagesOf([JSON.stringify(finding({ title: 'Ünïcödé — fine', resolution: 'a\u00a0b' }))]), []);
 });
 
 test('a line over the size bound is rejected before parsing', () => {
@@ -143,13 +188,15 @@ test('secret-like values are rejected wherever they appear', () => {
   ]);
   const samples = [
     `tkop_${'b'.repeat(43)}`, 'eyJhbGciOi.eyJzdWIiOi.c2lnbmF0dXJl', '-----BEGIN OPENSSH PRIVATE KEY-----',
-    `SU${'A'.repeat(56)}`, 'AKIAABCDEFGHIJKLMNOP', 'xoxb-1234567890-abc', `sk-${'c'.repeat(24)}`,
-    'postgres://owner:p4ss@db:5432/taskelith', `github_pat_${'d'.repeat(30)}`,
+    `SU${'A'.repeat(56)}`, 'AKIAABCDEFGHIJKLMNOP', 'ASIAABCDEFGHIJKLMNOP', 'xoxb-1234567890-abc',
+    `sk-${'c'.repeat(24)}`, 'postgres://owner:p4ss@db:5432/taskelith', 'https://my-secret-token@example.com',
+    `github_pat_${'d'.repeat(30)}`,
   ];
   for (const sample of samples) assert.deepEqual(secretLikeStrings({ nested: [sample] }), [sample], sample);
   assert.deepEqual(secretLikeStrings({ [token]: 1 }), [token]);
   assert.deepEqual(secretLikeStrings(finding()), []);
-  assert.deepEqual(secretLikeStrings([null, 3, true, 'https://example.com/a@b']), []);
+  const plain = [null, 3, true, 'https://example.com/a@b', 'https://example.com/?to=a@b', 'mail a@b.c', 'ASIA1234'];
+  assert.deepEqual(secretLikeStrings(plain), []);
 });
 
 test('an archived directory name drops its date prefix', () => {
