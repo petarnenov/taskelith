@@ -15,4 +15,4 @@
 ## 3. Records
 
 - [x] 3.1 Evidence run into `results.jsonl`, `make verify`, and `verification.md`
-- [ ] 3.2 Independent review
+- [ ] 3.2 Independent review (pass 1 done and fixed; pass 2 pending)

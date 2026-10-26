@@ -4,7 +4,7 @@ G2 work item 24, third part (24c), `run-g2-partition-and-races`, assigned by the
 
 ## Revision and environment
 
-- Base: `origin/dev` at `f9ba7a5` with the cherry-picked 24a recorder, then `origin/dev` merged twice: `3321cf2` (`3c66b09`) and `c7f546a` (`5c6f2a8`), which archives the 24a change, so its active directory left this branch with that merge. Branch `run-g2-partition-and-races`. Evidence runs at `17ea7e7`, the commit every record of `results.jsonl` names; only `verification.md` and `results.jsonl` change after it.
+- Base: `origin/dev` at `f9ba7a5` with the cherry-picked 24a recorder, then `origin/dev` merged three times: `3321cf2` (`3c66b09`), `c7f546a` (`5c6f2a8`), which archives the 24a change, so its active directory left this branch with that merge, and the UI proof-of-concept documents (`72003c4`). Branch `run-g2-partition-and-races`. Evidence runs at `31a2f00`, the commit every record of `results.jsonl` names; only `verification.md` and `results.jsonl` change after it.
 - Host: Linux 6.8.0-147-generic, x86_64, 8 CPUs; Docker 27.3.1; Node.js 24.22.1 from `.nvmrc` through `scripts/with-pinned-node.sh`, for the evidence runs and `make verify`.
 - Services: `make services-up` (PostgreSQL, NATS, Toxiproxy with routes `postgres` and `nats`). No delegated cgroup v2 subtree, so workers launch through the test-side process-group launch host (design decision 3).
 
@@ -22,11 +22,11 @@ G2 work item 24, third part (24c), `run-g2-partition-and-races`, assigned by the
 | `partition-worker-nats-while-running` | Route cut after the recorded start | heal before or after the exit | passed (both) |
 | `partition-worker-nats-inventory-settles` | Route cut until lost contact, task submitted, healed | ids and draws | expected failure B1 |
 | `partition-control-plane-postgres-authorization` | PostgreSQL route cut with the request held | 1 to 3 unavailable answers | passed (2 and 3 answers, same `operationId`) |
-| `partition-control-plane-postgres-while-running` | Route cut after the journaled start | heal before or after the exit | passed (historical start in both runs) |
+| `partition-control-plane-postgres-while-running` | Route cut after the journaled start | heal before or after the exit | passed (seed `20261026` current start, seed `7` historical start) |
 | `partition-control-plane-postgres-beyond-redelivery` | Route cut until the start and the exit used their 5 deliveries | redrive order | passed (both orders) |
 | `cancel-before-offer` (a) | Broker route cut, submit, `cancelInTransaction`, heal | heal before or after lost contact | passed (both) |
 | `cancel-during-authorization` (b) | Request or grant held at an `OrderedAuthority` gate, cancel, release | request or grant held | passed (both) |
-| `cancel-after-w4` (c) | Cancel once W4 or the start is journaled | W4 or start | passed (both, `SIGTERM`) |
+| `cancel-after-w4` (c) | Cancel once W4 or the start is journaled; for W4 the supervisor start waits at a test-side gate until the cancel is journaled | W4 or start | passed (both): journal state `authorized` (seed `7`) or `started` (seed `20261026`) at the cancel; `SIGTERM` |
 | `cancel-during-admission-pressure` (d) | Disk floor crossed after W1, cancel, relief | relief 0, 500, or 1000 ms later | passed (500 and 1000 ms) |
 | `cancel-crash-before-ack` (e) | Worker process `SIGKILL`s itself instead of acking the cancellation; restarted in-process | restart before or after the ack wait | passed (both; redelivery acked once) |
 | `invalidation-racing-grant` (f) | Held request and cancel released at offsets within 25 ms, 3 rounds | offsets | passed (seed `7` had a granted-then-revoked round) |
@@ -45,8 +45,8 @@ Each is a node:test `todo` that runs, records `failed`, and does not fail `make 
 
 - Reproducer: `TASKELITH_TEST_SEED=7 node --experimental-strip-types --no-warnings --test --test-name-pattern="inventory exchange" test/g2-partition.test.ts`; seed `20261026` reproduces too.
 - Steps: the worker's broker route is cut until the control plane marks the worker lost (3 s), a task is submitted, the route is healed, the task exits, and the test counts `worker.inventory.requested` outbox rows over two 3 s windows.
-- Expected: at most 1 further request in 3 s after the task ended. Observed: 80 (seed `20261026`) and 78 (seed `7`) in the evidence runs; 76 to 80 in other runs; one diagnostic run counted 264, 525, and 789 rows at 10 s intervals, each request answered by a report with a new `requestId` and a higher `snapshot`.
-- Rate: intermittent. Failed in every evidence run of this change (6 of 6 at seeds `20261026` and `7`) and in 4 of 6 consecutive reruns of the filter alone (seeds alternating); the 2 passing reruns sent at most 1 request.
+- Expected: at most 1 further request in 3 s after the task ended. Observed: 79 (seed `20261026`) and 80 (seed `7`) in the evidence runs, with the last reports (requestId prefix, snapshot) `(683d0a00, 442) (ebec0d6a, 443) (3b9603a5, 444) (31c7402a, 445)` and `(e519a7f1, 468) (79516d72, 469) (89fb3bfa, 470) (9598d3e8, 471)`: each answers a different request at the next snapshot; 76 to 80 in other runs; one diagnostic run counted 264, 525, and 789 rows at 10 s intervals, each request answered by a report with a new `requestId` and a higher `snapshot`.
+- Rate: intermittent. Failed in every evidence run of this change (8 of 8 at seeds `20261026` and `7`) and in 4 of 6 consecutive reruns of the filter alone (seeds alternating); the 2 passing reruns sent at most 1 request.
 - Hypothesis, unconfirmed: `receivePart` (`apps/control-plane/src/application/inventory-reconciliation.ts:70` to `88`, the `unsolicited` test at line 86) treats a report answering a superseded request, whose `snapshot` is still the highest, as unsolicited and requests again; once two requests are outstanding (a reconnect report and a request for an omitted unfinished assignment, in separate transactions), every answer is stale and the loop sustains itself.
 
 ### B2: an execution cancellation stops the whole intent
@@ -86,14 +86,37 @@ Each is a node:test `todo` that runs, records `failed`, and does not fail `make 
 | --- | --- |
 | `npm run openspec -- validate run-g2-partition-and-races --strict` | valid |
 | `npm run verify:comments` | every comment within the rule |
-| `make verify` | passed on 2026-10-26 at `17ea7e7` plus this change's `verification.md` and `results.jsonl`: 1805 tests, 1784 passed, 17 skipped, 4 todo, 0 failed, 0 cancelled; coverage 99.22 % lines, 91.99 % branches, 98.86 % functions; OpenSpec 69 items valid; the archive dry run of every active change is strictly valid |
+| `make verify` | passed on 2026-10-26 at `31a2f00` plus this change's `verification.md` and `results.jsonl`: 1805 tests, 1784 passed, 17 skipped, 4 todo, 0 failed, 0 cancelled; coverage 99.22 % lines, 91.99 % branches, 98.86 % functions; OpenSpec 69 items valid; the archive dry run of every active change is strictly valid |
 
 ## Independent review
+
+### Pass 1
+
+- Reviewer: Claude Code, model `claude-fable-5-1` (confirmed by the coordinator from the run's JSON output), effort medium, plan mode; session `d7dbd738-9cde-4678-95ff-4fbdbf4686ea`. Invocation, run from the worktree: `claude -p "<prompt>" --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json < /dev/null`.
+- Reviewed revision: `d0c81f6`. The worktree snapshots before and after the review are identical (`7931b89fadb23ae22464517ca5a6e3d6498aeeb872c4d00e7654c4e8745d88a9`).
+- Findings: 0 Critical, 0 High, 2 Medium, 9 Low. It confirmed B2, B3, and B4 in the product code, and B1 as plausible with its hypothesis unconfirmed.
+
+| Finding | Resolution | Commit |
+| --- | --- | --- |
+| M1: stale epoch negative assertions after a fixed 3 s delay | Wait for `execution.start.evidence` with decision `quarantine-evidence` for the early execution, and for the early worker's outbox to be confirmed, before the assertions of both stale epoch tests | `750d0db` |
+| M2: scenario c did not prove the W4 ordering | The supervisor start waits at a test-side gate until the cancel is journaled; the journal state at the cancel is asserted and recorded | `91f79ea` |
+| L3: B3 test named "b." | Renamed "a launch rejected after a cancel frees its worker slot (B3)" | `91f79ea` |
+| L4: `quarantined()` returned `[]` on an error | It asserts status 200; only the wait while the database returns tolerates an error | `b38b8a6` |
+| L5: literal `5` deliveries | `SCENARIO_LIMITS.maxDeliver` | `b38b8a6` |
+| L6: dead restart branch, `environment(extra)`, `ExecutedTask.result` | Removed | `2bcee2d` |
+| L7: task found by parsing `assignments.record` | Found by `installation.task` among the scenario's tasks | `750d0db` |
+| L8: g has no record | Stated under limitations, with a `not-applicable` outcome as a possible 24a extension; recorder unchanged | this document |
+| L9: a cleanup failure could mask the scenario failure | Cleanup failures after a failed body are logged, and the body's failure is rethrown | `2bcee2d` |
+| L10: `pressured()` used the throwing `running` getter | A flag set while the worker runs | `91f79ea` |
+| L11: B1 detail without the request trail | The failure detail carries the last four (requestId, snapshot) pairs | `b38b8a6` |
+
+### Pass 2
 
 pending: independent review by Claude Code (claude-fable-5-1)
 
 ## Limitations and remaining gates
 
+- The 24a recorder knows only `passed` and `failed`, so scenario g, not applicable on Linux, has no record in `results.jsonl` and is recorded only in this document. A `not-applicable` outcome is a possible future extension of 24a; this change leaves the recorder unchanged.
 - The scenarios run on a test-side composition against the `make` services, not on the Compose installation, with scaled worker timers and the process-group launch host; the Linux cgroup supervisor and macOS adoption are not exercised.
 - The unauthorized start and the epoch advance are test-side writes; no G2 product path writes either.
 - Duplicate delivery is out of scope; the coordinator decided it stays with 24b. It appears here only as the redelivered cancellation of e and the redelivered observations of the database partitions.
