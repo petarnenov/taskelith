@@ -50,6 +50,7 @@ export {
   type AssignmentId,
   type AttemptId,
   type ExecutionId,
+  type HarnessPluginId,
   type IdempotencyKey,
   type InstallationState,
   type LaunchAuthId,

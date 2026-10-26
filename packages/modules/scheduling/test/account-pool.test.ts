@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { inspect } from 'node:util';
+import type { HarnessPluginId } from '@taskelith/execution';
 import { err, failure, ok, parseIdentifier, parseInstant, type Result } from '@taskelith/kernel';
 import type { ConformanceCase } from '@taskelith/sdlc';
 import {
@@ -23,7 +24,6 @@ import {
   parseSlotRequest,
   type AccountSlot,
   type AccountSlots,
-  type HarnessPluginId,
   type SubscriptionMechanismId,
   type ProjectId,
   type ProviderCredentialId,
