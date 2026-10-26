@@ -32,7 +32,7 @@ import {
   type SupervisionFactory,
 } from './execution-supervision-port.js';
 import { cancelFiled, ExecutionWatch, type Watched, type WatchTarget } from './execution-watch.js';
-import { commitFact, type SpaceRetry } from './space-retry.js';
+import { commitWrite, type SpaceRetry } from './space-retry.js';
 
 // The provisional `ttl` and `skew` (operational targets), which bound the
 // retries of an operation before any grant names its own.
@@ -191,7 +191,7 @@ export class LaunchOrchestrator {
     if (!reported(this.#options, sealed)) return 'ended';
     const { executionId, stopping } = target;
     const { journal } = this.#options;
-    const commit = (write: () => Result<void>) => commitFact(this.#space, executionId, write, stopping);
+    const commit = (write: () => Result<void>) => commitWrite(this.#space, executionId, write, stopping);
     if (sealWon(sealed.value).ok) return (await commit(() => journal.recordNotStarted(executionId))) ? 'not-started' : 'ended';
     this.#logger.warn('worker.execution.uncertain', { executionId, reason: 'claimed before W4' });
     if (await commit(() => journal.recordExecutionRecordWritten(executionId))) await commit(() => journal.recordUncertain(executionId));
@@ -396,7 +396,8 @@ class Launch {
     const reading = this.#options.clock.read();
     if (operationId === undefined || !reading.ok) return { kind: 'end' };
     const request = this.#request(executionId, operationId, reportsNotStarted);
-    if (!this.#options.journal.beginAuthorization(request).ok) return { kind: 'end' };
+    // No request leaves before W2 commits (journal contract section 5).
+    if (!(await this.#commitWrite(executionId, () => this.#options.journal.beginAuthorization(request)))) return { kind: 'end' };
     const { workerId: _worker, ...sent } = request;
     for (;;) {
       if (this.#stopping.aborted) return { kind: 'end' };
@@ -404,10 +405,10 @@ class Launch {
       const answer = await this.#options.authority.authorize(sent);
       if (this.#stopping.aborted) return { kind: 'end' };
       if (!answer.ok) {
-        if (!this.#beforeDeadline(reading.value, DEFAULT_PARAMETERS)) return this.#expired(operationId);
+        if (!this.#beforeDeadline(reading.value, DEFAULT_PARAMETERS)) return this.#expired(executionId, operationId);
         await this.#backOff();
         await this.#awaitAdmission();
-        if (!this.#beforeDeadline(reading.value, DEFAULT_PARAMETERS)) return this.#expired(operationId);
+        if (!this.#beforeDeadline(reading.value, DEFAULT_PARAMETERS)) return this.#expired(executionId, operationId);
         continue;
       }
       const outcome = answer.value;
@@ -415,11 +416,11 @@ class Launch {
         case 'granted':
           return this.#granted(outcome.grant, reading.value);
         case 'expired':
-          return this.#expired(operationId);
+          return this.#expired(executionId, operationId);
         case 'revoked':
-          return this.#rejected(operationId, launchRejection(outcome.reason, `the grant was revoked: ${outcome.reason}`));
+          return this.#rejected(executionId, operationId, launchRejection(outcome.reason, `the grant was revoked: ${outcome.reason}`));
         case 'rejected':
-          return this.#rejected(operationId, outcome.rejection);
+          return this.#rejected(executionId, operationId, outcome.rejection);
       }
     }
   }
@@ -439,23 +440,25 @@ class Launch {
   }
 
   // W3; a grant past the deadline, or of a cancelled launch, is never used.
-  #granted(grant: LaunchGrant, reading: DeadlineReading): Authorized {
-    if (!this.#options.journal.recordGrant(grant).ok) return { kind: 'end' };
+  async #granted(grant: LaunchGrant, reading: DeadlineReading): Promise<Authorized> {
+    if (!(await this.#commitWrite(grant.executionId, () => this.#options.journal.recordGrant(grant)))) return { kind: 'end' };
     if (this.#cancelled || !this.#beforeDeadline(reading, grant.parameters)) return { kind: 'abandon' };
     return { kind: 'grant', grant, reading };
   }
 
   // W3 for a rejection; only a retryable one is tried again (section 6).
-  #rejected(operationId: OperationId, rejection: LaunchRejection): Authorized {
-    if (!this.#options.journal.recordLaunchRejection(operationId, rejection).ok) return { kind: 'end' };
+  async #rejected(executionId: ExecutionId, operationId: OperationId, rejection: LaunchRejection): Promise<Authorized> {
+    const write = () => this.#options.journal.recordLaunchRejection(operationId, rejection);
+    if (!(await this.#commitWrite(executionId, write))) return { kind: 'end' };
     if (!rejection.retryable) return { kind: 'end' };
     return this.#cancelled ? { kind: 'abandon' } : { kind: 'retry-operation' };
   }
 
   // W3 `expired`: no grant of the operation can be used, and nothing was
   // written, so the same execution is authorized again (design D2).
-  #expired(operationId: OperationId): Authorized {
-    if (!this.#options.journal.recordAuthorizationExpired(operationId).ok) return { kind: 'end' };
+  async #expired(executionId: ExecutionId, operationId: OperationId): Promise<Authorized> {
+    const write = () => this.#options.journal.recordAuthorizationExpired(operationId);
+    if (!(await this.#commitWrite(executionId, write))) return { kind: 'end' };
     return this.#cancelled ? { kind: 'abandon' } : { kind: 'retry-operation' };
   }
 
@@ -478,19 +481,19 @@ class Launch {
   // No supervisor of this launch can claim before W4, so a claim is a record
   // nobody journaled: journal it, where a grant allows, and report uncertain.
   async #claimedBeforeW4(executionId: ExecutionId): Promise<Executed> {
-    if (!(await this.#commitFact(executionId, () => this.#options.journal.recordExecutionRecordWritten(executionId)))) return 'end';
+    if (!(await this.#commitWrite(executionId, () => this.#options.journal.recordExecutionRecordWritten(executionId)))) return 'end';
     return this.#recordUncertain(executionId);
   }
 
   async #notStarted(executionId: ExecutionId): Promise<Executed> {
-    if (!(await this.#commitFact(executionId, () => this.#options.journal.recordNotStarted(executionId)))) return 'end';
+    if (!(await this.#commitWrite(executionId, () => this.#options.journal.recordNotStarted(executionId)))) return 'end';
     return this.#afterNotStarted();
   }
 
-  // The record keeps the fact, so a refusal for space is retried until a
-  // stop, which leaves it to the next start; a cancellation does not.
-  #commitFact(executionId: ExecutionId, write: () => Result<void>): Promise<boolean> {
-    return commitFact(this.#context.space, executionId, write, this.#stopping);
+  // A write refused for space is retried until a stop, which leaves the
+  // execution to the next start; a cancellation does not end it.
+  #commitWrite(executionId: ExecutionId, write: () => Result<void>): Promise<boolean> {
+    return commitWrite(this.#context.space, executionId, write, this.#stopping);
   }
 
   #afterNotStarted(): Executed {
@@ -505,7 +508,8 @@ class Launch {
     const { attemptId, ownershipGeneration } = this.#intent;
     const prepared = await supervision.prepare({ attemptId, ownershipGeneration, launchAuthId: grant.launchAuthId, deadline });
     if (!prepared.ok) return this.#abandon(executionId);
-    if (!this.#options.journal.recordExecutionRecordWritten(executionId).ok) return 'end';
+    // W4 commits before the supervisor starts (journal contract section 5).
+    if (!(await this.#commitWrite(executionId, () => this.#options.journal.recordExecutionRecordWritten(executionId)))) return 'end';
     if (this.#cancelled) return this.#sealWritten(executionId, supervision);
     const target = this.#target(executionId, supervision, grant);
     const started = await supervision.start();
@@ -532,7 +536,7 @@ class Launch {
   }
 
   async #recordUncertain(executionId: ExecutionId): Promise<Executed> {
-    await this.#commitFact(executionId, () => this.#options.journal.recordUncertain(executionId));
+    await this.#commitWrite(executionId, () => this.#options.journal.recordUncertain(executionId));
     return 'end';
   }
 

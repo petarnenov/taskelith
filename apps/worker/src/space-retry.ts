@@ -2,7 +2,7 @@ import { isSpaceRefusal, launchRetryDelay, type ExecutionId } from '@taskelith/e
 import type { Result } from '@taskelith/kernel';
 import type { Logger } from '@taskelith/observability';
 
-// What the retry of a fact refused for lack of space needs.
+// What the retry of a write refused for lack of space needs.
 export interface SpaceRetry {
   // Resolves after the delay, or early once the signal aborts.
   readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>;
@@ -26,9 +26,9 @@ export async function backOffForSpace(
   await retry.sleep(delayMilliseconds, signal);
 }
 
-// Commits a fact the record keeps; a refusal for space rolled back and is
-// retried after the backoff until it commits or the signal aborts.
-export async function commitFact(
+// Commits a journal write; one refused for space rolled back and is tried
+// again, unchanged, after the backoff until it commits or the signal aborts.
+export async function commitWrite(
   retry: SpaceRetry,
   executionId: ExecutionId,
   write: () => Result<void>,
