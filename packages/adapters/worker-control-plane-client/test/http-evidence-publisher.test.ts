@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createServer, type IncomingMessage, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { after, before, test } from 'node:test';
 import { parseEvidencePublication, type EvidencePublication } from '@taskelith/execution';
@@ -27,7 +27,13 @@ interface Seen {
 
 let answer: { status: number; body: unknown; delayMilliseconds?: number } = { status: 201, body: RECORD };
 const seen: Seen[] = [];
-const server: Server = createServer(async (request, response) => {
+const server: Server = createServer((request, response) => {
+  // A client that leaves mid-body ends the exchange; that is not a failure.
+  answerPublication(request, response).catch(() => response.destroy());
+});
+let baseUrl: URL;
+
+async function answerPublication(request: IncomingMessage, response: ServerResponse): Promise<void> {
   const form = await new Request('http://localhost/', {
     method: 'POST', headers: { 'content-type': request.headers['content-type'] ?? '' }, body: new Uint8Array(await bytes(request)),
   }).formData();
@@ -39,14 +45,16 @@ const server: Server = createServer(async (request, response) => {
   });
   if (answer.delayMilliseconds !== undefined) await new Promise((resolve) => setTimeout(resolve, answer.delayMilliseconds));
   response.writeHead(answer.status, { 'content-type': 'application/json' }).end(JSON.stringify(answer.body));
-});
-let baseUrl: URL;
+}
 
 before(async () => {
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
   baseUrl = new URL(`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/`);
 });
-after(() => new Promise<void>((resolve) => server.close(() => resolve())));
+after(() => new Promise<void>((resolve) => {
+  server.closeAllConnections();
+  server.close(() => resolve());
+}));
 
 async function bytes(request: IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
@@ -98,4 +106,15 @@ test('an answer that violates its schema or names another record is refused', as
   assert.equal(failed(await publisher().publish(PUBLICATION, CONTENT)).code, 'internal');
   answer = { status: 201, body: { ...RECORD, capturedAt: 'not a time' } };
   assert.equal(failed(await publisher().publish(PUBLICATION, CONTENT)).code, 'internal');
+});
+
+test('a client that leaves mid-body does not break the fake server', async () => {
+  const endlessBody = new ReadableStream<Uint8Array>({
+    start: (controller) => controller.enqueue(CONTENT),
+  });
+  await assert.rejects(fetch(new URL('evidence', baseUrl), {
+    method: 'POST', body: endlessBody, duplex: 'half', signal: AbortSignal.timeout(20),
+  } as RequestInit));
+  answer = { status: 201, body: RECORD };
+  assert.equal(value(await publisher().publish(PUBLICATION, CONTENT)).evidenceId, PUBLICATION.evidenceId);
 });
