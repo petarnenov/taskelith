@@ -4,7 +4,7 @@ G2 work item 24, first part (24a), `run-g2-failure-scenarios-composition`, assig
 
 ## Revision and environment
 
-- Base: `origin/dev` at `f9ba7a5`. Branch `run-g2-failure-scenarios-composition`. Phase 1 (the recorder): `3f9777d`. Phase 2 (the scenarios): `d0479ea` and `1cbf490` (first evidence). Review pass 1 fixes: `07fce6d`, the commit every current evidence record names; the evidence runs ran on that tree, with only `results.jsonl` changed. The records of `d0479ea` were replaced.
+- Base: `origin/dev` at `f9ba7a5`. Branch `run-g2-failure-scenarios-composition`. Phase 1 (the recorder): `3f9777d`. Phase 2 (the scenarios): `d0479ea` and `1cbf490` (first evidence). Review pass 1 fixes: `07fce6d` and `6608301` (second evidence). Review pass 2 fixes: `8e1c4d8`, the commit every current evidence record names; the evidence runs ran on that tree, with only `results.jsonl` changed. The records of `d0479ea` and `07fce6d` were replaced.
 - Host: Apple Silicon Mac, macOS 26.6.2 (build 25G83, Darwin 25.6.0), `arm64`; Node.js 24.22.1 from `.nvmrc`.
 - Engine: Docker Desktop, Docker Engine 29.6.1 (client and server), server architecture `aarch64`, kernel 6.12.76-linuxkit. The images are built for linux/arm64.
 
@@ -17,22 +17,22 @@ G2 work item 24, first part (24a), `run-g2-failure-scenarios-composition`, assig
 
 ## Scenario evidence runs
 
-Each command ran at `07fce6d` with `TASKELITH_SCENARIO_RESULTS=openspec/changes/run-g2-failure-scenarios-composition/results.jsonl` on 2026-10-26, in this order, each on a fresh throwaway project that it removed at the end; every one exited 0. The records are in [results.jsonl](results.jsonl). The last kill ran with `TASKELITH_TEST_SEED=23800`, chosen so that the pause falls after the execution's end, the case of review finding M1; the other seeds are random.
+Each command ran at `8e1c4d8` with `TASKELITH_SCENARIO_RESULTS=openspec/changes/run-g2-failure-scenarios-composition/results.jsonl` on 2026-10-26, in this order, each on a fresh throwaway project that it removed before it recorded the pass; every one exited 0. The records are in [results.jsonl](results.jsonl). The last kill ran with `TASKELITH_TEST_SEED=23800`, chosen so that the pause falls after the execution's end, the case of review finding M1; the other seeds are random.
 
 | Command | Scenario | Seed | Outcome | Observed |
 | --- | --- | --- | --- | --- |
-| `make scenario-fresh-composition` | `fresh-composition` | 906599561 | passed | The task was submitted, assigned to the enrolled Linux worker, executed, and stored as `ended`, exited with code 0 and a proven start. |
-| `make scenario-worker-disk-loss` | `worker-disk-loss` | 607870444 | passed | Worker killed with the execution `started`. With the journal deleted, the identity kept, and the restart policy off, the worker logged `{"error":{"code":"precondition-failed","message":"the journal /var/lib/taskelith/worker/journal/journal.sqlite is missing","details":{...,"reason":"journal-loss"}}}` and exited by itself with code 1 (container state `exited 1`, started 2026-10-26T15:52:43Z); the identity stayed and no journal was created. After the data root was deleted and the worker `w7f623eb81c9be080f44b558d094919c7` revoked, a new worker enrolled under a new identity; the old execution stayed `started` with `uncertain` evidence, its assignment `accepted` and held, the task `pending`; a new task exited 0 on the new worker, whose assignment ended and released its reservation. |
-| `make scenario-worker-kill` | `worker-kill` | 4046216523 | passed | Planned pause 16523 ms, measured 16762 ms; execution `started` just after the kill. The new worker process reconciled and stayed up, logging `worker.execution.recovered` and `worker.execution.uncertain`; `started` with `uncertain` evidence, result `pending`, the same in the journal. |
-| `make scenario-worker-kill` | `worker-kill` | 349530197 | passed | Planned pause 5197 ms, measured 5379 ms; no execution yet. After the restart the task ran: `exited`, result `ended exited code 0 start-proven`, the same in the journal; no `worker.execution` events. |
-| `make scenario-worker-kill` | `worker-kill` | 1875631402 | passed | Planned pause 6402 ms, measured 6606 ms; no execution yet; then as above, `exited`, `ended exited code 0 start-proven`. |
-| `make scenario-worker-kill` | `worker-kill` | 23800 | passed | Planned pause 23800 ms, measured 24017 ms; execution already `exited`. The new worker process reconciled and stayed up, logging `worker.execution.record-removed`; `exited`, `ended exited code 0 start-proven`, the same in the journal. |
+| `make scenario-fresh-composition` | `fresh-composition` | 4204782353 | passed | The task was submitted, assigned to the enrolled Linux worker, executed, and stored as `ended`, exited with code 0 and a proven start. |
+| `make scenario-worker-disk-loss` | `worker-disk-loss` | 305919345 | passed | Worker killed with the execution `started`. With the journal deleted, the identity kept, and the restart policy off, the worker logged `{"error":{"code":"precondition-failed","message":"the journal /var/lib/taskelith/worker/journal/journal.sqlite is missing","details":{...,"reason":"journal-loss"}}}` and exited by itself with code 1 (container state `exited 1`, started 2026-10-26T16:10:00Z); the identity stayed and no journal was created. After the data root was deleted and the worker `weec736f1f861e17370b0668d0c46b7fd` revoked, a new worker enrolled under a new identity; the old execution stayed `started` with `uncertain` evidence, its assignment `accepted` and held, the task `pending`; a new task exited 0 on the new worker, whose assignment ended and released its reservation. |
+| `make scenario-worker-kill` | `worker-kill` | 3534000135 | passed | Planned pause 135 ms, measured 292 ms; no execution yet. The new worker process reconciled and stayed up and ran the task: `exited`, result `ended exited code 0 start-proven`, the same in the journal; event `worker.execution.record-removed`. |
+| `make scenario-worker-kill` | `worker-kill` | 893362200 | passed | Planned pause 12200 ms, measured 12391 ms; execution `started` just after the kill. The new process logged `worker.execution.recovered` and `worker.execution.uncertain`; `started` with `uncertain` evidence, result `pending`, the same in the journal. |
+| `make scenario-worker-kill` | `worker-kill` | 817311872 | passed | Planned pause 11872 ms, measured 12048 ms; execution `authorized` just after the kill, between the grant and the start. The new process logged `worker.execution.recovered` and `worker.execution.uncertain`; `authorized` with `uncertain` evidence, result `pending`, the same in the journal. |
+| `make scenario-worker-kill` | `worker-kill` | 23800 | passed | Planned pause 23800 ms, measured 23978 ms; execution already `exited`. The new process reconciled and stayed up, logging `worker.execution.record-removed`; `exited`, `ended exited code 0 start-proven`, the same in the journal. |
 
 The measured interval runs from the submission's answer to the kill's return on the monotonic clock and includes the start of one Node.js process per timestamp, so it exceeds the planned pause by about 0.2 s.
 
-Development runs before the evidence (same scripts, records discarded) also passed: at `d0479ea` the smoke (`make installation-smoke`), the disk loss, and the kill with seeds 7000, 13000, and 17000, and five records that `1cbf490` committed and this evidence replaced; at the fixes, the disk loss and the kill with seed 17000 (`started` with `uncertain` evidence).
+Development runs before the evidence (same scripts, records discarded or replaced) also passed: at `d0479ea` the smoke (`make installation-smoke`), the disk loss, the kill with seeds 7000, 13000, and 17000, and the five records of `1cbf490`; at `07fce6d` the disk loss, the kill with seed 17000, and the six records of `6608301`.
 
-The kill outcomes match the specs: a kill before any journaled command leaves nothing to reconcile and the redelivered command runs; a kill of a started execution whose supervisor is gone is reconciled as uncertain by the recovery table (worker runtime, "Uncertain recovery"; worker journal, "Uncertain started execution": the state stays `started`, the uncertainty is evidence); a kill after the exit was reported leaves the exit, and the record is removed. The disk loss matches the worker journal's "Journal missing with an identity" and "Whole data root lost" and launch reconciliation's "Attempts of a revoked worker" ("Started execution").
+The kill outcomes match the specs: a kill before any journaled command leaves nothing to reconcile and the redelivered command runs; a kill of an authorized or started execution whose supervisor is gone is reconciled as uncertain by the recovery table (worker runtime, "Uncertain recovery"; worker journal, "Uncertain started execution": the state stays `started`, the uncertainty is evidence); a kill after the exit was reported leaves the exit, and the record is removed. The disk loss matches the worker journal's "Journal missing with an identity" and "Whole data root lost" and launch reconciliation's "Attempts of a revoked worker" ("Started execution").
 
 ## Product bugs found
 
@@ -43,7 +43,7 @@ None. Every asserted behaviour matched the specs in every run.
 | Check | Result |
 | --- | --- |
 | `npm run openspec -- validate run-g2-failure-scenarios-composition --strict` | valid |
-| `make verify` | passed on 2026-10-26 at `07fce6d` before the evidence runs, and again with the records and this file; 1780 tests, 1778 passed, 2 skipped, 0 failed; coverage 99.26 % lines, 91.87 % branches, 98.89 % functions, and 99.27 %, 91.88 %, 98.89 % on the second run (earlier at `d0479ea` and `1cbf490`: 1770 tests, all passing but 2 skipped) |
+| `make verify` | passed on 2026-10-26 at `8e1c4d8` before the evidence runs, and again with the records and this file; 1786 tests, 1784 passed, 2 skipped, 0 failed; coverage 99.27 % lines, 91.88 % branches, 98.89 % functions, and 99.26 %, 91.87 %, 98.89 % on the second run (earlier: 1770 tests at `d0479ea` and `1cbf490`, 1780 at `07fce6d` and `6608301`, all passing but 2 skipped) |
 
 ## Independent review
 
@@ -62,6 +62,17 @@ The scenario steps moved from `scripts/installation.sh` to `scripts/installation
 
 ### Pass 2
 
+Codex CLI, model `gpt-6.1-sol`, reasoning effort medium, sandbox read-only, session `01a178f1-8fb7-7a63-8a3b-47d92ffa3483`, reviewed `HEAD` `6608301`. The SHA-256 snapshot of the worktree was `7c1039754083075762a3e2f653a9038e4a1aeb7a4df66555699a1facbdf53242` before and after the pass, unchanged. It confirmed pass 1's M1 (`scripts/installation-scenarios.sh:188`, `:303`), M2 (`:216`), M3 (`:98`, `:113`), and L1 (`:320`, `:323`, `:343`) as resolved. New findings: 0 Critical, 0 High, 2 Medium, 0 Low; both were fixed in `8e1c4d8`.
+
+| Finding | Severity | Resolution |
+| --- | --- | --- |
+| M4 `scripts/installation-scenarios.sh:305`, `:308`: the reconciliation could take 180 s in total, 60 s for the new worker process and then a fresh 120 s for the executions, past the delta spec's two-minute bound. | Medium | `await_restarted_reconciliation` takes the restart's moment on the monotonic clock, taken just before `compose start`; both phases wait through the new `await_until` against one deadline, 120 s from the restart, and the first phase also against its own 60 s, whichever comes first. `await_condition` is now `await_until` from the current time. Test: "the restart and the reconciliation share one deadline from the restart", where each phase meets its own bound but the total exceeds it (fails), with a control run whose total fits (passes). Spec: the untimed kill counts two minutes from the restart, with the scenario "Phases within bounds, total over two minutes". |
+| M5 `scripts/installation-scenarios.sh:276`, `:342`: a failed final cleanup recorded nothing, since `remove_throwaway` disarmed the failure trap before it removed the project and before the pass was recorded. | Medium | Both scenarios end with the new `finish_passed`: step `cleaning up`, `remove_project` (a failure fails the scenario through the armed trap), the `passed` record, and only then the trap's removal. `remove_throwaway` is unchanged for the smoke, `verify`, and other callers. Tests: for each of the disk loss and the kill, a full run against stubs that records `passed` only after the cleanup, and a run whose cleanup fails and records `failed: failed while cleaning up`. |
+
+While adding these tests, a stubbed run that hit an unbound variable exited 0 without a record: bash passed status 0 to the `EXIT` trap after the expansion error under `set -u`. Since `finish_passed` disarms the trap, `finish_scenario` now treats any run of the trap as a failure (status 1 when 0 was passed), records `failed` with the step, and removes the project; test "an error the scenario did not expect is recorded as failed".
+
+### Pass 3
+
 Pending.
 
 ## Limitations and remaining gates
@@ -70,4 +81,4 @@ Pending.
 - The kill moment is reproducible from the seed, but what the worker is doing at that moment depends on the services' timing; on this host placement took more than ten seconds after the submission, so kills before about 7 to 11 s found no execution.
 - The disk loss deletes the data root's files rather than replacing the volume; a host disk failure is modelled, not reproduced. A new journal incarnation without re-enrolment has no operator action in G2, so the scenario re-enrolls.
 - The Linux supervisor crash windows run in 24b on the x86_64 iMac; multi-arch tooling for `make verify-linux-cgroup` is a follow-up.
-- Remaining gates: independent review pass 2, integration by the coordinator, and the archive.
+- Remaining gates: independent review pass 3, integration by the coordinator, and the archive.
