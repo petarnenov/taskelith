@@ -35,7 +35,7 @@ This is part 21d, the last part, of item 21 of the [G2 work plan](../../../docs/
 ## Obligations met
 
 Each obligation of the proposal maps to its tests (all in the `make verify` run below):
-- Start observations (D1): `apps/control-plane/test/observation.integration.test.ts` and `observation-service.test.ts`. These cover current, duplicate, foreign, quarantine, historical and unauthorized starts, and the cancellation that names only that execution.
+- Start observations (D1): `apps/control-plane/test/observation.integration.test.ts` and `observation-service.test.ts` cover the application wiring of current, duplicate, foreign, quarantine and unauthorized starts, and the cancellation that names only that execution. The historical start is covered only at domain level, in `packages/modules/execution/test/start-observation.test.ts` (review pass 3, L2).
 - Launch rejections (D2): the same integration file, for each action class and for the stale-generation fence on every reason.
 - Revoked worker (D3, D4): `describe('a revoked worker')`. It covers:
   - the in-flight exit;
@@ -101,6 +101,19 @@ Reviewer: OpenCode CLI, agent `reviewer`, model `opencode-go/kimi-k3.1-pro`, var
      - Tests: `capacity-not-reserved` and `stale-recovery-epoch` after an earlier `not-started` each end the attempt, release the assignment, and open a retry; the latter also sends its inventory request.
   2. **L1:** no successful `make verify` was recorded for the final revision. **Fixed** by recording the `a79732c` run above and the run after the pass 2 fix below.
 - **Checks after the fix:** `make verify` at `8c64c94` (the fix `a859c1f` plus this record): exit 0; 1396 tests, 1396 pass; coverage 99.22 / 91.36 / 98.71. Later commits change only this file.
+
+### Pass 3 (last allowed pass)
+
+- **Revision:** `8df4783`.
+- **Invocation:** as pass 2.
+- **Model confirmation:** all 19 stored messages record `{"id":"kimi-k3.1-pro","providerID":"opencode-go","variant":"high"}`.
+- **Session:** `ses_e8a445caeffelRKu3jU1FBbCnV`.
+- **Snapshot:** `06db3a4abdbffcd482ed3cf46aeca819ddfb94ff8b952ff217a1c9367d8c63ca` before and after; unchanged.
+- **Earlier findings:** the resolutions of pass 1 (M1, M2, M3) and pass 2 (M1, L1) were all confirmed.
+- **Findings:** 0 Critical, 1 High, 0 Medium, 2 Low.
+  1. **H1:** in `observation-effects.ts`, `launchRejection` did not check that the assignment is held by the reporting worker, unlike `cancelUnauthorizedStart`. An authenticated worker B could report a releasing rejection naming worker A's current assignment, attempt, and generation, and free A's assignment. **Open:** under the three-pass rule, the author stopped and presented options to the owner through the coordinator.
+  2. **L1:** the modified "Authenticated producer" admits a revoked worker's observations, but the unchanged "First contact" and "Confirmation sent again" still required contact for every authenticated observation and duplicate. The code already records none for a revoked worker. **Unreviewed fix:** both requirements are modified in the delta to exclude a revoked worker.
+  3. **L2:** this record claimed application-level tests of the historical start. **Unreviewed fix:** the evidence line now names the domain test.
 
 ## Limitations
 
