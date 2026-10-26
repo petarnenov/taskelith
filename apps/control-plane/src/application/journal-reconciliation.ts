@@ -33,6 +33,15 @@ export interface Producer {
 // Why a journal is retired as lost (decision 3).
 export type RetirementCause = 'sequence-rollback' | 'snapshot-rollback';
 
+// Item 21d D3: a revoked producer only settles what it already runs.
+export type ProducerStanding = 'enrolled' | 'revoked';
+
+// A journal of one worker.
+export interface WorkerJournal {
+  readonly workerId: WorkerId;
+  readonly journalId: JournalId;
+}
+
 const LOST_HISTORY = 'local-history-lost';
 
 // Decision 2: the subject's worker, enrolled and not revoked, under its
@@ -52,25 +61,50 @@ export async function authenticateProducer(
   return notAuthenticated(workerId);
 }
 
+// An observation's producer as decision 2 authenticates it, or a revoked
+// one under its enrolled journal, not retired, which it never replaces (D3).
+export async function authenticateObserver(
+  tx: ControlPlaneTransaction, producer: Producer, context: ReconciliationContext,
+): Promise<Result<ProducerStanding>> {
+  const worker = await subjectWorker(tx, producer);
+  if (!worker.ok) return worker;
+  const revoked = worker.value?.revokedAt !== undefined;
+  if (!revoked) {
+    const authentic = await authenticateProducer(tx, producer, context);
+    return authentic.ok ? ok('enrolled') : authentic;
+  }
+  const current = producer.journalId === worker.value?.journalId && !(await isRetiredJournal(tx, producer));
+  return current ? ok('revoked') : notAuthenticated(producer.workerId);
+}
+
 // Whether the producer is the subject's enrolled worker under its enrolled
 // journal, not retired; unlike an observation, this replaces no journal.
 export async function isCurrentProducer(tx: ControlPlaneTransaction, producer: Producer): Promise<Result<boolean>> {
   const worker = await enrolledProducer(tx, producer);
   if (!worker.ok) return worker;
   if (worker.value?.journalId !== producer.journalId) return ok(false);
-  return ok((await seenJournal(tx, producer))?.retiredAt === undefined);
+  return ok(!(await isRetiredJournal(tx, producer)));
+}
+
+// A journal never seen has no cursor, so it is not retired.
+export async function isRetiredJournal(tx: ControlPlaneTransaction, journal: WorkerJournal): Promise<boolean> {
+  return (await seenJournal(tx, journal))?.retiredAt !== undefined;
 }
 
 // The subject's worker, enrolled and not revoked, if the body names it.
 async function enrolledProducer(tx: ControlPlaneTransaction, producer: Producer): Promise<Result<EnrolledWorker | undefined>> {
-  const worker = await tx.fleet.worker(producer.workerId);
+  const worker = await subjectWorker(tx, producer);
   if (!worker.ok) return worker;
-  const enrolled = worker.value;
-  const authentic = producer.subjectWorkerId === producer.workerId && enrolled !== undefined && enrolled.revokedAt === undefined;
-  return ok(authentic ? enrolled : undefined);
+  return ok(worker.value?.revokedAt === undefined ? worker.value : undefined);
 }
 
-async function seenJournal(tx: ControlPlaneTransaction, { workerId, journalId }: Producer) {
+// The subject's enrolled worker, revoked or not, if the body names it.
+async function subjectWorker(tx: ControlPlaneTransaction, producer: Producer): Promise<Result<EnrolledWorker | undefined>> {
+  if (producer.subjectWorkerId !== producer.workerId) return ok(undefined);
+  return tx.fleet.worker(producer.workerId);
+}
+
+async function seenJournal(tx: ControlPlaneTransaction, { workerId, journalId }: WorkerJournal) {
   return (await tx.cursors.listByWorker(workerId)).find(({ cursor }) => cursor.journalId === journalId);
 }
 
