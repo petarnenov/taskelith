@@ -40,7 +40,19 @@ The limits an offer can never meet on this worker (ceiling, controls) and the ca
 
 ### D6: disk floor and logs
 
-The floor is `max(5 GiB, 10% of the volume)` from `statfs` (`bavail`, so only blocks an unprivileged writer may use). Each refresh below the floor empties the regular files under `worker/logs/` in place and keeps the directories. A link is never followed: the root and each directory are checked with `lstat`, and each file is opened with `O_NOFOLLOW`, checked through its descriptor to be a regular file with one link, and truncated through that descriptor, so neither a swapped entry nor a hard link to the journal loses content.
+The floor is `max(5 GiB, 10% of the volume)` from `statfs` (`bavail`, so only blocks an unprivileged writer may use). Each refresh below the floor empties the regular files under `worker/logs/` in place and keeps the directories.
+
+Node 24 has no `openat` and no way to read or open entries relative to a directory descriptor, and macOS `/dev/fd` cannot traverse one, so a path-based check cannot be made atomic without a native dependency. Truncation therefore verifies containment around a descriptor:
+
+1. The root and each directory are recorded with `lstat` (device and inode) when traversal reaches them; a link is never a directory.
+2. A file is opened with `O_NOFOLLOW` (no link as the last component); its descriptor must show a regular file with one link.
+3. The recorded chain is checked unchanged, the path is read again with `lstat` and must name the descriptor's inode, and the chain is checked unchanged once more. Only then is the descriptor truncated.
+
+**Guaranteed:** a link at any level, a hard link, a directory swapped for a link and left so, and one swapped and restored around the open, truncate nothing outside the logs; the truncated inode was, during the check, the single-link file at its path inside the recorded chain.
+
+**Residual race:** a process that swaps a directory of the chain for a link and back twice, timed between the open and each step of the check, can pass it. The threat model limits it to a local process that can already write the worker data root, and so the journal itself; such a process can remove the journal without this race.
+
+- **Alternative:** the Linux `/proc/self/fd/<descriptor>/<name>` path gives `openat` semantics, but not on macOS, a supported worker platform.
 
 ### D7: backlog
 

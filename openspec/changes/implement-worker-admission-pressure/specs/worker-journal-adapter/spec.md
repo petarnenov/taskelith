@@ -15,7 +15,7 @@ The journal SHALL report the number of unconfirmed outbox entries and the bytes 
 - **THEN** the backlog reports one entry and its stored bytes
 
 ### Requirement: Volume space and buffered logs
-The adapter SHALL read the free and total bytes of the volume that holds a path, counting only blocks an unprivileged writer may use, and SHALL empty in place, through a descriptor opened without following links, each regular file with a single link under a log directory that is not itself a link; a missing log directory SHALL truncate nothing.
+The adapter SHALL read the free and total bytes of the volume that holds a path, counting only blocks an unprivileged writer may use, and SHALL empty in place, through its descriptor, only a single-link regular file opened without following a final link and checked to be at its path inside the log directories recorded on traversal; a missing log directory SHALL truncate nothing.
 
 #### Scenario: Linked file in the logs
 - **WHEN** `worker/logs/` holds a link to a file outside it
@@ -23,4 +23,8 @@ The adapter SHALL read the free and total bytes of the volume that holds a path,
 
 #### Scenario: Hard link to the journal
 - **WHEN** `worker/logs/` holds a hard link to the journal file
+- **THEN** the journal keeps its content
+
+#### Scenario: Log directory swapped for a link
+- **WHEN** a log directory is replaced by a link to the journal directory after traversal recorded it
 - **THEN** the journal keeps its content

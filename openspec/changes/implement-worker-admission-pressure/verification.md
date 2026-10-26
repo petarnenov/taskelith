@@ -27,7 +27,7 @@ Date: 2026-10-26. Author verification is recorded below; the independent review 
 - **Reporting:** the first refresh of each process journals the causes, empty ones included, and later ones only a change; a failed commit is retried by the next refresh; the watch reports a change while nothing else asks and logs a failed refresh (`admission-pressure.test.ts`, `worker-start.test.ts`).
 - **Refusal:** under pressure an offer within the other limits is refused as retryable with its causes and is acknowledged; the other limits are checked first; a refresh that fails leaves the offer unacknowledged (`command-intake.test.ts`); the wire messages are valid (`execution-observations.test.ts`).
 - **Launches:** under pressure no W2 is journaled and no request sent until it clears; pressure between requests holds the retry of the same operation; a refresh that fails holds the launch and is reported (`launch-orchestrator.test.ts`).
-- **Disk floor:** below the floor the start reports `disk-floor` and empties the nested log files; links are not followed, a missing log directory truncates nothing, an unreadable one fails (`worker-start.test.ts`, `disk-space.test.ts`).
+- **Disk floor:** below the floor the start reports `disk-floor` and empties the nested log files; links and hard links are left alone, a log root or nested directory swapped for a link (and one swapped back around the open) truncates nothing outside the logs, a missing log directory truncates nothing, an unreadable one fails (`worker-start.test.ts`, `disk-space.test.ts`). A mutation that skips the containment check fails the three swap tests. The residual race of design D6 remains.
 - **Journal:** the pressure refusal keeps its causes, each pressure change has its own identity, and the backlog counts entries and bytes and falls with a confirmation (`worker-journal.test.ts`).
 - **Comment rule:** `npm run verify:comments` passes.
 - **OpenSpec:** `npm run openspec -- validate implement-worker-admission-pressure --strict` passes; every requirement is under 450 characters, and an archive in a scratch copy validates with `--all --strict`.
@@ -46,9 +46,19 @@ Codex, `gpt-6.1-sol` (`medium`, model and effort confirmed from the session head
 
 ## Review pass 2
 
-Pending.
+Codex, `gpt-6.1-sol` (`medium`, model and effort confirmed from the session header), read-only, session `01a177ef-bb92-7ae2-b9cb-f376a860ecec`, invoked as in pass 1, at `9f1609e`. The snapshots before and after the pass matched (`a176c78b…`).
+
+- **Pass 1 High 2, Medium, Low:** resolved.
+- **Pass 1 High 1:** not resolved, reported again as High. The directory checks and the later operations used separate path lookups: a root or nested directory replaced by a link to `worker/journal/` after its `lstat` was followed by `readdirSync`, and `O_NOFOLLOW` guards only the last component, so a single-link journal file could be truncated.
+- **Fix (`b6f1e34`, tests `48dfaaa`):** Node 24 has no `openat`-like primitive and macOS `/dev/fd` cannot traverse a directory descriptor, so no native dependency was added. Each directory's device and inode are recorded on traversal; before truncating a descriptor, the chain is checked unchanged, the path must name the descriptor's inode, and the chain is checked again (design D6). Tests through an injected file-system seam: the root swapped for a link, the root swapped and restored around the open, and a nested directory swapped for a link. The residual race and its threat model are in design D6; complete protection is not claimed.
+- **make verify:** VERIFY3.
+
+## Review pass 3
+
+Pending; the last allowed pass.
 
 ## Limitations and remaining gates
 
+- Log truncation keeps the residual race of design D6, open only to a local process that can already write the worker data root.
 - The daemon overhead causes (`daemon-memory`, `event-loop-lag`) and the retry of a write refused for lack of space belong to 20e2.
 - The worker journals one pressure observation after every start, also when nothing changed (design D2).
