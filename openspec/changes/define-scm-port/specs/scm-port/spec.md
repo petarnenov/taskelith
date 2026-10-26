@@ -19,7 +19,7 @@ The port SHALL represent repositories, change requests, commits, runs, credentia
 - **THEN** the plugin returns the number as a string, and reading the change request by that string returns the same identifier
 
 ### Requirement: Per-run credentials
-`issueRunCredential` SHALL return a credential for one run that is limited to the requested repositories for every permission, reads included, and reports its effective repositories, permissions, and expiry as a kernel instant (UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`). Effective permissions SHALL cover the request and MAY exceed it, except that a credential requested without `write-code` SHALL NOT have it, and SHALL be what the credential can actually do: each one works in the requested repositories, and a permission not reported does not. A run's credential SHALL be independent of other runs' credentials.
+`issueRunCredential` SHALL return a credential for one run that is limited to the requested repositories for every permission, reads included, and reports its effective repositories, permissions, and expiry as a kernel instant (UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`). A run's credential SHALL be independent of other runs' credentials.
 
 #### Scenario: Credential without write permission
 - **WHEN** a credential issued with only `read-code` attempts a code write in the project's repository
@@ -29,13 +29,16 @@ The port SHALL represent repositories, change requests, commits, runs, credentia
 - **WHEN** any credential attempts a read or a write in a repository outside the project that the plugin's own identity can access
 - **THEN** the attempt fails with `forbidden`
 
-#### Scenario: Change request and status permissions
-- **WHEN** a credential is issued with `write-change-requests` or `write-statuses`
-- **THEN** it can write change requests or statuses in the project's repository, as granted, and cannot do what it was not granted
-
 #### Scenario: Two runs at once
 - **WHEN** a read-only credential and a write credential are issued for two runs of the project
 - **THEN** the read-only credential still cannot write, and revoking either credential leaves the other usable
+
+### Requirement: Effective permissions
+A credential's effective permissions SHALL cover the request and MAY exceed it, except that a credential requested without `write-code` SHALL NOT have it, and SHALL be what the credential can actually do: each one works in the requested repositories, and a permission not reported does not.
+
+#### Scenario: Change request and status permissions
+- **WHEN** a credential is issued with `write-change-requests` or `write-statuses`
+- **THEN** it can write change requests or statuses in the project's repository, as granted, and cannot do what it was not granted
 
 ### Requirement: Credential refresh and revocation
 A credential's secret SHALL be delivered only to its run and never logged or stored. `refreshRunCredential` SHALL return a new secret with the same repositories and permissions and a later expiry, and SHALL end the previous secret; `revokeRunCredential` SHALL end the credential and return no value. An ended secret SHALL be refused for every permission, reads included.
