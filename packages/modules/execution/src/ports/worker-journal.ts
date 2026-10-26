@@ -4,6 +4,7 @@ import type { LaunchRequest } from '../domain/launch-authorization.js';
 import type { LaunchGrant } from '../domain/launch-grant.js';
 import type { LaunchRejection } from '../domain/launch-rejection.js';
 import type {
+  AdmissionPressureCause,
   CommandId,
   CommandRecording,
   JournalBinding,
@@ -13,6 +14,7 @@ import type {
   JournaledCommand,
   JournalInventory,
   JournalSnapshot,
+  OutboxBacklog,
   OutboxEntry,
 } from '../domain/journal-records.js';
 import type { Sequence } from '../domain/observation-sequence.js';
@@ -46,6 +48,8 @@ export interface WorkerJournal {
   recordUnrecordedProcess(containment: string, processes: readonly ExecutionProcess[]): Result<void>;
   // Journals a declaration only when it differs from the last one.
   recordCapacity(capacity: DeclaredCapacity): Result<void>;
+  // The current causes of admission pressure; an empty list clears it.
+  recordAdmissionPressure(causes: readonly AdmissionPressureCause[]): Result<void>;
   snapshot(): Result<JournalSnapshot>;
   // Executions whose terminal fact is confirmed and whose record remains.
   removableRecords(): Result<readonly ExecutionId[]>;
@@ -56,6 +60,8 @@ export interface WorkerJournal {
   // confirmed within the republication bound.
   dueForPublication(now: Instant): Result<readonly OutboxEntry[]>;
   markPublished(sequence: Sequence, at: Instant): void;
+  // What the outbox holds that the control plane has not confirmed.
+  backlog(): Result<OutboxBacklog>;
   // Cumulative confirmation by the control plane; prunes what it covers.
   confirmThrough(sequence: Sequence): Result<void>;
   close(): void;

@@ -17,6 +17,8 @@ function sourceOf(fact: ObservationFact, journalId: JournalId): readonly (string
       return ['command-outcome', fact.commandId];
     case 'capacity-declared':
       return ['capacity-declared', journalId, fact.declaration];
+    case 'admission-pressure-changed':
+      return ['admission-pressure-changed', journalId, fact.declaration];
     case 'launch-rejected':
       return ['operation-outcome', fact.operationId];
     case 'cancellation-not-applied':

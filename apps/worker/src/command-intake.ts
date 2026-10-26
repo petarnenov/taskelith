@@ -4,6 +4,7 @@ import {
   parseRecoveryEpoch,
   parseSequence,
   type CommandId,
+  type AssignmentRefusal,
   type CommandRejectionReason,
   type JournaledCommand,
   type LaunchIntent,
@@ -14,6 +15,7 @@ import type { WorkerCapacity } from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type CorrelationId, type Instant, type Result } from '@taskelith/kernel';
 import { parseGeneration, parseOwnershipGeneration } from '@taskelith/sdlc';
 import { encodeJson, type DeliveredMessage, type Publication, type PublishOutcome } from '@taskelith/nats';
+import type { AdmissionCheck } from './admission-pressure.js';
 import { refusalOf } from './assignment-admission.js';
 import { inventoryParts } from './observation-messages.js';
 
@@ -29,6 +31,7 @@ type Versioned = MessageSchemas['VersionedCommand'];
 export interface CommandIntakeOptions {
   readonly journal: WorkerJournal;
   readonly capacity: WorkerCapacity;
+  readonly pressure: AdmissionCheck;
   readonly publish: (publication: Publication) => Promise<Result<PublishOutcome>>;
   readonly observationSubject: string;
   readonly newReportId: () => string;
@@ -96,13 +99,25 @@ export class CommandIntake {
   #offer(source: JournaledSource, offer: Offer): Result<JournaledCommand> {
     const intent = intentOf(offer);
     if (!intent.ok) return intent;
+    const refusal = this.#refusal(intent.value);
+    if (!refusal.ok) return refusal;
+    if (refusal.value === undefined) return ok({ ...source, outcome: 'accepted', kind: 'assignment', intent: intent.value });
+    const { assignmentId, attemptId, ownershipGeneration } = intent.value;
+    const assignment = { assignmentId, attemptId, ownershipGeneration };
+    const rejection = { kind: 'assignment-refused' as const, assignment, ...refusal.value };
+    return ok({ ...source, outcome: 'rejected', kind: offer.metadata.commandType, rejection });
+  }
+
+  // The limits an offer can never meet here come before admission pressure,
+  // which is retryable; undefined admits the offer.
+  #refusal(intent: LaunchIntent): Result<AssignmentRefusal | undefined> {
     const journal = this.#options.journal.snapshot();
     if (!journal.ok) return journal;
-    const reason = refusalOf(intent.value.requested, journal.value, this.#options.capacity);
-    if (reason === undefined) return ok({ ...source, outcome: 'accepted', kind: 'assignment', intent: intent.value });
-    const { assignmentId, attemptId, ownershipGeneration } = intent.value;
-    const rejection = { kind: 'assignment-refused' as const, assignment: { assignmentId, attemptId, ownershipGeneration }, reason };
-    return ok({ ...source, outcome: 'rejected', kind: offer.metadata.commandType, rejection });
+    const reason = refusalOf(intent.requested, journal.value, this.#options.capacity);
+    if (reason !== undefined) return ok({ reason });
+    const causes = this.#options.pressure.refresh();
+    if (!causes.ok) return causes;
+    return ok(causes.value.length === 0 ? undefined : { reason: 'worker-admission-pressure', pressureCauses: causes.value });
   }
 
   // A confirmation of another journal, or beyond what this journal assigned,

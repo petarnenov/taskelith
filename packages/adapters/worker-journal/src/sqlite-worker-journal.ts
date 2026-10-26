@@ -1,5 +1,6 @@
 import { err, failure, ok, type Failure, type Instant, type Result } from '@taskelith/kernel';
 import type {
+  AdmissionPressureCause,
   CommandId,
   CommandRecording,
   DeclaredCapacity,
@@ -19,6 +20,7 @@ import type {
   LaunchRequest,
   ObservationFact,
   OperationId,
+  OutboxBacklog,
   OutboxEntry,
   RecoveryEpoch,
   Sequence,
@@ -283,6 +285,15 @@ export class SqliteWorkerJournal implements WorkerJournal {
     });
   }
 
+  // A declaration is the sequence it takes, so it is unique in the journal.
+  recordAdmissionPressure(causes: readonly AdmissionPressureCause[]): Result<void> {
+    return this.#connection.transact((database) => {
+      const declaration = storedInteger<number>(metaRow(database), 'next_sequence');
+      this.#append(database, { kind: 'admission-pressure-changed', declaration, causes: [...causes] });
+      return ok(undefined);
+    });
+  }
+
   snapshot(): Result<JournalSnapshot> {
     return this.#connection.read(readSnapshot);
   }
@@ -328,6 +339,14 @@ export class SqliteWorkerJournal implements WorkerJournal {
     this.#publishedAt.set(sequence, Date.parse(at));
   }
 
+  backlog(): Result<OutboxBacklog> {
+    return this.#connection.read((database) => {
+      const row = database.prepare(`SELECT COUNT(*) AS entries, COALESCE(SUM(LENGTH(CAST(observation_id AS BLOB))
+        + LENGTH(CAST(fact AS BLOB)) + LENGTH(CAST(recorded_at AS BLOB))), 0) AS bytes FROM outbox`).get() ?? {};
+      return Object.freeze({ entries: storedInteger<number>(row, 'entries'), bytes: storedInteger<number>(row, 'bytes') });
+    });
+  }
+
   confirmThrough(sequence: Sequence): Result<void> {
     return this.#connection.transact((database) => {
       const assigned = storedInteger<number>(metaRow(database), 'next_sequence') - 1;
@@ -353,9 +372,12 @@ export class SqliteWorkerJournal implements WorkerJournal {
     const cause = { commandId: command.commandId, correlationId: command.correlationId };
     if (command.outcome === 'rejected') {
       const { rejection } = command;
-      this.#append(database, rejection.kind === 'command-rejected'
-        ? { ...rejection, ...cause }
-        : { kind: 'assignment-refused', ...cause, ...rejection.assignment, reason: rejection.reason });
+      if (rejection.kind === 'command-rejected') {
+        this.#append(database, { ...rejection, ...cause });
+        return ok(undefined);
+      }
+      const { assignment, ...refusal } = rejection;
+      this.#append(database, { ...refusal, ...cause, ...assignment });
       return ok(undefined);
     }
     switch (command.kind) {

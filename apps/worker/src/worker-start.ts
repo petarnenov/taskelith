@@ -16,14 +16,18 @@ import {
   claimWorkerRoot,
   failureReason,
   openWorkerRoot,
+  readVolumeSpace,
   readWorkerCredentials,
+  truncateBufferedLogs,
   type JournalClock,
   type VolumeProbe,
+  type VolumeSpaceReader,
   type WorkerEnrollment,
   type WorkerIdentity,
   type WorkerRoot,
   type WorkerRootOptions,
 } from '@taskelith/worker-journal';
+import { AdmissionPressure } from './admission-pressure.js';
 import { CommandIntake } from './command-intake.js';
 import type { ContainmentScan, DeadlineClock, RecordListing, SupervisionFactory } from './execution-supervision-port.js';
 import { LaunchOrchestrator, openExecutions } from './launch-orchestrator.js';
@@ -36,6 +40,9 @@ export interface WorkerDependencies {
   readonly newJournalId: () => string;
   readonly clock: JournalClock;
   readonly probe?: VolumeProbe;
+  // The free space of the data root's volume, for the disk floor.
+  readonly space?: VolumeSpaceReader;
+  readonly pressurePollMilliseconds?: number;
   // Shorter transport timers for tests.
   readonly limits?: TransportLimits;
   // Used only when the settings name a launch command.
@@ -138,7 +145,8 @@ async function connectBroker(settings: WorkerSettings, dependencies: WorkerDepen
   if (!address.ok) return address;
   const observationSubject = address.value.observationSubject(identity.workerId);
   if (!observationSubject.ok) return observationSubject;
-  const launcher = launchOrchestrator(settings, dependencies, root, credentials.value.controlPlane);
+  const pressure = admissionPressure(settings, dependencies, root);
+  const launcher = launchOrchestrator(settings, dependencies, root, credentials.value.controlPlane, pressure);
   if (!launcher.ok) return launcher;
   if (launcher.value === undefined) {
     const deferred = deferReconciliation(root, dependencies.logger ?? SILENT_LOGGER);
@@ -146,16 +154,26 @@ async function connectBroker(settings: WorkerSettings, dependencies: WorkerDepen
   }
   const declared = declareCapacity(settings, root);
   if (!declared.ok) return declared;
+  const pressured = pressure.refresh();
+  if (!pressured.ok) return pressured;
   const transport = await dependencies.connect({
     server: settings.natsUrl, creds: credentials.value.broker, address: address.value, workerId: identity.workerId,
     ...(settings.natsTls === undefined ? {} : { tls: settings.natsTls }),
   });
   if (!transport.ok) return transport;
   const loops = startLoops({
-    settings, dependencies, root, transport: transport.value, address: address.value, observationSubject: observationSubject.value,
+    settings, dependencies, root, transport: transport.value, address: address.value, observationSubject: observationSubject.value, pressure,
     ...(launcher.value === undefined ? {} : { launcher: launcher.value }),
   });
   return ok(runningWorker(root, transport.value, loops));
+}
+
+function admissionPressure(settings: WorkerSettings, dependencies: WorkerDependencies, root: WorkerRoot): AdmissionPressure {
+  const space = dependencies.space ?? readVolumeSpace;
+  return new AdmissionPressure({
+    journal: root.journal, space: () => space(settings.dataRoot), truncateLogs: () => truncateBufferedLogs(root.paths.logs),
+    ...(dependencies.logger === undefined ? {} : { logger: dependencies.logger }),
+  });
 }
 
 // Only a worker whose settings name a launch command launches anything.
@@ -164,6 +182,7 @@ function launchOrchestrator(
   dependencies: WorkerDependencies,
   root: WorkerRoot,
   credential: string,
+  pressure: AdmissionPressure,
 ): Result<LaunchOrchestrator | undefined> {
   const { launch } = settings;
   const { launching } = dependencies;
@@ -173,7 +192,7 @@ function launchOrchestrator(
   const { sleep, draw, newId, pollMilliseconds, logger, onFailure } = launching;
   const { supervision, clock, records, containments } = host.value;
   return ok(new LaunchOrchestrator({
-    journal: root.journal, authority: launching.authority(credential), supervision, clock, sleep, draw, newId,
+    journal: root.journal, authority: launching.authority(credential), supervision, clock, pressure, sleep, draw, newId,
     ...(pollMilliseconds === undefined ? {} : { pollMilliseconds }), ...(records === undefined ? {} : { records }),
     ...(containments === undefined ? {} : { containments }),
     ...(logger === undefined ? {} : { logger }), ...(onFailure === undefined ? {} : { onFailure }),
@@ -203,6 +222,7 @@ interface LoopContext {
   readonly transport: TransportConnection;
   readonly address: TransportAddress;
   readonly observationSubject: string;
+  readonly pressure: AdmissionPressure;
   readonly launcher?: LaunchOrchestrator;
 }
 
@@ -211,16 +231,16 @@ interface Loops {
   abort(): void;
 }
 
-// The command consumer, the observation publisher, and the launches, until
-// aborted.
+// The command consumer, the observation publisher, the pressure watch, and
+// the launches, until aborted.
 function startLoops(context: LoopContext): Loops {
-  const { settings, dependencies, root, transport, address, observationSubject, launcher } = context;
+  const { settings, dependencies, root, transport, address, observationSubject, pressure, launcher } = context;
   const { journal } = root;
   const publisher = new JetStreamPublisher(transport.js);
   const publish = publisher.publish.bind(publisher);
   const now = () => dependencies.clock.now();
   const intake = new CommandIntake({
-    journal, capacity: settings.capacity, publish, observationSubject, newReportId: randomUUID, now,
+    journal, capacity: settings.capacity, pressure, publish, observationSubject, newReportId: randomUUID, now,
     ...(launcher === undefined ? {} : { onRecorded: launcher.notify }),
   });
   const options = dependencies.limits === undefined ? {} : { limits: dependencies.limits };
@@ -229,6 +249,7 @@ function startLoops(context: LoopContext): Loops {
   const finished = Promise.all([
     consumer.run(controller.signal),
     runObservationPublisher({ journal, publish, observationSubject, now }, controller.signal, dependencies.limits),
+    pressure.watch(controller.signal, dependencies.pressurePollMilliseconds),
     launcher?.run(controller.signal),
   ]).then(() => undefined);
   return { finished, abort: () => controller.abort() };

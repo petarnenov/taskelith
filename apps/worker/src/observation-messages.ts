@@ -1,5 +1,5 @@
 import { EXECUTION_PROTOCOL_VERSION, type MessageSchemas } from '@taskelith/contracts';
-import type { CommandCause, ExecutionExit, ExecutionSubject, JournalBinding, JournalInventory, OutboxEntry } from '@taskelith/execution';
+import type { AssignmentRefusal, CommandCause, ExecutionExit, ExecutionSubject, JournalBinding, JournalInventory, OutboxEntry } from '@taskelith/execution';
 import { ok, type Instant, type Result } from '@taskelith/kernel';
 
 // The wire shapes of execution.asyncapi.json for what the journal records.
@@ -25,14 +25,18 @@ export function observationMessage(entry: OutboxEntry): Result<ObservationMessag
       return ok({ metadata, payload: { commandId, assignmentId } });
     }
     case 'assignment-refused': {
-      const { commandId, assignmentId, attemptId, ownershipGeneration, reason } = fact;
+      const { commandId, assignmentId, attemptId, ownershipGeneration } = fact;
       const metadata = { ...metadataOf(entry, 'execution.assignment.refused', causedBy(fact)), attemptId, ownershipGeneration };
-      return ok({ metadata, payload: { commandId, assignmentId, reason, retryable: false } });
+      return ok({ metadata, payload: { commandId, assignmentId, ...refusalOf(fact) } });
     }
     case 'capacity-declared': {
       const { protocolVersions, ...capacity } = fact.capacity;
       const metadata = metadataOf(entry, 'worker.capacity.declared', { correlationId: entry.position.observationId });
       return ok({ metadata, payload: { capacity, protocolVersions } });
+    }
+    case 'admission-pressure-changed': {
+      const metadata = metadataOf(entry, 'worker.admission-pressure.changed', { correlationId: entry.position.observationId });
+      return ok({ metadata, payload: { causes: fact.causes } });
     }
     case 'launch-rejected': {
       const { executionId, assignmentId, operationId, reason } = fact;
@@ -64,6 +68,15 @@ export function observationMessage(entry: OutboxEntry): Result<ObservationMessag
       return ok({ metadata, payload: { containment, processes: fact.processes.slice(0, PROCESSES_MAXIMUM) } });
     }
   }
+}
+
+// Admission pressure is the only retryable refusal, and only it names
+// causes (wire contracts section 5).
+function refusalOf(refusal: AssignmentRefusal): Record<string, unknown> {
+  if (refusal.reason === 'worker-admission-pressure') {
+    return { reason: refusal.reason, retryable: true, pressureCauses: refusal.pressureCauses };
+  }
+  return { reason: refusal.reason, retryable: false };
 }
 
 // Only a failed spawn names its failure; every other exit names evidence.
