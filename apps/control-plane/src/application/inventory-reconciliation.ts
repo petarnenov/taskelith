@@ -6,6 +6,7 @@ import {
   highestReceivedSnapshot,
   isFreshReport,
   isRolledBack,
+  isUnsolicited,
   startProducerCursor,
   supersededReports,
   type InventoryPart,
@@ -83,7 +84,7 @@ export async function receivePart(tx: ControlPlaneTransaction, part: InventoryPa
   if (!raised.ok) return raised;
   const pruned = await removeSuperseded(tx, [...pending, part], { requestId: current?.requestId, highestSnapshot, preferred: part.reportId });
   if (!pruned.ok) return pruned;
-  const unsolicited = !fresh && !pending.some((stored) => stored.reportId === part.reportId);
+  const unsolicited = isUnsolicited(part) && !pending.some((stored) => stored.reportId === part.reportId);
   return unsolicited ? requestInventory(tx, workerId, context) : ok(undefined);
 }
 
@@ -140,15 +141,13 @@ async function evaluateSnapshot(
   }
   if (snapshot.snapshot < highestSnapshot) return keep(await tx.inventoryReports.remove(reportId));
   if (cursor.confirmedThrough < snapshot.throughSequence) return ok('kept');
-  const applied = await applySnapshot(tx, snapshot, fresh, context);
+  const applied = await applySnapshot(tx, snapshot, context);
   return applied.ok ? keep(await tx.inventoryReports.remove(reportId)) : applied;
 }
 
 // Decision 8: only the worker's unfinished assignments it omits change;
 // what it reports about executions is not applied.
-async function applySnapshot(
-  tx: ControlPlaneTransaction, snapshot: InventorySnapshot, fresh: boolean, context: ReconciliationContext,
-): Promise<Result<void>> {
+async function applySnapshot(tx: ControlPlaneTransaction, snapshot: InventorySnapshot, context: ReconciliationContext): Promise<Result<void>> {
   let unclassified = false;
   for (const assignment of await tx.assignments.listUnfinishedByWorker(snapshot.workerId)) {
     if (snapshot.assignmentIds.has(assignment.id)) continue;
@@ -159,7 +158,7 @@ async function applySnapshot(
       : await resendIfUngranted(tx, assignment, snapshot.reportId, context);
     if (!handled.ok) return handled;
   }
-  return unclassified && !fresh ? requestInventory(tx, snapshot.workerId, context) : ok(undefined);
+  return unclassified && isUnsolicited(snapshot) ? requestInventory(tx, snapshot.workerId, context) : ok(undefined);
 }
 
 // Stored parts never disagree, as receipt refuses a report whose do.
