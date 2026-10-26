@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
-import { launchRejection, SPACE_REFUSAL_REASON, type WorkerJournal } from '@taskelith/execution';
+import { launchRejection, REPORTED_SEALS_LIMIT, SPACE_REFUSAL_REASON, type WorkerJournal } from '@taskelith/execution';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { id, value } from '@taskelith/testing';
@@ -261,6 +261,25 @@ test('a granted execution sealed at runtime and a pending W2 after it are both r
   const reported = [{ executionId: EXECUTION, operationId: 'operation-1' }, { executionId: relaunch.executionId, operationId: 'operation-2' }];
   assert.deepEqual(authority.requests[0]?.reportsNotStartedFor, reported);
   assert.deepEqual(value(journal.snapshot()).executions.map(({ state }) => state), ['not-started', 'not-started', 'exited']);
+});
+
+test('after recovery, the first request reports exactly the oldest 8 of 10 unconfirmed sealed executions, in order', async () => {
+  inherit('granted');
+  value(journal.recordNotStarted(EXECUTION));
+  const relaunches = Array.from({ length: 9 }, (_, index) => requestOf(`sealed-${index + 2}`, `operation-${index + 2}`));
+  for (const relaunch of relaunches) {
+    value(journal.beginAuthorization(relaunch));
+    value(journal.recordNotStarted(relaunch.executionId));
+  }
+  authority.answers = [grantedToOwner(EXECUTION)];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  await startOnce();
+  const sealed = [requestOf(EXECUTION, 'operation-1'), ...relaunches].map(({ executionId, operationId }) => ({ executionId, operationId }));
+  assert.deepEqual(authority.requests[0]?.reportsNotStartedFor, sealed.slice(0, REPORTED_SEALS_LIMIT));
+  assert.equal(REPORTED_SEALS_LIMIT, 8);
+  assert.equal(value(journal.snapshot()).executions.at(-1)?.state, 'exited');
 });
 
 test('a resumed execution reports the sealed one, whose not-started has not reached the authority', async () => {
