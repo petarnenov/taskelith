@@ -30,12 +30,15 @@ Excerpt of the smoke output:
 installation.sh: submitted, assigned, executed, stored the result, removed
 ```
 
+## Privilege decision
+
+The worker runs as root with three capabilities inside its container (design decision 3), which replaces the 23a requirement that it run as `taskelith` and reverses 23a review finding 6. On 2026-10-26 the coordinator brought the options to the owner's delegate, who accepted option A, the root worker with the `SETUID`, `SETGID`, and `KILL` bounding set as implemented, on behalf of the owner (away run `20261026T134624Z-opencode-35455`). Observed in the worker container: `CapPrm`, `CapEff`, and `CapBnd` `00000000000000e0` (`KILL`, `SETGID`, `SETUID`), `CapAmb` `0000000000000000`. Item 25 covers Linux hosts with AppArmor or SELinux and linux/arm64. The coordinator reports the reversal to the owner.
+
 ## Independent review
 
 Pending: the coordinator assigns the reviewer and records the passes here.
 
 ## Limitations and remaining gates
 
-- The worker runs as root with three capabilities inside its container, replacing the 23a requirement that it run as `taskelith` (design decision 3); this needs the coordinator's or the owner's acceptance.
 - The smoke and the bring-up check ran on Docker Desktop x86_64 only; Linux hosts with AppArmor or SELinux, and linux/arm64, are not yet observed. Item 25 qualifies the container settings.
 - Independent review and integration remain.
