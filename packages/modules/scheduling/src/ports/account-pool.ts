@@ -11,7 +11,8 @@ export interface AccountSlots {
   get(id: ProviderCredentialId): Promise<Result<AccountSlot>>;
   // The active slots of the harness allowed for the project, by identifier.
   pool(projectId: ProjectId, harness: HarnessPluginId): Promise<readonly AccountSlot[]>;
-  // Compare-and-set; `invalid` for a harness change or a slot leaving removed.
+  // Compare-and-set; `invalid` for a revision other than the expected one
+  // plus one, a harness change, or a slot leaving removed.
   replace(slot: AccountSlot, expectedRevision: number): Promise<Result<void>>;
 }
 

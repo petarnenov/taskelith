@@ -202,6 +202,8 @@ The scheduler and the worker act on reasons, not text. Item 8 turns the worker's
 | Disk floor, journal backlog, or daemon overhead exceeded | `worker-admission-pressure` | Worker | Release if not acknowledged; place again after the pressure clears |
 | Offer in an execution protocol version the worker does not support | `protocol-not-supported` | Control plane, from the worker's command rejection | Release; place on a worker that supports a common version ([execution wire contracts](execution-wire-contracts.md)) |
 | Reservation released or held elsewhere | `capacity-not-reserved` | Launch authority | As the launch authorization contract states |
+| No eligible account slot for a new session whose project policy rejects (G3, item 12) | `no-eligible-slot` | Scheduler | Reject ([account pool contract](account-pool.md) section 4.5) |
+| A resumed session's slot is revoked, removed, or no longer allows the project (G3, item 12) | `session-slot-withdrawn` | Scheduler | Reject; the session is drained or ended, never moved (account pool contract section 4.3) |
 
 ## 12. Required tests
 

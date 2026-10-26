@@ -187,12 +187,12 @@ export type { TaskLineage } from './ports/task-lineage.js';
 export type { CapacityDeclaration, WorkerReports } from './ports/worker-reports.js';
 export {
   COOLDOWN_SOURCES,
-  DEFAULT_SLOT_CONCURRENCY,
   FIRST_SLOT_REVISION,
   SLOT_COOLDOWN_DEFAULT_MINUTES,
   SLOT_HEALTH,
   SLOT_INELIGIBILITY_REASONS,
   SLOT_STATES,
+  parseAccountSlot,
   type AccountSlot,
   type CooldownSource,
   type HarnessPluginId,

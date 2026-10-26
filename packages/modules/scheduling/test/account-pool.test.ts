@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { inspect } from 'node:util';
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, parseIdentifier, parseInstant, type Result } from '@taskelith/kernel';
 import {
   ACCOUNT_SLOTS_CONFORMANCE,
   COOLDOWN_SOURCES,
-  DEFAULT_SLOT_CONCURRENCY,
+  DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY,
   FIRST_SLOT_REVISION,
   NO_SLOT_POLICIES,
   REDACTED,
@@ -18,9 +18,11 @@ import {
   SLOT_STATES,
   SLOT_WAITING_REASON,
   SlotSecret,
+  parseAccountSlot,
   type AccountSlot,
   type AccountSlots,
   type HarnessPluginId,
+  type SubscriptionMechanismId,
   type ProjectId,
   type ProviderCredentialId,
   type SlotCredentials,
@@ -50,7 +52,6 @@ for (const [name, actual, expected] of CONTRACT_VALUES) {
 }
 
 test('the scalar contract values hold', () => {
-  assert.equal(DEFAULT_SLOT_CONCURRENCY, 4);
   assert.equal(FIRST_SLOT_REVISION, 1);
   assert.equal(SLOT_WAITING_REASON, 'provider-concurrency-exhausted');
   assert.deepEqual(SLOT_COOLDOWN_DEFAULT_MINUTES, { minimum: 1, maximum: 1440, provisional: 60 });
@@ -65,6 +66,51 @@ test('a slot secret reveals its text only through reveal()', () => {
   assert.equal(JSON.stringify({ secret: made.value }), `{"secret":"${REDACTED}"}`);
   assert.equal(inspect({ secret: made.value }), `{ secret: ${REDACTED} }`);
 });
+
+function identifier<Kind extends string>(kind: Kind, text: string) {
+  const parsed = parseIdentifier(kind, text);
+  assert.ok(parsed.ok);
+  return parsed.value;
+}
+
+const PROJECT = identifier('ProjectId', 'project-1') as ProjectId;
+const parsedWindowEnd = parseInstant('2026-10-26T10:00:00.000Z');
+assert.ok(parsedWindowEnd.ok);
+const WINDOW_END = parsedWindowEnd.value;
+const VALID_SLOT: AccountSlot = {
+  id: identifier('ProviderCredentialId', 'slot-1') as ProviderCredentialId,
+  harness: identifier('HarnessPluginId', 'harness-1') as HarnessPluginId,
+  mechanism: identifier('SubscriptionMechanismId', 'mechanism-1') as SubscriptionMechanismId,
+  allowedProjects: [PROJECT],
+  concurrencyLimit: DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY,
+  state: 'active',
+  health: 'healthy',
+  revision: FIRST_SLOT_REVISION,
+};
+
+test('a valid slot parses into a frozen record', () => {
+  const parsed = parseAccountSlot(VALID_SLOT);
+  assert.ok(parsed.ok);
+  assert.deepEqual(parsed.value, VALID_SLOT);
+  assert.ok(Object.isFrozen(parsed.value) && Object.isFrozen(parsed.value.allowedProjects));
+});
+
+const INVALID_SLOTS: readonly [string, Partial<AccountSlot>][] = [
+  ['no project', { allowedProjects: [] }],
+  ['a project twice', { allowedProjects: [PROJECT, PROJECT] }],
+  ['zero concurrency', { concurrencyLimit: 0 }],
+  ['fractional concurrency', { concurrencyLimit: 1.5 }],
+  ['zero revision', { revision: 0 }],
+  ['usage above 1', { usage: { fraction: 1.2, windowEndsAt: WINDOW_END } }],
+  ['usage not a number', { usage: { fraction: Number.NaN, windowEndsAt: WINDOW_END } }],
+];
+
+for (const [name, overrides] of INVALID_SLOTS) {
+  test(`a slot with ${name} is invalid`, () => {
+    const parsed = parseAccountSlot({ ...VALID_SLOT, ...overrides });
+    assert.equal(!parsed.ok && parsed.error.code, 'invalid');
+  });
+}
 
 test('an empty slot secret is invalid', () => {
   const made = SlotSecret.of('');
@@ -100,9 +146,8 @@ class InMemoryAccountSlots implements AccountSlots {
     if (slot.harness !== stored.harness || (stored.state === 'removed' && slot.state !== 'removed')) {
       return err(failure('invalid', 'a slot keeps its harness and its tombstone'));
     }
-    if (stored.revision !== expectedRevision || slot.revision !== expectedRevision + 1) {
-      return err(failure('conflict', 'the slot revision moved'));
-    }
+    if (slot.revision !== expectedRevision + 1) return err(failure('invalid', 'a change moves the revision by one'));
+    if (stored.revision !== expectedRevision) return err(failure('conflict', 'the slot revision moved'));
     this.#slots.set(slot.id, slot);
     return ok(undefined);
   }

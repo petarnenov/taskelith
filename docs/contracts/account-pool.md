@@ -20,7 +20,7 @@ This item adds the port types, the contract values, and a conformance suite for 
 1. **Authorization.** The Access module checks the caller's role before a port is called ([trust model](../trust-model.md) section 3); a port never decides authorization itself. Slots are installation resources: adding a slot, changing its allowed projects or concurrency limit, storing or rotating its credential, and revoking, reinstating, or removing it are `installation-owner` commands. A `project-viewer` reads the pool state of its own project, never a credential and never another project's slots.
 2. **Opaque identities.** A slot is identified by a `ProviderCredentialId`, the identifier that a reservation records in `providerCredentials`. The harness is a `HarnessPluginId` and the mechanism a `SubscriptionMechanismId`, both opaque to the pool.
 3. **Compare-and-set.** Every slot change replaces the record at an expected revision, inside the transaction that decides it, and fails with `conflict` when the revision has moved. A slot's revision starts at `1` and grows by one with each change.
-4. **Failures.** Every operation returns a kernel `Result`: `invalid` for malformed input, `not-found`, `conflict` for a duplicate or a lost compare-and-set, `precondition-failed` for a changed state, and `unavailable` for a store that cannot be reached.
+4. **Failures.** Every operation that can fail for a domain reason returns a kernel `Result`: `invalid` for malformed input, `not-found`, and `conflict` for a duplicate or a lost compare-and-set. A read without a domain failure, such as `pool`, returns its value, as the capacity ledger does. A store that cannot be reached rejects the operation's promise, which aborts the reservation transaction.
 5. **Secrecy.** A slot credential never enters a log, a prompt, a lesson, an error payload, an event, an outbox record, a view, or a wire response (ADR 0005 decision 6). Only `SlotCredentials` holds it, and only the delivery to the reserving run reveals it.
 
 ## 3. Slots
@@ -31,15 +31,17 @@ This item adds the port types, the contract values, and a conformance suite for 
 | --- | --- |
 | `id` | The slot's `ProviderCredentialId` |
 | `harness` | The harness plugin the slot belongs to; never changes |
-| `mechanism` | One subscription mechanism that the plugin's manifest declares; a mechanism the plugin does not declare as a subscription, such as an API key, is rejected when the slot is added |
+| `mechanism` | One subscription mechanism that the plugin's manifest declares. The control plane's add-slot command checks it against the manifest through the agent harness port (item 3) before `add`, and rejects a mechanism the plugin does not declare as a subscription, such as an API key, with `invalid`; `add` itself treats it as opaque |
 | `allowedProjects` | The projects the slot may serve, at least one, without duplicates |
-| `concurrencyLimit` | The slot's provider credential concurrency (capacity reservation contract section 2), a positive integer, by default `4` |
+| `concurrencyLimit` | The slot's provider credential concurrency (capacity reservation contract section 2), a positive integer, by default `DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY` (`4`) |
 | `state` | `active`, `revoked`, or `removed` (section 8) |
 | `health` | `healthy` or `unhealthy` (section 5) |
 | `cooldown` | Absent, or the end of the cooldown and its source: `reported-reset` or `default` (section 5) |
 | `usage` | Absent, or the last usage report: a fraction from `0` to `1` of the slot's usage-window limit and the end of that window (section 5) |
 | `lastReservedAt` | Absent, or the time of the slot's latest reservation |
 | `revision` | Section 2, rule 3 |
+
+`parseAccountSlot` checks these invariants: at least one allowed project and none twice, a positive integer concurrency limit and revision, and a usage fraction from `0` to `1`. Every command builds its record through it, and the ports store parsed records without checking them again.
 
 A project's **pool for a harness** is the set of `active` slots of that harness whose `allowedProjects` include the project. Revoked and removed slots belong to no pool.
 
@@ -56,7 +58,7 @@ A slot is eligible for a reservation at the database time `now` when all of thes
 | No cooldown, or its end is at or before `now` | `cooling-down` |
 | Its held reservations are below `concurrencyLimit` | `at-concurrency-limit` |
 
-Held reservations are counted by the capacity ledger's `heldForCredential`, inside the same transaction. That count equals ADR 0005's active sessions because a session has at most one active attempt (G3 item 4; capacity reservation contract section 10).
+Held reservations are counted by the capacity ledger's `heldForCredential`, inside the same transaction. That count equals ADR 0005's active sessions only if a session has at most one active attempt; this contract relies on G3 item 4 establishing that, as capacity reservation contract section 10 requires.
 
 ## 4. Selection
 
@@ -70,11 +72,11 @@ Selection runs inside the reservation transaction (capacity reservation contract
 | `resumed-session` | project, harness, slot | A session continues, for example after a restart; the session's harness and slot are fixed (section 4.3) |
 | `after-limit` | project, the limited session's harness and slot, the other harnesses allowed for the task in the project's order of preference | A new session continues the work of a session whose slot reported a limit (section 4.4) |
 
-Which harnesses a task may use, and in which order, comes from the project's defaults and the task (G3 item 11); the pool takes them as given. A `new-session` request also names the project's policy for no eligible slot: `wait` or `reject` (section 4.5).
+Which harnesses a task may use, and in which order, comes from the project's defaults and the task (G3 item 11); the pool takes them as given. An `after-limit` request whose alternatives include the limited harness, or name a harness twice, is `invalid`. A `new-session` request also names the project's policy for no eligible slot: `wait` or `reject` (section 4.5).
 
 ### 4.2 Least-loaded rule
 
-Among the eligible slots of the requested pool, the slot with the fewest held reservations wins. Ties go to the lowest usage fraction, but only when every tied slot has a usage report whose window ends after `now`; otherwise ties go directly to the least recently reserved slot. A slot never reserved counts as least recently reserved, and remaining ties go to the lowest `id`, so that the rule is deterministic. Selecting a slot sets its `lastReservedAt` to `now` in the same transaction.
+Among the eligible slots of the requested pool, the slot with the fewest held reservations wins. Remaining ties go to the lowest usage fraction, then to the least recently reserved slot, then to the lowest `id`, so that the rule is deterministic. The usage step applies only when every tied slot has a usage report whose window ends after `now`; otherwise it is skipped. A slot never reserved counts as least recently reserved. Selecting a slot sets its `lastReservedAt` to `now` in the same transaction.
 
 ### 4.3 Session affinity
 
@@ -82,7 +84,7 @@ A session keeps the harness and slot that started it until its work is finished 
 
 - If the slot is eligible, it is reserved again, even when another slot is less loaded.
 - If the slot is `unhealthy`, `cooling-down`, or `at-concurrency-limit`, the request waits with `provider-concurrency-exhausted`. A limit that the session's own slot reported does not lead here: that session writes a handoff and stops (section 4.4).
-- If the slot is `revoked` or `removed`, the request is rejected with `session-slot-withdrawn`. The session is drained or ended by policy or an operator, never moved to another slot or harness; its work may continue only in a new session.
+- If the slot is `revoked` or `removed`, or no longer allows the project (`not-allowed`), the request is rejected with `session-slot-withdrawn`. The session is drained or ended by policy or an operator, never moved to another slot or harness; its work may continue only in a new session.
 
 No request kind moves a running session to another slot or harness, and no explicit reconciliation does either.
 
@@ -98,7 +100,7 @@ If the limited slot is revoked or removed while the request waits, step 2 no lon
 
 ### 4.5 No eligible slot
 
-For a `new-session` request with no eligible slot in its pool, the policy decides: `wait` waits with `provider-concurrency-exhausted`, and `reject` rejects with `no-eligible-slot`. A slot outside the pool is never used. The reason values that this contract adds, `session-slot-withdrawn` and `no-eligible-slot`, join the capacity reservation contract section 11 when item 12 implements them.
+For a `new-session` request with no eligible slot in its pool, the policy decides: `wait` waits with `provider-concurrency-exhausted`, and `reject` rejects with `no-eligible-slot`. A slot outside the pool is never used. The reason values that this contract adds, `session-slot-withdrawn` and `no-eligible-slot`, are listed in the capacity reservation contract section 11, and item 12 adds them to its reason constants.
 
 ### 4.6 Outcomes
 
@@ -126,7 +128,7 @@ Read and written inside the reservation transaction; item 12 adds it to `Capacit
 | `add(slot)` | Stores a new slot; `conflict` when the identifier exists, and `invalid` when the revision is not `1` |
 | `get(id)` | The slot in any state; `not-found` when it was never added |
 | `pool(projectId, harness)` | The project's pool for the harness (section 3.1), ordered by `id`; empty when there is none |
-| `replace(slot, expectedRevision)` | Replaces the slot when its stored revision equals `expectedRevision` and the new revision is one higher; `conflict` otherwise, and `not-found` for an unknown slot |
+| `replace(slot, expectedRevision)` | Replaces the slot when its stored revision equals `expectedRevision`; `conflict` when it does not, `invalid` when the new revision is not `expectedRevision` plus one, and `not-found` for an unknown slot |
 
 `replace` does not let a slot change its `harness` or leave `removed`: such a change fails with `invalid`.
 
@@ -158,8 +160,8 @@ Revocation and removal release no held reservation by themselves. In-flight atte
 
 This item adds, through `make`:
 
-- A test that pins the contract values of sections 3, 4, and 5.
-- Conformance suites for `AccountSlots` and `SlotCredentials`, run against an in-memory test double: duplicate adds, reads in every state, the pool filter by project, harness, and state, compare-and-set with one winner among concurrent writers, refused harness and tombstone changes, credential replacement, idempotent destruction, and the redaction of a `SlotSecret`.
+- A test that pins the contract values of sections 3, 4, and 5, and a test of `parseAccountSlot`.
+- Conformance suites for `AccountSlots` and `SlotCredentials`, run against an in-memory test double: duplicate adds, reads in every state, the pool filter by project, harness, and state, compare-and-set with one winner among concurrent writers, refused revision skips and harness and tombstone changes, credential replacement, idempotent destruction, and the redaction of a `SlotSecret` in its string, JSON, and inspection forms.
 
 The item 12 implementation adds:
 

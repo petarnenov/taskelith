@@ -1,4 +1,4 @@
-import type { Identifier, Instant } from '@taskelith/kernel';
+import { err, failure, ok, type Identifier, type Instant, type Result } from '@taskelith/kernel';
 import type { ProjectId, ProviderCredentialId } from './capacity-reservation.js';
 
 // Opaque to the pool: no harness or vendor is ever named (contract section 1).
@@ -19,7 +19,6 @@ export const SLOT_INELIGIBILITY_REASONS = Object.freeze([
   'at-concurrency-limit',
 ] as const);
 
-export const DEFAULT_SLOT_CONCURRENCY = 4;
 export const FIRST_SLOT_REVISION = 1;
 
 // Contract section 5: an installation setting, provisional default.
@@ -53,4 +52,26 @@ export interface AccountSlot {
   readonly usage?: SlotUsage;
   readonly lastReservedAt?: Instant;
   readonly revision: number;
+}
+
+// The record invariants of contract section 3.1; the ports store parsed
+// records and do not check them again.
+export function parseAccountSlot(slot: AccountSlot): Result<AccountSlot> {
+  const problem = recordProblem(slot);
+  if (problem !== undefined) return err(failure('invalid', problem));
+  return ok(Object.freeze({ ...slot, allowedProjects: Object.freeze([...slot.allowedProjects]) }));
+}
+
+function recordProblem(slot: AccountSlot): string | undefined {
+  const { allowedProjects, concurrencyLimit, usage, revision } = slot;
+  if (allowedProjects.length === 0) return 'a slot must allow at least one project';
+  if (new Set(allowedProjects).size !== allowedProjects.length) return 'a project is allowed twice';
+  if (!isPositiveInteger(concurrencyLimit)) return 'the concurrency limit must be a positive integer';
+  if (!isPositiveInteger(revision)) return 'the revision must be a positive integer';
+  if (usage !== undefined && !(usage.fraction >= 0 && usage.fraction <= 1)) return 'usage must be a fraction from 0 to 1';
+  return undefined;
+}
+
+function isPositiveInteger(value: number): boolean {
+  return Number.isSafeInteger(value) && value > 0;
 }

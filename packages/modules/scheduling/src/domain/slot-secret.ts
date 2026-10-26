@@ -27,6 +27,7 @@ export class SlotSecret {
     return REDACTED;
   }
 
+  // Keeps console.log and util.inspect from showing the credential.
   [Symbol.for('nodejs.util.inspect.custom')](): string {
     return REDACTED;
   }

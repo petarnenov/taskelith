@@ -5,7 +5,8 @@ ADR 0005 fixes the harness account pools, and the capacity reservation contract 
 ## What Changes
 
 - Add the account pool contract (`docs/contracts/account-pool.md`): the slot record, eligibility and its reasons, the three selection request kinds, the least-loaded rule, session affinity, the selection after a limit, the effect of the harness port's load, limit, and reset signals, the `AccountSlots` and `SlotCredentials` ports, per-run credential delivery, and revocation, reinstatement, and removal.
-- Add domain types and contract constants to the Scheduling module: `AccountSlot`, `HarnessPluginId`, `SubscriptionMechanismId`, `SlotRequest`, `SlotSelection`, and `SlotSecret`, a credential value that discloses its text only through `reveal()`.
+- Add domain types and contract constants to the Scheduling module: `AccountSlot` with its parser `parseAccountSlot`, `HarnessPluginId`, `SubscriptionMechanismId`, `SlotRequest`, `SlotSelection`, and `SlotSecret`, a credential value that discloses its text only through `reveal()`.
+- Add the two new reasons to the capacity reservation contract section 11 and the default slot cooldown to the operational targets.
 - Add the `AccountSlots` and `SlotCredentials` port types and their conformance suites, run against an in-memory test double.
 - No selection or scheduler code, no adapter, no encryption implementation or key management choice, no wire schema, and no change to `CapacityTransaction`.
 
@@ -17,7 +18,7 @@ ADR 0005 fixes the harness account pools, and the capacity reservation contract 
 
 ### Modified Capabilities
 
-None. The behavior stays in `harness-account-pools`.
+None. `account-pool-port` refines `harness-account-pools` with the port's rules (tie order, cooldown bounds, revocation, reinstatement, and removal) and changes none of its requirements.
 
 ## Impact
 

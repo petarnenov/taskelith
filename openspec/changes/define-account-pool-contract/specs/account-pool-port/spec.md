@@ -15,6 +15,13 @@ The Scheduling module SHALL identify a slot by the `ProviderCredentialId` that a
 - **WHEN** an adapter is asked to make a removed slot active again
 - **THEN** the change fails with `invalid`, and the slot stays a tombstone in no pool
 
+### Requirement: Parsed slot records
+Every slot record SHALL be built through `parseAccountSlot`, which SHALL reject with `invalid` a slot without an allowed project, with a project allowed twice, with a concurrency limit or revision that is not a positive integer, or with a usage fraction outside 0 to 1.
+
+#### Scenario: Slot without a project
+- **WHEN** a slot with no allowed project is parsed
+- **THEN** parsing fails with `invalid`
+
 ### Requirement: Eligibility with ordered reasons
 A slot SHALL be eligible when it is not removed, not revoked, allowed for the project, healthy, out of cooldown, and below its concurrency limit, checked in that order, and the first failing check SHALL be its ineligibility reason.
 
@@ -33,8 +40,33 @@ A selection SHALL be a `new-session`, `resumed-session`, or `after-limit` reques
 - **WHEN** an `after-limit` request finds no eligible slot on another harness and the limited slot is still cooling down
 - **THEN** the selection waits with `provider-concurrency-exhausted`, and no other slot of the limited harness is chosen
 
+#### Scenario: Resumed session on a slot that no longer allows its project
+- **WHEN** a resumed session's slot no longer lists the session's project
+- **THEN** the selection is rejected with `session-slot-withdrawn`
+
+### Requirement: Deterministic least-loaded order
+The least-loaded rule SHALL order eligible slots by held reservations, then by usage fraction only when every tied slot reports one within its current window, then by least recent reservation, then by lowest identifier, and a selection SHALL record the time of the slot's reservation.
+
+#### Scenario: Equal usage
+- **WHEN** two eligible slots tie on held reservations and report the same usage fraction
+- **THEN** the least recently reserved of the two is reserved
+
+### Requirement: Cooldown bounds
+A limit without a future reset time SHALL put a slot in cooldown for the installation's default, a setting from 1 to 1440 minutes, provisionally 60; a later limit SHALL never shorten a cooldown, and a reset signal SHALL end it.
+
+#### Scenario: Shorter later limit
+- **WHEN** a slot cooling down until 10:00 reports a limit with a reset time of 09:30
+- **THEN** its cooldown still ends at 10:00
+
+### Requirement: Revocation, reinstatement, and removal
+Revoking a slot SHALL take it out of every pool and stop revealing its credential while keeping the credential encrypted; reinstating it SHALL return it to its pools unchanged; removing it SHALL destroy its credential and keep its record as a tombstone; none of them SHALL release a held reservation by itself.
+
+#### Scenario: Reinstated slot
+- **WHEN** a revoked slot is reinstated
+- **THEN** it rejoins its pools with its stored credential, health, cooldown, and usage
+
 ### Requirement: Slot store compare-and-set
-`AccountSlots` SHALL store a new slot only at revision 1, SHALL replace a slot only at its expected revision with the next revision, and SHALL return a project's pool for a harness as its active allowed slots ordered by identifier.
+`AccountSlots` SHALL store a new slot only at revision 1, SHALL replace a slot only at its expected revision with the next revision, failing with `conflict` for another stored revision and `invalid` for another new revision, and SHALL return a project's pool for a harness as its active allowed slots ordered by identifier.
 
 #### Scenario: Concurrent replaces
 - **WHEN** two replaces of one slot run at the same expected revision

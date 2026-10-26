@@ -1,7 +1,7 @@
 import { parseIdentifier, parseInstant, type Instant, type Result } from '@taskelith/kernel';
 import { expectCode, expectOneWinner, expectRead, expectSame, expectSuccess, type ConformanceCase } from '@taskelith/sdlc';
+import { DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY } from '../domain/capacity-limits.js';
 import {
-  DEFAULT_SLOT_CONCURRENCY,
   FIRST_SLOT_REVISION,
   type AccountSlot,
   type HarnessPluginId,
@@ -34,7 +34,7 @@ function slot(text: string, overrides: Partial<AccountSlot> = {}): AccountSlot {
     harness: HARNESS,
     mechanism: MECHANISM,
     allowedProjects: Object.freeze([PROJECT]),
-    concurrencyLimit: DEFAULT_SLOT_CONCURRENCY,
+    concurrencyLimit: DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY,
     state: 'active' as const,
     health: 'healthy' as const,
     revision: FIRST_SLOT_REVISION,
@@ -96,7 +96,8 @@ export const ACCOUNT_SLOTS_CONFORMANCE: readonly ConformanceCase<AccountSlots>[]
       expectSuccess(problems, 'replace', await slots.replace(cooled, stored.revision));
       expectRead(problems, 'replaced', await slots.get(stored.id), cooled);
       expectCode(problems, 'stale', await slots.replace(next(stored, { health: 'unhealthy' }), stored.revision), 'conflict');
-      expectCode(problems, 'skipped revision', await slots.replace({ ...cooled, revision: cooled.revision + 2 }, cooled.revision), 'conflict');
+      expectCode(problems, 'skipped revision', await slots.replace({ ...cooled, revision: cooled.revision + 2 }, cooled.revision), 'invalid');
+      expectCode(problems, 'future expectation', await slots.replace({ ...cooled, revision: 6 }, 5), 'conflict');
       expectCode(problems, 'unknown', await slots.replace(next(slot('slot-unknown'), {}), FIRST_SLOT_REVISION), 'not-found');
       expectRead(problems, 'unchanged', await slots.get(stored.id), cooled);
       return problems;
@@ -142,6 +143,12 @@ function expectRevealed(problems: string[], label: string, result: Result<SlotSe
   else expectSame(problems, label, result.value.reveal(), text);
 }
 
+// The form util.inspect and console.log print, without importing them.
+function inspected(value: SlotSecret): string {
+  const custom: unknown = (value as unknown as Record<symbol, unknown>)[Symbol.for('nodejs.util.inspect.custom')];
+  return typeof custom === 'function' ? String(custom.call(value)) : 'no inspection form: secret-material';
+}
+
 export const SLOT_CREDENTIALS_CONFORMANCE: readonly ConformanceCase<SlotCredentials>[] = Object.freeze([
   {
     name: 'stores, replaces, and destroys a slot credential, idempotently',
@@ -166,7 +173,7 @@ export const SLOT_CREDENTIALS_CONFORMANCE: readonly ConformanceCase<SlotCredenti
       expectSuccess(problems, 'store', await credentials.store(CREDENTIAL_SLOT, secret('secret-material')));
       const revealed = await credentials.reveal(CREDENTIAL_SLOT);
       if (!revealed.ok) return [...problems, `reveal: ${revealed.error.message}`];
-      const forms = [String(revealed.value), `${revealed.value}`, JSON.stringify({ revealed: revealed.value })];
+      const forms = [String(revealed.value), `${revealed.value}`, JSON.stringify({ revealed: revealed.value }), inspected(revealed.value)];
       for (const form of forms) if (form.includes('secret-material')) problems.push(`form discloses the credential: ${form}`);
       return problems;
     },
