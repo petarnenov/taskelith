@@ -24,9 +24,9 @@
 
 - [x] 3.1 proposal.md, design.md (coordinator decisions Q1 A, Q2 A, journal format approved), spec deltas (worker-runtime, worker-journal-adapter, execution-wire-contracts, worker-journal contract spec if any)
 - [x] 3.2 `make dependency-inventory` (worker now depends on @taskelith/observability)
-- [ ] 3.3 `make verify`
-- [ ] 3.4 OpenCode review (kimi-k3.1-pro#high), at most 3 passes
-- [ ] 3.5 verification.md and handoff to Niki
+- [x] 3.3 `make verify`
+- [x] 3.4 OpenCode review (kimi-k3.1-pro#high), at most 3 passes
+- [x] 3.5 verification.md and handoff to Niki
 
 ## State for a context reset
 

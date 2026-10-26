@@ -68,6 +68,15 @@ OpenCode, `opencode-go/kimi-k3.1-pro` (`high`, set by `-m` in the invocation, wh
 
 OpenCode, `opencode-go/kimi-k3.1-pro` (`high`, set by `-m`, as recorded in the OpenCode log), session `ses_e88554684ffe8v7Vxw4NTDuaUI`, at `984cb37`. The snapshot was identical before and after the pass (`18b79782…`). The reviewer confirmed the resolutions of M-A and M-B. Findings: 0 Critical, 0 High, 1 Medium, 2 Low. This was the last allowed pass; the Medium finding went to the coordinator.
 
-- **M-1 (open, with the coordinator):** the schema lets `boot-changed` and `namespace-ended` carry any `ExitStatus`, and `readExit` accepts such a record, although the delta requires status `unknown`; the contract test has no negative case.
-- **L-1 (open):** the delta and docs say "an operation without a grant" instead of "an operation of an execution without a grant", which reopens the H2 ambiguity.
-- **L-2 (open):** three comments in `launch-orchestrator.ts` name the wrong design decision (D5, D3, D4).
+- **M-1 (fixed, unreviewed, `5916967`):** the schema let `boot-changed` and `namespace-ended` carry any `ExitStatus`, and `readExit` accepted such a record, although the delta requires status `unknown`. The coordinator brought it to the owner's away delegate (OpenCode `kimi-k2.7-code`, run `20261026T101624Z-opencode-99267`), which chose to fix it without another review; this is the delegate's decision, not the owner's. The non-spawn exit branch is split: recovery evidence now requires status kind `unknown`, inside the unreleased 0.5.0 amendment (`make contract-compatibility` passes). `readExit` rejects another status with recovery evidence as a record problem. Negative tests cover the contract and the adapter, and the delta gained the scenario "Recovery evidence with a known status". A start-reconciliation fake that paired `boot-changed` with a clean exit now uses `unknown`.
+- **L-1 (fixed, unreviewed, `96780b6`, `9e588d7`):** "an operation of an execution without a grant" is restored in the worker-runtime delta, the proposal, and the worker journal recovery table. A regression test shows that a granted execution with a later expired operation is sealed and relaunched, not authorized again.
+- **L-2 (fixed, unreviewed, `77216bf`):** the launch orchestrator's comments cite the matching design decision (D3 for the watch), or none where none applies.
+- **make verify:** passed at `77216bf` (1461 tests, 0 failures; coverage 99.23% lines, 91.39% branches, 98.71% functions); `npm run openspec -- validate implement-worker-start-reconciliation --strict` passes.
+
+## Limitations and remaining gates
+
+- The fixes after pass 3 are unreviewed, as the decision above allows.
+- Seen and left: the journal port's `recordExit` still accepts recovery evidence with a known status; the worker never writes one, because only the supervisor record, which `readExit` now checks, supplies it.
+- Obligation for 20d2 `implement-worker-contact-and-offline`: build the supervision host without the launch command, so that start reconciliation and record removal run without it.
+- A failing assertion in the macOS supervisor tests leaves the supervisor running and hangs the suite instead of failing it; this is not changed here.
+- Remaining gates: integration into `dev` by the coordinator and archive.
