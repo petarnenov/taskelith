@@ -1,0 +1,37 @@
+export {
+  AUTO_MERGE_DEFAULT_ENABLED,
+  CONFLICT_ATTEMPT_BUDGET,
+  IN_FLIGHT_MERGE_STATES,
+  MERGE_REQUEST_STATES,
+  WITHDRAWAL_REASONS,
+  type AutoMergeChange,
+  type AutoMergeSetting,
+  type AutoMergeSettings,
+  type BranchName,
+  type CodeHead,
+  type IntegratedRevision,
+  type MergeEnqueue,
+  type MergeQueue,
+  type MergeRequest,
+  type MergeRequestId,
+  type MergeRequestState,
+  type MergeTransition,
+  type WithdrawalReason,
+} from './ports/auto-merge.js';
+export {
+  MAX_INTAKE_BODY_BYTES,
+  MAX_INTAKE_TITLE_LENGTH,
+  SPEC_APPROVERS,
+  type IntakeItemData,
+  type IntakeRequest,
+  type IntakeSource,
+  type IntakeSourceDescription,
+  type SpecApprover,
+} from './ports/intake-source.js';
+export type {
+  ChangeRequestLink,
+  ProgressReport,
+  SourceItemRef,
+  SourceResolution,
+  WriteBack,
+} from './ports/write-back.js';

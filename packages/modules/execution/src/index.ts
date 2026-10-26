@@ -202,6 +202,31 @@ export { InMemoryInbox } from './adapters/in-memory-inbox.js';
 export { InMemoryInventoryReports, InMemoryInventoryRequests } from './adapters/in-memory-inventory.js';
 export { InMemoryProducerCursors } from './adapters/in-memory-producer-cursors.js';
 export { InMemoryTaskRepository } from './adapters/in-memory-task-repository.js';
+export {
+  BOARD_COLUMNS,
+  EVIDENCE_FRESHNESS,
+  MERGE_GATE_STATES,
+  SESSION_ACTIVITIES,
+  WAITING_REASONS,
+  WORK_TYPES,
+  type AdmissionView,
+  type Board,
+  type BoardCard,
+  type BoardColumn,
+  type BoardReadModel,
+  type CurrentStage,
+  type EvidenceFreshness,
+  type GateView,
+  type MergeGateState,
+  type SessionActivity,
+  type SessionActivityState,
+  type StageView,
+  type TaskDetail,
+  type TraceLink,
+  type ViewStamp,
+  type WaitingReason,
+  type WorkType,
+} from './ports/board-read-model.js';
 export { EVIDENCE_RECORDS_CONFORMANCE, EVIDENCE_STORE_CONFORMANCE } from './ports/evidence-conformance.js';
 export type { EvidencePublisher } from './ports/evidence-publisher.js';
 export type { EvidenceRecords } from './ports/evidence-records.js';
@@ -209,6 +234,31 @@ export type { EvidenceStore } from './ports/evidence-store.js';
 export type { Inbox, InboxOutcome } from './ports/inbox.js';
 export type { LaunchAuthorityClient, LaunchAuthorizationRequest } from './ports/launch-authority-client.js';
 export type { LaunchPredicate, LaunchRecords, RecordedLaunch, RecordedRejection } from './ports/launch-records.js';
+export {
+  ANSWERING_ROLES,
+  ESCALATION_REASONS,
+  MAX_INPUT_ANSWER_BYTES,
+  NEEDS_YOU_KINDS,
+  type AnswerRequest,
+  type AnsweringRole,
+  type EscalationReason,
+  type IdempotencyKey,
+  type NativeRequestId,
+  type NeedsYouAnswer,
+  type NeedsYouCounts,
+  type NeedsYouFilter,
+  type NeedsYouInbox,
+  type NeedsYouItem,
+  type NeedsYouItemId,
+  type NeedsYouKind,
+  type NeedsYouList,
+  type NeedsYouResolution,
+  type NeedsYouSource,
+  type NeedsYouSourceId,
+  type NeedsYouSubject,
+  type PrincipalId,
+  type SourcePage,
+} from './ports/needs-you.js';
 export type { Outbox, OutboxMessage } from './ports/outbox.js';
 export type { InventoryReports } from './ports/inventory-reports.js';
 export type { InventoryRequests } from './ports/inventory-requests.js';
@@ -224,5 +274,16 @@ export {
   TASK_REPOSITORY_CONFORMANCE,
   type LaunchRecordsConformanceTarget,
 } from './ports/repository-conformance.js';
+export {
+  STANDING_RULE_OPERATIONS,
+  STANDING_RULE_ORIGINS,
+  type StandingApprovalRules,
+  type StandingRule,
+  type StandingRuleId,
+  type StandingRuleOperation,
+  type StandingRuleOrigin,
+  type StandingRuleRevocation,
+  type StandingRuleUse,
+} from './ports/standing-approval-rules.js';
 export type { TaskRepository } from './ports/task-repository.js';
 export type { WorkerJournal } from './ports/worker-journal.js';
