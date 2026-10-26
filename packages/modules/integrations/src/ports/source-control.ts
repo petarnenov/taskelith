@@ -117,7 +117,7 @@ export interface CommitStatusData {
 
 // The merge names the head it expects, so that only the verified and
 // reviewed head can merge, and the project's merge method.
-export interface MergeRequest extends ChangeRequestReference {
+export interface ChangeRequestMerge extends ChangeRequestReference {
   readonly expectedHead: string;
   readonly method: string;
 }
@@ -137,7 +137,7 @@ export interface ChangeRequestHost {
   openChangeRequest(request: OpenChangeRequest): Promise<Result<ChangeRequestData>>;
   readChangeRequest(request: ChangeRequestReference): Promise<Result<ChangeRequestData>>;
   setCommitStatus(request: CommitStatusRequest): Promise<Result<CommitStatusData>>;
-  mergeChangeRequest(request: MergeRequest): Promise<Result<MergeResult>>;
+  mergeChangeRequest(request: ChangeRequestMerge): Promise<Result<MergeResult>>;
 }
 
 // A delivery as received: header names in lower case and the body bytes

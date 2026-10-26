@@ -24,6 +24,7 @@ import { PostgresCurrentRevisions, PostgresLaunchRecords } from './launch-reposi
 import { PostgresInventoryReports, PostgresInventoryRequests } from './inventory-repositories.js';
 import { PostgresFleetRegistry, PostgresInstallationTable, PostgresOperatorCredentials } from './fleet-repositories.js';
 import { PostgresProducerCursors, PostgresWorkerReports } from './observation-repositories.js';
+import { PostgresReconciliationQueue, PostgresUnrecordedProcesses } from './reconciliation-repositories.js';
 import { PostgresRunCatalog } from './run-catalog.js';
 import type { Session } from './session.js';
 
@@ -57,6 +58,8 @@ export class PostgresTransaction {
   readonly reports: PostgresWorkerReports;
   readonly inventoryRequests: PostgresInventoryRequests;
   readonly inventoryReports: PostgresInventoryReports;
+  readonly unrecordedProcesses: PostgresUnrecordedProcesses;
+  readonly reconciliation: PostgresReconciliationQueue;
   // The outbox reads its stored messages back, such as an offer sent again.
   readonly outboxLookup: PostgresOutbox;
   readonly #session: Session;
@@ -90,6 +93,8 @@ export class PostgresTransaction {
     this.reports = new PostgresWorkerReports(session);
     this.inventoryRequests = new PostgresInventoryRequests(session);
     this.inventoryReports = new PostgresInventoryReports(session);
+    this.unrecordedProcesses = new PostgresUnrecordedProcesses(session);
+    this.reconciliation = new PostgresReconciliationQueue(session);
     this.outboxLookup = this.outbox;
   }
 

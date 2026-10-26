@@ -7,6 +7,8 @@ import type {
   InventoryRequests,
   LaunchRecords,
   ProducerCursors,
+  ReconciliationQueue,
+  UnrecordedProcesses,
   WorkerId,
 } from '@taskelith/execution';
 import type { FleetRegistry } from '@taskelith/fleet';
@@ -38,6 +40,8 @@ export interface ControlPlaneTransaction extends CapacityTransaction {
   readonly inventoryRequests: InventoryRequests;
   readonly inventoryReports: InventoryReports;
   readonly outboxLookup: OutboxLookup;
+  readonly unrecordedProcesses: UnrecordedProcesses;
+  readonly reconciliation: ReconciliationQueue;
 }
 
 // An enrolled worker as the transaction reads it, revoked or not, and the

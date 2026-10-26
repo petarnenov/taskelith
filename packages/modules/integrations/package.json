@@ -14,6 +14,11 @@
     }
   },
   "dependencies": {
-    "@taskelith/kernel": "0.0.0"
+    "@taskelith/execution": "0.0.0",
+    "@taskelith/kernel": "0.0.0",
+    "@taskelith/sdlc": "0.0.0"
+  },
+  "devDependencies": {
+    "@taskelith/testing": "0.0.0"
   }
 }
