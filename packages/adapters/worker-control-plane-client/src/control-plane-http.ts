@@ -1,4 +1,5 @@
 import { err, failure, ok, type Failure, type FailureCode, type Result } from '@taskelith/kernel';
+import { describeFailureCause } from './failure-cause.js';
 
 // Where the control-plane API is and how long one call may take.
 export interface ControlPlaneEndpoint {
@@ -36,8 +37,7 @@ async function post(endpoint: ControlPlaneEndpoint, path: string, headers: Recor
     return ok({ status: response.status, body: await response.json().catch(() => undefined) });
   } catch (error) {
     // The request may have reached a decision, which a retry replays.
-    const cause = error instanceof Error ? error.name : 'unknown';
-    return err(failure('unavailable', 'the control plane did not answer', { cause }));
+    return err(failure('unavailable', 'the control plane did not answer', describeFailureCause(error)));
   }
 }
 
