@@ -40,6 +40,16 @@ test('a handle and an exit keep the spawn and the termination evidence', () => {
   assert.equal(parseExit(encodeRecord({ ...exit, termination: 'guessed' })).ok, false);
 });
 
+test('an exit proven by recovery evidence has an unknown status', () => {
+  const recovered = { status: { kind: 'unknown' }, startProven: true, termination: 'boot-changed' };
+  for (const termination of ['boot-changed', 'namespace-ended']) {
+    assert.ok(parseExit(encodeRecord({ ...recovered, termination })).ok, termination);
+    for (const status of [{ kind: 'code', code: 0 }, { kind: 'signal', signal: 'SIGKILL' }]) {
+      assert.equal(parseExit(encodeRecord({ ...recovered, status, termination })).ok, false, termination);
+    }
+  }
+});
+
 test('a corrupt, newer-format, or unversioned file is never guessed around', () => {
   assert.deepEqual(parseIntent('{not json'), { ok: false, error: { file: 'intent', kind: 'corrupt', detail: 'is not JSON' } });
   assert.deepEqual(parseLaunch(JSON.stringify({ format: RECORD_FORMAT + 1, kind: 'seal' })), {

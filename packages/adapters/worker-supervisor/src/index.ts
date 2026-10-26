@@ -66,6 +66,7 @@ export {
   type RecordProblem,
   type SealReason,
   type SupervisorRecord,
+  type SurvivingProcess,
   type TerminationEvidence,
 } from './record.js';
 export {
@@ -97,7 +98,7 @@ export {
   type SupervisorOutcome,
   type SupervisorTiming,
 } from './supervisor-session.js';
-export { proveDarwinTermination, type DarwinTerminationInput, type TerminationProof } from './termination.js';
+export { proveDarwinTermination, type DarwinTerminationInput, type Survivor, type TerminationProof } from './termination.js';
 export {
   gatherEvidence,
   prepareRecord,

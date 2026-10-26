@@ -84,6 +84,9 @@ export const TERMINATION_EVIDENCE = Object.freeze([
 
 export type TerminationEvidence = (typeof TERMINATION_EVIDENCE)[number];
 
+// Recovery proves the end without seeing the exit, so the status is unknown.
+const RECOVERY_TERMINATION_EVIDENCE: readonly TerminationEvidence[] = ['boot-changed', 'namespace-ended'];
+
 export interface ExitRecord {
   readonly status: ExitStatus;
   readonly startProven: boolean;
@@ -98,7 +101,12 @@ export interface CancelRecord {
 export type EventEntry =
   | { readonly kind: 'descendant'; readonly process: ProcessIdentity }
   | { readonly kind: 'cancellation'; readonly step: 'terminate-sent' | 'kill-sent' | 'containment-killed' | 'not-applied' }
-  | { readonly kind: 'survivors'; readonly processes: readonly ProcessIdentity[] };
+  | { readonly kind: 'survivors'; readonly processes: readonly SurvivingProcess[] };
+
+// An entry an earlier supervisor version wrote names no group.
+export interface SurvivingProcess extends ProcessIdentity {
+  readonly processGroupId?: number;
+}
 
 type Fields = Record<string, unknown>;
 type Reader<T> = (fields: Fields) => T | undefined;
@@ -200,12 +208,17 @@ function readExit(fields: Fields): ExitRecord | undefined {
   const status = isFields(fields.status) ? parseExitStatus(fields.status as { kind: string }) : undefined;
   const termination = TERMINATION_EVIDENCE.find((known) => known === fields.termination);
   if (!status?.ok || typeof fields.startProven !== 'boolean' || !termination || !optionalText(fields.spawnFailure)) return undefined;
+  if (!statusFitsTermination(status.value, termination)) return undefined;
   return {
     status: status.value,
     startProven: fields.startProven,
     ...(fields.spawnFailure === undefined ? {} : { spawnFailure: fields.spawnFailure as string }),
     termination,
   };
+}
+
+function statusFitsTermination(status: ExitStatus, termination: TerminationEvidence): boolean {
+  return status.kind === 'unknown' || !RECOVERY_TERMINATION_EVIDENCE.includes(termination);
 }
 
 const CANCELLATION_STEPS = ['terminate-sent', 'kill-sent', 'containment-killed', 'not-applied'] as const;
@@ -216,8 +229,14 @@ function readEvent(fields: Fields): EventEntry | undefined {
   const step = CANCELLATION_STEPS.find((known) => known === fields.step);
   if (fields.kind === 'cancellation' && step) return { kind: 'cancellation', step };
   if (fields.kind !== 'survivors' || !Array.isArray(fields.processes)) return undefined;
-  const processes = fields.processes.map(readProcess);
-  return processes.every((entry) => entry !== undefined) ? { kind: 'survivors', processes: processes as ProcessIdentity[] } : undefined;
+  const processes = fields.processes.map(readSurvivor);
+  return processes.every((entry) => entry !== undefined) ? { kind: 'survivors', processes: processes as SurvivingProcess[] } : undefined;
+}
+
+function readSurvivor(value: unknown): SurvivingProcess | undefined {
+  const process = readProcess(value);
+  if (process === undefined || !isFields(value) || value.processGroupId === undefined) return process;
+  return isPositiveInteger(value.processGroupId) ? Object.freeze({ ...process, processGroupId: value.processGroupId }) : undefined;
 }
 
 function readProcess(value: unknown): ProcessIdentity | undefined {
