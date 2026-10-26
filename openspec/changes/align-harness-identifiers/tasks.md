@@ -8,7 +8,7 @@
 - [x] 2.1 Add `HarnessPluginId` to Execution's identifiers and export it from `@taskelith/execution`
 - [x] 2.2 Make Scheduling import Execution's `HarnessPluginId` and drop its own type and re-export
 - [x] 2.3 Update the account pool contract sections 1, 2, and 3.1 and the agent harness port contract sections 3 and 4.1
-- [x] 2.4 Add the `account-pool-port` spec delta
+- [x] 2.4 Add the `account-pool-port` spec delta (requirement "Shared harness plugin identifier")
 
 ## 3. Verification and review
 

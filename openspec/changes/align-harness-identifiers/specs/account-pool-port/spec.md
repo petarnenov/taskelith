@@ -1,16 +1,12 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
-### Requirement: Harness-neutral slot records
-The Scheduling module SHALL identify a slot by the `ProviderCredentialId` that a reservation records, SHALL treat its harness and subscription mechanism as opaque identifiers, the harness as the Execution module's `HarnessPluginId`, whose value is the harness plugin's manifest `id`, and the mechanism as its own `SubscriptionMechanismId`, whose values are validated outside the pool, and SHALL not let a slot change its harness or leave the removed state; no type, value, or test of the pool SHALL name a harness or vendor.
+### Requirement: Shared harness plugin identifier
+The Scheduling module SHALL name a slot's harness with the Execution module's `HarnessPluginId`, whose value is the harness plugin's manifest `id`, and SHALL define no harness plugin identifier type of its own; it SHALL keep a slot's mechanism its own opaque `SubscriptionMechanismId`, whose values come from the mechanisms the plugin declares through the agent harness port and are validated outside the pool.
 
-#### Scenario: Harness change
-- **WHEN** an adapter is asked to replace a slot with one of another harness
-- **THEN** the change fails with `invalid` and the stored slot is unchanged
-
-#### Scenario: Removed slot
-- **WHEN** an adapter is asked to make a removed slot active again
-- **THEN** the change fails with `invalid`, and the slot stays a tombstone in no pool
-
-#### Scenario: Shared harness identifier
+#### Scenario: Harness identifier from Execution
 - **WHEN** the pool names the harness plugin of a slot
-- **THEN** it uses the Execution module's `HarnessPluginId`, whose value is the plugin's manifest `id`, and defines no harness plugin identifier type of its own
+- **THEN** it uses the `HarnessPluginId` that `@taskelith/execution` exports, with the plugin's manifest `id` as its value
+
+#### Scenario: Mechanism stays opaque
+- **WHEN** the pool stores a slot's subscription mechanism
+- **THEN** it stores a `SubscriptionMechanismId` without importing the agent harness port's mechanism type, and the "Harness-neutral slot records" requirement still holds
