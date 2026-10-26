@@ -4,7 +4,7 @@
 
 ## What Changes
 
-- **Start reconciliation.** On its first pass the worker takes every `planJournalRecovery` action for the executions an earlier process left open, each once: a pending W2 or an unused grant is sealed and reported `not-started`; a journaled record goes to the supervisor's recovery table (recover, adopt and observe, retry after the liveness wait, or `uncertain` with a reason); an operation that expired or was rejected as retryable is authorized again for the same execution. Nothing is spawned for an inherited execution.
+- **Start reconciliation.** On its first pass the worker takes every `planJournalRecovery` action for the executions an earlier process left open, each once: a pending W2 or an unused grant is sealed and reported `not-started`; a journaled record goes to the supervisor's recovery table (recover, adopt and observe, retry after the liveness wait, or `uncertain` with a reason); an operation of an execution without a grant that expired or was rejected as retryable is authorized again for the same execution. Nothing is spawned for an inherited execution.
 - **Supervisor liveness.** A watched record with a claim has its supervisor's liveness checked every tenth poll; a dead supervisor is decided by the recovery table.
 - **Record removal.** Once the journal reports an execution's terminal fact confirmed, its record directory is removed and the removal journaled; a supervisor still holding the lock keeps it for a later pass.
 - **Leftovers.** A record directory that no journal row names is logged and kept (the `unrecorded-process` scan is a follow-up).
