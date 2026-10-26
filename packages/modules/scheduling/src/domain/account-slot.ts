@@ -1,8 +1,8 @@
+import type { HarnessPluginId } from '@taskelith/execution';
 import { err, failure, ok, type Identifier, type Instant, type Result } from '@taskelith/kernel';
 import type { ProjectId, ProviderCredentialId } from './capacity-reservation.js';
 
 // Opaque to the pool: no harness or vendor is ever named (contract section 1).
-export type HarnessPluginId = Identifier<'HarnessPluginId'>;
 export type SubscriptionMechanismId = Identifier<'SubscriptionMechanismId'>;
 
 export const SLOT_STATES = Object.freeze(['active', 'revoked', 'removed'] as const);

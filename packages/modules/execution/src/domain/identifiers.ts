@@ -9,6 +9,8 @@ export type WorkerId = Identifier<'WorkerId'>;
 export type PrincipalId = Identifier<'PrincipalId'>;
 export type IdempotencyKey = Identifier<'IdempotencyKey'>;
 export type NativeRequestId = Identifier<'NativeRequestId'>;
+// A harness plugin, by its manifest `id`; the account pool uses it too.
+export type HarnessPluginId = Identifier<'HarnessPluginId'>;
 
 declare const recoveryEpochBrand: unique symbol;
 

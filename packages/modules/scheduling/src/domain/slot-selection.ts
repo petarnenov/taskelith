@@ -1,5 +1,5 @@
+import type { HarnessPluginId } from '@taskelith/execution';
 import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
-import type { HarnessPluginId } from './account-slot.js';
 import type { WaitingReason } from './capacity-reasons.js';
 import type { ProjectId, ProviderCredentialId } from './capacity-reservation.js';
 
