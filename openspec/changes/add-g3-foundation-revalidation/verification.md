@@ -35,6 +35,19 @@ opencode run --standalone --agent reviewer -m 'opencode-go/kimi-k2.7-code' --for
   --title add-g3-foundation-revalidation "$(cat <prompt-file>)" < /dev/null > <log>
 ```
 
+### Pass 1
+
+- Session `ses_e8714ad12ffeU4uMXaEoNbqnsu`, on `f34d84e` (diff `f1a535e..f34d84e`). The stored assistant messages of the session record agent `reviewer` and `"model":{"id":"kimi-k2.7-code","providerID":"opencode-go","variant":"default"}`.
+- Snapshot (`git ls-files -co --exclude-standard | xargs shasum -a 256 | shasum -a 256`) before and after: `717e40fb37b5f630f5275a4cbec9b47f9f6dfe735ada113c261c2ce207b62c70`, equal. No external evidence directory was shared with the reviewer.
+- The reviewer's attempts to run `npm run openspec -- validate` and `make verify` were denied by its agent rules; it assessed the recorded evidence instead.
+- Findings: 0 Critical, 0 High, 1 Medium, 5 Low. All were fixed in `4bccf14`:
+  - **M1:** the item 3 check said "launch orchestration" where the owner decision and the code say "launch orchestrator". Fixed in `docs/g3-plan.md` and `proposal.md`.
+  - **L1:** item 0's "Depends on" names the G2 closure, while the introduction defined the column as G3 items only. The introduction now says that for item 0 it names the G2 closure; the cell stays, as the brief requires.
+  - **L2:** "Numbering the item 0" in `proposal.md` was ungrammatical. Reworded.
+  - **L3:** "every item not yet merged" included item 0 itself. The status paragraph and the introduction now say "every other item not yet merged", and the introduction's list of exceptions includes item 0.
+  - **L4:** the same in `design.md` "Risks / Trade-offs". Reworded to "every other".
+  - **L5:** `design.md` and this record justified the unchanged longest chain by an item 4 dependency on item 0 and "one step from the start". Both now say that item 0, like item 3, depends on no G3 item, so a chain from item 0 is no longer.
+
 ## Limitations
 
 - Documentation only; no runtime behavior is affected, so no runtime check applies.
