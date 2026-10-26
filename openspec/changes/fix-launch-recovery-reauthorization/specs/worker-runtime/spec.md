@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Journaled launch authorization
-A worker SHALL commit W2 before the first request of an operation and W3 with each decision, and SHALL repeat a request that reached no decision with the same `operationId`, after a delay of 5 s doubling to 60 s with jitter, until its deadline. A retryable rejection SHALL be retried under a new `operationId`; a final one SHALL end the launch with its observation. A new execution SHALL report the intent's last sealed one.
+A worker SHALL commit W2 before the first request of an operation and W3 with each decision, and SHALL repeat a request that reached no decision with the same `operationId`, after a delay of 5 s doubling to 60 s with jitter, until its deadline. A retryable rejection SHALL be retried under a new `operationId`; a final one SHALL end the launch with its observation. A new or resumed execution SHALL report the intent's last sealed one.
 
 #### Scenario: No decision
 - **WHEN** the launch authority does not answer twice and then grants

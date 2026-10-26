@@ -24,5 +24,5 @@ An attempt SHALL have at most one owning execution, spawned at most once across 
 - **THEN** the report changes nothing and the new execution is decided by the ownership rule
 
 #### Scenario: Refused seal report
-- **WHEN** the reported execution is `started` or `exited`, belongs to another attempt or worker, or the reported operation granted another execution
-- **THEN** the request is rejected with `execution-conflict` and nothing is recorded for either execution
+- **WHEN** the report names the requested execution itself, or the reported execution is `started` or `exited` or belongs to another attempt or worker, or the reported operation granted another execution
+- **THEN** the request is rejected with `execution-conflict`, the task is unchanged, and the rejection is final for the operation

@@ -23,7 +23,8 @@ The reported execution, looked up in the request's task:
 | Not found | Nothing to record: the authority never granted it, for example a W2 whose request never arrived |
 | `not-started` | Accepted, nothing changes: its observation arrived first, or an earlier request reported it |
 | `authorized`, of the request's attempt and worker, and the operation names no grant of another execution | Moved to `not-started` |
-| `started` or `exited`, of another attempt or worker, or the operation granted another execution | `execution-conflict` |
+| `started` or `exited`, of another attempt or worker, or the operation granted another execution of the same worker | `execution-conflict` |
+| The requested execution itself, found or not | `execution-conflict`, checked before the lookup |
 
 The operation need not name a grant of the execution. W6 closes a pending operation as `expired`, and that operation's request may never have reached the authority although an earlier operation granted the execution; requiring a match would make that recovery final. An operation that granted another execution is a worker defect and conflicts. The authority does not look up other tasks' operations: a report names an execution of the request's own attempt, so another task's execution is "not found" and changes nothing.
 
@@ -34,7 +35,7 @@ The operation need not name a grant of the execution. W6 closes a pending operat
 - An unknown `operationId` is accepted; the attempt, worker, and state checks still apply.
 - An execution already `not-started` is idempotent: accepted, nothing changes.
 - An unknown execution is a no-op.
-- A mismatch (an operation that granted another execution), a `started` or `exited` execution, or a report naming the requested execution itself is `execution-conflict`.
+- A mismatch (an operation that granted another execution of the same worker), a `started` or `exited` execution, or a report naming the requested execution itself is `execution-conflict`. The self-reference is checked first, so it conflicts also when the authority never granted that execution (review pass 1).
 
 ### D3. Idempotency
 
@@ -46,7 +47,7 @@ The operation need not name a grant of the execution. W6 closes a pending operat
 
 ### D4. Which execution the worker reports
 
-Every new execution of a `Launch`, at a start's continue-launch and at a runtime relaunch, reports `lastSealedExecution(snapshot, assignmentId)`: the intent's last journaled `not-started` execution, with its last granted operation, else its last operation. A resumed execution (same identity) reports nothing; it uses `reportsNotStarted` as before. At a new execution every earlier execution of the intent is `not-started` (`#launch` refuses otherwise), and each earlier relaunch already made its predecessor terminal at the authority, so only the last one can still own the attempt.
+Every execution a `Launch` authorizes, new at a start's continue-launch or at a runtime relaunch, or resumed after a retryable rejection or an expired operation, reports `lastSealedExecution(snapshot, assignmentId)`: the intent's last journaled `not-started` execution, with its last granted operation, else its last operation. A resumed execution also keeps `reportsNotStarted`. It is never `not-started` itself, so it never reports itself. Review pass 1 found the resumed case: E1 sealed, E2's operations closed `expired` while the authority was down, then a restart resumes E2 while E1's observation is undelivered. At a new or resumed execution every other execution of the intent is `not-started` (`#launch` refuses otherwise), and each earlier relaunch already made its predecessor terminal at the authority, so only the last one can still own the attempt.
 
 ## Risks / Trade-offs
 

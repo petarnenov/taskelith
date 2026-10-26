@@ -7,7 +7,7 @@ The crash-window scenarios of G2 item 24b found defect D1. After a crash past W2
 - **Contract.** `LaunchAuthorizationRequest` gets an optional, additive `reportsNotStartedFor { executionId, operationId }` (`execution.openapi.json`, schema `SealedExecution`). Launch authorization section 4 adds the reported-seal rule, section 9 maps its refusals to the existing `execution-conflict`, and the worker journal section 5 "continue the launch" row reports the sealed execution.
 - **Domain.** `authorizeLaunch` applies a reported seal to the task before the ownership rule: an `authorized` execution of the request's attempt and worker moves to `not-started`; one already `not-started`, or never granted, changes nothing; anything else is `execution-conflict`. No new rejection reason.
 - **Control plane.** `launch-wire.ts` maps the optional field; the deciding transaction stores the sealed execution and the new grant in one task write.
-- **Worker.** Every new execution of a launch, whether continued on start or relaunched at runtime, reports the intent's last `not-started` execution from the journal, with its last granted operation, else its last one (`lastSealedExecution`).
+- **Worker.** Every execution a launch authorizes, continued on start, relaunched at runtime, or resumed after an expired or retryable operation, reports the intent's last `not-started` execution from the journal, with its last granted operation, else its last one (`lastSealedExecution`).
 
 ## Capabilities
 
@@ -26,5 +26,6 @@ None.
 - `apps/control-plane`: `api/launch-wire.ts`. `apps/worker`: `launch-orchestrator.ts` (`Launch.#newExecution`, `LaunchedExecution`).
 - `packages/contracts/documents/execution.openapi.json`; `docs/contracts/launch-authorization.md`, `docs/contracts/worker-journal.md`.
 - Tests in the execution module, the worker, and the control plane (unit, API, and PostgreSQL integration).
+- Upgrade order: the control plane is upgraded before its workers, or both together, because a control plane without the field answers 400 `invalid` (contract section 11).
 - The published `taskelith` package does not bundle these workspaces, so the commits are `chore`, `test`, and `docs`. No new dependency.
 - G2 24b crash windows (`crash-windows.integration.test.ts`): the 11 windows that failed on D1 pass again, with the hold on the sealed execution's `not-started` kept to prove the race is won (tasks group 4). The worker's cancellation path of 24c is not touched.

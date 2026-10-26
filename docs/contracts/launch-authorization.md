@@ -52,9 +52,9 @@ An attempt has at most one owning execution at a time. Expiry of an authorizatio
   - records nothing for an `executionId` the authority never granted;
   - accepts an execution already `not-started`, for instance because its observation arrived first, and changes nothing;
   - moves an `authorized` execution to `not-started`, as its observation would, when the execution belongs to the request's attempt and worker and the operation granted no other execution. An operation the authority never recorded is accepted, because its request may have been lost before a decision;
-  - rejects every other case with `execution-conflict`: a `started` or `exited` execution, one of another attempt or worker, or an operation that granted another execution.
+  - rejects every other case with `execution-conflict`: a report naming the requested `executionId` itself, whether known or not, a `started` or `exited` execution, one of another attempt or worker, or an operation that granted another execution of the same worker.
 
-  The reported `operationId` is advisory evidence, not a match condition: only an operation that granted another execution conflicts. The observation, when it arrives later, is a duplicate. The report is not an expected value, so section 6 does not compare it on a transport retry.
+  The reported `operationId` is advisory evidence, not a match condition: only an operation that granted another execution conflicts, looked up among the worker's own grants as section 6 looks up operations. The observation, when it arrives later, is a duplicate. The report is not an expected value, so section 6 does not compare it on a transport retry.
 
 This section places two obligations on the supervisor identity contract (item 4) and the worker journal contract (item 5): a single, claimed spawn per execution identity, and an irreversible seal before `not-started` is reported.
 
@@ -170,5 +170,5 @@ Item 17 implements sections 2 to 7 on the control-plane side, with these G2 choi
   - The cancellation of item 18 keeps its reason `assignment-ended`.
   - G2 has no writer of gates, artifact revisions, policy revisions, or quarantine; each must call the helper when it is added.
 - **Crash points.** `LaunchAuthorizationCommit.before` and `.after` surround the commit of a transaction that recorded a grant.
-- **Reported seal.** `reportsNotStartedFor` is an optional field of the request. The domain applies it to the task before the ownership rule, so the task repository stores the `not-started` execution and the new grant in the one write of the deciding transaction (change `fix-launch-recovery-reauthorization`).
+- **Reported seal.** `reportsNotStartedFor` is an optional field of the request. The domain applies it to the task before the ownership rule, so the task repository stores the `not-started` execution and the new grant in the one write of the deciding transaction (change `fix-launch-recovery-reauthorization`). A control plane without the field refuses it with 400 `invalid`, which the worker retries as no decision, so the control plane is upgraded before its workers, or both together.
 - **Worker client.** `LaunchAuthorityClient` in Execution, with an HTTP adapter in `@taskelith/worker-control-plane-client`. A 502, 503, or 504, a timeout, or a lost connection is `unavailable`. A grant that binds other values than the request is refused. The retry loop and the journal steps W2 and W3 belong to item 20, and consuming start observations to item 21.
