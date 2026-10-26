@@ -14,8 +14,11 @@ export const WORKER_PATH = 'infra/installation/seccomp/worker.json';
 export const NAMESPACE_CALLS: readonly string[] = ['clone', 'clone3', 'setns', 'unshare'];
 const SYS_ADMIN = 'CAP_SYS_ADMIN';
 
-export const USAGE = 'usage: worker-seccomp-profile.ts write | applied SECURITY_OPT_JSON';
+export const USAGE = 'usage: worker-seccomp-profile.ts write [ROOT] | applied SECURITY_OPT_JSON';
 const SECCOMP_OPTION = 'seccomp=';
+// Actions that let a call through; SCMP_ACT_LOG only logs it.
+const PERMITTING_ACTIONS: readonly string[] = ['SCMP_ACT_ALLOW', 'SCMP_ACT_LOG'];
+const REPOSITORY = resolve(import.meta.dirname, '..');
 
 interface CapabilityFilter {
   caps?: string[];
@@ -52,10 +55,11 @@ export function workerProfile(upstream: SeccompProfile): SeccompProfile {
   return profile;
 }
 
-// A refreshed upstream must not allow a namespace call without arguments
-// checks, whatever capability the rule depends on.
+// A refreshed upstream must not allow or only log a namespace call without
+// an argument check, whatever capability the rule depends on.
 function refuseUnconditionalNamespaceAllowance(rules: SeccompRule[]): void {
-  const allowing = rules.filter((rule) => rule.action === 'SCMP_ACT_ALLOW' && rule.args === undefined
+  const allowing = rules.filter((rule) => PERMITTING_ACTIONS.includes(rule.action)
+    && !(Array.isArray(rule.args) && rule.args.length > 0)
     && rule.names.some((name) => NAMESPACE_CALLS.includes(name)));
   if (allowing.length > 0) {
     throw new ProfileShapeError(`the derived profile still allows ${allowing.flatMap((rule) => rule.names)
@@ -127,17 +131,19 @@ function parsedOrText(text: string): unknown {
   }
 }
 
-export function writeProfile(repository: string): void {
-  const derived = derivedWorkerProfile(readFileSync(resolve(repository, UPSTREAM_PATH), 'utf8'));
-  writeFileSync(resolve(repository, WORKER_PATH), derived);
+// ROOT holds the upstream copy and receives the worker profile, at their
+// paths relative to the repository.
+export function writeProfile(root: string): void {
+  const derived = derivedWorkerProfile(readFileSync(resolve(root, UPSTREAM_PATH), 'utf8'));
+  writeFileSync(resolve(root, WORKER_PATH), derived);
 }
 
 if (import.meta.main) {
   try {
     const [command, ...rest] = process.argv.slice(2);
-    if (command === 'write' && rest.length === 0) writeProfile(process.cwd());
+    if (command === 'write' && rest.length <= 1) writeProfile(rest[0] ?? REPOSITORY);
     else if (command === 'applied' && rest.length === 1) {
-      process.stdout.write(`${appliedProfileDigest(rest[0]!, readFileSync(resolve(process.cwd(), WORKER_PATH), 'utf8'))}\n`);
+      process.stdout.write(`${appliedProfileDigest(rest[0]!, readFileSync(resolve(REPOSITORY, WORKER_PATH), 'utf8'))}\n`);
     } else throw new ProfileShapeError(USAGE);
   } catch (error) {
     process.stderr.write(`worker-seccomp-profile: ${error instanceof Error ? error.message : String(error)}\n`);

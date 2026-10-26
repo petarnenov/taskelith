@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import test from 'node:test';
 import {
   appliedProfileDigest,
@@ -92,10 +95,26 @@ test('an upstream profile of another shape is refused', () => {
   assert.throws(() => workerProfile(withoutClone3), /clone3 rule answering ENOSYS/);
 });
 
+function widened(rule: SeccompRule): SeccompProfile {
+  return { ...upstream, syscalls: [...upstream.syscalls, rule] };
+}
+
 test('a refreshed upstream that allows a namespace call unconditionally is refused', () => {
   const unconditional = { names: ['clone'], action: 'SCMP_ACT_ALLOW', includes: { caps: ['CAP_NET_ADMIN'] } };
-  const widened = { ...upstream, syscalls: [...upstream.syscalls, unconditional] };
-  assert.throws(() => workerProfile(widened), /still allows clone without an argument check/);
+  assert.throws(() => workerProfile(widened(unconditional)), /still allows clone without an argument check/);
+});
+
+test('an empty argument check counts as none', () => {
+  assert.throws(() => workerProfile(widened({ names: ['setns'], action: 'SCMP_ACT_ALLOW', args: [] })), /still allows setns/);
+});
+
+test('a rule that only logs a namespace call lets it through and is refused', () => {
+  assert.throws(() => workerProfile(widened({ names: ['unshare'], action: 'SCMP_ACT_LOG' })), /still allows unshare/);
+});
+
+test('a namespace call allowed only with an argument check is kept', () => {
+  const checked = { names: ['clone'], action: 'SCMP_ACT_ALLOW', args: [{ index: 0, value: 2114060288, op: 'SCMP_CMP_MASKED_EQ' }] };
+  assert.doesNotThrow(() => workerProfile(widened(checked)));
 });
 
 // Docker's CLI sends the profile in compact form; inspect shows it so.
@@ -114,4 +133,49 @@ test('a container without the worker profile has no applied profile digest', () 
   assert.throws(() => appliedProfileDigest('null', workerText), /runs with 0 seccomp options/);
   assert.throws(() => appliedProfileDigest(securityOpt('seccomp=unconfined'), workerText), /is not infra/);
   assert.throws(() => appliedProfileDigest(securityOpt(`seccomp=${JSON.stringify(upstream)}`), workerText), /is not infra/);
+});
+
+const CLI = join(process.cwd(), 'scripts/worker-seccomp-profile.ts');
+const CLI_TIMEOUT_MILLISECONDS = 30_000;
+
+// Runs the CLI from a foreign directory, so that it finds the repository
+// through its own location.
+function cli(...args: string[]): { status: number | null; stdout: string; stderr: string } {
+  const directory = mkdtempSync(join(tmpdir(), 'taskelith-seccomp-cli-'));
+  try {
+    return spawnSync(process.execPath, ['--experimental-strip-types', CLI, ...args],
+      { cwd: directory, encoding: 'utf8', timeout: CLI_TIMEOUT_MILLISECONDS });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+test('the applied command prints the digest of the worker profile a container runs with', () => {
+  const run = cli('applied', securityOpt(`seccomp=${compactWorker}`));
+  assert.deepEqual([run.status, run.stdout, run.stderr], [0, `${sha256(compactWorker)}\n`, '']);
+});
+
+test('the applied command fails for a container without the worker profile', () => {
+  const run = cli('applied', securityOpt('seccomp=unconfined'));
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /^worker-seccomp-profile: the container's seccomp profile is not infra/);
+});
+
+test('the CLI without arguments prints its usage and fails', () => {
+  const run = cli();
+  assert.equal(run.status, 1);
+  assert.equal(run.stderr, 'worker-seccomp-profile: usage: worker-seccomp-profile.ts write [ROOT] | applied SECURITY_OPT_JSON\n');
+});
+
+test('the write command derives the worker profile under the root it is given', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-seccomp-root-'));
+  try {
+    mkdirSync(join(root, dirname(UPSTREAM_PATH)), { recursive: true });
+    cpSync(UPSTREAM_PATH, join(root, UPSTREAM_PATH));
+    const run = cli('write', root);
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(readFileSync(join(root, WORKER_PATH), 'utf8'), workerText);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
