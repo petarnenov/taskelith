@@ -1,0 +1,6 @@
+# Test-only addition of the Compose failure scenarios, over the smoke's: a
+# scripted process long enough to interrupt, which exits 0 after 10 seconds.
+services:
+  worker:
+    environment:
+      TASKELITH_WORKER_COMMAND: '["/usr/local/bin/node", "-e", "setTimeout(() => {}, 10000)"]'
