@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, test } from 'node:test';
 import { err, failure, parseInstant, type Failure } from '@taskelith/kernel';
 import {
+  isSpaceRefusal,
   parseSequence,
   type DeclaredCapacity,
   type ExecutionExit,
@@ -314,9 +315,13 @@ test('an I/O error at COMMIT stops the journal until a restart', () => {
 
 test('a write refused for lack of space rolls back and leaves the journal usable', () => {
   const database = faultyDatabase(13);
-  const full = value(SqliteWorkerJournal.open(database.handle, CLOCK));
+  let refusals = 0;
+  const full = value(SqliteWorkerJournal.open(database.handle, CLOCK, { onSpaceRefused: () => (refusals += 1) }));
   database.failNextCommit();
-  assert.equal(failureReason(failed(full.recordCommand(assignment()))), 'disk-full');
+  const refused = failed(full.recordCommand(assignment()));
+  assert.equal(failureReason(refused), 'disk-full');
+  assert.equal(isSpaceRefusal(refused), true);
+  assert.equal(refusals, 1, 'the hook hears of each refusal');
   assert.equal(full.fault, undefined);
   assert.equal(value(full.snapshot()).intents.length, 0);
   value(full.recordCommand(assignment()));

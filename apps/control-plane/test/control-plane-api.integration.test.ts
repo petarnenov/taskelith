@@ -423,8 +423,10 @@ describe('enrollment and quarantine', () => {
     const limits = { ...TRANSPORT_LIMITS, retryInitialMilliseconds: 100, retryMaxMilliseconds: 200, idlePollMilliseconds: 50 };
     const dependencies = (settings: Parameters<typeof productionDependencies>[0]) => ({
       ...productionDependencies(settings), probe: () => ok({ platform: 'darwin' as const, filesystem: 'apfs', local: true }), limits,
-      // A host disk below the floor would refuse the offers.
+      // A host disk below the floor, or a busy test process, would refuse
+      // the offers.
       space: () => ok({ availableBytes: 2 ** 40, totalBytes: 2 ** 41 }),
+      daemon: { residentBytes: () => ok(0), eventLoopLagMilliseconds: () => ok(0), watch: async () => undefined },
     });
     const lines: string[] = [];
     const worker = await workerMain(environment, (line) => lines.push(line), dependencies);

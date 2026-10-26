@@ -18,18 +18,24 @@ const DEVICE_FAULTS: ReadonlySet<number> = new Set([SQLITE_IOERR, SQLITE_CANTOPE
 // The part of node:sqlite the journal uses, so tests can inject I/O errors.
 export type JournalDatabase = Pick<DatabaseSync, 'exec' | 'prepare' | 'close' | 'isOpen'>;
 
+export interface ConnectionHooks {
+  // Keeps the worker stopped past this process; its failure is added to
+  // the fault, which the worker's service status reports.
+  readonly onStop: (fault: Failure) => Result<void>;
+  // Called after a write refused for lack of space rolled back.
+  readonly onSpaceRefused: () => void;
+}
+
 // Runs each protocol write as one `BEGIN IMMEDIATE` transaction and fails
 // closed after a flush failure or corruption (contract sections 7 and 8).
 export class JournalConnection {
   readonly #database: JournalDatabase;
-  readonly #onStop: (fault: Failure) => Result<void>;
+  readonly #hooks: ConnectionHooks;
   #fault: Failure | undefined;
 
-  // `onStop` keeps the worker stopped past this process; its failure is
-  // added to the fault, which the worker's service status reports.
-  constructor(database: JournalDatabase, onStop: (fault: Failure) => Result<void>) {
+  constructor(database: JournalDatabase, hooks: ConnectionHooks) {
     this.#database = database;
-    this.#onStop = onStop;
+    this.#hooks = hooks;
   }
 
   get fault(): Failure | undefined {
@@ -68,7 +74,7 @@ export class JournalConnection {
     if (code !== undefined && DEVICE_FAULTS.has(code)) return this.#stop(rootFailure('flush-failure', `journal I/O error: ${message}`));
     if (code === SQLITE_CORRUPT || code === SQLITE_NOTADB) return this.#stop(rootFailure('corrupt', `journal corrupt: ${message}`));
     this.#rollback();
-    if (code === SQLITE_FULL) return rootFailure('disk-full', `journal write refused for lack of space: ${message}`);
+    if (code === SQLITE_FULL) return this.#refusedForSpace(message);
     return failure('internal', `journal error: ${message}`);
   }
 
@@ -81,9 +87,14 @@ export class JournalConnection {
     } catch {
       // A failing device may also fail the close; the fault still stands.
     }
-    const recorded = this.#onStop(fault);
+    const recorded = this.#hooks.onStop(fault);
     if (!recorded.ok) this.#fault = { ...fault, details: { ...fault.details, recording: recorded.error.message } };
     return this.#fault;
+  }
+
+  #refusedForSpace(message: string): Failure {
+    this.#hooks.onSpaceRefused();
+    return rootFailure('disk-full', `journal write refused for lack of space: ${message}`);
   }
 
   #rollback(): void {

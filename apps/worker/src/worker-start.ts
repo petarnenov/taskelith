@@ -19,6 +19,7 @@ import {
   readVolumeSpace,
   readWorkerCredentials,
   truncateBufferedLogs,
+  workerPaths,
   type JournalClock,
   type VolumeProbe,
   type VolumeSpaceReader,
@@ -27,9 +28,10 @@ import {
   type WorkerRoot,
   type WorkerRootOptions,
 } from '@taskelith/worker-journal';
-import { AdmissionPressure } from './admission-pressure.js';
+import { AdmissionPressure, shedBufferedLogs } from './admission-pressure.js';
 import { BrokerSession, type BrokerLink } from './broker-session.js';
 import { CommandIntake } from './command-intake.js';
+import type { DaemonOverheadSource } from './daemon-overhead.js';
 import type { ContainmentScan, DeadlineClock, RecordListing, SupervisionFactory } from './execution-supervision-port.js';
 import { runHeartbeats, type HeartbeatOptions } from './heartbeat-publisher.js';
 import { reportInventoryOnConnection } from './inventory-report.js';
@@ -47,6 +49,8 @@ export interface WorkerDependencies {
   readonly probe?: VolumeProbe;
   // The free space of the data root's volume, for the disk floor.
   readonly space?: VolumeSpaceReader;
+  // The daemon's memory and event-loop delay, for the daemon overhead.
+  readonly daemon: DaemonOverheadSource;
   readonly pressurePollMilliseconds?: number;
   // Shorter transport timers for tests.
   readonly limits?: TransportLimits;
@@ -101,9 +105,13 @@ export async function startWorker(settings: WorkerSettings, dependencies: Worker
   return started;
 }
 
+// A journal write refused for lack of space sheds the buffered logs; the
+// command is redelivered, and the watch derives the fact again.
 function rootOptions(settings: WorkerSettings, dependencies: WorkerDependencies): WorkerRootOptions {
   const { clock, probe } = dependencies;
-  return { dataRoot: settings.dataRoot, clock, ...(probe === undefined ? {} : { probe }) };
+  const truncateLogs = () => truncateBufferedLogs(workerPaths(settings.dataRoot).logs);
+  const onSpaceRefused = () => shedBufferedLogs(truncateLogs, dependencies.logger ?? SILENT_LOGGER);
+  return { dataRoot: settings.dataRoot, clock, onSpaceRefused, ...(probe === undefined ? {} : { probe }) };
 }
 
 // The first start claims the root before it asks the control plane, so a
@@ -173,6 +181,7 @@ function startRuntime(settings: WorkerSettings, dependencies: WorkerDependencies
   });
   tasks.add(session.run(tasks.signal));
   tasks.add(pressure.watch(tasks.signal, dependencies.pressurePollMilliseconds));
+  tasks.add(dependencies.daemon.watch(tasks.signal));
   if (launcher.value !== undefined) tasks.add(launcher.value.run(tasks.signal));
   return ok(runningWorker(root, { finished: tasks.settled(), abort: () => controller.abort() }));
 }
@@ -192,7 +201,8 @@ function workerSubjects(address: TransportAddress, workerId: string): Result<Wor
 function admissionPressure(settings: WorkerSettings, dependencies: WorkerDependencies, root: WorkerRoot): AdmissionPressure {
   const space = dependencies.space ?? readVolumeSpace;
   return new AdmissionPressure({
-    journal: root.journal, space: () => space(settings.dataRoot), truncateLogs: () => truncateBufferedLogs(root.paths.logs),
+    journal: root.journal, space: () => space(settings.dataRoot), daemon: dependencies.daemon,
+    truncateLogs: () => truncateBufferedLogs(root.paths.logs),
     ...(dependencies.logger === undefined ? {} : { logger: dependencies.logger }),
   });
 }

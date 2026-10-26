@@ -14,10 +14,14 @@ export {
   ADMISSION_PRESSURE_POLL_MILLISECONDS,
   AdmissionPressure,
   pressureCauses,
+  shedBufferedLogs,
   type AdmissionCheck,
   type AdmissionLimits,
   type AdmissionPressureOptions,
+  type DaemonOverheadSensor,
+  type PressureReadings,
 } from './admission-pressure.js';
+export { ProcessDaemonOverhead, type DaemonOverheadSource } from './daemon-overhead.js';
 export { CommandIntake, type CommandIntakeOptions } from './command-intake.js';
 export { publishDueObservations, runObservationPublisher, type ObservationPublisherOptions } from './observation-publisher.js';
 export { startWorker, type LaunchHost, type LaunchingDependencies, type RunningWorker, type WorkerDependencies } from './worker-start.js';

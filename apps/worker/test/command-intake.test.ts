@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 import { checkMessageSchema, type MessageSchemas } from '@taskelith/contracts';
-import { parseRecoveryEpoch, planJournalRecovery, type JournalBinding } from '@taskelith/execution';
+import { isSpaceRefusal, parseRecoveryEpoch, planJournalRecovery, SPACE_REFUSAL_REASON, type JournalBinding } from '@taskelith/execution';
 import type { WorkerCapacity } from '@taskelith/fleet';
 import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
 import { readCommandSubjectMessage, type DeliveredMessage, type Publication, type PublishOutcome } from '@taskelith/nats';
@@ -255,6 +255,28 @@ test('a failed W1 commit records nothing, and the redelivered command is journal
   await assert.rejects(deliver(offer(1)), /crash before W1/);
   assert.equal(value(root.journal.snapshot()).intents.length, 0);
   onCommitPoint = () => undefined;
+  assert.deepEqual(value(await deliver(offer(1))), { kind: 'recorded' });
+  assert.equal(value(root.journal.snapshot()).intents.length, 1);
+});
+
+test('a W1 refused for lack of space is not acknowledged, and the redelivered command is journaled', async () => {
+  let refusals = 1;
+  const full = new Proxy(root.journal, {
+    get(target, property: string) {
+      const member = Reflect.get(target, property) as unknown;
+      if (property === 'recordCommand' && refusals > 0) {
+        refusals -= 1;
+        return () => err(failure('unavailable', 'journal write refused for lack of space', { reason: SPACE_REFUSAL_REASON }));
+      }
+      return typeof member === 'function' ? member.bind(target) : member;
+    },
+  });
+  intake = new CommandIntake({
+    journal: full, capacity: CAPACITY, pressure, publish: broker.publish, observationSubject: SUBJECT, newReportId: () => 'report-1', now: () => T0,
+    journalFault: () => root.journal.fault,
+  });
+  assert.equal(isSpaceRefusal(failed(await deliver(offer(1)))), true);
+  assert.equal(value(root.journal.snapshot()).intents.length, 0);
   assert.deepEqual(value(await deliver(offer(1))), { kind: 'recorded' });
   assert.equal(value(root.journal.snapshot()).intents.length, 1);
 });
