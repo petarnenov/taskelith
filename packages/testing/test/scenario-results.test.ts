@@ -5,12 +5,15 @@ import { arch, release, tmpdir, type } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import {
+  ACCEPTANCE_VARIABLE,
   FileScenarioRecorder,
   SCENARIO_RESULTS_VARIABLE,
   discardingScenarioRecorder,
+  parseAcceptanceContext,
   runEnvironment,
   scenarioRecorderFromEnvironment,
   scenarioResult,
+  type AcceptanceContext,
   type RunEnvironment,
   type ScenarioRun,
 } from '@taskelith/testing';
@@ -18,6 +21,19 @@ import {
 const ENVIRONMENT: RunEnvironment = { host: 'Darwin 25.6.0', arch: 'arm64', commit: 'f9ba7a5' };
 const RECORDED_AT = new Date('2026-10-26T15:00:00.000Z');
 const RUN: ScenarioRun = { scenario: 'worker-disk-loss', seed: 1234, target: 'compose-installation', outcome: 'passed' };
+const ACCEPTANCE: AcceptanceContext = {
+  entry: 'macos-26-arm64',
+  row: 'journal-and-storage',
+  proof: 'node --test packages/adapters/worker-journal/test/*.test.ts',
+  platform: {
+    os: 'macOS 26.6.2 (25G83)',
+    architecture: 'arm64',
+    kernel: 'Darwin 25.6.0',
+    filesystem: 'APFS',
+    node: 'v24.22.1',
+    docker: 'Docker Desktop 29.6.1',
+  },
+};
 
 // Git hooks export GIT_DIR; the commit must come from the given directory.
 const gitFreeEnv: NodeJS.ProcessEnv = Object.fromEntries(
@@ -62,7 +78,7 @@ test('a malformed run is rejected', () => {
     [{ scenario: 'Worker Disk Loss' }, /lowercase words joined by hyphens/],
     [{ seed: -1 }, /integer from 0 to 2\^32 - 1, got -1/],
     [{ seed: 2 ** 32 }, /got 4294967296/],
-    [{ target: 'production' as never }, /target must be one of harness-composition, compose-installation/],
+    [{ target: 'production' as never }, /target must be one of harness-composition, compose-installation, host-test-suite, linux-test-container/],
     [{ outcome: 'uncertain' as never }, /outcome must be one of passed, failed/],
   ];
   for (const [change, message] of invalid) {
@@ -124,4 +140,37 @@ test('outside a git repository the environment cannot name a commit', async () =
   await withTemporaryDirectory(async (directory) => {
     assert.throws(() => runEnvironment({ cwd: directory, env: gitFreeEnv }), /needs the commit, but git rev-parse HEAD failed/);
   });
+});
+
+test('a result carries the acceptance context of its environment', () => {
+  const result = scenarioResult({ ...RUN, target: 'host-test-suite' }, { ...ENVIRONMENT, acceptance: ACCEPTANCE }, RECORDED_AT);
+  assert.deepEqual(result.acceptance, ACCEPTANCE);
+  assert.equal(result.target, 'host-test-suite');
+  assert.equal('acceptance' in scenarioResult(RUN, ENVIRONMENT, RECORDED_AT), false);
+});
+
+test('the environment parses the acceptance context of TASKELITH_ACCEPTANCE', async () => {
+  await withTemporaryDirectory(async (directory) => {
+    execFileSync('git', ['init', '--quiet'], { cwd: directory, env: gitFreeEnv });
+    execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '--allow-empty', '-m', 'empty'], {
+      cwd: directory,
+      env: gitFreeEnv,
+    });
+    const env = { ...gitFreeEnv, [ACCEPTANCE_VARIABLE]: JSON.stringify(ACCEPTANCE) };
+    assert.deepEqual(runEnvironment({ cwd: directory, env }).acceptance, ACCEPTANCE);
+    assert.equal('acceptance' in runEnvironment({ cwd: directory, env: { ...gitFreeEnv, [ACCEPTANCE_VARIABLE]: '' } }), false);
+  });
+});
+
+test('a malformed acceptance context is rejected', () => {
+  const invalid: Array<[string, RegExp]> = [
+    ['not json', /must be JSON/],
+    ['[]', /must be a JSON object/],
+    [JSON.stringify({ ...ACCEPTANCE, platform: 'macOS' }), /needs a platform object/],
+    [JSON.stringify({ ...ACCEPTANCE, entry: 'windows-11' }), /entry must be one of .*macos-26-arm64, got "windows-11"/],
+    [JSON.stringify({ ...ACCEPTANCE, row: 'resource-budgets' }), /row must be one of service-lifecycle/],
+    [JSON.stringify({ ...ACCEPTANCE, proof: ' ' }), /proof must be a nonempty string/],
+    [JSON.stringify({ ...ACCEPTANCE, platform: { ...ACCEPTANCE.platform, docker: undefined } }), /platform.docker must be a nonempty string/],
+  ];
+  for (const [text, message] of invalid) assert.throws(() => parseAcceptanceContext(text), message);
 });
