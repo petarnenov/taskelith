@@ -1,0 +1,47 @@
+## Context
+
+Defect D1 of G2 item 24b, decided by the owner's delegate in away run `20261026T161148Z-opencode-90873`, option (b): `LaunchRequest` gets an optional `reportsNotStartedFor { executionId, operationId }`; the authority applies the referenced execution's `not-started` first, then the ownership rule for the new execution, in one transaction; the worker's continue-launch and relaunch requests fill it from the sealed execution. The [launch authorization contract](../../../docs/contracts/launch-authorization.md) sections 4, 6, and 9 and the [worker journal contract](../../../docs/contracts/worker-journal.md) section 5 are the sources.
+
+## Goals / Non-Goals
+
+**Goals:** a new execution of a launch is granted although the sealed predecessor's observation has not reached the authority; one transaction; no new rejection reason; an additive, optional API field.
+
+**Non-Goals:** the 24b harness and its evidence (tasks group 4); the 24c cancellation path of the launch orchestrator; ordering the worker's outbox before a relaunch.
+
+## Decisions
+
+### D1. The report is applied in the domain, before the ownership rule
+
+`authorizeLaunch` runs every check of contract section 2 first, so a request that fails one of them records nothing for either execution, and the observation settles the predecessor later. Then `recordReportedSeal` returns the attempt with the reported execution moved to `not-started`, and `applyOwnershipRule` decides the new execution on that attempt. The result is one task, written once by `tx.tasks.replace` in the deciding SERIALIZABLE transaction; the grant index (`launch_authorizations.live`) of both executions follows from the same write. A crash before the commit (`LaunchAuthorizationCommit.before`) leaves neither change.
+
+### D2. Validation rules
+
+The reported execution, looked up in the request's task:
+
+| Found as | Result |
+| --- | --- |
+| Not found | Nothing to record: the authority never granted it, for example a W2 whose request never arrived |
+| `not-started` | Accepted, nothing changes: its observation arrived first, or an earlier request reported it |
+| `authorized`, of the request's attempt and worker, and the operation names no grant of another execution | Moved to `not-started` |
+| `started` or `exited`, of another attempt or worker, or the operation granted another execution | `execution-conflict` |
+
+The operation need not name a grant of the execution. W6 closes a pending operation as `expired`, and that operation's request may never have reached the authority although an earlier operation granted the execution; requiring a match would make that recovery final. An operation that granted another execution is a worker defect and conflicts. The authority does not look up other tasks' operations: a report names an execution of the request's own attempt, so another task's execution is "not found" and changes nothing.
+
+`execution-conflict` is the reason contract section 9 already gives the ownership rule; the report is part of that rule, so no new reason is needed.
+
+### D3. Idempotency
+
+- **Transport retry** of the same `operationId`: answered from the recorded grant (contract section 6), which already holds the sealed execution; nothing is applied twice.
+- **Recorded final rejection:** replayed from `launch_rejections`, as before.
+- **Late observation:** `recordNotStarted` finds the execution `not-started` and returns `duplicate`; `recordTerminalFact` then writes nothing. Its capacity-refusal clearing is skipped, which is correct because the new execution of the same assignment holds the slot.
+- **Observation first:** the report is accepted and changes nothing.
+- The report is not an expected value, like `reportsNotStarted`, so it is not compared for `operation-mismatch`.
+
+### D4. Which execution the worker reports
+
+Every new execution of a `Launch`, at a start's continue-launch and at a runtime relaunch, reports `lastSealedExecution(snapshot, assignmentId)`: the intent's last journaled `not-started` execution, with its last granted operation, else its last operation. A resumed execution (same identity) reports nothing; it uses `reportsNotStarted` as before. At a new execution every earlier execution of the intent is `not-started` (`#launch` refuses otherwise), and each earlier relaunch already made its predecessor terminal at the authority, so only the last one can still own the attempt.
+
+## Risks / Trade-offs
+
+- A crash after a relaunch's W2 and before its request reached the authority, while the predecessor's observation is also still undelivered: the next start reports the newest sealed execution, which the authority never granted, and the older owner still blocks it. The single reference of option (b) cannot name both; this double fault ends the launch as before the fix. Reporting the older execution instead would fail the more likely case of a granted, sealed newest one.
+- The weaker operation check (D2) accepts an operation the authority never recorded; the execution, attempt, worker, and state checks still bind the report to the worker's own unspawned execution.

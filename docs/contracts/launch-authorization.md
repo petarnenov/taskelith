@@ -48,6 +48,13 @@ An attempt has at most one owning execution at a time. Expiry of an authorizatio
 - Another authorization of the same `executionId` is allowed only while the execution is `authorized` and the worker reports, from its supervisor's launch record (item 4), that it has not started. The supervisor spawns at most once per `executionId` across all its grants: its launch record is written once, and a spawn under any grant first claims it.
 - `not-started` is recorded only after the worker has sealed the execution's launch record so that no spawn can follow under any grant, and reported that seal with the absence of a process (item 4). From then on every grant of the execution is void.
 - An authorization for a different `executionId` is rejected with `execution-conflict` until the owning execution is `exited` or `not-started`. Uncertainty keeps the ownership and blocks another execution.
+- **Reported seal.** The worker's `not-started` observation of a sealed execution may not have reached the authority when the worker asks for the next execution. The request may therefore name that execution and an operation the worker journaled for it, preferably its last granted one, in `reportsNotStartedFor` (decision of the owner's delegate, away run `20261026T161148Z-opencode-90873`, option (b)). After the checks of section 2, and before this section's rule for the requested `executionId`, the same transaction:
+  - records nothing for an `executionId` the authority never granted;
+  - accepts an execution already `not-started`, for instance because its observation arrived first, and changes nothing;
+  - moves an `authorized` execution to `not-started`, as its observation would, when the execution belongs to the request's attempt and worker and the operation granted no other execution. An operation the authority never recorded is accepted, because its request may have been lost before a decision;
+  - rejects every other case with `execution-conflict`: a `started` or `exited` execution, one of another attempt or worker, or an operation that granted another execution.
+
+  The observation, when it arrives later, is a duplicate. The report is not an expected value, so section 6 does not compare it on a transport retry.
 
 This section places two obligations on the supervisor identity contract (item 4) and the worker journal contract (item 5): a single, claimed spawn per execution identity, and an irreversible seal before `not-started` is reported.
 
@@ -113,7 +120,7 @@ Each check of sections 2 to 4 maps to one reason. The scheduler acts on the reas
 | A bound artifact has a newer revision | `artifact-revision-changed` | no | Re-admit against the new revision |
 | Admission policy revision differs from the run's | `policy-revision-changed` | no | Re-admit under the current policy |
 | Reservation released or held elsewhere | `capacity-not-reserved` | no | Reserve again or reassign |
-| Ownership rule of section 4 | `execution-conflict` | no | Reconcile the owning execution |
+| Ownership rule of section 4, including a reported seal it refuses | `execution-conflict` | no | Reconcile the owning execution |
 | Same `operationId`, different values | `operation-mismatch` | no | None; a worker defect |
 | Transient failure inside the authority | `unavailable` | yes | None |
 
@@ -130,6 +137,7 @@ Items 17 and 24 implement these as tests through the deterministic test harness 
 - A worker whose wall clock is wrong by more than `skew` stops handing out an authorization at its monotonic deadline.
 - A timely start reported after an outage is recorded as a start; a duplicate start observation returns the recorded fact; a start under an unknown authorization becomes `unauthorized-start`.
 - After expiry with no recorded start, another execution identity is rejected until reconciliation records `not-started`; a supervisor paused before spawning, then resumed after the seal, does not spawn.
+- A new execution that reports the sealed owner is granted, and the owner ends `not-started` in the same transaction; reported again after the owner's observation, the seal is accepted; a seal reported for a `started` execution, or with another execution's operation, is rejected with `execution-conflict`.
 - A timely spawn, a disconnect, expiry, and a policy change before the start is reported: the writer still finds the execution, writes a cancellation, and the late start is recorded.
 - A start observation with a known grant bound to another execution identity becomes `unauthorized-start`.
 - An implementation admission whose relied-on gates have different subjects (one gate on the specification, another on the specification and the design) is granted; a changed digest in any subject is rejected.
@@ -162,4 +170,5 @@ Item 17 implements sections 2 to 7 on the control-plane side, with these G2 choi
   - The cancellation of item 18 keeps its reason `assignment-ended`.
   - G2 has no writer of gates, artifact revisions, policy revisions, or quarantine; each must call the helper when it is added.
 - **Crash points.** `LaunchAuthorizationCommit.before` and `.after` surround the commit of a transaction that recorded a grant.
+- **Reported seal.** `reportsNotStartedFor` is an optional field of the request. The domain applies it to the task before the ownership rule, so the task repository stores the `not-started` execution and the new grant in the one write of the deciding transaction (change `fix-launch-recovery-reauthorization`).
 - **Worker client.** `LaunchAuthorityClient` in Execution, with an HTTP adapter in `@taskelith/worker-control-plane-client`. A 502, 503, or 504, a timeout, or a lost connection is `unavailable`. A grant that binds other values than the request is refused. The retry loop and the journal steps W2 and W3 belong to item 20, and consuming start observations to item 21.
