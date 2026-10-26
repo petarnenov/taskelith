@@ -4,7 +4,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: installation.sh build|bootstrap|broker-config|start|stop|enroll|enrollment-token|verify|smoke|check-containment|scenario-fresh-composition|scenario-worker-disk-loss|scenario-worker-kill PROJECT" >&2
+  echo "usage: installation.sh build|bootstrap|broker-config|start|stop|enroll|enrollment-token|verify|smoke|check-containment|scenario-fresh-composition|scenario-worker-disk-loss|scenario-worker-kill|scenario-worker-namespace-confinement PROJECT" >&2
   exit 2
 }
 
@@ -309,5 +309,6 @@ case "$command" in
   scenario-fresh-composition) fresh_composition_scenario ;;
   scenario-worker-disk-loss) disk_loss_scenario ;;
   scenario-worker-kill) worker_kill_scenario ;;
+  scenario-worker-namespace-confinement) namespace_confinement_scenario ;;
   *) usage ;;
 esac
