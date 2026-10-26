@@ -166,10 +166,12 @@ test('a request without a decision is repeated with the same operation, backing 
   assert.equal(executions()[0]?.state, 'exited');
 });
 
-test('a request without an answer is logged with its cause before it is repeated', async () => {
+test('a request without an answer is logged with its cause, never over its known fields, before it is repeated', async () => {
   value(journal.recordCommand(offer()));
   const cause = { cause: 'TypeError: fetch failed <- Error[ECONNRESET]: read ECONNRESET', causeCode: 'ECONNRESET' };
-  authority.answers = [err(failure('unavailable', 'the control plane did not answer', cause)), granted()];
+  const spoofed = { executionId: 'spoofed', operationId: 'spoofed', code: 'spoofed', message: 'spoofed' };
+  const answered = failure('unavailable', 'the control plane did not answer', { ...spoofed, ...cause });
+  authority.answers = [err(answered), granted()];
   supervisions.onCreated = (supervision) => {
     supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
   };

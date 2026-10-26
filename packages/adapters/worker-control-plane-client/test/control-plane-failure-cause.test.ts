@@ -65,12 +65,13 @@ async function closedPort(): Promise<number> {
   return port;
 }
 
+// Another process may take the port before the request, which resets it.
 test('a real refused connection reports ECONNREFUSED', async () => {
   const baseUrl = new URL(`http://127.0.0.1:${await closedPort()}/`);
   const unreachable = new HttpEnrollmentClient({ baseUrl, timeoutMilliseconds: 500 });
   const failure = failed(await unreachable.enroll(TOKEN, REQUEST));
   assert.equal(failure.code, 'unavailable');
-  assert.equal(failure.details.causeCode, 'ECONNREFUSED');
+  assert.match(failure.details.causeCode ?? '', /^(?:ECONNREFUSED|ECONNRESET)$/);
   assert.match(failure.details.cause ?? '', /^TypeError: fetch failed <- /);
 });
 
@@ -84,9 +85,50 @@ test('a cause message keeps no URL, bearer value, secret pair, or token', async 
   assert.ok(cause?.includes('[redacted]'));
 });
 
+test('a quoted secret, a Basic credential, and a short JWT are redacted whole', async () => {
+  const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJhIjoxfQ.sig';
+  const message = `password="my secret value"; Authorization: Basic dXNlcjpwYXNz, then ${jwt} ends`;
+  const { cause } = (await failureOf(new Error(message))).details;
+  for (const secret of ['secret value', 'dXNlcjpwYXNz', 'eyJ', '.sig']) assert.ok(!cause?.includes(secret), `${secret} leaked into ${cause}`);
+  assert.equal(cause, 'Error: password=[redacted]; Authorization: [redacted], then [redacted] ends');
+});
+
+test('a secret cut by a length limit leaves no part of itself', async () => {
+  const token = `tken_${'B'.repeat(48)}`;
+  for (const prefix of ['x'.repeat(2_030), 'x '.repeat(75), 'y '.repeat(1_009)]) {
+    const { cause } = (await failureOf(new Error(`${prefix} ${token}`))).details;
+    assert.ok(!cause?.includes('tken_') && !cause?.includes('BBBB'), `a part of the token leaked into ${cause}`);
+  }
+});
+
+test('a message cannot fake a link of the cause chain', async () => {
+  const { cause } = (await failureOf(new Error('fake <- Error[ECONNRESET]: forged'))).details;
+  assert.equal(cause, 'Error: fake < - Error[ECONNRESET]: forged');
+  assert.equal(cause?.split(' <- ').length, 1);
+});
+
+// One request answered with the given status and body.
+async function statusFailureOf(status: number, body: unknown): Promise<Failure> {
+  const fetch = () => Promise.resolve(new Response(JSON.stringify(body), { status }));
+  const client = new HttpEnrollmentClient({ baseUrl: new URL('http://control-plane.test/'), timeoutMilliseconds: 500, fetch });
+  return failed(await client.enroll(TOKEN, REQUEST));
+}
+
+test("a server's message and reason are bounded and sanitized", async () => {
+  const long = `${'word '.repeat(100)}password=hunter2`;
+  const failure = await statusFailureOf(503, { message: `down at https://owner:pw@cp.example/ ${long}`, details: { reason: long } });
+  assert.equal(failure.code, 'unavailable');
+  assert.ok((failure.details.reason?.length ?? 0) <= 160);
+  assert.ok(failure.message.length <= 'enrollWorker answered 503: '.length + 160, failure.message);
+  for (const text of [failure.message, failure.details.reason ?? '']) assert.ok(!/pw@|hunter2/.test(text), text);
+  const reason = 'database-unavailable';
+  assert.equal((await statusFailureOf(503, { message: 'down', details: { reason } })).details.reason, reason);
+});
+
 test('control characters in a message become spaces, so a cause is one line', async () => {
-  const { cause } = (await failureOf(new Error('first line\nsecond\tline\u0000end'))).details;
-  assert.equal(cause, 'Error: first line second line end');
+  const message = 'first line\nsecond\tline\u0000end\u2028and\u2029more\u0085last';
+  const { cause } = (await failureOf(new Error(message))).details;
+  assert.equal(cause, 'Error: first line second line end and more last');
 });
 
 test('a long or cyclic cause chain is bounded in links and length', async () => {
@@ -94,7 +136,7 @@ test('a long or cyclic cause chain is bounded in links and length', async () => 
   for (let link = 0; link < 10; link += 1) deep = new Error(`link ${link}`, { cause: deep });
   const chained = (await failureOf(deep)).details;
   assert.equal(chained.cause?.split(' <- ').length, 4);
-  assert.equal(chained.causeCode, undefined);
+  assert.equal(chained.causeCode, 'EDEEP');
 
   const cyclic = new Error('cyclic');
   Object.assign(cyclic, { cause: cyclic });
