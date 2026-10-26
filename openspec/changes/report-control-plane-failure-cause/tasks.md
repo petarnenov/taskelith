@@ -29,3 +29,11 @@
 - [x] 5.3 Walk 16 links for `causeCode` (finding 5); accept a reset in the port test (finding 7)
 - [x] 5.4 Spec: define the token run; move the log rule to "Journaled launch authorization" (finding 8)
 - [x] 5.5 `make verify` passes after the fixes
+
+## 6. Review pass 2 fixes
+
+- [x] 6.1 Bound and sanitize the schema `violation` in every client (M1)
+- [x] 6.2 Never throw while describing a cause (L1); redact quoted authorization, colon pairs, and base64 (L2 to L4); codes under 32 characters (L5)
+- [x] 6.3 Readability of `causeChain` and `sanitizeFailureText` (L6); design and record fixes (L7, L8)
+- [x] 6.4 `make verify` passes after the fixes
+

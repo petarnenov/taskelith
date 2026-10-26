@@ -1,12 +1,12 @@
 # Verification
 
-Date: 2026-10-27. The author's verification and independent review pass 1 with its fixes are recorded below; review pass 2 is pending.
+Date: 2026-10-27. The author's verification and independent review pass 1 with its fixes and review passes 1 and 2 with their fixes are recorded below; review pass 3 is pending.
 
 ## Scope and source
 
 - **Source:** the coordinator's brief: `control-plane-http.ts:39` reduced the cause of a failed request to `error.name`, so a `fetch failed` caused by `ECONNRESET` was reported and logged as `TypeError`, which hid the root cause of B6.
 - **Base revision:** `c73c0fa` on `dev`.
-- **Revisions verified:** `d54243f` (spec `408c728`, failing tests `e00a826`, test fix `4981792`, fix `d54243f`); `c44884e` (the coordinator's merge of `origin/dev` `76ec83e`, the revision of review pass 1); and `1b45512` (the pass 1 fixes: specs `bddad32`, tests `cd309dc`, code `1b45512`).
+- **Revisions verified:** `d54243f` (spec `408c728`, failing tests `e00a826`, test fix `4981792`, fix `d54243f`); `c44884e` (the coordinator's merge of `origin/dev` `76ec83e`, the revision of review pass 1); `1b45512` (the pass 1 fixes: specs `bddad32`, tests `cd309dc`, code `1b45512`); `1738be7` (the coordinator's merge of `origin/dev` `1416167`, the revision of review pass 2); and `60e07c7` (the pass 2 fixes: specs `aee870e`, tests `5482357`, code `60e07c7`).
 - **Scope:** the client reports the bounded, sanitized cause chain in the details `cause` and `causeCode` (`packages/adapters/worker-control-plane-client/src/failure-cause.ts`, used at `control-plane-http.ts:40`); the worker logs each failed launch authorization request as `worker.launch.authorization-failed` (`apps/worker/src/launch-orchestrator.ts:526`, `:548`); requirement "Control-plane failure cause" of `worker-runtime`; one paragraph of `docs/contracts/launch-authorization.md` section 11.
 - **Out of scope:** the failure code, message, and retry policy; wire schemas and OpenAPI documents, which do not change; the evidence publisher's callers, which do not exist yet.
 
@@ -56,6 +56,7 @@ After the fix the first run showed that `http://127.0.0.1:1/` is a port `fetch` 
 - `npm run openspec -- validate report-control-plane-failure-cause --strict` at `d54243f` and again after the pass 1 fixes: `Change 'report-control-plane-failure-cause' is valid`.
 - Archive dry run in a scratch copy of `d54243f` (`git archive HEAD`, under the session scratchpad): `npm run openspec -- archive report-control-plane-failure-cause --yes` added one requirement to `worker-runtime`; `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
 - `npm run verify:comments`: every comment is within the rule.
+- `make verify` at `60e07c7` (after the pass 2 fixes): exit 0; 1969 tests, 1967 pass, 0 fail, 2 skipped; coverage lines 99.29%, branches 92.14%, functions 99.05%; no undeclared breaking contract change; `validate --all --strict`: 70 passed, 0 failed; the archive dry run, the dependency inventory, and the package verification passed. The known flaky test did not fail. `validate report-control-plane-failure-cause --strict` and `verify:comments` passed too.
 - `make verify` at `1b45512` (after the pass 1 fixes): exit 0; 1946 tests, 1944 pass, 0 fail, 2 skipped; coverage lines 99.29%, branches 92.10%, functions 99.04%; no undeclared breaking contract change; `validate --all --strict`: 70 passed, 0 failed; the archive dry run, the dependency inventory, and the package verification passed. The known flaky test did not fail.
 - `make verify` at `d54243f`: exit 0; 1939 tests, 1937 pass, 0 fail, 2 skipped; coverage lines 99.29%, branches 92.10%, functions 99.04%; 0 breaking contract changes against `c73c0fa`; `validate --all --strict`: 70 passed, 0 failed; the archive dry run and the package verification passed. The known flaky test "a worker journals its commands before it acknowledges them" did not fail.
 
@@ -82,7 +83,30 @@ Findings and resolutions, fixed in `bddad32` (specs, design, contract), `cd309dc
 
 **Fail before the fixes:** the new and changed tests of `cd309dc` ran once against the code of `d54243f` (its built `dist`, since the source with the fixes did not yet compile): 6 of 26 client tests failed, among them `a part of the token leaked into Error: [redacted] tken_BBBBBBBBBBBB` (finding 1), `secret value leaked into Error: password=[redacted] secret value"; Authorization: [redacted] dXNlcjpwYXNz, then eyJhbGciOiJIUzI1NiJ9.eyJhIjoxfQ.sig ends` (findings 2 and 3), `'Error: fake <- Error[ECONNRESET]: forged'` (finding 6), the server reason (finding 4), `'… and more\x85last'` (finding 9), and `causeCode` `undefined` instead of `EDEEP` (finding 5). After `1b45512`: 26 of 26 pass.
 
-The fixes of `1b45512` are unreviewed until pass 2.
+Review pass 2 confirmed all nine resolutions.
+
+### Pass 2
+
+- **Reviewer:** Claude Code, model `claude-fable-5-1`, assigned by the coordinator, who ran the review and recorded its invocation.
+- **Revision:** `1738be7` (the branch after the coordinator merged `origin/dev` `1416167`).
+- **Session ID:** `12278426-95e4-4c07-bf7e-dcdf9cb0a6f0`.
+- **Result:** Critical 0, High 0, Medium 1, Low 8; all nine pass 1 findings confirmed resolved.
+
+Findings and resolutions, fixed in `aee870e` (spec, design, this record), `5482357` (tests), and `60e07c7` (code). References are at `60e07c7`, in `packages/adapters/worker-control-plane-client/` unless named; the tests are in `test/control-plane-failure-cause.test.ts`.
+
+- **M1: `violation` reached the log unbounded and unredacted**, with a property name the server chose (`packages/contracts/src/schema-check.ts:43-46`). Fixed: every client passes it through `sanitizeFailureText` (`src/http-enrollment-client.ts:23`, `src/http-launch-authority-client.ts:35`, `src/http-evidence-publisher.ts:31`). Test at line 187, with a 2,000-character property name.
+- **L1: `describeFailureCause` could throw on a throwing getter or a `Proxy`**, so `post` rejected. Fixed: it returns `cause` `unknown` when describing throws (`src/failure-cause.ts:43`). Test at line 180.
+- **L2: a quoted or JSON `authorization` value passed.** Fixed: optional quotes around the key's separator and the value, which ends at `;`, `,`, a quote, or the end (`src/failure-cause.ts:20`). Test at line 96.
+- **L3: `password: hunter2` passed.** Fixed: a quoted-aware rule for `password`, `passwd`, `pwd`, `secret`, `token`, and `api_key` with `:` (`src/failure-cause.ts:21`). Test at line 96.
+- **L4: standard base64 with `/` passed.** Fixed: the run class is `[A-Za-z0-9_+=/-]` (`src/failure-cause.ts:25`); the spec and design say so. Test at line 96.
+- **L5: a 58-character NATS seed passed as a code.** Fixed: codes have at most 31 characters (`src/failure-cause.ts:14`); `UNABLE_TO_VERIFY_LEAF_SIGNATURE` still passes. Test at line 173.
+- **L6: readability.** Fixed: `causeChain` is a `while` loop with its stop conditions named (`src/failure-cause.ts:76`), and `sanitizeFailureText` calls `redactAll` and `toChainSafeLine` (`:65`, `:70`).
+- **L7: design decision 7 sat under "Risks / Trade-offs".** Fixed: it follows decision 6 under "Decisions".
+- **L8: this record named the old worker test.** Fixed: line 25 names the test at `apps/worker/test/launch-orchestrator.test.ts:169`.
+
+**Fail before the fixes:** with the source of `60e07c7` stashed, the tests of `5482357` ran against the code of `1738be7`: 4 of 17 failed. These were the base64 and JSON test (`dXNlcjpwYXNz leaked into Error: {"authorization":"Basic dXNlcjpwYXNz"} password: hunter2 …`), the seed passing as `causeCode`, `Error: trap` rejecting the request, and the unbounded violation. After `60e07c7`: 30 of 30 client tests pass.
+
+The fixes of `60e07c7` are unreviewed until pass 3.
 
 ## Limitations and remaining gates
 
@@ -90,6 +114,6 @@ The fixes of `1b45512` are unreviewed until pass 2.
 - `make verify` ran on macOS only.
 - The logger's own `redactText` still lacks the JWT and `Authorization` rules that the client adds; adding them there is a separate change of requirement "Logs without secrets".
 - Remaining gates:
-  - independent review pass 2 by Claude Code `claude-fable-5-1` (pending);
+  - independent review pass 3 by Claude Code `claude-fable-5-1` (pending);
   - archive on the branch (worker step 7, pending);
   - Integration into dev by the coordinator (single pull request).
