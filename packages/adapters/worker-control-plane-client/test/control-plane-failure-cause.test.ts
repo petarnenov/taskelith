@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { test } from 'node:test';
 import type { EnrollmentRequest } from '@taskelith/fleet';
 import type { Failure } from '@taskelith/kernel';
@@ -54,8 +56,18 @@ test('an aggregate error is followed into its first error, and the innermost cod
   assert.equal(failure.details.causeCode, 'ECONNREFUSED');
 });
 
+// A loopback port that was just free; fetch refuses well-known bad ports.
+async function closedPort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+  const { port } = server.address() as AddressInfo;
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  return port;
+}
+
 test('a real refused connection reports ECONNREFUSED', async () => {
-  const unreachable = new HttpEnrollmentClient({ baseUrl: new URL('http://127.0.0.1:1/'), timeoutMilliseconds: 500 });
+  const baseUrl = new URL(`http://127.0.0.1:${await closedPort()}/`);
+  const unreachable = new HttpEnrollmentClient({ baseUrl, timeoutMilliseconds: 500 });
   const failure = failed(await unreachable.enroll(TOKEN, REQUEST));
   assert.equal(failure.code, 'unavailable');
   assert.equal(failure.details.causeCode, 'ECONNREFUSED');
