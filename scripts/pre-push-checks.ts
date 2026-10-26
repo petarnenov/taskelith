@@ -28,7 +28,8 @@ function isDeletion(fields: readonly string[]): boolean {
   return OBJECT_ID.test(localSha) && OBJECT_ID.test(remoteSha) && DELETION.test(localSha);
 }
 
-// Empty or malformed input is not delete-only, so it still runs make verify.
+// Invalid input never gets the delete-only bypass; the standard checks may
+// refuse it before verify.
 export function isDeleteOnlyPush(updates: string): boolean {
   const refs = pushedRefs(updates);
   return refs.length > 0 && refs.every(isDeletion);
