@@ -243,7 +243,8 @@ export class LinuxContainmentScan {
     if (!text.ok) return text;
     const members: ProcessEntry[] = [];
     for (const line of (text.value ?? '').split('\n').filter((member) => member !== '')) {
-      const pid = /^\d+$/.test(line) ? Number(line) : 0;
+      if (!/^\d+$/.test(line)) return err(failure('invalid', `${path}/cgroup.procs names no process`));
+      const pid = Number(line);
       if (!Number.isSafeInteger(pid) || pid < 1) return err(failure('invalid', `${path}/cgroup.procs names no process`));
       const entry = this.#inspector.entry(pid);
       if (!entry.ok) return entry;
