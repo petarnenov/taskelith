@@ -105,6 +105,7 @@ export {
   highestReceivedSnapshot,
   isFreshReport,
   isRolledBack,
+  isUnsolicited,
   supersededReports,
   type AcceptanceProvenance,
   type InventoryPart,

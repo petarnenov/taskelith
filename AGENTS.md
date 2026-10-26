@@ -23,12 +23,12 @@
 - Record scope, requirements, verification evidence, and remaining gates. Do not claim independent review or deployment validation that did not occur.
 - Follow the [independent review process](docs/governance.md#independent-review-process): authorized read-only reviewers, one reviewer per task with a replacement when that reviewer is unavailable, at most three passes, and Low-only passes fixed without another review.
 - Since 2026-10-26 a session develops each task in a subagent it briefs and checks ([subagent execution](docs/agent-task-protocol.md#subagent-execution)).
-- When several agent sessions work in parallel, follow the [agent task protocol](docs/agent-task-protocol.md): workers develop and hand off one task at a time, and the coordinator integrates and archives it. A session whose context approaches 150,000 tokens tells the owner and recommends `/compact` or `/clear` ([context size](docs/agent-task-protocol.md#context-size)).
+- When several agent sessions work in parallel, follow the [agent task protocol](docs/agent-task-protocol.md): workers develop, archive on their own branch, and hand off one task at a time, and the coordinator integrates it into `dev` with one pull request. A session whose context approaches 150,000 tokens tells the owner and recommends `/compact` or `/clear` ([context size](docs/agent-task-protocol.md#context-size)).
 - Publication and deployment require owner authorization. The initial repository/package publication is explicitly authorized by the bootstrap request.
 
 ## Checks and commits
 
-- Run `make setup` once per worktree (it installs the dependencies and enables the hooks, which are shared repository configuration); `make doctor` checks the environment. `make verify` must pass before every push; the `pre-push` hook enforces it.
+- Run `make setup` once per worktree (it installs the dependencies and enables the hooks, which are shared repository configuration); `make doctor` checks the environment. `make verify` must pass before every push except one that only deletes remote refs; the `pre-push` hook enforces it.
 - Develop each change on its own feature branch in its own git worktree, so changes can proceed in parallel, and target `dev`, the default branch. Only promotion pull requests from `dev` target `main` (see [docs/releases.md](docs/releases.md)).
 - Inspect the actual package tarball before publishing; never include credentials or local state.
 - Use conventional commit messages without attribution or session trailers.
