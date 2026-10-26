@@ -8,7 +8,7 @@ Date: 2026-10-26. Author verification is recorded below; the independent review 
 
 - Base revision: `a698f11` on `dev`.
 - Scope: the daemon overhead causes (`daemon-memory`, `event-loop-lag`) on the 20e pressure path through injected sensors, and the log truncation and retry of a journal write refused for lack of space ([worker journal contract](../../../docs/contracts/worker-journal.md) section 7).
-- Out of scope: 20d2 (`implement-worker-contact-and-offline`), the `unrecorded-process` scan, supervisor test hygiene, UI, a space retry of the launch writes (design, Risks), and any contract change.
+- Out of scope: 20d2 (`implement-worker-contact-and-offline`), the `unrecorded-process` scan, supervisor test hygiene, UI, and any contract change.
 
 ### Values used
 
@@ -54,6 +54,5 @@ Pending.
 ## Limitations and remaining gates
 
 - Remaining gates: the independent review, the coordinator's integration into `dev`, and the archive of this change.
-- A launch write (W2, W3, or the W4 before a supervisor starts) refused for space sheds the logs but is not retried in place; the next pass or the next start continues as before (design, Risks).
 - Each start reports `unmeasurable-limit` until its first refresh after the event-loop histogram has a sample, within 5 seconds (design, Risks).
 - The worker's event-loop lag is not published as a metric.

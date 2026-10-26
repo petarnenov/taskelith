@@ -7,7 +7,7 @@
 - **Daemon overhead.** Each pressure refresh reads the daemon's resident set size and the p99 event-loop delay of its sample window through an injected sensor; above `512 MiB` it reports `daemon-memory`, above `200ms` `event-loop-lag`, through the 20e pressure path, so offers are refused and launches wait until the overhead subsides.
 - **Unmeasurable overhead**, including an event-loop window without a sample, counts as exceeded and is reported as `unmeasurable-limit`.
 - **Production sensor.** `process.memoryUsage.rss()` and Node's event-loop delay histogram at a `20ms` resolution, whose window closes every `15s` (operational targets section 4).
-- **Writes refused for lack of space.** The journal adapter tells the worker of each one, and the worker empties the buffered logs under `worker/logs/`. A command is not acknowledged, so the broker redelivers it after the failed-commit backoff; an execution fact stays in its record, and the watch or the orchestrator derives it again and retries after a backoff of `5s` to `60s` with jitter.
+- **Writes refused for lack of space.** The journal adapter tells the worker of each one, and the worker empties the buffered logs under `worker/logs/`. A command is not acknowledged, so the broker redelivers it after the failed-commit backoff; an execution fact stays in its record, and the watch or the orchestrator derives it again and retries after a backoff of `5s` to `60s` with jitter; a launch write (W2 to W4) is retried unchanged with the same backoff before the request, the grant's use, or the supervisor start it precedes.
 - No contract, AsyncAPI, OpenAPI, or journal format change.
 
 ## Capabilities

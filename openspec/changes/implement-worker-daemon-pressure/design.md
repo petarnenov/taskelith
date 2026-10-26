@@ -10,7 +10,6 @@
 
 - Any contract, AsyncAPI, OpenAPI, or journal format change; configuration variables for the limits.
 - Contact, heartbeat, offline mode, reconnect inventory (20d2); `unrecorded-process`; supervisor test hygiene; UI.
-- A space retry of the launch writes W2, W3, and the W4 before a supervisor starts (see Risks).
 - Publishing the worker's `event-loop.lag` as a metric.
 
 ## Decisions
@@ -41,14 +40,15 @@ The contract limits the p99 of the event-loop delay; the operational targets (se
 
 - **A command** (W1) refused for space is not acknowledged: intake answers the failure, and the consumer naks it with the redelivery backoff after a failed commit (operational targets section 2: doubling from `5s` to `60s`, up to a quarter shorter by jitter). Nothing new is needed.
 - **An execution fact** refused for space (W5s, W5e, W6 found by the watch or by recovery, `uncertain`, and the evidence beside them) no longer ends the watch. The watch backs off with `launchRetryDelay` (initial `5s`, maximum `60s`, with jitter; the automatic retry row of the operational targets) and derives the fact again: `observe` reads the record again, and `reconcile` asks the recovery table again in the same round. The backoff grows with consecutive refusals and resets after a poll without one. A refusal is logged as `worker.journal.space-refused` and not reported as a failure. A stop ends the retries; the fact stays in the record, and the next start derives it again.
-- **A fact the orchestrator writes after a seal** (W6 of a sealed pending W2 or unused grant at start, of a launch's own seal, and the W4 and `uncertain` of a seal lost to a claim) is retried by `commitFact` with the same backoff, until it commits or the worker stops; a cancellation does not end it. The seal is durable, so the retried fact is the one the record holds. An inherited execution stays claimed during the retry, which keeps a second reconciliation from starting; the retry ends only with a commit or the stop.
+- **A fact the orchestrator writes after a seal** (W6 of a sealed pending W2 or unused grant at start, of a launch's own seal, and the W4 and `uncertain` of a seal lost to a claim) is retried by `commitWrite` with the same backoff, until it commits or the worker stops; a cancellation does not end it. The seal is durable, so the retried fact is the one the record holds. An inherited execution stays claimed during the retry, which keeps a second reconciliation from starting; the retry ends only with a commit or the stop.
+- **A launch write** refused for space (W2, W3 for a grant, a rejection, or an expiry, and the W4 before the supervisor starts) is retried unchanged by `commitWrite`, for the same execution and operation, with the same backoff. What it precedes waits for its commit: no request is sent before W2, no grant is used before its W3, and no supervisor starts before W4 (journal contract section 5). The deadline still runs from the reading taken before W2, so a long retry can only make the operation expire, which W3 `expired` records and the same execution is authorized again.
 - **The pressure fact** refused for space is retried by the next refresh (20e).
 
 Both backoffs are 5 seconds to 60 seconds with jitter; the contract names no other.
 
 ## Risks / Trade-offs
 
-- **Launch writes are not retried for space.** A refused W2 ends the launch, and the next pass starts it again with a new execution, as before; a refused W3, or the W4 before a supervisor starts, ends the launch, and the next start reconciles the execution. Their logs are still shed. A follow-up can add a retry if the coordinator wants one.
+- **A failure other than a refusal for space** still ends a launch or a watch, as before 20e2, and is reported; the next start reconciles what it left.
 - **Each start reports `unmeasurable-limit`** in its first pressure observation, because the histogram starts with the loops; the next refresh, within 5 seconds, clears it. The first 15 seconds then read the open window.
 - **The test host:** a busy control-plane test process could exceed the overhead, so its worker integration test fixes the sensor, as 20e fixed the free space.
 - **Rollback:** nothing is persisted; the worker package is unreleased.
