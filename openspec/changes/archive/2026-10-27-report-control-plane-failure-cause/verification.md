@@ -63,6 +63,16 @@ After the fix the first run showed that `http://127.0.0.1:1/` is a port `fetch` 
 - `make verify` at `1b45512` (after the pass 1 fixes): exit 0; 1946 tests, 1944 pass, 0 fail, 2 skipped; coverage lines 99.29%, branches 92.10%, functions 99.04%; no undeclared breaking contract change; `validate --all --strict`: 70 passed, 0 failed; the archive dry run, the dependency inventory, and the package verification passed. The known flaky test did not fail.
 - `make verify` at `d54243f`: exit 0; 1939 tests, 1937 pass, 0 fail, 2 skipped; coverage lines 99.29%, branches 92.10%, functions 99.04%; 0 breaking contract changes against `c73c0fa`; `validate --all --strict`: 70 passed, 0 failed; the archive dry run and the package verification passed. The known flaky test "a worker journals its commands before it acknowledges them" did not fail.
 
+## Archive
+
+Checked state: the tree of the archive commit `docs: archive the control-plane failure cause change`, which is the working tree these checks ran on.
+
+- `npm run openspec -- archive report-control-plane-failure-cause --yes`: one requirement added and one modified in `worker-runtime`; the change moved to `openspec/changes/archive/2026-10-27-report-control-plane-failure-cause/`.
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`, this change's line: `✓ change/2026-10-27-report-control-plane-failure-cause`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `0d317f8`): only `openspec/specs/worker-runtime/spec.md`, with the sentence on the log line in requirement "Journaled launch authorization", its scenario "Logged authorization failure", and the new requirement "Control-plane failure cause" with its six scenarios. The pinned CLI leaves two blank lines before the new requirement; this is cosmetic and valid.
+- `make verify`: exit 0; 1971 tests, 1969 pass, 0 fail, 2 skipped; coverage lines 99.29%, branches 92.13%, functions 99.05%; no undeclared breaking contract change; `validate --all --strict`: 69 passed, 0 failed; the archive dry run, the dependency inventory, and the package verification passed. The known flaky test did not fail.
+
 ## Independent review
 
 ### Pass 1
@@ -135,5 +145,4 @@ Findings and resolutions. References are to `packages/adapters/worker-control-pl
 - The logger's own `redactText` still lacks the JWT, `Authorization`, scheme-less user information, and colon-pair rules that the client adds, and its `=` rule (`KEY_VALUE`) lacks the keys `pass`, `passphrase`, `credential(s)`, `cookie`, and `private_key`; adding them there is a separate change of requirement "Logs without secrets".
 - Remaining gates:
   - none for review: pass 3 was Low-only and the review cap is reached, so its fixes stay unreviewed;
-  - archive on the branch (worker step 7, pending);
   - Integration into dev by the coordinator (single pull request).
