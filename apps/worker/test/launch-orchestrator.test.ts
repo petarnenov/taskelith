@@ -21,6 +21,7 @@ import {
   cancellation,
   granted,
   grantFor,
+  grantedToOwner,
   offer,
   requestOf,
   temporaryJournal,
@@ -312,6 +313,9 @@ test('a grant that arrives after the deadline is journaled and never used', asyn
   assert.deepEqual(first?.authorizations.map(({ outcome }) => outcome), ['granted']);
   assert.deepEqual(supervisions.all[0]?.calls, ['seal']);
   assert.equal(authority.requests.length, 2);
+  assert.equal(authority.requests[0]?.reportsNotStartedFor, undefined);
+  const sealed = { executionId: first?.executionId, operationId: authority.requests[0]?.operationId };
+  assert.deepEqual(authority.requests[1]?.reportsNotStartedFor, sealed);
 });
 
 test('a reading from another boot never hands a grant out', async () => {
@@ -336,7 +340,7 @@ test('an unreadable clock requests nothing', async () => {
 
 test('a supervisor that seals reports not-started, and the intent is launched again', async () => {
   value(journal.recordCommand(offer()));
-  authority.answers = [granted()];
+  authority.answers = [grantedToOwner()];
   let launches = 0;
   supervisions.onCreated = (supervision) => {
     launches += 1;
@@ -507,7 +511,7 @@ test('a cancellation after W4 writes the cancel file; evidence waits for the exi
 // A sealed execution, then a second one whose supervisor runs.
 async function supersededThenRunning() {
   value(journal.recordCommand(offer()));
-  authority.answers = [granted()];
+  authority.answers = [grantedToOwner()];
   let launches = 0;
   supervisions.onCreated = (supervision) => {
     launches += 1;
@@ -530,6 +534,7 @@ test('cancellation names a superseded execution: the running one goes on, and ev
   assert.equal(callCount(supervisions.byExecution.get(running), 'cancel'), 0);
   assert.equal(executions()[1]?.state, 'started');
   assert.equal(executions().length, 2);
+  assert.equal(authority.requests[1]?.reportsNotStartedFor?.executionId, superseded);
   assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
 });
 
