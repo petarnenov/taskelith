@@ -8,7 +8,7 @@ import { assignmentsOf, supersedeAssignment } from './g2-scenarios/invalidation-
 import { OrderedAuthority } from './g2-scenarios/ordered-authority.ts';
 import type { ScenarioInstallation } from './g2-scenarios/scenario-installation.ts';
 import { assertExitedOnce, grantsUnder, journaledUnder, reachable } from './g2-scenarios/scenario-reads.ts';
-import { recordScenario, withInstallation, withPartitions } from './g2-scenarios/scenario-run.ts';
+import { PARTITION_TIMEOUT_MILLISECONDS, recordScenario, withInstallation, withPartitions } from './g2-scenarios/scenario-run.ts';
 import { ScenarioWorker, type ScenarioWorkerOptions } from './g2-scenarios/scenario-worker.ts';
 import { Gate, waitFor } from './g2-scenarios/waiting.ts';
 
@@ -37,7 +37,7 @@ async function heldWorker(installation: ScenarioInstallation, name: string, rand
 describe('stale generations', () => {
   // Seed: A's stale request answered before or after B's. A is cut off and
   // superseded; B owns the next generation and runs the attempt once.
-  test('a stale ownership generation is rejected, and the current owner runs the attempt once', { timeout: 120_000 }, async () => {
+  test('a stale ownership generation is rejected, and the current owner runs the attempt once', { timeout: PARTITION_TIMEOUT_MILLISECONDS }, async () => {
     const random = new SeededRandom(SEED);
     const staleFirst = random.nextInt(2) === 1;
     await recordScenario({ scenario: 'stale-ownership-generation', seed: SEED }, () => withPartitions((toxiproxy) => withInstallation({ postgres: 'direct', toxiproxy }, async (installation) => {

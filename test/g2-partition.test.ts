@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { SeededRandom, integrationEndpoint, rerunHint, seedFromEnvironment, value } from '@taskelith/testing';
 import { OrderedAuthority } from './g2-scenarios/ordered-authority.ts';
-import { recordScenario, withInstallation, withPartitions } from './g2-scenarios/scenario-run.ts';
+import { PARTITION_TIMEOUT_MILLISECONDS, recordScenario, withInstallation, withPartitions } from './g2-scenarios/scenario-run.ts';
 import { REDELIVERY_BUDGET_MILLISECONDS, SCENARIO_LIMITS, ScenarioInstallation } from './g2-scenarios/scenario-installation.ts';
 import { ScenarioWorker } from './g2-scenarios/scenario-worker.ts';
 import { assertExitedOnce, journaledState, reachable, startedExecutions } from './g2-scenarios/scenario-reads.ts';
@@ -37,7 +37,7 @@ describe('worker to NATS', () => {
 
   // Seed: whether the task is submitted before or after the control plane
   // marks the partitioned worker lost; either way it runs once after heal.
-  test('a partition before the offer delays it, and the worker runs it once after the heal', { timeout: 90_000 }, async () => {
+  test('a partition before the offer delays it, and the worker runs it once after the heal', { timeout: PARTITION_TIMEOUT_MILLISECONDS }, async () => {
     const random = new SeededRandom(SEED);
     const submitAfterLostContact = random.nextInt(2) === 1;
     await recordScenario({ scenario: 'partition-worker-nats-before-offer', seed: SEED }, () => withPartitions((toxiproxy) => withInstallation({ postgres: 'direct', toxiproxy }, async (installation) => {
@@ -63,7 +63,7 @@ describe('worker to NATS', () => {
 
   // Expected to fail: after a reconnect, an answer to a superseded inventory
   // request counts as unsolicited and asks again, in a loop (verification.md).
-  test('the inventory exchange settles after a reconnect', { timeout: 90_000, todo: INVENTORY_LOOP }, async () => {
+  test('the inventory exchange settles after a reconnect', { timeout: PARTITION_TIMEOUT_MILLISECONDS, todo: INVENTORY_LOOP }, async () => {
     const random = new SeededRandom(SEED);
     await recordScenario({ scenario: 'partition-worker-nats-inventory-settles', seed: SEED }, () => withPartitions((toxiproxy) => withInstallation({ postgres: 'direct', toxiproxy }, async (installation) => {
       const nats = toxiproxy.proxy('nats');
@@ -88,7 +88,7 @@ describe('worker to NATS', () => {
 
   // Seed: whether the heal comes before or after the process exits; an exit
   // journaled offline reaches the control plane from the local outbox.
-  test('a partition while the process runs keeps its observations, published once after the heal', { timeout: 90_000 }, async () => {
+  test('a partition while the process runs keeps its observations, published once after the heal', { timeout: PARTITION_TIMEOUT_MILLISECONDS }, async () => {
     const random = new SeededRandom(SEED);
     const healAfterExit = random.nextInt(2) === 1;
     await recordScenario({ scenario: 'partition-worker-nats-while-running', seed: SEED }, () => withPartitions((toxiproxy) => withInstallation({ postgres: 'direct', toxiproxy }, async (installation) => {
@@ -117,7 +117,7 @@ describe('worker to NATS', () => {
 describe('control plane to PostgreSQL', () => {
   // Seed: how many unavailable answers the worker gets before the heal; it
   // repeats the same operation, which the healed authority then grants.
-  test('a partition during authorization is unavailable, and the same operation is granted after the heal', { timeout: 90_000 }, async () => {
+  test('a partition during authorization is unavailable, and the same operation is granted after the heal', { timeout: PARTITION_TIMEOUT_MILLISECONDS }, async () => {
     const random = new SeededRandom(SEED);
     const failedAnswers = 1 + random.nextInt(3);
     await recordScenario({ scenario: 'partition-control-plane-postgres-authorization', seed: SEED }, () => withPartitions((toxiproxy) => withInstallation({ postgres: 'proxied', toxiproxy }, async (installation) => {
@@ -150,7 +150,7 @@ describe('control plane to PostgreSQL', () => {
 
   // Seed: whether the heal comes before or after the process exits; the
   // unapplied observations are redelivered and applied once.
-  test('a partition while the process runs delays its observations, applied once after the heal', { timeout: 90_000 }, async () => {
+  test('a partition while the process runs delays its observations, applied once after the heal', { timeout: PARTITION_TIMEOUT_MILLISECONDS }, async () => {
     const random = new SeededRandom(SEED);
     const healAfterExit = random.nextInt(2) === 1;
     await recordScenario({ scenario: 'partition-control-plane-postgres-while-running', seed: SEED }, () => withPartitions((toxiproxy) => withInstallation({ postgres: 'proxied', toxiproxy }, async (installation) => {
@@ -179,7 +179,7 @@ describe('control plane to PostgreSQL', () => {
 
   // Seed: the redrive order. Past the redelivery budget both observations
   // are quarantined; the reconnect's inventory or the redrive ends the task.
-  test('a partition beyond the redelivery budget quarantines the observations, and the task ends once', { timeout: 90_000 }, async () => {
+  test('a partition beyond the redelivery budget quarantines the observations, and the task ends once', { timeout: PARTITION_TIMEOUT_MILLISECONDS }, async () => {
     const random = new SeededRandom(SEED);
     const exitFirst = random.nextInt(2) === 1;
     await recordScenario({ scenario: 'partition-control-plane-postgres-beyond-redelivery', seed: SEED }, () => withPartitions((toxiproxy) => withInstallation({ postgres: 'proxied', toxiproxy }, async (installation) => {

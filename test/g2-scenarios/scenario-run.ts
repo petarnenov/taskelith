@@ -41,11 +41,15 @@ export async function withInstallation<T>(options: InstallationOptions, body: (i
   }
 }
 
+// A partition scenario waits for the Toxiproxy lock within its timeout.
+const PARTITION_LOCK_MILLISECONDS = 240_000;
+export const PARTITION_TIMEOUT_MILLISECONDS = PARTITION_LOCK_MILLISECONDS + 90_000;
+
 // Holds the Toxiproxy of the services for one scenario: other test files
 // partition it too, so each partition waits its turn.
 export async function withPartitions<T>(body: (toxiproxy: Toxiproxy) => Promise<T>): Promise<T> {
   const url = integrationEndpoint('TASKELITH_TOXIPROXY_URL');
-  const release = await acquireProcessLock(`toxiproxy-${url.port}`);
+  const release = await acquireProcessLock(`toxiproxy-${url.port}`, PARTITION_LOCK_MILLISECONDS);
   const toxiproxy = new Toxiproxy(url);
   try {
     return await body(toxiproxy);

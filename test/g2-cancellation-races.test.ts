@@ -18,7 +18,7 @@ import {
   reachable,
   startedExecutions,
 } from './g2-scenarios/scenario-reads.ts';
-import { recordScenario, withInstallation, withPartitions } from './g2-scenarios/scenario-run.ts';
+import { PARTITION_TIMEOUT_MILLISECONDS, recordScenario, withInstallation, withPartitions } from './g2-scenarios/scenario-run.ts';
 import { ScenarioWorker, type ScenarioWorkerOptions } from './g2-scenarios/scenario-worker.ts';
 import { Gate, waitFor } from './g2-scenarios/waiting.ts';
 
@@ -73,7 +73,7 @@ async function assertCancelled(installation: ScenarioInstallation, worker: Scena
 describe('cancellation races', () => {
   // Seed: whether the heal comes before or after the control plane marks
   // the worker lost. The offer and the end wait in the worker's stream.
-  test('a. a cancel committed before the worker receives the offer launches nothing', { timeout: 90_000 }, async () => {
+  test('a. a cancel committed before the worker receives the offer launches nothing', { timeout: PARTITION_TIMEOUT_MILLISECONDS }, async () => {
     const random = new SeededRandom(SEED);
     const healAfterLostContact = random.nextInt(2) === 1;
     await recordScenario({ scenario: 'cancel-before-offer', seed: SEED }, () => withPartitions((toxiproxy) => withInstallation({ postgres: 'direct', toxiproxy }, async (installation) => {
