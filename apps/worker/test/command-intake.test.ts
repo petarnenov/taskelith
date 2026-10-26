@@ -382,6 +382,65 @@ test('rejected-launch-frees-slot: a final rejection before a grant frees the slo
   assert.deepEqual(acceptedAssignments(), ['assignment-1', 'assignment-2']);
 });
 
+function rejectLaunchAsNotActive(operationId = id('OperationId', 'operation-1')): void {
+  const rejection = launchRejection('assignment-not-active', 'the assignment ended');
+  value(root.journal.recordLaunchRejection(operationId, rejection));
+}
+
+async function reportedAssignmentStates(): Promise<unknown[]> {
+  const request = {
+    messageType: 'worker.inventory.requested', schemaVersion: 1, protocolVersion: 1, issuedAt: T0, workerId: WORKER, requestId: 'request-1',
+  };
+  value(await deliver(request));
+  const [part] = broker.bodies().filter((body) => body.messageType === 'worker.inventory.reported');
+  return (part?.assignments as { state: string }[]).map(({ state }) => state);
+}
+
+// Capacity reservation section 8: the rejection ends the assignment locally.
+test('a launch rejected with assignment-not-active ends its assignment', async () => {
+  intake = newIntake({ ...CAPACITY, slots: 1 });
+  value(await deliver(offer(1)));
+  beginLaunch();
+  rejectLaunchAsNotActive();
+  value(await deliver(offer(2)));
+  assert.deepEqual(acceptedAssignments(), ['assignment-1', 'assignment-2']);
+  assert.equal(value(root.journal.snapshot()).intents[0]?.ended, true);
+  assert.deepEqual(await reportedAssignmentStates(), ['ended', 'accepted']);
+});
+
+// Design D4: an execution authorized before the rejection keeps its slot.
+test('an assignment ended by a rejection keeps its slot until its grant is sealed', async () => {
+  intake = newIntake({ ...CAPACITY, slots: 1 });
+  value(await deliver(offer(1)));
+  const request = beginLaunch();
+  value(root.journal.recordGrant(grantFor(request)));
+  const operationId = id('OperationId', 'operation-2');
+  value(root.journal.beginAuthorization({ ...request, operationId, reportsNotStarted: true }));
+  rejectLaunchAsNotActive(operationId);
+  value(await deliver(offer(2)));
+  assert.deepEqual(acceptedAssignments(), ['assignment-1']);
+  const snapshot = value(root.journal.snapshot());
+  assert.equal(snapshot.intents[0]?.ended, true);
+  assert.deepEqual(planJournalRecovery(snapshot), [{ kind: 'seal-execution', executionId: request.executionId }]);
+  value(root.journal.recordNotStarted(request.executionId));
+  value(await deliver(offer(3)));
+  assert.deepEqual(acceptedAssignments(), ['assignment-1', 'assignment-3']);
+});
+
+test('a late end of an assignment ended locally is journaled once', async () => {
+  value(await deliver(offer(1)));
+  beginLaunch();
+  rejectLaunchAsNotActive();
+  assert.equal(value(root.journal.snapshot()).intents[0]?.ended, true);
+  const before = value(root.journal.backlog());
+  assert.deepEqual(value(await deliver(end(1))), { kind: 'recorded' });
+  assert.deepEqual(value(await deliver(end(1))), { kind: 'duplicate' });
+  assert.deepEqual(value(root.journal.backlog()), before);
+  const snapshot = value(root.journal.snapshot());
+  assert.deepEqual(snapshot.intents.map((intent) => intent.ended), [true]);
+  assert.deepEqual(planJournalRecovery(snapshot), []);
+});
+
 const launchProgressions: Record<string, (request: LaunchRequest) => void> = {
   pending: () => undefined,
   authorized: (request) => value(root.journal.recordGrant(grantFor(request))),
