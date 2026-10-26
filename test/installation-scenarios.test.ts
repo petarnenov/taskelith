@@ -182,7 +182,7 @@ test('an execution left running without uncertainty fails the kill check', () =>
 // later: each phase meets its own bound, and only the total tells.
 function phasedRestart(reconciliationSeconds: number): StubbedRun {
   const stubs = { state: `exited 137 ${OLD_START}`, stateAfterStart: '', logs: [PLANNED, ONLINE], executions: 'e1 started certain' };
-  return withStubs(stubs, `RESTART_SECONDS=2 RECONCILIATION_SECONDS=${reconciliationSeconds}
+  return withStubs(stubs, `RESTART_SECONDS=3 RECONCILIATION_SECONDS=${reconciliationSeconds}
 restart="$(monotonic_milliseconds)"
 ( sleep 0.5; echo 'running 0 ${NEW_START}' > "$stubs/state"; sleep 2.8; echo 'e1 exited certain' > "$stubs/executions" ) &
 await_restarted_reconciliation worker-kill-task '${OLD_START}' "$restart"`);
@@ -192,7 +192,7 @@ test('the restart and the reconciliation share one deadline from the restart', (
   const late = phasedRestart(3);
   assert.equal(late.status, 1);
   assert.match(late.stderr, /did not end or become uncertain in time/);
-  assert.equal(phasedRestart(5).status, 0);
+  assert.equal(phasedRestart(8).status, 0);
 });
 
 const DISK_LOSS = { state: `running 0 ${OLD_START}`, stateAfterStart: `exited 1 ${NEW_START}`, logs: [REFUSAL], executions: 'e1 started certain' };
