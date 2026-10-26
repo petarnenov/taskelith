@@ -14,4 +14,6 @@ Since 2026-10-26 (owner rule), develop each task's worktree work in a subagent t
 
 If a review attempt does not run to a report for any reason, do not use that reviewer for any task for 30 minutes. Propose the next reviewer in the rotation that is not paused and meets the task's review requirements (a worker proposes it to the coordinator, who assigns it; a coordinator that develops the task itself chooses it and records why), as `docs/governance.md` "Unavailable reviewer" sets out. Reviewer invocations, one per reviewer (a harness may have several reviewers, named by their models), and current pauses are in `docs/agent-task-protocol.md`.
 
+Record every review finding as one line of the change's `findings.jsonl` after each pass that runs to a report (an empty file when there are none), and check at the archive that it exists and `npm run findings -- validate` passes; as coordinator, paste the output of `npm run findings -- checklist --capability <a,b> --files <globs>` into every brief. `docs/agent-task-protocol.md` "Review findings record" has the details.
+
 When your context approaches 150,000 tokens, record what a reset would lose, tell the owner, and recommend `/compact` or `/clear` (only `/compact` in the middle of a task); a worker also tells the coordinator. `docs/agent-task-protocol.md` "Context size" has the details.
