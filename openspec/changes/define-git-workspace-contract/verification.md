@@ -9,8 +9,8 @@
 
 ## Revision
 
-- Implementation commit: `b51cd00`, on branch `define-git-workspace-contract`, created from `origin/dev` at `d22d727`.
-- Records commit: the commit that adds this file.
+- Implementation commit: `b51cd00`, on branch `define-git-workspace-contract`, created from `origin/dev` at `d22d727`; first records commit `6f8861e`.
+- Fixes after review pass 1: `652854e`; this record is updated in the commit that follows it.
 
 ## Environment
 
@@ -36,12 +36,28 @@ The task was developed by an implementation subagent briefed by the worker sessi
 | --- | --- | --- |
 | `b51cd00` (tree before commit) | `make verify` | Passed: 1539 tests, 0 failed; coverage over all files 99.25% lines, 91.42% branches, 98.76% functions (the workspace module: domain files 100%; `workspace-conformance.js` 100% lines and functions, 61.40% branches, from its early returns after a failed step); 66 OpenSpec items valid; comment check, contract compatibility, dependency inventory, archive dry run, and package verification passed |
 | `b51cd00` | `npm run openspec -- validate define-git-workspace-contract --strict` | `Change 'define-git-workspace-contract' is valid` |
+| `652854e` (fixes after pass 1, tree before commit) | `make verify`; `npm run openspec -- validate define-git-workspace-contract --strict` | Passed: 1545 tests, 0 failed; coverage over all files 99.24% lines, 91.40% branches, 98.77% functions (`workspace-conformance.js` 100% lines and functions, 65.38% branches); 66 OpenSpec items valid; comment check, boundary checks, archive dry run, and package verification passed; change valid |
 
 The first `make verify` run failed only on the stale dependency inventory after `npm install` linked the new package; `make dependency-inventory` regenerated it, and the second run passed.
 
 ## Review
 
-Pending: the independent review by Codex (`gpt-6.1-sol`, medium effort, read-only), assigned by the coordinator. The worker session records each pass here: invocation, model confirmation, session ID, snapshot before and after, findings, and resolutions.
+Reviewer for all passes: Codex CLI v0.164.0, model `gpt-6.1-sol`, reasoning effort medium, read-only sandbox, assigned by the coordinator. Invocation from the worktree: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, with the prompt file kept outside the worktree.
+
+### Pass 1
+
+- Model confirmation: `gpt-6.1-sol` with reasoning effort medium, as the coordinator reported from the Codex run. Session ID `01a17787-90af-7690-beeb-12f7bcd2ab06`.
+- Reviewed revision: `origin/dev...6f8861e`.
+- Snapshot before and after: `bfa1a136e8302933357a24638d3ca00dd4ad95282d1c59099c2f30638106f177`, unchanged.
+- Findings: 0 Critical, 0 High, 6 Medium, 1 Low.
+  - M1 an `at-head` prepare did not check that the tree is the commit's tree: contract sections 3 and 9 and the spec refuse it with `invalid` and the new reason `head-mismatch`, checked after the sources and before `conflict`; the double compares the trees; the suite checks the refusal, its reason, and that nothing is left, and a defective variant that accepts the mismatch is reported.
+  - M2 an unsafe task identifier was accepted for an `at-head` target: names are checked for every target before the credential; the suite prepares an `at-head` workspace for `../unsafe` with a foreign credential and expects `invalid` with `unsafe-name`; a defective variant that checks the task name only for a task branch is reported.
+  - M3 the snapshot case admitted commit-dependent bytes and lost metadata: the fixture now gives the base tree and decodes a snapshot into tree entries with Git modes and link targets (`TreeEntry`), and gains helpers for executables and links; the suite compares the whole tree, and compares the bytes before and after an empty commit as well as across two workspaces; contract section 10 and the spec name modes, link targets, and independence from the commit; defective variants that put the commit into the snapshot and that lose modes and link targets are reported.
+  - M4 the suite did not prove a refusal before remote access: the fixture counts the remote calls the service sees (`remoteCalls`), and every scope refusal, including a push with a foreign credential that has `write-code` on another repository, must leave the count unchanged; contract section 7 and the spec say so; a defective variant that calls the remote before its scope check is reported.
+  - M5 sweep safety against symbolic links was unchecked: an interrupted prepare now holds a link to the journal directory, the interrupted removal holds a link to the identity, and a leftover staging entry is itself a link to `worker/executions/`; the double's control records cover every record kind of worker journal contract section 2, including the journal fault record and the logs; after the sweep the suite checks every control record and the ready workspaces; contract section 11 and the spec cover a leftover that is itself a link; a defective variant whose sweep follows links is reported.
+  - M6 the caller had no port way to learn the remote head that a push expects: `TaskBranchPublisher.readRemoteHead` returns the remote task branch head or null while the branch is absent, needs `read-code`, and refuses an `at-head` workspace; contract section 8, the spec, and design decision 9 explain the choice of a credential-bound read over a field captured at prepare; the push case now covers a first push, a continuing attempt, and the recovery after `remote-moved` through the port only.
+  - L1 contradictory wording on a failed prepare: contract section 9, the spec, and the port comment now say that a refusal creates no new workspace and leaves an existing one unchanged, and the suite checks that a second prepare keeps the first workspace's untracked file.
+- Resolution commit: `652854e`.
 
 ## Limitations
 
@@ -51,6 +67,6 @@ Pending: the independent review by Codex (`gpt-6.1-sol`, medium effort, read-onl
 
 ## Remaining gates
 
-- Independent review (Codex, `gpt-6.1-sol`, medium effort, read-only), with fixes and a final `make verify`.
+- Independent review pass 2 of the pass 1 resolutions (Codex, `gpt-6.1-sol`, medium effort, read-only), with fixes and a final `make verify`.
 - Integration into `dev` by the coordinator.
 - Archive of the change after the merge.
