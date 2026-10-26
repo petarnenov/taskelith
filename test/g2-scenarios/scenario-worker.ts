@@ -39,6 +39,8 @@ export interface ScenarioWorkerOptions {
   readonly authority?: (client: LaunchAuthorityClient) => LaunchAuthorityClient;
   // Free space of the data root's volume; ample unless a scenario says.
   readonly freeBytes?: () => number;
+  // Awaited before each supervisor starts, after W4.
+  readonly beforeSupervisorStart?: () => Promise<void>;
   // Offered slots; two unless a scenario says.
   readonly slots?: number;
   // Wraps the broker connection, for a test-side crash point.
@@ -120,7 +122,7 @@ export class ScenarioWorker {
       sleep: scaledSleep, draw, logger,
       launching: {
         authority: (credential) => wrap(new HttpLaunchAuthorityClient({ ...endpoint, credential })),
-        host: (_settings, executions) => ok(processGroupHost(executions, scriptedProcess(this.#options.runMilliseconds, this.dataRoot))),
+        host: (_settings, executions) => ok(processGroupHost(executions, scriptedProcess(this.#options.runMilliseconds, this.dataRoot), this.#options.beforeSupervisorStart)),
         sleep: scaledSleep, draw, newId: () => ids.next(), pollMilliseconds: LAUNCH_POLL_MILLISECONDS, logger,
         onFailure: (error) => logger.warn('scenario.launch.failed', { message: String((error as Error)?.message ?? error) }),
       },

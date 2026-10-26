@@ -45,11 +45,11 @@ export function processGroupPlatform(): Platform {
 
 // The launch host of a scenario worker: the real record and supervisor
 // modules, with a detached supervisor process on the process-group platform.
-export function processGroupHost(executions: string, command: Command): LaunchHost {
+export function processGroupHost(executions: string, command: Command, beforeStart: () => Promise<void> = async () => undefined): LaunchHost {
   const platform = processGroupPlatform();
   return {
     clock: platform.clock,
-    supervision: (executionId) => new ProcessGroupSupervision(join(executions, executionId), executionId, { platform, command }),
+    supervision: (executionId) => new ProcessGroupSupervision(join(executions, executionId), executionId, { platform, command, beforeStart }),
     records: fileRecordListing(executions),
   };
 }
@@ -57,6 +57,8 @@ export function processGroupHost(executions: string, command: Command): LaunchHo
 interface SupervisionSettings {
   readonly platform: Platform;
   readonly command: Command;
+  // Awaited before the supervisor starts, so a scenario can hold it.
+  readonly beforeStart: () => Promise<void>;
 }
 
 // The worker's side of one execution record, as the product's file
@@ -84,7 +86,8 @@ class ProcessGroupSupervision implements ExecutionSupervision {
     });
   }
 
-  start(): Promise<Result<void>> {
+  async start(): Promise<Result<void>> {
+    await this.#settings.beforeStart();
     return startSupervisor(this.#dependencies);
   }
 

@@ -145,18 +145,29 @@ describe('cancellation races', () => {
     const random = new SeededRandom(SEED);
     const afterStart = random.nextInt(2) === 1;
     await recordScenario({ scenario: 'cancel-after-w4', seed: SEED }, () => withInstallation({ postgres: 'direct' }, async (installation) => {
-      const worker = await startedWorker(installation, 'cancel-after-w4', random, { runMilliseconds: LONG_RUN_MILLISECONDS });
+      // Before the start, the supervisor waits until the cancel is journaled.
+      const supervisorHeld = new Gate();
+      if (afterStart) supervisorHeld.open();
+      const worker = await startedWorker(installation, 'cancel-after-w4', random, {
+        runMilliseconds: LONG_RUN_MILLISECONDS, beforeSupervisorStart: () => supervisorHeld.opened,
+      });
       try {
         await installation.submitTask('task-c');
         const cancelled = await firstAssignment(installation, 'task-c');
-        const reached = afterStart
-          ? () => journaledUnder(worker, cancelled.assignmentId).some(({ state }) => state === 'started')
-          : () => journaledUnder(worker, cancelled.assignmentId).some(({ recordWritten }) => recordWritten);
+        const latest = () => journaledUnder(worker, cancelled.assignmentId).at(-1);
+        const reached = afterStart ? () => latest()?.state === 'started' : () => latest()?.recordWritten === true;
         await waitFor(reached, 20_000, afterStart ? 'the start' : 'W4');
         await cancelAssignment(installation, cancelled.assignmentId);
+        const atCancel = latest()!;
+        assert.equal(atCancel.recordWritten, true, 'the cancel lands after W4');
+        const started = atCancel.state === 'started' || atCancel.state === 'exited';
+        assert.equal(started, afterStart, `the cancel lands ${afterStart ? 'after' : 'before'} the start: ${atCancel.state}`);
+        await waitFor(() => journalOf(worker).cancellations.length === 1, 20_000, 'the worker journals the cancellation');
+        supervisorHeld.open();
         const how = await assertCancelled(installation, worker, 'task-c');
-        return `cancelled after ${afterStart ? 'the start' : 'W4'}: ${how}`;
+        return `cancelled after ${afterStart ? 'the start' : 'W4, before the start'} (journal state ${atCancel.state ?? 'none'}): ${how}`;
       } finally {
+        supervisorHeld.open();
         await worker.stop();
       }
     }));
@@ -171,9 +182,12 @@ describe('cancellation races', () => {
       const relieved = new Gate();
       const authority = new OrderedAuthority();
       let worker: ScenarioWorker | undefined;
+      // Set while the worker runs, so the journal is read only then.
+      let running = false;
       // The disk floor is crossed once the offer is journaled (after W1).
-      const pressured = () => worker?.running !== undefined && journalOf(worker).intents.length > 0 && !relieved.isOpen;
+      const pressured = () => running && journalOf(worker!).intents.length > 0 && !relieved.isOpen;
       worker = await startedWorker(installation, 'cancel-pressure', random, { authority: authority.wrap, freeBytes: () => (pressured() ? 0 : 2 ** 50) });
+      running = true;
       try {
         await installation.submitTask('task-d');
         await waitFor(() => pressureChanges(worker!).length > 0, 20_000, 'admission pressure');
@@ -186,6 +200,7 @@ describe('cancellation races', () => {
         await assertNeverLaunched(installation, worker, 'task-d', cancelled);
         return `pressure relieved ${pressureMilliseconds} ms after the cancel; causes ${pressureChanges(worker).join(' then ')}`;
       } finally {
+        running = false;
         relieved.open();
         await worker.stop();
       }
@@ -272,7 +287,7 @@ describe('cancellation races', () => {
 
   // Expected to fail: the rejected execution of a cancelled assignment
   // still counts against the slots, so the worker refuses the re-placement.
-  test('b. a launch rejected after a cancel frees its worker slot', { timeout: 90_000, todo: SLOT_LEAK }, async () => {
+  test('a launch rejected after a cancel frees its worker slot (B3)', { timeout: 90_000, todo: SLOT_LEAK }, async () => {
     const random = new SeededRandom(SEED);
     await recordScenario({ scenario: 'rejected-launch-frees-slot', seed: SEED }, () => withInstallation({ postgres: 'direct' }, async (installation) => {
       const authority = new OrderedAuthority();
