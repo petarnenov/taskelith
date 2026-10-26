@@ -32,18 +32,23 @@ macOS x86_64, Node v24.22.1 (`.nvmrc`), Docker with the Compose services of `mak
 
 | Check | Result |
 | --- | --- |
-| `make verify` | passed |
+| `make verify` at `e9a5341` | passed |
 | Tests | 1637 tests, 0 failures |
-| Coverage (all) | 99.31% lines, 91.77% branches, 98.96% functions |
+| Coverage (all) | 99.31% lines, 91.76% branches, 98.96% functions |
 | Coverage (changed worker files) | `worker-contact.js`, `heartbeat-publisher.js` 100/100/100; `broker-session.js` 100/96.67/100; `inventory-report.js` 100/86.67/100; `worker-start.js` 99.14/90.00/96.55; `launch-orchestrator.js` 98.50/90.61/95.00; `settings.js` 100/100/100; `execution-supervision.js` 97.25/84.91/89.47; `command-intake.js` 99.23/87.04/100; `main.js` 90.91/82.93/85.00 (lines/branches/functions, %) |
 | `npm run openspec -- validate implement-worker-contact-and-offline --strict` | valid |
-| `npm run verify:comments` | passes |
+| `npm run verify:comments` | passes at `e9a5341`; at `7eaa72e` it reported one comment of three lines in `worker-contact.ts`, shortened in `e9a5341` |
 
 ## Independent review
 
-To be recorded by the coordinator.
+Reviewer: assigned by the coordinator, Claude Code Fable (`claude-fable-5-1`, effort medium, plan mode, editing tools disallowed).
+
+### Unavailable reviewer
+
+- On 2026-10-26 from 13:03 to 13:11 the invocation `claude -p "$(cat <prompt-file>)" --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json`, run from the worktree at `7eaa72e`, exited 1 with `Error: No messages returned from query`, no JSON output, no session, and no model usage. Snapshot before and after: `f66567b8a65c1a10881ba12ccf1c86463f77f29e1649a91a993a616f262305e5`, unchanged. The attempt produced no pass.
+- Under "Unavailable reviewer" (`docs/governance.md`) the worker proposed the next reviewer in the rotation that is not paused, and the coordinator assigned Codex CLI (`gpt-6.1-sol`, reasoning effort medium, read-only sandbox) as the replacement. Its first pass is pass 1.
 
 ## Limitations and remaining gates
 
-- Open questions OQ1 (an offline policy for running executions) and OQ2 (requiring `TASKELITH_CONTAINMENT_PARENT` on every Linux worker) are in the design.
+- The coordinator answered OQ1 and OQ2 on 2026-10-26 (`design.md`): a maximum offline duration for running executions stays open for a later stage, and item 23b must make the Linux worker image always set `TASKELITH_CONTAINMENT_PARENT`.
 - Remaining gates: independent review, integration into `dev`, and archive.
