@@ -20,6 +20,7 @@ import {
   SLOT_WAITING_REASON,
   SlotSecret,
   parseAccountSlot,
+  parseSlotRequest,
   type AccountSlot,
   type AccountSlots,
   type HarnessPluginId,
@@ -27,6 +28,7 @@ import {
   type ProjectId,
   type ProviderCredentialId,
   type SlotCredentials,
+  type SlotRequest,
 } from '@taskelith/scheduling';
 
 // The values the account pool contract fixes; a change here is a contract
@@ -80,8 +82,8 @@ assert.ok(parsedWindowEnd.ok);
 const WINDOW_END = parsedWindowEnd.value;
 const VALID_SLOT: AccountSlot = {
   id: identifier('ProviderCredentialId', 'slot-1') as ProviderCredentialId,
-  harness: identifier('HarnessPluginId', 'harness-1') as HarnessPluginId,
-  mechanism: identifier('SubscriptionMechanismId', 'mechanism-1') as SubscriptionMechanismId,
+  harnessId: identifier('HarnessPluginId', 'harness-1') as HarnessPluginId,
+  mechanismId: identifier('SubscriptionMechanismId', 'mechanism-1') as SubscriptionMechanismId,
   allowedProjects: [PROJECT],
   concurrencyLimit: DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY,
   state: 'active',
@@ -89,11 +91,20 @@ const VALID_SLOT: AccountSlot = {
   revision: FIRST_SLOT_REVISION,
 };
 
+const REPORTING_SLOT: AccountSlot = {
+  ...VALID_SLOT,
+  cooldown: { until: WINDOW_END, source: 'default' },
+  usage: { fraction: 0.5, windowEndsAt: WINDOW_END },
+};
+
 test('a valid slot parses into a frozen record', () => {
-  const parsed = parseAccountSlot(VALID_SLOT);
-  assert.ok(parsed.ok);
-  assert.deepEqual(parsed.value, VALID_SLOT);
-  assert.ok(Object.isFrozen(parsed.value) && Object.isFrozen(parsed.value.allowedProjects));
+  for (const slot of [VALID_SLOT, REPORTING_SLOT]) {
+    const parsed = parseAccountSlot(slot);
+    assert.ok(parsed.ok);
+    assert.deepEqual(parsed.value, slot);
+    const { allowedProjects, cooldown, usage } = parsed.value;
+    assert.ok([parsed.value, allowedProjects, cooldown, usage].every((part) => Object.isFrozen(part)));
+  }
 });
 
 const INVALID_SLOTS: readonly [string, Partial<AccountSlot>][] = [
@@ -113,6 +124,45 @@ for (const [name, overrides] of INVALID_SLOTS) {
   });
 }
 
+const HARNESS = VALID_SLOT.harnessId;
+const OTHER_HARNESS = identifier('HarnessPluginId', 'harness-2') as HarnessPluginId;
+const THIRD_HARNESS = identifier('HarnessPluginId', 'harness-3') as HarnessPluginId;
+const LIMITED = Object.freeze({ harnessId: HARNESS, slotId: VALID_SLOT.id });
+
+const afterLimit = (alternatives: readonly HarnessPluginId[]): SlotRequest => ({
+  projectId: PROJECT,
+  kind: 'after-limit',
+  limited: LIMITED,
+  alternatives,
+});
+
+const VALID_REQUESTS: readonly [string, SlotRequest][] = [
+  ['a new session', { projectId: PROJECT, kind: 'new-session', harnessId: HARNESS, whenNoSlot: 'wait' }],
+  ['a resumed session', { projectId: PROJECT, kind: 'resumed-session', pinned: LIMITED }],
+  ['an after-limit request', afterLimit([OTHER_HARNESS, THIRD_HARNESS])],
+  ['an after-limit request without alternatives', afterLimit([])],
+];
+
+for (const [name, request] of VALID_REQUESTS) {
+  test(`${name} parses unchanged`, () => {
+    const parsed = parseSlotRequest(request);
+    assert.ok(parsed.ok);
+    assert.deepEqual(parsed.value, request);
+  });
+}
+
+const INVALID_REQUESTS: readonly [string, readonly HarnessPluginId[]][] = [
+  ['the limited harness', [OTHER_HARNESS, HARNESS]],
+  ['a harness twice', [OTHER_HARNESS, THIRD_HARNESS, OTHER_HARNESS]],
+];
+
+for (const [name, alternatives] of INVALID_REQUESTS) {
+  test(`an after-limit request with ${name} among its alternatives is invalid`, () => {
+    const parsed = parseSlotRequest(afterLimit(alternatives));
+    assert.equal(!parsed.ok && parsed.error.code, 'invalid');
+  });
+}
+
 test('an empty slot secret is invalid', () => {
   const made = SlotSecret.of('');
   assert.equal(made.ok, false);
@@ -126,8 +176,7 @@ class InMemoryAccountSlots implements AccountSlots {
   async add(slot: AccountSlot): Promise<Result<void>> {
     if (this.#slots.has(slot.id)) return err(failure('conflict', 'the slot exists'));
     if (slot.revision !== FIRST_SLOT_REVISION) return err(failure('invalid', 'a new slot starts at the first revision'));
-    this.#slots.set(slot.id, slot);
-    return ok(undefined);
+    return this.write(slot);
   }
 
   async get(id: ProviderCredentialId): Promise<Result<AccountSlot>> {
@@ -135,20 +184,24 @@ class InMemoryAccountSlots implements AccountSlots {
     return slot === undefined ? err(failure('not-found', 'no such slot')) : ok(slot);
   }
 
-  async pool(projectId: ProjectId, harness: HarnessPluginId): Promise<readonly AccountSlot[]> {
+  async pool(projectId: ProjectId, harnessId: HarnessPluginId): Promise<readonly AccountSlot[]> {
     return [...this.#slots.values()]
-      .filter((slot) => slot.state === 'active' && slot.harness === harness && slot.allowedProjects.includes(projectId))
+      .filter((slot) => slot.state === 'active' && slot.harnessId === harnessId && slot.allowedProjects.includes(projectId))
       .sort((left, right) => (left.id < right.id ? -1 : 1));
   }
 
   async replace(slot: AccountSlot, expectedRevision: number): Promise<Result<void>> {
     const stored = this.#slots.get(slot.id);
     if (stored === undefined) return err(failure('not-found', 'no such slot'));
-    if (slot.harness !== stored.harness || (stored.state === 'removed' && slot.state !== 'removed')) {
+    if (slot.harnessId !== stored.harnessId || (stored.state === 'removed' && slot.state !== 'removed')) {
       return err(failure('invalid', 'a slot keeps its harness and its tombstone'));
     }
     if (slot.revision !== expectedRevision + 1) return err(failure('invalid', 'a change moves the revision by one'));
     if (stored.revision !== expectedRevision) return err(failure('conflict', 'the slot revision moved'));
+    return this.write(slot);
+  }
+
+  protected write(slot: AccountSlot): Result<void> {
     this.#slots.set(slot.id, slot);
     return ok(undefined);
   }
@@ -184,9 +237,10 @@ for (const conformance of SLOT_CREDENTIALS_CONFORMANCE) {
 }
 
 // Each suite must fail an adapter that breaks its rules, or it proves nothing.
+// This one overwrites without a revision, harness, or tombstone check.
 class LenientAccountSlots extends InMemoryAccountSlots {
   override async replace(slot: AccountSlot): Promise<Result<void>> {
-    return super.add({ ...slot, revision: FIRST_SLOT_REVISION });
+    return this.write(slot);
   }
 }
 

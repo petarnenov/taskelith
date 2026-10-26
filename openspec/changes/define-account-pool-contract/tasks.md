@@ -11,6 +11,6 @@
 
 ## 3. Verification and review
 
-- [ ] 3.1 Run `make verify`
-- [ ] 3.2 Independent review by the assigned reviewer (Claude Code, `claude-fable-5-1`, medium effort)
-- [ ] 3.3 Record the evidence in `verification.md`
+- [x] 3.1 Run `make verify`
+- [x] 3.2 Independent review by the assigned reviewer (Claude Code, `claude-fable-5-1`, medium effort)
+- [x] 3.3 Record the evidence in `verification.md`

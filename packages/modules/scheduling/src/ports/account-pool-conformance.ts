@@ -31,8 +31,8 @@ const UNKNOWN_SLOT = id('ProviderCredentialId', 'slot-unknown') as ProviderCrede
 function slot(text: string, overrides: Partial<AccountSlot> = {}): AccountSlot {
   return Object.freeze({
     id: id('ProviderCredentialId', text) as ProviderCredentialId,
-    harness: HARNESS,
-    mechanism: MECHANISM,
+    harnessId: HARNESS,
+    mechanismId: MECHANISM,
     allowedProjects: Object.freeze([PROJECT]),
     concurrencyLimit: DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY,
     state: 'active' as const,
@@ -51,7 +51,7 @@ const POOL_FIXTURES: readonly AccountSlot[] = Object.freeze([
   slot('slot-a-plain'),
   slot('slot-b-cooling', { health: 'unhealthy', cooldown: { until: LATER, source: 'default' }, usage: { fraction: 0.5, windowEndsAt: LATER } }),
   slot('slot-d-other-project', { allowedProjects: Object.freeze([OTHER_PROJECT]) }),
-  slot('slot-e-other-harness', { harness: OTHER_HARNESS }),
+  slot('slot-e-other-harness', { harnessId: OTHER_HARNESS }),
   slot('slot-f-revoked', { state: 'revoked' }),
   slot('slot-g-removed', { state: 'removed' }),
   // Before `slot-a-plain` in code point order, after it in a locale order.
@@ -125,12 +125,16 @@ export const ACCOUNT_SLOTS_CONFORMANCE: readonly ConformanceCase<AccountSlots>[]
       const problems: string[] = [];
       const stored = slot('slot-a-plain');
       expectSuccess(problems, 'add', await slots.add(stored));
-      expectCode(problems, 'harness', await slots.replace(next(stored, { harness: OTHER_HARNESS }), stored.revision), 'invalid');
+      const moved = next(stored, { harnessId: OTHER_HARNESS });
+      expectCode(problems, 'harness', await slots.replace(moved, stored.revision), 'invalid');
       const revoked = next(stored, { state: 'revoked' });
       expectSuccess(problems, 'revoke', await slots.replace(revoked, stored.revision));
+      // Invalid is checked before conflict (contract section 6.1).
+      expectCode(problems, 'harness at a stale revision', await slots.replace(moved, stored.revision), 'invalid');
       const removed = next(revoked, { state: 'removed' });
       expectSuccess(problems, 'remove', await slots.replace(removed, revoked.revision));
       expectCode(problems, 'leave removed', await slots.replace(next(removed, { state: 'active' }), removed.revision), 'invalid');
+      expectCode(problems, 'removed to revoked', await slots.replace(next(removed, { state: 'revoked' }), removed.revision), 'invalid');
       expectRead(problems, 'tombstone', await slots.get(stored.id), removed);
       expectSame(problems, 'not in a pool', ids(await slots.pool(PROJECT, HARNESS)), []);
       return problems;

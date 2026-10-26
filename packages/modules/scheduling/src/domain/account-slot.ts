@@ -42,8 +42,8 @@ export interface SlotUsage {
 
 export interface AccountSlot {
   readonly id: ProviderCredentialId;
-  readonly harness: HarnessPluginId;
-  readonly mechanism: SubscriptionMechanismId;
+  readonly harnessId: HarnessPluginId;
+  readonly mechanismId: SubscriptionMechanismId;
   readonly allowedProjects: readonly ProjectId[];
   readonly concurrencyLimit: number;
   readonly state: SlotState;
@@ -59,7 +59,16 @@ export interface AccountSlot {
 export function parseAccountSlot(slot: AccountSlot): Result<AccountSlot> {
   const problem = recordProblem(slot);
   if (problem !== undefined) return err(failure('invalid', problem));
-  return ok(Object.freeze({ ...slot, allowedProjects: Object.freeze([...slot.allowedProjects]) }));
+  return ok(Object.freeze({ ...slot, ...frozenParts(slot) }));
+}
+
+function frozenParts(slot: AccountSlot): Partial<AccountSlot> {
+  const { allowedProjects, cooldown, usage } = slot;
+  return {
+    allowedProjects: Object.freeze([...allowedProjects]),
+    ...(cooldown === undefined ? {} : { cooldown: Object.freeze({ ...cooldown }) }),
+    ...(usage === undefined ? {} : { usage: Object.freeze({ ...usage }) }),
+  };
 }
 
 function recordProblem(slot: AccountSlot): string | undefined {

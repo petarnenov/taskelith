@@ -208,6 +208,7 @@ export {
   SLOT_REJECTING_REASONS,
   SLOT_REQUEST_KINDS,
   SLOT_WAITING_REASON,
+  parseSlotRequest,
   type HarnessSlot,
   type NoSlotPolicy,
   type SlotRejectingReason,

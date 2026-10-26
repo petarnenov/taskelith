@@ -30,8 +30,8 @@ This item adds the port types, the contract values, and a conformance suite for 
 | Field | Meaning |
 | --- | --- |
 | `id` | The slot's `ProviderCredentialId` |
-| `harness` | The harness plugin the slot belongs to; never changes |
-| `mechanism` | One subscription mechanism that the plugin's manifest declares. The control plane's add-slot command checks it against the manifest through the agent harness port (item 3) before `add`, and rejects a mechanism the plugin does not declare as a subscription, such as an API key, with `invalid`; `add` itself treats it as opaque |
+| `harnessId` | The harness plugin the slot belongs to; never changes |
+| `mechanismId` | One subscription mechanism that the plugin's manifest declares. The control plane's add-slot command checks it against the manifest through the agent harness port (item 3) before `add`, and rejects a mechanism the plugin does not declare as a subscription, such as an API key, with `invalid`; `add` itself treats it as opaque |
 | `allowedProjects` | The projects the slot may serve, at least one, without duplicates |
 | `concurrencyLimit` | The slot's provider credential concurrency (capacity reservation contract section 2), a positive integer, by default `DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY` (`4`) |
 | `state` | `active`, `revoked`, or `removed` (section 8) |
@@ -68,11 +68,11 @@ Selection runs inside the reservation transaction (capacity reservation contract
 
 | Kind | Fields | Used when |
 | --- | --- | --- |
-| `new-session` | project, harness, policy for no eligible slot | A session starts, including a new session of a task whose earlier session closed for a reason other than a limit |
-| `resumed-session` | project, harness, slot | A session continues, for example after a restart; the session's harness and slot are fixed (section 4.3) |
-| `after-limit` | project, the limited session's harness and slot, the other harnesses allowed for the task in the project's order of preference | A new session continues the work of a session whose slot reported a limit (section 4.4) |
+| `new-session` | project, `harnessId`, policy for no eligible slot | A session starts, including a new session of a task whose earlier session closed for a reason other than a limit |
+| `resumed-session` | project, the session's `harnessId` and `slotId` | A session continues, for example after a restart; the session's harness and slot are fixed (section 4.3) |
+| `after-limit` | project, the limited session's `harnessId` and `slotId`, the other harnesses allowed for the task in the project's order of preference | A new session continues the work of a session whose slot reported a limit (section 4.4) |
 
-Which harnesses a task may use, and in which order, comes from the project's defaults and the task (G3 item 11); the pool takes them as given. An `after-limit` request whose alternatives include the limited harness, or name a harness twice, is `invalid`. A `new-session` request also names the project's policy for no eligible slot: `wait` or `reject` (section 4.5).
+Which harnesses a task may use, and in which order, comes from the project's defaults and the task (G3 item 11); the pool takes them as given. Every request is built through `parseSlotRequest`, which rejects with `invalid` an `after-limit` request whose alternatives include the limited harness or name a harness twice. A request whose pinned or limited `harnessId` differs from the stored slot's `harnessId` is also `invalid`; `parseSlotRequest` cannot see the store, so the item 12 selection checks it against the stored slot inside the reservation transaction. A `new-session` request also names the project's policy for no eligible slot: `wait` or `reject` (section 4.5).
 
 ### 4.2 Least-loaded rule
 
@@ -96,7 +96,7 @@ When a session's slot reports a usage or rate limit, the slot enters cooldown (s
 2. If no other harness has an eligible slot, the limited slot itself is reserved when it is eligible again, that is, when its cooldown has ended.
 3. Otherwise the request waits with `provider-concurrency-exhausted`, and each later attempt repeats steps 1 to 3, so that the work runs on another harness as soon as one has an eligible slot, or on the limited slot once its cooldown ends.
 
-If the limited slot is revoked or removed while the request waits, step 2 no longer applies, and the request waits only for another harness. An `after-limit` request names no policy and never rejects, because ADR 0005 decision 4 makes the task wait.
+If the limited slot is revoked or removed while the request waits, step 2 no longer applies, and the request waits only for another harness. When no other harness has an eligible slot either, that wait has no end of its own: policy or an operator ends the request, which keeps ADR 0005 decision 4, because the pool still never switches to another slot of the limited harness. An `after-limit` request names no policy and never rejects, because ADR 0005 decision 4 makes the task wait.
 
 ### 4.5 No eligible slot
 
@@ -108,7 +108,7 @@ A selection returns one of: `reserved`, with the slot and its harness; `waiting`
 
 ## 5. Signals, health, and cooldown
 
-The agent harness port (item 3) defines the load, limit, and reset signals that a plugin declares and reports; this contract defines only their effect on a slot. The control plane applies each signal as a compare-and-set change of the slot it names.
+The agent harness port (item 3) defines the load, limit, and reset signals that a plugin declares and reports; this contract defines only their effect on a slot. The control plane applies each signal as a compare-and-set change of the slot it names. A signal whose compare-and-set loses with `conflict` rereads the slot and applies the signal again to the fresh record, so that the rules below, such as a later limit never shortening a cooldown, hold against the latest record rather than a stale one.
 
 - **Limit.** A usage or rate limit puts the slot in cooldown until the reported reset time when that time is after `now` (source `reported-reset`), or for the bounded default otherwise (source `default`). The default is an installation setting from `1` to `1440` minutes, provisionally `60` minutes. A later limit extends a cooldown and never shortens it.
 - **Reset.** A reset signal ends the slot's cooldown.
@@ -127,8 +127,8 @@ Read and written inside the reservation transaction; item 12 adds it to `Capacit
 | --- | --- |
 | `add(slot)` | Stores a new slot; `conflict` when the identifier exists, and `invalid` when the revision is not `1` |
 | `get(id)` | The slot in any state; `not-found` when it was never added |
-| `pool(projectId, harness)` | The project's pool for the harness (section 3.1), ordered by `id`; empty when there is none |
-| `replace(slot, expectedRevision)` | Replaces the slot when its stored revision equals `expectedRevision`. Checked in this order: `not-found` for an unknown slot, `invalid` for a new revision other than `expectedRevision` plus one, a harness change, or a slot leaving `removed`, then `conflict` when the stored revision differs |
+| `pool(projectId, harnessId)` | The project's pool for the harness (section 3.1), ordered by `id`; empty when there is none |
+| `replace(slot, expectedRevision)` | Replaces the slot when its stored revision equals `expectedRevision`. Checked in this order: `not-found` for an unknown slot, `invalid` for a new revision other than `expectedRevision` plus one, a `harnessId` change, or a slot leaving `removed`, then `conflict` when the stored revision differs |
 
 
 ### 6.2 `SlotCredentials`
@@ -147,6 +147,8 @@ A `SlotSecret` reveals its text only through its `reveal()` method. Its string a
 
 A credential is revealed only to deliver it to the run that reserved its slot. The delivery checks, in a capacity transaction, that the reservation is `held`, names the slot in `providerCredentials`, and belongs to the attempt that the worker launches, and that the slot is `active`; it reveals the credential only after that transaction commits, and sends it only with a valid launch authorization for that attempt ([launch authorization contract](launch-authorization.md)). The worker receives the credential with the launch of that attempt, inside the worker container on Linux, and the harness plugin injects it into its harness (item 18). The worker keeps no copy when the run ends, and no later run reuses it. A credential is never sent to another run, another worker, or another plugin.
 
+A revoke or removal serialized after the delivery transaction commits but before the credential is sent does not stop that delivery: the attempt already checked receives the credential. Section 8 covers this window, because revocation and removal drain or end the in-flight attempts on the slot, that attempt among them.
+
 ## 8. Revocation, reinstatement, and removal
 
 | Command | From | To | Effect |
@@ -155,13 +157,13 @@ A credential is revealed only to deliver it to the run that reserved its slot. T
 | Reinstate | `revoked` | `active` | The slot returns to its pools with its health, cooldown, and usage as they were |
 | Remove | `active` or `revoked` | `removed` | The credential is destroyed; the record stays as a tombstone for the reservations and audit records that name it |
 
-Revocation and removal release no held reservation by themselves. In-flight attempts on the slot are drained or ended by policy or an operator and release their reservations only by a justifying fact (capacity reservation contract section 6); their sessions are never moved to another slot or harness. Each command is audited with its actor and time.
+Revocation and removal release no held reservation by themselves. In-flight attempts on the slot, including one whose credential delivery committed before the command and is still being sent (section 7), are drained or ended by policy or an operator and release their reservations only by a justifying fact (capacity reservation contract section 6); their sessions are never moved to another slot or harness. Each command is audited with its actor and time.
 
 ## 9. Required tests
 
 This item adds, through `make`:
 
-- A test that pins the contract values of sections 3, 4, and 5, and a test of `parseAccountSlot`.
+- A test that pins the contract values of sections 3, 4, and 5, and tests of `parseAccountSlot` and `parseSlotRequest`.
 - Conformance suites for `AccountSlots` and `SlotCredentials`, run against an in-memory test double: duplicate adds, reads in every state, the pool filter by project, harness, and state, compare-and-set with one winner among concurrent writers, refused revision skips and harness and tombstone changes, credential replacement, idempotent destruction, and the redaction of a `SlotSecret` in its string, JSON, and inspection forms.
 
 The item 12 implementation adds:
