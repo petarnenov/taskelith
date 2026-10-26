@@ -55,12 +55,29 @@ OpenCode, `opencode-go/kimi-k3.1-pro` (`high`), read-only reviewer agent, sessio
 - **Same pass, found by the author:** the cancellation evidence and the removal of a confirmed record, which each pass derives again, reported a refusal for space as a failure and were tried again at every pass. `HeldWrites` now holds each back for the same backoff without delaying the pass. Tests: both held back within the backoff and committed after it.
 - **make verify:** passed at `c16b214` (1671 tests, 0 failures; coverage 99.23% lines, 91.74% branches, 98.71% functions).
 
+## Merge of `dev`
+
+`origin/dev` at `311c40d` (20d2 worker contact and offline mode, the supervisor test hardening, and the unrecorded-process scan) was merged in `afb12c0`, with no rebase. The merge invalidates the evidence above, so pass 3 reviews the merged state.
+
+- **Conflicts and resolutions:**
+  - `apps/worker/src/worker-start.ts`: dev's `startRuntime` with its `TaskGroup`, broker session, and contact is kept. This change adds the required `daemon` dependency, the `onSpaceRefused` root option, the sensor in `admissionPressure`, and `tasks.add(dependencies.daemon.watch(tasks.signal))` beside the pressure watch. A start that fails before its tasks still enables no histogram.
+  - `apps/worker/src/main.ts`: dev's `sleep`, `draw`, and `containmentScan` are kept beside `daemon: new ProcessDaemonOverhead()`.
+  - `apps/worker/src/launch-orchestrator.ts`: the `Launch` context takes both dev's `authority` and this change's `space`.
+  - `apps/worker/test/worker-start.test.ts`: dev's `ManualTimers` and `sleep`/`draw` are kept beside `FakeDaemon`.
+  - `apps/worker/test/command-intake.test.ts` (no textual conflict): the W1 space test passes dev's new required `journalFault`.
+- **New journal writes from dev:**
+  - `takeInventory` in the inventory report: a refusal for space sheds the logs through the hook, and the report is retried with the transport backoff (`5s` to `60s`, jitter), as section 7 asks. Nothing was changed.
+  - `recordUnrecordedProcess` in the first pass's scan: a refusal for space is reported as a failure and not retried until the next start, which scans again. It is not adapted here (see Limitations).
+- **Dependency inventory:** `npm run verify:dependencies` passes, so it was not regenerated.
+- **make verify:** passed at `afb12c0` (1730 tests: 1728 passed, 0 failed, 2 Linux-only scan tests skipped on macOS; coverage 99.27% lines, 91.89% branches, 98.88% functions).
+
 ## Review pass 3
 
-Pending.
+Pending; it reviews the merged state.
 
 ## Limitations and remaining gates
 
-- Remaining gates: the independent review, the coordinator's integration into `dev`, and the archive of this change.
+- An unrecorded-process fact (from `dev`) refused for space at start is reported and waits for the next start's scan.
+- Remaining gates: review pass 3 of the merged state, the coordinator's integration into `dev`, and the archive of this change.
 - Each start reports `unmeasurable-limit` until its first refresh after the event-loop histogram has a sample, within 5 seconds (design, Risks).
 - The worker's event-loop lag is not published as a metric.
