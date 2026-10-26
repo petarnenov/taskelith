@@ -28,14 +28,14 @@ A stop that waits a full idle poll because `abortableDelay` ignores an already a
 ## Checks
 
 - `make verify` at `54ebd74` (before review): passed in 179 s (1704 tests, 1688 pass, 0 fail, 0 cancelled, 16 skipped macOS-only tests; coverage 99.18% lines, 91.76% branches, 98.81% functions; archive dry run and package verification passed).
-- `make verify` at `REVISION` (after the pass 1 fixes): RESULT
+- `make verify` at `38ae9b0` (after the pass 1 fixes): passed in 160 s (1704 tests, 1688 pass, 0 fail, 0 cancelled, 16 skipped macOS-only tests; coverage 99.18% lines, 91.75% branches, 98.81% functions; archive dry run and package verification passed). The next commit only records this result.
 
 ## Review pass 1
 
 Codex CLI v0.163.0, invoked as `codex exec -m gpt-6-astra -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`; the header confirmed model `gpt-6-astra`, reasoning effort `medium`, sandbox `read-only`; session `01a17858-bda1-7ea0-bfee-51fac3930227`. Reviewed revision `94776e5`, run 15:14:02 to 15:15:29 local time on 2026-10-26. The snapshot was identical before and after the pass (`6f30795545665da686b700ea856c53dab1e65e26552d02d46b6f0b64fea1112c`). The reviewer confirmed that the fix is correct for all three callers (no busy loop, no missed final work) and that the test fails without the fix. It did not run `make verify`, and the sandbox blocked its re-check of the comment rule. Findings: 0 Critical, 0 High, 1 Medium, 1 Low.
 
-- **M1 (fixed, `FIXREV`):** `skip_specs: true` is allowed only for documentation-only work, and this change alters runtime behaviour. `skip_specs` was removed and a `nats-transport` delta modifies "Outbox publication": one sentence ("A stop SHALL end the publication loop without waiting for the next poll.") and the scenario "Stop during a publication round", with the existing text and scenarios copied unchanged. The validating consumer and quarantine loops, under "Validation and quarantine", get no new requirement; design D2 records that the same helper ends them promptly.
-- **L1 (fixed, `FIXREV`):** the evidence check was not recorded. It is now recorded in the author self-check as not applicable, with the reason.
+- **M1 (fixed, `38ae9b0`):** `skip_specs: true` is allowed only for documentation-only work, and this change alters runtime behaviour. `skip_specs` was removed and a `nats-transport` delta modifies "Outbox publication": one sentence ("A stop SHALL end the publication loop without waiting for the next poll.") and the scenario "Stop during a publication round", with the existing text and scenarios copied unchanged. The validating consumer and quarantine loops, under "Validation and quarantine", get no new requirement; design D2 records that the same helper ends them promptly.
+- **L1 (fixed, `38ae9b0`):** the evidence check was not recorded. It is now recorded in the author self-check as not applicable, with the reason.
 
 ## Review pass 2
 
