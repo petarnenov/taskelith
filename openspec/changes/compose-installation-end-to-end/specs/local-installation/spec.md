@@ -29,7 +29,7 @@ The control plane and NATS SHALL run as non-root users. The worker container SHA
 
 #### Scenario: Fresh image
 - **WHEN** the control-plane or worker image is built
-- **THEN** it runs as `taskelith`, its data root is empty, and an untracked file of the checkout is absent
+- **THEN** its default `USER` is `taskelith`, its data root is empty, and an untracked file of the checkout is absent
 
 #### Scenario: Worker privileges
 - **WHEN** the composition starts the worker

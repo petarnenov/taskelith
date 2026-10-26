@@ -26,6 +26,7 @@ G2 work item 23, second part (23b), `compose-installation-end-to-end`, assigned 
 | `make verify` after the pass 1 fixes | passed; 1719 tests, 1717 passed, 2 skipped, 0 failed; coverage 99.28 % lines, 91.88 % branches, 98.98 % functions |
 | `make installation-smoke` after the pass 2 fixes | passed on 2026-10-26: the probe was refused with `Permission denied`, the worker process had `CapInh` 0, `CapPrm`, `CapEff`, and `CapBnd` `00000000000000e0`, and `CapAmb` 0; the result was `ended`, `exited`, code 0, `startProven` true; the project was removed with its volumes and images |
 | `make verify` after the pass 2 fixes | passed; 1720 tests, 1718 passed, 2 skipped, 0 failed; coverage 99.27 % lines, 91.88 % branches, 98.98 % functions |
+| `make verify` after the M-A records and the pass 3 fixes | passed; 1720 tests, 1718 passed, 2 skipped, 0 failed; coverage 99.27 % lines, 91.86 % branches, 98.98 % functions |
 
 Excerpt of the smoke output:
 
@@ -81,8 +82,25 @@ Reviewer assigned by the coordinator: Claude Code, `claude-fable-5-1`, effort me
 
 Reviewer's note outside the diff: `checkLinuxContainment` is not wired in `apps/worker`; the coordinator tracks it under G3 item 27.
 
+### Pass 3
+
+- Invocation as in pass 1.
+- Confirmation: `claude-fable-5-1` in the JSON `modelUsage`; session `2129a691-596a-4d04-aff9-1c3f8af72412`.
+- Snapshot: `40c80261…` before and after; unchanged.
+- Reviewed: `311c40d...34b6f40`. The reviewer confirmed every pass 2 resolution, M-A included, after checking the away run record and the plan row.
+- Findings: Critical 0, High 0, Medium 0, Low 3. By the review process, Lows of the last pass are fixed without another review.
+
+| # | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| 1 | Low | The "Fresh image" scenario said the image "runs as `taskelith`". | Unreviewed fix (Low, governance): it now says that its default `USER` is `taskelith`. |
+| 2 | Low | The composition test checked only `no-new-privileges=true` in the worker's `security_opt`. | Unreviewed fix (Low, governance): it asserts the full sorted list, `apparmor=unconfined` and `no-new-privileges=true`. |
+| 3 | Low | `docs/local-installation.md` described Docker's init in two sentences. | Unreviewed fix (Low, governance): one sentence says that process 1 reaps executions whose supervisor ended first and keeps the container's seven capabilities for the container's lifetime. |
+
+Reviewer's note outside the diff: Node.js's spawn with a user and group ID might leave root's supplementary group 0 on an execution. See the limitations.
+
 ## Limitations and remaining gates
 
 - `SYS_ADMIN` and `apparmor=unconfined` let an execution create a user namespace and mount inside it (design risks, review finding M2); accepted by the owner's delegate as known until item 25, which decides whether a seccomp profile is needed.
 - The smoke and the bring-up check ran on Docker Desktop x86_64 only; Linux hosts with AppArmor or SELinux, and linux/arm64, are not yet observed. Item 25 qualifies the container settings.
-- Independent review and integration remain.
+- Supplementary groups of an execution (pass 3 note): the pinned Node.js 24.22.1 bundles libuv 1.52.1 (`process.versions.uv`). Its child setup on Unix calls `setgroups(0, NULL)` before `setgid` and `setuid` whenever a spawn sets a user or group ID, ignoring a failure. The worker holds `CAP_SETGID`, so an execution should start with no supplementary group, not root's group 0. This comes from libuv's source as known to the author, not from the bundled source or a running execution; item 25 or 27 checks the `Groups:` line of an execution's `/proc/<pid>/status`.
+- Remaining gates: integration by the coordinator and the archive.

@@ -15,4 +15,4 @@
 - [x] 3.1 Tests of the entrypoint, the smoke client, the smoke workflow, and the worker service's settings and image environment
 - [x] 3.2 Update `docs/local-installation.md`
 - [x] 3.3 Run `make installation-smoke`, `make verify-installation`, and `make verify`
-- [ ] 3.4 Independent review and `verification.md`
+- [x] 3.4 Independent review and `verification.md`
