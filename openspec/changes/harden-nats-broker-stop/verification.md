@@ -26,7 +26,7 @@ A stop that waits a full idle poll because `abortableDelay` ignores an already a
 
 ## Checks
 
-- `make verify` at `REVISION`: RESULT
+- `make verify` at `54ebd74`: passed in 179 s (1704 tests, 1688 pass, 0 fail, 0 cancelled, 16 skipped macOS-only tests; coverage 99.18% lines, 91.76% branches, 98.81% functions; archive dry run and package verification passed). The next commit only fills in this line.
 
 ## Review passes
 
