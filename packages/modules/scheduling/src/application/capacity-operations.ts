@@ -7,6 +7,7 @@ import {
   type AssignmentExecutions,
   type AssignmentId,
   type AttemptId,
+  type ExecutionId,
   type Task,
   type WorkerId,
 } from '@taskelith/execution';
@@ -161,6 +162,15 @@ async function supersede(tx: CapacityTransaction, request: ReleaseRequest, loade
   if (!stored.ok) return stored;
   const ended = await appendWorkerCommand(tx, request, 'execution.assignment.end', superseded.value, at, endPayload(superseded.value, 'superseded'));
   return ended.ok ? ok(superseded.value) : ended;
+}
+
+// An unauthorized start (launch authorization section 7) is cancelled by
+// its execution only, never another execution of the attempt.
+export async function cancelExecutionInTransaction(tx: CapacityTransaction, request: ReleaseRequest, executionId: ExecutionId): Promise<Result<void>> {
+  const assignment = await tx.assignments.get(request.assignmentId);
+  if (!assignment.ok) return assignment;
+  const payload = cancellationPayload('launch-revoked', executionId);
+  return appendWorkerCommand(tx, request, 'execution.cancellation.request', assignment.value, await tx.now(), payload);
 }
 
 function outcome(reason: CapacityReason): Result<PlacementOutcome> {

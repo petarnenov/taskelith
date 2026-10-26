@@ -89,6 +89,7 @@ export {
 } from './ports/repository-conformance.js';
 export { admitDelegation, type DelegationRequest } from './application/delegation-admission.js';
 export {
+  cancelExecutionInTransaction,
   cancelInTransaction,
   placeInTransaction,
   refuseInTransaction,
