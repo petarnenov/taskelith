@@ -13,7 +13,7 @@ The contracts are explicit for both targets; the worker-runtime requirement, whi
 ## Decisions
 
 - **D1: a launch exposes the execution it runs.** `Launch.runs(executionId)` is true only between the start and the end of that execution's `#execute`; after the execution ends, while the launch backs off before the next one, it runs none. A cancellation of an ended execution therefore never stops the launch of its successor.
-- **D2: an execution target stops a launch only while it runs that execution.** Then the launch ends as for an attempt cancellation and launches no other execution: the named execution is stopped, and nothing replaces it.
+- **D2: an execution target stops a launch only while it runs that execution,** and only while the journal, read with no await before the cancel, shows the execution not yet terminal: its end may have committed before the launch returns from it (review pass 1, F1). Then the launch ends as for an attempt cancellation and launches no other execution: the named execution is stopped, and nothing replaces it.
 - **D3: the `cancel` file goes only to the named execution,** when it is open, has a written record, and no launch runs it. For an attempt target the rule is the same over all the intent's executions; a launch is live only while the intent's other executions are `not-started`, so it is unchanged.
 - **D4: evidence follows the target.** It is recorded once no launch the cancellation stops is live and every execution it names is settled; for an execution target that is only the named execution.
 

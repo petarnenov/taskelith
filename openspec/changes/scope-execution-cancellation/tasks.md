@@ -14,4 +14,7 @@
 
 - [x] 3.1 Proposal, design, worker-runtime delta, `verification.md`
 - [x] 3.2 `npm run openspec -- validate scope-execution-cancellation --strict` and `make verify`
-- [ ] 3.3 Independent review
+- [x] 3.3 Independent review pass 1
+- [x] 3.4 Pass 1, F1: skip a launch whose named execution already ended, with a regression test
+- [x] 3.5 Pass 1, F2: correct the verification record
+- [ ] 3.6 Independent review pass 2
