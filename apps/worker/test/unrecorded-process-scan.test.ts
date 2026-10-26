@@ -141,7 +141,7 @@ test('a Linux scan reports the members of each populated containment', { skip: p
 test('a failed Linux scan comes back as the failure', { skip: process.platform !== 'linux' }, (t) => {
   const parent = mkdtempSync(join(tmpdir(), 'taskelith-cgroups-'));
   t.after(() => rmSync(parent, { recursive: true, force: true }));
-  mkdirSync(join(parent, 'lost-1'));
-  writeFileSync(join(parent, 'lost-1', 'cgroup.events'), 'frozen 0\n');
-  assert.equal(containmentScan(linuxPlatform({ containmentParent: parent }), parent)!().ok, false);
+  const file = join(parent, 'not-a-directory');
+  writeFileSync(file, '');
+  assert.equal(containmentScan(linuxPlatform({ containmentParent: file }), file)!().ok, false);
 });

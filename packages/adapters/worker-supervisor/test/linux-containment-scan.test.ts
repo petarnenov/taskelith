@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { type TestContext } from 'node:test';
@@ -58,17 +58,24 @@ test('a containment removed since the listing, or a missing parent, holds nothin
   assert.deepEqual(scan.populated(), { ok: true, value: [] });
 });
 
-test('an unreadable parent, events file, or member list fails the scan', (t) => {
+test('one malformed containment never hides the others', (t) => {
   const { scan, parent } = fixture(t);
-  containment(parent, 'execution-1', 1, '42\n');
-  writeFileSync(join(parent, 'execution-1', 'cgroup.events'), 'frozen 0\n');
-  assert.equal(scan.populated().ok, false);
-  writeFileSync(join(parent, 'execution-1', 'cgroup.events'), 'populated 1\n');
-  writeFileSync(join(parent, 'execution-1', 'cgroup.procs'), 'not-a-pid\n');
-  assert.equal(scan.populated().ok, false);
-  rmSync(join(parent, 'execution-1'), { recursive: true });
-  chmodSync(parent, 0o000);
-  const unreadable = scan.populated();
-  chmodSync(parent, 0o755);
-  assert.equal(unreadable.ok, process.getuid?.() === 0);
+  containment(parent, 'execution-a', 1, '42\n');
+  writeFileSync(join(parent, 'execution-a', 'cgroup.events'), 'frozen 0\n');
+  for (const [name, procs] of [['execution-b', '0x2a\n'], ['execution-c', ' 42\n'], ['execution-d', '1e3\n'], ['execution-e', '42\n']]) {
+    containment(parent, name!, 1, procs);
+  }
+  const found = scan.populated();
+  assert.ok(found.ok);
+  const byName = [...found.value].sort((left, right) => left.name.localeCompare(right.name));
+  assert.deepEqual(byName.map(({ name, processes }) => [name, processes.map(({ identity }) => identity.pid)]), [
+    ['execution-b', []], ['execution-c', []], ['execution-d', []], ['execution-e', [42]],
+  ]);
+});
+
+test('an unreadable parent fails the scan', (t) => {
+  const { parent } = fixture(t);
+  const file = join(parent, 'not-a-directory');
+  writeFileSync(file, '');
+  assert.equal(new LinuxContainmentScan(file, new LinuxProcessInspector(parent)).populated().ok, false);
 });
