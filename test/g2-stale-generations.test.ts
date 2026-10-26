@@ -1,26 +1,20 @@
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
-import { after, afterEach, describe, test } from 'node:test';
+import { describe, test } from 'node:test';
 import type { LaunchAuthorizationRequest, LaunchOutcome, OperationId } from '@taskelith/execution';
 import type { Result } from '@taskelith/kernel';
-import { SeededRandom, Toxiproxy, acquireProcessLock, integrationEndpoint, rerunHint, seedFromEnvironment } from '@taskelith/testing';
+import { SeededRandom, integrationEndpoint, rerunHint, seedFromEnvironment } from '@taskelith/testing';
 import { assignmentsOf, supersedeAssignment } from './g2-scenarios/invalidation-writers.ts';
 import { OrderedAuthority } from './g2-scenarios/ordered-authority.ts';
 import type { ScenarioInstallation } from './g2-scenarios/scenario-installation.ts';
 import { assertExitedOnce, grantsUnder, journaledUnder, reachable } from './g2-scenarios/scenario-reads.ts';
-import { recordScenario, withInstallation } from './g2-scenarios/scenario-run.ts';
+import { recordScenario, withInstallation, withPartitions } from './g2-scenarios/scenario-run.ts';
 import { ScenarioWorker, type ScenarioWorkerOptions } from './g2-scenarios/scenario-worker.ts';
 import { Gate, waitFor } from './g2-scenarios/waiting.ts';
 
 // G2 item 24c: a stale ownership generation and a stale recovery epoch,
 // with two workers and a seeded order of their authorization requests.
 const SEED = seedFromEnvironment();
-const toxiproxyUrl = integrationEndpoint('TASKELITH_TOXIPROXY_URL');
-const toxiproxy = new Toxiproxy(toxiproxyUrl);
-// Other test files partition the same Toxiproxy, so this one waits its turn.
-const release = await acquireProcessLock(`toxiproxy-${toxiproxyUrl.port}`);
-after(release);
-afterEach(() => toxiproxy.reset());
 console.log(`g2 stale generation scenarios: ${rerunHint(SEED)}`);
 // How long an old-epoch start observation has to reach the control plane.
 const EVIDENCE_WAIT_MILLISECONDS = 3_000;
@@ -46,7 +40,7 @@ describe('stale generations', () => {
   test('a stale ownership generation is rejected, and the current owner runs the attempt once', { timeout: 120_000 }, async () => {
     const random = new SeededRandom(SEED);
     const staleFirst = random.nextInt(2) === 1;
-    await recordScenario({ scenario: 'stale-ownership-generation', seed: SEED }, () => withInstallation({ postgres: 'direct', toxiproxy }, async (installation) => {
+    await recordScenario({ scenario: 'stale-ownership-generation', seed: SEED }, () => withPartitions((toxiproxy) => withInstallation({ postgres: 'direct', toxiproxy }, async (installation) => {
       const nats = toxiproxy.proxy('nats');
       const a = await heldWorker(installation, 'owner-a', random, { nats: integrationEndpoint('TASKELITH_NATS_PROXY_URL') });
       let b: Awaited<ReturnType<typeof heldWorker>> | undefined;
@@ -83,7 +77,7 @@ describe('stale generations', () => {
         await a.worker.stop();
         await b?.worker.stop();
       }
-    }));
+    })));
   });
 
   // Seed: which request precedes the epoch advance, a test-side write as a

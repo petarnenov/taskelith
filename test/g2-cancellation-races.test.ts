@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
-import { after, afterEach, describe, test } from 'node:test';
+import { describe, test } from 'node:test';
 import type { ExecutionId, LaunchAuthId, Task } from '@taskelith/execution';
-import { SeededRandom, Toxiproxy, acquireProcessLock, integrationEndpoint, rerunHint, seedFromEnvironment, value } from '@taskelith/testing';
+import { SeededRandom, integrationEndpoint, rerunHint, seedFromEnvironment, value } from '@taskelith/testing';
 import { interceptAck } from './g2-scenarios/ack-interception.ts';
 import { CrashingWorker } from './g2-scenarios/crashing-worker.ts';
 import { assignmentsOf, cancelAssignment, type AssignmentRow } from './g2-scenarios/invalidation-writers.ts';
@@ -18,19 +18,13 @@ import {
   reachable,
   startedExecutions,
 } from './g2-scenarios/scenario-reads.ts';
-import { recordScenario, withInstallation } from './g2-scenarios/scenario-run.ts';
+import { recordScenario, withInstallation, withPartitions } from './g2-scenarios/scenario-run.ts';
 import { ScenarioWorker, type ScenarioWorkerOptions } from './g2-scenarios/scenario-worker.ts';
 import { Gate, waitFor } from './g2-scenarios/waiting.ts';
 
 // G2 item 24c: cancellation races. Without an operator cancel API, each
 // cancel is a test-side invalidation writer's transaction.
 const SEED = seedFromEnvironment();
-const toxiproxyUrl = integrationEndpoint('TASKELITH_TOXIPROXY_URL');
-const toxiproxy = new Toxiproxy(toxiproxyUrl);
-// Other test files partition the same Toxiproxy, so this one waits its turn.
-const release = await acquireProcessLock(`toxiproxy-${toxiproxyUrl.port}`);
-after(release);
-afterEach(() => toxiproxy.reset());
 console.log(`g2 cancellation races: ${rerunHint(SEED)}`);
 const SLOT_LEAK = 'product bug: a finally rejected launch keeps its worker slot (openspec/changes/run-g2-partition-and-races/verification.md)';
 const SCOPE_BUG = 'product bug: an execution cancellation stops the whole intent (openspec/changes/run-g2-partition-and-races/verification.md)';
@@ -82,7 +76,7 @@ describe('cancellation races', () => {
   test('a. a cancel committed before the worker receives the offer launches nothing', { timeout: 90_000 }, async () => {
     const random = new SeededRandom(SEED);
     const healAfterLostContact = random.nextInt(2) === 1;
-    await recordScenario({ scenario: 'cancel-before-offer', seed: SEED }, () => withInstallation({ postgres: 'direct', toxiproxy }, async (installation) => {
+    await recordScenario({ scenario: 'cancel-before-offer', seed: SEED }, () => withPartitions((toxiproxy) => withInstallation({ postgres: 'direct', toxiproxy }, async (installation) => {
       const nats = toxiproxy.proxy('nats');
       const worker = await startedWorker(installation, 'cancel-before-offer', random, { nats: integrationEndpoint('TASKELITH_NATS_PROXY_URL') });
       try {
@@ -99,7 +93,7 @@ describe('cancellation races', () => {
       } finally {
         await worker.stop();
       }
-    }));
+    })));
   });
 
   // Seed: the request is held before it reaches the authority, or its grant

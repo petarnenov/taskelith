@@ -1,4 +1,4 @@
-import { scenarioRecorderFromEnvironment, type ScenarioRecorder, type Toxiproxy } from '@taskelith/testing';
+import { Toxiproxy, acquireProcessLock, integrationEndpoint, scenarioRecorderFromEnvironment, type ScenarioRecorder } from '@taskelith/testing';
 import { killProcessesNaming } from './leftover-processes.ts';
 import { ScenarioInstallation, type PostgresRoute } from './scenario-installation.ts';
 
@@ -38,6 +38,20 @@ export async function withInstallation<T>(options: InstallationOptions, body: (i
     await options.toxiproxy?.reset();
     killProcessesNaming(installation.base);
     await installation.close();
+  }
+}
+
+// Holds the Toxiproxy of the services for one scenario: other test files
+// partition it too, so each partition waits its turn.
+export async function withPartitions<T>(body: (toxiproxy: Toxiproxy) => Promise<T>): Promise<T> {
+  const url = integrationEndpoint('TASKELITH_TOXIPROXY_URL');
+  const release = await acquireProcessLock(`toxiproxy-${url.port}`);
+  const toxiproxy = new Toxiproxy(url);
+  try {
+    return await body(toxiproxy);
+  } finally {
+    await toxiproxy.reset();
+    await release();
   }
 }
 
