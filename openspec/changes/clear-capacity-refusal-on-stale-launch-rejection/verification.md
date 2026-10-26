@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-26. The author verification and review pass 1, with its two Medium findings fixed, are recorded below; review pass 2 is still to come.
+Date: 2026-10-26. The author verification and review passes 1 and 2 are recorded below, and every finding of both passes is fixed. Review pass 3, the last allowed, is still to come.
 
 ## Scope and source
 
@@ -60,6 +60,7 @@ An implementation subagent that the worker session briefed and checks developed 
   - both "a stale not-started keeps the refusal after ... between its transactions".
 
   With the fix: 80 of 80.
+- **Fail on `267ff6f` (review pass 2 test):** `observation-effects.ts` was restored to its `267ff6f` version and rebuilt. The same two files: 81 tests, 80 passed, 1 failed. The failure is "a failed lookup while a stale launch rejection is recorded leaves it unconfirmed, and its redelivery clears the refusal": the observation was confirmed instead of failing. With the fix: 81 of 81.
 - **Comment rule:** `npm run verify:comments` passes within `make verify`.
 - **Evidence check:** the change adds only repository-relative links, and each resolves.
 - **OpenSpec:** `npm run openspec -- validate clear-capacity-refusal-on-stale-launch-rejection --strict` passes. The modified requirement bodies are 458, 453, 438, and 411 characters.
@@ -72,6 +73,8 @@ An implementation subagent that the worker session briefed and checks developed 
   - OpenSpec `Totals: 70 passed, 0 failed`
   - `Every active OpenSpec change archives into strictly valid specs.`
   - `Packed file allowlist and installed CLI verification passed.`
+- Merge of `origin/dev` at `f607d71` into the branch (a merge commit, no conflicts). It brought in 25 commits, including `fix-launch-recovery-reauthorization` and the native acceptance changes. It touched none of this change's requirements, contracts, implementation, or tests, and the dependency inventory stayed current.
+- `make verify` at `7e00b32` (after the merge and the review pass 2 fix): passed (exit 0). 1932 tests, 1930 passed, 0 failed, and 2 Linux-only tests skipped. Coverage: 99.29% lines, 92.09% branches, 99.04% functions. Contract compatibility, OpenSpec (70 passed), the archive check, and the package check passed.
 - `make verify` at `32aac2b` (after the review pass 1 fixes): passed (exit 0). 1918 tests, 1916 passed, 0 failed, and 2 Linux-only tests skipped. Coverage: 99.29% lines, 92.07% branches, 99.04% functions. Contract compatibility, OpenSpec (70 passed), the archive check, and the package check passed.
 
 ## Review pass 1
@@ -96,6 +99,24 @@ An implementation subagent that the worker session briefed and checks developed 
 - Regression tests: the two "between its transactions" integration tests.
 
 Two Medium findings were fixed, so review pass 2 is required.
+
+## Review pass 2
+
+- Reviewer: Codex CLI, model `gpt-6.1-sol`, reasoning effort medium, read-only sandbox, all confirmed in the output header.
+- Session: `01a17a09-9a88-7620-b807-8508f9b6b325`.
+- Invocation: the same as in pass 1.
+- Revision reviewed: `267ff6f`. The snapshots before and after the pass matched (`34e4c62a7b9f82b234d7ab8c6997af30f7740eb92d445fa93b5002a4a47a259a`).
+- Pass 1 F1 and F2: confirmed resolved.
+- New findings: 0 Critical, 0 High, 1 Medium, 0 Low.
+
+**Medium F3 (fixed), `observation-effects.ts:425`.**
+- Finding: `namedAssignmentHeld` turned every failed `assignments.get` into "not held", `unavailable` included. The recording transaction then confirmed the observation without the clear. Its redelivery would be a duplicate, so the missed clear was never repaired, and B5's block returned.
+- Resolution: `Holding` returns `Result<boolean>`, and `clearOwnRefusal` returns a failed lookup. Only `not-found` counts as not held. Any other failure rolls back the recording transaction, and the observation is delivered again (design D3).
+- `attemptAssignmentHeld` uses `listByAttempt`, whose port returns no `Result`, so a store failure there already fails the transaction.
+- The neighbouring effects in `observation-effects.ts`, `observation-service.ts`, and `assignment-freeing.ts` were checked for the same pattern, and each returns its failure.
+- Regression test: "a failed lookup while a stale launch rejection is recorded leaves it unconfirmed, and its redelivery clears the refusal". The lookup fails only in the recording transaction; the observation is unconfirmed (confirmations 1 to 4) and the refusal stays. The same observation delivered again is `rejected`, clears the refusal, and is confirmed.
+
+One Medium finding was fixed, so review pass 3, the last allowed, is required.
 
 ## Limitations and remaining gates
 
