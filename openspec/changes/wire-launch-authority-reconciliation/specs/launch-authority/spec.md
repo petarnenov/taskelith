@@ -11,12 +11,10 @@ The control plane SHALL serve `authorizeLaunch` to an authenticated worker and S
 - **WHEN** a worker whose enrolled journal was retired after a sequence rollback requests a launch
 - **THEN** it is rejected with `worker-not-authorized`, and the rejection is recorded
 
-### Requirement: Invalidating writers
-An invalidating writer SHALL, in its own transaction, read the live grants of its predicate, revoke them, and write one cancellation request per affected attempt. A worker revocation SHALL do so and SHALL record the worker's executions as uncertain for reconciliation. A writer that records the attempt's cancellation SHALL record the reason of its command: `assignment-ended` for the cancellation of an ended assignment, `launch-revoked` for every other writer. An attempt that already has a cancellation SHALL keep it, because its first request decides the outcome.
+## ADDED Requirements
 
-#### Scenario: Worker revocation after a grant
-- **WHEN** a worker is revoked after a grant
-- **THEN** the grant is revoked, a cancellation command with reason `launch-revoked` is written, and the execution is uncertain
+### Requirement: Attempt cancellation reason
+A writer that records the attempt's cancellation SHALL record the reason of its command: `assignment-ended` for the cancellation of an ended assignment, `launch-revoked` for every other writer. An attempt that already has a cancellation SHALL keep it, because its first request decides the outcome.
 
 #### Scenario: Ended assignment with a running launch
 - **WHEN** a cancellation ends an assignment whose execution is authorized

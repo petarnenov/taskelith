@@ -81,6 +81,10 @@ Reviewer: OpenCode CLI, agent `reviewer`, model `opencode-go/kimi-k3.1-pro`, var
      - **Fixed** in `76389be`: a fixed-length identity, `v` followed by SHA-256.
      - Test: two maximum-length assignment identities, one on each release path.
 - **D4 (b)** is implemented with the fixes, in `76389be` and `2354209`. Pass 2 reviews the combined diff.
+- **Coordinator approval (2026-10-26):** the M2 author resolution stands, because it is idempotent and never rewrites a recorded fact. The author addition `followAttemptEnd` is approved.
+- **Checks after the fixes:**
+  - At `6c49c1c`, the tests passed (1393 of 1393; coverage 99.22 / 91.34 / 98.71). `make verify` still failed in `verify:archive`, because the launch-authority delta's "Invalidating writers" requirement exceeded 500 characters.
+  - The cancellation-reason rule therefore moved into its own added requirement, "Attempt cancellation reason", and "Invalidating writers" is unchanged.
 
 ## Limitations
 
