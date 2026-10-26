@@ -13,7 +13,7 @@ Date: 2026-10-26. Author verification is recorded below; the coordinator records
 
 ## Environment
 
-macOS x86_64, Node v24.22.1 (`.nvmrc`), Docker with the Compose services of `make verify`.
+macOS 26.6.2 (Darwin 25.6.0), arm64, Node v24.22.1 (`.nvmrc`), Docker with the Compose services of `make verify`.
 
 ## Author self-check
 
@@ -33,12 +33,11 @@ macOS x86_64, Node v24.22.1 (`.nvmrc`), Docker with the Compose services of `mak
 
 | Check | Result |
 | --- | --- |
-| `make verify` at `9bc0cfe` (pass 2 fixes) | passed; earlier at `40b5808` and `e9a5341` |
-| Tests | 1646 tests, 0 failures |
-| Coverage (all) | 99.32% lines, 91.81% branches, 98.99% functions |
-| Coverage (changed worker files) | `worker-contact.js`, `heartbeat-publisher.js`, `task-group.js` 100/100/100; `broker-session.js` 100/96.77/100; `inventory-report.js` 100/90.91/100; `worker-start.js` 99.17/90.65/100; `launch-orchestrator.js` 98.52/90.87/95.00; `settings.js` 100/100/100; `execution-supervision.js` 97.25/84.91/89.47; `command-intake.js` 99.23/87.04/100; `main.js` 90.98/82.93/85.00 (lines/branches/functions, %) |
-| `npm run openspec -- validate implement-worker-contact-and-offline --strict` | valid |
-| `npm run verify:comments` | passes at `9bc0cfe`, `40b5808`, and `e9a5341`; at `7eaa72e` it reported one comment of three lines in `worker-contact.ts`, shortened in `e9a5341` |
+| `make verify` at `edcca02` (final: the pass 3 fixes and the merge of `origin/dev` `a698f11`) | passed: 1682 tests, 0 failures; coverage over all files 99.30% lines, 91.85% branches, 99.01% functions; comment, dependency, archive dry run, and package checks passed |
+| `make verify` at `9bc0cfe` (pass 2 fixes) | passed: 1646 tests, 0 failures; 99.32% lines, 91.81% branches, 98.99% functions; earlier passed at `40b5808` and `e9a5341` |
+| Coverage (changed worker files, at `9bc0cfe`) | `worker-contact.js`, `heartbeat-publisher.js`, `task-group.js` 100/100/100; `broker-session.js` 100/96.77/100; `inventory-report.js` 100/90.91/100; `worker-start.js` 99.17/90.65/100; `launch-orchestrator.js` 98.52/90.87/95.00; `settings.js` 100/100/100; `execution-supervision.js` 97.25/84.91/89.47; `command-intake.js` 99.23/87.04/100; `main.js` 90.98/82.93/85.00 (lines/branches/functions, %) |
+| `npm run openspec -- validate implement-worker-contact-and-offline --strict` | valid at `edcca02`, the final revision, which holds the last spec edit of `15b846a` |
+| `npm run verify:comments` | passes at `edcca02`, `9bc0cfe`, `40b5808`, and `e9a5341`; at `7eaa72e` it reported one comment of three lines in `worker-contact.ts`, shortened in `e9a5341` |
 
 ## Independent review
 
@@ -82,7 +81,33 @@ Reviewer: assigned by the coordinator, Claude Code Fable (`claude-fable-5-1`, ef
 | 4 | Medium | The client may buffer a stale heartbeat while the async status lags | Partly real: the client buffers while disconnected but resets its outbound buffer on each connection attempt, so only a heartbeat published during the successful handshake survives, at most one dial timeout stale, and a fresh one follows at once; a synchronous check needs the client's private `protocol.connected`. Resolved by stating this bounded behaviour in the requirement, the new scenario "Disconnect not yet seen", and design D5; no code change |
 | 5 | Low | The pending-W2 scenario launches without a launch command | The launch is conditional on a launch command and contact |
 
+### Pass 3
+
+- Same invocation; the prompt named the pass 2 session, asked the reviewer to confirm each pass 2 resolution first, and to judge the documented resolution of pass 2 finding 4. This was the last regular pass.
+- Session `01a17807-ecbe-7511-897e-e9177b88c319`. Model confirmation: the output header records model `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`.
+- Reviewed revision: `0f2873b` against `8a9abb6`.
+- Snapshot before and after: `348893101f2e725b97cb4f8279fa7fff312e4579c7c77e74f175d1c2f54b0386`, unchanged.
+- Pass 2 confirmation: all 5 resolved; finding 4 through the documented bounded buffering, which the reviewer judged acceptable for a contact signal.
+- Findings: Critical 0, High 0, Medium 2, Low 1.
+- Decision: Medium findings remained after the third pass, so the worker stopped and sent the options to the coordinator for the owner (`docs/governance.md`). The owner was away; the owner's delegate decided, not the owner, in run `20261026T115520Z-opencode-77761`, as in the 20d precedent (run `20261026T101624Z-opencode-99267`): fix both Medium findings without another review, each with its test, and fix the Low one by recording the checks of the final revision. The fixes below are **unreviewed fixes**; the implementation subagent made them and the worker checked them, in `fc040b7`.
+
+| # | Severity | Finding | Resolution (unreviewed) |
+| --- | --- | --- | --- |
+| 1 | Medium | A multipart inventory report keeps publishing its later parts after a journal flush failure | The journal fault is checked right before each part, for the unsolicited report and the request answer alike, and ends the report; a test holds the first part, raises the fault before its acknowledgement, and asserts no later part |
+| 2 | Medium | A stop cannot interrupt a pending broker connection attempt, so `stopped` can hang with the root lock held | The attempt is awaited unless the stop aborts first; a connection that arrives late is closed and a late failure is only logged; tests of a stop during a pending attempt, with a late link and with a late failure; the test that stopped during the back-off is renamed |
+| 3 | Low | No checks recorded for the final spec revision | `make verify` and the strict validation recorded for `edcca02`, the final revision (Checks) |
+
+## Merge of `origin/dev`
+
+- At the coordinator's request, `origin/dev` at `a698f11`, which holds 20e (`implement-worker-admission-pressure`, #270 and #271), was merged in `edcca02`. This is integration work, not a review pass.
+- Conflicts: `apps/worker/src/command-intake.ts` (imports only), `apps/worker/src/launch-orchestrator.ts`, `apps/worker/src/worker-start.ts`, and the tests `apps/worker/test/command-intake.test.ts` and `apps/worker/test/worker-start.test.ts`; `observation-messages.ts` and the control-plane integration test merged cleanly.
+- Beyond a mechanical combination, reported to the coordinator before the push:
+  - `Launch.#authorize` keeps the two conditions apart in one loop before W2: offline waits for contact, admission pressure waits for its poll, and each wait rechecks both, so W2 follows the last check of each with no `await` between. 20e's `#awaitAdmission` before W2 is replaced by that loop; its wait after a failed request is unchanged.
+  - `pressure.watch` runs with the launches among the runtime's tasks rather than in the per-connection loops, because in this change the runtime runs without a connection; it refreshes and journals pressure and publishes nothing itself.
+  - Tests: the offline launch tests take the pressure option 20e made required and test W2 waiting until the worker is both online and under no pressure; the 20e start test finds its observation by type, since the connection's inventory report may come first.
+- The spec deltas do not overlap: 20e modified only "Worker-side admission limits" and added requirements, and the requirements this change modifies are unchanged on `dev` since `8a9abb6`; the archive dry run passed.
+
 ## Limitations and remaining gates
 
 - The coordinator answered OQ1 and OQ2 on 2026-10-26 (`design.md`): a maximum offline duration for running executions stays open for a later stage, and item 23b must make the Linux worker image always set `TASKELITH_CONTAINMENT_PARENT`.
-- Remaining gates: independent review, integration into `dev`, and archive.
+- Remaining gates: integration into `dev` and archive.

@@ -25,5 +25,5 @@
 - [x] 4.1 proposal.md, design.md, spec deltas (`worker-runtime`, `worker-contact`), `npm run openspec -- validate implement-worker-contact-and-offline --strict`
 - [x] 4.2 `docs/local-installation.md` and the heartbeat row of `docs/operational-targets.md`
 - [x] 4.3 `make verify`
-- [ ] 4.4 Independent review (coordinator)
-- [ ] 4.5 Integration into `dev` and archive (coordinator)
+- [x] 4.4 Independent review (coordinator)
+- [x] 4.5 Integration into `dev` and archive (coordinator)
