@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 import { checkMessageSchema, type MessageSchemas } from '@taskelith/contracts';
-import { launchRejection, type ExecutionExit, type WorkerJournal } from '@taskelith/execution';
+import { launchRejection, type AssignmentRefusal, type ExecutionExit, type JournaledCommand, type WorkerJournal } from '@taskelith/execution';
 import { ok, type Result } from '@taskelith/kernel';
 import type { Publication, PublishOutcome } from '@taskelith/nats';
 import { id, value } from '@taskelith/testing';
@@ -122,4 +122,35 @@ test('a final launch rejection is published with its operation and reason', asyn
   assert.deepEqual((await publishedAs('LaunchRejectedObservation')).payload, {
     executionId: EXECUTION, assignmentId: 'assignment-1', operationId: 'operation-1', reason: 'gate-not-passed',
   });
+});
+
+function refusedOffer(number: number, refusal: AssignmentRefusal): JournaledCommand {
+  const { commandId, digest, correlationId } = offer(number);
+  const { assignmentId, attemptId, ownershipGeneration } = intentOf(number);
+  const rejection = { kind: 'assignment-refused' as const, assignment: { assignmentId, attemptId, ownershipGeneration }, ...refusal };
+  return { commandId, digest, correlationId, outcome: 'rejected', kind: 'execution.assignment.offer', rejection };
+}
+
+test('a refusal for admission pressure is retryable and names its causes', async () => {
+  value(journal.recordCommand(refusedOffer(2, { reason: 'worker-admission-pressure', pressureCauses: ['disk-floor', 'journal-backlog'] })));
+  const body = await publishedAs('AssignmentRefusedObservation');
+  assert.deepEqual(body.payload, {
+    commandId: offer(2).commandId, assignmentId: 'assignment-2', reason: 'worker-admission-pressure', retryable: true,
+    pressureCauses: ['disk-floor', 'journal-backlog'],
+  });
+});
+
+test('any other refusal is final and names no causes', async () => {
+  value(journal.recordCommand(refusedOffer(2, { reason: 'worker-slots-exhausted' })));
+  const body = await publishedAs('AssignmentRefusedObservation');
+  assert.deepEqual(body.payload, { commandId: offer(2).commandId, assignmentId: 'assignment-2', reason: 'worker-slots-exhausted', retryable: false });
+});
+
+test('a pressure change is published with its causes, and an empty list clears it', async () => {
+  value(journal.recordAdmissionPressure(['unmeasurable-limit']));
+  assert.deepEqual((await publishedAs('AdmissionPressureChangedObservation')).payload, { causes: ['unmeasurable-limit'] });
+  value(journal.recordAdmissionPressure([]));
+  const cleared = await publishedAs('AdmissionPressureChangedObservation');
+  assert.deepEqual(cleared.payload, { causes: [] });
+  assert.equal((cleared.metadata as Record<string, unknown>).attemptId, undefined);
 });

@@ -2,6 +2,7 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  type AdmissionPressureCause,
   parseLaunchParameters,
   parseRecoveryEpoch,
   type ExecutionExit,
@@ -19,7 +20,7 @@ import {
 import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
 import { parseGeneration, parseOwnershipGeneration } from '@taskelith/sdlc';
 import { id, value } from '@taskelith/testing';
-import type { ExecutionSupervision, LaunchPlan, RecoveryRound, SupervisedFacts, SupervisedRecovery } from '@taskelith/worker';
+import type { AdmissionCheck, ExecutionSupervision, LaunchPlan, RecoveryRound, SupervisedFacts, SupervisedRecovery } from '@taskelith/worker';
 import { enrollWorkerRoot, type WorkerEnrollment, type WorkerRoot } from '@taskelith/worker-journal';
 import type { DeadlineClock, DeadlineReading, LaunchRecord } from '@taskelith/worker-supervisor';
 
@@ -216,4 +217,15 @@ export function requestOf(executionId: string, operationId: string, number = 1):
     executionId: id('ExecutionId', executionId), admissionId: intent.admissionId,
     admissionGeneration: intent.admissionGeneration, reportsNotStarted: false,
   };
+}
+
+// Admission pressure as a test sets it; each refresh is counted.
+export class FakePressure implements AdmissionCheck {
+  causes: Result<readonly AdmissionPressureCause[]> = ok([]);
+  refreshes = 0;
+
+  refresh(): Result<readonly AdmissionPressureCause[]> {
+    this.refreshes += 1;
+    return this.causes;
+  }
 }
