@@ -65,6 +65,23 @@ Reviewer: assigned by the coordinator, Claude Code Fable (`claude-fable-5-1`, ef
 | 4 | Medium | A multipart inventory report continues after a disconnect or stop, and its task is never awaited | The signal is checked before each part; link-up work joins the link's task group and is awaited; a test with a held publish aborted between two parts |
 | 5 | Medium | The status watcher accumulates promise reactions | Each wait for the next status adds and removes its own abort listener; a test that the listener count stays flat over 100 statuses |
 
+### Pass 2
+
+- Same invocation as pass 1; the prompt named the pass 1 session and asked the reviewer to confirm each pass 1 resolution first.
+- Session `01a177fc-3cb5-7573-91a8-ed9b0dab7ca2`. Model confirmation: the output header records model `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`.
+- Reviewed revision: `0442760` against `8a9abb6`.
+- Snapshot before and after: `ca254e61eac3fda22cac086f753e60cd917844ab74140436acfd0434f304bf7b`, unchanged.
+- Pass 1 confirmation: all 5 resolved.
+- Findings: Critical 0, High 0, Medium 4, Low 1. Resolved by the implementation subagent and checked by the worker, in `9bc0cfe` and `15b846a`.
+
+| # | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| 1 | Medium | Heartbeats continue after a journal fault | A heartbeat is sent only while connected and the journal has not stopped (journal contract section 7); requirement, scenario "Stopped journal", design D5; a test of a fault after connect, at an interval and on a reconnect |
+| 2 | Medium | A cancellation ends the offline wait and W2 is then written while offline | A cancellation while waiting for contact begins no operation: a new execution ends without a journal row, one with an earlier operation is sealed as `not-started` without a new W2; design D4; tests assert no W2 |
+| 3 | Medium | `TaskGroup` keeps every finished task | Only running tasks are kept, the first failure apart; `settled` waits until none runs; tests over 100 reconnects and a task added while waiting |
+| 4 | Medium | The client may buffer a stale heartbeat while the async status lags | Partly real: the client buffers while disconnected but resets its outbound buffer on each connection attempt, so only a heartbeat published during the successful handshake survives, at most one dial timeout stale, and a fresh one follows at once; a synchronous check needs the client's private `protocol.connected`. Resolved by stating this bounded behaviour in the requirement, the new scenario "Disconnect not yet seen", and design D5; no code change |
+| 5 | Low | The pending-W2 scenario launches without a launch command | The launch is conditional on a launch command and contact |
+
 ## Limitations and remaining gates
 
 - The coordinator answered OQ1 and OQ2 on 2026-10-26 (`design.md`): a maximum offline duration for running executions stays open for a later stage, and item 23b must make the Linux worker image always set `TASKELITH_CONTAINMENT_PARENT`.
