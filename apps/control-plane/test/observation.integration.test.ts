@@ -18,6 +18,7 @@ import {
 import {
   openAttempt,
   requestCancellation,
+  type AssignmentId,
   type AttemptId,
   type ExecutionId,
   type LaunchGrant,
@@ -25,10 +26,10 @@ import {
   type WorkerId,
 } from '@taskelith/execution';
 import { fleetToken, fleetWorker } from '@taskelith/fleet';
-import { err, failure, ok, type CorrelationId, type Instant, type Result } from '@taskelith/kernel';
+import { MAX_IDENTIFIER_LENGTH, err, failure, ok, type CorrelationId, type EventId, type Instant, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { PostgresDatabase, migrate, type PostgresTransaction } from '@taskelith/postgres';
-import type { Assignment } from '@taskelith/scheduling';
+import { DEFAULT_ATTEMPT_REQUEST, placeInTransaction, type Assignment, type ReservationId } from '@taskelith/scheduling';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
 import { failed, integrationEndpoint, value } from '@taskelith/testing';
 import { issueGrant, launchAuthority } from './launch-fixtures.ts';
@@ -178,6 +179,28 @@ async function placeAgain(taskId: string): Promise<Placed> {
   const task = await stored(taskId);
   const attemptId = task.attempts.at(-1)!.id;
   return { taskId: task.id, attemptId, generation: task.ownershipGeneration, assignment: await heldAssignment(attemptId) };
+}
+
+// Submits the task and places its first attempt under the given identifier.
+async function placedAs(taskId: string, assignmentId: string): Promise<Placed> {
+  value(await tasks.submitTask('run-1', { taskId, kind: 'planning', stageId: 'specs' }, CORRELATION));
+  const attemptId = `attempt-${taskId}` as AttemptId;
+  const outcome = value(await database.transaction(async (tx) => {
+    const task = await tx.tasks.get(taskId as TaskId);
+    if (!task.ok) return task;
+    const opened = openAttempt(task.value, task.value.ownershipGeneration, { id: attemptId }, await tx.now());
+    if (!opened.ok) return opened;
+    const { ownershipGeneration } = opened.value;
+    const replaced = await tx.tasks.replace(opened.value, task.value.generation);
+    if (!replaced.ok) return replaced;
+    return placeInTransaction(tx, {
+      commandId: `offer-${taskId}` as EventId, correlationId: CORRELATION, assignmentId: assignmentId as AssignmentId,
+      reservationId: `reservation-${taskId}` as ReservationId, taskId: taskId as TaskId, attemptId, ownershipGeneration,
+      workerId: WORKER as WorkerId, requested: DEFAULT_ATTEMPT_REQUEST, providerCredentials: [],
+    });
+  }));
+  assert.equal(outcome.kind, 'placed');
+  return { taskId: taskId as TaskId, attemptId, generation: (await stored(taskId)).ownershipGeneration, assignment: await heldAssignment(attemptId) };
 }
 
 function accept(sequence: number, at: Placed, generation = at.generation, observationId?: string) {
@@ -824,6 +847,7 @@ describe('launch rejections', () => {
     assert.deepEqual(rejectionLogs().map((logged) => (logged as unknown[])[0]), ['assignment-not-active', 'stale-ownership-generation', 'attempt-not-launchable', 'operation-mismatch']);
     assert.deepEqual([await messages('execution.assignment.end'), await messages('worker.inventory.requested')], [[], []]);
   });
+
 });
 
 async function queue() {
@@ -909,16 +933,51 @@ describe('a revoked worker', () => {
     assert.deepEqual([again.attemptId, again.assignment.workerId], [at.attemptId, 'worker-b']);
   });
 
-  test('keeps an assignment that held a grant, even when its executions are terminal', async () => {
+  test('keeps an authorized execution uncertain with its reservation', async () => {
+    await enroll();
+    value(await declare(1));
+    const at = await placed();
+    await launch(at);
+    value(await revoke());
+    const kept = await heldAssignment(at.attemptId);
+    assert.deepEqual([kept.state, kept.end], ['offered', undefined]);
+    assert.equal((await stored(at.taskId)).attempts[0]!.outcome, undefined);
+    assert.deepEqual(await messages('execution.assignment.end'), []);
+  });
+
+  test('ends the attempt of an assignment that held a grant whose executions are terminal, once', async () => {
     await enroll();
     value(await declare(1));
     const at = await placed();
     const executionId = await launch(at);
     value(await observe('execution.not-started', { sequence: 2, attemptId: at.attemptId, ownershipGeneration: at.generation }, { executionId }));
     value(await revoke());
-    const kept = await heldAssignment(at.attemptId);
-    assert.deepEqual([kept.state, kept.end, kept.reservation.state], ['offered', undefined, 'held']);
-    assert.deepEqual(await messages('execution.assignment.end'), []);
+    const outcome = (await stored(at.taskId)).attempts[0]!.outcome;
+    assert.deepEqual([outcome?.kind, outcome?.cancelled], ['not-started', false]);
+    const ended = value(await database.transaction((tx) => tx.assignments.get(at.assignment.id)));
+    assert.deepEqual([ended.state, ended.end?.reason, ended.reservation.state], ['ended', 'attempt-ended', 'released']);
+    value(await revoke());
+    const ends = await messages('execution.assignment.end');
+    assert.deepEqual(ends.map((end) => (end as { payload: unknown }).payload), [
+      { protocolVersion: 1, assignmentId: at.assignment.id, reason: 'attempt-ended' },
+    ]);
+  });
+
+  test('frees assignments whose identifiers have the maximum length', async () => {
+    await enroll();
+    value(await declare(1));
+    const ungranted = await placedAs('task-1', 's'.repeat(MAX_IDENTIFIER_LENGTH));
+    const granted = await placedAs('task-2', 'g'.repeat(MAX_IDENTIFIER_LENGTH));
+    const executionId = await launch(granted);
+    value(await observe('execution.not-started', { sequence: 2, attemptId: granted.attemptId, ownershipGeneration: granted.generation }, {
+      executionId,
+    }));
+    value(await revoke());
+    const reasons = await Promise.all([ungranted, granted].map(async ({ assignment }) => {
+      const ended = value(await database.transaction((tx) => tx.assignments.get(assignment.id)));
+      return [ended.end?.reason, ended.reservation.state];
+    }));
+    assert.deepEqual(reasons, [['superseded', 'released'], ['attempt-ended', 'released']]);
   });
 });
 
