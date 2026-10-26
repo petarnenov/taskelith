@@ -29,6 +29,7 @@ import {
   type DeadlineClock,
   type DeadlineReading,
   type ExecutionSupervision,
+  type PopulatedContainment,
   type RecordListing,
   type SupervisionFactory,
 } from './execution-supervision-port.js';
@@ -84,6 +85,8 @@ export class LaunchOrchestrator {
   readonly #launches = new Map<string, Launch>();
   readonly #running = new Map<string, Promise<void>>();
   readonly #forwarded = new Set<string>();
+  // The start's unrecorded processes, by write key, until each commits.
+  readonly #unrecorded = new Map<string, PopulatedContainment>();
   // Executions an earlier process left open, until each is reconciled once.
   #inherited: Set<ExecutionId> | undefined;
   #wake: () => void = () => undefined;
@@ -123,6 +126,7 @@ export class LaunchOrchestrator {
     if (!reported(this.#options, snapshot)) return;
     const actions = planJournalRecovery(snapshot.value);
     if (this.#inherited === undefined) await this.#beginReconciliation(snapshot.value, actions);
+    this.#recordUnrecordedProcesses();
     for (const action of actions) await this.#act(action, snapshot.value, signal);
     await this.#removeConfirmedRecords();
   }
@@ -160,16 +164,26 @@ export class LaunchOrchestrator {
     for (const name of listed.value.filter((entry) => !journaled.has(entry))) {
       this.#logger.warn('worker.execution.leftover', { record: name });
     }
-    this.#reportUnrecordedProcesses(new Set(listed.value));
+    this.#findUnrecordedProcesses(new Set(listed.value));
   }
 
   // A populated containment without a record directory is an unrecorded
   // process (supervisor identity contract, section 9), never current work.
-  #reportUnrecordedProcesses(records: ReadonlySet<string>): void {
+  #findUnrecordedProcesses(records: ReadonlySet<string>): void {
     const scanned = this.#options.containments?.();
     if (scanned === undefined || !reported(this.#options, scanned)) return;
-    for (const { name, containment, processes } of scanned.value) {
-      if (!records.has(name)) reported(this.#options, this.#options.journal.recordUnrecordedProcess(containment, processes));
+    for (const found of scanned.value) {
+      if (!records.has(found.name)) this.#unrecorded.set(`unrecorded-process/${found.containment}`, found);
+    }
+  }
+
+  // Each pass journals the reports that are due; one refused for space is
+  // held back for its backoff, and its identity stays the containment's.
+  #recordUnrecordedProcesses(): void {
+    const { journal } = this.#options;
+    for (const [key, { containment, processes }] of this.#unrecorded) {
+      if (!this.#held.due(key)) continue;
+      if (this.#held.commit(key, () => journal.recordUnrecordedProcess(containment, processes))) this.#unrecorded.delete(key);
     }
   }
 
