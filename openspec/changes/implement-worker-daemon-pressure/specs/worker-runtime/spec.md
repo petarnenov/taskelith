@@ -14,7 +14,7 @@ A worker SHALL measure its disk floor, journal backlog, and daemon overhead at s
 ## ADDED Requirements
 
 ### Requirement: Daemon overhead
-A worker SHALL report `daemon-memory` while its own resident set exceeds 512 MiB and `event-loop-lag` while the p99 event-loop delay of its 15-second sample window exceeds 200 ms, reading both through a sensor port. An overhead it cannot read SHALL be reported as `unmeasurable-limit`.
+A worker SHALL report `daemon-memory` while its own resident set exceeds 512 MiB and `event-loop-lag` while the p99 event-loop delay of its 15-second sample window exceeds 200 ms, reading both through a sensor port. An overhead it cannot read, including a window without a sample, SHALL be reported as `unmeasurable-limit`.
 
 #### Scenario: Overhead subsides
 - **WHEN** a worker's resident set rises above 512 MiB and later falls below it
@@ -30,6 +30,10 @@ On a journal write refused for lack of space a worker SHALL empty the buffered l
 #### Scenario: Exit refused for space
 - **WHEN** the commit of an execution's exit is refused for lack of space twice
 - **THEN** the worker reads the record again after each backoff, and the outbox holds one `execution.exited`
+
+#### Scenario: Not-started refused for space after a seal
+- **WHEN** the worker seals an execution and the commit of its `execution.not-started` is refused for lack of space
+- **THEN** the worker retries it after the backoff without reporting a failure, and the outbox holds one `execution.not-started`
 
 #### Scenario: Command refused for space
 - **WHEN** W1 of an offer is refused for lack of space
