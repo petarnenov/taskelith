@@ -284,6 +284,25 @@ test('each connection reports the inventory unsolicited and sends heartbeats on 
   assert.deepEqual(timers.waiting, [10_000]);
 });
 
+// The fault a flush failure leaves on the journal (contract section 7).
+function stopJournal(worker: RunningWorker): void {
+  const fault = failure('unavailable', 'journal I/O error', { reason: 'flush-failure' });
+  Object.defineProperty(worker.root.journal, 'fault', { value: fault });
+}
+
+test('a journal stopped after the connection sends no heartbeat, at an interval or a reconnect', async () => {
+  const worker = await start();
+  await until(() => broker.core.length === 1 && timers.waiting.includes(10_000));
+  stopJournal(worker);
+  timers.elapse(10_000);
+  broker.statuses[0]?.push('disconnect');
+  broker.statuses[0]?.push('reconnect');
+  await until(() => broker.ofType('worker.inventory.reported').length === 2 && timers.waiting.includes(10_000));
+  timers.elapse(10_000);
+  await until(() => timers.waiting.includes(10_000));
+  assert.equal(broker.core.length, 1);
+});
+
 test('a runtime failure stops the launches, then closes the root, and settles stopped', async () => {
   const launchFailures: unknown[] = [];
   const launching = { ...new RecordingLaunching().dependencies, onFailure: (error: unknown) => launchFailures.push(error) };

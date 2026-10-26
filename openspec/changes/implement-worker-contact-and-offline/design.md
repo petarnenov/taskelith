@@ -34,13 +34,13 @@ The session iterates the connection's `status()`: `disconnect` marks the link do
 
 ### D4: offline, no operation begins
 
-The orchestrator takes an optional `LaunchContact`. Each authorization operation waits while the contact is `offline`, checking it again after each `whenOnline`, because a lost-contact timer can fire before the wait's continuation runs; it then reads the deadline clock and commits W2 with no await in between, so its deadline counts from the first request. An operation already begun keeps its requests and its deadline, because the grant is the online check (launch authorization section 8), and the 20d deadline cycle is unchanged: the operation expires, and the next operation for the same execution waits until the worker is online. A stop while waiting journals nothing; a cancellation while waiting commits W2 and then abandons it, as a cancellation before the first request did before.
+The orchestrator takes an optional `LaunchContact`. Each authorization operation waits while the contact is `offline`, checking it again after each `whenOnline`, because a lost-contact timer can fire before the wait's continuation runs; it then reads the deadline clock and commits W2 with no await in between, so its deadline counts from the first request. An operation already begun keeps its requests and its deadline, because the grant is the online check (launch authorization section 8), and the 20d deadline cycle is unchanged: the operation expires, and the next operation for the same execution waits until the worker is online. A stop while waiting journals nothing. A cancellation while waiting begins no operation either: a new execution ends with nothing journaled, and one with an earlier operation is sealed and reported `not-started`, as after a cancelled back-off.
 
 - **Alternative:** offline at once on any disconnect. Simpler, but a reconnect a second later would pause launches for nothing; rejected for D3's reason.
 
 ### D5: heartbeats only while connected
 
-`runHeartbeats` publishes at once on each connection and reconnection and then every `10s` over core NATS, only while the link is up: the client would otherwise buffer heartbeats during an outage and flush stale ones on reconnect. A publish that throws is logged at debug as `worker.heartbeat.unsent`; the next one replaces it. `sentAt` is the worker's clock, informational only.
+`runHeartbeats` publishes at once on each connection and reconnection and then every `10s` over core NATS, only while the link is up, as the client would otherwise buffer heartbeats during an outage and flush stale ones on reconnect, and only while the journal has not stopped, as no publication follows a flush failure (journal contract section 7). A publish that throws is logged at debug as `worker.heartbeat.unsent`; the next one replaces it. `sentAt` is the worker's clock, informational only.
 
 ### D6: the inventory on every connection
 

@@ -42,7 +42,7 @@ On its first pass after a start, a worker with a supervision host SHALL reconcil
 
 #### Scenario: Pending W2 on start
 - **WHEN** the worker starts with a W2 that has no outcome
-- **THEN** it seals the execution, reports `not-started`, and launches the intent under a new execution
+- **THEN** it seals the execution, reports `not-started`, and, with a launch command, launches the intent under a new execution once online
 
 #### Scenario: Recovery asks to retry
 - **WHEN** the recovery table answers that the supervisor's liveness is not yet decided

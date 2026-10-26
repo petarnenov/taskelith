@@ -169,7 +169,7 @@ test('a stop while offline journals nothing', async () => {
   assert.deepEqual([authority.requests, executions()], [[], []]);
 });
 
-test('a cancellation while offline stops the launch before any request', async () => {
+test('a cancellation while offline ends the launch with no W2 and no request', async () => {
   value(journal.recordCommand(offer()));
   const orchestrator = new LaunchOrchestrator(options);
   await orchestrator.pass(controller.signal);
@@ -177,7 +177,27 @@ test('a cancellation while offline stops the launch before any request', async (
   await orchestrator.pass(controller.signal);
   await orchestrator.settled();
   await orchestrator.pass(controller.signal);
-  assert.deepEqual(authority.requests, []);
+  assert.deepEqual([authority.requests, executions(), supervisions.all], [[], [], []]);
+  assert.deepEqual(value(journal.snapshot()).cancellations.map(({ evidenceRecorded }) => evidenceRecorded), [true]);
+});
+
+test('a cancellation while offline after an expired operation seals with no new W2', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [unavailable()];
+  contact.linkUp();
+  authority.onRequest = () => {
+    contact.linkDown();
+    timers.elapse(LOST_CONTACT_MILLISECONDS);
+  };
+  const orchestrator = new LaunchOrchestrator(options);
+  await orchestrator.pass(controller.signal);
+  await flush();
+  const requests = authority.requests.length;
+  value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));
+  await orchestrator.pass(controller.signal);
+  await orchestrator.settled();
+  await orchestrator.pass(controller.signal);
+  assert.deepEqual([authority.requests.length, outcomes()], [requests, ['expired']]);
   assert.deepEqual(executions().map(({ state }) => state), ['not-started']);
   assert.deepEqual(value(journal.snapshot()).cancellations.map(({ evidenceRecorded }) => evidenceRecorded), [true]);
 });

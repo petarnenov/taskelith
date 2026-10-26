@@ -11,6 +11,7 @@ import {
   LOST_CONTACT_MILLISECONDS,
   heartbeatMessage,
   runHeartbeats,
+  TaskGroup,
   WorkerContact,
   type BrokerLink,
 } from '@taskelith/worker';
@@ -106,7 +107,7 @@ test('heartbeats go out at once and at each interval, only while connected', asy
   let answer: Result<void> = ok(undefined);
   const signal = new AbortController();
   const running = runHeartbeats({
-    binding: BINDING, subject: 'heartbeats', now: () => T0, sleep: timers.sleep, connected: () => connected,
+    binding: BINDING, subject: 'heartbeats', now: () => T0, sleep: timers.sleep, canSend: () => connected,
     logger: new Logger(sink, { now: () => T0 }),
     send: (subject, body) => {
       sent.push({ subject, body: JSON.parse(new TextDecoder().decode(body)) as Record<string, unknown> });
@@ -291,4 +292,44 @@ test('a stop while connecting retries nothing', async () => {
   stopping.abort();
   await running;
   assert.deepEqual([trace.links.length, timers.waiting], [0, []]);
+});
+
+// A task the test ends; `end` settles it.
+function pendingTask(): { readonly task: Promise<void>; readonly end: () => void } {
+  let end: () => void = () => undefined;
+  const task = new Promise<void>((resolve) => {
+    end = resolve;
+  });
+  return { task, end };
+}
+
+test('a task group retains no ended task across reconnect cycles', async () => {
+  const group = new TaskGroup(stopping.signal);
+  for (let cycle = 0; cycle < 100; cycle += 1) {
+    const up = pendingTask();
+    group.add(up.task);
+    up.end();
+    await flush();
+    assert.equal(group.running, 0);
+  }
+});
+
+test('a task group waits for tasks added while it waits, then rethrows the first failure', async () => {
+  const group = new TaskGroup(stopping.signal);
+  const first = pendingTask();
+  group.add(first.task);
+  let settled = false;
+  const waiting = group.settled().finally(() => {
+    settled = true;
+  });
+  const late = pendingTask();
+  group.add(late.task);
+  group.add(Promise.reject(new Error('first failure')));
+  group.add(Promise.reject(new Error('second failure')));
+  first.end();
+  await flush();
+  assert.deepEqual([settled, group.running, group.signal.aborted], [false, 1, true]);
+  late.end();
+  await assert.rejects(waiting, /first failure/);
+  assert.equal(group.running, 0);
 });

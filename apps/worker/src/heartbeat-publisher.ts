@@ -16,8 +16,8 @@ export interface HeartbeatOptions {
   readonly subject: string;
   // Core NATS, outside any stream: the next heartbeat replaces a lost one.
   readonly send: (subject: string, body: Uint8Array) => Result<void>;
-  // Only a connected link sends, so no stale heartbeat waits in a buffer.
-  readonly connected: () => boolean;
+  // False while the link is down or the journal stopped (its section 7).
+  readonly canSend: () => boolean;
   readonly now: () => Instant;
   readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>;
   readonly intervalMilliseconds?: number;
@@ -35,7 +35,7 @@ export function heartbeatMessage(binding: HeartbeatOptions['binding'], sentAt: I
 export async function runHeartbeats(options: HeartbeatOptions, signal: AbortSignal): Promise<void> {
   const logger = options.logger ?? SILENT_LOGGER;
   while (!signal.aborted) {
-    if (options.connected()) {
+    if (options.canSend()) {
       const sent = options.send(options.subject, encodeJson(heartbeatMessage(options.binding, options.now())));
       if (!sent.ok) logger.debug('worker.heartbeat.unsent', { reason: sent.error.message });
     }

@@ -3,26 +3,29 @@
 export class TaskGroup {
   readonly signal: AbortSignal;
   readonly #failed = new AbortController();
-  readonly #tasks: Array<Promise<void>> = [];
+  // Only the running tasks, so a long-lived group retains no ended one.
+  readonly #running = new Set<Promise<void>>();
   #failure: { readonly error: unknown } | undefined;
 
   constructor(signal: AbortSignal) {
     this.signal = AbortSignal.any([signal, this.#failed.signal]);
   }
 
+  get running(): number {
+    return this.#running.size;
+  }
+
   add(task: Promise<void>): void {
-    this.#tasks.push(task.catch((error: unknown) => {
+    const tracked: Promise<void> = task.catch((error: unknown) => {
       this.#failure ??= { error };
       this.#failed.abort();
-    }));
+    }).finally(() => this.#running.delete(tracked));
+    this.#running.add(tracked);
   }
 
   // Also waits for the tasks added while it waits.
   async settled(): Promise<void> {
-    for (let awaited = 0; awaited < this.#tasks.length;) {
-      awaited = this.#tasks.length;
-      await Promise.allSettled(this.#tasks);
-    }
+    while (this.#running.size > 0) await Promise.all(this.#running);
     if (this.#failure !== undefined) throw this.#failure.error;
   }
 }

@@ -289,11 +289,13 @@ async function serveConnection(context: SessionContext, transport: TransportConn
   ]);
 }
 
-// Restarted on each link-up, so a reconnect sends one at once.
+// Restarted on each link-up, so a reconnect sends one at once; a stopped
+// journal stops them, as it stops every publication.
 function heartbeatOptions(context: SessionContext, transport: TransportConnection): HeartbeatOptions {
   const { dependencies, root, subjects, contact } = context;
+  const canSend = () => contact.connected && root.journal.fault === undefined;
   return {
-    binding: root.identity, subject: subjects.heartbeats, send: coreSender(transport), connected: () => contact.connected,
+    binding: root.identity, subject: subjects.heartbeats, send: coreSender(transport), canSend,
     now: () => dependencies.clock.now(), sleep: dependencies.sleep,
     ...(dependencies.logger === undefined ? {} : { logger: dependencies.logger }),
   };

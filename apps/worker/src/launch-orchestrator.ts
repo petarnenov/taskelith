@@ -401,6 +401,8 @@ class Launch {
     const { contact } = this.#options;
     while (contact?.offline === true && !this.#signal.aborted) await contact.whenOnline(this.#signal);
     if (this.#stopping.aborted) return { kind: 'end' };
+    // A cancel before W2 begins no operation, as one during a back-off.
+    if (this.#cancelled) return { kind: reportsNotStarted ? 'abandon' : 'end' };
     const operationId = this.#newId('OperationId');
     const reading = this.#options.clock.read();
     if (operationId === undefined || !reading.ok) return { kind: 'end' };
