@@ -46,3 +46,42 @@ export async function commitWrite(
     if (signal.aborted) return false;
   }
 }
+
+// Writes that every pass derives again: one refused for space is held back
+// until its backoff has passed, so the pass goes on meanwhile.
+export class HeldWrites {
+  readonly #retry: SpaceRetry;
+  // Milliseconds on a monotonic clock, or undefined when it cannot be read.
+  readonly #now: () => number | undefined;
+  readonly #held = new Map<string, { readonly refusals: number; readonly dueAt: number }>();
+
+  constructor(retry: SpaceRetry, now: () => number | undefined) {
+    this.#retry = retry;
+    this.#now = now;
+  }
+
+  // An unreadable clock lets the write be tried again.
+  due(key: string): boolean {
+    const held = this.#held.get(key);
+    const now = this.#now();
+    return held === undefined || now === undefined || now >= held.dueAt;
+  }
+
+  // Answers whether the write committed; other failures are reported.
+  commit(key: string, write: () => Result<void>): boolean {
+    const written = write();
+    if (written.ok) {
+      this.#held.delete(key);
+      return true;
+    }
+    if (!isSpaceRefusal(written.error)) {
+      this.#retry.onFailure?.(written.error);
+      return false;
+    }
+    const refusals = (this.#held.get(key)?.refusals ?? 0) + 1;
+    const delayMilliseconds = launchRetryDelay(refusals, this.#retry.draw());
+    this.#retry.logger.warn('worker.journal.space-refused', { write: key, refusals, delayMilliseconds });
+    this.#held.set(key, { refusals, dueAt: (this.#now() ?? 0) + delayMilliseconds });
+    return false;
+  }
+}

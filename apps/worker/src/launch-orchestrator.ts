@@ -32,7 +32,7 @@ import {
   type SupervisionFactory,
 } from './execution-supervision-port.js';
 import { cancelFiled, ExecutionWatch, type Watched, type WatchTarget } from './execution-watch.js';
-import { commitWrite, type SpaceRetry } from './space-retry.js';
+import { commitWrite, HeldWrites, type SpaceRetry } from './space-retry.js';
 
 // The provisional `ttl` and `skew` (operational targets), which bound the
 // retries of an operation before any grant names its own.
@@ -67,6 +67,7 @@ export class LaunchOrchestrator {
   readonly #logger: Logger;
   readonly #watch: ExecutionWatch;
   readonly #space: SpaceRetry;
+  readonly #held: HeldWrites;
   readonly #launches = new Map<string, Launch>();
   readonly #running = new Map<string, Promise<void>>();
   readonly #forwarded = new Set<string>();
@@ -80,6 +81,10 @@ export class LaunchOrchestrator {
     this.#watch = new ExecutionWatch({ ...options, logger: this.#logger, onFailure: (error) => this.#failed(error) });
     const { sleep, draw } = options;
     this.#space = { sleep, draw, logger: this.#logger, onFailure: (error) => this.#failed(error) };
+    this.#held = new HeldWrites(this.#space, () => {
+      const reading = options.clock.read();
+      return reading.ok ? reading.value.milliseconds : undefined;
+    });
   }
 
   // Asks for a pass at once, for example after intake journaled a command.
@@ -224,12 +229,14 @@ export class LaunchOrchestrator {
     const removable = this.#options.journal.removableRecords();
     if (!reported(this.#options, removable)) return;
     for (const executionId of removable.value) {
+      const key = `record-removed/${executionId}`;
+      if (!this.#held.due(key)) continue;
       const removed = await this.#options.supervision(executionId).remove();
       if (!removed.ok) {
         this.#logger.debug('worker.execution.record-kept', { executionId, reason: removed.error.message });
         continue;
       }
-      if (reported(this.#options, this.#options.journal.recordRecordRemoved(executionId))) {
+      if (this.#held.commit(key, () => this.#options.journal.recordRecordRemoved(executionId))) {
         this.#logger.debug('worker.execution.record-removed', { executionId });
       }
     }
@@ -257,8 +264,9 @@ export class LaunchOrchestrator {
       if (!needsCancelFile(execution, this.#launches.has(execution.assignmentId)) || this.#forwarded.has(key)) continue;
       if (cancelFiled(await this.#options.supervision(execution.executionId).cancel(reason))) this.#forwarded.add(key);
     }
-    if (launches.length === 0 && executions.every(isSettled)) {
-      reported(this.#options, this.#options.journal.recordCancellationEvidence(commandId));
+    const evidence = `cancellation-evidence/${commandId}`;
+    if (launches.length === 0 && executions.every(isSettled) && this.#held.due(evidence)) {
+      this.#held.commit(evidence, () => this.#options.journal.recordCancellationEvidence(commandId));
     }
   }
 
