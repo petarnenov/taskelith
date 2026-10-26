@@ -3,6 +3,7 @@ import { owningExecution } from './attempt.js';
 import { withStart, withUnauthorizedStart, type Execution } from './execution.js';
 import type { ExecutionId, InstallationState, LaunchAuthId, RecoveryEpoch, WorkerId } from './identifiers.js';
 import type { LaunchGrant } from './launch-grant.js';
+import { isQuarantineEvidence } from './observation-epoch.js';
 import { locateExecution, withAttempt, withExecution, type Task } from './task.js';
 
 // A worker's report that a spawn happened, from its supervisor's handle.
@@ -48,7 +49,7 @@ export function decideStartObservation(observation: StartObservation, context: S
   if (located !== undefined && located.execution.workerId !== observation.workerId) return 'foreign';
   const bound = located !== undefined && isBoundGrant(grant, observation, located.execution);
   if (bound && located.execution.start !== undefined) return 'duplicate';
-  if (installation.quarantined || observation.recoveryEpoch !== installation.recoveryEpoch) return 'quarantine-evidence';
+  if (isQuarantineEvidence(observation.recoveryEpoch, installation)) return 'quarantine-evidence';
   if (located === undefined || !bound) return 'unauthorized-start';
   const { attempt, execution } = located;
   if (execution.state === 'exited') return 'historical';
