@@ -8,7 +8,7 @@ Date: 2026-10-26. Author verification is recorded below; the independent review 
 
 - Base revision: `8a9abb6` on `dev`.
 - Scope: the worker-side admission pressure, the disk floor, and the backlog limit, as the design states.
-- Out of scope: 20d2 (`implement-worker-contact-and-offline`), the `unrecorded-process` follow-up, the daemon overhead limit, the retry of a write refused for lack of space, and any contract change.
+- Out of scope: 20d2 (`implement-worker-contact-and-offline`), the `unrecorded-process` follow-up, 20e2 (the daemon overhead causes and the retry of a write refused for lack of space), and any contract change.
 
 ### Dependency gate
 
@@ -16,7 +16,7 @@ Date: 2026-10-26. Author verification is recorded below; the independent review 
 
 ## Evidence
 
-- Revision: `f5807d7` (code, tests, and proposal).
+- Revision: `f5807d7` for the author check; `4ba367d` after the pass 1 fixes.
 - Environment: macOS 26.6.2 x86_64, Node v24.22.1, Docker with the Compose services of `make verify`.
 - Dependencies: no package added.
 - Contracts: no change to `docs/contracts`, `execution.asyncapi.json`, or the OpenAPI document; journal format 3 unchanged.
@@ -33,11 +33,22 @@ Date: 2026-10-26. Author verification is recorded below; the independent review 
 - **OpenSpec:** `npm run openspec -- validate implement-worker-admission-pressure --strict` passes; every requirement is under 450 characters, and an archive in a scratch copy validates with `--all --strict`.
 - **make verify:** passed at `f5807d7` (1638 tests, 0 failures; coverage 99.27% lines, 91.75% branches, 98.80% functions).
 
-## Review
+## Review pass 1
 
-Pending: the worker session runs the independent review.
+Codex, `gpt-6.1-sol` (`medium`, model and effort confirmed from the session header), read-only, session `01a177e6-12ae-7630-b606-a011ca5b7859`, invoked as `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`. It reviewed `9722117..e10272f`; the snapshots before and after the pass matched. `origin/dev` was then merged at `ac77fb7`. Findings: 0 Critical, 2 High, 1 Medium, 1 Low.
+
+- **High 1 (fixed, `b3070e0`):** log truncation followed a link given as the root, and an entry swapped for a link between the listing and the truncation could empty a file outside `worker/logs/`. The root and each directory are now checked with `lstat`, and each file is opened with `O_NOFOLLOW`, checked through its descriptor, and truncated through that descriptor. Tests: a linked root and a linked file keep the target's content.
+- **High 2 (fixed, `b3070e0`):** a hard link in `worker/logs/` to the journal or a record passed the regular-file check, and truncation emptied the shared content. A file whose descriptor shows more than one link is left alone. Test: a hard link to the journal file.
+- **Medium (fixed, `533841f`):** a cancellation that ended the wait for pressure still led to W2, a seal, and W6. A new execution now ends before W2 with no operation and no seal; an execution journaled before is sealed and reported `not-started`, as any cancelled launch is. Test: a cancellation during the wait leaves no execution, request, or supervisor, and its evidence is recorded.
+- **Low (fixed, `d6b81da`):** the retry test used a new instance. It now uses one instance whose journal fails once: the second refresh records the change, and a third records nothing.
+- **Coordinator decisions (`4ba367d`):** design D2 accepted (one pressure observation after every start, possibly empty, no journal format 4, which would change worker journal contract section 10); 20e2 (item 20, G2) recorded under the design's Non-Goals.
+- **make verify:** passed at `4ba367d` (1641 tests, 0 failures; coverage 99.25% lines, 91.74% branches, 98.81% functions).
+
+## Review pass 2
+
+Pending.
 
 ## Limitations and remaining gates
 
-- The daemon overhead limit (`daemon-memory`, `event-loop-lag`) is not measured; the coordinator decides where it goes.
+- The daemon overhead causes (`daemon-memory`, `event-loop-lag`) and the retry of a write refused for lack of space belong to 20e2.
 - The worker journals one pressure observation after every start, also when nothing changed (design D2).
