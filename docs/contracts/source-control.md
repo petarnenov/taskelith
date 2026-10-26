@@ -1,6 +1,6 @@
 # Source control port contract
 
-Date: 2026-10-26. Status: proposed contract for G3 ([G3 work plan](../g3-plan.md) item 7, `define-scm-port`), under independent review. It defines the draft `SourceControlProvider` port, version `0.1.0`, through which an SCM plugin issues per-run credentials, hosts change requests, commit statuses, and protected merges, and verifies webhooks, and the SCM-neutral conformance suite that every SCM plugin passes. [ADR 0006](../decisions/0006-github-first-scm.md) makes GitHub.com the first SCM and Forgejo a later second one; the [GitHub qualification](../qualification/github.md#consequences-for-the-scm-port) states the port's needs in SCM-neutral terms. G3 item 20 implements the port for GitHub, and items 21, 29, 32, 35, 37, 38, and 40 build on it.
+Date: 2026-10-26. Status: proposed contract for G3 ([G3 work plan](../g3-plan.md) item 7, `define-scm-port`), under independent review. It defines the draft `SourceControlProvider` port, version `0.1.0`, through which an SCM plugin issues per-run credentials, hosts change requests, commit statuses, and protected merges, and verifies webhooks, and the SCM-neutral conformance suite that every SCM plugin passes. [ADR 0006](../decisions/0006-github-first-scm.md) makes GitHub.com the first SCM and Forgejo a later second one; the [GitHub qualification](../qualification/github.md#consequences-for-the-scm-port) states the port's needs in SCM-neutral terms. G3 item 20 implements the port for GitHub, and item 9 maps it onto the wire schemas.
 
 ## 1. Purpose and parties
 

@@ -103,6 +103,23 @@ Reviewer assigned by the coordinator: Codex CLI, `gpt-6.1-sol`, reasoning effort
 | 8 | Medium | A refresh could extend only the declared expiry. | A refresh returns a new secret and ends the previous one; the suite checks both on the service. Waiting for the original expiry is left to item 20 (Limitations). |
 | 9 | Medium | Credentials of concurrent runs were not checked for isolation. | Two runs' credentials are issued at once; neither widens the other, and revoking one leaves the other usable. |
 
+### Pass 3
+
+- Invocation: as in pass 1, with a prompt that names the pass 2 session, asks for each pass 2 finding's resolution, and then for a review of the whole change, including the merge of `dev`.
+- Reviewed revision: `57f8c24`. `make verify` passed on it before the pass (1468 tests, 1453 passed, 0 failed, 15 skipped; coverage of all files 99.08% lines, 91.39% branches, 98.50% functions).
+- Confirmation: `model: gpt-6.1-sol`, `sandbox: read-only`, `reasoning effort: medium`, session ID `01a17730-f75d-79f3-9e41-fb2888a270a3`.
+- Snapshot: `c629b41f73987dd452f64952bab5be697a04680ec8e3a654bf5728b96f2e50b5` before and after; unchanged.
+- Pass 2 findings: 1, 2, 4, 5, 6, 7, and 9 resolved; 8 resolved for the reported defect; 3 partly resolved, carried into finding 1 below. The merge resolution and the `ChangeRequestMerge` rename raised no finding.
+- Findings: Critical 0, High 2, Medium 2, Low 1.
+
+| # | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| 1 | High | Missing, `failure`, and `error` required statuses are checked only with the fixture's merge method; other declared methods get only `pending` and a moved head. | Open: the third pass is the last, so the owner decides (see [Remaining gates](#remaining-gates)). |
+| 2 | High | Repository scope is not checked for reads: no credential's read outside the project is checked. | Open, as finding 1. |
+| 3 | Medium | Refresh and revocation check only that writes end, not reads, and the revoked read-only credential of the isolation case is not checked. | Open, as finding 1. |
+| 4 | Medium | `write-change-requests` and `write-statuses` are never requested or checked on the service. | Open, as finding 1. |
+| 5 | Low | The contract listed wave 7 of the plan as the items that build on the port; the items that depend on item 7 are 9 and 20. | Unreviewed fix: the contract names items 20 and 9. |
+
 ## Final checks
 
 Pending.
@@ -115,6 +132,8 @@ Pending.
 - The Forgejo and GitHub mapping was reviewed against repository records ([ADR 0006](../../../docs/decisions/0006-github-first-scm.md) and the [GitHub qualification](../../../docs/qualification/github.md)) without network access, because the assigned reviewer has none.
 
 ## Remaining gates
+
+- The owner's decision on the High and Medium findings left after pass 3: fix them without review, accept them as a known risk, or defer them; a fourth pass needs the owner's permission.
 
 - Integration into `dev` and the archive by the coordinator.
 - Item 20 runs the suite against GitHub.com; Forgejo's admission confirms the mapping.
