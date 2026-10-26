@@ -290,17 +290,17 @@ function stopJournal(worker: RunningWorker): void {
   Object.defineProperty(worker.root.journal, 'fault', { value: fault });
 }
 
-test('a journal stopped after the connection sends no heartbeat, at an interval or a reconnect', async () => {
+test('a journal stopped after the connection sends no heartbeat or inventory, at an interval or a reconnect', async () => {
   const worker = await start();
   await until(() => broker.core.length === 1 && timers.waiting.includes(10_000));
   stopJournal(worker);
   timers.elapse(10_000);
   broker.statuses[0]?.push('disconnect');
   broker.statuses[0]?.push('reconnect');
-  await until(() => broker.ofType('worker.inventory.reported').length === 2 && timers.waiting.includes(10_000));
+  await until(() => timers.waiting.includes(5_000) && timers.waiting.includes(10_000));
   timers.elapse(10_000);
   await until(() => timers.waiting.includes(10_000));
-  assert.equal(broker.core.length, 1);
+  assert.deepEqual([broker.core.length, broker.ofType('worker.inventory.reported').length], [1, 1]);
 });
 
 test('a runtime failure stops the launches, then closes the root, and settles stopped', async () => {
@@ -350,6 +350,7 @@ test('a close that fails still stops a served worker without a rejection', async
   const host: ServiceProcess = { on: (signal, listener) => listeners.set(signal, listener), off: () => undefined };
   const lines: string[] = [];
   const served = serveUntilStopped(worker, host, (line) => lines.push(line));
+  await until(() => broker.core.length === 1);
   listeners.get('SIGINT')?.();
   listeners.get('SIGTERM')?.();
   await served;

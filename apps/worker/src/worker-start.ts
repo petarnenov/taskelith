@@ -268,7 +268,7 @@ function observationPublishing(context: SessionContext, transport: TransportConn
   const { journal } = context.root;
   return {
     journal, publish: publisher.publish.bind(publisher), observationSubject: context.subjects.observations,
-    now: () => context.dependencies.clock.now(),
+    now: () => context.dependencies.clock.now(), journalFault: () => journal.fault,
   };
 }
 

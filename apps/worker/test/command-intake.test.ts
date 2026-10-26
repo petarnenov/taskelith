@@ -62,7 +62,7 @@ function newIntake(capacity: WorkerCapacity): CommandIntake {
   let reports = 0;
   return new CommandIntake({
     journal: root.journal, capacity, publish: broker.publish, observationSubject: SUBJECT,
-    newReportId: () => `report-${(reports += 1)}`, now: () => T0,
+    newReportId: () => `report-${(reports += 1)}`, now: () => T0, journalFault: () => root.journal.fault,
   });
 }
 

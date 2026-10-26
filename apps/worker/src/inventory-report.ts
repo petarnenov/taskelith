@@ -1,5 +1,5 @@
 import type { WorkerJournal } from '@taskelith/execution';
-import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Failure, type Instant, type Result } from '@taskelith/kernel';
 import { encodeJson, retryDelayMilliseconds, TRANSPORT_LIMITS, type Publication, type PublishOutcome, type TransportLimits } from '@taskelith/nats';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import { inventoryParts } from './observation-messages.js';
@@ -10,6 +10,8 @@ export interface InventoryReportOptions {
   readonly observationSubject: string;
   readonly newReportId: () => string;
   readonly now: () => Instant;
+  // A flush failure stops the journal and every later part (section 7).
+  readonly journalFault: () => Failure | undefined;
 }
 
 // One snapshot in parts; a failed part fails the report, and a later
@@ -25,13 +27,15 @@ interface ReportScope {
 }
 
 async function publishSnapshot(options: InventoryReportOptions, scope: ReportScope): Promise<Result<void>> {
-  const { journal, newReportId, now, observationSubject: subject, publish } = options;
+  const { journal, journalFault, newReportId, now, observationSubject: subject, publish } = options;
   const { requestId, signal } = scope;
   const inventory = journal.takeInventory();
   if (!inventory.ok) return inventory;
   const answer = { reportId: newReportId(), reportedAt: now(), ...(requestId === undefined ? {} : { requestId }) };
   for (const part of inventoryParts(journal.binding, inventory.value, answer)) {
     if (signal?.aborted === true) return err(failure('unavailable', 'the link went down during the report'));
+    const fault = journalFault();
+    if (fault !== undefined) return err(fault);
     const sent = await publish({ subject, body: encodeJson(part), messageId: `${part.reportId}.${part.part}` });
     if (!sent.ok) return sent;
   }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 import { checkMessageSchema } from '@taskelith/contracts';
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Failure, type Result } from '@taskelith/kernel';
 import { TRANSPORT_LIMITS, type Publication, type PublishOutcome } from '@taskelith/nats';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { value } from '@taskelith/testing';
@@ -17,6 +17,7 @@ let answers: Array<Result<PublishOutcome>>;
 let timers: ManualTimers;
 let sink: InMemoryLogSink;
 let options: ConnectionReportOptions;
+let fault: Failure | undefined;
 
 beforeEach(() => {
   ({ root, remove } = temporaryJournal());
@@ -24,9 +25,11 @@ beforeEach(() => {
   answers = [];
   timers = new ManualTimers();
   sink = new InMemoryLogSink();
+  fault = undefined;
   let reports = 0;
   options = {
     journal: root.journal, observationSubject: 'observations', now: () => T0, newReportId: () => `report-${(reports += 1)}`,
+    journalFault: () => fault,
     publish: async (publication) => {
       const answer = answers.shift() ?? ok('stored');
       if (answer.ok) published.push(publication);
@@ -79,7 +82,8 @@ test('a link that goes down ends the retries of its report', async () => {
   assert.deepEqual([published, timers.waiting], [[], []]);
 });
 
-test('a link that goes down during a report publishes none of its later parts', async () => {
+// Two parts, the first held until `acknowledge` is called.
+function heldReport(): { readonly held: ConnectionReportOptions; readonly acknowledge: () => void } {
   for (let number = 1; number <= 257; number += 1) value(root.journal.recordCommand(offer(number)));
   let acknowledge: () => void = () => undefined;
   const held: ConnectionReportOptions = { ...options, publish: async (publication) => {
@@ -90,6 +94,11 @@ test('a link that goes down during a report publishes none of its later parts', 
     });
     return ok('stored');
   } };
+  return { held, acknowledge: () => acknowledge() };
+}
+
+test('a link that goes down during a report publishes none of its later parts', async () => {
+  const { held, acknowledge } = heldReport();
   const link = new AbortController();
   const reported = reportInventoryOnConnection(held, link.signal);
   await flush();
@@ -98,4 +107,15 @@ test('a link that goes down during a report publishes none of its later parts', 
   acknowledge();
   await reported;
   assert.deepEqual([published.map(({ messageId }) => messageId), timers.waiting, sink.records], [['report-1.1'], [], []]);
+});
+
+test('a journal fault during a report publishes none of its later parts', async () => {
+  const { held, acknowledge } = heldReport();
+  const answered = publishInventory(held, 'request-7');
+  await flush();
+  assert.equal(published.length, 1);
+  fault = failure('unavailable', 'journal I/O error', { reason: 'flush-failure' });
+  acknowledge();
+  const answer = await answered;
+  assert.deepEqual([answer.ok, published.map(({ messageId }) => messageId)], [false, ['report-1.1']]);
 });

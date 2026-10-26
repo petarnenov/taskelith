@@ -44,12 +44,31 @@ export class BrokerSession<Link extends BrokerLink> {
   // The retry delays of a launch: 5 s doubling to 60 s, with jitter.
   async #connect(signal: AbortSignal): Promise<Link | undefined> {
     for (let retry = 1; !signal.aborted; retry += 1) {
-      const connected = await this.#options.connect();
+      const connected = await this.#attempt(signal);
+      if (connected === STOPPED) return undefined;
       if (connected.ok) return connected.value;
       this.#logger.warn('worker.broker.connect-failed', { retry, reason: connected.error.message });
       await this.#options.sleep(launchRetryDelay(retry, this.#options.draw()), signal);
     }
     return undefined;
+  }
+
+  // A stop does not wait for a pending attempt, which may wait on DNS
+  // without a timeout; its late outcome is discarded.
+  async #attempt(signal: AbortSignal): Promise<Result<Link> | typeof STOPPED> {
+    const attempt = this.#options.connect();
+    const connected = await settledUnlessAborted(attempt, signal);
+    if (connected === STOPPED) void this.#discard(attempt);
+    return connected;
+  }
+
+  async #discard(attempt: Promise<Result<Link>>): Promise<void> {
+    try {
+      const connected = await attempt;
+      if (connected.ok) await connected.value.close();
+    } catch (error) {
+      this.#logger.warn('worker.broker.late-attempt-failed', { reason: (error as Error).message });
+    }
   }
 
   // The link's work runs until the worker stops, the link closes, or a task
@@ -96,6 +115,16 @@ export class BrokerSession<Link extends BrokerLink> {
 }
 
 const ENDED = { done: true as const, value: undefined };
+const STOPPED = Symbol('stopped');
+
+function settledUnlessAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T | typeof STOPPED> {
+  if (signal.aborted) return Promise.resolve(STOPPED);
+  return new Promise((resolve, reject) => {
+    const abort = () => resolve(STOPPED);
+    signal.addEventListener('abort', abort, { once: true });
+    void promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+  });
+}
 
 // Each wait removes its own abort listener, so none accumulates.
 function nextUnlessAborted<T>(iterator: AsyncIterator<T>, signal: AbortSignal): Promise<IteratorResult<T>> {

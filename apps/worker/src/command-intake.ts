@@ -11,7 +11,7 @@ import {
   type WorkerJournal,
 } from '@taskelith/execution';
 import type { WorkerCapacity } from '@taskelith/fleet';
-import { err, failure, ok, parseIdentifier, type CorrelationId, type Instant, type Result } from '@taskelith/kernel';
+import { err, failure, ok, parseIdentifier, type CorrelationId, type Failure, type Instant, type Result } from '@taskelith/kernel';
 import { parseGeneration, parseOwnershipGeneration } from '@taskelith/sdlc';
 import type { DeliveredMessage, Publication, PublishOutcome } from '@taskelith/nats';
 import { refusalOf } from './assignment-admission.js';
@@ -33,6 +33,7 @@ export interface CommandIntakeOptions {
   readonly observationSubject: string;
   readonly newReportId: () => string;
   readonly now: () => Instant;
+  readonly journalFault: () => Failure | undefined;
   // Called after each W1 commit, so a launch can start at once.
   readonly onRecorded?: () => void;
 }

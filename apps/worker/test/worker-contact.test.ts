@@ -149,7 +149,7 @@ interface SessionTrace {
   readonly links: FakeLink[];
   readonly served: AbortSignal[];
   readonly ups: AbortSignal[];
-  answers: Array<Result<FakeLink> | undefined>;
+  answers: Array<Result<FakeLink> | Promise<Result<FakeLink>> | undefined>;
 }
 
 type Work = (signal: AbortSignal) => Promise<void>;
@@ -284,7 +284,7 @@ test('the status watcher keeps no listener per status event', async () => {
   await running;
 });
 
-test('a stop while connecting retries nothing', async () => {
+test('a stop during the connection backoff retries nothing', async () => {
   const trace = newTrace();
   trace.answers = [err(failure('unavailable', 'no broker'))];
   const running = session(trace).run(stopping.signal);
@@ -292,6 +292,54 @@ test('a stop while connecting retries nothing', async () => {
   stopping.abort();
   await running;
   assert.deepEqual([trace.links.length, timers.waiting], [0, []]);
+});
+
+interface Settle {
+  resolve: (link: FakeLink) => void;
+  reject: (error: Error) => void;
+}
+
+interface PendingAttempt {
+  readonly attempt: Promise<Result<FakeLink>>;
+  readonly settle: Settle;
+}
+
+// A connection attempt that settles only when the test settles it.
+function pendingAttempt(): PendingAttempt {
+  const settle: Settle = { resolve: () => undefined, reject: () => undefined };
+  const attempt = new Promise<Result<FakeLink>>((resolve, reject) => {
+    settle.resolve = (link) => resolve(ok(link));
+    settle.reject = reject;
+  });
+  return { attempt, settle };
+}
+
+test('a stop does not wait for a pending connection, and closes its late link', async () => {
+  const trace = newTrace();
+  const pending = pendingAttempt();
+  trace.answers = [pending.attempt];
+  const running = session(trace).run(stopping.signal);
+  await flush();
+  stopping.abort();
+  await running;
+  const late = new FakeLink();
+  pending.settle.resolve(late);
+  await flush();
+  assert.deepEqual([late.closed, trace.served.length, contact.connected], [1, 0, false]);
+});
+
+test('a pending connection that fails after a stop is only logged', async () => {
+  const trace = newTrace();
+  const pending = pendingAttempt();
+  trace.answers = [pending.attempt];
+  const running = session(trace).run(stopping.signal);
+  await flush();
+  stopping.abort();
+  await running;
+  pending.settle.reject(new Error('lookup failed'));
+  await flush();
+  const late = sink.records.filter(({ event }) => event === 'worker.broker.late-attempt-failed');
+  assert.deepEqual(late.map(({ fields }) => fields), [{ reason: 'lookup failed' }]);
 });
 
 // A task the test ends; `end` settles it.
