@@ -1,4 +1,4 @@
-// Journal format 2: the records of the worker journal contract, section 5.
+// Journal format 3: the records of the worker journal contract, section 5.
 export const JOURNAL_SCHEMA = `
 CREATE TABLE journal_meta (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -52,7 +52,10 @@ CREATE TABLE execution (
   assignment_id TEXT NOT NULL REFERENCES launch_intent (assignment_id),
   state TEXT CHECK (state IN ('authorized', 'started', 'exited', 'not-started')),
   record_written INTEGER NOT NULL DEFAULT 0,
-  uncertain_count INTEGER NOT NULL DEFAULT 0
+  uncertain_count INTEGER NOT NULL DEFAULT 0,
+  terminal_sequence INTEGER,
+  record_removed INTEGER NOT NULL DEFAULT 0,
+  termination_unproven INTEGER NOT NULL DEFAULT 0
 ) STRICT;
 
 CREATE TABLE authorization_request (
@@ -60,11 +63,17 @@ CREATE TABLE authorization_request (
   execution_id TEXT NOT NULL REFERENCES execution (execution_id),
   position INTEGER NOT NULL,
   expected TEXT NOT NULL,
-  outcome TEXT NOT NULL CHECK (outcome IN ('pending', 'granted', 'rejected-retryable', 'rejected-final')),
+  outcome TEXT NOT NULL CHECK (outcome IN ('pending', 'granted', 'rejected-retryable', 'rejected-final', 'expired')),
   launch_auth_id TEXT,
   grant_values TEXT,
   rejection_reason TEXT,
   UNIQUE (execution_id, position)
+) STRICT;
+
+CREATE TABLE cancellation_not_applied (
+  command_id TEXT NOT NULL REFERENCES cancellation_request (command_id),
+  execution_id TEXT NOT NULL REFERENCES execution (execution_id),
+  PRIMARY KEY (command_id, execution_id)
 ) STRICT;
 
 CREATE TABLE outbox (
@@ -89,5 +98,38 @@ ALTER TABLE launch_intent ADD COLUMN hard_controls TEXT NOT NULL DEFAULT '[]';
 CREATE TABLE assignment_end (
   assignment_id TEXT PRIMARY KEY,
   command_id TEXT NOT NULL UNIQUE REFERENCES inbox (command_id)
+) STRICT;
+`;
+
+// Format 2 to 3 (contract section 10); only a rebuilt table widens the
+// outcome CHECK, and a sealed execution's pending operation is expired.
+export const MIGRATION_FROM_FORMAT_2 = `
+ALTER TABLE execution ADD COLUMN terminal_sequence INTEGER;
+ALTER TABLE execution ADD COLUMN record_removed INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE execution ADD COLUMN termination_unproven INTEGER NOT NULL DEFAULT 0;
+UPDATE execution SET terminal_sequence = COALESCE((SELECT outbox.sequence FROM outbox
+  WHERE json_extract(outbox.fact, '$.executionId') = execution.execution_id
+    AND json_extract(outbox.fact, '$.kind') IN ('execution-exited', 'execution-not-started')), 0)
+  WHERE state IN ('exited', 'not-started');
+CREATE TABLE authorization_request_3 (
+  operation_id TEXT PRIMARY KEY,
+  execution_id TEXT NOT NULL REFERENCES execution (execution_id),
+  position INTEGER NOT NULL,
+  expected TEXT NOT NULL,
+  outcome TEXT NOT NULL CHECK (outcome IN ('pending', 'granted', 'rejected-retryable', 'rejected-final', 'expired')),
+  launch_auth_id TEXT,
+  grant_values TEXT,
+  rejection_reason TEXT,
+  UNIQUE (execution_id, position)
+) STRICT;
+INSERT INTO authorization_request_3 SELECT * FROM authorization_request;
+UPDATE authorization_request_3 SET outcome = 'expired' WHERE outcome = 'pending'
+  AND execution_id IN (SELECT execution_id FROM execution WHERE state = 'not-started');
+DROP TABLE authorization_request;
+ALTER TABLE authorization_request_3 RENAME TO authorization_request;
+CREATE TABLE cancellation_not_applied (
+  command_id TEXT NOT NULL REFERENCES cancellation_request (command_id),
+  execution_id TEXT NOT NULL REFERENCES execution (execution_id),
+  PRIMARY KEY (command_id, execution_id)
 ) STRICT;
 `;

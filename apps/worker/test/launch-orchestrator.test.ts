@@ -127,22 +127,24 @@ test('a request without a decision is repeated with the same operation, backing 
   assert.equal(executions()[0]?.state, 'exited');
 });
 
-test('offline, nothing starts: past the deadline the execution is sealed, reported not-started, and a new one requested', async () => {
+test('offline, nothing starts: past the deadline the operation expires and the same execution is asked again', async () => {
   value(journal.recordCommand(offer()));
   authority.answers = [unavailable()];
-  stopAfterRequests(4);
+  stopAfterRequests(7);
   await launchOnce();
 
-  const [first, second] = executions();
-  assert.equal(first?.state, 'not-started');
-  assert.notEqual(second?.executionId, first?.executionId);
+  const [only, ...others] = executions();
+  assert.deepEqual(others, []);
+  assert.equal(only?.state, undefined);
+  // Past the first deadline, the delay of 60 s outlasts each new one.
+  assert.deepEqual(only?.authorizations.map(({ outcome }) => outcome), ['expired', 'expired', 'expired', 'expired', 'pending']);
   const operations = authority.requests.map(({ operationId }) => operationId);
   assert.equal(new Set(operations.slice(0, 3)).size, 1);
   assert.notEqual(operations[3], operations[0]);
-  assert.equal(authority.requests[3]?.executionId, second?.executionId);
-  assert.ok(supervisions.all.every((supervision) => !supervision.calls.includes('start')));
-  assert.deepEqual(supervisions.all[0]?.calls, ['seal']);
-  assert.deepEqual(factKinds(), ['execution-not-started']);
+  assert.ok(authority.requests.every(({ executionId }) => executionId === only?.executionId));
+  assert.deepEqual(authority.requests.map(({ reportsNotStarted }) => reportsNotStarted), [false, false, false, true, true, true, true]);
+  assert.deepEqual(supervisions.all, []);
+  assert.deepEqual(factKinds(), []);
 });
 
 test('a retryable rejection is retried under a new operation for the same execution', async () => {
@@ -182,7 +184,7 @@ test('a revocation answered to a retry is a rejection with its reason', async ()
   assert.deepEqual(factKinds(), ['launch-rejected']);
 });
 
-test('an expired answer abandons the execution for a new one', async () => {
+test('an expired answer closes its operation, and the same execution is authorized again', async () => {
   value(journal.recordCommand(offer()));
   authority.answers = [ok({ kind: 'expired' }), granted()];
   supervisions.onCreated = (supervision) => {
@@ -190,8 +192,11 @@ test('an expired answer abandons the execution for a new one', async () => {
   };
   await launchOnce();
 
-  assert.deepEqual(executions().map(({ state }) => state), ['not-started', 'exited']);
-  assert.deepEqual(factKinds(), ['execution-not-started', 'execution-started', 'execution-exited']);
+  const [execution] = executions();
+  assert.deepEqual(executions().map(({ state }) => state), ['exited']);
+  assert.deepEqual(execution?.authorizations.map(({ outcome }) => outcome), ['expired', 'granted']);
+  assert.equal(authority.requests[1]?.reportsNotStarted, true);
+  assert.deepEqual(factKinds(), ['execution-started', 'execution-exited']);
 });
 
 test('a grant that arrives after the deadline is journaled and never used', async () => {
@@ -349,7 +354,12 @@ test('a cancellation after W4 writes the cancel file; evidence waits for the exi
 
 test('cancellation names a superseded execution: the launch stops before evidence is recorded', async () => {
   value(journal.recordCommand(offer()));
-  authority.answers = [ok({ kind: 'expired' }), unavailable()];
+  authority.answers = [granted(), unavailable()];
+  let launches = 0;
+  supervisions.onCreated = (supervision) => {
+    launches += 1;
+    if (launches === 1) supervision.facts = [{ problems: [], launch: { kind: 'seal', by: 'supervisor', reason: 'deadline-passed' } }];
+  };
   await orchestrator.pass(controller.signal);
   await until(() => authority.requests.length >= 2);
   const [superseded, current] = executions();
@@ -555,14 +565,17 @@ test('a failed seal is reported and ends the launch', async () => {
   const failures: unknown[] = [];
   orchestrator = reportingOrchestrator(failures);
   value(journal.recordCommand(offer()));
-  authority.answers = [ok({ kind: 'expired' })];
+  authority.answers = [granted()];
+  authority.onRequest = () => {
+    clock.milliseconds += 25_000;
+  };
   supervisions.onCreated = (supervision) => {
     supervision.sealResult = err(failure('unavailable', 'the seal cannot be written'));
   };
   await launchOnce();
   assert.deepEqual(failures.map((failed) => (failed as { message: string }).message), ['the seal cannot be written']);
   assert.equal(authority.requests.length, 1);
-  assert.equal(executions()[0]?.state, undefined);
+  assert.equal(executions()[0]?.state, 'authorized');
 });
 
 test('a failed recovery is reported and ends the launch', async () => {

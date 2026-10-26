@@ -1,12 +1,14 @@
+import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { ExecutionId } from '@taskelith/execution';
-import { ok, type Result } from '@taskelith/kernel';
+import type { ExecutionId, ExecutionProcess } from '@taskelith/execution';
+import { err, failure, ok, type Result } from '@taskelith/kernel';
 import {
   FileRecordStore,
   parseLaunch,
   prepareRecord,
   readReportedFacts,
   recoverExecution,
+  removeRecord,
   requestCancellation,
   RECORD_FILES,
   sealLaunch,
@@ -17,11 +19,14 @@ import {
   type ExecutionAccount,
   type LaunchRecord,
   type Platform,
+  type SurvivingProcess,
   type WorkerSupervisionDependencies,
 } from '@taskelith/worker-supervisor';
 import type {
   ExecutionSupervision,
   LaunchPlan,
+  RecordListing,
+  RecoveryRound,
   SupervisedFacts,
   SupervisedRecovery,
   SupervisionFactory,
@@ -98,29 +103,48 @@ class FileExecutionSupervision implements ExecutionSupervision {
     if (!text.ok) return text;
     // An unreadable launch record is already among the facts' problems.
     const launch = text.value === undefined ? undefined : parseLaunch(text.value);
-    const { handle, exit, problems } = facts.value;
+    const { handle, exit, survivors, cancellationNotApplied, problems } = facts.value;
     const platform = this.#options.platform.name;
+    const group = handle?.kind === 'spawned' ? handle.processGroupId : undefined;
     return ok({
       problems,
+      cancellationNotApplied,
       ...(launch?.ok ? { launch: launch.value } : {}),
       ...(handle?.kind === 'spawned' ? { process: { platform, ...handle.process, processGroupId: handle.processGroupId } } : {}),
       ...(exit === undefined ? {} : { exit }),
+      ...(survivors === undefined || group === undefined ? {} : { survivors: survivors.map((survivor) => survivorOf(survivor, platform, group)) }),
     });
   }
 
-  async recover(): Promise<Result<SupervisedRecovery>> {
-    const recovered = await recoverExecution(this.#dependencies, 'record');
+  // The worker journaled the record (W4) before any supervisor started.
+  async recover(round: RecoveryRound): Promise<Result<SupervisedRecovery>> {
+    const recovered = await recoverExecution(this.#dependencies, 'record', round === 'after-retry');
     if (!recovered.ok) return recovered;
-    switch (recovered.value.fact) {
-      case 'not-started':
-        return ok({ fact: 'not-started' });
-      case 'exited':
-        return ok({ fact: 'exited', exit: recovered.value.exit });
-      case 'adopted':
-      case 'retry':
-        return ok({ fact: 'observe' });
-      case 'uncertain':
-        return ok({ fact: 'uncertain' });
-    }
+    return ok(recovered.value.fact === 'adopted' ? { fact: 'observe' } : recovered.value);
   }
+
+  async remove(): Promise<Result<void>> {
+    const exists = await this.#dependencies.store.exists();
+    if (!exists.ok || !exists.value) return exists.ok ? ok(undefined) : exists;
+    return removeRecord(this.#dependencies);
+  }
+}
+
+// An entry an earlier supervisor wrote names no group: the child's, then.
+function survivorOf(survivor: SurvivingProcess, platform: 'linux' | 'darwin', childGroup: number): ExecutionProcess {
+  const { bootId, pid, startTime, processGroupId } = survivor;
+  return { platform, bootId, pid, startTime, processGroupId: processGroupId ?? childGroup };
+}
+
+// Directories only; anything else in `executions/` is no record.
+export function fileRecordListing(executions: string): RecordListing {
+  return async () => {
+    try {
+      const entries = await readdir(executions, { withFileTypes: true });
+      return ok(Object.freeze(entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return ok(Object.freeze([]));
+      return err(failure('unavailable', `cannot list ${executions}: ${(error as Error).message}`));
+    }
+  };
 }

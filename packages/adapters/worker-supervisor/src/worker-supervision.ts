@@ -1,4 +1,5 @@
 import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { parseEvents } from './event-log.js';
 import { sameProcess } from './process-identity.js';
 import type { ExecutionLock, Platform, RecordStore } from './ports.js';
 import {
@@ -10,11 +11,13 @@ import {
   parseSupervisor,
   RECORD_FILES,
   supervisorFile,
+  type EventEntry,
   type ExitRecord,
   type HandleRecord,
   type IntentRecord,
   type LaunchRecord,
   type RecordProblem,
+  type SurvivingProcess,
 } from './record.js';
 import {
   decideRecovery,
@@ -76,6 +79,9 @@ export async function requestCancellation(dependencies: WorkerSupervisionDepende
 export interface ReportedFacts {
   readonly handle?: HandleRecord;
   readonly exit?: ExitRecord;
+  // The first survivors the supervisor reported (section 8).
+  readonly survivors?: readonly SurvivingProcess[];
+  readonly cancellationNotApplied: boolean;
   readonly problems: readonly RecordProblem[];
 }
 
@@ -83,8 +89,20 @@ export interface ReportedFacts {
 export async function readReportedFacts(dependencies: WorkerSupervisionDependencies): Promise<Result<ReportedFacts>> {
   const snapshot = await readSnapshot(dependencies.store);
   if (!snapshot.ok) return snapshot;
-  const { handle, exit, problems } = snapshot.value;
-  return ok({ ...(handle ? { handle } : {}), ...(exit ? { exit } : {}), problems });
+  const { handle, exit } = snapshot.value;
+  const events = await readEvents(dependencies.store);
+  if (!events.ok) return events;
+  const problems = events.value.ok ? snapshot.value.problems : [...snapshot.value.problems, events.value.error];
+  const entries = events.value.ok ? events.value.value : [];
+  const survivors = entries.find((entry) => entry.kind === 'survivors')?.processes;
+  const cancellationNotApplied = entries.some((entry) => entry.kind === 'cancellation' && entry.step === 'not-applied');
+  return ok({ ...(handle ? { handle } : {}), ...(exit ? { exit } : {}), ...(survivors ? { survivors } : {}), cancellationNotApplied, problems });
+}
+
+async function readEvents(store: RecordStore): Promise<Result<Result<readonly EventEntry[], RecordProblem>>> {
+  const text = await store.read(RECORD_FILES.events);
+  if (!text.ok) return text;
+  return ok(text.value === undefined ? ok([]) : parseEvents(text.value));
 }
 
 export type RecoveryResult =

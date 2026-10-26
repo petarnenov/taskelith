@@ -101,7 +101,9 @@ export type CommandRecording =
   | { readonly kind: 'recorded' }
   | { readonly kind: 'duplicate' };
 
-export const AUTHORIZATION_OUTCOMES = Object.freeze(['pending', 'granted', 'rejected-retryable', 'rejected-final'] as const);
+// `expired`: no usable grant can come of the operation, as after an
+// `expired` answer or a deadline passed without a decision.
+export const AUTHORIZATION_OUTCOMES = Object.freeze(['pending', 'granted', 'rejected-retryable', 'rejected-final', 'expired'] as const);
 
 export type AuthorizationOutcome = (typeof AUTHORIZATION_OUTCOMES)[number];
 
@@ -213,7 +215,9 @@ export type ObservationFact =
   })
   | ({ readonly kind: 'execution-exited' } & ExecutionSubject & { readonly exit: ExecutionExit })
   | ({ readonly kind: 'execution-not-started' } & ExecutionSubject)
-  | ({ readonly kind: 'execution-uncertain' } & ExecutionSubject & { readonly evidenceCounter: number });
+  | ({ readonly kind: 'execution-uncertain' } & ExecutionSubject & { readonly evidenceCounter: number })
+  | ({ readonly kind: 'termination-unproven' } & ExecutionSubject & { readonly survivors: readonly ExecutionProcess[] })
+  | ({ readonly kind: 'cancellation-not-applied' } & ExecutionSubject & { readonly commandId: CommandId });
 
 export interface OutboxEntry {
   readonly position: ObservationPosition;

@@ -43,7 +43,7 @@ function recoverExecution(execution: JournaledExecution, cancelled: boolean): Re
   if (execution.state === 'exited' || execution.state === 'not-started') return [];
   if (execution.recordWritten) return [{ kind: 'recover-execution-record', executionId }];
   if (endsWithoutProcess(execution)) return [{ kind: 'seal-execution', executionId }];
-  if (lastOutcome(execution) === 'rejected-retryable' && !cancelled) return [{ kind: 'retry-authorization', executionId }];
+  if (mayRetry(execution) && !cancelled) return [{ kind: 'retry-authorization', executionId }];
   return [];
 }
 
@@ -53,6 +53,13 @@ function endsWithoutProcess(execution: JournaledExecution): boolean {
   if (execution.state === 'not-started') return true;
   if (execution.state === 'exited' || execution.recordWritten) return false;
   return execution.state === 'authorized' || lastOutcome(execution) === 'pending';
+}
+
+// A retryable rejection, or an operation that expired before any grant:
+// a new `operationId` for the same execution (section 5).
+function mayRetry(execution: JournaledExecution): boolean {
+  const outcome = lastOutcome(execution);
+  return execution.state === undefined && (outcome === 'rejected-retryable' || outcome === 'expired');
 }
 
 function lastOutcome(execution: JournaledExecution): AuthorizationOutcome | undefined {

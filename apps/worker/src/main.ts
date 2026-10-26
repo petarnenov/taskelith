@@ -2,12 +2,13 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
 import { isFailureCode, ok, type Failure, type Result } from '@taskelith/kernel';
-import { SYSTEM_CLOCK } from '@taskelith/node-observability';
+import { JsonLinesLogSink, SYSTEM_CLOCK } from '@taskelith/node-observability';
+import { Logger } from '@taskelith/observability';
 import { connectWorkerTransport } from '@taskelith/nats';
 import { redactFailure, redactSecrets } from '@taskelith/secrets';
 import { HttpEnrollmentClient, HttpLaunchAuthorityClient } from '@taskelith/worker-control-plane-client';
 import { hostPlatform } from '@taskelith/worker-supervisor';
-import { fileSupervision } from './execution-supervision.js';
+import { fileRecordListing, fileSupervision } from './execution-supervision.js';
 import {
   CONTROL_PLANE_TIMEOUT_MILLISECONDS,
   currentHost,
@@ -45,11 +46,12 @@ function productionLaunching(settings: WorkerSettings): LaunchingDependencies {
     sleep: (milliseconds, signal) => delay(milliseconds, undefined, { signal }).catch(() => undefined),
     draw: Math.random,
     newId: randomUUID,
+    logger: new Logger(new JsonLinesLogSink(process.stderr), SYSTEM_CLOCK),
     onFailure: reportLaunchFailure,
   };
 }
 
-// The worker has no logger yet (20d), so a failed launch goes to stderr.
+// A failed launch goes to stderr as one line, beside the structured logs.
 function reportLaunchFailure(error: unknown): void {
   process.stderr.write(`${launchFailureLine(error)}\n`);
 }
@@ -89,7 +91,11 @@ function launchHost(launch: LaunchSettings, executions: string, version: string)
     ...(containmentParent === undefined ? {} : { containmentParent }),
     ...(executionAccount === undefined ? {} : { executionAccount }),
   };
-  return ok({ clock: platform.value.clock, supervision: fileSupervision({ executions, platform: platform.value, program }) });
+  return ok({
+    clock: platform.value.clock,
+    supervision: fileSupervision({ executions, platform: platform.value, program }),
+    records: fileRecordListing(executions),
+  });
 }
 
 // The worker entry that item 23's image runs; it exits with 1 when it cannot

@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { id, value } from '@taskelith/testing';
-import { fileSupervision, type ExecutionSupervision, type LaunchProgram } from '@taskelith/worker';
-import { encodeRecord, RECORD_FILES, type Platform } from '@taskelith/worker-supervisor';
+import { fileRecordListing, fileSupervision, type ExecutionSupervision, type LaunchProgram } from '@taskelith/worker';
+import { encodeEvent, encodeRecord, RECORD_FILES, type Platform } from '@taskelith/worker-supervisor';
 import { BOOT } from './launch-fakes.ts';
 
 const EXECUTION = id('ExecutionId', 'execution-1');
@@ -76,6 +76,7 @@ test('read reports the launch record, the spawned process, and the exit', async 
   const facts = value(await supervision().read());
   assert.deepEqual(facts, {
     problems: [],
+    cancellationNotApplied: false,
     launch: { kind: 'claim', launchAuthId: 'grant-1', supervisor: 1 },
     process: { platform: 'darwin', bootId: BOOT, pid: 42, startTime: 7, processGroupId: 42 },
     exit: { status: { kind: 'code', code: 0 }, startProven: true, termination: 'process-group-empty' },
@@ -99,7 +100,7 @@ test('cancel writes the cancel file once', async () => {
 
 test('recovery of a record without a launch record seals it and reports not-started', async () => {
   value(await supervision().prepare(PLAN));
-  assert.deepEqual(value(await supervision().recover()), { fact: 'not-started' });
+  assert.deepEqual(value(await supervision().recover('first')), { fact: 'not-started' });
   assert.deepEqual(recordFile(RECORD_FILES.launch), { format: 1, kind: 'seal', by: 'worker', reason: 'recovery' });
 });
 
@@ -110,7 +111,48 @@ test('recovery reports a recorded exit, and a missing record is uncertain', asyn
   writeFileSync(join(directory, RECORD_FILES.exit), encodeRecord({
     status: { kind: 'unknown' }, startProven: false, spawnFailure: 'ENOENT', termination: 'never-spawned',
   }));
-  assert.equal(value(await supervision().recover()).fact, 'exited');
+  assert.equal(value(await supervision().recover('first')).fact, 'exited');
   rmSync(directory, { recursive: true });
-  assert.deepEqual(value(await supervision().recover()), { fact: 'uncertain' });
+  assert.deepEqual(value(await supervision().recover('first')), { fact: 'uncertain', reason: 'the journaled record is missing or damaged' });
+});
+
+test('read reports the first survivors with their groups, an older entry with the child group, and a cancel not applied', async () => {
+  value(await supervision().prepare(PLAN));
+  const directory = join(executions, EXECUTION);
+  writeFileSync(join(directory, RECORD_FILES.handle), encodeRecord({
+    kind: 'spawned', process: { bootId: BOOT, pid: 42, startTime: 7 }, processGroupId: 42,
+  }));
+  const survivors = [{ bootId: BOOT, pid: 43, startTime: 8, processGroupId: 50 }, { bootId: BOOT, pid: 44, startTime: 9 }];
+  writeFileSync(join(directory, RECORD_FILES.events), [
+    encodeEvent({ kind: 'survivors', processes: survivors }),
+    encodeEvent({ kind: 'survivors', processes: [] }),
+    encodeEvent({ kind: 'cancellation', step: 'not-applied' }),
+  ].join(''));
+  const facts = value(await supervision().read());
+  assert.deepEqual(facts.survivors, [
+    { platform: 'darwin', bootId: BOOT, pid: 43, startTime: 8, processGroupId: 50 },
+    { platform: 'darwin', bootId: BOOT, pid: 44, startTime: 9, processGroupId: 42 },
+  ]);
+  assert.equal(facts.cancellationNotApplied, true);
+});
+
+test('a damaged event log is a problem of the read', async () => {
+  value(await supervision().prepare(PLAN));
+  writeFileSync(join(executions, EXECUTION, RECORD_FILES.events), '9:00000000:{}\n');
+  assert.deepEqual(value(await supervision().read()).problems.map(({ file }) => file), [RECORD_FILES.events]);
+});
+
+test('remove deletes a record and counts a missing one as removed', async () => {
+  value(await supervision().seal());
+  value(await supervision().remove());
+  assert.equal(existsSync(join(executions, EXECUTION)), false);
+  value(await supervision().remove());
+});
+
+test('the record listing names directories only, and a missing directory lists nothing', async () => {
+  value(await supervision().seal());
+  writeFileSync(join(executions, 'stray-file'), '');
+  assert.deepEqual(value(await fileRecordListing(executions)()), [EXECUTION]);
+  assert.deepEqual(value(await fileRecordListing(join(executions, 'absent'))()), []);
+  assert.equal((await fileRecordListing(join(executions, 'stray-file'))()).ok, false);
 });

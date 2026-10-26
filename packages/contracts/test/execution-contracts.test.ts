@@ -205,6 +205,15 @@ test('execution facts carry the identities the launch authority checks', () => {
   assert.ok(!checkMessageSchema('ExecutionExitedPayload', { ...exited, terminationEvidence: 'never-spawned' }).ok);
 });
 
+test('recovery on start may prove an unknown exit by a changed boot or an ended namespace', () => {
+  const recovered = { executionId: 'execution-1', status: { kind: 'unknown' }, startProven: true, spawnFailed: false };
+  for (const terminationEvidence of ['boot-changed', 'namespace-ended']) {
+    assert.ok(checkMessageSchema('ExecutionExitedPayload', { ...recovered, terminationEvidence }).ok);
+    assert.ok(!checkMessageSchema('ExecutionExitedPayload', { ...recovered, spawnFailed: true, spawnFailure: 'x', terminationEvidence }).ok);
+  }
+  assert.ok(!checkMessageSchema('ExecutionExitedPayload', { ...recovered, terminationEvidence: 'host-rebooted' }).ok);
+});
+
 test('a non-retryable launch rejection is an observation, a retryable one is not', () => {
   const rejected = { executionId: 'execution-1', assignmentId: 'assignment-1', operationId: 'operation-1', reason: 'gate-not-passed' };
 

@@ -18,7 +18,7 @@ import {
 import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
 import { parseGeneration, parseOwnershipGeneration } from '@taskelith/sdlc';
 import { id, value } from '@taskelith/testing';
-import type { ExecutionSupervision, LaunchPlan, SupervisedFacts, SupervisedRecovery } from '@taskelith/worker';
+import type { ExecutionSupervision, LaunchPlan, RecoveryRound, SupervisedFacts, SupervisedRecovery } from '@taskelith/worker';
 import { enrollWorkerRoot, type WorkerEnrollment, type WorkerRoot } from '@taskelith/worker-journal';
 import type { DeadlineClock, DeadlineReading, LaunchRecord } from '@taskelith/worker-supervisor';
 
@@ -115,13 +115,16 @@ export function grantFor(request: LaunchAuthorizationRequest, ttlMilliseconds = 
   };
 }
 
+// A read as a test scripts it; no cancellation is unapplied unless named.
+export type ScriptedFacts = Omit<SupervisedFacts, 'cancellationNotApplied'> & { readonly cancellationNotApplied?: boolean };
+
 // One execution's record in memory; `facts` is what each read returns
 // next, and the last one repeats.
 export class FakeSupervision implements ExecutionSupervision {
   readonly calls: string[] = [];
   plan: LaunchPlan | undefined;
   launch: LaunchRecord | undefined;
-  facts: SupervisedFacts[] = [{ problems: [] }];
+  facts: ScriptedFacts[] = [{ problems: [] }];
   startResult: Result<void> = ok(undefined);
   prepareResult: Result<void> = ok(undefined);
   sealResult: Result<void> = ok(undefined);
@@ -129,6 +132,10 @@ export class FakeSupervision implements ExecutionSupervision {
   // When false, a scripted spawn is read back without a launch record.
   claimSpawns = true;
   recovery: SupervisedRecovery = { fact: 'not-started' };
+  // Recoveries to return first, before `recovery` repeats.
+  recoveries: SupervisedRecovery[] = [];
+  readonly rounds: RecoveryRound[] = [];
+  removeResult: Result<void> = ok(undefined);
   cancelled: string | undefined;
 
   async prepare(plan: LaunchPlan): Promise<Result<void>> {
@@ -159,15 +166,22 @@ export class FakeSupervision implements ExecutionSupervision {
   // script names its own launch record or claims are off.
   async read(): Promise<Result<SupervisedFacts>> {
     this.calls.push('read');
-    const facts = (this.facts.length > 1 ? this.facts.shift() : this.facts[0]) ?? { problems: [] };
+    const scripted = (this.facts.length > 1 ? this.facts.shift() : this.facts[0]) ?? { problems: [] };
+    const facts = { cancellationNotApplied: false, ...scripted };
     if (!this.claimSpawns || facts.launch !== undefined || facts.process === undefined || this.plan === undefined) return ok(facts);
     return ok({ ...facts, launch: { kind: 'claim', launchAuthId: this.plan.launchAuthId, supervisor: 1 } });
   }
 
-  async recover(): Promise<Result<SupervisedRecovery>> {
+  async recover(round: RecoveryRound): Promise<Result<SupervisedRecovery>> {
     this.calls.push('recover');
+    this.rounds.push(round);
     if (!this.recoverResult.ok) return this.recoverResult;
-    return ok(this.recovery);
+    return ok(this.recoveries.shift() ?? this.recovery);
+  }
+
+  async remove(): Promise<Result<void>> {
+    this.calls.push('remove');
+    return this.removeResult;
   }
 }
 

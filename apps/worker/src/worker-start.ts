@@ -3,6 +3,7 @@ import { SUPPORTED_PROTOCOL_VERSIONS } from '@taskelith/contracts';
 import type { JournalId, LaunchAuthorityClient } from '@taskelith/execution';
 import { parseInstallationId, type Enrollment, type EnrollmentClient } from '@taskelith/fleet';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
+import type { Logger } from '@taskelith/observability';
 import {
   JetStreamPublisher,
   TransportAddress,
@@ -24,7 +25,7 @@ import {
   type WorkerRootOptions,
 } from '@taskelith/worker-journal';
 import { CommandIntake } from './command-intake.js';
-import type { DeadlineClock, SupervisionFactory } from './execution-supervision-port.js';
+import type { DeadlineClock, RecordListing, SupervisionFactory } from './execution-supervision-port.js';
 import { LaunchOrchestrator } from './launch-orchestrator.js';
 import { runObservationPublisher } from './observation-publisher.js';
 import type { LaunchSettings, WorkerSettings } from './settings.js';
@@ -50,12 +51,14 @@ export interface LaunchingDependencies {
   readonly draw: () => number;
   readonly newId: () => string;
   readonly pollMilliseconds?: number;
+  readonly logger?: Logger;
   readonly onFailure?: (error: unknown) => void;
 }
 
 export interface LaunchHost {
   readonly clock: DeadlineClock;
   readonly supervision: SupervisionFactory;
+  readonly records?: RecordListing;
 }
 
 // A started worker: it holds the root lock and its broker connection, reads
@@ -161,10 +164,12 @@ function launchOrchestrator(
   if (launch === undefined || launching === undefined) return ok(undefined);
   const host = launching.host(launch, root.paths.executions);
   if (!host.ok) return host;
-  const { sleep, draw, newId, pollMilliseconds, onFailure } = launching;
+  const { sleep, draw, newId, pollMilliseconds, logger, onFailure } = launching;
+  const { supervision, clock, records } = host.value;
   return ok(new LaunchOrchestrator({
-    journal: root.journal, authority: launching.authority(credential), supervision: host.value.supervision, clock: host.value.clock,
-    sleep, draw, newId, ...(pollMilliseconds === undefined ? {} : { pollMilliseconds }), ...(onFailure === undefined ? {} : { onFailure }),
+    journal: root.journal, authority: launching.authority(credential), supervision, clock, sleep, draw, newId,
+    ...(pollMilliseconds === undefined ? {} : { pollMilliseconds }), ...(records === undefined ? {} : { records }),
+    ...(logger === undefined ? {} : { logger }), ...(onFailure === undefined ? {} : { onFailure }),
   }));
 }
 

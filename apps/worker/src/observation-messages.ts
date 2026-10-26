@@ -1,11 +1,13 @@
 import { EXECUTION_PROTOCOL_VERSION, type MessageSchemas } from '@taskelith/contracts';
 import type { CommandCause, ExecutionExit, ExecutionSubject, JournalBinding, JournalInventory, OutboxEntry } from '@taskelith/execution';
-import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
+import { ok, type Instant, type Result } from '@taskelith/kernel';
 
 // The wire shapes of execution.asyncapi.json for what the journal records.
 
 const SCHEMA_VERSION = 1;
 const ITEMS_PER_PART = 256;
+// The wire's bound; a longer list still proves the set is not empty.
+const SURVIVORS_MAXIMUM = 256;
 
 export type ObservationMessage = { readonly metadata: Record<string, unknown>; readonly payload: Record<string, unknown> };
 
@@ -41,29 +43,32 @@ export function observationMessage(entry: OutboxEntry): Result<ObservationMessag
       const payload = { executionId, assignmentId, launchAuthId, recoveryEpoch, process };
       return ok({ metadata: aboutAttempt(entry, 'execution.started', fact), payload });
     }
-    case 'execution-exited': {
-      const payload = exitedPayload(fact.executionId, fact.exit);
-      return payload.ok ? ok({ metadata: aboutAttempt(entry, 'execution.exited', fact), payload: payload.value }) : payload;
-    }
+    case 'execution-exited':
+      return ok({ metadata: aboutAttempt(entry, 'execution.exited', fact), payload: exitedPayload(fact.executionId, fact.exit) });
     case 'execution-not-started':
       return ok({ metadata: aboutAttempt(entry, 'execution.not-started', fact), payload: { executionId: fact.executionId } });
     case 'execution-uncertain':
       return ok({ metadata: aboutAttempt(entry, 'execution.uncertain', fact), payload: { executionId: fact.executionId } });
+    case 'termination-unproven': {
+      const payload = { executionId: fact.executionId, survivors: fact.survivors.slice(0, SURVIVORS_MAXIMUM) };
+      return ok({ metadata: aboutAttempt(entry, 'execution.termination-unproven', fact), payload });
+    }
+    case 'cancellation-not-applied': {
+      const { commandId, executionId } = fact;
+      const metadata = { ...aboutAttempt(entry, 'execution.cancellation.not-applied', fact), causationId: commandId };
+      return ok({ metadata, payload: { commandId, executionId, reason: 'adopting-supervisor' } });
+    }
   }
 }
 
-// Only the live termination evidence has a wire form; a recovery's
-// `boot-changed` or `namespace-ended` waits for 20d's amendment.
-function exitedPayload(executionId: string, exit: ExecutionExit): Result<Record<string, unknown>> {
+// Only a failed spawn names its failure; every other exit names evidence.
+function exitedPayload(executionId: string, exit: ExecutionExit): Record<string, unknown> {
   const { status, startProven, spawnFailure, termination } = exit;
   if (termination === 'never-spawned') {
     const failure = displayText(spawnFailure ?? 'the spawn failed');
-    return ok({ executionId, status, startProven: false, spawnFailed: true, spawnFailure: failure, terminationEvidence: termination });
+    return { executionId, status, startProven: false, spawnFailed: true, spawnFailure: failure, terminationEvidence: termination };
   }
-  if (termination === 'containment-empty' || termination === 'process-group-empty') {
-    return ok({ executionId, status, startProven, spawnFailed: false, terminationEvidence: termination });
-  }
-  return err(failure('precondition-failed', `an exit with termination evidence ${termination} has no wire form yet`, { termination }));
+  return { executionId, status, startProven, spawnFailed: false, terminationEvidence: termination };
 }
 
 const DISPLAY_TEXT_MAXIMUM = 1024;

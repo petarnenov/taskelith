@@ -1,8 +1,13 @@
 import { sameProcess, type ProcessEntry, type ProcessIdentity } from './process-identity.js';
 
+// A surviving process with the group the listing showed it in.
+export interface Survivor extends ProcessIdentity {
+  readonly processGroupId: number;
+}
+
 export type TerminationProof =
   | { readonly proven: true }
-  | { readonly proven: false; readonly survivors: readonly ProcessIdentity[] };
+  | { readonly proven: false; readonly survivors: readonly Survivor[] };
 
 export interface DarwinTerminationInput {
   readonly processGroupId: number;
@@ -17,9 +22,9 @@ export interface DarwinTerminationInput {
 export function proveDarwinTermination(input: DarwinTerminationInput): TerminationProof {
   if (input.listing === undefined) return { proven: false, survivors: [] };
   const listing = input.listing;
-  const inGroup = listing.filter((entry) => entry.processGroupId === input.processGroupId).map((entry) => entry.identity);
-  const escaped = input.recordedDescendants.filter((descendant) =>
-    listing.some((entry) => sameProcess(entry.identity, descendant)) && !inGroup.some((member) => sameProcess(member, descendant)));
-  const survivors = [...inGroup, ...escaped];
+  const inGroup = listing.filter((entry) => entry.processGroupId === input.processGroupId);
+  const escaped = listing.filter((entry) => entry.processGroupId !== input.processGroupId
+    && input.recordedDescendants.some((descendant) => sameProcess(entry.identity, descendant)));
+  const survivors = [...inGroup, ...escaped].map((entry) => ({ ...entry.identity, processGroupId: entry.processGroupId }));
   return survivors.length === 0 ? { proven: true } : { proven: false, survivors };
 }

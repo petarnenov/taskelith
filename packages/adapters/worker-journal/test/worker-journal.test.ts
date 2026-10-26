@@ -407,12 +407,112 @@ test('each inventory gets a higher snapshot number and the last sequence it refl
   assert.equal(value(journal.takeInventory()).snapshot, 3);
 });
 
-test('a format 1 journal is migrated to format 2 and keeps its records', () => {
+// Undoes format 3, as a format 2 journal stores its records; the widened
+// CHECK stays, which the migration's rebuild replaces anyway.
+function asFormat2(raw: DatabaseSync): void {
+  for (const column of ['terminal_sequence', 'record_removed', 'termination_unproven']) raw.exec(`ALTER TABLE execution DROP COLUMN ${column}`);
+  raw.exec('DROP TABLE cancellation_not_applied');
+  raw.exec('PRAGMA user_version = 2');
+}
+
+function reopenRaw(change: (raw: DatabaseSync) => void): void {
+  const { paths } = root;
+  root.close();
+  const raw = new DatabaseSync(paths.journal);
+  raw.exec('PRAGMA locking_mode = EXCLUSIVE');
+  change(raw);
+  raw.close();
+  root = value(openWorkerRoot(rootOptions(paths.dataRoot)));
+  journal = root.journal;
+}
+
+function cancellationOf(executionId: ExecutionId): JournaledCommand {
+  return {
+    commandId: id('CommandId', `cancel-${executionId}`), digest: digest(`cancel ${executionId}`), correlationId: CORRELATION,
+    outcome: 'accepted', kind: 'cancellation', target: { kind: 'execution', executionId },
+  };
+}
+
+test('a format 2 journal is migrated: a sealed pending operation expires and confirmed terminal facts are found', () => {
+  value(journal.recordCommand(assignment()));
+  launchUntilWritten();
+  value(journal.recordExit(EXECUTION, exitWith({ kind: 'code', code: 0 })));
+  const sealed = id('ExecutionId', 'execution-2');
+  value(journal.beginAuthorization(launchRequest(sealed, id('OperationId', 'operation-2'))));
+  value(journal.recordNotStarted(sealed));
+  value(journal.confirmThrough(value(parseSequence(2))));
+  reopenRaw((raw) => {
+    asFormat2(raw);
+    raw.exec(`UPDATE authorization_request SET outcome = 'pending' WHERE operation_id = 'operation-2'`);
+  });
+  const outcomes = value(journal.snapshot()).executions.map((execution) => execution.authorizations.at(-1)?.outcome);
+  assert.deepEqual(outcomes, ['granted', 'expired']);
+  // The exit (2) was confirmed and pruned; the seal (3) is still unconfirmed.
+  assert.deepEqual(value(journal.removableRecords()), [EXECUTION]);
+});
+
+test('an expired operation is closed and its execution authorized again under a new operation', () => {
+  value(journal.recordCommand(assignment()));
+  value(journal.beginAuthorization(launchRequest(EXECUTION, OPERATION)));
+  value(journal.recordAuthorizationExpired(OPERATION));
+  assert.equal(failed(journal.recordAuthorizationExpired(OPERATION)).code, 'precondition-failed');
+  const again = launchRequest(EXECUTION, id('OperationId', 'operation-2'));
+  value(journal.beginAuthorization({ ...again, reportsNotStarted: true }));
+  value(journal.recordGrant(grantFor(again)));
+  const [execution] = value(journal.snapshot()).executions;
+  assert.deepEqual(execution?.authorizations.map(({ outcome }) => outcome), ['expired', 'granted']);
+  assert.deepEqual(factKinds(), []);
+});
+
+test('a seal expires the operation still waiting for its answer', () => {
+  value(journal.recordCommand(assignment()));
+  value(journal.beginAuthorization(launchRequest(EXECUTION, OPERATION)));
+  value(journal.recordNotStarted(EXECUTION));
+  assert.deepEqual(value(journal.snapshot()).executions[0]?.authorizations.map(({ outcome }) => outcome), ['expired']);
+});
+
+test('a record is removable once its terminal fact is confirmed, and removed once', () => {
+  value(journal.recordCommand(assignment()));
+  launchUntilWritten();
+  value(journal.recordStart(EXECUTION, grantFor(launchRequest(EXECUTION, OPERATION)).launchAuthId, PROCESS));
+  assert.equal(failed(journal.recordRecordRemoved(EXECUTION)).code, 'precondition-failed');
+  value(journal.recordExit(EXECUTION, exitWith({ kind: 'code', code: 0 })));
+  assert.deepEqual(value(journal.removableRecords()), []);
+  value(journal.confirmThrough(value(parseSequence(2))));
+  assert.deepEqual(value(journal.removableRecords()), []);
+  value(journal.confirmThrough(value(parseSequence(3))));
+  assert.deepEqual(value(journal.removableRecords()), [EXECUTION]);
+  value(journal.recordRecordRemoved(EXECUTION));
+  assert.deepEqual(value(journal.removableRecords()), []);
+});
+
+test('termination unproven and a cancellation not applied are each reported once', () => {
+  value(journal.recordCommand(assignment()));
+  launchUntilWritten();
+  const cancellation = cancellationOf(EXECUTION);
+  value(journal.recordCommand(cancellation));
+  const survivors = [{ ...PROCESS, pid: 4300 }];
+  value(journal.recordTerminationUnproven(EXECUTION, survivors));
+  value(journal.recordTerminationUnproven(EXECUTION, survivors));
+  value(journal.recordCancellationNotApplied(cancellation.commandId, EXECUTION));
+  value(journal.recordCancellationNotApplied(cancellation.commandId, EXECUTION));
+  assert.equal(failed(journal.recordCancellationNotApplied(id('CommandId', 'unknown'), EXECUTION)).code, 'not-found');
+  assert.equal(failed(journal.recordTerminationUnproven(id('ExecutionId', 'unwritten'), survivors)).code, 'not-found');
+  const facts = value(journal.dueForPublication(T0)).map((entry) => entry.fact).filter(({ kind }) => kind !== 'assignment-accepted');
+  assert.deepEqual(facts.map(({ kind }) => kind), ['termination-unproven', 'cancellation-not-applied']);
+  assert.deepEqual(facts[1], {
+    kind: 'cancellation-not-applied', executionId: EXECUTION, assignmentId: intent().assignmentId, attemptId: intent().attemptId,
+    ownershipGeneration: intent().ownershipGeneration, commandId: cancellation.commandId,
+  });
+});
+
+test('a format 1 journal is migrated to the current format and keeps its records', () => {
   value(journal.recordCommand(assignment()));
   const { paths } = root;
   root.close();
   const raw = new DatabaseSync(paths.journal);
   raw.exec('PRAGMA locking_mode = EXCLUSIVE');
+  asFormat2(raw);
   for (const column of ['declared_capacity', 'capacity_declarations', 'inventory_snapshots']) raw.exec(`ALTER TABLE journal_meta DROP COLUMN ${column}`);
   for (const column of ['recovery_epoch', 'cpu_millicores', 'memory_mebibytes', 'hard_controls']) raw.exec(`ALTER TABLE launch_intent DROP COLUMN ${column}`);
   raw.exec('DROP TABLE assignment_end');

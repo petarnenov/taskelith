@@ -4,7 +4,7 @@ import { checkMessageSchema, type MessageSchemas } from '@taskelith/contracts';
 import { launchRejection, type ExecutionExit, type WorkerJournal } from '@taskelith/execution';
 import { ok, type Result } from '@taskelith/kernel';
 import type { Publication, PublishOutcome } from '@taskelith/nats';
-import { failed, id, value } from '@taskelith/testing';
+import { id, value } from '@taskelith/testing';
 import { publishDueObservations } from '@taskelith/worker';
 import { CLEAN_EXIT, PROCESS, T0, grantFor, intentOf, offer, temporaryJournal } from './launch-fakes.ts';
 
@@ -91,12 +91,15 @@ test('a spawn failure is published as DisplayText: control characters replaced, 
   assert.ok(payload.spawnFailure?.startsWith('spawn failed x'));
 });
 
-test('an exit with recovery-only termination evidence fails its mapping until 20d', async () => {
-  launched();
-  value(journal.recordExit(EXECUTION, { status: { kind: 'unknown' }, startProven: false, termination: 'boot-changed' }));
-  const mapped = await publishDueObservations({ journal, publish, observationSubject: SUBJECT, now: () => T0 });
-  assert.equal(failed(mapped).code, 'precondition-failed');
-});
+for (const termination of ['boot-changed', 'namespace-ended'] as const) {
+  test(`an exit proven by ${termination} on recovery is published with that evidence`, async () => {
+    launched();
+    value(journal.recordExit(EXECUTION, { status: { kind: 'unknown' }, startProven: true, termination }));
+    assert.deepEqual((await publishedAs('ExecutionExitedObservation')).payload, {
+      executionId: EXECUTION, status: { kind: 'unknown' }, startProven: true, spawnFailed: false, terminationEvidence: termination,
+    });
+  });
+}
 
 test('uncertain and not-started are published about their execution', async () => {
   launched();
