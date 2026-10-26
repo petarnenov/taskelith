@@ -21,6 +21,16 @@ const present: FieldCheck = (value) => (value === undefined ? 'is missing' : und
 
 export const flag: FieldCheck = (value) => (typeof value === 'boolean' ? undefined : 'must be a boolean');
 
+// A record of string values; reading an entry may run a plugin getter.
+export const textRecord: FieldCheck = (value) => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return 'must be a record of strings';
+  try {
+    return Object.values(value).every((item) => typeof item === 'string') ? undefined : 'must be a record of strings';
+  } catch (error) {
+    return `could not be read: ${describe(error)}`;
+  }
+};
+
 export function oneOf(values: readonly string[]): FieldCheck {
   return (value) =>
     typeof value === 'string' && values.includes(value) ? undefined : `must be one of ${values.join(', ')}`;
@@ -66,7 +76,7 @@ export function readResult(raw: unknown): Reading<Result<unknown>> {
   if (envelope.value.ok === true) return readValue(raw as { value?: unknown });
   const failed = readRecord<{ error: unknown }>('result', raw, { error: present });
   if (!failed.ok) return failed;
-  const error = readRecord<Failure>('result.error', failed.value.error, { code: text, message: text });
+  const error = readRecord<Failure>('result.error', failed.value.error, { code: text, message: text, details: textRecord });
   if (!error.ok) return error;
   if (!isFailureCode(error.value.code)) return { ok: false, error: [`result.error.code ${error.value.code} is not a kernel failure code`] };
   return { ok: true, value: { ok: false, error: error.value } };

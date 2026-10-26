@@ -43,7 +43,8 @@ export class ConformanceCase {
 
 export type ValueReader<Value> = (value: unknown) => Reading<Value>;
 
-export const anyValue: ValueReader<void> = () => ({ ok: true, value: undefined });
+export const nothing: ValueReader<void> = (value) =>
+  value === undefined ? { ok: true, value: undefined } : { ok: false, error: ['value must be undefined'] };
 
 // Calls a plugin operation that must succeed and returns its checked value.
 export async function succeeds<Value>(

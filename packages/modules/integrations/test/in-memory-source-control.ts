@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type FailureCode, type Result } from '@taskelith/kernel';
 import {
   COMMIT_STATUS_STATES,
   SCM_PERMISSIONS,
@@ -19,6 +19,19 @@ export interface ScmDefects {
   readonly ignoresSignature?: boolean;
   readonly ignoresRequiredStatuses?: boolean;
   readonly ignoresExpectedHead?: boolean;
+  readonly mergesDespiteRefusal?: boolean;
+  readonly ignoredContext?: string;
+  readonly failingStatesPass?: boolean;
+  readonly bypassFailsWith?: FailureCode;
+  readonly refreshKeepsExpiry?: boolean;
+  readonly refreshUnscopes?: boolean;
+  readonly unusableCredentials?: boolean;
+}
+
+// The service's own configuration, which a conforming plugin respects.
+export interface ScmSetup {
+  readonly mergeMethods?: readonly string[];
+  readonly existingRequiredStatuses?: readonly string[];
 }
 
 export const PROJECT = 'acme/project';
@@ -27,7 +40,7 @@ const BASE = 'main';
 const SIGNATURE = 'x-signature';
 const DELIVERY = 'x-delivery';
 const LIFETIME_MS = 60 * 60 * 1000;
-const MERGE_METHODS = Object.freeze(['merge-commit', 'squash']);
+const DEFAULT_MERGE_METHODS = Object.freeze(['merge-commit', 'squash']);
 
 interface Protection {
   readonly requiredStatuses: readonly string[];
@@ -37,6 +50,7 @@ interface Protection {
 interface StoredCredential {
   readonly credential: RunCredential;
   revoked: boolean;
+  unscoped: boolean;
 }
 
 interface StoredChangeRequest {
@@ -57,19 +71,24 @@ export class InMemoryScm {
   private readonly webhookSecret = 'webhook-secret';
 
   private readonly defects: ScmDefects;
+  private readonly mergeMethods: readonly string[];
+  private readonly existingRequiredStatuses: readonly string[];
 
-  constructor(defects: ScmDefects = {}) {
+  constructor(defects: ScmDefects = {}, setup: ScmSetup = {}) {
     this.defects = defects;
+    this.mergeMethods = setup.mergeMethods ?? DEFAULT_MERGE_METHODS;
+    this.existingRequiredStatuses = setup.existingRequiredStatuses ?? [];
   }
 
   provider(): SourceControlProvider {
     return {
-      capabilities: { mergeMethods: MERGE_METHODS, reviewEvidence: ['required-status'] },
+      capabilities: { mergeMethods: this.mergeMethods, reviewEvidence: ['required-status'] },
       issueRunCredential: async (request) => this.issue(request.runId, request.repositories, request.permissions),
       refreshRunCredential: async ({ credentialId }) => this.refresh(credentialId),
       revokeRunCredential: async ({ credentialId }) => this.revoke(credentialId),
       ensureMergeProtection: async ({ repository, branch, requiredStatuses }) => {
-        const protection = { requiredStatuses: [...requiredStatuses], bindsProvider: !this.defects.bypassableProtection };
+        const required = [...new Set([...this.existingRequiredStatuses, ...requiredStatuses])];
+        const protection = { requiredStatuses: required, bindsProvider: !this.defects.bypassableProtection };
         this.protections.set(branchKey(repository, branch), protection);
         return ok({ repository, branch, ...protection });
       },
@@ -97,6 +116,7 @@ export class InMemoryScm {
         return { branch, commit: this.push(PROJECT, branch) };
       },
       advanceHead: async (branch) => this.push(PROJECT, branch),
+      readBranchHead: async (branch) => this.branches.get(branchKey(PROJECT, branch))!,
       attemptWrite: async (credential, repository) => this.write(credential.secret, repository),
       attemptBypassMerge: async (changeRequest) => this.bypassMerge(changeRequest),
       signDelivery: async (event) => this.sign(JSON.stringify(event)),
@@ -109,15 +129,16 @@ export class InMemoryScm {
     }
     const id = this.next();
     const credential = { credentialId: `cred-${id}`, runId, secret: `secret-${id}`, repositories: [...repositories], permissions: [...permissions], expiresAt: expiry() };
-    this.credentials.set(credential.secret, { credential, revoked: false });
+    this.credentials.set(credential.secret, { credential, revoked: false, unscoped: false });
     return ok(credential);
   }
 
   private refresh(credentialId: string): Result<RunCredential> {
     const stored = this.findCredential(credentialId);
     if (!stored || stored.revoked) return err(failure('not-found', 'unknown credential'));
-    const credential = { ...stored.credential, expiresAt: expiry() };
-    this.credentials.set(credential.secret, { credential, revoked: false });
+    const previous = stored.credential.expiresAt;
+    const credential = { ...stored.credential, expiresAt: this.defects.refreshKeepsExpiry ? previous : extendedExpiry(previous) };
+    this.credentials.set(credential.secret, { credential, revoked: false, unscoped: Boolean(this.defects.refreshUnscopes) });
     return ok(credential);
   }
 
@@ -134,10 +155,12 @@ export class InMemoryScm {
 
   private write(secret: string, repository: string): Result<void> {
     const stored = this.credentials.get(secret);
-    if (!stored || stored.revoked || Date.parse(stored.credential.expiresAt) <= Date.now()) return forbidden();
+    if (!stored || stored.revoked || this.defects.unusableCredentials) return forbidden();
+    if (Date.parse(stored.credential.expiresAt) <= Date.now()) return forbidden();
     const { permissions, repositories } = stored.credential;
     if (!permissions.includes('write-code') && !this.defects.readOnlyCanWrite) return forbidden();
-    if (!repositories.includes(repository) && !this.defects.unscopedCredentials) return forbidden();
+    const unscoped = stored.unscoped || this.defects.unscopedCredentials;
+    if (!repositories.includes(repository) && !unscoped) return forbidden();
     this.push(repository, BASE);
     return ok(undefined);
   }
@@ -157,17 +180,21 @@ export class InMemoryScm {
   }
 
   private merge(id: string, expectedHead: string, method: string): Result<{ changeRequest: string; mergeCommit: string; method: string }> {
-    if (!MERGE_METHODS.includes(method)) return err(failure('unavailable', 'undeclared method'));
+    if (!this.mergeMethods.includes(method)) return err(failure('unavailable', 'undeclared method'));
     const current = this.read(id);
     if (!current.ok) return current;
     if (current.value.state !== 'open') return err(failure('conflict', 'not open'));
     if (current.value.headCommit !== expectedHead && !this.defects.ignoresExpectedHead) return refused('stale head');
-    if (!this.passesProtection(current.value) && !this.defects.ignoresRequiredStatuses) return refused('required status');
+    if (!this.passesProtection(current.value) && !this.defects.ignoresRequiredStatuses) {
+      if (this.defects.mergesDespiteRefusal) this.complete(current.value);
+      return refused('required status');
+    }
     return ok({ changeRequest: id, mergeCommit: this.complete(current.value), method });
   }
 
   // The most privileged native merge: only a binding protection stops it.
   private bypassMerge(changeRequest: ChangeRequestData): Result<void> {
+    if (this.defects.bypassFailsWith) return err(failure(this.defects.bypassFailsWith, 'probe broken'));
     const current = this.read(changeRequest.id);
     if (!current.ok || current.value.state !== 'open') return refused('not open');
     const binding = this.protections.get(branchKey(current.value.repository, current.value.baseBranch))?.bindsProvider ?? false;
@@ -178,9 +205,12 @@ export class InMemoryScm {
 
   private passesProtection(changeRequest: ChangeRequestData): boolean {
     const protection = this.protections.get(branchKey(changeRequest.repository, changeRequest.baseBranch));
-    return (protection?.requiredStatuses ?? []).every(
-      (context) => this.statuses.get(statusKey(changeRequest.repository, changeRequest.headCommit, context)) === 'success',
-    );
+    const enforced = (protection?.requiredStatuses ?? []).filter((context) => context !== this.defects.ignoredContext);
+    return enforced.every((context) => this.passes(this.statuses.get(statusKey(changeRequest.repository, changeRequest.headCommit, context))));
+  }
+
+  private passes(state: string | undefined): boolean {
+    return state === 'success' || (Boolean(this.defects.failingStatesPass) && (state === 'failure' || state === 'error'));
   }
 
   private complete(changeRequest: ChangeRequestData): string {
@@ -232,6 +262,11 @@ function statusKey(repository: string, commit: string, context: string): string 
 
 function expiry(): string {
   return new Date(Date.now() + LIFETIME_MS).toISOString();
+}
+
+// Strictly later than the previous expiry, even within one millisecond.
+function extendedExpiry(previous: string): string {
+  return new Date(Math.max(Date.now() + LIFETIME_MS, Date.parse(previous) + 1)).toISOString();
 }
 
 function isSameText(left: string, right: string): boolean {

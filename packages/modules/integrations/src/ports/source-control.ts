@@ -51,6 +51,7 @@ export interface RunCredential {
   readonly secret: string;
   readonly repositories: readonly string[];
   readonly permissions: readonly string[];
+  // A kernel Instant: UTC, YYYY-MM-DDTHH:mm:ss.sssZ.
   readonly expiresAt: string;
 }
 

@@ -19,7 +19,7 @@ The port SHALL represent repositories, change requests, commits, runs, credentia
 - **THEN** the plugin returns the number as a string, and reading the change request by that string returns the same identifier
 
 ### Requirement: Per-run credentials
-`issueRunCredential` SHALL return a credential for one run that is limited to the requested repositories and reports its effective repositories, permissions, and expiry; `refreshRunCredential` SHALL keep its scope and not shorten its expiry, and `revokeRunCredential` SHALL end it. The secret SHALL be delivered only to its run and never logged or stored.
+`issueRunCredential` SHALL return a credential for one run that is limited to the requested repositories and reports its effective repositories, permissions, and expiry as a kernel instant (UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`); `refreshRunCredential` SHALL keep its scope and return an expiry later than before, and `revokeRunCredential` SHALL end it. The secret SHALL be delivered only to its run and never logged or stored.
 
 #### Scenario: Credential without write permission
 - **WHEN** a credential issued with only `read-code` attempts a code write in the project's repository
@@ -31,14 +31,14 @@ The port SHALL represent repositories, change requests, commits, runs, credentia
 
 #### Scenario: Long run
 - **WHEN** a run outlives its credential's expiry
-- **THEN** a refresh returns a credential with the same repositories and permissions and an expiry no earlier than before
+- **THEN** a refresh returns a credential with the same repositories and permissions and a later expiry, which still writes in the project's repository and is refused outside it
 
 ### Requirement: Merge blocking that binds the plugin
-`ensureMergeProtection` SHALL configure the base branch's required statuses so that the service enforces them against the plugin's own identity, and SHALL report whether it does. `mergeChangeRequest` SHALL name the expected head and the project's merge method, and SHALL fail with `precondition-failed` while a required status is not successful or when the head differs from the expected one, and with `unavailable` for a merge method the plugin does not declare.
+`ensureMergeProtection` SHALL configure the base branch's required statuses so that the service enforces them against the plugin's own identity, and SHALL report whether it does. `mergeChangeRequest` SHALL name the expected head and the project's merge method, and SHALL fail with `precondition-failed` while any required status is missing or not successful or when the head differs from the expected one, and with `unavailable` for a merge method the plugin does not declare.
 
 #### Scenario: Pending required status
 - **WHEN** a required status on the change request's head is pending and the plugin merges with its own identity, through the port or by the most privileged native merge
-- **THEN** the merge is refused, and after every required status succeeds the merge with the project's merge method succeeds
+- **THEN** the merge is refused, the change request stays open, and the base branch is unchanged, and after every required status succeeds the merge with the project's merge method succeeds
 
 #### Scenario: Head moved after review
 - **WHEN** the head branch receives a new commit after the statuses succeed on the previous head
