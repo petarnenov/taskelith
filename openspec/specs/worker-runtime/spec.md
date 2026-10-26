@@ -156,7 +156,7 @@ A worker SHALL start no launch without a grant, whatever the state of its broker
 - **THEN** the operation is journaled `expired`, and the same execution is authorized again only once the worker is online
 
 ### Requirement: Cancellation forwarding
-A cancellation of an attempt SHALL stop its intent's launch; one of an execution SHALL stop only that execution, and a launch only while it runs it. Either SHALL seal an execution before its supervisor starts and write the `cancel` file of a started one. Its evidence SHALL be recorded once no launch it stops is live and every execution it names is `exited`, `not-started`, or rejected without a grant, and at once when there is none.
+A cancellation of an attempt SHALL stop its intent's launch; one of an execution SHALL stop only that execution, a launch only while it runs it, and a retry or relaunch only as the intent's last. Either SHALL seal an execution before its supervisor starts and write the `cancel` file of a started one. Its evidence SHALL be recorded once no launch it stops is live and every execution it names is `exited`, `not-started`, or rejected without a grant, and at once when there is none.
 
 #### Scenario: Cancelled after W4
 - **WHEN** a cancellation names an execution whose supervisor runs
@@ -173,6 +173,14 @@ A cancellation of an attempt SHALL stop its intent's launch; one of an execution
 #### Scenario: Attempt cancelled while an execution runs
 - **WHEN** a cancellation names the attempt of an intent whose launch runs an execution
 - **THEN** the launch stops and the running execution gets `cancel`
+
+#### Scenario: Superseded execution cancelled before a restart
+- **WHEN** the worker starts with a journaled cancellation of a superseded execution of an intent whose last execution awaits a retry or ended `not-started`
+- **THEN** the worker retries the last execution's authorization or launches the intent again
+
+#### Scenario: Last execution cancelled before a restart
+- **WHEN** the worker starts with a journaled cancellation of an intent's last execution, sealed `not-started` before its supervisor started
+- **THEN** the worker launches the intent no more, and a new attempt is left to the control plane
 
 ### Requirement: Launch settings
 A worker SHALL launch only when `TASKELITH_WORKER_COMMAND` names its program; on Linux a launch SHALL also need the containment parent and the execution account. On Linux the worker SHALL read the containment parent whenever it is set, with or without the command. Without the command it SHALL accept assignments and launch none.
