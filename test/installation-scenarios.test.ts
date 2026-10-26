@@ -228,3 +228,71 @@ test('an error the scenario did not expect is recorded as failed', () => {
   assert.equal(run.status, 1);
   assert.equal(run.records, 'failed: failed while submitting a task and awaiting its start\n');
 });
+
+// The worker container's answers to the namespace probes; the variables
+// ESCAPES, UNSHARE_MISSING, STATUS, CGROUP, and NO_DELEGATION vary them.
+const CONFINEMENT_STUBS = `
+worker_exec() {
+  case "$*" in
+    *'/proc/self/status'*) printf "\${STATUS:-Uid:\\t10003\\t10003\\t10003\\t10003\\nCapEff:\\t0000000000000000\\nCapBnd:\\t00000000000000e0\\nNoNewPrivs:\\t1\\nSeccomp:\\t2\\n}" ;;
+    *unshare*)
+      if [ -n "\${ESCAPES:-}" ]; then echo escaped; return 0; fi
+      if [ -n "\${UNSHARE_MISSING:-}" ]; then echo 'unshare: command not found' >&2; return 127; fi
+      echo 'unshare: unshare failed: Operation not permitted' >&2; return 1 ;;
+    *'/cgroup"'*) echo "\${CGROUP:-0::/executions/e1}" ;;
+    *) [ -z "\${NO_DELEGATION:-}" ] ;;
+  esac
+}
+check_containment() { :; }
+platform() { echo 'OS Stub; architecture aarch64'; }
+`;
+const CONFINEMENT = { state: `running 0 ${OLD_START}`, stateAfterStart: '', logs: [], executions: 'e1 started certain' };
+
+function confinement(variables = ''): StubbedRun {
+  return withStubs(CONFINEMENT, `${CONFINEMENT_STUBS}\n${variables} namespace_confinement_scenario`);
+}
+
+test('refused namespaces, a delegated containment, and an exited task pass the confinement', () => {
+  const run = confinement();
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.records, /^passed: OS Stub; architecture aarch64: as uid 10003 with status 'Uid: 10003 10003 10003 10003 CapEff: 0{16} CapBnd: 0{14}e0 NoNewPrivs: 1 Seccomp: 2', unshare -U and unshare -Urm .* ran in '0::\/executions\/e1' and exited 0\n$/);
+  assert.match(run.stderr, /refused to create a user namespace: unshare: unshare failed: Operation not permitted/);
+  assert.match(run.stderr, /cleaning up/);
+});
+
+test('an execution account that creates a user namespace fails the confinement', () => {
+  const run = confinement('ESCAPES=1');
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /the execution account could create a user namespace: escaped/);
+  assert.equal(run.records, 'failed: failed while probing namespaces as the execution account\n');
+});
+
+test('a probe that fails for another reason than EPERM fails the confinement', () => {
+  const run = confinement('UNSHARE_MISSING=1');
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /the probe to create a user namespace failed for another reason: unshare: command not found/);
+});
+
+test('a probe that does not run as the execution account fails the confinement', () => {
+  const run = confinement(String.raw`STATUS='Uid:\t0\t0\t0\t0\nCapEff:\t0\nCapBnd:\t00000000002001e3\nNoNewPrivs:\t1\nSeccomp:\t2\n'`);
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /the execution account's status: expected/);
+});
+
+test('a missing containment parent fails the confinement', () => {
+  const run = confinement('NO_DELEGATION=1');
+  assert.equal(run.status, 1);
+  assert.equal(run.records, 'failed: failed while checking the cgroup delegation\n');
+});
+
+test('an execution outside the containment parent fails the confinement', () => {
+  const run = confinement('CGROUP=0::/init');
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /the execution runs outside the containment parent: '0::\/init'/);
+});
+
+test('a failed cleanup of the confinement is recorded as failed', () => {
+  const run = confinement('CLEANUP_FAILS=1');
+  assert.equal(run.status, 1);
+  assert.equal(run.records, 'failed: failed while cleaning up\n');
+});

@@ -362,3 +362,86 @@ worker_kill_scenario() {
   expect_equal "the journal's executions" "$journal" "$(task_executions "$task")"
   finish_passed "killed and restarted the worker, reconciled, removed" "on $(engine): SIGKILL after a planned pause of $pause ms, measured $measured ms from the submission's answer to the kill's return; executions just after the kill '${before:-none}'; the restarted worker reached its reconciliation and stayed up; the control plane then held executions '$after' and the result '$result', as the worker journal did; worker events: ${events:-none}"
 }
+
+# An execution's identity as the supervisor launches it (item 25a).
+EXECUTION_STATUS='Uid: 10003 10003 10003 10003 CapEff: 0000000000000000 CapBnd: 00000000000000e0 NoNewPrivs: 1 Seccomp: 2'
+WORKER_SECCOMP_PROFILE="$repository/infra/installation/seccomp/worker.json"
+
+worker_exec() {
+  compose --profile worker exec -T worker "$@"
+}
+
+# Runs a command as the execution account, below the worker's setpriv: uid
+# and gid 10003, no capability, and the worker's bounding set.
+as_execution() {
+  worker_exec setpriv --bounding-set=-all,+setuid,+setgid,+kill --inh-caps=-all \
+    --reuid=10003 --regid=10003 --clear-groups -- "$@"
+}
+
+execution_status() {
+  as_execution grep -E '^(Uid|CapEff|CapBnd|NoNewPrivs|Seccomp):' /proc/self/status \
+    | tr -s ' \t\n' ' ' | sed 's/ $//'
+}
+
+# The command after LABEL must fail as the execution account with EPERM.
+expect_refused() {
+  local label="$1" output
+  shift
+  if output="$(as_execution "$@" 2>&1)"; then fail_scenario "the execution account could $label: $output"; fi
+  case "$output" in
+    *"Operation not permitted"*) echo "installation.sh: $scenario: refused to $label: $output" >&2 ;;
+    *) fail_scenario "the probe to $label failed for another reason: $output" ;;
+  esac
+}
+
+# The cgroup of the oldest process of the execution account.
+execution_cgroup() {
+  worker_exec bash -c 'cat "/proc/$(pgrep -o -u 10003)/cgroup"'
+}
+
+profile_digest() {
+  node -e 'const fs = require("node:fs"); const hash = require("node:crypto").createHash("sha256");
+    process.stdout.write(hash.update(fs.readFileSync(process.argv[1])).digest("hex"))' "$1"
+}
+
+# The native acceptance row's platform: OS, architecture, kernel, file
+# system, and versions.
+platform() {
+  local os kernel architecture version driver filesystem image
+  IFS='|' read -r os kernel architecture version driver <<< "$(docker info --format \
+    '{{.OperatingSystem}}|{{.KernelVersion}}|{{.Architecture}}|{{.ServerVersion}}|{{.Driver}}')"
+  filesystem="$(worker_exec stat -f -c %T /var/lib/taskelith)"
+  image="$(docker image inspect --format '{{.Id}}' "$worker_image")"
+  echo "OS $os; architecture $architecture; kernel $kernel; file system $filesystem" \
+    "(worker data root), storage driver $driver; Docker engine $version; worker image $image;" \
+    "seccomp profile sha256 $(profile_digest "$WORKER_SECCOMP_PROFILE")"
+}
+
+# The execution account cannot create a user or mount namespace in the
+# worker container, while the delegation and the executions still work.
+namespace_confinement_scenario() {
+  local task=namespace-task cgroup row
+  begin_scenario worker-namespace-confinement
+  scenario_project
+  step "checking the worker's containment"
+  check_containment
+  step "probing namespaces as the execution account"
+  expect_equal "the execution account's status" "$(execution_status)" "$EXECUTION_STATUS"
+  expect_refused "create a user namespace" unshare -U true
+  expect_refused "mount a tmpfs in new user and mount namespaces" unshare -Urm mount -t tmpfs none /mnt
+  step "checking the cgroup delegation"
+  worker_exec test -d /sys/fs/cgroup/executions || fail_scenario "the containment parent is missing"
+  worker_exec bash -c 'mkdir /sys/fs/cgroup/executions/probe && rmdir /sys/fs/cgroup/executions/probe' \
+    || fail_scenario "the containment parent refused a cgroup write"
+  step "running a task and reading its execution's cgroup"
+  scenario_tool submit "$url" "$smoke_directory/workflows.json" "$task"
+  await_condition "$START_SECONDS" has_started "$task" || fail_scenario "the execution did not start"
+  cgroup="$(execution_cgroup)"
+  case "$cgroup" in
+    "0::/executions/"?*) ;;
+    *) fail_scenario "the execution runs outside the containment parent: '$cgroup'" ;;
+  esac
+  scenario_tool await-exit "$url" "$task" >/dev/null
+  row="$(platform)"
+  finish_passed "refused the execution account's namespaces, ran a task, removed" "$row: as uid 10003 with status '$EXECUTION_STATUS', unshare -U and unshare -Urm with mount -t tmpfs were refused with EPERM; the worker kept KILL, SETGID, and SETUID only; executions/ existed and took a cgroup write; a task's execution ran in '$cgroup' and exited 0"
+}
