@@ -3,7 +3,7 @@
 - [x] 1.1 AsyncAPI 0.5.0: `boot-changed` and `namespace-ended` exit evidence, wire contracts doc, contract test
 - [x] 1.2 Journal format 3: `expired` outcome, terminal sequence, record removal, termination unproven, cancellation not applied; migration 2 to 3 chained after 1 to 2
 - [x] 1.3 Journal tests: migration from format 2, expiry, removable records, new facts
-- [ ] 1.4 docs/contracts/worker-journal.md: format 3, `expired`, recovery table row, removal query
+- [x] 1.4 docs/contracts/worker-journal.md: format 3, `expired`, recovery table row, removal query
 
 ## 2. Worker
 
@@ -19,8 +19,8 @@
 
 ## 3. Records and checks
 
-- [ ] 3.1 proposal.md, design.md (coordinator decisions Q1 A, Q2 A, journal format approved), spec deltas (worker-runtime, worker-journal-adapter, execution-wire-contracts, worker-journal contract spec if any)
-- [ ] 3.2 `make dependency-inventory` (worker now depends on @taskelith/observability)
+- [x] 3.1 proposal.md, design.md (coordinator decisions Q1 A, Q2 A, journal format approved), spec deltas (worker-runtime, worker-journal-adapter, execution-wire-contracts, worker-journal contract spec if any)
+- [x] 3.2 `make dependency-inventory` (worker now depends on @taskelith/observability)
 - [ ] 3.3 `make verify`
 - [ ] 3.4 OpenCode review (kimi-k3.1-pro#high), at most 3 passes
 - [ ] 3.5 verification.md and handoff to Niki
