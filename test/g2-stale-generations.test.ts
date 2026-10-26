@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import { describe, test } from 'node:test';
-import type { LaunchAuthorizationRequest, LaunchOutcome, OperationId } from '@taskelith/execution';
+import type { Execution, LaunchAuthorizationRequest, LaunchOutcome, OperationId } from '@taskelith/execution';
 import type { Result } from '@taskelith/kernel';
 import { SeededRandom, integrationEndpoint, rerunHint, seedFromEnvironment } from '@taskelith/testing';
 import { assignmentsOf, supersedeAssignment } from './g2-scenarios/invalidation-writers.ts';
@@ -16,7 +16,8 @@ import { Gate, waitFor } from './g2-scenarios/waiting.ts';
 // with two workers and a seeded order of their authorization requests.
 const SEED = seedFromEnvironment();
 console.log(`g2 stale generation scenarios: ${rerunHint(SEED)}`);
-// How long an old-epoch start observation has to reach the control plane.
+const B4 = 'product bug B4 (away run 20261026T164615Z-opencode-20899): an old-epoch exit ends its task (openspec/changes/run-g2-partition-and-races/verification.md)';
+// How long the old-epoch observations have to reach the control plane.
 const EVIDENCE_WAIT_MILLISECONDS = 3_000;
 
 type WorkerOverrides = Partial<Omit<ScenarioWorkerOptions, 'name' | 'random'>>;
@@ -82,48 +83,68 @@ describe('stale generations', () => {
 
   // Seed: which request precedes the epoch advance, a test-side write as a
   // restore's. The later is rejected; the earlier start is only evidence.
-  test('a stale recovery epoch is rejected, an old-epoch start is not recorded, and its exit ends the task (pending decision)', {
-    timeout: 120_000,
-  }, async () => {
+  test('a stale recovery epoch is rejected, and an old-epoch start is not recorded', { timeout: 120_000 }, async () => {
     const random = new SeededRandom(SEED);
-    const aFirst = random.nextInt(2) === 1;
     await recordScenario({ scenario: 'stale-recovery-epoch', seed: SEED }, () => withInstallation({ postgres: 'direct' }, async (installation) => {
-      const a = await heldWorker(installation, 'epoch-a', random);
-      const b = await heldWorker(installation, 'epoch-b', random);
-      try {
-        await installation.submitTask('task-epoch-1');
-        await installation.submitTask('task-epoch-2');
-        await waitFor(() => a.authority.sent.length === 1 && b.authority.sent.length === 1, 20_000, 'both request authorization');
-        const [early, late] = aFirst ? [a, b] : [b, a];
-        early.authority.beforeRequest.open();
-        await waitFor(() => early.authority.grants.length === 1, 20_000, 'the earlier request is granted');
-        await installation.query('UPDATE installation SET recovery_epoch = recovery_epoch + 1');
-        late.authority.beforeRequest.open();
-        await waitFor(() => late.authority.answered.length === 1, 20_000, 'the later answer');
-        assert.equal(rejectionOf(late.authority.answered[0]!.answer), 'stale-recovery-epoch');
-        assert.ok(late.worker.running.root.journal.snapshot().ok, 'the later worker keeps running');
-        const lateAssignment = late.authority.sent[0]!.assignmentId;
-        assert.ok(journaledUnder(late.worker, lateAssignment).every(({ recordWritten }) => !recordWritten), 'no record after the rejection');
-        const earlyRequest = early.authority.sent[0]!;
-        await waitFor(() => journaledUnder(early.worker, earlyRequest.assignmentId).some(({ state }) => state === 'exited'), 20_000, 'the earlier exit');
-        await delay(EVIDENCE_WAIT_MILLISECONDS);
-        const taskId = await taskOfAttempt(installation, earlyRequest.attemptId);
-        const executions = (await installation.task(taskId)).attempts.flatMap((attempt) => attempt.executions);
-        assert.ok(executions.every(({ start, unauthorizedStarts }) => start === undefined && unauthorizedStarts.length === 0), 'no start recorded');
-        const commands = await installation.commandsTo(early.worker.workerId);
-        assert.ok(commands.every(({ type }) => type !== 'execution.cancellation.request'), 'no cancellation');
-        // Pending an owner-delegate decision: today the old-epoch exit applies.
-        assert.notEqual((await installation.result(taskId)).state, 'pending', 'the old-epoch exit ends the task');
-        return `${aFirst ? 'A' : 'B'} granted before the epoch advanced; the other rejected stale-recovery-epoch; old-epoch exit ended the task`;
-      } finally {
-        a.authority.beforeRequest.open();
-        b.authority.beforeRequest.open();
-        await a.worker.stop();
-        await b.worker.stop();
-      }
+      const run = await advanceEpochBetweenRequests(installation, random);
+      assert.ok(run.executions.every(({ start, unauthorizedStarts }) => start === undefined && unauthorizedStarts.length === 0), 'no start recorded');
+      const commands = await installation.commandsTo(run.earlyWorkerId);
+      assert.ok(commands.every(({ type }) => type !== 'execution.cancellation.request'), 'no cancellation');
+      return `${run.order}; the other rejected stale-recovery-epoch; the old-epoch start is evidence only`;
+    }));
+  });
+
+  // Expected to fail: today the old-epoch exit ends its task (B4).
+  test('an old-epoch exit is kept as evidence and changes no state', { timeout: 120_000, todo: B4 }, async () => {
+    const random = new SeededRandom(SEED);
+    await recordScenario({ scenario: 'stale-epoch-exit-is-evidence', seed: SEED }, () => withInstallation({ postgres: 'direct' }, async (installation) => {
+      const run = await advanceEpochBetweenRequests(installation, random);
+      assert.ok(run.executions.every(({ exit }) => exit === undefined), 'no exit recorded');
+      assert.equal((await installation.result(run.taskId)).state, 'pending', 'the task is not ended');
+      return `${run.order}; the old-epoch exit changed no state`;
     }));
   });
 });
+
+interface EpochRun {
+  readonly order: string;
+  readonly earlyWorkerId: string;
+  readonly taskId: string;
+  readonly executions: readonly Execution[];
+}
+
+// Two held workers; the seed picks which is granted before the epoch
+// advances. The later one is rejected; then the earlier one runs to its exit.
+async function advanceEpochBetweenRequests(installation: ScenarioInstallation, random: SeededRandom): Promise<EpochRun> {
+  const aFirst = random.nextInt(2) === 1;
+  const a = await heldWorker(installation, 'epoch-a', random);
+  const b = await heldWorker(installation, 'epoch-b', random);
+  try {
+    await installation.submitTask('task-epoch-1');
+    await installation.submitTask('task-epoch-2');
+    await waitFor(() => a.authority.sent.length === 1 && b.authority.sent.length === 1, 20_000, 'both request authorization');
+    const [early, late] = aFirst ? [a, b] : [b, a];
+    early.authority.beforeRequest.open();
+    await waitFor(() => early.authority.grants.length === 1, 20_000, 'the earlier request is granted');
+    await installation.query('UPDATE installation SET recovery_epoch = recovery_epoch + 1');
+    late.authority.beforeRequest.open();
+    await waitFor(() => late.authority.answered.length === 1, 20_000, 'the later answer');
+    assert.equal(rejectionOf(late.authority.answered[0]!.answer), 'stale-recovery-epoch');
+    const lateAssignment = late.authority.sent[0]!.assignmentId;
+    assert.ok(journaledUnder(late.worker, lateAssignment).every(({ recordWritten }) => !recordWritten), 'no record after the rejection');
+    const earlyRequest = early.authority.sent[0]!;
+    await waitFor(() => journaledUnder(early.worker, earlyRequest.assignmentId).some(({ state }) => state === 'exited'), 20_000, 'the earlier exit');
+    await delay(EVIDENCE_WAIT_MILLISECONDS);
+    const taskId = await taskOfAttempt(installation, earlyRequest.attemptId);
+    const executions = (await installation.task(taskId)).attempts.flatMap((attempt) => attempt.executions);
+    return { order: `${aFirst ? 'A' : 'B'} granted before the epoch advanced`, earlyWorkerId: early.worker.workerId, taskId, executions };
+  } finally {
+    a.authority.beforeRequest.open();
+    b.authority.beforeRequest.open();
+    await a.worker.stop();
+    await b.worker.stop();
+  }
+}
 
 function rejectionOf(answer: Result<LaunchOutcome>): string {
   if (!answer.ok) return `failed: ${answer.error.code}`;

@@ -12,7 +12,7 @@ import { Gate, waitFor } from './g2-scenarios/waiting.ts';
 // broker connection and of the control plane's PostgreSQL connection.
 const SEED = seedFromEnvironment();
 console.log(`g2 partition scenarios: ${rerunHint(SEED)}`);
-const INVENTORY_LOOP = 'product bug: inventory request loop after a reconnect (openspec/changes/run-g2-partition-and-races/verification.md)';
+const INVENTORY_LOOP = 'product bug B1: inventory request loop after a reconnect (openspec/changes/run-g2-partition-and-races/verification.md)';
 const SETTLE_MILLISECONDS = 3_000;
 
 // One intent per offered assignment, however often it was offered.

@@ -26,8 +26,8 @@ import { Gate, waitFor } from './g2-scenarios/waiting.ts';
 // cancel is a test-side invalidation writer's transaction.
 const SEED = seedFromEnvironment();
 console.log(`g2 cancellation races: ${rerunHint(SEED)}`);
-const SLOT_LEAK = 'product bug: a finally rejected launch keeps its worker slot (openspec/changes/run-g2-partition-and-races/verification.md)';
-const SCOPE_BUG = 'product bug: an execution cancellation stops the whole intent (openspec/changes/run-g2-partition-and-races/verification.md)';
+const SLOT_LEAK = 'product bug B3: a finally rejected launch keeps its worker slot (openspec/changes/run-g2-partition-and-races/verification.md)';
+const SCOPE_BUG = 'product bug B2: an execution cancellation stops the whole intent (openspec/changes/run-g2-partition-and-races/verification.md)';
 const LONG_RUN_MILLISECONDS = 20_000;
 const CANCELLED_REASONS = ['assignment-not-active', 'attempt-not-launchable'];
 

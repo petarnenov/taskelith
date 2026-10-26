@@ -1,6 +1,3 @@
-## Purpose
-Define the G2 failure scenarios of work item 24, the targets they run against, and the recorded results that serve as G2 exit evidence for R05 to R08 and R27.
-
 ## ADDED Requirements
 
 ### Requirement: Worker broker partition
