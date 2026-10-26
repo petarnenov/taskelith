@@ -1,6 +1,5 @@
 import {
   isSpaceRefusal,
-  launchRetryDelay,
   type CommandId,
   type ExecutionExit,
   type ExecutionId,
@@ -10,6 +9,7 @@ import {
 import type { Result } from '@taskelith/kernel';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import type { ExecutionSupervision, RecoveryRound, SupervisedFacts } from './execution-supervision-port.js';
+import { backOffForSpace, type SpaceRetry } from './space-retry.js';
 
 export const WATCH_POLL_MILLISECONDS = 1_000;
 
@@ -66,10 +66,12 @@ interface Committed {
 export class ExecutionWatch {
   readonly #options: WatchOptions;
   readonly #logger: Logger;
+  readonly #space: SpaceRetry;
 
   constructor(options: WatchOptions) {
     this.#options = options;
     this.#logger = options.logger ?? SILENT_LOGGER;
+    this.#space = { sleep: options.sleep, draw: options.draw, logger: this.#logger };
   }
 
   // Start reconciliation of a record a previous process journaled (W4):
@@ -90,7 +92,7 @@ export class ExecutionWatch {
       if (decision.fact !== 'uncertain' && decision.fact !== 'not-started') return this.observe(target);
       const step = decision.fact === 'uncertain' ? this.#uncertain(target.executionId, decision.reason) : this.#notStarted(target.executionId);
       if (step !== SPACE_REFUSED) return step;
-      await this.#backOff(target, refusals++, target.stopping);
+      await backOffForSpace(this.#space, target.executionId, refusals++, target.stopping);
     }
     return 'ended';
   }
@@ -115,7 +117,7 @@ export class ExecutionWatch {
         else decided = checked;
       }
       if (decided === SPACE_REFUSED) {
-        await this.#backOff(target, refusals++, pause);
+        await backOffForSpace(this.#space, target.executionId, refusals++, pause);
         continue;
       }
       if (decided !== undefined) return decided;
@@ -201,13 +203,6 @@ export class ExecutionWatch {
     if (isSpaceRefusal(result.error)) return SPACE_REFUSED;
     this.#options.onFailure?.(result.error);
     return 'ended';
-  }
-
-  // Within [5 s, 60 s], the backoff of the operational targets.
-  async #backOff(target: WatchTarget, refusals: number, signal: AbortSignal): Promise<void> {
-    const delayMilliseconds = launchRetryDelay(refusals, this.#options.draw());
-    this.#logger.warn('worker.journal.space-refused', { executionId: target.executionId, refusals, delayMilliseconds });
-    await this.#options.sleep(delayMilliseconds, signal);
   }
 
   get #poll(): number {

@@ -32,6 +32,7 @@ import {
   type SupervisionFactory,
 } from './execution-supervision-port.js';
 import { cancelFiled, ExecutionWatch, type Watched, type WatchTarget } from './execution-watch.js';
+import { commitFact, type SpaceRetry } from './space-retry.js';
 
 // The provisional `ttl` and `skew` (operational targets), which bound the
 // retries of an operation before any grant names its own.
@@ -65,6 +66,7 @@ export class LaunchOrchestrator {
   readonly #options: LaunchOrchestratorOptions;
   readonly #logger: Logger;
   readonly #watch: ExecutionWatch;
+  readonly #space: SpaceRetry;
   readonly #launches = new Map<string, Launch>();
   readonly #running = new Map<string, Promise<void>>();
   readonly #forwarded = new Set<string>();
@@ -76,6 +78,8 @@ export class LaunchOrchestrator {
     this.#options = options;
     this.#logger = options.logger ?? SILENT_LOGGER;
     this.#watch = new ExecutionWatch({ ...options, logger: this.#logger, onFailure: (error) => this.#failed(error) });
+    const { sleep, draw } = options;
+    this.#space = { sleep, draw, logger: this.#logger, onFailure: (error) => this.#failed(error) };
   }
 
   // Asks for a pass at once, for example after intake journaled a command.
@@ -149,7 +153,7 @@ export class LaunchOrchestrator {
     if (intent === undefined || unsettled || this.#launches.has(assignmentId)) return false;
     // Registered before it runs, so a cancellation always finds it.
     const launch = new Launch({
-      options: this.#options, watch: this.#watch, intent, stopping: signal,
+      options: this.#options, watch: this.#watch, space: this.#space, intent, stopping: signal,
       cancellations: (executionId) => this.#cancellationsOf(assignmentId, executionId),
       ...(resume === undefined ? {} : { resume }),
     });
@@ -185,12 +189,12 @@ export class LaunchOrchestrator {
   async #sealUnwritten(target: WatchTarget): Promise<Watched> {
     const sealed = await target.supervision.seal();
     if (!reported(this.#options, sealed)) return 'ended';
+    const { executionId, stopping } = target;
     const { journal } = this.#options;
-    if (sealWon(sealed.value).ok) return reported(this.#options, journal.recordNotStarted(target.executionId)) ? 'not-started' : 'ended';
-    this.#logger.warn('worker.execution.uncertain', { executionId: target.executionId, reason: 'claimed before W4' });
-    if (reported(this.#options, journal.recordExecutionRecordWritten(target.executionId))) {
-      reported(this.#options, journal.recordUncertain(target.executionId));
-    }
+    const commit = (write: () => Result<void>) => commitFact(this.#space, executionId, write, stopping);
+    if (sealWon(sealed.value).ok) return (await commit(() => journal.recordNotStarted(executionId))) ? 'not-started' : 'ended';
+    this.#logger.warn('worker.execution.uncertain', { executionId, reason: 'claimed before W4' });
+    if (await commit(() => journal.recordExecutionRecordWritten(executionId))) await commit(() => journal.recordUncertain(executionId));
     return 'ended';
   }
 
@@ -315,6 +319,7 @@ type Executed = 'relaunch' | 'end';
 interface LaunchContext {
   readonly options: LaunchOrchestratorOptions;
   readonly watch: ExecutionWatch;
+  readonly space: SpaceRetry;
   readonly intent: JournaledIntent;
   readonly stopping: AbortSignal;
   readonly cancellations: (executionId: ExecutionId) => Result<readonly CommandId[]>;
@@ -472,14 +477,20 @@ class Launch {
 
   // No supervisor of this launch can claim before W4, so a claim is a record
   // nobody journaled: journal it, where a grant allows, and report uncertain.
-  #claimedBeforeW4(executionId: ExecutionId): Executed {
-    reported(this.#options, this.#options.journal.recordExecutionRecordWritten(executionId));
+  async #claimedBeforeW4(executionId: ExecutionId): Promise<Executed> {
+    if (!(await this.#commitFact(executionId, () => this.#options.journal.recordExecutionRecordWritten(executionId)))) return 'end';
     return this.#recordUncertain(executionId);
   }
 
-  #notStarted(executionId: ExecutionId): Executed {
-    if (!this.#options.journal.recordNotStarted(executionId).ok) return 'end';
+  async #notStarted(executionId: ExecutionId): Promise<Executed> {
+    if (!(await this.#commitFact(executionId, () => this.#options.journal.recordNotStarted(executionId)))) return 'end';
     return this.#afterNotStarted();
+  }
+
+  // The record keeps the fact, so a refusal for space is retried until a
+  // stop, which leaves it to the next start; a cancellation does not.
+  #commitFact(executionId: ExecutionId, write: () => Result<void>): Promise<boolean> {
+    return commitFact(this.#context.space, executionId, write, this.#stopping);
   }
 
   #afterNotStarted(): Executed {
@@ -520,8 +531,8 @@ class Launch {
     return this.#notStarted(executionId);
   }
 
-  #recordUncertain(executionId: ExecutionId): Executed {
-    reported(this.#options, this.#options.journal.recordUncertain(executionId));
+  async #recordUncertain(executionId: ExecutionId): Promise<Executed> {
+    await this.#commitFact(executionId, () => this.#options.journal.recordUncertain(executionId));
     return 'end';
   }
 

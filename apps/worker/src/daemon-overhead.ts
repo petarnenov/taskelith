@@ -15,6 +15,8 @@ export class ProcessDaemonOverhead implements DaemonOverheadSource {
   readonly #window: EventLoopLagWindow;
   readonly #resident: () => number;
   readonly #intervalMilliseconds: number;
+  // A window that failed to close leaves the lag unmeasured until one does.
+  #closeFailure: string | undefined;
 
   constructor(
     window = new EventLoopLagWindow(),
@@ -34,18 +36,41 @@ export class ProcessDaemonOverhead implements DaemonOverheadSource {
     }
   }
 
+  // Nothing is measured before the watch starts or without a sample.
   eventLoopLagMilliseconds(): Result<number> {
-    return ok(this.#window.lagMilliseconds());
+    if (this.#closeFailure !== undefined) return unmeasuredLag(this.#closeFailure);
+    try {
+      const lag = this.#window.lagMilliseconds();
+      return lag === undefined ? unmeasuredLag('no event-loop delay was sampled') : ok(lag);
+    } catch (error) {
+      return unmeasuredLag((error as Error).message);
+    }
   }
 
+  // The histogram is enabled only while the watch runs, so a start that
+  // fails before it holds none.
   async watch(signal: AbortSignal): Promise<void> {
+    this.#window.start();
     try {
       while (!signal.aborted) {
         await delay(this.#intervalMilliseconds, undefined, { signal }).catch(() => undefined);
-        if (!signal.aborted) this.#window.close();
+        if (!signal.aborted) this.#closeWindow();
       }
     } finally {
       this.#window.stop();
     }
   }
+
+  #closeWindow(): void {
+    try {
+      this.#window.close();
+      this.#closeFailure = undefined;
+    } catch (error) {
+      this.#closeFailure = (error as Error).message;
+    }
+  }
+}
+
+function unmeasuredLag(reason: string): Result<number> {
+  return err(failure('unavailable', `cannot measure the event-loop delay: ${reason}`));
 }
