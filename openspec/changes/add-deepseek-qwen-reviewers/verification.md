@@ -21,7 +21,7 @@ macOS (Darwin 25.6.0), Node.js v24.22.1, OpenCode CLI with the OpenCode Go provi
 - Only the reviewer list, the Rotation rule, the invocation table, and one scenario change; the one-reviewer rule, the pass cap, the unavailability window, and the pauses are unchanged.
 - Adjacency checked by hand over the nine positions and the wrap: harnesses Codex, OpenCode, Antigravity, OpenCode, Claude Code, OpenCode, Codex, OpenCode, Claude Code, then Codex; no two neighbours match.
 - The governance list, the Rotation turn, the invocation table, the design, and this record name the same reviewers in the same order.
-- `git grep kimi` outside the archive finds only `docs/governance.md` and `docs/agent-task-protocol.md`; `.claude/skills/taskelith-task-protocol/SKILL.md` names no reviewer and is unchanged. `AGENTS.md` names no reviewer.
+- `git grep -n kimi -- ':!openspec/changes/archive' ':!openspec/changes/add-deepseek-qwen-reviewers'` finds only `docs/governance.md` and `docs/agent-task-protocol.md`; `.claude/skills/taskelith-task-protocol/SKILL.md` names no reviewer and is unchanged. `AGENTS.md` names no reviewer.
 - The modified requirement text is copied unchanged (450 characters); only a fourth scenario is added.
 - The evidence check has nothing to verify: no external link is added. All content is English.
 
@@ -44,7 +44,11 @@ Node v24.22.1, in the worktree:
 
 ## Independent review
 
-PENDING
+Reviewer assigned by the coordinator: Codex CLI (gpt-6.1-sol), run by the worker's implementation subagent from the worktree.
+
+- **Pass 1** on 3fe3175b, 2026-10-26: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, session `01a17a23-1922-7fa1-8577-b604fa15ba13`; the output header confirmed model `gpt-6.1-sol`, sandbox `read-only`, and reasoning effort `medium`. The SHA-256 snapshots before and after the pass were identical (`194963612b8fb112eee64fe8e35c47f567ea022c84eb3f365efa5568e62246be`). The reviewer found the names and order consistent, no adjacent same-harness reviewers including the wrap, the requirement and its three scenarios copied unchanged, and the two DeepSeek models clearly distinguished. Findings: Critical 0, High 0, Medium 0, Low 1.
+  - Low: the self-check said that `git grep kimi` outside the archive finds only the two documents, which is untrue at 3fe3175b because this change's `design.md` and `verification.md` also match. Fixed (unreviewed fix) by recording the exact command, which also excludes this change's directory.
+- The pass had only a Low finding, so it was fixed without another review, as the governance policy allows.
 
 ## Remaining gates
 
