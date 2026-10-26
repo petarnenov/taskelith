@@ -23,7 +23,7 @@ SPECKIT_BASE := python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e0717
 SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
-.PHONY: verify verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility \
+.PHONY: verify verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility findings \
 	test services-up services-down verify-linux-cgroup installation-build installation-bootstrap installation-broker-config installation-start \
 	installation-stop installation-enroll installation-enrollment-token verify-installation installation-smoke qualify-harnesses \
 	scenario-fresh-composition scenario-worker-disk-loss scenario-worker-kill \
@@ -64,6 +64,11 @@ hooks:
 # reinstalls first, because the inventory reads the installed packages.
 dependency-inventory:
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use sh -c 'npm ci --ignore-scripts && npm run inventory:dependencies'
+
+# The review findings tool: ARGS is validate, index [--json], or checklist
+# [--capability <a,b>] [--files <globs>] [--top <n>] (agent task protocol).
+findings:
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run --silent findings -- $(ARGS)
 
 # Runs npm test with the .nvmrc Node.js against its own services, which stop
 # also when tests fail; fails closed without Docker.

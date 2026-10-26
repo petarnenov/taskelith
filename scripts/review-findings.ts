@@ -6,6 +6,7 @@ import { posix } from 'node:path';
 export const MAX_LINE_BYTES = 4096;
 export const VOCABULARY_PATH = 'docs/review-findings/categories.txt';
 export const NO_CAPABILITY = '(none)';
+export const MAX_CATEGORY_LENGTH = 64;
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low';
 export type Outcome = 'fixed' | 'fixed-unreviewed' | 'declined' | 'deferred' | 'owner-accepted';
@@ -77,6 +78,9 @@ export function parseVocabulary(text: string): { categories: Category[]; problem
     const problem = (message: string) => problems.push({ file: VOCABULARY_PATH, line: index + 1, message });
     const match = CATEGORY_LINE.exec(line);
     if (!match) return problem('expected "<category-id> <description>"');
+    if (match[1].length > MAX_CATEGORY_LENGTH) {
+      return problem(`category id is ${match[1].length} characters (max ${MAX_CATEGORY_LENGTH})`);
+    }
     if (categories.some((category) => category.id === match[1])) return problem(`duplicate category "${match[1]}"`);
     categories.push({ id: match[1], description: match[2] });
   });
@@ -106,20 +110,22 @@ function parseLine(text: string, change: string, rules: FindingRules): { finding
   if (bytes > MAX_LINE_BYTES) return { problems: [`line is ${bytes} bytes (max ${MAX_LINE_BYTES})`] };
   if (text.trim() === '') return { problems: ['empty line; a change without findings has an empty file'] };
   const parsed = parseJson(text);
-  if (!parsed.ok) return { problems: [`not a JSON value: ${parsed.error}`] };
-  const secrets = secretLikeStrings(parsed.value).length > 0 ? ['holds a secret-like value; describe it instead'] : [];
+  if (!parsed.ok) return { problems: ['not a JSON value'] };
+  // Schema diagnostics could echo the secret, so only this one is reported.
+  if (secretLikeStrings(parsed.value).length > 0) return { problems: ['holds a secret-like value; describe it instead'] };
   const violations = rules.checkSchema(parsed.value);
-  if (secrets.length > 0 || violations.length > 0) return { problems: [...secrets, ...violations] };
+  if (violations.length > 0) return { problems: [...violations] };
   const finding = parsed.value as Finding;
   const problems = recordProblems(finding, change, rules.categories);
   return problems.length > 0 ? { problems } : { finding, problems };
 }
 
-function parseJson(text: string): { ok: true; value: unknown } | { ok: false; error: string } {
+// The parser's message quotes the input, so callers get no message.
+function parseJson(text: string): { ok: true; value: unknown } | { ok: false } {
   try {
     return { ok: true, value: JSON.parse(text) };
-  } catch (error) {
-    return { ok: false, error: (error as Error).message };
+  } catch {
+    return { ok: false };
   }
 }
 
@@ -133,15 +139,15 @@ function recordProblems(finding: Finding, change: string, categories: ReadonlySe
 }
 
 // Common token shapes: Taskelith and GitHub tokens, JWTs, private keys, NATS
-// seeds, AWS and Slack keys, API keys, and URL credentials.
+// seeds, AWS and Slack keys, API keys, and URL user information.
 const SECRET_PATTERNS: readonly RegExp[] = [
   /\btk(?:op|en|wk)_[A-Za-z0-9_-]{20,}/,
   /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/,
   /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/,
   /-----BEGIN [A-Z ]*(?:PRIVATE KEY|NKEY SEED|USER JWT)-----/,
   /\bS[OAU][A-Z2-7]{56}\b/,
-  /\b(?:AKIA[0-9A-Z]{16}|xox[abpr]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9_-]{20,})/,
-  /\b[a-z][a-z0-9+.-]*:\/\/[^\s/@]*:[^\s/@]*@/i,
+  /\b(?:A(?:KIA|SIA)[0-9A-Z]{16}|xox[abpr]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9_-]{20,})/,
+  /\b[a-z][a-z0-9+.-]*:\/\/[^\s/?#@]+@/i,
 ];
 
 export function secretLikeStrings(value: unknown): string[] {

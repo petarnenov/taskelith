@@ -99,11 +99,11 @@
       "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
     },
     "text": {
-      "description": "One line of text without control characters.",
+      "description": "One line of text without C0 or C1 control characters, DEL, or Unicode line and paragraph separators.",
       "type": "string",
       "minLength": 1,
       "maxLength": 300,
-      "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]+$"
     }
   }
 }

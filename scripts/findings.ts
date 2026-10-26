@@ -32,7 +32,7 @@ export const DEFAULT_TOP = 7;
 export const MAX_TOP = 10;
 
 export const USAGE = [
-  'Usage: npm run findings -- <command>',
+  'Usage: make findings ARGS="<command>", or npm run findings -- <command>',
   '  validate                 check every findings.jsonl under openspec/changes',
   '  index [--json]           aggregate the findings of archived changes',
   `  checklist [--capability <a,b>] [--files <glob,glob>] [--top <1-${MAX_TOP}>]`,
@@ -87,9 +87,21 @@ function checklistQuery(capabilities: readonly string[], files: readonly string[
   return { capabilities: capabilities.flatMap(splitList), files: files.flatMap(splitList), top: topCount(top) };
 }
 
-// Splits at commas outside braces, so a glob such as `{a,b}.ts` stays whole.
+// Splits at commas outside braces, nested ones included, so a glob such as
+// `src/{a,{b,c}}.ts` stays whole.
 export function splitList(value: string): string[] {
-  return value.split(/,(?![^{]*\})/).map((item) => item.trim()).filter((item) => item !== '');
+  const items = [''];
+  let depth = 0;
+  for (const character of value) {
+    if (character === ',' && depth === 0) {
+      items.push('');
+      continue;
+    }
+    if (character === '{') depth += 1;
+    if (character === '}') depth = Math.max(0, depth - 1);
+    items[items.length - 1] += character;
+  }
+  return items.map((item) => item.trim()).filter((item) => item !== '');
 }
 
 function topCount(value: string | undefined): number {
@@ -105,10 +117,9 @@ export function ajvSchemaCheck(schema: object): SchemaCheck {
   return (value) => (validate(value) ? [] : validate.errors!.map(describeError));
 }
 
+// An unknown property's name is untrusted input, so it is never printed.
 function describeError(error: ErrorObject): string {
-  const location = error.instancePath || '/';
-  const property = error.params.additionalProperty as string | undefined;
-  return property === undefined ? `${location} ${error.message}` : `${location} ${error.message} "${property}"`;
+  return `${error.instancePath || '/'} ${error.message}`;
 }
 
 export interface ChangeFindings extends FindingsSource {
