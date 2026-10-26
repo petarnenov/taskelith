@@ -37,6 +37,18 @@ On 2026-10-26 the owner asked to streamline task integration; coordinator Niki r
 | `npm run openspec -- validate --all --strict` on `d1e0990` | 70 passed, 0 failed (70 items): the living specs and the one active change |
 | `npm run verify:archive` on `d1e0990` | passed: "Every active OpenSpec change archives into strictly valid specs." (one active change) |
 
+## Archive (worker step 7)
+
+The change was archived on its branch after review pass 3 and its unreviewed record fix (`8afa53b`), following worker step 7 of the protocol this change introduces: every task ticked, then `npm run openspec -- archive streamline-task-integration --yes`, which moved the change to `openspec/changes/archive/2026-10-26-streamline-task-integration/` and applied its deltas (`agent-task-protocol`: 3 added, 2 modified; `dependency-inventory`: 1 modified; `integration-flow`: 2 modified). The checks below ran on that working tree, which is the tree of the archive commit that also carries this section; the merge base is `origin/dev` at `26ff102`.
+
+| Check on the archived tree | Result |
+| --- | --- |
+| `npm run openspec -- validate --all --strict` | 69 passed, 0 failed (69 items): the living specs; no active change |
+| `npm run openspec -- validate --archived --no-interactive`, this change's line | `✓ change/2026-10-26-streamline-task-integration`; the command as a whole reported 149 passed, 12 failed (161 items), the 12 being the older archived changes recorded above |
+| `npm run openspec -- list` | "No active changes found." |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` | Only this change's edits: `agent-task-protocol` (the two modified requirements and the three added ones), `dependency-inventory` ("Committed inventory before push"), and `integration-flow` ("Local gate before push", "Parallel development in worktrees"); 3 files, 52 insertions, 11 deletions |
+| `make verify` | Passed (exit 0), first run: 1910 tests, 1908 passed, 0 failed, 2 skipped (the Linux-only scan tests); coverage of all files 99.29% lines, 92.08% branches, 99.04% functions; no undeclared contract breaking change; OpenSpec 69 passed; `verify:archive` reported "No active OpenSpec change; nothing to archive."; `verify:package` passed |
+
 ## Re-archive demonstration
 
 `openspec/changes/streamline-task-integration/rearchive-demo.sh`, run on 2026-10-26 as `bash openspec/changes/streamline-task-integration/rearchive-demo.sh "$PWD/node_modules/.bin/openspec"` with the pinned OpenSpec 1.14.3, builds a scratch repository whose living spec `demo` holds the requirement "The system SHALL log each run." with the scenario `Demo`. A task branch archives a `MODIFIED` delta "log each run with its duration"; `dev` meanwhile archives "log each run and its exit status"; both keep the scenario name. Output:
@@ -126,5 +138,4 @@ Under the review process, a Low-only pass is fixed without another review: no fu
 
 ## Remaining gates
 
-- Archive of this change on its branch (worker step 7).
 - Integration into dev by the coordinator (single pull request).
