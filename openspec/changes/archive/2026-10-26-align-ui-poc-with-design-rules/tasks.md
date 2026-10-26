@@ -17,4 +17,4 @@
 ## 4. Verify
 
 - [x] 4.1 Run `npm run openspec -- validate align-ui-poc-with-design-rules --strict` and `make verify`.
-- [ ] 4.2 Independent review and record it in `verification.md` (passes 1 and 2 recorded).
+- [x] 4.2 Independent review and record it in `verification.md` (passes 1 to 3 recorded).
