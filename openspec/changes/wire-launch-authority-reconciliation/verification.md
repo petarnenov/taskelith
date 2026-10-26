@@ -111,9 +111,21 @@ Reviewer: OpenCode CLI, agent `reviewer`, model `opencode-go/kimi-k3.1-pro`, var
 - **Snapshot:** `06db3a4abdbffcd482ed3cf46aeca819ddfb94ff8b952ff217a1c9367d8c63ca` before and after; unchanged.
 - **Earlier findings:** the resolutions of pass 1 (M1, M2, M3) and pass 2 (M1, L1) were all confirmed.
 - **Findings:** 0 Critical, 1 High, 0 Medium, 2 Low.
-  1. **H1:** in `observation-effects.ts`, `launchRejection` did not check that the assignment is held by the reporting worker, unlike `cancelUnauthorizedStart`. An authenticated worker B could report a releasing rejection naming worker A's current assignment, attempt, and generation, and free A's assignment. **Open:** under the three-pass rule, the author stopped and presented options to the owner through the coordinator.
+  1. **H1:** in `observation-effects.ts`, `launchRejection` did not check that the assignment is held by the reporting worker, unlike `cancelUnauthorizedStart`. An authenticated worker B could report a releasing rejection naming worker A's current assignment, attempt, and generation, and free A's assignment. Under the three-pass rule the author stopped and presented options through the coordinator. **Security fix** in `5c05bde`: `reportersAssignment` refuses with `forbidden`, before any log or effect, an assignment held by another worker, for both `launchRejection` and `cancelUnauthorizedStart`. Test: worker B's releasing rejection naming worker A's assignment is `rejected` and leaves A's assignment, attempt, and reservation unchanged. Reviewed in pass 4.
   2. **L1:** the modified "Authenticated producer" admits a revoked worker's observations, but the unchanged "First contact" and "Confirmation sent again" still required contact for every authenticated observation and duplicate. The code already records none for a revoked worker. **Unreviewed fix:** both requirements are modified in the delta to exclude a revoked worker.
   3. **L2:** this record claimed application-level tests of the historical start. **Unreviewed fix:** the evidence line now names the domain test.
+
+### Pass 4 (exception to the three-pass rule)
+
+- **Authorization:** the coordinator (Niki) chose option (b) for H1 on 2026-10-26: a security fix, then an exceptional pass 4 by the same reviewer, limited to the fix diff. The pass was permitted on the owner's behalf by the coordinator's away delegate, run `/Users/petarnenov/.config/away/runs/20261026T011301Z-opencode-56088`, not by the owner in person.
+- **Revision and scope:** `5c05bde`, limited to `git diff 8e152a4 5c05bde`.
+- **Checks before the pass:** `make verify` on the tree of `5c05bde`: exit 0; 1397 tests, 1397 pass; coverage 99.23 / 91.37 / 98.71.
+- **Invocation:** as pass 2, with a prompt limited to the fix.
+- **Model confirmation:** all 18 stored messages record `{"id":"kimi-k3.1-pro","providerID":"opencode-go","variant":"high"}`.
+- **Session:** `ses_e8a3933f0ffeDgZcuPfYY6Bw8r`.
+- **Snapshot:** `5d087bbe2e96909dfdf2999bc86f8ecb4bf0a1cfbaf42092f590faff87fb71d3` before and after; unchanged.
+- **Result:** H1 resolved. The guard runs before every log and effect. No other launch-rejection or unauthorized-start path bypasses it. The refusal is recorded as `rejected` and confirmed. The test proves worker A's state is unchanged.
+- **Findings:** 0 Critical, 0 High, 0 Medium, 0 Low.
 
 ## Limitations
 
@@ -124,4 +136,7 @@ Reviewer: OpenCode CLI, agent `reviewer`, model `opencode-go/kimi-k3.1-pro`, var
 
 ## Remaining gates
 
-PENDING.
+- The coordinator's integration into `dev` and the archive of this change.
+- Pepi's worker production of `execution.unrecorded-process` (item 20 follow-up).
+- Re-admission by a later writer of admissions, and an HTTP or CLI surface for the reconciliation queue.
+- No deployment validation was done; none is claimed.

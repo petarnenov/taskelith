@@ -23,4 +23,4 @@
 
 - [x] 4.1 Tests for every scenario of the spec deltas, including the D3 tests
 - [x] 4.2 `make verify` passes
-- [ ] 4.3 Independent review (OpenCode, `opencode-go/kimi-k3.1-pro#high`) and `verification.md`
+- [x] 4.3 Independent review (OpenCode, `opencode-go/kimi-k3.1-pro#high`) and `verification.md`
