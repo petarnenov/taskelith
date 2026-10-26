@@ -6,5 +6,5 @@
 
 ## 2. Verification and review
 
-- [ ] 2.1 Run `make verify` and the OpenSpec strict validation.
+- [x] 2.1 Run `make verify` and the OpenSpec strict validation.
 - [ ] 2.2 Obtain independent review from OpenCode, as the owner asked, and record the results.
