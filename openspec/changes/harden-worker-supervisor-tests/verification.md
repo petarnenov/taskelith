@@ -35,7 +35,7 @@ Follow-ups recorded in the [start reconciliation verification](../archive/2026-1
 
 OpenCode, `opencode-go/kimi-k3.1-pro` (`high`, set by `-m`), session `ses_e88152d5effehmRNLbMP27GjXT`, at `3f24c89`. The snapshot was identical before and after the pass (`5a2e5b98…`). Findings: 0 Critical, 0 High, 5 Medium, 1 Low, all in the test reaper; the type narrowing was judged complete and sound. The session recorded the invocation details above; the author fixed every finding in `3e58a77`, which replaces the record-based reaper with one that kills every live process whose command line names the test file's temporary root (design D1).
 
-- **M1 (fixed, `3e58a77`):** `stop()` killed a tracked scenario's group by its PID alone. The reaper no longer signals by a bare PID or group: it kills only processes whose command line names the root, which a reused PID cannot carry, and then waits for the tracked scenarios to close.
+- **M1 (fixed, `3e58a77`):** `stop()` killed a tracked scenario's group by its PID alone. The reaper no longer signals by a bare PID or group: it kills only processes whose command line names the root, which a reused PID cannot carry, and then waits for the tracked scenarios to close. Pass 2 found the scan-to-kill race left (M1').
 - **M2 (fixed, `3e58a77`):** a child spawned before `handle` (CP8) was not reaped. The child names the root through its spawn counter path, so it is killed without any record. Regression: with the CP8 expectation made wrong and the child sleeping 60 s, the test failed after 1.5 s and no process naming the root was left (not committed); `process-reaper.test.ts` shows that an untracked detached process in its own session is killed.
 - **M3 (fixed, `3e58a77`):** escaped descendants were not reaped. The `ESCAPE` and `MEMBER` descendants now get the root as an extra argument and are killed with the rest, on macOS and Linux, without a containment-specific path.
 - **M4 (fixed, `3e58a77`):** the detached supervisor was untracked until `supervisor.1` existed. Its command line names the execution directory under the root, so it is killed from its spawn on.
@@ -43,9 +43,22 @@ OpenCode, `opencode-go/kimi-k3.1-pro` (`high`, set by `-m`), session `ses_e88152
 - **L1 (fixed, `3e58a77`):** listing failures yielded nothing. A listing or kill error, or a process still alive after 5 s of rescans, is collected; the reaper still waits for the tracked scenarios and then throws an `AggregateError`.
 - **Checks after the fixes:** `darwin-supervisor.test.ts` passed 11 of 11 in nine runs (10.2 to 20.2 s, varying with machine load); the restart assertion made wrong failed the test and ended the run after 3 s with no process left (not committed); `make verify` at `3e58a77` passed in 179 s (1614 tests, 1614 pass, 0 fail, 0 cancelled, 0 skipped; coverage 99.26% lines, 91.68% branches, 98.80% functions; archive dry run and package verification passed). The design, proposal, tasks, and the `worker-supervisor` delta were updated to the marker approach afterwards; `npm run openspec -- validate harden-worker-supervisor-tests --strict` and `npm run verify:archive` pass on them.
 
+## Review pass 2
+
+OpenCode, `opencode-go/kimi-k3.1-pro` (`high`, set by `-m`), session `ses_e8804e78bffee3qsxPuW1RUe5q`, at `dfd75b3`. The snapshot was identical before and after the pass (`c01341b7…`). The reviewer confirmed the resolutions of M2, M3, M4, M5, and L1, and M1 in part. Findings: 0 Critical, 0 High, 3 Medium, 1 Low, all fixed in `708e59c`.
+
+- **M1' (mitigated, `708e59c`):** a process ID could be reused between the scan and the kill. Each listed process's command line is now read again (`ps -p` on macOS, `/proc/<pid>/cmdline` on Linux) just before `SIGKILL`, and the kill is skipped when it no longer names the root. A gap between that check and `process.kill` remains; Node offers no pidfd-based kill. Design D1 and its risks state this.
+- **M2' (fixed, `708e59c`):** `execFileSync('ps')` had no timeout and blocked the event loop. `ps` now runs through asynchronous `execFile` with a timeout of the remaining reaper budget; a timeout is collected into the `AggregateError`.
+- **M3' (fixed, `708e59c`):** a tracked process that never closed passed the teardown. `closed()` now returns an error after 5 s, which joins the `AggregateError`. Test: a marked scenario whose unmarked group member holds its stdout makes `reap()` reject with that error.
+- **L1' (fixed, `708e59c`):** the reaper test's cleanup missed processes. Every process joins a list before its spawn is awaited, all are created inside `try`, and `finally` kills each and waits at most 5 s for it.
+- **Checks after the fixes:** `process-reaper.test.ts` passes 2 of 2; `darwin-supervisor.test.ts` passed 11 of 11 in four runs (14.6 to 21.9 s under a load average of 8 to 11); the restart assertion made wrong failed the test and ended the run after 2 s with no process left (not committed); `make verify` at `708e59c` passed in 170 s (1615 tests, 1615 pass, 0 fail, 0 cancelled, 0 skipped; coverage 99.26% lines, 91.68% branches, 98.80% functions; archive dry run and package verification passed).
+- **Found while fixing:** the first version of the new reaper test hung because an `async` helper returned the exit promise, which `await` then waited for; the helper now returns it inside an object.
+
 ## Limitations and remaining gates
 
 - The privileged Linux tests were changed but not run.
 - Other real-process tests that leave a long-running process on a failed assertion (the lock holder in `file-adapters.test.ts`, the sleeper in `worker-supervision.test.ts`) start no supervisor and end within 60 s; they are not changed.
-- The fixes of pass 1 are not reviewed yet.
-- Remaining gates: the next review pass, integration into `dev`, and archive.
+- PID reuse is mitigated, not eliminated (M1'): a gap between the last command-line check and `process.kill` remains.
+- `/proc` reads on Linux have no timeout.
+- The fixes of pass 2 are not reviewed yet.
+- Remaining gates: review pass 3 (the last allowed), integration into `dev`, and archive.
