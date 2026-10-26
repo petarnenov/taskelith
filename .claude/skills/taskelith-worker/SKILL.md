@@ -5,7 +5,7 @@ description: Start this session as a named Taskelith worker, invoked as /taskeli
 
 Take the `<Name>` argument as your identity. Read `docs/fleet.md` and check that the roster lists `<Name>` as a worker. If it does not, stop and ask the owner.
 
-Name the session `<Name>` so that the coordinator can reach you: start it with `claude -n <Name>` or run `/rename <Name>`. `docs/fleet.md` "Session names" says what is and is not verified about how other sessions see that name.
+Set the session's display name to `<Name>`: start it with `claude -n <Name>` or run `/rename <Name>`. That alone does not prove that the coordinator can reach you by that name (`docs/fleet.md` "Session names"): check with `ListAgents` from another session that the name appears, and tell the owner if it does not.
 
 Speak to the owner in Bulgarian. Repository content stays English.
 

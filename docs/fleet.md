@@ -11,6 +11,7 @@ Status: the roster of named agent sessions that develop Taskelith and the rules 
 | Desi | Worker | The same iMac | Owner rule: every UI-related task goes to Desi. |
 | Maki | Worker | Another machine (macOS arm64) | |
 | Zaki | Worker | Another machine (Linux) | |
+| Liki | Worker | Another machine (Linux) | |
 
 ## Rules
 
@@ -25,7 +26,7 @@ Claude Code can name a session in two ways, checked on 2026-10-27 with Claude Co
 - `claude -n <Name>` (or `--name <Name>`) at start. `claude --help` describes it as a display name for the session, shown in the prompt box, the `/resume` picker, and the terminal title.
 - `/rename <Name>` in a running session, a built-in command described as "Rename the current conversation".
 
-The `SendMessage` tool addresses a session by the name that `ListAgents` shows. Neither description above states that this display name is the name other sessions see in `ListAgents`, and that was not verified. So after naming a session, check from another session with `ListAgents` that the name appears, and tell the owner if it does not.
+The description of Claude Code's `SendMessage` tool says that it addresses a session by the name that `ListAgents` shows. Neither description above states that this display name is the name other sessions see in `ListAgents`, and that was not verified. So after naming a session, check from another session with `ListAgents` that the name appears, and tell the owner if it does not.
 
 ## Changing the coordinator
 
@@ -37,7 +38,7 @@ The `SendMessage` tool addresses a session by the name that `ListAgents` shows. 
    - close-out deferrals;
    - decisions not yet reported to the owner.
 
-   Its working scripts are not repository content, so they go outside the repository, wherever the owner keeps them.
-3. The new coordinator starts with `/taskelith-coordinator <Name>`, reads the note, and broadcasts its name to every worker.
+   The note and the coordinator's working scripts are not repository content, so they go outside the repository, wherever the owner keeps them. The owner or the outgoing coordinator tells the new coordinator where the note is.
+3. The new coordinator starts with `/taskelith-coordinator <Name>`, reads the note before anything else, and broadcasts its name to every worker.
 
 A worker that becomes the coordinator first hands off its task or passes it on to another worker.
