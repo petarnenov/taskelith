@@ -27,18 +27,30 @@ async function failingCases(defects: DoubleDefects): Promise<string[]> {
   return failing;
 }
 
-test('a provider that stores the credential in the workspace fails the suite', async () => {
-  assert.deepEqual(await failingCases({ storesSecret: true }), ['uses a run credential only within its scope and never stores it']);
-});
+const PREPARE = 'prepares a task branch workspace at the base head';
+const REJECT = 'rejects unsafe names, foreign or mismatched heads, and missing sources, leaving nothing';
+const CREDENTIAL = 'refuses an out-of-scope credential before any remote call and never stores one';
+const DIRTY = 'reports modified and untracked files, ignores ignored ones, and is clean after a commit';
+const PUSH = 'pushes a clean task branch fast-forward at the remote head the port reports';
+const SNAPSHOT = 'snapshots exactly the clean head tree, in bytes that depend on the tree alone';
+const REMOVE = 'removes only its own workspace and never a control record';
+const SWEEP = 'sweeps interrupted prepares and removals without following links, across a restart';
 
-test('a provider that misses untracked files fails the suite', async () => {
-  assert.deepEqual(await failingCases({ ignoresUntracked: true }), [
-    'reports modified and untracked files, ignores ignored ones, and is clean after a commit',
-    'pushes a clean task branch fast-forward at the expected remote head only',
-    'snapshots only the clean head tree, in bytes that depend on the tree alone',
-  ]);
-});
+// Each defect of the double breaks the guarantees of the named cases.
+const DEFECTS: readonly [string, DoubleDefects, readonly string[]][] = [
+  ['stores the credential in the workspace', { storesSecret: true }, [CREDENTIAL]],
+  ['calls the remote before checking the scope', { callsRemoteBeforeScope: true }, [CREDENTIAL]],
+  ['misses untracked files', { ignoresUntracked: true }, [PREPARE, DIRTY, PUSH, SNAPSHOT]],
+  ['checks the task only for a task branch', { checksTaskOnlyOnBranch: true }, [REJECT]],
+  ['accepts a tree that is not the commit tree', { acceptsMismatchedTree: true }, [REJECT]],
+  ['puts the commit into the snapshot', { snapshotsCommit: true }, [SNAPSHOT]],
+  ['loses modes and link targets in the snapshot', { snapshotsWithoutMetadata: true }, [SNAPSHOT]],
+  ['removes beyond its workspace', { removesWorkspacesRoot: true }, [REMOVE]],
+  ['follows links when it sweeps', { sweepFollowsLinks: true }, [SWEEP]],
+];
 
-test('a provider whose removal reaches beyond its workspace fails the suite', async () => {
-  assert.deepEqual(await failingCases({ removesWorkspacesRoot: true }), ['removes only its own workspace and never a control record']);
-});
+for (const [name, defects, failing] of DEFECTS) {
+  test(`a provider that ${name} fails the suite`, async () => {
+    assert.deepEqual(await failingCases(defects), failing);
+  });
+}

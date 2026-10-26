@@ -31,10 +31,11 @@ export {
   type WorkspaceTarget,
 } from './domain/workspace.js';
 export { WORKSPACE_CONFORMANCE } from './ports/workspace-conformance.js';
-export type { FixtureCredentials, WorkspaceFixture } from './ports/workspace-fixture.js';
+export type { FixtureCredentials, TreeEntry, WorkspaceFixture } from './ports/workspace-fixture.js';
 export type {
   PrepareWorkspace,
   PushTaskBranch,
+  RemoteHeadRequest,
   TaskBranchPublisher,
   WorkspaceHeads,
   WorkspaceLifecycle,

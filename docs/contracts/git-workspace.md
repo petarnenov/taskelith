@@ -10,7 +10,7 @@ The architecture's Workspace module owns workspace ownership, placement, prepara
 | --- | --- | --- |
 | `WorkspaceLifecycle`: prepare, list, remove, and sweep | The worker runtime (item 18) | The item 16 Git workspace adapter on the worker |
 | `WorkspaceHeads`: status, code head, and head snapshot | Verification, review, and the evidence path (items 17 and 21) | The item 16 adapter |
-| `TaskBranchPublisher`: push of the task branch | The implementation flow (items 18 and 21) | The item 16 adapter |
+| `TaskBranchPublisher`: the remote task branch head and the push | The implementation flow (items 18 and 21) | The item 16 adapter |
 | `WorkspaceProvider`: the three ports together | The worker's composition root | The item 16 adapter |
 
 Each client depends on the narrowest port it uses ([ADR 0004](../decisions/0004-first-class-engineering-principles.md) principle 2). The ports run only on a worker, which is the only process that writes under `worker/` (worker journal contract section 1). This item adds no adapter, no Git call, no worker runtime wiring, and no wire schema.
@@ -35,7 +35,7 @@ Paths are relative to `dataRoot` ([storage contract](../storage.md)). By D4 (a),
 
 A workspace is `absent`, `preparing`, `ready`, or `removing`. Only `ready` workspaces are listed and used. A prepare names the attempt, its project and task, the target, the run credential, and the repository binding: the repository identifier, its remote URL, and the base branch, from the project's repository binding (item 11).
 
-1. **Prepare.** `prepare` checks the names, the target, and the credential (section 6), then clones the bound repository into `.staging-<attemptId>/checkout/` and checks out its target, then renames `.staging-<attemptId>/` to `<attemptId>/`. The rename is the moment the workspace becomes `ready`, so a crash leaves either no workspace or a complete one. An existing `<attemptId>/` fails with `conflict` and leaves it unchanged.
+1. **Prepare.** `prepare` checks the attempt and task names for every target, the target, the credential (section 7), and the sources, in the order of section 9, then clones the bound repository into `.staging-<attemptId>/checkout/` and checks out its target, then renames `.staging-<attemptId>/` to `<attemptId>/`. The rename is the moment the workspace becomes `ready`, so a crash leaves either no workspace or a complete one. An existing `<attemptId>/` fails with `conflict` and leaves it unchanged. An `at-head` target whose tree is not the tree of its commit fails with `invalid` and reason `head-mismatch`, so a workspace never claims a code head it does not hold.
 2. **Targets.** A `task-branch` workspace checks out the task branch (section 4): the remote task branch at its head when it exists, so that a later attempt continues the task's work, or a new task branch at the head of the binding's base branch. An `at-head` workspace checks out a given code head, detached, for review at the same head (G3 plan decision D7 (a)); it never pushes.
 3. **Ready.** A ready workspace survives a worker restart; `list` returns the attempts with a ready workspace, in the code point order of their identifiers, and an attempt continues in its own workspace after a restart.
 4. **Remove.** `remove` renames `<attemptId>/` to `.removing-<attemptId>/` and then deletes that entry, so a crash leaves either a ready workspace or a removal to finish. Removing an absent workspace succeeds.
@@ -79,31 +79,34 @@ A workspace is clean when no reason applies. Ignored files do not make a workspa
 
 The per-run SCM credential is the `RunCredential` of the [source control contract](source-control.md) section 3, issued by `RunCredentialIssuer` for the run. This contract uses it and does not redefine it.
 
-- **Per operation.** The caller passes the credential (`WorkspaceCredential`: its identifier, secret, repositories, and effective permissions) to each operation that reaches the remote: `prepare` and `push`. The workspace never keeps it, so a refreshed credential is simply the one passed next.
-- **Scope first.** Before any remote call, `checkCredentialScope` requires the bound repository among the credential's repositories and the permission among its effective permissions: `read-code` for `prepare`, `write-code` for `push`. Otherwise the operation fails with `forbidden` and reason `credential-out-of-scope`, without a remote call. The service checks the credential again.
+- **Per operation.** The caller passes the credential (`WorkspaceCredential`: its identifier, secret, repositories, and effective permissions) to each operation that reaches the remote: `prepare`, `readRemoteHead`, and `push`. The workspace never keeps it, so a refreshed credential is simply the one passed next.
+- **Scope first.** Before any remote call, `checkCredentialScope` requires the bound repository among the credential's repositories and the permission among its effective permissions: `read-code` for `prepare` and `readRemoteHead`, `write-code` for `push`. Otherwise the operation fails with `forbidden` and reason `credential-out-of-scope` before it makes any remote call, so the secret never reaches a service it is not scoped to. The service checks the credential again.
 - **Never stored.** The secret is never written into the workspace: not in `.git/config`, a remote URL, a credential store, a reflog, or a file of the working tree. It is never passed on a command line, where other processes can read it, and never logged; item 16 hands it to Git for the one call only.
 - **No repository-controlled programs.** An agent can edit the workspace's `.git`. The adapter therefore runs its own Git calls with hooks disabled, ignores repository-local settings that run programs or redirect a remote, such as credential helpers, `core.sshCommand`, `core.fsmonitor`, and `url.<base>.insteadOf`, and pushes to the binding's remote rather than to a remote the workspace configures.
 - **The agent.** Whether a harness process receives an SCM credential is the harness host's rule (item 18, [trust model](../trust-model.md) section 5); this contract gives it none.
 
 ## 8. Push
 
+`readRemoteHead` returns the remote task branch head now, or null while the branch does not exist, so a caller tells an absent branch from one at the base commit. It fails with `invalid` and reason `read-only-workspace` for an `at-head` workspace. A caller reads it before a first push, in a continuing attempt, and after a `remote-moved` refusal; it is the port's only view of the remote, and the caller never needs native access.
+
 `push` publishes a clean `task-branch` workspace's head to its task branch:
 
 - It fails with `invalid` and reason `read-only-workspace` for an `at-head` workspace, with `forbidden` for a credential without `write-code` on the repository, and with `precondition-failed` and reason `workspace-dirty` for a dirty workspace.
-- It names the remote task branch head the caller last saw, or none. A remote head that differs fails with `conflict` and reason `remote-moved`; a head that does not descend from the remote head fails with `conflict` and reason `not-fast-forward`. A push is never forced, and a refused push leaves the remote unchanged.
+- It names the remote task branch head the caller last saw through `readRemoteHead` or a successful push, or none. A remote head that differs fails with `conflict` and reason `remote-moved`; a head that does not descend from the remote head fails with `conflict` and reason `not-fast-forward`. A push is never forced, and a refused push leaves the remote unchanged.
 - On success it returns the pushed `CodeHeadIdentity`, which is the workspace's current head.
 
 ## 9. Failures
 
-Every operation returns a kernel `Result`, except `list` and `sweep`, which return values and reject their promise when the disk cannot be read, as the account pool's reads do. Failures carry a `reason` detail where this table names one (`WORKSPACE_FAILURE_REASONS`). `prepare` checks in this order: names and target (`invalid`), credential (`forbidden`), sources (`not-found`), then an existing workspace (`conflict`); a failed prepare leaves no ready workspace.
+Every operation returns a kernel `Result`, except `list` and `sweep`, which return values and reject their promise when the disk cannot be read, as the account pool's reads do. Failures carry a `reason` detail where this table names one (`WORKSPACE_FAILURE_REASONS`). `prepare` checks in this order: the attempt and task names and the target's repository (`invalid`), the credential (`forbidden`), the sources (`not-found`), the target's tree (`invalid`, `head-mismatch`), then an existing workspace (`conflict`). A refusal creates no new workspace and leaves an existing one unchanged.
 
 | Code | Reason | When |
 | --- | --- | --- |
 | `invalid` | `unsafe-name` | An attempt or task identifier outside the safe form of section 2 |
 | `invalid` | — | An `at-head` target of another repository |
-| `invalid` | `read-only-workspace` | A push from an `at-head` workspace |
+| `invalid` | `head-mismatch` | An `at-head` target whose tree is not its commit's tree |
+| `invalid` | `read-only-workspace` | `push` or `readRemoteHead` for an `at-head` workspace |
 | `forbidden` | `credential-out-of-scope` | A credential without the repository or the permission |
-| `not-found` | — | A missing base branch or head commit, or an absent workspace for `inspect`, `snapshot`, or `push` |
+| `not-found` | — | A missing base branch or head commit, or an absent workspace for `inspect`, `snapshot`, `readRemoteHead`, or `push` |
 | `conflict` | — | `prepare` for an attempt that has a ready workspace |
 | `conflict` | `remote-moved`, `not-fast-forward` | Section 8 |
 | `precondition-failed` | `workspace-dirty` | `snapshot` or `push` of a dirty workspace |
@@ -113,32 +116,32 @@ Every operation returns a kernel `Result`, except `list` and `sweep`, which retu
 
 Architecture section 6 requires content-addressed snapshots, because mutable workspace paths alone cannot reproduce an admission after a branch moves, and R31 requires accepted evidence to survive the deletion of a workspace.
 
-- `snapshot` returns the clean head's `CodeHeadIdentity`, a content type, and bytes that contain exactly the files of the head's tree with their paths, modes, and link targets: no `.git`, no ignored or untracked file, and no credential.
-- The bytes depend only on the tree: the same tree gives the same bytes in every workspace and on every run, so their SHA-256 digest is stable. Item 16 chooses the format and declares its content type, for example a tar archive with fixed metadata.
+- `snapshot` returns the clean head's `CodeHeadIdentity`, a content type, and bytes that contain exactly the entries of the head's tree: each file with its path, Git mode (`100644` or `100755`), and content, and each symbolic link with its path and target, and nothing else: no `.git`, no commit metadata, no ignored or untracked file, and no credential.
+- The bytes depend only on the tree: the same tree gives the same bytes in every workspace, on every run, and for every commit that has that tree, so their SHA-256 digest is stable. Item 16 chooses the format and declares its content type, for example a tar archive with fixed metadata.
 - The evidence path stores the bytes in the `EvidenceStore` under their `ContentDigest` and publishes them through `EvidencePublisher` with kind `code-head-snapshot` (`HEAD_SNAPSHOT_EVIDENCE_KIND`). Accepted evidence is kept for its retention period, whatever happens to the workspace or the branch.
 
 ## 11. Cleanup and control records
 
 - `remove` and `sweep` touch only entries directly under `worker/workspaces/` that belong to the workspace layout. They never remove, rename, or follow a path to the journal, the identity, a credential file, the root lock, the journal fault record, an execution record, or the logs (worker journal contract section 2), and never the workspace root itself.
-- Deletion never follows a symbolic link: a link inside a workspace is removed as a link, and its target stays.
+- Deletion never follows a symbolic link, whether it is inside a workspace or a leftover entry that is itself a link: the link is removed as a link, and its target stays.
 - The worker runtime removes a workspace only after the attempt's terminal fact is confirmed (worker journal contract section 6) and every head the attempt must keep is pushed or its snapshot is accepted as evidence. A workspace is never removed for disk pressure, which truncates only `worker/logs/` (worker journal contract section 7).
 - A ready workspace whose attempt the journal does not know is reported for reconciliation (item 21), and is removed only once the control plane confirms that attempt is terminal, or by an operator.
 
 ## 12. Conformance suite
 
-`WORKSPACE_CONFORMANCE` runs against an adapter through a `WorkspaceFixture` that its test supplies, fresh for each case: the provider, a repository binding, a read-only, a writing, and a foreign credential, a tracked and an ignored path of the base branch, a second provider over the same data root as after a restart, and native helpers that write files, link to a control record, commit, leave an operation unfinished, switch branches, read and advance remote branches, read every byte of a workspace, read every control record, decode a snapshot, and interrupt a prepare or a removal. It checks that:
+`WORKSPACE_CONFORMANCE` runs against an adapter through a `WorkspaceFixture` that its test supplies, fresh for each case: the provider, a repository binding, a read-only, a writing, and a foreign credential, the base branch's tree with a tracked and an ignored path, a second provider over the same data root as after a restart, and native helpers that write files, executables, and links, link to a control record, commit, leave an operation unfinished, switch branches, read and advance remote branches, count the remote calls the service has seen, read every byte of a workspace, read every control record kind of the worker journal contract section 2, decode a snapshot into its tree entries, interrupt a prepare or a removal with links to control records inside, and leave a leftover entry that is itself a link to a control record directory. It checks that:
 
-- a `task-branch` workspace starts at the base head on the task branch, or at the remote task branch when it exists, is listed, and cannot be prepared twice; an `at-head` workspace opens detached at the given head and cannot push;
-- unsafe names, a head of another repository, an unknown head, and a missing base branch fail with their codes and leave nothing;
-- a foreign credential cannot prepare, a read-only credential cannot push, and no credential's secret appears anywhere in the workspace;
+- a `task-branch` workspace starts at the base head on the task branch, or at the remote task branch when it exists, is listed, and a second prepare leaves it unchanged; an `at-head` workspace opens detached at the given head and can neither push nor read a task branch;
+- unsafe names, including an unsafe task with an `at-head` target and a foreign credential, a head of another repository, an unknown head, a tree that is not the commit's, and a missing base branch fail with their codes and reasons and leave nothing;
+- a foreign credential cannot prepare, read the remote head, or push, a read-only credential cannot push, each refusal makes no remote call, and no credential's secret appears anywhere in the workspace;
 - each dirty reason is reported, an ignored file is not, and a commit makes the workspace clean with a new commit and tree; a new commit with an unchanged tree is a new head;
-- a push needs a clean workspace and the expected remote head, refuses a moved or diverged remote, leaves the base branch unchanged, and returns the head it pushed;
-- a snapshot needs a clean head, holds committed files and no ignored one, has the same bytes in another workspace at the same head, and changes with the tree;
-- a removal is idempotent, removes no other workspace, leaves the target of a link inside the workspace and every control record unchanged; after a restart, interrupted prepares and removals are not listed and are swept, and ready workspaces remain.
+- `readRemoteHead` reports an absent branch as null; a first push, a continuing attempt's push, and the recovery after a moved remote all use the head it reports; a push needs a clean workspace and the expected remote head, refuses a moved or diverged remote, leaves the base branch unchanged, and returns the head it pushed;
+- a snapshot needs a clean head, holds exactly the base and committed entries with their modes and link targets and no ignored file, has the same bytes after an empty commit and in another workspace at the same head, and changes with the tree;
+- a removal is idempotent, removes no other workspace, leaves the target of a link inside the workspace and every control record unchanged; after a restart, interrupted prepares and removals are not listed and are swept without following any link, every control record stays unchanged, and ready workspaces remain.
 
 ## 13. Required tests
 
-- This item: the contract values, the parsers and rules, and the suite against a test-only double with real directories under a temporary data root and a fake Git service, and against defective variants of it that the suite must report: one that stores the credential in the workspace, one that misses untracked files, and one whose removal reaches beyond its workspace.
+- This item: the contract values, the parsers and rules, and the suite against a test-only double with real directories under a temporary data root and a fake Git service, and against defective variants of it that the suite must report: one that stores the credential in the workspace, one that calls the remote before checking the scope, one that checks the task name only for a task branch, one that accepts a mismatched tree, one that misses untracked files, one that puts the commit into the snapshot, one that loses modes and link targets, one whose removal reaches beyond its workspace, and one that follows links when it sweeps.
 - Item 16: the suite through `make` against the Git adapter with a local bare repository, on Linux in the worker image and natively on macOS; the crash points of section 3; a test that a hook, a credential helper, an `insteadOf` rewrite, and a changed remote URL planted in the workspace's `.git` neither run nor redirect a push, and that the secret never appears in a process's arguments; and snapshot bytes that are equal across two clones and two runs.
 - Item 17: a changed commit or tree makes head-bound verification and review stale, and editing an artifact cannot restore them.
 

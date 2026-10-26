@@ -29,6 +29,7 @@ export type DirtyReason = (typeof DIRTY_REASONS)[number];
 // The `reason` detail of a workspace failure (contract section 9).
 export const WORKSPACE_FAILURE_REASONS = Object.freeze([
   'unsafe-name',
+  'head-mismatch',
   'workspace-dirty',
   'credential-out-of-scope',
   'remote-moved',

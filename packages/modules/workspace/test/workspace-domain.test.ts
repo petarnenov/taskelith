@@ -29,7 +29,7 @@ const CONTRACT_VALUES = [
   [
     'WORKSPACE_FAILURE_REASONS',
     WORKSPACE_FAILURE_REASONS,
-    ['unsafe-name', 'workspace-dirty', 'credential-out-of-scope', 'remote-moved', 'not-fast-forward', 'read-only-workspace'],
+    ['unsafe-name', 'head-mismatch', 'workspace-dirty', 'credential-out-of-scope', 'remote-moved', 'not-fast-forward', 'read-only-workspace'],
   ],
 ] as const;
 

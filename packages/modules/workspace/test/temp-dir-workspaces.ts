@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
@@ -10,16 +10,21 @@ import {
   checkCredentialScope,
   cleanHead,
   parseCodeHeadIdentity,
+  parseGitObjectId,
   taskBranchName,
   workspaceDirectoryName,
   workspaceFailure,
   type CodeHeadIdentity,
   type DirtyReason,
+  type GitObjectId,
   type HeadSnapshot,
   type PrepareWorkspace,
   type PushTaskBranch,
+  type RemoteAccess,
+  type RemoteHeadRequest,
   type RepositoryBinding,
   type RepositoryId,
+  type TreeEntry,
   type Workspace,
   type WorkspaceCredential,
   type WorkspaceFixture,
@@ -29,34 +34,40 @@ import {
 } from '@taskelith/workspace';
 
 // A test-only provider: real directories under a temporary data root and
-// a fake Git service whose objects are content-addressed file maps.
+// a fake Git service whose objects are content-addressed trees.
 
-type Files = Readonly<Record<string, string>>;
+type Tree = Readonly<Record<string, TreeEntry>>;
 
 interface Commit {
   readonly tree: string;
   readonly parent: string | null;
-  readonly files: Files;
+  readonly entries: Tree;
 }
 
 const sha1 = (text: string) => createHash('sha1').update(text).digest('hex');
-const canonical = (files: Files) => JSON.stringify(Object.keys(files).sort().map((path) => [path, files[path]]));
+const canonical = (tree: Tree) => JSON.stringify(Object.keys(tree).sort().map((path) => [path, tree[path]]));
+const file = (content: string): TreeEntry => ({ type: 'file', mode: '100644', content });
 
 export class FakeGitService {
   readonly commits = new Map<string, Commit>();
   readonly branches = new Map<string, string>();
+  calls = 0;
   #sequence = 0;
 
-  constructor(baseBranch: string, baseFiles: Files) {
-    this.branches.set(baseBranch, this.commit(baseFiles, null));
+  constructor(baseBranch: string, baseTree: Tree) {
+    this.branches.set(baseBranch, this.commit(baseTree, null));
   }
 
-  commit(files: Files, parent: string | null): string {
+  commit(entries: Tree, parent: string | null): string {
     this.#sequence += 1;
-    const tree = sha1(canonical(files));
+    const tree = sha1(canonical(entries));
     const id = sha1(JSON.stringify({ tree, parent, sequence: this.#sequence }));
-    this.commits.set(id, { tree, parent, files });
+    this.commits.set(id, { tree, parent, entries });
     return id;
+  }
+
+  entries(commit: string): Tree {
+    return this.commits.get(commit)?.entries ?? {};
   }
 
   descends(commit: string, ancestor: string): boolean {
@@ -69,8 +80,6 @@ export class FakeGitService {
 
 // What the double keeps in the checkout's `.git`; a real adapter uses Git.
 interface LocalState {
-  readonly projectId: string;
-  readonly taskId: string;
   readonly kind: WorkspaceKind;
   readonly expectedBranch: string | null;
   readonly branch: string | null;
@@ -86,6 +95,12 @@ export interface DoubleDefects {
   readonly storesSecret?: boolean;
   readonly ignoresUntracked?: boolean;
   readonly removesWorkspacesRoot?: boolean;
+  readonly callsRemoteBeforeScope?: boolean;
+  readonly acceptsMismatchedTree?: boolean;
+  readonly checksTaskOnlyOnBranch?: boolean;
+  readonly snapshotsCommit?: boolean;
+  readonly snapshotsWithoutMetadata?: boolean;
+  readonly sweepFollowsLinks?: boolean;
 }
 
 export class TempDirWorkspaces implements WorkspaceProvider {
@@ -104,29 +119,32 @@ export class TempDirWorkspaces implements WorkspaceProvider {
   async prepare(request: PrepareWorkspace): Promise<Result<Workspace>> {
     const name = workspaceDirectoryName(request.attemptId);
     if (!name.ok) return name;
-    const branch = request.target.kind === 'task-branch' ? taskBranchName(request.taskId) : ok(null);
-    if (!branch.ok) return branch;
-    if (request.target.kind === 'at-head' && request.target.head.repository !== request.binding.repository) {
+    const { target } = request;
+    const lenient = this.defects.checksTaskOnlyOnBranch && target.kind === 'at-head';
+    const taskBranch = lenient ? ok(request.taskId) : taskBranchName(request.taskId);
+    if (!taskBranch.ok) return taskBranch;
+    if (target.kind === 'at-head' && target.head.repository !== request.binding.repository) {
       return err(failure('invalid', 'the head belongs to another repository'));
     }
-    const scope = checkCredentialScope(request.credential, request.binding.repository, 'read-code');
+    const scope = this.scope(request.credential, request.binding.repository, 'read-code');
     if (!scope.ok) return scope;
-    const commit = this.startCommit(request, branch.value);
+    this.service.calls += 1;
+    const commit = this.startCommit(request, taskBranch.value);
     if (commit === undefined) return err(failure('not-found', 'the base branch or the head is unknown'));
+    if (target.kind === 'at-head' && this.service.commits.get(commit)?.tree !== target.head.tree && !this.defects.acceptsMismatchedTree) {
+      return workspaceFailure('invalid', 'head-mismatch', 'the tree is not the commit tree');
+    }
     const final = join(this.root, name.value);
     if (await exists(final)) return err(failure('conflict', `workspace ${name.value} exists`));
-    const staging = join(this.root, `${WORKSPACE_LAYOUT.stagingPrefix}${name.value}`);
+    const branch = target.kind === 'task-branch' ? taskBranch.value : null;
     const secret = this.defects.storesSecret ? `https://${request.credential.secret}@` : '';
-    const state: LocalState = {
-      projectId: request.projectId, taskId: request.taskId, kind: request.target.kind,
-      expectedBranch: branch.value, branch: branch.value, commit, remote: `${secret}${request.binding.remote}`,
-    };
+    const state: LocalState = { kind: target.kind, expectedBranch: branch, branch, commit, remote: `${secret}${request.binding.remote}` };
+    const staging = join(this.root, `${WORKSPACE_LAYOUT.stagingPrefix}${name.value}`);
     await this.checkout(join(staging, WORKSPACE_LAYOUT.checkout), state);
     await rename(staging, final);
-    const head = this.head(commit);
     return ok({
-      attemptId: request.attemptId, projectId: request.projectId, taskId: request.taskId, kind: request.target.kind,
-      branch: branch.value, workingDirectory: join(final, WORKSPACE_LAYOUT.checkout), head,
+      attemptId: request.attemptId, projectId: request.projectId, taskId: request.taskId, kind: target.kind,
+      branch, workingDirectory: join(final, WORKSPACE_LAYOUT.checkout), head: this.head(commit),
     });
   }
 
@@ -153,9 +171,10 @@ export class TempDirWorkspaces implements WorkspaceProvider {
 
   async sweep(): Promise<void> {
     for (const entry of await readdir(this.root)) {
-      if (entry.startsWith(WORKSPACE_LAYOUT.stagingPrefix) || entry.startsWith(WORKSPACE_LAYOUT.removingPrefix)) {
-        await rm(join(this.root, entry), { recursive: true });
-      }
+      if (!entry.startsWith(WORKSPACE_LAYOUT.stagingPrefix) && !entry.startsWith(WORKSPACE_LAYOUT.removingPrefix)) continue;
+      const path = join(this.root, entry);
+      if (this.defects.sweepFollowsLinks) await rm(await realpath(path), { recursive: true });
+      await rm(path, { recursive: true, force: true });
     }
   }
 
@@ -163,12 +182,13 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     const checkout = await this.checkoutOf(attemptId);
     if (!checkout.ok) return checkout;
     const state = await readState(checkout.value);
-    const files = this.service.commits.get(state.commit)?.files ?? {};
-    const working = await workingFiles(checkout.value);
-    const ignored = new Set((files['.gitignore'] ?? '').split('\n').filter(Boolean));
+    const committed = this.service.entries(state.commit);
+    const working = await workingTree(checkout.value);
+    const ignored = ignoredPaths(committed);
     const reasons = new Set<DirtyReason>();
-    for (const [path, text] of Object.entries(files)) if (working[path] !== text) reasons.add('modified');
-    for (const path of Object.keys(working)) if (!(path in files) && !ignored.has(path) && !this.defects.ignoresUntracked) reasons.add('untracked');
+    for (const [path, entry] of Object.entries(committed)) if (!sameEntry(working[path], entry)) reasons.add('modified');
+    const untracked = Object.keys(working).some((path) => !(path in committed) && !ignored.has(path));
+    if (untracked && !this.defects.ignoresUntracked) reasons.add('untracked');
     if (await exists(join(checkout.value, OPERATION_FILE))) reasons.add('operation-in-progress');
     if (state.branch !== state.expectedBranch) reasons.add('off-branch');
     const dirtyReasons = DIRTY_REASONS.filter((reason) => reasons.has(reason));
@@ -180,29 +200,36 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     if (!current.ok) return current;
     const head = cleanHead(current.value);
     if (!head.ok) return head;
-    const files = this.service.commits.get(head.value.commit)?.files ?? {};
-    return ok({ head: head.value, contentType: SNAPSHOT_TYPE, content: new TextEncoder().encode(canonical(files)) });
+    let entries = this.service.entries(head.value.commit);
+    if (this.defects.snapshotsWithoutMetadata) {
+      entries = Object.fromEntries(Object.entries(entries).map(([path, entry]) => [path, file(entry.type === 'file' ? entry.content : entry.target)]));
+    }
+    if (this.defects.snapshotsCommit) entries = { ...entries, COMMIT: file(head.value.commit) };
+    return ok({ head: head.value, contentType: SNAPSHOT_TYPE, content: new TextEncoder().encode(canonical(entries)) });
+  }
+
+  async readRemoteHead(request: RemoteHeadRequest): Promise<Result<GitObjectId | null>> {
+    const opened = await this.taskBranchOf(request.attemptId, request.credential, 'read-code');
+    if (!opened.ok) return opened;
+    this.service.calls += 1;
+    const remote = this.service.branches.get(opened.value.branch);
+    return remote === undefined ? ok(null) : parseGitObjectId(remote);
   }
 
   async push(request: PushTaskBranch): Promise<Result<CodeHeadIdentity>> {
-    const checkout = await this.checkoutOf(request.attemptId);
-    if (!checkout.ok) return checkout;
-    const state = await readState(checkout.value);
-    if (state.kind !== 'task-branch' || state.expectedBranch === null) {
-      return workspaceFailure('invalid', 'read-only-workspace', 'an at-head workspace never pushes');
-    }
-    const scope = checkCredentialScope(request.credential, this.repository, 'write-code');
-    if (!scope.ok) return scope;
+    const opened = await this.taskBranchOf(request.attemptId, request.credential, 'write-code');
+    if (!opened.ok) return opened;
     const current = await this.inspect(request.attemptId);
     if (!current.ok) return current;
     const head = cleanHead(current.value);
     if (!head.ok) return head;
-    const remote = this.service.branches.get(state.expectedBranch) ?? null;
+    this.service.calls += 1;
+    const remote = this.service.branches.get(opened.value.branch) ?? null;
     if (remote !== request.expectedRemoteHead) return workspaceFailure('conflict', 'remote-moved', 'the remote task branch moved');
     if (remote !== null && !this.service.descends(head.value.commit, remote)) {
       return workspaceFailure('conflict', 'not-fast-forward', 'the push is not a fast-forward');
     }
-    this.service.branches.set(state.expectedBranch, head.value.commit);
+    this.service.branches.set(opened.value.branch, head.value.commit);
     return head;
   }
 
@@ -213,25 +240,37 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     return (await exists(checkout)) ? ok(checkout) : err(failure('not-found', `no workspace ${name.value}`));
   }
 
-  head(commit: string): CodeHeadIdentity {
+  private async taskBranchOf(attemptId: AttemptId, credential: WorkspaceCredential, access: RemoteAccess): Promise<Result<{ branch: string }>> {
+    const checkout = await this.checkoutOf(attemptId);
+    if (!checkout.ok) return checkout;
+    const { expectedBranch } = await readState(checkout.value);
+    if (expectedBranch === null) return workspaceFailure('invalid', 'read-only-workspace', 'an at-head workspace has no task branch');
+    const scope = this.scope(credential, this.repository, access);
+    return scope.ok ? ok({ branch: expectedBranch }) : scope;
+  }
+
+  private scope(credential: WorkspaceCredential, repository: RepositoryId, access: RemoteAccess): Result<void> {
+    if (this.defects.callsRemoteBeforeScope) this.service.calls += 1;
+    return checkCredentialScope(credential, repository, access);
+  }
+
+  private head(commit: string): CodeHeadIdentity {
     const tree = this.service.commits.get(commit)?.tree ?? '';
     return mustParse(parseCodeHeadIdentity({ repository: this.repository, commit, tree }));
   }
 
-  private startCommit(request: PrepareWorkspace, branch: string | null): string | undefined {
+  private startCommit(request: PrepareWorkspace, taskBranch: string): string | undefined {
     if (request.target.kind === 'at-head') {
       const { commit } = request.target.head;
       return this.service.commits.has(commit) ? commit : undefined;
     }
     if (!this.service.branches.has(request.binding.baseBranch)) return undefined;
-    return this.service.branches.get(branch ?? '') ?? this.service.branches.get(request.binding.baseBranch);
+    return this.service.branches.get(taskBranch) ?? this.service.branches.get(request.binding.baseBranch);
   }
 
   private async checkout(directory: string, state: LocalState): Promise<void> {
     await mkdir(join(directory, '.git'), { recursive: true });
-    for (const [path, text] of Object.entries(this.service.commits.get(state.commit)?.files ?? {})) {
-      await writeFile(join(directory, path), text);
-    }
+    for (const [path, entry] of Object.entries(this.service.entries(state.commit))) await writeEntry(join(directory, path), entry);
     await writeState(directory, state);
   }
 }
@@ -245,6 +284,21 @@ async function exists(path: string): Promise<boolean> {
   return lstat(path).then(() => true, () => false);
 }
 
+function sameEntry(left: TreeEntry | undefined, right: TreeEntry): boolean {
+  return left !== undefined && JSON.stringify(left) === JSON.stringify(right);
+}
+
+function ignoredPaths(tree: Tree): Set<string> {
+  const rules = tree['.gitignore'];
+  return new Set(rules?.type === 'file' ? rules.content.split('\n').filter(Boolean) : []);
+}
+
+async function writeEntry(path: string, entry: TreeEntry): Promise<void> {
+  if (entry.type === 'link') return symlink(entry.target, path);
+  await writeFile(path, entry.content);
+  await chmod(path, entry.mode === '100755' ? 0o755 : 0o644);
+}
+
 async function readState(checkout: string): Promise<LocalState> {
   return JSON.parse(await readFile(join(checkout, STATE_FILE), 'utf8')) as LocalState;
 }
@@ -253,16 +307,21 @@ async function writeState(checkout: string, state: LocalState): Promise<void> {
   await writeFile(join(checkout, STATE_FILE), JSON.stringify(state));
 }
 
-// Regular files and links outside `.git`; a link is never followed.
-async function workingFiles(checkout: string, prefix = ''): Promise<Record<string, string>> {
-  const files: Record<string, string> = {};
+// The working tree outside `.git`; a link is read, never followed.
+async function workingTree(checkout: string, prefix = ''): Promise<Record<string, TreeEntry>> {
+  const tree: Record<string, TreeEntry> = {};
   for (const entry of await readdir(join(checkout, prefix), { withFileTypes: true })) {
     const path = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
+    const full = join(checkout, path);
     if (path === '.git') continue;
-    if (entry.isDirectory()) Object.assign(files, await workingFiles(checkout, path));
-    else files[path] = entry.isSymbolicLink() ? `link:${path}` : await readFile(join(checkout, path), 'utf8');
+    if (entry.isDirectory()) Object.assign(tree, await workingTree(checkout, path));
+    else if (entry.isSymbolicLink()) tree[path] = { type: 'link', target: await readlink(full) };
+    else {
+      const mode = ((await lstat(full)).mode & 0o111) === 0 ? '100644' : '100755';
+      tree[path] = { type: 'file', mode, content: await readFile(full, 'utf8') };
+    }
   }
-  return files;
+  return tree;
 }
 
 async function allText(directory: string): Promise<string> {
@@ -282,6 +341,18 @@ async function recordText(path: string): Promise<string> {
 const BASE_BRANCH = 'main';
 const TRACKED = 'README.md';
 const IGNORED = 'build.log';
+const BASE_TREE: Tree = { [TRACKED]: file('base\n'), '.gitignore': file(`${IGNORED}\n`) };
+
+// Every record kind of the worker journal contract section 2.
+const CONTROL_RECORDS: Readonly<Record<string, string>> = {
+  'worker/identity': 'identity',
+  'worker/lock': '',
+  'worker/journal/journal.sqlite': 'journal',
+  'worker/journal-fault': 'fault',
+  'worker/credentials/control-plane.1': 'credential',
+  'worker/executions/execution-1/intent': 'intent',
+  'worker/logs/stream.log': 'log',
+};
 
 function credential(credentialId: string, repositories: string[], permissions: string[]): WorkspaceCredential {
   return { credentialId, secret: `secret-of-${credentialId}`, repositories, permissions };
@@ -290,16 +361,12 @@ function credential(credentialId: string, repositories: string[], permissions: s
 // A fresh data root with control records, a service, and the fixture.
 export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixture: WorkspaceFixture; dispose: () => Promise<void> }> {
   const dataRoot = await mkdtemp(join(tmpdir(), 'taskelith-workspace-'));
-  const records: Files = {
-    'worker/identity': 'identity', 'worker/lock': '', 'worker/journal/journal.sqlite': 'journal',
-    'worker/credentials/control-plane.1': 'credential', 'worker/executions/execution-1/intent': 'intent',
-  };
-  for (const [path, text] of Object.entries(records)) {
+  for (const [path, text] of Object.entries(CONTROL_RECORDS)) {
     await mkdir(dirname(join(dataRoot, path)), { recursive: true });
     await writeFile(join(dataRoot, path), text);
   }
   await mkdir(join(dataRoot, WORKSPACE_LAYOUT.root), { recursive: true });
-  const service = new FakeGitService(BASE_BRANCH, { [TRACKED]: 'base\n', '.gitignore': `${IGNORED}\n` });
+  const service = new FakeGitService(BASE_BRANCH, BASE_TREE);
   const repository = mustParse(parseIdentifier('RepositoryId', 'acme/project')) as RepositoryId;
   const make = () => new TempDirWorkspaces(dataRoot, service, repository, defects);
   const provider = make();
@@ -309,6 +376,11 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
     const directory = await checkout(attemptId);
     await writeState(directory, change(await readState(directory)));
   };
+  const write = async (attemptId: AttemptId, path: string, entry: TreeEntry) => {
+    const target = join(await checkout(attemptId), path);
+    await rm(target, { force: true });
+    await writeEntry(target, entry);
+  };
   const fixture: WorkspaceFixture = {
     provider,
     binding,
@@ -317,39 +389,47 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
       write: credential('write', [repository], ['read-code', 'write-code']),
       foreign: credential('foreign', ['acme/other'], ['read-code', 'write-code', 'write-change-requests', 'write-statuses']),
     },
+    baseTree: BASE_TREE,
     trackedPath: TRACKED,
     ignoredPath: IGNORED,
     reopen: make,
-    writeFile: async (attemptId, path, text) => writeFile(join(await checkout(attemptId), path), text),
+    writeFile: (attemptId, path, text) => write(attemptId, path, file(text)),
+    writeExecutable: (attemptId, path, text) => write(attemptId, path, { type: 'file', mode: '100755', content: text }),
+    writeLink: (attemptId, path, target) => write(attemptId, path, { type: 'link', target }),
     linkToControlRecord: async (attemptId, path) => symlink(join(dataRoot, 'worker/identity'), join(await checkout(attemptId), path)),
     commitAll: async (attemptId) => {
       const directory = await checkout(attemptId);
       const state = await readState(directory);
-      const ignored = new Set((service.commits.get(state.commit)?.files['.gitignore'] ?? '').split('\n'));
-      const files = Object.fromEntries(Object.entries(await workingFiles(directory)).filter(([path]) => !ignored.has(path)));
-      await update(attemptId, (current) => ({ ...current, commit: service.commit(files, current.commit) }));
+      const ignored = ignoredPaths(service.entries(state.commit));
+      const entries = Object.fromEntries(Object.entries(await workingTree(directory)).filter(([path]) => !ignored.has(path)));
+      await update(attemptId, (current) => ({ ...current, commit: service.commit(entries, current.commit) }));
     },
     beginOperation: async (attemptId) => writeFile(join(await checkout(attemptId), OPERATION_FILE), 'merge'),
     switchBranch: async (attemptId, branch) => update(attemptId, (current) => ({ ...current, branch })),
     remoteHead: async (branch) => service.branches.get(branch),
     advanceRemote: async (branch) => {
       const parent = service.branches.get(branch) ?? service.branches.get(BASE_BRANCH) ?? null;
-      const files = { ...(parent === null ? {} : service.commits.get(parent)?.files), [`remote-${service.commits.size}.txt`]: 'remote\n' };
-      service.branches.set(branch, service.commit(files, parent));
+      const entries = { ...(parent === null ? {} : service.entries(parent)), [`remote-${service.commits.size}.txt`]: file('remote\n') };
+      service.branches.set(branch, service.commit(entries, parent));
     },
+    remoteCalls: async () => service.calls,
     workspaceText: async (attemptId) => allText(dirname(await checkout(attemptId))),
     controlRecords: async () => {
       const worker = join(dataRoot, 'worker');
-      const entries = await readdir(worker);
-      const records = entries.filter((entry) => entry !== 'workspaces').map((entry) => recordText(join(worker, entry)));
+      const records = (await readdir(worker)).filter((entry) => entry !== 'workspaces').map((entry) => recordText(join(worker, entry)));
       return (await Promise.all(records)).join('\n');
     },
-    readSnapshot: async (content) => Object.fromEntries(JSON.parse(new TextDecoder().decode(content)) as [string, string][]),
+    readSnapshot: async (content) => Object.fromEntries(JSON.parse(new TextDecoder().decode(content)) as [string, TreeEntry][]),
     interruptPrepare: async (attemptId) => {
-      await mkdir(join(provider.root, `${WORKSPACE_LAYOUT.stagingPrefix}${attemptId}`, WORKSPACE_LAYOUT.checkout), { recursive: true });
+      const staging = join(provider.root, `${WORKSPACE_LAYOUT.stagingPrefix}${attemptId}`, WORKSPACE_LAYOUT.checkout);
+      await mkdir(staging, { recursive: true });
+      await symlink(join(dataRoot, 'worker/journal'), join(staging, 'journal-link'));
     },
     interruptRemove: async (attemptId) => {
       await rename(join(provider.root, attemptId), join(provider.root, `${WORKSPACE_LAYOUT.removingPrefix}${attemptId}`));
+    },
+    leaveLinkedLeftover: async (attemptId) => {
+      await symlink(join(dataRoot, 'worker/executions'), join(provider.root, `${WORKSPACE_LAYOUT.stagingPrefix}${attemptId}`));
     },
     leftovers: async () => (await readdir(provider.root)).filter((entry) => entry.startsWith('.')).sort(),
   };

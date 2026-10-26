@@ -20,6 +20,11 @@ export interface PrepareWorkspace {
   readonly credential: WorkspaceCredential;
 }
 
+export interface RemoteHeadRequest {
+  readonly attemptId: AttemptId;
+  readonly credential: WorkspaceCredential;
+}
+
 export interface PushTaskBranch {
   readonly attemptId: AttemptId;
   readonly credential: WorkspaceCredential;
@@ -29,8 +34,8 @@ export interface PushTaskBranch {
 
 // Fresh clone per attempt under `worker/workspaces/` (contract section 3).
 export interface WorkspaceLifecycle {
-  // `invalid`, `forbidden`, `not-found`, then `conflict` for an existing
-  // workspace; a failed prepare leaves no ready workspace (section 3).
+  // Refusals in the order of contract section 9; a refusal creates no
+  // workspace and leaves an existing one unchanged.
   prepare(request: PrepareWorkspace): Promise<Result<Workspace>>;
   // Ready workspaces only, in code point order of the attempt.
   list(): Promise<readonly AttemptId[]>;
@@ -49,6 +54,8 @@ export interface WorkspaceHeads {
 
 // Fast-forward only, never forced, task branch only (contract section 8).
 export interface TaskBranchPublisher {
+  // The remote task branch head now; null while the branch is absent.
+  readRemoteHead(request: RemoteHeadRequest): Promise<Result<GitObjectId | null>>;
   push(request: PushTaskBranch): Promise<Result<CodeHeadIdentity>>;
 }
 
