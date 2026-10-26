@@ -26,7 +26,7 @@ import { Gate, waitFor } from './g2-scenarios/waiting.ts';
 // cancel is a test-side invalidation writer's transaction.
 const SEED = seedFromEnvironment();
 console.log(`g2 cancellation races: ${rerunHint(SEED)}`);
-const SLOT_LEAK = 'product bug B3: a finally rejected launch keeps its worker slot (openspec/changes/run-g2-partition-and-races/verification.md)';
+const REFUSAL_KEPT = 'product bug B5 (clear-capacity-refusal-on-stale-launch-rejection): a stale launch rejection keeps the capacity refusal (openspec/changes/run-g2-partition-and-races/verification.md)';
 const LONG_RUN_MILLISECONDS = 20_000;
 const CANCELLED_REASONS = ['assignment-not-active', 'attempt-not-launchable'];
 
@@ -251,7 +251,8 @@ describe('cancellation races', () => {
     const random = new SeededRandom(SEED);
     await recordScenario({ scenario: 'invalidation-racing-grant', seed: SEED }, () => withInstallation({ postgres: 'direct' }, async (installation) => {
       const authority = new OrderedAuthority();
-      // A rejected round keeps a slot (SLOT_LEAK), so each round has its own.
+      // A refused re-placement can keep the worker ineligible (B5), so each
+      // round has its own slot.
       const worker = await startedWorker(installation, 'invalidation-race', random, {
         authority: authority.wrap, runMilliseconds: RACE_RUN_MILLISECONDS, slots: RACE_ROUNDS + 1,
       });
@@ -284,9 +285,9 @@ describe('cancellation races', () => {
     }));
   });
 
-  // Expected to fail: the rejected execution of a cancelled assignment
-  // still counts against the slots, so the worker refuses the re-placement.
-  test('a launch rejected after a cancel frees its worker slot (B3)', { timeout: 90_000, todo: SLOT_LEAK }, async () => {
+  // Expected to fail until B5: a refused re-placement stays refused, as the
+  // control plane fences the launch rejection as stale (verification.md).
+  test('a launch rejected after a cancel frees its worker slot (B3)', { timeout: 90_000, todo: REFUSAL_KEPT }, async () => {
     const random = new SeededRandom(SEED);
     await recordScenario({ scenario: 'rejected-launch-frees-slot', seed: SEED }, () => withInstallation({ postgres: 'direct' }, async (installation) => {
       const authority = new OrderedAuthority();
