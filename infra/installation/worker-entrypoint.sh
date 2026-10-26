@@ -3,7 +3,8 @@
 # with SETUID, SETGID, and KILL only (docs/local-installation.md).
 set -euo pipefail
 
-cgroup_root="${TASKELITH_CGROUP_ROOT:-/sys/fs/cgroup}"
+# The override is for tests only; the worker always reads /sys/fs/cgroup.
+cgroup_root="${TASKELITH_TEST_CGROUP_ROOT:-/sys/fs/cgroup}"
 home="$cgroup_root/init"
 parent="${TASKELITH_CONTAINMENT_PARENT:-}"
 data_root="${TASKELITH_DATA_DIR:-/var/lib/taskelith}"
@@ -32,8 +33,8 @@ for pid in $(cat "$cgroup_root/cgroup.procs"); do
 done
 if [ -n "$(cat "$cgroup_root/cgroup.procs")" ]; then fail "processes remain in the cgroup root $cgroup_root"; fi
 
-# The worker checks that root owns its data root; 23a images used taskelith.
-chown -R 0:0 "$data_root"
+# The worker checks that root owns its data root; a 23a volume is taskelith's.
+if [ "$(stat -c %u "$data_root")" != 0 ]; then chown -R 0:0 "$data_root"; fi
 
 # A child switches to the execution account, which clears its capabilities.
 exec setpriv --bounding-set=-all,+setuid,+setgid,+kill --inh-caps=-all --no-new-privs -- "$@"

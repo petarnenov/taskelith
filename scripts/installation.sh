@@ -4,7 +4,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: installation.sh build|bootstrap|broker-config|start|stop|enroll|enrollment-token|verify|smoke PROJECT" >&2
+  echo "usage: installation.sh build|bootstrap|broker-config|start|stop|enroll|enrollment-token|verify|smoke|check-containment PROJECT" >&2
   exit 2
 }
 
@@ -243,6 +243,27 @@ api_url() {
   echo "http://$address"
 }
 
+# The capabilities of the worker process: KILL, SETGID, and SETUID only.
+WORKER_CAPABILITIES='CapEff: 00000000000000e0 CapBnd: 00000000000000e0 CapAmb: 0000000000000000'
+
+# The execution account (uid 10003) cannot move a process into the worker's
+# cgroup, and the worker process holds exactly its three capabilities.
+check_containment() {
+  local capabilities
+  if compose --profile worker exec -T --user 10003:10003 worker \
+    bash -c 'echo $$ > /sys/fs/cgroup/init/cgroup.procs' 2>/dev/null; then
+    echo "installation.sh: the execution account can write the worker's cgroup.procs" >&2
+    exit 1
+  fi
+  capabilities="$(compose --profile worker exec -T worker bash -c \
+    'grep -E "^Cap(Bnd|Eff|Amb):" "/proc/$(pgrep -o -f "^node apps/worker/dist/main.js")/status"' \
+    | tr -s ' \t\n' ' ' | sed 's/ $//')"
+  if [ "$capabilities" != "$WORKER_CAPABILITIES" ]; then
+    echo "installation.sh: the worker process has other capabilities: $capabilities" >&2
+    exit 1
+  fi
+}
+
 # A failed smoke shows both services' logs before the project goes.
 finish_smoke() {
   if [ "$1" -ne 0 ]; then compose --profile worker logs --no-color control-plane worker >&2 || true; fi
@@ -259,6 +280,7 @@ smoke() {
   bootstrap_operator installation-smoke 'opt-in smoke'
   start
   enroll
+  check_containment
   local url
   url="$(api_url)"
   node --experimental-strip-types "$repository/scripts/installation-smoke.ts" "$url" "$smoke_directory/workflows.json"
@@ -275,5 +297,6 @@ case "$command" in
   enrollment-token) enrollment_token ;;
   verify) verify ;;
   smoke) smoke ;;
+  check-containment) check_containment ;;
   *) usage ;;
 esac

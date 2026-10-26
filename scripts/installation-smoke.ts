@@ -10,6 +10,7 @@ const SMOKE_PROJECT = 'installation-smoke-project';
 const SMOKE_STAGE = 'specs';
 export const RESULT_DEADLINE_MILLISECONDS = 120_000;
 export const POLL_MILLISECONDS = 1_000;
+export const REQUEST_TIMEOUT_MILLISECONDS = 10_000;
 
 export interface SmokeWorkflow {
   readonly id: string;
@@ -48,10 +49,20 @@ export function httpOperatorApi(baseUrl: string, operatorToken: string): Operato
       method,
       headers: { authorization: `Bearer ${operatorToken}`, 'content-type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS),
     });
-    return { status: response.status, body: await response.json() as unknown };
+    return { status: response.status, body: parsedBody(await response.text()) };
   };
   return { post: (path, body) => call('POST', path, body), get: (path) => call('GET', path) };
+}
+
+// A body that is not JSON, such as a proxy's error page, stays its text.
+export function parsedBody(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
 }
 
 // Returns the ended task result once its attempt exited with code 0.
