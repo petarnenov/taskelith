@@ -156,9 +156,20 @@ test('the record listing names directories only, and a missing directory lists n
   assert.equal((await fileRecordListing(join(executions, 'stray-file'))()).ok, false);
 });
 
-test('survivors that an older supervisor wrote without groups are no survivors fact', async () => {
+test('a record without a survivors event reports no survivors fact', async () => {
   value(await supervision().prepare(PLAN));
-  const directory = join(executions, EXECUTION);
-  writeFileSync(join(directory, RECORD_FILES.events), encodeEvent({ kind: 'survivors', processes: [{ bootId: BOOT, pid: 44, startTime: 9 }] }));
   assert.equal(value(await supervision().read()).survivors, undefined);
 });
+
+const UNLISTABLE_SURVIVORS = [
+  { name: 'no listable process', processes: [] },
+  { name: 'only entries an older supervisor wrote without groups', processes: [{ bootId: BOOT, pid: 44, startTime: 9 }] },
+];
+
+for (const { name, processes } of UNLISTABLE_SURVIVORS) {
+  test(`a survivors event with ${name} still reports an empty survivors fact`, async () => {
+    value(await supervision().prepare(PLAN));
+    writeFileSync(join(executions, EXECUTION, RECORD_FILES.events), encodeEvent({ kind: 'survivors', processes }));
+    assert.deepEqual(value(await supervision().read()).survivors, []);
+  });
+}

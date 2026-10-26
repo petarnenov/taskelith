@@ -105,14 +105,13 @@ class FileExecutionSupervision implements ExecutionSupervision {
     const launch = text.value === undefined ? undefined : parseLaunch(text.value);
     const { handle, exit, survivors, cancellationNotApplied, problems } = facts.value;
     const platform = this.#options.platform.name;
-    const reportable = reportableSurvivors(survivors, platform);
     return ok({
       problems,
       cancellationNotApplied,
       ...(launch?.ok ? { launch: launch.value } : {}),
       ...(handle?.kind === 'spawned' ? { process: { platform, ...handle.process, processGroupId: handle.processGroupId } } : {}),
       ...(exit === undefined ? {} : { exit }),
-      ...(reportable.length === 0 ? {} : { survivors: reportable }),
+      ...(survivors === undefined ? {} : { survivors: reportableSurvivors(survivors, platform) }),
     });
   }
 
@@ -132,10 +131,10 @@ class FileExecutionSupervision implements ExecutionSupervision {
   }
 }
 
-// An entry an earlier supervisor wrote names no group, which nothing can
-// prove now; it is left out rather than given a guessed group.
-function reportableSurvivors(survivors: readonly SurvivingProcess[] | undefined, platform: 'linux' | 'darwin'): ExecutionProcess[] {
-  return (survivors ?? []).flatMap(({ bootId, pid, startTime, processGroupId }) => processGroupId === undefined
+// A group-less entry of an older supervisor is left out, never guessed;
+// the termination stays unproven even when no entry is left.
+function reportableSurvivors(survivors: readonly SurvivingProcess[], platform: 'linux' | 'darwin'): ExecutionProcess[] {
+  return survivors.flatMap(({ bootId, pid, startTime, processGroupId }) => processGroupId === undefined
     ? []
     : [{ platform, bootId, pid, startTime, processGroupId }]);
 }
