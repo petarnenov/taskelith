@@ -848,6 +848,14 @@ describe('launch rejections', () => {
     assert.deepEqual([await messages('execution.assignment.end'), await messages('worker.inventory.requested')], [[], []]);
   });
 
+  test('a stale execution conflict is rejected before it logs or requests an inventory', async () => {
+    await enroll();
+    value(await declare(1));
+    const at = await placed();
+    assert.equal(value(await launchRejected(2, at, 'execution-conflict', at.generation + 1)), 'rejected');
+    assert.equal(value(await launchRejected(3, at, 'assignment-not-active', at.generation + 1)), 'rejected');
+    assert.deepEqual([rejectionLogs(), await messages('worker.inventory.requested')], [[], []]);
+  });
 });
 
 async function queue() {

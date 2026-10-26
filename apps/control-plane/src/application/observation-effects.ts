@@ -261,23 +261,23 @@ async function launchRejection(
   tx: ControlPlaneTransaction, observation: Observation, _at: Instant, context: ReconciliationContext,
 ): Promise<Result<void>> {
   const { assignmentId, executionId, reason } = observation.payload as Payload<'LaunchRejectedPayload'>;
+  const current = await currentAssignment(tx, observation, assignmentId as AssignmentId);
+  if (!current.ok) return current;
   const { workerId, observationId } = observation.position;
   context.log.warn({ workerId, observationId, correlationId: observation.correlationId }, 'execution.launch.rejected', {
     assignmentId, executionId, reason,
   });
   if (RELEASING_REJECTIONS.has(reason)) {
-    const released = await releaseRejected(tx, observation, assignmentId as AssignmentId);
+    const released = await releaseRejected(tx, observation, current.value);
     if (!released.ok) return released;
   }
   return RECONCILING_REJECTIONS.has(reason) ? requestInventory(tx, workerId, context) : ok(undefined);
 }
 
 // An assignment that already ended is not released again.
-async function releaseRejected(tx: ControlPlaneTransaction, observation: Observation, assignmentId: AssignmentId): Promise<Result<void>> {
-  const current = await currentAssignment(tx, observation, assignmentId);
-  if (!current.ok) return current;
-  if (current.value.state === 'ended') return ok(undefined);
-  const superseded = await supersedeUngrantedInTransaction(tx, commandIdentity(observation, assignmentId));
+async function releaseRejected(tx: ControlPlaneTransaction, observation: Observation, assignment: Assignment): Promise<Result<void>> {
+  if (assignment.state === 'ended') return ok(undefined);
+  const superseded = await supersedeUngrantedInTransaction(tx, commandIdentity(observation, assignment.id));
   return superseded.ok ? ok(undefined) : superseded;
 }
 
