@@ -31,4 +31,4 @@
 - [x] 5.2 `npm run openspec -- validate gate-stale-epoch-observations --strict`
 - [x] 5.3 `make verify`
 - [x] 5.4 Independent review (Codex CLI, gpt-6-astra): pass 1 (2 High accepted as G2 limitations, 1 Medium and 1 Low fixed), pass 2 clean
-- [ ] 5.5 Handoff to the coordinator
+- [x] 5.5 Handoff to the coordinator
