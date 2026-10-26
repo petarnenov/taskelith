@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:taskelith:review-finding",
+  "title": "Taskelith review finding",
+  "description": "One line of an OpenSpec change's findings.jsonl: one finding of an independent review pass. Reviewer text is untrusted, so every string is bounded, control characters are rejected, and unknown properties are rejected. The category vocabulary is docs/review-findings/categories.txt, which npm run findings checks; this schema checks only the category's form.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["change", "pass", "reviewer", "session", "severity", "category", "title", "file", "outcome", "resolution"],
+  "properties": {
+    "change": {
+      "description": "Name of the OpenSpec change, without the archive date prefix.",
+      "$ref": "#/$defs/identifier"
+    },
+    "pass": {
+      "description": "Number of the review pass, counted as the review process counts passes; failed attempts are not passes.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9
+    },
+    "reviewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["harness", "model"],
+      "properties": {
+        "harness": {
+          "description": "Reviewer harness, for example codex, opencode, claude, or antigravity.",
+          "$ref": "#/$defs/identifier"
+        },
+        "model": {
+          "description": "Model id as set in the invocation, for example gpt-6.1-sol.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._/:-]*$"
+        },
+        "variant": {
+          "description": "Variant or reasoning effort as set in the invocation, for example medium or high.",
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "session": {
+      "description": "Session or conversation id that the reviewer reported for the pass.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "severity": {
+      "description": "Severity as the review process names it.",
+      "type": "string",
+      "enum": ["critical", "high", "medium", "low"]
+    },
+    "category": {
+      "description": "A category id of docs/review-findings/categories.txt.",
+      "$ref": "#/$defs/identifier"
+    },
+    "title": {
+      "description": "One-line summary of the finding, written by the author, not pasted reviewer output.",
+      "$ref": "#/$defs/text"
+    },
+    "file": {
+      "description": "Repository-relative path of the file the finding concerns.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._@+/-]+$"
+    },
+    "line": {
+      "description": "Line of the file the finding concerns, when it has one.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000000
+    },
+    "capability": {
+      "description": "Name of the OpenSpec capability (spec) the finding concerns, when it has one.",
+      "$ref": "#/$defs/identifier"
+    },
+    "outcome": {
+      "description": "fixed and checked by a later pass; fixed-unreviewed; declined with a reason; deferred to later work; owner-accepted as a known risk.",
+      "type": "string",
+      "enum": ["fixed", "fixed-unreviewed", "declined", "deferred", "owner-accepted"]
+    },
+    "resolution": {
+      "description": "Short description of the resolution or the reason it was declined or deferred.",
+      "$ref": "#/$defs/text"
+    },
+    "commit": {
+      "description": "Abbreviated or full SHA of the commit that resolved the finding, when there is one.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "description": "Lowercase letters, digits, and inner hyphens, starting with a letter.",
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+    },
+    "text": {
+      "description": "One line of text without control characters.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+    }
+  }
+}
