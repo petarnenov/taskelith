@@ -13,6 +13,9 @@ The `make` services run PostgreSQL, NATS, and Toxiproxy, with Toxiproxy routes `
 7. **Unauthorized start from the worker's own journal.** A start that the authority did not grant is written through the worker's journal API, W2 to W5s for a new execution under the owning execution's grant, so the observation is a well-formed one of the worker's journal and outbox.
 8. **Results and expected failures.** Every scenario records its result through the 24a requirements "Scenario result records" and "Opt-in scenario results file", with target `harness-composition`. A scenario that fails because of product code is a `todo` test, which runs, records `failed`, and does not fail `make verify`; `verification.md` holds its evidence.
 
+9. **Duplicate delivery is 24b's.** By the coordinator's decision, duplicate delivery is out of scope; it appears here only where a scenario needs it, as the redelivered cancellation of scenario e and the redelivered observations of the database partitions.
+10. **Old-epoch exits are B4.** The owner's delegate decided (away run `20261026T164615Z-opencode-20899`) that an old-epoch exit ending its task is a G2 product defect. The stale epoch scenario passes on what the contract defines today, the rejected request and the start kept as evidence; a separate expected-failure test checks that the exit changes no state.
+
 ## Risks and limitations
 
 - The scenarios run against the `make` services, not the Compose installation; the worker is not containerized, and the launch host is the process-group one.
