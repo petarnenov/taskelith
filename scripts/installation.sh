@@ -4,13 +4,14 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: installation.sh build|bootstrap|broker-config|start|stop|enroll|enrollment-token|verify PROJECT" >&2
+  echo "usage: installation.sh build|bootstrap|broker-config|start|stop|enroll|enrollment-token|verify|smoke|check-containment|scenario-fresh-composition|scenario-worker-disk-loss|scenario-worker-kill PROJECT" >&2
   exit 2
 }
 
 if [ "$#" -ne 2 ]; then usage; fi
 repository="$(cd "$(dirname "$0")/.." && pwd)"
-compose_file="$repository/infra/installation/compose.yaml"
+compose_files=(--file "$repository/infra/installation/compose.yaml")
+smoke_directory="$repository/infra/installation/smoke"
 command="$1"
 project="$2"
 case "$project" in
@@ -25,7 +26,7 @@ control_plane_image="taskelith-control-plane:$project"
 worker_image="taskelith-worker:$project"
 
 compose() {
-  docker compose --file "$compose_file" --project-name "$project" "$@"
+  docker compose "${compose_files[@]}" --project-name "$project" "$@"
 }
 
 require() {
@@ -168,7 +169,7 @@ check_running() {
 }
 
 remove_project() {
-  rm -f "$repository/$sentinel"
+  if [ -n "${sentinel:-}" ]; then rm -f "$repository/$sentinel"; fi
   compose --profile setup --profile admin --profile worker down --volumes --remove-orphans >/dev/null 2>&1 \
     && docker image rm "$control_plane_image" "$worker_image" >/dev/null 2>&1
 }
@@ -184,36 +185,115 @@ finish_verify() {
   remove_leftovers
 }
 
+# A throwaway project: a random database password, ephemeral host ports,
+# and no leftovers of an earlier run.
+fresh_project() {
+  export TASKELITH_POSTGRES_PASSWORD TASKELITH_API_PUBLISH_PORT='' TASKELITH_NATS_PUBLISH_PORT=''
+  TASKELITH_POSTGRES_PASSWORD="$(od -An -tx1 -N16 /dev/urandom | tr -d ' \n')"
+  remove_leftovers
+}
+
+# Bootstraps and keeps the printed operator secret for the later steps.
+bootstrap_operator() {
+  local result
+  result="$(TASKELITH_ACTOR="$1" TASKELITH_REASON="$2" bootstrap)"
+  export TASKELITH_OPERATOR_TOKEN
+  TASKELITH_OPERATOR_TOKEN="$(printf '%s' "$result" | field operatorSecret)"
+  require TASKELITH_OPERATOR_TOKEN "bootstrap printed no operatorSecret"
+}
+
+# The final removal of a throwaway project, which must succeed.
+remove_throwaway() {
+  trap - EXIT
+  if ! remove_project; then
+    echo "installation.sh: the throwaway project was not fully removed" >&2
+    exit 1
+  fi
+  echo "installation.sh: $1"
+}
+
 # Opt-in end-to-end check on a fresh throwaway project with random secrets
 # and ephemeral host ports, removed with its volumes and images at the end.
 verify() {
   sentinel=".installation-sentinel-$$"
-  export TASKELITH_POSTGRES_PASSWORD TASKELITH_API_PUBLISH_PORT='' TASKELITH_NATS_PUBLISH_PORT=''
-  TASKELITH_POSTGRES_PASSWORD="$(od -An -tx1 -N16 /dev/urandom | tr -d ' \n')"
-  remove_leftovers
+  fresh_project
   trap 'finish_verify $?' EXIT
   : > "$repository/$sentinel"
   build
   check_image "$control_plane_image" "$sentinel"
   check_image "$worker_image" "$sentinel"
-  local result
-  result="$(TASKELITH_ACTOR=verify-installation TASKELITH_REASON='opt-in check' bootstrap)"
-  export TASKELITH_OPERATOR_TOKEN
-  TASKELITH_OPERATOR_TOKEN="$(printf '%s' "$result" | field operatorSecret)"
-  require TASKELITH_OPERATOR_TOKEN "bootstrap printed no operatorSecret"
+  bootstrap_operator verify-installation 'opt-in check'
   broker_config
   start
   enroll
   stop
   start
   check_running
-  trap - EXIT
-  if ! remove_project; then
-    echo "installation.sh: the throwaway project was not fully removed" >&2
+  remove_throwaway "built, bootstrapped, started, enrolled, restarted, removed"
+}
+
+# The control plane's published API port, for example 127.0.0.1:55012.
+api_url() {
+  local address
+  address="$(compose port control-plane 8080)"
+  if [ -z "$address" ]; then
+    echo "installation.sh: the control-plane API port is not published" >&2
     exit 1
   fi
-  echo "installation.sh: built, bootstrapped, started, enrolled, restarted, removed"
+  echo "http://$address"
 }
+
+# The capabilities of the worker process: KILL, SETGID, and SETUID only.
+WORKER_CAPABILITIES='CapInh: 0000000000000000 CapPrm: 00000000000000e0 CapEff: 00000000000000e0 CapBnd: 00000000000000e0 CapAmb: 0000000000000000'
+
+# The execution account (uid 10003) cannot move a process into the worker's
+# cgroup, and the worker process holds exactly its three capabilities.
+check_containment() {
+  local refusal capabilities
+  if refusal="$(compose --profile worker exec -T --user 10003:10003 worker \
+    bash -c 'echo $$ > /sys/fs/cgroup/init/cgroup.procs' 2>&1)"; then
+    echo "installation.sh: the execution account can write the worker's cgroup.procs" >&2
+    exit 1
+  fi
+  case "$refusal" in
+    *"Permission denied"*) ;;
+    *) echo "installation.sh: the cgroup.procs probe failed: $refusal" >&2; exit 1 ;;
+  esac
+  capabilities="$(compose --profile worker exec -T worker bash -c \
+    'grep -E "^Cap(Inh|Prm|Eff|Bnd|Amb):" "/proc/$(pgrep -o -f "^node apps/worker/dist/main.js")/status"' \
+    | tr -s ' \t\n' ' ' | sed 's/ $//')"
+  if [ "$capabilities" != "$WORKER_CAPABILITIES" ]; then
+    echo "installation.sh: the worker process has other capabilities: $capabilities" >&2
+    exit 1
+  fi
+}
+
+# A failed smoke shows both services' logs before the project goes.
+finish_smoke() {
+  if [ "$1" -ne 0 ]; then compose --profile worker logs --no-color control-plane worker >&2 || true; fi
+  remove_leftovers
+}
+
+# Opt-in end-to-end smoke on a fresh throwaway project: an operator submits
+# a task, the worker container executes it, and the result is stored.
+smoke() {
+  compose_files+=(--file "$smoke_directory/compose.yaml")
+  fresh_project
+  trap 'finish_smoke $?' EXIT
+  build
+  bootstrap_operator installation-smoke 'opt-in smoke'
+  start
+  enroll
+  check_containment
+  local url
+  url="$(api_url)"
+  node --experimental-strip-types "$repository/scripts/installation-smoke.ts" "$url" "$smoke_directory/workflows.json"
+  remove_throwaway "submitted, assigned, executed, stored the result, removed"
+}
+
+# The G2 failure scenarios (item 24a), defined apart so tests can load them.
+# shellcheck source=installation-scenarios.sh
+source "$repository/scripts/installation-scenarios.sh"
 
 case "$command" in
   build) build ;;
@@ -224,5 +304,10 @@ case "$command" in
   enroll) enroll ;;
   enrollment-token) enrollment_token ;;
   verify) verify ;;
+  smoke) smoke ;;
+  check-containment) check_containment ;;
+  scenario-fresh-composition) fresh_composition_scenario ;;
+  scenario-worker-disk-loss) disk_loss_scenario ;;
+  scenario-worker-kill) worker_kill_scenario ;;
   *) usage ;;
 esac

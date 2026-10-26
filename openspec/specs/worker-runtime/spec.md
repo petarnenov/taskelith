@@ -289,7 +289,7 @@ A worker SHALL report `daemon-memory` while its own resident set exceeds 512 MiB
 - **THEN** the worker reports `unmeasurable-limit` and refuses new offers
 
 ### Requirement: Journal writes refused for lack of space
-On a journal write refused for lack of space a worker SHALL empty the buffered logs under `worker/logs/`. A refused command SHALL stay unacknowledged for redelivery. A refused execution fact SHALL be derived again from its record, and a refused launch write retried unchanged before what it precedes, after a backoff of 5 to 60 seconds with jitter, not reported as a failure, until it commits or the worker stops.
+On a journal write refused for lack of space a worker SHALL empty the buffered logs under `worker/logs/`. A refused command SHALL stay unacknowledged for redelivery. A refused execution fact SHALL be derived again from its record, a refused launch write retried unchanged before what it precedes, and a refused unrecorded process journaled by a later pass, after a backoff of 5 to 60 seconds with jitter, not reported as a failure, until it commits or the worker stops.
 
 #### Scenario: Exit refused for space
 - **WHEN** the commit of an execution's exit is refused for lack of space twice
@@ -306,3 +306,7 @@ On a journal write refused for lack of space a worker SHALL empty the buffered l
 #### Scenario: Command refused for space
 - **WHEN** W1 of an offer is refused for lack of space
 - **THEN** the offer is not acknowledged, and its redelivery is journaled
+
+#### Scenario: Unrecorded process refused for space
+- **WHEN** the commit of an unrecorded process found at start is refused for lack of space twice
+- **THEN** no pass tries it within the backoff, and the outbox then holds one `unrecorded-process` with its containment's identity, without a second scan or a reported failure

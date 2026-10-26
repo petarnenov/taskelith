@@ -47,6 +47,6 @@ export function rerunHint(seed: number): string {
   return `rerun with ${SEED_VARIABLE}=${seed}`;
 }
 
-function isSeed(value: number): boolean {
+export function isSeed(value: number): boolean {
   return Number.isInteger(value) && value >= 0 && value < SEED_LIMIT;
 }
