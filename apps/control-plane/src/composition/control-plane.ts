@@ -72,7 +72,7 @@ export interface ControlPlaneSettings extends Omit<AdministrationSettings, 'logg
   readonly lostContactTimeoutMilliseconds?: number;
   readonly lostContactCheckMilliseconds?: number;
   readonly shutdownMilliseconds?: number;
-  // Shorter or smaller ones only in tests; production takes the targets.
+  // The targets unless configured; tests pass shorter or smaller ones.
   readonly transportLimits?: TransportLimits;
   readonly launchParameters?: LaunchParametersInput;
 }
