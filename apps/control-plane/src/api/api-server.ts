@@ -65,6 +65,9 @@ export function createApiServer(handlers: ApiHandlers, options: ApiServerOptions
   const routes = options.routes ?? ROUTES;
   const uploads = new UploadSlots(options.maxConcurrentUploads ?? MAX_CONCURRENT_UPLOADS);
   return createServer((request, response) => {
+    // A reused idle socket races the idle timeout: a request written as it
+    // fires is reset unread, so every answer closes its connection.
+    response.shouldKeepAlive = false;
     // serve answers every failure itself; this only guards a broken socket.
     serve(handlers, uploads, routes, logger, request, response).catch(() => response.destroy());
   });
