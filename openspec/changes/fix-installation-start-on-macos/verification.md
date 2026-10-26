@@ -31,7 +31,7 @@ Decisions:
 | `make verify` at `fbce516`, before pass 1 | passed; 1368 tests, 1353 passed, 0 failed, 15 skipped (macOS-only); coverage 99.08 % lines, 91.39 % branches, 98.44 % functions; archive dry run valid |
 | `make verify-installation` at the `fbce516` content | passed: built, bootstrapped, started, enrolled, restarted, removed |
 | `make verify-installation` with a temporary `max_file_store: 4GiB` | failed as designed at the start, with the reservation error printed, the control plane stopped, and the project removed |
-| `make verify` after the pass 1 fixes, with this record | passed; 1371 tests, 1356 passed, 0 failed, 15 skipped; coverage 99.07 % lines, 91.38 % branches, 98.44 % functions; archive dry run valid |
+| `make verify` after the pass 1 fixes, before this record | passed; 1371 tests, 1356 passed, 0 failed, 15 skipped; coverage 99.07 % lines, 91.38 % branches, 98.44 % functions; archive dry run valid |
 
 ## Independent review
 
