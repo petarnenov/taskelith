@@ -2,7 +2,7 @@
 
 - [x] 1.1 `WorkerContact`: offline until the first connection, a `30s` lost-contact timer after a link goes down, `whenOnline`, logs
 - [x] 1.2 `BrokerSession`: connect with retries (5 s to 60 s with jitter), the `status()` watcher, a closed link replaced, the link's work under its own signal
-- [x] 1.3 Heartbeat publisher: `worker.heartbeat` at once and every `10s` over core NATS, only while connected and the journal has not stopped
+- [x] 1.3 Heartbeat publisher: `worker.heartbeat` at once and every `10s` over core NATS, only while known to be connected and the journal has not stopped
 - [x] 1.4 Inventory on every connection: `publishInventory` shared with the request answer, an unsolicited snapshot retried until published or the link is down
 
 ## 2. Launches and reconciliation

@@ -40,7 +40,7 @@ The orchestrator takes an optional `LaunchContact`. Each authorization operation
 
 ### D5: heartbeats only while connected
 
-`runHeartbeats` publishes at once on each connection and reconnection and then every `10s` over core NATS, only while the link is up, as the client would otherwise buffer heartbeats during an outage and flush stale ones on reconnect, and only while the journal has not stopped, as no publication follows a flush failure (journal contract section 7). A publish that throws is logged at debug as `worker.heartbeat.unsent`; the next one replaces it. `sentAt` is the worker's clock, informational only.
+`runHeartbeats` publishes at once on each connection and reconnection and then every `10s` over core NATS, only while the worker knows the link is up and the journal has not stopped, as no publication follows a flush failure (journal contract section 7). The client buffers publications while disconnected and resets its outbound buffer on each connection attempt (nats-core `protocol.js`, `prepare` and `resetOutbound`), so only a heartbeat published during the successful handshake, before the worker has seen the disconnect, can survive, at most one dial timeout stale; a fresh one follows at once. The heartbeat is a liveness hint, and the control plane tolerates a stale one. A synchronous check would need the client's private `protocol.connected`, which this change does not use. A publish that throws is logged at debug as `worker.heartbeat.unsent`; the next one replaces it. `sentAt` is the worker's clock, informational only.
 
 ### D6: the inventory on every connection
 

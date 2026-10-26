@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Worker heartbeat
-A connected worker SHALL publish `worker.heartbeat` with its `workerId`, its `journalId`, and `sentAt` from its own clock on its own heartbeat subject over core NATS, at once on each connection and reconnection and then every `10s`. It SHALL send none while its connection is down or after its journal stopped, and a heartbeat it cannot send SHALL be logged and replaced by the next.
+A connected worker SHALL publish `worker.heartbeat` with its `workerId`, its `journalId`, and `sentAt` from its own clock on its own heartbeat subject over core NATS, at once on each connection and reconnection and then every `10s`. It SHALL send none while it knows its connection is down or after its journal stopped, and a heartbeat it cannot send SHALL be logged and replaced by the next.
 
 #### Scenario: Connected worker
 - **WHEN** a worker's broker connection is up
@@ -12,8 +12,12 @@ A connected worker SHALL publish `worker.heartbeat` with its `workerId`, its `jo
 - **THEN** a heartbeat goes out at once, without waiting for the rest of the interval
 
 #### Scenario: Disconnected worker
-- **WHEN** the connection is down at a heartbeat interval
-- **THEN** no heartbeat is sent or buffered for that interval
+- **WHEN** the worker has seen its connection go down before a heartbeat interval
+- **THEN** no heartbeat is sent for that interval
+
+#### Scenario: Disconnect not yet seen
+- **WHEN** a heartbeat is published after the connection dropped but before the worker has seen the disconnect
+- **THEN** the client may buffer it, and it leaves only on the next successful connection, at most one connection attempt late, followed at once by a fresh heartbeat
 
 #### Scenario: Stopped journal
 - **WHEN** the journal stops after a flush failure while the worker is connected
