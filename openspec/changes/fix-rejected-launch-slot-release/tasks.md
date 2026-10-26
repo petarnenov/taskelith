@@ -17,4 +17,4 @@
 - [x] 3.2 `npm run openspec -- validate fix-rejected-launch-slot-release --strict` and `make verify`
 - [x] 3.3 Independent review pass 1
 - [x] 3.4 Merge `origin/dev`
-- [ ] 3.5 Independent review pass 2
+- [x] 3.5 Independent review pass 2

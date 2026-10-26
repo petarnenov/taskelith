@@ -60,7 +60,10 @@ Reviewer: Codex CLI, model `gpt-6.1-sol`, reasoning effort medium, read-only san
 
 ### Review pass 2
 
-Pending: independent review by the same reviewer of the fix `bd2fc16` and the merge.
+Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, read-only sandbox, all confirmed in the output header; session `01a17958-fbeb-70a2-980d-f908835b6169`, run by the worker session from the worktree with the same invocation as pass 1. The prompt named pass 1's session and finding and the author's deviation (design D2) and asked to confirm the resolution before reviewing the whole change again (`git diff 62d324e...HEAD`). Revision reviewed: `0319f43`. The snapshots before and after the pass matched (`a3aec6d5c344033a6122b0bc8272c51f716d635693be503d0300a004df29b268`).
+
+- Pass 1 Medium: confirmed resolved; the deviation that a terminal state releases despite `uncertain` was confirmed correct against capacity reservation section 6, worker journal section 5, and the SQLite adapter.
+- New findings: 0 Critical, 0 High, 0 Medium, 0 Low. The reviewer ran `verify:comments`, strict OpenSpec validation, and `git diff --check`, and relied on the recorded `make verify` result.
 
 ## Limitations
 
@@ -69,6 +72,5 @@ Pending: independent review by the same reviewer of the fix `bd2fc16` and the me
 
 ## Remaining gates
 
-- Independent review pass 2.
 - The coordinator's integration into `dev` and the archive of this change.
 - No deployment validation was done; none is claimed.
