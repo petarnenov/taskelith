@@ -27,7 +27,7 @@ import {
 import { authorizeLaunch } from '../domain/launch-authorization.js';
 import { parseLaunchParameters } from '../domain/launch-grant.js';
 import { parseRecoveryEpoch } from '../domain/identifiers.js';
-import { claimOwnership, openAttempt, openTask, type Task } from '../domain/task.js';
+import { claimOwnership, openAttempt, openTask, recordExecutionEvidence, type Task } from '../domain/task.js';
 import { launchRejection } from '../domain/launch-rejection.js';
 import { revokeLaunch } from '../domain/task.js';
 import {
@@ -39,11 +39,14 @@ import {
 } from '../domain/observation-sequence.js';
 import type { AssignmentId, WorkerId } from '../domain/identifiers.js';
 import type { InventoryPart, InventoryRequest } from '../domain/inventory.js';
+import type { UnrecordedProcess } from '../domain/reconciliation.js';
 import type { Inbox } from './inbox.js';
 import type { InventoryReports } from './inventory-reports.js';
 import type { InventoryRequests } from './inventory-requests.js';
 import type { ProducerCursors } from './producer-cursors.js';
 import type { LaunchRecords, RecordedLaunch } from './launch-records.js';
+import type { ReconciliationQueue } from './reconciliation-queue.js';
+import type { UnrecordedProcesses } from './unrecorded-processes.js';
 import type { TaskRepository } from './task-repository.js';
 
 // Shared suites that the in-memory and the database adapters of the
@@ -373,6 +376,65 @@ export const LAUNCH_RECORDS_CONFORMANCE: readonly ConformanceCase<LaunchRecordsC
       expectCode(problems, 'again', await launches.recordRejection(recorded), 'conflict');
       expectRead(problems, 'read', await launches.rejection(request.workerId, request.operationId), recorded);
       expectRead(problems, 'other worker', await launches.rejection(id('WorkerId', 'worker-2'), request.operationId), undefined);
+      return problems;
+    },
+  },
+]);
+
+// The queue reads the stored tasks and the recorded processes.
+export interface ReconciliationQueueConformanceTarget {
+  readonly tasks: TaskRepository;
+  readonly processes: UnrecordedProcesses;
+  readonly queue: ReconciliationQueue;
+}
+
+// The authorized execution of `authorizedTask`, made uncertain.
+function uncertainTask(taskId: string, launch: string, worker: string): Task {
+  const task = authorizedTask(taskId, launch, worker);
+  const report = { workerId: id('WorkerId', worker), executionId: id('ExecutionId', 'execution-1'), kind: 'uncertain' as const };
+  return must(recordExecutionEvidence(task, report, LATER)).task;
+}
+
+function unrecordedProcess(observation: string, recordedAt: Instant, worker = 'worker-1'): UnrecordedProcess {
+  return {
+    workerId: id('WorkerId', worker), journalId: id('JournalId', 'journal-1') as JournalId, observationId: id('ObservationId', observation),
+    containment: 'cgroup taskelith/unknown', processCount: 2, recordedAt,
+  };
+}
+
+export const RECONCILIATION_QUEUE_CONFORMANCE: readonly ConformanceCase<ReconciliationQueueConformanceTarget>[] = Object.freeze([
+  {
+    name: 'unknown executions are listed for their worker and their task, known ones never',
+    async check({ tasks, queue }) {
+      const problems: string[] = [];
+      const workerId = id('WorkerId', 'worker-1');
+      expectSame(problems, 'none', await queue.unknownExecutionsOfWorker(workerId), []);
+      const [second, first] = [uncertainTask('task-2', '2', 'worker-1'), uncertainTask('task-1', '1', 'worker-1')];
+      for (const task of [second!, first!, uncertainTask('task-3', '3', 'worker-2'), authorizedTask('task-4', '4', 'worker-1')]) {
+        must(await tasks.add(task));
+      }
+      const listed = (unknown: readonly { taskId: string; execution: { id: string } }[]) => unknown.map(({ taskId, execution }) => [taskId, execution.id]);
+      expectSame(problems, 'worker', listed(await queue.unknownExecutionsOfWorker(workerId)), [['task-1', 'execution-1'], ['task-2', 'execution-1']]);
+      expectSame(problems, 'task', await queue.unknownExecutionsOfTask(first!.id), [
+        { taskId: first!.id, attemptId: first!.attempts[0]!.id, execution: first!.attempts[0]!.executions[0] },
+      ]);
+      expectSame(problems, 'known', await queue.unknownExecutionsOfTask(id('TaskId', 'task-4')), []);
+      return problems;
+    },
+  },
+  {
+    name: 'an unrecorded process is recorded once per observation and listed for its worker',
+    async check({ processes, queue }) {
+      const problems: string[] = [];
+      const workerId = id('WorkerId', 'worker-1');
+      expectSame(problems, 'none', await queue.unrecordedProcessesOfWorker(workerId), []);
+      expectSuccess(problems, 'later', await processes.record(unrecordedProcess('observation-2', LATER)));
+      expectSuccess(problems, 'first', await processes.record(unrecordedProcess('observation-1', AT)));
+      expectSuccess(problems, 'repeat', await processes.record({ ...unrecordedProcess('observation-1', LATER), processCount: 9 }));
+      expectSuccess(problems, 'other worker', await processes.record(unrecordedProcess('observation-1', AT, 'worker-2')));
+      expectSame(problems, 'listed', await queue.unrecordedProcessesOfWorker(workerId), [
+        unrecordedProcess('observation-1', AT), unrecordedProcess('observation-2', LATER),
+      ]);
       return problems;
     },
   },
