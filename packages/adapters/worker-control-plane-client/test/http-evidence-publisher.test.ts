@@ -124,3 +124,9 @@ test('a client that leaves mid-body does not break the fake server', async () =>
   answer = { status: 201, body: RECORD };
   assert.equal(value(await publisher().publish(PUBLICATION, CONTENT)).evidenceId, PUBLICATION.evidenceId);
 });
+
+test('any other failure of the fake server answers 500', async () => {
+  const response = await fetch(new URL('evidence', baseUrl), { method: 'POST', body: 'not multipart' });
+  assert.equal(response.status, 500);
+  await response.text();
+});
