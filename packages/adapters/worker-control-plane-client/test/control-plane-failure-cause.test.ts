@@ -167,7 +167,12 @@ test('a thrown value that is not an error is unknown; names and codes must be id
   assert.deepEqual((await failureOf('a string')).details, { cause: 'unknown' });
   const odd = Object.assign(new Error(''), { name: 'not a name', code: 'free text code' });
   assert.deepEqual((await failureOf(odd)).details, { cause: 'Error' });
-  assert.deepEqual((await failureOf(fetchFailed('plain cause'))).details, { cause: 'TypeError: fetch failed' });
+  assert.deepEqual((await failureOf(fetchFailed('plain cause'))).details, { cause: 'TypeError: fetch failed <- Error: plain cause' });
+  assert.deepEqual((await failureOf(fetchFailed('password: hunter2'))).details, { cause: 'TypeError: fetch failed <- Error: password: [redacted]' });
+  const longName = Object.assign(new Error('x'), { name: `N${'a'.repeat(31)}` });
+  assert.deepEqual((await failureOf(longName)).details, { cause: 'Error: x' });
+  const name31 = `N${'a'.repeat(30)}`;
+  assert.deepEqual((await failureOf(Object.assign(new Error('x'), { name: name31 }))).details, { cause: `${name31}: x` });
 });
 
 test('a code of 32 or more characters is not a code, so no seed passes as one', async () => {
@@ -197,3 +202,11 @@ test('a schema violation naming a 2000-character property is bounded', async () 
   assert.match(failure.details.violation ?? '', /must NOT have additional properties "name name/);
   assert.ok((failure.details.violation?.length ?? 0) <= 160, failure.details.violation);
 });
+
+test('user information without a scheme and colon pairs of other secret keys are redacted', async () => {
+  const message = 'connect owner:pa55w0rd@cp.example:8443 failed; passphrase: open sesame; cookie: sid=1; credentials: c1; private_key: k1';
+  const { cause } = (await failureOf(new Error(message))).details;
+  for (const secret of ['pa55w0rd', 'open', 'sid=1', 'c1', 'k1']) assert.ok(!cause?.includes(secret), `${secret} leaked into ${cause}`);
+  assert.ok(cause?.startsWith('Error: connect [redacted]@cp.example:8443 failed;'), cause);
+});
+
