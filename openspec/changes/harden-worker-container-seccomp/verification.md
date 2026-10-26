@@ -106,6 +106,7 @@ Discrimination, checked before the reruns with a probe container of the base ima
 ## Remaining gates / open items
 
 - `make verify-linux-cgroup` on the x86_64 iMac (coordinator); for the profile on x86_64, `make scenario-worker-namespace-confinement` there as well.
+- Coordinator run on the x86_64 iMac (macOS 26 Intel, Docker Desktop 29.5.2), integration merge 16747e8 of this branch with `origin/dev` 62d324e: `make verify-linux-cgroup` passed 14/14; `make scenario-worker-namespace-confinement` passed and `make scenario-fresh-composition` passed with the profile attached, both recorded in `results.jsonl` with `arch` `x64`.
 - Integration into `dev` and the archive of this change (coordinator).
 
 Known limits, not gates of this change: an `x86_64` Linux host with AppArmor or SELinux is not yet observed (Docker Desktop aarch64 only); the profile follows the engine, and a newer engine's default profile is adopted by the refresh procedure in `docs/local-installation.md`.
