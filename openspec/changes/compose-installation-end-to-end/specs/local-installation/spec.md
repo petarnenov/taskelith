@@ -5,7 +5,7 @@ The worker container SHALL run in a private cgroup v2 namespace whose root holds
 
 #### Scenario: Worker start
 - **WHEN** the worker container starts
-- **THEN** the worker runs in `init/`, its containment parent exists outside its own cgroup, and the execution account can write no `cgroup.procs` of the worker
+- **THEN** the worker runs in `init/`, its containment parent exists outside its own cgroup, and the execution account can write no `cgroup.procs` of the worker, which `make installation-smoke` checks
 
 #### Scenario: No delegation
 - **WHEN** the container cannot be delegated, such as without root or without cgroup v2
@@ -34,3 +34,10 @@ The control plane and NATS SHALL run as non-root users. The worker container SHA
 #### Scenario: Worker privileges
 - **WHEN** the composition starts the worker
 - **THEN** the service drops every capability but those its entrypoint needs, sets `no-new-privileges`, and the entrypoint runs the worker with `SETUID`, `SETGID`, and `KILL` only
+
+### Requirement: Harness image variant
+The worker image SHALL have a separate `worker-harnesses` variant that adds the agent harness packages pinned in the qualification records, installed from a tracked lockfile with every package checked against its integrity hash and no install scripts run. The default worker image SHALL stay without harnesses. Root SHALL own the installed harnesses, so that the execution account cannot change them, and the variant SHALL set every self-update switch that a harness reads from the environment.
+
+#### Scenario: Default worker image
+- **WHEN** the default `worker` target is built
+- **THEN** it contains no harness package

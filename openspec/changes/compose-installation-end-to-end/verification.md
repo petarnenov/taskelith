@@ -22,6 +22,8 @@ G2 work item 23, second part (23b), `compose-installation-end-to-end`, assigned 
 | `make installation-smoke` | passed on 2026-10-26: built, bootstrapped, started, enrolled; the stored result was `ended`, outcome `exited`, status code 0, `startProven` true; the project was removed with its volumes and images, and nothing was left |
 | `make verify-installation` | passed on 2026-10-26: built, bootstrapped, started, enrolled, restarted, removed |
 | `make verify` | passed; 1714 tests, 1712 passed, 2 skipped, 0 failed; coverage 99.27 % lines, 91.87 % branches, 98.98 % functions |
+| `make installation-smoke` after the pass 1 fixes | passed on 2026-10-26: the containment check passed (the write under uid 10003 was refused; the worker process had `CapEff` and `CapBnd` `00000000000000e0`, `CapAmb` 0), the stored result was `ended`, `exited`, code 0, `startProven` true, and the project was removed with its volumes and images. A comment was shortened afterwards. |
+| `make verify` after the pass 1 fixes | passed; 1719 tests, 1717 passed, 2 skipped, 0 failed; coverage 99.28 % lines, 91.88 % branches, 98.98 % functions |
 
 Excerpt of the smoke output:
 
@@ -36,9 +38,28 @@ The worker runs as root with three capabilities inside its container (design dec
 
 ## Independent review
 
-Pending: the coordinator assigns the reviewer and records the passes here.
+Reviewer assigned by the coordinator: Claude Code, `claude-fable-5-1`, effort medium, plan mode.
+
+### Pass 1
+
+- Invocation: `claude -p "<prompt>" --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json < /dev/null`, prompt and log outside the worktree.
+- Confirmation: `claude-fable-5-1` in the JSON `modelUsage`; session `5b74f8f3-b89c-4d53-998c-86d53e75f7a5`.
+- Snapshot: `77b2bab6…` before and after; unchanged.
+- Reviewed: `311c40d...bd35a83`.
+- Findings: Critical 0, High 0, Medium 2, Low 5.
+
+| # | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| M1 | Medium | The scenario "Worker start" had no automated evidence that the execution account cannot write the worker's `cgroup.procs`. | `installation.sh check-containment`, run by the smoke after enrollment, writes the shell's PID to `/sys/fs/cgroup/init/cgroup.procs` through `exec --user 10003:10003` and fails if that succeeds, and fails unless the worker process shows `CapEff` and `CapBnd` `00000000000000e0` and `CapAmb` 0. Tests drive both failures with a fake `docker`; the scenario names the smoke as its evidence. |
+| M2 | Medium | `SYS_ADMIN` widens Docker's default seccomp filter for every process, executions included, and `apparmor=unconfined` lifts the user-namespace restriction, so the kernel surface is wider than the risks said. | Documented, not changed: design.md risks and `docs/local-installation.md` now state the consequence, with the observed user namespace and mount under uid 10003, and why no custom seccomp profile was chosen (a copy of Docker's engine- and architecture-specific profile or a fragile hand-written list); handed to item 25. |
+| L1 | Low | The entrypoint took ownership of the whole data root on every start, also of files a later execution account might create. | The entrypoint changes owners only when root does not own the data root (`stat -c %u`); a test shows a root-owned data root is left alone; design decision 5 says who owns execution files. |
+| L2 | Low | `TASKELITH_CGROUP_ROOT` was a test seam in the product entrypoint. | Renamed to `TASKELITH_TEST_CGROUP_ROOT`, with a comment that the worker always reads `/sys/fs/cgroup`. |
+| L3 | Low | "so that the worker user cannot change them" was stale with a root worker. | A MODIFIED "Harness image variant" requirement names the execution account; `docs/local-installation.md` says the same. |
+| L4 | Low | The smoke client lost the status on a non-JSON body, and its requests had no timeout. | It reads the text, parses JSON with the text as fallback, and sets `AbortSignal.timeout` of 10 s; tested. |
+| L5 | Low | The entrypoint tests took about 12 s. | The fakes are written once per file, since a new executable starts slowly the first time on macOS, and the refusals run in parallel: about 3 s. |
 
 ## Limitations and remaining gates
 
+- `SYS_ADMIN` and `apparmor=unconfined` let an execution create a user namespace and mount inside it (design risks, review finding M2); item 25 decides whether a seccomp profile is needed.
 - The smoke and the bring-up check ran on Docker Desktop x86_64 only; Linux hosts with AppArmor or SELinux, and linux/arm64, are not yet observed. Item 25 qualifies the container settings.
 - Independent review and integration remain.
