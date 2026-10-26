@@ -50,6 +50,15 @@ Reviewer assigned by the coordinator: Codex CLI (gpt-6.1-sol), run by the worker
   - Low: the self-check said that `git grep kimi` outside the archive finds only the two documents, which is untrue at 3fe3175b because this change's `design.md` and `verification.md` also match. Fixed (unreviewed fix) by recording the exact command, which also excludes this change's directory.
 - The pass had only a Low finding, so it was fixed without another review, as the governance policy allows.
 
+## Archive (worker step 7)
+
+Checked state: the tree of the archive commit `docs: archive the add DeepSeek and Qwen reviewers change`, which is the working tree these checks ran on, after `npm run openspec -- archive add-deepseek-qwen-reviewers --yes` (`~ 1 modified`, archived as `2026-10-26-add-deepseek-qwen-reviewers`).
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line is `✓ change/2026-10-26-add-deepseek-qwen-reviewers`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/review-process/spec.md`, adding the scenario "Same harness after a skipped reviewer" to "Rotation order".
+- `make verify`: passed; tests 1923, pass 1921, fail 0, skipped 2; coverage of all files 99.29% lines, 92.09% branches, 99.04% functions; OpenSpec 69 passed, 0 failed; the archive dry run and the package check passed.
+
 ## Remaining gates
 
 Integration into dev by the coordinator (single pull request). Promotion to `main` is a separate owner decision.
