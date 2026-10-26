@@ -46,4 +46,4 @@ A worker SHALL commit W2 before the first request of an operation and W3 with ea
 
 #### Scenario: Logged authorization failure
 - **WHEN** a launch authorization request fails
-- **THEN** the worker logs `worker.launch.authorization-failed` with the failure's details, then the execution, the operation, and the failure's code and message, which no detail replaces, and repeats the operation
+- **THEN** the worker logs `worker.launch.authorization-failed` with the failure's details, then the execution, the operation, and the failure's code and message, which no detail replaces, and, before its deadline, repeats the operation

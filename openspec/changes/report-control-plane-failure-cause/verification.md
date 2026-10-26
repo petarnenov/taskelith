@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-27. The author's verification and independent review pass 1 with its fixes and review passes 1 and 2 with their fixes are recorded below; review pass 3 is pending.
+Date: 2026-10-27. The author's verification, independent review passes 1 to 3 with their fixes, and the archive are recorded below.
 
 ## Scope and source
 
@@ -17,11 +17,13 @@ macOS 26.6.2 (x86_64), Node 24.22.1 from `.nvmrc` through nvm, Docker Desktop.
 ## Author self-check
 
 - The enrollment failure reaches the start failure line with its details through `workerMain` (`apps/worker/src/main.ts`, `redactFailure`), so it needed no change; the launch authorization loop logged nothing and now logs each failed request before its back-off.
-- The new requirement is 416 characters, below the archive limit, and each scenario maps to a test:
+- Requirement "Control-plane failure cause" is 494 characters and requirement "Journaled launch authorization" 489, both below the archive limit. The first has six scenarios and the second gains one; each maps to a test (line numbers in the client test file at the head of the branch):
   - "Reset connection": `a reset connection names its code beside the outer fetch failure`, with `a socket closed by the control plane keeps the code of undici`, `an aggregate error is followed into its first error, and the innermost code wins`, and `a real refused connection reports ECONNREFUSED`;
-  - "Secrets in a cause message": `a cause message keeps no URL, bearer value, secret pair, or token`;
+  - "Secrets in a cause message": `a cause message keeps no URL, bearer value, secret pair, or token` and the redaction tests at lines 88, 96, 104, and 206;
   - "Long cause chain": `a long or cyclic cause chain is bounded in links and length`;
   - "No cause": `an error without a cause or code is named alone, without a cause code` and `a thrown value that is not an error is unknown; names and codes must be identifiers`;
+  - "Throwing thrown value": `a thrown value whose getters throw is unknown, not a rejection` (line 185);
+  - "Unbounded server reason": `a server's message and reason are bounded and sanitized` (line 125) and `a schema violation naming a 2000-character property is bounded` (line 192);
   - "Logged authorization failure" (requirement "Journaled launch authorization"): `a request without an answer is logged with its cause, never over its known fields, before it is repeated` at `apps/worker/test/launch-orchestrator.test.ts:169`.
 - The client tests are in `packages/adapters/worker-control-plane-client/test/control-plane-failure-cause.test.ts`.
 - The comment length rule holds (`npm run verify:comments`).
@@ -106,14 +108,31 @@ Findings and resolutions, fixed in `aee870e` (spec, design, this record), `54823
 
 **Fail before the fixes:** with the source of `60e07c7` stashed, the tests of `5482357` ran against the code of `1738be7`: 4 of 17 failed. These were the base64 and JSON test (`dXNlcjpwYXNz leaked into Error: {"authorization":"Basic dXNlcjpwYXNz"} password: hunter2 …`), the seed passing as `causeCode`, `Error: trap` rejecting the request, and the unbounded violation. After `60e07c7`: 30 of 30 client tests pass.
 
-The fixes of `60e07c7` are unreviewed until pass 3.
+Review pass 3 confirmed all nine resolutions.
+
+### Pass 3
+
+- **Reviewer:** Claude Code, model `claude-fable-5-1`, assigned by the coordinator, who ran the review and recorded its invocation.
+- **Revision:** `32193cc` (the branch after the coordinator merged `origin/dev` `0d317f8`).
+- **Session ID:** `0abbc408-42ff-4f70-be9d-932e56be33b8`.
+- **Result:** Critical 0, High 0, Medium 0, Low 7; all pass 2 findings confirmed resolved.
+
+Findings and resolutions. References are to `packages/adapters/worker-control-plane-client/src/failure-cause.ts` and the client test file unless named. **The fixes are UNREVIEWED (Low-only pass, review cap reached).**
+
+- **L1: a name was not redacted and could have 64 characters.** Fixed: `NAME` allows at most 31 (line 13); test at line 166 (a 32-character name becomes `Error`, a 31-character one stays).
+- **L2: the colon rule missed other secret keys.** Fixed: it also covers `pass`, `passphrase`, `credential(s)`, `cookie`, and `private_key` (line 22); test at line 206. The `=` form of these keys is the logger's gap (see "Limitations").
+- **L3: user information without a scheme passed.** Fixed: `user:secret@` becomes `[redacted]@` before `redactText` (line 20); test at line 206.
+- **L4: a string `cause` was dropped.** Fixed: it ends the chain as a last sanitized link `Error: <string>` (lines 85, 122-126); test at line 166; design decision 2 says so.
+- **L5: the self-check named 416 characters and four scenarios.** Fixed: "Author self-check" gives the real lengths and maps "Throwing thrown value" and "Unbounded server reason".
+- **L6: a garbled sentence about the review passes.** Fixed: the date line of this record.
+- **L7: scenario "Logged authorization failure" said the operation is always repeated.** Fixed: "before its deadline, repeats the operation" (spec delta).
 
 ## Limitations and remaining gates
 
 - The real network failures covered by a test are a refused loopback connection and a timeout (existing tests); a reset connection and an undici socket error are covered with constructed errors of the same shape.
 - `make verify` ran on macOS only.
-- The logger's own `redactText` still lacks the JWT and `Authorization` rules that the client adds; adding them there is a separate change of requirement "Logs without secrets".
+- The logger's own `redactText` still lacks the JWT, `Authorization`, scheme-less user information, and colon-pair rules that the client adds, and its `=` rule (`KEY_VALUE`) lacks the keys `pass`, `passphrase`, `credential(s)`, `cookie`, and `private_key`; adding them there is a separate change of requirement "Logs without secrets".
 - Remaining gates:
-  - independent review pass 3 by Claude Code `claude-fable-5-1` (pending);
+  - none for review: pass 3 was Low-only and the review cap is reached, so its fixes stay unreviewed;
   - archive on the branch (worker step 7, pending);
   - Integration into dev by the coordinator (single pull request).

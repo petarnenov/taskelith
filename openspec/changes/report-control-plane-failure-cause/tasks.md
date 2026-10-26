@@ -20,7 +20,7 @@
 - [x] 4.1 `npm run openspec -- validate report-control-plane-failure-cause --strict`
 - [x] 4.2 Archive dry run in a scratch copy, then `validate --all --strict`
 - [x] 4.3 `make verify` passes
-- [ ] 4.4 Independent review and its record in `verification.md`
+- [x] 4.4 Independent review and its record in `verification.md`
 
 ## 5. Review pass 1 fixes
 
@@ -36,4 +36,10 @@
 - [x] 6.2 Never throw while describing a cause (L1); redact quoted authorization, colon pairs, and base64 (L2 to L4); codes under 32 characters (L5)
 - [x] 6.3 Readability of `causeChain` and `sanitizeFailureText` (L6); design and record fixes (L7, L8)
 - [x] 6.4 `make verify` passes after the fixes
+
+## 7. Review pass 3 fixes (Low only, not reviewed again)
+
+- [x] 7.1 Names below 32 characters (L1); more colon-pair keys (L2); scheme-less user information (L3); a string cause as a last link (L4)
+- [x] 7.2 Record and spec fixes (L5 to L7)
+- [x] 7.3 `make verify` passes after the fixes
 
