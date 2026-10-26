@@ -11,7 +11,9 @@ import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { value } from '@taskelith/testing';
 import { containmentScan, LaunchOrchestrator, publishDueObservations, type PopulatedContainment } from '@taskelith/worker';
 import { linuxPlatform } from '@taskelith/worker-supervisor';
-import { FakeAuthority, FakeClock, FakeSupervisions, T0, temporaryJournal } from './launch-fakes.ts';
+import {
+  FakeAuthority, FakeClock, FakePressure, FakeSupervisions, T0, temporaryJournal,
+} from './launch-fakes.ts';
 
 const PARENT = '/sys/fs/cgroup/taskelith';
 const MEMBER: ExecutionProcess = { platform: 'linux', bootId: 'boot-1', pid: 77, startTime: 5, processGroupId: 77 };
@@ -45,6 +47,7 @@ function populated(name: string, processes: readonly ExecutionProcess[] = [MEMBE
 async function startProcess(): Promise<void> {
   const orchestrator = new LaunchOrchestrator({
     journal, authority: new FakeAuthority(), supervision: new FakeSupervisions().factory, clock: new FakeClock(),
+    pressure: new FakePressure(),
     sleep: async () => undefined, draw: () => 0.5, newId: () => 'id-1',
     records: async () => records,
     containments: () => {
