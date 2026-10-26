@@ -33,7 +33,14 @@ ENV TASKELITH_API_HOST=0.0.0.0
 EXPOSE 8080
 CMD ["node", "apps/control-plane/dist/main.js"]
 
+# Each execution runs as taskelith-exec, which owns no cgroup of the worker;
+# the entrypoint needs root (compose.yaml) and keeps three capabilities.
 FROM runtime AS worker
+USER root
+RUN useradd --uid 10003 --user-group --no-create-home --shell /usr/sbin/nologin taskelith-exec
+USER taskelith
+ENV TASKELITH_CONTAINMENT_PARENT=/sys/fs/cgroup/executions TASKELITH_EXECUTION_UID=10003 TASKELITH_EXECUTION_GID=10003
+ENTRYPOINT ["bash", "/opt/taskelith/infra/installation/worker-entrypoint.sh"]
 CMD ["node", "apps/worker/dist/main.js"]
 
 FROM node-${TARGETARCH} AS harnesses

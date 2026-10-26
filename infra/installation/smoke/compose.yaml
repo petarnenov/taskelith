@@ -1,0 +1,9 @@
+# Test-only additions of make installation-smoke: a known workflow and the
+# G2 scripted process, which exits 0 after one second.
+services:
+  control-plane:
+    environment:
+      TASKELITH_WORKFLOWS: /opt/taskelith/infra/installation/smoke/workflows.json
+  worker:
+    environment:
+      TASKELITH_WORKER_COMMAND: '["/usr/local/bin/node", "-e", "setTimeout(() => {}, 1000)"]'
