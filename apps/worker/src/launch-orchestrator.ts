@@ -296,23 +296,42 @@ export class LaunchOrchestrator {
     this.#running.set(key, done);
   }
 
-  // Any target cancels its whole intent, as the recovery plan reads it: the
-  // launch stops, and evidence waits until it ended.
+  // An attempt target stops its intents' launches; an execution target
+  // only that execution, and evidence waits until nothing runs it.
   async #forward(commandId: CommandId, target: CancellationTarget, snapshot: JournalSnapshot): Promise<void> {
     const reason = `cancellation ${commandId}`;
-    const assignments = targetedAssignments(target, snapshot);
-    const launches = [...assignments].flatMap((assignmentId) => this.#launches.get(assignmentId) ?? []);
+    const launches = this.#targetedLaunches(target, snapshot);
     for (const launch of launches) launch.cancel(reason);
-    const executions = snapshot.executions.filter(({ assignmentId }) => assignments.has(assignmentId));
+    const executions = targetedExecutions(target, snapshot);
     for (const execution of executions) {
       const key = `${commandId}/${execution.executionId}`;
-      if (!needsCancelFile(execution, this.#launches.has(execution.assignmentId)) || this.#forwarded.has(key)) continue;
+      if (!needsCancelFile(execution, this.#runs(execution)) || this.#forwarded.has(key)) continue;
       if (cancelFiled(await this.#options.supervision(execution.executionId).cancel(reason))) this.#forwarded.add(key);
     }
     const evidence = `cancellation-evidence/${commandId}`;
     if (launches.length === 0 && executions.every(isSettled) && this.#held.due(evidence)) {
       this.#held.commit(evidence, () => this.#options.journal.recordCancellationEvidence(commandId));
     }
+  }
+
+  // An execution target stops a launch only while it runs that execution.
+  #targetedLaunches(target: CancellationTarget, snapshot: JournalSnapshot): Launch[] {
+    const launches = [...targetedAssignments(target, snapshot)].flatMap((assignmentId) => this.#launches.get(assignmentId) ?? []);
+    if (target.kind === 'attempt') return launches;
+    return launches.filter((launch) => launch.runs(target.executionId) && !this.#endedNow(target.executionId));
+  }
+
+  // Read with no await before the cancel: an end may have committed while
+  // its launch has not yet returned from it.
+  #endedNow(executionId: ExecutionId): boolean {
+    const current = this.#options.journal.snapshot();
+    if (!reported(this.#options, current)) return false;
+    const execution = current.value.executions.find((candidate) => candidate.executionId === executionId);
+    return execution !== undefined && isTerminal(execution);
+  }
+
+  #runs(execution: JournaledExecution): boolean {
+    return this.#launches.get(execution.assignmentId)?.runs(execution.executionId) === true;
   }
 
   #failed(error: unknown): void {
@@ -326,6 +345,13 @@ function targetedAssignments(target: CancellationTarget, snapshot: JournalSnapsh
     ? snapshot.intents.filter(({ attemptId }) => attemptId === target.attemptId)
     : snapshot.executions.filter(({ executionId }) => executionId === target.executionId);
   return new Set(named.map(({ assignmentId }) => assignmentId));
+}
+
+// The executions a cancellation names: the attempt's, or only that one.
+function targetedExecutions(target: CancellationTarget, snapshot: JournalSnapshot): JournaledExecution[] {
+  if (target.kind === 'execution') return snapshot.executions.filter(({ executionId }) => executionId === target.executionId);
+  const assignments = targetedAssignments(target, snapshot);
+  return snapshot.executions.filter(({ assignmentId }) => assignments.has(assignmentId));
 }
 
 // The executions not yet terminal: at a start, those an earlier process left.
@@ -351,10 +377,10 @@ function reported<T>(options: LaunchOrchestratorOptions, result: Result<T>): res
   return result.ok;
 }
 
-// A live launch cancels its own execution; any other open one with a
+// A live launch cancels the execution it runs; any other open one with a
 // written record gets the `cancel` file.
-function needsCancelFile(execution: JournaledExecution, launchLive: boolean): boolean {
-  return !launchLive && !isTerminal(execution) && execution.recordWritten;
+function needsCancelFile(execution: JournaledExecution, runByLaunch: boolean): boolean {
+  return !runByLaunch && !isTerminal(execution) && execution.recordWritten;
 }
 
 // How one authorization attempt of an execution ended.
@@ -390,6 +416,7 @@ class Launch {
   readonly #cancelling = new AbortController();
   readonly #signal: AbortSignal;
   #cancelReason: string | undefined;
+  #executing: ExecutionId | undefined;
   #retries = 0;
 
   constructor(context: LaunchContext) {
@@ -405,6 +432,11 @@ class Launch {
     this.#cancelling.abort();
   }
 
+  // Whether this launch runs the execution now, not after it ended.
+  runs(executionId: ExecutionId): boolean {
+    return this.#executing === executionId;
+  }
+
   get #cancelled(): boolean {
     return this.#cancelReason !== undefined;
   }
@@ -414,7 +446,10 @@ class Launch {
     while (!this.#signal.aborted) {
       const executionId = resume ?? this.#newId('ExecutionId');
       if (executionId === undefined) return;
-      if ((await this.#execute(executionId, resume !== undefined)) === 'end') return;
+      this.#executing = executionId;
+      const executed = await this.#execute(executionId, resume !== undefined);
+      this.#executing = undefined;
+      if (executed === 'end') return;
       resume = undefined;
       await this.#backOff();
     }
