@@ -1,13 +1,13 @@
 # Verification
 
-Date: 2026-10-26. Author verification is recorded below; the review passes are left to the coordinating session.
+Date: 2026-10-26. Author verification is recorded below. Review passes are recorded below as they occur.
 
 ## Scope and source
 
 The `unrecorded-process` follow-up of [`implement-worker-start-reconciliation`](../archive/2026-10-26-implement-worker-start-reconciliation/design.md) (design D5 and coordinator decision Q2). The implementing subagent stopped at its specification gate and reported the gap; the owner's away delegate chose option A (OpenCode run `20261026T110406Z-opencode-12993`), relayed by the coordinator. The scope is as the design's owner decision states.
 
 - Base revision: `503a0be` on `dev`.
-- Reviewed revision (pass 1): `ab9c95e`. Final checks: on the final head of the branch, the commit that adds the pass 1 record (see "Checks and results").
+- Reviewed revisions: `ab9c95e` (pass 1) and `4853d57` (pass 2). Final checks: `make verify` at `59e034f`; the later commit that records them changes only this file (see "Checks and results").
 - Out of scope: the fate of leftover record directories (a separate future task), any journal format or AsyncAPI change, macOS.
 
 ## Environment
@@ -32,6 +32,7 @@ The `unrecorded-process` follow-up of [`implement-worker-start-reconciliation`](
 - Author, before review, at `3ad8666`: `make verify` exit 0; 1627 tests, 1612 passed, 0 failed, 15 skipped; coverage 99.13% lines, 91.61% branches, 98.59% functions.
 - Coordinating session, on the reviewed revision `ab9c95e`: `make verify` exit 0; 1627 tests, 1612 passed, 0 failed, 15 skipped; coverage 99.13% lines, 91.61% branches, 98.59% functions.
 - Author, after the pass 1 fixes, at `644311f`, at `7ad8b0f`, and on the final head (each later commit changes only this file): `make verify` exit 0 each time; 1628 tests, 1613 passed, 0 failed, 15 skipped; coverage 99.14% lines, 98.59% functions, and 91.60% to 91.62% branches across the runs; `Every comment is within the comment length rule.`; `Every active OpenSpec change archives into strictly valid specs.`; `Packed file allowlist and installed CLI verification passed.`
+- Final, after the pass 2 fixes, at `59e034f`: `make verify` exit 0; 1628 tests, 1613 passed, 0 failed, 15 skipped; coverage 99.13% lines, 91.59% branches, 98.59% functions; `Every comment is within the comment length rule.`; `Every active OpenSpec change archives into strictly valid specs.`; `Packed file allowlist and installed CLI verification passed.` The commit that records this run changes only this file.
 - `npm run openspec -- validate implement-unrecorded-process-scan --strict`: `Change 'implement-unrecorded-process-scan' is valid`.
 
 ## Review pass 1
@@ -53,7 +54,26 @@ The `unrecorded-process` follow-up of [`implement-worker-start-reconciliation`](
 | L5 Low: the worker's own home cgroup is not excluded | Recorded in design.md Risks as a future self-check task; no code change (`644311f`) |
 | L6 Low: the final `make verify` must run on the final head and name it | "Checks and results" names each run and its revision |
 
-The pass 1 fixes are Low or Medium; a further pass is the coordinator's decision under the review process.
+The pass 1 fixes are Low or Medium; pass 2 reviewed them.
+
+## Review pass 2
+
+- Reviewer: Claude Code with Fable. Invocation: as in pass 1.
+- Reviewed revision: `4853d57`. Run: 2026-10-26, 13:57:30 to 14:02:10 local time.
+- Model confirmation: `modelUsage` names `claude-fable-5-1`. Session ID: `5a159597-2371-49b0-ac93-de13b6b6fc85`.
+- Snapshot: before and after `a77cf3b00df4355ae44db63aeb4439f8fba0063df726377bc3e73cf9cbf5099a` (unchanged).
+- The reviewer did not run `make verify` (no Docker); it ran the new tests (16 of 16 passed), `openspec validate --strict`, and `verify:comments`.
+- Pass 1 resolutions: M1, L1, L2, and L4 confirmed resolved; L3 and L5 resolved as documented risks; L6 partially resolved (new L1 below).
+- Counts: Critical 0, High 0, Medium 0, Low 4.
+
+Low only, so the fixes below are **unreviewed**, as the review process allows.
+
+| Finding | Resolution (unreviewed) |
+| --- | --- |
+| L1 Low: this record named the wrong head for the final checks, and its date line was stale | The final run names `59e034f`; the date line says review passes are recorded as they occur |
+| L2 Low: tasks.md said "M1 and L1 to L6 fixed" | Now "M1, L1, L2, L4, L6 fixed; L3 and L5 recorded as accepted risks in design.md" (`59e034f`) |
+| L3 Low: `linux.ts` used a sentinel 0 for an invalid `cgroup.procs` line | A line that is not decimal returns the `invalid` failure at once (`30d2f12`) |
+| L4 Low: design D3 named the reconciliation queue as the guard on the normal path | D3 now says the inbox classifies the known identity and records it without effect, and the queue's duplicate rule is only the second guard (`59e034f`) |
 
 ## Limitations
 
@@ -63,5 +83,5 @@ The pass 1 fixes are Low or Medium; a further pass is the coordinator's decision
 
 ## Remaining gates
 
-- Independent review, at most three passes.
 - Integration and archive by the coordinator.
+- `make verify-linux-cgroup` against a real delegated cgroup v2 parent: not run.
