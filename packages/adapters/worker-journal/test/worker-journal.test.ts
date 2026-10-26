@@ -395,6 +395,19 @@ test('an assignment end is journaled before or after its offer and ends the assi
   assert.deepEqual(value(journal.recordCommand(end(3, 1))), { kind: 'recorded' });
 });
 
+test('a launch rejected with assignment-not-active ends its assignment, also after a reopen', () => {
+  value(journal.recordCommand(assignment(1)));
+  value(journal.recordCommand(assignment(2)));
+  value(journal.beginAuthorization(launchRequest(EXECUTION, OPERATION)));
+  value(journal.beginAuthorization(launchRequest(id('ExecutionId', 'execution-2'), id('OperationId', 'operation-2'), 2)));
+  value(journal.recordLaunchRejection(OPERATION, { reason: 'assignment-not-active', retryable: false, message: 'ended' }));
+  value(journal.recordLaunchRejection(id('OperationId', 'operation-2'), { reason: 'gate-not-passed', retryable: false, message: 'gate' }));
+  root.close();
+  root = value(openWorkerRoot(rootOptions(root.paths.dataRoot)));
+  journal = root.journal;
+  assert.deepEqual(value(journal.snapshot()).intents.map((entry) => entry.ended), [true, false]);
+});
+
 test('a capacity declaration is journaled only when it changes, each with its own identity', () => {
   value(journal.recordCapacity(CAPACITY));
   value(journal.recordCapacity(CAPACITY));
