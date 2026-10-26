@@ -103,8 +103,9 @@ services:
     cgroup: private
     cap_drop: [ALL]
     cap_add: [CHOWN, DAC_OVERRIDE, KILL, SETGID, SETPCAP, SETUID, SYS_ADMIN]
-    # The remount of /sys/fs/cgroup needs no AppArmor profile in its way.
-    security_opt: ["apparmor=unconfined", "no-new-privileges=true"]
+    # The remount of /sys/fs/cgroup needs no AppArmor profile in its way;
+    # the seccomp profile refuses namespaces despite SYS_ADMIN (seccomp/).
+    security_opt: ["apparmor=unconfined", "no-new-privileges=true", "seccomp=./seccomp/worker.json"]
     # Reaps executions whose supervisor ended first.
     init: true
     environment:
