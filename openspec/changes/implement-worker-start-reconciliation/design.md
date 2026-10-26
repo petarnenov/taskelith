@@ -7,6 +7,8 @@
 - **Q1 (A): scope.** 20d is the start reconciliation (every `planJournalRecovery` action, recover and adopt, retry or uncertain, a dead supervisor, record removal, leftovers, the expired-pending and deadline-cycle fixes), the AsyncAPI 0.5.0 amendment for `boot-changed` and `namespace-ended` (approved, with a compatibility check and a version bump), and structured logs. The heartbeat, the `status()` watcher, lost-contact and offline mode, the inventory on every reconnect, and the failed-first-connect requirement change go to 20d2 (`implement-worker-contact-and-offline`).
 - **Q2 (A): evidence facts.** 20d adds the journal facts and wire mapping of `termination-unproven` and `cancellation.not-applied`. `unrecorded-process` (the Linux cgroup scan) is a separate follow-up.
 - **Journal format.** The terminal-confirmed query, the W3 `expired` outcome, and the new fact kinds are approved, with a format step, a migration, and a spec delta.
+- **Review pass 2, M-B (option B): narrow, do not decouple.** Decided by the owner's away delegate (OpenCode `kimi-k2.7-code`, run `20261026T095212Z-opencode-38865`), not by the owner. Start reconciliation and record removal run only in a worker with `TASKELITH_WORKER_COMMAND`, because only that worker builds a supervision host. A worker without it logs each inherited open execution once as `worker.reconciliation.deferred` and leaves its journal rows and record for a later start with the command.
+- **Obligation for 20d2 (`implement-worker-contact-and-offline`).** Decouple the supervision host's construction from the launch command, so start reconciliation and record removal run without `TASKELITH_WORKER_COMMAND`.
 
 ## Goals / Non-Goals
 
@@ -49,7 +51,7 @@ Format 3 adds `terminal_sequence`, `record_removed`, and `termination_unproven` 
 
 ### D7: logs
 
-`main.ts` logs JSON lines to standard error through `Logger`. The events are `worker.reconciliation.planned`, `worker.execution.recovered`, `worker.execution.uncertain`, `worker.supervisor.lost`, `worker.execution.leftover`, `worker.execution.record-removed`, and `worker.execution.record-kept`. The logger is optional in the orchestrator and silent by default.
+`main.ts` logs JSON lines to standard error through `Logger`. The events are `worker.reconciliation.planned`, `worker.execution.recovered`, `worker.execution.uncertain`, `worker.supervisor.lost`, `worker.execution.leftover`, `worker.execution.record-removed`, `worker.execution.record-kept`, and, in a worker without a launch command, `worker.reconciliation.deferred`. The logger is optional in the orchestrator and the worker start, and silent by default.
 
 ## Risks / Trade-offs
 

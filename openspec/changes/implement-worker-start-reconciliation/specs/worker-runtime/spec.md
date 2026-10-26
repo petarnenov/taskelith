@@ -21,7 +21,7 @@ A worker SHALL start no launch without a grant, whatever the state of its broker
 ## ADDED Requirements
 
 ### Requirement: Start reconciliation
-On its first pass after a start, a worker SHALL reconcile each execution an earlier process left open exactly once and SHALL spawn nothing for it: a pending W2 or an unused grant is sealed and reported `not-started`, an operation of an execution without a grant that expired or was rejected as retryable is authorized again for that execution, and a journaled record goes to the supervisor's recovery table.
+On its first pass after a start, a worker with `TASKELITH_WORKER_COMMAND` SHALL reconcile each execution an earlier process left open once and SHALL spawn nothing for it: a pending W2 or an unused grant is sealed and reported `not-started`, an operation without a grant that expired or was rejected as retryable is authorized again for that execution, and a journaled record goes to the supervisor's recovery table.
 
 #### Scenario: Pending W2 on start
 - **WHEN** the worker starts with a W2 that has no outcome
@@ -35,6 +35,13 @@ On its first pass after a start, a worker SHALL reconcile each execution an earl
 - **WHEN** the recovery table answers `uncertain`
 - **THEN** the worker reports `execution.uncertain` once, logs the reason, and never reconciles that execution again in the process
 
+### Requirement: Deferred reconciliation without a launch command
+A worker started without `TASKELITH_WORKER_COMMAND` SHALL reconcile and remove nothing: it SHALL log each execution an earlier process left open once as `worker.reconciliation.deferred` and SHALL leave its journal rows and record for a later start with the command.
+
+#### Scenario: Open execution without the command
+- **WHEN** the worker starts without `TASKELITH_WORKER_COMMAND` and the journal holds an open execution
+- **THEN** it logs `worker.reconciliation.deferred` once with the execution's identifier, seals nothing, and journals nothing for it
+
 ### Requirement: Supervisor liveness
 While a claimed record has no terminal fact, a worker SHALL check its supervisor's liveness every tenth poll and SHALL let the recovery table decide an execution whose supervisor is gone.
 
@@ -43,7 +50,7 @@ While a claimed record has no terminal fact, a worker SHALL check its supervisor
 - **THEN** the worker reports `execution.uncertain` and logs `worker.supervisor.lost`
 
 ### Requirement: Execution record removal
-A worker SHALL remove an execution record only after the journal reports its terminal fact confirmed, SHALL journal the removal after the directory is gone, and SHALL keep a record whose supervisor still holds its lock for a later pass.
+A worker with `TASKELITH_WORKER_COMMAND` SHALL remove an execution record only after the journal reports its terminal fact confirmed, SHALL journal the removal after the directory is gone, and SHALL keep a record whose supervisor still holds its lock for a later pass.
 
 #### Scenario: Held record
 - **WHEN** the terminal fact is confirmed and the supervisor still holds the record's lock

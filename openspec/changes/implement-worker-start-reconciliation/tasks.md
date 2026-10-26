@@ -16,6 +16,9 @@
 - [x] 2.7 Existing tests updated (orchestrator, supervision adapter, observations)
 - [x] 2.8 New tests: start reconciliation (seal, recover, retry, adopt, uncertain once), liveness, removal, leftovers, logs, not-applied and survivors through the watch, supervisor termination survivors
 - [x] 2.9 Worker start wiring test with logger and records
+- [x] 2.10 Review pass 2, M-B (option B): a worker without `TASKELITH_WORKER_COMMAND` logs each inherited open execution once as `worker.reconciliation.deferred` and reconciles nothing; a worker-level logger wired in `main.ts`
+- [x] 2.11 Tests: a deferred log once per open execution, no launch host, an unchanged journal; no open executions, no deferred log
+- [x] 2.12 Spec delta (worker-runtime): start reconciliation and record removal need the command; deferred reconciliation requirement; design decision and the 20d2 obligation
 
 ## 3. Records and checks
 
