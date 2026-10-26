@@ -9,16 +9,17 @@ const MAX_FAILURE_TEXT = 160;
 const LINK_SEPARATOR = ' <- ';
 const ELLIPSIS = '…';
 
-const NAME = /^[A-Za-z][A-Za-z0-9_$]{0,63}$/;
-// Below the 32 characters of a token run, so no seed passes as a code.
+// Both below the 32 characters of a token run, so no seed passes as one.
+const NAME = /^[A-Za-z][A-Za-z0-9_$]{0,30}$/;
 const CODE = /^[A-Z][A-Z0-9_]{0,30}$/;
 
 // Line breaks, then rules the logger's `redactText` lacks (decision 4).
 const BEFORE_REDACT_TEXT: readonly (readonly [RegExp, string])[] = [
   [/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' '],
   [/\b[a-z][a-z0-9+.-]*:\/\/\S*/gi, '[url]'],
+  [/[^\s/?#@:'"]+:[^\s/?#@'"]+@/g, `${REDACTED}@`],
   [/\b((?:proxy-)?authorization)(["']?\s*[=:]\s*["']?)[^;,"']*/gi, `$1$2${REDACTED}`],
-  [/\b(password|passwd|pwd|secret|token|api[_-]?key)(["']?\s*:\s*)("(?:[^"\\]|\\.)*"?|'(?:[^'\\]|\\.)*'?|\S+)/gi, `$1$2${REDACTED}`],
+  [/\b(password|passwd|passphrase|pass|pwd|secret|token|credentials?|cookie|private[_-]?key|api[_-]?key)(["']?\s*:\s*)("(?:[^"\\]|\\.)*"?|'(?:[^'\\]|\\.)*'?|\S+)/gi, `$1$2${REDACTED}`],
 ];
 const AFTER_REDACT_TEXT: readonly (readonly [RegExp, string])[] = [
   [/eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*/g, REDACTED],
@@ -78,9 +79,10 @@ function causeChain(thrown: unknown): object[] {
   let link = thrown;
   while (isObject(link) && !chain.includes(link)) {
     chain.push(link);
-    if (chain.length === MAX_CODE_DEPTH) break;
+    if (chain.length === MAX_CODE_DEPTH) return chain;
     link = nextCause(link);
   }
+  if (chain.length > 0 && isText(link)) chain.push({ message: link });
   return chain;
 }
 
@@ -115,6 +117,12 @@ function replace(text: string, [pattern, replacement]: readonly [RegExp, string]
 
 function truncate(text: string, limit: number): string {
   return text.length <= limit ? text : `${text.slice(0, limit - ELLIPSIS.length)}${ELLIPSIS}`;
+}
+
+// A string cause, such as `new TypeError('x', { cause: 'y' })`, ends the
+// chain as a link of its own.
+function isText(value: unknown): value is string {
+  return typeof value === 'string' && value !== '';
 }
 
 function isObject(value: unknown): value is object {
