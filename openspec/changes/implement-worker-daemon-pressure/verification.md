@@ -36,12 +36,24 @@ Every value comes from an existing document or constant; none was invented.
 - **OpenSpec:** `npm run openspec -- validate implement-worker-daemon-pressure --strict` passes; every requirement is under 400 characters.
 - **make verify:** passed at `9739dbe` (1656 tests, 0 failures; coverage 99.24% lines, 91.77% branches, 98.73% functions).
 
-## Review passes
+## Review pass 1
+
+OpenCode, `opencode-go/kimi-k3.1-pro` (`high`), read-only reviewer agent, session `ses_e87ca5a0bffeEajVzlELneb5uU`, invoked as `opencode run --standalone --agent reviewer -m 'opencode-go/kimi-k3.1-pro#high' --format json --title implement-worker-daemon-pressure "$(cat <prompt-file>)" < /dev/null > <log>`. The model was set by `-m` only: standalone sessions are not stored in the global OpenCode database, and the JSON events carry no model field, so the model could not be confirmed from the session (a limitation). The snapshots before and after the pass matched (`8566d434e44dc4e838f592f0900e30d7838786f6ebd1e9c6343bea4546916f73`). Findings: 0 Critical, 2 High, 2 Medium, 1 Low.
+
+- **High 1 (fixed, `137de33`, tests `705d9ba`):** `#sealUnwritten` wrote W6, W4, and `uncertain` through `reported()`, so a refusal for space was a failure, with the execution already claimed, until the next start. They now go through `commitFact` (`space-retry.ts`): a refusal for space is retried after the 5 s to 60 s backoff with jitter, until it commits or the worker stops, and is not reported. The claim is kept as the guard against a second reconciliation; the retry ends only with a commit or the stop (design D5). Tests: a pending W2, an unused grant lost to a claim, and a recovered `uncertain`, each with one and three refusals.
+- **High 2 (fixed, `137de33`, tests `705d9ba`):** `Launch.#notStarted`, `#claimedBeforeW4`, and `#recordUncertain` ended the launch on a refusal for space. They now retry through `commitFact` on the stop signal, so a cancellation does not end the retry. The exclusion of the W6 after a launch's own seal is removed from the design. Tests: a live launch's own seal with two refusals, after which it goes on with a new execution, and a seal lost to a claim with refused W4 and `uncertain`.
+- **Medium 1 (fixed, `137de33`, tests `705d9ba`):** an empty histogram read as `ok(0)`. `EventLoopLagWindow.lagMilliseconds` answers undefined for a window without a sample, and the sensor answers a failure, so `unmeasurable-limit`; the `event-loop.lag` metric still reads it as zero. Tests: the lag window and the sensor before any sample.
+- **Medium 2 (fixed, `137de33`, tests `705d9ba`):** a histogram read that threw escaped the sensor and ended the watch. The sensor catches it and answers a failure; a failed close leaves the lag unmeasured until a later close succeeds, and the loop goes on. Test: a histogram whose `percentile()` throws, during and after the watch.
+- **Low (fixed, `137de33`, tests `705d9ba`):** the histogram was enabled at construction and disabled only by the watch. `EventLoopLagWindow.start` enables it, and the watch starts and stops it, so a start that fails before its loops, and the test, hold none. Test: no histogram is enabled before the watch, and it is disabled after.
+- **make verify:** passed at `1974fb0` (1665 tests, 0 failures; coverage 99.24% lines, 91.77% branches, 98.71% functions).
+
+## Review pass 2
 
 Pending.
 
 ## Limitations and remaining gates
 
 - Remaining gates: the independent review, the coordinator's integration into `dev`, and the archive of this change.
-- A launch write (W2 to W4, or a W6 after a launch's own seal) refused for space sheds the logs but is not retried in place; the next pass or the next start continues as before (design, Risks).
+- A launch write (W2, W3, or the W4 before a supervisor starts) refused for space sheds the logs but is not retried in place; the next pass or the next start continues as before (design, Risks).
+- Each start reports `unmeasurable-limit` until its first refresh after the event-loop histogram has a sample, within 5 seconds (design, Risks).
 - The worker's event-loop lag is not published as a metric.
