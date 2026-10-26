@@ -4,14 +4,15 @@
 
 - G3 work plan item 6 (`docs/g3-plan.md`), assigned by the coordinator on 2026-10-26, under the owner's decision of 2026-10-26 that starts the G3 wave 1 contracts (items 3, 5, 6, 7, and 8) in parallel with G2.
 - Sources: the plan row; G3 plan decisions D3 (a), D4 (a), and D7 (a); ADR 0010's code-head deferral; architecture section 6 (Modules, head-bound evidence, content-addressed snapshots) and R21 and R31; the worker journal contract sections 2, 6, and 7; the storage contract; the trust model section 5; the source control contract section 3 (`RunCredential`, `RunCredentialIssuer`); the G2 evidence store (`EvidenceStore`, `EvidencePublisher`, `EvidencePublication`); the account pool, product ports, and source control contracts and their archived changes for structure and style.
-- Delivered: `docs/contracts/git-workspace.md`; the `git-workspace-port` spec delta; the `@taskelith/workspace` module with `CodeHeadIdentity` (`parseCodeHeadIdentity`, `isSameCodeHead`, `parseGitObjectId`), the contract values (`WORKSPACE_LAYOUT`, `TASK_BRANCH_PREFIX`, `WORKSPACE_KINDS`, `DIRTY_REASONS`, `WORKSPACE_FAILURE_REASONS`, `HEAD_SNAPSHOT_EVIDENCE_KIND`), the rules `workspaceDirectoryName`, `taskBranchName`, `cleanHead`, and `checkCredentialScope`, the `WorkspaceLifecycle`, `WorkspaceHeads`, `TaskBranchPublisher`, and `WorkspaceProvider` ports, the `WorkspaceFixture`, and the `WORKSPACE_CONFORMANCE` suite, run against a temporary-directory double with a fake Git service and three defective variants; pointers to the new contract from the worker journal and source control contracts; the regenerated dependency inventory for the new workspace package.
+- Delivered: `docs/contracts/git-workspace.md`; the `git-workspace-port` spec delta; the `@taskelith/workspace` module with `CodeHeadIdentity` (`parseCodeHeadIdentity`, `isSameCodeHead`, `parseGitObjectId`), the contract values (`WORKSPACE_LAYOUT`, `TASK_BRANCH_PREFIX`, `WORKSPACE_KINDS`, `DIRTY_REASONS`, `WORKSPACE_FAILURE_REASONS`, `HEAD_SNAPSHOT_EVIDENCE_KIND`), the rules `workspaceDirectoryName`, `taskBranchName`, `cleanHead`, and `checkCredentialScope`, the `WorkspaceLifecycle`, `WorkspaceHeads`, `TaskBranchPublisher`, and `WorkspaceProvider` ports, the `WorkspaceFixture`, and the `WORKSPACE_CONFORMANCE` suite, run against a temporary-directory double with a fake Git service and twelve defective variants; pointers to the new contract from the worker journal and source control contracts; the regenerated dependency inventory for the new workspace package.
 - Not delivered, by scope: the Git adapter and any Git call, an SCM adapter, worker runtime wiring, the snapshot format, wire schemas, and UI.
 
 ## Revision
 
 - Implementation commit: `b51cd00`, on branch `define-git-workspace-contract`, created from `origin/dev` at `d22d727`; first records commit `6f8861e`.
 - Fixes after review pass 1: `652854e`, recorded in `1719c3a`.
-- Fixes after review pass 2: `37f5bd3`; this record is updated in the commit that follows it.
+- Fixes after review pass 2: `37f5bd3`, recorded in `3b893bd`.
+- Review pass 3 and its unreviewed Low fix: recorded in the commit that follows `3b893bd`.
 
 ## Environment
 
@@ -74,15 +75,33 @@ Reviewer for all passes: Codex CLI v0.164.0, model `gpt-6.1-sol`, reasoning effo
   - M4 cleanup allowed removing a dirty workspace, against architecture invariant 7: `remove` now refuses a dirty workspace with `precondition-failed` and reason `workspace-dirty` and keeps it (contract sections 3, 9, and 11, the spec, and the port comment); discarding a dirty workspace on an operator's decision is recorded as a later, separately defined policy and not implemented. The removal case uses an ignored link to a control record, which keeps the workspace clean, and checks that a workspace with an untracked file is refused and kept; the sweep case removes a workspace whose link to a control record is committed. Design decision 3 and contract section 3 explain why `sweep` stays within invariant 7: a staging entry is an incomplete clone no attempt has used, and a removing entry was clean when `remove` renamed it after the attempt's terminal fact. A defective variant that removes a dirty workspace is reported.
 - Resolution commit: `37f5bd3`.
 
+### Pass 3
+
+- Model confirmation: `gpt-6.1-sol` with reasoning effort medium, Codex CLI v0.164.0, read-only sandbox, as the coordinator reported from the Codex run. Session ID `01a1779d-f37b-7e43-98f5-0b43f361ab7d`.
+- Reviewed revision: `origin/dev...3b893bd`. The prompt named pass 2's session and findings.
+- Snapshot before and after: `f37b3c195c756e7d7b63dcbb9366e1626fef70e27ce2537dcafaa8e79a887a2f`, unchanged.
+- Pass 2 confirmations: M1 to M4 correct and complete; pass 2 M1 also closes pass 1 M4, and pass 2 M2 closes the remainder of pass 1 M3.
+- Findings: 0 Critical, 0 High, 2 Medium, 1 Low.
+  - M1 the suite does not check staged-only changes: the contract counts a staged change as `modified`, but the fixture has no staging operation and the double compares only the working tree with the head, so a change staged and then reverted in the working tree leaves the index different and an adapter that checks only the working tree passes. Proposed fix: index state and a staging helper in the fixture and the double; checks that such a workspace is `modified` and that `snapshot`, `push`, and `remove` refuse it and keep it; a defective variant that ignores the index. **Open**, not fixed.
+  - M2 the suite does not check that a snapshot preserves binary content: `TreeEntry.content` and the write helpers are text and the double reads UTF-8, so an adapter that corrupts a blob through a UTF-8 round trip, for example the bytes 0, 128, and 255, passes. Proposed fix: a byte representation in the fixture, a binary write helper, a snapshot check with bytes that are not valid UTF-8, and a defective variant. **Open**, not fixed.
+  - L1 the delivered summary in this record said "three defective variants" while the suite's table has twelve: fixed in "Scope and source" (unreviewed fix, below).
+- Under the governance review process ("At most three passes per task"), pass 3 is the last allowed pass. M1 and M2 remain open pending the owner's decision, with these options: fix them without another review and record the fixes as unreviewed; accept them as known risks of this contract; or defer them to a follow-up change, for example with item 16, whose Git adapter runs the suite against real Git.
+
+### Unreviewed fixes after pass 3
+
+1. L1: the delivered summary now says twelve defective variants. Documentation only.
+
 ## Limitations
 
 - The suite runs only against a test-only double; the Git adapter (item 16) runs it against real Git.
 - Discarding a dirty workspace on an operator's explicit decision is not defined here; a later change defines that policy.
 - The snapshot format is not fixed here; item 16 chooses it.
+- Open after pass 3: the suite does not yet check staged-only changes or binary snapshot content (pass 3 M1 and M2).
 - `CodeHeadIdentity` is not yet joined to the evidence record's `codeRevision` or the merge queue's `CodeHead`; item 17 does that (contract section 14).
 
 ## Remaining gates
 
-- Independent review pass 3 of the pass 2 resolutions (Codex, `gpt-6.1-sol`, medium effort, read-only), the last allowed pass, with fixes and a final `make verify`.
+- The owner's decision on pass 3 M1 (staged-only changes) and M2 (binary snapshot content): fix without review, accept as known risks, or defer.
+- After that decision, any unreviewed fixes recorded here and a final `make verify`.
 - Integration into `dev` by the coordinator.
 - Archive of the change after the merge.
