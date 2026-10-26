@@ -287,9 +287,10 @@ export class SqliteWorkerJournal implements WorkerJournal {
 
   recordRecordRemoved(executionId: ExecutionId): Result<void> {
     return this.#connection.transact((database) => {
-      const updated = database.prepare('UPDATE execution SET record_removed = 1 WHERE execution_id = ? AND terminal_sequence IS NOT NULL')
-        .run(executionId);
-      return updated.changes === 0 ? err(notInState(executionId, 'terminal')) : ok(undefined);
+      const updated = database.prepare(`UPDATE execution SET record_removed = 1
+        WHERE execution_id = ? AND terminal_sequence IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM outbox WHERE outbox.sequence = execution.terminal_sequence)`).run(executionId);
+      return updated.changes === 0 ? err(notInState(executionId, 'terminal and confirmed')) : ok(undefined);
     });
   }
 

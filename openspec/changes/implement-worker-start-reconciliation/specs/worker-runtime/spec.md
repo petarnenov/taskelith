@@ -21,7 +21,7 @@ A worker SHALL start no launch without a grant, whatever the state of its broker
 ## ADDED Requirements
 
 ### Requirement: Start reconciliation
-On its first pass after a start, a worker SHALL reconcile each execution an earlier process left open exactly once and SHALL spawn nothing for it: a pending W2 or an unused grant is sealed and reported `not-started`, an operation that expired or was rejected as retryable is authorized again for the same execution, and a journaled record goes to the supervisor's recovery table.
+On its first pass after a start, a worker SHALL reconcile each execution an earlier process left open exactly once and SHALL spawn nothing for it: a pending W2 or an unused grant is sealed and reported `not-started`, an operation of an execution without a grant that expired or was rejected as retryable is authorized again for that execution, and a journaled record goes to the supervisor's recovery table.
 
 #### Scenario: Pending W2 on start
 - **WHEN** the worker starts with a W2 that has no outcome
