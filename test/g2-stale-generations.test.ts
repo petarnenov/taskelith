@@ -15,7 +15,6 @@ import { Gate, waitFor } from './g2-scenarios/waiting.ts';
 // with two workers and a seeded order of their authorization requests.
 const SEED = seedFromEnvironment();
 console.log(`g2 stale generation scenarios: ${rerunHint(SEED)}`);
-const B4 = 'product bug B4 (away run 20261026T164615Z-opencode-20899): an old-epoch exit ends its task (openspec/changes/run-g2-partition-and-races/verification.md)';
 const EPOCH_TASKS = ['task-epoch-1', 'task-epoch-2'];
 
 type WorkerOverrides = Partial<Omit<ScenarioWorkerOptions, 'name' | 'random'>>;
@@ -92,8 +91,8 @@ describe('stale generations', () => {
     }));
   });
 
-  // Expected to fail: today the old-epoch exit ends its task (B4).
-  test('an old-epoch exit is kept as evidence and changes no state', { timeout: 120_000, todo: B4 }, async () => {
+  // Guards the B4 fix (#302): an old-epoch exit is evidence only.
+  test('an old-epoch exit is kept as evidence and changes no state', { timeout: 120_000 }, async () => {
     const random = new SeededRandom(SEED);
     await recordScenario({ scenario: 'stale-epoch-exit-is-evidence', seed: SEED }, () => withInstallation({ postgres: 'direct' }, async (installation) => {
       const run = await advanceEpochBetweenRequests(installation, random);
