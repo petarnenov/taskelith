@@ -9,4 +9,4 @@ An exit, `not-started`, `uncertain`, `termination-unproven`, or `cancellation.no
 
 #### Scenario: Exit in quarantine
 - **WHEN** a current-epoch exit arrives during restore quarantine
-- **THEN** it is kept as evidence, no state changes, and the same exit after the quarantine ends its attempt
+- **THEN** it is kept as evidence and no state changes; a repeat of it after the quarantine is a duplicate and replays nothing, and only reconciliation acts on the evidence

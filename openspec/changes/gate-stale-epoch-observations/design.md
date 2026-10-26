@@ -26,7 +26,7 @@ Each execution observation carries a required `recoveryEpoch`, as `execution.sta
 
 `make contract-compatibility` reports the added required fields as breaking changes of `execution.asyncapi.json` (192 changes over the dereferenced document, against `62d324e`) and fails while `info.version` stays 0.5.0. The document is 0.6.0, the minor increase that declares a breaking change while the major version is 0. `execution.openapi.json` is unchanged.
 
-- **Protocol version stays 1.** Wire contracts section 3 asks for the next protocol version when a worker of the current version could not execute a change correctly, such as a new required field. The author kept version 1 because no worker or control plane of version 1 runs outside this repository: both are private workspace packages built from one commit, and nothing of them is published or deployed. Earlier tightenings of worker observations after their merge kept version 1 too, such as the declared capacity bounds (`13ca8fe`). This is recorded as an open point for the owner; the alternative is protocol version 2 with a control-plane window of 1 to 2, which would need a rule for a version 1 observation without an epoch.
+- **Protocol version stays 1, as a recorded pre-release exception.** Wire contracts section 3 asks for the next protocol version when a worker of the current version could not execute a change correctly, such as a new required field. The owner's delegate decided in away run `20261026T183040Z-opencode-31830` to keep version 1 as a bounded exception, because: the worker and the control plane are private workspace packages built from one commit; G2 is unreleased, and nothing of them runs outside this repository; the journal format 4 migration (D5) gives facts already queued in a worker's outbox their epoch, so no queued observation is published without it; and an earlier tightening of worker observations after its merge kept version 1 too (`13ca8fe`, the declared capacity bounds). The exception ends at the first release of an execution package or at the G2 closure, whichever comes first; after that, wire contracts section 3 applies strictly. No version window of 1 to 2 and no rule for an observation without an epoch are added.
 
 ### D3: one domain check, applied before the effect
 
@@ -47,5 +47,5 @@ Facts stored in a format 3 outbox have no epoch, and the worker would publish th
 
 ## Risks / Trade-offs
 
-- **Protocol version 1 kept (D2).** A worker built before this change would have its execution observations quarantined as malformed. No such worker exists outside development clones; the owner may still choose version 2.
+- **Protocol version 1 kept (D2).** A worker built before this change would have its execution observations quarantined as malformed. No such worker exists outside development clones, and the bounded pre-release exception of D2 ends at the first release of an execution package or the G2 closure.
 - **Evidence only in the inbox and the log.** An evidence observation is not stored apart from the inbox entry and the warning; quarantine reconciliation (G6) defines how it reads them.

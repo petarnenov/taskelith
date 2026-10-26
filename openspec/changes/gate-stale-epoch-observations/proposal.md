@@ -21,6 +21,7 @@ None.
 - `observation-consumption`: "Epoch gate before effects" (added).
 - `execution-wire-contracts`: "Execution observations" requires the recovery epoch on every fact and unapplied cancellation.
 - `worker-journal-adapter`: "Execution facts with wire fields" carries the intent's epoch; "Journal format 3" becomes "Journal format 4".
+- `worker-journal`: the "Format versioning" scenario names formats 2 to 4.
 
 ## Impact
 
