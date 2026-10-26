@@ -119,7 +119,7 @@ export class ScenarioInstallation {
   }
 
   async start(): Promise<void> {
-    this.#running = value(await startControlPlane({ ...this.#settings, api: this.#running?.api ?? this.#settings.api }));
+    this.#running = value(await startControlPlane(this.#settings));
   }
 
   async stop(): Promise<void> {
@@ -130,10 +130,10 @@ export class ScenarioInstallation {
     return this.#running?.stopped;
   }
 
-  environment(extra: Record<string, string> = {}): Record<string, string> {
+  environment(): Record<string, string> {
     return {
       TASKELITH_DATA_DIR: this.#settings.dataRoot, TASKELITH_POSTGRES_URL: this.database.href, TASKELITH_NATS_URL: this.nats.href,
-      TASKELITH_OPERATOR_TOKEN: this.#operator, ...extra,
+      TASKELITH_OPERATOR_TOKEN: this.#operator,
     };
   }
 

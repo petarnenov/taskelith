@@ -7,7 +7,6 @@ import type { ScenarioWorker } from './scenario-worker.ts';
 import { waitFor } from './waiting.ts';
 
 export interface ExecutedTask {
-  readonly result: Record<string, unknown>;
   readonly executions: number;
   readonly startKind: string;
 }
@@ -15,7 +14,7 @@ export interface ExecutedTask {
 // The task ended exited 0, with one started execution in its only attempt.
 // A start redelivered after the exit is applied as a historical start.
 export async function assertExitedOnce(installation: ScenarioInstallation, taskId: string): Promise<ExecutedTask> {
-  const result = await installation.ended(taskId);
+  await installation.ended(taskId);
   await waitFor(async () => (await startedExecutions(installation, taskId)) > 0, REDELIVERY_BUDGET_MILLISECONDS + 5_000, 'the start fact');
   const task = await installation.task(taskId);
   assert.equal(task.attempts.length, 1, 'one attempt');
@@ -23,7 +22,7 @@ export async function assertExitedOnce(installation: ScenarioInstallation, taskI
   assert.deepEqual(attempt!.outcome?.kind === 'exited' && attempt!.outcome.status, { kind: 'code', code: 0 });
   const started = attempt!.executions.filter((execution) => execution.start !== undefined);
   assert.equal(started.length, 1, `one started execution: ${JSON.stringify(task)}`);
-  return { result, executions: attempt!.executions.length, startKind: started[0]!.start!.kind };
+  return { executions: attempt!.executions.length, startKind: started[0]!.start!.kind };
 }
 
 export async function startedExecutions(installation: ScenarioInstallation, taskId: string): Promise<number> {

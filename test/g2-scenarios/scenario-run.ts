@@ -32,13 +32,11 @@ export interface InstallationOptions {
 // a placement candidate.
 export async function withInstallation<T>(options: InstallationOptions, body: (installation: ScenarioInstallation) => Promise<T>): Promise<T> {
   const installation = await ScenarioInstallation.create('g2', { postgres: options.postgres });
-  try {
-    return await body(installation);
-  } finally {
+  return withCleanup(() => body(installation), async () => {
     await options.toxiproxy?.reset();
     killProcessesNaming(installation.base);
     await installation.close();
-  }
+  });
 }
 
 // A partition scenario waits for the Toxiproxy lock within its timeout.
@@ -51,12 +49,27 @@ export async function withPartitions<T>(body: (toxiproxy: Toxiproxy) => Promise<
   const url = integrationEndpoint('TASKELITH_TOXIPROXY_URL');
   const release = await acquireProcessLock(`toxiproxy-${url.port}`, PARTITION_LOCK_MILLISECONDS);
   const toxiproxy = new Toxiproxy(url);
+  return withCleanup(() => body(toxiproxy), async () => {
+    try {
+      await toxiproxy.reset();
+    } finally {
+      await release();
+    }
+  });
+}
+
+// Runs the cleanup after the body; a cleanup failure is logged and does not
+// replace the body's own failure, which is what the scenario reports.
+async function withCleanup<T>(body: () => Promise<T>, cleanup: () => Promise<void>): Promise<T> {
+  let value: T;
   try {
-    return await body(toxiproxy);
-  } finally {
-    await toxiproxy.reset();
-    await release();
+    value = await body();
+  } catch (error) {
+    await cleanup().catch((cleanupError: unknown) => console.error(`scenario cleanup failed: ${messageOf(cleanupError)}`));
+    throw error;
   }
+  await cleanup();
+  return value;
 }
 
 function messageOf(error: unknown): string {
