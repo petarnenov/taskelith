@@ -7,6 +7,8 @@ import {
   type AssignmentId,
   type AttemptId,
   type LaunchAuthorizationRequest,
+  type LaunchGrant,
+  type LaunchOutcome,
   type WorkerId,
 } from '@taskelith/execution';
 import { ok } from '@taskelith/kernel';
@@ -83,4 +85,30 @@ export async function placedTask(store: PostgresDatabase, task: string, workerId
       reportsNotStarted: false,
     } as LaunchAuthorizationRequest,
   };
+}
+
+// A placed attempt whose execution a test launches.
+export interface LaunchTarget {
+  readonly taskId: TaskId;
+  readonly attemptId: AttemptId;
+  readonly generation: number;
+  readonly assignmentId: AssignmentId;
+}
+
+// Issues the grant of the execution through the launch authority, as the
+// worker's launch does (item 21d decision 8).
+export async function issueGrant(
+  authority: LaunchAuthority, store: PostgresDatabase, target: LaunchTarget, workerId: WorkerId, executionId: string,
+): Promise<LaunchGrant> {
+  const admission = value(await store.transaction(async (tx) => {
+    const task = await tx.tasks.get(target.taskId);
+    return task.ok ? tx.admissions.get(task.value.admissionId) : task;
+  }));
+  const outcome = value(await authority.authorize({ workerId, generation: 1 }, {
+    operationId: id('OperationId', `operation-${executionId}`), recoveryEpoch: 1 as never, assignmentId: target.assignmentId,
+    attemptId: target.attemptId, ownershipGeneration: target.generation as never, executionId: id('ExecutionId', executionId),
+    admissionId: admission.id, admissionGeneration: admission.generation, reportsNotStarted: false,
+  } as LaunchAuthorizationRequest));
+  assert.equal(outcome.kind, 'granted', JSON.stringify(outcome));
+  return (outcome as Extract<LaunchOutcome, { kind: 'granted' }>).grant;
 }

@@ -24,6 +24,7 @@ export { PostgresInventoryReports, PostgresInventoryRequests } from './inventory
 export { MIGRATIONS_DIRECTORY, migrate } from './migrations.js';
 export { PostgresProducerCursors, PostgresWorkerReports } from './observation-repositories.js';
 export { PostgresOutboxRelay } from './outbox-relay.js';
+export { PostgresReconciliationQueue, PostgresUnrecordedProcesses } from './reconciliation-repositories.js';
 export {
   PostgresDatabase,
   SERIALIZATION_ATTEMPTS,
