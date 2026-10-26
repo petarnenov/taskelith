@@ -14,6 +14,7 @@ import {
   type LaunchGrant,
   type LaunchIntent,
   type LaunchOutcome,
+  type LaunchRequest,
 } from '@taskelith/execution';
 import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
 import { parseGeneration, parseOwnershipGeneration } from '@taskelith/sdlc';
@@ -204,4 +205,15 @@ export class FakeSupervisions {
   get all(): FakeSupervision[] {
     return [...this.byExecution.values()];
   }
+}
+
+// The W2 request of an intent's execution, as an earlier process sent it.
+export function requestOf(executionId: string, operationId: string, number = 1): LaunchRequest {
+  const intent = intentOf(number);
+  return {
+    operationId: id('OperationId', operationId), workerId: BINDING.workerId, recoveryEpoch: intent.recoveryEpoch,
+    assignmentId: intent.assignmentId, attemptId: intent.attemptId, ownershipGeneration: intent.ownershipGeneration,
+    executionId: id('ExecutionId', executionId), admissionId: intent.admissionId,
+    admissionGeneration: intent.admissionGeneration, reportsNotStarted: false,
+  };
 }

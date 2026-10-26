@@ -169,7 +169,7 @@ test('an escaped descendant keeps the set unproven until it is gone', async () =
 
   assert.deepEqual(events(setup), [
     { kind: 'descendant', process: identity(501) },
-    { kind: 'survivors', processes: [identity(501)] },
+    { kind: 'survivors', processes: [{ ...identity(501), processGroupId: 501 }] },
   ]);
   assert.equal(outcome.kind, 'exited');
 });
@@ -192,7 +192,7 @@ test('termination is proven only by two consecutive listings without the group',
   const listingsBefore = setup.fake.listings;
   const outcome = await run;
 
-  assert.deepEqual(events(setup), [{ kind: 'survivors', processes: [identity(502)] }]);
+  assert.deepEqual(events(setup), [{ kind: 'survivors', processes: [{ ...identity(502), processGroupId: 500 }] }]);
   assert.equal(outcome.kind, 'exited');
   assert.ok(setup.fake.listings - listingsBefore >= 2);
 });

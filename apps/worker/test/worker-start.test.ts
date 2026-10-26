@@ -9,6 +9,7 @@ import { SUPPORTED_PROTOCOL_VERSIONS, checkMessageSchema } from '@taskelith/cont
 import type { Enrollment, EnrollmentClient, EnrollmentRequest } from '@taskelith/fleet';
 import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
 import type { TransportConnection, WorkerTransportEndpoint } from '@taskelith/nats';
+import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { failed, id, value } from '@taskelith/testing';
 import {
   launchFailureLine,
@@ -340,4 +341,14 @@ test('a launch failure line uses an object\'s message, and falls back on what it
   assert.deepEqual(badDetails.error, { code: 'internal', message: 'a launch failed: m' });
   const unprintable = { toString: () => { throw new Error('no text'); } };
   assert.deepEqual(JSON.parse(launchFailureLine(unprintable)).error, { code: 'internal', message: 'a launch failed' });
+});
+
+test('the host\'s record listing and the logger reach the start reconciliation', async () => {
+  const launching = new RecordingLaunching();
+  const sink = new InMemoryLogSink();
+  launching.hostAnswer = ok({ clock: new FakeClock(), supervision: new FakeSupervisions().factory, records: async () => ok(['stray-1']) });
+  const dependencies = { ...launching.dependencies, logger: new Logger(sink, { now: () => T0 }) };
+  await start({ ...settings, launch: LAUNCH }, dependencies);
+  await until(() => sink.records.some(({ event }) => event === 'worker.execution.leftover'));
+  assert.deepEqual(sink.records.find(({ event }) => event === 'worker.execution.leftover')?.fields, { record: 'stray-1' });
 });

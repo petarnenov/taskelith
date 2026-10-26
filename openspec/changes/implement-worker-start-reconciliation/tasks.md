@@ -14,8 +14,8 @@
 - [x] 2.5 Orchestrator: inherited executions reconciled once, seal, resume, removal, leftovers, logs
 - [x] 2.6 Deadline cycle and expired answer: W3 `expired`, same execution, `reportsNotStarted`
 - [x] 2.7 Existing tests updated (orchestrator, supervision adapter, observations)
-- [ ] 2.8 New tests: start reconciliation (seal, recover, retry, adopt, uncertain once), liveness, removal, leftovers, logs, not-applied and survivors through the watch, supervisor termination survivors
-- [ ] 2.9 Worker start wiring test with logger and records
+- [x] 2.8 New tests: start reconciliation (seal, recover, retry, adopt, uncertain once), liveness, removal, leftovers, logs, not-applied and survivors through the watch, supervisor termination survivors
+- [x] 2.9 Worker start wiring test with logger and records
 
 ## 3. Records and checks
 
