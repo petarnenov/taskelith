@@ -62,3 +62,12 @@ OpenCode, `opencode-go/kimi-k3.1-pro` (`high`, set by `-m` in the invocation, wh
 
 - **M-A (fixed, `c44a59e`):** the M2 fix dropped the whole `termination-unproven` fact when a survivors event listed no process, or only group-less legacy entries, although macOS reports an empty list when no process listing can be taken. The fact is now left out only when no survivors event exists; otherwise it carries the reportable survivors, possibly none. Tests: adapter reads, the watch reports it once, and the wire message is valid.
 - **M-B (fixed, option B):** without `TASKELITH_WORKER_COMMAND` no orchestrator is built, so the start reconciliation and record removal did not run, while the delta read as unconditional. The coordinator brought the options to the owner's away delegate (OpenCode `kimi-k2.7-code`, run `20261026T095212Z-opencode-38865`), which chose B; this is the delegate's decision, not the owner's. Both requirements now apply to a worker configured to launch; without the command the worker logs each inherited open execution once as `worker.reconciliation.deferred` and leaves it. Obligation for 20d2 `implement-worker-contact-and-offline`: build the supervision host without the launch command, so that reconciliation and removal run without it.
+- **make verify:** passed at `984cb37` (1460 tests, 0 failures; coverage 99.23% lines, 91.37% branches, 98.71% functions).
+
+## Review pass 3
+
+OpenCode, `opencode-go/kimi-k3.1-pro` (`high`, set by `-m`, as recorded in the OpenCode log), session `ses_e88554684ffe8v7Vxw4NTDuaUI`, at `984cb37`. The snapshot was identical before and after the pass (`18b79782…`). The reviewer confirmed the resolutions of M-A and M-B. Findings: 0 Critical, 0 High, 1 Medium, 2 Low. This was the last allowed pass; the Medium finding went to the coordinator.
+
+- **M-1 (open, with the coordinator):** the schema lets `boot-changed` and `namespace-ended` carry any `ExitStatus`, and `readExit` accepts such a record, although the delta requires status `unknown`; the contract test has no negative case.
+- **L-1 (open):** the delta and docs say "an operation without a grant" instead of "an operation of an execution without a grant", which reopens the H2 ambiguity.
+- **L-2 (open):** three comments in `launch-orchestrator.ts` name the wrong design decision (D5, D3, D4).
