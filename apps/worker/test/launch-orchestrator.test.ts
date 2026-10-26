@@ -533,6 +533,30 @@ test('cancellation names a superseded execution: the running one goes on, and ev
   assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
 });
 
+test('a cancellation journaled right after its execution ended leaves the next one launched', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  let launches = 0;
+  supervisions.onCreated = (supervision) => {
+    launches += 1;
+    supervision.facts = launches === 1
+      ? [{ problems: [], launch: { kind: 'seal', by: 'supervisor', reason: 'deadline-passed' } }]
+      : [{ problems: [], process: PROCESS }];
+  };
+  // The pass decides before the launch resumes after the W6 commit.
+  const recordNotStarted = journal.recordNotStarted.bind(journal);
+  journal.recordNotStarted = (executionId) => {
+    const committed = recordNotStarted(executionId);
+    journal.recordNotStarted = recordNotStarted;
+    value(journal.recordCommand(cancellation(1, { executionId })));
+    void orchestrator.pass(controller.signal);
+    return committed;
+  };
+  await orchestrator.pass(controller.signal);
+  await until(() => authority.requests.length >= 2);
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
+});
+
 test('an attempt cancellation still stops the running execution of its intent', async () => {
   const { running } = await supersededThenRunning();
 
