@@ -16,7 +16,7 @@ Date: 2026-10-26. Author verification is recorded below; the independent review 
 
 ## Evidence
 
-- Revision: `f5807d7` for the author check; `4ba367d` after the pass 1 fixes.
+- Revision: `f5807d7` for the author check; `4ba367d` after the pass 1 fixes; `a42e076` after the pass 2 fix.
 - Environment: macOS 26.6.2 x86_64, Node v24.22.1, Docker with the Compose services of `make verify`.
 - Dependencies: no package added.
 - Contracts: no change to `docs/contracts`, `execution.asyncapi.json`, or the OpenAPI document; journal format 3 unchanged.
@@ -51,7 +51,7 @@ Codex, `gpt-6.1-sol` (`medium`, model and effort confirmed from the session head
 - **Pass 1 High 2, Medium, Low:** resolved.
 - **Pass 1 High 1:** not resolved, reported again as High. The directory checks and the later operations used separate path lookups: a root or nested directory replaced by a link to `worker/journal/` after its `lstat` was followed by `readdirSync`, and `O_NOFOLLOW` guards only the last component, so a single-link journal file could be truncated.
 - **Fix (`b6f1e34`, tests `48dfaaa`):** Node 24 has no `openat`-like primitive and macOS `/dev/fd` cannot traverse a directory descriptor, so no native dependency was added. Each directory's device and inode are recorded on traversal; before truncating a descriptor, the chain is checked unchanged, the path must name the descriptor's inode, and the chain is checked again (design D6). Tests through an injected file-system seam: the root swapped for a link, the root swapped and restored around the open, and a nested directory swapped for a link. The residual race and its threat model are in design D6; complete protection is not claimed.
-- **make verify:** VERIFY3.
+- **make verify:** passed at `a42e076` (1644 tests, 0 failures; coverage 99.23% lines, 91.74% branches, 98.81% functions).
 
 ## Review pass 3
 
