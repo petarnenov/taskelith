@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseGeneration, parseOwnershipGeneration } from '@taskelith/sdlc';
 import {
+  lastSealedExecution,
   parseRecoveryEpoch,
   planJournalRecovery,
   type AuthorizationOutcome,
@@ -108,4 +109,16 @@ test('a cancellation is forwarded until its evidence is recorded and stops the l
 test('a cancelled execution with an unused grant is sealed and not relaunched', () => {
   const cancellation: JournaledCancellation = { commandId: COMMAND, target: { kind: 'execution', executionId: EXECUTION }, evidenceRecorded: true };
   assert.deepEqual(plan([execution(['granted'], 'authorized')], [cancellation]), [seal]);
+});
+
+test("a new execution reports the intent's last sealed one with its last granted, else last, operation", () => {
+  const snapshot = (executions: JournaledExecution[]): JournalSnapshot => ({ intents: [INTENT], cancellations: [], executions });
+  const later = { ...execution(['expired', 'granted', 'expired'], 'not-started'), executionId: id('ExecutionId', 'execution-2') };
+  const other = { ...later, executionId: id('ExecutionId', 'execution-3'), assignmentId: id('AssignmentId', 'assignment-2') };
+  const sealed = lastSealedExecution(snapshot([execution(['granted'], 'not-started'), later, other]), INTENT.assignmentId);
+  assert.deepEqual(sealed, { executionId: 'execution-2', operationId: 'operation-1' });
+  const ungranted = lastSealedExecution(snapshot([execution(['expired', 'expired'], 'not-started')]), INTENT.assignmentId);
+  assert.deepEqual(ungranted, { executionId: EXECUTION, operationId: 'operation-1' });
+  assert.equal(lastSealedExecution(snapshot([execution(['granted'], 'exited')]), INTENT.assignmentId), undefined);
+  assert.equal(lastSealedExecution(snapshot([]), INTENT.assignmentId), undefined);
 });

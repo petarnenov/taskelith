@@ -192,6 +192,26 @@ test('only an unspawned authorized execution is authorized again, and no other e
   assert.equal((await rows('SELECT 1 FROM launch_authorizations WHERE live')).length, 2);
 });
 
+test('a new execution that reports the sealed owner is granted, and the owner ends not-started in the same commit', async () => {
+  const { request } = await placed();
+  grantOf(await authority.authorize(PRINCIPAL, request));
+  const relaunch = {
+    ...request, operationId: id('OperationId', 'operation-2') as never, executionId: id('ExecutionId', 'execution-2') as never,
+    reportsNotStartedFor: { executionId: request.executionId, operationId: request.operationId },
+  };
+  const lost = authorityOn(open(new CrashPoints({ point: 'LaunchAuthorizationCommit.before', occurrence: 1, action: 'throw' })));
+  await assert.rejects(lost.authorize(PRINCIPAL, relaunch), SimulatedCrash);
+  const live = 'SELECT execution_id, live FROM launch_authorizations ORDER BY execution_id';
+  assert.deepEqual(await rows(live), [{ execution_id: request.executionId, live: true }], 'nothing of a lost decision commits');
+  const second = grantOf(await authority.authorize(PRINCIPAL, relaunch));
+  assert.equal(second.executionId, 'execution-2');
+  assert.deepEqual(await rows(live), [
+    { execution_id: 'execution-2', live: true },
+    { execution_id: request.executionId, live: false },
+  ]);
+  assert.equal(grantOf(await authority.authorize(PRINCIPAL, relaunch)).launchAuthId, second.launchAuthId, 'a retry replays the grant');
+});
+
 test('a replay after the deadline is expired, and expiry changes nothing stored', async () => {
   const { request } = await placed();
   const short = authorityOn(database, value(parseLaunchParameters({ ttlMilliseconds: 300, skewMilliseconds: 100 })));

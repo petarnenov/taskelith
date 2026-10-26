@@ -45,8 +45,8 @@ function composedDependencies(settings: WorkerSettings): WorkerDependencies {
   };
 }
 
-// D1 needs the relaunch's answer before the control plane processes the
-// sealed execution's `not-started`; the hold makes that order certain.
+// The race of defect D1: the relaunch is answered before the sealed
+// execution's `not-started` is published; the hold makes that order certain.
 class NotStartedHold {
   readonly #answered = new Set<string>();
 
