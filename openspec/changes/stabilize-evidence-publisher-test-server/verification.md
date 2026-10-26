@@ -85,4 +85,4 @@ The change adds no external link.
 
 ## Final checks
 
-PENDING
+`make verify` passed on the final tree at `c20ba72`, after the pass 2 fixes: 1931 tests, 1929 passed, 0 failed, 2 skipped; coverage of all files was 99.28% lines, 92.08% branches, and 99.04% functions. The next commit only records this result and removes its placeholder.
