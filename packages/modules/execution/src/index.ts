@@ -117,11 +117,12 @@ export {
   type ReportFreshness,
   type SnapshotAssembly,
 } from './domain/inventory.js';
-export { lastSealedExecution, planJournalRecovery, type RecoveryAction } from './domain/journal-recovery.js';
+export { planJournalRecovery, unconfirmedSealedExecutions, type RecoveryAction } from './domain/journal-recovery.js';
 export { unknownExecutionsOf, type UnknownExecution, type UnrecordedProcess } from './domain/reconciliation.js';
 export {
   authorizeLaunch,
   checkLaunchPreconditions,
+  REPORTED_SEALS_LIMIT,
   rejectUnknownAssignment,
   replayLaunchOperation,
   type GrantIssue,

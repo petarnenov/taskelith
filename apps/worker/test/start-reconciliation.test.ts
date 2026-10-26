@@ -163,7 +163,7 @@ for (const until of ['pending', 'granted'] as const) {
     };
     await startOnce();
     await startOnce();
-    assert.deepEqual(authority.requests[0]?.reportsNotStartedFor, { executionId: EXECUTION, operationId: 'operation-1' });
+    assert.deepEqual(authority.requests[0]?.reportsNotStartedFor, [{ executionId: EXECUTION, operationId: 'operation-1' }]);
     assert.deepEqual(value(journal.snapshot()).executions.map(({ state }) => state), ['not-started', 'exited']);
   });
 }
@@ -247,6 +247,22 @@ test('an operation that expired is resumed for the same execution, reporting not
   assert.deepEqual(value(journal.snapshot()).executions.map(({ state }) => state), ['exited']);
 });
 
+test('a granted execution sealed at runtime and a pending W2 after it are both reported with the next one', async () => {
+  inherit('granted');
+  value(journal.recordNotStarted(EXECUTION));
+  const relaunch = requestOf('relaunch-2', 'operation-2');
+  value(journal.beginAuthorization(relaunch));
+  authority.answers = [grantedToOwner(EXECUTION)];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  await startOnce();
+  await startOnce();
+  const reported = [{ executionId: EXECUTION, operationId: 'operation-1' }, { executionId: relaunch.executionId, operationId: 'operation-2' }];
+  assert.deepEqual(authority.requests[0]?.reportsNotStartedFor, reported);
+  assert.deepEqual(value(journal.snapshot()).executions.map(({ state }) => state), ['not-started', 'not-started', 'exited']);
+});
+
 test('a resumed execution reports the sealed one, whose not-started has not reached the authority', async () => {
   inherit('granted');
   value(journal.recordNotStarted(EXECUTION));
@@ -259,7 +275,7 @@ test('a resumed execution reports the sealed one, whose not-started has not reac
   };
   await startOnce();
   assert.equal(authority.requests[0]?.executionId, resumed.executionId);
-  assert.deepEqual(authority.requests[0]?.reportsNotStartedFor, { executionId: EXECUTION, operationId: 'operation-1' });
+  assert.deepEqual(authority.requests[0]?.reportsNotStartedFor, [{ executionId: EXECUTION, operationId: 'operation-1' }]);
   assert.deepEqual(value(journal.snapshot()).executions.map(({ state }) => state), ['not-started', 'exited']);
 });
 

@@ -197,7 +197,7 @@ test('a new execution that reports the sealed owner is granted, and the owner en
   grantOf(await authority.authorize(PRINCIPAL, request));
   const relaunch = {
     ...request, operationId: id('OperationId', 'operation-2') as never, executionId: id('ExecutionId', 'execution-2') as never,
-    reportsNotStartedFor: { executionId: request.executionId, operationId: request.operationId },
+    reportsNotStartedFor: [{ executionId: request.executionId, operationId: request.operationId }],
   };
   const lost = authorityOn(open(new CrashPoints({ point: 'LaunchAuthorizationCommit.before', occurrence: 1, action: 'throw' })));
   await assert.rejects(lost.authorize(PRINCIPAL, relaunch), SimulatedCrash);

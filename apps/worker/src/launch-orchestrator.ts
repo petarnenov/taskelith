@@ -1,9 +1,9 @@
 import {
-  lastSealedExecution,
   launchRejection,
   launchRetryDelay,
   parseLaunchParameters,
   planJournalRecovery,
+  unconfirmedSealedExecutions,
   workerLaunchDeadline,
   type CancellationTarget,
   type CommandId,
@@ -399,7 +399,7 @@ type Executed = 'relaunch' | 'end';
 interface LaunchedExecution {
   readonly executionId: ExecutionId;
   readonly authorizedBefore: boolean;
-  readonly reportsNotStartedFor?: SealedExecution;
+  readonly reportsNotStartedFor?: readonly SealedExecution[];
 }
 
 // What one intent's launches work with; `resume` continues an execution
@@ -464,14 +464,14 @@ class Launch {
     }
   }
 
-  // A new or resumed execution reports the intent's last sealed one, whose
-  // `not-started` may not have reached the authority yet (journal section 5).
+  // A new or resumed execution reports the intent's unconfirmed sealed ones,
+  // whose `not-started` may not have reached the authority (journal, 5).
   #nextExecution(resume: ExecutionId | undefined): LaunchedExecution | undefined {
     const executionId = resume ?? this.#newId('ExecutionId');
     const snapshot = this.#options.journal.snapshot();
     if (executionId === undefined || !reported(this.#options, snapshot)) return undefined;
-    const sealed = lastSealedExecution(snapshot.value, this.#intent.assignmentId);
-    const report = sealed === undefined ? {} : { reportsNotStartedFor: sealed };
+    const sealed = unconfirmedSealedExecutions(snapshot.value, this.#intent.assignmentId);
+    const report = sealed.length === 0 ? {} : { reportsNotStartedFor: sealed };
     return { executionId, authorizedBefore: resume !== undefined, ...report };
   }
 
