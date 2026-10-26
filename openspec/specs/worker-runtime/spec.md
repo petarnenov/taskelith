@@ -104,7 +104,7 @@ A worker SHALL answer every `worker.inventory.requested` addressed to it with a 
 - **THEN** the worker publishes a snapshot without a `requestId`, and tries again with backoff until it is published or the connection is down again
 
 ### Requirement: Journaled launch authorization
-A worker SHALL commit W2 before the first request of an operation and W3 with each decision, and SHALL repeat a request that reached no decision with the same `operationId`, after a delay of 5 s doubling to 60 s with jitter, until its deadline. A retryable rejection SHALL be retried under a new `operationId`; a final one SHALL end the launch with its observation.
+A worker SHALL commit W2 before the first request of an operation and W3 with each decision, and SHALL repeat a request that reached no decision with the same `operationId`, after a delay of 5 s doubling to 60 s with jitter, until its deadline. A retryable rejection SHALL be retried under a new `operationId`; a final one SHALL end the launch with its observation. A new or resumed execution SHALL report the intent's last sealed one.
 
 #### Scenario: No decision
 - **WHEN** the launch authority does not answer twice and then grants
@@ -113,6 +113,10 @@ A worker SHALL commit W2 before the first request of an operation and W3 with ea
 #### Scenario: Final rejection
 - **WHEN** the authority rejects with `gate-not-passed`
 - **THEN** the worker journals the rejection with its `execution.launch.rejected` observation and never requests again for the intent
+
+#### Scenario: Relaunch after a seal
+- **WHEN** a grant arrives after the deadline and the worker seals its execution and reports it `not-started`
+- **THEN** the request for the next execution reports the sealed execution with its granted operation
 
 ### Requirement: Launch deadline
 A worker SHALL hand a grant to its supervisor only before the deadline from its suspend-inclusive clock read before the operation's first request, in the same boot. An operation past its deadline without a decision, or answered `expired`, SHALL be journaled `expired`, and the same execution SHALL be authorized again reporting it has not started. An unusable grant's execution SHALL be sealed and reported `not-started`.
@@ -193,7 +197,7 @@ On its first pass after a start, a worker with a supervision host SHALL reconcil
 
 #### Scenario: Pending W2 on start
 - **WHEN** the worker starts with a W2 that has no outcome
-- **THEN** it seals the execution, reports `not-started`, and, with a launch command, launches the intent under a new execution once online
+- **THEN** it seals the execution, reports `not-started`, and, with a launch command, launches the intent under a new execution once online, whose request reports the sealed one, so it runs although the observation has not reached the authority
 
 #### Scenario: Recovery asks to retry
 - **WHEN** the recovery table answers that the supervisor's liveness is not yet decided
