@@ -14,6 +14,7 @@ import {
   CLEAN_EXIT,
   FakeAuthority,
   FakeClock,
+  FakePressure,
   FakeSupervisions,
   PROCESS,
   T0,
@@ -28,6 +29,7 @@ let root: WorkerRoot;
 let journal: WorkerJournal;
 let remove: () => void;
 let clock: FakeClock;
+let pressure: FakePressure;
 let authority: FakeAuthority;
 let supervisions: FakeSupervisions;
 let delays: number[];
@@ -38,13 +40,14 @@ beforeEach(() => {
   ({ root, remove } = temporaryJournal());
   journal = root.journal;
   clock = new FakeClock();
+  pressure = new FakePressure();
   authority = new FakeAuthority();
   supervisions = new FakeSupervisions();
   delays = [];
   controller = new AbortController();
   let ids = 0;
   orchestrator = new LaunchOrchestrator({
-    journal, authority, supervision: supervisions.factory, clock, draw: () => 0.5, newId: () => `id-${(ids += 1)}`,
+    journal, authority, supervision: supervisions.factory, clock, pressure, draw: () => 0.5, newId: () => `id-${(ids += 1)}`,
     // Each sleep advances the clock and yields, so polling never spins; an
     // aborted signal returns at once, as the production sleep does.
     sleep: async (milliseconds, signal) => {
@@ -125,6 +128,71 @@ test('a request without a decision is repeated with the same operation, backing 
   assert.deepEqual(backoff, [7_500, 15_000]);
   assert.ok(backoff.every((delay) => delay <= LAUNCH_RETRY_DELAY.maximumMilliseconds));
   assert.equal(executions()[0]?.state, 'exited');
+});
+
+test('under admission pressure no authorization is journaled or requested until it clears', async () => {
+  value(journal.recordCommand(offer()));
+  pressure.causes = ok(['disk-floor']);
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  const launched = launchOnce();
+  await until(() => pressure.refreshes >= 3);
+  assert.deepEqual([authority.requests.length, executions().length], [0, 0]);
+  pressure.causes = ok([]);
+  await launched;
+  assert.equal(authority.requests.length, 1);
+  assert.equal(executions()[0]?.state, 'exited');
+});
+
+test('a cancellation during the wait for pressure ends the launch without an operation or a seal', async () => {
+  value(journal.recordCommand(offer()));
+  pressure.causes = ok(['disk-floor']);
+  const launched = launchOnce();
+  await until(() => pressure.refreshes >= 2);
+  value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));
+  await orchestrator.pass(controller.signal);
+  await launched;
+  assert.deepEqual([authority.requests.length, executions().length, supervisions.all.length], [0, 0, 0]);
+  await launchOnce();
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
+  assert.deepEqual(factKinds(), []);
+});
+
+test('pressure that arises between requests holds the retry of the same operation', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [unavailable(), granted()];
+  authority.onRequest = () => {
+    pressure.causes = ok(['journal-backlog']);
+  };
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  const launched = launchOnce();
+  await until(() => pressure.refreshes >= 4);
+  assert.equal(authority.requests.length, 1);
+  authority.onRequest = () => undefined;
+  pressure.causes = ok([]);
+  await launched;
+  assert.equal(new Set(authority.requests.map(({ operationId }) => operationId)).size, 1);
+});
+
+test('pressure that cannot be refreshed holds the launch and is reported', async () => {
+  const failures: unknown[] = [];
+  let ids = 0;
+  orchestrator = new LaunchOrchestrator({
+    journal, authority, supervision: supervisions.factory, clock, pressure, draw: () => 0, newId: () => `id-${(ids += 1)}`,
+    sleep: async () => new Promise((resolve) => setImmediate(resolve)), onFailure: (error) => failures.push(error),
+  });
+  value(journal.recordCommand(offer()));
+  pressure.causes = err(failure('unavailable', 'the journal is stopped'));
+  const launched = launchOnce();
+  await until(() => failures.length >= 2);
+  assert.equal(authority.requests.length, 0);
+  controller.abort();
+  await launched;
+  assert.deepEqual(executions(), []);
 });
 
 test('offline, nothing starts: past the deadline the operation expires and the same execution is asked again', async () => {
@@ -411,7 +479,7 @@ test('a launch that throws is reported and ends; the orchestrator keeps running'
   const failures: unknown[] = [];
   let ids = 0;
   orchestrator = new LaunchOrchestrator({
-    journal, authority, supervision: supervisions.factory, clock, draw: () => 0, newId: () => `id-${(ids += 1)}`,
+    journal, authority, supervision: supervisions.factory, clock, pressure, draw: () => 0, newId: () => `id-${(ids += 1)}`,
     sleep: async () => new Promise((resolve) => setImmediate(resolve)), onFailure: (error) => failures.push(error),
   });
   value(journal.recordCommand(offer()));
@@ -449,7 +517,7 @@ test('a commit that fails without changing the decision is reported', async () =
   const failures: unknown[] = [];
   let ids = 0;
   orchestrator = new LaunchOrchestrator({
-    journal, authority, supervision: supervisions.factory, clock, draw: () => 0, newId: () => `id-${(ids += 1)}`,
+    journal, authority, supervision: supervisions.factory, clock, pressure, draw: () => 0, newId: () => `id-${(ids += 1)}`,
     sleep: async () => new Promise((resolve) => setImmediate(resolve)), onFailure: (error) => failures.push(error),
   });
   value(journal.recordCommand(offer()));
@@ -541,7 +609,7 @@ test('a failed record read ends the launch and is reported', async () => {
   const failures: unknown[] = [];
   let ids = 0;
   orchestrator = new LaunchOrchestrator({
-    journal, authority, supervision: supervisions.factory, clock, draw: () => 0, newId: () => `id-${(ids += 1)}`,
+    journal, authority, supervision: supervisions.factory, clock, pressure, draw: () => 0, newId: () => `id-${(ids += 1)}`,
     sleep: async () => new Promise((resolve) => setImmediate(resolve)), onFailure: (error) => failures.push(error),
   });
   value(journal.recordCommand(offer()));
@@ -556,7 +624,7 @@ test('a failed record read ends the launch and is reported', async () => {
 function reportingOrchestrator(failures: unknown[]): LaunchOrchestrator {
   let ids = 0;
   return new LaunchOrchestrator({
-    journal, authority, supervision: supervisions.factory, clock, draw: () => 0, newId: () => `id-${(ids += 1)}`,
+    journal, authority, supervision: supervisions.factory, clock, pressure, draw: () => 0, newId: () => `id-${(ids += 1)}`,
     sleep: async () => new Promise((resolve) => setImmediate(resolve)), onFailure: (error) => failures.push(error),
   });
 }

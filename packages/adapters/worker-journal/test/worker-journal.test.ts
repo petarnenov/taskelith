@@ -406,6 +406,46 @@ test('a capacity declaration is journaled only when it changes, each with its ow
   assert.notEqual(otherJournal, entries[0]!.position.observationId);
 });
 
+test('a refusal for admission pressure is journaled with its causes', () => {
+  const { assignmentId, attemptId, ownershipGeneration } = intent(2);
+  const refused: JournaledCommand = {
+    commandId: id('CommandId', 'command-2'), digest: digest('pressure'), correlationId: CORRELATION, outcome: 'rejected',
+    kind: 'execution.assignment.offer',
+    rejection: {
+      kind: 'assignment-refused', assignment: { assignmentId, attemptId, ownershipGeneration },
+      reason: 'worker-admission-pressure', pressureCauses: ['disk-floor'],
+    },
+  };
+  value(journal.recordCommand(refused));
+  assert.deepEqual(value(journal.dueForPublication(T0)).map((entry) => entry.fact), [{
+    kind: 'assignment-refused', commandId: refused.commandId, correlationId: CORRELATION, ...pick(intent(2)),
+    reason: 'worker-admission-pressure', pressureCauses: ['disk-floor'],
+  }]);
+});
+
+test('each pressure change is journaled under its own identity, numbered by its sequence', () => {
+  value(journal.recordAdmissionPressure(['journal-backlog']));
+  value(journal.recordAdmissionPressure([]));
+  const entries = value(journal.dueForPublication(T0));
+  assert.deepEqual(entries.map((entry) => entry.fact), [
+    { kind: 'admission-pressure-changed', declaration: 1, causes: ['journal-backlog'] },
+    { kind: 'admission-pressure-changed', declaration: 2, causes: [] },
+  ]);
+  assert.equal(new Set(entries.map((entry) => entry.position.observationId)).size, 2);
+  assert.notEqual(observationIdOf(entries[0]!.fact, id('JournalId', 'journal-2')), entries[0]!.position.observationId);
+});
+
+test('the backlog counts the unconfirmed entries and their stored bytes', () => {
+  assert.deepEqual(value(journal.backlog()), { entries: 0, bytes: 0 });
+  value(journal.recordCapacity(CAPACITY));
+  value(journal.recordAdmissionPressure([]));
+  const [first, second] = value(journal.dueForPublication(T0));
+  const stored = (entry: typeof first) => Buffer.byteLength(entry!.position.observationId + JSON.stringify(entry!.fact) + entry!.recordedAt);
+  assert.deepEqual(value(journal.backlog()), { entries: 2, bytes: stored(first) + stored(second) });
+  value(journal.confirmThrough(value(parseSequence(1))));
+  assert.deepEqual(value(journal.backlog()), { entries: 1, bytes: stored(second) });
+});
+
 test('each inventory gets a higher snapshot number and the last sequence it reflects', () => {
   const first = value(journal.takeInventory());
   assert.deepEqual([first.snapshot, first.throughSequence, first.journal.intents.length], [1, 0, 0]);
