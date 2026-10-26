@@ -39,9 +39,21 @@ Codex CLI v0.163.0, invoked as `codex exec -m gpt-6-astra -c model_reasoning_eff
 
 ## Review pass 2
 
-TODO: the session decides whether a further pass is needed for M1.
+- Reviewer: Codex CLI, the same invocation as pass 1. Codex v0.163.0 header:
+  model `gpt-6-astra`, reasoning effort `medium`, sandbox `read-only`, session
+  id `01a17860-94d7-7920-888d-d05542cd61c3`.
+- Revision: `92069f7`, run 15:22:32 to 15:23:54 local time on 2026-10-26.
+- Snapshot before and after:
+  `d254d741a93b6c8e149a7c70afdc055c09d64fdcee7c3ab86900b2fd2130f777` (unchanged).
+- Pass 1 findings: M1 resolved (the `nats-transport` delta), L1 resolved
+  (evidence check in the author self-check).
+- Whole change `311c40d..92069f7` reviewed again: no new findings. The reviewer
+  ran the regression test, confirmed it fails without the fix, and ran strict
+  OpenSpec validation; it did not run `make verify`, and its comment re-check
+  was blocked by the sandbox.
+- Counts: Critical 0, High 0, Medium 0, Low 0.
 
 ## Limitations and remaining gates
 
 - `make verify-linux-cgroup` was not run; no cgroup code changed.
-- Independent review, integration, and archive are pending.
+- Integration and archive by the coordinator are pending.
