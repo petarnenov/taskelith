@@ -24,20 +24,28 @@ Under the protocol a worker SHALL archive its reviewed and verified change in th
 
 #### Scenario: Branch conflicts with dev
 - **WHEN** merging `dev` into a reported branch conflicts or invalidates its evidence
-- **THEN** the coordinator returns the task to its worker, who resolves it, runs the checks again, and has the assigned reviewer review the resolved diff before handing off again
+- **THEN** the coordinator returns the task to its worker, who restores the active change, merges `dev`, reconciles its deltas, runs the checks again, has the assigned reviewer review the resolved diff, and archives again before handing off again
 
 ## ADDED Requirements
 
-### Requirement: Re-archive after a spec conflict
-When merging `dev` into a handed-off branch conflicts under `openspec/specs/` or `openspec/changes/archive/`, the coordinator SHALL return the task; the worker SHALL revert its archive commit, merge `dev`, resolve, check, and review as for any conflict, and archive the change again onto `dev`'s specs as the branch's last commit.
+### Requirement: Return and re-archive
+On any return, the worker SHALL restore the active change by reverting its archive commit, merge `dev`, reconcile each restored delta with `dev`'s current requirement text, keeping others' edits, have the assigned reviewer review the resolved diff and the reconciliation, record it, and archive again as the last commit.
 
-#### Scenario: Living spec changed on dev
-- **WHEN** `dev` changed a living spec that the task's archive also changed, and the merge conflicts there
-- **THEN** the worker restores the active change by reverting the archive commit, merges `dev`, and archives again before handing off
+#### Scenario: Requirement changed on dev
+- **WHEN** `dev` changed a requirement that a restored delta modifies
+- **THEN** the worker rewrites the delta from `dev`'s current text, and the re-archived specs differ from `dev` only by the task's own edits
+
+#### Scenario: Conflict outside the specs
+- **WHEN** a task is returned for a conflict outside `openspec/`
+- **THEN** the worker still restores the active change and ends the branch with a new archive commit
 
 ### Requirement: Integration gate in the archived record
-A change's `verification.md` SHALL be complete before the change is archived and SHALL name integration into `dev` by the coordinator through one pull request as a remaining gate; the coordinator SHALL NOT edit the archived record at integration, and the merge pull request SHALL record the integrated revision.
+A change's `verification.md` SHALL name integration into `dev` by the coordinator through one pull request as a remaining gate; the worker SHALL record the checks of the archived tree in the archive commit itself; the coordinator SHALL NOT edit the archived record, and the merge pull request SHALL record the integration checks, its merge commit being the integrated revision.
+
+#### Scenario: Checks of the archived tree
+- **WHEN** the worker archives the change and runs the checks on the resulting working tree
+- **THEN** it writes their results into the moved `verification.md` before it commits the archive
 
 #### Scenario: Coordinator merges an archived change
 - **WHEN** the coordinator merges a branch whose archived `verification.md` names integration as its remaining gate
-- **THEN** the record stays unchanged, and the pull request and its merge commit show the integrated revision
+- **THEN** the record stays unchanged, and the pull request records the integration checks

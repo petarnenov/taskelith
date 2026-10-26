@@ -14,5 +14,6 @@
 
 - [x] 3.1 Add the spec deltas for `integration-flow`, `dependency-inventory`, and `agent-task-protocol`.
 - [x] 3.2 Run `make verify` and strict validation, and record them.
-- [ ] 3.3 Obtain the independent review and record it.
+- [ ] 3.3 Obtain the independent review and record it (pass 1 recorded and its findings fixed; pass 2 pending).
+- [x] 3.5 Demonstrate the reconciled re-archive in a scratch repository with `rearchive-demo.sh`.
 - [ ] 3.4 Archive this change on its branch under the new worker step 7.
