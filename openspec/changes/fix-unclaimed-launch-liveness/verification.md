@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-26. Author verification is recorded below; review pass 1 is recorded, and pass 2 is pending.
+Date: 2026-10-26. Author verification is recorded below; review passes 1 and 2 are recorded; pass 2 found no problems.
 
 ## Scope and source
 
@@ -57,11 +57,15 @@ OpenCode CLI, model `opencode-go/kimi-k3.1-pro`, variant `high`, read-only `revi
 
 ## Review pass 2
 
-Pending: pass 2 by the same reviewer (OpenCode CLI, `opencode-go/kimi-k3.1-pro`, variant `high`) on the fixes above.
+OpenCode CLI, model `opencode-go/kimi-k3.1-pro`, variant `high`, read-only `reviewer` agent, session `ses_e86c55a7effe5vtC9OA84URzBi`, run by the worker session from the worktree with the same invocation as pass 1; the prompt named pass 1's session and findings and asked to confirm each resolution before reviewing the whole change again. The OpenCode database records the model and the variant `high`. Revision reviewed: `284795f`. The snapshots before and after the pass matched (`acb226db137c8e1804debae75d3d582e7668b850dc1e111670cfe45f812a01ae`).
+
+- Pass 1 Medium: confirmed resolved (deadline-gated check, `100ms` regression test, thirty-poll bound removed).
+- Pass 1 Low: confirmed resolved (the scenario forbids only a liveness check of the unclaimed record).
+- New findings: 0 Critical, 0 High, 0 Medium, 0 Low. The reviewer did not rerun the tests and relied on the recorded `make verify` result.
 
 ## Limitations and remaining gates
 
 - An unreadable deadline clock counts as a passed deadline, so a slow live supervisor could then be sealed; it would seal itself on the same clock (design, Risks).
 - The fix is shown with fake supervisions; the 24b crash-window test with a real supervisor is out of scope.
 - The control-plane integration test that failed once was not investigated; it passed on the rerun.
-- Remaining gates: review pass 2, the coordinator's integration into `dev`, and the archive of this change.
+- Remaining gates: the coordinator's integration into `dev`, and the archive of this change.

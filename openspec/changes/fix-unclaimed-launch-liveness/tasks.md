@@ -10,5 +10,5 @@
 - [x] 2.1 proposal.md, design.md, spec delta (worker-runtime)
 - [x] 2.2 `npm run openspec -- validate fix-unclaimed-launch-liveness --strict`
 - [x] 2.3 `make verify`
-- [ ] 2.4 Independent review (OpenCode, kimi-k3.1-pro): pass 1 done, pass 2 pending
-- [ ] 2.5 Handoff to the coordinator
+- [x] 2.4 Independent review (OpenCode, kimi-k3.1-pro): pass 1 (1 Medium, 1 Low, fixed), pass 2 clean
+- [x] 2.5 Handoff to the coordinator
