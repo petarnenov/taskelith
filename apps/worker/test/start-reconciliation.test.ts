@@ -10,6 +10,7 @@ import {
   CLEAN_EXIT,
   FakeAuthority,
   FakeClock,
+  FakePressure,
   FakeSupervisions,
   PROCESS,
   T0,
@@ -27,6 +28,7 @@ let root: WorkerRoot;
 let journal: WorkerJournal;
 let remove: () => void;
 let authority: FakeAuthority;
+let pressure: FakePressure;
 let supervisions: FakeSupervisions;
 let sink: InMemoryLogSink;
 let records: Result<readonly string[]>;
@@ -41,6 +43,7 @@ beforeEach(() => {
   journal = root.journal;
   const clock = new FakeClock();
   authority = new FakeAuthority();
+  pressure = new FakePressure();
   supervisions = new FakeSupervisions();
   sink = new InMemoryLogSink();
   records = ok([]);
@@ -49,7 +52,7 @@ beforeEach(() => {
   controller = new AbortController();
   let ids = 0;
   orchestrator = new LaunchOrchestrator({
-    journal: failingOnce(journal), authority, supervision: supervisions.factory, clock, draw: () => 0.5, newId: () => `id-${(ids += 1)}`,
+    journal: failingOnce(journal), authority, supervision: supervisions.factory, clock, pressure, draw: () => 0.5, newId: () => `id-${(ids += 1)}`,
     sleep: async (milliseconds, signal) => {
       if (signal.aborted) return;
       clock.milliseconds += milliseconds;

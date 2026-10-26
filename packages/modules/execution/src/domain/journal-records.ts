@@ -59,16 +59,32 @@ export const COMMAND_REJECTION_REASONS = Object.freeze(['protocol-not-supported'
 
 export type CommandRejectionReason = (typeof COMMAND_REJECTION_REASONS)[number];
 
-// The worker-side refusals of capacity reservation section 8 that intake
-// raises; admission pressure joins them with the operational limits.
+// The worker-side refusals of capacity reservation section 8.
 export const ASSIGNMENT_REFUSAL_REASONS = Object.freeze([
   'resource-ceiling-exceeded',
   'control-not-enforceable',
   'worker-slots-exhausted',
   'worker-capacity-exhausted',
+  'worker-admission-pressure',
 ] as const);
 
 export type AssignmentRefusalReason = (typeof ASSIGNMENT_REFUSAL_REASONS)[number];
+
+// The causes of admission pressure (capacity reservation section 8).
+export const ADMISSION_PRESSURE_CAUSES = Object.freeze([
+  'disk-floor',
+  'journal-backlog',
+  'daemon-memory',
+  'event-loop-lag',
+  'unmeasurable-limit',
+] as const);
+
+export type AdmissionPressureCause = (typeof ADMISSION_PRESSURE_CAUSES)[number];
+
+// Only a refusal for admission pressure names causes, at least one.
+export type AssignmentRefusal =
+  | { readonly reason: Exclude<AssignmentRefusalReason, 'worker-admission-pressure'> }
+  | { readonly reason: 'worker-admission-pressure'; readonly pressureCauses: readonly AdmissionPressureCause[] };
 
 export interface ProtocolWindow {
   readonly minimum: number;
@@ -82,7 +98,7 @@ export type CommandRejection =
     readonly reason: CommandRejectionReason;
     readonly supportedProtocolVersions: ProtocolWindow;
   }
-  | { readonly kind: 'assignment-refused'; readonly assignment: AssignmentRef; readonly reason: AssignmentRefusalReason };
+  | ({ readonly kind: 'assignment-refused'; readonly assignment: AssignmentRef } & AssignmentRefusal);
 
 // `digest` identifies the command's content, so a reused `commandId` with
 // other content is a conflict, never a duplicate.
@@ -202,8 +218,13 @@ export type ObservationFact =
     readonly supportedProtocolVersions: ProtocolWindow;
   })
   | ({ readonly kind: 'assignment-accepted' } & CommandCause & AssignmentRef)
-  | ({ readonly kind: 'assignment-refused' } & CommandCause & AssignmentRef & { readonly reason: AssignmentRefusalReason })
+  | ({ readonly kind: 'assignment-refused' } & CommandCause & AssignmentRef & AssignmentRefusal)
   | { readonly kind: 'capacity-declared'; readonly declaration: number; readonly capacity: DeclaredCapacity }
+  | {
+    readonly kind: 'admission-pressure-changed';
+    readonly declaration: number;
+    readonly causes: readonly AdmissionPressureCause[];
+  }
   | ({ readonly kind: 'launch-rejected' } & ExecutionSubject & {
     readonly operationId: OperationId;
     readonly reason: LaunchRejectionReason;
@@ -218,6 +239,12 @@ export type ObservationFact =
   | ({ readonly kind: 'execution-uncertain' } & ExecutionSubject & { readonly evidenceCounter: number })
   | ({ readonly kind: 'termination-unproven' } & ExecutionSubject & { readonly survivors: readonly ExecutionProcess[] })
   | ({ readonly kind: 'cancellation-not-applied' } & ExecutionSubject & { readonly commandId: CommandId });
+
+// The unconfirmed outbox entries and the bytes they store.
+export interface OutboxBacklog {
+  readonly entries: number;
+  readonly bytes: number;
+}
 
 export interface OutboxEntry {
   readonly position: ObservationPosition;
