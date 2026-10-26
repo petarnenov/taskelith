@@ -53,7 +53,7 @@ OpenCode, `opencode-go/kimi-k3.1-pro` (`high`), read-only reviewer agent, sessio
 
 - **High (fixed, `1aa532c`, tests `d71bb12`; `f4d74bf`, tests `8965e31`):** W2, W3 for a grant, a rejection, or an expiry, and the W4 before the supervisor starts ended the launch on any failure, a refusal for space included. A W3 or W4 left an execution of this process that no later pass reconciled until a restart, and a refused W2 was replaced by a new execution. Each is now retried unchanged by `commitWrite` (renamed from `commitFact` of pass 1) for the same execution and operation, after the 5 s to 60 s backoff with jitter, until it commits or the worker stops, and is not reported. What it precedes waits for the commit: no request before W2, no use of a grant before its W3, no supervisor start before W4 (journal contract section 5); no contract change was needed. The exclusion is removed from the design and from the limitations below. Tests: each write refused and then committed without a restart; the one request follows W2 for the same operation, the supervisor starts only after W3 and W4, and a rejection and an expiry keep the same execution.
 - **Same pass, found by the author:** the cancellation evidence and the removal of a confirmed record, which each pass derives again, reported a refusal for space as a failure and were tried again at every pass. `HeldWrites` now holds each back for the same backoff without delaying the pass. Tests: both held back within the backoff and committed after it.
-- **make verify:** {VERIFY}
+- **make verify:** passed at `c16b214` (1671 tests, 0 failures; coverage 99.23% lines, 91.74% branches, 98.71% functions).
 
 ## Review pass 3
 
