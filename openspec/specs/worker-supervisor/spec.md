@@ -85,11 +85,16 @@ The execution `lock` SHALL be taken without waiting through one lock port. Only 
 - **THEN** removal fails and the record stays
 
 ### Requirement: Linux readers and containment
-On Linux, the adapter SHALL read the boot identity, process start time, parent, and group from `/proc`, and the deadline clock from `/proc/uptime`. It SHALL run each execution in a cgroup v2 containment that the child is born in. A self-check SHALL prove cgroup v2 delegation, a kill control, and that the execution account cannot write any cgroup of the worker.
+On Linux, the adapter SHALL read the boot identity, process start time, parent, and group from `/proc`, and the deadline clock from `/proc/uptime`. It SHALL run each execution in a cgroup v2 containment that the child is born in. A self-check SHALL prove cgroup v2 delegation, a kill control, and that the execution account cannot write any cgroup of the worker. The self-check SHALL fail when the worker's home cgroup is at or under the containment parent, comparing whole path segments.
 
 #### Scenario: Writable cgroup
 - **WHEN** the execution account can write a `cgroup.procs` file of the worker
 - **THEN** the self-check fails and names the file
+
+#### Scenario: Home cgroup at or under the containment parent
+- **WHEN** the worker's home cgroup is the containment parent or a cgroup under it
+- **THEN** the self-check fails, names both cgroups, and creates no probe cgroup
+- **AND** a home beside the parent, such as `init/` beside `executions/`, or one whose name only starts with the parent's name, such as `executions-home/`, is not refused for its layout
 
 ### Requirement: Named crash points
 The worker and the supervisor SHALL reach the crash points CP2, CP4, CP5 to CP9, and CP11 of contract section 4 through an injected hook, after the step each names. A crash at any of them SHALL lead to the recovery result section 6 assigns, without a second spawn.

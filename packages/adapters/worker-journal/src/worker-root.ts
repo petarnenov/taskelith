@@ -27,6 +27,8 @@ export interface WorkerRootOptions {
   readonly clock: JournalClock;
   readonly probe?: VolumeProbe;
   readonly onCommitPoint?: CommitPointHook;
+  // Called after each journal write refused for lack of space.
+  readonly onSpaceRefused?: () => void;
 }
 
 // An open worker root: the root lock is held until `close`.
@@ -234,6 +236,7 @@ function openJournal(
   if (!database.ok) return database;
   const journal = SqliteWorkerJournal.open(database.value, options.clock, {
     ...(options.onCommitPoint === undefined ? {} : { onCommitPoint: options.onCommitPoint }),
+    ...(options.onSpaceRefused === undefined ? {} : { onSpaceRefused: options.onSpaceRefused }),
     onStop: (fault) => keepStopped(paths, fault),
   });
   if (!journal.ok) {

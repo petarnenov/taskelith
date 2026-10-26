@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -124,4 +124,34 @@ test('the Linux self-check fails without cgroup v2, delegation, a kill control, 
     `the execution account can write ${join(options.home, 'cgroup.procs')}`,
   ]);
   assert.match(problems(writable).at(-1)!, /cannot be removed/);
+});
+
+test('the Linux self-check refuses a home cgroup at or under the containment parent', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-selfcheck-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  writeFileSync(join(root, 'cgroup.controllers'), 'cpu memory\n');
+  const account = { uid: process.getuid!(), gid: process.getgid!() };
+  const parent = join(root, 'executions');
+  const check = (home: string) => checkLinuxContainment({ cgroupRoot: root, containmentParent: parent, home, account });
+
+  for (const home of [parent, `${parent}/`, join(parent, 'init'), join(parent, 'a', 'b')]) {
+    assert.deepEqual(check(home), { ok: false, error: [`the home cgroup ${home} is at or under the containment parent ${parent}`] });
+  }
+  assert.equal(existsSync(join(parent, `self-check-${process.pid}`)), false);
+});
+
+test('the Linux self-check accepts a home beside the parent and compares whole segments', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-selfcheck-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  writeFileSync(join(root, 'cgroup.controllers'), 'cpu memory\n');
+  const account = { uid: process.getuid!(), gid: process.getgid!() };
+  const parent = join(root, 'executions');
+  mkdirSync(parent);
+  const layoutProblems = (home: string) => problems(checkLinuxContainment({ cgroupRoot: root, containmentParent: parent, home, account }))
+    .filter((problem) => problem.startsWith('the home cgroup'));
+
+  // Each still fails for the writes an unprivileged test cannot deny.
+  assert.deepEqual(layoutProblems(join(root, 'init')), []);
+  assert.deepEqual(layoutProblems(join(root, 'executions-home')), []);
+  assert.deepEqual(layoutProblems(root), []);
 });

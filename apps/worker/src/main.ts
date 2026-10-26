@@ -8,6 +8,7 @@ import { connectWorkerTransport } from '@taskelith/nats';
 import { redactFailure, redactSecrets } from '@taskelith/secrets';
 import { HttpEnrollmentClient, HttpLaunchAuthorityClient } from '@taskelith/worker-control-plane-client';
 import { hostPlatform } from '@taskelith/worker-supervisor';
+import { ProcessDaemonOverhead } from './daemon-overhead.js';
 import { containmentScan, fileRecordListing, fileSupervision } from './execution-supervision.js';
 import {
   CONTROL_PLANE_TIMEOUT_MILLISECONDS,
@@ -33,6 +34,7 @@ export function productionDependencies(settings: WorkerSettings): WorkerDependen
     connect: connectWorkerTransport,
     newJournalId: () => randomBytes(JOURNAL_ID_BYTES).toString('hex'),
     clock: SYSTEM_CLOCK,
+    daemon: new ProcessDaemonOverhead(),
     sleep,
     draw: Math.random,
     launching: productionLaunching(settings, logger),

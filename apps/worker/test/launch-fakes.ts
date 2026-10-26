@@ -20,7 +20,7 @@ import {
 import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
 import { parseGeneration, parseOwnershipGeneration } from '@taskelith/sdlc';
 import { id, value } from '@taskelith/testing';
-import type { AdmissionCheck, ExecutionSupervision, LaunchPlan, RecoveryRound, SupervisedFacts, SupervisedRecovery } from '@taskelith/worker';
+import type { AdmissionCheck, DaemonOverheadSource, ExecutionSupervision, LaunchPlan, RecoveryRound, SupervisedFacts, SupervisedRecovery } from '@taskelith/worker';
 import { enrollWorkerRoot, type WorkerEnrollment, type WorkerRoot } from '@taskelith/worker-journal';
 import type { DeadlineClock, DeadlineReading, LaunchRecord } from '@taskelith/worker-supervisor';
 
@@ -227,5 +227,26 @@ export class FakePressure implements AdmissionCheck {
   refresh(): Result<readonly AdmissionPressureCause[]> {
     this.refreshes += 1;
     return this.causes;
+  }
+}
+
+// The daemon's overhead as a test sets it; its watch only waits for the
+// stop.
+export class FakeDaemon implements DaemonOverheadSource {
+  resident: Result<number> = ok(64 * 2 ** 20);
+  lag: Result<number> = ok(0);
+  watches = 0;
+
+  residentBytes(): Result<number> {
+    return this.resident;
+  }
+
+  eventLoopLagMilliseconds(): Result<number> {
+    return this.lag;
+  }
+
+  async watch(signal: AbortSignal): Promise<void> {
+    this.watches += 1;
+    if (!signal.aborted) await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
   }
 }

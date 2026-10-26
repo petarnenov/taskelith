@@ -33,6 +33,7 @@ import {
   type SupervisionFactory,
 } from './execution-supervision-port.js';
 import { cancelFiled, ExecutionWatch, type Watched, type WatchTarget } from './execution-watch.js';
+import { commitWrite, HeldWrites, type SpaceRetry } from './space-retry.js';
 
 // The provisional `ttl` and `skew` (operational targets), which bound the
 // retries of an operation before any grant names its own.
@@ -78,6 +79,8 @@ export class LaunchOrchestrator {
   readonly #options: LaunchOrchestratorOptions;
   readonly #logger: Logger;
   readonly #watch: ExecutionWatch;
+  readonly #space: SpaceRetry;
+  readonly #held: HeldWrites;
   readonly #launches = new Map<string, Launch>();
   readonly #running = new Map<string, Promise<void>>();
   readonly #forwarded = new Set<string>();
@@ -89,6 +92,12 @@ export class LaunchOrchestrator {
     this.#options = options;
     this.#logger = options.logger ?? SILENT_LOGGER;
     this.#watch = new ExecutionWatch({ ...options, logger: this.#logger, onFailure: (error) => this.#failed(error) });
+    const { sleep, draw } = options;
+    this.#space = { sleep, draw, logger: this.#logger, onFailure: (error) => this.#failed(error) };
+    this.#held = new HeldWrites(this.#space, () => {
+      const reading = options.clock.read();
+      return reading.ok ? reading.value.milliseconds : undefined;
+    });
   }
 
   // Asks for a pass at once, for example after intake journaled a command.
@@ -174,7 +183,7 @@ export class LaunchOrchestrator {
     if (authority === undefined || intent === undefined || unsettled || this.#launches.has(assignmentId)) return false;
     // Registered before it runs, so a cancellation always finds it.
     const launch = new Launch({
-      options: this.#options, authority, watch: this.#watch, intent, stopping: signal,
+      options: this.#options, authority, watch: this.#watch, space: this.#space, intent, stopping: signal,
       cancellations: (executionId) => this.#cancellationsOf(assignmentId, executionId),
       ...(resume === undefined ? {} : { resume }),
     });
@@ -216,12 +225,12 @@ export class LaunchOrchestrator {
   async #sealUnwritten(target: WatchTarget): Promise<Watched> {
     const sealed = await target.supervision.seal();
     if (!reported(this.#options, sealed)) return 'ended';
+    const { executionId, stopping } = target;
     const { journal } = this.#options;
-    if (sealWon(sealed.value).ok) return reported(this.#options, journal.recordNotStarted(target.executionId)) ? 'not-started' : 'ended';
-    this.#logger.warn('worker.execution.uncertain', { executionId: target.executionId, reason: 'claimed before W4' });
-    if (reported(this.#options, journal.recordExecutionRecordWritten(target.executionId))) {
-      reported(this.#options, journal.recordUncertain(target.executionId));
-    }
+    const commit = (write: () => Result<void>) => commitWrite(this.#space, executionId, write, stopping);
+    if (sealWon(sealed.value).ok) return (await commit(() => journal.recordNotStarted(executionId))) ? 'not-started' : 'ended';
+    this.#logger.warn('worker.execution.uncertain', { executionId, reason: 'claimed before W4' });
+    if (await commit(() => journal.recordExecutionRecordWritten(executionId))) await commit(() => journal.recordUncertain(executionId));
     return 'ended';
   }
 
@@ -251,12 +260,14 @@ export class LaunchOrchestrator {
     const removable = this.#options.journal.removableRecords();
     if (!reported(this.#options, removable)) return;
     for (const executionId of removable.value) {
+      const key = `record-removed/${executionId}`;
+      if (!this.#held.due(key)) continue;
       const removed = await this.#options.supervision(executionId).remove();
       if (!removed.ok) {
         this.#logger.debug('worker.execution.record-kept', { executionId, reason: removed.error.message });
         continue;
       }
-      if (reported(this.#options, this.#options.journal.recordRecordRemoved(executionId))) {
+      if (this.#held.commit(key, () => this.#options.journal.recordRecordRemoved(executionId))) {
         this.#logger.debug('worker.execution.record-removed', { executionId });
       }
     }
@@ -284,8 +295,9 @@ export class LaunchOrchestrator {
       if (!needsCancelFile(execution, this.#launches.has(execution.assignmentId)) || this.#forwarded.has(key)) continue;
       if (cancelFiled(await this.#options.supervision(execution.executionId).cancel(reason))) this.#forwarded.add(key);
     }
-    if (launches.length === 0 && executions.every(isSettled)) {
-      reported(this.#options, this.#options.journal.recordCancellationEvidence(commandId));
+    const evidence = `cancellation-evidence/${commandId}`;
+    if (launches.length === 0 && executions.every(isSettled) && this.#held.due(evidence)) {
+      this.#held.commit(evidence, () => this.#options.journal.recordCancellationEvidence(commandId));
     }
   }
 
@@ -347,6 +359,7 @@ interface LaunchContext {
   readonly options: LaunchOrchestratorOptions;
   readonly authority: LaunchAuthorityClient;
   readonly watch: ExecutionWatch;
+  readonly space: SpaceRetry;
   readonly intent: JournaledIntent;
   readonly stopping: AbortSignal;
   readonly cancellations: (executionId: ExecutionId) => Result<readonly CommandId[]>;
@@ -429,7 +442,8 @@ class Launch {
     const reading = this.#options.clock.read();
     if (operationId === undefined || !reading.ok) return { kind: 'end' };
     const request = this.#request(executionId, operationId, reportsNotStarted);
-    if (!this.#options.journal.beginAuthorization(request).ok) return { kind: 'end' };
+    // No request leaves before W2 commits (journal contract section 5).
+    if (!(await this.#commitWrite(executionId, () => this.#options.journal.beginAuthorization(request)))) return { kind: 'end' };
     const { workerId: _worker, ...sent } = request;
     for (;;) {
       if (this.#stopping.aborted) return { kind: 'end' };
@@ -437,10 +451,10 @@ class Launch {
       const answer = await this.#context.authority.authorize(sent);
       if (this.#stopping.aborted) return { kind: 'end' };
       if (!answer.ok) {
-        if (!this.#beforeDeadline(reading.value, DEFAULT_PARAMETERS)) return this.#expired(operationId);
+        if (!this.#beforeDeadline(reading.value, DEFAULT_PARAMETERS)) return this.#expired(executionId, operationId);
         await this.#backOff();
         await this.#awaitAdmission();
-        if (!this.#beforeDeadline(reading.value, DEFAULT_PARAMETERS)) return this.#expired(operationId);
+        if (!this.#beforeDeadline(reading.value, DEFAULT_PARAMETERS)) return this.#expired(executionId, operationId);
         continue;
       }
       const outcome = answer.value;
@@ -448,11 +462,11 @@ class Launch {
         case 'granted':
           return this.#granted(outcome.grant, reading.value);
         case 'expired':
-          return this.#expired(operationId);
+          return this.#expired(executionId, operationId);
         case 'revoked':
-          return this.#rejected(operationId, launchRejection(outcome.reason, `the grant was revoked: ${outcome.reason}`));
+          return this.#rejected(executionId, operationId, launchRejection(outcome.reason, `the grant was revoked: ${outcome.reason}`));
         case 'rejected':
-          return this.#rejected(operationId, outcome.rejection);
+          return this.#rejected(executionId, operationId, outcome.rejection);
       }
     }
   }
@@ -474,23 +488,25 @@ class Launch {
   }
 
   // W3; a grant past the deadline, or of a cancelled launch, is never used.
-  #granted(grant: LaunchGrant, reading: DeadlineReading): Authorized {
-    if (!this.#options.journal.recordGrant(grant).ok) return { kind: 'end' };
+  async #granted(grant: LaunchGrant, reading: DeadlineReading): Promise<Authorized> {
+    if (!(await this.#commitWrite(grant.executionId, () => this.#options.journal.recordGrant(grant)))) return { kind: 'end' };
     if (this.#cancelled || !this.#beforeDeadline(reading, grant.parameters)) return { kind: 'abandon' };
     return { kind: 'grant', grant, reading };
   }
 
   // W3 for a rejection; only a retryable one is tried again (section 6).
-  #rejected(operationId: OperationId, rejection: LaunchRejection): Authorized {
-    if (!this.#options.journal.recordLaunchRejection(operationId, rejection).ok) return { kind: 'end' };
+  async #rejected(executionId: ExecutionId, operationId: OperationId, rejection: LaunchRejection): Promise<Authorized> {
+    const write = () => this.#options.journal.recordLaunchRejection(operationId, rejection);
+    if (!(await this.#commitWrite(executionId, write))) return { kind: 'end' };
     if (!rejection.retryable) return { kind: 'end' };
     return this.#cancelled ? { kind: 'abandon' } : { kind: 'retry-operation' };
   }
 
   // W3 `expired`: no grant of the operation can be used, and nothing was
   // written, so the same execution is authorized again (design D2).
-  #expired(operationId: OperationId): Authorized {
-    if (!this.#options.journal.recordAuthorizationExpired(operationId).ok) return { kind: 'end' };
+  async #expired(executionId: ExecutionId, operationId: OperationId): Promise<Authorized> {
+    const write = () => this.#options.journal.recordAuthorizationExpired(operationId);
+    if (!(await this.#commitWrite(executionId, write))) return { kind: 'end' };
     return this.#cancelled ? { kind: 'abandon' } : { kind: 'retry-operation' };
   }
 
@@ -512,14 +528,20 @@ class Launch {
 
   // No supervisor of this launch can claim before W4, so a claim is a record
   // nobody journaled: journal it, where a grant allows, and report uncertain.
-  #claimedBeforeW4(executionId: ExecutionId): Executed {
-    reported(this.#options, this.#options.journal.recordExecutionRecordWritten(executionId));
+  async #claimedBeforeW4(executionId: ExecutionId): Promise<Executed> {
+    if (!(await this.#commitWrite(executionId, () => this.#options.journal.recordExecutionRecordWritten(executionId)))) return 'end';
     return this.#recordUncertain(executionId);
   }
 
-  #notStarted(executionId: ExecutionId): Executed {
-    if (!this.#options.journal.recordNotStarted(executionId).ok) return 'end';
+  async #notStarted(executionId: ExecutionId): Promise<Executed> {
+    if (!(await this.#commitWrite(executionId, () => this.#options.journal.recordNotStarted(executionId)))) return 'end';
     return this.#afterNotStarted();
+  }
+
+  // A write refused for space is retried until a stop, which leaves the
+  // execution to the next start; a cancellation does not end it.
+  #commitWrite(executionId: ExecutionId, write: () => Result<void>): Promise<boolean> {
+    return commitWrite(this.#context.space, executionId, write, this.#stopping);
   }
 
   #afterNotStarted(): Executed {
@@ -534,7 +556,8 @@ class Launch {
     const { attemptId, ownershipGeneration } = this.#intent;
     const prepared = await supervision.prepare({ attemptId, ownershipGeneration, launchAuthId: grant.launchAuthId, deadline });
     if (!prepared.ok) return this.#abandon(executionId);
-    if (!this.#options.journal.recordExecutionRecordWritten(executionId).ok) return 'end';
+    // W4 commits before the supervisor starts (journal contract section 5).
+    if (!(await this.#commitWrite(executionId, () => this.#options.journal.recordExecutionRecordWritten(executionId)))) return 'end';
     if (this.#cancelled) return this.#sealWritten(executionId, supervision);
     const target = this.#target(executionId, supervision, grant);
     const started = await supervision.start();
@@ -560,8 +583,8 @@ class Launch {
     return this.#notStarted(executionId);
   }
 
-  #recordUncertain(executionId: ExecutionId): Executed {
-    reported(this.#options, this.#options.journal.recordUncertain(executionId));
+  async #recordUncertain(executionId: ExecutionId): Promise<Executed> {
+    await this.#commitWrite(executionId, () => this.#options.journal.recordUncertain(executionId));
     return 'end';
   }
 
