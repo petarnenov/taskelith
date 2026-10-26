@@ -41,3 +41,14 @@ Under the protocol, a coordinator or worker session whose context approaches 150
 #### Scenario: Worker in the middle of a task
 - **WHEN** a worker nears the limit before its handoff
 - **THEN** it recommends `/compact`, not `/clear`, and tells the coordinator
+
+### Requirement: Subagent task execution
+For a task assigned from 2026-10-26 on, the developing session SHALL delegate its worktree work to a subagent it briefs and SHALL check the result before review and handoff; the session SHALL keep messages, owner questions, the independent review, and the handoff itself; the subagent MAY record review results the session provides.
+
+#### Scenario: New task
+- **WHEN** a worker receives a task assigned on or after 2026-10-26
+- **THEN** a subagent does the worktree work and the worker checks it before review
+
+#### Scenario: Protocol steps
+- **WHEN** the subagent's work is ready
+- **THEN** the worker, not the subagent, runs the review and hands off to the coordinator
