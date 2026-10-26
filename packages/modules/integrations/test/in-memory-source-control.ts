@@ -33,12 +33,19 @@ export interface ScmDefects {
   readonly enforcesOnlyFor?: string;
   readonly alwaysSquashes?: boolean;
   readonly fabricatedMergeCommit?: boolean;
+  readonly readsOutsideProject?: boolean;
+  readonly endedCanRead?: boolean;
+  readonly refusesPermission?: string;
+  readonly grantsOnPaper?: string;
+  readonly onlyPendingBlocksFor?: string;
 }
 
 // The service's own configuration, which a conforming plugin respects.
 export interface ScmSetup {
   readonly mergeMethods?: readonly string[];
   readonly existingRequiredStatuses?: readonly string[];
+  // A permission the service adds to every grant, having no narrower one.
+  readonly alsoGrants?: string;
 }
 
 export const PROJECT = 'acme/project';
@@ -57,7 +64,7 @@ interface Protection {
 
 interface StoredCredential {
   readonly credential: RunCredential;
-  revoked: boolean;
+  ended: boolean;
   unscoped: boolean;
 }
 
@@ -81,11 +88,13 @@ export class InMemoryScm {
   private readonly defects: ScmDefects;
   private readonly mergeMethods: readonly string[];
   private readonly existingRequiredStatuses: readonly string[];
+  private readonly alsoGrants: readonly string[];
 
   constructor(defects: ScmDefects = {}, setup: ScmSetup = {}) {
     this.defects = defects;
     this.mergeMethods = setup.mergeMethods ?? DEFAULT_MERGE_METHODS;
     this.existingRequiredStatuses = setup.existingRequiredStatuses ?? [];
+    this.alsoGrants = setup.alsoGrants === undefined ? [] : [setup.alsoGrants];
   }
 
   provider(): SourceControlProvider {
@@ -126,8 +135,7 @@ export class InMemoryScm {
       advanceHead: async (branch) => this.push(PROJECT, branch),
       readBranchHead: async (branch) => this.branches.get(branchKey(PROJECT, branch))!,
       signatureHeader: SIGNATURE,
-      attemptRead: async (credential, repository) => this.access(credential.secret, repository, 'read-code'),
-      attemptWrite: async (credential, repository) => this.write(credential.secret, repository),
+      attemptAction: async (credential, repository, permission) => this.act(credential.secret, repository, permission),
       attemptBypassMerge: async (changeRequest) => this.bypassMerge(changeRequest),
       observeMergeMethod: async (mergeCommit) => this.mergedBy.get(mergeCommit) ?? 'none',
       signDelivery: async (event) => this.sign(JSON.stringify(event), WEBHOOK_SECRET),
@@ -139,49 +147,56 @@ export class InMemoryScm {
     if (!permissions.every((permission) => (SCM_PERMISSIONS as readonly string[]).includes(permission))) {
       return err(failure('invalid', 'unknown permission'));
     }
+    const refused = this.defects.refusesPermission;
+    if (refused !== undefined && permissions.includes(refused)) return err(failure('unavailable', 'permission refused'));
     const id = this.next();
     const secret = this.defects.sharedSecret ? 'shared-secret' : `secret-${id}`;
-    const credential = { credentialId: `cred-${id}`, runId, secret, repositories: [...repositories], permissions: [...permissions], expiresAt: expiry() };
-    this.credentials.set(credential.secret, { credential, revoked: false, unscoped: false });
+    const granted = [...new Set([...permissions, ...this.alsoGrants])];
+    const credential = { credentialId: `cred-${id}`, runId, secret, repositories: [...repositories], permissions: granted, expiresAt: expiry() };
+    this.credentials.set(credential.secret, { credential, ended: false, unscoped: false });
     return ok(credential);
   }
 
   private refresh(credentialId: string): Result<RunCredential> {
     const stored = this.findCredential(credentialId);
-    if (!stored || stored.revoked) return err(failure('not-found', 'unknown credential'));
+    if (!stored) return err(failure('not-found', 'unknown credential'));
     const previous = stored.credential;
     const secret = this.defects.refreshKeepsSecret ? previous.secret : `secret-${this.next()}`;
     const expiresAt = this.defects.refreshKeepsExpiry ? previous.expiresAt : extendedExpiry(previous.expiresAt);
     const credential = { ...previous, secret, expiresAt };
-    if (!this.defects.refreshKeepsOldSecret) this.credentials.delete(previous.secret);
-    this.credentials.set(secret, { credential, revoked: false, unscoped: Boolean(this.defects.refreshUnscopes) });
+    if (!this.defects.refreshKeepsOldSecret) stored.ended = true;
+    this.credentials.set(secret, { credential, ended: false, unscoped: Boolean(this.defects.refreshUnscopes) });
     return ok(credential);
   }
 
   private revoke(credentialId: string): Result<void> {
     const stored = this.findCredential(credentialId);
     if (!stored) return err(failure('not-found', 'unknown credential'));
-    stored.revoked = true;
+    stored.ended = true;
     return ok(undefined);
   }
 
   private findCredential(credentialId: string): StoredCredential | undefined {
-    return [...this.credentials.values()].find((stored) => stored.credential.credentialId === credentialId);
+    return [...this.credentials.values()].find((stored) => !stored.ended && stored.credential.credentialId === credentialId);
   }
 
-  private write(secret: string, repository: string): Result<void> {
-    const access = this.access(secret, repository, this.defects.readOnlyCanWrite ? 'read-code' : 'write-code');
-    if (access.ok) this.push(repository, BASE);
+  // Only a code write leaves a trace that later cases see.
+  private act(secret: string, repository: string, permission: string): Result<void> {
+    const writesCode = permission === 'write-code';
+    const access = this.access(secret, repository, writesCode && this.defects.readOnlyCanWrite ? 'read-code' : permission);
+    if (access.ok && writesCode) this.push(repository, BASE);
     return access;
   }
 
   private access(secret: string, repository: string, permission: string): Result<void> {
     const stored = this.credentials.get(secret);
-    if (!stored || stored.revoked || this.defects.unusableCredentials) return forbidden();
+    if (!stored || this.defects.unusableCredentials) return forbidden();
+    const reads = permission === 'read-code';
+    if (stored.ended && !(reads && this.defects.endedCanRead)) return forbidden();
     if (Date.parse(stored.credential.expiresAt) <= Date.now()) return forbidden();
     const { permissions, repositories } = stored.credential;
-    if (!permissions.includes(permission)) return forbidden();
-    const unscoped = stored.unscoped || this.defects.unscopedCredentials;
+    if (!permissions.includes(permission) || this.defects.grantsOnPaper === permission) return forbidden();
+    const unscoped = stored.unscoped || this.defects.unscopedCredentials || (reads && this.defects.readsOutsideProject);
     return repositories.includes(repository) || unscoped ? ok(undefined) : forbidden();
   }
 
@@ -207,7 +222,7 @@ export class InMemoryScm {
     const guarded = this.defects.enforcesOnlyFor === undefined || this.defects.enforcesOnlyFor === method;
     const performed = this.defects.alwaysSquashes ? 'squash' : method;
     if (guarded && current.value.headCommit !== expectedHead && !this.defects.ignoresExpectedHead) return refused('stale head');
-    if (guarded && !this.passesProtection(current.value) && !this.defects.ignoresRequiredStatuses) {
+    if (guarded && !this.passesProtection(current.value, method) && !this.defects.ignoresRequiredStatuses) {
       if (this.defects.mergesDespiteRefusal) this.complete(current.value, performed);
       return refused('required status');
     }
@@ -226,13 +241,16 @@ export class InMemoryScm {
     return ok(undefined);
   }
 
-  private passesProtection(changeRequest: ChangeRequestData): boolean {
+  // `method` is unset for the native bypass merge.
+  private passesProtection(changeRequest: ChangeRequestData, method?: string): boolean {
     const protection = this.protections.get(branchKey(changeRequest.repository, changeRequest.baseBranch));
     const enforced = (protection?.requiredStatuses ?? []).filter((context) => context !== this.defects.ignoredContext);
-    return enforced.every((context) => this.passes(this.statuses.get(statusKey(changeRequest.repository, changeRequest.headCommit, context))));
+    const { repository, headCommit } = changeRequest;
+    return enforced.every((context) => this.passes(this.statuses.get(statusKey(repository, headCommit, context)), method));
   }
 
-  private passes(state: string | undefined): boolean {
+  private passes(state: string | undefined, method?: string): boolean {
+    if (method !== undefined && this.defects.onlyPendingBlocksFor === method) return state !== 'pending';
     return state === 'success' || (Boolean(this.defects.failingStatesPass) && (state === 'failure' || state === 'error'));
   }
 

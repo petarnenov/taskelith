@@ -10,7 +10,7 @@ import { InMemoryScm, type ScmDefects, type ScmSetup } from './in-memory-source-
 
 // Helpers that run the suite and render its findings as text lines.
 
-const CASE_COUNT = 14;
+const CASE_COUNT = 15;
 
 export async function findings(fixture: SourceControlConformanceFixture): Promise<string[]> {
   const report = await runSourceControlConformance(fixture);

@@ -27,32 +27,41 @@ test('a protection that the provider identity can bypass is reported', async () 
   const lines = await defective({ bypassableProtection: true });
   assert.equal(lines[0], 'merge protection outcome: ensureMergeProtection must bind the provider identity');
   assert.ok(lines.includes('required statuses bypass: the provider identity merged past taskelith/review missing'));
-  assert.ok(lines.includes('merge method protection bypass: the provider identity merged past taskelith/review pending'));
 });
 
 test('a read-only credential that can write is reported', async () => {
   const lines = await defective({ readOnlyCanWrite: true });
-  assert.deepEqual(headings(lines), ['read-only credential outcome', 'credential isolation outcome']);
-  assert.match(lines[0]!, /attemptWrite with credential cred-\d+ to acme\/project must fail with forbidden/);
+  assert.deepEqual(cases(lines), [
+    'read-only credential outcome',
+    'change request and status credentials outcome',
+    'credential isolation outcome',
+  ]);
+  assert.match(lines[0]!, /^read-only credential outcome: write-code with credential cred-\d+ to acme\/project must fail with forbidden$/);
 });
 
 test('a credential that works for no access at all is reported', async () => {
   const lines = await defective({ unusableCredentials: true });
   assert.ok(lines.length > 0 && lines.every((line) => line.endsWith('must succeed')));
-  assert.match(lines[0]!, /^read-only credential outcome: attemptRead with credential cred-\d+ to acme\/project must succeed$/);
-  assert.ok(lines.some((line) => /^revoked credential outcome: attemptWrite .* must succeed$/.test(line)));
+  assert.match(lines[0]!, /^read-only credential outcome: read-code with credential cred-\d+ to acme\/project must succeed$/);
+  assert.ok(lines.some((line) => /^revoked credential outcome: write-code .* must succeed$/.test(line)));
 });
 
 test('a credential not limited to the project repositories is reported', async () => {
   const lines = await defective({ unscopedCredentials: true });
-  assert.deepEqual(headings(lines), ['write credential outcome', 'refreshed credential outcome']);
-  assert.match(lines[0]!, /to acme\/other must fail with forbidden/);
+  assert.ok(lines.every((line) => line.endsWith('to acme/other must fail with forbidden')));
+  assert.deepEqual(cases(lines), [
+    'read-only credential outcome',
+    'write credential outcome',
+    'change request and status credentials outcome',
+    'refreshed credential outcome',
+    'revoked credential outcome',
+  ]);
 });
 
 test('a refreshed credential that the service widened is reported', async () => {
   const lines = await defective({ refreshUnscopes: true });
-  assert.deepEqual(headings(lines), ['refreshed credential outcome']);
-  assert.match(lines[0]!, /to acme\/other must fail with forbidden/);
+  assert.deepEqual(headings(lines), Array(4).fill('refreshed credential outcome'));
+  assert.ok(lines.every((line) => line.endsWith('to acme/other must fail with forbidden')));
 });
 
 test('a refresh that does not extend the expiry is reported', async () => {
@@ -64,13 +73,13 @@ test('a refresh that does not extend the expiry is reported', async () => {
 test('a refresh that returns the same secret with a later expiry is reported', async () => {
   const lines = await defective({ refreshKeepsSecret: true });
   assert.equal(lines[0], 'refreshed credential outcome: refreshRunCredential must return a new secret');
-  assert.match(lines[1]!, /attemptWrite with credential cred-\d+ to acme\/project after its refresh must fail with forbidden/);
+  assert.match(lines[2]!, /write-code with credential cred-\d+ to acme\/project after its refresh must fail with forbidden/);
 });
 
 test('a refresh that leaves the previous secret working is reported', async () => {
   const lines = await defective({ refreshKeepsOldSecret: true });
-  assert.deepEqual(headings(lines), ['refreshed credential outcome']);
-  assert.match(lines[0]!, /after its refresh must fail with forbidden/);
+  assert.deepEqual(headings(lines), Array(4).fill('refreshed credential outcome'));
+  assert.ok(lines.every((line) => line.endsWith('after its refresh must fail with forbidden')));
 });
 
 test('one secret shared between runs is reported', async () => {
@@ -78,8 +87,52 @@ test('one secret shared between runs is reported', async () => {
   assert.deepEqual(cases(lines), ['credential isolation outcome']);
   assert.equal(lines[0], 'credential isolation outcome: credentials of two runs must have distinct secrets');
   assert.match(lines[1]!, /after another run got write-code must fail with forbidden/);
-  assert.match(lines[2]!, /attemptRead .* after another run was revoked must succeed/);
+  assert.match(lines[2]!, /read-code .* after another run was revoked must succeed/);
 });
+
+test('a credential that reads outside the project is reported', async () => {
+  const lines = await defective({ readsOutsideProject: true });
+  assert.ok(lines.length > 0);
+  assert.ok(lines.every((line) => /: read-code with credential cred-\d+ to acme\/other must fail with forbidden$/.test(line)));
+  assert.deepEqual(cases(lines), [
+    'read-only credential outcome',
+    'write credential outcome',
+    'change request and status credentials outcome',
+    'refreshed credential outcome',
+    'revoked credential outcome',
+  ]);
+});
+
+test('a refreshed or revoked credential that still reads is reported', async () => {
+  const lines = await defective({ endedCanRead: true });
+  assert.deepEqual(lines.map((line) => line.replace(/cred-\d+/, 'cred')), [
+    'refreshed credential outcome: read-code with credential cred to acme/project after its refresh must fail with forbidden',
+    'revoked credential outcome: read-code with credential cred to acme/project after its revocation must fail with forbidden',
+    'credential isolation outcome: read-code with credential cred to acme/project after its revocation must fail with forbidden',
+  ]);
+});
+
+for (const permission of ['write-change-requests', 'write-statuses']) {
+  test(`a provider that refuses ${permission} is reported`, async () => {
+    const lines = await defective({ refusesPermission: permission });
+    assert.ok(lines.length > 0 && lines.every((line) => line.endsWith('issueRunCredential failed with unavailable, expected success')));
+    assert.deepEqual(cases(lines), [
+      'change request and status credentials outcome',
+      'refreshed credential outcome',
+      'revoked credential outcome',
+    ]);
+  });
+
+  test(`a credential that lists ${permission} without honouring it is reported`, async () => {
+    const lines = await defective({ grantsOnPaper: permission });
+    assert.ok(lines.length > 0 && lines.every((line) => line.includes(`${permission} with credential`) && line.endsWith('must succeed')));
+    assert.deepEqual(cases(lines), [
+      'change request and status credentials outcome',
+      'refreshed credential outcome',
+      'revoked credential outcome',
+    ]);
+  });
+}
 
 test('a webhook verifier that ignores the signature is reported', async () => {
   const lines = await defective({ ignoresSignature: true });
@@ -97,42 +150,48 @@ test('a webhook verifier that checks only header presence and canonical JSON is 
 
 test('a merge allowed while a required status blocks is reported', async () => {
   const lines = await defective({ ignoresRequiredStatuses: true });
-  assert.deepEqual(cases(lines), ['required statuses outcome', 'merge method protection outcome']);
-  assert.match(lines[0]!, /squash and taskelith\/review missing succeeded, expected failure precondition-failed/);
+  assert.deepEqual(cases(lines), ['required statuses outcome']);
+  assert.match(lines[0]!, /merge-commit and taskelith\/review missing succeeded, expected failure precondition-failed/);
 });
 
 test('a merge that ignores one required context is reported', async () => {
   const lines = await defective({ ignoredContext: 'taskelith/verification' });
-  assert.match(lines[0]!, /^required statuses outcome: mergeChangeRequest with squash and taskelith\/verification missing succeeded/);
+  assert.match(lines[0]!, /^required statuses outcome: mergeChangeRequest with merge-commit and taskelith\/verification missing succeeded/);
 });
 
 test('an existing required context that is not enforced is reported', async () => {
   const lines = await defective({ ignoredContext: EXTRA_CONTEXT }, { existingRequiredStatuses: [EXTRA_CONTEXT] });
-  assert.deepEqual(cases(lines), ['required statuses outcome', 'merge method protection outcome']);
-  assert.match(lines[0]!, /^required statuses outcome: mergeChangeRequest with squash and existing\/required missing succeeded/);
+  assert.deepEqual(cases(lines), ['required statuses outcome']);
+  assert.match(lines[0]!, /^required statuses outcome: mergeChangeRequest with merge-commit and existing\/required missing succeeded/);
 });
 
 test('a merge that treats failure and error as success is reported', async () => {
   const lines = await defective({ failingStatesPass: true });
-  assert.match(lines[0]!, /^required statuses outcome: mergeChangeRequest with squash and taskelith\/review failure succeeded/);
+  assert.match(lines[0]!, /^required statuses outcome: mergeChangeRequest with merge-commit and taskelith\/review failure succeeded/);
+});
+
+test('a method other than the fixture method that only pending blocks is reported', async () => {
+  const lines = await defective({ onlyPendingBlocksFor: 'merge-commit' });
+  assert.deepEqual(cases(lines), ['required statuses outcome']);
+  assert.match(lines[0]!, /^required statuses outcome: mergeChangeRequest with merge-commit and taskelith\/review missing succeeded/);
 });
 
 test('a refused merge that merged anyway is reported', async () => {
   const lines = await defective({ mergesDespiteRefusal: true });
-  assert.deepEqual(cases(lines), ['required statuses outcome', 'merge method protection outcome']);
-  assert.match(lines[0]!, /after mergeChangeRequest with squash and taskelith\/review missing main moved from/);
+  assert.deepEqual(cases(lines), ['required statuses outcome']);
+  assert.match(lines[0]!, /after mergeChangeRequest with merge-commit and taskelith\/review missing main moved from/);
   assert.match(lines[1]!, /the change request is merged, not open$/);
 });
 
 test('a protection enforced for one merge method only is reported', async () => {
   const lines = await defective({ enforcesOnlyFor: 'squash' });
-  assert.deepEqual(cases(lines), ['merge method protection outcome']);
-  assert.match(lines[0]!, /mergeChangeRequest with merge-commit and taskelith\/review pending succeeded/);
+  assert.deepEqual(cases(lines), ['required statuses outcome', 'stale head outcome']);
+  assert.match(lines[0]!, /mergeChangeRequest with merge-commit and taskelith\/review missing succeeded/);
 });
 
 test('a merge of a stale head is reported', async () => {
   const lines = await defective({ ignoresExpectedHead: true });
-  assert.deepEqual(cases(lines), ['merge method protection outcome']);
+  assert.deepEqual(cases(lines), ['stale head outcome']);
   assert.match(lines[0]!, /mergeChangeRequest with merge-commit and a stale expected head succeeded/);
 });
 

@@ -19,26 +19,34 @@ The port SHALL represent repositories, change requests, commits, runs, credentia
 - **THEN** the plugin returns the number as a string, and reading the change request by that string returns the same identifier
 
 ### Requirement: Per-run credentials
-`issueRunCredential` SHALL return a credential for one run that is limited to the requested repositories and reports its effective repositories, permissions, and expiry as a kernel instant (UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`). Effective permissions SHALL cover the request and MAY exceed it, except that a credential requested without `write-code` SHALL NOT have it. A run's credential SHALL be independent of other runs' credentials.
+`issueRunCredential` SHALL return a credential for one run that is limited to the requested repositories for every permission, reads included, and reports its effective repositories, permissions, and expiry as a kernel instant (UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`). Effective permissions SHALL cover the request and MAY exceed it, except that a credential requested without `write-code` SHALL NOT have it, and SHALL be what the credential can actually do: each one works in the requested repositories, and a permission not reported does not. A run's credential SHALL be independent of other runs' credentials.
 
 #### Scenario: Credential without write permission
 - **WHEN** a credential issued with only `read-code` attempts a code write in the project's repository
 - **THEN** the service refuses the write, and the attempt fails with `forbidden`
 
 #### Scenario: Repository outside the project
-- **WHEN** a credential with `write-code` attempts a write in a repository outside the project
+- **WHEN** any credential attempts a read or a write in a repository outside the project that the plugin's own identity can access
 - **THEN** the attempt fails with `forbidden`
+
+#### Scenario: Change request and status permissions
+- **WHEN** a credential is issued with `write-change-requests` or `write-statuses`
+- **THEN** it can write change requests or statuses in the project's repository, as granted, and cannot do what it was not granted
 
 #### Scenario: Two runs at once
 - **WHEN** a read-only credential and a write credential are issued for two runs of the project
 - **THEN** the read-only credential still cannot write, and revoking either credential leaves the other usable
 
 ### Requirement: Credential refresh and revocation
-A credential's secret SHALL be delivered only to its run and never logged or stored. `refreshRunCredential` SHALL return a new secret with the same repositories and permissions and a later expiry, and SHALL end the previous secret; `revokeRunCredential` SHALL end the credential and return no value.
+A credential's secret SHALL be delivered only to its run and never logged or stored. `refreshRunCredential` SHALL return a new secret with the same repositories and permissions and a later expiry, and SHALL end the previous secret; `revokeRunCredential` SHALL end the credential and return no value. An ended secret SHALL be refused for every permission, reads included.
 
 #### Scenario: Long run
 - **WHEN** a run outlives its credential's expiry and the credential is refreshed
-- **THEN** the refreshed credential writes in the project's repository and is refused outside it, and the previous secret is refused
+- **THEN** the refreshed credential writes in the project's repository and is refused outside it, and the previous secret is refused for reads and writes
+
+#### Scenario: Revoked read-only credential
+- **WHEN** a read-only credential that could read is revoked
+- **THEN** a read with it fails with `forbidden`
 
 ### Requirement: Merge blocking that binds the plugin
 `ensureMergeProtection` SHALL configure the base branch's required statuses so that the service enforces them against the plugin's own identity, and SHALL report whether it does.
@@ -50,13 +58,13 @@ A credential's secret SHALL be delivered only to its run and never logged or sto
 ### Requirement: Merge of the reviewed head
 `mergeChangeRequest` SHALL name the expected head and the project's merge method, SHALL return the base branch head after the merge as its merge commit, and SHALL fail with `precondition-failed` while any required status is missing or not successful or when the head differs from the expected one, and with `unavailable` for a merge method the plugin does not declare.
 
-#### Scenario: Pending required status
-- **WHEN** a required status on the change request's head is pending and the plugin merges with its own identity, through the port or by the most privileged native merge
+#### Scenario: Blocking required status
+- **WHEN** a required status on the change request's head is missing, pending, failed, or in error, with any declared merge method, and the plugin merges with its own identity, through the port or by the most privileged native merge
 - **THEN** the merge is refused, the change request stays open, and the base branch is unchanged, and after every required status succeeds the merge with the project's merge method succeeds
 
 #### Scenario: Head moved after review
 - **WHEN** the head branch receives a new commit after the statuses succeed on the previous head
-- **THEN** a merge that expects the previous head fails with `precondition-failed`
+- **THEN** a merge that expects the previous head fails with `precondition-failed` with every declared merge method
 
 ### Requirement: Review evidence as a required status
 Each SCM plugin SHALL declare `required-status` review evidence: independent review is recorded as a commit status in the project's review context that merge protection requires (G3 plan D8 (a)). The port SHALL have no approval operation, because the identity that opens a change cannot approve it.

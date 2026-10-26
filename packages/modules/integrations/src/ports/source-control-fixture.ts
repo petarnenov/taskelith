@@ -17,6 +17,7 @@ export interface SignedChangeRequestEvent {
 export interface SourceControlConformanceFixture {
   readonly provider: SourceControlProvider;
   readonly projectRepository: string;
+  // Outside the project, yet open to the plugin's own identity.
   readonly foreignRepository: string;
   readonly baseBranch: string;
   readonly mergeMethod: string;
@@ -25,8 +26,9 @@ export interface SourceControlConformanceFixture {
   prepareHeadBranch(): Promise<PreparedHead>;
   advanceHead(branch: string): Promise<string>;
   readBranchHead(branch: string): Promise<string>;
-  attemptRead(credential: RunCredential, repository: string): Promise<Result<void>>;
-  attemptWrite(credential: RunCredential, repository: string): Promise<Result<void>>;
+  // Natively does what `permission` allows, such as a code write for
+  // write-code, with the run credential.
+  attemptAction(credential: RunCredential, repository: string, permission: string): Promise<Result<void>>;
   attemptBypassMerge(changeRequest: ChangeRequestData): Promise<Result<void>>;
   // The method, in port terms, by which this commit was merged.
   observeMergeMethod(mergeCommit: string): Promise<string>;

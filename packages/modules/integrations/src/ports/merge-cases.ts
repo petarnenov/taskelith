@@ -67,40 +67,37 @@ export async function checkChangeRequest(run: ConformanceCase, fixture: SourceCo
   run.expect(read.headCommit === opened.headCommit, `readChangeRequest returned head ${read.headCommit}`);
 }
 
-// Each required context, the suite's own and any other, blocks on its own
-// in every blocking state while every other one passes.
+// For every declared method, each required context, the suite's own and any
+// other, blocks on its own in every blocking state while the others pass.
 export async function checkRequiredStatuses(run: ConformanceCase, fixture: SourceControlConformanceFixture): Promise<void> {
-  const guarded = await openProtectedChangeRequest(run, fixture);
-  const blockers = guarded.requiredStatuses.flatMap((context) =>
-    BLOCKING_STATES.map((state) => ({ context, state, method: fixture.mergeMethod })));
-  await expectAllBlocked(run, fixture, guarded, blockers);
-}
-
-// Every declared method honours the protection: a pending status and a
-// stale head block it, so a plugin cannot guard only some methods.
-export async function checkMethodProtection(run: ConformanceCase, fixture: SourceControlConformanceFixture): Promise<void> {
   for (const method of declaredMergeMethods(run, fixture)) {
     const guarded = await openProtectedChangeRequest(run, fixture);
-    const blockers = guarded.requiredStatuses.map((context) => ({ context, state: 'pending' as const, method }));
-    const head = await expectAllBlocked(run, fixture, guarded, blockers);
-    await expectStaleHeadRefused(run, fixture, guarded, head, method);
+    const blockers = guarded.requiredStatuses.flatMap((context) =>
+      BLOCKING_STATES.map((state) => ({ context, state, method })));
+    await expectAllBlocked(run, fixture, guarded, blockers);
   }
 }
 
-// Each blocker gets a new head, as a status cannot be removed; returns the
-// last head.
+// A head that moved after its statuses passed blocks every declared method.
+export async function checkStaleHead(run: ConformanceCase, fixture: SourceControlConformanceFixture): Promise<void> {
+  for (const method of declaredMergeMethods(run, fixture)) {
+    const guarded = await openProtectedChangeRequest(run, fixture);
+    await expectStaleHeadRefused(run, fixture, guarded, method);
+  }
+}
+
+// Each blocker gets a new head, as a status cannot be removed.
 async function expectAllBlocked(
   run: ConformanceCase,
   fixture: SourceControlConformanceFixture,
   guarded: GuardedChangeRequest,
   blockers: readonly Blocker[],
-): Promise<string> {
+): Promise<void> {
   let head = guarded.changeRequest.headCommit;
   for (const [index, blocker] of blockers.entries()) {
     if (index > 0) head = await advanceHead(run, fixture, guarded.changeRequest);
     await expectBlocked(run, fixture, guarded, head, blocker);
   }
-  return head;
 }
 
 async function expectBlocked(
@@ -125,9 +122,9 @@ async function expectStaleHeadRefused(
   run: ConformanceCase,
   fixture: SourceControlConformanceFixture,
   guarded: GuardedChangeRequest,
-  staleHead: string,
   method: string,
 ): Promise<void> {
+  const staleHead = guarded.changeRequest.headCommit;
   await setStatuses(run, fixture, staleHead, guarded.requiredStatuses, 'success');
   const newHead = await advanceHead(run, fixture, guarded.changeRequest);
   await setStatuses(run, fixture, newHead, guarded.requiredStatuses, 'success');

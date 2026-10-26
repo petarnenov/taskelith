@@ -11,33 +11,40 @@ import { describe } from './untrusted-shapes.js';
 
 const READ_ONLY = Object.freeze(['read-code']);
 const READ_WRITE = Object.freeze(['read-code', 'write-code']);
+const CHANGE_REQUESTS = Object.freeze(['read-code', 'write-change-requests']);
+const STATUSES = Object.freeze(['read-code', 'write-statuses']);
 
 interface Probe {
-  readonly kind: 'attemptRead' | 'attemptWrite';
+  readonly permission: string;
   readonly credential: RunCredential;
   readonly repository: string;
   readonly when?: string;
 }
 
-// The read shows that the credential works, so the refused write comes
-// from its permissions and not from a broken secret.
 export async function checkReadOnlyCredential(run: ConformanceCase, fixture: SourceControlConformanceFixture): Promise<void> {
   const credential = await issueCredential(run, fixture, 'conformance-read-only', READ_ONLY);
-  await expectAllowed(run, fixture, { kind: 'attemptRead', credential, repository: fixture.projectRepository });
-  await expectRefused(run, fixture, { kind: 'attemptWrite', credential, repository: fixture.projectRepository });
+  await expectGrantedAccess(run, fixture, credential);
 }
 
 export async function checkWriteCredential(run: ConformanceCase, fixture: SourceControlConformanceFixture): Promise<void> {
   const credential = await issueCredential(run, fixture, 'conformance-write', READ_WRITE);
-  await expectAllowed(run, fixture, { kind: 'attemptRead', credential, repository: fixture.projectRepository });
-  await expectAllowed(run, fixture, { kind: 'attemptWrite', credential, repository: fixture.projectRepository });
-  await expectRefused(run, fixture, { kind: 'attemptWrite', credential, repository: fixture.foreignRepository });
+  await expectGrantedAccess(run, fixture, credential);
+}
+
+export async function checkChangeRequestAndStatusCredentials(
+  run: ConformanceCase,
+  fixture: SourceControlConformanceFixture,
+): Promise<void> {
+  const changeRequests = await issueCredential(run, fixture, 'conformance-change-requests', CHANGE_REQUESTS);
+  await expectGrantedAccess(run, fixture, changeRequests);
+  const statuses = await issueCredential(run, fixture, 'conformance-statuses', STATUSES);
+  await expectGrantedAccess(run, fixture, statuses);
 }
 
 // A refresh keeps the grant, extends it, and replaces the secret; the old
 // secret must stop working, and the new one gets the native probes again.
 export async function checkRefreshedCredential(run: ConformanceCase, fixture: SourceControlConformanceFixture): Promise<void> {
-  const original = await issueCredential(run, fixture, 'conformance-refresh', READ_WRITE);
+  const original = await issueCredential(run, fixture, 'conformance-refresh', SCM_PERMISSIONS);
   const refreshed = await succeeds(
     run,
     'refreshRunCredential',
@@ -51,19 +58,17 @@ export async function checkRefreshedCredential(run: ConformanceCase, fixture: So
     Date.parse(refreshed.expiresAt) > Date.parse(original.expiresAt),
     `refreshRunCredential must extend expiresAt beyond ${original.expiresAt}, not return ${refreshed.expiresAt}`,
   );
-  const project = fixture.projectRepository;
-  await expectRefused(run, fixture, { kind: 'attemptWrite', credential: original, repository: project, when: 'after its refresh' });
-  await expectAllowed(run, fixture, { kind: 'attemptWrite', credential: refreshed, repository: project });
-  await expectRefused(run, fixture, { kind: 'attemptWrite', credential: refreshed, repository: fixture.foreignRepository });
+  await expectEnded(run, fixture, original, 'after its refresh');
+  await expectGrantedAccess(run, fixture, refreshed);
 }
 
-// The write before the revocation shows that the refusal after it comes
+// The access before the revocation shows that the refusals after it come
 // from the revocation.
 export async function checkRevokedCredential(run: ConformanceCase, fixture: SourceControlConformanceFixture): Promise<void> {
-  const credential = await issueCredential(run, fixture, 'conformance-revoke', READ_WRITE);
-  await expectAllowed(run, fixture, { kind: 'attemptWrite', credential, repository: fixture.projectRepository });
+  const credential = await issueCredential(run, fixture, 'conformance-revoke', SCM_PERMISSIONS);
+  await expectGrantedAccess(run, fixture, credential);
   await revoke(run, fixture, credential);
-  await expectRefused(run, fixture, { kind: 'attemptWrite', credential, repository: fixture.projectRepository, when: 'after its revocation' });
+  await expectEnded(run, fixture, credential, 'after its revocation');
 }
 
 // Credentials of runs that overlap stay apart: a grant for one run never
@@ -73,13 +78,17 @@ export async function checkCredentialIsolation(run: ConformanceCase, fixture: So
   const reader = await issueCredential(run, fixture, 'conformance-isolation-reader', READ_ONLY);
   const writer = await issueCredential(run, fixture, 'conformance-isolation-writer', READ_WRITE);
   run.expect(reader.secret !== writer.secret, 'credentials of two runs must have distinct secrets');
-  await expectRefused(run, fixture, { kind: 'attemptWrite', credential: reader, repository: project, when: 'after another run got write-code' });
+  const afterGrant = 'after another run got write-code';
+  await expectRefused(run, fixture, { permission: 'write-code', credential: reader, repository: project, when: afterGrant });
   await revoke(run, fixture, writer);
-  await expectAllowed(run, fixture, { kind: 'attemptRead', credential: reader, repository: project, when: 'after another run was revoked' });
+  const afterRevocation = 'after another run was revoked';
+  await expectAllowed(run, fixture, { permission: 'read-code', credential: reader, repository: project, when: afterRevocation });
   const laterReader = await issueCredential(run, fixture, 'conformance-isolation-later-reader', READ_ONLY);
   const laterWriter = await issueCredential(run, fixture, 'conformance-isolation-later-writer', READ_WRITE);
+  await expectAllowed(run, fixture, { permission: 'read-code', credential: laterReader, repository: project });
   await revoke(run, fixture, laterReader);
-  await expectAllowed(run, fixture, { kind: 'attemptWrite', credential: laterWriter, repository: project, when: 'after another run was revoked' });
+  await expectEnded(run, fixture, laterReader, 'after its revocation');
+  await expectAllowed(run, fixture, { permission: 'write-code', credential: laterWriter, repository: project, when: afterRevocation });
 }
 
 async function issueCredential(
@@ -134,6 +143,32 @@ function checkGrant(run: ConformanceCase, operation: string, request: RunCredent
   );
 }
 
+// In the project, the credential does exactly what its effective
+// permissions allow; outside it, nothing.
+async function expectGrantedAccess(
+  run: ConformanceCase,
+  fixture: SourceControlConformanceFixture,
+  credential: RunCredential,
+): Promise<void> {
+  for (const permission of SCM_PERMISSIONS) {
+    const inProject = { permission, credential, repository: fixture.projectRepository };
+    if (credential.permissions.includes(permission)) await expectAllowed(run, fixture, inProject);
+    else await expectRefused(run, fixture, inProject);
+    await expectRefused(run, fixture, { permission, credential, repository: fixture.foreignRepository });
+  }
+}
+
+async function expectEnded(
+  run: ConformanceCase,
+  fixture: SourceControlConformanceFixture,
+  credential: RunCredential,
+  when: string,
+): Promise<void> {
+  for (const permission of SCM_PERMISSIONS) {
+    await expectRefused(run, fixture, { permission, credential, repository: fixture.projectRepository, when });
+  }
+}
+
 async function expectAllowed(run: ConformanceCase, fixture: SourceControlConformanceFixture, probe: Probe): Promise<void> {
   const result = await attempt(run, fixture, probe);
   run.expect(result.ok, `${describeProbe(probe)} must succeed`);
@@ -145,10 +180,10 @@ async function expectRefused(run: ConformanceCase, fixture: SourceControlConform
 }
 
 function attempt(run: ConformanceCase, fixture: SourceControlConformanceFixture, probe: Probe): Promise<Result<void>> {
-  return fixtureStep(run, probe.kind, () => fixture[probe.kind](probe.credential, probe.repository));
+  return fixtureStep(run, 'attemptAction', () => fixture.attemptAction(probe.credential, probe.repository, probe.permission));
 }
 
 function describeProbe(probe: Probe): string {
   const when = probe.when === undefined ? '' : ` ${probe.when}`;
-  return `${probe.kind} with credential ${probe.credential.credentialId} to ${probe.repository}${when}`;
+  return `${probe.permission} with credential ${probe.credential.credentialId} to ${probe.repository}${when}`;
 }

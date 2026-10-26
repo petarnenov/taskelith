@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { err, ok } from '@taskelith/kernel';
 import type { RunCredential } from '@taskelith/integrations';
-import { findings, headings, issued, patched } from './conformance-findings.ts';
+import { defective, findings, headings, issued, patched } from './conformance-findings.ts';
 import { InMemoryScm } from './in-memory-source-control.ts';
 
 // Plugin results replaced one operation at a time: the suite checks every
@@ -36,6 +36,7 @@ test('a value that is not a Result is reported', async () => {
   assert.deepEqual(headings(lines), [
     'read-only credential result',
     'write credential result',
+    'change request and status credentials result',
     'refreshed credential result',
     'revoked credential result',
     'credential isolation result',
@@ -81,18 +82,31 @@ test('a malformed credential grant is reported', async () => {
 });
 
 test('an effective grant beyond the request is allowed, but not write-code', async () => {
-  const widen = (credential: RunCredential, extra: string) => ({ ...credential, permissions: [...new Set([...credential.permissions, extra])] });
-  const widened = (extra: string) => patched((provider) => ({
-    issueRunCredential: async (request) => ok(widen(await issued(provider, request), extra)),
-    refreshRunCredential: async (request) => {
-      const refreshed = await provider.refreshRunCredential(request);
-      return refreshed.ok ? ok(widen(refreshed.value, extra)) : refreshed;
+  assert.deepEqual(await defective({}, { alsoGrants: 'write-statuses' }), []);
+  const escalated = await defective({}, { alsoGrants: 'write-code' });
+  assert.deepEqual(cases(escalated), [
+    'read-only credential outcome',
+    'change request and status credentials outcome',
+    'credential isolation outcome',
+  ]);
+  const escalations = escalated.filter((line) => line.endsWith('issueRunCredential granted write-code to a request without it'));
+  assert.equal(escalations.length, 5);
+  assert.match(escalated[4]!, /^credential isolation outcome: write-code .* after another run got write-code must fail with forbidden$/);
+});
+
+test('a reported permission that the service does not grant is reported', async () => {
+  const lines = await patched((provider) => ({
+    issueRunCredential: async (request) => {
+      const credential = await issued(provider, request);
+      return ok({ ...credential, permissions: [...new Set([...credential.permissions, 'write-statuses'])] });
     },
   }));
-  assert.deepEqual(await widened('write-statuses'), []);
-  const escalated = await widened('write-code');
-  assert.deepEqual(cases(escalated), ['read-only credential outcome', 'credential isolation outcome']);
-  assert.ok(escalated.every((line) => line.endsWith('issueRunCredential granted write-code to a request without it')));
+  assert.deepEqual(cases(lines), [
+    'read-only credential outcome',
+    'write credential outcome',
+    'change request and status credentials outcome',
+  ]);
+  assert.ok(lines.every((line) => /: write-statuses with credential cred-\d+ to acme\/project must succeed$/.test(line)));
 });
 
 test('a read-only credential whose secret does not work is reported', async () => {
@@ -102,8 +116,12 @@ test('a read-only credential whose secret does not work is reported', async () =
       return ok(request.permissions.includes('write-code') ? credential : { ...credential, secret: 'not-a-token' });
     },
   }));
-  assert.deepEqual(cases(lines), ['read-only credential outcome', 'credential isolation outcome']);
-  assert.match(lines[0]!, /^read-only credential outcome: attemptRead with credential cred-\d+ to acme\/project must succeed$/);
+  assert.deepEqual(cases(lines), [
+    'read-only credential outcome',
+    'change request and status credentials outcome',
+    'credential isolation outcome',
+  ]);
+  assert.match(lines[0]!, /^read-only credential outcome: read-code with credential cred-\d+ to acme\/project must succeed$/);
 });
 
 test('a refresh that changes the permissions or moves the expiry back is reported', async () => {
@@ -115,8 +133,10 @@ test('a refresh that changes the permissions or moves the expiry back is reporte
     },
   }));
   assert.deepEqual(lines.map((line) => line.split(' ').slice(3, 5).join(' ')), [
+    'refreshRunCredential granted',
     'refreshRunCredential changed',
     'refreshRunCredential must',
+    'write-change-requests with',
   ]);
 });
 
@@ -136,15 +156,27 @@ test('capabilities that cannot be read are reported', async () => {
     get: () => { throw new Error('no getter'); },
   });
   const lines = await findings(scm.fixture(provider));
-  assert.deepEqual(headings(lines), ['capabilities threw', 'merge method protection threw', 'merge methods threw', 'undeclared merge methods threw']);
+  assert.deepEqual(headings(lines), [
+    'capabilities threw',
+    'required statuses threw',
+    'stale head threw',
+    'merge methods threw',
+    'undeclared merge methods threw',
+  ]);
   const malformed = await patched(() => ({ capabilities: { mergeMethods: 'squash' } as never }));
-  assert.deepEqual(headings(malformed), ['capabilities shape', 'merge method protection shape', 'merge methods shape', 'undeclared merge methods shape']);
+  assert.deepEqual(headings(malformed), [
+    'capabilities shape',
+    'required statuses shape',
+    'stale head shape',
+    'merge methods shape',
+    'undeclared merge methods shape',
+  ]);
 });
 
 test('a declared merge method that the provider cannot perform is reported', async () => {
   const declared = { mergeMethods: ['merge-commit', 'squash', 'rebase'], reviewEvidence: ['required-status'] };
   const lines = await patched(() => ({ capabilities: declared }));
-  assert.deepEqual(cases(lines), ['merge method protection outcome', 'merge methods outcome']);
+  assert.deepEqual(cases(lines), ['required statuses outcome', 'stale head outcome', 'merge methods outcome']);
   assert.ok(lines.includes('merge methods outcome: mergeChangeRequest with rebase failed with unavailable, expected success'));
   assert.ok(lines.every((line) => line.includes('with rebase')));
 });

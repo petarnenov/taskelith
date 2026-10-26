@@ -114,11 +114,15 @@ Reviewer assigned by the coordinator: Codex CLI, `gpt-6.1-sol`, reasoning effort
 
 | # | Severity | Finding | Resolution |
 | --- | --- | --- | --- |
-| 1 | High | Missing, `failure`, and `error` required statuses are checked only with the fixture's merge method; other declared methods get only `pending` and a moved head. | Open: the third pass is the last, so the owner decides (see [Remaining gates](#remaining-gates)). |
-| 2 | High | Repository scope is not checked for reads: no credential's read outside the project is checked. | Open, as finding 1. |
-| 3 | Medium | Refresh and revocation check only that writes end, not reads, and the revoked read-only credential of the isolation case is not checked. | Open, as finding 1. |
-| 4 | Medium | `write-change-requests` and `write-statuses` are never requested or checked on the service. | Open, as finding 1. |
+| 1 | High | Missing, `failure`, and `error` required statuses are checked only with the fixture's merge method; other declared methods get only `pending` and a moved head. | `checkRequiredStatuses` runs the full matrix of declared methods, required contexts, and the four blocking states; a moved head is a separate `stale head` case for every declared method. New defective variant: a method other than the fixture's that only `pending` blocks. Checked in pass 4. |
+| 2 | High | Repository scope is not checked for reads: no credential's read outside the project is checked. | The fixture's `attemptRead` and `attemptWrite` became one `attemptAction(credential, repository, permission)`. Every issued and refreshed credential is probed for each permission: in the project it does exactly what its effective permissions allow, outside it nothing, reads included. The foreign repository must be open to the plugin's own identity. New defective variant: reads outside the project. Checked in pass 4. |
+| 3 | Medium | Refresh and revocation check only that writes end, not reads, and the revoked read-only credential of the isolation case is not checked. | After a refresh or a revocation, the previous credential is refused for every permission; the isolation case reads with the later reader before its revocation and is refused after it. New defective variant: an ended credential that still reads. Checked in pass 4. |
+| 4 | Medium | `write-change-requests` and `write-statuses` are never requested or checked on the service. | New case `change request and status credentials` issues each permission; the refresh and revocation cases use all four. A reported permission must work natively and an unreported one must not. New defective variants: each permission refused at issue, and each listed but not honoured; the fake's `alsoGrants` setup tests an honest effective superset. Checked in pass 4. |
 | 5 | Low | The contract listed wave 7 of the plan as the items that build on the port; the items that depend on item 7 are 9 and 20. | Unreviewed fix: the contract names items 20 and 9. |
+
+### Owner decision after pass 3
+
+On 2026-10-26 the owner, through the coordinator, chose to fix findings 1 to 4 and permitted one exceptional fourth pass by the same reviewer, limited to confirming those four fixes and checking that nothing else in the diff regresses. Finding 5 stays an unreviewed fix.
 
 ## Final checks
 
@@ -133,7 +137,6 @@ Pending.
 
 ## Remaining gates
 
-- The owner's decision on the High and Medium findings left after pass 3: fix them without review, accept them as a known risk, or defer them; a fourth pass needs the owner's permission.
 
 - Integration into `dev` and the archive by the coordinator.
 - Item 20 runs the suite against GitHub.com; Forgejo's admission confirms the mapping.

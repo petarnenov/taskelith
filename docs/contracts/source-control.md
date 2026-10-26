@@ -29,12 +29,13 @@ The ports belong to the Integrations module, the "SCM / Tracker integrations" mo
 | --- | --- |
 | `SCM_PERMISSIONS` | `read-code`, `write-code`, `write-change-requests`, `write-statuses` |
 
-- `issueRunCredential` takes the run, its repositories, and the permissions it needs, and returns a credential for that run only, limited to those repositories, with its effective repositories, permissions, and expiry.
+- `issueRunCredential` takes the run, its repositories, and the permissions it needs, and returns a credential for that run only, limited to those repositories for every permission, reads included, with its effective repositories, permissions, and expiry.
+- The effective permissions are what the credential can actually do: each one works in the project, and a permission not listed does not.
 - Effective permissions cover the request and may exceed it when the service has no narrower permission, and the plugin reports them; a credential requested without `write-code` never has it. The policy that accepts or refuses a wider set belongs to the module's use cases.
 - The secret goes only to its run and is never logged or stored.
 - Credentials of different runs are independent: neither widens the other, and revoking one leaves the other usable.
-- `refreshRunCredential` returns a new secret for the same repositories and permissions with a later expiry, and ends the previous secret, so that a long run keeps working. `credentialId` may stay the same.
-- `revokeRunCredential` ends the credential and returns no value.
+- `refreshRunCredential` returns a new secret for the same repositories and permissions with a later expiry, and ends the previous secret, reads included, so that a long run keeps working. `credentialId` may stay the same.
+- `revokeRunCredential` ends the credential, reads included, and returns no value.
 
 ## 4. Change requests, statuses, and merges
 
@@ -92,11 +93,12 @@ The gaps are recorded, not hidden: Forgejo's coarser token scopes make the effec
 
 ## 8. Conformance suite
 
-`runSourceControlConformance` runs against a live service with the plugin's own credential. The plugin's test supplies a fixture: the provider, a project repository and a foreign one, the base branch, the merge method, and native helpers to create and advance a head branch, read a branch head, observe a merge's method, attempt a read and a write with a run credential, attempt the most privileged native merge, and sign a delivery with the plugin's secret or another one. The report has a finding for each thrown error, malformed or unknown result value, and outcome that differs from this contract. Among others, the suite checks on the service that:
+`runSourceControlConformance` runs against a live service with the plugin's own credential. The plugin's test supplies a fixture: the provider, a project repository, a foreign repository outside the project that the plugin's own identity can access, so that a refusal shows the credential's scope, the base branch, the merge method, and native helpers to create and advance a head branch, read a branch head, observe a merge's method, attempt with a run credential the action that each permission allows (a code read, a code write, a change request write, and a status write), attempt the most privileged native merge, and sign a delivery with the plugin's secret or another one. The report has a finding for each thrown error, malformed or unknown result value, and outcome that differs from this contract. Among others, the suite checks on the service that:
 
-- a read-only credential reads but cannot write, a credential cannot write outside the project, and two runs' credentials stay independent;
-- a refresh returns a later expiry and a new secret and ends the previous one, and revocation ends the credential;
-- each required context, including any the service already required, blocks a merge through the port and through the native bypass while it is missing, pending, failed, or in error, for every declared merge method, and a moved head blocks it too;
+- in the project, every credential, read-only, write, change request, status, and refreshed, can do exactly what its effective permissions allow and nothing else, and outside the project it can do nothing, reads included;
+- a refresh returns a later expiry and a new secret, and after a refresh or a revocation the previous credential can do nothing, reads included;
+- two runs' credentials stay independent;
+- each required context, including any the service already required, blocks a merge through the port and through the native bypass while it is missing, pending, failed, or in error, for every declared merge method, and a moved head blocks every declared method too;
 - the native bypass merges a change request whose statuses all succeed, so that a broken helper cannot pass as protection;
 - every declared method merges with that method and reports the base branch head as its merge commit, and every undeclared method fails with `unavailable`;
 - a re-serialized body, a foreign signature, and a missing signature fail with `forbidden`, and delivery identifiers are stable per delivery and distinct between deliveries.
