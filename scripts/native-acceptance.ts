@@ -92,7 +92,7 @@ export function acceptanceContext({ entry, platform }: EntryPlatform, row: strin
 
 export function matrixArchitecture(machine: string): 'arm64' | 'x86_64' {
   if (machine === 'arm64' || machine === 'aarch64') return 'arm64';
-  if (machine === 'x86_64') return 'x86_64';
+  if (machine === 'x86_64' || machine === 'amd64' || machine === 'x86-64') return 'x86_64';
   throw new AcceptanceFailure(`architecture "${machine}" is not a matrix entry`);
 }
 
@@ -166,6 +166,14 @@ export async function runAcceptanceCommand(command: AcceptanceCommand, dependenc
   }
 }
 
+// A failed command's message, with the standard error it printed.
+export function failureText(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const stderr = (error as { stderr?: unknown }).stderr;
+  const text = typeof stderr === 'string' ? stderr : Buffer.isBuffer(stderr) ? stderr.toString('utf8') : '';
+  return text.trim() === '' ? error.message : `${error.message}\n${text.trim()}`;
+}
+
 const systemRun: Run = (file, args) => execFileSync(file, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 
 function required(name: string): string {
@@ -190,7 +198,7 @@ if (import.meta.main) {
     const output = await runAcceptanceCommand(parseAcceptanceCommand(process.argv.slice(2)), systemDependencies());
     if (output !== '') process.stdout.write(`${output}\n`);
   } catch (error) {
-    process.stderr.write(`native-acceptance: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.stderr.write(`native-acceptance: ${failureText(error)}\n`);
     process.exitCode = 1;
   }
 }

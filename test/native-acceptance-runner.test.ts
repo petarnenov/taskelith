@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 // The runner of make native-acceptance (scripts/native-acceptance.sh) with
 // a stubbed tool: what each proof records, and the summary of its log.
 
-function runner(script: string): { readonly status: number | null; readonly stdout: string; readonly stderr: string } {
+function runner(script: string, env: NodeJS.ProcessEnv = process.env): { readonly status: number | null; readonly stdout: string; readonly stderr: string } {
   const result = spawnSync('bash', ['-c', `set -euo pipefail
 source scripts/native-acceptance.sh
 tool() {
@@ -15,7 +18,7 @@ tool() {
   esac
 }
 platform_file=/dev/null entry=macos-26-arm64 TASKELITH_TEST_SEED=9
-${script}`], { encoding: 'utf8', timeout: 20_000 });
+${script}`], { encoding: 'utf8', timeout: 20_000, env });
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };
 }
 
@@ -53,4 +56,24 @@ test('an unknown entry kind is refused before any proof runs', () => {
   const run = runner(`ENTRIES=windows main results.jsonl`);
   assert.equal(run.status, 2);
   assert.match(run.stderr, /unknown entry kind windows; use macos or linux/);
+});
+
+test('the macos entry on another host fails early', () => {
+  const run = runner(`uname() { echo Linux; }
+ENTRIES=macos main results.jsonl`);
+  assert.equal(run.status, 2);
+  assert.match(run.stderr, /the macos entry runs only on a macOS host, not Linux/);
+});
+
+test('an early exit removes the platform file and keeps an earlier exit trap', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'taskelith-runner-'));
+  try {
+    const run = runner(`trap 'echo earlier trap' EXIT
+ENTRIES=windows main results.jsonl`, { ...process.env, TMPDIR: directory });
+    assert.equal(run.status, 2);
+    assert.match(run.stdout, /^earlier trap$/m);
+    assert.deepEqual(readdirSync(directory), []);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

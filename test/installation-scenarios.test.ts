@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-// The scenario steps of scripts/installation-scenarios.sh against stubbed
-// compose, docker, and psql: the worker's state lives in a file.
+// The failure and lifecycle scenarios of installation-scenarios.sh against
+// stubbed compose, docker, and psql: the worker's state lives in a file.
 
 const BASH_TIMEOUT_MILLISECONDS = 20_000;
 const OLD_START = '2026-10-26T10:00:00.000000000Z';
@@ -376,7 +376,7 @@ test('a failed cleanup of the confinement is recorded as failed', () => {
 const LIFECYCLE_STUBS = `
 GOOD_STATUS='Uid:\\t10003\\t10003\\t10003\\t10003\\nCapEff:\\t0000000000000000\\n'
 echo 1d > "$stubs/identity"
-stop() { echo 'exited 0 ${NEW_START}' > "$stubs/state"; }
+stop() { echo "exited \${STOP_CODE:-0} ${NEW_START}" > "$stubs/state"; }
 start() {
   if [ -z "\${NO_RESTART:-}" ]; then echo 'running 0 ${NEW_START}' > "$stubs/state"; fi
   if [ -n "\${IDENTITY_AFTER:-}" ]; then echo "$IDENTITY_AFTER" > "$stubs/identity"; fi
@@ -430,6 +430,13 @@ test('an execution that does not run as the execution account fails the lifecycl
   assert.equal(run.status, 1);
   assert.match(run.stderr, /does not run as the execution account/);
   assert.equal(run.records, 'failed: failed while running a task on the installed worker\n');
+});
+
+test('a worker container that stops with another exit code fails the lifecycle', () => {
+  const run = lifecycle('STOP_CODE=137');
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /the stopped worker container's exit code: expected '0', got '137'/);
+  assert.equal(run.records, 'failed: failed while stopping the installation\n');
 });
 
 test('a failed cleanup of the lifecycle is recorded as failed', () => {

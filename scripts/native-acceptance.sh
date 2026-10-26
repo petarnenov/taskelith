@@ -103,6 +103,14 @@ linux_entry() {
   }
 }
 
+# Removes FILE on any exit, after the EXIT trap that was already set.
+remove_on_exit() {
+  local previous
+  previous="$(trap -p EXIT | sed -E "s/^trap -- '(.*)' EXIT$/\\1/")"
+  # shellcheck disable=SC2064
+  trap "${previous:+$previous; }rm -f '$1'" EXIT
+}
+
 # Every entry runs all its proofs; the run fails if any proof failed.
 main() {
   local results kind
@@ -119,9 +127,14 @@ main() {
   export TASKELITH_TEST_SEED TASKELITH_SCENARIO_RESULTS="$results"
   echo "native-acceptance.sh: seed $TASKELITH_TEST_SEED, results $results" >&2
   platform_file="$(mktemp)"
+  remove_on_exit "$platform_file"
   for kind in ${ENTRIES:-$(default_entries)}; do
     case "$kind" in
-      macos|linux) ;;
+      macos) if [ "$(uname -s)" != Darwin ]; then
+          echo "native-acceptance.sh: the macos entry runs only on a macOS host, not $(uname -s)" >&2
+          exit 2
+        fi ;;
+      linux) ;;
       *) echo "native-acceptance.sh: unknown entry kind $kind; use macos or linux" >&2; exit 2 ;;
     esac
     if [ "$kind" = linux ]; then "$make_command" --no-print-directory linux-test-image; fi

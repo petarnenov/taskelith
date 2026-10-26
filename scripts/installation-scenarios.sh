@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The G2 failure scenarios (item 24a), sourced by installation.sh, which
-# defines compose, the project, and its other steps.
+# The G2 failure scenarios (items 24a, 25a) and lifecycle scenarios (25b),
+# sourced by installation.sh, which defines compose and the project's steps.
 
 scenario_directory="$repository/infra/installation/scenarios"
 # An untimed kill lands at most this long after the task's submission.
@@ -548,7 +548,7 @@ run_as_execution_account() {
 # Install, start, stop, and restart of the Linux worker container: its
 # identity stays on its volume, and executions run as the execution account.
 worker_lifecycle_scenario() {
-  local worker identity stopped first_start row
+  local worker identity stopped code first_start row
   begin_scenario worker-lifecycle
   scenario_project
   check_containment
@@ -559,8 +559,9 @@ worker_lifecycle_scenario() {
   first_start="$(started_at)"
   step "stopping the installation"
   stop
-  read -r stopped _ <<< "$(worker_state)"
+  read -r stopped code _ <<< "$(worker_state)"
   expect_equal "the stopped worker container" "$stopped" exited
+  expect_equal "the stopped worker container's exit code" "$code" 0
   step "starting the installation again"
   start
   # Host ports are ephemeral, so the API may have moved.
@@ -578,7 +579,8 @@ worker_lifecycle_scenario() {
 }
 
 # The native worker's settings and state (scenario-native-worker-lifecycle).
-STOP_SECONDS=30
+# Wide for a loaded host; the environment may set another bound.
+STOP_SECONDS="${STOP_SECONDS:-60}"
 native_worker_pid=''
 
 native_log() {

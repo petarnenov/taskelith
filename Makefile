@@ -87,7 +87,7 @@ contract-compatibility:
 # architecture (x86_64 or aarch64).
 linux-test-image:
 	@case "$$(docker info --format '{{.Architecture}}')" in \
-		x86_64) node_arch=x64; node_sha256=$(NODE_LINUX_X64_SHA256) ;; \
+		x86_64|amd64|x86-64) node_arch=x64; node_sha256=$(NODE_LINUX_X64_SHA256) ;; \
 		aarch64|arm64) node_arch=arm64; node_sha256=$(NODE_LINUX_ARM64_SHA256) ;; \
 		*) echo "make linux-test-image: no pinned Node.js for this Docker host" >&2; exit 1 ;; \
 	esac; \

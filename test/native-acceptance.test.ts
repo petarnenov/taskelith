@@ -5,6 +5,7 @@ import {
   AcceptanceFailure,
   acceptanceContext,
   dfMountPoint,
+  failureText,
   diskutilField,
   linuxPlatform,
   macosPlatform,
@@ -94,6 +95,7 @@ test('another Linux release or architecture is not a matrix entry', () => {
     /Ubuntu 22.04.5 LTS is not a matrix entry; it needs Ubuntu 24.04/);
   assert.throws(() => matrixArchitecture('riscv64'), /architecture "riscv64" is not a matrix entry/);
   assert.equal(matrixArchitecture('aarch64'), 'arm64');
+  for (const machine of ['x86_64', 'amd64', 'x86-64']) assert.equal(matrixArchitecture(machine), 'x86_64');
 });
 
 test('the output parsers take mount points with spaces and fail on missing fields', () => {
@@ -151,4 +153,13 @@ test('a record needs the acceptance context and then reaches the recorder', asyn
   await assert.rejects(runAcceptanceCommand({ name: 'record', run }, dependencies({}, recorded)), /record needs TASKELITH_ACCEPTANCE/);
   assert.equal(await runAcceptanceCommand({ name: 'record', run }, dependencies({ [ACCEPTANCE_VARIABLE]: '{}' }, recorded)), '');
   assert.deepEqual(recorded, [run]);
+});
+
+test('a failed command reports its standard error with its message', () => {
+  const error = Object.assign(new Error('Command failed: docker info'), { stderr: 'Cannot connect to the Docker daemon\n' });
+  assert.equal(failureText(error), 'Command failed: docker info\nCannot connect to the Docker daemon');
+  const buffered = Object.assign(new Error('Command failed: df'), { stderr: Buffer.from('df: no such file\n') });
+  assert.equal(failureText(buffered), 'Command failed: df\ndf: no such file');
+  assert.equal(failureText(new Error('plain')), 'plain');
+  assert.equal(failureText('text'), 'text');
 });
