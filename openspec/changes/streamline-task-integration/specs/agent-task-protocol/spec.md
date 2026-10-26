@@ -29,7 +29,7 @@ Under the protocol a worker SHALL archive its reviewed and verified change in th
 ## ADDED Requirements
 
 ### Requirement: Return and re-archive
-On any return, the worker SHALL restore the active change by reverting its archive commit, merge `dev`, reconcile each restored delta with `dev`'s current requirement text, keeping others' edits, have the assigned reviewer review the resolved diff and the reconciliation, record it, and archive again as the last commit.
+On any return of a branch that carries its archive commit, the worker SHALL restore the active change by reverting that commit, merge `dev`, reconcile each restored delta with `dev`'s current requirement text, keeping others' edits, have the assigned reviewer review the resolved diff and the reconciliation, record it, and archive again as the last commit; a branch without an archive commit only needs the archive.
 
 #### Scenario: Requirement changed on dev
 - **WHEN** `dev` changed a requirement that a restored delta modifies
@@ -38,6 +38,17 @@ On any return, the worker SHALL restore the active change by reverting its archi
 #### Scenario: Conflict outside the specs
 - **WHEN** a task is returned for a conflict outside `openspec/`
 - **THEN** the worker still restores the active change and ends the branch with a new archive commit
+
+#### Scenario: Branch without an archive commit
+- **WHEN** a task is returned because its branch lacks its archive commit
+- **THEN** the worker archives the change as the branch's last commit and reverts nothing
+
+### Requirement: Uncommitted coordinator merge
+The coordinator SHALL merge `dev` into a handed-off branch with `git merge --no-commit --no-ff origin/dev`, SHALL commit the merge only when it will integrate, and SHALL run `git merge --abort` on any return, so that a returned branch never carries a coordinator merge.
+
+#### Scenario: Clean merge that invalidates evidence
+- **WHEN** the merge of `dev` completes without a conflict but invalidates the task's evidence
+- **THEN** the coordinator aborts the uncommitted merge and returns the task, and the worker's merge base still predates `dev`'s changes
 
 ### Requirement: Integration gate in the archived record
 A change's `verification.md` SHALL name integration into `dev` by the coordinator through one pull request as a remaining gate; the worker SHALL record the checks of the archived tree in the archive commit itself; the coordinator SHALL NOT edit the archived record, and the merge pull request SHALL record the integration checks, its merge commit being the integrated revision.
