@@ -228,3 +228,145 @@ test('an error the scenario did not expect is recorded as failed', () => {
   assert.equal(run.status, 1);
   assert.equal(run.records, 'failed: failed while submitting a task and awaiting its start\n');
 });
+
+// The worker container's answers to the namespace probes. ESCAPE names the
+// probe that succeeds and OTHER the one that fails otherwise than expected.
+const CONFINEMENT_STUBS = `
+GOOD_STATUS='Uid:\\t10003\\t10003\\t10003\\t10003\\nCapEff:\\t0000000000000000\\nCapBnd:\\t00000000000000e0\\nNoNewPrivs:\\t1\\nSeccomp:\\t2\\nSeccomp_filters:\\t1\\n'
+probe_answer() {
+  if [ "\${ESCAPE:-}" = "$1" ]; then echo created; return 0; fi
+  if [ "\${OTHER:-}" = "$1" ]; then echo 'errno 22 Invalid argument' >&2; return 1; fi
+  echo "$2" >&2; return 1
+}
+worker_exec() {
+  case "$*" in
+    *'/proc/self/status'*) printf "\${PROBE_STATUS:-$GOOD_STATUS}" ;;
+    *'pgrep -o -u 10003'*)
+      if [ -n "\${UNREADABLE_ONCE:-}" ] && [ ! -e "$stubs/read-once" ]; then : > "$stubs/read-once"; return 1; fi
+      printf "\${EXECUTION_STATUS:-$GOOD_STATUS}"; echo cgroup:; echo "\${CGROUP:-0::/executions/e1}" ;;
+    'uname -m') echo "\${MACHINE:-aarch64}" ;;
+    *'unshare -U true'*) probe_answer user 'unshare: unshare failed: Operation not permitted' ;;
+    *'unshare -Urm'*) probe_answer mount 'unshare: unshare failed: Operation not permitted' ;;
+    *' 435 0 0') probe_answer clone3 'errno 38' ;;
+    *" \$(clone_number_of "\${MACHINE:-aarch64}") 268435473 0 0 0 0") probe_answer clone "errno \${CLONE_ERRNO:-1}" ;;
+    *nsenter*) probe_answer setns "nsenter: reassociate to namespace 'ns/user' failed: Operation not permitted" ;;
+    'test -d /sys/fs/cgroup/executions') [ -z "\${NO_PARENT:-}" ] ;;
+    *'mkdir /sys/fs/cgroup/executions/probe'*) [ -z "\${NO_CGROUP_WRITE:-}" ] ;;
+    *) echo "unexpected worker_exec $*" >&2; return 1 ;;
+  esac
+}
+# The retried read takes about a second; the deadline leaves a wide margin.
+START_SECONDS=12
+clone_number_of() { if [ "$1" = x86_64 ]; then echo 56; else echo 220; fi; }
+check_containment() { :; }
+applied_profile() { [ -z "\${NO_PROFILE:-}" ] && echo d1gest; }
+platform() { echo 'OS Stub; architecture aarch64'; }
+`;
+const CONFINEMENT = { state: `running 0 ${OLD_START}`, stateAfterStart: '', logs: [], executions: 'e1 started certain' };
+
+function confinement(variables = ''): StubbedRun {
+  return withStubs(CONFINEMENT, `${CONFINEMENT_STUBS}\n${variables} namespace_confinement_scenario`);
+}
+
+const PROBES = ['user', 'mount', 'clone3', 'clone', 'setns'];
+
+test('refused namespaces, a delegated containment, and an exited task pass the confinement', () => {
+  const run = confinement();
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.records, /^passed: OS Stub; architecture aarch64; applied seccomp profile sha256 d1gest, equal to infra\/installation\/seccomp\/worker\.json: the execution e1 ran in '0::\/executions\/e1' with status 'Uid: 10003 10003 10003 10003 CapEff: 0{16} CapBnd: 0{14}e0 NoNewPrivs: 1 Seccomp: 2 Seccomp_filters: 1' and exited 0; .*clone3 answered ENOSYS/);
+  for (const label of ['create a user namespace', 'mount a tmpfs', 'call clone3', 'clone into a new user namespace', 'enter a user namespace with setns']) {
+    assert.match(run.stderr, new RegExp(`refused to ${label}`));
+  }
+  assert.match(run.stderr, /cleaning up/);
+});
+
+test('any namespace probe that succeeds fails the confinement, the later ones included', () => {
+  for (const probe of PROBES) {
+    const run = confinement(`ESCAPE=${probe}`);
+    assert.equal(run.status, 1, probe);
+    assert.match(run.stderr, /the execution account could .*: created/, probe);
+    assert.equal(run.records, 'failed: failed while probing namespaces as the execution account\n', probe);
+  }
+});
+
+test('a refused user namespace does not hide a mount namespace that succeeds', () => {
+  const run = confinement('ESCAPE=mount');
+  assert.match(run.stderr, /refused to create a user namespace/);
+  assert.match(run.stderr, /the execution account could mount a tmpfs in new user and mount namespaces/);
+});
+
+test('a probe that fails otherwise than the profile refuses it fails the confinement', () => {
+  for (const probe of PROBES) {
+    const run = confinement(`OTHER=${probe}`);
+    assert.equal(run.status, 1, probe);
+    assert.match(run.stderr, /failed otherwise than '.*': errno 22 Invalid argument/, probe);
+  }
+});
+
+test('an errno probe must answer its exact errno, not one that starts with it', () => {
+  const run = confinement('CLONE_ERRNO=13');
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /the probe to clone into a new user namespace failed otherwise than 'errno 1': errno 13/);
+});
+
+test('a read of the execution that fails at first is retried', () => {
+  const run = confinement('UNREADABLE_ONCE=1');
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.records, /^passed: .* ran in '0::\/executions\/e1' with status 'Uid: 10003 10003 10003 10003 CapEff: 0{16} CapBnd: 0{14}e0 NoNewPrivs: 1 Seccomp: 2 Seccomp_filters: 1'/);
+});
+
+test('a worker container without the worker profile fails the confinement', () => {
+  const run = confinement('NO_PROFILE=1');
+  assert.equal(run.status, 1);
+  assert.equal(run.records, "failed: failed while checking the worker's containment and its seccomp profile\n");
+});
+
+test('a probe whose status differs from the execution fails the confinement', () => {
+  const run = confinement(String.raw`PROBE_STATUS='Uid:\t10003\t10003\t10003\t10003\nCapEff:\t0000000000000000\nCapBnd:\t00000000002001e3\nNoNewPrivs:\t1\nSeccomp:\t2\nSeccomp_filters:\t1\n'`);
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /the probe's status: expected/);
+});
+
+test('an execution and a probe that share a status other than the execution account fail', () => {
+  const root = String.raw`'Uid:\t0\t0\t0\t0\nCapEff:\t00000000000000e0\nCapBnd:\t00000000000000e0\nNoNewPrivs:\t1\nSeccomp:\t2\nSeccomp_filters:\t1\n'`;
+  const run = confinement(`PROBE_STATUS=${root} EXECUTION_STATUS=${root}`);
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /the probe does not run as the execution account/);
+});
+
+test('an execution outside its own cgroup fails the confinement', () => {
+  for (const cgroup of ['0::/init', '0::/executions/e2']) {
+    const run = confinement(`CGROUP=${cgroup}`);
+    assert.equal(run.status, 1, cgroup);
+    assert.match(run.stderr, /the execution's cgroup: expected '0::\/executions\/e1'/, cgroup);
+  }
+});
+
+test('an x86_64 worker probes clone by its own syscall number', () => {
+  assert.equal(confinement('MACHINE=x86_64').status, 0);
+});
+
+test('a host without a clone syscall number fails the confinement', () => {
+  const run = confinement('MACHINE=riscv64');
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /no clone syscall number for riscv64/);
+});
+
+test('a missing containment parent fails the confinement', () => {
+  const run = confinement('NO_PARENT=1');
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /the containment parent is missing/);
+  assert.equal(run.records, 'failed: failed while checking the cgroup delegation\n');
+});
+
+test('a containment parent that refuses a cgroup write fails the confinement', () => {
+  const run = confinement('NO_CGROUP_WRITE=1');
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /the containment parent refused a cgroup write/);
+});
+
+test('a failed cleanup of the confinement is recorded as failed', () => {
+  const run = confinement('CLEANUP_FAILS=1');
+  assert.equal(run.status, 1);
+  assert.equal(run.records, 'failed: failed while cleaning up\n');
+});
