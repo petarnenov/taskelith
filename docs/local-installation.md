@@ -17,7 +17,7 @@ Every target except the build needs `TASKELITH_POSTGRES_PASSWORD` in the environ
 
 1. `make installation-build` builds both images. A new file must be staged (`git add`) to be part of them.
 2. `make installation-bootstrap ACTOR=<who> REASON=<why>` starts PostgreSQL, runs `init` of the administrative entry ([installation contract](contracts/installation-and-enrollment.md) section 2), and copies the generated `nats-authority.conf` into the broker's configuration volume. It prints the operator secret once; store it, because only its hash is kept. If the copy fails after `init` succeeded, `make installation-broker-config` repeats only the copy; a second bootstrap fails with `conflict`.
-3. `make installation-start` starts PostgreSQL, NATS, and the control plane, and restarts an enrolled worker container.
+3. `make installation-start` starts PostgreSQL, NATS, and the control plane, and restarts an enrolled worker container. If the control plane does not become healthy, the target stops it, so that it does not restart in a loop, prints its last error, and fails.
 4. `make installation-enroll`, with `TASKELITH_OPERATOR_TOKEN` set to the operator secret, issues a single-use enrollment token and starts the Linux worker container, which enrolls on its first start; the target fails unless the worker stores its identity within a minute.
 5. `make installation-stop` stops the containers and keeps the volumes.
 
@@ -37,9 +37,13 @@ On Linux a launch also needs `TASKELITH_CONTAINMENT_PARENT`, the absolute path o
 
 ## Checks
 
-- `make verify` validates the resolved composition and the Dockerfile: digest pins, checksummed Node.js tarballs, unprivileged services, named data volumes, localhost-only ports, and secrets from the environment.
+- `make verify` validates the resolved composition and the Dockerfile: digest pins, checksummed Node.js tarballs, unprivileged services, named data volumes, localhost-only ports, secrets from the environment, and stream reservations that fit the broker's fixed file store.
 - `make qualify-harnesses OUT=<dir>` (opt-in, outside `make verify`) builds the `worker-harnesses` variant for each platform in `PLATFORMS` (default `linux/amd64 linux/arm64`) from the pinned inputs, and runs the credential-free harness steps in it with `--network none`, writing the step results, the before-and-after listings, the changed paths, a root search for credential files, and the image metadata per architecture to `OUT`, which must be outside the worktree; each run replaces the directory of every platform it runs, such as `OUT/amd64`. A platform whose build or steps fail gets an `error.txt`, the other platforms still run, and the target then fails. `make verify` checks the variant's pins without building it.
-- `make verify-installation` (opt-in, outside `make verify`) builds the images, bootstraps, starts, and enrolls the Linux worker on a throwaway project with a random database password and ephemeral ports, restarts the composition, and removes it with its volumes and images. It also checks that the images run as `taskelith`, ship an empty data root, and do not contain an untracked file it creates for the build.
+- `make verify-installation` (opt-in, outside `make verify`) builds the images, bootstraps, starts, and enrolls the Linux worker on a throwaway project with a random database password and ephemeral ports, restarts the composition, and removes it with its volumes and images. It also checks that the images run as `taskelith`, ship an empty data root, and do not contain an untracked file it creates for the build. When it fails, it prints the control plane's log before it removes the project.
+
+## Broker storage
+
+JetStream reserves the byte limit of each stream on the broker's disk when the stream is created. The installation fixes the broker's file store at 8 GiB (`max_file_store` in [`nats-server.conf`](../infra/installation/nats-server.conf)) and sets `TASKELITH_STREAM_MAX_BYTES` of the control plane to 1 GiB, so its five streams reserve 5 GiB. These are provisional local values ([operational targets](operational-targets.md) section 2). The `nats-data` volume needs 8 GiB of free disk; under Docker Desktop that is free space in its virtual machine's disk. With less, the control plane fails to start, and its error names the bytes the streams reserve.
 
 ## Limits
 

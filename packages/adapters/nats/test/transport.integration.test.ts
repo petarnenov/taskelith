@@ -3,7 +3,7 @@ import { describe, test } from 'node:test';
 import { InMemoryInbox } from '@taskelith/execution';
 import { err, failure, ok, parseInstant } from '@taskelith/kernel';
 import { InMemoryLogSink, InMemoryMetrics, Logger } from '@taskelith/observability';
-import { SimulatedHost, value } from '@taskelith/testing';
+import { failed as failedResult, SimulatedHost, value } from '@taskelith/testing';
 import {
   applyOnce,
   encodeJson,
@@ -63,6 +63,13 @@ describe('topology', () => {
     );
     const reader = await transport.jsm.consumers.info(address.streamName('observations'), 'execution');
     assert.deepEqual([reader.config.filter_subject, reader.config.max_deliver], [address.allWorkerSubjects('observations'), 2]);
+  });
+  test('streams larger than the broker file store fail with their reservation', async () => {
+    const { address, transport } = await installation([]);
+    const streamMaxBytes = 2 ** 50;
+    const refused = failedResult(await ensureStreams(transport.jsm, address, { ...TEST_LIMITS, streamMaxBytes }));
+    assert.deepEqual([refused.code, refused.details.reservedBytes], ['unavailable', String(5 * streamMaxBytes)]);
+    assert.match(refused.message, /less free JetStream file storage .* max_file_store/);
   });
 });
 

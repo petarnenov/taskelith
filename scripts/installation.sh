@@ -74,7 +74,9 @@ broker_config() {
 
 start() {
   local worker
-  compose up --detach --wait --wait-timeout 120 postgres nats control-plane
+  if ! compose up --detach --wait --wait-timeout 120 postgres nats control-plane; then
+    stop_failed_control_plane
+  fi
   worker="$(compose --profile worker ps --all --quiet worker)"
   # Recreates an enrolled worker from a rebuilt image; its volume stays.
   if [ -n "$worker" ]; then
@@ -84,6 +86,18 @@ start() {
 
 stop() {
   compose --profile worker stop
+}
+
+# Stops the control plane, so that a start failure does not restart it in a
+# loop, and shows why it failed: its last error, or else its last lines.
+stop_failed_control_plane() {
+  local logs reason
+  logs="$(compose logs --no-color --no-log-prefix control-plane 2>&1 || true)"
+  compose stop control-plane >&2 || true
+  reason="$(printf '%s\n' "$logs" | grep '"error"' | tail -n 1 || true)"
+  printf '%s\n' "${reason:-$(printf '%s\n' "$logs" | tail -n 20)}" >&2
+  echo "installation.sh: the installation did not start; the control plane is stopped" >&2
+  exit 1
 }
 
 # Issues a single-use enrollment token; prints {"enrollmentToken": ...}.
@@ -164,6 +178,12 @@ remove_leftovers() {
   remove_project || true
 }
 
+# A failed check shows the control plane's log before the project goes.
+finish_verify() {
+  if [ "$1" -ne 0 ]; then compose logs --no-color control-plane >&2 || true; fi
+  remove_leftovers
+}
+
 # Opt-in end-to-end check on a fresh throwaway project with random secrets
 # and ephemeral host ports, removed with its volumes and images at the end.
 verify() {
@@ -171,7 +191,7 @@ verify() {
   export TASKELITH_POSTGRES_PASSWORD TASKELITH_API_PUBLISH_PORT='' TASKELITH_NATS_PUBLISH_PORT=''
   TASKELITH_POSTGRES_PASSWORD="$(od -An -tx1 -N16 /dev/urandom | tr -d ' \n')"
   remove_leftovers
-  trap remove_leftovers EXIT
+  trap 'finish_verify $?' EXIT
   : > "$repository/$sentinel"
   build
   check_image "$control_plane_image" "$sentinel"
