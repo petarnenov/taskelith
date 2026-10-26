@@ -57,6 +57,15 @@ The race itself is not reproduced in the suite: a test would need a stall of sev
 - **Confirmed without a finding:** the fix covers every response, error paths included; no streaming responses exist; the test's connection count is deterministic; the decision not to change the contract is right.
 - The fixes of L1 and L2 are unreviewed, as the Low-only rule of the [independent review process](../../../docs/governance.md#independent-review-process) allows.
 
+## Archive checks
+
+Worker step 7, run by the worker session after review pass 1 and its fixes. The checked state is the tree of the archive commit, which is the working tree these checks ran on after `npm run openspec -- archive fix-control-plane-api-keep-alive-race --yes` (base `6b3a806`).
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `make verify`: exit 0; 1930 tests, 1928 pass, 0 fail, 2 skipped; coverage lines 99.28%, branches 92.08%, functions 99.04%.
+- `npm run openspec -- validate --archived --no-interactive`: the line of `change/2026-10-27-fix-control-plane-api-keep-alive-race` passes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/control-plane-api/spec.md`, which gains the requirement "Connection closed after each response" with its scenario, the intended edit.
+
 ## Limitations
 
 - Symptom d of B6 (`placement.integration.test.ts:226`) is left unexplained; it is out of scope until it recurs.
