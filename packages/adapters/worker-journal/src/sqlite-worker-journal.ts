@@ -48,6 +48,8 @@ export interface JournalHooks {
   readonly onCommitPoint?: CommitPointHook;
   // Called once when a flush failure or corruption stops the journal.
   readonly onStop?: (fault: Failure) => Result<void>;
+  // Called after each write refused for lack of space rolled back.
+  readonly onSpaceRefused?: () => void;
 }
 
 // An unconfirmed entry is published again after this bound (contract
@@ -76,7 +78,10 @@ export class SqliteWorkerJournal implements WorkerJournal {
   }
 
   static open(database: JournalDatabase, clock: JournalClock, hooks: JournalHooks = {}): Result<SqliteWorkerJournal> {
-    const connection = new JournalConnection(database, hooks.onStop ?? (() => ok(undefined)));
+    const connection = new JournalConnection(database, {
+      onStop: hooks.onStop ?? (() => ok(undefined)),
+      onSpaceRefused: hooks.onSpaceRefused ?? (() => undefined),
+    });
     const binding = connection.read(readBinding);
     if (!binding.ok) return binding;
     return ok(new SqliteWorkerJournal(connection, binding.value, clock, hooks.onCommitPoint ?? (() => {})));

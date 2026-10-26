@@ -1,4 +1,4 @@
-import type { Instant, Result } from '@taskelith/kernel';
+import type { Failure, Instant, Result } from '@taskelith/kernel';
 import type { ExecutionId, LaunchAuthId, OperationId } from '../domain/identifiers.js';
 import type { LaunchRequest } from '../domain/launch-authorization.js';
 import type { LaunchGrant } from '../domain/launch-grant.js';
@@ -62,4 +62,12 @@ export interface WorkerJournal {
   // Cumulative confirmation by the control plane; prunes what it covers.
   confirmThrough(sequence: Sequence): Result<void>;
   close(): void;
+}
+
+// The `reason` of a write refused for lack of space: it rolled back as a
+// whole and may be retried (worker journal contract section 7).
+export const SPACE_REFUSAL_REASON = 'disk-full';
+
+export function isSpaceRefusal(failure: Failure): boolean {
+  return failure.details.reason === SPACE_REFUSAL_REASON;
 }
