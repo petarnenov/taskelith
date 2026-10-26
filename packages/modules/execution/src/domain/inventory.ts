@@ -124,6 +124,11 @@ export function highestReceivedSnapshot(reportedSnapshot: number, pending: reado
   return Math.max(reportedSnapshot, ...pending.map((part) => part.snapshot));
 }
 
+// A report is unsolicited when it answers no request.
+export function isUnsolicited(report: { readonly requestId?: string }): boolean {
+  return report.requestId === undefined;
+}
+
 // A report is fresh when it answers the worker's current request.
 export function isFreshReport(report: { readonly requestId?: string }, currentRequestId: string | undefined): boolean {
   return report.requestId !== undefined && report.requestId === currentRequestId;
