@@ -214,7 +214,8 @@ export class ComposedWorker {
 
   static async start(run: WorkerRun, enrollmentToken: string): Promise<ComposedWorker> {
     const { installation, seed, armed } = run;
-    const { [CRASH_POINT_VARIABLE]: _unarmed, ...inherited } = process.env;
+    // A crash kills mid-write the coverage file of an inheriting child.
+    const { [CRASH_POINT_VARIABLE]: _unarmed, NODE_V8_COVERAGE: _uncovered, ...inherited } = process.env;
     const env = {
       ...inherited, ...(armed === undefined ? {} : crashEnvironment(armed)),
       [SEED_VARIABLE]: String(seed), [CRASH_TRACE_VARIABLE]: crashTrace(installation),
