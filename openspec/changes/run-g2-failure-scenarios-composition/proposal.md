@@ -6,8 +6,8 @@ G2 work item 24, `run-g2-failure-scenarios` ([docs/g2-plan.md](../../../docs/g2-
 
 - **Results recorder.** `@taskelith/testing` gains a small recorder API: a scenario reports its name, seed, target, outcome, and an optional detail; the recorder adds the rerun hint, host, architecture, commit, and the time, and appends the result as one JSON line to the file that `TASKELITH_SCENARIO_RESULTS` names. Without that variable it records nothing, so ordinary test runs leave the tree unchanged. The target is `harness-composition`, a test-side composition of the real modules against the `make` services, or `compose-installation`, the item 23 installation.
 - **Fresh-composition happy path on arm64.** From a fresh Compose installation on an Apple Silicon host, submit an admitted task, have it assigned and executed, and check its persisted result.
-- **Worker disk loss.** In the Compose installation, lose the worker's persistent volume while an attempt runs, enrol a new worker, and check that the old attempt becomes `uncertain`.
-- **Untimed worker SIGKILL.** Send `SIGKILL` to the worker container at an untimed moment of an attempt, restart it, and check the reconciliation of the attempt.
+- **Worker disk loss.** In the Compose installation, kill the worker while an attempt runs, delete its journal and check that the worker refuses to start, then delete its whole data root, revoke it, enrol a new worker, and check that the old execution stays `started` with uncertain evidence and that a new task runs on the new worker.
+- **Untimed worker SIGKILL.** Send `SIGKILL` to the worker container at an untimed moment derived from the seed, restart it, and check that the reconciliation ends every execution or makes it uncertain, in agreement with the worker journal.
 - **Records.** This change directory carries the recorded results in `results.jsonl`.
 
 ## Capabilities
@@ -22,4 +22,4 @@ G2 work item 24, `run-g2-failure-scenarios` ([docs/g2-plan.md](../../../docs/g2-
 
 ## Impact
 
-The private package `@taskelith/testing`, its tests, and, in later phases of this change, scenario scripts and `make` targets. No product code, published CLI command, OpenAPI, AsyncAPI, or JSON schema, or npm dependency changes; product code still cannot import the harness. The commits use `test` or `chore`.
+The private package `@taskelith/testing` and its tests; the scenario steps in `scripts/installation-scenarios.sh`, sourced by `scripts/installation.sh`, and `scripts/installation-scenario.ts`, a parametrized `scripts/installation-smoke.ts`, the test-only `infra/installation/scenarios/`, the `make` targets `scenario-fresh-composition`, `scenario-worker-disk-loss`, and `scenario-worker-kill`, and `docs/local-installation.md`. No product code, published CLI command, OpenAPI, AsyncAPI, or JSON schema, or npm dependency changes; product code still cannot import the harness. The commits use `test`, `chore`, or `docs`.
