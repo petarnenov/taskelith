@@ -421,7 +421,7 @@ class Launch {
   async run(): Promise<void> {
     let resume = this.#context.resume;
     while (!this.#signal.aborted) {
-      const execution = resume === undefined ? this.#newExecution() : { executionId: resume, authorizedBefore: true };
+      const execution = this.#nextExecution(resume);
       if (execution === undefined) return;
       if ((await this.#execute(execution)) === 'end') return;
       resume = undefined;
@@ -429,14 +429,15 @@ class Launch {
     }
   }
 
-  // A new execution reports the intent's last sealed one, whose `not-started`
-  // may not have reached the authority yet (journal section 5).
-  #newExecution(): LaunchedExecution | undefined {
-    const executionId = this.#newId('ExecutionId');
+  // A new or resumed execution reports the intent's last sealed one, whose
+  // `not-started` may not have reached the authority yet (journal section 5).
+  #nextExecution(resume: ExecutionId | undefined): LaunchedExecution | undefined {
+    const executionId = resume ?? this.#newId('ExecutionId');
     const snapshot = this.#options.journal.snapshot();
     if (executionId === undefined || !reported(this.#options, snapshot)) return undefined;
     const sealed = lastSealedExecution(snapshot.value, this.#intent.assignmentId);
-    return { executionId, authorizedBefore: false, ...(sealed === undefined ? {} : { reportsNotStartedFor: sealed }) };
+    const report = sealed === undefined ? {} : { reportsNotStartedFor: sealed };
+    return { executionId, authorizedBefore: resume !== undefined, ...report };
   }
 
   // An execution authorized again reports that it has not started, so a

@@ -262,13 +262,12 @@ function applyOwnershipRule(task: Task, attempt: Attempt, request: LaunchRequest
 function recordReportedSeal(task: Task, attempt: Attempt, request: LaunchRequest): Result<Attempt, LaunchRejection> {
   const report = request.reportsNotStartedFor;
   if (report === undefined) return ok(attempt);
+  if (report.executionId === request.executionId) return err(sealRejection(report, 'it is the requested execution'));
   const located = locateExecution(task, report.executionId);
   if (located === undefined) return ok(attempt);
   const { execution } = located;
   const conflict = sealConflict(task, located.attempt, execution, request, report);
-  if (conflict !== undefined) {
-    return err(launchRejection('execution-conflict', `execution ${execution.id} cannot be reported sealed: ${conflict}`));
-  }
+  if (conflict !== undefined) return err(sealRejection(report, conflict));
   if (execution.state === 'not-started') return ok(attempt);
   const sealed = moveExecution(execution, 'not-started');
   return sealed.ok ? ok(withExecution(attempt, sealed.value)) : err(launchRejection('execution-conflict', sealed.error.message));
@@ -279,14 +278,19 @@ function recordReportedSeal(task: Task, attempt: Attempt, request: LaunchRequest
 function sealConflict(task: Task, owner: Attempt, execution: Execution, request: LaunchRequest, report: SealedExecution): string | undefined {
   if (owner.id !== request.attemptId || execution.workerId !== request.workerId) return 'it is not of this attempt and worker';
   if (execution.state !== 'authorized' && execution.state !== 'not-started') return `it is ${execution.state}`;
-  const named = grantOfOperation(task, report.operationId);
+  const named = grantOfOperation(task, request.workerId, report.operationId);
   if (named !== undefined && named.executionId !== execution.id) return `operation ${report.operationId} granted another execution`;
   return undefined;
 }
 
-function grantOfOperation(task: Task, operationId: OperationId): LaunchGrant | undefined {
+function sealRejection(report: SealedExecution, conflict: string): LaunchRejection {
+  return launchRejection('execution-conflict', `execution ${report.executionId} cannot be reported sealed: ${conflict}`);
+}
+
+// Only the worker's own operations, as a replay looks them up (section 6).
+function grantOfOperation(task: Task, workerId: WorkerId, operationId: OperationId): LaunchGrant | undefined {
   return task.attempts.flatMap((attempt) => attempt.executions).flatMap((execution) => execution.grants)
-    .find((grant) => grant.operationId === operationId);
+    .find((grant) => grant.workerId === workerId && grant.operationId === operationId);
 }
 
 function checkSameOperation(recorded: LaunchGrant, request: LaunchRequest): Check {

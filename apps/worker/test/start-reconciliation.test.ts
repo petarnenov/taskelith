@@ -247,6 +247,22 @@ test('an operation that expired is resumed for the same execution, reporting not
   assert.deepEqual(value(journal.snapshot()).executions.map(({ state }) => state), ['exited']);
 });
 
+test('a resumed execution reports the sealed one, whose not-started has not reached the authority', async () => {
+  inherit('granted');
+  value(journal.recordNotStarted(EXECUTION));
+  const resumed = requestOf('resumed-2', 'operation-2');
+  value(journal.beginAuthorization(resumed));
+  value(journal.recordAuthorizationExpired(resumed.operationId));
+  authority.answers = [grantedToOwner(EXECUTION)];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  await startOnce();
+  assert.equal(authority.requests[0]?.executionId, resumed.executionId);
+  assert.deepEqual(authority.requests[0]?.reportsNotStartedFor, { executionId: EXECUTION, operationId: 'operation-1' });
+  assert.deepEqual(value(journal.snapshot()).executions.map(({ state }) => state), ['not-started', 'exited']);
+});
+
 test('a retryable rejection is resumed for the same execution on start', async () => {
   inherit('pending');
   value(journal.recordLaunchRejection(id('OperationId', 'operation-1'), { reason: 'unavailable', retryable: true, message: 'down' }));

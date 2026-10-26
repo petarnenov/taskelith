@@ -12,11 +12,13 @@ import {
   rejectUnknownAssignment,
   workerLaunchDeadline,
   parseLaunchParameters,
+  recordExit,
   recordNotStarted,
   recordStartObservation,
   replayLaunchOperation,
   requestCancellation,
   revokeLaunch,
+  type Attempt,
   type LaunchContext,
   type LaunchRejectionReason,
   type LaunchRequest,
@@ -174,19 +176,43 @@ test('a reported seal whose not-started arrived first, or of an execution never 
   assert.equal(lost.task.attempts[0]!.executions[0]!.state, 'not-started');
 });
 
-test('a reported seal of a started execution, of another execution\'s operation, or of the new one conflicts', () => {
+function sealRefusal(result: ReturnType<typeof relaunch>): string {
+  const rejection = failed(result);
+  assert.equal(rejection.reason, 'execution-conflict');
+  return rejection.message;
+}
+
+test('a reported seal of a started or exited execution conflicts, although the rule alone would grant after an exit', () => {
   const first = authorized();
   const grant = first.task.attempts[0]!.executions[0]!.grants[0]!;
   const start = { workerId: WORKER, launchAuthId: grant.launchAuthId, executionId: EXECUTION, recoveryEpoch: EPOCH };
   const started = value(recordStartObservation(first.task, start, { installation: { recoveryEpoch: EPOCH, quarantined: false }, grant }, T2)).task;
-  assert.equal(failed(relaunch(started)).reason, 'execution-conflict');
+  assert.match(sealRefusal(relaunch(started)), /cannot be reported sealed: it is started/);
+  const exit = { workerId: WORKER, executionId: EXECUTION, status: { kind: 'code', code: 0 } as const, startProven: true, spawnFailed: false };
+  const exited = value(recordExit(first.task, exit, T2)).task;
+  assert.match(sealRefusal(relaunch(exited)), /cannot be reported sealed: it is exited/);
+});
+
+test('a reported seal of another attempt\'s execution, or naming another execution\'s operation, conflicts', () => {
+  const first = authorized();
+  const [owner] = first.task.attempts as [Attempt];
+  const elsewhere: Task = { ...first.task, attempts: [{ ...owner, id: attemptId('attempt-0') }, { ...owner, executions: [] }] };
+  assert.match(sealRefusal(relaunch(elsewhere)), /cannot be reported sealed: it is not of this attempt and worker/);
   const sealed = value(recordNotStarted(first.task, { workerId: WORKER, executionId: EXECUTION }, T2)).task;
   const second = value(relaunch(sealed)).task;
   const crossed = { executionId: executionId('execution-2'), operationId: operationId('operation-1') };
   const third = { operationId: operationId('operation-3'), executionId: executionId('execution-3'), reportsNotStartedFor: crossed };
-  assert.equal(failed(authorizeLaunch(second, launchRequest(second, third), launchContext(second), grantIssue('launch-3', T3))).reason, 'execution-conflict');
-  const itself = launchRequest(first.task, { operationId: operationId('operation-2'), reportsNotStartedFor: { executionId: EXECUTION, operationId: operationId('operation-1') } });
-  assert.equal(failed(authorizeLaunch(first.task, itself, launchContext(first.task), grantIssue('launch-2', T3))).reason, 'execution-conflict');
+  const result = authorizeLaunch(second, launchRequest(second, third), launchContext(second), grantIssue('launch-3', T3));
+  assert.match(sealRefusal(result), /cannot be reported sealed: operation operation-1 granted another execution/);
+});
+
+test('a report naming the requested execution itself conflicts, known or never granted', () => {
+  for (const task of [authorized().task, placedTask()]) {
+    const itself = { executionId: executionId('execution-2'), operationId: operationId('operation-1') };
+    const request = launchRequest(task, { operationId: operationId('operation-2'), executionId: executionId('execution-2'), reportsNotStartedFor: itself });
+    const result = authorizeLaunch(task, request, launchContext(task), grantIssue('launch-2', T3));
+    assert.match(sealRefusal(result), /cannot be reported sealed: it is the requested execution/);
+  }
 });
 
 test('a reported seal of another worker\'s execution conflicts and changes nothing', () => {
@@ -194,7 +220,7 @@ test('a reported seal of another worker\'s execution conflicts and changes nothi
   const request = { ...launchRequest(first.task, { operationId: operationId('operation-2'), executionId: executionId('execution-2') }), workerId: OTHER_WORKER };
   const reported = { ...request, reportsNotStartedFor: { executionId: EXECUTION, operationId: operationId('operation-1') } };
   const context = launchContext(first.task, { assignment: { ...launchContext(first.task).assignment!, workerId: OTHER_WORKER }, reservation: { state: 'held', attemptId: ATTEMPT, workerId: OTHER_WORKER } });
-  assert.equal(failed(authorizeLaunch(first.task, reported, context, grantIssue('launch-2', T3))).reason, 'execution-conflict');
+  assert.match(sealRefusal(authorizeLaunch(first.task, reported, context, grantIssue('launch-2', T3))), /cannot be reported sealed: it is not of this attempt and worker/);
 });
 
 test('a transport retry of a relaunch replays its grant without a second seal', () => {
