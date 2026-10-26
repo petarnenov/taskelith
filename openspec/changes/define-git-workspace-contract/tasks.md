@@ -14,4 +14,4 @@
 
 - [x] 3.1 Run `make verify`
 - [x] 3.2 Independent review by the assigned reviewer (Codex, `gpt-6.1-sol`, medium effort, read-only): three passes; pass 3 M1 and M2 open for the owner
-- [ ] 3.3 Record the review evidence in `verification.md` (passes 1 to 3 recorded)
+- [x] 3.3 Record the review evidence in `verification.md`

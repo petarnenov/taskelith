@@ -4,7 +4,7 @@
 
 - G3 work plan item 6 (`docs/g3-plan.md`), assigned by the coordinator on 2026-10-26, under the owner's decision of 2026-10-26 that starts the G3 wave 1 contracts (items 3, 5, 6, 7, and 8) in parallel with G2.
 - Sources: the plan row; G3 plan decisions D3 (a), D4 (a), and D7 (a); ADR 0010's code-head deferral; architecture section 6 (Modules, head-bound evidence, content-addressed snapshots) and R21 and R31; the worker journal contract sections 2, 6, and 7; the storage contract; the trust model section 5; the source control contract section 3 (`RunCredential`, `RunCredentialIssuer`); the G2 evidence store (`EvidenceStore`, `EvidencePublisher`, `EvidencePublication`); the account pool, product ports, and source control contracts and their archived changes for structure and style.
-- Delivered: `docs/contracts/git-workspace.md`; the `git-workspace-port` spec delta; the `@taskelith/workspace` module with `CodeHeadIdentity` (`parseCodeHeadIdentity`, `isSameCodeHead`, `parseGitObjectId`), the contract values (`WORKSPACE_LAYOUT`, `TASK_BRANCH_PREFIX`, `WORKSPACE_KINDS`, `DIRTY_REASONS`, `WORKSPACE_FAILURE_REASONS`, `HEAD_SNAPSHOT_EVIDENCE_KIND`), the rules `workspaceDirectoryName`, `taskBranchName`, `cleanHead`, and `checkCredentialScope`, the `WorkspaceLifecycle`, `WorkspaceHeads`, `TaskBranchPublisher`, and `WorkspaceProvider` ports, the `WorkspaceFixture`, and the `WORKSPACE_CONFORMANCE` suite, run against a temporary-directory double with a fake Git service and twelve defective variants; pointers to the new contract from the worker journal and source control contracts; the regenerated dependency inventory for the new workspace package.
+- Delivered: `docs/contracts/git-workspace.md`; the `git-workspace-port` spec delta; the `@taskelith/workspace` module with `CodeHeadIdentity` (`parseCodeHeadIdentity`, `isSameCodeHead`, `parseGitObjectId`), the contract values (`WORKSPACE_LAYOUT`, `TASK_BRANCH_PREFIX`, `WORKSPACE_KINDS`, `DIRTY_REASONS`, `WORKSPACE_FAILURE_REASONS`, `HEAD_SNAPSHOT_EVIDENCE_KIND`), the rules `workspaceDirectoryName`, `taskBranchName`, `cleanHead`, and `checkCredentialScope`, the `WorkspaceLifecycle`, `WorkspaceHeads`, `TaskBranchPublisher`, and `WorkspaceProvider` ports, the `WorkspaceFixture`, and the `WORKSPACE_CONFORMANCE` suite, run against a temporary-directory double with a fake Git service and fourteen defective variants; pointers to the new contract from the worker journal and source control contracts; the regenerated dependency inventory for the new workspace package.
 - Not delivered, by scope: the Git adapter and any Git call, an SCM adapter, worker runtime wiring, the snapshot format, wire schemas, and UI.
 
 ## Revision
@@ -12,7 +12,8 @@
 - Implementation commit: `b51cd00`, on branch `define-git-workspace-contract`, created from `origin/dev` at `d22d727`; first records commit `6f8861e`.
 - Fixes after review pass 1: `652854e`, recorded in `1719c3a`.
 - Fixes after review pass 2: `37f5bd3`, recorded in `3b893bd`.
-- Review pass 3 and its unreviewed Low fix: recorded in the commit that follows `3b893bd`.
+- Review pass 3 and its unreviewed Low fix: recorded in `ce18d76`.
+- Unreviewed fixes of pass 3 M1 and M2: `b24e551`; this record is updated in the commit that follows it.
 
 ## Environment
 
@@ -38,6 +39,7 @@ The task was developed by an implementation subagent briefed by the worker sessi
 | --- | --- | --- |
 | `b51cd00` (tree before commit) | `make verify` | Passed: 1539 tests, 0 failed; coverage over all files 99.25% lines, 91.42% branches, 98.76% functions (the workspace module: domain files 100%; `workspace-conformance.js` 100% lines and functions, 61.40% branches, from its early returns after a failed step); 66 OpenSpec items valid; comment check, contract compatibility, dependency inventory, archive dry run, and package verification passed |
 | `b51cd00` | `npm run openspec -- validate define-git-workspace-contract --strict` | `Change 'define-git-workspace-contract' is valid` |
+| `b24e551` (unreviewed fixes after pass 3, tree before commit) | `make verify`; `npm run openspec -- validate define-git-workspace-contract --strict` | Passed: 1551 tests, 0 failed; coverage over all files 99.25% lines, 91.42% branches, 98.77% functions (`workspace-conformance.js` 100% lines and functions, 72.16% branches); 66 OpenSpec items valid; comment check, archive dry run, and package verification passed; change valid |
 | `37f5bd3` (fixes after pass 2, tree before commit) | `make verify`; `npm run openspec -- validate define-git-workspace-contract --strict` | Passed: 1548 tests, 0 failed; coverage over all files 99.25% lines, 91.41% branches, 98.77% functions (`workspace-conformance.js` 100% lines and functions, 73.12% branches); 66 OpenSpec items valid; comment check, archive dry run, and package verification passed; change valid |
 | `652854e` (fixes after pass 1, tree before commit) | `make verify`; `npm run openspec -- validate define-git-workspace-contract --strict` | Passed: 1545 tests, 0 failed; coverage over all files 99.24% lines, 91.40% branches, 98.77% functions (`workspace-conformance.js` 100% lines and functions, 65.38% branches); 66 OpenSpec items valid; comment check, boundary checks, archive dry run, and package verification passed; change valid |
 
@@ -82,26 +84,27 @@ Reviewer for all passes: Codex CLI v0.164.0, model `gpt-6.1-sol`, reasoning effo
 - Snapshot before and after: `f37b3c195c756e7d7b63dcbb9366e1626fef70e27ce2537dcafaa8e79a887a2f`, unchanged.
 - Pass 2 confirmations: M1 to M4 correct and complete; pass 2 M1 also closes pass 1 M4, and pass 2 M2 closes the remainder of pass 1 M3.
 - Findings: 0 Critical, 0 High, 2 Medium, 1 Low.
-  - M1 the suite does not check staged-only changes: the contract counts a staged change as `modified`, but the fixture has no staging operation and the double compares only the working tree with the head, so a change staged and then reverted in the working tree leaves the index different and an adapter that checks only the working tree passes. Proposed fix: index state and a staging helper in the fixture and the double; checks that such a workspace is `modified` and that `snapshot`, `push`, and `remove` refuse it and keep it; a defective variant that ignores the index. **Open**, not fixed.
-  - M2 the suite does not check that a snapshot preserves binary content: `TreeEntry.content` and the write helpers are text and the double reads UTF-8, so an adapter that corrupts a blob through a UTF-8 round trip, for example the bytes 0, 128, and 255, passes. Proposed fix: a byte representation in the fixture, a binary write helper, a snapshot check with bytes that are not valid UTF-8, and a defective variant. **Open**, not fixed.
+  - M1 the suite does not check staged-only changes: the contract counts a staged change as `modified`, but the fixture has no staging operation and the double compares only the working tree with the head, so a change staged and then reverted in the working tree leaves the index different and an adapter that checks only the working tree passes. Proposed fix: index state and a staging helper in the fixture and the double; checks that such a workspace is `modified` and that `snapshot`, `push`, and `remove` refuse it and keep it; a defective variant that ignores the index. Fixed without review (below).
+  - M2 the suite does not check that a snapshot preserves binary content: `TreeEntry.content` and the write helpers are text and the double reads UTF-8, so an adapter that corrupts a blob through a UTF-8 round trip, for example the bytes 0, 128, and 255, passes. Proposed fix: a byte representation in the fixture, a binary write helper, a snapshot check with bytes that are not valid UTF-8, and a defective variant. Fixed without review (below).
   - L1 the delivered summary in this record said "three defective variants" while the suite's table has twelve: fixed in "Scope and source" (unreviewed fix, below).
-- Under the governance review process ("At most three passes per task"), pass 3 is the last allowed pass. M1 and M2 remain open pending the owner's decision, with these options: fix them without another review and record the fixes as unreviewed; accept them as known risks of this contract; or defer them to a follow-up change, for example with item 16, whose Git adapter runs the suite against real Git.
+- Under the governance review process ("At most three passes per task"), pass 3 is the last allowed pass. M1 and M2 were left open for a decision among three options: fix them without another review and record the fixes as unreviewed; accept them as known risks; or defer them to a follow-up change.
+- Decision: option 1, fix M1 and M2 without review. It was made by the OpenCode `kimi-k2.7-code` delegate acting on the owner's delegation while the owner is away, not by the owner, in the away run `/Users/petarnenov/.config/away/runs/20261026T095621Z-opencode-45144`, and relayed by the coordinator.
 
 ### Unreviewed fixes after pass 3
 
-1. L1: the delivered summary now says twelve defective variants. Documentation only.
+1. L1: the delivered summary states the number of defective variants, now fourteen after the fixes below. Documentation only (`ce18d76`, updated here).
+2. M1, under the delegate's decision (`b24e551`): the double keeps an index, and the fixture gains `stage`; a new case stages a change to a tracked file, restores the working tree to the head, and checks that `inspect` reports `modified`, that `snapshot`, `push`, and `remove` fail with `precondition-failed` and reason `workspace-dirty`, that nothing is pushed, and that the workspace stays listed and dirty; contract section 6 and the spec name a staged change that the working tree no longer shows; a defective variant that ignores the index is reported, and the variant that removes a dirty workspace is now reported by this case too.
+3. M2, under the delegate's decision (`b24e551`): `TreeEntry` file content is now exact bytes (`Uint8Array`), the double stores them losslessly, and the fixture gains `writeBytes`; the snapshot case commits a file with the bytes 0, 128, and 255, which are not valid UTF-8, and compares the decoded tree byte for byte; contract section 10 and the spec require exact bytes; a defective variant that corrupts binary content through a UTF-8 round trip is reported.
 
 ## Limitations
 
 - The suite runs only against a test-only double; the Git adapter (item 16) runs it against real Git.
 - Discarding a dirty workspace on an operator's explicit decision is not defined here; a later change defines that policy.
 - The snapshot format is not fixed here; item 16 chooses it.
-- Open after pass 3: the suite does not yet check staged-only changes or binary snapshot content (pass 3 M1 and M2).
+- The fixes of pass 3 M1 and M2 were not reviewed independently, because pass 3 was the last allowed pass; they are recorded as unreviewed fixes under the delegate's decision.
 - `CodeHeadIdentity` is not yet joined to the evidence record's `codeRevision` or the merge queue's `CodeHead`; item 17 does that (contract section 14).
 
 ## Remaining gates
 
-- The owner's decision on pass 3 M1 (staged-only changes) and M2 (binary snapshot content): fix without review, accept as known risks, or defer.
-- After that decision, any unreviewed fixes recorded here and a final `make verify`.
 - Integration into `dev` by the coordinator.
 - Archive of the change after the merge.
