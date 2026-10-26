@@ -69,3 +69,17 @@ Environment: macOS (Darwin 25.6.0), Node from `.nvmrc`, Docker test services sta
 ## Remaining gates
 
 - Integration into dev by the coordinator (single pull request).
+
+## Merge of dev and reviewer authorization
+
+- After review pass 2, the worker session merged `origin/dev` at `cc7f998` into the branch (`c7240e8`) without conflicts. That `dev` carries `add-deepseek-qwen-reviewers` (pull request #320), which records in `docs/governance.md` the owner's approval of 2026-10-26 of OpenCode CLI (qwen3.8-max), model `opencode-go/qwen3.8-max` with the `medium` variant, relayed by the coordinator. This resolves finding H1 of pass 2: passes 1 and 2 ran with an authorized reviewer configuration.
+- Evidence freshness: the merge changes no requirement, contract, or implementation of this change. It changes other tests of `packages/adapters/postgres/test/observability.integration.test.ts` (from `stabilize-observability-lag-test`), not the tests this change adds or extends, and no living spec this change modifies. The reviewed evidence therefore stands; the checks below ran again on the merged and archived tree.
+
+## Archive checks
+
+Worker step 7, run by the worker session after review pass 2, its fixes, and the merge of `dev`. The checked state is the tree of the archive commit, which is the working tree these checks ran on after `npm run openspec -- archive stamp-assignment-age-on-database-clock --yes` (base `c7240e8`).
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `make verify`: exit 0; 1955 tests, 1953 pass, 0 fail, 2 skipped; coverage lines 99.28%, branches 92.09%, functions 99.04%.
+- `npm run openspec -- validate --archived --no-interactive`: the line of `change/2026-10-27-stamp-assignment-age-on-database-clock` passes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/execution-observability/spec.md`, where the requirement "Control-plane snapshot from PostgreSQL" takes the reviewed delta text and gains the scenarios "Placement under a skewed application clock" and "A stamp later than the read", the intended edit.
