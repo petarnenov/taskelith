@@ -16,14 +16,22 @@ export { SERVICES_REMEDY, integrationEndpoint, integrationSecret } from './integ
 export { acquireProcessLock, lockPort, type ReleaseLock } from './process-lock.js';
 export { failed, id, value } from './results.js';
 export {
+  ACCEPTANCE_ROWS,
+  ACCEPTANCE_VARIABLE,
   FileScenarioRecorder,
+  MATRIX_ENTRIES,
   SCENARIO_OUTCOMES,
   SCENARIO_RESULTS_VARIABLE,
   SCENARIO_TARGETS,
   discardingScenarioRecorder,
+  parseAcceptanceContext,
   runEnvironment,
   scenarioRecorderFromEnvironment,
   scenarioResult,
+  type AcceptanceContext,
+  type AcceptancePlatform,
+  type AcceptanceRow,
+  type MatrixEntry,
   type RunEnvironment,
   type RunEnvironmentOptions,
   type ScenarioOutcome,
