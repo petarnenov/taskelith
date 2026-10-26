@@ -5,8 +5,8 @@ The `execution-observability` requirement "Control-plane snapshot from PostgreSQ
 ## What Changes
 
 - **Comment.** The snapshot comment says that outbox lag uses the database default `appended_at` and assignment age the `changed_at` that placement writes from `tx.now()`; the wrong contract section reference is gone.
-- **Spec.** The requirement states that an age is the database's `now()` less the row's stamp, written by the database or by placement from its clock, clamped at zero. The waiting-work scenario states that "at least" assumes the database clock has not stepped back; scenarios for a placement under a skewed application clock and for a later stamp are added.
-- **Test.** A placement through `ResourceAdmissionService` under an application `Date` six hours behind must store `changed_at` within a second of its offer's `appended_at`, the same transaction's database time.
+- **Spec.** The requirement states that an age is the database's `now()` less the row's stamp, written by the database default or, for an offered assignment, by placement from the database clock of its transaction (`tx.now()`), clamped at zero. The waiting-work scenario states that "at least" assumes the database clock has not stepped back; scenarios for a placement under a skewed application clock and for later stamps of both ages are added.
+- **Tests.** The future-stamp test also covers the assignment age. A placement through `ResourceAdmissionService` under an application `Date` six hours behind must store `changed_at` within a second of its offer's `appended_at`, the same transaction's database time.
 
 No schema, migration, contract, wire message, or published package changes.
 
@@ -23,5 +23,5 @@ None.
 ## Impact
 
 - `packages/adapters/postgres/src/control-plane-signals.ts` (comment only).
-- `packages/adapters/postgres/test/resource-admission.integration.test.ts` (new test).
+- `packages/adapters/postgres/test/resource-admission.integration.test.ts` (new test) and `packages/adapters/postgres/test/observability.integration.test.ts` (extended future-stamp test).
 - Out of scope: the acceptance writer of `changedAt` (`apps/control-plane/src/application/observation-effects.ts:78`), tracked by the coordinator as a follow-up.

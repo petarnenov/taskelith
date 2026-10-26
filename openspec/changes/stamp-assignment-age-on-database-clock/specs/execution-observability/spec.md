@@ -2,7 +2,7 @@
 
 ### Requirement: Control-plane snapshot from PostgreSQL
 
-The PostgreSQL adapter SHALL read, in one read-only snapshot that takes no part in the writers' serialization checks, the age of the oldest unpublished outbox row and the unpublished count, the age of the oldest assignment still offered and their count, the unknown executions, the eligible workers' slots, and the held reservations. An age SHALL be the database's now() less the row's stamp, written by the database or by placement from its clock, and zero when nothing waits or the stamp is later.
+The PostgreSQL adapter SHALL read, in one read-only snapshot that takes no part in the writers' serialization checks, the age of the oldest unpublished outbox row and their count, the age of the oldest offered assignment and their count, the unknown executions, the eligible workers' slots, and the held reservations. An age SHALL be the database's now() less the row's stamp, from the database default or, for an assignment, placement's tx.now(), and zero when nothing waits or the stamp is later.
 
 #### Scenario: A snapshot of waiting work
 
@@ -26,5 +26,5 @@ The PostgreSQL adapter SHALL read, in one read-only snapshot that takes no part 
 
 #### Scenario: A stamp later than the read
 
-- **WHEN** an outbox row carries a stamp later than the database's now(), as after that clock stepped back
-- **THEN** its age reads zero
+- **WHEN** an outbox row and an offered assignment carry stamps later than the database's now(), as after that clock stepped back
+- **THEN** both ages read zero

@@ -12,9 +12,11 @@
 
 - [x] 3.1 `a placement stamps the assignment change time on the database clock`
 - [x] 3.2 Prove 3.1 fails when placement uses the application clock
+- [x] 3.3 Review pass 1: the future-stamp test covers the assignment age; 3.1 asserts its row exists
 
 ## 4. Records
 
 - [x] 4.1 Proposal, design with the rejected option A, `verification.md`
 - [x] 4.2 `npm run openspec -- validate stamp-assignment-age-on-database-clock --strict` and `make verify`
-- [ ] 4.3 Independent review
+- [x] 4.3 Independent review pass 1 (1 Medium, 4 Low), fixed
+- [ ] 4.4 Independent review pass 2
