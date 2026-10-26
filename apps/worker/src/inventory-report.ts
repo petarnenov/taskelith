@@ -1,5 +1,5 @@
 import type { WorkerJournal } from '@taskelith/execution';
-import { ok, type Instant, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import { encodeJson, retryDelayMilliseconds, TRANSPORT_LIMITS, type Publication, type PublishOutcome, type TransportLimits } from '@taskelith/nats';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import { inventoryParts } from './observation-messages.js';
@@ -14,12 +14,24 @@ export interface InventoryReportOptions {
 
 // One snapshot in parts; a failed part fails the report, and a later
 // snapshot replaces it. Only an answer names the request.
-export async function publishInventory(options: InventoryReportOptions, requestId?: string): Promise<Result<void>> {
+export function publishInventory(options: InventoryReportOptions, requestId?: string): Promise<Result<void>> {
+  return publishSnapshot(options, requestId === undefined ? {} : { requestId });
+}
+
+interface ReportScope {
+  readonly requestId?: string;
+  // Once it aborts, no further part is published.
+  readonly signal?: AbortSignal;
+}
+
+async function publishSnapshot(options: InventoryReportOptions, scope: ReportScope): Promise<Result<void>> {
   const { journal, newReportId, now, observationSubject: subject, publish } = options;
+  const { requestId, signal } = scope;
   const inventory = journal.takeInventory();
   if (!inventory.ok) return inventory;
   const answer = { reportId: newReportId(), reportedAt: now(), ...(requestId === undefined ? {} : { requestId }) };
   for (const part of inventoryParts(journal.binding, inventory.value, answer)) {
+    if (signal?.aborted === true) return err(failure('unavailable', 'the link went down during the report'));
     const sent = await publish({ subject, body: encodeJson(part), messageId: `${part.reportId}.${part.part}` });
     if (!sent.ok) return sent;
   }
@@ -38,8 +50,8 @@ export interface ConnectionReportOptions extends InventoryReportOptions {
 export async function reportInventoryOnConnection(options: ConnectionReportOptions, signal: AbortSignal): Promise<void> {
   const logger = options.logger ?? SILENT_LOGGER;
   for (let attempt = 1; !signal.aborted; attempt += 1) {
-    const reported = await publishInventory(options);
-    if (reported.ok) return;
+    const reported = await publishSnapshot(options, { signal });
+    if (reported.ok || signal.aborted) return;
     logger.debug('worker.inventory.unreported', { attempt, reason: reported.error.message });
     await options.sleep(retryDelayMilliseconds(attempt, options.limits ?? TRANSPORT_LIMITS, options.draw), signal);
   }

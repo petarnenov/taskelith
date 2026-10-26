@@ -27,11 +27,12 @@ import {
 import { BrokerSession, type BrokerLink } from './broker-session.js';
 import { CommandIntake } from './command-intake.js';
 import type { DeadlineClock, RecordListing, SupervisionFactory } from './execution-supervision-port.js';
-import { runHeartbeats } from './heartbeat-publisher.js';
+import { runHeartbeats, type HeartbeatOptions } from './heartbeat-publisher.js';
 import { reportInventoryOnConnection } from './inventory-report.js';
 import { LaunchOrchestrator, openExecutions } from './launch-orchestrator.js';
 import { runObservationPublisher } from './observation-publisher.js';
 import type { WorkerSettings } from './settings.js';
+import { runTogether, TaskGroup } from './task-group.js';
 import { WorkerContact } from './worker-contact.js';
 
 export interface WorkerDependencies {
@@ -74,7 +75,8 @@ export interface LaunchHost {
 export interface RunningWorker {
   readonly identity: WorkerIdentity;
   readonly root: WorkerRoot;
-  // Settles once the worker has stopped; `stop` may be called repeatedly.
+  // Settles once the worker has stopped, by `stop` or by a runtime
+  // failure, which `stop` rejects with; it may be called repeatedly.
   readonly stopped: Promise<void>;
   stop(): Promise<void>;
 }
@@ -146,8 +148,9 @@ function startRuntime(settings: WorkerSettings, dependencies: WorkerDependencies
   const subjects = workerSubjects(address.value, identity.workerId);
   if (!subjects.ok) return subjects;
   const controller = new AbortController();
+  const tasks = new TaskGroup(controller.signal);
   const logger = dependencies.logger ?? SILENT_LOGGER;
-  const contact = new WorkerContact({ sleep: dependencies.sleep, stopping: controller.signal, logger });
+  const contact = new WorkerContact({ sleep: dependencies.sleep, stopping: tasks.signal, logger });
   const launcher = launchOrchestrator({ settings, dependencies, root, credential: credentials.value.controlPlane, contact });
   if (!launcher.ok) return launcher;
   const declared = declareCapacity(settings, root);
@@ -156,8 +159,9 @@ function startRuntime(settings: WorkerSettings, dependencies: WorkerDependencies
     settings, dependencies, root, address: address.value, subjects: subjects.value, contact, broker: credentials.value.broker,
     ...(launcher.value === undefined ? {} : { launcher: launcher.value }),
   });
-  const finished = Promise.all([session.run(controller.signal), launcher.value?.run(controller.signal)]).then(() => undefined);
-  return ok(runningWorker(root, { finished, abort: () => controller.abort() }));
+  tasks.add(session.run(tasks.signal));
+  if (launcher.value !== undefined) tasks.add(launcher.value.run(tasks.signal));
+  return ok(runningWorker(root, { finished: tasks.settled(), abort: () => controller.abort() }));
 }
 
 interface WorkerSubjects {
@@ -244,10 +248,13 @@ function brokerSession(context: SessionContext): BrokerSession<TransportLink> {
       return connected.ok ? ok(transportLink(connected.value)) : connected;
     },
     serve: (link, signal) => serveConnection(context, link.transport, signal),
-    linkUp: (link, signal) => void reportInventoryOnConnection({
-      ...observationPublishing(context, link.transport), newReportId: randomUUID, sleep, draw, logger,
-      ...(limits === undefined ? {} : { limits }),
-    }, signal),
+    linkUp: (link, signal) => runTogether(signal, [
+      (upSignal) => reportInventoryOnConnection({
+        ...observationPublishing(context, link.transport), newReportId: randomUUID, sleep, draw, logger,
+        ...(limits === undefined ? {} : { limits }),
+      }, upSignal),
+      (upSignal) => runHeartbeats(heartbeatOptions(context, link.transport), upSignal),
+    ]),
     contact, sleep, draw, logger,
   });
 }
@@ -265,10 +272,10 @@ function observationPublishing(context: SessionContext, transport: TransportConn
   };
 }
 
-// The command consumer, the observation publisher, and the heartbeats of
-// one connection, until its signal aborts.
+// The command consumer and the observation publisher of one connection,
+// until its signal aborts.
 async function serveConnection(context: SessionContext, transport: TransportConnection, signal: AbortSignal): Promise<void> {
-  const { settings, dependencies, root, address, subjects, contact, launcher } = context;
+  const { settings, dependencies, root, address, launcher } = context;
   const publishing = observationPublishing(context, transport);
   const intake = new CommandIntake({
     ...publishing, capacity: settings.capacity, newReportId: randomUUID,
@@ -276,15 +283,20 @@ async function serveConnection(context: SessionContext, transport: TransportConn
   });
   const options = dependencies.limits === undefined ? {} : { limits: dependencies.limits };
   const consumer = workerCommandConsumer(transport.js, address, root.identity.workerId, intake.handle, options);
-  const heartbeats = {
-    binding: root.identity, subject: subjects.heartbeats, send: coreSender(transport), connected: () => contact.connected,
-    now: publishing.now, sleep: dependencies.sleep, ...(dependencies.logger === undefined ? {} : { logger: dependencies.logger }),
-  };
-  await Promise.all([
-    consumer.run(signal),
-    runObservationPublisher(publishing, signal, dependencies.limits),
-    runHeartbeats(heartbeats, signal),
+  await runTogether(signal, [
+    (served) => consumer.run(served),
+    (served) => runObservationPublisher(publishing, served, dependencies.limits),
   ]);
+}
+
+// Restarted on each link-up, so a reconnect sends one at once.
+function heartbeatOptions(context: SessionContext, transport: TransportConnection): HeartbeatOptions {
+  const { dependencies, root, subjects, contact } = context;
+  return {
+    binding: root.identity, subject: subjects.heartbeats, send: coreSender(transport), connected: () => contact.connected,
+    now: () => dependencies.clock.now(), sleep: dependencies.sleep,
+    ...(dependencies.logger === undefined ? {} : { logger: dependencies.logger }),
+  };
 }
 
 // Core NATS publishes without an acknowledgement; a throw loses only this
@@ -306,24 +318,20 @@ interface Runtime {
 }
 
 function runningWorker(root: WorkerRoot, runtime: Runtime): RunningWorker {
-  let finish: () => void = () => undefined;
-  const stopped = new Promise<void>((resolve) => {
-    finish = resolve;
-  });
-  let stopping: Promise<void> | undefined;
+  const closed = closeAfter(root, runtime.finished);
+  const stopped = closed.catch(() => undefined);
   const stop = () => {
-    stopping ??= closeAll(root, runtime).finally(finish);
-    return stopping;
+    runtime.abort();
+    return closed;
   };
   return Object.freeze({ identity: root.identity, root, stopped, stop });
 }
 
-// The session closes its connection once its work stopped; the journal
+// Every task of the runtime ended, after a stop or a failure; the journal
 // they use closes last.
-async function closeAll(root: WorkerRoot, runtime: Runtime): Promise<void> {
-  runtime.abort();
+async function closeAfter(root: WorkerRoot, finished: Promise<void>): Promise<void> {
   try {
-    await runtime.finished;
+    await finished;
   } finally {
     root.close();
   }

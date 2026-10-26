@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { getEventListeners } from 'node:events';
 import { afterEach, beforeEach, test } from 'node:test';
 import { checkMessageSchema } from '@taskelith/contracts';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
@@ -150,7 +151,9 @@ interface SessionTrace {
   answers: Array<Result<FakeLink> | undefined>;
 }
 
-function session(trace: SessionTrace, serve?: (signal: AbortSignal) => Promise<void>): BrokerSession<FakeLink> {
+type Work = (signal: AbortSignal) => Promise<void>;
+
+function session(trace: SessionTrace, serve?: Work, linkUp?: Work): BrokerSession<FakeLink> {
   return new BrokerSession<FakeLink>({
     connect: async () => {
       const answer = trace.answers.shift();
@@ -164,7 +167,10 @@ function session(trace: SessionTrace, serve?: (signal: AbortSignal) => Promise<v
       if (serve !== undefined) return serve(signal);
       await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
     },
-    linkUp: (_link, signal) => trace.ups.push(signal),
+    linkUp: async (_link, signal) => {
+      trace.ups.push(signal);
+      if (linkUp !== undefined) await linkUp(signal);
+    },
     contact, sleep: timers.sleep, draw: () => 0, logger: new Logger(sink, { now: () => T0 }),
   });
 }
@@ -238,6 +244,43 @@ test('a failed close or serve reaches the caller after the link is closed', asyn
   await flush();
   stopping.abort();
   await assert.rejects(running, /close failed/);
+});
+
+test('a failed serve aborts the link-up work and closes the link after it ended', async () => {
+  const trace = newTrace();
+  let failServe: (error: Error) => void = () => undefined;
+  let endUp: () => void = () => undefined;
+  const serve: Work = async () => new Promise((_resolve, reject) => {
+    failServe = reject;
+  });
+  const up: Work = async (signal) => new Promise((resolve) => {
+    signal.addEventListener('abort', () => {
+      endUp = resolve;
+    }, { once: true });
+  });
+  const running = session(trace, serve, up).run(stopping.signal);
+  await flush();
+  failServe(new Error('serve failed'));
+  await flush();
+  assert.deepEqual([trace.ups[0]?.aborted, trace.links[0]?.closed], [true, 0]);
+  endUp();
+  await assert.rejects(running, /serve failed/);
+  assert.equal(trace.links[0]?.closed, 1);
+});
+
+test('the status watcher keeps no listener per status event', async () => {
+  const trace = newTrace();
+  const running = session(trace).run(stopping.signal);
+  await flush();
+  const [link] = trace.links;
+  const [signal] = trace.served;
+  assert.ok(link && signal);
+  const listeners = getEventListeners(signal, 'abort').length;
+  for (let event = 0; event < 100; event += 1) link.statuses.push('pingTimer');
+  await flush();
+  assert.equal(getEventListeners(signal, 'abort').length, listeners);
+  stopping.abort();
+  await running;
 });
 
 test('a stop while connecting retries nothing', async () => {

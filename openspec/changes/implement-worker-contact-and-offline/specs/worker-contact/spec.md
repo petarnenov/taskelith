@@ -1,11 +1,15 @@
 ## ADDED Requirements
 
 ### Requirement: Worker heartbeat
-A connected worker SHALL publish `worker.heartbeat` with its `workerId`, its `journalId`, and `sentAt` from its own clock on its own heartbeat subject over core NATS, at once on each connection and then every `10s`. It SHALL send none while its connection is down, and a heartbeat it cannot send SHALL be logged and replaced by the next.
+A connected worker SHALL publish `worker.heartbeat` with its `workerId`, its `journalId`, and `sentAt` from its own clock on its own heartbeat subject over core NATS, at once on each connection and reconnection and then every `10s`. It SHALL send none while its connection is down, and a heartbeat it cannot send SHALL be logged and replaced by the next.
 
 #### Scenario: Connected worker
 - **WHEN** a worker's broker connection is up
 - **THEN** a heartbeat that matches `WorkerHeartbeat` goes out at once on `taskelith.<installationId>.workers.<workerId>.heartbeats`, and another one every `10s`
+
+#### Scenario: Reconnected worker
+- **WHEN** the broker connection is restored after a disconnect
+- **THEN** a heartbeat goes out at once, without waiting for the rest of the interval
 
 #### Scenario: Disconnected worker
 - **WHEN** the connection is down at a heartbeat interval

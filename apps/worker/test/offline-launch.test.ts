@@ -3,7 +3,13 @@ import { afterEach, beforeEach, test } from 'node:test';
 import type { WorkerJournal } from '@taskelith/execution';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { id, value } from '@taskelith/testing';
-import { LaunchOrchestrator, LOST_CONTACT_MILLISECONDS, WorkerContact, type LaunchOrchestratorOptions } from '@taskelith/worker';
+import {
+  LaunchOrchestrator,
+  LOST_CONTACT_MILLISECONDS,
+  WorkerContact,
+  type LaunchContact,
+  type LaunchOrchestratorOptions,
+} from '@taskelith/worker';
 import type { WorkerRoot } from '@taskelith/worker-journal';
 import { flush, ManualTimers } from './contact-fakes.ts';
 import {
@@ -117,6 +123,41 @@ test('an operation begun online runs to its deadline offline; the next waits for
   await orchestrator.settled();
   assert.deepEqual(outcomes(), ['expired', 'granted']);
   assert.equal(authority.requests[requests]?.reportsNotStarted, true);
+});
+
+test('contact lost before a wait\'s continuation runs holds W2 until online again', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  let offline = true;
+  let waits = 0;
+  let reconnect: () => void = () => undefined;
+  const gate: LaunchContact = {
+    get offline() {
+      return offline;
+    },
+    whenOnline: async () => {
+      waits += 1;
+      if (waits > 1) return new Promise((resolve) => {
+        reconnect = resolve;
+      });
+      offline = false;
+      // The lost-contact callback, queued before the wait's continuation.
+      queueMicrotask(() => {
+        offline = true;
+      });
+    },
+  };
+  const orchestrator = new LaunchOrchestrator({ ...options, contact: gate });
+  await orchestrator.pass(controller.signal);
+  await flush();
+  assert.deepEqual([waits, authority.requests, executions()], [2, [], []]);
+  offline = false;
+  reconnect();
+  await orchestrator.settled();
+  assert.deepEqual(executions().map(({ state }) => state), ['exited']);
 });
 
 test('a stop while offline journals nothing', async () => {

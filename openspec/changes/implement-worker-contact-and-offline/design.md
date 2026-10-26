@@ -17,7 +17,7 @@
 
 ### D1: one broker session owns the connection
 
-`BrokerSession` connects, retries a failed connection at the launch retry delays (5 s doubling to 60 s with jitter, `launchRetryDelay`), and holds the connection until the worker stops or the connection closes; a closed connection is replaced the same way. The work of one connection (the command consumer, the observation publisher, the heartbeats) runs under a signal that ends with the connection. The launch orchestrator runs beside the session from the start, so reconciliation and the journal work never wait for the broker. `RunningWorker` no longer exposes a transport, which may not exist yet.
+`BrokerSession` connects, retries a failed connection at the launch retry delays (5 s doubling to 60 s with jitter, `launchRetryDelay`), and holds the connection until the worker stops or the connection closes; a closed connection is replaced the same way. The work of one connection (the command consumer, the observation publisher) runs under a signal that ends with the connection; the inventory report and the heartbeats run under a link-up signal that ends at each `disconnect` and starts again at each `reconnect`. Tasks end together: the first failure aborts the others of its connection, and of the session and the orchestrator, and each waits for all of its tasks, so the journal closes last and `stopped` settles after a failure too. The launch orchestrator runs beside the session from the start, so reconciliation and the journal work never wait for the broker. `RunningWorker` no longer exposes a transport, which may not exist yet.
 
 - **Alternative:** the client's `waitOnFirstConnect`. Its `connect()` resolves only once connected, so the start would block, and the retries would be invisible to the worker's logs.
 - Every broker failure is `unavailable` (`brokerFailure`), so a wrong credential is retried as well; it is logged as `worker.broker.connect-failed` with each retry. Before, the process exited and its supervisor restarted it, which retried just the same.
@@ -34,13 +34,13 @@ The session iterates the connection's `status()`: `disconnect` marks the link do
 
 ### D4: offline, no operation begins
 
-The orchestrator takes an optional `LaunchContact`. Each authorization operation waits for `whenOnline` before it reads the deadline clock and commits W2, so its deadline counts from the first request. An operation already begun keeps its requests and its deadline, because the grant is the online check (launch authorization section 8), and the 20d deadline cycle is unchanged: the operation expires, and the next operation for the same execution waits until the worker is online. A stop while waiting journals nothing; a cancellation while waiting commits W2 and then abandons it, as a cancellation before the first request did before.
+The orchestrator takes an optional `LaunchContact`. Each authorization operation waits while the contact is `offline`, checking it again after each `whenOnline`, because a lost-contact timer can fire before the wait's continuation runs; it then reads the deadline clock and commits W2 with no await in between, so its deadline counts from the first request. An operation already begun keeps its requests and its deadline, because the grant is the online check (launch authorization section 8), and the 20d deadline cycle is unchanged: the operation expires, and the next operation for the same execution waits until the worker is online. A stop while waiting journals nothing; a cancellation while waiting commits W2 and then abandons it, as a cancellation before the first request did before.
 
 - **Alternative:** offline at once on any disconnect. Simpler, but a reconnect a second later would pause launches for nothing; rejected for D3's reason.
 
 ### D5: heartbeats only while connected
 
-`runHeartbeats` publishes at once and then every `10s` over core NATS, only while the link is up: the client would otherwise buffer heartbeats during an outage and flush stale ones on reconnect. A publish that throws is logged at debug as `worker.heartbeat.unsent`; the next one replaces it. `sentAt` is the worker's clock, informational only.
+`runHeartbeats` publishes at once on each connection and reconnection and then every `10s` over core NATS, only while the link is up: the client would otherwise buffer heartbeats during an outage and flush stale ones on reconnect. A publish that throws is logged at debug as `worker.heartbeat.unsent`; the next one replaces it. `sentAt` is the worker's clock, informational only.
 
 ### D6: the inventory on every connection
 

@@ -61,6 +61,7 @@ export interface LaunchOrchestratorOptions {
 
 // The worker's contact: no authorization operation begins while offline.
 export interface LaunchContact {
+  readonly offline: boolean;
   whenOnline(signal: AbortSignal): Promise<void>;
 }
 
@@ -394,10 +395,11 @@ class Launch {
     }
   }
 
-  // W2, then the requests of one operation until a decision (design D2);
-  // an offline worker begins no operation.
+  // W2, then one operation's requests until a decision (design D2); W2
+  // follows the last offline check with no await, as contact can change.
   async #authorize(executionId: ExecutionId, reportsNotStarted: boolean): Promise<Authorized> {
-    await this.#options.contact?.whenOnline(this.#signal);
+    const { contact } = this.#options;
+    while (contact?.offline === true && !this.#signal.aborted) await contact.whenOnline(this.#signal);
     if (this.#stopping.aborted) return { kind: 'end' };
     const operationId = this.#newId('OperationId');
     const reading = this.#options.clock.read();

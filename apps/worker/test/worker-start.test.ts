@@ -280,9 +280,29 @@ test('each connection reports the inventory unsolicited and sends heartbeats on 
   assert.deepEqual([heartbeat?.body.workerId, heartbeat?.body.journalId], [worker.identity.workerId, worker.identity.journalId]);
   broker.statuses[0]?.push('disconnect');
   broker.statuses[0]?.push('reconnect');
-  await until(() => broker.ofType('worker.inventory.reported').length === 2);
-  timers.elapse(10_000);
-  await until(() => broker.core.length === 2);
+  await until(() => broker.ofType('worker.inventory.reported').length === 2 && broker.core.length === 2);
+  assert.deepEqual(timers.waiting, [10_000]);
+});
+
+test('a runtime failure stops the launches, then closes the root, and settles stopped', async () => {
+  const launchFailures: unknown[] = [];
+  const launching = { ...new RecordingLaunching().dependencies, onFailure: (error: unknown) => launchFailures.push(error) };
+  const failing = { ...dependencies(launching), connect: async (endpoint: WorkerTransportEndpoint) => {
+    const connected = await broker.connect(endpoint);
+    return connected.ok ? ok({ ...connected.value, close: async () => Promise.reject(new Error('close failed')) }) : connected;
+  } };
+  const worker = value(await startWorker({ ...settings, launch: LAUNCH }, failing));
+  const host: ServiceProcess = { on: () => undefined, off: () => undefined };
+  const lines: string[] = [];
+  const served = serveUntilStopped(worker, host, (line) => lines.push(line));
+  await until(() => broker.statuses.length === 1);
+  broker.statuses[0]?.end();
+  await served;
+  assert.equal(host.exitCode, 1);
+  assert.match(lines.join('\n'), /stopping the worker failed: Error: close failed/);
+  assert.deepEqual(launchFailures, []);
+  await assert.rejects(worker.stop(), /close failed/);
+  assert.equal((await start()).identity.workerId, ENROLLMENT.workerId);
 });
 
 test('stop closes the connection and the root once, and a signal stops a served worker', async () => {

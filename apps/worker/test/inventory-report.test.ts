@@ -78,3 +78,24 @@ test('a link that goes down ends the retries of its report', async () => {
   await reported;
   assert.deepEqual([published, timers.waiting], [[], []]);
 });
+
+test('a link that goes down during a report publishes none of its later parts', async () => {
+  for (let number = 1; number <= 257; number += 1) value(root.journal.recordCommand(offer(number)));
+  let acknowledge: () => void = () => undefined;
+  const held: ConnectionReportOptions = { ...options, publish: async (publication) => {
+    published.push(publication);
+    if (published.length > 1) return ok('stored');
+    await new Promise<void>((resolve) => {
+      acknowledge = resolve;
+    });
+    return ok('stored');
+  } };
+  const link = new AbortController();
+  const reported = reportInventoryOnConnection(held, link.signal);
+  await flush();
+  assert.equal(published.length, 1);
+  link.abort();
+  acknowledge();
+  await reported;
+  assert.deepEqual([published.map(({ messageId }) => messageId), timers.waiting, sink.records], [['report-1.1'], [], []]);
+});

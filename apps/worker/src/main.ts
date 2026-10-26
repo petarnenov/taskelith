@@ -131,8 +131,8 @@ export interface ServiceProcess {
   exitCode?: number | string | null | undefined;
 }
 
-// A failed close still settles `stopped`; it is reported and makes the
-// exit status 1 instead of becoming an unhandled rejection.
+// A failed close or runtime still settles `stopped`; it is reported and
+// makes the exit status 1 instead of becoming an unhandled rejection.
 export async function serveUntilStopped(worker: RunningWorker, host: ServiceProcess, write: (line: string) => void): Promise<void> {
   let stopping: Promise<void> | undefined;
   const shutdown = () => {
@@ -143,6 +143,7 @@ export async function serveUntilStopped(worker: RunningWorker, host: ServiceProc
   };
   for (const signal of ['SIGTERM', 'SIGINT'] as const) host.on(signal, shutdown);
   await worker.stopped;
+  shutdown();
   await stopping;
   for (const signal of ['SIGTERM', 'SIGINT'] as const) host.off(signal, shutdown);
 }

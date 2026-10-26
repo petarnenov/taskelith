@@ -1,6 +1,7 @@
 import { launchRetryDelay } from '@taskelith/execution';
 import type { Result } from '@taskelith/kernel';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
+import { TaskGroup } from './task-group.js';
 import type { WorkerContact } from './worker-contact.js';
 
 // One broker connection as the worker watches it.
@@ -15,7 +16,7 @@ export interface BrokerSessionOptions<Link extends BrokerLink> {
   // The work of one connection, until the signal aborts.
   readonly serve: (link: Link, signal: AbortSignal) => Promise<void>;
   // Each time the link is up, until it is down again.
-  readonly linkUp: (link: Link, signal: AbortSignal) => void;
+  readonly linkUp: (link: Link, signal: AbortSignal) => Promise<void>;
   readonly contact: WorkerContact;
   readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>;
   readonly draw: () => number;
@@ -51,27 +52,27 @@ export class BrokerSession<Link extends BrokerLink> {
     return undefined;
   }
 
-  // The link's work runs until the worker stops or the link closes; the
-  // link is closed after its work ended.
+  // The link's work runs until the worker stops, the link closes, or a task
+  // fails; the link is closed after every task of it ended.
   async #hold(link: Link, signal: AbortSignal): Promise<void> {
     const ended = new AbortController();
-    const linkSignal = AbortSignal.any([signal, ended.signal]);
+    const tasks = new TaskGroup(AbortSignal.any([signal, ended.signal]));
     try {
-      const watched = this.#watch(link, linkSignal).finally(() => ended.abort());
-      await Promise.all([watched, this.#options.serve(link, linkSignal)]);
+      tasks.add(this.#watch(link, tasks).finally(() => ended.abort()));
+      tasks.add(this.#options.serve(link, tasks.signal));
+      await tasks.settled();
     } finally {
       this.#options.contact.linkDown();
       await link.close();
     }
   }
 
-  // Until the link's statuses end, or the signal aborts.
-  async #watch(link: Link, signal: AbortSignal): Promise<void> {
-    let up = this.#up(link, signal);
+  // Until the link's statuses end, or the tasks' signal aborts.
+  async #watch(link: Link, tasks: TaskGroup): Promise<void> {
+    let up = this.#up(link, tasks);
     const statuses = link.statuses[Symbol.asyncIterator]();
-    const aborted = abortion(signal);
     for (;;) {
-      const next = await Promise.race([statuses.next(), aborted]);
+      const next = await nextUnlessAborted(statuses, tasks.signal);
       if (next.done === true) break;
       if (next.value.type === 'disconnect') {
         up.abort();
@@ -80,22 +81,28 @@ export class BrokerSession<Link extends BrokerLink> {
       } else if (next.value.type === 'reconnect') {
         up.abort();
         this.#logger.debug('worker.broker.reconnected', {});
-        up = this.#up(link, signal);
+        up = this.#up(link, tasks);
       }
     }
     up.abort();
   }
 
-  #up(link: Link, signal: AbortSignal): AbortController {
+  #up(link: Link, tasks: TaskGroup): AbortController {
     const up = new AbortController();
     this.#options.contact.linkUp();
-    this.#options.linkUp(link, AbortSignal.any([signal, up.signal]));
+    tasks.add(this.#options.linkUp(link, AbortSignal.any([tasks.signal, up.signal])));
     return up;
   }
 }
 
-function abortion(signal: AbortSignal): Promise<{ readonly done: true; readonly value: undefined }> {
-  const ended = { done: true as const, value: undefined };
-  if (signal.aborted) return Promise.resolve(ended);
-  return new Promise((resolve) => signal.addEventListener('abort', () => resolve(ended), { once: true }));
+const ENDED = { done: true as const, value: undefined };
+
+// Each wait removes its own abort listener, so none accumulates.
+function nextUnlessAborted<T>(iterator: AsyncIterator<T>, signal: AbortSignal): Promise<IteratorResult<T>> {
+  if (signal.aborted) return Promise.resolve(ENDED);
+  return new Promise((resolve, reject) => {
+    const abort = () => resolve(ENDED);
+    signal.addEventListener('abort', abort, { once: true });
+    void iterator.next().then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+  });
 }
