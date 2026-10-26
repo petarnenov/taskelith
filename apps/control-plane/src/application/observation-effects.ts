@@ -69,8 +69,6 @@ const RELEASING_REJECTIONS: ReadonlySet<string> = new Set([
 ]);
 const RECONCILING_REJECTIONS: ReadonlySet<string> = new Set(['stale-recovery-epoch', 'execution-conflict']);
 const STALE_GENERATION = 'stale-ownership-generation';
-// Capacity reservation section 8: the facts that prove a worker's slot free.
-const SLOT_FREEING: ReadonlySet<string> = new Set(['execution.launch.rejected', 'execution.not-started', 'execution.exited']);
 
 async function acceptance(tx: ControlPlaneTransaction, observation: Observation, at: Instant): Promise<Result<void>> {
   const { assignmentId } = observation.payload as Payload<'AssignmentAcceptedPayload'>;
@@ -413,11 +411,37 @@ function clearRefusal(tx: ControlPlaneTransaction, observation: Observation): Pr
   return tx.reports.clearCapacityRefusal(workerId, sequence);
 }
 
+type Holding = (tx: ControlPlaneTransaction, observation: Observation) => Promise<boolean>;
+
+// The clear, only for a fact about an assignment the producer holds.
+function clearOwnRefusal(holds: Holding): ObservationEffect {
+  return async (tx, observation) => ((await holds(tx, observation)) ? clearRefusal(tx, observation) : ok(undefined));
+}
+
+// The assignment the payload names, of the observed attempt.
+const namedAssignmentHeld: Holding = async (tx, observation) => {
+  const { assignmentId } = observation.payload as Payload<'LaunchRejectedPayload'>;
+  const named = await tx.assignments.get(assignmentId as AssignmentId);
+  return named.ok && named.value.attemptId === observation.attemptId && named.value.workerId === observation.position.workerId;
+};
+
+// Any assignment of the observed attempt.
+const attemptAssignmentHeld: Holding = async (tx, observation) => (
+  (await tx.assignments.listByAttempt(observation.attemptId!)).some(({ workerId }) => workerId === observation.position.workerId)
+);
+
+// Capacity reservation section 8: the facts that prove a worker's slot free,
+// each under the epoch gate its applied effect has.
+const SLOT_FREEING: Readonly<Record<string, ObservationEffect>> = Object.freeze({
+  'execution.launch.rejected': clearOwnRefusal(namedAssignmentHeld),
+  'execution.not-started': atCurrentEpoch(clearOwnRefusal(attemptAssignmentHeld)),
+  'execution.exited': atCurrentEpoch(clearOwnRefusal(attemptAssignmentHeld)),
+});
+
 // The effect of an observation the domain refused: a stale slot-freeing
 // fact still clears its producer's capacity refusal, and nothing else.
 export function rejectedEffect(observation: Observation, refusal: Failure): ObservationEffect | undefined {
-  if (refusal.details.reason !== STALE_GENERATION || !SLOT_FREEING.has(observation.type)) return undefined;
-  return (tx) => clearRefusal(tx, observation);
+  return refusal.details.reason === STALE_GENERATION ? SLOT_FREEING[observation.type] : undefined;
 }
 
 // Stores each change that changes the task, one generation at a time.
