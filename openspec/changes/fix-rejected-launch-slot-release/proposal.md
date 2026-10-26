@@ -6,8 +6,8 @@ The [capacity reservation contract](../../../docs/contracts/capacity-reservation
 
 ## What Changes
 
-- **Slot counting.** An execution under an ended assignment holds its attempt's slot only while it is `authorized` or `started`, or while it has no grant and its launch authorization request is still pending. A launch rejected finally, or one whose operations are all closed without a grant, holds nothing.
-- **Tests.** A regression test reproduces 24c with a one-slot worker, and tests keep a pending, `authorized`, or `started` execution holding its slot.
+- **Slot counting.** An execution under an ended assignment frees its attempt's slot only on proof: a terminal state, or no grant, no uncertainty, and every operation closed without a grant. A launch rejected finally therefore holds nothing; anything unproven still holds.
+- **Tests.** A regression test reproduces 24c with a one-slot worker, and tests keep every unproven execution holding its slot.
 - **Spec.** The worker-runtime requirement "Worker-side admission limits" gains the two scenarios.
 
 No contract, schema, wire message, or journal format changes.

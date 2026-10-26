@@ -1,4 +1,6 @@
-import type { AssignmentRefusalReason, AttemptId, JournaledExecution, JournalSnapshot, ResourceRequest } from '@taskelith/execution';
+import type {
+  AssignmentRefusalReason, AttemptId, AuthorizationOutcome, JournaledAuthorization, JournaledExecution, JournalSnapshot, ResourceRequest,
+} from '@taskelith/execution';
 
 type CapacityRefusalReason = Exclude<AssignmentRefusalReason, 'worker-admission-pressure'>;
 import type { WorkerCapacity } from '@taskelith/fleet';
@@ -31,11 +33,18 @@ function countedAttempts(journal: JournalSnapshot): ResourceRequest[] {
   return [...counted.values()];
 }
 
-// Authorized or started, or without a grant while one may still come; a
-// finally rejected launch never started and holds nothing.
+// A slot is freed only on proof: a terminal state, or no grant and every
+// operation closed without one; anything else, uncertainty included, holds.
 function holdsSlot(execution: JournaledExecution): boolean {
-  if (execution.state === undefined) return execution.authorizations.some(({ outcome }) => outcome === 'pending');
-  return execution.state === 'authorized' || execution.state === 'started';
+  if (execution.state === 'exited' || execution.state === 'not-started') return false;
+  if (execution.uncertain || execution.state !== undefined) return true;
+  return !closedWithoutGrant(execution.authorizations);
+}
+
+const CLOSED_WITHOUT_GRANT: readonly AuthorizationOutcome[] = ['rejected-final', 'rejected-retryable', 'expired'];
+
+function closedWithoutGrant(authorizations: readonly JournaledAuthorization[]): boolean {
+  return authorizations.length > 0 && authorizations.every(({ outcome }) => CLOSED_WITHOUT_GRANT.includes(outcome));
 }
 
 function sum(requests: readonly ResourceRequest[], resource: 'cpuMillicores' | 'memoryMebibytes'): number {

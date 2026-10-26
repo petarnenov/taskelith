@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 import { checkMessageSchema, type MessageSchemas } from '@taskelith/contracts';
 import {
-  isSpaceRefusal, launchRejection, parseRecoveryEpoch, planJournalRecovery, SPACE_REFUSAL_REASON, type JournalBinding, type LaunchRequest,
+  isSpaceRefusal, launchRejection, parseRecoveryEpoch, planJournalRecovery, SPACE_REFUSAL_REASON, type ExecutionState,
+  type JournalBinding, type JournaledExecution, type LaunchRequest, type WorkerJournal,
 } from '@taskelith/execution';
 import type { WorkerCapacity } from '@taskelith/fleet';
 import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
@@ -401,6 +402,50 @@ for (const [progression, progress] of Object.entries(launchProgressions)) {
     value(await deliver(offer(2)));
     assert.deepEqual(acceptedAssignments(), ['assignment-1']);
     assert.equal(value(root.journal.snapshot()).executions[0]?.state, progression === 'pending' ? undefined : progression);
+  });
+}
+
+// The journal as the admission reads it, with assignment-1's execution as
+// given; the SQLite journal cannot store some of these combinations.
+function journalShowing(execution: Partial<JournaledExecution>): WorkerJournal {
+  const shown: JournaledExecution = {
+    executionId: id('ExecutionId', 'execution-1'), assignmentId: id('AssignmentId', 'assignment-1'), recordWritten: false,
+    uncertain: false, authorizations: [], ...execution,
+  };
+  const snapshot = () => {
+    const real = root.journal.snapshot();
+    return real.ok ? ok({ ...real.value, executions: [shown] }) : real;
+  };
+  return new Proxy(root.journal, {
+    get: (target, key) => {
+      if (key === 'snapshot') return snapshot;
+      const member: unknown = Reflect.get(target, key, target);
+      return typeof member === 'function' ? member.bind(target) : member;
+    },
+  });
+}
+
+const operation = (outcome: JournaledExecution['authorizations'][number]['outcome']) => ({ operationId: id('OperationId', `operation-${outcome}`), outcome });
+
+const slotEvidence: readonly (readonly [string, Partial<JournaledExecution>, boolean])[] = [
+  ['an uncertain execution without a grant and a closed operation', { uncertain: true, authorizations: [operation('rejected-final')] }, true],
+  ['an execution without a state and a granted operation', { authorizations: [operation('granted')] }, true],
+  ['an execution without a state or an operation', {}, true],
+  ['an execution in an unknown state', { state: 'paused' as ExecutionState }, true],
+  ['an exited execution with uncertainty evidence', { state: 'exited', uncertain: true }, false],
+  ['an execution whose operations were rejected retryably and expired', { authorizations: [operation('rejected-retryable'), operation('expired')] }, false],
+];
+
+for (const [evidence, execution, holds] of slotEvidence) {
+  test(`an ended assignment ${holds ? 'keeps' : 'frees'} its slot for ${evidence}`, async () => {
+    intake = new CommandIntake({
+      journal: journalShowing(execution), capacity: { ...CAPACITY, slots: 1 }, pressure, publish: broker.publish, observationSubject: SUBJECT,
+      newReportId: () => 'report-1', now: () => T0, journalFault: () => root.journal.fault,
+    });
+    value(await deliver(offer(1)));
+    value(await deliver(end(1)));
+    value(await deliver(offer(2)));
+    assert.deepEqual(acceptedAssignments(), holds ? ['assignment-1'] : ['assignment-1', 'assignment-2']);
   });
 }
 

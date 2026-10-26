@@ -16,5 +16,5 @@ Before it accepts an offer, a worker SHALL refuse it with `resource-ceiling-exce
 - **THEN** the rejected execution holds no slot, and the worker accepts the offer
 
 #### Scenario: Ended assignment with a live execution
-- **WHEN** a worker with one slot holds an ended assignment whose execution is `authorized` or `started`, or awaits the answer to its launch authorization request, and another offer arrives
+- **WHEN** a worker with one slot holds an ended assignment whose execution is `authorized`, `started`, uncertain without a terminal state, or without a grant and with an operation that is not closed, and another offer arrives
 - **THEN** it refuses the offer with `worker-slots-exhausted`
