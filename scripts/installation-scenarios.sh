@@ -641,7 +641,7 @@ native_identity() {
 
 # Octal permission bits of PATH on macOS or Linux.
 mode_of() {
-  stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1"
+  stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"
 }
 
 # A failed native scenario stops its worker and keeps its logs visible.
