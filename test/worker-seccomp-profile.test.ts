@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
-  checkProfiles,
+  appliedProfileDigest,
   derivedWorkerProfile,
   NAMESPACE_CALLS,
   ProfileShapeError,
@@ -18,7 +18,8 @@ import {
 
 const upstreamText = readFileSync(UPSTREAM_PATH, 'utf8');
 const upstream = JSON.parse(upstreamText) as SeccompProfile;
-const worker = JSON.parse(readFileSync(WORKER_PATH, 'utf8')) as SeccompProfile;
+const workerText = readFileSync(WORKER_PATH, 'utf8');
+const worker = JSON.parse(workerText) as SeccompProfile;
 const SYS_ADMIN = 'CAP_SYS_ADMIN';
 
 function mentionsSysAdmin(rule: SeccompRule): boolean {
@@ -35,14 +36,14 @@ test('the upstream copy is the pinned Docker default profile, byte for byte', ()
 });
 
 test('the tracked worker profile is its derivation from the upstream copy', () => {
-  assert.doesNotThrow(() => checkProfiles(process.cwd()));
+  assert.equal(workerText, derivedWorkerProfile(upstreamText), `${WORKER_PATH} is stale; run make worker-seccomp-profile`);
 });
 
 test('no namespace call depends on CAP_SYS_ADMIN in the worker profile', () => {
   assert.ok(namespaceRules(upstream).some(mentionsSysAdmin));
   assert.deepEqual(namespaceRules(worker).filter(mentionsSysAdmin), []);
   const allowed = worker.syscalls.filter((rule) => rule.action === 'SCMP_ACT_ALLOW' && rule.args === undefined);
-  for (const call of ['unshare', 'setns', 'clone3']) assert.ok(!allowed.some((rule) => rule.names.includes(call)), call);
+  for (const call of ['clone', 'clone3', 'setns', 'unshare']) assert.ok(!allowed.some((rule) => rule.names.includes(call)), call);
   const clone3 = worker.syscalls.find((rule) => rule.names.includes('clone3'));
   assert.deepEqual([clone3?.action, clone3?.errnoRet], ['SCMP_ACT_ERRNO', 38]);
 });
@@ -89,4 +90,28 @@ test('an upstream profile of another shape is refused', () => {
   assert.throws(() => workerProfile(withoutAllowance), /single CAP_SYS_ADMIN allowance/);
   const withoutClone3 = { ...upstream, syscalls: upstream.syscalls.filter((rule) => rule.names.join() !== 'clone3') };
   assert.throws(() => workerProfile(withoutClone3), /clone3 rule answering ENOSYS/);
+});
+
+test('a refreshed upstream that allows a namespace call unconditionally is refused', () => {
+  const unconditional = { names: ['clone'], action: 'SCMP_ACT_ALLOW', includes: { caps: ['CAP_NET_ADMIN'] } };
+  const widened = { ...upstream, syscalls: [...upstream.syscalls, unconditional] };
+  assert.throws(() => workerProfile(widened), /still allows clone without an argument check/);
+});
+
+// Docker's CLI sends the profile in compact form; inspect shows it so.
+const compactWorker = JSON.stringify(worker);
+
+function securityOpt(...options: string[]): string {
+  return JSON.stringify(['apparmor=unconfined', 'no-new-privileges=true', ...options]);
+}
+
+test('the applied profile digest names the compact profile the container runs with', () => {
+  assert.equal(appliedProfileDigest(securityOpt(`seccomp=${compactWorker}`), workerText), sha256(compactWorker));
+});
+
+test('a container without the worker profile has no applied profile digest', () => {
+  assert.throws(() => appliedProfileDigest(securityOpt(), workerText), /runs with 0 seccomp options/);
+  assert.throws(() => appliedProfileDigest('null', workerText), /runs with 0 seccomp options/);
+  assert.throws(() => appliedProfileDigest(securityOpt('seccomp=unconfined'), workerText), /is not infra/);
+  assert.throws(() => appliedProfileDigest(securityOpt(`seccomp=${JSON.stringify(upstream)}`), workerText), /is not infra/);
 });
