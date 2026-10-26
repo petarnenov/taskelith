@@ -11,7 +11,7 @@
 
 **Goals:** a worker that starts and runs without a broker, sends heartbeats while connected, knows when it is offline and then begins no authorization, reports its inventory on every connection, and reconciles and removes records without a launch command.
 
-**Non-Goals:** an offline policy for running executions (see the open question); rotated credential delivery (G3 item 26); 20e's limits.
+**Non-Goals:** an offline policy for running executions (see OQ1); rotated credential delivery (G3 item 26); 20e's limits.
 
 ## Decisions
 
@@ -63,5 +63,8 @@ The host needs the platform, and on Linux the containment parent, to recover a r
 
 ## Open questions
 
-- **OQ1: an offline policy for running executions.** The architecture (universal lifecycle admission) lets started work continue "within its admitted scope and the configured offline policy", but no document defines that policy or a maximum offline duration. This change stops only new authorizations. Recommendation: leave running executions alone in G2 and define the policy, if any, with the G6 operational targets.
-- **OQ2: requiring `TASKELITH_CONTAINMENT_PARENT` on every Linux worker.** It would remove the remaining deferral, but would make a Linux worker without it fail its start. Recommendation: keep it optional until item 23's image always sets it.
+Answered by the coordinator on 2026-10-26.
+
+- **OQ1: an offline policy for running executions.** The architecture (universal lifecycle admission) lets started work continue "within its admitted scope and the configured offline policy", but no document defines a maximum offline duration. Answer: no new policy. The G2 offline policy is the one `docs/g2-plan.md` item 20 defines, "no new launch while offline", and this change implements only that. A maximum offline duration for running executions is out of scope and stays open for a later stage.
+- **OQ2: requiring `TASKELITH_CONTAINMENT_PARENT` on every Linux worker.** It would remove the remaining deferral, but would make a Linux worker without it fail its start. Answer: it stays optional, consistent with the 20d deferral. Obligation: item 23b must make the Linux worker image always set it.
+- **Documentation.** The edits to `docs/operational-targets.md` and `docs/local-installation.md` are accepted; they reuse the existing 30s value and add no new target.
