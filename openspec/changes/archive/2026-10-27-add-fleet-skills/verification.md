@@ -24,6 +24,7 @@ The change adds no external link. Its external facts are the Claude Code help te
 
 - `npm run openspec -- validate add-fleet-skills --strict`: passed ("Change 'add-fleet-skills' is valid") on `b8ee1595`, before review pass 1, and on `a8e73db3`, after the pass 1 fixes.
 - `make verify`: passed (exit 0) on `b8ee1595` and on `a8e73db3`: 1951 tests, 1949 passed, 0 failed, 2 skipped; coverage of all files 99.29% lines, 92.11% (on `a8e73db3` 92.10%) branches, 99.04% functions; OpenSpec validation 70 passed, 0 failed; comment length, archive dry run, and package checks passed.
+- Archive (worker step 7): `npm run openspec -- archive add-fleet-skills --yes` moved the change to `openspec/changes/archive/2026-10-27-add-fleet-skills/` and added the requirement "Named fleet roles" to `openspec/specs/agent-task-protocol/spec.md`. On that working tree, which is the tree of the archive commit: `npm run openspec -- validate --all --strict` passed (69 passed, 0 failed); this change's line in `npm run openspec -- validate --archived --no-interactive` passed (`change/2026-10-27-add-fleet-skills`); `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` shows only the 15 added lines of the new requirement; `make verify` passed (exit 0): 1951 tests, 1949 passed, 0 failed, 2 skipped; coverage 99.28% lines, 92.11% branches, 99.04% functions.
 
 ## Independent review
 
