@@ -7,7 +7,7 @@
 
 - [x] 2.1 Add the pure rules in `scripts/review-findings.ts`: vocabulary parsing, line validation with secret-like value rejection, the index, and the checklist.
 - [x] 2.2 Add `scripts/findings.ts` with `validate`, `index [--json]`, and `checklist`, and the npm scripts `findings` and `verify:findings`.
-- [x] 2.3 Wire `npm run verify:findings` into `make verify`.
+- [x] 2.3 Wire `npm run verify:findings` into `make verify`, and add `make findings ARGS=...` as the operation entry.
 - [x] 2.4 Test both modules in `test/review-findings.test.ts` and `test/findings.test.ts`.
 
 ## 3. Protocol
@@ -22,4 +22,5 @@
 
 - [x] 4.1 Create this change's empty `findings.jsonl`.
 - [x] 4.2 Run `npm run openspec -- validate record-review-findings --strict` and `make verify`.
-- [ ] 4.3 Independent review, recorded in `verification.md` and `findings.jsonl`.
+- [x] 4.3 Review pass 1 (Codex CLI gpt-6.1-sol): fix its eight findings with regression tests, add `make findings`, and record them in `verification.md` and `findings.jsonl`.
+- [ ] 4.4 Review pass 2 confirms the pass 1 fixes.

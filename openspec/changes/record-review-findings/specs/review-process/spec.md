@@ -24,7 +24,7 @@ Each finding of an independent review pass SHALL be recorded as one line of its 
 - **THEN** findings may use that category without a change to the schema or the script
 
 ### Requirement: Findings index and checklist
-`npm run findings -- index` SHALL count archived findings by category, capability, file, and reviewer, with the shares fixed (`fixed` and `fixed-unreviewed`), declined, and other. `npm run findings -- checklist` SHALL list the most frequent archived categories for the given capabilities and file globs, at most ten, each with its newest example title.
+`make findings ARGS="index"` SHALL count archived findings by category, capability, file, and reviewer, with the shares fixed (`fixed` and `fixed-unreviewed`), declined, and other. `make findings ARGS="checklist"` SHALL list the most frequent archived categories for the given capabilities and file globs, at most ten, each with its newest example title.
 
 #### Scenario: Index of archived findings
 - **WHEN** archived changes hold findings with the outcomes `fixed`, `fixed-unreviewed`, `declined`, and `deferred`

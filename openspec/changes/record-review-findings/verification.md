@@ -30,7 +30,15 @@ macOS 26.6.2 (Darwin 25.6.0, arm64), Node.js v24.22.1 from `.nvmrc`, npm as pinn
 
 ## Independent review
 
-Pending: Codex CLI (gpt-6.1-sol).
+- **Pass 1 — Codex CLI, model `gpt-6.1-sol`, reasoning effort medium, read-only sandbox, session `01a17a97-de81-7280-9fe9-e2e56a17146f`, revision `31139ee`.** Run by the worker session (Maki) with the protocol's invocation, `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`; the worker session holds the header confirmation and the before and after snapshots and records them. Findings: 0 Critical, 1 High, 4 Medium, 3 Low, all fixed in `da5d560` (code) and `37d21bc` (tests), with the protocol and skill text in the following docs commit, and recorded as eight lines of `findings.jsonl` with outcome `fixed` for the next pass to check. Each fix has a regression test; with the pass 1 code restored and the new tests, 8 tests failed (H1, M2 twice, M3, M4 with L6, L7, and the changed diagnostics), and all pass on the fixed code. M5 changes only a test, so it has no failing-before run.
+  1. High, redaction (`scripts/review-findings.ts:109`, `scripts/findings.ts:111`): diagnostics echoed input through the JSON parse message and unknown property names. Fixed: an unparsable line gets `not a JSON value`; ajv diagnostics never name an unknown property; a line with a secret-like value gets only that diagnostic. Tests assert that the token is absent on the parse and the schema paths.
+  2. Medium, contract-drift (`scripts/findings.ts:92`): `src/{a,{b,c}}.ts,docs/**` split wrongly. Fixed: `splitList` tracks brace depth; tested through `parseCommand` and `matchesQuery`.
+  3. Medium, redaction (`docs/review-findings/finding.schema.json:106`): free text allowed C1 controls and U+2028/U+2029. Fixed in the shared text pattern; negative tests for title and resolution.
+  4. Medium, redaction (`scripts/review-findings.ts:144`): username-only URL credentials were missed. Fixed: any non-empty URL user information is secret-like; tested with username only, user and password, and plain URLs.
+  5. Medium, contract-drift (`test/review-findings.test.ts:55`): the test pinned exactly 15 categories. Fixed: it asserts the seeded categories, and a new test adds one vocabulary line and validates a finding in the new category.
+  6. Low, redaction (`scripts/review-findings.ts:143`): the AWS pattern missed `ASIA`. Fixed and tested.
+  7. Low, error-handling (`scripts/review-findings.ts:78`): category ids were not limited to 64 characters. Fixed with the line named; 64/65 boundary test.
+  8. Low, process (ADR 0004 principle 7): no Makefile entry. Fixed: `make findings ARGS="<command>"`; the protocol, the requirements, and the skills point at it, and the npm scripts stay as the implementation.
 
 ## Limitations
 

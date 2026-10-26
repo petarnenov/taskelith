@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Review findings in the task flow
-A worker SHALL create an empty `findings.jsonl` with its change, append each finding of every review pass that runs to a report, and at the archive check that the file exists and validates. Failed review attempts SHALL add no findings. The coordinator SHALL include in every brief the checklist that `npm run findings -- checklist` prints for the task's capabilities and files.
+A worker SHALL create an empty `findings.jsonl` with its change, append each finding of every review pass that runs to a report, and at the archive check that the file exists and validates. Failed review attempts SHALL add no findings. The coordinator SHALL include in every brief the checklist that `make findings ARGS="checklist"` prints for the task's capabilities and files.
 
 #### Scenario: Pass with findings
 - **WHEN** a review pass reports findings
