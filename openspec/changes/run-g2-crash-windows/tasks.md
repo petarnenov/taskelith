@@ -17,4 +17,4 @@
 - [x] 3.2 Mark the eleven windows that fail on D1 as expected failures matched on D1's signature, still recorded `failed` (coordinator decision)
 - [x] 3.3 Record D1 and O1 with the owner's delegate's decisions (away run `20261026T161148Z-opencode-90873`); D1's fix belongs to `fix-launch-recovery-reauthorization`, O1's to `fix-unclaimed-launch-liveness`
 - [x] 3.4 Merge `origin/dev`, a final evidence run with seed `2776760789`, and `make verify`
-- [ ] 3.5 Independent review: pass 1 (Codex CLI) found 0 Critical, 1 High, 7 Medium, 2 Low, all resolved; pass 2 pending
+- [ ] 3.5 Independent review: pass 1 (Codex CLI) found 0 Critical, 1 High, 7 Medium, 2 Low, all resolved; pass 2 found 0 Critical, 0 High, 3 Medium, 1 Low, all resolved; pass 3 pending
