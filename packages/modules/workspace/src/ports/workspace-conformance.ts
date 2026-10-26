@@ -23,6 +23,9 @@ const SECOND = attempt('attempt-2');
 const THIRD = attempt('attempt-3');
 const UNKNOWN_COMMIT = must(parseGitObjectId('0'.repeat(40)));
 const TASK_BRANCH_TARGET: WorkspaceTarget = Object.freeze({ kind: 'task-branch' });
+// Bytes that are not valid UTF-8, so a text round trip would change them.
+const BINARY = Uint8Array.of(0, 128, 255);
+const text = (value: string) => new TextEncoder().encode(value);
 
 function request(fixture: WorkspaceFixture, overrides: Partial<PrepareWorkspace> = {}): PrepareWorkspace {
   return {
@@ -247,6 +250,27 @@ const HEAD_STATE: readonly ConformanceCase<WorkspaceFixture>[] = [
     },
   },
   {
+    name: 'reports a change staged and then reverted in the working tree, and keeps that workspace',
+    async check(fixture) {
+      const problems: string[] = [];
+      if ((await prepared(problems, fixture)) === undefined) return problems;
+      const original = fixture.baseTree[fixture.trackedPath];
+      if (original?.type !== 'file') return [...problems, 'fixture: the tracked path must be a file of the base tree'];
+      await fixture.writeFile(FIRST, fixture.trackedPath, 'staged\n');
+      await fixture.stage(FIRST, fixture.trackedPath);
+      await fixture.writeBytes(FIRST, fixture.trackedPath, original.content);
+      await expectDirty(problems, fixture, FIRST, ['modified']);
+      const push = { attemptId: FIRST, credential: fixture.credentials.write, expectedRemoteHead: null };
+      expectReason(problems, 'snapshot', await fixture.provider.snapshot(FIRST), 'precondition-failed', 'workspace-dirty');
+      expectReason(problems, 'push', await fixture.provider.push(push), 'precondition-failed', 'workspace-dirty');
+      expectReason(problems, 'remove', await fixture.provider.remove(FIRST), 'precondition-failed', 'workspace-dirty');
+      expectSame(problems, 'nothing pushed', await fixture.remoteHead(TASK_BRANCH), undefined);
+      expectSame(problems, 'kept', await fixture.provider.list(), [FIRST]);
+      await expectDirty(problems, fixture, FIRST, ['modified']);
+      return problems;
+    },
+  },
+  {
     name: 'a new commit with the same tree is a new head',
     async check(fixture) {
       const problems: string[] = [];
@@ -325,6 +349,7 @@ const SNAPSHOTS: readonly ConformanceCase<WorkspaceFixture>[] = [
       await fixture.writeFile(FIRST, 'change.txt', 'change\n');
       await fixture.writeExecutable(FIRST, 'run.sh', 'echo run\n');
       await fixture.writeLink(FIRST, 'latest', 'change.txt');
+      await fixture.writeBytes(FIRST, 'blob.bin', BINARY);
       await fixture.commitAll(FIRST, 'tree');
       const credential = fixture.credentials.write;
       // Published, so that a fresh clone can open the same head.
@@ -335,8 +360,9 @@ const SNAPSHOTS: readonly ConformanceCase<WorkspaceFixture>[] = [
       sameHead(problems, 'snapshot of the pushed head', first.head, pushed);
       const expected = sortedTree({
         ...fixture.baseTree,
-        'change.txt': { type: 'file', mode: '100644', content: 'change\n' },
-        'run.sh': { type: 'file', mode: '100755', content: 'echo run\n' },
+        'change.txt': { type: 'file', mode: '100644', content: text('change\n') },
+        'run.sh': { type: 'file', mode: '100755', content: text('echo run\n') },
+        'blob.bin': { type: 'file', mode: '100644', content: BINARY },
         latest: { type: 'link', target: 'change.txt' },
       });
       expectSame(problems, 'tree', sortedTree(await fixture.readSnapshot(first.content)), expected);

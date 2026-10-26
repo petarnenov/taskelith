@@ -38,6 +38,24 @@ import {
 
 type Tree = Readonly<Record<string, TreeEntry>>;
 
+// An entry as JSON can hold it: file bytes in base64, so nothing is lost.
+type StoredEntry =
+  | { readonly type: 'file'; readonly mode: '100644' | '100755'; readonly content: string }
+  | { readonly type: 'link'; readonly target: string };
+
+type StoredTree = Readonly<Record<string, StoredEntry>>;
+
+function store(entry: TreeEntry): StoredEntry {
+  return entry.type === 'link' ? entry : { ...entry, content: Buffer.from(entry.content).toString('base64') };
+}
+
+function load(entry: StoredEntry): TreeEntry {
+  return entry.type === 'link' ? entry : { ...entry, content: new Uint8Array(Buffer.from(entry.content, 'base64')) };
+}
+
+const storeTree = (tree: Tree): StoredTree => Object.fromEntries(Object.entries(tree).map(([path, entry]) => [path, store(entry)]));
+const loadTree = (tree: StoredTree): Tree => Object.fromEntries(Object.entries(tree).map(([path, entry]) => [path, load(entry)]));
+
 interface Commit {
   readonly tree: string;
   readonly parent: string | null;
@@ -45,8 +63,10 @@ interface Commit {
 }
 
 const sha1 = (text: string) => createHash('sha1').update(text).digest('hex');
-const canonical = (tree: Tree) => JSON.stringify(Object.keys(tree).sort().map((path) => [path, tree[path]]));
-const file = (content: string): TreeEntry => ({ type: 'file', mode: '100644', content });
+const canonical = (tree: Tree) => JSON.stringify(Object.keys(tree).sort().map((path) => [path, store(tree[path]!)]));
+const bytes = (text: string) => new TextEncoder().encode(text);
+const file = (content: Uint8Array): TreeEntry => ({ type: 'file', mode: '100644', content });
+const textFile = (text: string) => file(bytes(text));
 
 export class FakeGitService {
   readonly commits = new Map<string, Commit>();
@@ -90,6 +110,8 @@ interface LocalState {
   readonly branch: string | null;
   readonly commit: string;
   readonly remote: string;
+  // The index: what the next commit would hold.
+  readonly index: StoredTree;
 }
 
 const STATE_FILE = join('.git', 'state.json');
@@ -109,6 +131,8 @@ export interface DoubleDefects {
   readonly snapshotsCommit?: boolean;
   readonly snapshotsWithoutMetadata?: boolean;
   readonly sweepFollowsLinks?: boolean;
+  readonly ignoresIndex?: boolean;
+  readonly corruptsBinary?: boolean;
 }
 
 export class TempDirWorkspaces implements WorkspaceProvider {
@@ -147,7 +171,9 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     if (await exists(final)) return err(failure('conflict', `workspace ${name.value} exists`));
     const branch = target.kind === 'task-branch' ? taskBranch.value : null;
     const secret = this.defects.storesSecret ? `https://${request.credential.secret}@` : '';
-    const state: LocalState = { kind: target.kind, expectedBranch: branch, branch, commit, remote: `${secret}${request.binding.remote}` };
+    const remote = `${secret}${request.binding.remote}`;
+    const index = storeTree(this.service.entries(commit));
+    const state: LocalState = { kind: target.kind, expectedBranch: branch, branch, commit, remote, index };
     const staging = join(this.root, `${WORKSPACE_LAYOUT.stagingPrefix}${name.value}`);
     await this.checkout(join(staging, WORKSPACE_LAYOUT.checkout), state);
     await rename(staging, final);
@@ -200,6 +226,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     const ignored = ignoredPaths(committed);
     const reasons = new Set<DirtyReason>();
     for (const [path, entry] of Object.entries(committed)) if (!sameEntry(working[path], entry)) reasons.add('modified');
+    if (!this.defects.ignoresIndex && !sameTree(loadTree(state.index), committed)) reasons.add('modified');
     const untracked = Object.keys(working).some((path) => !(path in committed) && !ignored.has(path));
     if (untracked && !this.defects.ignoresUntracked) reasons.add('untracked');
     if (await exists(join(checkout.value, OPERATION_FILE))) reasons.add('operation-in-progress');
@@ -215,9 +242,13 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     if (!head.ok) return head;
     let entries = this.service.entries(head.value.commit);
     if (this.defects.snapshotsWithoutMetadata) {
-      entries = Object.fromEntries(Object.entries(entries).map(([path, entry]) => [path, file(entry.type === 'file' ? entry.content : entry.target)]));
+      entries = Object.fromEntries(Object.entries(entries).map(([path, entry]) => [path, entry.type === 'file' ? file(entry.content) : textFile(entry.target)]));
     }
-    if (this.defects.snapshotsCommit) entries = { ...entries, COMMIT: file(head.value.commit) };
+    if (this.defects.corruptsBinary) {
+      const lossy = (entry: TreeEntry) => (entry.type === 'file' ? { ...entry, content: bytes(new TextDecoder().decode(entry.content)) } : entry);
+      entries = Object.fromEntries(Object.entries(entries).map(([path, entry]) => [path, lossy(entry)]));
+    }
+    if (this.defects.snapshotsCommit) entries = { ...entries, COMMIT: textFile(head.value.commit) };
     const content = new TextEncoder().encode(canonical(entries));
     return ok({ head: this.defects.snapshotsStaleTree ? this.staleHead(head.value) : head.value, contentType: SNAPSHOT_TYPE, content });
   }
@@ -306,12 +337,16 @@ async function exists(path: string): Promise<boolean> {
 }
 
 function sameEntry(left: TreeEntry | undefined, right: TreeEntry): boolean {
-  return left !== undefined && JSON.stringify(left) === JSON.stringify(right);
+  return left !== undefined && JSON.stringify(store(left)) === JSON.stringify(store(right));
+}
+
+function sameTree(left: Tree, right: Tree): boolean {
+  return canonical(left) === canonical(right);
 }
 
 function ignoredPaths(tree: Tree): Set<string> {
   const rules = tree['.gitignore'];
-  return new Set(rules?.type === 'file' ? rules.content.split('\n').filter(Boolean) : []);
+  return new Set(rules?.type === 'file' ? new TextDecoder().decode(rules.content).split('\n').filter(Boolean) : []);
 }
 
 async function writeEntry(path: string, entry: TreeEntry): Promise<void> {
@@ -339,7 +374,7 @@ async function workingTree(checkout: string, prefix = ''): Promise<Record<string
     else if (entry.isSymbolicLink()) tree[path] = { type: 'link', target: await readlink(full) };
     else {
       const mode = ((await lstat(full)).mode & 0o111) === 0 ? '100644' : '100755';
-      tree[path] = { type: 'file', mode, content: await readFile(full, 'utf8') };
+      tree[path] = { type: 'file', mode, content: new Uint8Array(await readFile(full)) };
     }
   }
   return tree;
@@ -362,7 +397,7 @@ async function recordText(path: string): Promise<string> {
 const BASE_BRANCH = 'main';
 const TRACKED = 'README.md';
 const IGNORED = 'build.log';
-const BASE_TREE: Tree = { [TRACKED]: file('base\n'), '.gitignore': file(`${IGNORED}\n`) };
+const BASE_TREE: Tree = { [TRACKED]: textFile('base\n'), '.gitignore': textFile(`${IGNORED}\n`) };
 
 // Every record kind of the worker journal contract section 2.
 const CONTROL_RECORDS: Readonly<Record<string, string>> = {
@@ -414,8 +449,9 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
     trackedPath: TRACKED,
     ignoredPath: IGNORED,
     reopen: make,
-    writeFile: (attemptId, path, text) => write(attemptId, path, file(text)),
-    writeExecutable: (attemptId, path, text) => write(attemptId, path, { type: 'file', mode: '100755', content: text }),
+    writeFile: (attemptId, path, text) => write(attemptId, path, textFile(text)),
+    writeBytes: (attemptId, path, content) => write(attemptId, path, file(content)),
+    writeExecutable: (attemptId, path, text) => write(attemptId, path, { type: 'file', mode: '100755', content: bytes(text) }),
     writeLink: (attemptId, path, target) => write(attemptId, path, { type: 'link', target }),
     linkToControlRecord: async (attemptId, path) => symlink(join(dataRoot, 'worker/identity'), join(await checkout(attemptId), path)),
     commitAll: async (attemptId) => {
@@ -423,14 +459,22 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
       const state = await readState(directory);
       const ignored = ignoredPaths(service.entries(state.commit));
       const entries = Object.fromEntries(Object.entries(await workingTree(directory)).filter(([path]) => !ignored.has(path)));
-      await update(attemptId, (current) => ({ ...current, commit: service.commit(entries, current.commit) }));
+      const commit = service.commit(entries, state.commit);
+      await update(attemptId, (current) => ({ ...current, commit, index: storeTree(entries) }));
+    },
+    stage: async (attemptId, path) => {
+      const entry = (await workingTree(await checkout(attemptId)))[path];
+      await update(attemptId, (current) => {
+        const { [path]: _staged, ...rest } = current.index;
+        return { ...current, index: entry === undefined ? rest : { ...rest, [path]: store(entry) } };
+      });
     },
     beginOperation: async (attemptId) => writeFile(join(await checkout(attemptId), OPERATION_FILE), 'merge'),
     switchBranch: async (attemptId, branch) => update(attemptId, (current) => ({ ...current, branch })),
     remoteHead: async (branch) => service.branches.get(branch),
     advanceRemote: async (branch) => {
       const parent = service.branches.get(branch) ?? service.branches.get(BASE_BRANCH) ?? null;
-      const entries = { ...(parent === null ? {} : service.entries(parent)), [`remote-${service.commits.size}.txt`]: file('remote\n') };
+      const entries = { ...(parent === null ? {} : service.entries(parent)), [`remote-${service.commits.size}.txt`]: textFile('remote\n') };
       service.branches.set(branch, service.commit(entries, parent));
     },
     remoteCalls: async () => service.calls,
@@ -444,7 +488,10 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
       const records = (await readdir(worker)).filter((entry) => entry !== 'workspaces').map((entry) => recordText(join(worker, entry)));
       return (await Promise.all(records)).join('\n');
     },
-    readSnapshot: async (content) => Object.fromEntries(JSON.parse(new TextDecoder().decode(content)) as [string, TreeEntry][]),
+    readSnapshot: async (content) => {
+      const stored = JSON.parse(new TextDecoder().decode(content)) as [string, StoredEntry][];
+      return Object.fromEntries(stored.map(([path, entry]) => [path, load(entry)]));
+    },
     interruptPrepare: async (attemptId) => {
       const staging = join(provider.root, `${WORKSPACE_LAYOUT.stagingPrefix}${attemptId}`, WORKSPACE_LAYOUT.checkout);
       await mkdir(staging, { recursive: true });

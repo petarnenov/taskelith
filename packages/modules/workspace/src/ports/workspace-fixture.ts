@@ -11,9 +11,9 @@ export interface FixtureCredentials {
   readonly foreign: WorkspaceCredential;
 }
 
-// One entry of a tree, with Git's file modes.
+// One entry of a tree, with Git's file modes and exact file bytes.
 export type TreeEntry =
-  | { readonly type: 'file'; readonly mode: '100644' | '100755'; readonly content: string }
+  | { readonly type: 'file'; readonly mode: '100644' | '100755'; readonly content: Uint8Array }
   | { readonly type: 'link'; readonly target: string };
 
 // What an adapter's test supplies, fresh for each case (contract section 12).
@@ -29,10 +29,13 @@ export interface WorkspaceFixture {
   // A new provider over the same data root, as after a worker restart.
   reopen(): WorkspaceProvider;
   writeFile(attemptId: AttemptId, path: string, text: string): Promise<void>;
+  writeBytes(attemptId: AttemptId, path: string, content: Uint8Array): Promise<void>;
   writeExecutable(attemptId: AttemptId, path: string, text: string): Promise<void>;
   writeLink(attemptId: AttemptId, path: string, target: string): Promise<void>;
   // A symbolic link in the workspace to a control record outside it.
   linkToControlRecord(attemptId: AttemptId, path: string): Promise<void>;
+  // Stages the path's working tree entry, or its removal, in the index.
+  stage(attemptId: AttemptId, path: string): Promise<void>;
   // Commits every change on the current branch, or an empty commit.
   commitAll(attemptId: AttemptId, message: string): Promise<void>;
   // Leaves an operation such as a merge unfinished.

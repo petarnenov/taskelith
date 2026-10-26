@@ -50,6 +50,10 @@ A code head SHALL be the repository, the full commit object name, and the full t
 ### Requirement: Dirty-state detection
 `inspect` SHALL report, in order, `modified`, `untracked`, `operation-in-progress`, and `off-branch` when they apply, SHALL not count ignored files, and a head SHALL be recorded, snapshotted, or pushed only from a clean workspace, failing with `precondition-failed` and reason `workspace-dirty` otherwise.
 
+#### Scenario: Staged change reverted in the working tree
+- **WHEN** a tracked file's change is staged and the working tree is then restored to the head
+- **THEN** `inspect` reports `modified`, and `snapshot`, `push`, and `remove` fail with `precondition-failed` and keep the workspace
+
 #### Scenario: Untracked file before a snapshot
 - **WHEN** a workspace holds an untracked file that its ignore rules do not ignore
 - **THEN** `inspect` reports `untracked` and `snapshot` fails with `precondition-failed`
@@ -88,7 +92,7 @@ A push SHALL name the remote task branch head the caller expects, SHALL fail wit
 - **THEN** the push fails with `conflict` and the remote keeps the other party's head
 
 ### Requirement: Head evidence snapshot
-`snapshot` SHALL return the workspace's current clean head, with all three parts, and bytes holding exactly the entries of its tree, each file with its mode and content and each link with its target, without `.git`, commit metadata, ignored or untracked files, or a credential, and equal for equal trees in any workspace and for any commit, for storage under their SHA-256 digest with kind `code-head-snapshot`.
+`snapshot` SHALL return the workspace's current clean head, with all three parts, and bytes holding exactly the entries of its tree, each file with its mode and exact bytes and each link with its target, without `.git`, commit metadata, ignored or untracked files, or a credential, and equal for equal trees in any workspace and for any commit, for storage under their SHA-256 digest with kind `code-head-snapshot`.
 
 #### Scenario: Same head in two workspaces
 - **WHEN** a pushed head is snapshotted in the implementation workspace and in a fresh review workspace at that head
@@ -114,7 +118,7 @@ A push SHALL name the remote task branch head the caller expects, SHALL fail wit
 - **THEN** the link is removed and every execution record is unchanged
 
 ### Requirement: Workspace conformance suite
-Every workspace adapter SHALL pass `WORKSPACE_CONFORMANCE` through a `WorkspaceFixture` that its test supplies, and the suite SHALL report an adapter that stores a credential, calls the remote before its scope check, checks a task name for one target only, accepts a mismatched tree, misses untracked files, snapshots commit metadata, a stale tree, or lost modes and links, removes a dirty workspace or beyond its workspace, or follows links when it sweeps.
+Every workspace adapter SHALL pass `WORKSPACE_CONFORMANCE` through its own `WorkspaceFixture`, and the suite SHALL report an adapter that stores a credential, calls the remote before its scope check, checks a task name for one target only, accepts a mismatched tree, misses untracked or staged changes, snapshots commit metadata, a stale tree, or altered bytes, modes, or links, removes a dirty workspace or beyond its own, or follows links when it sweeps.
 
 #### Scenario: Defective removal
 - **WHEN** the suite runs against an adapter whose removal deletes other workspaces
