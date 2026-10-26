@@ -82,7 +82,9 @@ describe('stale generations', () => {
 
   // Seed: which request precedes the epoch advance, a test-side write as a
   // restore's. The later is rejected; the earlier start is only evidence.
-  test('a stale recovery epoch is rejected, and an old-epoch start is not recorded', { timeout: 120_000 }, async () => {
+  test('a stale recovery epoch is rejected, an old-epoch start is not recorded, and its exit ends the task (pending decision)', {
+    timeout: 120_000,
+  }, async () => {
     const random = new SeededRandom(SEED);
     const aFirst = random.nextInt(2) === 1;
     await recordScenario({ scenario: 'stale-recovery-epoch', seed: SEED }, () => withInstallation({ postgres: 'direct' }, async (installation) => {
@@ -110,8 +112,9 @@ describe('stale generations', () => {
         assert.ok(executions.every(({ start, unauthorizedStarts }) => start === undefined && unauthorizedStarts.length === 0), 'no start recorded');
         const commands = await installation.commandsTo(early.worker.workerId);
         assert.ok(commands.every(({ type }) => type !== 'execution.cancellation.request'), 'no cancellation');
-        const exited = executions.some(({ exit }) => exit !== undefined);
-        return `${aFirst ? 'A' : 'B'} granted before the epoch advanced; the other rejected stale-recovery-epoch; old-epoch exit ${exited ? 'applied' : 'not applied'}`;
+        // Pending an owner-delegate decision: today the old-epoch exit applies.
+        assert.notEqual((await installation.result(taskId)).state, 'pending', 'the old-epoch exit ends the task');
+        return `${aFirst ? 'A' : 'B'} granted before the epoch advanced; the other rejected stale-recovery-epoch; old-epoch exit ended the task`;
       } finally {
         a.authority.beforeRequest.open();
         b.authority.beforeRequest.open();
