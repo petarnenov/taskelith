@@ -2,6 +2,8 @@
 
 Status: working protocol for agent sessions that develop Taskelith in parallel, set by the owner on 2026-10-24. It applies the [governance policy](governance.md) and the [release flow](releases.md) to several sessions working at once, on one or more machines. It summarizes the operational steps and points to those documents for the full rules; where this page and they differ, they win.
 
+The named sessions, their roles, and how the owner changes the coordinator are in the [fleet roster](fleet.md).
+
 ## Roles
 
 - **Owner.** Defines scope and decides product, architecture, dependency, promotion, publication, and deployment questions, review exceptions, and findings left after the third review pass ([governance "Authority"](governance.md#authority), [review process](governance.md#independent-review-process)).
