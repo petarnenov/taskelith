@@ -137,11 +137,24 @@ export async function releaseInTransaction(tx: CapacityTransaction, request: Rel
 export async function supersedeInTransaction(tx: CapacityTransaction, request: ReleaseRequest): Promise<Result<Assignment>> {
   const loaded = await loadAssignment(tx, request.assignmentId);
   if (!loaded.ok) return loaded;
-  const { assignment, task } = loaded.value;
+  const { assignment } = loaded.value;
   const at = await tx.now();
   if (!isSupersessionDue(assignment, await tx.workers.get(assignment.workerId), at)) {
     return err(failure('precondition-failed', `assignment ${assignment.id} is within its supersession bounds`, { assignment: assignment.id }));
   }
+  return supersede(tx, request, loaded.value, at);
+}
+
+// The supersession of an assignment without a grant whatever its bounds,
+// as a launch rejection or its worker's revocation requires (item 21d).
+export async function supersedeUngrantedInTransaction(tx: CapacityTransaction, request: ReleaseRequest): Promise<Result<Assignment>> {
+  const loaded = await loadAssignment(tx, request.assignmentId);
+  if (!loaded.ok) return loaded;
+  return supersede(tx, request, loaded.value, await tx.now());
+}
+
+async function supersede(tx: CapacityTransaction, request: ReleaseRequest, loaded: LoadedAssignment, at: Instant): Promise<Result<Assignment>> {
+  const { assignment, task } = loaded;
   const superseded = supersedeAssignment(assignment, assignment.generation, executionsUnderAssignment(task, assignment.id), at);
   if (!superseded.ok) return superseded;
   const stored = await tx.assignments.replace(superseded.value, assignment.generation);
@@ -263,7 +276,12 @@ async function quotaStandings(tx: CapacityTransaction, lineage: TaskLineageLink,
   return [project, ...runs];
 }
 
-async function loadAssignment(tx: CapacityTransaction, assignmentId: AssignmentId): Promise<Result<{ assignment: Assignment; task: Task }>> {
+interface LoadedAssignment {
+  readonly assignment: Assignment;
+  readonly task: Task;
+}
+
+async function loadAssignment(tx: CapacityTransaction, assignmentId: AssignmentId): Promise<Result<LoadedAssignment>> {
   const assignment = await tx.assignments.get(assignmentId);
   if (!assignment.ok) return assignment;
   const task = await tx.tasks.get(assignment.value.reservation.scope.taskId);

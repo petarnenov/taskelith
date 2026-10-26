@@ -94,6 +94,7 @@ export {
   refuseInTransaction,
   releaseInTransaction,
   supersedeInTransaction,
+  supersedeUngrantedInTransaction,
   type PlacementOutcome,
   type PlacementRequest,
   type ReleaseOutcome,
