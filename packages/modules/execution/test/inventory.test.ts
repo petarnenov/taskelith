@@ -7,6 +7,7 @@ import {
   highestReceivedSnapshot,
   isFreshReport,
   isRolledBack,
+  isUnsolicited,
   parseSequence,
   recordAppliedSequence,
   startProducerCursor,
@@ -91,6 +92,11 @@ test('a report is fresh only when it answers the current request', () => {
   assert.equal(isFreshReport({ requestId: 'request-1' }, 'request-1'), true);
   assert.equal(isFreshReport({ requestId: 'request-1' }, 'request-2'), false);
   assert.equal(isFreshReport({}, undefined), false);
+});
+
+test('a report is unsolicited only when it answers no request', () => {
+  assert.equal(isUnsolicited({}), true);
+  assert.equal(isUnsolicited({ requestId: 'request-1' }), false);
 });
 
 test('the highest applied sequence counts the sequences above a gap', () => {
