@@ -32,10 +32,7 @@ export interface SupervisedFacts {
 export type SupervisedRecovery =
   | { readonly fact: 'not-started' }
   | { readonly fact: 'exited'; readonly exit: ExecutionExit }
-  // A live supervisor keeps watching; `adopted` started a new one for a
-  // supervisor that was gone.
   | { readonly fact: 'observe' }
-  | { readonly fact: 'adopted' }
   | { readonly fact: 'retry' }
   | { readonly fact: 'uncertain'; readonly reason: string };
 

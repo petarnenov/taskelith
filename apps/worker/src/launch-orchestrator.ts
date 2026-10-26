@@ -20,7 +20,7 @@ import {
   type RecoveryAction,
   type WorkerJournal,
 } from '@taskelith/execution';
-import { ok, parseIdentifier, type Result } from '@taskelith/kernel';
+import { parseIdentifier, type Result } from '@taskelith/kernel';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import {
   sealWon,
@@ -202,13 +202,13 @@ export class LaunchOrchestrator {
   }
 
   // The journaled cancellations that name an execution or its attempt.
-  #cancellationsOf(assignmentId: string, executionId: ExecutionId): Result<readonly CommandId[]> {
+  #cancellationsOf(assignmentId: string, executionId: ExecutionId): readonly CommandId[] {
     const snapshot = this.#options.journal.snapshot();
-    if (!snapshot.ok) return snapshot;
+    if (!reported(this.#options, snapshot)) return [];
     const intent = snapshot.value.intents.find((candidate) => candidate.assignmentId === assignmentId);
-    return ok(snapshot.value.cancellations.filter(({ target }) => target.kind === 'execution'
+    return snapshot.value.cancellations.filter(({ target }) => target.kind === 'execution'
       ? target.executionId === executionId
-      : target.attemptId === intent?.attemptId).map(({ commandId }) => commandId));
+      : target.attemptId === intent?.attemptId).map(({ commandId }) => commandId);
   }
 
   // Item 4: only after the terminal fact is confirmed; a supervisor still
@@ -309,7 +309,7 @@ interface LaunchContext {
   readonly watch: ExecutionWatch;
   readonly intent: JournaledIntent;
   readonly stopping: AbortSignal;
-  readonly cancellations: (executionId: ExecutionId) => Result<readonly CommandId[]>;
+  readonly cancellations: (executionId: ExecutionId) => readonly CommandId[];
   readonly resume?: ExecutionId;
 }
 

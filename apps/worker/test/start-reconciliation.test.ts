@@ -31,8 +31,6 @@ let supervisions: FakeSupervisions;
 let sink: InMemoryLogSink;
 let records: Result<readonly string[]>;
 let failures: unknown[];
-// Journal methods whose next call fails, once each.
-let failing: Set<string>;
 let controller: AbortController;
 let orchestrator: LaunchOrchestrator;
 
@@ -45,11 +43,10 @@ beforeEach(() => {
   sink = new InMemoryLogSink();
   records = ok([]);
   failures = [];
-  failing = new Set();
   controller = new AbortController();
   let ids = 0;
   orchestrator = new LaunchOrchestrator({
-    journal: failingOnce(journal), authority, supervision: supervisions.factory, clock, draw: () => 0.5, newId: () => `id-${(ids += 1)}`,
+    journal, authority, supervision: supervisions.factory, clock, draw: () => 0.5, newId: () => `id-${(ids += 1)}`,
     sleep: async (milliseconds, signal) => {
       if (signal.aborted) return;
       clock.milliseconds += milliseconds;
@@ -61,18 +58,6 @@ beforeEach(() => {
     onFailure: (error) => failures.push(error),
   });
 });
-
-// The journal, except that each method named in `failing` fails once.
-function failingOnce(real: WorkerJournal): WorkerJournal {
-  return new Proxy(real, {
-    get(target, property: string) {
-      const member = Reflect.get(target, property) as unknown;
-      if (typeof member !== 'function') return member;
-      if (!failing.delete(property)) return member.bind(target);
-      return () => err(failure('unavailable', `${property} failed`));
-    },
-  });
-}
 
 afterEach(() => {
   controller.abort();
@@ -327,60 +312,4 @@ test('executions of this process are never reconciled as inherited', async () =>
   await startOnce();
   await startOnce();
   assert.ok(supervisions.all.every(({ calls }) => !calls.includes('recover')));
-});
-
-function claimedBy(supervisor: number) {
-  return { kind: 'claim' as const, launchAuthId: id('LaunchAuthId', 'grant-operation-1'), supervisor };
-}
-
-test('evidence that fails to commit holds the exit back until it is committed', async () => {
-  inherit('written');
-  value(journal.recordCommand(cancellation(1, { executionId: EXECUTION })));
-  failing = new Set(['recordTerminationUnproven', 'recordCancellationNotApplied']);
-  supervisions.onCreated = (supervision) => {
-    supervision.recovery = { fact: 'observe' };
-    const ended = { problems: [], process: PROCESS, survivors: [PROCESS], cancellationNotApplied: true, launch: claimedBy(2), exit: CLEAN_EXIT };
-    supervision.facts = [ended];
-  };
-  await startOnce();
-  assert.equal(failures.length, 2);
-  assert.deepEqual(factKinds(), [
-    'execution-started', 'termination-unproven', 'cancellation-not-applied', 'execution-exited',
-  ]);
-});
-
-test('a cancellation journaled later in the same watch gets its own not-applied report', async () => {
-  inherit('written');
-  value(journal.recordCommand(cancellation(1, { executionId: EXECUTION })));
-  supervisions.onCreated = (supervision) => {
-    supervision.recovery = { fact: 'observe' };
-    const reported = { problems: [], process: PROCESS, cancellationNotApplied: true, launch: claimedBy(2) };
-    supervision.facts = [reported, reported, { ...reported, exit: CLEAN_EXIT }];
-    const read = supervision.read.bind(supervision);
-    let reads = 0;
-    supervision.read = async () => {
-      reads += 1;
-      if (reads === 2) value(journal.recordCommand(cancellation(2, { executionId: EXECUTION })));
-      return read();
-    };
-  };
-  await startOnce();
-  const notApplied = value(journal.dueForPublication(T0)).flatMap(({ fact }) => fact.kind === 'cancellation-not-applied' ? [fact.commandId] : []);
-  assert.deepEqual(notApplied, ['cancel-1', 'cancel-2']);
-});
-
-test('a supervisor replaced by a new adopter is logged as lost, and the watch goes on', async () => {
-  inherit('written');
-  launchNothingNew();
-  supervisions.onCreated = (supervision) => {
-    supervision.recoveries = [{ fact: 'observe' }, { fact: 'adopted' }];
-    supervision.recovery = { fact: 'observe' };
-    const running = { problems: [], process: PROCESS, launch: claimedBy(1) };
-    supervision.facts = Array.from({ length: LIVENESS_POLLS }, () => running);
-    supervision.facts.push({ ...running, exit: CLEAN_EXIT });
-  };
-  await startOnce();
-  assert.equal(inherited()?.state, 'exited');
-  const lost = sink.records.find(({ event }) => event === 'worker.supervisor.lost');
-  assert.equal(lost?.fields['fact'], 'adopted');
 });

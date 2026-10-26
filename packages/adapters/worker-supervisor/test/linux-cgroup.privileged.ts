@@ -171,7 +171,7 @@ test('a worker restart adopts a live supervisor and leaves its process set runni
   // The worker recovers only after it started the supervisor (section 6).
   await until(() => existsSync(join(execution.directory, 'handle')));
 
-  assert.deepEqual(await recover(execution), { fact: 'adopted', supervisor: 'live' });
+  assert.deepEqual(await recover(execution), { fact: 'adopted' });
   assert.deepEqual(await supervisor.exited, { code: 0, signal: null });
   assert.deepEqual((await recordedExit(execution)).status, { kind: 'code', code: 0 });
 });
@@ -182,13 +182,13 @@ test('a supervisor and then its adopter are killed: each recovery adopts again, 
   await until(() => existsSync(join(execution.directory, 'handle')));
   launcher.kill('SIGKILL');
   await launcher.exited;
-  assert.deepEqual(await recover(execution), { fact: 'adopted', supervisor: 'started' });
+  assert.deepEqual(await recover(execution), { fact: 'adopted' });
   const first = await startSupervisor(execution, 'adopt');
   await until(() => existsSync(join(execution.directory, 'supervisor.2')));
   first.kill('SIGKILL');
   await first.exited;
 
-  assert.deepEqual(await recover(execution), { fact: 'adopted', supervisor: 'started' });
+  assert.deepEqual(await recover(execution), { fact: 'adopted' });
   const second = await startSupervisor(execution, 'adopt');
   assert.deepEqual(await second.exited, { code: 0, signal: null });
   assert.equal((await recordedExit(execution)).status.kind, 'unknown');

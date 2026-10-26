@@ -116,7 +116,7 @@ test('recovery reports a recorded exit, and a missing record is uncertain', asyn
   assert.deepEqual(value(await supervision().recover('first')), { fact: 'uncertain', reason: 'the journaled record is missing or damaged' });
 });
 
-test('read reports the first survivors with their groups, leaves out an older entry without one, and a cancel not applied', async () => {
+test('read reports the first survivors with their groups, an older entry with the child group, and a cancel not applied', async () => {
   value(await supervision().prepare(PLAN));
   const directory = join(executions, EXECUTION);
   writeFileSync(join(directory, RECORD_FILES.handle), encodeRecord({
@@ -131,6 +131,7 @@ test('read reports the first survivors with their groups, leaves out an older en
   const facts = value(await supervision().read());
   assert.deepEqual(facts.survivors, [
     { platform: 'darwin', bootId: BOOT, pid: 43, startTime: 8, processGroupId: 50 },
+    { platform: 'darwin', bootId: BOOT, pid: 44, startTime: 9, processGroupId: 42 },
   ]);
   assert.equal(facts.cancellationNotApplied, true);
 });
@@ -154,11 +155,4 @@ test('the record listing names directories only, and a missing directory lists n
   assert.deepEqual(value(await fileRecordListing(executions)()), [EXECUTION]);
   assert.deepEqual(value(await fileRecordListing(join(executions, 'absent'))()), []);
   assert.equal((await fileRecordListing(join(executions, 'stray-file'))()).ok, false);
-});
-
-test('survivors that an older supervisor wrote without groups are no survivors fact', async () => {
-  value(await supervision().prepare(PLAN));
-  const directory = join(executions, EXECUTION);
-  writeFileSync(join(directory, RECORD_FILES.events), encodeEvent({ kind: 'survivors', processes: [{ bootId: BOOT, pid: 44, startTime: 9 }] }));
-  assert.equal(value(await supervision().read()).survivors, undefined);
 });
