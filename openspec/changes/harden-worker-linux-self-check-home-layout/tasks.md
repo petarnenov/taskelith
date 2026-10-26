@@ -15,6 +15,6 @@
 - [x] 3.1 proposal.md, design.md, tasks.md, verification.md
 - [x] 3.2 `npm run openspec -- validate harden-worker-linux-self-check-home-layout --strict`
 - [x] 3.3 `make verify`
-- [ ] 3.4 Independent review
+- [x] 3.4 Independent review (pass 1, no findings)
 - [ ] 3.5 `make verify-linux-cgroup` on a host with cgroup v2 (coordinator, at integration)
 - [ ] 3.6 Handoff and integration by the coordinator
