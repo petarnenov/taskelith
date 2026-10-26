@@ -13,9 +13,13 @@ class ScriptedHistogram implements LoopDelayHistogram {
   enabled = false;
   resets = 0;
   failing = false;
+  failedReads = 0;
 
   percentile(): number {
-    if (this.failing) throw new Error('histogram unreadable');
+    if (this.failing) {
+      this.failedReads += 1;
+      throw new Error('histogram unreadable');
+    }
     return this.p99Nanoseconds;
   }
 
@@ -88,7 +92,9 @@ test('a histogram that cannot be read is unmeasured, and the watch goes on', asy
   assert.match(failed(sensor.eventLoopLagMilliseconds()).message, /histogram unreadable/);
   const controller = new AbortController();
   const watching = sensor.watch(controller.signal);
-  await delay(30);
+  // Past the direct read above, a failed read is a failed close.
+  for (let wait = 0; histogram.failedReads < 2 && wait < 200; wait += 1) await delay(5);
+  assert.ok(histogram.failedReads >= 2, 'no close was attempted');
   histogram.failing = false;
   histogram.p99Nanoseconds = 50e6;
   assert.match(failed(sensor.eventLoopLagMilliseconds()).message, /histogram unreadable/, 'a failed close stays unmeasured');
