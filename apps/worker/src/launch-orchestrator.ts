@@ -125,7 +125,7 @@ export class LaunchOrchestrator {
   // The first pass logs the plan and the records no journal row names; the
   // open executions it finds are the inherited ones.
   async #beginReconciliation(snapshot: JournalSnapshot, actions: readonly RecoveryAction[]): Promise<void> {
-    this.#inherited = new Set(snapshot.executions.filter((execution) => !isTerminal(execution)).map(({ executionId }) => executionId));
+    this.#inherited = new Set(openExecutions(snapshot));
     const counts: Record<string, number> = {};
     for (const { kind } of actions) counts[kind] = (counts[kind] ?? 0) + 1;
     this.#logger.info('worker.reconciliation.planned', { inherited: this.#inherited.size, ...counts });
@@ -266,6 +266,11 @@ function targetedAssignments(target: CancellationTarget, snapshot: JournalSnapsh
     ? snapshot.intents.filter(({ attemptId }) => attemptId === target.attemptId)
     : snapshot.executions.filter(({ executionId }) => executionId === target.executionId);
   return new Set(named.map(({ assignmentId }) => assignmentId));
+}
+
+// The executions not yet terminal: at a start, those an earlier process left.
+export function openExecutions(snapshot: JournalSnapshot): ExecutionId[] {
+  return snapshot.executions.filter((execution) => !isTerminal(execution)).map(({ executionId }) => executionId);
 }
 
 function isTerminal(execution: JournaledExecution): boolean {
