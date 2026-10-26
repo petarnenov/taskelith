@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { basename } from 'node:path';
 import { describe, test, type TestContext } from 'node:test';
 import type { Execution, JournaledExecution, Task } from '@taskelith/execution';
 import { JetStreamPublisher, type ControlPlaneConnection, type TransportAddress } from '@taskelith/nats';
@@ -251,10 +252,11 @@ async function d1Failure(scenario: Scenario): Promise<Error> {
   const task = await scenario.taskWhere('E1 not-started in the control plane', (current) => executions(current).length > 0 && executions(current).every(({ state }) => state === 'not-started'));
   assert.equal(task.attempts.length, 1, 'one attempt');
   assert.deepEqual(executions(task).map(({ id }) => id), [first.executionId], 'the control plane knows E1 alone');
-  assertD1Order(establishedOrder(installation), first.executionId, relaunch.executionId);
+  const order = establishedOrder(installation);
+  assertD1Order(order, first.executionId, relaunch.executionId);
   await scenario.noLeftovers();
   assert.equal(spawnedChildren(installation).length, 0, 'no spawn');
-  return new Error(`D1: the relaunch ${relaunch.executionId} was rejected-final with execution-conflict`);
+  return new Error(`D1: the relaunch ${relaunch.executionId} was rejected-final with execution-conflict; established ${order.join(', ')}`);
 }
 
 // The hold published E1's `not-started` only after E2's rejection.
@@ -298,6 +300,12 @@ function assertNoBoundRelease(order: readonly string[]): void {
   assert.ok(!order.some((step) => step.includes(BY_THE_BOUND)), `a barrier ran into its bound: ${order.join('; ')}`);
 }
 
+// The adopting supervisors' records, once one exists, while the child runs.
+async function adoption(scenario: Scenario): Promise<string[]> {
+  await scenario.wait('an adopting supervisor', async () => adoptingSupervisors(scenario.installation).length > 0);
+  return adoptingSupervisors(scenario.installation).map((path) => basename(path));
+}
+
 async function runCrashWindow(window: CrashWindow, signal: AbortSignal): Promise<string> {
   const { points, outcome, spawns, childRelease } = window;
   const scenario = await Scenario.start({ signal, holdNotStarted: window.defect === 'D1' });
@@ -314,7 +322,7 @@ async function runCrashWindow(window: CrashWindow, signal: AbortSignal): Promise
     if (window.journaled !== undefined) assertJournaled(scenario, window.journaled);
     const restarted = await scenario.startWorker();
     await restarted.ready();
-    if (childRelease === 'after-adoption') await scenario.wait('an adopting supervisor', async () => adoptingSupervisors(installation).length > 0);
+    const adopted = childRelease === 'after-adoption' ? await adoption(scenario) : [];
     releaseChild(installation);
     const task = await scenario.settledUnlessD1(outcome);
     await restarted.stop();
@@ -325,7 +333,8 @@ async function runCrashWindow(window: CrashWindow, signal: AbortSignal): Promise
     const order = establishedOrder(installation);
     assertNoBoundRelease(order);
     if (points.includes('CP4')) assert.ok(order.includes('CP4 after the claim'), order.join('; '));
-    const established = order.length === 0 ? '' : `; established ${order.join(', ')}`;
+    const steps = [...order, ...adopted.map((record) => `child released after the adopter's ${record}`)];
+    const established = steps.length === 0 ? '' : `; established ${steps.join(', ')}`;
     return `crashed at ${points.join(' then ')}; recovered to ${outcome} of execution ${execution.id} with ${spawns} spawn(s)${established}`;
   } finally {
     await scenario.stop();
