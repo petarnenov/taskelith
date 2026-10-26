@@ -14,24 +14,26 @@
 
 ## Decisions
 
-### D1: the bound is thirty polls, three liveness intervals
+### D1: the bound is the launch's spawn deadline
 
-`UNCLAIMED_LIVENESS_POLLS = 3 * LIVENESS_POLLS`. A record with no launch record is checked on the thirtieth poll and then every tenth poll, the cadence of a claimed record.
+The launch orchestrator passes the deadline it handed the supervisor in the `LaunchPlan` to the watch as `WatchTarget.spawnDeadline`, and the watch reads the `DeadlineClock` it now takes in `WatchOptions`. A record with no launch record is checked only on a tenth poll at which the deadline has passed, and then every tenth poll, the cadence of a claimed record.
 
-- **Why thirty.** The recovery table seals a record without a launch record without probing the supervisor (contract section 6, "No launch record"), so a check before the supervisor could claim would seal a healthy but slow launch. The worker hands the supervisor a deadline of at most `ttl` minus `skew` after its first request's reading, `25s` with the operational targets' `30s` and `5s` ([operational targets](../../../docs/operational-targets.md), "Launch authorization validity window"), and starts the supervisor after that reading. Thirty polls at the default `1s` interval (`WATCH_POLL_MILLISECONDS`) take at least `30s`, so by then the deadline has passed: a supervisor that has not claimed cannot spawn, because CP5 seals past the deadline and a later claim finds the deadline passed before the spawn and records a spawn failure. The seal therefore preempts nothing that could still start.
-- **Why a multiple of `LIVENESS_POLLS`.** The check keeps one cadence for both kinds of record, and the first unclaimed check is the third liveness interval, the smallest one past the deadline.
+- **Why the deadline.** The recovery table seals a record without a launch record without probing the supervisor (contract section 6, "No launch record"), so a check before the supervisor could claim would seal a healthy but slow launch. Past the deadline nothing can still start: CP5 seals past the deadline, and a later claim finds the deadline passed before the spawn and records a spawn failure. The seal therefore preempts nothing that could still start.
+- **Passed means not proven ahead.** The check uses the orchestrator's rule for handing out a grant, turned around: the deadline is ahead only in the boot of its reading, on a readable clock, below its milliseconds. Another boot or an unreadable clock counts as passed, as for the supervisor, which seals then (`boot-changed`, `deadline-unreadable`).
+- **Why the cadence stays.** The check keeps one cadence for both kinds of record and costs at most one liveness interval of delay after the deadline.
 - **Recovery rounds.** The round is kept as for a claim: `first`, then `after-retry` after a `retry`, back to `first` after `observe`. Without a launch record the table answers `not-started` after its seal; it answers `retry` or `observe` only when the seal lost to a claim and the table decided again from it.
-- **Alternative:** carry the deadline in `WatchTarget` and compare it with the deadline clock. It is exact, but the watch would need the clock and a reconciled record has no deadline in hand; a poll count reuses the existing cadence.
+- **Inherited records.** A reconciled target has no deadline in hand and keeps the reconcile path: its first recovery already seals a record without a launch record, and its watch never checks an unclaimed record.
+- **Alternative (review pass 1 replaced it):** a fixed count of thirty polls, three liveness intervals. It was meant to exceed the `25s` deadline at the default `1s` poll, but the poll interval is configurable (the tests use `100ms`), thirty polls are only twenty-nine sleeps, and an installation may set another `ttl`, so the count does not prove the deadline passed and could seal a live slow launch. The deadline is exact and already known to the launch that set it.
 
 ### D2: outcomes through the existing paths
 
-`livenessDue(launch, polls)` replaces the claim-only condition in `observe`; `#checkLiveness` and the rest are unchanged. A `not-started` answer logs `worker.supervisor.lost` and keeps observing, the next read sees the seal, and `#commitFacts` commits W6 and returns `not-started`, after which the launch orchestrator launches the intent again under a new execution. `observe` keeps a live supervisor watched, `adopted` is read back, and `uncertain` is reported once with its reason. A seal in the record is decided by `#commitFacts` before any check.
+`#livenessDue(target, launch, polls)` replaces the claim-only condition in `observe`; `#checkLiveness` and the rest are unchanged. A `not-started` answer logs `worker.supervisor.lost` and keeps observing, the next read sees the seal, and `#commitFacts` commits W6 and returns `not-started`, after which the launch orchestrator launches the intent again under a new execution. `observe` keeps a live supervisor watched, `adopted` is read back, and `uncertain` is reported once with its reason. A seal in the record is decided by `#commitFacts` before any check.
 
 ### D3: no contract change
 
-The contract states supervisor liveness and the recovery table without restricting the worker's check to a claimed record, and the table already seals a record without a launch record. Its rule that the worker probes `lock` only during recovery, never while it starts a supervisor, holds: the check is a recovery-table call, made only after the deadline. A supervisor that has not even taken `lock` by then exits when it finds the lock probed, and spawns nothing.
+The contract states supervisor liveness and the recovery table without restricting the worker's check to a claimed record, and the table already seals a record without a launch record. Its rule that the worker probes `lock` only during recovery, never while it starts a supervisor, holds: the check is a recovery-table call, made only past the deadline. A supervisor that has not even taken `lock` by then exits when it finds the lock probed, and spawns nothing.
 
 ## Risks / Trade-offs
 
-- **The bound counts polls, not time.** With a shorter `pollMilliseconds` or a longer installation `ttl`, the check can come before the deadline. It stays safe, because the seal is exclusive and the seal or a lost race decides once; at worst a slow live launch is sealed, reported `not-started`, and launched again under a new execution.
-- **Detection takes about thirty seconds** at the default interval, instead of a worker restart.
+- **An unreadable deadline clock counts as passed.** A slow live supervisor could then be sealed; it would seal itself at CP5 or before the spawn on the same clock, and the seal decides once, so no spawn is lost that could have started.
+- **Detection takes the remaining deadline and up to one liveness interval**, about `25s` to `35s` at the default values, instead of a worker restart.
