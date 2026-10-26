@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -17,7 +17,7 @@ import { PostgresDatabase } from '@taskelith/postgres';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
 import { CRASH_POINT_VARIABLE, crashEnvironment, integrationEndpoint, integrationSecret, ScenarioProcess, SEED_VARIABLE, value } from '@taskelith/testing';
 import { openWorkerRoot } from '@taskelith/worker-journal';
-import { CRASH_TRACE_VARIABLE } from './fixtures/crash-hook.ts';
+import { CRASH_TRACE_VARIABLE, HOLD_NOT_STARTED_VARIABLE, ORDER_TRACE_VARIABLE } from './fixtures/crash-hook.ts';
 
 // A test-side composition of the real control plane and a real worker
 // process against the make services, for the G2 crash scenarios (item 24b).
@@ -30,9 +30,10 @@ const DIGEST = `sha256:${'cd'.repeat(32)}`;
 const RUN_ID = 'crash-run';
 const POLL_MILLISECONDS = 100;
 export const SETTLE_MILLISECONDS = 60_000;
-// The child runs this long, so a dead supervisor's child is still alive
-// when recovery looks for it.
-export const CHILD_MILLISECONDS = 3_000;
+const STOP_MILLISECONDS = 15_000;
+// The scripted child runs until the test releases it, at most this long.
+const CHILD_BOUND_MILLISECONDS = 30_000;
+const STREAM_KINDS = ['commands', 'observations', 'sdlc', 'quarantine', 'advisories'] as const;
 
 const WORKFLOW = value(parseWorkflowDefinition({
   id: 'crash-workflow', version: '1', stages: [
@@ -61,11 +62,61 @@ export async function sql<Row extends pg.QueryResultRow>(url: URL, text: string,
   }
 }
 
-export async function waitFor(what: string | (() => string), condition: () => Promise<boolean>, timeoutMilliseconds = SETTLE_MILLISECONDS): Promise<void> {
-  const deadline = Date.now() + timeoutMilliseconds;
+export interface WaitOptions {
+  readonly timeout?: number;
+  readonly signal?: AbortSignal;
+}
+
+export async function waitFor(what: string | (() => string), condition: () => Promise<boolean>, options: WaitOptions = {}): Promise<void> {
+  const deadline = Date.now() + (options.timeout ?? SETTLE_MILLISECONDS);
   while (!(await condition())) {
+    options.signal?.throwIfAborted();
     if (Date.now() > deadline) throw new Error(`timed out waiting for ${typeof what === 'string' ? what : what()}`);
-    await delay(POLL_MILLISECONDS);
+    await delay(POLL_MILLISECONDS, undefined, options.signal === undefined ? {} : { signal: options.signal });
+  }
+}
+
+// Settles as the promise does, or rejects once the signal aborts.
+function settledUnlessAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    if (signal.aborted) return abort();
+    signal.addEventListener('abort', abort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+  });
+}
+
+// What a scenario acquired, released last first; every release runs, and
+// their errors come back together.
+export class Releases {
+  readonly #releases: Array<() => unknown> = [];
+
+  add(release: () => unknown): void {
+    this.#releases.push(release);
+  }
+
+  async releaseAll(): Promise<void> {
+    const errors: unknown[] = [];
+    for (let release = this.#releases.pop(); release !== undefined; release = this.#releases.pop()) {
+      try {
+        await release();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length > 0) throw new AggregateError(errors, 'a release failed');
+  }
+}
+
+// Runs the releases of a failed acquisition, then rethrows its error.
+export async function releasedOnFailure<T>(releases: Releases, acquire: () => Promise<T>): Promise<T> {
+  try {
+    return await acquire();
+  } catch (error) {
+    await releases.releaseAll().catch((cleanup: unknown) => {
+      throw new AggregateError([error, cleanup], 'a failed start could not release what it acquired');
+    });
+    throw error;
   }
 }
 
@@ -77,36 +128,56 @@ interface Identity {
   readonly operator: string;
 }
 
+export interface LaunchRejectionLog {
+  readonly executionId: string;
+  readonly assignmentId: string;
+  readonly reason: string;
+}
+
 // One scenario's own installation: a database, data roots, a broker account,
 // and a control plane, so no scenario sees another's workers or tasks.
 export class HarnessInstallation {
   readonly #identity: Identity;
-  readonly #running: RunningControlPlane;
   readonly #store: PostgresDatabase;
   readonly #logs: InMemoryLogSink;
+  readonly #apiPort: number;
+  readonly #releases: Releases;
 
-  private constructor(identity: Identity, running: RunningControlPlane, logs: InMemoryLogSink) {
+  private constructor(identity: Identity, store: PostgresDatabase, logs: InMemoryLogSink, apiPort: number, releases: Releases) {
     this.#identity = identity;
-    this.#running = running;
+    this.#store = store;
     this.#logs = logs;
-    this.#store = new PostgresDatabase(identity.database);
+    this.#apiPort = apiPort;
+    this.#releases = releases;
   }
 
-  static async start(): Promise<HarnessInstallation> {
+  static start(): Promise<HarnessInstallation> {
+    const releases = new Releases();
+    return releasedOnFailure(releases, () => HarnessInstallation.#acquire(releases));
+  }
+
+  static async #acquire(releases: Releases): Promise<HarnessInstallation> {
     installations += 1;
     const databaseName = `taskelith_crash_${process.pid}_${installations}`;
     await sql(POSTGRES, `CREATE DATABASE ${databaseName}`);
+    releases.add(() => sql(POSTGRES, `DROP DATABASE IF EXISTS ${databaseName} WITH (FORCE)`));
     const database = new URL(POSTGRES);
     database.pathname = `/${databaseName}`;
     const base = mkdtempSync(join(tmpdir(), 'taskelith-crash-'));
+    releases.add(() => rmSync(base, { recursive: true, force: true }));
     const dataRoot = join(base, 'control-plane');
     const authority = await registeredAuthority(dataRoot);
     const environment = { TASKELITH_DATA_DIR: dataRoot, TASKELITH_POSTGRES_URL: database.href, TASKELITH_NATS_URL: NATS.href };
     const initialized = await admin(environment, ['init', '--actor', 'root@test', '--reason', 'crash scenario']) as { identity: { installationId: string }; operatorSecret: string };
     const address = value(TransportAddress.of(initialized.identity.installationId));
+    releases.add(() => deleteStreams(authority, address));
     const logs = new InMemoryLogSink();
-    const running = value(await startControlPlane(controlPlaneSettings(dataRoot, database, logs)));
-    return new HarnessInstallation({ database, base, authority, address, operator: initialized.operatorSecret }, running, logs);
+    const running: RunningControlPlane = value(await startControlPlane(controlPlaneSettings(dataRoot, database, logs)));
+    releases.add(() => running.stop());
+    const store = new PostgresDatabase(database);
+    releases.add(() => store.close());
+    const identity = { database, base, authority, address, operator: initialized.operatorSecret };
+    return new HarnessInstallation(identity, store, logs, running.api.port, releases);
   }
 
   get base(): string {
@@ -114,7 +185,7 @@ export class HarnessInstallation {
   }
 
   get apiUrl(): string {
-    return `http://127.0.0.1:${this.#running.api.port}/`;
+    return `http://127.0.0.1:${this.#apiPort}/`;
   }
 
   get address(): TransportAddress {
@@ -134,9 +205,11 @@ export class HarnessInstallation {
     await this.#operatorCall(`/runs/${RUN_ID}/tasks`, { taskId, kind: 'planning', stageId: 'specs' });
   }
 
-  // The reasons of the launch rejections the control plane observed.
-  launchRejections(): string[] {
-    return this.#logs.records.filter(({ event }) => event === 'execution.launch.rejected').map(({ fields }) => String(fields.reason));
+  // The launch rejections the control plane observed, in order.
+  launchRejections(): LaunchRejectionLog[] {
+    return this.#logs.records.filter(({ event }) => event === 'execution.launch.rejected').map(({ fields }) => ({
+      executionId: String(fields.executionId), assignmentId: String(fields.assignmentId), reason: String(fields.reason),
+    }));
   }
 
   async task(taskId: string): Promise<Task> {
@@ -145,20 +218,11 @@ export class HarnessInstallation {
 
   // A broker connection of the operator's side, for the commands stream.
   connectBroker(name: string): Promise<ControlPlaneConnection> {
-    const creds = this.#identity.authority.user(name, Math.floor(Date.now() / 1000)).creds;
-    return connectTransport({ server: NATS, address: this.address, creds }).then(value);
+    return brokerConnection(this.#identity.authority, this.address, name);
   }
 
-  async stop(): Promise<void> {
-    await this.#running.stop();
-    await this.#store.close();
-    const broker = await this.connectBroker('cleanup');
-    for (const kind of ['commands', 'observations', 'sdlc', 'quarantine', 'advisories'] as const) {
-      await broker.jsm.streams.delete(this.address.streamName(kind)).catch(() => false);
-    }
-    await broker.close();
-    rmSync(this.base, { recursive: true, force: true });
-    await sql(POSTGRES, `DROP DATABASE IF EXISTS ${this.#identity.database.pathname.slice(1)} WITH (FORCE)`);
+  stop(): Promise<void> {
+    return this.#releases.releaseAll();
   }
 
   async #operatorCall(path: string, body: unknown): Promise<void> {
@@ -169,6 +233,20 @@ export class HarnessInstallation {
   }
 }
 
+function brokerConnection(authority: BrokerAuthority, address: TransportAddress, name: string): Promise<ControlPlaneConnection> {
+  const creds = authority.user(name, Math.floor(Date.now() / 1000)).creds;
+  return connectTransport({ server: NATS, address, creds }).then(value);
+}
+
+async function deleteStreams(authority: BrokerAuthority, address: TransportAddress): Promise<void> {
+  const broker = await brokerConnection(authority, address, 'cleanup');
+  try {
+    for (const kind of STREAM_KINDS) await broker.jsm.streams.delete(address.streamName(kind)).catch(() => false);
+  } finally {
+    await broker.close();
+  }
+}
+
 // A fresh broker account, registered on the test server that trusts the
 // test operator.
 async function registeredAuthority(dataRoot: string): Promise<BrokerAuthority> {
@@ -176,8 +254,11 @@ async function registeredAuthority(dataRoot: string): Promise<BrokerAuthority> {
   value(value(ControlPlaneNamespace.open({ dataRoot, ownerUid })).create('broker-authority', keys));
   const authority = value(BrokerAuthority.fromKeys(keys));
   const system = value(await connectSystemAccount({ server: NATS, creds: integrationSecret('system.creds') }));
-  value(await new NatsBrokerCredentials(authority, system.connection).publishRevocations([]));
-  await system.close();
+  try {
+    value(await new NatsBrokerCredentials(authority, system.connection).publishRevocations([]));
+  } finally {
+    await system.close();
+  }
   return authority;
 }
 
@@ -199,17 +280,24 @@ async function admin(environment: Record<string, string>, argv: string[]): Promi
 export interface WorkerRun {
   readonly installation: HarnessInstallation;
   readonly seed: number;
+  // Aborts every wait of the run, as the scenario's deadline passes.
+  readonly signal: AbortSignal;
   // The crash point TASKELITH_CRASH_POINT arms in this run, if any.
   readonly armed?: string;
+  readonly holdNotStarted?: boolean;
 }
+
+type ProcessExit = Awaited<ScenarioProcess['exited']>;
 
 // One run of the composed worker process on the scenario's data root; a
 // later run of the same installation is its restart.
 export class ComposedWorker {
   readonly #process: ScenarioProcess;
+  readonly #signal: AbortSignal;
 
-  private constructor(process: ScenarioProcess) {
+  private constructor(process: ScenarioProcess, signal: AbortSignal) {
     this.#process = process;
+    this.#signal = signal;
   }
 
   static async start(run: WorkerRun, enrollmentToken: string): Promise<ComposedWorker> {
@@ -217,13 +305,14 @@ export class ComposedWorker {
     // A crash kills mid-write the coverage file of an inheriting child.
     const { [CRASH_POINT_VARIABLE]: _unarmed, NODE_V8_COVERAGE: _uncovered, ...inherited } = process.env;
     const env = {
-      ...inherited, ...(armed === undefined ? {} : crashEnvironment(armed)),
-      [SEED_VARIABLE]: String(seed), [CRASH_TRACE_VARIABLE]: crashTrace(installation),
+      ...inherited, ...(armed === undefined ? {} : crashEnvironment(armed)), ...(run.holdNotStarted === true ? { [HOLD_NOT_STARTED_VARIABLE]: '1' } : {}),
+      [SEED_VARIABLE]: String(seed), [CRASH_TRACE_VARIABLE]: crashTrace(installation), [ORDER_TRACE_VARIABLE]: orderTrace(installation),
       TASKELITH_DATA_DIR: join(installation.base, 'worker'), TASKELITH_CONTROL_PLANE_URL: installation.apiUrl,
       TASKELITH_NATS_URL: NATS.href, TASKELITH_ENROLLMENT_TOKEN: enrollmentToken, TASKELITH_WORKER_COMMAND: childCommand(installation),
     };
     // The base names the scenario on the command line, for leftoverProcesses.
-    return new ComposedWorker(await ScenarioProcess.start(process.execPath, ['--experimental-strip-types', COMPOSED_WORKER, installation.base], { env }));
+    const started = await ScenarioProcess.start(process.execPath, ['--experimental-strip-types', COMPOSED_WORKER, installation.base], { env });
+    return new ComposedWorker(started, run.signal);
   }
 
   // Resolves once the worker reconciled its journal and is online, so a
@@ -236,19 +325,19 @@ export class ComposedWorker {
     await waitFor('the restarted worker to be online', async () => {
       if (exited) throw new Error(`the worker exited before it was online: ${this.#process.stderr}`);
       return READY_EVENTS.every((event) => this.#process.stderr.includes(`"event":"${event}"`));
-    });
+    }, { signal: this.#signal });
   }
 
   // Resolves once the armed crash killed the worker itself.
   async crashed(): Promise<void> {
-    const exit = await this.#process.exited;
+    const exit = await this.#exitWithin('the armed crash', SETTLE_MILLISECONDS);
     assert.equal(exit.signal, 'SIGKILL', `the worker was not killed: ${this.#process.stderr}`);
   }
 
   // A service stop: SIGTERM, as a process supervisor sends it.
   async stop(): Promise<void> {
     this.#process.kill('SIGTERM');
-    const exit = await this.#process.exited;
+    const exit = await this.#exitWithin('the stop', STOP_MILLISECONDS);
     assert.deepEqual(exit, { code: 0, signal: null }, `the worker did not stop cleanly: ${this.#process.stderr}`);
   }
 
@@ -257,6 +346,16 @@ export class ComposedWorker {
       this.#process.kill('SIGKILL');
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+    }
+  }
+
+  // A bounded wait for the exit; a worker still running is killed.
+  async #exitWithin(what: string, milliseconds: number): Promise<ProcessExit> {
+    try {
+      return await settledUnlessAborted(this.#process.exited, AbortSignal.any([this.#signal, AbortSignal.timeout(milliseconds)]));
+    } catch (error) {
+      this.kill();
+      throw new Error(`the worker's exit after ${what} did not come: ${this.#process.stderr.slice(-2000)}`, { cause: error });
     }
   }
 }
@@ -270,20 +369,49 @@ export function tracedCrashes(installation: HarnessInstallation): string[] {
   return readLines(crashTrace(installation));
 }
 
+function orderTrace(installation: HarnessInstallation): string {
+  return join(installation.base, 'order-trace');
+}
+
+// The steps the test-side barriers established, in the order they came.
+export function establishedOrder(installation: HarnessInstallation): string[] {
+  return readLines(orderTrace(installation));
+}
+
 function spawnsFile(installation: HarnessInstallation): string {
   return join(installation.base, 'spawns');
 }
 
+function releaseFile(installation: HarnessInstallation): string {
+  return join(installation.base, 'release');
+}
+
+// Lets every scripted child of the scenario exit, now and later.
+export function releaseChild(installation: HarnessInstallation): void {
+  writeFileSync(releaseFile(installation), '');
+}
+
 // The test-only scripted process: it appends its process ID to `spawns`
-// once it starts, so a scenario counts every spawn, then exits 0.
+// once it starts, then exits 0 once released or at its bound.
 function childCommand(installation: HarnessInstallation): string {
-  const script = `require('node:fs').appendFileSync(${JSON.stringify(spawnsFile(installation))}, process.pid + '\\n');`
-    + ` setTimeout(() => {}, ${CHILD_MILLISECONDS});`;
+  const [spawns, release, order] = [spawnsFile(installation), releaseFile(installation), orderTrace(installation)].map((path) => JSON.stringify(path));
+  const script = `const fs = require('node:fs'); fs.appendFileSync(${spawns}, process.pid + '\\n');`
+    + ` const bound = Date.now() + ${CHILD_BOUND_MILLISECONDS};`
+    + ' (function wait() { if (fs.existsSync(' + release + ')) return;'
+    + ` if (Date.now() > bound) return fs.appendFileSync(${order}, 'child ' + process.pid + ' released by the bound\\n');`
+    + ' setTimeout(wait, 50); })();';
   return JSON.stringify([process.execPath, '-e', script]);
 }
 
 export function spawnedChildren(installation: HarnessInstallation): string[] {
   return readLines(spawnsFile(installation));
+}
+
+// The records of adopting supervisors: a claim names supervisor.1, so an
+// adopter writes a later serial (supervisor identity contract).
+export function adoptingSupervisors(installation: HarnessInstallation): string[] {
+  const paths = readdirSync(join(installation.base, 'worker'), { recursive: true, encoding: 'utf8' });
+  return paths.filter((path) => /(^|\/)supervisor\.([2-9]|\d{2,})$/.test(path));
 }
 
 function readLines(path: string): string[] {
@@ -295,7 +423,7 @@ function readLines(path: string): string[] {
   }
 }
 
-// The worker's journal, read once its process stopped and the lock is free.
+// The worker's journal, read while no worker process holds its lock.
 export function journalSnapshot(installation: HarnessInstallation): JournalSnapshot {
   const root = value(openWorkerRoot({ dataRoot: join(installation.base, 'worker'), clock: SYSTEM_CLOCK }));
   try {
