@@ -908,6 +908,18 @@ describe('a revoked worker', () => {
     const again = await placeAgain(at.taskId);
     assert.deepEqual([again.attemptId, again.assignment.workerId], [at.attemptId, 'worker-b']);
   });
+
+  test('keeps an assignment that held a grant, even when its executions are terminal', async () => {
+    await enroll();
+    value(await declare(1));
+    const at = await placed();
+    const executionId = await launch(at);
+    value(await observe('execution.not-started', { sequence: 2, attemptId: at.attemptId, ownershipGeneration: at.generation }, { executionId }));
+    value(await revoke());
+    const kept = await heldAssignment(at.attemptId);
+    assert.deepEqual([kept.state, kept.end, kept.reservation.state], ['offered', undefined, 'held']);
+    assert.deepEqual(await messages('execution.assignment.end'), []);
+  });
 });
 
 describe('reconciliation queue', () => {

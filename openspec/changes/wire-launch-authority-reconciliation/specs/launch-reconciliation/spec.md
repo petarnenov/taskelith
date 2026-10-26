@@ -56,7 +56,7 @@ The control plane SHALL apply an observation of a revoked worker only when it na
 - **THEN** each is refused, and no contact is recorded
 
 ### Requirement: Attempts of a revoked worker
-A worker revocation SHALL, in its transaction, supersede every active assignment of the worker whose attempt owns no execution that could run. An attempt with an `authorized` or `started` execution SHALL keep its ownership and reservation, with the execution uncertain.
+A worker revocation SHALL, in its transaction, supersede every active assignment of the worker that never held a grant. An attempt with an `authorized` or `started` execution SHALL keep its ownership and reservation, with the execution uncertain.
 
 #### Scenario: Accepted assignment without a grant
 - **WHEN** a worker holding an accepted assignment with no grant is revoked
