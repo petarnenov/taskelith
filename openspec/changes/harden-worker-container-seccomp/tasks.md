@@ -9,12 +9,16 @@
 
 ## 2. Owner decision
 
-- [ ] 2.1 Owner chooses the option, and for option (b) the profile shape (default-derived or deny-list)
+- [x] 2.1 The owner's delegate chose option b1, the default-derived profile (away run `20261026T170116Z-opencode-68419`)
 
-## 3. Hardening (phase 2, after the decision)
+## 3. Hardening (phase 2)
 
-- [ ] 3.1 Add the tracked seccomp profile under `infra/installation/` (for the chosen option)
-- [ ] 3.2 Wire it into the Compose `worker` service's `security_opt`, and the `worker-harnesses` variant if in scope
-- [ ] 3.3 Re-run `make installation-smoke` and confirm the escape is blocked for uid 10003
-- [ ] 3.4 Update `docs/local-installation.md` to state the profile and that the user namespace is closed
-- [ ] 3.5 Independent review and `verification.md`
+- [x] 3.1 Add the pinned upstream copy `infra/installation/seccomp/docker-default.json` (moby `8ec5ab355a34`, `github.com/moby/profiles/seccomp` v0.2.3) and the derived `infra/installation/seccomp/worker.json`
+- [x] 3.2 Add `scripts/worker-seccomp-profile.ts`, `make worker-seccomp-profile`, and `test/worker-seccomp-profile.test.ts`, which proves the copy and the derivation
+- [x] 3.3 Wire the profile into the Compose `worker` service's `security_opt` and pin it in `test/installation-composition.test.ts`
+- [x] 3.4 Add `make scenario-worker-namespace-confinement` with stub tests
+- [x] 3.5 Run the scenario and `make scenario-fresh-composition` (the smoke) with the results recorder
+- [x] 3.6 Update `docs/local-installation.md`: the profile, its pinned source, the refresh procedure, and the scenario
+- [x] 3.7 Run `make verify`
+- [ ] 3.8 `make verify-linux-cgroup` on the x86_64 iMac (coordinator)
+- [ ] 3.9 Independent review
