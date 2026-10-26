@@ -260,6 +260,19 @@ function warnings(event: string): Record<string, unknown>[] {
   return logs.records.filter((record) => record.event === event).map((record) => ({ ...record.correlation, ...record.fields }));
 }
 
+// The worker answers each request in the outbox in order with a rising
+// snapshot, until none is left or the rounds run out; returns the answers.
+async function answerInTurn(fields: Pick<Report, 'throughSequence'>, rounds = 20): Promise<number> {
+  let answered = 0;
+  for (; answered < rounds; answered += 1) {
+    const request = (await requests())[answered];
+    if (request === undefined) break;
+    const snapshot = answered + 1;
+    value(await report({ ...fields, reportId: `answer-${snapshot}`, snapshot, requestId: String(request.requestId) }));
+  }
+  return answered;
+}
+
 // A reachable worker with a capacity, so that placement offers it work.
 async function readyWorker(): Promise<void> {
   await enroll();
@@ -315,7 +328,15 @@ describe('inventory requests', () => {
     assert.notEqual(first, second);
     value(await report({ reportId: 'report-1', snapshot: 1, throughSequence: 6, requestId: first }));
     assert.equal(await retired(), false, 'a snapshot that is not fresh proves no rollback');
-    assert.equal((await requests()).length, 3, 'it is unsolicited, so it requests inventory');
+    assert.equal((await requests()).length, 2, 'it answers a request, so it requests nothing more');
+  });
+
+  test('two outstanding requests answered in turn settle without a further request', async () => {
+    await enroll();
+    await inventory.requestAll([WORKER as WorkerId]);
+    await inventory.requestAll([WORKER as WorkerId]);
+    assert.equal(await answerInTurn({ throughSequence: 0 }), 2);
+    assert.equal((await requests()).length, 2);
   });
 
   test('at start one failed request is logged, the other worker\'s is sent, and the summary counts both', async () => {

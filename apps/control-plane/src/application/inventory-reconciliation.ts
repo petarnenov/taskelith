@@ -83,7 +83,7 @@ export async function receivePart(tx: ControlPlaneTransaction, part: InventoryPa
   if (!raised.ok) return raised;
   const pruned = await removeSuperseded(tx, [...pending, part], { requestId: current?.requestId, highestSnapshot, preferred: part.reportId });
   if (!pruned.ok) return pruned;
-  const unsolicited = !fresh && !pending.some((stored) => stored.reportId === part.reportId);
+  const unsolicited = part.requestId === undefined && !pending.some((stored) => stored.reportId === part.reportId);
   return unsolicited ? requestInventory(tx, workerId, context) : ok(undefined);
 }
 
