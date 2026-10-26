@@ -26,7 +26,8 @@ UV_PIN := 0.13.5
 .PHONY: verify verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility \
 	test services-up services-down verify-linux-cgroup installation-build installation-bootstrap installation-broker-config installation-start \
 	installation-stop installation-enroll installation-enrollment-token verify-installation installation-smoke qualify-harnesses \
-	scenario-fresh-composition scenario-worker-disk-loss scenario-worker-kill
+	scenario-fresh-composition scenario-worker-disk-loss scenario-worker-kill \
+	scenario-worker-namespace-confinement worker-seccomp-profile
 
 # Uses the .nvmrc Node.js when nvm has it, so no 'nvm use' is needed first.
 verify:
@@ -146,6 +147,15 @@ scenario-worker-disk-loss:
 
 scenario-worker-kill:
 	@$(SCENARIO_RUN) scenario-worker-kill $(INSTALLATION)-scenario
+
+# Opt-in item 25a check of the worker's seccomp profile.
+scenario-worker-namespace-confinement:
+	@$(SCENARIO_RUN) scenario-worker-namespace-confinement $(INSTALLATION)-scenario
+
+# Rederives the worker's seccomp profile from the pinned Docker default.
+worker-seccomp-profile:
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use \
+		node --experimental-strip-types scripts/worker-seccomp-profile.ts write
 
 # Opt-in: builds the worker-harnesses variant per platform (PLATFORMS, default
 # linux/amd64 linux/arm64) and runs the credential-free steps, into OUT.

@@ -123,6 +123,9 @@ test('the effective user of a stage follows its parents', () => {
   assert.equal(isRoot('10002:10002'), false);
 });
 
+// Relative to infra/installation, the project directory Compose resolves it in.
+const WORKER_SECCOMP = 'seccomp=./seccomp/worker.json';
+
 // The capabilities the worker entrypoint drops to before the worker runs.
 const ENTRYPOINT_CAPABILITIES = ['CHOWN', 'DAC_OVERRIDE', 'KILL', 'SETGID', 'SETPCAP', 'SETUID', 'SYS_ADMIN'];
 
@@ -136,7 +139,7 @@ test('long-running services run unprivileged; only the worker entrypoint starts 
   assert.equal(worker.user, '0:0');
   assert.deepEqual([worker.cap_drop, [...(worker.cap_add ?? [])].sort()], [['ALL'], ENTRYPOINT_CAPABILITIES]);
   assert.deepEqual([worker.cgroup, worker.init], ['private', true]);
-  assert.deepEqual([...(worker.security_opt ?? [])].sort(), ['apparmor=unconfined', 'no-new-privileges=true']);
+  assert.deepEqual([...(worker.security_opt ?? [])].sort(), ['apparmor=unconfined', 'no-new-privileges=true', WORKER_SECCOMP]);
   assert.match(dockerfile, /^ENTRYPOINT \["bash", "\/opt\/taskelith\/infra\/installation\/worker-entrypoint\.sh"\]$/m);
   const entrypoint = readFileSync('infra/installation/worker-entrypoint.sh', 'utf8');
   assert.match(entrypoint, /^exec setpriv --bounding-set=-all,\+setuid,\+setgid,\+kill --inh-caps=-all --no-new-privs -- "\$@"$/m);
