@@ -1,6 +1,7 @@
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
+import { promisify } from 'node:util';
 import type { ScenarioProcess } from '@taskelith/testing';
 
 // The longest a real-process test may run before it fails as timed out.
@@ -8,6 +9,8 @@ export const REAL_PROCESS_TEST_TIMEOUT = 30_000;
 
 const REAP_BOUND_MILLISECONDS = 5_000;
 const RESCAN_MILLISECONDS = 25;
+const PS_OUTPUT_BYTES = 16 * 1024 * 1024;
+const runFile = promisify(execFile);
 
 // Kills what a real-process test started, so that a failed assertion fails
 // the test instead of leaving a supervisor that holds the runner open.
@@ -27,9 +30,10 @@ export class ProcessReaper {
   }
 
   async reap(): Promise<void> {
-    const errors = await killMarked(this.#marker);
-    await Promise.all([...this.#scenarios].map(closed));
+    const killed = await killMarked(this.#marker);
+    const unclosed = await Promise.all([...this.#scenarios].map(closed));
     this.#scenarios.clear();
+    const errors = [...killed, ...unclosed.flat()];
     if (errors.length > 0) throw new AggregateError(errors, 'the test teardown left processes behind');
   }
 }
@@ -38,10 +42,10 @@ export class ProcessReaper {
 async function killMarked(marker: string): Promise<Error[]> {
   const deadline = Date.now() + REAP_BOUND_MILLISECONDS;
   try {
-    for (let marked = markedProcesses(marker); marked.length > 0; marked = markedProcesses(marker)) {
-      const errors = marked.flatMap(kill);
-      if (errors.length > 0) return errors;
+    for (let marked = await markedProcesses(marker, deadline); marked.length > 0; marked = await markedProcesses(marker, deadline)) {
       if (Date.now() > deadline) return [new Error(`processes ${marked.join(', ')} survived SIGKILL`)];
+      const errors = (await Promise.all(marked.map((pid) => killIfMarked(pid, marker, deadline)))).flat();
+      if (errors.length > 0) return errors;
       await delay(RESCAN_MILLISECONDS);
     }
     return [];
@@ -50,11 +54,16 @@ async function killMarked(marker: string): Promise<Error[]> {
   }
 }
 
-function closed(scenario: ScenarioProcess): Promise<unknown> {
-  return Promise.race([scenario.exited, delay(REAP_BOUND_MILLISECONDS, undefined, { ref: false })]);
+async function closed(scenario: ScenarioProcess): Promise<Error[]> {
+  const bound = delay(REAP_BOUND_MILLISECONDS, 'open' as const, { ref: false });
+  const outcome = await Promise.race([scenario.exited.then(() => 'closed' as const), bound]);
+  return outcome === 'closed' ? [] : [new Error(`process ${scenario.pid} did not close within ${REAP_BOUND_MILLISECONDS} ms`)];
 }
 
-function kill(pid: number): Error[] {
+// Checked again just before the signal, so that a process ID taken over
+// since the scan is spared; only the check-to-kill gap remains.
+async function killIfMarked(pid: number, marker: string, deadline: number): Promise<Error[]> {
+  if (!(await markedProcesses(marker, deadline, pid)).includes(pid)) return [];
   try {
     process.kill(pid, 'SIGKILL');
     return [];
@@ -64,22 +73,34 @@ function kill(pid: number): Error[] {
 }
 
 // Live processes only: a zombie is already dead and cannot be killed.
-function markedProcesses(marker: string): number[] {
-  const marked = process.platform === 'linux' ? linuxMarked(marker) : psMarked(marker);
-  return marked.filter((pid) => pid !== process.pid);
+async function markedProcesses(marker: string, deadline: number, pid?: number): Promise<number[]> {
+  const marked = process.platform === 'linux' ? linuxMarked(marker, pid) : await psMarked(marker, deadline, pid);
+  return marked.filter((candidate) => candidate !== process.pid);
 }
 
-function psMarked(marker: string): number[] {
-  const listing = execFileSync('ps', ['-axww', '-o', 'pid=,stat=,command='], { encoding: 'utf8' });
+async function psMarked(marker: string, deadline: number, pid?: number): Promise<number[]> {
+  const selection = pid === undefined ? ['-axww'] : ['-ww', '-p', String(pid)];
+  const listing = await ps([...selection, '-o', 'pid=,stat=,command='], deadline);
   return listing.split('\n').flatMap((line) => {
     const match = /^\s*(\d+)\s+(\S+)\s+(.*)$/.exec(line);
     return match && !match[2]!.startsWith('Z') && match[3]!.includes(marker) ? [Number(match[1])] : [];
   });
 }
 
-function linuxMarked(marker: string): number[] {
-  const pids = readdirSync('/proc').filter((name) => /^\d+$/.test(name)).map(Number);
-  return pids.filter((pid) => linuxNamesMarker(pid, marker));
+// `ps -p` exits with 1 when the process is gone; a timeout is an error.
+async function ps(args: readonly string[], deadline: number): Promise<string> {
+  const timeout = Math.max(1, deadline - Date.now());
+  try {
+    return (await runFile('ps', args, { encoding: 'utf8', timeout, maxBuffer: PS_OUTPUT_BYTES })).stdout;
+  } catch (error) {
+    if ((error as { code?: unknown }).code === 1) return '';
+    throw error;
+  }
+}
+
+function linuxMarked(marker: string, pid?: number): number[] {
+  const pids = pid === undefined ? readdirSync('/proc').filter((name) => /^\d+$/.test(name)).map(Number) : [pid];
+  return pids.filter((candidate) => linuxNamesMarker(candidate, marker));
 }
 
 function linuxNamesMarker(pid: number, marker: string): boolean {
