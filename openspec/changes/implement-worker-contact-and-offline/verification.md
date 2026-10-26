@@ -33,12 +33,12 @@ macOS x86_64, Node v24.22.1 (`.nvmrc`), Docker with the Compose services of `mak
 
 | Check | Result |
 | --- | --- |
-| `make verify` at `40b5808` (pass 1 fixes) | passed; earlier at `e9a5341` |
-| Tests | 1642 tests, 0 failures |
-| Coverage (all) | 99.32% lines, 91.79% branches, 98.99% functions |
-| Coverage (changed worker files) | `worker-contact.js`, `heartbeat-publisher.js`, `task-group.js` 100/100/100; `broker-session.js` 100/96.77/100; `inventory-report.js` 100/90.91/100; `worker-start.js` 99.17/90.65/100; `launch-orchestrator.js` 98.51/90.74/95.00; `settings.js` 100/100/100; `execution-supervision.js` 97.25/84.91/89.47; `command-intake.js` 99.23/87.04/100; `main.js` 90.98/82.93/85.00 (lines/branches/functions, %) |
+| `make verify` at `9bc0cfe` (pass 2 fixes) | passed; earlier at `40b5808` and `e9a5341` |
+| Tests | 1646 tests, 0 failures |
+| Coverage (all) | 99.32% lines, 91.81% branches, 98.99% functions |
+| Coverage (changed worker files) | `worker-contact.js`, `heartbeat-publisher.js`, `task-group.js` 100/100/100; `broker-session.js` 100/96.77/100; `inventory-report.js` 100/90.91/100; `worker-start.js` 99.17/90.65/100; `launch-orchestrator.js` 98.52/90.87/95.00; `settings.js` 100/100/100; `execution-supervision.js` 97.25/84.91/89.47; `command-intake.js` 99.23/87.04/100; `main.js` 90.98/82.93/85.00 (lines/branches/functions, %) |
 | `npm run openspec -- validate implement-worker-contact-and-offline --strict` | valid |
-| `npm run verify:comments` | passes at `40b5808` and `e9a5341`; at `7eaa72e` it reported one comment of three lines in `worker-contact.ts`, shortened in `e9a5341` |
+| `npm run verify:comments` | passes at `9bc0cfe`, `40b5808`, and `e9a5341`; at `7eaa72e` it reported one comment of three lines in `worker-contact.ts`, shortened in `e9a5341` |
 
 ## Independent review
 
