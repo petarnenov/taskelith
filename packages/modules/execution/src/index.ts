@@ -192,6 +192,7 @@ export {
   type EvidenceReport,
   type ExecutionReport,
   type ExitReport,
+  type LaunchRevocation,
   type ObservationResult,
   type PlacementNeed,
   type Task,

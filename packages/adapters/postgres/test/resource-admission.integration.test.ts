@@ -243,7 +243,7 @@ test('cancelling an assignment with a running execution keeps the reservation un
   assert.deepEqual(await counts(), { held: 1, assignments: 1, charges: 1, outbox: 2 });
   const cancelled = value(await database.transaction((tx) => tx.tasks.get(task.id)));
   const attempt = cancelled.attempts.at(-1)!;
-  assert.equal(attempt.cancellation?.reason, 'launch-revoked');
+  assert.equal(attempt.cancellation?.reason, 'assignment-ended', 'as its command says');
   assert.deepEqual(attempt.executions[0]!.grants.map((grant) => grant.state === 'revoked' && grant.revokedFor), ['attempt-not-launchable']);
   // The terminal fact and the release commit in one transaction (item 21).
   const released = value(await database.transaction(async (tx) => {

@@ -350,7 +350,7 @@ export const LAUNCH_RECORDS_CONFORMANCE: readonly ConformanceCase<LaunchRecordsC
       expectSame(problems, 'artifact', ids(await launches.liveGrants({ kind: 'artifact', artifactId: SPEC.artifactId })), ['launch-1', 'launch-2']);
       expectSame(problems, 'gates', ids(await launches.liveGrants({ kind: 'gates', gateIds: [passedGate().id] })), ['launch-1', 'launch-2']);
       expectSame(problems, 'no gates', ids(await launches.liveGrants({ kind: 'gates', gateIds: [] })), []);
-      const revoked = must(revokeLaunch(first, first.attempts[0]!.id, 'gate-not-passed', LATER));
+      const revoked = must(revokeLaunch(first, first.attempts[0]!.id, { grants: 'gate-not-passed', cancellation: 'launch-revoked' }, LATER));
       must(await tasks.replace(revoked, first.generation));
       expectSame(problems, 'all', ids(await launches.liveGrants({ kind: 'all' })), ['launch-2']);
       expectRead(problems, 'revoked still found', await launches.byLaunchAuthId(id('LaunchAuthId', 'launch-1')), recordedLaunch(first));

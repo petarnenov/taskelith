@@ -442,7 +442,7 @@ describe('refusal after a grant', () => {
     assert.deepEqual([refused.state, refused.end?.refusal, refused.reservation.state], ['ended', 'resource-ceiling-exceeded', 'held']);
     const attempt = (await stored(at.taskId)).attempts[0]!;
     assert.deepEqual(attempt.executions[0]!.grants.map((grant) => grant.state === 'revoked' && grant.revokedFor), ['attempt-not-launchable']);
-    assert.equal(attempt.cancellation?.reason, 'launch-revoked');
+    assert.equal(attempt.cancellation?.reason, 'assignment-ended', 'as its command says');
     assert.deepEqual(await sql('SELECT live FROM launch_authorizations'), [{ live: false }]);
     const [cancellation] = await messages('execution.cancellation.request');
     assert.equal((cancellation as { payload: { reason: string } }).payload.reason, 'assignment-ended');

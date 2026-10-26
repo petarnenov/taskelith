@@ -274,7 +274,7 @@ async function loadAssignment(tx: CapacityTransaction, assignmentId: AssignmentI
 // A cancellation or refusal invalidates (launch authorization section 5):
 // it revokes the execution's grants and sends its cancellation.
 async function revokeRunningLaunch(tx: CapacityTransaction, assignment: Assignment, task: Task, request: ReleaseRequest, at: Instant): Promise<Result<void>> {
-  const revoked = revokeLaunch(task, assignment.attemptId, 'attempt-not-launchable', at);
+  const revoked = revokeLaunch(task, assignment.attemptId, { grants: 'attempt-not-launchable', cancellation: 'assignment-ended' }, at);
   if (!revoked.ok) return revoked;
   const stored = await tx.tasks.replace(revoked.value, task.generation);
   if (!stored.ok) return stored;
