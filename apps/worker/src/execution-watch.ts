@@ -8,7 +8,13 @@ import {
 } from '@taskelith/execution';
 import type { Result } from '@taskelith/kernel';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
-import type { ExecutionSupervision, RecoveryRound, SupervisedFacts } from './execution-supervision-port.js';
+import type {
+  DeadlineClock,
+  DeadlineReading,
+  ExecutionSupervision,
+  RecoveryRound,
+  SupervisedFacts,
+} from './execution-supervision-port.js';
 import { backOffForSpace, type SpaceRetry } from './space-retry.js';
 
 export const WATCH_POLL_MILLISECONDS = 1_000;
@@ -19,6 +25,7 @@ export const LIVENESS_POLLS = 10;
 
 export interface WatchOptions {
   readonly journal: WorkerJournal;
+  readonly clock: DeadlineClock;
   // Resolves after the delay, or early once the signal aborts.
   readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>;
   // A jitter draw in [0, 1), for the backoff after a refusal for space.
@@ -35,6 +42,9 @@ export interface WatchTarget {
   readonly supervision: ExecutionSupervision;
   // The journal's grant for it; a claim under another is no start of ours.
   readonly launchAuthId: LaunchAuthId | undefined;
+  // A fresh launch's spawn deadline; past it, a record without a launch
+  // record is checked for liveness, as no supervisor can claim it then.
+  readonly spawnDeadline?: DeadlineReading;
   // Ends the watch; the next start reconciles what is left.
   readonly stopping: AbortSignal;
   // Wakes a poll early, as a new cancellation does.
@@ -98,7 +108,7 @@ export class ExecutionWatch {
   }
 
   // Reads the record at the poll interval until a terminal fact (CP10 and
-  // CP12); a claimed record's supervisor is checked for liveness.
+  // CP12); a supervisor that may be gone is checked for liveness.
   async observe(target: WatchTarget): Promise<Watched> {
     let forwarded = false;
     let round: RecoveryRound = 'first';
@@ -111,7 +121,7 @@ export class ExecutionWatch {
       const facts = await target.supervision.read();
       if (!this.#reported(facts)) return 'ended';
       let decided = this.#commitFacts(target, facts.value, committed);
-      if (decided === undefined && facts.value.launch?.kind === 'claim' && polls % LIVENESS_POLLS === 0) {
+      if (decided === undefined && this.#livenessDue(target, facts.value.launch, polls)) {
         const checked = await this.#checkLiveness(target, round);
         if (checked === 'observe' || checked === 'retry') round = checked === 'retry' ? 'after-retry' : 'first';
         else decided = checked;
@@ -181,6 +191,21 @@ export class ExecutionWatch {
     if (fact === 'observe' || fact === 'retry') return fact;
     this.#logger.warn('worker.supervisor.lost', { executionId: target.executionId, fact });
     return fact === 'uncertain' ? this.#uncertain(target.executionId, recovered.value.reason) : 'observe';
+  }
+
+  // A claim is checked every LIVENESS_POLLS polls, a missing launch record
+  // only past the spawn deadline; a seal is decided before any check.
+  #livenessDue(target: WatchTarget, launch: SupervisedFacts['launch'], polls: number): boolean {
+    if (polls % LIVENESS_POLLS !== 0) return false;
+    return launch === undefined ? this.#pastDeadline(target.spawnDeadline) : launch.kind === 'claim';
+  }
+
+  // The launch orchestrator's rule turned around: a deadline not proven
+  // ahead, in the same boot on a readable clock, has passed.
+  #pastDeadline(deadline: DeadlineReading | undefined): boolean {
+    if (deadline === undefined) return false;
+    const now = this.#options.clock.read();
+    return !(now.ok && now.value.bootId === deadline.bootId && now.value.milliseconds < deadline.milliseconds);
   }
 
   #notStarted(executionId: ExecutionId): Step {
