@@ -26,6 +26,13 @@ export interface ScmDefects {
   readonly refreshKeepsExpiry?: boolean;
   readonly refreshUnscopes?: boolean;
   readonly unusableCredentials?: boolean;
+  readonly refreshKeepsSecret?: boolean;
+  readonly refreshKeepsOldSecret?: boolean;
+  readonly sharedSecret?: boolean;
+  readonly canonicalJsonOnly?: boolean;
+  readonly enforcesOnlyFor?: string;
+  readonly alwaysSquashes?: boolean;
+  readonly fabricatedMergeCommit?: boolean;
 }
 
 // The service's own configuration, which a conforming plugin respects.
@@ -39,6 +46,7 @@ export const FOREIGN = 'acme/other';
 const BASE = 'main';
 const SIGNATURE = 'x-signature';
 const DELIVERY = 'x-delivery';
+const WEBHOOK_SECRET = 'webhook-secret';
 const LIFETIME_MS = 60 * 60 * 1000;
 const DEFAULT_MERGE_METHODS = Object.freeze(['merge-commit', 'squash']);
 
@@ -68,7 +76,7 @@ export class InMemoryScm {
   private readonly statuses = new Map<string, string>();
   private readonly credentials = new Map<string, StoredCredential>();
   private readonly changeRequests = new Map<string, StoredChangeRequest>();
-  private readonly webhookSecret = 'webhook-secret';
+  private readonly mergedBy = new Map<string, string>();
 
   private readonly defects: ScmDefects;
   private readonly mergeMethods: readonly string[];
@@ -117,9 +125,13 @@ export class InMemoryScm {
       },
       advanceHead: async (branch) => this.push(PROJECT, branch),
       readBranchHead: async (branch) => this.branches.get(branchKey(PROJECT, branch))!,
+      signatureHeader: SIGNATURE,
+      attemptRead: async (credential, repository) => this.access(credential.secret, repository, 'read-code'),
       attemptWrite: async (credential, repository) => this.write(credential.secret, repository),
       attemptBypassMerge: async (changeRequest) => this.bypassMerge(changeRequest),
-      signDelivery: async (event) => this.sign(JSON.stringify(event)),
+      observeMergeMethod: async (mergeCommit) => this.mergedBy.get(mergeCommit) ?? 'none',
+      signDelivery: async (event) => this.sign(JSON.stringify(event), WEBHOOK_SECRET),
+      signWithForeignSecret: async (event) => this.sign(JSON.stringify(event), 'foreign-secret'),
     };
   }
 
@@ -128,7 +140,8 @@ export class InMemoryScm {
       return err(failure('invalid', 'unknown permission'));
     }
     const id = this.next();
-    const credential = { credentialId: `cred-${id}`, runId, secret: `secret-${id}`, repositories: [...repositories], permissions: [...permissions], expiresAt: expiry() };
+    const secret = this.defects.sharedSecret ? 'shared-secret' : `secret-${id}`;
+    const credential = { credentialId: `cred-${id}`, runId, secret, repositories: [...repositories], permissions: [...permissions], expiresAt: expiry() };
     this.credentials.set(credential.secret, { credential, revoked: false, unscoped: false });
     return ok(credential);
   }
@@ -136,9 +149,12 @@ export class InMemoryScm {
   private refresh(credentialId: string): Result<RunCredential> {
     const stored = this.findCredential(credentialId);
     if (!stored || stored.revoked) return err(failure('not-found', 'unknown credential'));
-    const previous = stored.credential.expiresAt;
-    const credential = { ...stored.credential, expiresAt: this.defects.refreshKeepsExpiry ? previous : extendedExpiry(previous) };
-    this.credentials.set(credential.secret, { credential, revoked: false, unscoped: Boolean(this.defects.refreshUnscopes) });
+    const previous = stored.credential;
+    const secret = this.defects.refreshKeepsSecret ? previous.secret : `secret-${this.next()}`;
+    const expiresAt = this.defects.refreshKeepsExpiry ? previous.expiresAt : extendedExpiry(previous.expiresAt);
+    const credential = { ...previous, secret, expiresAt };
+    if (!this.defects.refreshKeepsOldSecret) this.credentials.delete(previous.secret);
+    this.credentials.set(secret, { credential, revoked: false, unscoped: Boolean(this.defects.refreshUnscopes) });
     return ok(credential);
   }
 
@@ -154,15 +170,19 @@ export class InMemoryScm {
   }
 
   private write(secret: string, repository: string): Result<void> {
+    const access = this.access(secret, repository, this.defects.readOnlyCanWrite ? 'read-code' : 'write-code');
+    if (access.ok) this.push(repository, BASE);
+    return access;
+  }
+
+  private access(secret: string, repository: string, permission: string): Result<void> {
     const stored = this.credentials.get(secret);
     if (!stored || stored.revoked || this.defects.unusableCredentials) return forbidden();
     if (Date.parse(stored.credential.expiresAt) <= Date.now()) return forbidden();
     const { permissions, repositories } = stored.credential;
-    if (!permissions.includes('write-code') && !this.defects.readOnlyCanWrite) return forbidden();
+    if (!permissions.includes(permission)) return forbidden();
     const unscoped = stored.unscoped || this.defects.unscopedCredentials;
-    if (!repositories.includes(repository) && !unscoped) return forbidden();
-    this.push(repository, BASE);
-    return ok(undefined);
+    return repositories.includes(repository) || unscoped ? ok(undefined) : forbidden();
   }
 
   private open(repository: string, baseBranch: string, headBranch: string): Result<ChangeRequestData> {
@@ -184,12 +204,15 @@ export class InMemoryScm {
     const current = this.read(id);
     if (!current.ok) return current;
     if (current.value.state !== 'open') return err(failure('conflict', 'not open'));
-    if (current.value.headCommit !== expectedHead && !this.defects.ignoresExpectedHead) return refused('stale head');
-    if (!this.passesProtection(current.value) && !this.defects.ignoresRequiredStatuses) {
-      if (this.defects.mergesDespiteRefusal) this.complete(current.value);
+    const guarded = this.defects.enforcesOnlyFor === undefined || this.defects.enforcesOnlyFor === method;
+    const performed = this.defects.alwaysSquashes ? 'squash' : method;
+    if (guarded && current.value.headCommit !== expectedHead && !this.defects.ignoresExpectedHead) return refused('stale head');
+    if (guarded && !this.passesProtection(current.value) && !this.defects.ignoresRequiredStatuses) {
+      if (this.defects.mergesDespiteRefusal) this.complete(current.value, performed);
       return refused('required status');
     }
-    return ok({ changeRequest: id, mergeCommit: this.complete(current.value), method });
+    const mergeCommit = this.complete(current.value, performed);
+    return ok({ changeRequest: id, mergeCommit: this.defects.fabricatedMergeCommit ? 'nonexistent' : mergeCommit, method });
   }
 
   // The most privileged native merge: only a binding protection stops it.
@@ -199,7 +222,7 @@ export class InMemoryScm {
     if (!current.ok || current.value.state !== 'open') return refused('not open');
     const binding = this.protections.get(branchKey(current.value.repository, current.value.baseBranch))?.bindsProvider ?? false;
     if (binding && !this.passesProtection(current.value)) return refused('required status');
-    this.complete(current.value);
+    this.complete(current.value, 'merge-commit');
     return ok(undefined);
   }
 
@@ -213,21 +236,25 @@ export class InMemoryScm {
     return state === 'success' || (Boolean(this.defects.failingStatesPass) && (state === 'failure' || state === 'error'));
   }
 
-  private complete(changeRequest: ChangeRequestData): string {
+  // The service records which method made each merge commit, as a real
+  // service shows it in the commit topology.
+  private complete(changeRequest: ChangeRequestData, method: string): string {
     this.changeRequests.get(changeRequest.id)!.state = 'merged';
-    return this.push(changeRequest.repository, changeRequest.baseBranch);
+    const mergeCommit = this.push(changeRequest.repository, changeRequest.baseBranch);
+    this.mergedBy.set(mergeCommit, method);
+    return mergeCommit;
   }
 
-  private sign(body: string): WebhookDelivery {
+  private sign(body: string, secret: string): WebhookDelivery {
     const rawBody = new TextEncoder().encode(body);
-    return { headers: { [SIGNATURE]: this.signatureOf(rawBody), [DELIVERY]: `delivery-${this.next()}` }, rawBody };
+    return { headers: { [SIGNATURE]: signatureOf(rawBody, secret), [DELIVERY]: `delivery-${this.next()}` }, rawBody };
   }
 
   private verify(delivery: WebhookDelivery): Result<{ deliveryId: string; kind: string; repository: string; changeRequest: string }> {
     const signature = delivery.headers[SIGNATURE];
     const deliveryId = delivery.headers[DELIVERY];
     if (signature === undefined || deliveryId === undefined) return forbidden();
-    if (!this.defects.ignoresSignature && !isSameText(signature, this.signatureOf(delivery.rawBody))) return forbidden();
+    if (!this.signatureAccepted(signature, delivery.rawBody)) return forbidden();
     try {
       const event = JSON.parse(new TextDecoder().decode(delivery.rawBody)) as { kind: string; repository: string; changeRequest: string };
       return ok({ deliveryId, kind: event.kind, repository: event.repository, changeRequest: event.changeRequest });
@@ -236,8 +263,10 @@ export class InMemoryScm {
     }
   }
 
-  private signatureOf(rawBody: Uint8Array): string {
-    return `sha256=${createHmac('sha256', this.webhookSecret).update(rawBody).digest('hex')}`;
+  private signatureAccepted(signature: string, rawBody: Uint8Array): boolean {
+    if (this.defects.ignoresSignature) return true;
+    if (this.defects.canonicalJsonOnly) return isCanonicalJson(rawBody);
+    return isSameText(signature, signatureOf(rawBody, WEBHOOK_SECRET));
   }
 
   private push(repository: string, branch: string): string {
@@ -267,6 +296,19 @@ function expiry(): string {
 // Strictly later than the previous expiry, even within one millisecond.
 function extendedExpiry(previous: string): string {
   return new Date(Math.max(Date.now() + LIFETIME_MS, Date.parse(previous) + 1)).toISOString();
+}
+
+function signatureOf(rawBody: Uint8Array, secret: string): string {
+  return `sha256=${createHmac('sha256', secret).update(rawBody).digest('hex')}`;
+}
+
+function isCanonicalJson(rawBody: Uint8Array): boolean {
+  const text = new TextDecoder().decode(rawBody);
+  try {
+    return JSON.stringify(JSON.parse(text)) === text;
+  } catch {
+    return false;
+  }
 }
 
 function isSameText(left: string, right: string): boolean {

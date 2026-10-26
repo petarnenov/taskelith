@@ -5,7 +5,7 @@ import { readWebhookEvent } from './source-control-readers.js';
 import type { WebhookDelivery, WebhookEvent } from './source-control.js';
 
 // Two deliveries of the same event must keep apart, a redelivery must keep
-// its id, and any change to the signed bytes must be refused.
+// its id, and a changed body or a missing or foreign signature is refused.
 export async function checkWebhookDelivery(run: ConformanceCase, fixture: SourceControlConformanceFixture): Promise<void> {
   const opened = await openChangeRequest(run, fixture);
   const event = { kind: 'change-request', repository: fixture.projectRepository, changeRequest: opened.id } as const;
@@ -18,6 +18,16 @@ export async function checkWebhookDelivery(run: ConformanceCase, fixture: Source
   const reformatted = reserializedJson(first.rawBody);
   if (reformatted) await expectRefused(run, fixture, 'a re-serialized body', withBody(first, reformatted));
   await expectRefused(run, fixture, 'no signature headers', { headers: {}, rawBody: first.rawBody });
+  await expectRefused(run, fixture, 'the signature header removed', withoutSignature(run, fixture, first));
+  const foreign = await fixtureStep(run, 'signWithForeignSecret', () => fixture.signWithForeignSecret(event));
+  await expectRefused(run, fixture, 'a signature made with another secret', foreign);
+}
+
+// The same delivery without its signature, every other header kept.
+function withoutSignature(run: ConformanceCase, fixture: SourceControlConformanceFixture, delivery: WebhookDelivery): WebhookDelivery {
+  const { [fixture.signatureHeader]: signature, ...headers } = delivery.headers;
+  if (signature === undefined) run.abort('fixture', `signDelivery returned no ${fixture.signatureHeader} header`);
+  return { headers, rawBody: new Uint8Array(delivery.rawBody) };
 }
 
 async function signedDelivery(

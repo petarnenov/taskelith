@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { err, ok } from '@taskelith/kernel';
+import type { RunCredential } from '@taskelith/integrations';
 import { findings, headings, issued, patched } from './conformance-findings.ts';
 import { InMemoryScm } from './in-memory-source-control.ts';
 
 // Plugin results replaced one operation at a time: the suite checks every
 // result at run time, as plugin output is untrusted.
+
+function cases(lines: readonly string[]): string[] {
+  return [...new Set(headings(lines))];
+}
 
 test('a throwing operation is reported and the suite continues', async () => {
   const lines = await patched(() => ({ readChangeRequest: async () => { throw new Error('service down'); } }));
@@ -33,15 +38,17 @@ test('a value that is not a Result is reported', async () => {
     'write credential result',
     'refreshed credential result',
     'revoked credential result',
+    'credential isolation result',
   ]);
   assert.match(lines[0]!, /result.ok must be a boolean/);
 });
 
 test('a failure with an unknown code or malformed details is reported', async () => {
   const unknownCode = await patched(() => ({ revokeRunCredential: async () => err({ code: 'gone', message: 'no', details: {} }) as never }));
-  assert.deepEqual(unknownCode, ['revoked credential result: revokeRunCredential: result.error.code gone is not a kernel failure code']);
+  assert.deepEqual(headings(unknownCode), ['revoked credential result', 'credential isolation result']);
+  assert.equal(unknownCode[0], 'revoked credential result: revokeRunCredential: result.error.code gone is not a kernel failure code');
   const badDetails = await patched(() => ({ revokeRunCredential: async () => err({ code: 'internal', message: 'no', details: 123 }) as never }));
-  assert.deepEqual(badDetails, ['revoked credential result: revokeRunCredential: result.error.details must be a record of strings']);
+  assert.equal(badDetails[0], 'revoked credential result: revokeRunCredential: result.error.details must be a record of strings');
   const throwingDetails = await patched(() => ({
     revokeRunCredential: async () => err({ code: 'internal', message: 'no', details: { get reason() { throw new Error('no getter'); } } }) as never,
   }));
@@ -50,7 +57,10 @@ test('a failure with an unknown code or malformed details is reported', async ()
 
 test('a revocation that returns a value is a shape finding', async () => {
   const lines = await patched(() => ({ revokeRunCredential: async () => ok({ revoked: true }) as never }));
-  assert.deepEqual(lines, ['revoked credential shape: revokeRunCredential: value must be undefined']);
+  assert.deepEqual(lines, [
+    'revoked credential shape: revokeRunCredential: value must be undefined',
+    'credential isolation shape: revokeRunCredential: value must be undefined',
+  ]);
 });
 
 test('a malformed credential grant is reported', async () => {
@@ -65,9 +75,35 @@ test('a malformed credential grant is reported', async () => {
     refreshRunCredential: async () => err({ code: 'not-found', message: 'gone', details: {} }),
   }));
   const grant = lines.filter((line) => line.startsWith('read-only credential outcome: issueRunCredential'));
-  assert.equal(grant.length, 4);
-  assert.ok(lines.includes('read-only credential outcome: a read-only credential must not grant write-code'));
+  assert.equal(grant.length, 5);
+  assert.ok(lines.includes('read-only credential outcome: issueRunCredential granted write-code to a request without it'));
   assert.ok(lines.includes('refreshed credential outcome: refreshRunCredential failed with not-found, expected success'));
+});
+
+test('an effective grant beyond the request is allowed, but not write-code', async () => {
+  const widen = (credential: RunCredential, extra: string) => ({ ...credential, permissions: [...new Set([...credential.permissions, extra])] });
+  const widened = (extra: string) => patched((provider) => ({
+    issueRunCredential: async (request) => ok(widen(await issued(provider, request), extra)),
+    refreshRunCredential: async (request) => {
+      const refreshed = await provider.refreshRunCredential(request);
+      return refreshed.ok ? ok(widen(refreshed.value, extra)) : refreshed;
+    },
+  }));
+  assert.deepEqual(await widened('write-statuses'), []);
+  const escalated = await widened('write-code');
+  assert.deepEqual(cases(escalated), ['read-only credential outcome', 'credential isolation outcome']);
+  assert.ok(escalated.every((line) => line.endsWith('issueRunCredential granted write-code to a request without it')));
+});
+
+test('a read-only credential whose secret does not work is reported', async () => {
+  const lines = await patched((provider) => ({
+    issueRunCredential: async (request) => {
+      const credential = await issued(provider, request);
+      return ok(request.permissions.includes('write-code') ? credential : { ...credential, secret: 'not-a-token' });
+    },
+  }));
+  assert.deepEqual(cases(lines), ['read-only credential outcome', 'credential isolation outcome']);
+  assert.match(lines[0]!, /^read-only credential outcome: attemptRead with credential cred-\d+ to acme\/project must succeed$/);
 });
 
 test('a refresh that changes the permissions or moves the expiry back is reported', async () => {
@@ -100,16 +136,17 @@ test('capabilities that cannot be read are reported', async () => {
     get: () => { throw new Error('no getter'); },
   });
   const lines = await findings(scm.fixture(provider));
-  assert.deepEqual(headings(lines), ['capabilities threw', 'merge methods threw', 'undeclared merge methods threw']);
+  assert.deepEqual(headings(lines), ['capabilities threw', 'merge method protection threw', 'merge methods threw', 'undeclared merge methods threw']);
   const malformed = await patched(() => ({ capabilities: { mergeMethods: 'squash' } as never }));
-  assert.deepEqual(headings(malformed), ['capabilities shape', 'merge methods shape', 'undeclared merge methods shape']);
+  assert.deepEqual(headings(malformed), ['capabilities shape', 'merge method protection shape', 'merge methods shape', 'undeclared merge methods shape']);
 });
 
 test('a declared merge method that the provider cannot perform is reported', async () => {
   const declared = { mergeMethods: ['merge-commit', 'squash', 'rebase'], reviewEvidence: ['required-status'] };
-  assert.deepEqual(await patched(() => ({ capabilities: declared })), [
-    'merge methods outcome: mergeChangeRequest with rebase failed with unavailable, expected success',
-  ]);
+  const lines = await patched(() => ({ capabilities: declared }));
+  assert.deepEqual(cases(lines), ['merge method protection outcome', 'merge methods outcome']);
+  assert.ok(lines.includes('merge methods outcome: mergeChangeRequest with rebase failed with unavailable, expected success'));
+  assert.ok(lines.every((line) => line.includes('with rebase')));
 });
 
 test('a protection of another branch is reported', async () => {
@@ -185,6 +222,11 @@ test('a constant or changing delivery id is reported', async () => {
   }));
   assert.deepEqual(headings(changing), ['webhook delivery outcome', 'webhook delivery outcome']);
   assert.match(changing[0]!, /a repeated delivery must keep its deliveryId/);
+});
+
+test('a fixture whose delivery lacks the named signature header is reported', async () => {
+  const lines = await findings({ ...new InMemoryScm().fixture(), signatureHeader: 'x-other' });
+  assert.deepEqual(lines, ['webhook delivery fixture: signDelivery returned no x-other header']);
 });
 
 test('a throwing fixture step and an empty signed body are fixture findings', async () => {

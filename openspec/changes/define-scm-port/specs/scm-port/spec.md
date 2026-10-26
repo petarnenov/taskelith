@@ -19,7 +19,7 @@ The port SHALL represent repositories, change requests, commits, runs, credentia
 - **THEN** the plugin returns the number as a string, and reading the change request by that string returns the same identifier
 
 ### Requirement: Per-run credentials
-`issueRunCredential` SHALL return a credential for one run that is limited to the requested repositories and reports its effective repositories, permissions, and expiry as a kernel instant (UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`); `refreshRunCredential` SHALL keep its scope and return an expiry later than before, and `revokeRunCredential` SHALL end it. The secret SHALL be delivered only to its run and never logged or stored.
+`issueRunCredential` SHALL return a credential for one run that is limited to the requested repositories and reports its effective repositories, permissions, and expiry as a kernel instant (UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`). Effective permissions SHALL cover the request and MAY exceed it, except that a credential requested without `write-code` SHALL NOT have it. A run's credential SHALL be independent of other runs' credentials.
 
 #### Scenario: Credential without write permission
 - **WHEN** a credential issued with only `read-code` attempts a code write in the project's repository
@@ -29,12 +29,26 @@ The port SHALL represent repositories, change requests, commits, runs, credentia
 - **WHEN** a credential with `write-code` attempts a write in a repository outside the project
 - **THEN** the attempt fails with `forbidden`
 
+#### Scenario: Two runs at once
+- **WHEN** a read-only credential and a write credential are issued for two runs of the project
+- **THEN** the read-only credential still cannot write, and revoking either credential leaves the other usable
+
+### Requirement: Credential refresh and revocation
+A credential's secret SHALL be delivered only to its run and never logged or stored. `refreshRunCredential` SHALL return a new secret with the same repositories and permissions and a later expiry, and SHALL end the previous secret; `revokeRunCredential` SHALL end the credential and return no value.
+
 #### Scenario: Long run
-- **WHEN** a run outlives its credential's expiry
-- **THEN** a refresh returns a credential with the same repositories and permissions and a later expiry, which still writes in the project's repository and is refused outside it
+- **WHEN** a run outlives its credential's expiry and the credential is refreshed
+- **THEN** the refreshed credential writes in the project's repository and is refused outside it, and the previous secret is refused
 
 ### Requirement: Merge blocking that binds the plugin
-`ensureMergeProtection` SHALL configure the base branch's required statuses so that the service enforces them against the plugin's own identity, and SHALL report whether it does. `mergeChangeRequest` SHALL name the expected head and the project's merge method, and SHALL fail with `precondition-failed` while any required status is missing or not successful or when the head differs from the expected one, and with `unavailable` for a merge method the plugin does not declare.
+`ensureMergeProtection` SHALL configure the base branch's required statuses so that the service enforces them against the plugin's own identity, and SHALL report whether it does.
+
+#### Scenario: Protection the plugin could bypass
+- **WHEN** the service would let the plugin's own identity merge despite the protection
+- **THEN** the protection is reported as not binding the plugin
+
+### Requirement: Merge of the reviewed head
+`mergeChangeRequest` SHALL name the expected head and the project's merge method, SHALL return the base branch head after the merge as its merge commit, and SHALL fail with `precondition-failed` while any required status is missing or not successful or when the head differs from the expected one, and with `unavailable` for a merge method the plugin does not declare.
 
 #### Scenario: Pending required status
 - **WHEN** a required status on the change request's head is pending and the plugin merges with its own identity, through the port or by the most privileged native merge
@@ -52,7 +66,7 @@ Each SCM plugin SHALL declare `required-status` review evidence: independent rev
 - **THEN** the merge is refused
 
 ### Requirement: Webhooks verified on the raw body
-`verifyWebhookDelivery` SHALL verify the delivery's signature over the raw body bytes as received before it trusts any payload, SHALL fail with `forbidden` for a missing or invalid signature, and SHALL return an event whose delivery identifier is the same for every redelivery of that delivery.
+`verifyWebhookDelivery` SHALL verify the delivery's signature over the raw body bytes as received before it trusts any payload, SHALL fail with `forbidden` for a missing signature or one made with another secret, and SHALL return an event whose delivery identifier is the same for every redelivery of that delivery.
 
 #### Scenario: Re-serialized body
 - **WHEN** a delivery's JSON body is parsed and serialized again with different bytes

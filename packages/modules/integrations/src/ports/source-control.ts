@@ -55,6 +55,8 @@ export interface RunCredential {
   readonly expiresAt: string;
 }
 
+// A refresh returns a new secret for the same grant and ends the previous
+// secret; `credentialId` may stay the same.
 export interface RunCredentialIssuer {
   issueRunCredential(request: RunCredentialRequest): Promise<Result<RunCredential>>;
   refreshRunCredential(request: RunCredentialReference): Promise<Result<RunCredential>>;
@@ -120,6 +122,8 @@ export interface MergeRequest extends ChangeRequestReference {
   readonly method: string;
 }
 
+// `mergeCommit` is the base branch head right after the merge, whatever the
+// method.
 export interface MergeResult {
   readonly changeRequest: string;
   readonly mergeCommit: string;

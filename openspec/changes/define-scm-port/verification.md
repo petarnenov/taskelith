@@ -26,8 +26,8 @@ Linux 6.8.0 x86_64, Node.js from `.nvmrc` through `nvm use`, the pinned `@fissio
   - The port entry exports only the port types and constants, like `@taskelith/sdlc/port`, and a test follows its compiled imports (hexagonal).
   - Principles 5 (Docker), 6 (OpenAPI), and 7 (Makefile) add no obligation: there is no new interface or image, and `make verify` runs the new tests.
 - Scope: no SCM I/O and no GitHub plugin. The plan row's required elements map to the spec as follows:
-  - credentials, refresh, and the check that a credential without write permission cannot write: "Per-run credentials";
-  - change requests, statuses, and merge methods, with merge blocking that binds the plugin and a refused merge while a required status is pending: "Merge blocking that binds the plugin";
+  - credentials, refresh, and the check that a credential without write permission cannot write: "Per-run credentials" and "Credential refresh and revocation";
+  - change requests, statuses, and merge methods, with merge blocking that binds the plugin and a refused merge while a required status is pending: "Merge blocking that binds the plugin" and "Merge of the reviewed head";
   - D8: "Review evidence as a required status";
   - webhooks: "Webhooks verified on the raw body";
   - identifiers: "Opaque SCM identifiers";
@@ -68,6 +68,27 @@ Reviewer assigned by the coordinator: Codex CLI, `gpt-6.1-sol`, reasoning effort
 | 12 | Medium | `verification.md` was missing before the first pass. | Added. The author self-check above was performed before pass 1 but recorded after it. |
 | 13 | Low | The Forgejo mapping had no sources. | `design.md` states that the mapping is an unsourced assumption and lists each unconfirmed condition per row; the Forgejo plugin must source it at a pinned version. |
 
+### Pass 2
+
+- Invocation: as in pass 1, with a prompt that names the pass 1 session and asks for each finding's resolution before a full review.
+- Reviewed revision: `7603d09`. `make verify` passed on it before the pass (1406 tests, 0 failures; coverage of all files 99.05% lines, 91.47% branches, 98.46% functions).
+- Confirmation: `model: gpt-6.1-sol`, `sandbox: read-only`, `reasoning effort: medium`, session ID `01a175cb-5a14-7c40-b5d6-b55ffbb837e2`.
+- Snapshot: `a77bd4111ce511df34f9e31b11abd83335fc86b3cfdfbb8b49656ff8930b079f` before and after; unchanged.
+- Pass 1 findings: 1, 3, 5, 7, 9, 10, and 11 resolved; 6, 8, and 12 resolved for the reported defect; 13 addressed by an explicit limitation; 2 and 4 partly resolved, carried into findings 2 and 8 below.
+- Findings: Critical 0, High 3, Medium 6, Low 0.
+
+| # | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| 1 | High | A verifier that checked only that signature headers were present passed. | The fixture names its signature header and signs with another secret; an unchanged body with that signature, and a delivery without only the signature header, must fail with `forbidden`. |
+| 2 | High | A required context that the service already had could be ignored. | The blocking matrix covers every context the protection reports. |
+| 3 | High | Status and head protections were checked with one merge method only. | For every declared method, a pending status in each required context and a moved head must be refused. |
+| 4 | Medium | The method actually used was not checked. | The fixture observes a merge's method natively, and it must equal the requested one. |
+| 5 | Medium | A fabricated merge commit passed. | The merge commit is the base branch head after the merge, compared with the service; the port and spec say so. |
+| 6 | Medium | An invalid read-only secret passed as a restricted one. | Read-only and write credentials must read the project's repository through the new fixture helper `attemptRead` before the write checks. |
+| 7 | Medium | The design allowed effective supersets that the suite always refused. | One rule in spec, design, and suite: effective permissions cover the request and may exceed it, except `write-code` for a credential requested without it. |
+| 8 | Medium | A refresh could extend only the declared expiry. | A refresh returns a new secret and ends the previous one; the suite checks both on the service. Waiting for the original expiry is left to item 20 (Limitations). |
+| 9 | Medium | Credentials of concurrent runs were not checked for isolation. | Two runs' credentials are issued at once; neither widens the other, and revoking one leaves the other usable. |
+
 ## Final checks
 
 Pending.
@@ -76,6 +97,7 @@ Pending.
 
 - The conformance suite has run only against a test-only in-memory SCM and its defective variants; item 20 runs it against GitHub.com with the plugin's own credential.
 - The Forgejo mapping is unverified.
+- The suite does not wait for a credential's original expiry; item 20 records a run that outlives it.
 - The reviewer has no network access, so the GitHub and Forgejo facts were reviewed against the repository's records only.
 
 ## Remaining gates
