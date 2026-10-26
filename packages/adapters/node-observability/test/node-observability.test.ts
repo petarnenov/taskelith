@@ -6,6 +6,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { parseInstant } from '@taskelith/kernel';
 import {
   EventLoopLagMonitor,
+  EventLoopLagWindow,
   JsonLinesLogSink,
   type LoopDelayHistogram,
   runPeriodically,
@@ -170,6 +171,23 @@ test('a window without a measured delay reports zero', () => {
   monitor.sample(metrics);
   monitor.stop();
   assert.equal(metrics.series('event-loop.lag')?.last, 0);
+});
+
+test('a lag window reads the open window until it closes, then the last closed one', () => {
+  const histogram = new RecordedHistogram();
+  const window = new EventLoopLagWindow(10, histogram);
+  assert.ok(histogram.enabled, 'the window enables its histogram');
+  assert.equal(window.lagMilliseconds(), 0, 'an empty window has no delay');
+  histogram.record(10, 10, 260);
+  assert.ok(Math.abs(window.lagMilliseconds() - 250) < hdrTolerance(260));
+  window.close();
+  histogram.record(10, 10.2);
+  assert.ok(Math.abs(window.lagMilliseconds() - 250) < hdrTolerance(260), 'the closed window stands until the next close');
+  window.close();
+  assert.ok(window.lagMilliseconds() < 1, 'the blocked interval of the first window is gone');
+  assert.equal(histogram.resets, 2);
+  window.stop();
+  assert.ok(!histogram.enabled, 'stop disables the histogram');
 });
 
 test('a periodic sample runs at once and stops when the signal aborts', async () => {

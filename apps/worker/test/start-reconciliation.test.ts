@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
-import type { WorkerJournal } from '@taskelith/execution';
+import { SPACE_REFUSAL_REASON, type WorkerJournal } from '@taskelith/execution';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { id, value } from '@taskelith/testing';
@@ -35,6 +35,10 @@ let records: Result<readonly string[]>;
 let failures: unknown[];
 // Journal methods whose next call fails, once each.
 let failing: Set<string>;
+// Journal methods refused for lack of space this many times before they
+// commit, and what each refusal also does.
+let spaceRefusals: Map<string, number>;
+let onSpaceRefused: () => void;
 let controller: AbortController;
 let orchestrator: LaunchOrchestrator;
 
@@ -49,6 +53,8 @@ beforeEach(() => {
   records = ok([]);
   failures = [];
   failing = new Set();
+  spaceRefusals = new Map();
+  onSpaceRefused = () => undefined;
   controller = new AbortController();
   let ids = 0;
   orchestrator = new LaunchOrchestrator({
@@ -65,16 +71,28 @@ beforeEach(() => {
   });
 });
 
-// The journal, except that each method named in `failing` fails once.
+// The journal, except that each method named in `failing` fails once, and
+// each in `spaceRefusals` is refused for lack of space.
 function failingOnce(real: WorkerJournal): WorkerJournal {
   return new Proxy(real, {
     get(target, property: string) {
       const member = Reflect.get(target, property) as unknown;
       if (typeof member !== 'function') return member;
+      if ((spaceRefusals.get(property) ?? 0) > 0) return () => refusedForSpace(property);
       if (!failing.delete(property)) return member.bind(target);
       return () => err(failure('unavailable', `${property} failed`));
     },
   });
+}
+
+function refusedForSpace(method: string): Result<never> {
+  spaceRefusals.set(method, (spaceRefusals.get(method) ?? 0) - 1);
+  onSpaceRefused();
+  return err(failure('unavailable', `${method} refused for lack of space`, { reason: SPACE_REFUSAL_REASON }));
+}
+
+function spaceBackoffs(): unknown[] {
+  return sink.records.filter(({ event }) => event === 'worker.journal.space-refused').map(({ fields }) => fields['delayMilliseconds']);
 }
 
 afterEach(() => {
@@ -400,4 +418,51 @@ test('a supervisor replaced by a new adopter is logged as lost, and the watch go
   assert.equal(inherited()?.state, 'exited');
   const lost = sink.records.find(({ event }) => event === 'worker.supervisor.lost');
   assert.equal(lost?.fields['fact'], 'adopted');
+});
+
+test('a fact refused for lack of space is derived again after the backoff and committed once', async () => {
+  inherit('written');
+  spaceRefusals = new Map([['recordStart', 1], ['recordExit', 2]]);
+  supervisions.onCreated = (supervision) => {
+    supervision.recovery = { fact: 'observe' };
+    supervision.facts = [{ problems: [], process: PROCESS, launch: claimedBy(2) }, { problems: [], process: PROCESS, exit: CLEAN_EXIT, launch: claimedBy(2) }];
+  };
+  await startOnce();
+  assert.equal(inherited()?.state, 'exited');
+  assert.deepEqual(factKinds(), ['execution-started', 'execution-exited']);
+  assert.deepEqual(failures, [], 'a refusal for space is retried, not reported');
+  assert.deepEqual(spaceBackoffs(), [7_500, 15_000, 30_000]);
+  assert.equal(inheritedSupervision().calls.filter((call) => call === 'read').length, 4, 'each retry reads the record again');
+});
+
+test('a recovered fact refused for lack of space is recovered and committed again', async () => {
+  inherit('written');
+  launchNothingNew();
+  spaceRefusals = new Map([['recordNotStarted', 1]]);
+  supervisions.onCreated = (supervision) => {
+    supervision.recovery = { fact: 'not-started' };
+  };
+  await startOnce();
+  assert.equal(inherited()?.state, 'not-started');
+  assert.deepEqual(factKinds(), ['execution-not-started']);
+  assert.deepEqual(inheritedSupervision().rounds, ['first', 'first']);
+  assert.deepEqual([failures, spaceBackoffs()], [[], [7_500]]);
+});
+
+test('a stop ends the retries of a fact refused for lack of space, which stays in its record', async () => {
+  inherit('written');
+  let refused = 0;
+  spaceRefusals = new Map([['recordExit', Number.POSITIVE_INFINITY]]);
+  onSpaceRefused = () => {
+    refused += 1;
+    if (refused === 3) controller.abort();
+  };
+  supervisions.onCreated = (supervision) => {
+    supervision.recovery = { fact: 'observe' };
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT, launch: claimedBy(2) }];
+  };
+  await startOnce();
+  assert.notEqual(inherited()?.state, 'exited');
+  assert.deepEqual(factKinds(), ['execution-started']);
+  assert.deepEqual([failures, spaceBackoffs().length], [[], 3]);
 });

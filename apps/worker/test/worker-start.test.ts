@@ -25,7 +25,7 @@ import {
   type WorkerDependencies,
   type WorkerSettings,
 } from '@taskelith/worker';
-import { FakeAuthority, FakeClock, FakeSupervisions, grantFor, offer, requestOf } from './launch-fakes.ts';
+import { FakeAuthority, FakeClock, FakeDaemon, FakeSupervisions, grantFor, offer, requestOf } from './launch-fakes.ts';
 import {
   failureReason,
   hostBootId,
@@ -90,6 +90,7 @@ let settings: WorkerSettings;
 let enrollment: FakeEnrollment;
 let broker: FakeBroker;
 let space: VolumeSpace;
+let daemon: FakeDaemon;
 const running: RunningWorker[] = [];
 
 beforeEach(() => {
@@ -103,6 +104,7 @@ beforeEach(() => {
   enrollment = new FakeEnrollment();
   broker = new FakeBroker();
   space = AMPLE_SPACE;
+  daemon = new FakeDaemon();
 });
 
 afterEach(async () => {
@@ -113,7 +115,7 @@ afterEach(async () => {
 function dependencies(launching?: LaunchingDependencies): WorkerDependencies {
   return {
     enrollment, connect: broker.connect, newJournalId: () => 'c'.repeat(32), clock: { now: () => T0 },
-    probe: TEST_VOLUME, space: () => ok(space), pressurePollMilliseconds: 10, ...(launching === undefined ? {} : { launching }),
+    probe: TEST_VOLUME, space: () => ok(space), daemon, pressurePollMilliseconds: 10, ...(launching === undefined ? {} : { launching }),
   };
 }
 
@@ -216,6 +218,20 @@ test('the pressure watch reports a change while nothing else asks', async () => 
   space = AMPLE_SPACE;
   for (let wait = 0; pressureFacts(worker).length < 3 && wait < 100; wait += 1) await delay(10);
   assert.deepEqual(pressureFacts(worker), [[], ['disk-floor'], []]);
+});
+
+test('the daemon overhead is reported until it subsides, and its sensor runs until the stop', async () => {
+  const worker = await start();
+  assert.equal(daemon.watches, 1);
+  daemon.resident = ok(2 ** 40);
+  daemon.lag = ok(250);
+  for (let wait = 0; pressureFacts(worker).length < 2 && wait < 100; wait += 1) await delay(10);
+  assert.deepEqual(pressureFacts(worker), [[], ['daemon-memory', 'event-loop-lag']]);
+  daemon.resident = ok(0);
+  daemon.lag = ok(0);
+  for (let wait = 0; pressureFacts(worker).length < 3 && wait < 100; wait += 1) await delay(10);
+  assert.deepEqual(pressureFacts(worker), [[], ['daemon-memory', 'event-loop-lag'], []]);
+  await worker.stop();
 });
 
 test('the worker listens on no port: every connection is outbound', async () => {
