@@ -141,9 +141,20 @@ On 2026-10-26 the owner, through the coordinator, chose to fix findings 1 to 4 a
 
 On 2026-10-26 the owner, through the coordinator, chose to fix pass 4 finding 1 and permitted one more exceptional pass by the same reviewer, limited to confirming that fix and checking that its diff introduces nothing new.
 
+### Pass 5 (owner-permitted, limited)
+
+- Invocation: as in pass 1, with a prompt limited to the owner's scope: confirm pass 4 finding 1, and check the fix diff since `bf18b69`, without the records, for anything new.
+- Reviewed revision: `2ab67a2`. `make verify` passed on it before the pass (see [Final checks](#final-checks)).
+- Confirmation: `model: gpt-6.1-sol`, `sandbox: read-only`, `reasoning effort: medium`, session ID `01a1774b-2c52-7ff2-a6c2-bd45d62b3558`.
+- Snapshot: `77d7a72520ebab1fb1dee6c1295814ff4d858e38f67a8166d60ee934140e6c96` before and after; unchanged.
+- Pass 4 finding 1: resolved; the reviewer reproduced the widening refresh, and the suite now reports it.
+- Findings: Critical 0, High 0, Medium 0, Low 0.
+
 ## Final checks
 
-Pending.
+- `make verify` on `2ab67a2`, the last revision with code or contract changes: passed. 1477 tests, 1462 passed, 0 failed, 15 skipped; coverage of all files 99.08% lines, 91.41% branches, 98.50% functions; `openspec validate --all --strict` 64 passed, 0 failed; the archive dry run and the package verification passed; every comment is within the length rule.
+- The commits after it change only this record and `tasks.md`; the `pre-push` hook runs `make verify` again on the pushed head.
+- Unreviewed fix: pass 3 finding 5 (the contract's list of dependent items).
 
 ## Limitations
 
