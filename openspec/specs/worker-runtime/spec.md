@@ -70,6 +70,14 @@ Before it accepts an offer, a worker SHALL refuse it with `resource-ceiling-exce
 - **WHEN** a worker below its disk floor receives an offer within its slots and capacity
 - **THEN** it journals a retryable `worker-admission-pressure` refusal naming `disk-floor`, records no launch intent, and acknowledges the offer
 
+#### Scenario: Launch rejected finally before a grant
+- **WHEN** a worker with one slot journaled a final launch authorization rejection for an execution that never received a grant, its assignment then ends, and another offer arrives
+- **THEN** the rejected execution holds no slot, and the worker accepts the offer
+
+#### Scenario: Ended assignment with a live execution
+- **WHEN** a worker with one slot holds an ended assignment whose execution is `authorized`, `started`, uncertain without a terminal state, or without a grant and with an operation that is not closed, and another offer arrives
+- **THEN** it refuses the offer with `worker-slots-exhausted`
+
 ### Requirement: Capacity declaration
 A worker SHALL journal `worker.capacity.declared` at its first start and whenever its slots, CPU, memory, enforceable controls, or protocol window differ from its last declaration.
 
