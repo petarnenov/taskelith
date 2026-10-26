@@ -4,7 +4,7 @@ G2 work item 24, second part (24b), `run-g2-crash-windows`, assigned by the coor
 
 ## Revision and environment
 
-- Base: `origin/dev` at `f9ba7a5`, plus `d060900` (24a's recorder, Maki's `3f9777d`), and `origin/dev` merged in as `d1df5ad`. Branch `run-g2-crash-windows`. The final evidence run is of `d1df5ad`, which holds the final test code.
+- Base: `origin/dev` at `f9ba7a5`, plus `d060900` (24a's recorder, Maki's `3f9777d`), and `origin/dev` merged in as `d1df5ad`. Branch `run-g2-crash-windows`. The final evidence run is of `40aab95`, which holds the final test code: it adds the tsconfig references of the two worker adapters and keeps `NODE_V8_COVERAGE` out of the composed worker, whose crashed children otherwise left an empty coverage file that failed the coverage report of `make verify`.
 - Host: macOS 26 (Darwin 25.6.0), x86_64 (2020 Intel iMac); Docker Desktop, engine 29.5.2; Node.js 24.22.1 from `.nvmrc`. Services: `make services-up` (PostgreSQL 18.6, NATS 2.15.1, Toxiproxy) of this worktree; another worktree ran `make verify` on the same host during some runs.
 
 ## Author self-check and evidence check
@@ -21,8 +21,8 @@ G2 work item 24, second part (24b), `run-g2-crash-windows`, assigned by the coor
 | --- | --- |
 | `npm run openspec -- validate run-g2-crash-windows --strict` | valid |
 | `npm run verify:archive` | passed, with 24a's change archived after this one; archiving 24a first in a copy of `openspec/` also gave strictly valid specs |
-| Evidence run of `d1df5ad`: `TASKELITH_TEST_SEED=2776760789 TASKELITH_SCENARIO_RESULTS=openspec/changes/run-g2-crash-windows/results.jsonl node --experimental-strip-types --test apps/control-plane/test/crash-windows.integration.test.ts` against `make services-up` | 27 tests passed (16 scenarios passed, 11 expected failures on D1); `results.jsonl` holds 27 lines, 16 `passed` and 11 `failed`, all target `harness-composition`, arch `x64`, commit `d1df5ad`, seed `2776760789` |
-| `make verify` | MAKE_VERIFY_RESULT |
+| Evidence run of `40aab95`: `TASKELITH_TEST_SEED=2776760789 TASKELITH_SCENARIO_RESULTS=openspec/changes/run-g2-crash-windows/results.jsonl node --experimental-strip-types --test apps/control-plane/test/crash-windows.integration.test.ts` against `make services-up` | 27 tests passed (16 scenarios passed, 11 expected failures on D1); `results.jsonl` holds 27 lines, 16 `passed` and 11 `failed`, all target `harness-composition`, arch `x64`, commit `40aab95`, seed `2776760789` |
+| `make verify` of `40aab95` | Passed: 1787 tests, 1785 passed, 0 failed, 2 skipped (the Linux-only scan tests); coverage of all files 99.27% lines, 92.07% branches, 99.03% functions; OpenSpec 69 passed; `verify:archive` and `verify:package` passed |
 | `make verify-linux-cgroup` | not run: this change adds no test there |
 
 ## Windows and results
@@ -62,7 +62,7 @@ Seed `2776760789` for every row, on macOS natively.
 ## Product defect D1: a relaunch after `not-started` is rejected with `execution-conflict`
 
 - Scenarios: `crash-window-w3-before`, `-w3-after`, `-w4-before`, `-w4-after`, `-w6-before`, `-w6-after`, `-cp1`, `-cp2`, `-cp3`, `-cp5`, `-cp6`; seed `2776760789`.
-- Reproductions: three full runs on 2026-10-26 (the first two before the seed was fixed, the third the evidence run of `df271e2`), each with the same eleven failures, and `crash-window-w3-after` alone with a 240 s wait instead of 60 s, in which the attempt stayed without an outcome. The final evidence run of `d1df5ad` reproduced D1's signature in all eleven.
+- Reproductions: three full runs on 2026-10-26 (the first two before the seed was fixed, the third the evidence run of `df271e2`), each with the same eleven failures, and `crash-window-w3-after` alone with a 240 s wait instead of 60 s, in which the attempt stayed without an outcome. The final evidence run of `40aab95` reproduced D1's signature in all eleven.
 - Sequence:
   1. The control plane grants execution E1 and records it `authorized` and owning.
   2. The worker crashes after the grant (W3) and before its supervisor claims, or its supervisor dies before claiming (CP5, CP6).
@@ -81,11 +81,11 @@ Seed `2776760789` for every row, on macOS natively.
 - Expected: the execution is sealed and reported `not-started`, and the intent launches under a new execution that is granted, spawns once, and exits 0, so the attempt ends `exited`.
 - Observed: E1 `not-started` in the control plane, no second execution there; in the worker journal E2 with one operation, `rejected-final`, `execution-conflict`; no spawn; no attempt outcome after 240 s.
 - W2.after passes because the authority never saw that execution. A grant abandoned at runtime (`launch-orchestrator.ts` `#abandon`) may race the same way, although a back-off precedes its new execution; not tested here.
-- Decision: the owner's delegate chose option (b) in away run `20261026T161148Z-opencode-90873`. `LaunchRequest` gets an optional `reportsNotStartedFor` (`executionId`, `operationId`); the authority applies the referenced execution's `not-started` first, then the ownership rule for the new execution, in one transaction; the worker's `continue-launch` and `relaunch` requests fill it from the sealed execution. It is a contract change to launch authorization sections 4 and 9 (and journal section 5 if needed). The fix comes in a separate change, `fix-launch-recovery-reauthorization`, which turns the eleven expected failures back into ordinary scenarios and reruns the evidence with seed `2776760789`; it is not implemented here.
+- Decision: the owner's delegate chose option (b) in away run `20261026T161148Z-opencode-90873`. `LaunchRequest` gets an optional `reportsNotStartedFor` (`executionId`, `operationId`); the authority applies the referenced execution's `not-started` first, then the ownership rule for the new execution, in one transaction; the worker's `continue-launch` and `relaunch` requests fill it from the sealed execution. It is a contract change to launch authorization sections 4 and 9 (and journal section 5 if needed). The fix comes in a separate change, `fix-launch-recovery-reauthorization`, which fixes D1 only, turns the eleven expected failures back into ordinary scenarios, and reruns the evidence with seed `2776760789`; CP5 may also need the fix of O1 to pass. It is not implemented here.
 
 ## Observation O1: a live worker does not notice a supervisor that died before its claim
 
-With CP5 armed and the worker kept running, the execution stayed `authorized` with no observation for 30 s; only the worker's restart sealed it. `ExecutionWatch.observe` checks the supervisor's liveness only for a claimed launch record (`apps/worker/src/execution-watch.ts:114`). The scenarios restart the worker after every supervisor crash, so none of them fails on it. The coordinator took O1 to the owner's delegate, who decided (A) in away run `20261026T161148Z-opencode-90873`: it is a defect to fix in G2, where the watch also checks liveness for an authorized but unclaimed launch record after a bound. The fix belongs to the same follow-up change, `fix-launch-recovery-reauthorization`; it is not implemented here.
+With CP5 armed and the worker kept running, the execution stayed `authorized` with no observation for 30 s; only the worker's restart sealed it. `ExecutionWatch.observe` checks the supervisor's liveness only for a claimed launch record (`apps/worker/src/execution-watch.ts:114`). The scenarios restart the worker after every supervisor crash, so none of them fails on it. The coordinator took O1 to the owner's delegate, who decided (A) in away run `20261026T161148Z-opencode-90873`: it is a defect to fix in G2, where the watch also checks liveness for an authorized but unclaimed launch record after a bound. The fix belongs to a separate change, `fix-unclaimed-launch-liveness`, assigned to another worker; it is not implemented here.
 
 ## Independent review
 
@@ -93,6 +93,6 @@ Codex CLI (gpt-6-astra) pending.
 
 ## Limitations and remaining gates
 
-- Eleven windows are expected failures on D1 until `fix-launch-recovery-reauthorization` lands; their `failed` rows stay in `results.jsonl`.
+- Eleven windows are expected failures on D1 until `fix-launch-recovery-reauthorization` lands (CP5 possibly also until `fix-unclaimed-launch-liveness` lands); their `failed` rows stay in `results.jsonl`.
 - The control plane runs in the test process; the scenarios crash the worker and the supervisor only.
-- Remaining gates: the independent review, integration by the coordinator, the archive, and, in the follow-up change, the fixes of D1 and O1 with a new evidence run.
+- Remaining gates: the independent review, integration by the coordinator, the archive, and, in the follow-up changes, the fix of D1 (`fix-launch-recovery-reauthorization`) with a new evidence run and the fix of O1 (`fix-unclaimed-launch-liveness`).
