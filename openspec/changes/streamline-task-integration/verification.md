@@ -29,6 +29,7 @@ On 2026-10-26 the owner asked to streamline task integration; coordinator Niki r
 | `npm run verify:comments` on `f10cf83` | passed |
 | `make verify` on `f10cf83`, first run | Failed in an unrelated test, `apps/control-plane/test/control-plane-api.integration.test.ts:417` ("the control plane did not answer"), while other worktrees ran `make verify` on the host; 1877 tests, 1874 passed, 1 failed, 2 skipped |
 | `make verify` on `f10cf83`, second run | Passed (exit 0): 1877 tests, 1875 passed, 0 failed, 2 skipped (the Linux-only scan tests), the new pre-push tests among them; coverage of all files 99.28% lines, 92.05% branches, 99.03% functions; contract compatibility 0 breaking changes; OpenSpec 69 passed; `verify:archive` and `verify:package` passed |
+| `make verify` on `409de66`, after the fixes of review pass 1 | Passed (exit 0): 1879 tests, 1877 passed, 0 failed, 2 skipped (the Linux-only scan tests), the new malformed-input and failing-verify tests among them; coverage of all files 99.28% lines, 92.05% branches, 99.03% functions; contract compatibility 0 breaking changes; OpenSpec 69 passed; `verify:archive` and `verify:package` passed |
 
 ## Re-archive demonstration
 
