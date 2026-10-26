@@ -63,6 +63,12 @@ OpenCode, `opencode-go/kimi-k3.1-pro` (`high`, set by `-m`), session `ses_e87f37
 - **L2 (fixed, unreviewed):** the L1' resolution said that every process joins the cleanup list before its spawn is awaited, which holds for the detached processes only. It now says that a `ScenarioProcess` joins right after `ScenarioProcess.start` resolves.
 - **Checks after the record fixes:** `npm run verify:comments`, `npm run verify:archive`, and `npm run openspec -- validate harden-worker-supervisor-tests --strict` pass.
 
+## Merge of `dev`
+
+- `origin/dev` at `a698f11` (with 20e, #270 and #271) merged into the branch at `93cd1fd` with the merge commit `b7711d6`, without conflicts. `make verify` reported no stale dependency inventory.
+- Overlap with this change: `dev` also changed `packages/modules/execution/src/domain/journal-records.ts` (assignment refusal reasons and admission pressure causes), `apps/worker/test/launch-orchestrator.test.ts`, and `packages/adapters/worker-journal/test/worker-journal.test.ts`, in other regions; none of its changes builds an `ExecutionExit` with recovery evidence, and the type check passes. No file of `packages/adapters/worker-supervisor` and no file of this change's records was touched.
+- **make verify** at `b7711d6`: passed in 129 s (1648 tests, 1648 pass, 0 fail, 0 cancelled, 0 skipped; coverage 99.24% lines, 91.75% branches, 98.81% functions; dependency inventory check, archive dry run, and package verification passed).
+
 ## Limitations and remaining gates
 
 - The privileged Linux tests were changed but not run.
