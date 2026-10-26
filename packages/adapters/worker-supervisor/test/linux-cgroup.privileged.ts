@@ -118,6 +118,13 @@ test('the self-check proves a delegated containment that the execution account c
   assert.deepEqual(checkLinuxContainment({ cgroupRoot: CGROUP, containmentParent: PARENT, home: HOME, account: ACCOUNT }), { ok: true, value: undefined });
 });
 
+test('the self-check refuses a home cgroup at or under the containment parent', () => {
+  for (const home of [PARENT, `${PARENT}/init`]) {
+    const result = checkLinuxContainment({ cgroupRoot: CGROUP, containmentParent: PARENT, home, account: ACCOUNT });
+    assert.deepEqual(result, { ok: false, error: [`the home cgroup ${home} is at or under the containment parent ${PARENT}`] });
+  }
+});
+
 test('the execution stays started until the containment empties, also after a descendant escapes its group', BOUNDED, async () => {
   const execution = await prepare('execution-escape', ESCAPE);
   const started = Date.now();
