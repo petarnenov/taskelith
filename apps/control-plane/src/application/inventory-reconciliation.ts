@@ -6,6 +6,7 @@ import {
   highestReceivedSnapshot,
   isFreshReport,
   isRolledBack,
+  isUnsolicited,
   startProducerCursor,
   supersededReports,
   type InventoryPart,
@@ -83,7 +84,7 @@ export async function receivePart(tx: ControlPlaneTransaction, part: InventoryPa
   if (!raised.ok) return raised;
   const pruned = await removeSuperseded(tx, [...pending, part], { requestId: current?.requestId, highestSnapshot, preferred: part.reportId });
   if (!pruned.ok) return pruned;
-  const unsolicited = part.requestId === undefined && !pending.some((stored) => stored.reportId === part.reportId);
+  const unsolicited = isUnsolicited(part) && !pending.some((stored) => stored.reportId === part.reportId);
   return unsolicited ? requestInventory(tx, workerId, context) : ok(undefined);
 }
 
@@ -157,8 +158,7 @@ async function applySnapshot(tx: ControlPlaneTransaction, snapshot: InventorySna
       : await resendIfUngranted(tx, assignment, snapshot.reportId, context);
     if (!handled.ok) return handled;
   }
-  const unsolicited = snapshot.requestId === undefined;
-  return unclassified && unsolicited ? requestInventory(tx, snapshot.workerId, context) : ok(undefined);
+  return unclassified && isUnsolicited(snapshot) ? requestInventory(tx, snapshot.workerId, context) : ok(undefined);
 }
 
 // Stored parts never disagree, as receipt refuses a report whose do.

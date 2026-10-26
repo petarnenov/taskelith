@@ -269,7 +269,7 @@ function warnings(event: string): Record<string, unknown>[] {
 const MAX_ANSWERS = 20;
 
 // The worker answers each request in the outbox in order from `first`, with
-// a rising snapshot, while any is left; returns how many were answered.
+// a rising snapshot; returns the position of the first one left unanswered.
 async function answerInTurn(fields: Pick<Report, 'throughSequence'>, first = 0): Promise<number> {
   let answered = first;
   for (; answered < MAX_ANSWERS; answered += 1) {
@@ -379,6 +379,17 @@ describe('pending snapshots and their rollback check', () => {
     assert.deepEqual([await pendingParts(), (await offersOf(at)).length], [['report-1.1', 'report-1.2'], 1]);
     value(await pressure(5));
     assert.deepEqual([await pendingParts(), (await offersOf(at)).length], [[], 2], 'applied: the omitted offer is sent again');
+  });
+
+  test('two requests from an unsolicited snapshot applied later settle once answered in turn', async () => {
+    await readyWorker();
+    await placed('task-1');
+    for (let sequence = 2; sequence <= 4; sequence += 1) value(await pressure(sequence));
+    value(await report({ reportId: 'report-1', snapshot: 1, throughSequence: 5 }));
+    value(await pressure(5));
+    assert.equal((await requests()).length, 2, 'one at receipt, one when applied');
+    assert.equal(await answerInTurn({ throughSequence: 5 }), 2);
+    assert.equal((await requests()).length, 2);
   });
 
   test('a delayed snapshot after a later one from the same journal is discarded and never applied', async () => {
@@ -558,9 +569,9 @@ describe('omitted assignments and re-sent offers', () => {
     value(await report({ reportId: 'answer-1', snapshot: 1, throughSequence: 1, requestId: String(first!.requestId) }));
     assert.equal(value(await refuse(2, at, 'resource-ceiling-exceeded')), 'applied');
     assert.equal((await assignmentOf(at)).state, 'ended');
-    const answered = await answerInTurn({ throughSequence: 2 }, 1);
-    assert.equal((await requests()).length, answered, 'no request stays unanswered');
-    assert.ok(answered < MAX_ANSWERS, `the exchange settles, after ${answered} answers`);
+    assert.equal(await answerInTurn({ throughSequence: 2 }, 1), 2);
+    assert.equal((await requests()).length, 2);
+    assert.equal((await offersOf(at)).length, 2, 'only the first answer re-sends the offer');
   });
 
   test('a fresh snapshot that omits an acceptance above it only re-sends the offer', async () => {
