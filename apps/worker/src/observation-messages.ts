@@ -7,7 +7,7 @@ import { ok, type Instant, type Result } from '@taskelith/kernel';
 const SCHEMA_VERSION = 1;
 const ITEMS_PER_PART = 256;
 // The wire's bound; a longer list still proves the set is not empty.
-const SURVIVORS_MAXIMUM = 256;
+const PROCESSES_MAXIMUM = 256;
 
 export type ObservationMessage = { readonly metadata: Record<string, unknown>; readonly payload: Record<string, unknown> };
 
@@ -54,13 +54,18 @@ export function observationMessage(entry: OutboxEntry): Result<ObservationMessag
     case 'execution-uncertain':
       return ok({ metadata: aboutAttempt(entry, 'execution.uncertain', fact), payload: { executionId: fact.executionId } });
     case 'termination-unproven': {
-      const payload = { executionId: fact.executionId, survivors: fact.survivors.slice(0, SURVIVORS_MAXIMUM) };
+      const payload = { executionId: fact.executionId, survivors: fact.survivors.slice(0, PROCESSES_MAXIMUM) };
       return ok({ metadata: aboutAttempt(entry, 'execution.termination-unproven', fact), payload });
     }
     case 'cancellation-not-applied': {
       const { commandId, executionId } = fact;
       const metadata = { ...aboutAttempt(entry, 'execution.cancellation.not-applied', fact), causationId: commandId };
       return ok({ metadata, payload: { commandId, executionId, reason: 'adopting-supervisor' } });
+    }
+    case 'unrecorded-process': {
+      const metadata = metadataOf(entry, 'execution.unrecorded-process', { correlationId: entry.position.observationId });
+      const containment = displayText(fact.containment, 'an unnamed containment');
+      return ok({ metadata, payload: { containment, processes: fact.processes.slice(0, PROCESSES_MAXIMUM) } });
     }
   }
 }
@@ -78,7 +83,7 @@ function refusalOf(refusal: AssignmentRefusal): Record<string, unknown> {
 function exitedPayload(executionId: string, exit: ExecutionExit): Record<string, unknown> {
   const { status, startProven, spawnFailure, termination } = exit;
   if (termination === 'never-spawned') {
-    const failure = displayText(spawnFailure ?? 'the spawn failed');
+    const failure = displayText(spawnFailure ?? SPAWN_FAILED, SPAWN_FAILED);
     return { executionId, status, startProven: false, spawnFailed: true, spawnFailure: failure, terminationEvidence: termination };
   }
   return { executionId, status, startProven, spawnFailed: false, terminationEvidence: termination };
@@ -88,11 +93,13 @@ const DISPLAY_TEXT_MAXIMUM = 1024;
 // C0 and C1 control characters, which `DisplayText` forbids.
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
 
-// A supervisor's failure text as `DisplayText`: no control characters, at
-// most 1024 characters, and never empty.
-function displayText(text: string): string {
+const SPAWN_FAILED = 'the spawn failed';
+
+// Text as `DisplayText`: no control characters, at most 1024 characters,
+// and `fallback` when nothing is left.
+function displayText(text: string, fallback: string): string {
   const cleaned = [...text.replace(CONTROL_CHARACTERS, ' ').trim()].slice(0, DISPLAY_TEXT_MAXIMUM).join('');
-  return cleaned === '' ? 'the spawn failed' : cleaned;
+  return cleaned === '' ? fallback : cleaned;
 }
 
 // An execution fact is about its attempt at the generation of the offer.
@@ -113,9 +120,10 @@ function metadataOf(entry: OutboxEntry, observationType: string, correlation: Re
   };
 }
 
+// An unsolicited report, as on each connection, names no request.
 export interface InventoryAnswer {
   readonly reportId: string;
-  readonly requestId: string;
+  readonly requestId?: string;
   readonly reportedAt: Instant;
 }
 

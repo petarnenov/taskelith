@@ -25,18 +25,30 @@ export { ProcessDaemonOverhead, type DaemonOverheadSource } from './daemon-overh
 export { CommandIntake, type CommandIntakeOptions } from './command-intake.js';
 export { publishDueObservations, runObservationPublisher, type ObservationPublisherOptions } from './observation-publisher.js';
 export { startWorker, type LaunchHost, type LaunchingDependencies, type RunningWorker, type WorkerDependencies } from './worker-start.js';
-export { fileRecordListing, fileSupervision, type LaunchProgram } from './execution-supervision.js';
+export { containmentScan, fileRecordListing, fileSupervision, type LaunchProgram } from './execution-supervision.js';
 export type {
+  ContainmentScan,
   DeadlineClock,
   DeadlineReading,
   ExecutionSupervision,
   LaunchPlan,
+  PopulatedContainment,
   RecordListing,
   RecoveryRound,
   SupervisedFacts,
   SupervisedRecovery,
   SupervisionFactory,
 } from './execution-supervision-port.js';
-export { LAUNCH_POLL_MILLISECONDS, LaunchOrchestrator, type LaunchOrchestratorOptions } from './launch-orchestrator.js';
+export { LAUNCH_POLL_MILLISECONDS, LaunchOrchestrator, type LaunchContact, type LaunchOrchestratorOptions } from './launch-orchestrator.js';
+export { LOST_CONTACT_MILLISECONDS, WorkerContact, type WorkerContactOptions } from './worker-contact.js';
+export { BrokerSession, type BrokerLink, type BrokerSessionOptions } from './broker-session.js';
+export { TaskGroup } from './task-group.js';
+export { HEARTBEAT_MILLISECONDS, heartbeatMessage, runHeartbeats, type HeartbeatOptions } from './heartbeat-publisher.js';
+export {
+  publishInventory,
+  reportInventoryOnConnection,
+  type ConnectionReportOptions,
+  type InventoryReportOptions,
+} from './inventory-report.js';
 export { ExecutionWatch, LIVENESS_POLLS, WATCH_POLL_MILLISECONDS, type WatchOptions, type WatchTarget, type Watched } from './execution-watch.js';
 export { launchFailureLine, productionDependencies, serveUntilStopped, workerMain, type ServiceProcess } from './main.js';

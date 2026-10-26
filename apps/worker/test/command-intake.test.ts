@@ -65,7 +65,7 @@ function newIntake(capacity: WorkerCapacity): CommandIntake {
   let reports = 0;
   return new CommandIntake({
     journal: root.journal, capacity, pressure, publish: broker.publish, observationSubject: SUBJECT,
-    newReportId: () => `report-${(reports += 1)}`, now: () => T0,
+    newReportId: () => `report-${(reports += 1)}`, now: () => T0, journalFault: () => root.journal.fault,
   });
 }
 
@@ -273,6 +273,7 @@ test('a W1 refused for lack of space is not acknowledged, and the redelivered co
   });
   intake = new CommandIntake({
     journal: full, capacity: CAPACITY, pressure, publish: broker.publish, observationSubject: SUBJECT, newReportId: () => 'report-1', now: () => T0,
+    journalFault: () => root.journal.fault,
   });
   assert.equal(isSpaceRefusal(failed(await deliver(offer(1)))), true);
   assert.equal(value(root.journal.snapshot()).intents.length, 0);

@@ -4,6 +4,8 @@ import type { ExecutionId, ExecutionProcess } from '@taskelith/execution';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import {
   FileRecordStore,
+  LinuxContainmentScan,
+  LinuxProcessInspector,
   parseLaunch,
   prepareRecord,
   readReportedFacts,
@@ -23,6 +25,7 @@ import {
   type WorkerSupervisionDependencies,
 } from '@taskelith/worker-supervisor';
 import type {
+  ContainmentScan,
   ExecutionSupervision,
   LaunchPlan,
   RecordListing,
@@ -32,18 +35,19 @@ import type {
   SupervisionFactory,
 } from './execution-supervision-port.js';
 
-// The program every launch runs and the platform settings it runs under.
+// The program every launch runs and the account it runs as.
 export interface LaunchProgram {
   readonly command: Command;
   readonly executionAccount?: ExecutionAccount;
-  readonly containmentParent?: string;
   readonly supervisorVersion: string;
 }
 
+// Without a program the records are recovered and removed, never prepared.
 export interface FileSupervisionOptions {
   readonly executions: string;
   readonly platform: Platform;
-  readonly program: LaunchProgram;
+  readonly containmentParent?: string;
+  readonly program?: LaunchProgram;
 }
 
 // Each execution's record in `worker/executions/<executionId>/`.
@@ -60,7 +64,7 @@ class FileExecutionSupervision implements ExecutionSupervision {
     this.#executionId = executionId;
     this.#options = options;
     const directory = join(options.executions, executionId);
-    const { containmentParent } = options.program;
+    const { containmentParent } = options;
     this.#dependencies = {
       store: new FileRecordStore(directory),
       lock: new SqliteExecutionLock(directory),
@@ -73,7 +77,9 @@ class FileExecutionSupervision implements ExecutionSupervision {
   }
 
   async prepare(plan: LaunchPlan): Promise<Result<void>> {
-    const { command, executionAccount, supervisorVersion } = this.#options.program;
+    const { program } = this.#options;
+    if (program === undefined) return err(failure('precondition-failed', 'no launch command is configured'));
+    const { command, executionAccount, supervisorVersion } = program;
     const incarnation = this.#options.platform.namespaceIncarnation();
     if (incarnation !== undefined && !incarnation.ok) return incarnation;
     return prepareRecord(this.#dependencies, {
@@ -149,5 +155,20 @@ export function fileRecordListing(executions: string): RecordListing {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return ok(Object.freeze([]));
       return err(failure('unavailable', `cannot list ${executions}: ${(error as Error).message}`));
     }
+  };
+}
+
+// No containment exists on macOS, so surviving processes cannot be found
+// there (worker journal contract, section 11).
+export function containmentScan(platform: Platform, containmentParent: string | undefined): ContainmentScan | undefined {
+  if (platform.name !== 'linux' || containmentParent === undefined) return undefined;
+  const scan = new LinuxContainmentScan(containmentParent, new LinuxProcessInspector());
+  return () => {
+    const found = scan.populated();
+    if (!found.ok) return found;
+    return ok(Object.freeze(found.value.map(({ name, path, processes }) => ({
+      name, containment: path,
+      processes: processes.map(({ identity, processGroupId }) => ({ platform: 'linux' as const, ...identity, processGroupId })),
+    }))));
   };
 }

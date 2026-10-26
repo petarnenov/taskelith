@@ -260,6 +260,16 @@ export class SqliteWorkerJournal implements WorkerJournal {
     });
   }
 
+  recordUnrecordedProcess(containment: string, processes: readonly ExecutionProcess[]): Result<void> {
+    return this.#connection.transact((database) => {
+      const fact: ObservationFact = { kind: 'unrecorded-process', containment, processes };
+      const observationId = observationIdOf(fact, this.binding.journalId);
+      if (database.prepare('SELECT 1 FROM outbox WHERE observation_id = ?').get(observationId)) return ok(undefined);
+      this.#append(database, fact);
+      return ok(undefined);
+    });
+  }
+
   recordCancellationEvidence(commandId: CommandId): Result<void> {
     return this.#connection.transact((database) => {
       const updated = database.prepare('UPDATE cancellation_request SET evidence_recorded = 1 WHERE command_id = ?').run(commandId);

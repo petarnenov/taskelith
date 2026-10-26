@@ -11,6 +11,7 @@ import {
   parseLaunch,
   parseSupervisor,
   RECORD_FORMAT,
+  type ExitRecord,
 } from '@taskelith/worker-supervisor';
 import { identity, intent } from './fakes.ts';
 
@@ -48,6 +49,9 @@ test('an exit proven by recovery evidence has an unknown status', () => {
       assert.equal(parseExit(encodeRecord({ ...recovered, status, termination })).ok, false, termination);
     }
   }
+  // @ts-expect-error the exit record type rejects what the reader rejects
+  const known: ExitRecord = { status: { kind: 'code', code: 0 }, startProven: true, termination: 'boot-changed' };
+  assert.equal(parseExit(encodeRecord(known)).ok, false);
 });
 
 test('a corrupt, newer-format, or unversioned file is never guessed around', () => {

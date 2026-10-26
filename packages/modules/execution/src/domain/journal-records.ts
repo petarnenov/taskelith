@@ -197,13 +197,18 @@ export const TERMINATION_EVIDENCE_KINDS = Object.freeze([
 
 export type TerminationEvidenceKind = (typeof TERMINATION_EVIDENCE_KINDS)[number];
 
+// Only recovery on start proves these, so it never sees the exit status.
+type RecoveryTerminationKind = Extract<TerminationEvidenceKind, 'boot-changed' | 'namespace-ended'>;
+
+type ExitEnd =
+  | { readonly status: ExitStatus; readonly termination: Exclude<TerminationEvidenceKind, RecoveryTerminationKind> }
+  | { readonly status: { readonly kind: 'unknown' }; readonly termination: RecoveryTerminationKind };
+
 // An execution's `exit` record as the worker reports it.
-export interface ExecutionExit {
-  readonly status: ExitStatus;
+export type ExecutionExit = ExitEnd & {
   readonly startProven: boolean;
   readonly spawnFailure?: string;
-  readonly termination: TerminationEvidenceKind;
-}
+};
 
 // The execution an execution fact is about, with its assignment.
 export interface ExecutionSubject extends AssignmentRef {
@@ -238,7 +243,8 @@ export type ObservationFact =
   | ({ readonly kind: 'execution-not-started' } & ExecutionSubject)
   | ({ readonly kind: 'execution-uncertain' } & ExecutionSubject & { readonly evidenceCounter: number })
   | ({ readonly kind: 'termination-unproven' } & ExecutionSubject & { readonly survivors: readonly ExecutionProcess[] })
-  | ({ readonly kind: 'cancellation-not-applied' } & ExecutionSubject & { readonly commandId: CommandId });
+  | ({ readonly kind: 'cancellation-not-applied' } & ExecutionSubject & { readonly commandId: CommandId })
+  | { readonly kind: 'unrecorded-process'; readonly containment: string; readonly processes: readonly ExecutionProcess[] };
 
 // The unconfirmed outbox entries and the bytes they store.
 export interface OutboxBacklog {

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
-import { id, value } from '@taskelith/testing';
+import { failed, id, value } from '@taskelith/testing';
 import { fileRecordListing, fileSupervision, type ExecutionSupervision, type LaunchProgram } from '@taskelith/worker';
 import { encodeEvent, encodeRecord, RECORD_FILES, type Platform } from '@taskelith/worker-supervisor';
 import { BOOT } from './launch-fakes.ts';
@@ -56,6 +56,15 @@ test('prepare writes intent with the plan, the program, and on Linux the namespa
 test('prepare fails when the namespace incarnation cannot be read', async () => {
   namespace = err(failure('unavailable', 'no /proc'));
   assert.equal((await supervision('linux').prepare(PLAN)).ok, false);
+});
+
+test('without a launch program a record is sealed and removed but never prepared', async () => {
+  const recovering = fileSupervision({ executions, platform: platform('darwin') })(EXECUTION);
+  assert.equal(failed(await recovering.prepare(PLAN)).code, 'precondition-failed');
+  assert.equal(existsSync(join(executions, EXECUTION)), false);
+  assert.deepEqual(value(await recovering.seal()), { kind: 'seal', by: 'worker', reason: 'recovery' });
+  value(await recovering.remove());
+  assert.equal(existsSync(join(executions, EXECUTION)), false);
 });
 
 test('seal creates the directory and returns the winning launch record', async () => {
