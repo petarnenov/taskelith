@@ -10,7 +10,7 @@ macOS 26.6.2 (Darwin 25.6.0, arm64), Node.js v24.22.1 from `.nvmrc`, npm as pinn
 
 ## Author self-check
 
-- AGENTS.md and ADR 0004: TypeScript only; pure rules (`scripts/review-findings.ts`) separate from file access, argument parsing, and the ajv adapter (`scripts/findings.ts`); small functions; every comment within two lines of 80 characters (`npm run verify:comments`); no new dependency (`ajv@8.20.0` is already installed for `@taskelith/plugin-sdk` and `@taskelith/contracts`, and the dependency inventory is unchanged); `make verify` drives the check.
+- AGENTS.md and ADR 0004: TypeScript only; pure rules (`scripts/review-findings.ts`) separate from file access, argument parsing, and the ajv adapter (`scripts/findings.ts`); small functions; every comment within two lines of 80 characters (`npm run verify:comments`); no new package (`ajv@8.20.0` is already installed for `@taskelith/plugin-sdk` and `@taskelith/contracts`; after coordinator decision B it is also declared as a root development dependency, with `package-lock.json` and `docs/dependencies` regenerated and its row in `docs/dependencies.md` updated); `make verify` drives the check.
 - Coverage: `npm test` measures only built product modules, so the two script modules were measured separately (below) at 100 % lines and functions and 98.40 % branches, above the 75 % gate.
 - Requirements: each ADDED requirement is under 400 characters, and `make verify` archives the change in a temporary copy and validates it strictly.
 - Without backfill: `validate` requires `findings.jsonl` only in active changes; the 170 archived changes without one pass, and worker step 7 checks the file of a newly archived change.
@@ -32,6 +32,8 @@ macOS 26.6.2 (Darwin 25.6.0, arm64), Node.js v24.22.1 from `.nvmrc`, npm as pinn
 Pending: Codex CLI (gpt-6.1-sol).
 
 ## Limitations
+
+- Follow-up: `scripts/integration-broker.ts` also imports an undeclared root dependency, `@nats-io/nkeys`; it is left unchanged by this change.
 
 - The secret patterns are heuristics for common token shapes, not a guarantee.
 - The checklist starts empty, because no archived change has findings yet.

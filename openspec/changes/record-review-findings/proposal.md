@@ -21,6 +21,6 @@ Review findings are recorded only as prose in each change's `verification.md`, s
 
 ## Impact
 
-Repository tooling and process documentation only. `scripts/` and `docs/review-findings/` are outside the published package's `files` allowlist, so the published `taskelith` package does not change. The script uses `ajv@8.20.0`, already installed as a runtime dependency of `@taskelith/plugin-sdk` and `@taskelith/contracts`; no dependency is added. Every active change, including those on other branches, needs a `findings.jsonl` once this change is merged into `dev`.
+Repository tooling and process documentation only. `scripts/` and `docs/review-findings/` are outside the published package's `files` allowlist, so the published `taskelith` package does not change. The script uses `ajv@8.20.0`, already installed as a runtime dependency of `@taskelith/plugin-sdk` and `@taskelith/contracts`, now also declared as a root development dependency at the same version; no new package enters the tree. Every active change, including those on other branches, needs a `findings.jsonl` once this change is merged into `dev`.
 
 Exclusions: no database (Neo4j or other), no owner-facing UI, no backfill of archived changes; the fleet skills from `add-fleet-skills` get only the findings lines.
