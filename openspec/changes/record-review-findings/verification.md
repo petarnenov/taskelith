@@ -24,7 +24,8 @@ macOS 26.6.2 (Darwin 25.6.0, arm64), Node.js v24.22.1 from `.nvmrc`, npm as pinn
 - `npm run verify:archive`: every active change archives into strictly valid specs.
 - `npm run verify:comments`: every comment is within the rule.
 - Sample run on a scratch fixture with two archived changes and five findings: `validate`, `index`, and `checklist --capability review-process --files 'scripts/**' --top 5` printed the expected counts, shares, and three checklist items.
-- `make verify`: see below.
+- `make verify` failed first on `830e47a` only because the dependency inventory hashes `package.json`, which gained the `findings` and `verify:findings` scripts; `make dependency-inventory` regenerated `docs/dependencies/licenses.json`, whose only change is that hash (commit `1434376`).
+- `make verify` passed on `1434376`: `npm run verify:findings` valid; 1,978 tests, 1,976 passed, 0 failed, 2 skipped; coverage 99.28 % lines, 92.09 % branches, 99.04 % functions; 0 breaking contract changes; dependency inventory verified (731 paths); strict OpenSpec validation 70 passed, 0 failed; archive dry run and package verification passed.
 
 ## Independent review
 
