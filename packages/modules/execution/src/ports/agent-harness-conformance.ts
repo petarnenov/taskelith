@@ -8,9 +8,11 @@ import {
   type HarnessRequestKind,
   type ParsedAgentHarnessCapabilities,
 } from './agent-harness-data.js';
+import { DELEGATION_OUTCOMES } from './agent-harness.js';
 import type {
   AgentHarness,
   AgentHarnessOperation,
+  DelegationOutcome,
   HarnessCapability,
   HarnessEventData,
   ResponseData,
@@ -68,6 +70,10 @@ type Outcome = { readonly ok: true; readonly value: unknown } | { readonly ok: f
 
 type TurnEnded = Extract<HarnessEvent, { kind: 'turn-ended' }>;
 
+type ReadStep = IteratorResult<HarnessEventData> | 'timeout' | 'threw';
+
+type DelegationResult = Extract<ResponseData, { kind: 'delegation-result' }>;
+
 interface Scenario {
   readonly name: string;
   readonly needs?: HarnessCapability;
@@ -100,8 +106,12 @@ export async function runAgentHarnessConformance(
   const findings: AgentHarnessConformanceFinding[] = [];
   for (const [index, scenario] of SCENARIOS.entries()) {
     const probe = new Probe({ harness, capabilities: capabilities.value, fixture, timeoutMs, scenario: scenario.name, index, findings });
-    if (scenario.needs === undefined || capabilities.value.supported.includes(scenario.needs)) await scenario.run(probe);
-    else await undeclared(probe, scenario.needs);
+    try {
+      if (scenario.needs === undefined || probe.declares(scenario.needs)) await scenario.run(probe);
+      else await undeclared(probe, scenario.needs);
+    } finally {
+      await probe.cleanUp();
+    }
   }
   return { scenarios: SCENARIOS.length, findings };
 }
@@ -125,8 +135,8 @@ const SCENARIOS: readonly Scenario[] = Object.freeze([
   { name: 'permission request with a single response', run: permission },
   { name: 'exit observation', run: exitObservation },
   { name: 'turn and account limits', run: limits },
-  { name: 'input request', needs: 'input-requests', run: (probe: Probe) => answerRequest(probe, 'input-request') },
-  { name: 'delegation result by correlation', needs: 'delegation', run: (probe: Probe) => answerRequest(probe, 'delegation-request') },
+  { name: 'input request', needs: 'input-requests', run: input },
+  { name: 'delegation result by correlation', needs: 'delegation', run: delegation },
   { name: 'resume without replaying a pending request', needs: 'resume', run: resume },
   { name: 'terminal only while the session runs', needs: 'terminal', run: terminal },
 ]);
@@ -137,7 +147,7 @@ async function chat(probe: Probe): Promise<void> {
   probe.expect('second subscriber', await probe.call('events', session), 'conflict');
   if (!(await probe.turn(session, 'turn-1', probe.prompts.remember, 'completed'))) return;
   if (!(await probe.turn(session, 'turn-2', probe.prompts.recall, 'completed'))) return;
-  probe.expectOutput('turn-2', probe.recalled, 'the recall turn does not contain the remembered fact');
+  probe.expectOutput('turn-2', [probe.recalled], 'the recall turn does not contain the remembered fact');
   probe.expect('repeated turn ID', await probe.submit(session, 'turn-1', probe.prompts.recall), 'conflict');
   probe.expect('unknown native session', await probe.call('submitTurn', { ...session, nativeSessionId: 'unknown', turnId: 'x', text: 'x' }), 'not-found');
   await probe.close(session);
@@ -165,21 +175,22 @@ async function permission(probe: Probe): Promise<void> {
   if (before === undefined || !probe.succeeded('submit', await probe.submit(session, 'turn-1', probe.prompts.permission))) return;
   const denied = await probe.request('permission-request');
   if (denied === undefined) return;
-  const respond = (response: unknown, nativeRequestId = denied, generation = session.generation): Promise<Outcome | undefined> =>
-    probe.call('respond', { ...session, generation, nativeRequestId, response: response as ResponseData });
-  const deny = { kind: 'permission', decision: 'deny', message: 'conformance' };
-  probe.expect('response at a stale generation', await respond(deny, denied, session.generation + 1), 'precondition-failed');
-  probe.expect('unknown response kind', await respond({ kind: 'approval' }), 'invalid');
-  probe.expect('malformed decision', await respond({ kind: 'permission', decision: 'maybe' }), 'invalid');
-  probe.succeeded('deny', await respond(deny));
-  probe.expect('second response', await respond(deny), 'conflict');
-  probe.expect('unknown native request', await respond(deny, 'unknown-request'), 'not-found');
+  const deny: ResponseData = { kind: 'permission', decision: 'deny', message: 'conformance' };
+  const stale = { ...session, generation: session.generation + 1, nativeRequestId: denied, response: deny };
+  probe.expect('response at a stale generation', await probe.call('respond', stale), 'precondition-failed');
+  await rejectMalformed(probe, session, denied, [
+    ['unknown response kind', { kind: 'approval' }],
+    ['malformed decision', { kind: 'permission', decision: 'maybe' }],
+    ['extra response field', { ...deny, scope: 'always' }],
+  ]);
+  await answerOnce(probe, session, denied, deny);
+  probe.expect('unknown native request', await probe.call('respond', { ...session, nativeRequestId: 'unknown-request', response: deny }), 'not-found');
   await probe.turnEnd('turn-1');
   await probe.expectActionRuns(before, 'a denied action ran');
   if (!probe.succeeded('submit', await probe.submit(session, 'turn-2', probe.prompts.permission))) return;
   const allowed = await probe.request('permission-request');
   if (allowed === undefined) return;
-  probe.succeeded('allow', await respond({ kind: 'permission', decision: 'allow' }, allowed));
+  probe.succeeded('allow', await probe.call('respond', { ...session, nativeRequestId: allowed, response: { kind: 'permission', decision: 'allow' } }));
   await probe.turnEnd('turn-2');
   await probe.expectActionRuns(before + 1, 'an allowed action did not run exactly once');
   await probe.close(session);
@@ -209,21 +220,73 @@ async function limits(probe: Probe): Promise<void> {
 }
 
 // The answer must reach the harness: the turn's output contains it.
-async function answerRequest(probe: Probe, kind: 'input-request' | 'delegation-request'): Promise<void> {
-  const prompt = kind === 'input-request' ? probe.prompts.input : probe.prompts.delegation;
-  if (prompt === undefined) return probe.report('fixture', `${kind} is declared, but the fixture has no prompt for it`);
+async function input(probe: Probe): Promise<void> {
+  const prompt = probe.prompts.input;
+  if (prompt === undefined) return probe.report('fixture', 'input-requests is declared, but the fixture has no input prompt');
   const session = await probe.start();
   if (session === undefined) return;
   if (!probe.succeeded('submit', await probe.submit(session, 'turn-1', prompt))) return;
-  const request = await probe.request(kind);
+  const request = await probe.request('input-request');
   if (request === undefined) return;
-  const response = responseFor(kind);
-  probe.succeeded('response', await probe.call('respond', { ...session, nativeRequestId: request, response }));
-  probe.expect('second response', await probe.call('respond', { ...session, nativeRequestId: request, response }), 'conflict');
+  const answer = inputAnswer();
+  await rejectMalformed(probe, session, request, [
+    ['extra response field', { ...answer, format: 'plain' }],
+    ['response of the wrong kind', { kind: 'permission', decision: 'allow' }],
+    ['malformed input text', { kind: 'input', text: 7 }],
+  ]);
+  await answerOnce(probe, session, request, answer);
   await probe.turnEnd('turn-1');
-  const expected = kind === 'input-request' ? INPUT_ANSWER : DELEGATION_SUMMARY;
-  probe.expectOutput('turn-1', expected, `the ${kind} answer did not reach the harness`);
+  probe.expectOutput('turn-1', [answer.text], 'the input answer did not reach the harness');
   await probe.close(session);
+}
+
+// One turn per delegation outcome, each with its own delegation ID, so the
+// output shows that every result reached the request it answers.
+async function delegation(probe: Probe): Promise<void> {
+  const prompt = probe.prompts.delegation;
+  if (prompt === undefined) return probe.report('fixture', 'delegation is declared, but the fixture has no delegation prompt');
+  const session = await probe.start();
+  if (session === undefined) return;
+  for (const [index, outcome] of DELEGATION_OUTCOMES.entries()) {
+    if (!(await delegateOnce(probe, session, prompt, delegationResult(index, outcome)))) return;
+  }
+  await probe.close(session);
+}
+
+async function delegateOnce(probe: Probe, session: SessionRequest, prompt: string, result: DelegationResult): Promise<boolean> {
+  const turnId = `turn-for-${result.delegationId}`;
+  if (!probe.succeeded(`submit ${turnId}`, await probe.submit(session, turnId, prompt))) return false;
+  const request = await probe.request('delegation-request');
+  if (request === undefined) return false;
+  if (result.outcome === DELEGATION_OUTCOMES[0]) {
+    await rejectMalformed(probe, session, request, [
+      ['extra response field', { ...result, cost: 1 }],
+      ['response of the wrong kind', { kind: 'permission', decision: 'allow' }],
+      ['malformed delegation outcome', { ...result, outcome: 'maybe' }],
+    ]);
+  }
+  await answerOnce(probe, session, request, result);
+  if ((await probe.turnEnd(turnId)) === undefined) return false;
+  const expected = [result.delegationId, result.outcome, result.summary];
+  probe.expectOutput(turnId, expected, `the delegation result ${result.delegationId} did not reach the harness`);
+  return true;
+}
+
+async function rejectMalformed(
+  probe: Probe,
+  session: SessionRequest,
+  nativeRequestId: string,
+  cases: readonly (readonly [string, unknown])[],
+): Promise<void> {
+  for (const [label, response] of cases) {
+    const outcome = await probe.call('respond', { ...session, nativeRequestId, response: response as ResponseData });
+    probe.expect(label, outcome, 'invalid');
+  }
+}
+
+async function answerOnce(probe: Probe, session: SessionRequest, nativeRequestId: string, response: ResponseData): Promise<void> {
+  probe.succeeded('response', await probe.call('respond', { ...session, nativeRequestId, response }));
+  probe.expect('second response', await probe.call('respond', { ...session, nativeRequestId, response }), 'conflict');
 }
 
 async function resume(probe: Probe): Promise<void> {
@@ -237,12 +300,23 @@ async function resume(probe: Probe): Promise<void> {
   if (second === undefined || request === undefined) return;
   const response: ResponseData = { kind: 'permission', decision: 'allow' };
   probe.expect('old request after resume', await probe.call('respond', { ...second, nativeRequestId: request, response }), 'not-found');
-  probe.expect('old generation', await probe.call('submitTurn', { ...first, turnId: 'turn-3', text: probe.prompts.recall }), 'precondition-failed');
+  await expectFenced(probe, first);
   probe.expect('turn ID of the first generation', await probe.submit(second, 'turn-1', probe.prompts.recall), 'conflict');
   if (await probe.turn(second, 'turn-3', probe.prompts.recall, 'completed')) {
-    probe.expectOutput('turn-3', probe.recalled, 'the resumed session lost its history');
+    probe.expectOutput('turn-3', [probe.recalled], 'the resumed session lost its history');
   }
   await probe.close(second);
+}
+
+// Every operation at the generation before the resume is refused.
+async function expectFenced(probe: Probe, earlier: SessionRequest): Promise<void> {
+  const fenced = (label: string, outcome: Outcome | undefined): void =>
+    probe.expect(`${label} at the earlier generation`, outcome, 'precondition-failed');
+  fenced('turn', await probe.call('submitTurn', { ...earlier, turnId: 'turn-4', text: probe.prompts.recall }));
+  fenced('events', await probe.call('events', earlier));
+  fenced('interrupt', await probe.call('interrupt', { ...earlier, turnId: 'turn-2' }));
+  fenced('close', await probe.call('closeSession', earlier));
+  if (probe.declares('terminal')) fenced('terminal', await probe.call('terminalProgram', earlier));
 }
 
 async function terminal(probe: Probe): Promise<void> {
@@ -260,20 +334,23 @@ async function undeclared(probe: Probe, capability: HarnessCapability): Promise<
   const unavailable = (outcome: Outcome | undefined): void =>
     probe.expect(`${capability} is not declared`, outcome, 'unavailable', 'undeclared-capability');
   if (capability === 'resume') {
-    unavailable(await probe.call('resumeSession', { ...probe.startRequest(1), nativeSessionId: 'undeclared' }));
+    unavailable(await probe.call('resumeSession', { ...probe.startRequest(2), nativeSessionId: 'undeclared' }));
   } else if (capability === 'terminal') {
     unavailable(await probe.call('terminalProgram', session));
   } else if (capability === 'delegation') {
-    unavailable(await probe.call('respond', { ...session, nativeRequestId: 'undeclared', response: responseFor('delegation-request') }));
+    unavailable(await probe.call('respond', { ...session, nativeRequestId: 'undeclared', response: delegationResult(0, 'completed') }));
   } else if (capability === 'input-requests') {
-    unavailable(await probe.call('respond', { ...session, nativeRequestId: 'undeclared', response: responseFor('input-request') }));
+    unavailable(await probe.call('respond', { ...session, nativeRequestId: 'undeclared', response: inputAnswer() }));
   }
 }
 
-function responseFor(kind: 'input-request' | 'delegation-request'): ResponseData {
-  return kind === 'input-request'
-    ? { kind: 'input', text: INPUT_ANSWER }
-    : { kind: 'delegation-result', delegationId: 'delegation-1', outcome: 'completed', summary: DELEGATION_SUMMARY };
+function inputAnswer(): Extract<ResponseData, { kind: 'input' }> {
+  return { kind: 'input', text: INPUT_ANSWER };
+}
+
+function delegationResult(index: number, outcome: DelegationOutcome): DelegationResult {
+  const number = index + 1;
+  return { kind: 'delegation-result', delegationId: `delegation-${number}`, outcome, summary: `${DELEGATION_SUMMARY} ${number}` };
 }
 
 interface ProbeContext {
@@ -295,6 +372,7 @@ class Probe {
   readonly #turns = new Map<string, TurnRecord>();
   readonly #requests = new Set<string>();
   #events: AsyncIterator<HarnessEventData> | undefined;
+  #session: SessionRequest | undefined;
   #generation = 0;
   #ended = false;
 
@@ -338,6 +416,7 @@ class Probe {
   async close(session: SessionRequest): Promise<void> {
     const open = [...this.#turns].filter(([, turn]) => turn.generation === session.generation && turn.outcome === undefined);
     if (!this.succeeded('close', await this.call('closeSession', session))) return;
+    this.#session = undefined;
     if (!(await this.sessionEnd(['closed']))) return;
     for (const [turnId, turn] of open) {
       if (turn.outcome !== undefined && turn.outcome !== 'interrupted') {
@@ -357,8 +436,8 @@ class Probe {
 
   async actionRuns(): Promise<number | undefined> {
     const runs = await this.#fixtureCall('actionRuns', () => this.#context.fixture.actionRuns());
-    if (runs === undefined || Number.isInteger(runs)) return runs;
-    this.report('fixture', 'actionRuns must return an integer');
+    if (runs === undefined || (Number.isSafeInteger(runs) && runs >= 0)) return runs;
+    this.report('fixture', 'actionRuns must return a non-negative safe integer');
     return undefined;
   }
 
@@ -368,7 +447,7 @@ class Probe {
   }
 
   async request(kind: HarnessRequestKind): Promise<string | undefined> {
-    if (!this.#context.capabilities.supported.includes(capabilityOfRequest(kind))) return undefined;
+    if (!this.declares(capabilityOfRequest(kind))) return undefined;
     const event = await this.#next((each) => each.kind === kind);
     return event !== undefined && 'nativeRequestId' in event ? event.nativeRequestId : undefined;
   }
@@ -391,8 +470,13 @@ class Probe {
     return true;
   }
 
-  expectOutput(turnId: string, expected: string, message: string): void {
-    if (!(this.#turns.get(turnId)?.output.includes(expected) ?? false)) this.report('outcome', message);
+  expectOutput(turnId: string, expected: readonly string[], message: string): void {
+    const output = this.#turns.get(turnId)?.output ?? '';
+    if (!expected.every((text) => output.includes(text))) this.report('outcome', message);
+  }
+
+  declares(capability: HarnessCapability): boolean {
+    return this.#context.capabilities.supported.includes(capability);
   }
 
   declaresLimitSignal(): boolean {
@@ -438,6 +522,28 @@ class Probe {
     this.#context.findings.push({ scenario: this.#context.scenario, check, message });
   }
 
+  // Best effort and without findings: closes a session the scenario left
+  // open, and ends its harness through the fixture when that fails.
+  async cleanUp(): Promise<void> {
+    const session = this.#session;
+    this.#session = undefined;
+    if (this.#events !== undefined) this.#abandon(this.#events);
+    if (session === undefined || this.#ended) return;
+    const raw = await this.#quietly(() => this.#context.harness.closeSession({ ...session }));
+    const closed = parseOperationResult('closeSession', raw);
+    if (closed.ok && closed.value.ok) return;
+    await this.#quietly(() => this.#context.fixture.endHarness({ ...session }));
+  }
+
+  async #quietly<Value>(work: () => Promise<Value>): Promise<Value | undefined> {
+    try {
+      const value = await this.#withDeadline(Promise.resolve(work()), undefined);
+      return value === TIMED_OUT ? undefined : value;
+    } catch {
+      return undefined;
+    }
+  }
+
   async #fixtureCall<Value>(name: string, work: () => Promise<Value>): Promise<Value | undefined> {
     try {
       const value = await this.#withDeadline(Promise.resolve(work()), name);
@@ -448,9 +554,16 @@ class Probe {
     }
   }
 
+  // The session is tracked before its events are read, so that cleanup
+  // closes it even when subscribing fails.
   async #open(operation: string, handle: Outcome | undefined, generation: number): Promise<SessionRequest | undefined> {
     if (!this.succeeded(operation, handle) || !handle?.ok) return undefined;
     const session = { nativeSessionId: (handle.value as { nativeSessionId: string }).nativeSessionId, generation };
+    this.#session = session;
+    this.#events = undefined;
+    this.#generation = generation;
+    this.#ended = false;
+    this.#requests.clear();
     const events = await this.call('events', session);
     if (!this.succeeded('events', events) || !events?.ok) return undefined;
     try {
@@ -459,20 +572,17 @@ class Probe {
       this.report('threw', `the events could not be iterated: ${String(error)}`);
       return undefined;
     }
-    this.#generation = generation;
-    this.#ended = false;
-    this.#requests.clear();
     return session;
   }
 
-  // Reads events until one matches, within one deadline for the whole wait;
-  // each is checked against the session's rules on the way.
+  // Reads events until one matches, within one deadline for the whole wait,
+  // checked by the clock too: events that never yield starve the timer.
   async #next(matches: (event: HarnessEvent) => boolean): Promise<HarnessEvent | undefined> {
     const deadline = Date.now() + this.#context.timeoutMs;
     for (;;) {
       const events = this.#events;
       if (events === undefined) return undefined;
-      const step = await this.#read(events, deadline - Date.now());
+      const step = await this.#readBefore(events, deadline);
       if (step === 'timeout') return (this.report('timeout', `no matching event within ${this.#context.timeoutMs} ms`), undefined);
       if (step === 'threw' || step.done) return (this.report('event', 'the events ended before the expected event'), undefined);
       const event = this.#check(step.value);
@@ -486,11 +596,18 @@ class Probe {
     return step !== 'timeout' && step !== 'threw' && step.done === true;
   }
 
+  async #readBefore(events: AsyncIterator<HarnessEventData>, deadline: number): Promise<ReadStep> {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs > 0) return this.#read(events, remainingMs);
+    this.#abandon(events);
+    return 'timeout';
+  }
+
   // A read that times out abandons the iterator, so no later read overlaps
   // a pending one; its return() is requested but not awaited.
-  async #read(events: AsyncIterator<HarnessEventData>, remainingMs: number): Promise<IteratorResult<HarnessEventData> | 'timeout' | 'threw'> {
+  async #read(events: AsyncIterator<HarnessEventData>, remainingMs: number): Promise<ReadStep> {
     try {
-      const step = await this.#withDeadline(Promise.resolve(events.next()), undefined, Math.max(remainingMs, 0));
+      const step = await this.#withDeadline(Promise.resolve(events.next()), undefined, remainingMs);
       if (step !== TIMED_OUT) return step;
       this.#abandon(events);
       return 'timeout';

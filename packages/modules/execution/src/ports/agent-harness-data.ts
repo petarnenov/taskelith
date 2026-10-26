@@ -69,7 +69,7 @@ const MAX_PATH_LENGTH = 1024;
 const MAX_FAILURE_MESSAGE_LENGTH = 4096;
 const BRANCH_PREFIX = 'refs/heads/';
 // Rules of git check-ref-format for one branch name, without its prefix.
-const BAD_BRANCH = /(?:^|\/)\.|\.\.|@\{|\/\/|[\x00-\x20\x7f~^:?*[\\]|\.lock(?:\/|$)|[/.]$|^@$/;
+const BAD_BRANCH = /(?:^|\/)\.|\.\.|@\{|\/\/|[\x00-\x20\x7f~^:?*[\\]|\.lock(?:\/|$)|[/.]$/;
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
 
 export function parseAgentHarnessCapabilities(raw: unknown): Result<ParsedAgentHarnessCapabilities> {
@@ -118,8 +118,8 @@ export function parseHarnessEvent(raw: unknown, capabilities: ParsedAgentHarness
   });
 }
 
-// A plugin's operation result: exactly a kernel Result, whose value has the
-// shape its operation defines. The outer Result fails when it is malformed.
+// Exactly a kernel Result: a success has an own `value`, even undefined,
+// of its operation's shape. The outer Result fails when it is malformed.
 export function parseOperationResult(operation: AgentHarnessOperation, raw: unknown): Result<Result<unknown>> {
   return guarded<Result<unknown>>('result', () => {
     const fields = readFields('result', raw, ['ok'], ['value', 'error']);
@@ -131,6 +131,7 @@ export function parseOperationResult(operation: AgentHarnessOperation, raw: unkn
     }
     if (fields.value.ok !== true) return invalid('result.ok', 'must be a boolean');
     if (Object.hasOwn(fields.value, 'error')) return invalid('result.error', 'is not a field of a success');
+    if (!Object.hasOwn(fields.value, 'value')) return invalid('result.value', 'is missing');
     const value = readOperationValue(operation, fields.value.value);
     return value.ok ? ok(ok(value.value)) : value;
   });

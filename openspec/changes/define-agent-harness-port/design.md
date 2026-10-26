@@ -31,4 +31,5 @@ Architecture section 7 lists the capabilities the first real agent adapter must 
 
 - **One harness behind the contract.** The contract draws on one qualified harness. G4 may find a rule that a second harness cannot meet; the port stays at an unfrozen `0.1.0` until then, and a contract change follows.
 - **Contracts before the G2 closure.** If the G2 closure defers something this port relies on, a follow-up change corrects it, as the owner decided on 2026-10-26.
+- **Terminal on macOS.** A terminal program runs in its own session under a pseudo-terminal and so leaves the execution's process group, on which the macOS supervisor's termination evidence rests. On Linux the cgroup covers it. On macOS the host offers no terminal until item 39 extends the supervisor identity contract to record, signal, and prove the end of the terminal's process group; this point stays open until then.
 - **Obligations the suite cannot check.** The pinned binary digest, disabled self-update, the write set, and process-group containment need a real harness; the contract assigns them to items 18, 19, and 35.

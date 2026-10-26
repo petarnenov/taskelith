@@ -45,14 +45,38 @@ Every permission, input, and delegation request SHALL carry a native request ID 
 - **THEN** a response to that request fails with `not-found`, and the host reconciles it as unresolved
 
 ### Requirement: Generations
-Each start or resume of a session SHALL use the next generation, and a request for a generation other than the session's current one SHALL fail with `precondition-failed`.
+A session SHALL start at generation 1 exactly, a start at another generation SHALL fail with `invalid`, a resume SHALL use exactly the generation after the last one or fail with `precondition-failed`, and a request for a generation other than the session's current one SHALL fail with `precondition-failed`.
+
+#### Scenario: Start at a later generation
+- **WHEN** the host starts a session at generation 2
+- **THEN** the start fails with `invalid`
+
+#### Scenario: Resume that skips a generation
+- **WHEN** the host resumes a session that ended at generation 1 at generation 3
+- **THEN** the resume fails with `precondition-failed`
+
+#### Scenario: Close at an earlier generation
+- **WHEN** the host closes a resumed session at its earlier generation
+- **THEN** the call fails with `precondition-failed`
 
 #### Scenario: Response for an earlier process
 - **WHEN** a response names an earlier generation of the session
 - **THEN** it fails with `precondition-failed` and is not applied
 
 ### Requirement: Delegation and terminal
-A delegation's result SHALL return to the parent attempt as the single response to its native delegation request, and a terminal program SHALL be given only for a running session at its current generation.
+A delegation's result SHALL return to the parent attempt as the single response to its native delegation request, a terminal program SHALL be given only for a running session at its current generation, and the host SHALL run it in its own session under a pseudo-terminal, offering it on macOS only once the supervisor identity contract covers the terminal's process group.
+
+#### Scenario: Terminal on Linux
+- **WHEN** the host runs a terminal program on Linux
+- **THEN** the execution's cgroup containment covers the terminal's processes
+
+#### Scenario: Terminal on macOS before item 39
+- **WHEN** the supervisor identity contract does not yet record, signal, and prove the end of the terminal's process group
+- **THEN** the host does not offer `terminal` on macOS
+
+#### Scenario: Delegation outcomes by correlation
+- **WHEN** the host answers four delegation requests with the outcomes `completed`, `rejected`, `failed`, and `cancelled`, each with its own delegation ID
+- **THEN** each turn's output contains its own delegation ID, outcome, and summary
 
 #### Scenario: Terminal after close
 - **WHEN** the host asks for a terminal program of a closed session

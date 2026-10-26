@@ -189,6 +189,7 @@ test('harness events are parsed against the declaration', () => {
     { kind: 'output', turnId: 't', text: 'x' },
     { kind: 'permission-request', turnId: 't', nativeRequestId: 'r', summary: 's' },
     { kind: 'permission-request', turnId: 't', nativeRequestId: 'r', summary: 's', operation: { kind: 'push', ref: 'refs/heads/a/b' } },
+    { kind: 'permission-request', turnId: 't', nativeRequestId: 'r', summary: 's', operation: { kind: 'push', ref: 'refs/heads/@' } },
     { kind: 'input-request', turnId: 't', nativeRequestId: 'r', prompt: 'p' },
     { kind: 'delegation-request', turnId: 't', nativeRequestId: 'r', instructions: 'i' },
     { kind: 'account-signal', signal: 'usage', usage: 1 },
@@ -243,13 +244,14 @@ test('operation results are parsed as exact kernel Results', () => {
   const iterable = { async *[Symbol.asyncIterator]() { /* no events */ } };
   assert.deepEqual(parseOperationResult('startSession', ok({ nativeSessionId: 'n' })), ok(ok({ nativeSessionId: 'n' })));
   assert.deepEqual(parseOperationResult('submitTurn', ok(undefined)), ok(ok(undefined)));
-  assert.deepEqual(parseOperationResult('submitTurn', { ok: true }), ok(ok(undefined)));
+  assert.deepEqual(parseOperationResult('submitTurn', { ok: true, value: undefined }), ok(ok(undefined)));
   assert.deepEqual(parseOperationResult('terminalProgram', ok({ argv: ['sh'], workingDirectory: '/w' })), ok(ok({ argv: ['sh'], workingDirectory: '/w' })));
   assert.deepEqual(parseOperationResult('respond', err(failure('conflict', 'again', { field: 'x' }))), ok(err(failure('conflict', 'again', { field: 'x' }))));
   assert.equal(code(parseOperationResult('events', ok(iterable))), 'ok');
   const malformed: readonly [string, Parameters<typeof parseOperationResult>[0], unknown][] = [
     ['not an object', 'submitTurn', 'ok'],
     ['inherited ok', 'submitTurn', Object.create({ ok: true })],
+    ['success without value', 'submitTurn', { ok: true }],
     ['extra field', 'submitTurn', { ok: true, value: undefined, extra: 1 }],
     ['value on void', 'submitTurn', ok('x')],
     ['error on success', 'submitTurn', { ok: true, error: failure('internal', 'x') }],
@@ -278,6 +280,7 @@ test('the scripted harness keeps its own rules outside the suite', async () => {
     terminal: { argv: ['shell'], workingDirectory: '/work' },
   });
   assert.equal(code(await harness.startSession({ ...START, generation: 0 })), 'invalid');
+  assert.equal(code(await harness.startSession({ ...START, generation: 2 })), 'invalid');
   assert.equal(code(await harness.startSession({ ...START, binaryPath: '' })), 'invalid');
   assert.equal(code(await harness.startSession({ ...START, credential: { mechanism: 'device-login', secret: '' } })), 'invalid');
   const { session, events } = await started(harness);
@@ -295,6 +298,7 @@ test('the scripted harness keeps its own rules outside the suite', async () => {
   const [first, second] = await Promise.all([harness.closeSession(session), harness.closeSession(session)]);
   assert.deepEqual([code(first), code(second)], ['ok', 'ok']);
   assert.deepEqual(await drain(events), ['output', 'turn-ended:failed', 'session-ended']);
+  assert.equal(code(await harness.resumeSession({ ...resume, generation: 3 })), 'precondition-failed');
   await harness.exitHarness(session.nativeSessionId);
   await harness.exitHarness('unknown');
 });
@@ -318,9 +322,50 @@ test('the scripted harness rejects a response of the wrong kind', async () => {
   assert.equal(request.kind, 'permission-request');
   const nativeRequestId = request.kind === 'permission-request' ? request.nativeRequestId : '';
   assert.equal(code(await harness.respond({ ...session, nativeRequestId, response: { kind: 'input', text: 'x' } })), 'invalid');
-  const message = { ...session, nativeRequestId, response: { kind: 'permission', decision: 'allow', message: 1 } } as unknown as RespondRequest;
-  assert.equal(code(await harness.respond(message)), 'invalid');
+  const long = 'x'.repeat(65_537);
+  const malformed: readonly unknown[] = [
+    { kind: 'permission', decision: 'allow', message: 1 },
+    { kind: 'permission', decision: 'allow', message: long },
+    { kind: 'permission', decision: 'allow', scope: 'always' },
+    { kind: 'input', text: 'x', format: 'plain' },
+    { kind: 'input', text: long },
+    { kind: 'delegation-result', delegationId: 'd'.repeat(129), outcome: 'completed', summary: 's' },
+    { kind: 'delegation-result', delegationId: 'd', outcome: 'completed', summary: long },
+    { kind: 'delegation-result', delegationId: 'd', outcome: 'completed', summary: 's', cost: 1 },
+  ];
+  for (const response of malformed) {
+    const respond = { ...session, nativeRequestId, response } as RespondRequest;
+    assert.equal(code(await harness.respond(respond)), 'invalid', JSON.stringify(response).slice(0, 80));
+  }
+  assert.equal(code(await harness.respond({ ...session, nativeRequestId, response: { kind: 'permission', decision: 'allow' } })), 'ok');
   assert.equal(code(await harness.closeSession(session)), 'ok');
+});
+
+test('the scripted harness resumes only after an unfinished close', async () => {
+  const harness = new ScriptedAgentHarness(OPTIONS);
+  const { session, events } = await started(harness);
+  await harness.submitTurn({ ...session, turnId: 't1', text: 'permission' });
+  assert.equal((await events.next()).value?.kind, 'permission-request');
+  const resume = { ...START, generation: 2, workingDirectory: '/moved', nativeSessionId: session.nativeSessionId };
+  const closed = harness.closeSession(session);
+  const resumed = harness.resumeSession(resume);
+  const raced = harness.resumeSession(resume);
+  assert.deepEqual([code(await closed), code(await resumed), code(await raced)], ['ok', 'ok', 'precondition-failed']);
+  const next = { ...session, generation: 2 };
+  const subscribed = await harness.events(next);
+  assert.ok(subscribed.ok);
+  const fresh = subscribed.value[Symbol.asyncIterator]();
+  assert.deepEqual(await harness.terminalProgram(next), ok({ argv: ['scripted-terminal'], workingDirectory: '/moved' }));
+  await harness.submitTurn({ ...next, turnId: 't2', text: 'permission' });
+  const request = (await fresh.next()).value as HarnessEventData;
+  assert.ok(request.kind === 'permission-request');
+  const allow = { ...next, nativeRequestId: request.nativeRequestId, response: { kind: 'permission', decision: 'allow' } } as const;
+  assert.equal(code(await harness.respond(allow)), 'ok');
+  assert.deepEqual([(await fresh.next()).value?.kind, (await fresh.next()).value], ['output', { kind: 'turn-ended', turnId: 't2', outcome: 'completed' }]);
+  assert.equal(code(await harness.closeSession(next)), 'ok');
+  assert.deepEqual(await drain(fresh), ['session-ended']);
+  assert.deepEqual(await drain(events), ['turn-ended:interrupted', 'session-ended']);
+  assert.equal(harness.actionRuns(), 1);
 });
 
 // Broken harnesses, each breaking one rule, to show the suite finds it.
@@ -430,6 +475,37 @@ class ThrowingEventsHarness extends ScriptedAgentHarness {
   }
 }
 
+// Events that resolve at once and never match, so the timer never fires.
+class EndlessEventsHarness extends ScriptedAgentHarness {
+  override async events(request: SessionRequest): Promise<Result<AsyncIterable<HarnessEventData>>> {
+    const events = await super.events(request);
+    const usage = { kind: 'account-signal', signal: 'usage', usage: 0.5 } as const;
+    return events.ok ? ok({ [Symbol.asyncIterator]: () => ({ next: async () => ({ done: false, value: usage }) }) }) : events;
+  }
+}
+
+class UnfencedCloseHarness extends ScriptedAgentHarness {
+  override async closeSession(request: SessionRequest): Promise<Result<void>> {
+    const result = await super.closeSession(request);
+    return !result.ok && result.error.code === 'precondition-failed' ? ok(undefined) : result;
+  }
+}
+
+class CountedCloseHarness extends ScriptedAgentHarness {
+  readonly closed: string[] = [];
+
+  override async closeSession(request: SessionRequest): Promise<Result<void>> {
+    this.closed.push(request.nativeSessionId);
+    return super.closeSession(request);
+  }
+}
+
+class FailingCloseHarness extends ScriptedAgentHarness {
+  override async closeSession(): Promise<Result<void>> {
+    return err(failure('internal', 'cannot close'));
+  }
+}
+
 class UniterableEventsHarness extends ScriptedAgentHarness {
   override async events(request: SessionRequest): Promise<Result<AsyncIterable<HarnessEventData>>> {
     const events = await super.events(request);
@@ -453,12 +529,29 @@ test('the suite reports each broken rule', async () => {
     ['silent events', new SilentHarness(OPTIONS), 'timeout'],
     ['throwing events', new ThrowingEventsHarness(OPTIONS), 'threw'],
     ['events without an iterator', new UniterableEventsHarness(OPTIONS), 'threw'],
+    ['endless immediate events', new EndlessEventsHarness(OPTIONS), 'timeout'],
+    ['close at an earlier generation', new UnfencedCloseHarness(OPTIONS), 'outcome'],
     ['forgotten context', new ScriptedAgentHarness({ ...OPTIONS, script: { ...SCRIPT, recall: [{ output: 'no idea' }] } }), 'outcome'],
     ['wrong outcome', new ScriptedAgentHarness({ ...OPTIONS, script: { ...SCRIPT, remember: [{ end: 'interrupted' }] } }), 'outcome'],
     ['limit without signal', new ScriptedAgentHarness({ ...OPTIONS, script: { ...SCRIPT, 'account limit': [{ end: 'account-limit-reached' }] } }), 'event'],
     ['wrong failure', new ScriptedAgentHarness({ ...OPTIONS, script: { ...SCRIPT, 'turn limit': [{ end: 'failed', failure: 'internal' }] } }), 'outcome'],
   ];
   for (const [name, harness, check, overrides] of cases) assert.ok((await checksOf(harness, overrides)).has(check), name);
+});
+
+test('the suite closes a session that a scenario left open', async () => {
+  const passing = new CountedCloseHarness(OPTIONS);
+  assert.deepEqual(await findingsOf(passing), []);
+  assert.equal(passing.closed.filter((id) => id === 'scripted-conformance-1').length, 2);
+  assert.ok(!passing.closed.includes('scripted-conformance-4'));
+  const stuck = new CountedCloseHarness({ ...OPTIONS, script: { ...SCRIPT, remember: [{ waitForInterrupt: true }] } });
+  const findings = await findingsOf(stuck);
+  assert.ok(findings.some((finding) => finding.scenario === 'chat with prompt correlation' && finding.check === 'timeout'));
+  assert.ok(stuck.closed.includes('scripted-conformance-1'));
+  const unclosable = new FailingCloseHarness(OPTIONS);
+  const ended: string[] = [];
+  await findingsOf(unclosable, { endHarness: async (session) => { ended.push(session.nativeSessionId); } });
+  assert.ok(ended.includes('scripted-conformance-1'));
 });
 
 test('the suite reports a broken fixture', async () => {
@@ -469,8 +562,9 @@ test('the suite reports a broken fixture', async () => {
   assert.ok((await checksOf(noExit, { endHarness: async () => undefined })).has('timeout'));
   const brokenProbe = new ScriptedAgentHarness(OPTIONS);
   assert.ok((await checksOf(brokenProbe, { actionRuns: async () => { throw new Error('gone'); } })).has('fixture'));
-  const fractional = new ScriptedAgentHarness(OPTIONS);
-  assert.ok((await checksOf(fractional, { actionRuns: async () => 0.5 })).has('fixture'));
+  for (const runs of [0.5, -1, 2 ** 53]) {
+    assert.ok((await checksOf(new ScriptedAgentHarness(OPTIONS), { actionRuns: async () => runs })).has('fixture'), String(runs));
+  }
   for (const timeoutMs of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 1.5]) {
     assert.deepEqual(await findingsOf(new ScriptedAgentHarness(OPTIONS), { timeoutMs }), [
       { scenario: 'fixture', check: 'fixture', message: 'timeoutMs must be an integer from 1 to 600000' },

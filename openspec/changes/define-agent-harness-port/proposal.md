@@ -5,7 +5,7 @@ Architecture section 7 requires the first real agent adapter to specify its nati
 ## What Changes
 
 - Add the agent harness port contract (`docs/contracts/agent-harness-port.md`): declared capabilities, sessions and generations, host-generated turn IDs mapped to native correlation, native permission, input, and delegation requests with a single response, the terminal program, turn outcomes, session end, and error mapping, subscription mechanisms and account signals, pinned binaries with self-update disabled, the process-group obligation on macOS, and the conformance suite.
-- Add the `AgentHarness` port types and contract constants to the Execution module, with the parsers of the capability declaration and of harness events.
+- Add the `AgentHarness` port types and contract constants to the Execution module, with the parsers of the capability declaration, of harness events, and of operation results (`parseAgentHarnessCapabilities`, `parseHarnessEvent`, and `parseOperationResult`).
 - Add the harness-neutral conformance suite `runAgentHarnessConformance` and the scripted test harness `ScriptedAgentHarness`, with tests that run the suite against it and against broken variants.
 - No real harness plugin, no harness host, no account pool, and no wire schema. The port is not frozen in the plugin SDK.
 
