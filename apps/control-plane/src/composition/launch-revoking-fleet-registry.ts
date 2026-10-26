@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { WorkerId } from '@taskelith/execution';
-import { ok, parseIdentifier, type Instant, type Result } from '@taskelith/kernel';
+import { parseIdentifier, type Instant, type Result } from '@taskelith/kernel';
 import { CommittingFleetRegistry, type PostgresDatabase } from '@taskelith/postgres';
-import { invalidateWorkerLaunches } from '@taskelith/scheduling';
+import { releaseRevokedWorker } from '../application/worker-revocation.js';
 
 // A worker revocation is an invalidating writer (launch authorization
-// section 5): in its transaction it revokes and cancels the worker's grants.
+// section 5); in its transaction it also frees what the worker cannot run.
 export class LaunchRevokingFleetRegistry extends CommittingFleetRegistry {
   readonly #database: PostgresDatabase;
 
@@ -20,8 +20,7 @@ export class LaunchRevokingFleetRegistry extends CommittingFleetRegistry {
     return this.#database.transaction(async (tx) => {
       const revoked = await tx.fleet.revoke(workerId, at);
       if (!revoked.ok) return revoked;
-      const invalidated = await invalidateWorkerLaunches(tx, workerId, correlationId.value);
-      return invalidated.ok ? ok(undefined) : invalidated;
+      return releaseRevokedWorker(tx, workerId, correlationId.value);
     });
   }
 }

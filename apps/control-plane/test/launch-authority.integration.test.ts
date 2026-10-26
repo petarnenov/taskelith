@@ -270,10 +270,25 @@ test('a worker revocation revokes its grants, cancels them, and leaves the execu
   value(await fleet.revoke(WORKER.workerId, WORKER.enrolledAt));
   assert.deepEqual(await rows('SELECT live FROM launch_authorizations'), [{ live: false }]);
   assert.deepEqual(await rows(`SELECT unknown_executions FROM tasks WHERE id = '${taskId}'`), [{ unknown_executions: 1 }]);
-  assert.equal((await rows(`SELECT 1 FROM outbox WHERE event_type = 'execution.cancellation.request'`)).length, 1);
+  const commands = await rows(`SELECT message FROM outbox WHERE event_type = 'execution.cancellation.request'`);
+  assert.deepEqual(commands.map((command) => JSON.parse(command.message as string).payload.payload.reason), ['launch-revoked']);
+  const [task] = await rows(`SELECT record FROM tasks WHERE id = '${taskId}'`);
+  assert.equal(JSON.parse(task!.record as string).attempts[0].cancellation.reason, 'launch-revoked');
   assert.equal(kindOf(await authority.authorize(PRINCIPAL, request)), 'rejected:worker-not-authorized', 'a replay re-checks the credential');
   value(await fleet.revoke(WORKER.workerId, WORKER.enrolledAt));
   assert.equal((await rows(`SELECT 1 FROM outbox WHERE event_type = 'execution.cancellation.request'`)).length, 1, 'a repeated revocation reads nothing live');
+});
+
+test('a worker whose enrolled journal is retired is rejected, also on a replay, and the rejection is recorded', async () => {
+  const { request } = await placed();
+  grantOf(await authority.authorize(PRINCIPAL, request));
+  await sql(url, `INSERT INTO producer_cursors (worker_id, journal_id, confirmed_through, applied_above, retired_at)
+    VALUES ($1, $2, 0, '{}', now())`, [WORKER.workerId, WORKER.journalId]);
+  assert.equal(kindOf(await authority.authorize(PRINCIPAL, request)), 'rejected:worker-not-authorized', 'a replay');
+  const fresh = { ...request, operationId: id('OperationId', 'operation-2') as never };
+  assert.equal(kindOf(await authority.authorize(PRINCIPAL, fresh)), 'rejected:worker-not-authorized');
+  assert.equal(kindOf(await authority.authorize(PRINCIPAL, fresh)), 'rejected:worker-not-authorized', 'final');
+  assert.deepEqual(await rows('SELECT operation_id FROM launch_rejections'), [{ operation_id: 'operation-2' }]);
 });
 
 test('concurrent requests of one operation leave one grant, and a racing revocation is ordered before or after it', async () => {

@@ -9,6 +9,7 @@ import {
   type LaunchAuthId,
   type LaunchAuthorizationRequest,
   type LaunchContext,
+  type LaunchGrant,
   type LaunchOutcome,
   type LaunchParameters,
   type LaunchRejection,
@@ -22,6 +23,7 @@ import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kerne
 import { launchAssignment, launchReservation, type Assignment } from '@taskelith/scheduling';
 import type { TaskAdmission } from '@taskelith/sdlc';
 import type { ControlPlaneStore, ControlPlaneTransaction } from './control-plane-store.js';
+import { isRetiredJournal } from './journal-reconciliation.js';
 import type { WorkflowRegistry } from './workflow-registry.js';
 
 export interface LaunchAuthoritySettings {
@@ -120,10 +122,15 @@ type Checked = Pick<LaunchContext, 'installation' | 'workerAuthorized'>;
 async function replay(tx: ControlPlaneTransaction, recorded: RecordedLaunch, request: LaunchRequest, checked: Checked): Promise<Result<LaunchOutcome>> {
   const task = await tx.tasks.get(recorded.taskId);
   if (!task.ok) return task;
-  const grant = task.value.attempts.flatMap((attempt) => attempt.executions).flatMap((execution) => execution.grants)
-    .find((candidate) => candidate.launchAuthId === recorded.launchAuthId);
+  const grant = grantIn(task.value, recorded.launchAuthId);
   if (grant === undefined) return err(failure('internal', `grant ${recorded.launchAuthId} is not in task ${recorded.taskId}`));
   return ok(replayLaunchOperation(task.value, grant, request, checked, await tx.now()));
+}
+
+// The grant stays in its task's record (contract section 11).
+export function grantIn(task: Task, launchAuthId: LaunchAuthId): LaunchGrant | undefined {
+  return task.attempts.flatMap((attempt) => attempt.executions).flatMap((execution) => execution.grants)
+    .find((candidate) => candidate.launchAuthId === launchAuthId);
 }
 
 function repeatedRejection(recorded: RecordedRejection, request: LaunchRequest): LaunchOutcome {
@@ -148,13 +155,15 @@ function isSameOperation(recorded: LaunchRequest, request: LaunchRequest): boole
   return compared.every((field) => recorded[field] === request[field]);
 }
 
-// The worker as the deciding transaction reads it: enrolled, unrevoked, and
-// at its current generation (contract section 2), not a predecessor's.
+// The worker as the deciding transaction reads it: enrolled, unrevoked, at
+// its current generation, and under a journal not retired (decision 7).
 async function isCurrentWorker(tx: ControlPlaneTransaction, principal: WorkerPrincipal): Promise<Result<boolean>> {
   const worker = await tx.fleet.worker(principal.workerId);
   if (!worker.ok) return worker;
   if (worker.value === undefined) return ok(false);
-  return ok(worker.value.revokedAt === undefined && worker.value.credentials.current.generation === principal.generation);
+  const { revokedAt, credentials, journalId } = worker.value;
+  if (revokedAt !== undefined || credentials.current.generation !== principal.generation) return ok(false);
+  return ok(!(await isRetiredJournal(tx, { workerId: principal.workerId, journalId })));
 }
 
 // A stored run without its workflow reaches no decision; the worker retries
@@ -163,7 +172,7 @@ function noDecision(message: string): Result<never> {
   return err(failure('unavailable', message));
 }
 
-async function installationState(tx: ControlPlaneTransaction): Promise<Result<InstallationState>> {
+export async function installationState(tx: ControlPlaneTransaction): Promise<Result<InstallationState>> {
   const epoch = await tx.installation.recoveryEpoch();
   const recoveryEpoch = epoch === undefined ? undefined : parseRecoveryEpoch(epoch);
   if (recoveryEpoch === undefined || !recoveryEpoch.ok) return err(failure('internal', 'the installation has no valid recovery epoch'));
