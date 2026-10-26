@@ -186,29 +186,35 @@ describe('control plane to PostgreSQL', () => {
     const exitFirst = random.nextInt(2) === 1;
     await recordScenario({ scenario: 'partition-control-plane-postgres-beyond-redelivery', seed: SEED }, () => withPartitions((toxiproxy) => withInstallation({ postgres: 'proxied', toxiproxy }, async (installation) => {
       const postgres = toxiproxy.proxy('postgres');
+      // The supervisor starts only once the route is cut, so the control
+      // plane cannot record the start before the partition.
+      const routeCut = new Gate();
       const worker = new ScenarioWorker(installation, {
         name: 'pg-beyond', random, nats: installation.nats, runMilliseconds: 1_000, enrollmentToken: await installation.enrollmentToken(),
+        beforeSupervisorStart: () => routeCut.opened,
       });
       await worker.start();
       try {
         await installation.submitTask('task-pg-beyond');
-        await waitFor(() => journaledState(worker) === 'started', 20_000, 'the start is journaled');
+        await waitFor(() => journaledState(worker) === 'authorized', 20_000, 'the launch is authorized');
         await postgres.disconnect();
+        routeCut.open();
         await waitFor(() => journaledState(worker) === 'exited', 20_000, 'the exit is journaled');
         // The quarantine API needs the database, so the log tells the moment.
         const startAndExit = 2;
-        await waitFor(() => lastDeliveries(installation) === startAndExit, REDELIVERY_BUDGET_MILLISECONDS + 20_000, 'the start and the exit quarantined');
+        await waitFor(() => lastDeliveredRun(installation).size === startAndExit, REDELIVERY_BUDGET_MILLISECONDS + 20_000, 'the start and the exit quarantined');
+        const run = lastDeliveredRun(installation);
         await postgres.heal();
         // The API answers again once its database connection is back.
-        const listed = () => quarantined(installation).catch(() => []);
+        const listed = async () => ofRun(await quarantined(installation).catch(() => []), run);
         await waitFor(async () => (await listed()).length === startAndExit, 20_000, 'the quarantine is listed');
-        const records = await quarantined(installation);
+        const records = ofRun(await quarantined(installation), run);
         assert.deepEqual(records.map(({ reason, deliveries }) => [reason, deliveries]), records.map(() => ['max-deliveries', SCENARIO_LIMITS.maxDeliver]));
         const beforeRedrive = (await installation.result('task-pg-beyond')).state;
         const ordered = exitFirst ? [...records].reverse() : records;
         for (const { sequence } of ordered) assert.equal((await installation.call('POST', `/quarantine/${sequence}/redrive`)).status, 200);
         const executed = await assertExitedOnce(installation, 'task-pg-beyond');
-        assert.deepEqual(await quarantined(installation), [], 'the redrive empties the quarantine');
+        assert.deepEqual(ofRun(await quarantined(installation), run), [], 'the redrive takes the run out of the quarantine');
         return `${records.length} quarantined; task ${beforeRedrive} before the redrive, ${exitFirst ? 'exit' : 'start'} first; ${executed.startKind} start`;
       } finally {
         await worker.stop();
@@ -221,10 +227,22 @@ async function inventoryRequests(installation: ScenarioInstallation): Promise<nu
   return (await installation.query(`SELECT 1 FROM outbox WHERE event_type = 'worker.inventory.requested'`)).length;
 }
 
-async function quarantined(installation: ScenarioInstallation): Promise<{ sequence: number; reason: string; deliveries: number }[]> {
+interface QuarantineRecord {
+  readonly sequence: number;
+  readonly reason: string;
+  readonly deliveries: number;
+  readonly originalMessageId?: string;
+}
+
+async function quarantined(installation: ScenarioInstallation): Promise<QuarantineRecord[]> {
   const listed = await installation.call('GET', '/quarantine');
   assert.equal(listed.status, 200, JSON.stringify(listed.body));
-  return listed.body.records as { sequence: number; reason: string; deliveries: number }[];
+  return listed.body.records as QuarantineRecord[];
+}
+
+// A run observation is published under its observation id as message id.
+function ofRun(records: readonly QuarantineRecord[], run: ReadonlySet<string>): QuarantineRecord[] {
+  return records.filter(({ originalMessageId }) => originalMessageId !== undefined && run.has(originalMessageId));
 }
 
 // The last reports' (requestId, snapshot) pairs, oldest first.
@@ -241,11 +259,15 @@ function findMessage(node: unknown, messageType: string): Record<string, unknown
   return Object.values(record).flatMap((child) => findMessage(child, messageType));
 }
 
-// Observations whose last allowed delivery failed.
-function lastDeliveries(installation: ScenarioInstallation): number {
-  return installation.logs.records.filter(({ event, fields }) =>
-    event === 'nats.message.redelivered' && fields.deliveryCount === SCENARIO_LIMITS.maxDeliver).length;
+// The start's and the exit's observation ids once their last delivery
+// failed; other observations in flight at the cut can fail as well.
+function lastDeliveredRun(installation: ScenarioInstallation): ReadonlySet<string> {
+  return new Set(installation.logs.records.filter(({ event, fields }) => event === 'nats.message.redelivered'
+    && RUN_OBSERVATIONS.includes(String(fields.type)) && fields.deliveryCount === SCENARIO_LIMITS.maxDeliver)
+    .flatMap(({ correlation }) => correlation.observationId ?? []));
 }
+
+const RUN_OBSERVATIONS = ['execution.started', 'execution.exited'];
 
 function unavailableAnswers(authority: OrderedAuthority): number {
   return authority.answered.filter(({ answer }) => !answer.ok && answer.error.code === 'unavailable').length;
