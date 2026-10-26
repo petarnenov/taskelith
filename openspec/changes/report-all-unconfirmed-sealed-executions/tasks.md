@@ -24,5 +24,5 @@
 - [x] 4.4 All crash windows with seed `2776760789` into this change's `results.jsonl`
 - [x] 4.5 proposal.md, design.md, spec deltas, `validate --strict`, and an archive in a scratch copy
 - [x] 4.6 `make verify`
-- [ ] 4.7 Independent review (OpenCode, `opencode-go/kimi-k2.7-code`)
-- [ ] 4.8 Archive on the branch (protocol step 7) and integration into `dev` by the coordinator
+- [x] 4.7 Independent review (OpenCode, `opencode-go/kimi-k2.7-code`): pass 1, 3 Low, fixed unreviewed
+- [x] 4.8 Archive on the branch (protocol step 7); integration into `dev` is the coordinator's

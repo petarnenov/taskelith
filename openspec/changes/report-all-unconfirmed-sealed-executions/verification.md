@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-26. Author verification only; no independent review has taken place yet.
+Date: 2026-10-26. Author verification and review pass 1 are recorded below; the fixes of pass 1 (Low only) are UNREVIEWED.
 
 ## Scope and source
 
@@ -12,7 +12,8 @@ Follow-up of defect D1 (`fix-launch-recovery-reauthorization`, archived), whose 
 
 ## Evidence
 
-- Revisions: `25080ec` (crash-window tests and harness only, on the base code), `94b2db2` (contracts), `e33a7bb` (implementation and unit tests), `29737c5` (OpenSpec artifacts and `results.jsonl`).
+- Revisions: `25080ec` (crash-window tests and harness only, on the base code), `94b2db2` (contracts), `e33a7bb` (implementation and unit tests), `29737c5` (OpenSpec artifacts and `results.jsonl`), `5f809b1` (this record), `421ae58` (merge of `origin/dev` at `843e293`, by the coordinator), `96cdc4a` (review pass 1 fixes).
+- Evidence freshness: the merge of `843e293` (`itg-streamline-task-integration`) changed the agent task protocol, governance and release documents, the pre-push hook and its scripts and tests, and the `agent-task-protocol`, `dependency-inventory`, and `integration-flow` specs. It touches no file of this change, no contract, and none of its requirements; the checks were repeated on the merged tree (below).
 - Environment: macOS Darwin 25.6.0 x86_64, Node v24.22.1, npm 12.2.1, Docker with the Compose services of `make verify`.
 - Dependencies: none added. Journal format: unchanged.
 - Contracts: `execution.openapi.json` 0.3.1 to 0.4.0, a declared breaking change (design D1). With the version left at 0.3.1, `scripts/check-contract-compatibility.ts` failed with three undeclared changes: `request-property-type-changed`, `request-property-min-items-set`, and `request-property-max-items-set` (`authorizeLaunch`). With 0.4.0 it reports `3 breaking change(s) against a38aefce00f7` and `Contract documents have no undeclared breaking change.`
@@ -45,7 +46,23 @@ Follow-up of defect D1 (`fix-launch-recovery-reauthorization`, archived), whose 
 - `npm run openspec -- validate report-all-unconfirmed-sealed-executions --strict`: `Change 'report-all-unconfirmed-sealed-executions' is valid`. Modified requirement bodies: 419 ("Execution ownership"), 490 ("Journaled launch authorization"), and 472 ("Start reconciliation", text unchanged) characters.
 - Archive in a scratch copy of `openspec/` (outside the worktree): `openspec archive report-all-unconfirmed-sealed-executions --yes` applied 1 modified requirement to `launch-authorization` and 2 to `worker-runtime`; then `openspec validate --all --strict --no-interactive`: `Totals: 69 passed, 0 failed`.
 - `npm run verify:comments`: `Every comment is within the comment length rule.`
-- `make verify` at `29737c5`: passed (exit 0) on the first run; 1926 tests, 1924 passed, 0 failed, 2 Linux-only tests skipped; coverage 99.30% lines, 92.13% branches, 99.04% functions (`launch-authorization.js` 100%, 98.71%, 100%; `journal-recovery.js` 100%; `launch-wire.js` 100%, 96.97%, 100%; `launch-orchestrator.js` 98.81%, 91.78%, 95.54%); contract compatibility as under Evidence; OpenSpec `70 passed, 0 failed`; `Every active OpenSpec change archives into strictly valid specs.`; `Packed file allowlist and installed CLI verification passed.` The known intermittent test did not fail.
+- `make verify` at `29737c5` (history, before the merge): passed (exit 0) on the first run; 1926 tests, 1924 passed, 0 failed, 2 Linux-only tests skipped; coverage 99.30% lines, 92.13% branches, 99.04% functions (`launch-authorization.js` 100%, 98.71%, 100%; `journal-recovery.js` 100%; `launch-wire.js` 100%, 96.97%, 100%; `launch-orchestrator.js` 98.81%, 91.78%, 95.54%); contract compatibility as under Evidence; OpenSpec `70 passed, 0 failed`; `Every active OpenSpec change archives into strictly valid specs.`; `Packed file allowlist and installed CLI verification passed.` The known intermittent test did not fail.
+
+- After review pass 1, on the tree of `96cdc4a` (the merge plus the pass 1 fixes), 2026-10-26 21:53 UTC, before the archive:
+  - `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 70 passed, 0 failed (70 items)`.
+  - `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `843e293`): empty, as expected before the archive.
+  - `make verify`: passed (exit 0) on the first run; 1934 tests, 1932 passed, 0 failed, 2 Linux-only tests skipped; coverage 99.28% lines, 92.09% branches, 99.04% functions (`launch-authorization.js` 100%, 98.71%, 100%; `journal-recovery.js` 100%; `launch-wire.js` 100%, 96.97%, 100%; `launch-orchestrator.js` 98.81%, 91.81%, 95.54%); `execution.openapi.json: 3 breaking change(s) against 843e293d72bf`, declared, 0 for the other documents; OpenSpec `70 passed, 0 failed`; `Every active OpenSpec change archives into strictly valid specs.`; `Packed file allowlist and installed CLI verification passed.` The known intermittent test did not fail.
+  - The crash windows (`results.jsonl`, commit `e33a7bb`) were not rerun separately: the merge and the pass 1 fixes change no input of the harness or the launch path, and `make verify` ran every crash window again on this tree.
+
+## Review
+
+### Review pass 1
+
+OpenCode, model `opencode-go/kimi-k2.7-code`, run by the coordinator under the [review process](../../../docs/governance.md#independent-review-process). Session `ses_e85dbb9d5ffeIdmD4uBDZ38OXW`. Revision reviewed: `421ae58` (the merge of `origin/dev` at `843e293` into the branch). Findings: 0 Critical, 0 High, 0 Medium, 3 Low. The fixes below are **UNREVIEWED** (Low-only pass, governance); no further review follows.
+
+- **L1 (UNREVIEWED fix):** this record named `make verify` at `29737c5` while the head was the merge `421ae58`. Resolution: the checks were rerun on the merged tree with the fixes (`96cdc4a`), recorded under Checks and results with revision and date; the earlier run stays as history.
+- **L2 (UNREVIEWED fix, `96cdc4a`):** the PostgreSQL test covered only a one-entry list. Resolution: `apps/control-plane/test/launch-authority.integration.test.ts:215` "a relaunch that reports two sealed executions ends both not-started and is granted in one commit": E3 reports [E1 already `not-started`, E2 the `authorized` owner]; a conflict in the second entry (E3 itself) leaves the grant rows unchanged; a crash before the commit leaves neither change; then E1 and E2 are `not-started` and E3 `authorized` in one task write. The file passes 18 of 18.
+- **L3 (UNREVIEWED fix, `96cdc4a`):** no worker test exercised the cap. Resolution: `apps/worker/test/start-reconciliation.test.ts:266` "after recovery, the first request reports exactly the oldest 8 of 10 unconfirmed sealed executions, in order". The file passes 41 of 41.
 
 ## Limitations
 
@@ -55,6 +72,6 @@ Follow-up of defect D1 (`fix-launch-recovery-reauthorization`, archived), whose 
 
 ## Remaining gates
 
-- Independent review: OpenCode, `opencode-go/kimi-k2.7-code`, pending.
-- Archive on the branch (protocol step 7), pending.
+- Independent review: done, pass 1 above; its Low fixes are unreviewed.
+- Archive on the branch (protocol step 7): see "Archive" below.
 - Integration into `dev` by the coordinator.
