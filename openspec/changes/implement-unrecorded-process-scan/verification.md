@@ -31,7 +31,7 @@ The `unrecorded-process` follow-up of [`implement-worker-start-reconciliation`](
 
 - Author, before review, at `3ad8666`: `make verify` exit 0; 1627 tests, 1612 passed, 0 failed, 15 skipped; coverage 99.13% lines, 91.61% branches, 98.59% functions.
 - Coordinating session, on the reviewed revision `ab9c95e`: `make verify` exit 0; 1627 tests, 1612 passed, 0 failed, 15 skipped; coverage 99.13% lines, 91.61% branches, 98.59% functions.
-- Author, after the pass 1 fixes, at `644311f` and again on the final head (the commit that adds this record, which changes only this file): `make verify` exit 0; 1628 tests, 1613 passed, 0 failed, 15 skipped; coverage 99.14% lines, 91.60% branches, 98.59% functions; `Every comment is within the comment length rule.`; `Every active OpenSpec change archives into strictly valid specs.`; `Packed file allowlist and installed CLI verification passed.`
+- Author, after the pass 1 fixes, at `644311f`, at `7ad8b0f`, and on the final head (each later commit changes only this file): `make verify` exit 0 each time; 1628 tests, 1613 passed, 0 failed, 15 skipped; coverage 99.14% lines, 98.59% functions, and 91.60% to 91.62% branches across the runs; `Every comment is within the comment length rule.`; `Every active OpenSpec change archives into strictly valid specs.`; `Packed file allowlist and installed CLI verification passed.`
 - `npm run openspec -- validate implement-unrecorded-process-scan --strict`: `Change 'implement-unrecorded-process-scan' is valid`.
 
 ## Review pass 1
