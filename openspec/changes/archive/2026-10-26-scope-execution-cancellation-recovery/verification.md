@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-26. The author's verification is recorded below; the independent review is still to come.
+Date: 2026-10-26. The author's verification, both independent review passes, and the archive on the task branch (worker step 7) are recorded below.
 
 ## Scope and source
 
@@ -66,6 +66,25 @@ Reviewer: OpenCode CLI, model `opencode-go/kimi-k3.1-pro`, variant `high`, assig
   1. `design.md:8` and 2. `verification.md:16` cited `launch-authorization.md:92`; after the merge the rule is on line 99.
   - **Fixed, unreviewed:** both citations now name line 99 (Low-only pass).
 
+### Merge of `origin/dev` with the new task protocol
+
+- **Merge:** `04fd83d` merges `origin/dev` at `843e293` with `streamline-task-integration` after review pass 2. It changes `docs/agent-task-protocol.md`, `docs/governance.md`, `docs/releases.md`, `AGENTS.md`, the task-protocol skill, `.githooks/pre-push`, `scripts/check-pre-push.ts`, `scripts/pre-push-checks.ts`, their tests, and the `agent-task-protocol`, `dependency-inventory`, and `integration-flow` specs. It merged without conflicts.
+- **Evidence freshness:** the merge touches no requirement, contract, implementation, or test of this change: not the worker-runtime "Cancellation forwarding" requirement, not `packages/modules/execution/src/domain/journal-recovery.ts`, and not its tests. No dependency changed, so `make setup` was not rerun. The review evidence stands; the archive checks below run on the merged tree.
+
+## Archive (worker step 7)
+
+After review pass 2 and its unreviewed Low fixes, and the merge `04fd83d`, every task in `tasks.md` was ticked and `npm run openspec -- archive scope-execution-cancellation-recovery --yes` applied the worker-runtime delta (1 modified requirement) and moved the change here. The checked state is the tree of the archive commit, which is the working tree the checks ran on.
+
+| Check on the archived tree | Result |
+| --- | --- |
+| `npm run openspec -- validate --all --strict` | 69 passed, 0 failed (69 items): the living specs; no active change |
+| `npm run openspec -- validate --archived --no-interactive`, this change's line | `✓ change/2026-10-26-scope-execution-cancellation-recovery`; the command as a whole reported 150 passed, 13 failed (163 items), the 13 being older archived changes recorded before tasks were ticked at archive |
+| `npm run openspec -- list` | "No active changes found." |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` | Only this change's edit: `worker-runtime` "Cancellation forwarding", its requirement sentence and the two added scenarios "Superseded execution cancelled before a restart" and "Last execution cancelled before a restart" (9 insertions, 1 deletion) |
+| `make verify` | Passed (exit 0), first run: 1926 tests, 1924 passed, 0 failed, 2 skipped (the Linux-only scan tests); coverage of all files 99.28% lines, 92.09% branches, 99.04% functions; OpenSpec 69 passed; package allowlist and installed CLI verification passed; no flaky rerun was needed |
+
+The archive commit only applies the reviewed deltas with the pinned CLI, so it needs no further review pass.
+
 ## Limitations
 
 - The reviewer's model could not be confirmed from stored messages, because the standalone OpenCode run stores none in the global database; only the `-m` argument sets it.
@@ -73,5 +92,5 @@ Reviewer: OpenCode CLI, model `opencode-go/kimi-k3.1-pro`, variant `high`, assig
 
 ## Remaining gates
 
-- The coordinator's integration into `dev` and archive of this change.
+- Integration into dev by the coordinator (single pull request).
 - No deployment validation was done; none is claimed.
