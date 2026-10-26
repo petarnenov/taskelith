@@ -1,4 +1,5 @@
 import type { AssignmentId, ExecutionId } from './identifiers.js';
+import type { SealedExecution } from './launch-authorization.js';
 import type {
   AuthorizationOutcome,
   CancellationTarget,
@@ -24,6 +25,16 @@ export function planJournalRecovery(snapshot: JournalSnapshot): readonly Recover
     .map(({ commandId, target }): RecoveryAction => ({ kind: 'forward-cancellation', commandId, target }));
   const launches = snapshot.intents.flatMap((intent) => recoverIntent(intent, snapshot));
   return Object.freeze([...cancellations, ...launches].map((action) => Object.freeze(action)));
+}
+
+// The intent's last sealed execution, which a new execution reports, so the
+// authority ends it first; its last granted operation, else its last one.
+export function lastSealedExecution(snapshot: JournalSnapshot, assignmentId: AssignmentId): SealedExecution | undefined {
+  const sealed = snapshot.executions.filter((execution) => execution.assignmentId === assignmentId && execution.state === 'not-started').at(-1);
+  const latest = [...(sealed?.authorizations ?? [])].reverse();
+  const operation = latest.find(({ outcome }) => outcome === 'granted') ?? latest[0];
+  if (sealed === undefined || operation === undefined) return undefined;
+  return Object.freeze({ executionId: sealed.executionId, operationId: operation.operationId });
 }
 
 // An ended assignment launches nothing more, like a cancelled one.

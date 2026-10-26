@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The G2 failure scenarios (item 24a), sourced by installation.sh, which
-# defines compose, the project, and its other steps.
+# The G2 failure scenarios (items 24a, 25a) and lifecycle scenarios (25b),
+# sourced by installation.sh, which defines compose and the project's steps.
 
 scenario_directory="$repository/infra/installation/scenarios"
 # An untimed kill lands at most this long after the task's submission.
@@ -519,4 +519,182 @@ namespace_confinement_scenario() {
   scenario_tool await-exit "$url" "$task" >/dev/null
   row="$(platform)"
   finish_passed "refused the execution account's namespaces, ran a task, removed" "$row; applied seccomp profile sha256 $digest, equal to infra/installation/seccomp/worker.json: the execution $execution ran in '$cgroup' with status '$status' and exited 0; as the execution account with the same status, unshare -U and unshare -Urm with mount -t tmpfs were refused with EPERM, clone3 answered ENOSYS, clone with CLONE_NEWUSER and setns were refused with EPERM; the worker kept KILL, SETGID, and SETUID only; executions/ existed and took a cgroup write"
+}
+
+# The digest of the worker's identity file on its volume.
+worker_identity() {
+  worker_exec sha256sum /var/lib/taskelith/worker/identity | cut -d ' ' -f 1
+}
+
+# A task's execution runs as the execution account in its containment.
+run_as_execution_account() {
+  local task="$1" identity_file identity execution
+  scenario_tool submit "$url" "$smoke_directory/workflows.json" "$task"
+  identity_file="$(mktemp)"
+  await_condition "$START_SECONDS" capture_identity "$identity_file" \
+    || fail_scenario "the execution of $task could not be read"
+  identity="$(cat "$identity_file")"
+  rm -f "$identity_file"
+  await_condition "$START_SECONDS" has_started "$task" || fail_scenario "the execution of $task did not start"
+  execution="$(task_executions "$task" | cut -d ' ' -f 1)"
+  case "$identity" in
+    "Uid: 10003 10003 10003 10003 "*) ;;
+    *) fail_scenario "the execution of $task does not run as the execution account: $identity" ;;
+  esac
+  expect_equal "the cgroup of $task's execution" "$(printf '%s\n' "$identity" | sed -n 2p)" "0::/executions/$execution"
+  scenario_tool await-exit "$url" "$task" >/dev/null
+}
+
+# Install, start, stop, and restart of the Linux worker container: its
+# identity stays on its volume, and executions run as the execution account.
+worker_lifecycle_scenario() {
+  local worker identity stopped code first_start row
+  begin_scenario worker-lifecycle
+  scenario_project
+  check_containment
+  worker="$(unrevoked_workers)"
+  identity="$(worker_identity)"
+  step "running a task on the installed worker"
+  run_as_execution_account lifecycle-first-task
+  first_start="$(started_at)"
+  step "stopping the installation"
+  stop
+  read -r stopped code _ <<< "$(worker_state)"
+  expect_equal "the stopped worker container" "$stopped" exited
+  expect_equal "the stopped worker container's exit code" "$code" 0
+  step "starting the installation again"
+  start
+  # Host ports are ephemeral, so the API may have moved.
+  url="$(api_url)"
+  await_condition "$RESTART_SECONDS" back_since "$first_start" \
+    || fail_scenario "the restarted worker did not reach its reconciliation and the broker"
+  expect_equal "the worker identity after the restart" "$(worker_identity)" "$identity"
+  expect_equal "the enrolled workers after the restart" "$(unrevoked_workers)" "$worker"
+  check_containment
+  step "running a task on the restarted worker"
+  run_as_execution_account lifecycle-second-task
+  expect_equal "the worker's assignments" "$(worker_assignments "$worker")" "ended released,ended released"
+  row="$(platform)"
+  finish_passed "installed, ran, stopped, restarted, and ran again, removed" "$row: a fresh installation enrolled worker $worker, whose task ran as uid 10003 in executions/ and exited 0; installation-stop stopped the worker container, installation-start started it again with the same identity file on its volume and no new enrollment, its new process reconciled and reached the broker, kept KILL, SETGID, and SETUID only, and a second task ran as uid 10003 and exited 0"
+}
+
+# The native worker's settings and state (scenario-native-worker-lifecycle).
+# Wide for a loaded host; the environment may set another bound.
+STOP_SECONDS="${STOP_SECONDS:-60}"
+native_worker_pid=''
+
+native_log() {
+  echo "$native_directory/worker-$1.log"
+}
+
+# Starts the worker of this checkout as a host process, logging to RUN's
+# file; the data root path holds spaces on purpose.
+start_native_worker() {
+  local run="$1" token="$2" node
+  node="$(command -v node)"
+  TASKELITH_CONTROL_PLANE_URL="$url" TASKELITH_NATS_URL="$nats_url" TASKELITH_DATA_DIR="$native_root" \
+    TASKELITH_ENROLLMENT_TOKEN="$token" \
+    TASKELITH_WORKER_COMMAND="[\"$node\", \"-e\", \"setTimeout(() => {}, 1000)\"]" \
+    node "$repository/apps/worker/dist/main.js" > "$(native_log "$run")" 2>&1 &
+  native_worker_pid=$!
+}
+
+native_running() {
+  [ -n "$native_worker_pid" ] && kill -0 "$native_worker_pid" 2>/dev/null
+}
+
+native_stopped() {
+  ! native_running
+}
+
+# The worker of RUN logged its first reconciliation pass and its contact.
+native_online() {
+  native_running && grep -qF '"event":"worker.reconciliation.planned"' "$(native_log "$1")" \
+    && grep -qF '"event":"worker.contact.online"' "$(native_log "$1")"
+}
+
+# SIGTERM is the service stop; the worker must exit 0 within the deadline.
+stop_native_worker() {
+  local status=0
+  kill -TERM "$native_worker_pid"
+  await_condition "$STOP_SECONDS" native_stopped || fail_scenario "the native worker did not stop on SIGTERM"
+  wait "$native_worker_pid" || status=$?
+  native_worker_pid=''
+  expect_equal "the native worker's exit status" "$status" 0
+}
+
+# The file system of PATH's volume: mount point, type, and free space.
+volume_of() {
+  local mount_point kind
+  mount_point="$(df -P "$1" | tail -n 1 | awk '{ for (i = 6; i <= NF; i++) printf "%s%s", $i, (i < NF ? " " : "") }')"
+  if command -v diskutil >/dev/null; then
+    kind="$(diskutil info "$mount_point" | sed -n 's/^ *File System Personality: *//p')"
+  else
+    kind="$(stat -f -c %T "$mount_point")"
+  fi
+  echo "$kind at '$mount_point' with $(df -Pk "$1" | tail -n 1 | awk '{ print int($4 / 1048576) }') GiB free"
+}
+
+native_identity() {
+  shasum -a 256 "$native_root/worker/identity" | cut -d ' ' -f 1
+}
+
+# Octal permission bits of PATH on macOS or Linux.
+mode_of() {
+  stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1"
+}
+
+# A failed native scenario stops its worker and keeps its logs visible.
+finish_native() {
+  if native_running; then kill -KILL "$native_worker_pid" 2>/dev/null || true; fi
+  if [ "$1" -ne 0 ]; then tail -n 40 "$native_directory"/worker-*.log >&2 2>/dev/null || true; fi
+  rm -rf "$native_directory"
+  finish_scenario "$1"
+}
+
+# Install, start, stop, and restart of a native worker of this host against
+# a fresh installation, with its data root on the host's file system.
+native_worker_lifecycle_scenario() {
+  local architecture token worker identity volume
+  begin_scenario native-worker-lifecycle
+  compose_files+=(--file "$smoke_directory/compose.yaml" --file "$scenario_directory/compose.yaml")
+  fresh_project
+  # Resolved, since a data root behind a symbolic link such as /var fails.
+  native_directory="$(cd "$(mktemp -d "${NATIVE_DATA_PARENT:-${TMPDIR:-/tmp}}/taskelith-native.XXXXXX")" && pwd -P)"
+  native_root="$native_directory/data root with spaces"
+  trap 'finish_native $?' EXIT
+  step "building and starting a fresh installation without a Linux worker"
+  build
+  bootstrap_operator "$scenario" 'opt-in native acceptance'
+  start
+  url="$(api_url)"
+  nats_url="nats://$(compose port nats 4222)"
+  architecture="$(node -p process.arch)"
+  volume="$(volume_of "$native_directory")"
+  step "installing a native $(uname -s) $architecture worker"
+  token="$(TASKELITH_WORKER_PLATFORM="$(node -p process.platform)" TASKELITH_WORKER_ARCHITECTURE="$architecture" \
+    enrollment_token | field enrollmentToken)"
+  if [ -z "$token" ]; then fail_scenario "no enrollment token was issued"; fi
+  start_native_worker first "$token"
+  await_condition "$START_SECONDS" native_online first || fail_scenario "the native worker did not enroll and come online"
+  worker="$(unrevoked_workers)"
+  identity="$(native_identity)"
+  expect_equal "the mode of the worker subtree" "$(mode_of "$native_root/worker")" 700
+  step "running a task on the native worker"
+  scenario_tool submit "$url" "$smoke_directory/workflows.json" native-first-task
+  scenario_tool await-exit "$url" native-first-task >/dev/null
+  step "stopping the native worker"
+  stop_native_worker
+  step "starting the native worker again without a token"
+  start_native_worker second ''
+  await_condition "$RESTART_SECONDS" native_online second || fail_scenario "the restarted native worker did not come online"
+  expect_equal "the worker identity after the restart" "$(native_identity)" "$identity"
+  expect_equal "the enrolled workers after the restart" "$(unrevoked_workers)" "$worker"
+  step "running a task on the restarted native worker"
+  scenario_tool submit "$url" "$smoke_directory/workflows.json" native-second-task
+  scenario_tool await-exit "$url" native-second-task >/dev/null
+  stop_native_worker
+  expect_equal "the native worker's assignments" "$(worker_assignments "$worker")" "ended released,ended released"
+  rm -rf "$native_directory"
+  finish_passed "installed, ran, stopped, restarted, and ran again a native worker, removed" "native $(uname -s) $(uname -r) $architecture worker of this checkout under user $(id -un), data root '$native_root' on $volume, worker/ mode 0700, against a fresh installation on $(engine): it enrolled as $worker and ran a task that exited 0; SIGTERM stopped it with status 0; started again without a token it kept the identity file and the enrollment, reconciled, reached the broker, and ran a second task that exited 0"
 }

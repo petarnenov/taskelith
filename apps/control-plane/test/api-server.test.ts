@@ -333,6 +333,33 @@ test('authorizeLaunch maps every outcome to its contract shape, and needs a work
   assert.equal(failed(await api.handle('authorizeLaunch', { ...request, body: { ...body, recoveryEpoch: 0 } }, '')).code, 'invalid');
 });
 
+test('authorizeLaunch passes a reported sealed execution to the authority and refuses an invalid one', async () => {
+  const received: unknown[] = [];
+  const api = new ControlPlaneApi({
+    runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, enrollment: undefined as never,
+    quarantine: undefined as never, delegations: undefined as never,
+    launches: { authorize: async (_principal, values) => {
+      received.push(values);
+      return ok({ kind: 'expired' });
+    } },
+  });
+  const body = {
+    operationId: 'operation-2', recoveryEpoch: 1, assignmentId: 'assignment-1', attemptId: 'attempt-1', ownershipGeneration: 1,
+    executionId: 'execution-2', admissionId: 'admission-1', admissionGeneration: 2, reportsNotStarted: false,
+    reportsNotStartedFor: { executionId: 'execution-1', operationId: 'operation-1' },
+  };
+  assert.ok(checkHttpSchema('LaunchAuthorizationRequest', body).ok);
+  const request = { parameters: [], body, query: new URLSearchParams(), correlationId: 'c' as never, worker: { workerId: 'worker-1' as never, generation: 1 } };
+  value(await api.handle('authorizeLaunch', request, ''));
+  const { reportsNotStartedFor: _sealed, ...unreported } = body;
+  value(await api.handle('authorizeLaunch', { ...request, body: unreported }, ''));
+  assert.deepEqual(received.map((values) => (values as { reportsNotStartedFor?: unknown }).reportsNotStartedFor), [body.reportsNotStartedFor, undefined]);
+  for (const reportsNotStartedFor of [{ executionId: '', operationId: 'operation-1' }, { executionId: 'execution-1', operationId: '' }]) {
+    assert.equal(failed(await api.handle('authorizeLaunch', { ...request, body: { ...body, reportsNotStartedFor } }, '')).code, 'invalid');
+  }
+  assert.equal(received.length, 2);
+});
+
 test('an undecided launch operation is 503, never 500', async () => {
   const launchServer = createApiServer({
     ...handlers,
