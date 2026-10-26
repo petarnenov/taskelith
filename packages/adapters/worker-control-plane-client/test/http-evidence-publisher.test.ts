@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { createServer, type IncomingMessage, type Server } from 'node:http';
+import { once } from 'node:events';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { after, before, test } from 'node:test';
 import { parseEvidencePublication, type EvidencePublication } from '@taskelith/execution';
@@ -27,7 +28,16 @@ interface Seen {
 
 let answer: { status: number; body: unknown; delayMilliseconds?: number } = { status: 201, body: RECORD };
 const seen: Seen[] = [];
-const server: Server = createServer(async (request, response) => {
+const server: Server = createServer((request, response) => {
+  answerPublication(request, response).catch((error: unknown) => {
+    // A client that left mid-body is no failure; anything else answers 500.
+    if (request.errored) response.destroy();
+    else response.writeHead(500).end(String(error));
+  });
+});
+let baseUrl: URL;
+
+async function answerPublication(request: IncomingMessage, response: ServerResponse): Promise<void> {
   const form = await new Request('http://localhost/', {
     method: 'POST', headers: { 'content-type': request.headers['content-type'] ?? '' }, body: new Uint8Array(await bytes(request)),
   }).formData();
@@ -39,8 +49,7 @@ const server: Server = createServer(async (request, response) => {
   });
   if (answer.delayMilliseconds !== undefined) await new Promise((resolve) => setTimeout(resolve, answer.delayMilliseconds));
   response.writeHead(answer.status, { 'content-type': 'application/json' }).end(JSON.stringify(answer.body));
-});
-let baseUrl: URL;
+}
 
 before(async () => {
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
@@ -98,4 +107,26 @@ test('an answer that violates its schema or names another record is refused', as
   assert.equal(failed(await publisher().publish(PUBLICATION, CONTENT)).code, 'internal');
   answer = { status: 201, body: { ...RECORD, capturedAt: 'not a time' } };
   assert.equal(failed(await publisher().publish(PUBLICATION, CONTENT)).code, 'internal');
+});
+
+test('a client that leaves mid-body does not break the fake server', async () => {
+  const endlessBody = new ReadableStream<Uint8Array>({
+    start: (controller) => controller.enqueue(CONTENT),
+  });
+  const arrived = once(server, 'request');
+  const client = new AbortController();
+  const sent = fetch(new URL('evidence', baseUrl), {
+    method: 'POST', body: endlessBody, duplex: 'half', signal: client.signal,
+  } as RequestInit);
+  await arrived;
+  client.abort();
+  await assert.rejects(sent);
+  answer = { status: 201, body: RECORD };
+  assert.equal(value(await publisher().publish(PUBLICATION, CONTENT)).evidenceId, PUBLICATION.evidenceId);
+});
+
+test('any other failure of the fake server answers 500', async () => {
+  const response = await fetch(new URL('evidence', baseUrl), { method: 'POST', body: 'not multipart' });
+  assert.equal(response.status, 500);
+  await response.text();
 });
