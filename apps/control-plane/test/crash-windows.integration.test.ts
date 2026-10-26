@@ -142,7 +142,7 @@ class Scenario {
   }
 
   static async start(options: ScenarioOptions): Promise<Scenario> {
-    const installation = await HarnessInstallation.start();
+    const installation = await HarnessInstallation.start(options.signal);
     try {
       return new Scenario(installation, await installation.enrollmentToken(), options);
     } catch (error) {
@@ -253,17 +253,20 @@ async function d1Failure(scenario: Scenario): Promise<Error> {
   assert.equal(task.attempts.length, 1, 'one attempt');
   assert.deepEqual(executions(task).map(({ id }) => id), [first.executionId], 'the control plane knows E1 alone');
   const order = establishedOrder(installation);
+  assertNoBoundRelease(order);
   assertD1Order(order, first.executionId, relaunch.executionId);
   await scenario.noLeftovers();
   assert.equal(spawnedChildren(installation).length, 0, 'no spawn');
   return new Error(`D1: the relaunch ${relaunch.executionId} was rejected-final with execution-conflict; established ${order.join(', ')}`);
 }
 
-// The hold published E1's `not-started` only after E2's rejection.
+// The hold let E1's `not-started` go, on its first try as on any retry,
+// only after E2's rejection.
 function assertD1Order(order: readonly string[], sealed: string, relaunch: string): void {
   const answered = order.indexOf(`answered ${relaunch} rejected execution-conflict`);
-  const published = order.indexOf(`published not-started ${sealed}`);
-  assert.ok(answered >= 0 && published > answered, `E2 answered before E1's not-started: ${order.join('; ')}`);
+  const firstRelease = order.findIndex((step) => step.endsWith(`not-started ${sealed}`));
+  const ordered = answered >= 0 && firstRelease > answered && order[firstRelease] === `published not-started ${sealed}`;
+  assert.ok(ordered, `E2 answered before E1's not-started first went out: ${order.join('; ')}`);
 }
 
 // The control plane agrees with the worker's journal on every execution it

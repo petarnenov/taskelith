@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import pg from 'pg';
+import { JetStreamApiCodes, JetStreamApiError } from '@nats-io/jetstream';
 import { createAccount } from '@nats-io/nkeys';
 import { adminMain, startControlPlane, type AdminIo, type ControlPlaneSettings, type RunningControlPlane } from '@taskelith/control-plane';
 import { ControlPlaneNamespace } from '@taskelith/control-plane-store';
@@ -31,6 +32,9 @@ const RUN_ID = 'crash-run';
 const POLL_MILLISECONDS = 100;
 export const SETTLE_MILLISECONDS = 60_000;
 const STOP_MILLISECONDS = 15_000;
+// Each database, broker, HTTP, or ps operation and each release ends
+// within this, so a blocked one cannot hold a scenario past its deadline.
+const OPERATION_MILLISECONDS = 20_000;
 // The scripted child runs until the test releases it, at most this long.
 const CHILD_BOUND_MILLISECONDS = 30_000;
 const STREAM_KINDS = ['commands', 'observations', 'sdlc', 'quarantine', 'advisories'] as const;
@@ -53,7 +57,9 @@ const READY_EVENTS = ['worker.reconciliation.planned', 'worker.contact.online'];
 let installations = 0;
 
 export async function sql<Row extends pg.QueryResultRow>(url: URL, text: string, values: unknown[] = []): Promise<Row[]> {
-  const client = new pg.Client({ connectionString: url.href });
+  const client = new pg.Client({
+    connectionString: url.href, connectionTimeoutMillis: OPERATION_MILLISECONDS, query_timeout: OPERATION_MILLISECONDS, statement_timeout: OPERATION_MILLISECONDS,
+  });
   await client.connect();
   try {
     return (await client.query<Row>(text, values)).rows;
@@ -69,9 +75,10 @@ export interface WaitOptions {
 
 export async function waitFor(what: string | (() => string), condition: () => Promise<boolean>, options: WaitOptions = {}): Promise<void> {
   const deadline = Date.now() + (options.timeout ?? SETTLE_MILLISECONDS);
-  while (!(await condition())) {
+  const description = () => (typeof what === 'string' ? what : what());
+  while (!(await bounded(() => `a check while waiting for ${description()}`, condition, options.signal))) {
     options.signal?.throwIfAborted();
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${typeof what === 'string' ? what : what()}`);
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${description()}`);
     await delay(POLL_MILLISECONDS, undefined, options.signal === undefined ? {} : { signal: options.signal });
   }
 }
@@ -86,8 +93,21 @@ function settledUnlessAborted<T>(promise: Promise<T>, signal: AbortSignal): Prom
   });
 }
 
-// What a scenario acquired, released last first; every release runs, and
-// their errors come back together.
+// The operation's result, unless it takes longer than an operation may or
+// the signal aborts; the operation gets the combined signal to stop early.
+export async function bounded<T>(what: string | (() => string), operation: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
+  const timeout = AbortSignal.timeout(OPERATION_MILLISECONDS);
+  const combined = signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
+  try {
+    return await settledUnlessAborted(operation(combined), combined);
+  } catch (error) {
+    if (!combined.aborted) throw error;
+    throw new Error(`${typeof what === 'string' ? what : what()} did not end: ${String(combined.reason)}`, { cause: error });
+  }
+}
+
+// What a scenario acquired, released last first; every release runs, each
+// bounded, and their errors come back together.
 export class Releases {
   readonly #releases: Array<() => unknown> = [];
 
@@ -99,7 +119,7 @@ export class Releases {
     const errors: unknown[] = [];
     for (let release = this.#releases.pop(); release !== undefined; release = this.#releases.pop()) {
       try {
-        await release();
+        await bounded('a release', async () => release());
       } catch (error) {
         errors.push(error);
       }
@@ -142,42 +162,52 @@ export class HarnessInstallation {
   readonly #logs: InMemoryLogSink;
   readonly #apiPort: number;
   readonly #releases: Releases;
+  // The scenario's signal, which ends every operation but the releases.
+  readonly #signal: AbortSignal;
 
-  private constructor(identity: Identity, store: PostgresDatabase, logs: InMemoryLogSink, apiPort: number, releases: Releases) {
+  private constructor(identity: Identity, store: PostgresDatabase, logs: InMemoryLogSink, apiPort: number, releases: Releases, signal: AbortSignal) {
     this.#identity = identity;
     this.#store = store;
     this.#logs = logs;
     this.#apiPort = apiPort;
     this.#releases = releases;
+    this.#signal = signal;
   }
 
-  static start(): Promise<HarnessInstallation> {
+  static start(signal: AbortSignal): Promise<HarnessInstallation> {
     const releases = new Releases();
-    return releasedOnFailure(releases, () => HarnessInstallation.#acquire(releases));
+    return releasedOnFailure(releases, () => HarnessInstallation.#acquire(releases, signal));
   }
 
-  static async #acquire(releases: Releases): Promise<HarnessInstallation> {
+  // Each release is registered before its acquisition is awaited, so a
+  // start that ends early still releases what came of it.
+  static async #acquire(releases: Releases, signal: AbortSignal): Promise<HarnessInstallation> {
     installations += 1;
     const databaseName = `taskelith_crash_${process.pid}_${installations}`;
-    await sql(POSTGRES, `CREATE DATABASE ${databaseName}`);
     releases.add(() => sql(POSTGRES, `DROP DATABASE IF EXISTS ${databaseName} WITH (FORCE)`));
+    await bounded('the database creation', () => sql(POSTGRES, `CREATE DATABASE ${databaseName}`), signal);
     const database = new URL(POSTGRES);
     database.pathname = `/${databaseName}`;
     const base = mkdtempSync(join(tmpdir(), 'taskelith-crash-'));
     releases.add(() => rmSync(base, { recursive: true, force: true }));
     const dataRoot = join(base, 'control-plane');
-    const authority = await registeredAuthority(dataRoot);
+    const authority = await bounded('the broker account', () => registeredAuthority(dataRoot), signal);
     const environment = { TASKELITH_DATA_DIR: dataRoot, TASKELITH_POSTGRES_URL: database.href, TASKELITH_NATS_URL: NATS.href };
-    const initialized = await admin(environment, ['init', '--actor', 'root@test', '--reason', 'crash scenario']) as { identity: { installationId: string }; operatorSecret: string };
+    const init = ['init', '--actor', 'root@test', '--reason', 'crash scenario'];
+    const initialized = await bounded('the installation init', () => admin(environment, init), signal) as { identity: { installationId: string }; operatorSecret: string };
     const address = value(TransportAddress.of(initialized.identity.installationId));
     releases.add(() => deleteStreams(authority, address));
     const logs = new InMemoryLogSink();
-    const running: RunningControlPlane = value(await startControlPlane(controlPlaneSettings(dataRoot, database, logs)));
-    releases.add(() => running.stop());
+    const starting = startControlPlane(controlPlaneSettings(dataRoot, database, logs));
+    releases.add(async () => {
+      const started = await starting;
+      if (started.ok) await started.value.stop();
+    });
+    const running: RunningControlPlane = value(await bounded('the control plane start', () => starting, signal));
     const store = new PostgresDatabase(database);
     releases.add(() => store.close());
     const identity = { database, base, authority, address, operator: initialized.operatorSecret };
-    return new HarnessInstallation(identity, store, logs, running.api.port, releases);
+    return new HarnessInstallation(identity, store, logs, running.api.port, releases, signal);
   }
 
   get base(): string {
@@ -195,7 +225,8 @@ export class HarnessInstallation {
   async enrollmentToken(): Promise<string> {
     const { database, base, operator } = this.#identity;
     const environment = { TASKELITH_DATA_DIR: join(base, 'control-plane'), TASKELITH_POSTGRES_URL: database.href, TASKELITH_NATS_URL: NATS.href };
-    const issued = await admin({ ...environment, TASKELITH_OPERATOR_TOKEN: operator }, ['issue-enrollment-token']);
+    const issue = () => admin({ ...environment, TASKELITH_OPERATOR_TOKEN: operator }, ['issue-enrollment-token']);
+    const issued = await bounded('the enrollment token', issue, this.#signal);
     return issued.enrollmentToken as string;
   }
 
@@ -213,23 +244,27 @@ export class HarnessInstallation {
   }
 
   async task(taskId: string): Promise<Task> {
-    return value(await this.#store.transaction((tx) => tx.tasks.get(taskId as TaskId)));
+    const read = () => this.#store.transaction((tx) => tx.tasks.get(taskId as TaskId));
+    return value(await bounded(`the read of task ${taskId}`, read, this.#signal));
   }
 
   // A broker connection of the operator's side, for the commands stream.
   connectBroker(name: string): Promise<ControlPlaneConnection> {
-    return brokerConnection(this.#identity.authority, this.address, name);
+    return bounded(`the broker connection ${name}`, () => brokerConnection(this.#identity.authority, this.address, name), this.#signal);
   }
 
+  // Runs on after the scenario's signal aborted; each release is bounded.
   stop(): Promise<void> {
     return this.#releases.releaseAll();
   }
 
   async #operatorCall(path: string, body: unknown): Promise<void> {
-    const response = await fetch(new URL(path, this.apiUrl), {
-      method: 'POST', headers: { authorization: `Bearer ${this.#identity.operator}`, 'content-type': 'application/json' }, body: JSON.stringify(body),
-    });
-    assert.equal(response.status, 201, `POST ${path}: ${await response.text()}`);
+    await bounded(`POST ${path}`, async (signal) => {
+      const response = await fetch(new URL(path, this.apiUrl), {
+        method: 'POST', headers: { authorization: `Bearer ${this.#identity.operator}`, 'content-type': 'application/json' }, body: JSON.stringify(body), signal,
+      });
+      assert.equal(response.status, 201, `POST ${path}: ${await response.text()}`);
+    }, this.#signal);
   }
 }
 
@@ -238,13 +273,24 @@ function brokerConnection(authority: BrokerAuthority, address: TransportAddress,
   return connectTransport({ server: NATS, address, creds }).then(value);
 }
 
+// Tries every stream; only an absent one is no error.
 async function deleteStreams(authority: BrokerAuthority, address: TransportAddress): Promise<void> {
   const broker = await brokerConnection(authority, address, 'cleanup');
+  const errors: unknown[] = [];
   try {
-    for (const kind of STREAM_KINDS) await broker.jsm.streams.delete(address.streamName(kind)).catch(() => false);
+    for (const kind of STREAM_KINDS) {
+      await broker.jsm.streams.delete(address.streamName(kind)).catch((error: unknown) => {
+        if (!isAbsentStream(error)) errors.push(error);
+      });
+    }
   } finally {
     await broker.close();
   }
+  if (errors.length > 0) throw new AggregateError(errors, 'streams of the scenario were not deleted');
+}
+
+function isAbsentStream(error: unknown): boolean {
+  return error instanceof JetStreamApiError && error.code === JetStreamApiCodes.StreamNotFound;
 }
 
 // A fresh broker account, registered on the test server that trusts the
@@ -438,7 +484,7 @@ const runFile = promisify(execFile);
 // Live processes, zombies excluded, that name the scenario's base on their
 // command line: the worker, its supervisors, and the children.
 export async function leftoverProcesses(installation: HarnessInstallation): Promise<string[]> {
-  const { stdout } = await runFile('ps', ['-axww', '-o', 'pid=,stat=,command='], { encoding: 'utf8', maxBuffer: 16 * 1024 ** 2 });
+  const { stdout } = await runFile('ps', ['-axww', '-o', 'pid=,stat=,command='], { encoding: 'utf8', maxBuffer: 16 * 1024 ** 2, timeout: OPERATION_MILLISECONDS });
   return stdout.split('\n').filter((line) => {
     const match = /^\s*(\d+)\s+(\S+)\s+(.*)$/.exec(line);
     return match !== null && Number(match[1]) !== process.pid && !match[2]!.startsWith('Z') && match[3]!.includes(installation.base);
