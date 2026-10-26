@@ -149,6 +149,15 @@ export class SqliteWorkerJournal implements WorkerJournal {
     });
   }
 
+  recordAuthorizationExpired(operationId: OperationId): Result<void> {
+    return this.#commit('W3', (database) => {
+      const pending = this.#pendingAuthorization(database, operationId);
+      if (!pending.ok) return pending;
+      database.prepare(`UPDATE authorization_request SET outcome = 'expired' WHERE operation_id = ?`).run(operationId);
+      return ok(undefined);
+    });
+  }
+
   recordExecutionRecordWritten(executionId: ExecutionId): Result<void> {
     return this.#commit('W4', (database) => {
       const execution = executionRow(database, executionId);
@@ -194,6 +203,9 @@ export class SqliteWorkerJournal implements WorkerJournal {
       if (execution === undefined) return err(unknownExecution(executionId));
       if (execution.state === 'not-started') return ok(undefined);
       if (execution.state !== null && execution.state !== 'authorized') return err(notInState(executionId, 'authorized'));
+      // The seal leaves no use for an operation still waiting for its answer.
+      database.prepare(`UPDATE authorization_request SET outcome = 'expired' WHERE execution_id = ? AND outcome = 'pending'`)
+        .run(executionId);
       const { subject } = subjectOf(database, executionId);
       this.#moveExecution(database, executionId, 'not-started', { kind: 'execution-not-started', ...subject });
       return ok(undefined);
@@ -211,6 +223,32 @@ export class SqliteWorkerJournal implements WorkerJournal {
       const evidenceCounter = storedInteger<number>(execution, 'uncertain_count') + 1;
       database.prepare('UPDATE execution SET uncertain_count = ? WHERE execution_id = ?').run(evidenceCounter, executionId);
       this.#append(database, { kind: 'execution-uncertain', ...subjectOf(database, executionId).subject, evidenceCounter });
+      return ok(undefined);
+    });
+  }
+
+  recordTerminationUnproven(executionId: ExecutionId, survivors: readonly ExecutionProcess[]): Result<void> {
+    return this.#connection.transact((database) => {
+      const written = writtenExecution(database, executionId);
+      if (!written.ok) return written;
+      if (written.value.termination_unproven === 1) return ok(undefined);
+      database.prepare('UPDATE execution SET termination_unproven = 1 WHERE execution_id = ?').run(executionId);
+      this.#append(database, { kind: 'termination-unproven', ...subjectOf(database, executionId).subject, survivors });
+      return ok(undefined);
+    });
+  }
+
+  recordCancellationNotApplied(commandId: CommandId, executionId: ExecutionId): Result<void> {
+    return this.#connection.transact((database) => {
+      const written = writtenExecution(database, executionId);
+      if (!written.ok) return written;
+      if (!database.prepare('SELECT 1 FROM cancellation_request WHERE command_id = ?').get(commandId)) {
+        return err(failure('not-found', `no cancellation request for command ${commandId}`));
+      }
+      const inserted = database.prepare('INSERT OR IGNORE INTO cancellation_not_applied (command_id, execution_id) VALUES (?, ?)')
+        .run(commandId, executionId);
+      if (inserted.changes === 0) return ok(undefined);
+      this.#append(database, { kind: 'cancellation-not-applied', ...subjectOf(database, executionId).subject, commandId });
       return ok(undefined);
     });
   }
@@ -237,6 +275,23 @@ export class SqliteWorkerJournal implements WorkerJournal {
 
   snapshot(): Result<JournalSnapshot> {
     return this.#connection.read(readSnapshot);
+  }
+
+  // A terminal fact is confirmed once its outbox entry is pruned.
+  removableRecords(): Result<readonly ExecutionId[]> {
+    return this.#connection.read((database) => Object.freeze(database.prepare(`SELECT execution_id FROM execution
+      WHERE terminal_sequence IS NOT NULL AND record_removed = 0
+        AND NOT EXISTS (SELECT 1 FROM outbox WHERE outbox.sequence = execution.terminal_sequence)
+      ORDER BY rowid`).all().map((row) => storedText<ExecutionId>(row, 'execution_id'))));
+  }
+
+  recordRecordRemoved(executionId: ExecutionId): Result<void> {
+    return this.#connection.transact((database) => {
+      const updated = database.prepare(`UPDATE execution SET record_removed = 1
+        WHERE execution_id = ? AND terminal_sequence IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM outbox WHERE outbox.sequence = execution.terminal_sequence)`).run(executionId);
+      return updated.changes === 0 ? err(notInState(executionId, 'terminal and confirmed')) : ok(undefined);
+    });
   }
 
   takeInventory(): Result<JournalInventory> {
@@ -343,17 +398,20 @@ export class SqliteWorkerJournal implements WorkerJournal {
     return ok(storedText<ExecutionId>(pending, 'execution_id'));
   }
 
+  // A terminal fact's sequence tells when it is confirmed.
   #moveExecution(database: JournalDatabase, executionId: ExecutionId, state: string, fact: ObservationFact): void {
-    database.prepare('UPDATE execution SET state = ? WHERE execution_id = ?').run(state, executionId);
-    this.#append(database, fact);
+    const sequence = this.#append(database, fact);
+    const terminal = state === 'exited' || state === 'not-started' ? sequence : null;
+    database.prepare('UPDATE execution SET state = ?, terminal_sequence = ? WHERE execution_id = ?').run(state, terminal, executionId);
   }
 
   // Assigns the next number of the gapless sequence in the same transaction.
-  #append(database: JournalDatabase, fact: ObservationFact): void {
+  #append(database: JournalDatabase, fact: ObservationFact): number {
     const sequence = storedInteger<number>(metaRow(database), 'next_sequence');
     database.prepare('INSERT INTO outbox (sequence, observation_id, fact, recorded_at) VALUES (?, ?, ?, ?)')
       .run(sequence, observationIdOf(fact, this.binding.journalId), JSON.stringify(fact), this.#clock.now());
     database.prepare('UPDATE journal_meta SET next_sequence = ?').run(sequence + 1);
+    return sequence;
   }
 }
 
@@ -393,10 +451,10 @@ function recordIntent(database: JournalDatabase, commandId: CommandId, intent: L
   return ok(undefined);
 }
 
-// Before a grant only a retryable rejection is retried for the execution;
-// after one, only while its launch record says it has not started.
+// Before a grant only a retryable rejection or an expired operation is
+// retried; after one, only while its launch record says it has not started.
 function mayAuthorizeAgain(execution: Row, last: Row | undefined, request: LaunchRequest): boolean {
-  if (execution.state === null) return last?.outcome === 'rejected-retryable';
+  if (execution.state === null) return last?.outcome === 'rejected-retryable' || last?.outcome === 'expired';
   const settled = last?.outcome === 'granted' || last?.outcome === 'rejected-retryable';
   return execution.state === 'authorized' && settled && request.reportsNotStarted;
 }

@@ -172,7 +172,7 @@ test('on macOS a worker restart adopts a live supervisor and leaves its child ru
   const supervisor = await startSupervisor(execution, 'launch');
   await until(() => existsSync(join(execution.directory, 'handle')));
 
-  assert.deepEqual(await recover(execution), { fact: 'adopted' });
+  assert.deepEqual(await recover(execution), { fact: 'adopted', supervisor: 'live' });
   assert.deepEqual(await supervisor.exited, { code: 0, signal: null });
   assert.deepEqual((await recordedExit(execution)).status, { kind: 'code', code: 0 });
 });

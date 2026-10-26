@@ -54,13 +54,6 @@ Enrollment SHALL write the journal, then each credential file of the generation 
 - **WHEN** the broker credential that the identity references is removed
 - **THEN** reading the credentials fails with reason `corrupt`
 
-### Requirement: Journal format 2
-The journal SHALL be format 2, which records an offer's requested resources, assignment ends, the last capacity declaration, and the inventory snapshot counter. A worker SHALL migrate a format 1 journal to format 2 in one transaction on start.
-
-#### Scenario: Format 1 journal
-- **WHEN** a worker opens a format 1 journal
-- **THEN** it is format 2 afterwards and keeps its records
-
 ### Requirement: Intake records
 W1 SHALL append the acceptance observation of an accepted offer and the refusal or rejection observation of a refused or rejected command in the transaction that journals the command, and an inventory read SHALL return the snapshot with the last assigned sequence in one transaction.
 
@@ -74,3 +67,17 @@ The journal SHALL store each execution fact with the assignment, attempt, and ow
 #### Scenario: Start fact
 - **WHEN** W5s commits a start with a process identity
 - **THEN** the outbox entry names the intent's assignment, attempt, generation, and recovery epoch, with the process
+
+### Requirement: Journal format 3
+The journal SHALL be format 3, which adds to format 2 the `expired` operation outcome, each execution's terminal sequence and record removal, unproven terminations, and unapplied cancellations. A worker SHALL migrate a format 1 or 2 journal to format 3 in one transaction on start, expiring the pending operations of executions already `not-started`.
+
+#### Scenario: Format 2 journal
+- **WHEN** a worker opens a format 2 journal
+- **THEN** it is format 3 afterwards, keeps its records, and takes each terminal sequence from the outbox
+
+### Requirement: Removable execution records
+The journal SHALL list as removable each terminal execution whose terminal fact's outbox entry is confirmed and whose record is not yet removed, and SHALL commit a removal only for such an execution.
+
+#### Scenario: Terminal fact confirmed
+- **WHEN** the outbox entry of an execution's exit is confirmed
+- **THEN** the execution is removable until its removal is journaled

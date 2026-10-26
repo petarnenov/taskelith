@@ -20,15 +20,27 @@ export interface SupervisedFacts {
   readonly launch?: LaunchRecord;
   readonly process?: ExecutionProcess;
   readonly exit?: ExecutionExit;
+  // Processes that outlived the child, as the supervisor first saw them.
+  readonly survivors?: readonly ExecutionProcess[];
+  // An adopting supervisor could not apply a requested cancellation.
+  readonly cancellationNotApplied: boolean;
   readonly problems: readonly RecordProblem[];
 }
 
-// What recovery after a failed supervisor start found.
+// What recovery found: `observe` once a live or adopting supervisor runs;
+// `retry` while a dead process may still hold the lock.
 export type SupervisedRecovery =
   | { readonly fact: 'not-started' }
   | { readonly fact: 'exited'; readonly exit: ExecutionExit }
+  // A live supervisor keeps watching; `adopted` started a new one for a
+  // supervisor that was gone.
   | { readonly fact: 'observe' }
-  | { readonly fact: 'uncertain' };
+  | { readonly fact: 'adopted' }
+  | { readonly fact: 'retry' }
+  | { readonly fact: 'uncertain'; readonly reason: string };
+
+// A recovery after `retry` decides a lock still held by no live process.
+export type RecoveryRound = 'first' | 'after-retry';
 
 // One execution's record and supervisor (supervisor identity contract,
 // section 4), as the launch orchestrator drives them.
@@ -41,10 +53,15 @@ export interface ExecutionSupervision {
   seal(): Promise<Result<LaunchRecord>>;
   cancel(reason: string): Promise<Result<void>>;
   read(): Promise<Result<SupervisedFacts>>;
-  recover(): Promise<Result<SupervisedRecovery>>;
+  recover(round: RecoveryRound): Promise<Result<SupervisedRecovery>>;
+  // Only after the terminal fact is confirmed; a missing record is removed.
+  remove(): Promise<Result<void>>;
 }
 
 export type SupervisionFactory = (executionId: ExecutionId) => ExecutionSupervision;
+
+// The execution records on disk, by their directory names.
+export type RecordListing = () => Promise<Result<readonly string[]>>;
 
 // A launch record that is a claim proves a supervisor may have spawned.
 export function sealWon(launch: LaunchRecord): Result<void> {

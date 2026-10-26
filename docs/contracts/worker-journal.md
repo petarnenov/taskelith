@@ -31,7 +31,7 @@ The **control records** are every path in the table except `worker/workspaces/` 
 - **Explicit creation.** Enrollment creates `worker/`; starting an unenrolled worker fails and creates nothing. Enrollment creates the journal first, then the credential files, and `worker/identity` last, so an identity without a journal always means loss (section 8), and an identity never names a credential that was not written.
 - **Ownership and permissions.** `worker/` and every control record are owned by the worker's account; `worker/` and the control-record directories have mode `0700`, and control-record files mode `0600`. A control record, or a directory on the path to one, owned by another account or writable by group or others, fails startup.
 - **No redirection.** No path component from `dataRoot` down to a control record is a symbolic link; the worker refuses one instead of following it. The checkout or a subtree of it is refused as `dataRoot` (storage contract).
-- **Workspaces.** Content under `worker/workspaces/` is project content with its own modes and symbolic links; the workspace rules of item 14 and G3 govern it, and nothing in it is read as a control record. `worker/` being `0700` closes it to other accounts.
+- **Workspaces.** Content under `worker/workspaces/` is project content with its own modes and symbolic links; the workspace rules of item 14 and G3 ([Git workspace contract](git-workspace.md)) govern it, and nothing in it is read as a control record. `worker/` being `0700` closes it to other accounts.
 - **Local, persistent filesystem.** The journal lives on a local filesystem that supports POSIX advisory locks and `fsync`. On Linux, `dataRoot` is a persistent volume mounted into the worker container (decision D5 (a)), never the container's writable layer; a network filesystem is refused.
 - **One owner.** Separate workers on one host have distinct roots; a colocated control plane uses only `control-plane/`.
 - **Separate retention.** Workspace removal and log truncation never delete the journal, the identity, or an execution record. Durable records never live in a cache, temporary, or log directory.
@@ -78,8 +78,9 @@ The journal holds these logical records; item 14 defines the schema:
 - **Inbox:** one entry per `commandId`, with the command's kind, digest, and outcome (accepted, rejected with a reason, or duplicate). `commandId` entries are kept for the journal's lifetime, as the lifetime deduplication of the [operational targets](../operational-targets.md); a command's payload may be pruned once its assignment is terminal.
 - **Launch intent:** the accepted assignment the worker means to launch: `assignmentId`, `attemptId`, `ownershipGeneration`, and the admission it names.
 - **Cancellation request:** an accepted cancellation command's target execution or attempt, until the cancellation's evidence is recorded (item 4 section 8).
-- **Execution:** `executionId` (item 4), its launch intent, its state as item 3 defines it (none before a grant, then `authorized`, `started`, `exited`, or `not-started`), and whether its execution record is journaled as written. `uncertain` is never a state here: it is evidence kept beside the state, which it leaves unchanged (item 4 section 7).
-- **Authorization request:** `operationId`, its `executionId`, the expected values sent, and the outcome: the grant (`launchAuthId`, `issuedAt`, `ttl`, `skew`, the bound values) or the rejection reason (item 3).
+- **Execution:** `executionId` (item 4), its launch intent, its state as item 3 defines it (none before a grant, then `authorized`, `started`, `exited`, or `not-started`), whether its execution record is journaled as written, the outbox sequence of its terminal fact, and whether its execution record was removed. `uncertain` is never a state here: it is evidence kept beside the state, which it leaves unchanged (item 4 section 7).
+- **Authorization request:** `operationId`, its `executionId`, the expected values sent, and the outcome: the grant (`launchAuthId`, `issuedAt`, `ttl`, `skew`, the bound values), the rejection reason (item 3), or `expired` when no grant of the operation can be used any more.
+- **Execution evidence:** whether an execution's termination was left unproven, and which cancellations of it the supervisor did not apply; each is reported once.
 - **Outbox:** observations to publish (section 6).
 - **Journal metadata:** `journalId`, `installationId`, `workerId`, the recovery epoch the worker holds, and the next outbox sequence.
 
@@ -89,10 +90,10 @@ Each commit below precedes the action in its row:
 | --- | --- | --- | --- |
 | W1 | The inbox entry and its outcome, in one transaction with what the command asks: for an accepted assignment its launch intent, for an accepted cancellation its cancellation request, and for a rejected command its rejection observation | Acknowledging the command to the broker | An acknowledged command, including a cancellation, is never lost (architecture section 9, step 4) |
 | W2 | A new `executionId`, or the current one for a re-authorization item 3 allows, and a new `operationId` with its expected values | Sending the first launch authorization request for that operation | Item 3 sections 6 and 7; item 4 crash point CP1 |
-| W3 | The grant, and the execution as `authorized`; or a retryable rejection; or a non-retryable rejection and its observation (item 3 section 9) | Writing or replacing `intent` (item 4, CP2) after a grant; any retry after a rejection | A grant is never used without a journaled trace, and a non-retryable rejection is never retried |
+| W3 | The grant, and the execution as `authorized`; or a retryable rejection; or a non-retryable rejection and its observation (item 3 section 9); or the operation as `expired`, when its deadline passed without a decision or the control plane answered that it expired | Writing or replacing `intent` (item 4, CP2) after a grant; any retry after a rejection | A grant is never used without a journaled trace, and a non-retryable rejection is never retried |
 | W4 | The execution record as written | Starting the supervisor (item 4, CP3 and CP4) | From here on, a missing or damaged record is data loss, never proof that nothing spawned |
 | W5 | A fact read from the execution record, its state change, and its observation: `started` from `handle` (W5s) or `exited` from `exit` (W5e) | Removing anything from the execution record | Facts reach the outbox before their source can go |
-| W6 | The execution as `not-started`, and its observation | — ; it follows reading a seal made durable under section 4 | `not-started` is reported only after the irreversible seal (item 3 section 4, item 4 section 5) |
+| W6 | The execution as `not-started`, its operations without an outcome as `expired`, and its observation | — ; it follows reading a seal made durable under section 4 | `not-started` is reported only after the irreversible seal (item 3 section 4, item 4 section 5) |
 
 The worker writes its wall-clock time into records for diagnosis only. No safety decision reads it; the spawn deadline uses the clock item 3 and item 4 name, read in memory.
 
@@ -106,15 +107,19 @@ A duplicate command (its `commandId` already in the inbox) is acknowledged again
 | An accepted launch intent, not cancelled, without an execution or whose executions are all `not-started`, and no non-retryable rejection | Continue the launch: commit W2 for a new execution and request a current launch authorization (item 3). This holds whether or not the command was acknowledged, because the broker will not redeliver an acknowledged command |
 | W1 with a cancellation request whose evidence is not recorded | Forward the cancellation to the execution's supervisor again (item 4 section 8); a launch intent with an accepted cancellation and no execution launches nothing |
 | W2 without an outcome, or W3 with a grant, and no W4 | Seal the execution under item 4 (its row "record not journaled"), commit W6, and continue as the launch intent row says, with a new `executionId` and `operationId` (item 3 section 7); never send the old operation again and never use its grant |
-| W3 with a retryable rejection, and no W4 | Continue with a new `operationId` for the same execution (item 3 section 6) |
+| W3 with a retryable rejection or an expired operation of an execution without a grant, and no W4 | Continue with a new `operationId` for the same execution, reporting that it has not started (item 3 sections 6 and 7); no seal and no W6 are needed, because nothing was written |
 | W3 with a non-retryable rejection | Nothing is retried; the rejection's observation reaches the control plane, and the scheduler acts on its reason (item 3 section 9) |
 | W4 or W5s, and no terminal fact | Item 4's recovery table decides from the execution record and native evidence: adopt and keep observing, forward a pending cancellation, report a recorded exit (W5e), seal, or report `uncertain`; nothing is spawned |
 | W5e or W6 | Nothing to repeat; the outbox publishes the observation |
 | Outbox entries not confirmed | Publish them again with the same `observationId` (section 6) |
 
+Each execution is reconciled once per start; nothing an earlier process journaled is launched again outside these rows. An execution record directory that no execution names is reported and kept.
+
+**Record removal.** An execution record is removed once its terminal fact (W5e or W6) is confirmed, which the journal knows when the outbox entry at the execution's terminal sequence is gone (section 6). The removal is journaled after the directory is gone, so a crash in between only repeats it. A supervisor that still holds the record's lock keeps it for a later pass.
+
 ## 6. Local outbox of observations
 
-- **Identity.** Each observation has an `observationId` derived deterministically from its source: from `commandId` for a command outcome, from `executionId` and the fact for an execution fact, and from `executionId`, the fact, and an evidence counter for a repeated `uncertain`. A fact derived again after a lost write therefore gets the same identity, and the receiver deduplicates it.
+- **Identity.** Each observation has an `observationId` derived deterministically from its source: from `commandId` for a command outcome, from `executionId` and the fact for an execution fact, from `executionId`, the fact, and an evidence counter for a repeated `uncertain`, and from `executionId`, the fact, and the cancellation's `commandId` for a cancellation that was not applied. A fact derived again after a lost write therefore gets the same identity, and the receiver deduplicates it.
 - **Producer sequence.** Each entry gets the next number of a gapless sequence per `(workerId, journalId)`, assigned in its transaction. Observations carry `workerId`, `journalId`, and the sequence (item 8), as the per-producer sequence of architecture section 9.
 - **Publication.** The worker publishes only committed entries and retries each with the same `observationId` until the broker acknowledges it. A broker acknowledgement is transport only: the stream may expire an entry before the control plane consumes it (operational targets: `7 days` or `10 GiB`).
 - **Confirmation.** The control plane confirms what it has applied, cumulatively by sequence per `(workerId, journalId)` (item 8 defines the message). An entry stays in the outbox until it is confirmed, and the worker publishes an unconfirmed entry again, with the same `observationId`, after a bound item 14 sets. Only a confirmed entry may be pruned, and an execution record is removed only after its terminal fact is confirmed (item 4). Confirmation and publication marks need no durability of their own: losing one only repeats a publication that the receiver deduplicates.
@@ -171,7 +176,8 @@ After a journal loss or a corrupt journal, the worker acknowledges, requests, an
 ## 10. Format versioning
 
 - `user_version` names the journal's format; `application_id` names it as a Taskelith journal. Every other control record carries its own format version (section 4).
-- A worker reads the current and the previous journal format. It migrates the previous one forward in a single transaction on start, so a crash leaves either format complete. It never downgrades a journal.
+- A worker reads the current journal format and every earlier format it lists. It migrates an earlier one forward step by step in a single transaction on start, so a crash leaves either format complete. It never downgrades a journal.
+- Format 1 is the bootstrap format; format 2 added the declared capacity, the inventory counters, the intent's recovery epoch and resources, and assignment ends; format 3 adds the `expired` outcome, the terminal sequence, record removal, and the execution evidence of section 5. Its migration expires the operations without an outcome of executions already `not-started`, and takes the terminal sequence from the outbox, or 0 when the entry was pruned.
 - A newer or unknown format fails startup; the worker never guesses around it.
 - A worker package that changes the format states the change in its release notes, and a rollback to a version that cannot read the format requires a new journal incarnation (section 8).
 
@@ -219,6 +225,6 @@ Items 14, 20, 21, 24, and 25 implement these through the deterministic test harn
 - The journal is opened with `EXCLUSIVE` locking before WAL mode, and no `-shm` file exists.
 - A second worker on the same root fails to take the root lock; after the first is killed, the lock is free.
 - A symbolic link or a foreign owner on a control-record path, or a group-writable control-record directory, fails startup; a symbolic link inside a workspace does not.
-- The previous journal format is migrated, and a crash during migration leaves either format complete.
+- Every earlier journal format is migrated, and a crash during migration leaves either format complete.
 - Power loss is simulated where the harness supports it (for example by a filesystem that discards unsynced writes); native acceptance records which storage and settings were exercised on each matrix entry.
 - A removed workspace never removes the journal, an identity, or an execution record.
