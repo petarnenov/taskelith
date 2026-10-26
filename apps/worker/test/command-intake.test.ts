@@ -4,14 +4,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 import { checkMessageSchema, type MessageSchemas } from '@taskelith/contracts';
-import { isSpaceRefusal, parseRecoveryEpoch, planJournalRecovery, SPACE_REFUSAL_REASON, type JournalBinding } from '@taskelith/execution';
+import {
+  isSpaceRefusal, launchRejection, parseRecoveryEpoch, planJournalRecovery, SPACE_REFUSAL_REASON, type ExecutionState,
+  type JournalBinding, type JournaledExecution, type LaunchRequest, type WorkerJournal,
+} from '@taskelith/execution';
 import type { WorkerCapacity } from '@taskelith/fleet';
 import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
 import { readCommandSubjectMessage, type DeliveredMessage, type Publication, type PublishOutcome } from '@taskelith/nats';
 import { failed, id, value } from '@taskelith/testing';
 import { CommandIntake, publishDueObservations, type ObservationPublisherOptions } from '@taskelith/worker';
 import { enrollWorkerRoot, type CommitPointHook, type WorkerEnrollment, type WorkerRoot } from '@taskelith/worker-journal';
-import { FakePressure } from './launch-fakes.ts';
+import { FakePressure, PROCESS, grantFor } from './launch-fakes.ts';
 
 const T0 = value(parseInstant('2026-10-25T09:00:00.000Z'));
 const WORKER = 'worker-1';
@@ -352,13 +355,98 @@ test('an inventory request is answered with a fresh snapshot in parts', async ()
 });
 
 // W2 for the first intent, as 20c's launches will journal it.
-function beginLaunch(): void {
+function beginLaunch(): LaunchRequest {
   const { assignmentId, attemptId, ownershipGeneration, admissionId, admissionGeneration } = value(root.journal.snapshot()).intents[0]!;
-  value(root.journal.beginAuthorization({
+  const request: LaunchRequest = {
     operationId: id('OperationId', 'operation-1'), workerId: BINDING.workerId, recoveryEpoch: BINDING.recoveryEpoch,
     assignmentId, attemptId, ownershipGeneration, executionId: id('ExecutionId', 'execution-1'), admissionId, admissionGeneration,
     reportsNotStarted: false,
-  }));
+  };
+  value(root.journal.beginAuthorization(request));
+  return request;
+}
+
+function acceptedAssignments(): string[] {
+  return value(root.journal.snapshot()).intents.map((intent) => intent.assignmentId);
+}
+
+// Crash scenario 24c: a launch rejected finally before any grant, then the
+// assignment ends and the scheduler places another attempt on the worker.
+test('rejected-launch-frees-slot: a final rejection before a grant frees the slot', async () => {
+  intake = newIntake({ ...CAPACITY, slots: 1 });
+  value(await deliver(offer(1)));
+  beginLaunch();
+  value(root.journal.recordLaunchRejection(id('OperationId', 'operation-1'), launchRejection('gate-not-passed', 'gate failed')));
+  value(await deliver(end(1)));
+  value(await deliver(offer(2)));
+  assert.deepEqual(acceptedAssignments(), ['assignment-1', 'assignment-2']);
+});
+
+const launchProgressions: Record<string, (request: LaunchRequest) => void> = {
+  pending: () => undefined,
+  authorized: (request) => value(root.journal.recordGrant(grantFor(request))),
+  started: (request) => {
+    const grant = grantFor(request);
+    value(root.journal.recordGrant(grant));
+    value(root.journal.recordExecutionRecordWritten(request.executionId));
+    value(root.journal.recordStart(request.executionId, grant.launchAuthId, PROCESS));
+  },
+};
+
+for (const [progression, progress] of Object.entries(launchProgressions)) {
+  test(`an ended assignment keeps its slot while its launch is ${progression}`, async () => {
+    intake = newIntake({ ...CAPACITY, slots: 1 });
+    value(await deliver(offer(1)));
+    progress(beginLaunch());
+    value(await deliver(end(1)));
+    value(await deliver(offer(2)));
+    assert.deepEqual(acceptedAssignments(), ['assignment-1']);
+    assert.equal(value(root.journal.snapshot()).executions[0]?.state, progression === 'pending' ? undefined : progression);
+  });
+}
+
+// The journal as the admission reads it, with assignment-1's execution as
+// given; the SQLite journal cannot store some of these combinations.
+function journalShowing(execution: Partial<JournaledExecution>): WorkerJournal {
+  const shown: JournaledExecution = {
+    executionId: id('ExecutionId', 'execution-1'), assignmentId: id('AssignmentId', 'assignment-1'), recordWritten: false,
+    uncertain: false, authorizations: [], ...execution,
+  };
+  const snapshot = () => {
+    const real = root.journal.snapshot();
+    return real.ok ? ok({ ...real.value, executions: [shown] }) : real;
+  };
+  return new Proxy(root.journal, {
+    get: (target, key) => {
+      if (key === 'snapshot') return snapshot;
+      const member: unknown = Reflect.get(target, key, target);
+      return typeof member === 'function' ? member.bind(target) : member;
+    },
+  });
+}
+
+const operation = (outcome: JournaledExecution['authorizations'][number]['outcome']) => ({ operationId: id('OperationId', `operation-${outcome}`), outcome });
+
+const slotEvidence: readonly (readonly [string, Partial<JournaledExecution>, boolean])[] = [
+  ['an uncertain execution without a grant and a closed operation', { uncertain: true, authorizations: [operation('rejected-final')] }, true],
+  ['an execution without a state and a granted operation', { authorizations: [operation('granted')] }, true],
+  ['an execution without a state or an operation', {}, true],
+  ['an execution in an unknown state', { state: 'paused' as ExecutionState }, true],
+  ['an exited execution with uncertainty evidence', { state: 'exited', uncertain: true }, false],
+  ['an execution whose operations were rejected retryably and expired', { authorizations: [operation('rejected-retryable'), operation('expired')] }, false],
+];
+
+for (const [evidence, execution, holds] of slotEvidence) {
+  test(`an ended assignment ${holds ? 'keeps' : 'frees'} its slot for ${evidence}`, async () => {
+    intake = new CommandIntake({
+      journal: journalShowing(execution), capacity: { ...CAPACITY, slots: 1 }, pressure, publish: broker.publish, observationSubject: SUBJECT,
+      newReportId: () => 'report-1', now: () => T0, journalFault: () => root.journal.fault,
+    });
+    value(await deliver(offer(1)));
+    value(await deliver(end(1)));
+    value(await deliver(offer(2)));
+    assert.deepEqual(acceptedAssignments(), holds ? ['assignment-1'] : ['assignment-1', 'assignment-2']);
+  });
 }
 
 test('a resent command with its keys in another order is a duplicate', async () => {

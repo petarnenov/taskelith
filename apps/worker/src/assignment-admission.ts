@@ -1,4 +1,6 @@
-import type { AssignmentRefusalReason, AttemptId, JournalSnapshot, ResourceRequest } from '@taskelith/execution';
+import type {
+  AssignmentRefusalReason, AttemptId, AuthorizationOutcome, JournaledAuthorization, JournaledExecution, JournalSnapshot, ResourceRequest,
+} from '@taskelith/execution';
 
 type CapacityRefusalReason = Exclude<AssignmentRefusalReason, 'worker-admission-pressure'>;
 import type { WorkerCapacity } from '@taskelith/fleet';
@@ -23,14 +25,26 @@ export function refusalOf(requested: ResourceRequest, journal: JournalSnapshot, 
 // Once per attempt: every assignment that has not ended, and every one with
 // an execution that is not terminal, uncertain ones included.
 function countedAttempts(journal: JournalSnapshot): ResourceRequest[] {
-  const running = new Set(journal.executions
-    .filter((execution) => execution.state !== 'exited' && execution.state !== 'not-started')
-    .map((execution) => execution.assignmentId));
+  const running = new Set(journal.executions.filter(holdsSlot).map((execution) => execution.assignmentId));
   const counted = new Map<AttemptId, ResourceRequest>();
   for (const intent of journal.intents) {
     if (!intent.ended || running.has(intent.assignmentId)) counted.set(intent.attemptId, intent.requested);
   }
   return [...counted.values()];
+}
+
+// A slot is freed only on proof: a terminal state, or no grant and every
+// operation closed without one; anything else, uncertainty included, holds.
+function holdsSlot(execution: JournaledExecution): boolean {
+  if (execution.state === 'exited' || execution.state === 'not-started') return false;
+  if (execution.uncertain || execution.state !== undefined) return true;
+  return !closedWithoutGrant(execution.authorizations);
+}
+
+const CLOSED_WITHOUT_GRANT: readonly AuthorizationOutcome[] = ['rejected-final', 'rejected-retryable', 'expired'];
+
+function closedWithoutGrant(authorizations: readonly JournaledAuthorization[]): boolean {
+  return authorizations.length > 0 && authorizations.every(({ outcome }) => CLOSED_WITHOUT_GRANT.includes(outcome));
 }
 
 function sum(requests: readonly ResourceRequest[], resource: 'cpuMillicores' | 'memoryMebibytes'): number {
