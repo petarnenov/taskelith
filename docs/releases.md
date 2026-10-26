@@ -5,7 +5,7 @@ Taskelith uses semantic-release and GitHub Actions. The repository checks are de
 ## Branch flow
 
 1. Each change is developed on its own feature branch in its own git worktree, so several changes can proceed in parallel, and is merged into `dev`, the default branch, through a pull request. Pushes and pull requests targeting `dev` run no workflow.
-2. Before every push, `make verify` must pass locally. Run `make hooks` once per clone; the `pre-push` hook then runs `make verify` and blocks the push on failure. The target first checks that Node matches `.nvmrc` and npm matches the CI pin.
+2. Before every push, `make verify` must pass locally, except for a push whose every ref is a deletion. Run `make hooks` once per clone; the `pre-push` hook then runs `make verify` and blocks the push on failure, and lets a delete-only push through without it. The target first checks that Node matches `.nvmrc` and npm matches the CI pin.
 3. A promotion pull request from `dev` into `main` runs `make verify` in GitHub.
 4. Merging the promotion into `main` runs `make verify` again and releases qualifying changes.
 

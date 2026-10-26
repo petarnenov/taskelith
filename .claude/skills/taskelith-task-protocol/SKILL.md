@@ -6,7 +6,7 @@ description: The Taskelith agent task protocol for coordinator and worker sessio
 Read `docs/agent-task-protocol.md` in this repository and follow it step by step for your role:
 
 - As a **worker**, follow "Worker steps" from the worktree through the archive of your change on its own branch to the handoff, then stop and wait for the coordinator; after it reports the merge, clean up and clear your context.
-- As the **coordinator**, follow "Coordinator steps" to assign, integrate each archived change with one pull request, clean up, and release workers; a branch that conflicts under `openspec/specs/` or `openspec/changes/archive/` goes back to its worker to re-archive.
+- As the **coordinator**, follow "Coordinator steps" to assign, integrate each archived change with one pull request, clean up, and release workers; a branch that conflicts with `dev`, whose evidence the merge invalidates, or that lacks its archive commit goes back to its worker. On any return, the worker restores the active change by reverting its archive commit, merges `dev`, reconciles each restored delta with `dev`'s current requirement text, keeping others' edits, has the assigned reviewer review the resolved diff and the reconciliation, records it, and archives again as the last commit.
 
 The protocol builds on `AGENTS.md`, `docs/governance.md`, and `docs/releases.md`; read them when the protocol points to them. Never skip the OpenSpec change, `make verify`, or the independent review, and send owner decisions to the coordinator (or, as coordinator, to the owner) with options instead of deciding them.
 
