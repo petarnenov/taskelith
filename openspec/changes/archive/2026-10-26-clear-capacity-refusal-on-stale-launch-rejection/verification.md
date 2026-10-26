@@ -77,6 +77,23 @@ An implementation subagent that the worker session briefed and checks developed 
 - `make verify` at `7e00b32` (after the merge and the review pass 2 fix): passed (exit 0). 1932 tests, 1930 passed, 0 failed, and 2 Linux-only tests skipped. Coverage: 99.29% lines, 92.09% branches, 99.04% functions. Contract compatibility, OpenSpec (70 passed), the archive check, and the package check passed.
 - `make verify` at `32aac2b` (after the review pass 1 fixes): passed (exit 0). 1918 tests, 1916 passed, 0 failed, and 2 Linux-only tests skipped. Coverage: 99.29% lines, 92.07% branches, 99.04% functions. Contract compatibility, OpenSpec (70 passed), the archive check, and the package check passed.
 
+## Archive checks
+
+The checked state is the tree of the archive commit: the working tree after `npm run openspec -- archive clear-capacity-refusal-on-stale-launch-rejection --yes` on `5f6ecc8`, where the checks below ran.
+
+- The archive applied 4 modified requirements: 1 in `launch-reconciliation` and 3 in `observation-consumption`.
+- `npm run openspec -- validate --all --strict`: `Totals: 69 passed, 0 failed (69 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line is `✓ change/2026-10-26-clear-capacity-refusal-on-stale-launch-rejection`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only this change's intended edits, in two files (27 insertions, 3 deletions):
+  - `launch-reconciliation`: the "Launch rejections that reconcile or only record" body, and the scenario "Rejection after a refusal for slots".
+  - `observation-consumption`: the bodies of "Stale ownership generation" and "Acceptance and refusal".
+  - `observation-consumption`: the four scenarios added to "Stale ownership generation", and "Stale launch rejection older than a refusal" in "Report sequence fences".
+- `make verify`: passed (exit 0). 1938 tests, 1936 passed, 0 failed, and 2 Linux-only tests skipped. Coverage: 99.28% lines, 92.09% branches, 99.04% functions. The other checks also passed:
+  - `Contract documents have no undeclared breaking change.`
+  - OpenSpec `Totals: 69 passed, 0 failed`
+  - `Every active OpenSpec change archives into strictly valid specs.`
+  - `Packed file allowlist and installed CLI verification passed.`
+
 ## Review pass 1
 
 - Reviewer: Codex CLI, model `gpt-6.1-sol`, reasoning effort medium, read-only sandbox. The coordinator confirmed all three from the output header.
