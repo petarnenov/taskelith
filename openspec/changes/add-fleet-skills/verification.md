@@ -47,6 +47,10 @@ Session `ses_e8599f351ffeEtaPI8fvibYj4H`, revision `b8ee1595`. Model confirmatio
 - Low: the skills repeat protocol detail (the handoff items and one integration at a time). Resolution: kept, because the owner's request names both; `design.md` decision 5 says so, and the self-check no longer claims that the skills repeat nothing.
 - Low: the evidence check omitted the source of the `SendMessage` and `ListAgents` addressing statement. Resolution: the evidence check and `docs/fleet.md` name the `SendMessage` tool description as its source.
 
+### Pass 2
+
+Session `ses_e85907241ffeO3xIPcurhqfqvd`, revision `06782cc0`. Model confirmation from the stored assistant messages of the session: provider `opencode-go`, model `kimi-k3.1-pro`, variant `high`, agent `reviewer`. The `opencode run` process exited with status 0. The SHA-256 snapshot of the worktree before and after the review was equal: `ddf863aa6feb84150ac475406111a7f4dc2adcbde051901b941e50d07492db75`. The reviewer confirmed that all seven pass 1 findings are resolved, and a full re-review found no new problems. Findings: Critical 0, High 0, Medium 0, Low 0.
+
 ## Limitations
 
 - The review passes were run by the subagent on the coordinator's instruction, not by the coordinator's session, as Scope and source states.
