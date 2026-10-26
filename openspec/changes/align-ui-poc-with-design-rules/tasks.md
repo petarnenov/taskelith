@@ -6,17 +6,15 @@
 
 ## 2. Contrast
 
-- [x] 2.1 Measure dimmed text contrast on every surface in both color schemes.
-- [x] 2.2 Set the dimmed color through the `cssVariablesResolver` in both color schemes.
-- [x] 2.3 Measure every visible text, placeholder, and disabled text on its background in both color schemes.
-- [x] 2.4 Make text on filled colors readable with `primaryShade`, `autoContrast`, and `luminanceThreshold`, and colored, placeholder, disabled, error, and separator text with the resolver and theme defaults.
+- [x] 2.1 Measure text contrast in both color schemes.
+- [x] 2.2 Keep Mantine's default colors, as the owner decided, and record the default ratios below 4.5:1 as a departure for item 28.
 
 ## 3. Documentation and build
 
-- [x] 3.1 Replace the README section on the departures with how the design rules are met, and rewrite the ADR 0011 consequence as history.
+- [x] 3.1 Replace the README section on the departures with the design rules' status, and rewrite the ADR 0011 consequence as history.
 - [x] 3.2 Rebuild the proof of concept as the README says, measure it again, and record its size and SHA-256 for version 7.
 
 ## 4. Verify
 
 - [x] 4.1 Run `npm run openspec -- validate align-ui-poc-with-design-rules --strict` and `make verify`.
-- [ ] 4.2 Independent review and record it in `verification.md` (pass 1 recorded).
+- [ ] 4.2 Independent review and record it in `verification.md` (passes 1 and 2 recorded).

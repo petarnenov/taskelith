@@ -25,8 +25,8 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { PERSONAS, PocProvider, usePoc, type Screen } from './store';
-import { LaterGate, TARGET_SIZE } from './ui';
-import { resolveCssVariables, theme } from './theme';
+import { LaterGate } from './ui';
+import { TARGET_SIZE, theme } from './theme';
 import { ChevronIcon, InboxIcon, LogoIcon, MoonIcon, SunIcon } from './icons';
 import { BoardScreen } from './screens/Board';
 import { SessionScreen } from './screens/Session';
@@ -131,8 +131,7 @@ function AccountMenu() {
         <Menu.Item>Account settings</Menu.Item>
         <Menu.Item>Change password</Menu.Item>
         <Menu.Divider />
-        {/* A colored menu item uses shade 6; c keeps the readable ink. */}
-        <Menu.Item color="red" c="red" onClick={signOut}>
+        <Menu.Item color="red" onClick={signOut}>
           Sign out
         </Menu.Item>
       </Menu.Dropdown>
@@ -292,7 +291,7 @@ function Shell() {
 }
 
 createRoot(document.getElementById('root')!).render(
-  <MantineProvider theme={theme} cssVariablesResolver={resolveCssVariables} defaultColorScheme="dark">
+  <MantineProvider theme={theme} defaultColorScheme="dark">
     <PocProvider>
       <Shell />
     </PocProvider>

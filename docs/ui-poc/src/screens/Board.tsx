@@ -15,7 +15,8 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { usePoc } from '../store';
-import { GATE, LaterGate, PageHeader, SessionBadge, TARGET_SIZE, deriveSessionStatus } from '../ui';
+import { GATE, LaterGate, PageHeader, SessionBadge, deriveSessionStatus } from '../ui';
+import { TARGET_SIZE } from '../theme';
 import { PlusIcon } from '../icons';
 import { COLUMNS, conflictFiles, mergeSteps, type Run } from './board-data';
 import {
