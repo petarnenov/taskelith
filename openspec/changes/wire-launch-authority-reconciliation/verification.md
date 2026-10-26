@@ -85,6 +85,22 @@ Reviewer: OpenCode CLI, agent `reviewer`, model `opencode-go/kimi-k3.1-pro`, var
 - **Checks after the fixes:**
   - At `6c49c1c`, the tests passed (1393 of 1393; coverage 99.22 / 91.34 / 98.71). `make verify` still failed in `verify:archive`, because the launch-authority delta's "Invalidating writers" requirement exceeded 500 characters.
   - The cancellation-reason rule therefore moved into its own added requirement, "Attempt cancellation reason", and "Invalidating writers" is unchanged.
+  - `make verify` at `a79732c`: exit 0; 1393 tests, 1393 pass; coverage 99.22 / 91.35 / 98.71.
+
+### Pass 2
+
+- **Revision:** `a79732c`.
+- **Invocation:** as pass 1. The git-restriction paragraph also forbade `git -C`, absolute paths, and compound commands, as the coordinator asked.
+- **Model confirmation:** all 19 stored messages record `{"id":"kimi-k3.1-pro","providerID":"opencode-go","variant":"high"}`.
+- **Session:** `ses_e8a4eeb97ffe4Uf1g7bdDr3FEi`.
+- **Snapshot:** `d3a5fffdbc14e51380a3590ad9fb167a8de1df26746d2dd99055256f3b44061a` before and after; unchanged.
+- **Pass 1 findings:** M1 and M3 confirmed resolved. The M2 resolution was judged sound. Revised D4 (b) was judged atomic and idempotent, with no problem found in its retry or delegation-close behavior.
+- **Findings:** 0 Critical, 0 High, 1 Medium, 1 Low.
+  1. **M1:** `releaseRejected` always superseded. After a granted execution was recorded `not-started`, a releasing rejection of a second launch under the same assignment failed `supersedeAssignment`'s precondition and rolled back. The assignment and reservation stayed held, and a `stale-recovery-epoch` sent no inventory request.
+     - **Fixed** in `a859c1f`: `freeIdleAssignment` (`assignment-freeing.ts`) is the one freeing rule for revocation and releasing rejections. It supersedes a never-granted assignment, ends a granted one with only terminal executions as `attempt-ended` with `followAttemptEnd`, and keeps one with an `authorized` or `started` execution.
+     - Tests: `capacity-not-reserved` and `stale-recovery-epoch` after an earlier `not-started` each end the attempt, release the assignment, and open a retry; the latter also sends its inventory request.
+  2. **L1:** no successful `make verify` was recorded for the final revision. **Fixed** by recording the `a79732c` run above and the run after the pass 2 fix below.
+- **Checks after the fix:** `make verify` at `a859c1f`, run by the author: exit 0; 1396 tests, 1396 pass; coverage 99.22 / 91.35 / 98.71.
 
 ## Limitations
 

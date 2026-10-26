@@ -23,7 +23,7 @@ For an unauthorized start, the control plane SHALL write one `execution.cancella
 - **THEN** nothing is written to that execution, and the observation is logged as evidence
 
 ### Requirement: Launch rejections
-The control plane SHALL apply each `execution.launch.rejected` by its reason and SHALL log it with that reason. `worker-not-authorized`, `stale-recovery-epoch`, `capacity-not-reserved`, `admission-not-current`, `gate-not-passed`, `artifact-revision-changed`, and `policy-revision-changed` SHALL supersede the assignment, so placement can reassign the attempt.
+The control plane SHALL apply each `execution.launch.rejected` by its reason and SHALL log it with that reason. `worker-not-authorized`, `stale-recovery-epoch`, `capacity-not-reserved`, `admission-not-current`, `gate-not-passed`, `artifact-revision-changed`, and `policy-revision-changed` SHALL free the assignment as a worker revocation frees it, so placement can reassign the attempt.
 
 #### Scenario: Reservation lost
 - **WHEN** a worker reports a launch rejected with `capacity-not-reserved` for its current assignment
@@ -35,6 +35,10 @@ A launch rejected with `stale-recovery-epoch` or `execution-conflict` SHALL requ
 #### Scenario: Execution conflict
 - **WHEN** a worker reports a launch rejected with `execution-conflict`
 - **THEN** an inventory request is sent to that worker
+
+#### Scenario: Rejection after an earlier execution did not start
+- **WHEN** a second launch of an assignment whose first granted execution is `not-started` is rejected with `capacity-not-reserved`
+- **THEN** the attempt ends, the assignment ends as `attempt-ended` with its reservation released, and an automatic retry opens
 
 #### Scenario: Stale generation
 - **WHEN** a worker reports a launch rejected with `stale-ownership-generation`
