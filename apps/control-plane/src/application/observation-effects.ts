@@ -29,12 +29,12 @@ import {
   cancelExecutionInTransaction,
   refuseInTransaction,
   releaseInTransaction,
-  supersedeUngrantedInTransaction,
   type Assignment,
   type HardControl,
   type Refusal,
   type ReleaseRequest,
 } from '@taskelith/scheduling';
+import { freeIdleAssignment } from './assignment-freeing.js';
 import type { ControlPlaneTransaction } from './control-plane-store.js';
 import { requestInventory } from './inventory-reconciliation.js';
 import type { ReconciliationContext } from './journal-reconciliation.js';
@@ -272,10 +272,9 @@ async function launchRejection(
 }
 
 // An assignment that already ended is not released again.
-async function releaseRejected(tx: ControlPlaneTransaction, observation: Observation, assignment: Assignment): Promise<Result<void>> {
-  if (assignment.state === 'ended') return ok(undefined);
-  const superseded = await supersedeUngrantedInTransaction(tx, commandIdentity(observation, assignment.id));
-  return superseded.ok ? ok(undefined) : superseded;
+function releaseRejected(tx: ControlPlaneTransaction, observation: Observation, assignment: Assignment): Promise<Result<void>> {
+  if (assignment.state === 'ended') return Promise.resolve(ok(undefined));
+  return freeIdleAssignment(tx, assignment, commandIdentity(observation, assignment.id));
 }
 
 // Item 21d D3: a revoked worker takes no new work, so an observation that

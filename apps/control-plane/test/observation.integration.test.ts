@@ -863,6 +863,37 @@ describe('launch rejections', () => {
     assert.deepEqual([await messages('execution.assignment.end'), await messages('worker.inventory.requested')], [[], []]);
   });
 
+  for (const [reason, inventories] of [['capacity-not-reserved', 0], ['stale-recovery-epoch', 1]] as const) {
+    test(`a ${reason} rejection after a not-started execution ends the attempt and retries it`, async () => {
+      await enroll();
+      value(await declare(1));
+      const at = await placed();
+      value(await accept(2, at));
+      const executionId = await launch(at, 'execution-a');
+      value(await observe('execution.not-started', { sequence: 3, attemptId: at.attemptId, ownershipGeneration: at.generation }, { executionId }));
+      assert.equal(value(await launchRejected(4, at, reason)), 'applied');
+      const ended = value(await database.transaction((tx) => tx.assignments.get(at.assignment.id)));
+      assert.deepEqual([ended.end?.reason, ended.reservation.state], ['attempt-ended', 'released']);
+      const [first, retry] = (await stored(at.taskId)).attempts;
+      assert.deepEqual([first?.outcome?.kind, retry?.retryOf], ['not-started', at.attemptId]);
+      assert.equal((await messages('execution.assignment.end')).length, 1);
+      assert.equal((await messages('worker.inventory.requested')).length, inventories);
+    });
+  }
+
+  test('a releasing rejection keeps an assignment whose execution is authorized', async () => {
+    await enroll();
+    value(await declare(1));
+    const at = await placed();
+    value(await accept(2, at));
+    await launch(at, 'execution-a');
+    assert.equal(value(await launchRejected(3, at, 'gate-not-passed')), 'applied');
+    const kept = await heldAssignment(at.attemptId);
+    assert.deepEqual([kept.state, kept.end], ['accepted', undefined]);
+    assert.equal((await stored(at.taskId)).attempts[0]!.outcome, undefined);
+    assert.deepEqual(await messages('execution.assignment.end'), []);
+  });
+
   test('a stale execution conflict is rejected before it logs or requests an inventory', async () => {
     await enroll();
     value(await declare(1));
