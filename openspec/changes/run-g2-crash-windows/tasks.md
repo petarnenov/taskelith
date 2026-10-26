@@ -14,6 +14,7 @@
 ## 3. Records
 
 - [x] 3.1 Evidence run on macOS x86_64 and `verification.md`
-- [ ] 3.2 The product defect that fails eleven windows is decided and fixed in its own change, and the scenarios pass
-- [ ] 3.3 `make verify`
-- [ ] 3.4 Independent review
+- [x] 3.2 Mark the eleven windows that fail on D1 as expected failures matched on D1's signature, still recorded `failed` (coordinator decision)
+- [x] 3.3 Record D1 and O1 with the owner's delegate's decisions (away run `20261026T161148Z-opencode-90873`); their fixes belong to `fix-launch-recovery-reauthorization`
+- [x] 3.4 Merge `origin/dev`, a final evidence run with seed `2776760789`, and `make verify`
+- [ ] 3.5 Independent review
