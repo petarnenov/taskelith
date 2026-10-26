@@ -238,7 +238,7 @@ export class LaunchOrchestrator {
   }
 
   // Any target cancels its whole intent, as the recovery plan reads it: the
-  // launch stops, and evidence waits until it ended (design D5).
+  // launch stops, and evidence waits until it ended.
   async #forward(commandId: CommandId, target: CancellationTarget, snapshot: JournalSnapshot): Promise<void> {
     const reason = `cancellation ${commandId}`;
     const assignments = targetedAssignments(target, snapshot);
@@ -440,7 +440,7 @@ class Launch {
   }
 
   // Before W4 nothing can spawn: seal, report `not-started` once the seal is
-  // read back (W6), and launch a new execution unless cancelled (design D3).
+  // read back (W6), and launch a new execution unless cancelled.
   async #abandon(executionId: ExecutionId): Promise<Executed> {
     const sealed = await this.#options.supervision(executionId).seal();
     if (!reported(this.#options, sealed)) return 'end';
@@ -464,7 +464,7 @@ class Launch {
     return this.#cancelled || this.#stopping.aborted ? 'end' : 'relaunch';
   }
 
-  // CP2 to CP4, then the facts the supervisor writes (design D4); a failed
+  // CP2 to CP4, then the facts the supervisor writes (design D3); a failed
   // start goes to the recovery table.
   async #supervise(executionId: ExecutionId, grant: LaunchGrant, reading: DeadlineReading): Promise<Executed> {
     const supervision = this.#options.supervision(executionId);
