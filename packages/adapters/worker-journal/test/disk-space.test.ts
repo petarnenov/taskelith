@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmodSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, linkSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 import { failed, value } from '@taskelith/testing';
@@ -41,6 +41,27 @@ test('buffered logs are emptied in place, nested ones too, and links are not fol
   assert.equal(readFileSync(join(logs, 'worker.log'), 'utf8'), '');
   assert.equal(readFileSync(join(logs, 'attempt-1', 'stdout.log'), 'utf8'), '');
   assert.equal(readFileSync(outside, 'utf8'), 'journal');
+});
+
+test('a log directory that is a link is not followed', () => {
+  const elsewhere = join(base, 'elsewhere');
+  mkdirSync(elsewhere);
+  writeFileSync(join(elsewhere, 'journal.sqlite'), 'journal');
+  symlinkSync(elsewhere, join(base, 'logs'));
+  assert.equal(value(truncateBufferedLogs(join(base, 'logs'))), 0);
+  assert.equal(readFileSync(join(elsewhere, 'journal.sqlite'), 'utf8'), 'journal');
+});
+
+test('a hard link to a file outside the logs is left with its content', () => {
+  const logs = join(base, 'logs');
+  const journal = join(base, 'journal.sqlite');
+  mkdirSync(logs);
+  writeFileSync(journal, 'journal');
+  linkSync(journal, join(logs, 'linked.log'));
+  writeFileSync(join(logs, 'own.log'), 'output');
+  assert.equal(value(truncateBufferedLogs(logs)), 1);
+  assert.equal(readFileSync(journal, 'utf8'), 'journal');
+  assert.equal(readFileSync(join(logs, 'own.log'), 'utf8'), '');
 });
 
 test('a missing log directory has nothing to truncate, and an unreadable one fails', () => {
