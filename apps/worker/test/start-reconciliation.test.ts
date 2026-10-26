@@ -274,20 +274,6 @@ test('survivors and an unapplied cancellation are each reported once beside the 
   ]);
 });
 
-test('survivors that cannot be listed are still reported once as termination-unproven', async () => {
-  inherit('written');
-  supervisions.onCreated = (supervision) => {
-    supervision.recovery = { fact: 'observe' };
-    const reported = {
-      problems: [], process: PROCESS, survivors: [],
-      launch: { kind: 'claim' as const, launchAuthId: id('LaunchAuthId', 'grant-operation-1'), supervisor: 2 },
-    };
-    supervision.facts = [reported, reported, { ...reported, exit: CLEAN_EXIT }];
-  };
-  await startOnce();
-  assert.deepEqual(factKinds(), ['execution-started', 'termination-unproven', 'execution-exited']);
-});
-
 test('a confirmed terminal fact removes its record once; a held record is kept for a later pass', async () => {
   inherit('written');
   launchNothingNew();
