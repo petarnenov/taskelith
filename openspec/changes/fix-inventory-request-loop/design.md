@@ -18,7 +18,7 @@ The exchange keeps two requests outstanding forever. In G2 this showed as about 
 
 The specification already disagrees with the code: scenario "Unsolicited report" defines an unsolicited report as one without a `requestId`, and the wire contract (section 6, "Inventory request") names only a reconnect and an unclassifiable omission as triggers.
 
-## Decision: option A
+## Decision 1: option A
 
 Only a part without a `requestId` is unsolicited:
 
@@ -26,25 +26,43 @@ Only a part without a `requestId` is unsolicited:
 const unsolicited = part.requestId === undefined && !pending.some((stored) => stored.reportId === part.reportId);
 ```
 
-An answer to a superseded request is stored, filtered, and applied exactly as before; it only no longer requests inventory by itself. The request of `applySnapshot` for a snapshot that is not fresh and omits an unclassifiable assignment (requirement "Omitted assignments", line 162) is unchanged. The coordinator chose this option on 2026-10-26.
+An answer to a superseded request is stored, filtered, and applied exactly as before; it only no longer requests inventory by itself. The coordinator chose this option on 2026-10-26.
+
+## Decision 2: option 1, the omitted-assignment request
+
+Option A left the request of `applySnapshot` for an unclassifiable omission, which fired for every snapshot that is not fresh. The author showed that it still loops (see "Residual risk" below), and the coordinator chose option 1 on 2026-10-26: only an unsolicited snapshot, one without a `requestId`, requests inventory for such an omission.
+
+```ts
+const unsolicited = snapshot.requestId === undefined;
+return unclassified && unsolicited ? requestInventory(tx, snapshot.workerId, context) : ok(undefined);
+```
+
+- An answer to a superseded request still re-sends the offer while no grant is recorded. It requests nothing, because a newer request is outstanding: the worker answers it with a fresh snapshot, taken after that request arrived, and a fresh snapshot handles the omission (scenario "Fresh snapshot omits an undelivered offer").
+- An unsolicited snapshot, sent at a reconnect, still requests inventory as before (scenario "Offer not yet received").
+- A fresh snapshot is unchanged: it never requested inventory for an omission.
+- `applySnapshot` no longer takes the `fresh` flag, which only this condition read.
+
+This is option C below, rejected for the first decision and chosen now as the bound of the residual loop. It was rejected first because it changes a requirement the coordinator had kept; the coordinator lifted that limit once the loop was shown.
 
 ## Rejected options
 
 - **B: an "answered" state for requests.** Record each request as answered and treat an answer to an older, answered request as settled. It needs a new column in `inventory_requests` and a migration, and it changes the request lifecycle that the requirements "Inventory request" and "Pending snapshot bound" describe, for a defect that one condition fixes.
-- **C: narrow "Omitted assignments".** Request inventory at line 162 only for a snapshot without a `requestId`. It would close the residual case below too, but it changes a requirement that the coordinator kept, and it drops a request the wire contract names as a trigger. It is out of this change's scope.
+- **C: narrow "Omitted assignments"** (for decision 1). Request inventory at line 162 only for a snapshot without a `requestId`. It was out of decision 1's scope; decision 2 adopts it.
 
-## Residual risk: the omitted-assignment request
+## Residual risk under option A alone
 
-The coordinator asked whether line 162 can still re-request on every stale answer, both after the omitted assignment finishes and while it stays active.
+The coordinator asked whether line 162 could still re-request on every stale answer, both after the omitted assignment finishes and while it stays active.
 
-**After the assignment finishes, it settles.** `applySnapshot` considers only `tx.assignments.listUnfinishedByWorker` (line 153), so a finished assignment is never an omission and requests nothing. It also settles once the worker's acceptance is applied: the snapshot then lists the assignment, or its omission is classified as lost local history, which requests nothing.
+- **After the assignment finishes, it settles.** `applySnapshot` considers only `tx.assignments.listUnfinishedByWorker` (line 153), so a finished assignment is never an omission and requests nothing. It also settles once the worker's acceptance is applied: the snapshot then lists the assignment, or its omission is classified as lost local history, which requests nothing.
+- **While the assignment stays active and every snapshot omits it, it did not settle.** Under two outstanding requests:
+  1. The answer to the first request is not fresh, so with option A `receivePart` requests nothing (line 86).
+  2. `evaluateSnapshots` applies it (line 143). `applySnapshot` finds the active assignment omitted without an applied acceptance, so `classifyOmission` returns `unclassified` (`packages/modules/execution/src/domain/inventory.ts`, line 156). It re-sends the offer and, as the snapshot is not fresh, requests inventory (line 162 before decision 2).
+  3. The new request supersedes the second one, whose answer is then stale too and repeats step 2.
 
-**While the assignment stays active and every snapshot omits it, it does not settle.** Under two outstanding requests:
+  An integration test answered 20 requests in turn and found 22 requests and 21 offers: one request and one re-sent offer per answer. Decision 2 closes this loop; the test is now committed.
 
-1. The answer to the first request is not fresh, so with option A `receivePart` requests nothing (line 86).
-2. `evaluateSnapshots` applies it (line 143). `applySnapshot` finds the active assignment omitted without an applied acceptance, so `classifyOmission` returns `unclassified` (`packages/modules/execution/src/domain/inventory.ts`, line 156). It re-sends the offer and, as the snapshot is not fresh, requests inventory (line 162).
-3. The new request supersedes the second one, whose answer is then stale too and repeats step 2.
+## Refused offer
 
-An integration test (kept outside the repository, see `verification.md`) answered 20 requests in turn and found 22 requests and 21 offers: one request and one re-sent offer per answer. With a single outstanding request the answer is fresh, so only the offer is re-sent (scenario "Fresh snapshot omits an undelivered offer").
+A worker that cannot admit an offer journals the outcome `rejected` (`apps/worker/src/command-intake.ts`, lines 100 to 109) and publishes it as `execution.assignment.refused` (`apps/worker/src/observation-messages.ts`, lines 27 to 31). The control plane applies it through `refusal` (`apps/control-plane/src/application/observation-effects.ts`, lines 82 to 88, registered at line 324), which ends the assignment and releases its reservation. An ended assignment is no longer unfinished, so no later snapshot omits it, and the exchange settles. This holds under option A alone too; a test covers it.
 
-The loop needs a worker that keeps omitting an offer it is re-sent. A worker that receives the offer and accepts it ends the loop, as above. Per the coordinator's condition, this change does not touch line 162; the case is reported to the coordinator as an open question.
+A retryable refusal may lead placement to offer a new attempt later. That is a new assignment under placement's backoff, not a request of this exchange.
