@@ -4,7 +4,7 @@ The owner's instruction was short: a task runs in a subagent. The owner first sa
 
 ## Decisions
 
-1. **What runs in the subagent.** The worktree work (code, tests, documentation, OpenSpec artifacts) runs in a subagent the session briefs; the session checks the result. Messages, owner questions, the review, and the handoff stay in the session, because only the session is addressable by the coordinator and the owner.
+1. **What runs in the subagent.** The worktree work (code, tests, documentation, OpenSpec artifacts) runs in a subagent the session briefs; the session checks the result. Messages, owner questions, the review, and the handoff stay in the session, because only the session is addressable by the coordinator and the owner. The subagent may record the review results the session provides in `verification.md`; the session checks the record.
 2. **Start.** The rule applies to tasks assigned from 2026-10-26 on, so that tasks in progress are not restarted.
 
 ## Risks

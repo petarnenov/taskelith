@@ -42,7 +42,7 @@ Questions that belong to the owner (see Roles) go to the coordinator with option
 The owner set this rule on 2026-10-26; it applies to tasks assigned from that day on.
 
 - **Implementation in a subagent.** A session that develops a task, a worker or the coordinator, delegates the work of the worktree (code, tests, documentation, and OpenSpec artifacts) to a subagent that it briefs with the task, its scope, and the rules that apply. The session reviews and checks the subagent's result itself before review and handoff.
-- **Protocol in the session.** The session keeps the protocol steps: messages to the coordinator or the owner, owner questions, the independent review and its records, and the handoff. A subagent does not hand off, open pull requests, or decide owner questions.
+- **Protocol in the session.** The session keeps the protocol steps: messages to the coordinator or the owner, owner questions, the independent review, whose results the subagent may record as the session provides them, and the handoff. A subagent does not hand off, open pull requests, or decide owner questions.
 
 ## Context size
 
