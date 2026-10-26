@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-26. The author verification and review passes 1 and 2 are recorded below, and every finding of both passes is fixed. Review pass 3, the last allowed, is still to come.
+Date: 2026-10-26. The author verification and review passes 1 to 3 are recorded below. Every finding is fixed; the pass 3 Low fix is unreviewed.
 
 ## Scope and source
 
@@ -117,6 +117,20 @@ Two Medium findings were fixed, so review pass 2 is required.
 - Regression test: "a failed lookup while a stale launch rejection is recorded leaves it unconfirmed, and its redelivery clears the refusal". The lookup fails only in the recording transaction; the observation is unconfirmed (confirmations 1 to 4) and the refusal stays. The same observation delivered again is `rejected`, clears the refusal, and is confirmed.
 
 One Medium finding was fixed, so review pass 3, the last allowed, is required.
+
+## Review pass 3
+
+- Reviewer: Codex CLI, model `gpt-6.1-sol`, reasoning effort medium, read-only sandbox, all confirmed in the output header.
+- Session: `01a17a14-01e0-7750-aa8b-eb813af9f886`.
+- Invocation: the same as in pass 1.
+- Revision reviewed: `b7f737d`, after the session merged `origin/dev` into the branch (a merge commit, no conflicts). That merge brought in the `streamline-task-integration` process change, including worker step 7 "Archive" of the [agent task protocol](../../../docs/agent-task-protocol.md). It touched none of this change's requirements, contracts, implementation, or tests.
+- The snapshots before and after the pass matched (`4d033361a01a627e60ee40fcc70d80fe4b55e5f68c8a7072b0e9466d39663824`).
+- Pass 2 F3: confirmed resolved; F1 and F2 stay resolved; no new functional defect.
+- New findings: 0 Critical, 0 High, 0 Medium, 1 Low.
+
+**Low F4 (fixed, unreviewed), `proposal.md:18`.**
+- Finding: the proposal said the "Stale ownership generation" delta adds two scenarios, but it adds four.
+- Resolution: the proposal now says four scenarios. A Low-only pass is fixed without another review ([review process](../../../docs/governance.md#independent-review-process)), so this fix is unreviewed.
 
 ## Limitations and remaining gates
 

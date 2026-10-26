@@ -22,5 +22,5 @@
 - [x] 4.1 proposal.md, design.md, spec deltas, verification.md
 - [x] 4.2 `npm run openspec -- validate clear-capacity-refusal-on-stale-launch-rejection --strict`
 - [x] 4.3 `make verify`
-- [ ] 4.4 Independent review (Codex CLI, gpt-6.1-sol, medium, read-only): pass 1 (2 Medium fixed), pass 2 (1 Medium fixed); pass 3 pending
-- [ ] 4.5 Handoff to the coordinator
+- [x] 4.4 Independent review (Codex CLI, gpt-6.1-sol, medium, read-only): pass 1 (2 Medium fixed), pass 2 (1 Medium fixed), pass 3 (1 Low fixed, unreviewed)
+- [x] 4.5 Handoff to the coordinator

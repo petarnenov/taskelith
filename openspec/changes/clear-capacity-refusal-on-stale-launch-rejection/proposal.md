@@ -15,7 +15,7 @@ None.
 
 ### Modified Capabilities
 
-- `observation-consumption`: "Stale ownership generation" (the evidence clear, two scenarios), "Acceptance and refusal" (a slot-freeing observation ends the refusal), and "Report sequence fences" (a scenario for an older stale launch rejection).
+- `observation-consumption`: "Stale ownership generation" (the evidence clear, four scenarios), "Acceptance and refusal" (a slot-freeing observation ends the refusal), and "Report sequence fences" (a scenario for an older stale launch rejection).
 - `launch-reconciliation`: "Launch rejections that reconcile or only record" (every launch rejection clears the producer's capacity refusal; one scenario).
 
 ## Impact
