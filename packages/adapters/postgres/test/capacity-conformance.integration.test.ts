@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
-import { INVENTORY_REPORTS_CONFORMANCE, INVENTORY_REQUESTS_CONFORMANCE, PRODUCER_CURSORS_CONFORMANCE } from '@taskelith/execution';
+import {
+  INVENTORY_REPORTS_CONFORMANCE,
+  INVENTORY_REQUESTS_CONFORMANCE,
+  PRODUCER_CURSORS_CONFORMANCE,
+  RECONCILIATION_QUEUE_CONFORMANCE,
+} from '@taskelith/execution';
 import { ok, type Result } from '@taskelith/kernel';
 import { PostgresDatabase, type PostgresTransaction } from '@taskelith/postgres';
 import {
@@ -59,6 +64,7 @@ runSuite('delegation requests', DELEGATION_REQUESTS_CONFORMANCE, (tx) => tx.dele
 runSuite('producer cursors', PRODUCER_CURSORS_CONFORMANCE, (tx) => tx.cursors);
 runSuite('inventory requests', INVENTORY_REQUESTS_CONFORMANCE, (tx) => tx.inventoryRequests);
 runSuite('inventory reports', INVENTORY_REPORTS_CONFORMANCE, (tx) => tx.inventoryReports);
+runSuite('reconciliation queue', RECONCILIATION_QUEUE_CONFORMANCE, (tx) => ({ tasks: tx.tasks, processes: tx.unrecordedProcesses, queue: tx.reconciliation }));
 runSuite('outbox lookup', OUTBOX_LOOKUP_CONFORMANCE, (tx) => ({ outbox: tx.outbox, lookup: tx.outboxLookup }));
 
 // Each report commits on its own, as each observation's transaction does,

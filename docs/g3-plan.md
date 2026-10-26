@@ -1,6 +1,6 @@
 # G3 work plan
 
-Date: 2026-10-25. Status: draft. On 2026-10-25 the owner approved drafting this plan and decided every owner decision below except D15, which waited for item 2, and added D18; the owner decided D15 the same day, after item 2. The draft authorizes no implementation, and no item starts from it; once the owner starts G3, by D16 (a), items start in dependency order and are merged without a per-item approval. It is finalized when G2 closes, because the G2 closure ADR may carry deferrals into G3; the finalized plan adds those deferrals and corrects the starting point to what G2 actually delivered.
+Date: 2026-10-25. Status: draft. On 2026-10-25 the owner approved drafting this plan and decided every owner decision below except D15, which waited for item 2, and added D18; the owner decided D15 the same day, after item 2. The draft authorizes no implementation, and no item starts from it except the wave 1 contracts that the owner started on 2026-10-26 (below); once the owner starts G3, by D16 (a), items start in dependency order and are merged without a per-item approval. It is finalized when G2 closes, because the G2 closure ADR may carry deferrals into G3; the finalized plan adds those deferrals and corrects the starting point to what G2 actually delivered. On 2026-10-26 the owner started G3 for the contracts of the first wave only: items 3, 5, 6, 7, and 8 start now, in parallel with G2, and every other item waits for the G2 closure (see [Dependency order and parallel work](#dependency-order-and-parallel-work)).
 
 G3, "Usable web product and first real agent", is defined in [architecture section 13](architecture.md#delivery-sequence): the React SPA, self-hosted login, project, task, and session views, chat and approvals, the Git workspace adapter, and the selected real agent and SCM plugins. Its exit evidence: from a fresh installation, an operator enrolls a remote worker and completes a real repository task with inspectable artifacts, independent review, and verification evidence; closing the browser does not stop execution; and turn retries and native approval responses survive a restart without silently repeating side effects. Section 13 requires each gate to be decomposed through the SDLC framework into reviewed, independently verifiable work items; this plan lists them. Each item is one OpenSpec change, developed in its own git worktree and merged into `dev`.
 
@@ -18,7 +18,7 @@ G3, "Usable web product and first real agent", is defined in [architecture secti
 
 ## Work items
 
-"Blocked by" names the open owner decisions an item needs; "Depends on" names the G3 items that must merge first. Every item also depends on the G2 closure, and its "Source" names the G2 items it builds on. Items marked "UI" go to the UI worker ([agent task protocol](agent-task-protocol.md#roles)). Items 3 to 8 are the G3 contracts; no implementation item starts before the contracts it depends on are merged. Each item that adds a turn, approval, workspace, or merge path adds that path's named crash points through the G2 test harness.
+"Blocked by" names the open owner decisions an item needs; "Depends on" names the G3 items that must merge first. Every item except items 3, 5, 6, 7, and 8 also depends on the G2 closure, and its "Source" names the G2 items it builds on. Items marked "UI" go to the UI worker ([agent task protocol](agent-task-protocol.md#roles)). Items 3 to 8 are the G3 contracts; no implementation item starts before the contracts it depends on are merged. Each item that adds a turn, approval, workspace, or merge path adds that path's named crash points through the G2 test harness.
 
 | # | Change | Scope | Source | Depends on | Blocked by | UI |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -66,6 +66,8 @@ G3, "Usable web product and first real agent", is defined in [architecture secti
 | 42 | `close-g3` | Reproduce the exit evidence from a fresh clone, update the foundation ledger, and record the closure with any deferrals in an ADR. | G3 exit | all | — | — |
 
 ## Dependency order and parallel work
+
+On 2026-10-26 the owner decided that items 3, 5, 6, 7, and 8, the contracts of wave 1, start before the G2 closure and run in parallel with G2. If the G2 closure carries deferrals that affect them, the merged contracts are corrected by follow-up changes. Every other item still depends on the G2 closure.
 
 Items 1, 2, 3, 5, 6, 7, 8, 26, and 27 depend on no other G3 item. A possible schedule is below: each wave holds the items whose "Depends on" items are all in earlier waves, assuming their decisions are made; with four sessions, a wave of more than four items runs in turns. The UI items start in wave 5, so the UI worker can take other items before then.
 

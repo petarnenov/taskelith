@@ -260,16 +260,28 @@ test('admission pressure makes the worker ineligible until it clears', async () 
   assert.deepEqual(await transaction.workers.candidates(), [WORKER]);
 });
 
-test('what this change does not consume, or cannot authenticate, is not consumed', async () => {
+test('what no effect consumes, or cannot authenticate, is not consumed', async () => {
   const { service, transaction } = await fixture(fleetWorker(WORKER, JOURNAL, { revokedAt: AT }));
   const reason = async (answer: Promise<Result<unknown>>) => failed(await answer).details.reason;
   assert.equal(await reason(service.apply({ subjectWorkerId: WORKER, type: 'worker.inventory.reported', body: {} })), 'not-consumed');
-  assert.equal(await reason(service.apply(message('execution.uncertain', 1, {}))), 'not-consumed');
-  assert.equal(await reason(service.apply(message('worker.capacity.declared', 1, DECLARATION))), 'not-consumed');
+  assert.equal(await reason(service.apply(message('execution.unknown', 1, {}))), 'not-consumed');
+  assert.equal(await reason(service.apply(message('worker.capacity.declared', 1, DECLARATION, { journalId: 'journal-2' }))), 'not-consumed');
+  assert.equal(value(await transaction.fleet.worker(WORKER))?.journalId, JOURNAL, 'a revoked worker never replaces its journal');
   assert.equal((await transaction.workers.get(WORKER))?.reachable, false, 'a revoked worker makes no contact');
   assert.equal(failed(await service.apply(message('worker.capacity.declared', 0, DECLARATION))).code, 'invalid');
   assert.equal(failed(await service.apply(message('worker.capacity.declared', 1, DECLARATION, { observationId: 'bad id' }))).code, 'invalid');
   assert.equal(failed(await service.apply(message('worker.capacity.declared', 1, DECLARATION, { correlationId: 'bad id' }))).code, 'invalid');
+});
+
+test('an unrecorded process is recorded once for the reconciliation queue', async () => {
+  const { service, transaction } = await fixture();
+  const unrecorded = message('execution.unrecorded-process', 1, { containment: 'cgroup x', processes: [{ pid: 7, startedAt: AT }] });
+  assert.equal(value(await service.apply(unrecorded)), 'applied');
+  assert.equal(value(await service.apply(unrecorded)), 'duplicate');
+  const recorded = await transaction.reconciliation.unrecordedProcessesOfWorker(WORKER);
+  assert.deepEqual(recorded.map(({ journalId, containment, processCount, recordedAt }) => [journalId, containment, processCount, recordedAt]), [
+    [JOURNAL, 'cgroup x', 1, AT],
+  ]);
 });
 
 // Each transaction answers from a script, as a store that rolled back.

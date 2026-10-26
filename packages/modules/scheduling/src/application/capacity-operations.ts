@@ -7,6 +7,7 @@ import {
   type AssignmentExecutions,
   type AssignmentId,
   type AttemptId,
+  type ExecutionId,
   type Task,
   type WorkerId,
 } from '@taskelith/execution';
@@ -137,17 +138,39 @@ export async function releaseInTransaction(tx: CapacityTransaction, request: Rel
 export async function supersedeInTransaction(tx: CapacityTransaction, request: ReleaseRequest): Promise<Result<Assignment>> {
   const loaded = await loadAssignment(tx, request.assignmentId);
   if (!loaded.ok) return loaded;
-  const { assignment, task } = loaded.value;
+  const { assignment } = loaded.value;
   const at = await tx.now();
   if (!isSupersessionDue(assignment, await tx.workers.get(assignment.workerId), at)) {
     return err(failure('precondition-failed', `assignment ${assignment.id} is within its supersession bounds`, { assignment: assignment.id }));
   }
+  return supersede(tx, request, loaded.value, at);
+}
+
+// The supersession of an assignment without a grant whatever its bounds,
+// as a launch rejection or its worker's revocation requires (item 21d).
+export async function supersedeUngrantedInTransaction(tx: CapacityTransaction, request: ReleaseRequest): Promise<Result<Assignment>> {
+  const loaded = await loadAssignment(tx, request.assignmentId);
+  if (!loaded.ok) return loaded;
+  return supersede(tx, request, loaded.value, await tx.now());
+}
+
+async function supersede(tx: CapacityTransaction, request: ReleaseRequest, loaded: LoadedAssignment, at: Instant): Promise<Result<Assignment>> {
+  const { assignment, task } = loaded;
   const superseded = supersedeAssignment(assignment, assignment.generation, executionsUnderAssignment(task, assignment.id), at);
   if (!superseded.ok) return superseded;
   const stored = await tx.assignments.replace(superseded.value, assignment.generation);
   if (!stored.ok) return stored;
   const ended = await appendWorkerCommand(tx, request, 'execution.assignment.end', superseded.value, at, endPayload(superseded.value, 'superseded'));
   return ended.ok ? ok(superseded.value) : ended;
+}
+
+// An unauthorized start (launch authorization section 7) is cancelled by
+// its execution only, never another execution of the attempt.
+export async function cancelExecutionInTransaction(tx: CapacityTransaction, request: ReleaseRequest, executionId: ExecutionId): Promise<Result<void>> {
+  const assignment = await tx.assignments.get(request.assignmentId);
+  if (!assignment.ok) return assignment;
+  const payload = cancellationPayload('launch-revoked', executionId);
+  return appendWorkerCommand(tx, request, 'execution.cancellation.request', assignment.value, await tx.now(), payload);
 }
 
 function outcome(reason: CapacityReason): Result<PlacementOutcome> {
@@ -263,7 +286,12 @@ async function quotaStandings(tx: CapacityTransaction, lineage: TaskLineageLink,
   return [project, ...runs];
 }
 
-async function loadAssignment(tx: CapacityTransaction, assignmentId: AssignmentId): Promise<Result<{ assignment: Assignment; task: Task }>> {
+interface LoadedAssignment {
+  readonly assignment: Assignment;
+  readonly task: Task;
+}
+
+async function loadAssignment(tx: CapacityTransaction, assignmentId: AssignmentId): Promise<Result<LoadedAssignment>> {
   const assignment = await tx.assignments.get(assignmentId);
   if (!assignment.ok) return assignment;
   const task = await tx.tasks.get(assignment.value.reservation.scope.taskId);
@@ -274,7 +302,7 @@ async function loadAssignment(tx: CapacityTransaction, assignmentId: AssignmentI
 // A cancellation or refusal invalidates (launch authorization section 5):
 // it revokes the execution's grants and sends its cancellation.
 async function revokeRunningLaunch(tx: CapacityTransaction, assignment: Assignment, task: Task, request: ReleaseRequest, at: Instant): Promise<Result<void>> {
-  const revoked = revokeLaunch(task, assignment.attemptId, 'attempt-not-launchable', at);
+  const revoked = revokeLaunch(task, assignment.attemptId, { grants: 'attempt-not-launchable', cancellation: 'assignment-ended' }, at);
   if (!revoked.ok) return revoked;
   const stored = await tx.tasks.replace(revoked.value, task.generation);
   if (!stored.ok) return stored;

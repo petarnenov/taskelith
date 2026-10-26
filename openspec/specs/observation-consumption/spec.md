@@ -17,7 +17,7 @@ The control plane SHALL apply each observation in one SERIALIZABLE transaction t
 - **THEN** nothing of it is committed, and the message is delivered again
 
 ### Requirement: Authenticated producer
-An observation SHALL be applied only when its subject names its `metadata.workerId`, that worker is enrolled and not revoked, and its `journalId` is the worker's enrolled journal and not retired, or a journal never seen from that worker that replaces the enrolled one as a new journal incarnation; otherwise it SHALL NOT be applied.
+An observation SHALL be applied only when its subject names its `metadata.workerId`, that worker is enrolled, and its `journalId` is the worker's enrolled journal and not retired, or, for a worker that is not revoked, a journal never seen from that worker that replaces the enrolled one as a new journal incarnation; otherwise it SHALL NOT be applied. An observation of a revoked worker SHALL be applied under the requirement for observations of a revoked worker in `launch-reconciliation`.
 
 #### Scenario: Worker in the body differs from the subject
 - **WHEN** an observation on worker A's subject names worker B
@@ -27,13 +27,6 @@ An observation SHALL be applied only when its subject names its `metadata.worker
 - **WHEN** an enrolled worker's observation names a journal other than its enrolled one that the control plane saw from that worker before
 - **THEN** it is not applied, and its sequence is not recorded
 
-### Requirement: Observations left to later changes
-An authenticated observation of a type that a later change consumes (`execution.started`, `execution.launch.rejected`) and an observation of a revoked worker SHALL NOT be applied, and its sequence SHALL stay unrecorded; an authenticated one SHALL still record first contact.
-
-#### Scenario: Start before 21d
-- **WHEN** a worker's `execution.started` is delivered
-- **THEN** the worker becomes reachable, the execution is unchanged, the cursor does not record its sequence, and after five deliveries it is in quarantine
-
 ### Requirement: Confirmation by sequence
 The producer cursor SHALL record each applied or rejected sequence, and when its contiguous prefix grows, the transaction SHALL append `execution.observations.confirmed` with the new `confirmedThrough` to the worker's command subject. The outbox publisher SHALL send a confirmation without a `Nats-Msg-Id` header.
 
@@ -42,14 +35,14 @@ The producer cursor SHALL record each applied or rejected sequence, and when its
 - **THEN** confirmations through 1 and 2 are appended, and none for 4 until 3 is applied, which appends a confirmation through 4
 
 ### Requirement: Confirmation sent again
-A duplicate from an authenticated producer at or below `confirmedThrough` SHALL append a confirmation of the current `confirmedThrough` again, under a new event identity and without any other effect than recording the worker's contact, because the worker may have lost the earlier one.
+A duplicate from an authenticated producer at or below `confirmedThrough` SHALL append a confirmation of the current `confirmedThrough` again, under a new event identity and without any other effect than recording the worker's contact, because the worker may have lost the earlier one. A revoked worker's duplicate SHALL record no contact.
 
 #### Scenario: Confirmation lost
 - **WHEN** the confirmation through 1 expired from the stream unread, and the worker republishes its applied observation at sequence 1
 - **THEN** it is a duplicate, the cursor is unchanged, and a confirmation through the current prefix is appended again under a new event identity
 
 ### Requirement: First contact
-An authenticated observation SHALL mark its worker reachable and SHALL move the worker's last contact to the database time, never backward. A duplicate that the inbox already holds SHALL record contact too.
+An authenticated observation of a worker that is not revoked SHALL mark its worker reachable and SHALL move the worker's last contact to the database time, never backward. A duplicate that the inbox already holds SHALL record contact too. An observation of a revoked worker SHALL record no contact, as `launch-reconciliation` requires.
 
 #### Scenario: New worker
 - **WHEN** a newly enrolled worker's first capacity declaration is applied

@@ -16,7 +16,6 @@ import {
   type AttemptId,
   type Execution,
   type ExecutionId,
-  type LaunchGrant,
   type Task,
   type WorkerId,
 } from '@taskelith/execution';
@@ -27,6 +26,7 @@ import { PostgresDatabase, migrate } from '@taskelith/postgres';
 import type { Assignment } from '@taskelith/scheduling';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
 import { failed, integrationEndpoint, value } from '@taskelith/testing';
+import { issueGrant, launchAuthority } from './launch-fixtures.ts';
 
 const POSTGRES = integrationEndpoint('TASKELITH_POSTGRES_URL');
 const databaseName = `taskelith_inventory_${process.pid}`;
@@ -69,6 +69,7 @@ const TABLES = [
   'workflow_runs', 'gates', 'admissions', 'tasks', 'assignments', 'outbox', 'inbox', 'task_lineage', 'capacity_charges', 'delegations',
   'capacity_quotas', 'workers', 'installation', 'enrollment_tokens', 'delegation_requests', 'current_revisions', 'producer_cursors',
   'inventory_requests', 'inventory_report_parts', 'launch_authorizations', 'broker_revocations',
+  'launch_rejections', 'unrecorded_processes',
 ];
 const WORKER = 'worker-a';
 const JOURNAL = 'journal-a';
@@ -77,6 +78,7 @@ const AT = '2026-10-25T09:00:00.000Z';
 // Placement's clock runs ahead, so that a retry's backoff could pass.
 const TIMING = { now: () => Date.now() + 3_600_000, draw: () => 0 };
 const tasks = new TaskService(database);
+const authority = launchAuthority(database, undefined, new WorkflowRegistry([{ definition, digest: DIGEST }]));
 let logs: InMemoryLogSink;
 let observations: ObservationService;
 let inventory: InventoryService;
@@ -205,30 +207,10 @@ function accept(sequence: number, at: Placed, journalId = JOURNAL) {
   });
 }
 
-// A live grant, as launch authority would record it until item 21d.
-function grantOf(at: Placed, executionId: string): LaunchGrant {
-  return {
-    launchAuthId: `launch-${executionId}`, operationId: `operation-${executionId}`, executionId, attemptId: at.attemptId,
-    assignmentId: at.assignment.id, workerId: WORKER, ownershipGeneration: at.generation, recoveryEpoch: 1, admissionId: 'admission-1',
-    admissionGeneration: 1, reliedOnGates: [], artifacts: [], policyRevision: 'r', issuedAt: AT,
-    parameters: { ttlMilliseconds: 30_000, skewMilliseconds: 5_000 }, state: 'granted',
-  } as unknown as LaunchGrant;
-}
-
-// Tests seed the granted execution until item 21d wires launch authority.
-async function seedExecution(at: Placed): Promise<ExecutionId> {
-  const executionId = `execution-${at.taskId}` as ExecutionId;
-  const execution: Execution = {
-    id: executionId, assignmentId: at.assignment.id, workerId: WORKER as WorkerId, state: 'authorized',
-    grants: [grantOf(at, executionId)], evidence: [], unauthorizedStarts: [],
-  };
-  value(await database.transaction(async (tx) => {
-    const task = await tx.tasks.get(at.taskId);
-    if (!task.ok) return task;
-    const attempts = task.value.attempts.map((attempt) => (attempt.id === at.attemptId ? { ...attempt, executions: [execution] } : attempt));
-    return tx.tasks.replace({ ...task.value, attempts, generation: (task.value.generation + 1) as never }, task.value.generation);
-  }));
-  return executionId;
+// The execution of the attempt, granted by the launch authority.
+async function launch(at: Placed): Promise<ExecutionId> {
+  const target = { taskId: at.taskId, attemptId: at.attemptId, generation: at.generation, assignmentId: at.assignment.id };
+  return (await issueGrant(authority, database, target, WORKER as WorkerId, `execution-${at.taskId}`)).executionId;
 }
 
 function executionOf(task: Task): Execution {
@@ -463,7 +445,7 @@ describe('pending snapshots and their rollback check', () => {
     await readyWorker();
     const at = await placed('task-1');
     value(await accept(2, at));
-    const executionId = await seedExecution(at);
+    const executionId = await launch(at);
     value(await report({
       reportId: 'report-1', snapshot: 1, throughSequence: 2, assignments: [at],
       executions: [{ executionId, assignmentId: at.assignment.id, state: 'exited', uncertain: true }],
@@ -495,7 +477,7 @@ describe('omitted assignments and re-sent offers', () => {
     await readyWorker();
     const at = await placed('task-1');
     value(await accept(2, at));
-    await seedExecution(at);
+    await launch(at);
     value(await report({ reportId: 'report-1', snapshot: 1, throughSequence: 2 }));
     const task = await stored(at.taskId);
     assert.deepEqual([executionOf(task).state, executionOf(task).evidence.map(({ kind }) => kind)], ['authorized', ['local-history-lost']]);
@@ -561,7 +543,7 @@ describe('journal incarnations', () => {
     const granted = await placed('task-2');
     value(await accept(2, ungranted));
     value(await accept(3, granted));
-    await seedExecution(granted);
+    await launch(granted);
     assert.equal(value(await declare(1, NEW_JOURNAL)), 'applied');
     assert.deepEqual([await enrolledJournal(), (await workerRow()).journal_id, await retired(JOURNAL)], [NEW_JOURNAL, NEW_JOURNAL, true]);
     assert.deepEqual(warnings('execution.journal.replaced'), [{ workerId: WORKER, previousJournalId: JOURNAL, journalId: NEW_JOURNAL }]);
@@ -670,7 +652,7 @@ describe('execution evidence observations', () => {
   test('an uncertain execution stays authorized with its evidence, and its attempt cannot end until a terminal fact', async () => {
     await readyWorker();
     const at = await placed('task-1');
-    const executionId = await seedExecution(at);
+    const executionId = await launch(at);
     assert.equal(value(await observe('execution.uncertain', { sequence: 2, ...attemptOf(at) }, { executionId })), 'applied');
     const task = await stored(at.taskId);
     assert.deepEqual([executionOf(task).state, executionOf(task).evidence.map(({ kind }) => kind), task.attempts[0]!.outcome], [
@@ -681,7 +663,7 @@ describe('execution evidence observations', () => {
   test('an unproven termination after an exit is rejected without effect and confirmed', async () => {
     await readyWorker();
     const at = await placed('task-1');
-    const executionId = await seedExecution(at);
+    const executionId = await launch(at);
     value(await observe('execution.exited', { sequence: 2, ...attemptOf(at) }, {
       executionId, status: { kind: 'code', code: 0 }, startProven: true, spawnFailed: false, terminationEvidence: 'containment-empty',
     }));
@@ -695,7 +677,7 @@ describe('execution evidence observations', () => {
   test('a cancellation not applied keeps the request pending, and the later exit ends the attempt as cancelled', async () => {
     await readyWorker();
     const at = await placed('task-1');
-    const executionId = await seedExecution(at);
+    const executionId = await launch(at);
     value(await database.transaction(async (tx) => {
       const task = await tx.tasks.get(at.taskId);
       if (!task.ok) return task;

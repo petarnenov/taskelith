@@ -72,6 +72,13 @@ export interface EvidenceReport extends ExecutionReport {
   readonly kind: ExecutionEvidenceKind;
 }
 
+// The check each grant would now fail, and the attempt's cancellation
+// reason, which matches the command its writer sends (B8).
+export interface LaunchRevocation {
+  readonly grants: RevocationReason;
+  readonly cancellation: CancellationReason;
+}
+
 // What the scheduler reads before it ends an assignment or releases its
 // reservation (capacity reservation contract, section 6).
 export interface AssignmentExecutions {
@@ -182,13 +189,13 @@ export function isLaunchAffected(task: Task, attemptId: AttemptId): boolean {
 
 // Revokes every grant of the owning execution and requests cancellation; a
 // started process may still run, so the outcome waits for its terminal fact.
-export function revokeLaunch(task: Task, attemptId: AttemptId, reason: RevocationReason, at: Instant): Result<Task> {
+export function revokeLaunch(task: Task, attemptId: AttemptId, revocation: LaunchRevocation, at: Instant): Result<Task> {
   const attempt = findActiveAttempt(task, attemptId);
   if (!attempt.ok) return attempt;
   const owning = owningExecution(attempt.value);
   if (owning === undefined) return attemptFailure(attempt.value, 'owns no execution whose launch could be revoked');
-  const revoked = withExecution(attempt.value, withRevokedGrants(owning, reason));
-  const cancelled = revoked.cancellation === undefined ? withCancellation(revoked, 'launch-revoked', at) : revoked;
+  const revoked = withExecution(attempt.value, withRevokedGrants(owning, revocation.grants));
+  const cancelled = revoked.cancellation === undefined ? withCancellation(revoked, revocation.cancellation, at) : revoked;
   return ok(withAttempt(task, cancelled, at));
 }
 

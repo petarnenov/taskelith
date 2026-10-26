@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { streamConfigs, TRANSPORT_LIMITS, TransportAddress } from '@taskelith/nats';
 
 interface Mount {
   readonly type: string;
@@ -35,6 +36,7 @@ interface Stage {
 const DIGEST_PINNED = /^[^@\s]+@sha256:[0-9a-f]{64}$/;
 const PASSWORD = 'composition-test-password';
 const ROOT_USERS = new Set(['', 'root', '0']);
+const GIB = 1024 ** 3;
 
 function makeVariable(name: string): string {
   const match = new RegExp(`^${name} := (.+)$`, 'm').exec(readFileSync('Makefile', 'utf8'));
@@ -154,4 +156,16 @@ test('secrets come from the environment of the make targets', () => {
   for (const service of Object.values(services)) {
     assert.equal(service.environment?.TASKELITH_OPERATOR_TOKEN, undefined);
   }
+});
+
+test('the streams reserve no more than the fixed broker file store', () => {
+  const store = /^\s*max_file_store: (\d+)GiB$/m.exec(readFileSync('infra/installation/nats-server.conf', 'utf8'));
+  assert.ok(store, 'nats-server.conf fixes max_file_store in GiB');
+  const streamMaxBytes = Number(services['control-plane'].environment?.TASKELITH_STREAM_MAX_BYTES);
+  const address = TransportAddress.of('installation');
+  assert.ok(address.ok);
+  const streams = streamConfigs(address.value, { ...TRANSPORT_LIMITS, streamMaxBytes });
+  const reserved = streams.reduce((total, stream) => total + (stream.max_bytes ?? 0), 0);
+  assert.deepEqual([streamMaxBytes, Number(store[1]) * GIB], [GIB, 8 * GIB]);
+  assert.ok(reserved <= Number(store[1]) * GIB, `${reserved} bytes reserved`);
 });

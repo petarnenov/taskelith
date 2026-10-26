@@ -64,11 +64,15 @@ A receiver SHALL apply a message at most once per consumer by the identity in it
 - **THEN** the first delivery is `accepted` and the second `duplicate`
 
 ### Requirement: Transport bounds
-Streams and consumers SHALL take the provisional bounds of the operational targets: 7 days or 10 GiB per stream, 1 MiB per message, `ack_wait` 30 s, `max_deliver` 5, `max_ack_pending` 4 per worker, and 10,000 queued commands per worker subject, rejecting new ones when full.
+Streams and consumers SHALL take the provisional bounds of the operational targets: 7 days or 10 GiB per stream, 1 MiB per message, `ack_wait` 30 s, `max_deliver` 5, `max_ack_pending` 4 per worker, and 10,000 queued commands per worker subject, rejecting new ones when full. A deployment MAY set a smaller per-stream byte limit. When the broker refuses a stream for lack of file storage, the failure SHALL name the bytes the streams reserve.
 
 #### Scenario: Stream configuration
 - **WHEN** the streams are created again
 - **THEN** they are updated in place and carry these bounds
+
+#### Scenario: Too little broker storage
+- **WHEN** the streams reserve more bytes than the broker's free file storage
+- **THEN** creating them fails as `unavailable` with the reserved bytes
 
 ### Requirement: Heartbeat receiver
 The adapter SHALL receive every worker's heartbeats on `taskelith.<installationId>.workers.*.heartbeats` through one core NATS queue group, so that each heartbeat reaches one receiver, and SHALL keep them in no stream. It SHALL handle them one at a time. After a stop it SHALL handle no waiting heartbeat, and a subscription that closes without a stop SHALL fail the receiver.

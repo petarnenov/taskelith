@@ -3,7 +3,7 @@ import { after, beforeEach, test } from 'node:test';
 import type { Result } from '@taskelith/kernel';
 import { endAttempt, recordNotStarted, type AssignmentId, type AttemptId, type Task, type WorkerId } from '@taskelith/execution';
 import { PostgresDatabase } from '@taskelith/postgres';
-import { releaseInTransaction } from '@taskelith/scheduling';
+import { releaseInTransaction, supersedeUngrantedInTransaction } from '@taskelith/scheduling';
 import {
   DELEGATION_CAPACITY_WAIT_BOUND_MILLISECONDS,
   ROOT_LINK,
@@ -243,7 +243,7 @@ test('cancelling an assignment with a running execution keeps the reservation un
   assert.deepEqual(await counts(), { held: 1, assignments: 1, charges: 1, outbox: 2 });
   const cancelled = value(await database.transaction((tx) => tx.tasks.get(task.id)));
   const attempt = cancelled.attempts.at(-1)!;
-  assert.equal(attempt.cancellation?.reason, 'launch-revoked');
+  assert.equal(attempt.cancellation?.reason, 'assignment-ended', 'as its command says');
   assert.deepEqual(attempt.executions[0]!.grants.map((grant) => grant.state === 'revoked' && grant.revokedFor), ['attempt-not-launchable']);
   // The terminal fact and the release commit in one transaction (item 21).
   const released = value(await database.transaction(async (tx) => {
@@ -303,6 +303,24 @@ test('a granted assignment is not superseded', async () => {
   const refused = await service.supersede({ assignmentId: placed.assignment.id, commandId: id('EventId', 's'), correlationId: id('CorrelationId', 'c') });
   assert.equal(!refused.ok && refused.error.code, 'precondition-failed');
   assert.deepEqual(await counts(), { held: 1, assignments: 1, charges: 1, outbox: 1 });
+});
+
+test('an assignment without a grant is superseded within its bounds when a writer requires it, a granted one never', async () => {
+  const task = await rootTask('task-1');
+  const placed = value(await service.reserve(placement(task, 'a')));
+  assert.ok(placed.kind === 'placed');
+  const request = { assignmentId: placed.assignment.id, commandId: id('EventId', 'supersede-a'), correlationId: id('CorrelationId', 'correlation-a') };
+  const superseded = value(await database.transaction((tx) => supersedeUngrantedInTransaction(tx, request)));
+  assert.deepEqual([superseded.end?.reason, superseded.reservation.state], ['superseded', 'released']);
+  assert.deepEqual(await eventTypes(), ['execution.assignment.offer', 'execution.assignment.end']);
+  const again = await database.transaction((tx) => supersedeUngrantedInTransaction(tx, request));
+  assert.equal(!again.ok && again.error.code, 'precondition-failed', 'an ended assignment');
+  const second = await rootTask('task-2');
+  const granted = value(await service.reserve(placement(second, 'b')));
+  assert.ok(granted.kind === 'placed');
+  value(await database.transaction((tx) => tx.tasks.replace(authorizedUnder(second, granted.assignment.id, WORKER), second.generation)));
+  const refused = await database.transaction((tx) => supersedeUngrantedInTransaction(tx, { ...request, assignmentId: granted.assignment.id }));
+  assert.equal(!refused.ok && refused.error.code, 'precondition-failed');
 });
 
 test('a crash before the placement commits leaves no reservation, assignment, charge, or command', async () => {
