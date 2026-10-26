@@ -10,4 +10,4 @@
 ## 3. Verification
 
 - [x] 3.1 `openspec validate --strict` and `make verify`
-- [ ] 3.2 Independent review (pending)
+- [x] 3.2 Independent review (pass 1, Low-only; fixes unreviewed)

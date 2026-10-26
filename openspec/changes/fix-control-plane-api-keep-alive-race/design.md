@@ -10,7 +10,7 @@ The coordinator reproduced it deterministically in one process (fetch, then a bu
 
 **Goals:** no request to the control-plane API fails because the server closed an idle socket the client reused, whatever the client.
 
-**Non-Goals:** retries, widened test timeouts, client-side changes, and symptom d of B6.
+**Non-Goals:** retries, widened test timeouts, client-side changes, and symptoms c and d of B6. B6 had four symptoms: (a) and (b) are this change; (c), `http-evidence-publisher.test.ts` reporting "asynchronous activity after the test ended", is a separate test bug handled by change `stabilize-evidence-publisher-test-server`; (d), `placement.integration.test.ts:226` "tasks are placed in fair order across projects", is unexplained (0 of 60 failures under stress, failing assertion output not available) and left alone by the coordinator's decision until it recurs.
 
 ## Decisions
 
