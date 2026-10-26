@@ -207,6 +207,12 @@ function accept(sequence: number, at: Placed, journalId = JOURNAL) {
   });
 }
 
+function refuse(sequence: number, at: Placed, reason: string) {
+  return observe('execution.assignment.refused', { sequence, ...attemptOf(at) }, {
+    commandId: at.assignment.offerCommandId, assignmentId: at.assignment.id, reason, retryable: false,
+  });
+}
+
 // The execution of the attempt, granted by the launch authority.
 async function launch(at: Placed): Promise<ExecutionId> {
   const target = { taskId: at.taskId, attemptId: at.attemptId, generation: at.generation, assignmentId: at.assignment.id };
@@ -260,11 +266,13 @@ function warnings(event: string): Record<string, unknown>[] {
   return logs.records.filter((record) => record.event === event).map((record) => ({ ...record.correlation, ...record.fields }));
 }
 
-// The worker answers each request in the outbox in order with a rising
-// snapshot, until none is left or the rounds run out; returns the answers.
-async function answerInTurn(fields: Pick<Report, 'throughSequence'>, rounds = 20): Promise<number> {
-  let answered = 0;
-  for (; answered < rounds; answered += 1) {
+const MAX_ANSWERS = 20;
+
+// The worker answers each request in the outbox in order from `first`, with
+// a rising snapshot, while any is left; returns how many were answered.
+async function answerInTurn(fields: Pick<Report, 'throughSequence'>, first = 0): Promise<number> {
+  let answered = first;
+  for (; answered < MAX_ANSWERS; answered += 1) {
     const request = (await requests())[answered];
     if (request === undefined) break;
     const snapshot = answered + 1;
@@ -518,6 +526,41 @@ describe('omitted assignments and re-sent offers', () => {
     assert.equal((await offersOf(at)).length, 2);
     assert.equal((await requests()).length, 1);
     assert.deepEqual(await stored(at.taskId), before);
+  });
+
+  test('an answer to a superseded request that omits an offer never accepted re-sends it and requests nothing', async () => {
+    await readyWorker();
+    const at = await placed('task-1');
+    await inventory.requestAll([WORKER as WorkerId]);
+    await inventory.requestAll([WORKER as WorkerId]);
+    const [first] = await requests();
+    value(await report({ reportId: 'report-1', snapshot: 1, throughSequence: 1, requestId: String(first!.requestId) }));
+    assert.equal((await offersOf(at)).length, 2);
+    assert.equal((await requests()).length, 2);
+  });
+
+  test('two outstanding requests settle while every answer omits an active offer never accepted', async () => {
+    await readyWorker();
+    const at = await placed('task-1');
+    await inventory.requestAll([WORKER as WorkerId]);
+    await inventory.requestAll([WORKER as WorkerId]);
+    assert.equal(await answerInTurn({ throughSequence: 1 }), 2);
+    assert.equal((await requests()).length, 2);
+    assert.equal((await offersOf(at)).length, 3, 'each answer re-sends the offer');
+  });
+
+  test('two outstanding requests settle once the worker refuses the re-sent offer', async () => {
+    await readyWorker();
+    const at = await placed('task-1');
+    await inventory.requestAll([WORKER as WorkerId]);
+    await inventory.requestAll([WORKER as WorkerId]);
+    const [first] = await requests();
+    value(await report({ reportId: 'answer-1', snapshot: 1, throughSequence: 1, requestId: String(first!.requestId) }));
+    assert.equal(value(await refuse(2, at, 'resource-ceiling-exceeded')), 'applied');
+    assert.equal((await assignmentOf(at)).state, 'ended');
+    const answered = await answerInTurn({ throughSequence: 2 }, 1);
+    assert.equal((await requests()).length, answered, 'no request stays unanswered');
+    assert.ok(answered < MAX_ANSWERS, `the exchange settles, after ${answered} answers`);
   });
 
   test('a fresh snapshot that omits an acceptance above it only re-sends the offer', async () => {
