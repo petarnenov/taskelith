@@ -57,6 +57,15 @@ Environment: macOS (Darwin 25.6.0), Node v24.22.1 from `.nvmrc`, Docker test ser
   4. **L4:** test 2.1 did not check the reported state, and D4 was untested. **Fixed** in `fd62d87`: 2.1 asserts the inventory reports `ended`; a new test grants the execution, rejects its re-authorization with `assignment-not-active`, and shows `worker-slots-exhausted` until the seal, with `seal-execution` as the only recovery action. The behaviour matched D4.
   5. **L5:** the evidence check lacked the links check, and 2.2 and 2.3 were not run on the old code. **Fixed** in this file: both checks are recorded above.
 
+## Archive checks
+
+Worker step 7, run by the coordinating session after review pass 1 and its fixes. The checked state is the tree of the archive commit, which is the working tree these checks ran on after `npm run openspec -- archive end-assignment-on-not-active --yes` (base `bb5dc3e`).
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `make verify`: exit 0; 1921 tests, 1919 pass, 0 fail, 2 skipped; coverage lines 99.29%, branches 92.09%, functions 99.04%.
+- `npm run openspec -- validate --archived --no-interactive`: the line of `change/2026-10-26-end-assignment-on-not-active` passes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/worker-runtime/spec.md`, which gains the requirement "Assignment ended by a launch rejection" with its three scenarios, the intended edit.
+
 ## Limitations
 
 - The local end lives in the SQLite journal's snapshot read; another journal implementation would have to apply `endsAssignment` too.
