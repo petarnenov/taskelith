@@ -8,6 +8,7 @@ import { readControlPlaneSettings } from '@taskelith/control-plane';
 import { value } from '@taskelith/testing';
 import {
   httpOperatorApi,
+  parsedBody,
   POLL_MILLISECONDS,
   readSmokeWorkflow,
   RESULT_DEADLINE_MILLISECONDS,
@@ -126,4 +127,10 @@ test('the HTTP adapter sends the operator bearer and JSON bodies', async (t) => 
     { method: 'POST', url: '/runs', authorization: 'Bearer tkop_test', body: '{"runId":"r"}' },
     { method: 'GET', url: '/runs/r', authorization: 'Bearer tkop_test', body: '' },
   ]);
+});
+
+test('a body that is not JSON keeps its status and text', () => {
+  assert.deepEqual(parsedBody('{"code":"invalid"}'), { code: 'invalid' });
+  assert.equal(parsedBody('<html>Bad Gateway</html>'), '<html>Bad Gateway</html>');
+  assert.equal(parsedBody(''), '');
 });
