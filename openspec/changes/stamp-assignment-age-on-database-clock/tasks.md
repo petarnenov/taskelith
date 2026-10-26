@@ -19,4 +19,4 @@
 - [x] 4.1 Proposal, design with the rejected option A, `verification.md`
 - [x] 4.2 `npm run openspec -- validate stamp-assignment-age-on-database-clock --strict` and `make verify`
 - [x] 4.3 Independent review pass 1 (1 Medium, 4 Low), fixed
-- [ ] 4.4 Independent review pass 2
+- [x] 4.4 Independent review pass 2 (pass 1 resolved; a process High and a Low recorded and fixed)

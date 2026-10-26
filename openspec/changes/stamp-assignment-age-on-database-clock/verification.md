@@ -1,12 +1,12 @@
 # Verification
 
-Date: 2026-10-27. The author's verification and review pass 1 are recorded below; pass 2 is pending.
+Date: 2026-10-27. The author's verification and review passes 1 and 2 are recorded below.
 
 ## Scope and source
 
 A G2 follow-up found during B6 `stabilize-observability-lag-test`: the snapshot claimed the database clock stamps every row it ages, but `assignments.changed_at` is a caller-supplied time. Coordinator Niki first chose option (a), a database-stamped column; that implementation found the premise only partly right (placement already writes `changed_at` from `tx.now()`), and Niki then chose option B: keep the schema, state the convention, and test it. Worker session Maki developed it in a briefed and checked subagent ([subagent execution](../../../docs/agent-task-protocol.md#subagent-execution)), in worktree `taskelith-worktrees/stamp-assignment-age-on-database-clock` on branch `stamp-assignment-age-on-database-clock`. The option A commits are kept on local branch `stamp-assignment-age-option-a`.
 - **Base revision:** `b0d018a` on `dev`.
-- **Revision verified:** `2520ab2` (the comment, the test, and these records before this file); after review pass 1, the tree of the commit that records it.
+- **Revision verified:** `2520ab2` (the comment, the test, and these records before this file); after review pass 1, `b93a6c0`, on which `make verify` ran; review pass 2 reviewed `cdbb2d0`, and its record changes only this file and `tasks.md`, so no further `make verify` ran.
 - **Scope:** the snapshot comment, a placement test, and the `execution-observability` delta.
 - **Out of scope:** schema and migrations, the acceptance writer of `changedAt` (`apps/control-plane/src/application/observation-effects.ts:78`, a coordinator follow-up), and the outbox stamp.
 
@@ -49,6 +49,18 @@ Environment: macOS (Darwin 25.6.0), Node from `.nvmrc`, Docker test services sta
   4. **L4:** the future-stamp clamp was tested only for the outbox. **Fixed:** the test also sets an offered assignment's `changed_at` an hour ahead and asserts both ages are zero; the scenario "A stamp later than the read" covers both ages.
   5. **L5:** the placement test used `row!` without checking the row exists. **Fixed:** `assert.ok(row, 'the assignment and its offer row exist')` narrows the type, and the non-null assertions are gone.
 
+### Review pass 2
+
+- **Reviewer and invocation:** as in pass 1 (OpenCode CLI, `opencode-go/qwen3.8-max`, variant `medium`, `reviewer` agent, read-only).
+- **Revision:** `cdbb2d0`; the pass 1 resolutions are `848b5c3..cdbb2d0`, the whole change `b0d018a..cdbb2d0`.
+- **Model confirmation:** the stored assistant messages record provider `opencode-go`, model `qwen3.8-max`, variant `medium`; session `ses_e858ee27effeU92a3lE3as8XCI`.
+- **Snapshot:** `37fd4227d8c10138a16616276fc86267bcefc59dff1bae36130a99bb09cd98c2` before and after; unchanged.
+- **Limits:** the reviewer could not run npm (denied by its agent) and verified statically.
+- **Pass 1 findings:** all five resolved, including the shortened requirement phrases, which lose no meaning.
+- **New findings:** 0 Critical, 1 High (process), 0 Medium, 1 Low.
+  1. **H1 (process):** `opencode-go/qwen3.8-max` was not listed under "Authorized reviewers (owner)" in `docs/governance.md` at the reviewed base. **Resolution:** the owner approved OpenCode `opencode-go/qwen3.8-max#medium` (first with `xhigh`, then changed by the owner to `medium`) and `opencode-go/deepseek-v4-pro#high` directly in the coordinator's session on 2026-10-26; coordinator Niki relayed it, and the governance change `add-deepseek-qwen-reviewers` records both entries with that date, model, and variant. It is a recording issue, not a defect of this change, so it needs no code change and no further pass; that authorization makes passes 1 and 2 count. The merge of `dev` that brings the governance entry is added by the coordinator afterwards.
+  2. **L2:** "Revision verified" named no revision for the post-pass-1 state. **Fixed:** it names `b93a6c0` and `cdbb2d0` explicitly.
+
 ## Limitations
 
 - The offered age is on the database clock by placement's convention, guarded by a test, not by the schema; a new writer of offered rows with another clock would skew it (design, rejected alternative).
@@ -56,5 +68,4 @@ Environment: macOS (Darwin 25.6.0), Node from `.nvmrc`, Docker test services sta
 
 ## Remaining gates
 
-- Independent review (pass 2 pending).
 - Integration into dev by the coordinator (single pull request).
