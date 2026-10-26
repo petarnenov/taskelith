@@ -64,6 +64,22 @@ OpenCode, model `opencode-go/kimi-k2.7-code`, run by the coordinator under the [
 - **L2 (UNREVIEWED fix, `96cdc4a`):** the PostgreSQL test covered only a one-entry list. Resolution: `apps/control-plane/test/launch-authority.integration.test.ts:215` "a relaunch that reports two sealed executions ends both not-started and is granted in one commit": E3 reports [E1 already `not-started`, E2 the `authorized` owner]; a conflict in the second entry (E3 itself) leaves the grant rows unchanged; a crash before the commit leaves neither change; then E1 and E2 are `not-started` and E3 `authorized` in one task write. The file passes 18 of 18.
 - **L3 (UNREVIEWED fix, `96cdc4a`):** no worker test exercised the cap. Resolution: `apps/worker/test/start-reconciliation.test.ts:266` "after recovery, the first request reports exactly the oldest 8 of 10 unconfirmed sealed executions, in order". The file passes 41 of 41.
 
+## Return 1 (integration conflict)
+
+Awaiting review pass 2, which reviews the resolved diff and the reconciliation below.
+
+- **Return:** the coordinator's merge of `origin/dev` at `cc7f998` into the archived head `ceea886` conflicted in `packages/modules/execution/test/journal-recovery.test.ts`, against `scope-execution-cancellation-recovery` (#314). The coordinator aborted the merge; the branch was unchanged.
+- **Restore (worker step 10.1):** `git revert --no-commit ceea886`, committed as `53a7b4e` "docs: restore the active unconfirmed sealed executions report change to merge dev"; the change is active again and the living specs are `dev`'s of `843e293`.
+- **Merge (step 10.2):** base `843e293` (`git merge-base ceea886 origin/dev`); `git merge origin/dev` as `7416c02`. One conflict, at the end of `journal-recovery.test.ts`: #314 added three tests of execution-targeted cancellations ("a cancellation of a superseded execution leaves the last one to be retried or relaunched", "a cancelled last execution sealed before its start ends the intent", "an attempt cancellation still stops every execution of its intent") beside D1's `lastSealedExecution` test, where this change has its three `unconfirmedSealedExecutions` tests. Resolution: both sides' new tests are kept; D1's `lastSealedExecution` test is dropped, as this change already replaced it together with the function. The import list merged without a conflict (#314's `ExecutionId` beside this change's names).
+- **What #314 and the other merged work change for this change:** `recoverIntent` now stops an intent only when its last execution is cancelled, so a superseded execution's cancellation leaves the intent to a retry or relaunch. Such a relaunch goes through `Launch.#nextExecution`, which reports `unconfirmedSealedExecutions` as before; the superseded execution is sealed `not-started`, so reporting it is correct and the authority's per-item rules apply unchanged. `unconfirmedSealedExecutions`, the launch orchestrator, worker journal section 5, the launch authorization contract, and the crash-window harness are not touched by the merge; `journal-records.ts`, `launch-rejection.ts`, and `inventory.ts` changed for the assignment end and capacity work (#315, #316) and do not touch the report. No code change was needed.
+- **Delta reconciliation (step 10.3):** `git diff 843e293 origin/dev -- openspec/specs` changes `worker-runtime` ("Cancellation forwarding", with two new scenarios, and the new "Assignment ended by a launch rejection") and other capabilities, but none of the three requirements this change modifies. A script compared each delta requirement with `dev`'s current text: "Execution ownership" (`launch-authorization`), "Journaled launch authorization" and "Start reconciliation" (`worker-runtime`) are unchanged since `843e293`, and every scenario `dev` has is in the delta. The deltas therefore stay as reviewed; neither touches "Cancellation forwarding" or "Assignment ended by a launch rejection", which the archive keeps verbatim. Requirement bodies: 419, 490, and 472 characters.
+- **Checks on `7416c02`** (2026-10-26 23:32 UTC):
+  - `npm run openspec -- validate report-all-unconfirmed-sealed-executions --strict`: valid.
+  - Archive in a scratch copy of `openspec/`: `Totals: + 0, ~ 3, - 0, → 0`; then `validate --all --strict --no-interactive`: `69 passed, 0 failed`; the archived `worker-runtime` spec differs from `dev`'s by the 14 changed lines of this delta only.
+  - Crash windows: `TASKELITH_TEST_SEED=2776760789 TASKELITH_SCENARIO_RESULTS=openspec/changes/report-all-unconfirmed-sealed-executions/results.jsonl bash scripts/services.sh run taskelith-rause node --experimental-strip-types --test apps/control-plane/test/crash-windows.integration.test.ts`: 29 tests, 29 passed; `results.jsonl` regenerated: 29 rows, all `passed`, 29 distinct scenarios, commit `7416c02`, seed `2776760789`, arch `x64`.
+  - `make verify`: passed (exit 0) on the first run; 1965 tests, 1963 passed, 0 failed, 2 Linux-only tests skipped; coverage 99.29% lines, 92.13% branches, 99.05% functions; `execution.openapi.json: 3 breaking change(s) against cc7f9986d7a5`, declared, 0 for the other documents; OpenSpec `70 passed, 0 failed`; `Every active OpenSpec change archives into strictly valid specs.`; `Packed file allowlist and installed CLI verification passed.`
+- **Not done yet:** review pass 2 of this resolution and reconciliation, then the archive again (step 7) as the last commit.
+
 ## Limitations
 
 - More than 8 unconfirmed sealed executions: the worker reports the oldest 8, and an owner among the newer ones still ends the launch (design D5).
@@ -73,5 +89,6 @@ OpenCode, model `opencode-go/kimi-k2.7-code`, run by the coordinator under the [
 ## Remaining gates
 
 - Independent review: done, pass 1 above; its Low fixes are unreviewed.
-- Archive on the branch (protocol step 7): see "Archive" below.
+- Review pass 2 of Return 1 (resolved merge and delta reconciliation): pending.
+- Archive on the branch again (protocol step 7): pending; the first archive (`ceea886`) was reverted in `53a7b4e`.
 - Integration into `dev` by the coordinator.
