@@ -40,7 +40,7 @@
 | `709261d` | `make verify` | Failed in the archive dry run: the first delta, a `MODIFIED` "Harness-neutral slot records", exceeded 500 characters. Replaced by an added requirement (design decision 5) |
 | `876fa60` | `npm run openspec -- validate align-harness-identifiers --strict` | `Change 'align-harness-identifiers' is valid` |
 | `876fa60` | `make verify` | Passed: 1532 tests, 1517 passed, 0 failed, 15 skipped; coverage over all files 99.12% lines, 91.75% branches, 98.56% functions; 67 OpenSpec items valid; boundary checks, comment check, archive dry run, and package verification passed |
-| Head with this record | `npm run openspec -- validate align-harness-identifiers --strict`; `make verify` | Repeated after this record was added; results reported to the coordinator in the handoff |
+| `688b14a` (this record added; the next commit only fills in this row) | `npm run openspec -- validate align-harness-identifiers --strict`; `make verify` | Passed: change valid; 1532 tests, 1517 passed, 0 failed, 15 skipped; coverage 99.12% lines, 91.75% branches, 98.56% functions; 67 OpenSpec items valid; archive dry run and package verification passed |
 
 ## Review
 
