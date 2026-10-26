@@ -5,6 +5,7 @@ import { err, failure, parseInstant, type Failure } from '@taskelith/kernel';
 import {
   parseSequence,
   type DeclaredCapacity,
+  type ExecutionExit,
   type ExecutionId,
   type JournaledCommand,
   type LaunchIntent,
@@ -183,6 +184,19 @@ test('uncertain evidence after W4 gets a new identity each time, until a termina
   const entries = value(journal.dueForPublication(T0));
   assert.deepEqual(entries.map((entry) => entry.fact.kind), ['assignment-accepted', 'execution-uncertain', 'execution-uncertain', 'execution-exited']);
   assert.equal(new Set(entries.map((entry) => entry.position.observationId)).size, 4);
+});
+
+test('the journal port takes recovery evidence only with an unknown status', () => {
+  value(journal.recordCommand(assignment()));
+  launchUntilWritten();
+  const recovered: ExecutionExit = { status: { kind: 'unknown' }, startProven: false, termination: 'boot-changed' };
+  // @ts-expect-error recovery evidence never carries a known exit status
+  const known: ExecutionExit = { status: { kind: 'code', code: 0 }, startProven: false, termination: 'namespace-ended' };
+  value(journal.recordExit(EXECUTION, recovered));
+
+  const exited = value(journal.dueForPublication(T0)).map((entry) => entry.fact).at(-1);
+  assert.deepEqual(exited?.kind === 'execution-exited' ? exited.exit : undefined, recovered);
+  assert.notDeepEqual(known, recovered);
 });
 
 test('a late grant cannot move a started execution back to authorized', () => {
