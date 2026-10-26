@@ -10,6 +10,7 @@ export const REAL_PROCESS_TEST_TIMEOUT = 30_000;
 const REAP_BOUND_MILLISECONDS = 5_000;
 const RESCAN_MILLISECONDS = 25;
 const PS_OUTPUT_BYTES = 16 * 1024 * 1024;
+const PS_COLUMNS = ['-o', 'pid=,stat=,command='];
 const runFile = promisify(execFile);
 
 // Kills what a real-process test started, so that a failed assertion fails
@@ -79,23 +80,26 @@ async function markedProcesses(marker: string, deadline: number, pid?: number): 
 }
 
 async function psMarked(marker: string, deadline: number, pid?: number): Promise<number[]> {
-  const selection = pid === undefined ? ['-axww'] : ['-ww', '-p', String(pid)];
-  const listing = await ps([...selection, '-o', 'pid=,stat=,command='], deadline);
+  const listing = pid === undefined ? await ps(['-axww', ...PS_COLUMNS], deadline) : await psOne(pid, deadline);
   return listing.split('\n').flatMap((line) => {
     const match = /^\s*(\d+)\s+(\S+)\s+(.*)$/.exec(line);
     return match && !match[2]!.startsWith('Z') && match[3]!.includes(marker) ? [Number(match[1])] : [];
   });
 }
 
-// `ps -p` exits with 1 when the process is gone; a timeout is an error.
-async function ps(args: readonly string[], deadline: number): Promise<string> {
-  const timeout = Math.max(1, deadline - Date.now());
+// `ps -p` exits with 1 when the process is gone; any other failure counts.
+async function psOne(pid: number, deadline: number): Promise<string> {
   try {
-    return (await runFile('ps', args, { encoding: 'utf8', timeout, maxBuffer: PS_OUTPUT_BYTES })).stdout;
+    return await ps(['-ww', '-p', String(pid), ...PS_COLUMNS], deadline);
   } catch (error) {
     if ((error as { code?: unknown }).code === 1) return '';
     throw error;
   }
+}
+
+async function ps(args: readonly string[], deadline: number): Promise<string> {
+  const timeout = Math.max(1, deadline - Date.now());
+  return (await runFile('ps', args, { encoding: 'utf8', timeout, maxBuffer: PS_OUTPUT_BYTES })).stdout;
 }
 
 function linuxMarked(marker: string, pid?: number): number[] {

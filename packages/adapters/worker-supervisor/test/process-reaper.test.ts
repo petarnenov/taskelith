@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -80,6 +80,21 @@ test('the reaper fails the teardown when a tracked process never closes', { time
     await assert.rejects(reaper.reap(), (error: AggregateError) => error.errors.some((entry: Error) => entry.message === `process ${tracked.pid} did not close within 5000 ms`));
   } finally {
     await stopAll(started);
+    rmSync(marker, { recursive: true, force: true });
+  }
+});
+
+// Linux scans /proc instead of running `ps`.
+test('the reaper fails the teardown when the process listing fails', { skip: process.platform === 'linux' }, async () => {
+  const marker = mkdtempSync(join(tmpdir(), 'taskelith-reaper-'));
+  const path = process.env.PATH;
+  writeFileSync(join(marker, 'ps'), '#!/bin/sh\nexit 1\n');
+  chmodSync(join(marker, 'ps'), 0o755);
+  process.env.PATH = `${marker}:${path ?? ''}`;
+  try {
+    await assert.rejects(new ProcessReaper(marker).reap(), (error: AggregateError) => error.errors.some((entry) => (entry as { code?: unknown }).code === 1));
+  } finally {
+    process.env.PATH = path;
     rmSync(marker, { recursive: true, force: true });
   }
 });
