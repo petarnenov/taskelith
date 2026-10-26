@@ -21,12 +21,14 @@ export {
 export { CommandIntake, type CommandIntakeOptions } from './command-intake.js';
 export { publishDueObservations, runObservationPublisher, type ObservationPublisherOptions } from './observation-publisher.js';
 export { startWorker, type LaunchHost, type LaunchingDependencies, type RunningWorker, type WorkerDependencies } from './worker-start.js';
-export { fileRecordListing, fileSupervision, type LaunchProgram } from './execution-supervision.js';
+export { containmentScan, fileRecordListing, fileSupervision, type LaunchProgram } from './execution-supervision.js';
 export type {
+  ContainmentScan,
   DeadlineClock,
   DeadlineReading,
   ExecutionSupervision,
   LaunchPlan,
+  PopulatedContainment,
   RecordListing,
   RecoveryRound,
   SupervisedFacts,

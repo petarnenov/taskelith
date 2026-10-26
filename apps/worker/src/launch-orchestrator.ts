@@ -25,6 +25,7 @@ import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import type { AdmissionCheck } from './admission-pressure.js';
 import {
   sealWon,
+  type ContainmentScan,
   type DeadlineClock,
   type DeadlineReading,
   type ExecutionSupervision,
@@ -54,6 +55,9 @@ export interface LaunchOrchestratorOptions {
   readonly pollMilliseconds?: number;
   // The records on disk, for the leftovers a start reports.
   readonly records?: RecordListing;
+  // Linux only, for the unrecorded processes a start reports; it runs only
+  // after a successful `records` listing.
+  readonly containments?: ContainmentScan;
   readonly logger?: Logger;
   // Told of a launch or pass that threw; the worker keeps running.
   readonly onFailure?: (error: unknown) => void;
@@ -137,6 +141,17 @@ export class LaunchOrchestrator {
     const journaled = new Set<string>(snapshot.executions.map(({ executionId }) => executionId));
     for (const name of listed.value.filter((entry) => !journaled.has(entry))) {
       this.#logger.warn('worker.execution.leftover', { record: name });
+    }
+    this.#reportUnrecordedProcesses(new Set(listed.value));
+  }
+
+  // A populated containment without a record directory is an unrecorded
+  // process (supervisor identity contract, section 9), never current work.
+  #reportUnrecordedProcesses(records: ReadonlySet<string>): void {
+    const scanned = this.#options.containments?.();
+    if (scanned === undefined || !reported(this.#options, scanned)) return;
+    for (const { name, containment, processes } of scanned.value) {
+      if (!records.has(name)) reported(this.#options, this.#options.journal.recordUnrecordedProcess(containment, processes));
     }
   }
 

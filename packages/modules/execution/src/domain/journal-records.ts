@@ -238,7 +238,8 @@ export type ObservationFact =
   | ({ readonly kind: 'execution-not-started' } & ExecutionSubject)
   | ({ readonly kind: 'execution-uncertain' } & ExecutionSubject & { readonly evidenceCounter: number })
   | ({ readonly kind: 'termination-unproven' } & ExecutionSubject & { readonly survivors: readonly ExecutionProcess[] })
-  | ({ readonly kind: 'cancellation-not-applied' } & ExecutionSubject & { readonly commandId: CommandId });
+  | ({ readonly kind: 'cancellation-not-applied' } & ExecutionSubject & { readonly commandId: CommandId })
+  | { readonly kind: 'unrecorded-process'; readonly containment: string; readonly processes: readonly ExecutionProcess[] };
 
 // The unconfirmed outbox entries and the bytes they store.
 export interface OutboxBacklog {
