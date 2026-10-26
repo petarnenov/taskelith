@@ -9,7 +9,9 @@ import { acceptAssignment } from '@taskelith/scheduling';
 import { SimulatedHost, id, value } from '@taskelith/testing';
 import { authorizedUnder, placedTask, seedWorker } from './capacity-fixtures.ts';
 import { AT, assignment, command } from './fixtures.ts';
-import { assertNoPassword, createMigratedDatabase, query, sentinelCredentials, truncateAll } from './test-database.ts';
+import {
+  assertNoPassword, createMigratedDatabase, pinnedClockCredentials, query, sentinelCredentials, truncateAll,
+} from './test-database.ts';
 
 const url = await createMigratedDatabase();
 const metrics = new InMemoryMetrics();
@@ -17,7 +19,11 @@ const sink = new InMemoryLogSink();
 const observer = await sentinelCredentials(url);
 const database = new PostgresDatabase(observer, { metrics, logger: new Logger(sink, new SimulatedHost(AT).wallClock) });
 const signals = new PostgresControlPlaneSignals(database);
-after(() => database.close());
+// The server's wall clock may step back between two transactions, so ages
+// are asserted on a clock pinned at AT, the stamps written relative to it.
+const pinnedDatabase = new PostgresDatabase(await pinnedClockCredentials(url, AT));
+const pinnedSignals = new PostgresControlPlaneSignals(pinnedDatabase);
+after(() => Promise.all([database.close(), pinnedDatabase.close()]));
 beforeEach(() => truncateAll(url));
 
 const EMPTY = {
@@ -52,14 +58,12 @@ test('the snapshot reads outbox lag, assignment age, unknown executions, and cap
     }
     return tx.outbox.append(command('offer-2'));
   })).ok);
-  await query(url, "UPDATE outbox SET appended_at = now() - interval '30 seconds'");
-  await query(url, "UPDATE assignments SET changed_at = now() - interval '90 seconds'");
-  const read = value(await signals.read());
-  assert.deepEqual({ ...read, outboxLagSeconds: 0, assignmentAgeSeconds: 0 }, {
-    ...EMPTY, outboxPending: 2, offeredAssignments: 1, unknownExecutions: 1, eligibleSlots: 2, heldSlots: 1,
-  });
-  assert.ok(read.outboxLagSeconds >= 30 && read.outboxLagSeconds < 60, String(read.outboxLagSeconds));
-  assert.ok(read.assignmentAgeSeconds >= 90 && read.assignmentAgeSeconds < 120, String(read.assignmentAgeSeconds));
+  await query(url, "UPDATE outbox SET appended_at = $1::timestamptz - interval '30 seconds'", [AT]);
+  await query(url, "UPDATE assignments SET changed_at = $1::timestamptz - interval '90 seconds'", [AT]);
+  assert.deepEqual(await pinnedSignals.read(), ok({
+    ...EMPTY, outboxLagSeconds: 30, outboxPending: 2, assignmentAgeSeconds: 90, offeredAssignments: 1,
+    unknownExecutions: 1, eligibleSlots: 2, heldSlots: 1,
+  }));
 });
 
 test('an accepted assignment and a published row no longer count as waiting', async () => {
@@ -81,10 +85,9 @@ test('outbox lag reads the oldest append, which need not be the lowest position'
     const first = await tx.outbox.append(command('offer-1'));
     return first.ok ? tx.outbox.append(command('offer-2')) : first;
   })).ok);
-  await query(url, "UPDATE outbox SET appended_at = now() - interval '5 seconds' WHERE event_id = 'offer-1'");
-  await query(url, "UPDATE outbox SET appended_at = now() - interval '60 seconds' WHERE event_id = 'offer-2'");
-  const lag = value(await signals.read()).outboxLagSeconds;
-  assert.ok(lag >= 60 && lag < 90, String(lag));
+  await query(url, "UPDATE outbox SET appended_at = $1::timestamptz - interval '5 seconds' WHERE event_id = 'offer-1'", [AT]);
+  await query(url, "UPDATE outbox SET appended_at = $1::timestamptz - interval '60 seconds' WHERE event_id = 'offer-2'", [AT]);
+  assert.equal(value(await pinnedSignals.read()).outboxLagSeconds, 60);
 });
 
 test('a clock that stamped a row in the future never reads as a negative age', async () => {
