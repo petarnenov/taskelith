@@ -40,6 +40,10 @@ macOS 26.6.2 (Darwin 25.6.0, arm64), Node.js v24.22.1 from `.nvmrc`, npm as pinn
   6. Low, redaction (`scripts/review-findings.ts:143`): the AWS pattern missed `ASIA`. Fixed and tested.
   7. Low, error-handling (`scripts/review-findings.ts:78`): category ids were not limited to 64 characters. Fixed with the line named; 64/65 boundary test.
   8. Low, process (ADR 0004 principle 7): no Makefile entry. Fixed: `make findings ARGS="<command>"`; the protocol, the requirements, and the skills point at it, and the npm scripts stay as the implementation.
+- **Pass 2 — Codex CLI, model `gpt-6.1-sol`, reasoning effort medium, read-only sandbox, session `01a17aa0-112c-7911-afe3-4cd8c6b40542`, revision `4a0a7da`.** Same invocation; the worker session confirmed the model, effort, and sandbox in the header, and the snapshot was `5731a2efaedca5d501ab6b0fe61bb29fa2497e800163ac34f0f0dffe0e1c81c3` before and after the pass. The reviewer confirmed pass 1 findings 1, 2, 3, 4, 6, and 7 as fixed and the defect of finding 5 as removed. Findings: 0 Critical, 0 High, 1 Medium, 2 Low, fixed in `ff53da9` (code) and `0b8f21b` (tests) and recorded as three `findings.jsonl` lines with outcome `fixed`. With the pass 2 code restored, the two new tests of findings 1 and 2 failed; all pass on the fixed code. Finding 3 changes only a test.
+  1. Medium, error-handling (`Makefile:71`): `$(ARGS)` went through the shell, so `make findings ARGS='checklist --files scripts/**'` failed with `unexpected argument`. Fixed: the recipe runs with `set -f`, so the documented forms work as written; the protocol says so; a test runs the real Makefile entry with `scripts/*.ts`, which matches several files.
+  2. Low, redaction (`scripts/review-findings.ts:148`): the NATS seed pattern missed `SN`, `SC`, and `SX`. Fixed; tested through full finding validation for all six seed kinds, with a short non-seed string accepted.
+  3. Low, contract-drift (`test/review-findings.test.ts:66`): the extension test assumed `supply-chain` is never seeded. Fixed: the test picks an id that the vocabulary does not hold and uses it throughout.
 
 ## Limitations
 
