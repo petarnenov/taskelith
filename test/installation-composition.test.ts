@@ -136,7 +136,7 @@ test('long-running services run unprivileged; only the worker entrypoint starts 
   assert.equal(worker.user, '0:0');
   assert.deepEqual([worker.cap_drop, [...(worker.cap_add ?? [])].sort()], [['ALL'], ENTRYPOINT_CAPABILITIES]);
   assert.deepEqual([worker.cgroup, worker.init], ['private', true]);
-  assert.ok(worker.security_opt?.includes('no-new-privileges=true'));
+  assert.deepEqual([...(worker.security_opt ?? [])].sort(), ['apparmor=unconfined', 'no-new-privileges=true']);
   assert.match(dockerfile, /^ENTRYPOINT \["bash", "\/opt\/taskelith\/infra\/installation\/worker-entrypoint\.sh"\]$/m);
   const entrypoint = readFileSync('infra/installation/worker-entrypoint.sh', 'utf8');
   assert.match(entrypoint, /^exec setpriv --bounding-set=-all,\+setuid,\+setgid,\+kill --inh-caps=-all --no-new-privs -- "\$@"$/m);
