@@ -372,6 +372,23 @@ export const PLACEMENT_QUEUE_CONFORMANCE: readonly ConformanceCase<PlacementQueu
     },
   },
   {
+    name: 'a read after a project between two waiting ones starts after it, in the fair order',
+    async check({ queue, tasks, lineage }: PlacementQueueConformanceTarget) {
+      const problems: string[] = [];
+      const placed = [[queuedTask('task-a', at(0)), 'project-a'], [queuedTask('task-c', at(0)), 'project-c']] as const;
+      for (const [task, project] of placed) {
+        expectSuccess(problems, `add ${task.id}`, await tasks.add(task));
+        expectSuccess(problems, `link ${task.id}`, await lineage.add(rootLink(task.id, project)));
+      }
+      const [a, c] = placed.map(([task]) => task.id);
+      const afterB = id('ProjectId', 'project-b') as ProjectId;
+      const read = await queue.waiting(10, [], afterB);
+      expectSame(problems, 'after b', read.map((entry) => entry.item), [c, a]);
+      expectSame(problems, 'fair order', fairPlacementOrder(read, afterB), [c, a]);
+      return problems;
+    },
+  },
+  {
     name: 'only the given tasks that still wait are answered, in id order',
     async check({ queue, tasks, lineage, assignments }: PlacementQueueConformanceTarget) {
       const problems: string[] = [];

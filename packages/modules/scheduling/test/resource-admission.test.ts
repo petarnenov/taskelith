@@ -211,6 +211,15 @@ test('a project after the cursor is offered before the older backlog of the curs
   assert.deepEqual(fairPlacementOrder([...waiting].reverse(), projectId('p-a')), ['b1', 'a2', 'a3']);
 });
 
+test('a cursor between two waiting projects starts the round after it, then wraps', () => {
+  const entry = (project: string, item: string) => ({
+    projectId: projectId(project), waitingSince: at('2026-10-25T09:00:00.000Z'), item,
+  });
+  const waiting = [entry('project-a', 'task-a'), entry('project-c', 'task-c')];
+  assert.deepEqual(fairPlacementOrder(waiting, projectId('project-b')), ['task-c', 'task-a']);
+  assert.deepEqual(fairPlacementOrder(waiting, undefined), ['task-a', 'task-c']);
+});
+
 test('waiting placements with equal waiting times follow task id order', () => {
   const entry = (project: string, item: string) => ({
     projectId: projectId(project), waitingSince: at('2026-10-25T09:00:00.000Z'), item,
