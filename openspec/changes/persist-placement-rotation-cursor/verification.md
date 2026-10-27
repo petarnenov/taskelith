@@ -134,6 +134,16 @@ Criteria: the ADR 0004 principles and the plan checklist of [design.md](design.m
 
 `findings.jsonl` holds the seven findings of pass 2: six `fixed` and L6 `deferred`, M1 with `missedBy` pass 1, role A. `passes.jsonl` holds the summary of pass 2. Pass 2 had a Medium finding, so its fixes go to a third pass.
 
+- Pass 3 (reviewer A), the last pass, run by the coordinator:
+  - Reviewer: Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, read-only sandbox.
+  - Invocation: as in pass 1, on `bc9bad26`.
+  - Model confirmation: the output header names model `gpt-6.1-sol`, sandbox `read-only`, and reasoning effort `medium`.
+  - Session: `01a17daa-5f96-7150-b96f-132e98c035f0`.
+  - Snapshot before and after: identical (`fb9785f8…0a205ff9e`).
+  - Findings: Critical 0, High 0, Medium 0, Low 0. It confirmed M1 and L1 to L5 of pass 2 resolved and the deferral of L6 recorded correctly.
+
+`passes.jsonl` holds the summary of pass 3; `findings.jsonl` gains no line from it.
+
 ## Limitations
 
 - Control-plane instances share one cursor and the last placement wins. An end-of-pass write does not overwrite another writer's change unless that writer set the same project back, and no instance otherwise coordinates its passes with another (design D7, D8).
@@ -142,6 +152,5 @@ Criteria: the ADR 0004 principles and the plan checklist of [design.md](design.m
 
 ## Remaining gates
 
-- Review pass 3 (reviewer A) of the pass 2 fixes, the last pass under the governance process
 - Archive under worker step 7
 - Integration into dev by the coordinator (single pull request)
