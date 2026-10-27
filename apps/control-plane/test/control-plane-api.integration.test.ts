@@ -506,6 +506,7 @@ describe('enrollment and quarantine', () => {
       },
     });
     const workerBearer = (enrolled.body.credentials as { controlPlane: string }).controlPlane;
+    await sql(database, "UPDATE workers SET worker_admission = 'admitted' WHERE worker_id = $1", [enrolled.body.workerId]);
     const body = {
       operationId: 'operation-api-1', recoveryEpoch: 1, assignmentId: 'assignment-unknown', attemptId: 'attempt-1', ownershipGeneration: 1,
       executionId: 'execution-1', admissionId: 'admission-1', admissionGeneration: 1, reportsNotStarted: false,
