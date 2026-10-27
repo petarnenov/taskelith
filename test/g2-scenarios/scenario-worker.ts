@@ -70,6 +70,10 @@ export class ScenarioWorker {
     return this.#running;
   }
 
+  get name(): string {
+    return this.#options.name;
+  }
+
   get workerId(): string {
     return this.running.identity.workerId;
   }
@@ -143,6 +147,10 @@ export async function stopWorkers(...workers: readonly (ScenarioWorker | undefin
 // The workers a timed-out scenario left running.
 export function stopRunningWorkers(): Promise<void> {
   return stopWorkers(...runningWorkers);
+}
+
+export function runningWorkerNames(): string[] {
+  return [...runningWorkers].map((worker) => worker.name);
 }
 
 // The G2 scripted process; the data root as an argument marks it, so a

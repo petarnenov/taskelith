@@ -2,7 +2,7 @@ import { after } from 'node:test';
 import { Toxiproxy, acquireProcessLock, integrationEndpoint, scenarioRecorderFromEnvironment, type ScenarioRecorder } from '@taskelith/testing';
 import { killProcessesNaming } from './leftover-processes.ts';
 import { ScenarioInstallation, type PostgresRoute } from './scenario-installation.ts';
-import { stopRunningWorkers } from './scenario-worker.ts';
+import { runningWorkerNames, stopRunningWorkers } from './scenario-worker.ts';
 import { within } from './waiting.ts';
 
 const recorder: ScenarioRecorder = scenarioRecorderFromEnvironment();
@@ -73,13 +73,27 @@ export async function withPartitions<T>(body: (toxiproxy: Toxiproxy) => Promise<
 // a file still alive after that is ended, naming what holds it.
 export function guardScenarioFile(): void {
   after(async () => {
+    reportLeftovers();
     await runCleanupSteps([
       ['the leftover workers', stopRunningWorkers],
-      ['the leftover installations', () => runCleanupSteps([...openInstallations].map((installation) =>
-        [`the close of ${installation.base}`, () => closeInstallation(installation)]))],
+      ['the leftover installations', () => runCleanupSteps([...openInstallations].flatMap(leftoverInstallationSteps))],
     ]).catch((error: unknown) => console.error(`scenario file cleanup failed: ${messageOf(error)}`));
     setTimeout(endHeldProcess, EXIT_GRACE_MILLISECONDS).unref();
   });
+}
+
+function reportLeftovers(): void {
+  const workers = runningWorkerNames();
+  const installations = [...openInstallations].map(({ base }) => base);
+  if (workers.length + installations.length === 0) return;
+  console.error(`scenario file left workers [${workers.join(', ')}] and installations [${installations.join(', ')}]`);
+}
+
+function leftoverInstallationSteps(installation: ScenarioInstallation): CleanupStep[] {
+  return [
+    [`the leftover process kill of ${installation.base}`, async () => { killProcessesNaming(installation.base); }],
+    [`the close of ${installation.base}`, () => closeInstallation(installation)],
+  ];
 }
 
 function endHeldProcess(): void {

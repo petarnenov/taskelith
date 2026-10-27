@@ -3,8 +3,10 @@ import { once } from 'node:events';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import type { CrashingWorkerArguments } from './fixtures/crash-before-ack-worker.ts';
+import { within } from './waiting.ts';
 
 const FIXTURE = join(import.meta.dirname, 'fixtures', 'crash-before-ack-worker.ts');
+const CRASHING_WORKER_MILLISECONDS = 20_000;
 
 // The parent's handle on a crash-before-ack worker process.
 export class CrashingWorker {
@@ -25,15 +27,19 @@ export class CrashingWorker {
     });
     const exited = once(child, 'exit').then(([, signal]) => signal as NodeJS.Signals | null);
     const lines = createInterface({ input: child.stdout! });
-    const [line] = await Promise.race([once(lines, 'line'), exited.then((signal) => {
+    const started = Promise.race([once(lines, 'line'), exited.then((signal) => {
       throw new Error(`the crashing worker exited before it started (${signal})`);
-    })]) as [string];
+    })]) as Promise<[string]>;
+    const [line] = await within(started, CRASHING_WORKER_MILLISECONDS, 'the crashing worker start').catch((error: unknown) => {
+      child.kill('SIGKILL');
+      throw error;
+    });
     return new CrashingWorker((JSON.parse(line) as { workerId: string }).workerId, child, exited);
   }
 
-  // The signal that ended the process.
+  // The signal that ended the process, within the crash bound.
   exited(): Promise<NodeJS.Signals | null> {
-    return this.#exited;
+    return within(this.#exited, CRASHING_WORKER_MILLISECONDS, 'the crash exit');
   }
 
   kill(): void {
