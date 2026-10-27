@@ -480,6 +480,22 @@ test('a journal read that fails before W2 defers the launch', async () => {
   assert.deepEqual(executions().map(({ state }) => state), ['exited']);
 });
 
+test('a journal read before W2 that finds the journal stopped ends the launch without a deferral', async () => {
+  value(journal.recordCommand(offer()));
+  const stopped = failure('unavailable', 'the journal stopped: disk I/O error', { reason: 'stopped' });
+  const snapshot = journal.snapshot.bind(journal);
+  let reads = 0;
+  // Read 1 is the pass; the stop at read 4 bounds a launch that defers.
+  journal.snapshot = () => {
+    if ((reads += 1) >= 4) controller.abort();
+    return reads === 1 ? snapshot() : err(stopped);
+  };
+  await launchOnce();
+  journal.snapshot = snapshot;
+
+  assert.deepEqual([deferrals().length, authority.requests.length, executions().length], [0, 0, 0]);
+});
+
 test('a W2 commit that fails and rolls back is tried again on a timer, with a new operation', async () => {
   value(journal.recordCommand(offer()));
   const beginAuthorization = journal.beginAuthorization.bind(journal);
