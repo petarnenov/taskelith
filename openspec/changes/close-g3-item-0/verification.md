@@ -71,7 +71,7 @@ Sequence deviation: worker step 4 runs `make verify` before the first review pas
 
 ## Remaining gates
 
-- `make verify` after the pass 1 fixes (worker step 4).
+- `make verify` on the archive tree (step 7). The coordinator ruled that the pass 1 fixes, which touch only change records, need no separate re-verify.
 - Review pass 2 (reviewer B, Claude Code, `claude-opus-5-5`, effort high) and pass 3 (reviewer A).
 - Archive.
 - Integration into dev by the coordinator (single pull request).
