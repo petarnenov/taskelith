@@ -116,3 +116,13 @@ Review pass 1 was Low-only, so passes 2 and 3 are not run.
 
 - Archive
 - Integration into dev by the coordinator (single pull request)
+
+## Archive checks
+
+After `npm run openspec -- archive refresh-g3-dependency-observations --yes`:
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived`: `change/2026-10-27-refresh-g3-dependency-observations` valid.
+- `git diff 4cbea974 -- openspec/specs` (merge base): empty, as the change skips specs.
+- `make findings ARGS="validate"`: 40 findings files and 20 pass summary files valid.
+- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: passed.
