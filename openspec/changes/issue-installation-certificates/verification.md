@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-28. The author's self-check and checks are recorded below, with review pass 1 and its fixes. Review pass 2 is pending.
+Date: 2026-10-28. The author's self-check and checks are recorded below, with review passes 1 and 2 and their fixes.
 
 ## Scope and source
 
@@ -13,7 +13,7 @@ G3 sub-change 26a of item 26 `secure-remote-connectivity` ([G3 plan](/docs/g3-pl
 
 ## Environment
 
-macOS 26.6.2 arm64, Node.js 24.22.1 from `.nvmrc`, Docker Engine 29.6.1; the integration services of `make services-up` for the integration tests.
+macOS 26.6.2 arm64 (Apple M3, `uname -m` `arm64`), Node.js 24.22.1 from `.nvmrc`, Docker Engine 29.6.1; the integration services of `make services-up` for the integration tests.
 
 ## Author self-check
 
@@ -31,6 +31,8 @@ macOS 26.6.2 arm64, Node.js 24.22.1 from `.nvmrc`, Docker Engine 29.6.1; the int
 - New files' coverage: `x509-certificate-issuer` 100% lines and branches; `installation-authority` 100% lines, 79.07% branches; `server-tls` 94.29% lines (the catch of `createSecureContext`); `server-hosts`, `broker-tls`, `installation-certificates`, and `redaction-rules` 100%.
 - `make verify-installation` (Docker) at `72cfabf4`: exit 0, "built, bootstrapped, started, enrolled, certificates re-issued, restarted, removed".
 - `make installation-smoke` (Docker) at `72cfabf4`: exit 0, the run ended with exit code 0 over HTTPS and TLS NATS, "submitted, assigned, executed, stored the result, removed".
+- After review pass 2, on the working tree of `6770d360`: `make verify`: exit 0, twice (the second a mistyped Linux suites run that make took as the default target); 2384 tests, 2381 pass, 0 fail, 3 skipped; coverage lines 99.34%, branches 92.32%, functions 99.04%; `validate --all --strict` 70 passed; every active OpenSpec change archives into strictly valid specs. `make verify-installation`: exit 0, "built, bootstrapped, started, enrolled, restarted, certificates re-issued and served, removed".
+- M3 attempts, on the same tree: `make linux-test-suites SUITES="test/g2-*.test.ts"`: exit 2, 14 of 21 fail because that target runs without network or services (`TASKELITH_POSTGRES_URL is not set`); the same three suites in the Linux test image on the host network against `scripts/services.sh run`: 14 fail with `ECONNREFUSED`, because Docker Desktop's host network does not reach the services' published ports on this macOS host. `make scenario-native-worker-lifecycle`: exit 2; the native Darwin arm64 worker enrolled over HTTPS (201), reached NATS over TLS (`worker.contact.online`), and the operator polled over HTTPS, but the task never ran: the worker reported admission pressure `disk-floor`, with 2.6 GiB free on the host disk.
 - `npm audit --omit=dev`: 0 vulnerabilities. `npm run verify:dependencies`: 766 package paths verified.
 - After review pass 1, on the working tree of `74456be6` with the design, findings, and pass records of the records commit: `npm run openspec -- validate issue-installation-certificates --strict`: valid; `make findings ARGS="validate"`: 53 findings files and 33 pass summary files valid; `make verify`: exit 0; 2380 tests, 2377 pass, 0 fail, 3 skipped; coverage lines 99.34%, branches 92.31%, functions 99.04%; every active OpenSpec change archives into strictly valid specs; `validate --all --strict` 70 passed. `make verify-installation` at `706b6b6a` content (the restart in place): exit 0, "built, bootstrapped, started, enrolled, restarted, certificates re-issued and served, removed"; its log holds no `PRIVATE KEY` line.
 
@@ -72,17 +74,43 @@ Fails before the fixes, each run before its fix was written: findings 1 and 2, t
 
 ### Review pass 2
 
-Pending: reviewer B of another harness, briefed with pass 1's session.
+- **Reviewer:** B, Claude Code `claude-opus-5-5`, effort `high`, plan mode.
+- **Invocation:** `claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose < /dev/null > <log>`, run by the coordinator from the worktree.
+- **Confirmation:** the last `result` line names session `cd2c3d8e-002c-4f2c-8658-89b5fc195dcc`, and its `modelUsage` holds `claude-opus-5-5` only.
+- **Revision reviewed:** `d9d44ebf`.
+- **Snapshot:** `9baf0a6f88d4f7f7799f9be3f970da1f0e6b701f9a657b335b07428593140360` before and after, unchanged.
+- **Pass 1 fixes:** all 11 confirmed; the notes on findings 3, 4, 8, and 9 lead to M2, L5, L6, L7, and L8 below.
+- **Result:** Critical 0, High 0, Medium 3, Low 10, written in Bulgarian and recorded in English. M2 is a regression of the pass 1 fix of finding 8, so it names no missed pass; every other finding was present at pass 1 and names pass 1 (A) in `missedBy`.
+
+| # | Severity | Finding | Resolution | Commit |
+| --- | --- | --- | --- | --- |
+| M1 | Medium | Three contracts still called the API and NATS plain | Execution wire, account pool, and source control contracts state the TLS of 26a and what 26b and 26d add; a grep for other plain claims found only the G3 plan's "G2 as built" list, which is historical | `6770d360` |
+| M2 | Medium | The served certificate probe ran once, right after `compose restart` | Retried until `CONTACT_SECONDS` (90 s); with the restart removed, `make verify-installation` still failed: both servers presented the old certificates until "not served within 90s" | `61ab5f15` |
+| M3 | Medium | The changed G2 scenario code was not run | Deferred to a Linux host; see Checks, Limitations, and Remaining gates | none |
+| L1 | Low | The qualification named a macOS x86_64 host | It names macOS 26.6.2 arm64 (Apple M3) | `6770d360` |
+| L2 | Low | The issuer signed with an expired authority or one ending before the server certificate | Refused with `precondition-failed`, naming rollover as G6; conformance case, delta scenario "Authority near its end", contract section 7 | `3af3e8e5`, `6770d360` |
+| L3 | Low | A bad browser key was reported under `TASKELITH_BROWSER_TLS_CERT` | The failure names the file at fault, `TASKELITH_BROWSER_TLS_KEY` for the key | `c0afe2cc` |
+| L4 | Low | An API key mismatch named neither `api-key.pem` nor the remedy | It names `api-key.pem`, `api-certificate.pem`, and `make installation-certificates`; an integration test swaps the key | `c0afe2cc` |
+| L5 | Low | "Before initialization" read as contradicting "Lost installation CA" | Its WHEN names neither an installation record nor an installation CA | `6770d360` |
+| L6 | Low | The authority requirement did not name the failing commands and kept "stay plain without one" | It names `init` and `issue-installation-certificates` and refers client CA behavior to "Installation broker TLS" | `6770d360` |
+| L7 | Low | Two local installation scenarios had no test | A composition test shows that no browser setting or host file reaches the control plane; the probe of `make verify-installation` checks that NATS refuses a plain client, with a unit test of both outcomes | `61ab5f15` |
+| L8 | Low | The private key check missed double-escaped and single-line keys and read the working copy | Both forms refused; tracked files read from the index with `git cat-file --batch`; tests cover each and a key staged and then removed from the working copy | `fe2d4ae1` |
+| L9 | Low | "running worker host" in the guide | "running installation" | `6770d360` |
+| L10 | Low | "plain on localhost" for PostgreSQL | "plain on the Compose network, unpublished" in the delta, proposal, guide, and contract; the G3 plan's deferral row is unchanged | `6770d360` |
+
+Fails before the fixes, each run before its fix was written: L2, the new conformance case failed with success for both authorities; L3 and L4, the new unit assertions failed on the old messages and details; L8, the nested, one-line, and staged-key tests failed; L7's plain client probe and composition test are new checks of behavior that already held. M2 was shown as above.
 
 ## Limitations
 
 - The design's Risks and limitations apply: installations initialized before this change fail closed without an authority; `NODE_EXTRA_CA_CERTS` adds the CA to the system roots until 26b pins it; the composition's browser endpoint serves the installation certificate; `issue-installation-certificates` writes no audit row.
 - The composition still serves the browser endpoint on the API certificate (finding 9), as decided for 26d.
-- The checks ran on macOS arm64 only; the Linux suites of `make verify-linux-cgroup` and the G2 failure scenarios on the composition were not run.
+- The checks ran on macOS arm64 only. Not run with their changed code (M3): `test/g2-scenarios/scenario-installation.ts`, `test/g2-scenarios/crashing-worker.ts`, `test/g2-scenarios/fixtures/crash-before-ack-worker.ts`, and `test/g2-cancellation-races.test.ts` (Linux only, `SCENARIO_HOST`); `scripts/installation-scenarios.sh` with `trust_installation_ca` and `TASKELITH_NATS_CA` past the native worker's enrollment and broker contact (stopped at the disk floor), and the G2 failure scenarios on the composition; the Linux suites of `make verify-linux-cgroup` and `make verify-linux-crash-windows`.
 
 ## Remaining gates
 
-- Independent review passes under the [review process](/docs/governance.md#independent-review-process), and their fixes.
+- Review pass 3 (reviewer A confirms the pass 2 fixes) under the [review process](/docs/governance.md#independent-review-process).
 - Owner review of decisions 1, 2, 3, and 5 of the away run.
 - Archive under worker step 7.
+- On a Linux host: the G2 scenario suites (`test/g2-cancellation-races.test.ts`, `test/g2-partition.test.ts`, `test/g2-stale-generations.test.ts`) with services, `make verify-linux-crash-windows`, and the G2 failure scenarios on the composition.
+- On a host with free disk above the worker's floor: `make scenario-native-worker-lifecycle`.
 - Integration into dev by the coordinator (single pull request).

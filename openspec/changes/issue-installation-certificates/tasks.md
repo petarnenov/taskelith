@@ -29,5 +29,5 @@
 
 - [x] 6.1 `npm run openspec -- validate issue-installation-certificates --strict` and `make verify`
 - [x] 6.2 `verification.md` drafted
-- [ ] 6.3 Independent review passes and their fixes (pass 1 fixed; pass 2 pending)
+- [ ] 6.3 Independent review passes and their fixes (passes 1 and 2 fixed; pass 3 pending)
 - [ ] 6.4 Archive under worker step 7
