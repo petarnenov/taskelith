@@ -20,7 +20,7 @@ Each independent review pass that runs to a report, also one without findings, S
 - **THEN** validation fails for that line without repeating the string
 
 ### Requirement: Pass summary consistency
-Where a change has both `findings.jsonl` and `passes.jsonl`, each pass SHALL be summarized once, every finding's pass SHALL have a summary with the same reviewer and session, and each summary's counts SHALL equal its pass's findings by severity. Validation SHALL report each mismatch with its file and line.
+Where a change has `passes.jsonl`, with a missing `findings.jsonl` taken as empty, each pass SHALL be summarized once, every finding's pass SHALL have a summary with the same reviewer and session, and each summary's counts SHALL equal its pass's findings by severity. Validation SHALL report each mismatch with its file and line.
 
 #### Scenario: Counts differ from the findings
 - **WHEN** a pass summary counts two Medium findings and `findings.jsonl` holds one Medium finding of that pass
@@ -50,7 +50,7 @@ A finding MAY name in `missedBy` what missed it: an earlier pass of its change w
 - **THEN** validation fails and names the finding's file and line
 
 ### Requirement: Reviewer statistics
-`make findings ARGS="reviewers [--json]"` SHALL count archived review passes per reviewer and per role: passes, findings by severity, findings per pass, the share of passes with at least one Medium or worse finding, and the misses that `missedBy` attributes to them, plus the integration's misses. An archived change without `passes.jsonl` SHALL count only its passes with findings, with role unknown, and the output SHALL say so.
+`make findings ARGS="reviewers [--json]"` SHALL count archived review passes per reviewer and per role: passes, findings by severity, findings per pass, the share of passes with at least one Medium or worse finding, and the misses that `missedBy` attributes to them, plus the integration's misses and those of passes without a record. An archived change without `passes.jsonl` SHALL count only its passes with findings, with role unknown, and the output SHALL say so.
 
 #### Scenario: Summarized pass without findings
 - **WHEN** an archived change's `passes.jsonl` summarizes a pass without findings

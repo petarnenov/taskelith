@@ -54,7 +54,7 @@ export interface Category {
 // Schema violations of one parsed value, as readable messages; none if valid.
 export type SchemaCheck = (value: unknown) => readonly string[];
 
-export interface FindingsSource {
+export interface RecordSource {
   readonly path: string;
   readonly change: string;
   readonly text: string;
@@ -109,12 +109,12 @@ export function contentLines(text: string): string[] {
   return lines.at(-1) === '' ? lines.slice(0, -1) : lines;
 }
 
-export function parseFindings(source: FindingsSource, rules: FindingRules): ParsedFindings {
+export function parseFindings(source: RecordSource, rules: FindingRules): ParsedFindings {
   const { located, problems } = parseLocatedFindings(source, rules);
   return { findings: located.map(({ finding }) => finding), problems };
 }
 
-export function parseLocatedFindings(source: FindingsSource, rules: FindingRules) {
+export function parseLocatedFindings(source: RecordSource, rules: FindingRules) {
   const located: LocatedFinding[] = [];
   const problems: Problem[] = [];
   contentLines(source.text).forEach((text, index) => {

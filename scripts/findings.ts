@@ -200,11 +200,13 @@ function loadRepository(root: string): Repository {
     const path = posix.join(directory, name);
     return existsSync(posix.join(root, path)) ? { path, text: read(path) } : undefined;
   };
-  const changes = changeLocations(root).map(({ directory, change, archived }) =>
-    ({ change, archived, findings: file(directory, FINDINGS_FILE), passes: file(directory, PASSES_FILE) }));
-  const missing = changeLocations(root).filter(({ archived }) => !archived).flatMap(({ directory }) =>
-    [FINDINGS_FILE, PASSES_FILE].filter((name) => !existsSync(posix.join(root, directory, name)))
-      .map((name) => ({ file: posix.join(directory, name), message: MISSING[name] })));
+  const located = changeLocations(root).map(({ directory, change, archived }) =>
+    ({ directory, records: { change, archived, findings: file(directory, FINDINGS_FILE), passes: file(directory, PASSES_FILE) } }));
+  const changes: ChangeRecords[] = located.map(({ records }) => records);
+  const missing = located.filter(({ records }) => !records.archived).flatMap(({ directory, records }) =>
+    ([[FINDINGS_FILE, records.findings], [PASSES_FILE, records.passes]] as const)
+      .filter(([, present]) => present === undefined)
+      .map(([name]) => ({ file: posix.join(directory, name), message: MISSING[name] })));
   const recorded = changes.filter(({ findings, passes }) => findings !== undefined || passes !== undefined);
   return {
     changes: recorded,
@@ -251,15 +253,19 @@ interface ChangeRules {
   readonly passSchema: SchemaCheck;
 }
 
-// Cross-file checks run only when both files exist and parse cleanly, so a
-// broken line is reported once and not again as a mismatch.
+// Cross-file checks need passes.jsonl, take a missing findings.jsonl as
+// empty, and skip files with broken lines, which are reported once.
 function checkChange(records: ChangeRecords, rules: ChangeRules): CheckedChange {
   const { change, archived } = records;
   const findings = records.findings && parseLocatedFindings({ ...records.findings, change }, archived ? rules.archived : rules.active);
   const passes = records.passes && parsePassSummaries({ ...records.passes, change }, rules.passSchema);
-  const clean = findings !== undefined && passes !== undefined && findings.problems.length + passes.problems.length === 0;
-  const consistency = clean
-    ? consistencyProblems({ findingsPath: records.findings!.path, passesPath: records.passes!.path, findings: findings.located, summaries: passes.located })
+  const consistency = passes !== undefined && passes.problems.length + (findings?.problems.length ?? 0) === 0
+    ? consistencyProblems({
+      findingsPath: records.findings?.path ?? posix.join(posix.dirname(records.passes!.path), FINDINGS_FILE),
+      passesPath: records.passes!.path,
+      findings: findings?.located ?? [],
+      summaries: passes.located,
+    })
     : [];
   return {
     change,
@@ -304,9 +310,9 @@ function commandOutput(command: Command, repository: Repository, checked: readon
   return command.json ? JSON.stringify(index, null, 2) : formatIndex(index);
 }
 
-function validOutput(files: readonly ChangeRecords[]): string {
-  const findings = files.filter((records) => records.findings !== undefined).length;
-  const passes = files.filter((records) => records.passes !== undefined).length;
+function validOutput(changes: readonly ChangeRecords[]): string {
+  const findings = changes.filter((records) => records.findings !== undefined).length;
+  const passes = changes.filter((records) => records.passes !== undefined).length;
   return `Every findings file is valid: ${findings} file(s); every pass summary file is valid: ${passes} file(s).`;
 }
 

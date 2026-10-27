@@ -23,4 +23,4 @@ The review findings record shows what reviewers found, but not how often each re
 
 Repository tooling and process documentation only (`scripts/`, `docs/`, `.claude/skills/`, `test/`); no runtime, contract, or published package change. Archived records are not rewritten.
 
-Exclusions: no backfill of pass summaries or `missedBy` in archived changes, no change to the index or checklist commands, and no statistics over active changes.
+Exclusions: no backfill of pass summaries or `missedBy` in archived changes, no change to the output of the index and checklist commands, which, like every command, now refuse to run on invalid pass summaries or summaries that disagree with the findings, and no statistics over active changes.

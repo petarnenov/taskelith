@@ -310,6 +310,21 @@ test('reviewers derives the passes of archives without summaries and says so', (
   }
 });
 
+test('pass summaries without findings.jsonl are checked against no findings', () => {
+  const archived = 'openspec/changes/archive/2026-10-07-summaries-only';
+  const root = repository({ [`${archived}/passes.jsonl`]: `${summary('summaries-only', 1, { low: 2 })}\n` });
+  try {
+    assert.deepEqual(runFindings(['reviewers'], root).stderr.split('\n'), [
+      `${archived}/passes.jsonl:1: counts of pass 1 differ from its lines in findings.jsonl: low 2 here, 0 there`,
+      `Review findings: 1 problem(s); ${FORMATS}.`,
+    ]);
+    writeFileSync(join(root, archived, 'passes.jsonl'), `${summary('summaries-only', 1)}\n`);
+    assert.match(runFindings(['reviewers'], root).stdout, /^Reviewer statistics of archived changes: 1 change\(s\) with review records, 1 pass\(es\)\./);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('reviewers names the archived changes without any review record', () => {
   const root = repository({ 'openspec/changes/archive/2026-10-06-no-records/proposal.md': '# Proposal\n' });
   try {

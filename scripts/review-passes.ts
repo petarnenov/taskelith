@@ -3,7 +3,7 @@ import {
   contentLines,
   reviewerKey,
   type Finding,
-  type FindingsSource,
+  type RecordSource,
   type LocatedFinding,
   type Problem,
   type Reviewer,
@@ -41,7 +41,7 @@ export interface ParsedSummaries {
 
 const EMPTY_LINE = 'empty line; a change without review passes has an empty file';
 
-export function parsePassSummaries(source: FindingsSource, checkSchema: SchemaCheck): ParsedSummaries {
+export function parsePassSummaries(source: RecordSource, checkSchema: SchemaCheck): ParsedSummaries {
   const located: LocatedSummary[] = [];
   const problems: Problem[] = [];
   contentLines(source.text).forEach((text, index) => {
