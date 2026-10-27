@@ -19,4 +19,6 @@ Then follow "Coordinator steps" of the `taskelith-task-protocol` skill and `docs
 
 Every brief carries the output of `make findings ARGS="checklist --capability <a,b> --files <globs>"` for the task's capabilities and files, including its "Record quality" section, as `docs/agent-task-protocol.md` coordinator step 1 requires, and names its reviewers A and B, of different harnesses unless none of another harness is available (`docs/governance.md` "Two alternating reviewers per task" and "Rotation").
 
+Keep your context thin: run waits, such as an integration or a review, as background scripts and act on their notifications instead of polling in your context, and keep briefs and notes in files that your messages name (`docs/agent-task-protocol.md` "Context size").
+
 To step down, follow "Changing the coordinator" in `docs/fleet.md`.
