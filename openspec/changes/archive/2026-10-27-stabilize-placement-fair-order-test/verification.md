@@ -53,3 +53,13 @@ MacBook Air, macOS 26.6.2 (Darwin 25.6.0, arm64), Node.js v24.22.1, Docker 29.6.
 ## Follow-up outside scope
 
 `fairPlacementOrder` (`packages/modules/scheduling/src/domain/fair-order.ts:25-27`) breaks ties on waiting time only by project id, with no explicit task-id tie-break, and relies on a stable sort to keep the queue's id order among a project's tasks with equal stamps. An explicit task-id tie-break would make that order independent of the input order.
+
+## Archive checks
+
+Worker step 7, run by the worker session after review pass 1 and its fix. The checked state is the tree of the archive commit, which is the working tree these checks ran on after `npm run openspec -- archive stabilize-placement-fair-order-test --yes` (base `f2e5796`). The archive commit also points the finding's `file` at the moved `verification.md`.
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `make verify`: exit 0; 2018 tests, 2016 pass, 0 fail, 2 skipped; coverage lines 99.29%, branches 92.13%, functions 99.05%.
+- `npm run openspec -- validate --archived --no-interactive`: the line of `change/2026-10-27-stabilize-placement-fair-order-test` passes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: empty, as intended for a change with `skip_specs: true`.
+- The moved change has its `findings.jsonl` with the one pass-1 line, and `make findings ARGS="validate"` passes.
