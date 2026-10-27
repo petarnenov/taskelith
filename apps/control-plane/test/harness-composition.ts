@@ -16,7 +16,7 @@ import { SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { InMemoryLogSink } from '@taskelith/observability';
 import { PostgresDatabase } from '@taskelith/postgres';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
-import { CRASH_POINT_VARIABLE, crashEnvironment, integrationEndpoint, integrationSecret, ScenarioProcess, SEED_VARIABLE, value } from '@taskelith/testing';
+import { CRASH_POINT_VARIABLE, crashEnvironment, integrationEndpoint, integrationSecret, ScenarioProcess, SEED_VARIABLE, uncoveredEnvironment, value } from '@taskelith/testing';
 import { openWorkerRoot } from '@taskelith/worker-journal';
 import { CRASH_TRACE_VARIABLE, FAIL_FIRST_PREPARE_VARIABLE, HOLD_NOT_STARTED_VARIABLE, ORDER_TRACE_VARIABLE } from './fixtures/crash-hook.ts';
 
@@ -371,8 +371,7 @@ export class ComposedWorker {
 
   static async start(run: WorkerRun, enrollmentToken: string): Promise<ComposedWorker> {
     const { installation, seed, armed } = run;
-    // A crash kills mid-write the coverage file of an inheriting child.
-    const { [CRASH_POINT_VARIABLE]: _unarmed, NODE_V8_COVERAGE: _uncovered, ...inherited } = process.env;
+    const { [CRASH_POINT_VARIABLE]: _unarmed, ...inherited } = uncoveredEnvironment();
     const env = {
       ...inherited, ...(armed === undefined ? {} : armedEnvironment(armed)), ...(run.holdNotStarted === true ? { [HOLD_NOT_STARTED_VARIABLE]: '1' } : {}),
       ...(run.failsFirstPrepare === true ? { [FAIL_FIRST_PREPARE_VARIABLE]: '1' } : {}),
