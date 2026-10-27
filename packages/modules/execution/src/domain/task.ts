@@ -72,6 +72,13 @@ export interface EvidenceReport extends ExecutionReport {
   readonly kind: ExecutionEvidenceKind;
 }
 
+// The check each grant would now fail, and the attempt's cancellation
+// reason, which matches the command its writer sends (B8).
+export interface LaunchRevocation {
+  readonly grants: RevocationReason;
+  readonly cancellation: CancellationReason;
+}
+
 // What the scheduler reads before it ends an assignment or releases its
 // reservation (capacity reservation contract, section 6).
 export interface AssignmentExecutions {
@@ -84,6 +91,12 @@ export interface ObservationResult {
   readonly effect: 'applied' | 'duplicate';
   readonly task: Task;
 }
+
+// What a task needs from placement: its first attempt, or a placement of
+// its active attempt, which must be uncancelled and own nothing that runs.
+export type PlacementNeed = { readonly kind: 'open-attempt' } | { readonly kind: 'place'; readonly attemptId: AttemptId };
+
+const OPEN_ATTEMPT: PlacementNeed = Object.freeze({ kind: 'open-attempt' });
 
 export function openTask(admission: TaskAdmission, at: Instant): Result<Task> {
   const ownership = dispatchedOwnership(admission);
@@ -176,13 +189,13 @@ export function isLaunchAffected(task: Task, attemptId: AttemptId): boolean {
 
 // Revokes every grant of the owning execution and requests cancellation; a
 // started process may still run, so the outcome waits for its terminal fact.
-export function revokeLaunch(task: Task, attemptId: AttemptId, reason: RevocationReason, at: Instant): Result<Task> {
+export function revokeLaunch(task: Task, attemptId: AttemptId, revocation: LaunchRevocation, at: Instant): Result<Task> {
   const attempt = findActiveAttempt(task, attemptId);
   if (!attempt.ok) return attempt;
   const owning = owningExecution(attempt.value);
   if (owning === undefined) return attemptFailure(attempt.value, 'owns no execution whose launch could be revoked');
-  const revoked = withExecution(attempt.value, withRevokedGrants(owning, reason));
-  const cancelled = revoked.cancellation === undefined ? withCancellation(revoked, 'launch-revoked', at) : revoked;
+  const revoked = withExecution(attempt.value, withRevokedGrants(owning, revocation.grants));
+  const cancelled = revoked.cancellation === undefined ? withCancellation(revoked, revocation.cancellation, at) : revoked;
   return ok(withAttempt(task, cancelled, at));
 }
 
@@ -275,6 +288,14 @@ export function taskOutcomeFact(task: Task, attemptId: AttemptId): Result<TaskOu
     ownershipGeneration: attempt.value.outcome.ownershipGeneration,
     outcome: attempt.value.outcome,
   }));
+}
+
+// Undefined once every attempt ended: an automatic retry is not placement.
+export function placementNeed(task: Task): PlacementNeed | undefined {
+  if (task.attempts.length === 0) return OPEN_ATTEMPT;
+  const active = activeAttempt(task);
+  if (active === undefined || active.cancellation !== undefined || owningExecution(active) !== undefined) return undefined;
+  return Object.freeze({ kind: 'place', attemptId: active.id });
 }
 
 export function activeAttempt(task: Task): Attempt | undefined {

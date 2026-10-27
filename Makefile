@@ -8,17 +8,27 @@ SERVICES_ID := $(shell printf '%s' '$(CURDIR)' | cksum | cut -d ' ' -f 1)
 VERIFY_SERVICES := taskelith-$(SERVICES_ID)-verify
 DEV_SERVICES := taskelith-$(SERVICES_ID)-dev
 
-LINUX_CGROUP_IMAGE := taskelith-linux-cgroup:test
-LINUX_CGROUP_BASE := ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
+UBUNTU_BASE := ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
 NODE_LINUX_X64_SHA256 := eb6728e77c576a35162c122c45ccadf224d89ff00abc8dae46cc2897c6002d7c
+NODE_LINUX_ARM64_SHA256 := 33c37be234ba8bee041961047b19160f4d7d0f164e8e246f78bdd10feff148b3
+LINUX_CGROUP_IMAGE := taskelith-linux-cgroup:test
+
+# The minimal local installation is one Compose project per worktree.
+INSTALLATION := taskelith-$(SERVICES_ID)-installation
+INSTALLATION_PINS := TASKELITH_UBUNTU_BASE=$(UBUNTU_BASE) TASKELITH_NODE_VERSION=$(NODE_PIN) \
+	TASKELITH_NODE_SHA256_AMD64=$(NODE_LINUX_X64_SHA256) TASKELITH_NODE_SHA256_ARM64=$(NODE_LINUX_ARM64_SHA256)
 
 SPECKIT_IMAGE := taskelith-speckit:1.2.3
 SPECKIT_BASE := python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962
 SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
-.PHONY: verify verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility \
-	test services-up services-down verify-linux-cgroup
+.PHONY: verify verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility findings \
+	test services-up services-down verify-linux-cgroup verify-linux-crash-windows installation-build installation-bootstrap installation-broker-config installation-start \
+	installation-stop installation-enroll installation-enrollment-token verify-installation verify-worker-image-reproducible installation-smoke qualify-harnesses \
+	scenario-fresh-composition scenario-worker-disk-loss scenario-worker-kill \
+	scenario-worker-namespace-confinement worker-seccomp-profile linux-test-image linux-test-suites \
+	scenario-worker-lifecycle scenario-native-worker-lifecycle native-acceptance
 
 # Uses the .nvmrc Node.js when nvm has it, so no 'nvm use' is needed first.
 verify:
@@ -26,10 +36,12 @@ verify:
 
 verify-checks: toolchain
 	npm run verify:comments
+	npm run verify:findings
 	$(MAKE) --no-print-directory test
 	$(MAKE) contract-compatibility
 	npm run verify:dependencies
 	npm run openspec -- validate --all --strict --no-interactive
+	npm run verify:links
 	npm run verify:archive
 	npm run verify:package
 
@@ -54,6 +66,11 @@ hooks:
 dependency-inventory:
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use sh -c 'npm ci --ignore-scripts && npm run inventory:dependencies'
 
+# Review records tool: ARGS is validate, index, reviewers, or effect (the last
+# three take --json), or checklist; a usage error prints every option.
+findings:
+	@set -f; NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run --silent findings -- $(ARGS)
+
 # Runs npm test with the .nvmrc Node.js against its own services, which stop
 # also when tests fail; fails closed without Docker.
 test:
@@ -73,17 +90,133 @@ services-down:
 contract-compatibility:
 	node --experimental-strip-types scripts/check-contract-compatibility.ts
 
+# The test image of the Linux tests, with the Node.js of the Docker host's
+# architecture (x86_64 or aarch64).
+linux-test-image:
+	@case "$$(docker info --format '{{.Architecture}}')" in \
+		x86_64|amd64|x86-64) node_arch=x64; node_sha256=$(NODE_LINUX_X64_SHA256) ;; \
+		aarch64|arm64) node_arch=arm64; node_sha256=$(NODE_LINUX_ARM64_SHA256) ;; \
+		*) echo "make linux-test-image: no pinned Node.js for this Docker host" >&2; exit 1 ;; \
+	esac; \
+	docker build --quiet --build-arg BASE=$(UBUNTU_BASE) --build-arg NODE_VERSION=$(NODE_PIN) \
+		--build-arg NODE_ARCH="$$node_arch" --build-arg NODE_SHA256="$$node_sha256" \
+		--tag $(LINUX_CGROUP_IMAGE) tools/linux-cgroup >/dev/null
+
 # Opt-in privileged cgroup v2 tests of the worker supervisor; kept out of
-# make verify, which stays unprivileged. x86_64 Docker hosts only.
+# make verify, which stays unprivileged. PATTERN selects tests by name.
 verify-linux-cgroup:
-	@if [ "$$(docker info --format '{{.Architecture}}')" != "x86_64" ]; then \
-		echo "make verify-linux-cgroup: needs an x86_64 Docker host; the image pins the linux-x64 Node.js." >&2; \
-		exit 1; \
-	fi
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run build
-	docker build --quiet --build-arg BASE=$(LINUX_CGROUP_BASE) --build-arg NODE_VERSION=$(NODE_PIN) \
-		--build-arg NODE_SHA256=$(NODE_LINUX_X64_SHA256) --tag $(LINUX_CGROUP_IMAGE) tools/linux-cgroup
-	docker run --rm --privileged --cgroupns=private --network none --volume "$(CURDIR):/repo:ro" $(LINUX_CGROUP_IMAGE)
+	@$(MAKE) --no-print-directory linux-test-image
+	docker run --rm --privileged --cgroupns=private --network none --volume "$(CURDIR):/repo:ro" $(LINUX_CGROUP_IMAGE) \
+		$(if $(PATTERN),--test-name-pattern='$(PATTERN)')
+
+# Opt-in G2 crash windows on Linux (privileged, host network), out of make
+# verify; PATTERN selects and SKIP_PATTERN skips tests by name.
+verify-linux-crash-windows:
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run build
+	@$(MAKE) --no-print-directory linux-test-image
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use bash scripts/services.sh run taskelith-$(SERVICES_ID)-crash-windows \
+		bash scripts/linux-crash-windows.sh $(LINUX_CGROUP_IMAGE) $(if $(PATTERN),--test-name-pattern='$(PATTERN)') \
+		$(if $(SKIP_PATTERN),--test-skip-pattern='$(SKIP_PATTERN)')
+
+# Opt-in: runs the test files of SUITES in the Linux test image, without
+# privileges or network, as an unprivileged user, on a fresh volume.
+linux-test-suites:
+	@if [ -z "$(SUITES)" ]; then echo "make linux-test-suites: set SUITES to test files" >&2; exit 2; fi
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run build
+	@$(MAKE) --no-print-directory linux-test-image
+	docker run --rm --network none --user 2000:2000 --volume /tmp --volume "$(CURDIR):/repo:ro" --workdir /repo \
+		--entrypoint node $(LINUX_CGROUP_IMAGE) --experimental-strip-types --test \
+		$(if $(PATTERN),--test-name-pattern='$(PATTERN)') $(SUITES)
+
+# Minimal local installation (docs/local-installation.md); the targets after
+# this build need TASKELITH_POSTGRES_PASSWORD. Builds both images.
+installation-build:
+	@$(INSTALLATION_PINS) bash scripts/installation.sh build $(INSTALLATION)
+
+# Migrates and initializes once; prints the operator secret only this once.
+# Arguments reach the script through the environment, never as shell text.
+installation-bootstrap:
+	@TASKELITH_ACTOR="$$ACTOR" TASKELITH_REASON="$$REASON" bash scripts/installation.sh bootstrap $(INSTALLATION)
+
+# Installs the broker trust again, for example after a failed bootstrap.
+installation-broker-config:
+	@bash scripts/installation.sh broker-config $(INSTALLATION)
+
+installation-start:
+	@bash scripts/installation.sh start $(INSTALLATION)
+
+# Stops the containers and keeps their volumes.
+installation-stop:
+	@bash scripts/installation.sh stop $(INSTALLATION)
+
+# Enrolls the Linux worker container; needs TASKELITH_OPERATOR_TOKEN.
+installation-enroll:
+	@bash scripts/installation.sh enroll $(INSTALLATION)
+
+# Prints a token for a native worker, for example a macOS one.
+installation-enrollment-token:
+	@TASKELITH_WORKER_PLATFORM="$$PLATFORM" TASKELITH_WORKER_ARCHITECTURE="$$ARCHITECTURE" \
+		TASKELITH_WORKER_HOSTNAME="$$WORKER_HOSTNAME" bash scripts/installation.sh enrollment-token $(INSTALLATION)
+
+# Opt-in image build and bring-up on a throwaway project; kept out of
+# make verify, like verify-linux-cgroup.
+verify-installation:
+	@$(INSTALLATION_PINS) bash scripts/installation.sh verify $(INSTALLATION)-verify
+
+# Opt-in: builds the worker image twice without the build cache and fails
+# unless both builds give one image ID; kept out of make verify.
+verify-worker-image-reproducible:
+	@$(INSTALLATION_PINS) bash scripts/installation.sh check-reproducible $(INSTALLATION)-reproducible
+
+# Opt-in end-to-end smoke on a throwaway project: submit, assign, execute,
+# and store the result of a test-only scripted process.
+installation-smoke:
+	@NODE_PIN=$(NODE_PIN) $(INSTALLATION_PINS) bash scripts/with-pinned-node.sh use bash scripts/installation.sh smoke $(INSTALLATION)-smoke
+
+# Opt-in G2 failure scenarios on throwaway projects (item 24a); each records
+# its result in TASKELITH_SCENARIO_RESULTS when set. Builds the harness first.
+SCENARIO_RUN := NODE_PIN=$(NODE_PIN) $(INSTALLATION_PINS) bash scripts/with-pinned-node.sh use bash -c \
+	'npm run --silent build && bash scripts/installation.sh "$$0" "$$1"'
+
+scenario-fresh-composition:
+	@$(SCENARIO_RUN) scenario-fresh-composition $(INSTALLATION)-smoke
+
+scenario-worker-disk-loss:
+	@$(SCENARIO_RUN) scenario-worker-disk-loss $(INSTALLATION)-scenario
+
+scenario-worker-kill:
+	@$(SCENARIO_RUN) scenario-worker-kill $(INSTALLATION)-scenario
+
+# Opt-in item 25a check of the worker's seccomp profile.
+scenario-worker-namespace-confinement:
+	@$(SCENARIO_RUN) scenario-worker-namespace-confinement $(INSTALLATION)-scenario
+
+# Opt-in item 25b: install, start, stop, and restart of the Linux worker
+# container, and of a native worker on this host against the installation.
+scenario-worker-lifecycle:
+	@$(SCENARIO_RUN) scenario-worker-lifecycle $(INSTALLATION)-scenario
+
+scenario-native-worker-lifecycle:
+	@$(SCENARIO_RUN) scenario-native-worker-lifecycle $(INSTALLATION)-scenario
+
+# Opt-in item 25b: runs the native acceptance proofs of this host's matrix
+# entries (ENTRIES: macos, linux) and records each into RESULTS.
+native-acceptance:
+	@if [ -z "$(RESULTS)" ]; then echo "make native-acceptance: set RESULTS to a results.jsonl file" >&2; exit 2; fi
+	@NODE_PIN=$(NODE_PIN) $(INSTALLATION_PINS) LINUX_TEST_IMAGE=$(LINUX_CGROUP_IMAGE) SERVICES=taskelith-$(SERVICES_ID)-acceptance \
+		ENTRIES="$(ENTRIES)" bash scripts/with-pinned-node.sh use bash scripts/native-acceptance.sh "$(RESULTS)"
+
+# Rederives the worker's seccomp profile from the pinned Docker default.
+worker-seccomp-profile:
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use \
+		node --experimental-strip-types scripts/worker-seccomp-profile.ts write
+
+# Opt-in: builds the worker-harnesses variant per platform (PLATFORMS, default
+# linux/amd64 linux/arm64) and runs the credential-free steps, into OUT.
+qualify-harnesses:
+	@if [ -z "$$OUT" ]; then echo "make qualify-harnesses: set OUT to a directory outside the worktree" >&2; exit 2; fi
+	@$(INSTALLATION_PINS) PLATFORMS="$$PLATFORMS" bash scripts/harness-qualification.sh "$$OUT"
 
 # SpecKit runs only in its digest-pinned container (G1 decision D5); see
 # docs/qualification/speckit.md.

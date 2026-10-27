@@ -100,3 +100,54 @@ The harness SHALL provide `value`, which returns the value of a successful resul
 #### Scenario: Harness manifest names another workspace package
 - **WHEN** any dependency field of the `@taskelith/testing` manifest names a workspace package other than `@taskelith/kernel`
 - **THEN** the boundary check reports a violation naming that package
+
+### Requirement: Scenario result records
+The harness SHALL build a scenario's result with `scenario`, `seed`, `rerunHint`, `host`, `arch`, `commit`, `target`, `outcome`, an optional `detail`, and `recordedAt`, where `target` is `harness-composition`, `compose-installation`, `host-test-suite`, or `linux-test-container` and `outcome` is `passed` or `failed`, and SHALL reject a malformed scenario name (not lowercase words joined by hyphens), a seed that is not an integer from 0 to 2^32 − 1, and any other target or outcome.
+
+#### Scenario: Record a result
+- **WHEN** a file recorder with host `Darwin 25.6.0`, architecture `arm64`, and commit `f9ba7a5` records the run `worker-disk-loss` with seed 1234, target `compose-installation`, and outcome `passed`
+- **THEN** the file gains one JSON line with those values, `rerunHint` `rerun with TASKELITH_TEST_SEED=1234`, and the recording time
+
+#### Scenario: Malformed run
+- **WHEN** a run has the outcome `uncertain` or the seed −1
+- **THEN** recording it fails and nothing is written
+
+#### Scenario: Result without an acceptance context
+- **WHEN** the run environment has no acceptance context
+- **THEN** the result has no `acceptance` field, as before this change
+
+### Requirement: Opt-in scenario results file
+`scenarioRecorderFromEnvironment` SHALL append each result as one JSON line to the file that `TASKELITH_SCENARIO_RESULTS` names, resolved against the working directory, with the commit from `git rev-parse HEAD`, and SHALL record nothing when the variable is unset or empty.
+
+#### Scenario: Evidence run
+- **WHEN** `TASKELITH_SCENARIO_RESULTS` is `results.jsonl` and a scenario records a run
+- **THEN** `results.jsonl` in the working directory gains one line whose `commit` is the `HEAD` commit
+
+#### Scenario: Ordinary test run
+- **WHEN** `TASKELITH_SCENARIO_RESULTS` is unset and a scenario records a valid run
+- **THEN** no file is written
+
+### Requirement: Acceptance context from the environment
+`runEnvironment` SHALL read `TASKELITH_ACCEPTANCE`, when set and nonempty, as a JSON acceptance context, SHALL fail on a malformed one, and every result recorded with that environment SHALL carry the context as `acceptance`.
+
+#### Scenario: Acceptance run
+- **WHEN** `TASKELITH_ACCEPTANCE` holds a valid context and a scenario records a run
+- **THEN** its result carries that context as `acceptance`
+
+### Requirement: Acceptance context fields
+An acceptance context SHALL name a matrix entry (`linux-ubuntu-24.04-x86_64`, `linux-ubuntu-24.04-arm64`, `macos-26-x86_64`, or `macos-26-arm64`), a G2 acceptance row (`service-lifecycle`, `process-ownership`, `journal-and-storage`, `cancellation`, or `connectivity`), a nonempty `proof`, and a `platform` with nonempty `os`, `architecture`, `kernel`, `filesystem`, `node`, and `docker`.
+
+#### Scenario: Malformed context
+- **WHEN** `TASKELITH_ACCEPTANCE` names the row `resource-budgets`
+- **THEN** building the run environment fails, naming the allowed rows
+
+### Requirement: Coverage kept out of killed processes
+`@taskelith/testing` SHALL provide an environment that passes no `NODE_V8_COVERAGE` to a child it starts, and a way for a test process to withhold it from the processes it starts. A test SHALL start without that variable every Node process that it, or the product code it drives, kills as part of the test, so that a kill during exit leaves no empty coverage file, while the test process still writes its own coverage.
+
+#### Scenario: A killed child leaves no coverage file
+- **WHEN** a test starts a Node child with the uncovered environment and kills it
+- **THEN** the child writes no coverage file, and the coverage report of the run cannot fail on it
+
+#### Scenario: Product spawns inherit no coverage directory
+- **WHEN** a test withholds coverage and then drives product code that spawns with a copy of `process.env`
+- **THEN** the spawned processes see no `NODE_V8_COVERAGE`, and the test process still writes its own coverage file

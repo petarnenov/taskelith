@@ -12,6 +12,7 @@ import {
   executionsUnderAssignment,
   openAttempt,
   openTask,
+  placementNeed,
   rebindAdmission,
   recordExecutionEvidence,
   recordExit,
@@ -82,6 +83,18 @@ test('a task has at most one active attempt, and every owner change raises the o
   assert.equal(second.code, 'precondition-failed');
   const placed = value(claimOwnership(attempted, ownership(2), ATTEMPT, T0));
   assert.equal(placed.ownershipGeneration, 3);
+});
+
+test('a task waits for its first attempt, then for each placement of an active attempt that runs nothing', () => {
+  const task = value(openTask(implementationAdmission(), T0));
+  assert.deepEqual(placementNeed(task), { kind: 'open-attempt' });
+  assert.deepEqual(placementNeed(placedTask()), { kind: 'place', attemptId: ATTEMPT });
+  assert.equal(placementNeed(authorized().task), undefined, 'an owning execution can still run');
+  assert.equal(placementNeed(value(endAttempt(placedTask(), ATTEMPT, T1))), undefined, 'a retry is not placement');
+  const placed = placedTask();
+  const cancellation = { reason: 'requested' as const, requestedAt: T1 };
+  const cancelled = { ...placed, attempts: [{ ...placed.attempts[0]!, cancellation }] };
+  assert.equal(placementNeed(cancelled), undefined);
 });
 
 test('a stale ownership generation is rejected with its reason before anything else', () => {
@@ -170,6 +183,16 @@ test('a cancellation request is not termination: the attempt ends only once noth
   const outcome = terminated.attempts[0]!.outcome;
   assert.equal(outcome?.kind, 'exited');
   assert.equal(outcome?.cancelled, true);
+});
+
+test('a cancellation not applied keeps the request pending and the execution known', () => {
+  const requested = value(requestCancellation(started(), ATTEMPT, 'requested', T3));
+  const signalFailed = value(recordExecutionEvidence(requested, { ...REPORT, kind: 'cancellation-not-applied' }, T3)).task;
+  const attempt = signalFailed.attempts[0]!;
+  assert.deepEqual([attempt.executions[0]!.state, attempt.cancellation?.reason], ['started', 'requested']);
+  assert.equal(unknownExecutionCount(signalFailed), 0);
+  const terminated = value(recordExit(signalFailed, { ...CLEAN_EXIT, status: { kind: 'signal', signal: 'SIGKILL' } }, T4)).task;
+  assert.equal(terminated.attempts[0]!.outcome?.cancelled, true);
 });
 
 test('cancelling an attempt with nothing running ends it at once', () => {

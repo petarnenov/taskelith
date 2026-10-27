@@ -4102,6 +4102,21 @@
       "externalReferences": []
     },
     {
+      "bom-ref": "@taskelith/integrations@0.0.0",
+      "type": "library",
+      "name": "@taskelith/integrations",
+      "version": "0.0.0",
+      "scope": "required",
+      "purl": "pkg:npm/%40taskelith/integrations@0.0.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:private",
+          "value": "true"
+        }
+      ],
+      "externalReferences": []
+    },
+    {
       "bom-ref": "@taskelith/kernel@0.0.0",
       "type": "library",
       "name": "@taskelith/kernel",
@@ -4333,6 +4348,21 @@
       "version": "0.0.0",
       "scope": "required",
       "purl": "pkg:npm/%40taskelith/worker@0.0.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:private",
+          "value": "true"
+        }
+      ],
+      "externalReferences": []
+    },
+    {
+      "bom-ref": "@taskelith/workspace@0.0.0",
+      "type": "library",
+      "name": "@taskelith/workspace",
+      "version": "0.0.0",
+      "scope": "required",
+      "purl": "pkg:npm/%40taskelith/workspace@0.0.0",
       "properties": [
         {
           "name": "cdx:npm:package:private",
@@ -22683,6 +22713,9 @@
         "@taskelith/sdlc@0.0.0",
         "@taskelith/secrets@0.0.0",
         "@taskelith/testing@0.0.0",
+        "@taskelith/worker-journal@0.0.0",
+        "@taskelith/worker-supervisor@0.0.0",
+        "@taskelith/worker@0.0.0",
         "@types/pg@8.23.1",
         "pg@8.23.1"
       ]
@@ -22724,6 +22757,15 @@
       ]
     },
     {
+      "ref": "@taskelith/integrations@0.0.0",
+      "dependsOn": [
+        "@taskelith/execution@0.0.0",
+        "@taskelith/kernel@0.0.0",
+        "@taskelith/sdlc@0.0.0",
+        "@taskelith/testing@0.0.0"
+      ]
+    },
+    {
       "ref": "@taskelith/kernel@0.0.0",
       "dependsOn": []
     },
@@ -22755,6 +22797,7 @@
     {
       "ref": "@taskelith/observability@0.0.0",
       "dependsOn": [
+        "@taskelith/access@0.0.0",
         "@taskelith/kernel@0.0.0",
         "@taskelith/sdlc@0.0.0",
         "@taskelith/testing@0.0.0"
@@ -22824,6 +22867,7 @@
         "@taskelith/access@0.0.0",
         "@taskelith/fleet@0.0.0",
         "@taskelith/kernel@0.0.0",
+        "@taskelith/observability@0.0.0",
         "@taskelith/testing@0.0.0"
       ]
     },
@@ -22840,7 +22884,9 @@
       "dependsOn": [
         "@taskelith/contracts@0.0.0",
         "@taskelith/execution@0.0.0",
+        "@taskelith/fleet@0.0.0",
         "@taskelith/kernel@0.0.0",
+        "@taskelith/observability@0.0.0",
         "@taskelith/sdlc@0.0.0",
         "@taskelith/testing@0.0.0"
       ]
@@ -22871,7 +22917,32 @@
     },
     {
       "ref": "@taskelith/worker@0.0.0",
-      "dependsOn": []
+      "dependsOn": [
+        "@taskelith/contracts@0.0.0",
+        "@taskelith/data-root@0.0.0",
+        "@taskelith/execution@0.0.0",
+        "@taskelith/fleet@0.0.0",
+        "@taskelith/kernel@0.0.0",
+        "@taskelith/nats@0.0.0",
+        "@taskelith/node-observability@0.0.0",
+        "@taskelith/observability@0.0.0",
+        "@taskelith/scheduling@0.0.0",
+        "@taskelith/sdlc@0.0.0",
+        "@taskelith/secrets@0.0.0",
+        "@taskelith/testing@0.0.0",
+        "@taskelith/worker-control-plane-client@0.0.0",
+        "@taskelith/worker-journal@0.0.0",
+        "@taskelith/worker-supervisor@0.0.0"
+      ]
+    },
+    {
+      "ref": "@taskelith/workspace@0.0.0",
+      "dependsOn": [
+        "@taskelith/execution@0.0.0",
+        "@taskelith/integrations@0.0.0",
+        "@taskelith/kernel@0.0.0",
+        "@taskelith/sdlc@0.0.0"
+      ]
     },
     {
       "ref": "@tufjs/canonical-json@2.0.0",
@@ -25940,6 +26011,7 @@
         "@taskelith/evidence-volume@0.0.0",
         "@taskelith/execution@0.0.0",
         "@taskelith/fleet@0.0.0",
+        "@taskelith/integrations@0.0.0",
         "@taskelith/kernel@0.0.0",
         "@taskelith/nats@0.0.0",
         "@taskelith/node-observability@0.0.0",
@@ -25956,9 +26028,12 @@
         "@taskelith/worker-journal@0.0.0",
         "@taskelith/worker-supervisor@0.0.0",
         "@taskelith/worker@0.0.0",
+        "@taskelith/workspace@0.0.0",
         "@types/node@24.19.2",
+        "ajv@8.20.0",
         "conventional-changelog-conventionalcommits@9.3.1",
         "json-schema-to-typescript@16.0.0",
+        "marked@15.0.12",
         "openapi-typescript@7.13.0",
         "semantic-release@25.0.9",
         "typescript@5.9.3"

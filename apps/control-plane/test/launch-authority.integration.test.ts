@@ -53,7 +53,7 @@ const PRINCIPAL: WorkerPrincipal = { workerId: WORKER.workerId, generation: 1 };
 beforeEach(async () => {
   await sql(url, `TRUNCATE workflow_runs, gates, admissions, tasks, assignments, outbox, inbox, task_lineage, capacity_charges,
     delegations, capacity_quotas, workers, installation, enrollment_tokens, broker_revocations, launch_authorizations,
-    launch_rejections, current_revisions`);
+    launch_rejections, current_revisions, producer_cursors`);
   await sql(url, 'INSERT INTO installation (quarantined, recovery_epoch) VALUES (false, 1)');
   value(await fleet.addToken(fleetToken('token-1')));
   value(await fleet.enroll(fleetToken('token-1').hash, WORKER));
@@ -192,6 +192,51 @@ test('only an unspawned authorized execution is authorized again, and no other e
   assert.equal((await rows('SELECT 1 FROM launch_authorizations WHERE live')).length, 2);
 });
 
+test('a new execution that reports the sealed owner is granted, and the owner ends not-started in the same commit', async () => {
+  const { request } = await placed();
+  grantOf(await authority.authorize(PRINCIPAL, request));
+  const relaunch = {
+    ...request, operationId: id('OperationId', 'operation-2') as never, executionId: id('ExecutionId', 'execution-2') as never,
+    reportsNotStartedFor: [{ executionId: request.executionId, operationId: request.operationId }],
+  };
+  const lost = authorityOn(open(new CrashPoints({ point: 'LaunchAuthorizationCommit.before', occurrence: 1, action: 'throw' })));
+  await assert.rejects(lost.authorize(PRINCIPAL, relaunch), SimulatedCrash);
+  const live = 'SELECT execution_id, live FROM launch_authorizations ORDER BY execution_id';
+  assert.deepEqual(await rows(live), [{ execution_id: request.executionId, live: true }], 'nothing of a lost decision commits');
+  const second = grantOf(await authority.authorize(PRINCIPAL, relaunch));
+  assert.equal(second.executionId, 'execution-2');
+  assert.deepEqual(await rows(live), [
+    { execution_id: 'execution-2', live: true },
+    { execution_id: request.executionId, live: false },
+  ]);
+  assert.equal(grantOf(await authority.authorize(PRINCIPAL, relaunch)).launchAuthId, second.launchAuthId, 'a retry replays the grant');
+});
+
+test('a relaunch that reports two sealed executions ends both not-started and is granted in one commit', async () => {
+  const { taskId, request } = await placed();
+  grantOf(await authority.authorize(PRINCIPAL, request));
+  const sealed = (execution: string, operation: string) => ({ executionId: id('ExecutionId', execution) as never, operationId: id('OperationId', operation) as never });
+  const relaunch = (execution: string, operation: string, reportsNotStartedFor: ReturnType<typeof sealed>[]) => ({
+    ...request, operationId: id('OperationId', operation) as never, executionId: id('ExecutionId', execution) as never, reportsNotStartedFor,
+  });
+  const first = sealed(request.executionId, request.operationId);
+  grantOf(await authority.authorize(PRINCIPAL, relaunch('execution-2', 'operation-2', [first])));
+  const second = sealed('execution-2', 'operation-2');
+  const conflicting = relaunch('execution-3', 'operation-3', [second, sealed('execution-3', 'operation-3')]);
+  assert.equal(kindOf(await authority.authorize(PRINCIPAL, conflicting)), 'rejected:execution-conflict');
+  const live = 'SELECT execution_id, live FROM launch_authorizations ORDER BY execution_id';
+  const beforeThird = [{ execution_id: 'execution-2', live: true }, { execution_id: request.executionId, live: false }];
+  assert.deepEqual(await rows(live), beforeThird, 'a conflict in the second entry writes nothing');
+  const third = relaunch('execution-3', 'operation-4', [first, second]);
+  const lost = authorityOn(open(new CrashPoints({ point: 'LaunchAuthorizationCommit.before', occurrence: 1, action: 'throw' })));
+  await assert.rejects(lost.authorize(PRINCIPAL, third), SimulatedCrash);
+  assert.deepEqual(await rows(live), beforeThird, 'nothing of a lost decision commits');
+  assert.equal(grantOf(await authority.authorize(PRINCIPAL, third)).executionId, 'execution-3');
+  const task = value(await database.transaction((tx) => tx.tasks.get(taskId)));
+  const states = task.attempts.flatMap(({ executions }) => executions).map(({ id: execution, state }) => [execution, state]);
+  assert.deepEqual(states, [[request.executionId, 'not-started'], ['execution-2', 'not-started'], ['execution-3', 'authorized']]);
+});
+
 test('a replay after the deadline is expired, and expiry changes nothing stored', async () => {
   const { request } = await placed();
   const short = authorityOn(database, value(parseLaunchParameters({ ttlMilliseconds: 300, skewMilliseconds: 100 })));
@@ -270,10 +315,25 @@ test('a worker revocation revokes its grants, cancels them, and leaves the execu
   value(await fleet.revoke(WORKER.workerId, WORKER.enrolledAt));
   assert.deepEqual(await rows('SELECT live FROM launch_authorizations'), [{ live: false }]);
   assert.deepEqual(await rows(`SELECT unknown_executions FROM tasks WHERE id = '${taskId}'`), [{ unknown_executions: 1 }]);
-  assert.equal((await rows(`SELECT 1 FROM outbox WHERE event_type = 'execution.cancellation.request'`)).length, 1);
+  const commands = await rows(`SELECT message FROM outbox WHERE event_type = 'execution.cancellation.request'`);
+  assert.deepEqual(commands.map((command) => JSON.parse(command.message as string).payload.payload.reason), ['launch-revoked']);
+  const [task] = await rows(`SELECT record FROM tasks WHERE id = '${taskId}'`);
+  assert.equal(JSON.parse(task!.record as string).attempts[0].cancellation.reason, 'launch-revoked');
   assert.equal(kindOf(await authority.authorize(PRINCIPAL, request)), 'rejected:worker-not-authorized', 'a replay re-checks the credential');
   value(await fleet.revoke(WORKER.workerId, WORKER.enrolledAt));
   assert.equal((await rows(`SELECT 1 FROM outbox WHERE event_type = 'execution.cancellation.request'`)).length, 1, 'a repeated revocation reads nothing live');
+});
+
+test('a worker whose enrolled journal is retired is rejected, also on a replay, and the rejection is recorded', async () => {
+  const { request } = await placed();
+  grantOf(await authority.authorize(PRINCIPAL, request));
+  await sql(url, `INSERT INTO producer_cursors (worker_id, journal_id, confirmed_through, applied_above, retired_at)
+    VALUES ($1, $2, 0, '{}', now())`, [WORKER.workerId, WORKER.journalId]);
+  assert.equal(kindOf(await authority.authorize(PRINCIPAL, request)), 'rejected:worker-not-authorized', 'a replay');
+  const fresh = { ...request, operationId: id('OperationId', 'operation-2') as never };
+  assert.equal(kindOf(await authority.authorize(PRINCIPAL, fresh)), 'rejected:worker-not-authorized');
+  assert.equal(kindOf(await authority.authorize(PRINCIPAL, fresh)), 'rejected:worker-not-authorized', 'final');
+  assert.deepEqual(await rows('SELECT operation_id FROM launch_rejections'), [{ operation_id: 'operation-2' }]);
 });
 
 test('concurrent requests of one operation leave one grant, and a racing revocation is ordered before or after it', async () => {

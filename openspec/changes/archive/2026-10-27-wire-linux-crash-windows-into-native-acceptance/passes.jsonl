@@ -1,0 +1,1 @@
+{"change": "wire-linux-crash-windows-into-native-acceptance", "pass": 1, "role": "A", "reviewer": {"harness": "opencode", "model": "opencode-go/deepseek-v4-pro", "variant": "high"}, "session": "ses_e82c1a3dfffelHrljRmn627wfe", "counts": {"critical": 0, "high": 0, "medium": 0, "low": 3}}

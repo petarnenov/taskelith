@@ -1,6 +1,6 @@
 import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import type { SecretHash } from '@taskelith/access';
-import type { WorkerId } from '@taskelith/execution';
+import type { JournalId, WorkerId } from '@taskelith/execution';
 import {
   credentialGenerations,
   expiredPredecessor,
@@ -56,6 +56,29 @@ export class InMemoryFleetRegistry implements FleetRegistry {
 
   worker(workerId: WorkerId): Promise<Result<EnrolledWorker | undefined>> {
     return settle(ok(this.#workers.get(workerId)));
+  }
+
+  replaceJournal(workerId: WorkerId, previous: JournalId, journalId: JournalId): Promise<Result<void>> {
+    const worker = this.#workers.get(workerId);
+    if (worker === undefined) return settle(err(failure('not-found', `no worker ${workerId} is enrolled`)));
+    if (worker.revokedAt !== undefined) return settle(err(failure('forbidden', `worker ${workerId} is revoked`)));
+    if (worker.journalId !== previous) return settle(err(failure('conflict', `worker ${workerId} no longer holds journal ${previous}`)));
+    if ([...this.#workers.values()].some((known) => known.journalId === journalId)) {
+      return settle(err(failure('conflict', 'the journal is enrolled', { reason: 'journal-enrolled' })));
+    }
+    this.#workers.set(workerId, Object.freeze({ ...worker, journalId }));
+    return settle(ok(undefined));
+  }
+
+  activeWorkerIds(): Promise<Result<readonly WorkerId[]>> {
+    const active = [...this.#workers.values()].filter((worker) => worker.revokedAt === undefined).map((worker) => worker.workerId);
+    return settle(ok(Object.freeze(active.sort())));
+  }
+
+  recentlyRevokedWorkerIds(limit: number): Promise<Result<readonly WorkerId[]>> {
+    const revoked = [...this.#workers.values()].filter((worker) => worker.revokedAt !== undefined);
+    const latestFirst = revoked.sort((a, b) => b.revokedAt!.localeCompare(a.revokedAt!) || a.workerId.localeCompare(b.workerId));
+    return settle(ok(Object.freeze(latestFirst.slice(0, limit).map((worker) => worker.workerId))));
   }
 
   workerByCredentialHash(hash: SecretHash): Promise<Result<EnrolledWorker | undefined>> {

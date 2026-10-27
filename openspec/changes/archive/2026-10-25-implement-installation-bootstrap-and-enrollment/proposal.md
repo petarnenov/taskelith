@@ -1,6 +1,6 @@
 ## Why
 
-G2 work item 13 ([docs/g2-plan.md](../../../docs/g2-plan.md)) serves "enrollment and authorization boundaries", trust contract sections 2 to 4, and R09. Trust model sections 2 to 5 require:
+G2 work item 13 ([docs/g2-plan.md](/docs/g2-plan.md)) serves "enrollment and authorization boundaries", trust contract sections 2 to 4, and R09. Trust model sections 2 to 5 require:
 - explicit installation initialization, with `installationId` and `recoveryEpoch = 1` in a record outside the database, and a one-time operator bootstrap credential;
 - an audited operator credential reset by direct administrative invocation;
 - single-use enrollment tokens that mint a `workerId` and per-worker credentials with generations, rotation, and revocation;
@@ -41,7 +41,7 @@ The execution wire contracts (item 8) leave the credential content to this item.
   - The spike users keep their permissions as JWT users.
   - `@taskelith/testing` gains `integrationSecret`.
 - **Documents:**
-  - [installation and enrollment contract](../../../docs/contracts/installation-and-enrollment.md);
+  - [installation and enrollment contract](/docs/contracts/installation-and-enrollment.md);
   - a provisional row in the operational targets (O4);
   - the `@nats-io/nkeys` row in the dependency register;
   - a pointer in the storage contract.

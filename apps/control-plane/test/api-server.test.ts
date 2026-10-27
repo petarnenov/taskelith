@@ -1,9 +1,20 @@
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { after, before, test } from 'node:test';
-import { ControlPlaneApi, ROUTES, StatusAnswer, createApiServer, type ApiHandlers, type ApiRequest, type RouteDefinition, type Upload } from '@taskelith/control-plane';
+import {
+  ControlPlaneApi,
+  DelegationService,
+  ROUTES,
+  StatusAnswer,
+  createApiServer,
+  type ApiHandlers,
+  type ApiRequest,
+  type ControlPlaneStore,
+  type RouteDefinition,
+  type Upload,
+} from '@taskelith/control-plane';
 import { checkHttpSchema } from '@taskelith/contracts';
-import { parseLaunchParameters, type LaunchGrant, type LaunchOutcome } from '@taskelith/execution';
+import { parseLaunchParameters, REPORTED_SEALS_LIMIT, type LaunchGrant, type LaunchOutcome } from '@taskelith/execution';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { failed, value } from '@taskelith/testing';
@@ -88,10 +99,28 @@ test('a correlation that carries a secret is replaced, so no log line holds it',
   assert.doesNotMatch(JSON.stringify(sink.records), /tkop_/);
 });
 
+test('every response closes its connection, so no idle socket is reused', async () => {
+  answers = { readTaskResult: () => ok({ state: 'pending', runId: 'r', taskId: 't' }) };
+  let connections = 0;
+  const counted = () => { connections++; };
+  server.on('connection', counted);
+  try {
+    const headers = { authorization: `Bearer ${OPERATOR}` };
+    for (let request = 0; request < 2; request++) {
+      const response = await fetch(`${base}/runs/r/tasks/t/result`, { headers });
+      await response.arrayBuffer();
+      assert.equal(response.headers.get('connection'), 'close');
+    }
+    assert.equal(connections, 2);
+  } finally {
+    server.off('connection', counted);
+  }
+});
+
 test('a redrive sequence that is not a positive safe integer is 400 before the broker', async () => {
   let redriven = 0;
   const api = new ControlPlaneApi({
-    runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: { authenticate: async () => ok(undefined) },
+    runs: undefined as never, tasks: undefined as never, evidence: undefined as never, delegations: undefined as never, operator: { authenticate: async () => ok(undefined) },
     enrollment: undefined as never, launches: undefined as never,
     quarantine: { records: async () => ok([]), redrive: async () => (redriven++, ok(null)) },
   });
@@ -172,7 +201,7 @@ test('an operator route carries no worker principal', async () => {
 test('the API authenticates a worker bearer through enrollment', async () => {
   const principal = { workerId: 'worker-1' as never, generation: 1 };
   const api = new ControlPlaneApi({
-    runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, quarantine: undefined as never,
+    runs: undefined as never, tasks: undefined as never, evidence: undefined as never, delegations: undefined as never, operator: undefined as never, quarantine: undefined as never,
     launches: undefined as never,
     enrollment: { enroll: undefined as never, authenticateWorkerBearer: async (secret) => (secret === 'tkwk_x' ? ok(principal) : err(failure('forbidden', 'no'))) },
   });
@@ -304,7 +333,7 @@ test('authorizeLaunch maps every outcome to its contract shape, and needs a work
   let next = 0;
   const api = new ControlPlaneApi({
     runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, enrollment: undefined as never,
-    quarantine: undefined as never,
+    quarantine: undefined as never, delegations: undefined as never,
     launches: { authorize: async () => ok(outcomes[next++]!) },
   });
   const body = {
@@ -320,6 +349,37 @@ test('authorizeLaunch maps every outcome to its contract shape, and needs a work
   const { worker: _worker, ...anonymous } = request;
   assert.equal(failed(await api.handle('authorizeLaunch', anonymous, '')).code, 'internal');
   assert.equal(failed(await api.handle('authorizeLaunch', { ...request, body: { ...body, recoveryEpoch: 0 } }, '')).code, 'invalid');
+});
+
+test('authorizeLaunch passes the reported sealed executions to the authority and refuses an invalid list', async () => {
+  const received: unknown[] = [];
+  const api = new ControlPlaneApi({
+    runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, enrollment: undefined as never,
+    quarantine: undefined as never, delegations: undefined as never,
+    launches: { authorize: async (_principal, values) => {
+      received.push(values);
+      return ok({ kind: 'expired' });
+    } },
+  });
+  const sealed = (index: number) => ({ executionId: `execution-${index}`, operationId: `operation-${index}` });
+  const limit = Array.from({ length: REPORTED_SEALS_LIMIT }, (_, index) => sealed(index + 1));
+  const body = {
+    operationId: 'operation-9', recoveryEpoch: 1, assignmentId: 'assignment-1', attemptId: 'attempt-1', ownershipGeneration: 1,
+    executionId: 'execution-9', admissionId: 'admission-1', admissionGeneration: 2, reportsNotStarted: false,
+    reportsNotStartedFor: limit,
+  };
+  assert.ok(checkHttpSchema('LaunchAuthorizationRequest', body).ok);
+  const request = { parameters: [], body, query: new URLSearchParams(), correlationId: 'c' as never, worker: { workerId: 'worker-1' as never, generation: 1 } };
+  value(await api.handle('authorizeLaunch', request, ''));
+  const { reportsNotStartedFor: _sealed, ...unreported } = body;
+  value(await api.handle('authorizeLaunch', { ...request, body: unreported }, ''));
+  assert.deepEqual(received.map((values) => (values as { reportsNotStartedFor?: unknown }).reportsNotStartedFor), [limit, undefined]);
+  const invalid = [[], [...limit, sealed(9)], [{ executionId: '', operationId: 'operation-1' }], [sealed(1), { executionId: 'execution-2', operationId: '' }]];
+  assert.equal(checkHttpSchema('LaunchAuthorizationRequest', { ...body, reportsNotStartedFor: invalid[1] }).ok, false);
+  for (const reportsNotStartedFor of invalid) {
+    assert.equal(failed(await api.handle('authorizeLaunch', { ...request, body: { ...body, reportsNotStartedFor } }, '')).code, 'invalid');
+  }
+  assert.equal(received.length, 2);
 });
 
 test('an undecided launch operation is 503, never 500', async () => {
@@ -338,4 +398,29 @@ test('an undecided launch operation is 503, never 500', async () => {
     method: 'POST', headers: { authorization: `Bearer tkwk_${'F'.repeat(43)}`, 'content-type': 'application/json' }, body: JSON.stringify(body),
   });
   assert.equal(response.status, 503);
+});
+
+test('a delegation while the database is down is 503 with a Failure', async () => {
+  const down = { transaction: async () => err(failure('unavailable', 'the database is down')) } as unknown as ControlPlaneStore;
+  const api = new ControlPlaneApi({
+    runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, enrollment: undefined as never,
+    quarantine: undefined as never, launches: undefined as never, delegations: new DelegationService(down),
+  });
+  const delegationServer = createApiServer({
+    ...handlers,
+    authenticateWorker: async () => ok({ workerId: 'worker-1' as never, generation: 1 }),
+    handle: (operationId, request, bearer) => api.handle(operationId, request, bearer),
+  });
+  await new Promise<void>((resolve) => delegationServer.listen(0, '127.0.0.1', () => resolve()));
+  after(() => new Promise<void>((resolve) => delegationServer.close(() => resolve())));
+  const body = {
+    delegationId: 'delegation-1', attemptId: 'attempt-1', ownershipGeneration: 2, runId: 'run-1',
+    child: { taskId: 'task-child', kind: 'planning', stageId: 'specs' },
+  };
+  const response = await fetch(`http://127.0.0.1:${(delegationServer.address() as AddressInfo).port}/delegations`, {
+    method: 'POST', headers: { authorization: `Bearer tkwk_${'F'.repeat(43)}`, 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const answer: unknown = await response.json();
+  assert.equal(response.status, 503);
+  assert.ok(checkHttpSchema('Failure', answer).ok, JSON.stringify(answer));
 });

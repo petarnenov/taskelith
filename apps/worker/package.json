@@ -8,5 +8,24 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
+  },
+  "dependencies": {
+    "@taskelith/contracts": "0.0.0",
+    "@taskelith/data-root": "0.0.0",
+    "@taskelith/execution": "0.0.0",
+    "@taskelith/fleet": "0.0.0",
+    "@taskelith/kernel": "0.0.0",
+    "@taskelith/nats": "0.0.0",
+    "@taskelith/node-observability": "0.0.0",
+    "@taskelith/observability": "0.0.0",
+    "@taskelith/scheduling": "0.0.0",
+    "@taskelith/sdlc": "0.0.0",
+    "@taskelith/secrets": "0.0.0",
+    "@taskelith/worker-control-plane-client": "0.0.0",
+    "@taskelith/worker-journal": "0.0.0",
+    "@taskelith/worker-supervisor": "0.0.0"
+  },
+  "devDependencies": {
+    "@taskelith/testing": "0.0.0"
   }
 }

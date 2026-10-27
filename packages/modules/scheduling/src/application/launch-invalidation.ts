@@ -64,7 +64,7 @@ async function revokeAttempt(
 ): Promise<Result<void>> {
   const task = await tx.tasks.get(launch.taskId);
   if (!task.ok) return task;
-  const revoked = revokeLaunch(task.value, launch.attemptId, invalidation.reason, at);
+  const revoked = revokeLaunch(task.value, launch.attemptId, { grants: invalidation.reason, cancellation: 'launch-revoked' }, at);
   if (!revoked.ok) return revoked;
   const stored = await tx.tasks.replace(revoked.value, task.value.generation);
   if (!stored.ok) return stored;

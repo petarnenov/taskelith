@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
-import { crashEnvironment, ScenarioProcess } from '@taskelith/testing';
+import { crashEnvironment, ScenarioProcess, withholdCoverageFromDescendants } from '@taskelith/testing';
 import {
   darwinPlatform,
   FileRecordStore,
@@ -22,13 +22,18 @@ import {
   type WorkerSupervisionDependencies,
 } from '@taskelith/worker-supervisor';
 import { intent } from './fakes.ts';
+import { ProcessReaper, REAL_PROCESS_TEST_TIMEOUT } from './process-reaper.ts';
+
+// The supervisor programs, which kill their children, spawn with process.env.
+withholdCoverageFromDescendants();
 
 // Real processes under the macOS native readers; the Linux counterpart is
 // linux-cgroup.privileged.ts.
-const DARWIN = { skip: process.platform !== 'darwin' };
+const DARWIN = { skip: process.platform !== 'darwin', timeout: REAL_PROCESS_TEST_TIMEOUT };
 const SCENARIO = new URL('./fixtures/supervisor-scenario.ts', import.meta.url).pathname;
 const ROOT = mkdtempSync(join(tmpdir(), 'taskelith-darwin-'));
 const platform = darwinPlatform(loadDarwinNative());
+const reaper = new ProcessReaper(ROOT);
 
 interface Execution {
   readonly directory: string;
@@ -59,10 +64,10 @@ async function prepare(executionId: string, body: string): Promise<Execution> {
   return { directory, spawns, worker };
 }
 
-function startSupervisor(execution: Execution, mode: SupervisorMode, crashPoint?: string): Promise<ScenarioProcess> {
-  return ScenarioProcess.start(process.execPath, ['--experimental-strip-types', SCENARIO, mode, execution.directory], {
+async function startSupervisor(execution: Execution, mode: SupervisorMode, crashPoint?: string): Promise<ScenarioProcess> {
+  return reaper.track(await ScenarioProcess.start(process.execPath, ['--experimental-strip-types', SCENARIO, mode, execution.directory], {
     env: { ...process.env, ...(crashPoint === undefined ? {} : crashEnvironment(crashPoint)) },
-  });
+  }));
 }
 
 function spawnCount(execution: Execution): number {
@@ -97,10 +102,11 @@ async function recordedEvents(execution: Execution) {
 }
 
 // A descendant in its own session leaves the child's process group.
-const ESCAPE = `require('node:child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 1500)'], { detached: true, stdio: 'ignore' }).unref();`;
+const ESCAPE = `require('node:child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 1500)', ${JSON.stringify(ROOT)}], { detached: true, stdio: 'ignore' }).unref();`;
 // A descendant in the child's group, which a group signal reaches.
-const MEMBER = `require('node:child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], { stdio: 'ignore' }).unref();`;
+const MEMBER = `require('node:child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)', ${JSON.stringify(ROOT)}], { stdio: 'ignore' }).unref();`;
 
+test.afterEach(() => reaper.reap());
 test.after(() => rmSync(ROOT, { recursive: true, force: true }));
 
 test('on macOS the supervisor program launches the child and proves its exit', DARWIN, async () => {
@@ -172,7 +178,7 @@ test('on macOS a worker restart adopts a live supervisor and leaves its child ru
   const supervisor = await startSupervisor(execution, 'launch');
   await until(() => existsSync(join(execution.directory, 'handle')));
 
-  assert.deepEqual(await recover(execution), { fact: 'adopted' });
+  assert.deepEqual(await recover(execution), { fact: 'adopted', supervisor: 'live' });
   assert.deepEqual(await supervisor.exited, { code: 0, signal: null });
   assert.deepEqual((await recordedExit(execution)).status, { kind: 'code', code: 0 });
 });

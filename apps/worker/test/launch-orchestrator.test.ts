@@ -1,0 +1,1067 @@
+import assert from 'node:assert/strict';
+import { afterEach, beforeEach, test } from 'node:test';
+import {
+  LAUNCH_RETRY_DELAY,
+  launchRejection,
+  type ObservationFact,
+  type WorkerJournal,
+} from '@taskelith/execution';
+import { err, failure, ok } from '@taskelith/kernel';
+import { InMemoryLogSink, Logger } from '@taskelith/observability';
+import { value } from '@taskelith/testing';
+import { LaunchOrchestrator, LIVENESS_POLLS } from '@taskelith/worker';
+import type { WorkerRoot } from '@taskelith/worker-journal';
+import {
+  CLEAN_EXIT,
+  FakeAuthority,
+  FakeClock,
+  FakePressure,
+  FakeSupervisions,
+  PROCESS,
+  T0,
+  cancellation,
+  granted,
+  grantFor,
+  grantedToOwner,
+  offer,
+  requestOf,
+  temporaryJournal,
+  unavailable,
+  type FakeSupervision,
+  type ScriptedFacts,
+} from './launch-fakes.ts';
+
+let root: WorkerRoot;
+let journal: WorkerJournal;
+let remove: () => void;
+let clock: FakeClock;
+let pressure: FakePressure;
+let authority: FakeAuthority;
+let supervisions: FakeSupervisions;
+let delays: number[];
+let sink: InMemoryLogSink;
+let controller: AbortController;
+let orchestrator: LaunchOrchestrator;
+let newId: () => string;
+
+beforeEach(() => {
+  ({ root, remove } = temporaryJournal());
+  journal = root.journal;
+  clock = new FakeClock();
+  pressure = new FakePressure();
+  authority = new FakeAuthority();
+  supervisions = new FakeSupervisions();
+  delays = [];
+  sink = new InMemoryLogSink();
+  controller = new AbortController();
+  let ids = 0;
+  newId = () => `id-${(ids += 1)}`;
+  orchestrator = new LaunchOrchestrator({
+    journal, authority, supervision: supervisions.factory, clock, pressure, draw: () => 0.5, newId: () => newId(),
+    // Each sleep advances the clock and yields, so polling never spins; an
+    // aborted signal returns at once, as the production sleep does.
+    sleep: async (milliseconds, signal) => {
+      if (signal.aborted) return;
+      delays.push(milliseconds);
+      clock.milliseconds += milliseconds;
+      await new Promise((resolve) => setImmediate(resolve));
+    },
+    pollMilliseconds: 100,
+    logger: new Logger(sink, { now: () => T0 }),
+  });
+});
+
+afterEach(() => {
+  controller.abort();
+  remove();
+});
+
+async function launchOnce(): Promise<void> {
+  await orchestrator.pass(controller.signal);
+  await orchestrator.settled();
+}
+
+// Waits a bounded number of turns of the event loop for the condition.
+async function until(condition: () => boolean): Promise<void> {
+  for (let turn = 0; !condition() && turn < 1_000; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(condition(), 'the condition never held');
+}
+
+// Bounds a watch that never decides, so a failing test still ends.
+function stopAfterReads(supervision: FakeSupervision, reads: number): void {
+  const read = supervision.read.bind(supervision);
+  supervision.read = async () => {
+    if (callCount(supervision, 'read') >= reads) controller.abort();
+    return read();
+  };
+}
+
+// Runs the change before the fake answers the recovery.
+function onRecover(supervision: FakeSupervision, change: () => void): void {
+  const recover = supervision.recover.bind(supervision);
+  supervision.recover = async (round) => {
+    change();
+    return recover(round);
+  };
+}
+
+function stopAfterRequests(count: number): void {
+  authority.onRequest = () => {
+    if (authority.requests.length >= count) controller.abort();
+  };
+}
+
+function facts(): ObservationFact[] {
+  return value(journal.dueForPublication(T0)).map((entry) => entry.fact);
+}
+
+function factKinds(): string[] {
+  return facts().map((fact) => fact.kind).filter((kind) => kind !== 'assignment-accepted');
+}
+
+// Reads without a launch record, as after a supervisor lost before CP7.
+function unclaimed(polls: number): ScriptedFacts[] {
+  return Array.from({ length: polls }, () => ({ problems: [] }));
+}
+
+function callCount(supervision: FakeSupervision | undefined, call: string): number {
+  return supervision?.calls.filter((made) => made === call).length ?? 0;
+}
+
+function executions() {
+  return value(journal.snapshot()).executions;
+}
+
+// The waits of the launch back-off, without the shorter polls.
+function backOffs(): number[] {
+  return delays.filter((delay) => delay >= LAUNCH_RETRY_DELAY.initialMilliseconds);
+}
+
+function deferrals() {
+  return sink.records.filter(({ event }) => event === 'worker.launch.deferred');
+}
+
+// Fails the first `failing` clock reads and stops the worker at read
+// `stopAt`; answers, per read, whether the event loop turned since the last.
+function failClockReads(failing: number, stopAt = Infinity): boolean[] {
+  const read = clock.read.bind(clock);
+  const turns: boolean[] = [];
+  let turned = true;
+  clock.read = () => {
+    turns.push(turned);
+    turned = false;
+    setImmediate(() => {
+      turned = true;
+    });
+    if (turns.length >= stopAt) controller.abort();
+    return turns.length <= failing ? err(failure('unavailable', 'the deadline clock cannot be read')) : read();
+  };
+  return turns;
+}
+
+test('a grant is journaled, the record written, and the supervisor started; its facts reach the outbox', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [] }, { problems: [], process: PROCESS }, { problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  await launchOnce();
+
+  const [supervision] = supervisions.all;
+  assert.deepEqual(supervision?.calls.slice(0, 2), ['prepare', 'start']);
+  assert.deepEqual(supervision?.plan?.deadline, { bootId: 'boot-1', milliseconds: 1_000 + 25_000 });
+  const [execution] = executions();
+  assert.equal(execution?.state, 'exited');
+  assert.equal(execution?.recordWritten, true);
+  assert.deepEqual(execution?.authorizations.map(({ outcome }) => outcome), ['granted']);
+  assert.deepEqual(factKinds(), ['execution-started', 'execution-exited']);
+  const started = facts().find((fact) => fact.kind === 'execution-started');
+  assert.deepEqual(started?.kind === 'execution-started' ? started.process : undefined, PROCESS);
+});
+
+test('a request without a decision is repeated with the same operation, backing off within [5 s, 60 s]', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [unavailable(), unavailable(), granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  await launchOnce();
+
+  assert.equal(authority.requests.length, 3);
+  assert.equal(new Set(authority.requests.map(({ operationId }) => operationId)).size, 1);
+  const backoff = delays.filter((delay) => delay >= LAUNCH_RETRY_DELAY.initialMilliseconds);
+  assert.deepEqual(backoff, [7_500, 15_000]);
+  assert.ok(backoff.every((delay) => delay <= LAUNCH_RETRY_DELAY.maximumMilliseconds));
+  assert.equal(executions()[0]?.state, 'exited');
+});
+
+test('a request without an answer is logged with its cause, never over its known fields, before it is repeated', async () => {
+  value(journal.recordCommand(offer()));
+  const cause = { cause: 'TypeError: fetch failed <- Error[ECONNRESET]: read ECONNRESET', causeCode: 'ECONNRESET' };
+  const spoofed = { executionId: 'spoofed', operationId: 'spoofed', code: 'spoofed', message: 'spoofed' };
+  const answered = failure('unavailable', 'the control plane did not answer', { ...spoofed, ...cause });
+  authority.answers = [err(answered), granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  await launchOnce();
+
+  const logged = sink.records.filter(({ event }) => event === 'worker.launch.authorization-failed');
+  const [request] = authority.requests;
+  assert.deepEqual(logged.map(({ level, fields }) => ({ level, fields })), [{
+    level: 'warn',
+    fields: {
+      executionId: request?.executionId, operationId: request?.operationId,
+      code: 'unavailable', message: 'the control plane did not answer', ...cause,
+    },
+  }]);
+  assert.equal(authority.requests.length, 2);
+});
+
+test('under admission pressure no authorization is journaled or requested until it clears', async () => {
+  value(journal.recordCommand(offer()));
+  pressure.causes = ok(['disk-floor']);
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  const launched = launchOnce();
+  await until(() => pressure.refreshes >= 3);
+  assert.deepEqual([authority.requests.length, executions().length], [0, 0]);
+  pressure.causes = ok([]);
+  await launched;
+  assert.equal(authority.requests.length, 1);
+  assert.equal(executions()[0]?.state, 'exited');
+});
+
+test('a cancellation during the wait for pressure ends the launch without an operation or a seal', async () => {
+  value(journal.recordCommand(offer()));
+  pressure.causes = ok(['disk-floor']);
+  const launched = launchOnce();
+  await until(() => pressure.refreshes >= 2);
+  value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));
+  await orchestrator.pass(controller.signal);
+  await launched;
+  assert.deepEqual([authority.requests.length, executions().length, supervisions.all.length], [0, 0, 0]);
+  await launchOnce();
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
+  assert.deepEqual(factKinds(), []);
+});
+
+test('pressure that arises between requests holds the retry of the same operation', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [unavailable(), granted()];
+  authority.onRequest = () => {
+    pressure.causes = ok(['journal-backlog']);
+  };
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  const launched = launchOnce();
+  await until(() => pressure.refreshes >= 4);
+  assert.equal(authority.requests.length, 1);
+  authority.onRequest = () => undefined;
+  pressure.causes = ok([]);
+  await launched;
+  assert.equal(new Set(authority.requests.map(({ operationId }) => operationId)).size, 1);
+});
+
+test('pressure that cannot be refreshed holds the launch and is reported', async () => {
+  const failures: unknown[] = [];
+  let ids = 0;
+  orchestrator = new LaunchOrchestrator({
+    journal, authority, supervision: supervisions.factory, clock, pressure, draw: () => 0, newId: () => `id-${(ids += 1)}`,
+    sleep: async () => new Promise((resolve) => setImmediate(resolve)), onFailure: (error) => failures.push(error),
+  });
+  value(journal.recordCommand(offer()));
+  pressure.causes = err(failure('unavailable', 'the journal is stopped'));
+  const launched = launchOnce();
+  await until(() => failures.length >= 2);
+  assert.equal(authority.requests.length, 0);
+  controller.abort();
+  await launched;
+  assert.deepEqual(executions(), []);
+});
+
+test('offline, nothing starts: past the deadline the operation expires and the same execution is asked again', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [unavailable()];
+  stopAfterRequests(7);
+  await launchOnce();
+
+  const [only, ...others] = executions();
+  assert.deepEqual(others, []);
+  assert.equal(only?.state, undefined);
+  // Past the first deadline, the delay of 60 s outlasts each new one.
+  assert.deepEqual(only?.authorizations.map(({ outcome }) => outcome), ['expired', 'expired', 'expired', 'expired', 'pending']);
+  const operations = authority.requests.map(({ operationId }) => operationId);
+  assert.equal(new Set(operations.slice(0, 3)).size, 1);
+  assert.notEqual(operations[3], operations[0]);
+  assert.ok(authority.requests.every(({ executionId }) => executionId === only?.executionId));
+  assert.deepEqual(authority.requests.map(({ reportsNotStarted }) => reportsNotStarted), [false, false, false, true, true, true, true]);
+  assert.deepEqual(supervisions.all, []);
+  assert.deepEqual(factKinds(), []);
+});
+
+test('a retryable rejection is retried under a new operation for the same execution', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [ok({ kind: 'rejected', rejection: launchRejection('quarantined', 'restore') }), granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  await launchOnce();
+
+  const [first, second] = authority.requests;
+  assert.notEqual(first?.operationId, second?.operationId);
+  assert.equal(first?.executionId, second?.executionId);
+  assert.deepEqual(executions()[0]?.authorizations.map(({ outcome }) => outcome), ['rejected-retryable', 'granted']);
+});
+
+test('a final rejection is journaled with its observation and never retried', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [ok({ kind: 'rejected', rejection: launchRejection('gate-not-passed', 'gate') })];
+  await launchOnce();
+
+  assert.equal(authority.requests.length, 1);
+  assert.deepEqual(factKinds(), ['launch-rejected']);
+  assert.equal(supervisions.all.length, 0);
+  await launchOnce();
+  assert.equal(authority.requests.length, 1);
+});
+
+test('a revocation answered to a retry is a rejection with its reason', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [unavailable(), ok({ kind: 'revoked', reason: 'policy-revision-changed' })];
+  await launchOnce();
+
+  assert.deepEqual(executions()[0]?.authorizations.map(({ outcome, rejection }) => [outcome, rejection]), [
+    ['rejected-final', 'policy-revision-changed'],
+  ]);
+  assert.deepEqual(factKinds(), ['launch-rejected']);
+});
+
+test('an expired answer closes its operation, and the same execution is authorized again', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [ok({ kind: 'expired' }), granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  await launchOnce();
+
+  const [execution] = executions();
+  assert.deepEqual(executions().map(({ state }) => state), ['exited']);
+  assert.deepEqual(execution?.authorizations.map(({ outcome }) => outcome), ['expired', 'granted']);
+  assert.equal(authority.requests[1]?.reportsNotStarted, true);
+  assert.deepEqual(factKinds(), ['execution-started', 'execution-exited']);
+});
+
+test('a grant that arrives after the deadline is journaled and never used', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  authority.onRequest = () => {
+    if (authority.requests.length === 1) clock.milliseconds += 25_000;
+    else controller.abort();
+  };
+  await launchOnce();
+
+  const [first] = executions();
+  assert.equal(first?.state, 'not-started');
+  assert.deepEqual(first?.authorizations.map(({ outcome }) => outcome), ['granted']);
+  assert.deepEqual(supervisions.all[0]?.calls, ['seal']);
+  assert.equal(authority.requests.length, 2);
+  assert.equal(authority.requests[0]?.reportsNotStartedFor, undefined);
+  const sealed = { executionId: first?.executionId, operationId: authority.requests[0]?.operationId };
+  assert.deepEqual(authority.requests[1]?.reportsNotStartedFor, [sealed]);
+});
+
+test('a later grant confirms the sealed executions before it, so the next request reports only the newer one', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  authority.onRequest = () => {
+    if (authority.requests.length <= 2) clock.milliseconds += 25_000;
+    else controller.abort();
+  };
+  await launchOnce();
+
+  const [, second] = executions();
+  assert.equal(authority.requests.length, 3);
+  assert.equal(authority.requests[1]?.reportsNotStartedFor?.length, 1);
+  const sealed = { executionId: second?.executionId, operationId: authority.requests[1]?.operationId };
+  assert.deepEqual(authority.requests[2]?.reportsNotStartedFor, [sealed]);
+});
+
+test('a reading from another boot never hands a grant out', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  authority.onRequest = () => {
+    if (authority.requests.length === 1) clock.bootId = 'boot-2';
+    else controller.abort();
+  };
+  await launchOnce();
+  assert.equal(executions()[0]?.state, 'not-started');
+  assert.ok(supervisions.all.every((supervision) => !supervision.calls.includes('prepare')));
+});
+
+test('an unreadable clock defers the launch on a timer: the event loop turns between tries', async () => {
+  value(journal.recordCommand(offer()));
+  const turns = failClockReads(Infinity, 3);
+  await orchestrator.run(controller.signal);
+
+  assert.deepEqual(turns, [true, true, true]);
+  assert.deepEqual(backOffs(), [7_500, 15_000]);
+  assert.deepEqual([authority.requests.length, executions().length], [0, 0]);
+});
+
+test('a launch deferred before W2 logs why, and its waits stay within [5 s, 60 s]', async () => {
+  value(journal.recordCommand(offer()));
+  failClockReads(Infinity, 8);
+  await launchOnce();
+
+  assert.deepEqual(backOffs(), [7_500, 15_000, 30_000, 50_000, 60_000, 60_000, 60_000]);
+  assert.ok(backOffs().every((delay) => delay <= LAUNCH_RETRY_DELAY.maximumMilliseconds));
+  const [first] = deferrals();
+  assert.deepEqual({ level: first?.level, fields: first?.fields }, {
+    level: 'warn',
+    fields: {
+      assignmentId: value(journal.snapshot()).intents[0]?.assignmentId,
+      code: 'unavailable', message: 'the deadline clock cannot be read', retries: 1, delayMilliseconds: 7_500,
+    },
+  });
+  assert.equal(deferrals().length, 8);
+  assert.deepEqual([authority.requests.length, executions().length], [0, 0]);
+});
+
+test('a clock readable again after the waits begins the operation, and the back-off goes on from them', async () => {
+  value(journal.recordCommand(offer()));
+  failClockReads(2);
+  authority.answers = [ok({ kind: 'rejected', rejection: launchRejection('quarantined', 'restore') }), granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  await launchOnce();
+
+  assert.deepEqual(backOffs(), [7_500, 15_000, 30_000]);
+  const [first, second] = authority.requests;
+  assert.equal(first?.reportsNotStarted, false);
+  assert.equal(first?.executionId, second?.executionId);
+  assert.deepEqual(executions().map(({ state }) => state), ['exited']);
+});
+
+test('an identifier that cannot be parsed before W2 defers the launch', async () => {
+  value(journal.recordCommand(offer()));
+  const valid = newId;
+  let calls = 0;
+  newId = () => ((calls += 1) === 1 || calls === 3 ? 'not an identifier' : valid());
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  await launchOnce();
+
+  assert.deepEqual(deferrals().map(({ fields }) => fields.code), ['invalid', 'invalid']);
+  assert.deepEqual(backOffs(), [7_500, 15_000]);
+  assert.deepEqual(executions().map(({ state }) => state), ['exited']);
+});
+
+test('a journal read that fails before W2 defers the launch', async () => {
+  value(journal.recordCommand(offer()));
+  const snapshot = journal.snapshot.bind(journal);
+  let reads = 0;
+  journal.snapshot = () => ((reads += 1) === 2 ? err(failure('unavailable', 'the journal cannot be read')) : snapshot());
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  await launchOnce();
+  journal.snapshot = snapshot;
+
+  assert.deepEqual(deferrals().map(({ fields }) => fields.message), ['the journal cannot be read']);
+  assert.deepEqual(backOffs(), [7_500]);
+  assert.deepEqual(executions().map(({ state }) => state), ['exited']);
+});
+
+test('a journal read before W2 that finds the journal stopped ends the launch without a deferral', async () => {
+  value(journal.recordCommand(offer()));
+  const stopped = failure('unavailable', 'the journal stopped: disk I/O error', { reason: 'stopped' });
+  const snapshot = journal.snapshot.bind(journal);
+  let reads = 0;
+  // Read 1 is the pass; the stop at read 4 bounds a launch that defers.
+  journal.snapshot = () => {
+    if ((reads += 1) >= 4) controller.abort();
+    return reads === 1 ? snapshot() : err(stopped);
+  };
+  await launchOnce();
+  journal.snapshot = snapshot;
+
+  assert.deepEqual([deferrals().length, authority.requests.length, executions().length], [0, 0, 0]);
+});
+
+test('a W2 commit that fails and rolls back is tried again on a timer, with a new operation', async () => {
+  value(journal.recordCommand(offer()));
+  const beginAuthorization = journal.beginAuthorization.bind(journal);
+  const tried: string[] = [];
+  const turns: boolean[] = [];
+  let turned = true;
+  journal.beginAuthorization = (request) => {
+    tried.push(request.operationId);
+    turns.push(turned);
+    turned = false;
+    setImmediate(() => {
+      turned = true;
+    });
+    return tried.length <= 2 ? err(failure('internal', 'journal error: database is locked')) : beginAuthorization(request);
+  };
+  authority.answers = [unavailable()];
+  stopAfterRequests(1);
+  await orchestrator.run(controller.signal);
+  journal.beginAuthorization = beginAuthorization;
+
+  assert.deepEqual(turns, [true, true, true]);
+  assert.deepEqual(backOffs(), [7_500, 15_000]);
+  assert.equal(new Set(tried).size, 3);
+  assert.deepEqual(deferrals().map(({ fields }) => fields.message), Array(2).fill('journal error: database is locked'));
+  assert.deepEqual(authority.requests.map(({ operationId }) => operationId), [tried[2]]);
+  assert.deepEqual(executions()[0]?.authorizations.map(({ operationId }) => operationId), [tried[2]]);
+});
+
+test('a W2 commit that stops the journal ends the launch without a deferral', async () => {
+  value(journal.recordCommand(offer()));
+  const stopped = failure('unavailable', 'journal I/O error: disk I/O error', { reason: 'flush-failure' });
+  const beginAuthorization = journal.beginAuthorization.bind(journal);
+  journal.beginAuthorization = () => err(stopped);
+  await launchOnce();
+  journal.beginAuthorization = beginAuthorization;
+
+  assert.deepEqual([deferrals().length, authority.requests.length, executions().length], [0, 0, 0]);
+});
+
+test('a cancellation while a launch waits before W2 ends it without an operation or a seal', async () => {
+  value(journal.recordCommand(offer()));
+  failClockReads(Infinity);
+  const launched = launchOnce();
+  await until(() => deferrals().length >= 2);
+  value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));
+  await orchestrator.pass(controller.signal);
+  await launched;
+  assert.deepEqual([authority.requests.length, executions().length, supervisions.all.length], [0, 0, 0]);
+  await launchOnce();
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
+  assert.deepEqual(factKinds(), []);
+});
+
+test('a supervisor that seals reports not-started, and the intent is launched again', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [grantedToOwner()];
+  let launches = 0;
+  supervisions.onCreated = (supervision) => {
+    launches += 1;
+    supervision.facts = launches === 1
+      ? [{ problems: [], launch: { kind: 'seal', by: 'supervisor', reason: 'deadline-passed' } }]
+      : [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  await launchOnce();
+  assert.deepEqual(executions().map(({ state }) => state), ['not-started', 'exited']);
+});
+
+test('a supervisor that cannot start is recovered from its record', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  let launches = 0;
+  supervisions.onCreated = (supervision) => {
+    launches += 1;
+    if (launches === 1) supervision.startResult = err(failure('unavailable', 'no spawn'));
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  await launchOnce();
+  assert.deepEqual(supervisions.all[0]?.calls, ['prepare', 'start', 'recover']);
+  assert.deepEqual(executions().map(({ state }) => state), ['not-started', 'exited']);
+});
+
+test('a live unclaimed launch is not checked for liveness before its spawn deadline', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  // At the 100 ms poll, 100 reads stay well before the 25 s deadline.
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [...unclaimed(100), { problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  await launchOnce();
+  assert.equal(callCount(supervisions.all[0], 'recover'), 0);
+  assert.deepEqual(executions().map(({ state }) => state), ['exited']);
+});
+
+test('a supervisor lost before its claim is sealed past the deadline, and the intent is launched again', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  let launches = 0;
+  let recoveredAt: number | undefined;
+  supervisions.onCreated = (supervision) => {
+    launches += 1;
+    if (launches > 1) {
+      supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+      return;
+    }
+    stopAfterReads(supervision, 400);
+    onRecover(supervision, () => {
+      recoveredAt = clock.milliseconds;
+      supervision.facts = [{ problems: [], launch: { kind: 'seal', by: 'worker', reason: 'recovery' } }];
+    });
+  };
+  await launchOnce();
+  const [lost] = supervisions.all;
+  const deadline = lost?.plan?.deadline.milliseconds ?? 0;
+  assert.deepEqual(lost?.rounds, ['first']);
+  assert.ok(recoveredAt !== undefined && recoveredAt >= deadline && recoveredAt < deadline + LIVENESS_POLLS * 100);
+  assert.deepEqual(executions().map(({ state }) => state), ['not-started', 'exited']);
+});
+
+test('a supervisor still live at the unclaimed check keeps the watch going', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.recovery = { fact: 'observe' };
+    stopAfterReads(supervision, 400);
+    onRecover(supervision, () => {
+      supervision.facts = [{ problems: [], process: PROCESS }, { problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+    });
+  };
+  await launchOnce();
+  assert.deepEqual(supervisions.all[0]?.rounds, ['first']);
+  assert.deepEqual(executions().map(({ state }) => state), ['exited']);
+  assert.deepEqual(factKinds(), ['execution-started', 'execution-exited']);
+});
+
+test('a recovered exit is reported, and a recovery that adopts keeps observing', async () => {
+  value(journal.recordCommand(offer()));
+  value(journal.recordCommand(offer(2)));
+  authority.answers = [granted()];
+  let launches = 0;
+  supervisions.onCreated = (supervision) => {
+    launches += 1;
+    supervision.startResult = err(failure('unavailable', 'no spawn'));
+    supervision.recovery = launches === 1 ? { fact: 'exited', exit: { ...CLEAN_EXIT, startProven: false } } : { fact: 'observe' };
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  await launchOnce();
+  assert.deepEqual(executions().map(({ state }) => state), ['exited', 'exited']);
+});
+
+test('a corrupt record is reported uncertain once, and the launch stops', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [{ file: 'handle', kind: 'corrupt', detail: 'bad json' }] }];
+  };
+  await launchOnce();
+  assert.deepEqual(factKinds(), ['execution-uncertain']);
+  assert.equal(executions()[0]?.state, 'authorized');
+  assert.equal(executions()[0]?.uncertain, true);
+});
+
+test('a failed record write abandons the execution before W4', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  let launches = 0;
+  supervisions.onCreated = (supervision) => {
+    launches += 1;
+    if (launches === 1) supervision.prepareResult = err(failure('unavailable', 'disk'));
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  await launchOnce();
+  assert.deepEqual(executions().map(({ state, recordWritten }) => [state, recordWritten]), [['not-started', false], ['exited', true]]);
+});
+
+test('a cancellation during authorization stops the launch, seals it, and then records its evidence', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [unavailable()];
+  let cancelling: Promise<void> = Promise.resolve();
+  authority.onRequest = () => {
+    if (authority.requests.length === 1) {
+      value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));
+      cancelling = orchestrator.pass(controller.signal);
+    }
+  };
+  await launchOnce();
+  await cancelling;
+  assert.equal(authority.requests.length, 1);
+  assert.equal(executions()[0]?.state, 'not-started');
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, false);
+
+  await launchOnce();
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
+  assert.equal(authority.requests.length, 1);
+});
+
+test('a cancellation after W4 writes the cancel file; evidence waits for the exit', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  let release: () => void = () => undefined;
+  const exited = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS }];
+    void exited.then(() => {
+      supervision.facts = [{ problems: [], process: PROCESS, exit: { status: { kind: 'signal', signal: 'SIGTERM' }, startProven: true, termination: 'process-group-empty' } }];
+    });
+  };
+  await orchestrator.pass(controller.signal);
+  await until(() => executions()[0]?.state === 'started');
+
+  value(journal.recordCommand(cancellation(1, { executionId: executions()[0]?.executionId ?? '' })));
+  await orchestrator.pass(controller.signal);
+  await until(() => supervisions.all[0]?.cancelled !== undefined);
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, false);
+
+  release();
+  await orchestrator.settled();
+  await orchestrator.pass(controller.signal);
+  assert.equal(executions()[0]?.state, 'exited');
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
+});
+
+// A sealed execution, then a second one whose supervisor runs.
+async function supersededThenRunning() {
+  value(journal.recordCommand(offer()));
+  authority.answers = [grantedToOwner()];
+  let launches = 0;
+  supervisions.onCreated = (supervision) => {
+    launches += 1;
+    supervision.facts = launches === 1
+      ? [{ problems: [], launch: { kind: 'seal', by: 'supervisor', reason: 'deadline-passed' } }]
+      : [{ problems: [], process: PROCESS }];
+  };
+  await orchestrator.pass(controller.signal);
+  await until(() => executions()[1]?.state === 'started');
+  const [superseded, running] = executions();
+  return { superseded: superseded?.executionId ?? '', running: running?.executionId ?? '' };
+}
+
+test('cancellation names a superseded execution: the running one goes on, and evidence is recorded', async () => {
+  const { superseded, running } = await supersededThenRunning();
+
+  value(journal.recordCommand(cancellation(1, { executionId: superseded })));
+  await orchestrator.pass(controller.signal);
+  for (let turn = 0; turn < 50; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(callCount(supervisions.byExecution.get(running), 'cancel'), 0);
+  assert.equal(executions()[1]?.state, 'started');
+  assert.equal(executions().length, 2);
+  assert.deepEqual(authority.requests[1]?.reportsNotStartedFor?.map(({ executionId }) => executionId), [superseded]);
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
+});
+
+test('a cancellation journaled right after its execution ended leaves the next one launched', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  let launches = 0;
+  supervisions.onCreated = (supervision) => {
+    launches += 1;
+    supervision.facts = launches === 1
+      ? [{ problems: [], launch: { kind: 'seal', by: 'supervisor', reason: 'deadline-passed' } }]
+      : [{ problems: [], process: PROCESS }];
+  };
+  // The pass decides before the launch resumes after the W6 commit.
+  const recordNotStarted = journal.recordNotStarted.bind(journal);
+  journal.recordNotStarted = (executionId) => {
+    const committed = recordNotStarted(executionId);
+    journal.recordNotStarted = recordNotStarted;
+    value(journal.recordCommand(cancellation(1, { executionId })));
+    void orchestrator.pass(controller.signal);
+    return committed;
+  };
+  await orchestrator.pass(controller.signal);
+  await until(() => authority.requests.length >= 2);
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
+});
+
+test('an attempt cancellation still stops the running execution of its intent', async () => {
+  const { running } = await supersededThenRunning();
+
+  value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));
+  await orchestrator.pass(controller.signal);
+  await until(() => supervisions.byExecution.get(running)?.cancelled !== undefined);
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, false);
+});
+
+test('an execution cancellation files `cancel` only for that execution, with evidence at its exit', async () => {
+  value(journal.recordCommand(offer()));
+  const [named, other] = ['a', 'b'].map((name) => {
+    const request = requestOf(`execution-${name}`, `operation-${name}`);
+    const { launchAuthId } = grantFor(request);
+    value(journal.beginAuthorization(request));
+    value(journal.recordGrant(grantFor(request)));
+    value(journal.recordExecutionRecordWritten(request.executionId));
+    const supervision = supervisions.factory(request.executionId);
+    supervision.recovery = { fact: 'observe' };
+    supervision.facts = [{ problems: [], process: PROCESS, launch: { kind: 'claim', launchAuthId, supervisor: 1 } }];
+    return supervision;
+  });
+  value(journal.recordCommand(cancellation(1, { executionId: 'execution-a' })));
+  await orchestrator.pass(controller.signal);
+  assert.equal(callCount(named, 'cancel'), 1);
+  assert.equal(callCount(other, 'cancel'), 0);
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, false);
+
+  if (named !== undefined) named.facts = [{ ...named.facts[0], problems: [], exit: CLEAN_EXIT }];
+  await until(() => executions().find(({ executionId }) => executionId === 'execution-a')?.state === 'exited');
+  await orchestrator.pass(controller.signal);
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
+  assert.equal(callCount(other, 'cancel'), 0);
+  assert.notEqual(executions().find(({ executionId }) => executionId === 'execution-b')?.state, 'exited');
+});
+
+test('a cancellation names an execution a stopped launch left open: its cancel file is written', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS }];
+  };
+  await orchestrator.pass(controller.signal);
+  await until(() => executions()[0]?.state === 'started');
+  controller.abort();
+  await orchestrator.settled();
+
+  controller = new AbortController();
+  value(journal.recordCommand(cancellation(1, { executionId: executions()[0]?.executionId ?? '' })));
+  await orchestrator.pass(controller.signal);
+  await orchestrator.pass(controller.signal);
+  assert.equal(supervisions.all[0]?.calls.filter((call) => call === 'cancel').length, 1);
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, false);
+});
+
+test('a seal lost to a claim before W4 is reported uncertain', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.prepareResult = err(failure('unavailable', 'disk'));
+    supervision.launch = { kind: 'claim', launchAuthId: 'unknown', supervisor: 1 };
+  };
+  await launchOnce();
+  assert.deepEqual(factKinds(), ['execution-uncertain']);
+  assert.equal(executions()[0]?.recordWritten, true);
+});
+
+test('a launch that throws is reported and ends; the orchestrator keeps running', async () => {
+  const failures: unknown[] = [];
+  let ids = 0;
+  orchestrator = new LaunchOrchestrator({
+    journal, authority, supervision: supervisions.factory, clock, pressure, draw: () => 0, newId: () => `id-${(ids += 1)}`,
+    sleep: async () => new Promise((resolve) => setImmediate(resolve)), onFailure: (error) => failures.push(error),
+  });
+  value(journal.recordCommand(offer()));
+  authority.authorize = async () => {
+    throw new Error('broken client');
+  };
+  await launchOnce();
+  assert.equal(failures.length, 1);
+});
+
+test('a cancellation after a final rejection records its evidence', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [ok({ kind: 'rejected', rejection: launchRejection('gate-not-passed', 'gate') })];
+  await launchOnce();
+  assert.equal(executions()[0]?.state, undefined);
+
+  value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));
+  await launchOnce();
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
+});
+
+test('a cancellation of an execution with a pending W2 and no live launch waits for the seal of the next start', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [unavailable()];
+  stopAfterRequests(1);
+  await launchOnce();
+  controller = new AbortController();
+
+  value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));
+  await launchOnce();
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, false);
+});
+
+test('a commit that fails without changing the decision is reported', async () => {
+  const failures: unknown[] = [];
+  let ids = 0;
+  orchestrator = new LaunchOrchestrator({
+    journal, authority, supervision: supervisions.factory, clock, pressure, draw: () => 0, newId: () => `id-${(ids += 1)}`,
+    sleep: async () => new Promise((resolve) => setImmediate(resolve)), onFailure: (error) => failures.push(error),
+  });
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  const recordExit = journal.recordExit.bind(journal);
+  journal.recordExit = () => err(failure('unavailable', 'the disk is full'));
+  await launchOnce();
+  journal.recordExit = recordExit;
+  assert.deepEqual(failures.map((failed) => (failed as { message: string }).message), ['the disk is full']);
+});
+
+test('an existing cancel file counts as forwarded', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS }];
+    supervision.cancel = async (reason) => {
+      supervision.calls.push('cancel');
+      supervision.cancelled = reason;
+      return err(failure('conflict', 'cancel exists'));
+    };
+  };
+  await orchestrator.pass(controller.signal);
+  await until(() => executions()[0]?.state === 'started');
+  controller.abort();
+  await orchestrator.settled();
+
+  controller = new AbortController();
+  value(journal.recordCommand(cancellation(1, { executionId: executions()[0]?.executionId ?? '' })));
+  await orchestrator.pass(controller.signal);
+  await orchestrator.pass(controller.signal);
+  assert.equal(supervisions.all[0]?.calls.filter((call) => call === 'cancel').length, 1);
+});
+
+test('a cancel file that cannot be written is retried at the poll interval, never in a hot loop', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS }];
+    supervision.cancel = async () => {
+      supervision.calls.push('cancel');
+      if (supervision.calls.filter((call) => call === 'cancel').length === 3) {
+        supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+      }
+      return err(failure('unavailable', 'the record is not writable'));
+    };
+  };
+  await orchestrator.pass(controller.signal);
+  await until(() => executions()[0]?.state === 'started');
+  const polls = delays.length;
+  value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));
+  await orchestrator.pass(controller.signal);
+  await orchestrator.settled();
+
+  const calls = supervisions.all[0]?.calls ?? [];
+  assert.equal(calls.filter((call) => call === 'cancel').length, 3);
+  assert.equal(delays.length - polls, 2);
+  assert.equal(executions()[0]?.state, 'exited');
+});
+
+test('a spawn claimed under another grant is reported uncertain, never as a start', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, launch: { kind: 'claim', launchAuthId: 'another-grant', supervisor: 1 } }];
+  };
+  await launchOnce();
+  assert.deepEqual(factKinds(), ['execution-uncertain']);
+});
+
+test('a cancellation after a retryable rejection of a stopped launch records its evidence', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [ok({ kind: 'rejected', rejection: launchRejection('quarantined', 'restore') })];
+  // The worker stops during the delay before the retry, after W3.
+  authority.onRequest = () => void setImmediate(() => controller.abort());
+  await launchOnce();
+  assert.deepEqual(executions()[0]?.authorizations.map(({ outcome }) => outcome), ['rejected-retryable']);
+  controller = new AbortController();
+
+  value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));
+  await launchOnce();
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
+});
+
+test('a failed record read ends the launch and is reported', async () => {
+  const failures: unknown[] = [];
+  let ids = 0;
+  orchestrator = new LaunchOrchestrator({
+    journal, authority, supervision: supervisions.factory, clock, pressure, draw: () => 0, newId: () => `id-${(ids += 1)}`,
+    sleep: async () => new Promise((resolve) => setImmediate(resolve)), onFailure: (error) => failures.push(error),
+  });
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.read = async () => err(failure('unavailable', 'the record cannot be read'));
+  };
+  await launchOnce();
+  assert.deepEqual(failures.map((failed) => (failed as { message: string }).message), ['the record cannot be read']);
+});
+
+function reportingOrchestrator(failures: unknown[]): LaunchOrchestrator {
+  let ids = 0;
+  return new LaunchOrchestrator({
+    journal, authority, supervision: supervisions.factory, clock, pressure, draw: () => 0, newId: () => `id-${(ids += 1)}`,
+    sleep: async () => new Promise((resolve) => setImmediate(resolve)), onFailure: (error) => failures.push(error),
+  });
+}
+
+test('a failed seal is reported and ends the launch', async () => {
+  const failures: unknown[] = [];
+  orchestrator = reportingOrchestrator(failures);
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  authority.onRequest = () => {
+    clock.milliseconds += 25_000;
+  };
+  supervisions.onCreated = (supervision) => {
+    supervision.sealResult = err(failure('unavailable', 'the seal cannot be written'));
+  };
+  await launchOnce();
+  assert.deepEqual(failures.map((failed) => (failed as { message: string }).message), ['the seal cannot be written']);
+  assert.equal(authority.requests.length, 1);
+  assert.equal(executions()[0]?.state, 'authorized');
+});
+
+test('a failed recovery is reported and ends the launch', async () => {
+  const failures: unknown[] = [];
+  orchestrator = reportingOrchestrator(failures);
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.startResult = err(failure('unavailable', 'no spawn'));
+    supervision.recoverResult = err(failure('unavailable', 'the record cannot be recovered'));
+  };
+  await launchOnce();
+  assert.deepEqual(failures.map((failed) => (failed as { message: string }).message), ['the record cannot be recovered']);
+  assert.equal(authority.requests.length, 1);
+  assert.equal(executions()[0]?.state, 'authorized');
+});
+
+test('a spawn without a claim is reported uncertain, never as a start', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.claimSpawns = false;
+    supervision.facts = [{ problems: [], process: PROCESS }];
+  };
+  await launchOnce();
+  assert.deepEqual(factKinds(), ['execution-uncertain']);
+});
+
+test('a cancellation journaled before any launch records its evidence and launches nothing', async () => {
+  value(journal.recordCommand(offer()));
+  value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));
+  await launchOnce();
+  assert.equal(authority.requests.length, 0);
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
+});
+
+test('an execution an earlier process left pending is not launched again', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [unavailable()];
+  stopAfterRequests(1);
+  await launchOnce();
+  assert.equal(executions()[0]?.state, undefined);
+
+  controller = new AbortController();
+  await launchOnce();
+  assert.equal(authority.requests.length, 1);
+});
+
+test('run passes until aborted and waits for its launches', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [unavailable()];
+  stopAfterRequests(2);
+  await orchestrator.run(controller.signal);
+  assert.equal(authority.requests.length, 2);
+  orchestrator.notify();
+});

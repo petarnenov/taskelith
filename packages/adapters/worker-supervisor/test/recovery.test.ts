@@ -99,11 +99,11 @@ test('macOS proves an empty set only from one listing without the group or a rec
   assert.deepEqual(proveDarwinTermination({ processGroupId: 500, listing: undefined, recordedDescendants: [] }), { proven: false, survivors: [] });
   assert.deepEqual(proveDarwinTermination({ processGroupId: 500, listing: [sameGroup], recordedDescendants: [] }), {
     proven: false,
-    survivors: [identity(777)],
+    survivors: [{ ...identity(777), processGroupId: 500 }],
   });
   assert.deepEqual(proveDarwinTermination({ processGroupId: 500, listing: [escaped], recordedDescendants: [identity(888)] }), {
     proven: false,
-    survivors: [identity(888)],
+    survivors: [{ ...identity(888), processGroupId: 888 }],
   });
   const reused = { identity: identity(888, 1), parentPid: 1, processGroupId: 888 };
   assert.deepEqual(proveDarwinTermination({ processGroupId: 500, listing: [reused], recordedDescendants: [identity(888)] }), { proven: true });

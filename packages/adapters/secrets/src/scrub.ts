@@ -1,33 +1,40 @@
-import { SECRET_PREFIXES } from './node-secrets.js';
+import { REDACTED, redactUrlUserinfoEvenEmpty, redactWith, SECRET_SHAPE_RULES } from '@taskelith/observability';
+import { replaceSpans, revealedSpans } from './revealed-spans.js';
 
-export const REDACTED = '[redacted]';
+export { REDACTED };
 
-// A URL's user information, up to the last `@` of its authority, since a
-// password may hold an unescaped `@` (`postgres://owner:p@ss@host`).
-const URL_USERINFO = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#]*@/gi;
-
-// Bearer secrets, NATS seeds and JWTs, and `.creds` blocks (trust model 5),
-// without word boundaries, so text glued in front of one hides nothing.
-const SECRET_PATTERNS: readonly RegExp[] = [
-  new RegExp(`(?:${Object.values(SECRET_PREFIXES).join('|')})_[A-Za-z0-9_-]{20,}`, 'g'),
-  /-----BEGIN NATS USER JWT-----[\s\S]*?------END USER NKEY SEED------/g,
-  /S[OAU][A-Z2-7]{56}/g,
-  /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
-];
+// A URL's user information, even empty, then the shapes of trust model 5.
+const SECRET_TEXT_RULES = [redactUrlUserinfoEvenEmpty, ...SECRET_SHAPE_RULES];
 
 // Environment variables whose names mark them as secrets.
 const SECRET_VARIABLE = /(?:TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDS|SEED|PRIVATE_KEY|API_KEY)/i;
 
-export function redactSecrets(text: string): string {
-  const withoutUserinfo = text.replace(URL_USERINFO, `$1${REDACTED}@`);
-  return SECRET_PATTERNS.reduce((redacted, pattern) => redacted.replace(pattern, REDACTED), withoutUserinfo);
+// Redacts the credentials revealed to a run, which may have no known shape
+// (account pool contract section 7.4), then the installation's shapes.
+export function redactSecrets(text: string, revealed: readonly string[] = []): string {
+  const spans = revealedSpans(text, revealed, SECRET_TEXT_RULES);
+  return redactWith(replaceSpans(text, spans, REDACTED), SECRET_TEXT_RULES);
 }
 
 // Redacts every string of a failure's message and details before it leaves
 // the process in an error payload or a log line.
-export function redactFailure<T extends { readonly message: string; readonly details: Readonly<Record<string, string>> }>(failure: T): T {
-  const details = Object.fromEntries(Object.entries(failure.details).map(([key, value]) => [key, redactSecrets(value)]));
-  return { ...failure, message: redactSecrets(failure.message), details };
+export function redactFailure<T extends { readonly message: string; readonly details: Readonly<Record<string, string>> }>(
+  failure: T,
+  revealed: readonly string[] = [],
+): T {
+  const redact = (text: string) => redactSecrets(text, revealed);
+  return { ...failure, message: redact(failure.message), details: redactDetails(failure.details, redact) };
+}
+
+// Keys are redacted too; values of keys that become equal are joined in order.
+function redactDetails(details: Readonly<Record<string, string>>, redact: (text: string) => string): Record<string, string> {
+  const redacted = new Map<string, string>();
+  for (const [key, value] of Object.entries(details)) {
+    const safeKey = redact(key);
+    const earlier = redacted.get(safeKey);
+    redacted.set(safeKey, earlier === undefined ? redact(value) : `${earlier}, ${redact(value)}`);
+  }
+  return Object.fromEntries(redacted);
 }
 
 // The environment a child process gets: no variable named like a secret, and

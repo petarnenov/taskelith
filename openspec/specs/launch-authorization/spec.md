@@ -32,7 +32,7 @@ Every transaction that changes a compared value SHALL run serializably and SHALL
 - **THEN** the result is either a rejection or a revocation with a cancellation command, never an unrevoked stale authorization
 
 ### Requirement: Execution ownership
-An attempt SHALL have at most one owning execution, spawned at most once across all its grants. Expiry SHALL end the permission to spawn but not ownership; another execution identity SHALL be authorized only after the owning execution has a recorded exit or a `not-started` fact recorded after its launch record was irreversibly sealed.
+An attempt SHALL have at most one owning execution, spawned at most once across all its grants. Expiry SHALL end the permission to spawn but not ownership; another execution identity SHALL be authorized only after the owner has a recorded exit or a `not-started` recorded after its seal, including one the request reports in its list of at most 8 sealed executions, recorded in list order first in the same transaction.
 
 #### Scenario: Expired grant without a recorded start
 - **WHEN** an authorization expired and no start or terminal fact is recorded
@@ -45,6 +45,26 @@ An attempt SHALL have at most one owning execution, spawned at most once across 
 #### Scenario: Sealed execution
 - **WHEN** `not-started` is recorded after the worker sealed the launch record
 - **THEN** a supervisor resumed later does not spawn under any grant of that execution
+
+#### Scenario: Reported seal before its observation
+- **WHEN** a request for a new execution reports the `authorized` owner of its attempt as sealed, before the owner's `not-started` observation arrives
+- **THEN** one transaction records the owner `not-started` and grants the new execution, and the later observation is a duplicate
+
+#### Scenario: Reported seal after its observation
+- **WHEN** the reported execution is already `not-started`, or the authority never granted it
+- **THEN** the report changes nothing and the new execution is decided by the ownership rule
+
+#### Scenario: Several reported seals
+- **WHEN** a request reports an execution the authority never granted, one already `not-started`, and the `authorized` owner, in that order
+- **THEN** each entry is applied in order in one transaction, the owner ends `not-started`, and the new execution is granted
+
+#### Scenario: Refused seal report
+- **WHEN** any entry of the report names the requested execution itself, or an execution that is `started` or `exited` or belongs to another attempt or worker, or an operation that granted another execution
+- **THEN** the request is rejected with `execution-conflict`, the task is unchanged, and the rejection is final for the operation
+
+#### Scenario: Too many reported seals
+- **WHEN** a request reports 9 sealed executions, or an empty list
+- **THEN** the request is refused as `invalid` and nothing is decided, while a list of 8 is decided
 
 ### Requirement: Idempotent replay without reuse of stale grants
 A repeated request with the same operation ID from the same worker SHALL return the recorded grant only while it is granted, unexpired, its execution not terminal, and the quarantine state, epoch, and worker credential are current; a reused operation ID with different values SHALL be rejected.
@@ -121,3 +141,14 @@ In restore quarantine the launch authority SHALL grant nothing and return no rec
 #### Scenario: Old epoch
 - **WHEN** a worker requests authorization with an older recovery epoch
 - **THEN** the request is rejected with `stale-recovery-epoch`
+
+### Requirement: Execution observations outside the current epoch
+An exit, `not-started`, `uncertain`, `termination-unproven`, or `cancellation.not-applied` observation whose recovery epoch differs from the current one, older or newer, or that arrives in restore quarantine, SHALL only be kept as evidence for quarantine reconciliation and SHALL change no current state. At the current epoch outside quarantine it SHALL be decided as before. An unrecorded process SHALL be evidence at every epoch.
+
+#### Scenario: Exit at an older epoch
+- **WHEN** a worker reports the exit of an execution at an epoch older than the current one
+- **THEN** it is kept as evidence, and the attempt, the execution, and the reservation are unchanged
+
+#### Scenario: Exit in quarantine
+- **WHEN** a current-epoch exit arrives during restore quarantine
+- **THEN** it is kept as evidence and no state changes; a repeat of it after the quarantine is a duplicate and replays nothing, and only reconciliation acts on the evidence

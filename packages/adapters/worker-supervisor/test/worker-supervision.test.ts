@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { withholdCoverageFromDescendants } from '@taskelith/testing';
 import {
   darwinPlatform,
   encodeRecord,
@@ -15,6 +16,9 @@ import {
   superviseLaunch,
 } from '@taskelith/worker-supervisor';
 import { identity, intent, rig, SUPERVISOR_PID, type Rig } from './fakes.ts';
+
+// The Node spawner passes this environment to the children it kills.
+withholdCoverageFromDescendants();
 
 const CLAIM = encodeRecord({ kind: 'claim', launchAuthId: 'launch-1', supervisor: 1 });
 const HANDLE = encodeRecord({ kind: 'spawned', process: identity(500), processGroupId: 500 });
@@ -62,7 +66,7 @@ test('a seal that loses to a claim is decided again from the claim', async () =>
   const winner = await sealLaunch(setup.worker);
   assert.ok(winner.ok);
   assert.equal(winner.value.kind, 'claim');
-  assert.deepEqual(await fact(setup, 'intent'), { fact: 'adopted' });
+  assert.deepEqual(await fact(setup, 'intent'), { fact: 'adopted', supervisor: 'started' });
   assert.deepEqual(setup.started, ['adopt']);
 });
 
@@ -79,7 +83,7 @@ test('a live supervisor is adopted only while its recorded identity is alive', a
   setup.store.files.set('launch', CLAIM);
   setup.store.files.set('supervisor.1', encodeRecord({ serial: 1, process: identity(SUPERVISOR_PID) }));
   setup.lock.held = true;
-  assert.deepEqual(await fact(setup), { fact: 'adopted' });
+  assert.deepEqual(await fact(setup), { fact: 'adopted', supervisor: 'live' });
 
   setup.fake.end(SUPERVISOR_PID);
   assert.deepEqual(await fact(setup), { fact: 'retry' });

@@ -22,6 +22,18 @@ export const REJECTING_REASONS = Object.freeze([
   'retry-budget-exhausted',
 ] as const);
 
+// Reasons about one worker: placement tries the next candidate on them.
+export const WORKER_REASONS = Object.freeze(['worker-not-eligible', 'worker-capacity-exhausted', 'control-not-enforceable'] as const);
+
+// A placement that found no candidate worker reports this reason.
+export const NO_CANDIDATE_REASON = 'no-candidate';
+
+// Reasons the fleet's lack of room explains, exact while all requests are
+// equal: a pass ends at one; no backoff, cursor stops (contract §5, §13).
+export const FLEET_REASONS = Object.freeze([
+  'quarantined', 'worker-not-eligible', 'worker-capacity-exhausted', NO_CANDIDATE_REASON,
+] as const);
+
 export type WaitingReason = (typeof WAITING_REASONS)[number];
 export type RejectingReason = (typeof REJECTING_REASONS)[number];
 export type StandingReason = (typeof STANDING_REASONS)[number];
@@ -36,4 +48,17 @@ export function isWaitingReason(reason: CapacityReason): reason is WaitingReason
 export function reasonOutcome(reason: CapacityReason): ReasonOutcome {
   if (isWaitingReason(reason)) return 'waiting';
   return (STANDING_REASONS as readonly string[]).includes(reason) ? 'standing' : 'rejected';
+}
+
+export function isRejectingReason(reason: CapacityReason): reason is RejectingReason {
+  return reasonOutcome(reason) === 'rejected';
+}
+
+export function triesNextCandidate(reason: CapacityReason): boolean {
+  return (WORKER_REASONS as readonly string[]).includes(reason);
+}
+
+// Takes any value, since failure details carry the reason untyped.
+export function lacksFleetCapacity(reason: unknown): boolean {
+  return (FLEET_REASONS as readonly unknown[]).includes(reason);
 }

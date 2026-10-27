@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:taskelith:review-pass",
+  "title": "Taskelith review pass summary",
+  "description": "One line of an OpenSpec change's passes.jsonl: the summary of one independent review pass, of one artifact in a multi-artifact change, that ran to a report, also one with no findings. It reuses the definitions of the finding schema, urn:taskelith:review-finding. Unknown properties are rejected. npm run findings checks the counts against the pass's lines in findings.jsonl.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["change", "pass", "role", "reviewer", "session", "counts"],
+  "properties": {
+    "change": { "$ref": "urn:taskelith:review-finding#/properties/change" },
+    "artifact": { "$ref": "urn:taskelith:review-finding#/properties/artifact" },
+    "pass": { "$ref": "urn:taskelith:review-finding#/properties/pass" },
+    "role": { "$ref": "urn:taskelith:review-finding#/$defs/role" },
+    "reviewer": { "$ref": "urn:taskelith:review-finding#/properties/reviewer" },
+    "session": { "$ref": "urn:taskelith:review-finding#/properties/session" },
+    "counts": {
+      "description": "Number of the pass's findings per severity.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["critical", "high", "medium", "low"],
+      "properties": {
+        "critical": { "$ref": "#/$defs/count" },
+        "high": { "$ref": "#/$defs/count" },
+        "medium": { "$ref": "#/$defs/count" },
+        "low": { "$ref": "#/$defs/count" }
+      }
+    }
+  },
+  "$defs": {
+    "count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 999
+    }
+  }
+}

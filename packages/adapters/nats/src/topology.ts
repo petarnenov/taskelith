@@ -10,12 +10,14 @@ import {
   type StreamConfig,
 } from '@nats-io/jetstream';
 import { nanos } from '@nats-io/nats-core';
-import { ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { brokerFailure } from './broker-failure.js';
 import type { StreamKind, TransportAddress } from './transport-address.js';
 import { TRANSPORT_LIMITS, type TransportLimits } from './transport-limits.js';
 
 const ADVISORY_KINDS = ['MAX_DELIVERIES', 'MSG_TERMINATED'] as const;
+// The server's JSStorageResourcesExceededErr, which the client has no name for.
+const STORAGE_RESOURCES_EXCEEDED = 10047;
 
 // Creates or updates the streams of decision D3 (a): commands on worker
 // subjects, observations, and the quarantine with its advisory capture.
@@ -24,12 +26,29 @@ export async function ensureStreams(
   address: TransportAddress,
   limits: TransportLimits = TRANSPORT_LIMITS,
 ): Promise<Result<void>> {
+  const configs = streamConfigs(address, limits);
   try {
-    for (const config of streamConfigs(address, limits)) await ensureStream(jsm, config);
+    for (const config of configs) await ensureStream(jsm, config);
     return ok(undefined);
   } catch (error) {
+    if (isStorageExceeded(error)) return storageFailure(configs);
     return brokerFailure('ensure the streams', error);
   }
+}
+
+function isStorageExceeded(error: unknown): boolean {
+  return error instanceof JetStreamApiError && error.code === STORAGE_RESOURCES_EXCEEDED;
+}
+
+// Each stream reserves its max_bytes up front against the broker's file store.
+function storageFailure(configs: ReadonlyArray<Partial<StreamConfig>>): Result<never> {
+  const reservedBytes = configs.reduce((total, config) => total + (config.max_bytes ?? 0), 0);
+  return err(failure(
+    'unavailable',
+    `the broker has less free JetStream file storage than the ${reservedBytes} bytes the streams reserve; `
+      + 'free disk space for the broker, or raise its max_file_store, or lower the stream byte limit',
+    { cause: 'insufficient storage resources available', reservedBytes: String(reservedBytes) },
+  ));
 }
 
 // The durable pull consumer that only this worker reads, on its own subject.
@@ -45,6 +64,23 @@ export async function ensureWorkerConsumer(
     ...deliveryConfig(workerId, subject.value, limits),
     max_ack_pending: limits.maxAckPendingPerWorker,
   });
+}
+
+// Deletes a revoked worker's consumer; one already gone, with or without
+// its stream, counts as removed.
+export async function removeWorkerConsumer(jsm: JetStreamManager, address: TransportAddress, workerId: string): Promise<Result<void>> {
+  try {
+    await jsm.consumers.delete(address.streamName('commands'), workerId);
+    return ok(undefined);
+  } catch (error) {
+    if (isAbsent(error)) return ok(undefined);
+    return brokerFailure(`remove consumer ${workerId}`, error);
+  }
+}
+
+function isAbsent(error: unknown): boolean {
+  const absent: number[] = [JetStreamApiCodes.ConsumerNotFound, JetStreamApiCodes.StreamNotFound];
+  return error instanceof JetStreamApiError && absent.includes(error.code);
 }
 
 // One independent consumer per reader of every worker's observations.

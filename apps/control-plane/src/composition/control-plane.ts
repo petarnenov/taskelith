@@ -6,8 +6,13 @@ import { err, failure, ok, type Result } from '@taskelith/kernel';
 import {
   connectTransport,
   ensureAdvisoryConsumer,
+  ensureObservationConsumer,
   ensureStreams,
+  HeartbeatReceiver,
+  INVENTORY_REPORTED,
   JetStreamPublisher,
+  NatsCommandConsumers,
+  observationConsumer,
   OutboxPublisher,
   Quarantine,
   runOutboxPublisher,
@@ -15,24 +20,37 @@ import {
   TransportAddress,
   TRANSPORT_LIMITS,
   type ControlPlaneConnection,
+  type DeliveredMessage,
+  type ReceivedHeartbeat,
   type TransportLimits,
 } from '@taskelith/nats';
 import { EventLoopLagMonitor, JsonLinesLogSink, runPeriodically, SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { LocalEvidenceVolume } from '@taskelith/evidence-volume';
 import { InMemoryMetrics, Logger, sampleControlPlane, type LogSink } from '@taskelith/observability';
-import { PostgresControlPlaneSignals, PostgresOutboxRelay } from '@taskelith/postgres';
+import { CommittingFleetRegistry, PostgresControlPlaneSignals, PostgresOutboxRelay } from '@taskelith/postgres';
 import { Administration, type AdministrationSettings } from '../admin/administration.js';
 import { createApiServer } from '../api/api-server.js';
 import { ControlPlaneApi } from '../api/control-plane-api.js';
+import { DelegationService } from '../application/delegation-service.js';
 import { EvidenceService } from '../application/evidence-service.js';
+import { HEARTBEAT_QUEUE, HeartbeatService } from '../application/heartbeat-service.js';
 import { LaunchAuthority } from '../application/launch-authority.js';
+import { LostContactCheck } from '../application/lost-contact-check.js';
+import { InventoryService } from '../application/inventory-service.js';
+import { OBSERVATION_CONSUMER, ObservationService } from '../application/observation-service.js';
+import { PlacementService } from '../application/placement-service.js';
 import { RunService } from '../application/run-service.js';
 import { TaskService } from '../application/task-service.js';
 import { WorkflowRegistry, type KnownWorkflow } from '../application/workflow-registry.js';
+import { repairCommandConsumers } from './command-consumer-repair.js';
+import { requestStartInventories } from './start-inventory-requests.js';
 import { InstallationPublicationFence } from './installation-publication-fence.js';
 
 // Provisional G2 values in docs/operational-targets.md, which G6 verifies.
 export const GRACE_WINDOW_SWEEP_MILLISECONDS = 60_000;
+export const PLACEMENT_PASS_MILLISECONDS = 5_000;
+export const LOST_CONTACT_TIMEOUT_MILLISECONDS = 30_000;
+export const LOST_CONTACT_CHECK_MILLISECONDS = 10_000;
 // The launch ttl and skew of docs/operational-targets.md (provisional).
 export const LAUNCH_PARAMETERS: LaunchParametersInput = Object.freeze({ ttlMilliseconds: 30_000, skewMilliseconds: 5_000 });
 // How long a stop waits for the loops before it cancels what still blocks.
@@ -50,8 +68,11 @@ export interface ControlPlaneSettings extends Omit<AdministrationSettings, 'logg
   readonly workflows: readonly KnownWorkflow[];
   readonly logSink?: LogSink;
   readonly sweepMilliseconds?: number;
+  readonly placementMilliseconds?: number;
+  readonly lostContactTimeoutMilliseconds?: number;
+  readonly lostContactCheckMilliseconds?: number;
   readonly shutdownMilliseconds?: number;
-  // Shorter or smaller ones only in tests; production takes the targets.
+  // The targets unless configured; tests pass shorter or smaller ones.
   readonly transportLimits?: TransportLimits;
   readonly launchParameters?: LaunchParametersInput;
 }
@@ -99,10 +120,13 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   const limits = settings.transportLimits ?? TRANSPORT_LIMITS;
   const topology = await prepareTopology(broker.value, address.value, limits);
   if (!topology.ok) return topology;
-  const enrollment = await admin.value.enrollmentService();
+  const commandConsumers = new NatsCommandConsumers(broker.value.jsm, address.value, limits);
+  const enrollment = await admin.value.enrollmentService(commandConsumers);
   if (!enrollment.ok) return enrollment;
   cleanup.push(() => enrollment.value.close());
   const database = admin.value.database;
+  const registry = new CommittingFleetRegistry(database);
+  await repairCommandConsumers(registry, commandConsumers, logger);
   const volume = LocalEvidenceVolume.open({ dataRoot: settings.dataRoot, ownerUid: settings.ownerUid });
   if (!volume.ok) return volume;
   const fence = new InstallationPublicationFence(database);
@@ -115,6 +139,7 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     runs: new RunService(database, workflows),
     tasks: new TaskService(database),
     evidence: new EvidenceService(database, volume.value),
+    delegations: new DelegationService(database),
     operator: admin.value.operator,
     enrollment: enrollment.value.service,
     launches,
@@ -133,6 +158,20 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   cleanup.push(async () => lag.stop());
   const publisher = new OutboxPublisher(new PostgresOutboxRelay(database), new JetStreamPublisher(broker.value.js), address.value, { logger, limits, fence });
   const sweep = settings.sweepMilliseconds ?? GRACE_WINDOW_SWEEP_MILLISECONDS;
+  const placement = new PlacementService(database, { now: Date.now, draw: Math.random });
+  const placementPass = settings.placementMilliseconds ?? PLACEMENT_PASS_MILLISECONDS;
+  const newRequestId = () => randomUUID();
+  const services = {
+    observations: new ObservationService(database, { newConfirmationId: () => `o${randomUUID()}`, newRequestId, logger }),
+    inventory: new InventoryService(database, { newRequestId, logger }),
+  };
+  await requestStartInventories(registry, services.inventory, logger);
+  const observations = observationConsumer(broker.value.js, address.value, OBSERVATION_CONSUMER,
+    observationHandler(services, address.value), { limits, logger, metrics });
+  const heartbeats = new HeartbeatReceiver({ connection: broker.value.connection, address: address.value, queue: HEARTBEAT_QUEUE },
+    heartbeatHandler(new HeartbeatService(database), address.value), { logger });
+  const lostContact = new LostContactCheck(database, { timeoutMilliseconds: settings.lostContactTimeoutMilliseconds ?? LOST_CONTACT_TIMEOUT_MILLISECONDS, logger });
+  const lostContactCheck = settings.lostContactCheckMilliseconds ?? LOST_CONTACT_CHECK_MILLISECONDS;
   let outcome: 'stopped' | 'failed' = 'stopped';
   let settle!: (value: 'stopped' | 'failed') => void;
   const stopped = new Promise<'stopped' | 'failed'>((resolve) => { settle = resolve; });
@@ -168,6 +207,10 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
     supervise('outbox', runOutboxPublisher(publisher, controller.signal, limits)),
     supervise('quarantine', runQuarantineKeeper(quarantine, controller.signal, limits)),
     supervise('grace-windows', runPeriodically(async () => logFailure(logger, 'fleet.grace-windows.failed', await enrollment.value.service.expireGraceWindows()), controller.signal, sweep)),
+    supervise('observations', observations.run(controller.signal)),
+    supervise('heartbeats', heartbeats.run(controller.signal)),
+    supervise('lost-contact', runPeriodically(async () => logFailure(logger, 'fleet.lost-contact.failed', await lostContact.markLost()), controller.signal, lostContactCheck)),
+    supervise('placement', runPeriodically(async () => logFailure(logger, 'execution.placement.failed', await placement.placeWaiting()), controller.signal, placementPass)),
     supervise('sampler', runPeriodically(() => sampleControlPlane(new PostgresControlPlaneSignals(database), metrics, logger), controller.signal)),
     supervise('event-loop', runPeriodically(() => lag.sample(metrics), controller.signal)),
   ];
@@ -208,7 +251,27 @@ function once(work: () => Promise<void>): () => Promise<void> {
 
 async function prepareTopology(broker: ControlPlaneConnection, address: TransportAddress, limits: TransportLimits): Promise<Result<void>> {
   const streams = await ensureStreams(broker.jsm, address, limits);
-  return streams.ok ? ensureAdvisoryConsumer(broker.jsm, address, limits) : streams;
+  if (!streams.ok) return streams;
+  const observations = await ensureObservationConsumer(broker.jsm, address, OBSERVATION_CONSUMER, limits);
+  return observations.ok ? ensureAdvisoryConsumer(broker.jsm, address, limits) : observations;
+}
+
+interface ObservationServices {
+  readonly observations: ObservationService;
+  readonly inventory: InventoryService;
+}
+
+// The worker that the subject names authenticates the observation; an
+// inventory report goes to its own service (21c decision 11).
+function observationHandler(services: ObservationServices, address: TransportAddress) {
+  return (message: DeliveredMessage) => {
+    const observation = { subjectWorkerId: address.workerOfObservationSubject(message.subject), type: message.type, body: message.body };
+    return message.type === INVENTORY_REPORTED ? services.inventory.apply(observation) : services.observations.apply(observation);
+  };
+}
+
+function heartbeatHandler(service: HeartbeatService, address: TransportAddress) {
+  return (heartbeat: ReceivedHeartbeat) => service.record({ subjectWorkerId: address.workerOfHeartbeatSubject(heartbeat.subject), body: heartbeat.body });
 }
 
 function listen(server: Server, endpoint: ApiEndpoint): Promise<Result<ApiEndpoint>> {

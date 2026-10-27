@@ -5,12 +5,17 @@ import { err, failure, ok, type Err, type Failure, type Instant, type Result } f
 import type { JournalBinding } from '@taskelith/execution';
 import { syncPath } from '@taskelith/data-root';
 import { rootFailure } from './journal-failure.js';
-import { JOURNAL_SCHEMA } from './journal-schema.js';
+import { JOURNAL_SCHEMA, MIGRATION_FROM_FORMAT_1, MIGRATION_FROM_FORMAT_2, MIGRATION_FROM_FORMAT_3 } from './journal-schema.js';
 import { isSqliteError, SQLITE_BUSY, SQLITE_CORRUPT, SQLITE_NOTADB } from './sqlite-errors.js';
 
 // Marks a database as a Taskelith worker journal: "TKJL".
 export const JOURNAL_APPLICATION_ID = 0x544b4a4c;
-export const JOURNAL_FORMAT = 1;
+export const JOURNAL_FORMAT = 4;
+const OLDEST_FORMAT = 1;
+// The step from each older format to the next one.
+const MIGRATIONS: Readonly<Record<number, string>> = Object.freeze({
+  1: MIGRATION_FROM_FORMAT_1, 2: MIGRATION_FROM_FORMAT_2, 3: MIGRATION_FROM_FORMAT_3,
+});
 
 // Section 3 of the worker journal contract: exclusive locking first, then
 // these, in order; the header is checked before WAL mode changes the file.
@@ -60,8 +65,25 @@ export function openJournalDatabase(path: string): Result<DatabaseSync> {
     const checked = configure(database, path);
     if (!checked.ok) return closeWith(database, checked);
     const intact = quickCheck(database);
-    return intact.ok ? ok(database) : closeWith(database, intact);
+    if (!intact.ok) return closeWith(database, intact);
+    migrate(database);
+    return ok(database);
   });
+}
+
+// One transaction, so a crash leaves either format complete (section 10).
+function migrate(database: DatabaseSync): void {
+  const format = Number(database.prepare('PRAGMA user_version').get()?.user_version);
+  if (format === JOURNAL_FORMAT) return;
+  database.exec('BEGIN IMMEDIATE');
+  try {
+    for (let step = format; step < JOURNAL_FORMAT; step += 1) database.exec(MIGRATIONS[step] ?? '');
+    database.exec(`PRAGMA user_version = ${JOURNAL_FORMAT}`);
+    database.exec('COMMIT');
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  }
 }
 
 function configure(database: DatabaseSync, path: string): Result<void> {
@@ -84,7 +106,7 @@ function verifyHeader(database: DatabaseSync): Result<void> {
   if (format > JOURNAL_FORMAT) {
     return err(rootFailure('newer-format', `journal format ${format} is newer than ${JOURNAL_FORMAT}`, { format: String(format) }));
   }
-  if (format < JOURNAL_FORMAT) return err(rootFailure('corrupt', `journal format ${format} is unknown`));
+  if (format < OLDEST_FORMAT) return err(rootFailure('corrupt', `journal format ${format} is unknown`));
   return ok(undefined);
 }
 

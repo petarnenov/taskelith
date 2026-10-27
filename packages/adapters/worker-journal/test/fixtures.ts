@@ -7,7 +7,10 @@ import { parseGeneration, parseOwnershipGeneration } from '@taskelith/sdlc';
 import {
   parseLaunchParameters,
   parseRecoveryEpoch,
+  type ExecutionExit,
   type ExecutionId,
+  type ExecutionProcess,
+  type ExitStatus,
   type JournalBinding,
   type JournaledCommand,
   type LaunchGrant,
@@ -16,7 +19,7 @@ import {
   type OperationId,
 } from '@taskelith/execution';
 import { id, value } from '@taskelith/testing';
-import type { JournalClock, VolumeProbe, WorkerRootOptions } from '@taskelith/worker-journal';
+import type { JournalClock, VolumeProbe, WorkerEnrollment, WorkerRootOptions } from '@taskelith/worker-journal';
 
 export const T0: Instant = value(parseInstant('2026-10-25T09:00:00.000Z'));
 export const CLOCK: JournalClock = { now: () => T0 };
@@ -26,6 +29,12 @@ export const BINDING: JournalBinding = {
   workerId: id('WorkerId', 'worker-1'),
   journalId: id('JournalId', 'journal-1'),
   recoveryEpoch: value(parseRecoveryEpoch(1)),
+};
+
+export const ENROLLMENT: WorkerEnrollment = {
+  ...BINDING,
+  credentialGeneration: 1,
+  credentials: { controlPlane: 'tkwk_test-secret', broker: '-----BEGIN NATS USER JWT-----\ntest\n' },
 };
 
 // A fresh data root outside any checkout, resolved past symbolic links
@@ -50,11 +59,30 @@ export function intent(number = 1): LaunchIntent {
     ownershipGeneration: value(parseOwnershipGeneration(1)),
     admissionId: id('AdmissionId', `admission-${number}`),
     admissionGeneration: value(parseGeneration(1)),
+    recoveryEpoch: value(parseRecoveryEpoch(1)),
+    requested: { cpuMillicores: 1000, memoryMebibytes: 1024, hardControls: [] },
   };
 }
 
+export const CORRELATION = id('CorrelationId', 'correlation-1');
+
 export function assignment(number = 1): JournaledCommand {
-  return { commandId: id('CommandId', `command-${number}`), digest: digest(`assignment-${number}`), outcome: 'accepted', kind: 'assignment', intent: intent(number) };
+  return {
+    commandId: id('CommandId', `command-${number}`), digest: digest(`assignment-${number}`), correlationId: CORRELATION,
+    outcome: 'accepted', kind: 'assignment', intent: intent(number),
+  };
+}
+
+// A command of a protocol version the worker does not support.
+export function unsupported(number: number): JournaledCommand {
+  return {
+    commandId: id('CommandId', `command-${number}`), digest: digest(`unsupported-${number}`), correlationId: CORRELATION,
+    outcome: 'rejected', kind: 'execution.assignment.offer',
+    rejection: {
+      kind: 'command-rejected', commandType: 'execution.assignment.offer', reason: 'protocol-not-supported',
+      supportedProtocolVersions: { minimum: 1, maximum: 1 },
+    },
+  };
 }
 
 export function digest(content: string): string {
@@ -96,4 +124,10 @@ export function grantFor(request: LaunchRequest, launchAuthText = 'launch-auth-1
     issuedAt: T0,
     parameters: value(parseLaunchParameters({ ttlMilliseconds: 30_000, skewMilliseconds: 5_000 })),
   };
+}
+
+export const PROCESS: ExecutionProcess = { platform: 'darwin', bootId: 'boot-1', pid: 4242, startTime: 1, processGroupId: 4242 };
+
+export function exitWith(status: ExitStatus): ExecutionExit {
+  return { status, startProven: true, termination: 'process-group-empty' };
 }

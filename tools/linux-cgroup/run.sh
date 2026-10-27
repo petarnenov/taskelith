@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
-# Moves every process into a leaf, so that the namespace's root cgroup can
-# hold the delegated containment parent, then runs the privileged tests.
+# Runs the privileged tests with the options it gets, in the cgroup layout
+# of cgroup-layout.sh.
 set -euo pipefail
 
-cgroup=/sys/fs/cgroup
-mkdir -p "$cgroup/init" "$cgroup/executions"
-while read -r pid; do
-  echo "$pid" > "$cgroup/init/cgroup.procs" 2>/dev/null || true
-done < "$cgroup/cgroup.procs"
+# shellcheck source=tools/linux-cgroup/cgroup-layout.sh
+source /usr/local/lib/taskelith/cgroup-layout.sh
 cd /repo
-exec node --experimental-strip-types --test packages/adapters/worker-supervisor/test/linux-cgroup.privileged.ts
+exec node --experimental-strip-types --test "$@" packages/adapters/worker-supervisor/test/linux-cgroup.privileged.ts \
+  packages/adapters/worker-journal/test/linux-execution-access.privileged.ts

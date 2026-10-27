@@ -6,8 +6,12 @@ const SUBJECT_TOKEN = /^[A-Za-z0-9_-]{1,64}$/;
 const OUTBOX_COMMAND_SUBJECT = /^workers\.([^.]+)\.commands$/;
 // The SDLC events of the control plane (coordinator decision Q2 of item 16).
 const OUTBOX_SDLC_SUBJECT = 'sdlc.events';
+const OBSERVATIONS_SUFFIX = '.observations';
+const HEARTBEATS_SUFFIX = '.heartbeats';
 
 export type StreamKind = 'commands' | 'observations' | 'quarantine' | 'advisories' | 'sdlc';
+
+type WorkerSubjectKind = 'commands' | 'observations' | 'heartbeats';
 
 // Where one installation's messages live: the subjects of the execution
 // contract and the streams that hold them.
@@ -31,6 +35,11 @@ export class TransportAddress {
     return this.#workerSubject(workerId, 'observations');
   }
 
+  // Core NATS, in no stream: a lost heartbeat is replaced by the next one.
+  heartbeatSubject(workerId: string): Result<string> {
+    return this.#workerSubject(workerId, 'heartbeats');
+  }
+
   // An outbox row names `workers.<workerId>.commands` or `sdlc.events`
   // without the installation's prefix.
   subjectOfOutboxRow(subject: string): Result<string> {
@@ -42,11 +51,20 @@ export class TransportAddress {
     return this.commandSubject(workerId);
   }
 
+  // The worker whose observation subject this is, if it is one.
+  workerOfObservationSubject(subject: string): string | undefined {
+    return this.#workerOf(subject, OBSERVATIONS_SUFFIX);
+  }
+
+  workerOfHeartbeatSubject(subject: string): string | undefined {
+    return this.#workerOf(subject, HEARTBEATS_SUFFIX);
+  }
+
   sdlcEventsSubject(): string {
     return `${this.#prefix}.sdlc.events`;
   }
 
-  allWorkerSubjects(kind: 'commands' | 'observations'): string {
+  allWorkerSubjects(kind: WorkerSubjectKind): string {
     return `${this.#prefix}.workers.*.${kind}`;
   }
 
@@ -59,10 +77,12 @@ export class TransportAddress {
   }
 
   // What a worker's broker user may do: pull and acknowledge its own commands,
-  // publish its own observations, and receive replies under its own prefix.
+  // publish its own observations and heartbeats, and receive its replies.
   workerPermissions(workerId: string): Result<{ publish: string[]; subscribe: string[] }> {
     const observations = this.observationSubject(workerId);
     if (!observations.ok) return observations;
+    const heartbeats = this.heartbeatSubject(workerId);
+    if (!heartbeats.ok) return heartbeats;
     const stream = this.streamName('commands');
     return ok({
       publish: [
@@ -70,6 +90,7 @@ export class TransportAddress {
         `$JS.API.CONSUMER.MSG.NEXT.${stream}.${workerId}`,
         `$JS.ACK.${stream}.${workerId}.>`,
         observations.value,
+        heartbeats.value,
       ],
       subscribe: [`_INBOX.${this.installationId}.${workerId}.>`],
     });
@@ -85,9 +106,16 @@ export class TransportAddress {
     return `taskelith.${this.installationId}`;
   }
 
-  #workerSubject(workerId: string, kind: 'commands' | 'observations'): Result<string> {
+  #workerSubject(workerId: string, kind: WorkerSubjectKind): Result<string> {
     const checked = checkToken('workerId', workerId);
     return checked.ok ? ok(`${this.#prefix}.workers.${workerId}.${kind}`) : checked;
+  }
+
+  #workerOf(subject: string, suffix: string): string | undefined {
+    const prefix = `${this.#prefix}.workers.`;
+    if (!subject.startsWith(prefix) || !subject.endsWith(suffix)) return undefined;
+    const workerId = subject.slice(prefix.length, -suffix.length);
+    return SUBJECT_TOKEN.test(workerId) ? workerId : undefined;
   }
 }
 

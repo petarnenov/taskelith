@@ -84,12 +84,19 @@ export const TERMINATION_EVIDENCE = Object.freeze([
 
 export type TerminationEvidence = (typeof TERMINATION_EVIDENCE)[number];
 
-export interface ExitRecord {
-  readonly status: ExitStatus;
+// Recovery proves the end without seeing the exit, so the status is unknown.
+const RECOVERY_TERMINATION_EVIDENCE = ['boot-changed', 'namespace-ended'] as const satisfies readonly TerminationEvidence[];
+
+type RecoveryTerminationEvidence = (typeof RECOVERY_TERMINATION_EVIDENCE)[number];
+
+type ExitEnd =
+  | { readonly status: ExitStatus; readonly termination: Exclude<TerminationEvidence, RecoveryTerminationEvidence> }
+  | { readonly status: { readonly kind: 'unknown' }; readonly termination: RecoveryTerminationEvidence };
+
+export type ExitRecord = ExitEnd & {
   readonly startProven: boolean;
   readonly spawnFailure?: string;
-  readonly termination: TerminationEvidence;
-}
+};
 
 export interface CancelRecord {
   readonly reason: string;
@@ -98,7 +105,12 @@ export interface CancelRecord {
 export type EventEntry =
   | { readonly kind: 'descendant'; readonly process: ProcessIdentity }
   | { readonly kind: 'cancellation'; readonly step: 'terminate-sent' | 'kill-sent' | 'containment-killed' | 'not-applied' }
-  | { readonly kind: 'survivors'; readonly processes: readonly ProcessIdentity[] };
+  | { readonly kind: 'survivors'; readonly processes: readonly SurvivingProcess[] };
+
+// An entry an earlier supervisor version wrote names no group.
+export interface SurvivingProcess extends ProcessIdentity {
+  readonly processGroupId?: number;
+}
 
 type Fields = Record<string, unknown>;
 type Reader<T> = (fields: Fields) => T | undefined;
@@ -200,12 +212,22 @@ function readExit(fields: Fields): ExitRecord | undefined {
   const status = isFields(fields.status) ? parseExitStatus(fields.status as { kind: string }) : undefined;
   const termination = TERMINATION_EVIDENCE.find((known) => known === fields.termination);
   if (!status?.ok || typeof fields.startProven !== 'boolean' || !termination || !optionalText(fields.spawnFailure)) return undefined;
+  const end = readExitEnd(status.value, termination);
+  if (!end) return undefined;
   return {
-    status: status.value,
+    ...end,
     startProven: fields.startProven,
     ...(fields.spawnFailure === undefined ? {} : { spawnFailure: fields.spawnFailure as string }),
-    termination,
   };
+}
+
+function readExitEnd(status: ExitStatus, termination: TerminationEvidence): ExitEnd | undefined {
+  if (!isRecoveryEvidence(termination)) return { status, termination };
+  return status.kind === 'unknown' ? { status, termination } : undefined;
+}
+
+function isRecoveryEvidence(termination: TerminationEvidence): termination is RecoveryTerminationEvidence {
+  return (RECOVERY_TERMINATION_EVIDENCE as readonly TerminationEvidence[]).includes(termination);
 }
 
 const CANCELLATION_STEPS = ['terminate-sent', 'kill-sent', 'containment-killed', 'not-applied'] as const;
@@ -216,8 +238,14 @@ function readEvent(fields: Fields): EventEntry | undefined {
   const step = CANCELLATION_STEPS.find((known) => known === fields.step);
   if (fields.kind === 'cancellation' && step) return { kind: 'cancellation', step };
   if (fields.kind !== 'survivors' || !Array.isArray(fields.processes)) return undefined;
-  const processes = fields.processes.map(readProcess);
-  return processes.every((entry) => entry !== undefined) ? { kind: 'survivors', processes: processes as ProcessIdentity[] } : undefined;
+  const processes = fields.processes.map(readSurvivor);
+  return processes.every((entry) => entry !== undefined) ? { kind: 'survivors', processes: processes as SurvivingProcess[] } : undefined;
+}
+
+function readSurvivor(value: unknown): SurvivingProcess | undefined {
+  const process = readProcess(value);
+  if (process === undefined || !isFields(value) || value.processGroupId === undefined) return process;
+  return isPositiveInteger(value.processGroupId) ? Object.freeze({ ...process, processGroupId: value.processGroupId }) : undefined;
 }
 
 function readProcess(value: unknown): ProcessIdentity | undefined {

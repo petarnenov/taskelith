@@ -1,20 +1,37 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { ConformanceCase } from '@taskelith/sdlc';
+import { InMemoryTaskRepository } from '@taskelith/execution';
+import { InMemoryOutbox } from '@taskelith/sdlc';
 import {
   ASSIGNMENT_REPOSITORY_CONFORMANCE,
+  CANDIDATE_WORKER_FIXTURES,
   CAPACITY_LEDGER_CONFORMANCE,
+  DELEGATION_REQUESTS_CONFORMANCE,
   InMemoryAssignmentRepository,
   InMemoryCapacityLedger,
+  InMemoryDelegationRequests,
   InMemoryInstallationGuard,
+  InMemoryOutboxLookup,
+  OUTBOX_LOOKUP_CONFORMANCE,
+  InMemoryPlacementOutcomeRecords,
+  InMemoryPlacementQueue,
+  InMemoryPlacementRotation,
   InMemoryPlacementWorkers,
   InMemoryQuotaSettings,
   InMemoryTaskLineage,
+  InMemoryWorkerReports,
+  PLACEMENT_CANDIDATES_CONFORMANCE,
+  PLACEMENT_OUTCOME_RECORDS_CONFORMANCE,
+  PLACEMENT_QUEUE_CONFORMANCE,
+  PLACEMENT_ROTATION_CONFORMANCE,
   PLACEMENT_WORKERS_CONFORMANCE,
   PLACEMENT_WORKER_FIXTURES,
   QUOTA_FIXTURES,
   QUOTA_SETTINGS_CONFORMANCE,
+  REPORTING_WORKER_FIXTURE,
   TASK_LINEAGE_CONFORMANCE,
+  WORKER_REPORTS_CONFORMANCE,
 } from '@taskelith/scheduling';
 
 for (const conformance of ASSIGNMENT_REPOSITORY_CONFORMANCE) {
@@ -38,6 +55,32 @@ runSuite('in-memory ledger', CAPACITY_LEDGER_CONFORMANCE, () => {
   const assignments = new InMemoryAssignmentRepository();
   const lineage = new InMemoryTaskLineage();
   return { ledger: new InMemoryCapacityLedger(() => assignments.all(), lineage), assignments, lineage };
+});
+
+runSuite('in-memory candidates', PLACEMENT_CANDIDATES_CONFORMANCE, () => {
+  const assignments = new InMemoryAssignmentRepository();
+  return { workers: new InMemoryPlacementWorkers(CANDIDATE_WORKER_FIXTURES, () => assignments.all()), assignments };
+});
+runSuite('in-memory placement queue', PLACEMENT_QUEUE_CONFORMANCE, () => {
+  const tasks = new InMemoryTaskRepository();
+  const lineage = new InMemoryTaskLineage();
+  const assignments = new InMemoryAssignmentRepository();
+  return { queue: new InMemoryPlacementQueue(() => tasks.all(), lineage, () => assignments.all()), tasks, lineage, assignments };
+});
+runSuite('in-memory placement rotation', PLACEMENT_ROTATION_CONFORMANCE, () => new InMemoryPlacementRotation());
+runSuite('in-memory placement outcomes', PLACEMENT_OUTCOME_RECORDS_CONFORMANCE, () => new InMemoryPlacementOutcomeRecords());
+runSuite('in-memory outbox lookup', OUTBOX_LOOKUP_CONFORMANCE, () => {
+  const outbox = new InMemoryOutbox();
+  return { outbox, lookup: new InMemoryOutboxLookup(() => outbox.messages) };
+});
+runSuite('in-memory delegation requests', DELEGATION_REQUESTS_CONFORMANCE, () => new InMemoryDelegationRequests());
+runSuite('in-memory worker reports', WORKER_REPORTS_CONFORMANCE, () => {
+  const workers = new InMemoryPlacementWorkers([REPORTING_WORKER_FIXTURE]);
+  return { reports: new InMemoryWorkerReports(workers), workers, addWorker: async (worker) => workers.replace(worker) };
+});
+
+test('workers without assignments are candidates in identity order', async () => {
+  assert.deepEqual(await new InMemoryPlacementWorkers(CANDIDATE_WORKER_FIXTURES).candidates(), ['worker-a', 'worker-b', 'worker-c', 'worker-d']);
 });
 
 test('an installation without its record admits nothing, as one in quarantine', async () => {

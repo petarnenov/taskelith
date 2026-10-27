@@ -1,12 +1,13 @@
 import type { AssignmentId, ExecutionId } from './identifiers.js';
+import { REPORTED_SEALS_LIMIT, type SealedExecution } from './launch-authorization.js';
 import type {
   AuthorizationOutcome,
   CancellationTarget,
   CommandId,
   JournaledCancellation,
   JournaledExecution,
+  JournaledIntent,
   JournalSnapshot,
-  LaunchIntent,
 } from './journal-records.js';
 
 // What a worker does on start for each record, from the last commit it finds
@@ -26,12 +27,38 @@ export function planJournalRecovery(snapshot: JournalSnapshot): readonly Recover
   return Object.freeze([...cancellations, ...launches].map((action) => Object.freeze(action)));
 }
 
-function recoverIntent(intent: LaunchIntent, snapshot: JournalSnapshot): RecoveryAction[] {
+// The intent's sealed executions that no later grant confirms, oldest
+// first and at most REPORTED_SEALS_LIMIT (journal contract section 5).
+export function unconfirmedSealedExecutions(snapshot: JournalSnapshot, assignmentId: AssignmentId): readonly SealedExecution[] {
+  const executions = snapshot.executions.filter((execution) => execution.assignmentId === assignmentId);
+  const lastGranted = executions.map((execution) => isGranted(execution)).lastIndexOf(true);
+  const unconfirmed = executions.slice(Math.max(lastGranted, 0)).filter((execution) => execution.state === 'not-started')
+    .flatMap((execution) => sealedExecution(execution) ?? []);
+  return Object.freeze(unconfirmed.slice(0, REPORTED_SEALS_LIMIT));
+}
+
+// A grant proves every execution journaled before it had ended at the
+// authority, which grants only while no other one owns the attempt.
+function isGranted(execution: JournaledExecution): boolean {
+  return execution.authorizations.some(({ outcome }) => outcome === 'granted');
+}
+
+// Its last granted operation, else its last one.
+function sealedExecution(execution: JournaledExecution): SealedExecution | undefined {
+  const latest = [...execution.authorizations].reverse();
+  const operation = latest.find(({ outcome }) => outcome === 'granted') ?? latest[0];
+  if (operation === undefined) return undefined;
+  return Object.freeze({ executionId: execution.executionId, operationId: operation.operationId });
+}
+
+// An ended assignment launches nothing more, like a cancelled one.
+function recoverIntent(intent: JournaledIntent, snapshot: JournalSnapshot): RecoveryAction[] {
   const executions = snapshot.executions.filter((execution) => execution.assignmentId === intent.assignmentId);
-  const cancelled = isCancelled(intent, executions, snapshot.cancellations);
-  const actions = executions.flatMap((execution) => recoverExecution(execution, cancelled));
+  const cancelled = (execution?: JournaledExecution): boolean => isCancelled(intent, execution, snapshot.cancellations);
+  const stopped = intent.ended || cancelled(executions.at(-1));
+  const actions = executions.flatMap((execution) => recoverExecution(execution, stopped || cancelled(execution)));
   const rejectedFinally = executions.some((execution) => execution.authorizations.some(({ outcome }) => outcome === 'rejected-final'));
-  if (!cancelled && !rejectedFinally && executions.every((execution) => endsWithoutProcess(execution))) {
+  if (!stopped && !rejectedFinally && executions.every((execution) => endsWithoutProcess(execution))) {
     actions.push({ kind: 'continue-launch', assignmentId: intent.assignmentId });
   }
   return actions;
@@ -42,7 +69,7 @@ function recoverExecution(execution: JournaledExecution, cancelled: boolean): Re
   if (execution.state === 'exited' || execution.state === 'not-started') return [];
   if (execution.recordWritten) return [{ kind: 'recover-execution-record', executionId }];
   if (endsWithoutProcess(execution)) return [{ kind: 'seal-execution', executionId }];
-  if (lastOutcome(execution) === 'rejected-retryable' && !cancelled) return [{ kind: 'retry-authorization', executionId }];
+  if (mayRetry(execution) && !cancelled) return [{ kind: 'retry-authorization', executionId }];
   return [];
 }
 
@@ -54,16 +81,25 @@ function endsWithoutProcess(execution: JournaledExecution): boolean {
   return execution.state === 'authorized' || lastOutcome(execution) === 'pending';
 }
 
+// A retryable rejection, or an operation that expired before any grant:
+// a new `operationId` for the same execution (section 5).
+function mayRetry(execution: JournaledExecution): boolean {
+  const outcome = lastOutcome(execution);
+  return execution.state === undefined && (outcome === 'rejected-retryable' || outcome === 'expired');
+}
+
 function lastOutcome(execution: JournaledExecution): AuthorizationOutcome | undefined {
   return execution.authorizations.at(-1)?.outcome;
 }
 
+// An execution target stops only the execution it names; it stops the intent
+// when that is the intent's last execution, the one a relaunch would follow.
 function isCancelled(
-  intent: LaunchIntent,
-  executions: readonly JournaledExecution[],
+  intent: JournaledIntent,
+  execution: JournaledExecution | undefined,
   cancellations: readonly JournaledCancellation[],
 ): boolean {
   return cancellations.some(({ target }) => target.kind === 'attempt'
     ? target.attemptId === intent.attemptId
-    : executions.some((execution) => execution.executionId === target.executionId));
+    : target.executionId === execution?.executionId);
 }

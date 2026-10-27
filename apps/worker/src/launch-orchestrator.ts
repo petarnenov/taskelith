@@ -1,0 +1,753 @@
+import {
+  isJournalStop,
+  launchRejection,
+  launchRetryDelay,
+  parseLaunchParameters,
+  planJournalRecovery,
+  unconfirmedSealedExecutions,
+  workerLaunchDeadline,
+  type CancellationTarget,
+  type CommandId,
+  type ExecutionExit,
+  type ExecutionId,
+  type JournaledExecution,
+  type JournaledIntent,
+  type JournalSnapshot,
+  type LaunchAuthorityClient,
+  type LaunchGrant,
+  type LaunchParameters,
+  type LaunchRejection,
+  type LaunchRequest,
+  type OperationId,
+  type RecoveryAction,
+  type SealedExecution,
+  type WorkerJournal,
+} from '@taskelith/execution';
+import { ok, parseIdentifier, type Failure, type Result } from '@taskelith/kernel';
+import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
+import type { AdmissionCheck } from './admission-pressure.js';
+import {
+  sealWon,
+  type ContainmentScan,
+  type DeadlineClock,
+  type DeadlineReading,
+  type ExecutionSupervision,
+  type PopulatedContainment,
+  type RecordListing,
+  type SupervisionFactory,
+} from './execution-supervision-port.js';
+import { cancelFiled, ExecutionWatch, type Watched, type WatchTarget } from './execution-watch.js';
+import { commitWrite, HeldWrites, type SpaceRetry } from './space-retry.js';
+
+// The provisional `ttl` and `skew` (operational targets), which bound the
+// retries of an operation before any grant names its own.
+const DEFAULT_PARAMETERS = required(parseLaunchParameters({ ttlMilliseconds: 30_000, skewMilliseconds: 5_000 }));
+
+export const LAUNCH_POLL_MILLISECONDS = 1_000;
+
+export interface LaunchOrchestratorOptions {
+  readonly journal: WorkerJournal;
+  // Without one, nothing is launched or authorized again; the rest runs.
+  readonly authority?: LaunchAuthorityClient;
+  // Resolves once no new authorization waits; at once without one.
+  readonly contact?: LaunchContact;
+  readonly supervision: SupervisionFactory;
+  readonly clock: DeadlineClock;
+  // Under admission pressure no launch authorization is requested.
+  readonly pressure: AdmissionCheck;
+  // Resolves after the delay, or early once the signal aborts.
+  readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>;
+  // A jitter draw in [0, 1).
+  readonly draw: () => number;
+  readonly newId: () => string;
+  readonly pollMilliseconds?: number;
+  // The records on disk, for the leftovers a start reports.
+  readonly records?: RecordListing;
+  // Linux only, for the unrecorded processes a start reports; it runs only
+  // after a successful `records` listing.
+  readonly containments?: ContainmentScan;
+  readonly logger?: Logger;
+  // Told of a launch or pass that threw; the worker keeps running.
+  readonly onFailure?: (error: unknown) => void;
+}
+
+// The worker's contact: no authorization operation begins while offline.
+export interface LaunchContact {
+  readonly offline: boolean;
+  whenOnline(signal: AbortSignal): Promise<void>;
+}
+
+// Launches each accepted, launchable intent under a current grant, forwards
+// journaled cancellations, and reconciles what an earlier process left.
+export class LaunchOrchestrator {
+  readonly #options: LaunchOrchestratorOptions;
+  readonly #logger: Logger;
+  readonly #watch: ExecutionWatch;
+  readonly #space: SpaceRetry;
+  readonly #held: HeldWrites;
+  readonly #launches = new Map<string, Launch>();
+  readonly #running = new Map<string, Promise<void>>();
+  readonly #forwarded = new Set<string>();
+  // The start's unrecorded processes, by write key, until each commits.
+  readonly #unrecorded = new Map<string, PopulatedContainment>();
+  // Executions an earlier process left open, until each is reconciled once.
+  #inherited: Set<ExecutionId> | undefined;
+  #wake: () => void = () => undefined;
+
+  constructor(options: LaunchOrchestratorOptions) {
+    this.#options = options;
+    this.#logger = options.logger ?? SILENT_LOGGER;
+    this.#watch = new ExecutionWatch({ ...options, logger: this.#logger, onFailure: (error) => this.#failed(error) });
+    const { sleep, draw } = options;
+    this.#space = { sleep, draw, logger: this.#logger, onFailure: (error) => this.#failed(error) };
+    this.#held = new HeldWrites(this.#space, () => {
+      const reading = options.clock.read();
+      return reading.ok ? reading.value.milliseconds : undefined;
+    });
+  }
+
+  // Asks for a pass at once, for example after intake journaled a command.
+  readonly notify = (): void => this.#wake();
+
+  // Passes at the poll interval and on every notification, until aborted;
+  // then waits for every launch to stop.
+  async run(signal: AbortSignal): Promise<void> {
+    while (!signal.aborted) {
+      const woken = new Promise<void>((resolve) => {
+        this.#wake = resolve;
+      });
+      await this.pass(signal).catch((error: unknown) => this.#failed(error));
+      await Promise.race([woken, this.#options.sleep(this.#options.pollMilliseconds ?? LAUNCH_POLL_MILLISECONDS, signal)]);
+    }
+    await this.settled();
+  }
+
+  // One pass over the journal: the recovery plan's actions, then the
+  // records whose terminal fact is confirmed.
+  async pass(signal: AbortSignal): Promise<void> {
+    const snapshot = this.#options.journal.snapshot();
+    if (!reported(this.#options, snapshot)) return;
+    const actions = planJournalRecovery(snapshot.value);
+    if (this.#inherited === undefined) await this.#beginReconciliation(snapshot.value, actions);
+    this.#recordUnrecordedProcesses();
+    for (const action of actions) await this.#act(action, snapshot.value, signal);
+    await this.#removeConfirmedRecords();
+  }
+
+  // Settles once no launch or reconciliation is running.
+  async settled(): Promise<void> {
+    while (this.#running.size > 0) await Promise.all(this.#running.values());
+  }
+
+  async #act(action: RecoveryAction, snapshot: JournalSnapshot, signal: AbortSignal): Promise<void> {
+    switch (action.kind) {
+      case 'continue-launch':
+        this.#launch(action.assignmentId, snapshot, signal);
+        return;
+      case 'forward-cancellation':
+        return this.#forward(action.commandId, action.target, snapshot);
+      case 'retry-authorization':
+        return this.#resume(action.executionId, snapshot, signal);
+      case 'seal-execution':
+      case 'recover-execution-record':
+        return this.#reconcile(action.executionId, snapshot, signal);
+    }
+  }
+
+  // The first pass logs the plan and the records no journal row names; the
+  // open executions it finds are the inherited ones.
+  async #beginReconciliation(snapshot: JournalSnapshot, actions: readonly RecoveryAction[]): Promise<void> {
+    this.#inherited = new Set(openExecutions(snapshot));
+    const counts: Record<string, number> = {};
+    for (const { kind } of actions) counts[kind] = (counts[kind] ?? 0) + 1;
+    this.#logger.info('worker.reconciliation.planned', { inherited: this.#inherited.size, ...counts });
+    const listed = await this.#options.records?.();
+    if (listed === undefined || !reported(this.#options, listed)) return;
+    const journaled = new Set<string>(snapshot.executions.map(({ executionId }) => executionId));
+    for (const name of listed.value.filter((entry) => !journaled.has(entry))) {
+      this.#logger.warn('worker.execution.leftover', { record: name });
+    }
+    this.#findUnrecordedProcesses(new Set(listed.value));
+  }
+
+  // A populated containment without a record directory is an unrecorded
+  // process (supervisor identity contract, section 9), never current work.
+  #findUnrecordedProcesses(records: ReadonlySet<string>): void {
+    const scanned = this.#options.containments?.();
+    if (scanned === undefined || !reported(this.#options, scanned)) return;
+    for (const found of scanned.value) {
+      if (!records.has(found.name)) this.#unrecorded.set(`unrecorded-process/${found.containment}`, found);
+    }
+  }
+
+  // Each pass journals the reports that are due; one refused for space is
+  // held back for its backoff, and its identity stays the containment's.
+  #recordUnrecordedProcesses(): void {
+    const { journal } = this.#options;
+    for (const [key, { containment, processes }] of this.#unrecorded) {
+      if (!this.#held.due(key)) continue;
+      if (this.#held.commit(key, () => journal.recordUnrecordedProcess(containment, processes))) this.#unrecorded.delete(key);
+    }
+  }
+
+  // An execution left before its terminal fact, by a stop or an earlier
+  // process, is reconciled once and never launched again.
+  #launch(assignmentId: string, snapshot: JournalSnapshot, signal: AbortSignal, resume?: ExecutionId): boolean {
+    const { authority } = this.#options;
+    const intent = snapshot.intents.find((candidate) => candidate.assignmentId === assignmentId);
+    const unsettled = snapshot.executions.some((execution) => execution.assignmentId === assignmentId
+      && execution.executionId !== resume && execution.state !== 'not-started');
+    if (authority === undefined || intent === undefined || unsettled || this.#launches.has(assignmentId)) return false;
+    // Registered before it runs, so a cancellation always finds it.
+    const launch = new Launch({
+      options: this.#options, authority, watch: this.#watch, space: this.#space, logger: this.#logger, intent, stopping: signal,
+      cancellations: (executionId) => this.#cancellationsOf(assignmentId, executionId),
+      ...(resume === undefined ? {} : { resume }),
+    });
+    this.#launches.set(assignmentId, launch);
+    this.#track(assignmentId, launch.run(), () => this.#launches.delete(assignmentId));
+    return true;
+  }
+
+  // W3 with a retryable rejection or an expired operation: a new operation
+  // for the same execution (journal section 5).
+  #resume(executionId: ExecutionId, snapshot: JournalSnapshot, signal: AbortSignal): void {
+    const execution = snapshot.executions.find((candidate) => candidate.executionId === executionId);
+    if (execution === undefined || this.#inherited?.has(executionId) !== true) return;
+    if (this.#options.authority === undefined) return this.#deferResume(executionId);
+    if (this.#launch(execution.assignmentId, snapshot, signal, executionId)) this.#claimInherited(executionId);
+  }
+
+  // Without a launch command its journal rows wait for a start with one.
+  #deferResume(executionId: ExecutionId): void {
+    if (this.#claimInherited(executionId)) this.#logger.info('worker.reconciliation.deferred', { executionId, reason: 'no launch command' });
+  }
+
+  // A pending W2 or an unused grant is sealed; a journaled record goes to
+  // the recovery table. A live launch reconciles its own executions.
+  #reconcile(executionId: ExecutionId, snapshot: JournalSnapshot, signal: AbortSignal): void {
+    const execution = snapshot.executions.find((candidate) => candidate.executionId === executionId);
+    if (execution === undefined || this.#launches.has(execution.assignmentId) || !this.#claimInherited(executionId)) return;
+    const target = this.#target(execution, snapshot, signal);
+    const watched = execution.recordWritten ? this.#watch.reconcile(target) : this.#sealUnwritten(target);
+    this.#track(`execution/${executionId}`, watched, () => undefined);
+  }
+
+  #claimInherited(executionId: ExecutionId): boolean {
+    return this.#inherited?.delete(executionId) === true;
+  }
+
+  // Before W4 no supervisor can claim; a lost seal is a record nobody
+  // journaled, reported uncertain where a grant allows.
+  async #sealUnwritten(target: WatchTarget): Promise<Watched> {
+    const sealed = await target.supervision.seal();
+    if (!reported(this.#options, sealed)) return 'ended';
+    const { executionId, stopping } = target;
+    const { journal } = this.#options;
+    const commit = (write: () => Result<void>) => commitWrite(this.#space, executionId, write, stopping);
+    if (sealWon(sealed.value).ok) return (await commit(() => journal.recordNotStarted(executionId))) ? 'not-started' : 'ended';
+    this.#logger.warn('worker.execution.uncertain', { executionId, reason: 'claimed before W4' });
+    if (await commit(() => journal.recordExecutionRecordWritten(executionId))) await commit(() => journal.recordUncertain(executionId));
+    return 'ended';
+  }
+
+  #target(execution: JournaledExecution, snapshot: JournalSnapshot, signal: AbortSignal): WatchTarget {
+    const { executionId } = execution;
+    const launchAuthId = [...execution.authorizations].reverse().find(({ outcome }) => outcome === 'granted')?.launchAuthId;
+    return {
+      executionId, supervision: this.#options.supervision(executionId), launchAuthId, stopping: signal, wake: signal,
+      cancelReason: () => undefined,
+      cancellations: () => this.#cancellationsOf(execution.assignmentId, executionId),
+    };
+  }
+
+  // The journaled cancellations that name an execution or its attempt.
+  #cancellationsOf(assignmentId: string, executionId: ExecutionId): Result<readonly CommandId[]> {
+    const snapshot = this.#options.journal.snapshot();
+    if (!snapshot.ok) return snapshot;
+    const intent = snapshot.value.intents.find((candidate) => candidate.assignmentId === assignmentId);
+    return ok(snapshot.value.cancellations.filter(({ target }) => target.kind === 'execution'
+      ? target.executionId === executionId
+      : target.attemptId === intent?.attemptId).map(({ commandId }) => commandId));
+  }
+
+  // Item 4: only after the terminal fact is confirmed; a supervisor still
+  // holding its lock leaves the record for a later pass.
+  async #removeConfirmedRecords(): Promise<void> {
+    const removable = this.#options.journal.removableRecords();
+    if (!reported(this.#options, removable)) return;
+    for (const executionId of removable.value) {
+      const key = `record-removed/${executionId}`;
+      if (!this.#held.due(key)) continue;
+      const removed = await this.#options.supervision(executionId).remove();
+      if (!removed.ok) {
+        this.#logger.debug('worker.execution.record-kept', { executionId, reason: removed.error.message });
+        continue;
+      }
+      if (this.#held.commit(key, () => this.#options.journal.recordRecordRemoved(executionId))) {
+        this.#logger.debug('worker.execution.record-removed', { executionId });
+      }
+    }
+  }
+
+  #track(key: string, work: Promise<unknown>, cleanup: () => void): void {
+    const done = work.catch((error: unknown) => this.#failed(error)).then(() => undefined).finally(() => {
+      cleanup();
+      this.#running.delete(key);
+      this.#wake();
+    });
+    this.#running.set(key, done);
+  }
+
+  // An attempt target stops its intents' launches; an execution target
+  // only that execution, and evidence waits until nothing runs it.
+  async #forward(commandId: CommandId, target: CancellationTarget, snapshot: JournalSnapshot): Promise<void> {
+    const reason = `cancellation ${commandId}`;
+    const launches = this.#targetedLaunches(target, snapshot);
+    for (const launch of launches) launch.cancel(reason);
+    const executions = targetedExecutions(target, snapshot);
+    for (const execution of executions) {
+      const key = `${commandId}/${execution.executionId}`;
+      if (!needsCancelFile(execution, this.#runs(execution)) || this.#forwarded.has(key)) continue;
+      if (cancelFiled(await this.#options.supervision(execution.executionId).cancel(reason))) this.#forwarded.add(key);
+    }
+    const evidence = `cancellation-evidence/${commandId}`;
+    if (launches.length === 0 && executions.every(isSettled) && this.#held.due(evidence)) {
+      this.#held.commit(evidence, () => this.#options.journal.recordCancellationEvidence(commandId));
+    }
+  }
+
+  // An execution target stops a launch only while it runs that execution.
+  #targetedLaunches(target: CancellationTarget, snapshot: JournalSnapshot): Launch[] {
+    const launches = [...targetedAssignments(target, snapshot)].flatMap((assignmentId) => this.#launches.get(assignmentId) ?? []);
+    if (target.kind === 'attempt') return launches;
+    return launches.filter((launch) => launch.runs(target.executionId) && !this.#endedNow(target.executionId));
+  }
+
+  // Read with no await before the cancel: an end may have committed while
+  // its launch has not yet returned from it.
+  #endedNow(executionId: ExecutionId): boolean {
+    const current = this.#options.journal.snapshot();
+    if (!reported(this.#options, current)) return false;
+    const execution = current.value.executions.find((candidate) => candidate.executionId === executionId);
+    return execution !== undefined && isTerminal(execution);
+  }
+
+  #runs(execution: JournaledExecution): boolean {
+    return this.#launches.get(execution.assignmentId)?.runs(execution.executionId) === true;
+  }
+
+  #failed(error: unknown): void {
+    this.#options.onFailure?.(error);
+  }
+}
+
+// The intents a cancellation names: the attempt's, or the execution's.
+function targetedAssignments(target: CancellationTarget, snapshot: JournalSnapshot): ReadonlySet<string> {
+  const named = target.kind === 'attempt'
+    ? snapshot.intents.filter(({ attemptId }) => attemptId === target.attemptId)
+    : snapshot.executions.filter(({ executionId }) => executionId === target.executionId);
+  return new Set(named.map(({ assignmentId }) => assignmentId));
+}
+
+// The executions a cancellation names: the attempt's, or only that one.
+function targetedExecutions(target: CancellationTarget, snapshot: JournalSnapshot): JournaledExecution[] {
+  if (target.kind === 'execution') return snapshot.executions.filter(({ executionId }) => executionId === target.executionId);
+  const assignments = targetedAssignments(target, snapshot);
+  return snapshot.executions.filter(({ assignmentId }) => assignments.has(assignmentId));
+}
+
+// The executions not yet terminal: at a start, those an earlier process left.
+export function openExecutions(snapshot: JournalSnapshot): ExecutionId[] {
+  return snapshot.executions.filter((execution) => !isTerminal(execution)).map(({ executionId }) => executionId);
+}
+
+function isTerminal(execution: JournaledExecution): boolean {
+  return execution.state === 'exited' || execution.state === 'not-started';
+}
+
+// With no live launch, nothing more happens to it: terminal, or never
+// granted and closed. A pending W2 is not settled until it is sealed.
+function isSettled(execution: JournaledExecution): boolean {
+  const outcome = execution.authorizations.at(-1)?.outcome;
+  const closed = outcome === 'rejected-final' || outcome === 'rejected-retryable' || outcome === 'expired';
+  return isTerminal(execution) || (execution.state === undefined && closed);
+}
+
+// A commit whose failure changes no decision is still reported.
+function reported<T>(options: LaunchOrchestratorOptions, result: Result<T>): result is Extract<Result<T>, { ok: true }> {
+  if (!result.ok) options.onFailure?.(result.error);
+  return result.ok;
+}
+
+// A live launch cancels the execution it runs; any other open one with a
+// written record gets the `cancel` file.
+function needsCancelFile(execution: JournaledExecution, runByLaunch: boolean): boolean {
+  return !runByLaunch && !isTerminal(execution) && execution.recordWritten;
+}
+
+// How one authorization attempt of an execution ended.
+type Authorized =
+  | { readonly kind: 'grant'; readonly grant: LaunchGrant; readonly reading: DeadlineReading }
+  | { readonly kind: 'abandon' }
+  | { readonly kind: 'retry-operation' }
+  | { readonly kind: 'end' };
+
+// How one execution ended: launch another, or stop launching the intent.
+type Executed = 'relaunch' | 'end';
+
+// An operation whose W2 committed, with the request it journaled.
+interface Begun {
+  readonly kind: 'begun';
+  readonly operationId: OperationId;
+  readonly request: LaunchRequest;
+  readonly reading: DeadlineReading;
+}
+
+// The execution a launch authorizes: a resumed one was authorized before.
+interface LaunchedExecution {
+  readonly executionId: ExecutionId;
+  readonly authorizedBefore: boolean;
+  readonly reportsNotStartedFor?: readonly SealedExecution[];
+}
+
+// What one intent's launches work with; `resume` continues an execution
+// whose last operation closed without a grant.
+interface LaunchContext {
+  readonly options: LaunchOrchestratorOptions;
+  readonly authority: LaunchAuthorityClient;
+  readonly watch: ExecutionWatch;
+  readonly space: SpaceRetry;
+  readonly logger: Logger;
+  readonly intent: JournaledIntent;
+  readonly stopping: AbortSignal;
+  readonly cancellations: (executionId: ExecutionId) => Result<readonly CommandId[]>;
+  readonly resume?: ExecutionId;
+}
+
+// One intent's launches, until one runs to its end, a rejection is final,
+// the intent is cancelled, or the worker stops.
+class Launch {
+  readonly #context: LaunchContext;
+  readonly #options: LaunchOrchestratorOptions;
+  readonly #intent: JournaledIntent;
+  readonly #stopping: AbortSignal;
+  readonly #cancelling = new AbortController();
+  readonly #signal: AbortSignal;
+  #cancelReason: string | undefined;
+  #executing: ExecutionId | undefined;
+  #retries = 0;
+
+  constructor(context: LaunchContext) {
+    this.#context = context;
+    this.#options = context.options;
+    this.#intent = context.intent;
+    this.#stopping = context.stopping;
+    this.#signal = AbortSignal.any([context.stopping, this.#cancelling.signal]);
+  }
+
+  cancel(reason: string): void {
+    this.#cancelReason ??= reason;
+    this.#cancelling.abort();
+  }
+
+  // Whether this launch runs the execution now, not after it ended.
+  runs(executionId: ExecutionId): boolean {
+    return this.#executing === executionId;
+  }
+
+  get #cancelled(): boolean {
+    return this.#cancelReason !== undefined;
+  }
+
+  async run(): Promise<void> {
+    let resume = this.#context.resume;
+    while (!this.#signal.aborted) {
+      const next = this.#nextExecution(resume);
+      if (!next.ok) {
+        if (isJournalStop(next.error)) return;
+        await this.#deferBeforeW2(next.error);
+        continue;
+      }
+      const execution = next.value;
+      this.#executing = execution.executionId;
+      const executed = await this.#execute(execution);
+      this.#executing = undefined;
+      if (executed === 'end') return;
+      resume = undefined;
+      await this.#backOff();
+    }
+  }
+
+  // A new or resumed execution reports the intent's unconfirmed sealed ones,
+  // whose `not-started` may not have reached the authority (journal, 5).
+  #nextExecution(resume: ExecutionId | undefined): Result<LaunchedExecution> {
+    const executionId = resume === undefined ? this.#newId('ExecutionId') : ok(resume);
+    if (!executionId.ok) return executionId;
+    const snapshot = this.#options.journal.snapshot();
+    if (!reported(this.#options, snapshot)) return snapshot;
+    const sealed = unconfirmedSealedExecutions(snapshot.value, this.#intent.assignmentId);
+    const report = sealed.length === 0 ? {} : { reportsNotStartedFor: sealed };
+    return ok({ executionId: executionId.value, authorizedBefore: resume !== undefined, ...report });
+  }
+
+  // An execution authorized again reports that it has not started, so a
+  // grant the authority recorded for an earlier operation is renewed.
+  async #execute(execution: LaunchedExecution): Promise<Executed> {
+    const { executionId } = execution;
+    for (let reportsNotStarted = execution.authorizedBefore; ; reportsNotStarted = true) {
+      const authorized = await this.#authorize(execution, reportsNotStarted);
+      switch (authorized.kind) {
+        case 'end':
+          return 'end';
+        case 'abandon':
+          return this.#abandon(executionId);
+        case 'retry-operation':
+          await this.#backOff();
+          if (this.#signal.aborted) return this.#cancelled ? this.#abandon(executionId) : 'end';
+          continue;
+        case 'grant':
+          return this.#supervise(executionId, authorized.grant, authorized.reading);
+      }
+    }
+  }
+
+  // W2, then one operation's requests until a decision (design D2).
+  async #authorize(execution: LaunchedExecution, reportsNotStarted: boolean): Promise<Authorized> {
+    const begun = await this.#beginOperation(execution, reportsNotStarted);
+    if (begun.kind !== 'begun') return begun;
+    const { executionId } = execution;
+    const { operationId, request, reading } = begun;
+    const { workerId: _worker, ...sent } = request;
+    for (;;) {
+      if (this.#stopping.aborted) return { kind: 'end' };
+      if (this.#cancelled) return { kind: 'abandon' };
+      const answer = await this.#context.authority.authorize(sent);
+      if (this.#stopping.aborted) return { kind: 'end' };
+      if (!answer.ok) {
+        this.#authorizationFailed(executionId, operationId, answer.error);
+        if (!this.#beforeDeadline(reading, DEFAULT_PARAMETERS)) return this.#expired(executionId, operationId);
+        await this.#backOff();
+        await this.#awaitAdmission();
+        if (!this.#beforeDeadline(reading, DEFAULT_PARAMETERS)) return this.#expired(executionId, operationId);
+        continue;
+      }
+      const outcome = answer.value;
+      switch (outcome.kind) {
+        case 'granted':
+          return this.#granted(outcome.grant, reading);
+        case 'expired':
+          return this.#expired(executionId, operationId);
+        case 'revoked':
+          return this.#rejected(executionId, operationId, launchRejection(outcome.reason, `the grant was revoked: ${outcome.reason}`));
+        case 'rejected':
+          return this.#rejected(executionId, operationId, outcome.rejection);
+      }
+    }
+  }
+
+  // W2 follows the last contact and pressure checks with no await between;
+  // a failure before it is tried again after a back-off.
+  async #beginOperation(execution: LaunchedExecution, reportsNotStarted: boolean): Promise<Begun | Authorized> {
+    const { contact } = this.#options;
+    for (;;) {
+      while (!this.#signal.aborted) {
+        if (contact?.offline === true) await contact.whenOnline(this.#signal);
+        else if (this.#pressured()) await this.#pressurePause();
+        else break;
+      }
+      if (this.#stopping.aborted) return { kind: 'end' };
+      // A cancel before W2 begins no operation, as one during a back-off.
+      if (this.#cancelled) return { kind: reportsNotStarted ? 'abandon' : 'end' };
+      const operationId = this.#newId('OperationId');
+      if (!operationId.ok) {
+        await this.#deferBeforeW2(operationId.error);
+        continue;
+      }
+      const reading = this.#options.clock.read();
+      if (!reading.ok) {
+        await this.#deferBeforeW2(reading.error);
+        continue;
+      }
+      const request = this.#request(execution, operationId.value, reportsNotStarted);
+      const failed = await this.#commitW2(request);
+      if (failed === undefined) return { kind: 'begun', operationId: operationId.value, request, reading: reading.value };
+      if (this.#stopping.aborted || isJournalStop(failed)) return { kind: 'end' };
+      await this.#deferBeforeW2(failed);
+    }
+  }
+
+  // No request leaves before W2 commits (journal contract section 5); answers
+  // the last failure when W2 did not commit.
+  async #commitW2(request: LaunchRequest): Promise<Failure | undefined> {
+    let failed: Failure | undefined;
+    const write = () => {
+      const written = this.#options.journal.beginAuthorization(request);
+      failed = written.ok ? undefined : written.error;
+      return written;
+    };
+    return (await this.#commitWrite(request.executionId, write)) ? undefined : failed;
+  }
+
+  // Nothing was committed or sent; the launch waits its back-off on a
+  // timer, so the worker's other work runs (journal contract section 5).
+  async #deferBeforeW2({ code, message, details }: Failure): Promise<void> {
+    const delayMilliseconds = this.#nextRetryDelay();
+    const { assignmentId } = this.#intent;
+    const fields = { ...details, assignmentId, code, message, retries: this.#retries, delayMilliseconds };
+    this.#context.logger.warn('worker.launch.deferred', fields);
+    await this.#options.sleep(delayMilliseconds, this.#signal);
+  }
+
+  // The details name the cause, such as the code of a lost connection;
+  // they never replace the known fields.
+  #authorizationFailed(executionId: ExecutionId, operationId: OperationId, { code, message, details }: Failure): void {
+    this.#context.logger.warn('worker.launch.authorization-failed', { ...details, executionId, operationId, code, message });
+  }
+
+  // Capacity reservation section 8: the launch waits, keeping its
+  // reservation, until the pressure clears or the launch stops.
+  async #awaitAdmission(): Promise<void> {
+    while (!this.#signal.aborted && this.#pressured()) await this.#pressurePause();
+  }
+
+  #pressurePause(): Promise<void> {
+    return this.#options.sleep(this.#options.pollMilliseconds ?? LAUNCH_POLL_MILLISECONDS, this.#signal);
+  }
+
+  // Pressure that cannot be refreshed counts as pressure.
+  #pressured(): boolean {
+    const causes = this.#options.pressure.refresh();
+    return !reported(this.#options, causes) || causes.value.length > 0;
+  }
+
+  // W3; a grant past the deadline, or of a cancelled launch, is never used.
+  async #granted(grant: LaunchGrant, reading: DeadlineReading): Promise<Authorized> {
+    if (!(await this.#commitWrite(grant.executionId, () => this.#options.journal.recordGrant(grant)))) return { kind: 'end' };
+    if (this.#cancelled || !this.#beforeDeadline(reading, grant.parameters)) return { kind: 'abandon' };
+    return { kind: 'grant', grant, reading };
+  }
+
+  // W3 for a rejection; only a retryable one is tried again (section 6).
+  async #rejected(executionId: ExecutionId, operationId: OperationId, rejection: LaunchRejection): Promise<Authorized> {
+    const write = () => this.#options.journal.recordLaunchRejection(operationId, rejection);
+    if (!(await this.#commitWrite(executionId, write))) return { kind: 'end' };
+    if (!rejection.retryable) return { kind: 'end' };
+    return this.#cancelled ? { kind: 'abandon' } : { kind: 'retry-operation' };
+  }
+
+  // W3 `expired`: no grant of the operation can be used, and nothing was
+  // written, so the same execution is authorized again (design D2).
+  async #expired(executionId: ExecutionId, operationId: OperationId): Promise<Authorized> {
+    const write = () => this.#options.journal.recordAuthorizationExpired(operationId);
+    if (!(await this.#commitWrite(executionId, write))) return { kind: 'end' };
+    return this.#cancelled ? { kind: 'abandon' } : { kind: 'retry-operation' };
+  }
+
+  // The deadline holds only in the boot of the reading, on a readable clock.
+  #beforeDeadline(reading: DeadlineReading, parameters: LaunchParameters): boolean {
+    const now = this.#options.clock.read();
+    return now.ok && now.value.bootId === reading.bootId
+      && now.value.milliseconds < workerLaunchDeadline(reading.milliseconds, parameters);
+  }
+
+  // Before W4 nothing can spawn: seal, report `not-started` once the seal is
+  // read back (W6), and launch a new execution unless cancelled.
+  async #abandon(executionId: ExecutionId): Promise<Executed> {
+    const sealed = await this.#options.supervision(executionId).seal();
+    if (!reported(this.#options, sealed)) return 'end';
+    if (!sealWon(sealed.value).ok) return this.#claimedBeforeW4(executionId);
+    return this.#notStarted(executionId);
+  }
+
+  // No supervisor of this launch can claim before W4, so a claim is a record
+  // nobody journaled: journal it, where a grant allows, and report uncertain.
+  async #claimedBeforeW4(executionId: ExecutionId): Promise<Executed> {
+    if (!(await this.#commitWrite(executionId, () => this.#options.journal.recordExecutionRecordWritten(executionId)))) return 'end';
+    return this.#recordUncertain(executionId);
+  }
+
+  async #notStarted(executionId: ExecutionId): Promise<Executed> {
+    if (!(await this.#commitWrite(executionId, () => this.#options.journal.recordNotStarted(executionId)))) return 'end';
+    return this.#afterNotStarted();
+  }
+
+  // A write refused for space is retried until a stop, which leaves the
+  // execution to the next start; a cancellation does not end it.
+  #commitWrite(executionId: ExecutionId, write: () => Result<void>): Promise<boolean> {
+    return commitWrite(this.#context.space, executionId, write, this.#stopping);
+  }
+
+  #afterNotStarted(): Executed {
+    return this.#cancelled || this.#stopping.aborted ? 'end' : 'relaunch';
+  }
+
+  // CP2 to CP4, then the facts the supervisor writes (design D3); a failed
+  // start goes to the recovery table.
+  async #supervise(executionId: ExecutionId, grant: LaunchGrant, reading: DeadlineReading): Promise<Executed> {
+    const supervision = this.#options.supervision(executionId);
+    const deadline = { bootId: reading.bootId, milliseconds: workerLaunchDeadline(reading.milliseconds, grant.parameters) };
+    const { attemptId, ownershipGeneration } = this.#intent;
+    const prepared = await supervision.prepare({ attemptId, ownershipGeneration, launchAuthId: grant.launchAuthId, deadline });
+    if (!prepared.ok) return this.#abandon(executionId);
+    // W4 commits before the supervisor starts (journal contract section 5).
+    if (!(await this.#commitWrite(executionId, () => this.#options.journal.recordExecutionRecordWritten(executionId)))) return 'end';
+    if (this.#cancelled) return this.#sealWritten(executionId, supervision);
+    const target = this.#target(executionId, supervision, grant, deadline);
+    const started = await supervision.start();
+    const watched = started.ok ? await this.#context.watch.observe(target) : await this.#context.watch.reconcile(target);
+    return watched === 'not-started' ? this.#afterNotStarted() : 'end';
+  }
+
+  // A cancel wakes the watch to forward it at once; a stop leaves the
+  // execution to the next start.
+  #target(executionId: ExecutionId, supervision: ExecutionSupervision, grant: LaunchGrant, spawnDeadline: DeadlineReading): WatchTarget {
+    return {
+      executionId, supervision, launchAuthId: grant.launchAuthId, spawnDeadline, stopping: this.#stopping, wake: this.#signal,
+      cancelReason: () => this.#cancelReason,
+      cancellations: () => this.#context.cancellations(executionId),
+    };
+  }
+
+  // A record without a supervisor: a won seal proves nothing can spawn.
+  async #sealWritten(executionId: ExecutionId, supervision: ExecutionSupervision): Promise<Executed> {
+    const sealed = await supervision.seal();
+    if (!reported(this.#options, sealed)) return 'end';
+    if (!sealWon(sealed.value).ok) return this.#recordUncertain(executionId);
+    return this.#notStarted(executionId);
+  }
+
+  async #recordUncertain(executionId: ExecutionId): Promise<Executed> {
+    await this.#commitWrite(executionId, () => this.#options.journal.recordUncertain(executionId));
+    return 'end';
+  }
+
+  #request(execution: LaunchedExecution, operationId: OperationId, reportsNotStarted: boolean): LaunchRequest {
+    const { workerId } = this.#options.journal.binding;
+    const { recoveryEpoch, assignmentId, attemptId, ownershipGeneration, admissionId, admissionGeneration } = this.#intent;
+    const { executionId, reportsNotStartedFor } = execution;
+    return {
+      operationId, workerId, recoveryEpoch, assignmentId, attemptId, ownershipGeneration, executionId, admissionId, admissionGeneration,
+      reportsNotStarted, ...(reportsNotStartedFor === undefined ? {} : { reportsNotStartedFor }),
+    };
+  }
+
+  async #backOff(): Promise<void> {
+    await this.#options.sleep(this.#nextRetryDelay(), this.#signal);
+  }
+
+  // The retry counter grows across operations and executions of the launch.
+  #nextRetryDelay(): number {
+    this.#retries += 1;
+    return launchRetryDelay(this.#retries, this.#options.draw());
+  }
+
+  #newId<Kind extends 'ExecutionId' | 'OperationId'>(kind: Kind) {
+    return parseIdentifier(kind, this.#options.newId());
+  }
+}
+
+function required<T>(result: Result<T>): T {
+  if (!result.ok) throw new TypeError(result.error.message);
+  return result.value;
+}

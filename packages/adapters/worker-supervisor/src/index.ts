@@ -14,6 +14,7 @@ export { SqliteExecutionLock } from './execution-lock.js';
 export { FileRecordStore } from './file-record-store.js';
 export {
   LinuxContainment,
+  LinuxContainmentScan,
   LinuxDeadlineClock,
   linuxPlatform,
   LinuxProcessInspector,
@@ -21,6 +22,7 @@ export {
   parseProcStat,
   parseUptime,
   type LinuxPlatformOptions,
+  type PopulatedCgroup,
   type ProcStat,
 } from './linux.js';
 export { checkLinuxContainment, type LinuxSelfCheckOptions } from './linux-self-check.js';
@@ -66,6 +68,7 @@ export {
   type RecordProblem,
   type SealReason,
   type SupervisorRecord,
+  type SurvivingProcess,
   type TerminationEvidence,
 } from './record.js';
 export {
@@ -97,7 +100,7 @@ export {
   type SupervisorOutcome,
   type SupervisorTiming,
 } from './supervisor-session.js';
-export { proveDarwinTermination, type DarwinTerminationInput, type TerminationProof } from './termination.js';
+export { proveDarwinTermination, type DarwinTerminationInput, type Survivor, type TerminationProof } from './termination.js';
 export {
   gatherEvidence,
   prepareRecord,

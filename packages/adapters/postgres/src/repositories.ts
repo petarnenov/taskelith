@@ -1,6 +1,24 @@
 import { err, failure, ok, type EventId, type Result } from '@taskelith/kernel';
-import { unknownExecutionCount, type AssignmentId, type Inbox, type InboxOutcome, type Task, type TaskRepository } from '@taskelith/execution';
-import type { Assignment, AssignmentRepository } from '@taskelith/scheduling';
+import {
+  activeAttempt,
+  placementNeed,
+  unknownExecutionCount,
+  type AssignmentId,
+  type AttemptId,
+  type Inbox,
+  type InboxOutcome,
+  type Task,
+  type TaskRepository,
+  type WorkerId,
+} from '@taskelith/execution';
+import type {
+  Assignment,
+  AssignmentRepository,
+  DelegationId,
+  DelegationRecord,
+  DelegationRequests,
+  OutboxLookup,
+} from '@taskelith/scheduling';
 import type {
   AdmissionId,
   AdmissionRepository,
@@ -126,7 +144,7 @@ export class PostgresTaskRepository implements TaskRepository {
       entity: 'task',
       idOf: (task) => task.id,
       generationOf: (task) => task.generation,
-      columnsOf: (task) => ({ admission_id: task.admissionId, unknown_executions: unknownExecutionCount(task) }),
+      columnsOf: (task) => ({ admission_id: task.admissionId, unknown_executions: unknownExecutionCount(task), ...placementColumns(task) }),
       decode: decodeTask,
     });
   }
@@ -156,6 +174,25 @@ export class PostgresTaskRepository implements TaskRepository {
   }
 }
 
+// The placement queue reads these; a task waits since its last change.
+function placementColumns(task: Task): Readonly<Record<string, unknown>> {
+  const awaits = placementNeed(task) !== undefined;
+  return {
+    awaits_placement: awaits,
+    active_attempt_id: activeAttempt(task)?.id ?? null,
+    placement_waiting_since: awaits ? task.changedAt : null,
+  };
+}
+
+// A record stored before its offer's command was kept lacks it; every read
+// carries the command the migration wrote to the column.
+function decodeAssignment(json: unknown, columns: Readonly<Record<string, unknown>>): Assignment {
+  const assignment = decodeRecord<Assignment>(json);
+  const column = columns['offer_command_id'];
+  if (typeof column !== 'string' || assignment.offerCommandId !== undefined) return assignment;
+  return Object.freeze({ ...assignment, offerCommandId: column as EventId });
+}
+
 // One held reservation per attempt is checked before writing, so a transaction
 // gets a `conflict` result; the partial unique index guards concurrent writers.
 export class PostgresAssignmentRepository implements AssignmentRepository {
@@ -169,8 +206,10 @@ export class PostgresAssignmentRepository implements AssignmentRepository {
       entity: 'assignment',
       idOf: (assignment) => assignment.id,
       generationOf: (assignment) => assignment.generation,
-      columnsOf: ({ attemptId, workerId, state, changedAt, reservation }) => ({
+      columnsOf: ({ attemptId, workerId, state, changedAt, reservation, acceptance }) => ({
         attempt_id: attemptId,
+        accepted_journal_id: acceptance?.journalId ?? null,
+        accepted_sequence: acceptance?.sequence ?? null,
         worker_id: workerId,
         state,
         changed_at: changedAt,
@@ -183,7 +222,8 @@ export class PostgresAssignmentRepository implements AssignmentRepository {
         memory_mebibytes: reservation.requested.memoryMebibytes,
         provider_credentials: [...reservation.providerCredentials],
       }),
-      decode: decodeRecord,
+      readColumns: ['offer_command_id'],
+      decode: decodeAssignment,
     });
   }
 
@@ -191,13 +231,50 @@ export class PostgresAssignmentRepository implements AssignmentRepository {
     return this.#store.get(id);
   }
 
+  // The offer's command is written once: a record stored before it was kept
+  // has none, and the migration found its command in the outbox.
   add(assignment: Assignment): Promise<Result<void>> {
-    return this.#store.add(assignment, { uniqueConflict: () => this.#heldReservationConflict(assignment) });
+    return this.#store.add(assignment, {
+      insertOnly: { offer_command_id: assignment.offerCommandId ?? null },
+      uniqueConflict: () => this.#heldReservationConflict(assignment),
+    });
   }
 
   replace(assignment: Assignment, expectedGeneration: Generation): Promise<Result<void>> {
-    const held = assignment.reservation.state === 'held' ? () => this.#heldReservationConflict(assignment) : undefined;
-    return this.#store.replace(assignment, expectedGeneration, held);
+    return this.#store.replace(assignment, expectedGeneration, async () => {
+      const offer = await this.#offerIdentityConflict(assignment);
+      if (!offer.ok || assignment.reservation.state !== 'held') return offer;
+      return this.#heldReservationConflict(assignment);
+    });
+  }
+
+  listByAttempt(attemptId: AttemptId): Promise<readonly Assignment[]> {
+    return this.#store.list('attempt_id = $1', [attemptId]);
+  }
+
+  listUnfinishedByWorker(workerId: WorkerId): Promise<readonly Assignment[]> {
+    return this.#store.list("worker_id = $1 AND state <> 'ended'", [workerId]);
+  }
+
+  async byOfferCommand(commandId: EventId): Promise<Result<Assignment>> {
+    const [offered] = await this.#store.list('offer_command_id = $1', [commandId]);
+    if (offered === undefined) return err(failure('not-found', `no assignment was offered by ${commandId}`, { command: commandId }));
+    return ok(offered);
+  }
+
+  // A replace keeps the offer's command; omitting it keeps the column's
+  // command of a record stored before the command was kept.
+  async #offerIdentityConflict(assignment: Assignment): Promise<Result<void>> {
+    const { rows: [stored] } = await this.#session.query<{ offer_command_id: string | null; record: unknown }>(
+      'SELECT offer_command_id, record FROM assignments WHERE id = $1',
+      [assignment.id],
+    );
+    const recorded = stored === undefined ? undefined : decodeRecord<Assignment>(stored.record).offerCommandId;
+    const kept = assignment.offerCommandId === undefined
+      ? recorded === undefined
+      : assignment.offerCommandId === stored?.offer_command_id;
+    if (kept) return ok(undefined);
+    return err(failure('conflict', `assignment ${assignment.id} keeps the command that offered it`, { assignment: assignment.id }));
   }
 
   async #heldReservationConflict(assignment: Assignment): Promise<Result<void>> {
@@ -212,9 +289,36 @@ export class PostgresAssignmentRepository implements AssignmentRepository {
   }
 }
 
+export class PostgresDelegationRequests implements DelegationRequests {
+  readonly #store: AggregateStore<DelegationRecord>;
+
+  constructor(session: Session) {
+    this.#store = new AggregateStore(session, {
+      table: 'delegation_requests',
+      entity: 'delegation',
+      idOf: (record) => record.delegationId,
+      generationOf: (record) => record.generation,
+      columnsOf: (record) => ({ attempt_id: record.values.attemptId, state: record.outcome.state }),
+      decode: decodeRecord,
+    });
+  }
+
+  get(delegationId: DelegationId): Promise<Result<DelegationRecord>> {
+    return this.#store.get(delegationId);
+  }
+
+  add(record: DelegationRecord): Promise<Result<void>> {
+    return this.#store.add(record);
+  }
+
+  replace(record: DelegationRecord, expectedGeneration: Generation): Promise<Result<void>> {
+    return this.#store.replace(record, expectedGeneration);
+  }
+}
+
 // One table serves the outbox ports of every module; `appended` tells the
 // transaction that its commit carries outbox messages.
-export class PostgresOutbox implements Outbox {
+export class PostgresOutbox implements Outbox, OutboxLookup {
   readonly #session: Session;
   #appended = false;
 
@@ -236,6 +340,11 @@ export class PostgresOutbox implements Outbox {
     if (inserted.rowCount === 0) return err(failure('conflict', `outbox message ${eventId} already exists`, { event: eventId }));
     this.#appended = true;
     return ok(undefined);
+  }
+
+  async byEventId(eventId: EventId): Promise<OutboxMessage | undefined> {
+    const { rows: [row] } = await this.#session.query<{ message: unknown }>('SELECT message FROM outbox WHERE event_id = $1', [eventId]);
+    return row === undefined ? undefined : decodeRecord<OutboxMessage>(row.message);
   }
 
   // The oldest messages not yet published, in append order.

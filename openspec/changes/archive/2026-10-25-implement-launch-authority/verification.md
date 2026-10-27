@@ -4,7 +4,7 @@ Date: 2026-10-25. Author verification and independent review are recorded below.
 
 ## Scope and source
 
-[G2 work plan](../../../docs/g2-plan.md) item 17. The coordinating session (Niki) assigned it to the worker session Pepi. The reviewer is OpenCode `opencode/deepseek-v4.1-flash` (high), the next one in the rotation.
+[G2 work plan](/docs/g2-plan.md) item 17. The coordinating session (Niki) assigned it to the worker session Pepi. The reviewer is OpenCode `opencode/deepseek-v4.1-flash` (high), the next one in the rotation.
 - Base revision: `603731b` on `dev`, with `add-worker-bearer-authentication` merged and archived.
 - Scope: the row of item 17, and the obligations that items 16 and `add-worker-bearer-authentication` left to it:
   - worker authentication with an in-transaction re-read at the current generation;

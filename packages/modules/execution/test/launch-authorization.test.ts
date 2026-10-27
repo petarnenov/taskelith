@@ -12,13 +12,17 @@ import {
   rejectUnknownAssignment,
   workerLaunchDeadline,
   parseLaunchParameters,
+  recordExit,
   recordNotStarted,
+  recordStartObservation,
   replayLaunchOperation,
   requestCancellation,
   revokeLaunch,
+  type Attempt,
   type LaunchContext,
   type LaunchRejectionReason,
   type LaunchRequest,
+  type SealedExecution,
   type Task,
 } from '@taskelith/execution';
 import { failed, value } from '@taskelith/testing';
@@ -145,6 +149,131 @@ test('after not-started, a new identity is authorized against the same reservati
   assert.deepEqual(second.task.attempts[0]!.executions.map((execution) => execution.state), ['not-started', 'authorized']);
 });
 
+// The relaunch after a seal whose `not-started` has not reached the authority.
+function relaunch(task: Task, sealed: Partial<SealedExecution> = {}, issue = grantIssue('launch-2', T3)) {
+  const reportsNotStartedFor = [{ executionId: EXECUTION, operationId: operationId('operation-1'), ...sealed }];
+  const request = launchRequest(task, { operationId: operationId('operation-2'), executionId: executionId('execution-2'), reportsNotStartedFor });
+  return authorizeLaunch(task, request, launchContext(task), issue);
+}
+
+test('a new execution reporting the sealed owner ends it not-started and is authorized in one decision', () => {
+  const first = authorized();
+  const second = value(relaunch(first.task));
+  assert.deepEqual(second.task.attempts[0]!.executions.map((execution) => execution.state), ['not-started', 'authorized']);
+  assert.equal(second.task.generation, first.task.generation + 1);
+  assert.equal(second.grant.executionId, 'execution-2');
+  const late = value(recordNotStarted(second.task, { workerId: WORKER, executionId: EXECUTION }, T4));
+  assert.equal(late.effect, 'duplicate');
+});
+
+test('a reported seal whose not-started arrived first, or of an execution never granted, is accepted', () => {
+  const first = authorized();
+  const delivered = value(recordNotStarted(first.task, { workerId: WORKER, executionId: EXECUTION }, T2)).task;
+  assert.deepEqual(value(relaunch(delivered)).task.attempts[0]!.executions.map(({ state }) => state), ['not-started', 'authorized']);
+  const unknown = value(relaunch(placedTask(), {}, grantIssue('launch-2', T1)));
+  assert.deepEqual(unknown.task.attempts[0]!.executions.map(({ id }) => id), ['execution-2']);
+  const lost = value(relaunch(first.task, { operationId: operationId('operation-never-received') }));
+  assert.equal(lost.task.attempts[0]!.executions[0]!.state, 'not-started');
+});
+
+function sealRefusal(result: ReturnType<typeof relaunch>): string {
+  const rejection = failed(result);
+  assert.equal(rejection.reason, 'execution-conflict');
+  return rejection.message;
+}
+
+test('a reported seal of a started or exited execution conflicts, although the rule alone would grant after an exit', () => {
+  const first = authorized();
+  const grant = first.task.attempts[0]!.executions[0]!.grants[0]!;
+  const start = { workerId: WORKER, launchAuthId: grant.launchAuthId, executionId: EXECUTION, recoveryEpoch: EPOCH };
+  const started = value(recordStartObservation(first.task, start, { installation: { recoveryEpoch: EPOCH, quarantined: false }, grant }, T2)).task;
+  assert.match(sealRefusal(relaunch(started)), /cannot be reported sealed: it is started/);
+  const exit = { workerId: WORKER, executionId: EXECUTION, status: { kind: 'code', code: 0 } as const, startProven: true, spawnFailed: false };
+  const exited = value(recordExit(first.task, exit, T2)).task;
+  assert.match(sealRefusal(relaunch(exited)), /cannot be reported sealed: it is exited/);
+});
+
+test('a reported seal of another attempt\'s execution, or naming another execution\'s operation, conflicts', () => {
+  const first = authorized();
+  const [owner] = first.task.attempts as [Attempt];
+  const elsewhere: Task = { ...first.task, attempts: [{ ...owner, id: attemptId('attempt-0') }, { ...owner, executions: [] }] };
+  assert.match(sealRefusal(relaunch(elsewhere)), /cannot be reported sealed: it is not of this attempt and worker/);
+  const sealed = value(recordNotStarted(first.task, { workerId: WORKER, executionId: EXECUTION }, T2)).task;
+  const second = value(relaunch(sealed)).task;
+  const crossed = { executionId: executionId('execution-2'), operationId: operationId('operation-1') };
+  const third = { operationId: operationId('operation-3'), executionId: executionId('execution-3'), reportsNotStartedFor: [crossed] };
+  const result = authorizeLaunch(second, launchRequest(second, third), launchContext(second), grantIssue('launch-3', T3));
+  assert.match(sealRefusal(result), /cannot be reported sealed: operation operation-1 granted another execution/);
+});
+
+test('a report naming the requested execution itself conflicts, known or never granted', () => {
+  for (const task of [authorized().task, placedTask()]) {
+    const itself = { executionId: executionId('execution-2'), operationId: operationId('operation-1') };
+    const request = launchRequest(task, { operationId: operationId('operation-2'), executionId: executionId('execution-2'), reportsNotStartedFor: [itself] });
+    const result = authorizeLaunch(task, request, launchContext(task), grantIssue('launch-2', T3));
+    assert.match(sealRefusal(result), /cannot be reported sealed: it is the requested execution/);
+  }
+});
+
+test('a reported seal of another worker\'s execution conflicts and changes nothing', () => {
+  const first = authorized();
+  const request = { ...launchRequest(first.task, { operationId: operationId('operation-2'), executionId: executionId('execution-2') }), workerId: OTHER_WORKER };
+  const reported = { ...request, reportsNotStartedFor: [{ executionId: EXECUTION, operationId: operationId('operation-1') }] };
+  const context = launchContext(first.task, { assignment: { ...launchContext(first.task).assignment!, workerId: OTHER_WORKER }, reservation: { state: 'held', attemptId: ATTEMPT, workerId: OTHER_WORKER } });
+  assert.match(sealRefusal(authorizeLaunch(first.task, reported, context, grantIssue('launch-2', T3))), /cannot be reported sealed: it is not of this attempt and worker/);
+});
+
+// E1 sealed and delivered, E2 granted and owning: the state of a worker
+// that sealed E2 too, before either observation reached the authority.
+function twoSealed(): Task {
+  const sealed = value(recordNotStarted(authorized().task, { workerId: WORKER, executionId: EXECUTION }, T2)).task;
+  return value(relaunch(sealed)).task;
+}
+
+function reportAll(task: Task, reports: readonly (readonly [string, string])[]) {
+  const reportsNotStartedFor = reports.map(([execution, operation]) => ({ executionId: executionId(execution), operationId: operationId(operation) }));
+  const request = launchRequest(task, { operationId: operationId('operation-3'), executionId: executionId('execution-3'), reportsNotStartedFor });
+  return authorizeLaunch(task, request, launchContext(task), grantIssue('launch-3', T3));
+}
+
+test('every reported seal is applied in order: unknown, already not-started, and the owner, then the new grant', () => {
+  const task = twoSealed();
+  const reports = [['execution-never', 'operation-never'], ['execution-1', 'operation-1'], ['execution-2', 'operation-2'], ['execution-2', 'operation-2']] as const;
+  const third = value(reportAll(task, reports));
+  assert.deepEqual(third.task.attempts[0]!.executions.map(({ id, state }) => [id, state]), [
+    ['execution-1', 'not-started'], ['execution-2', 'not-started'], ['execution-3', 'authorized'],
+  ]);
+  assert.equal(third.task.generation, task.generation + 1);
+});
+
+test('one conflicting entry anywhere in the list rejects the request, and no entry is recorded', () => {
+  const task = twoSealed();
+  for (const reports of [
+    [['execution-2', 'operation-2'], ['execution-3', 'operation-3']],
+    [['execution-3', 'operation-3'], ['execution-2', 'operation-2']],
+    [['execution-1', 'operation-1'], ['execution-2', 'operation-1']],
+  ] as const) {
+    assert.match(sealRefusal(reportAll(task, reports)), /cannot be reported sealed/);
+  }
+  assert.equal(task.attempts[0]!.executions[1]!.state, 'authorized');
+});
+
+test('only the reported seals end the owner: a list without it conflicts by the ownership rule', () => {
+  const rejection = failed(reportAll(twoSealed(), [['execution-1', 'operation-1']]));
+  assert.equal(rejection.reason, 'execution-conflict');
+  assert.match(rejection.message, /execution execution-2 is authorized/);
+});
+
+test('a transport retry of a relaunch replays its grant without a second seal', () => {
+  const second = value(relaunch(authorized().task));
+  const request = launchRequest(second.task, {
+    operationId: operationId('operation-2'), executionId: executionId('execution-2'),
+    reportsNotStartedFor: [{ executionId: EXECUTION, operationId: operationId('operation-1') }],
+  });
+  const context = { installation: { recoveryEpoch: EPOCH, quarantined: false }, workerAuthorized: true };
+  assert.deepEqual(replayLaunchOperation(second.task, second.grant, request, context, T3), { kind: 'granted', grant: second.grant });
+});
+
 test('expiry is computed from issuedAt and ttl and changes no state', () => {
   const { grant } = authorized();
   assert.equal(isGrantExpired(grant, T2), false);
@@ -190,7 +319,7 @@ test('a retry after revocation, quarantine, a worker revocation, or with changed
   const { task, grant } = authorized();
   const request = launchRequest(placedTask());
   const context = { installation: { recoveryEpoch: EPOCH, quarantined: false }, workerAuthorized: true };
-  const revoked = value(revokeLaunch(task, ATTEMPT, 'policy-revision-changed', T2));
+  const revoked = value(revokeLaunch(task, ATTEMPT, { grants: 'policy-revision-changed', cancellation: 'launch-revoked' }, T2));
   const revokedGrant = revoked.attempts[0]!.executions[0]!.grants[0]!;
   assert.deepEqual(replayLaunchOperation(revoked, revokedGrant, request, context, T2), { kind: 'revoked', reason: 'policy-revision-changed' });
   const quarantined = replayLaunchOperation(task, grant, request, { ...context, installation: { recoveryEpoch: EPOCH, quarantined: true } }, T2);
@@ -214,20 +343,32 @@ test('a retry of a grant whose execution has ended returns no grant', () => {
 test('an invalidating writer finds an expired grant, revokes it, and requests cancellation', () => {
   const { task } = authorized();
   assert.equal(isLaunchAffected(task, ATTEMPT), true);
-  const revoked = value(revokeLaunch(task, ATTEMPT, 'artifact-revision-changed', T4));
+  const revoked = value(revokeLaunch(task, ATTEMPT, { grants: 'artifact-revision-changed', cancellation: 'launch-revoked' }, T4));
   const attempt = revoked.attempts[0]!;
   assert.equal(attempt.executions[0]!.grants[0]!.state, 'revoked');
   assert.deepEqual(attempt.cancellation, { reason: 'launch-revoked', requestedAt: T4 });
   assert.equal(attemptPhase(attempt), 'launch-authorized');
-  const again = value(revokeLaunch(revoked, ATTEMPT, 'policy-revision-changed', T4));
+  const again = value(revokeLaunch(revoked, ATTEMPT, { grants: 'policy-revision-changed', cancellation: 'launch-revoked' }, T4));
   const grant = again.attempts[0]!.executions[0]!.grants[0]!;
   assert.equal(grant.state === 'revoked' && grant.revokedFor, 'artifact-revision-changed');
   assert.equal(again.attempts[0]!.cancellation?.reason, 'launch-revoked');
+});
+
+test('the attempt keeps the cancellation reason its writer names', () => {
+  const { task } = authorized();
+  const ended = value(revokeLaunch(task, ATTEMPT, { grants: 'attempt-not-launchable', cancellation: 'assignment-ended' }, T4));
+  assert.deepEqual(ended.attempts[0]!.cancellation, { reason: 'assignment-ended', requestedAt: T4 });
+});
+
+test('an earlier cancellation request wins over the reason of a later writer', () => {
+  const requested = value(requestCancellation(authorized().task, ATTEMPT, 'requested', T2));
+  const ended = value(revokeLaunch(requested, ATTEMPT, { grants: 'attempt-not-launchable', cancellation: 'assignment-ended' }, T4));
+  assert.deepEqual(ended.attempts[0]!.cancellation, { reason: 'requested', requestedAt: T2 });
 });
 
 test('an invalidating writer with an empty predicate affects nothing', () => {
   const task = placedTask();
   assert.equal(isLaunchAffected(task, ATTEMPT), false);
   assert.equal(isLaunchAffected(task, attemptId('attempt-9')), false);
-  assert.equal(failed(revokeLaunch(task, ATTEMPT, 'policy-revision-changed', T1)).code, 'precondition-failed');
+  assert.equal(failed(revokeLaunch(task, ATTEMPT, { grants: 'policy-revision-changed', cancellation: 'launch-revoked' }, T1)).code, 'precondition-failed');
 });

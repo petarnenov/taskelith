@@ -14,8 +14,8 @@ interface SnapshotRow {
   readonly held_slots: string;
 }
 
-// Each part reads an index of its own; ages use the database clock, which
-// also stamps the rows (capacity contract section 4).
+// Each part reads an index of its own; ages are now() less appended_at, a
+// database default, or changed_at, which placement writes from tx.now().
 const SNAPSHOT = `SELECT
   coalesce(extract(epoch FROM now() - (
     SELECT min(appended_at) FROM outbox WHERE published_at IS NULL

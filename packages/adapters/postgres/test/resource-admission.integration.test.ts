@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { after, beforeEach, test } from 'node:test';
+import { after, beforeEach, mock, test } from 'node:test';
 import type { Result } from '@taskelith/kernel';
 import { endAttempt, recordNotStarted, type AssignmentId, type AttemptId, type Task, type WorkerId } from '@taskelith/execution';
 import { PostgresDatabase } from '@taskelith/postgres';
-import { releaseInTransaction } from '@taskelith/scheduling';
+import { releaseInTransaction, supersedeUngrantedInTransaction } from '@taskelith/scheduling';
 import {
   DELEGATION_CAPACITY_WAIT_BOUND_MILLISECONDS,
   ROOT_LINK,
@@ -119,6 +119,22 @@ test('a placement writes the held reservation, its assignment, the charge, and t
   assert.deepEqual(offer!.metadata.sdlc, { runId: ROOT_LINK.runId, stageId: 'specs', admissionId: `admission-${task.id}`, admissionGeneration: 2 });
   assert.deepEqual([offer!.payload.protocolVersion, offer!.payload.recoveryEpoch], [1, 1]);
   assert.equal(kind(await service.reserve(placement(task, 'b'))), 'standing:attempt-already-reserved');
+});
+
+// The assignment age (execution observability) reads changed_at against the
+// database clock; a skewed application Date must not move it.
+test('a placement stamps the assignment change time on the database clock', async () => {
+  const task = await rootTask('task-clock');
+  mock.timers.enable({ apis: ['Date'], now: Date.now() - 6 * 60 * 60 * 1000 });
+  try {
+    assert.equal(kind(await service.reserve(placement(task, 'clock'))), 'placed');
+  } finally {
+    mock.timers.reset();
+  }
+  const [row] = await query<{ gap: number }>(url, `SELECT extract(epoch FROM o.appended_at - a.changed_at)::float8 AS gap
+    FROM assignments a, outbox o WHERE a.id = 'assignment-clock' AND o.event_id = 'offer-clock'`);
+  assert.ok(row, 'the assignment and its offer row exist');
+  assert.ok(Math.abs(row.gap) < 1, String(row.gap));
 });
 
 test('two replicas placing the same attempt leave one assignment and one held reservation', async () => {
@@ -238,11 +254,12 @@ test('cancelling an assignment with a running execution keeps the reservation un
   const ended = value(await service.cancelAssignment(request));
   assert.deepEqual([ended.state, ended.reservation.state], ['ended', 'held']);
   assert.deepEqual(await eventTypes(), ['execution.assignment.offer', 'execution.cancellation.request']);
-  const early = await service.releaseAfterTerminalFact({ ...request, commandId: id('EventId', 'release-early') });
-  assert.equal(!early.ok && early.error.code, 'precondition-failed');
+  const early = value(await service.releaseAfterTerminalFact({ ...request, commandId: id('EventId', 'release-early') }));
+  assert.deepEqual([early.outcome, early.assignment], ['kept', ended]);
+  assert.deepEqual(await counts(), { held: 1, assignments: 1, charges: 1, outbox: 2 });
   const cancelled = value(await database.transaction((tx) => tx.tasks.get(task.id)));
   const attempt = cancelled.attempts.at(-1)!;
-  assert.equal(attempt.cancellation?.reason, 'launch-revoked');
+  assert.equal(attempt.cancellation?.reason, 'assignment-ended', 'as its command says');
   assert.deepEqual(attempt.executions[0]!.grants.map((grant) => grant.state === 'revoked' && grant.revokedFor), ['attempt-not-launchable']);
   // The terminal fact and the release commit in one transaction (item 21).
   const released = value(await database.transaction(async (tx) => {
@@ -251,7 +268,8 @@ test('cancelling an assignment with a running execution keeps the reservation un
     const stored = await tx.tasks.replace(sealed.value.task, cancelled.generation);
     return stored.ok ? releaseInTransaction(tx, { ...request, commandId: id('EventId', 'release-a') }) : stored;
   }));
-  assert.equal(released.reservation.state === 'released' && released.reservation.releasedBy, 'execution-terminal');
+  assert.equal(released.outcome, 'released');
+  assert.equal(released.assignment.reservation.state === 'released' && released.assignment.reservation.releasedBy, 'execution-terminal');
   assert.deepEqual(await counts(), { held: 0, assignments: 1, charges: 1, outbox: 2 });
 });
 
@@ -301,6 +319,24 @@ test('a granted assignment is not superseded', async () => {
   const refused = await service.supersede({ assignmentId: placed.assignment.id, commandId: id('EventId', 's'), correlationId: id('CorrelationId', 'c') });
   assert.equal(!refused.ok && refused.error.code, 'precondition-failed');
   assert.deepEqual(await counts(), { held: 1, assignments: 1, charges: 1, outbox: 1 });
+});
+
+test('an assignment without a grant is superseded within its bounds when a writer requires it, a granted one never', async () => {
+  const task = await rootTask('task-1');
+  const placed = value(await service.reserve(placement(task, 'a')));
+  assert.ok(placed.kind === 'placed');
+  const request = { assignmentId: placed.assignment.id, commandId: id('EventId', 'supersede-a'), correlationId: id('CorrelationId', 'correlation-a') };
+  const superseded = value(await database.transaction((tx) => supersedeUngrantedInTransaction(tx, request)));
+  assert.deepEqual([superseded.end?.reason, superseded.reservation.state], ['superseded', 'released']);
+  assert.deepEqual(await eventTypes(), ['execution.assignment.offer', 'execution.assignment.end']);
+  const again = await database.transaction((tx) => supersedeUngrantedInTransaction(tx, request));
+  assert.equal(!again.ok && again.error.code, 'precondition-failed', 'an ended assignment');
+  const second = await rootTask('task-2');
+  const granted = value(await service.reserve(placement(second, 'b')));
+  assert.ok(granted.kind === 'placed');
+  value(await database.transaction((tx) => tx.tasks.replace(authorizedUnder(second, granted.assignment.id, WORKER), second.generation)));
+  const refused = await database.transaction((tx) => supersedeUngrantedInTransaction(tx, { ...request, assignmentId: granted.assignment.id }));
+  assert.equal(!refused.ok && refused.error.code, 'precondition-failed');
 });
 
 test('a crash before the placement commits leaves no reservation, assignment, charge, or command', async () => {
@@ -397,7 +433,7 @@ test('the transaction recording an attempt\'s end also ends its active assignmen
     const stored = await tx.tasks.replace(ended.value, task.generation);
     return stored.ok ? releaseInTransaction(tx, request) : stored;
   }));
-  assert.deepEqual([released.end?.reason, released.reservation.state], ['attempt-ended', 'released']);
+  assert.deepEqual([released.outcome, released.assignment.end?.reason, released.assignment.reservation.state], ['released', 'attempt-ended', 'released']);
   assert.deepEqual(await eventTypes(), ['execution.assignment.offer', 'execution.assignment.end']);
   const active = await service.releaseAfterTerminalFact(request);
   assert.equal(!active.ok && active.error.code, 'precondition-failed');

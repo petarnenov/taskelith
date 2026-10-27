@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { statfsSync } from 'node:fs';
-import { err, ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { rootFailure } from './journal-failure.js';
 
 // What the startup check learns about the volume that holds `dataRoot`.
@@ -79,4 +79,22 @@ export function parseMacMountOptions(mounts: string, mountPoint: string): readon
   const line = mounts.split('\n').find((entry) => entry.includes(marker) && entry.endsWith(')'));
   if (line === undefined) return undefined;
   return line.slice(line.indexOf(marker) + marker.length, -1).split(', ');
+}
+
+// The free and total bytes of the volume that holds a path.
+export interface VolumeSpace {
+  readonly availableBytes: number;
+  readonly totalBytes: number;
+}
+
+export type VolumeSpaceReader = (path: string) => Result<VolumeSpace>;
+
+// Free space counts only the blocks an unprivileged writer may use.
+export function readVolumeSpace(path: string): Result<VolumeSpace> {
+  try {
+    const { bavail, blocks, bsize } = statfsSync(path);
+    return ok({ availableBytes: bavail * bsize, totalBytes: blocks * bsize });
+  } catch (error) {
+    return err(failure('unavailable', `cannot read the free space of ${path}: ${(error as Error).message}`));
+  }
 }

@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { after, test } from 'node:test';
 import { planJournalRecovery, type ObservationFact, type RecoveryAction } from '@taskelith/execution';
-import { crashEnvironment, ScenarioProcess, id, value } from '@taskelith/testing';
+import { crashEnvironment, ScenarioProcess, id, uncoveredEnvironment, value } from '@taskelith/testing';
 import { enrollWorkerRoot, openWorkerRoot } from '@taskelith/worker-journal';
-import { BINDING, T0, assignment, rootOptions, temporaryDataRoot } from './fixtures.ts';
+import { ENROLLMENT, T0, assignment, rootOptions, temporaryDataRoot } from './fixtures.ts';
 
 // Contract section 13: a crash before and after each of W1 to W6, followed
 // by recovery, gives the result the recovery table of section 5 assigns.
@@ -26,19 +26,19 @@ interface Expectation {
 
 const EXPECTATIONS: readonly Expectation[] = [
   { scenario: 'exit', point: 'W1.before', acknowledged: false, recovery: [], facts: [] },
-  { scenario: 'exit', point: 'W1.after', acknowledged: false, recovery: [CONTINUE], facts: [] },
-  { scenario: 'exit', point: 'W2.before', acknowledged: true, recovery: [CONTINUE], facts: [] },
-  { scenario: 'exit', point: 'W2.after', acknowledged: true, recovery: SEAL_AND_CONTINUE, facts: [] },
-  { scenario: 'exit', point: 'W3.before', acknowledged: true, recovery: SEAL_AND_CONTINUE, facts: [] },
-  { scenario: 'exit', point: 'W3.after', acknowledged: true, recovery: SEAL_AND_CONTINUE, facts: [] },
-  { scenario: 'exit', point: 'W4.before', acknowledged: true, recovery: SEAL_AND_CONTINUE, facts: [] },
-  { scenario: 'exit', point: 'W4.after', acknowledged: true, recovery: RECOVER_RECORD, facts: [] },
-  { scenario: 'exit', point: 'W5s.before', acknowledged: true, recovery: RECOVER_RECORD, facts: [] },
-  { scenario: 'exit', point: 'W5s.after', acknowledged: true, recovery: RECOVER_RECORD, facts: ['execution-started'] },
-  { scenario: 'exit', point: 'W5e.before', acknowledged: true, recovery: RECOVER_RECORD, facts: ['execution-started'] },
-  { scenario: 'exit', point: 'W5e.after', acknowledged: true, recovery: [], facts: ['execution-started', 'execution-exited'] },
-  { scenario: 'seal', point: 'W6.before', acknowledged: true, recovery: SEAL_AND_CONTINUE, facts: [] },
-  { scenario: 'seal', point: 'W6.after', acknowledged: true, recovery: [CONTINUE], facts: ['execution-not-started'] },
+  { scenario: 'exit', point: 'W1.after', acknowledged: false, recovery: [CONTINUE], facts: ['assignment-accepted'] },
+  { scenario: 'exit', point: 'W2.before', acknowledged: true, recovery: [CONTINUE], facts: ['assignment-accepted'] },
+  { scenario: 'exit', point: 'W2.after', acknowledged: true, recovery: SEAL_AND_CONTINUE, facts: ['assignment-accepted'] },
+  { scenario: 'exit', point: 'W3.before', acknowledged: true, recovery: SEAL_AND_CONTINUE, facts: ['assignment-accepted'] },
+  { scenario: 'exit', point: 'W3.after', acknowledged: true, recovery: SEAL_AND_CONTINUE, facts: ['assignment-accepted'] },
+  { scenario: 'exit', point: 'W4.before', acknowledged: true, recovery: SEAL_AND_CONTINUE, facts: ['assignment-accepted'] },
+  { scenario: 'exit', point: 'W4.after', acknowledged: true, recovery: RECOVER_RECORD, facts: ['assignment-accepted'] },
+  { scenario: 'exit', point: 'W5s.before', acknowledged: true, recovery: RECOVER_RECORD, facts: ['assignment-accepted'] },
+  { scenario: 'exit', point: 'W5s.after', acknowledged: true, recovery: RECOVER_RECORD, facts: ['assignment-accepted', 'execution-started'] },
+  { scenario: 'exit', point: 'W5e.before', acknowledged: true, recovery: RECOVER_RECORD, facts: ['assignment-accepted', 'execution-started'] },
+  { scenario: 'exit', point: 'W5e.after', acknowledged: true, recovery: [], facts: ['assignment-accepted', 'execution-started', 'execution-exited'] },
+  { scenario: 'seal', point: 'W6.before', acknowledged: true, recovery: SEAL_AND_CONTINUE, facts: ['assignment-accepted'] },
+  { scenario: 'seal', point: 'W6.after', acknowledged: true, recovery: [CONTINUE], facts: ['assignment-accepted', 'execution-not-started'] },
 ];
 
 const cleanups: (() => void)[] = [];
@@ -47,9 +47,9 @@ after(() => cleanups.forEach((cleanup) => cleanup()));
 async function crashAt(scenario: string, point: string): Promise<{ dataRoot: string; stdout: string }> {
   const { dataRoot, remove } = temporaryDataRoot();
   cleanups.push(remove);
-  value(enrollWorkerRoot(rootOptions(dataRoot), BINDING)).close();
+  value(enrollWorkerRoot(rootOptions(dataRoot), ENROLLMENT)).close();
   const worker = await ScenarioProcess.start(process.execPath, ['--experimental-strip-types', SCENARIO, dataRoot, scenario], {
-    env: { ...process.env, ...crashEnvironment(point) },
+    env: { ...uncoveredEnvironment(), ...crashEnvironment(point) },
   });
   const exit = await worker.exited;
   assert.equal(exit.signal, 'SIGKILL', `the worker was not killed at ${point}: ${worker.stderr}`);

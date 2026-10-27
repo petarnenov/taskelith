@@ -73,7 +73,9 @@ export interface UnauthorizedStart {
 
 // Observations kept beside the state, which they leave unchanged, and which
 // keep the execution's ownership and capacity until new evidence ends them.
-export const EXECUTION_EVIDENCE_KINDS = Object.freeze(['uncertain', 'termination-unproven', 'local-history-lost'] as const);
+export const EXECUTION_EVIDENCE_KINDS = Object.freeze([
+  'uncertain', 'termination-unproven', 'local-history-lost', 'cancellation-not-applied',
+] as const);
 
 export type ExecutionEvidenceKind = (typeof EXECUTION_EVIDENCE_KINDS)[number];
 
@@ -98,10 +100,10 @@ export function isTerminalExecution(execution: Execution): boolean {
   return EXECUTION_TRANSITIONS[execution.state].length === 0;
 }
 
-// The control plane does not know whether such an execution still runs; it
-// keeps its ownership and capacity until reconciled.
+// Whether it still runs is not known, so it keeps ownership and capacity
+// until reconciled; a failed cancellation signal leaves its processes known.
 export function isUnknownExecution(execution: Execution): boolean {
-  return !isTerminalExecution(execution) && execution.evidence.length > 0;
+  return !isTerminalExecution(execution) && execution.evidence.some(({ kind }) => kind !== 'cancellation-not-applied');
 }
 
 export function authorizedExecution(grant: LaunchGrant): Execution {

@@ -2,6 +2,8 @@ import type { Instant } from '@taskelith/kernel';
 import {
   PostgresCapacityLedger,
   PostgresInstallationGuard,
+  PostgresPlacementQueue,
+  PostgresPlacementRotation,
   PostgresPlacementWorkers,
   PostgresQuotaSettings,
   PostgresTaskLineage,
@@ -12,6 +14,7 @@ import { PostgresEvidenceProducers, PostgresEvidenceRecords } from './evidence-r
 import {
   PostgresAdmissionRepository,
   PostgresAssignmentRepository,
+  PostgresDelegationRequests,
   PostgresGateRepository,
   PostgresInbox,
   PostgresOutbox,
@@ -19,7 +22,11 @@ import {
   PostgresWorkflowRunRepository,
 } from './repositories.js';
 import { PostgresCurrentRevisions, PostgresLaunchRecords } from './launch-repositories.js';
+import { PostgresInventoryReports, PostgresInventoryRequests } from './inventory-repositories.js';
 import { PostgresFleetRegistry, PostgresInstallationTable, PostgresOperatorCredentials } from './fleet-repositories.js';
+import { PostgresProducerCursors, PostgresWorkerReports } from './observation-repositories.js';
+import { PostgresReconciliationQueue, PostgresUnrecordedProcesses } from './reconciliation-repositories.js';
+import { PostgresPlacementOutcomeRecords } from './placement-outcome-records.js';
 import { PostgresRunCatalog } from './run-catalog.js';
 import type { Session } from './session.js';
 
@@ -38,6 +45,10 @@ export class PostgresTransaction {
   readonly quotas: PostgresQuotaSettings;
   readonly lineage: PostgresTaskLineage;
   readonly ledger: PostgresCapacityLedger;
+  readonly placements: PostgresPlacementQueue;
+  readonly rotation: PostgresPlacementRotation;
+  readonly placementOutcomes: PostgresPlacementOutcomeRecords;
+  readonly delegations: PostgresDelegationRequests;
   readonly fleet: PostgresFleetRegistry;
   readonly catalog: PostgresRunCatalog;
   readonly installationTable: PostgresInstallationTable;
@@ -47,6 +58,14 @@ export class PostgresTransaction {
   readonly producers: PostgresEvidenceProducers;
   readonly launches: PostgresLaunchRecords;
   readonly revisions: PostgresCurrentRevisions;
+  readonly cursors: PostgresProducerCursors;
+  readonly reports: PostgresWorkerReports;
+  readonly inventoryRequests: PostgresInventoryRequests;
+  readonly inventoryReports: PostgresInventoryReports;
+  readonly unrecordedProcesses: PostgresUnrecordedProcesses;
+  readonly reconciliation: PostgresReconciliationQueue;
+  // The outbox reads its stored messages back, such as an offer sent again.
+  readonly outboxLookup: PostgresOutbox;
   readonly #session: Session;
 
   constructor(session: Session) {
@@ -63,6 +82,10 @@ export class PostgresTransaction {
     this.quotas = new PostgresQuotaSettings(session);
     this.lineage = new PostgresTaskLineage(session);
     this.ledger = new PostgresCapacityLedger(session);
+    this.placements = new PostgresPlacementQueue(session);
+    this.rotation = new PostgresPlacementRotation(session);
+    this.placementOutcomes = new PostgresPlacementOutcomeRecords(session);
+    this.delegations = new PostgresDelegationRequests(session);
     this.fleet = new PostgresFleetRegistry(session);
     this.catalog = new PostgresRunCatalog(session);
     this.installationTable = new PostgresInstallationTable(session);
@@ -72,6 +95,13 @@ export class PostgresTransaction {
     this.producers = new PostgresEvidenceProducers(session);
     this.launches = new PostgresLaunchRecords(session);
     this.revisions = new PostgresCurrentRevisions(session);
+    this.cursors = new PostgresProducerCursors(session);
+    this.reports = new PostgresWorkerReports(session);
+    this.inventoryRequests = new PostgresInventoryRequests(session);
+    this.inventoryReports = new PostgresInventoryReports(session);
+    this.unrecordedProcesses = new PostgresUnrecordedProcesses(session);
+    this.reconciliation = new PostgresReconciliationQueue(session);
+    this.outboxLookup = this.outbox;
   }
 
   now(): Promise<Instant> {

@@ -17,6 +17,7 @@ import {
 import { FLEET_LIMITS, type FleetLimits } from '../domain/fleet-limits.js';
 import { parseWorkerId, type InstallationIdentity } from '../domain/installation.js';
 import type { BrokerCredentials } from '../ports/broker-credentials.js';
+import type { WorkerCommandConsumers } from '../ports/command-consumers.js';
 import type { FleetRegistry } from '../ports/fleet-registry.js';
 import type { IdentifierSource } from '../ports/identifier-source.js';
 
@@ -38,6 +39,12 @@ export interface RotatedCredentials {
   readonly revocationsPublished: boolean;
 }
 
+// `commandConsumerRemoved` false: the consumer is left, and a start retries
+// while the worker is among the latest revoked (operational targets).
+export interface WorkerRevocation {
+  readonly commandConsumerRemoved: boolean;
+}
+
 export interface EnrollmentServiceDependencies {
   readonly installation: InstallationIdentity;
   readonly serverProtocolVersions: ProtocolWindow;
@@ -45,6 +52,7 @@ export interface EnrollmentServiceDependencies {
   readonly secrets: Secrets;
   readonly ids: IdentifierSource;
   readonly broker: BrokerCredentials;
+  readonly commandConsumers: WorkerCommandConsumers;
   readonly clock: Clock;
   readonly limits?: FleetLimits;
 }
@@ -83,6 +91,10 @@ export class EnrollmentService {
     }
     const workerId = parseWorkerId(this.#deps.ids.newWorkerId());
     if (!workerId.ok) return workerId;
+    // Before the token is used; a commit that fails after it leaves an
+    // unused consumer of an unknown worker, which is harmless.
+    const consumer = await this.#deps.commandConsumers.ensure(workerId.value);
+    if (!consumer.ok) return err(failure('unavailable', `the worker's command consumer is not ready: ${consumer.error.message}`));
     const issued = await this.#issueGeneration(workerId.value, 1);
     if (!issued.ok) return issued;
     const worker: EnrolledWorker = Object.freeze({
@@ -117,11 +129,13 @@ export class EnrollmentService {
 
   // Denies every credential of the worker at once; with item 17's registry
   // its executions holding a live grant also become uncertain, never dead.
-  async revoke(workerId: WorkerId): Promise<Result<void>> {
+  async revoke(workerId: WorkerId): Promise<Result<WorkerRevocation>> {
     const revoked = await this.#deps.registry.revoke(workerId, this.#deps.clock.now());
     if (!revoked.ok) return revoked;
+    // After the commit, which decides; a consumer left over does no harm.
+    const removed = await this.#deps.commandConsumers.remove(workerId);
     const published = await this.publishRevocations();
-    return published.ok ? ok(undefined) : published;
+    return published.ok ? ok(Object.freeze({ commandConsumerRemoved: removed.ok })) : published;
   }
 
   // Ends the grace windows that have passed; the control plane runs it

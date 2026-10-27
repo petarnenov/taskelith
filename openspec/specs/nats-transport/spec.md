@@ -17,7 +17,7 @@ The adapter SHALL publish commands on `taskelith.<installationId>.workers.<worke
 - **THEN** the adapter refuses the subject and the consumer
 
 ### Requirement: Outbox publication
-The publisher SHALL publish an outbox row with `Nats-Msg-Id` set to its event identity, and SHALL mark it published only after the broker acknowledged it. A row the broker did not acknowledge SHALL be published again with the same identity. A later row of the same subject SHALL wait until the earlier one is marked.
+The publisher SHALL publish an outbox row with `Nats-Msg-Id` set to its event identity, and SHALL mark it published only after the broker acknowledged it. A row the broker did not acknowledge SHALL be published again with the same identity. A later row of the same subject SHALL wait until the earlier one is marked. A stop SHALL end the publication loop without waiting for the next poll.
 
 #### Scenario: Killed after the broker acknowledgement
 - **WHEN** the publisher is killed after the broker stored a row but before the outbox marked it
@@ -26,6 +26,10 @@ The publisher SHALL publish an outbox row with `Nats-Msg-Id` set to its event id
 #### Scenario: Lost connection
 - **WHEN** a publication runs while the connection to the broker is lost
 - **THEN** it fails as `unavailable`, and its retry after the heal stores the message once
+
+#### Scenario: Stop during a publication round
+- **WHEN** a stop is requested during a publication round
+- **THEN** the loop ends after that round without the poll pause
 
 ### Requirement: Acknowledgement after commit
 A consumer SHALL acknowledge a message only after its handler reported the commit. It SHALL redeliver a message whose commit failed after a backoff, during which later messages MAY pass it, and SHALL extend `ack_wait` while a commit runs.
@@ -64,8 +68,34 @@ A receiver SHALL apply a message at most once per consumer by the identity in it
 - **THEN** the first delivery is `accepted` and the second `duplicate`
 
 ### Requirement: Transport bounds
-Streams and consumers SHALL take the provisional bounds of the operational targets: 7 days or 10 GiB per stream, 1 MiB per message, `ack_wait` 30 s, `max_deliver` 5, `max_ack_pending` 4 per worker, and 10,000 queued commands per worker subject, rejecting new ones when full.
+Streams and consumers SHALL take the provisional bounds of the operational targets: 7 days or 10 GiB per stream, 1 MiB per message, `ack_wait` 30 s, `max_deliver` 5, `max_ack_pending` 4 per worker, and 10,000 queued commands per worker subject, rejecting new ones when full. A deployment MAY set a smaller per-stream byte limit. When the broker refuses a stream for lack of file storage, the failure SHALL name the bytes the streams reserve.
 
 #### Scenario: Stream configuration
 - **WHEN** the streams are created again
 - **THEN** they are updated in place and carry these bounds
+
+#### Scenario: Too little broker storage
+- **WHEN** the streams reserve more bytes than the broker's free file storage
+- **THEN** creating them fails as `unavailable` with the reserved bytes
+
+### Requirement: Heartbeat receiver
+The adapter SHALL receive every worker's heartbeats on `taskelith.<installationId>.workers.*.heartbeats` through one core NATS queue group, so that each heartbeat reaches one receiver, and SHALL keep them in no stream. It SHALL handle them one at a time. After a stop it SHALL handle no waiting heartbeat, and a subscription that closes without a stop SHALL fail the receiver.
+
+#### Scenario: Two receivers in one group
+- **WHEN** two receivers share the queue group and four workers each send a heartbeat
+- **THEN** the receivers together handle four heartbeats, and no stream matches the heartbeat subject
+
+#### Scenario: Subscription closed by the server
+- **WHEN** the heartbeat subscription closes with an error and no stop was requested
+- **THEN** the receiver fails with that cause
+
+### Requirement: Dropped heartbeats
+The heartbeat receiver SHALL drop and log, without retrying, a heartbeat that fails its schema, one that arrives while more than the pending bound wait, and one whose handler fails or throws.
+
+#### Scenario: Malformed heartbeat
+- **WHEN** a heartbeat fails the `WorkerHeartbeat` schema
+- **THEN** its handler is not called and `nats.heartbeat.dropped` is logged with the reason
+
+#### Scenario: Too many pending
+- **WHEN** a heartbeat arrives while more than the pending bound wait
+- **THEN** it is dropped with the reason `too many pending`

@@ -1,4 +1,5 @@
 import { err, failure, ok, parseEventMetadata, type CorrelationId, type EventId, type Instant, type Result } from '@taskelith/kernel';
+import type { ExecutionId } from '@taskelith/execution';
 import type { JsonObject } from '@taskelith/sdlc';
 import type { Assignment, AssignmentEndReason } from '../domain/assignment.js';
 import type { CapacityTransaction } from '../ports/capacity-store.js';
@@ -75,9 +76,9 @@ export function endPayload(assignment: Assignment, reason: AssignmentEndReason):
 }
 
 // `assignment-ended` follows an ended assignment whose launch was revoked;
-// `launch-revoked` follows any other invalidating writer.
-export function cancellationPayload(reason: 'assignment-ended' | 'launch-revoked'): CommandPayload {
-  return ({ protocolVersion }) => ({ protocolVersion, reason });
+// `launch-revoked` any other writer. An execution limits it to that one.
+export function cancellationPayload(reason: 'assignment-ended' | 'launch-revoked', executionId?: ExecutionId): CommandPayload {
+  return ({ protocolVersion }) => ({ protocolVersion, reason, ...(executionId === undefined ? {} : { executionId }) });
 }
 
 interface CommandContext {

@@ -76,7 +76,7 @@ Control records outside the journal SHALL be either absent or complete after any
 - **THEN** the file is either absent or complete, never empty or partial
 
 ### Requirement: Local outbox
-A worker SHALL publish only committed observations, each with a deterministic identity derived from its source fact and a gapless sequence per journal incarnation, SHALL keep each until the control plane confirms it, and SHALL publish an unconfirmed one again with the same identity. Above the backlog limit it SHALL accept no new attempt.
+A worker SHALL publish only committed observations, each with a deterministic identity derived from its source fact and a gapless sequence per journal incarnation, SHALL keep each until the control plane confirms it, and SHALL publish an unconfirmed one again with the same identity. An unrecorded process SHALL take its identity from the journal and its containment. Above the backlog limit it SHALL accept no new attempt.
 
 #### Scenario: Fact derived again after a lost write
 - **WHEN** a fact's journal write was lost and the worker reads the fact again from its execution record
@@ -85,6 +85,10 @@ A worker SHALL publish only committed observations, each with a deterministic id
 #### Scenario: Observation expired from the stream
 - **WHEN** the broker acknowledged an observation and the stream expired it before the control plane consumed it
 - **THEN** the worker still holds it unconfirmed and publishes it again
+
+#### Scenario: Unrecorded process found again
+- **WHEN** a later start of the same journal incarnation finds the same populated containment without an execution record
+- **THEN** the worker journals no second entry while the first is unconfirmed, and one derived after confirmation has the same identity
 
 ### Requirement: Execution state and uncertainty
 The journal SHALL keep each execution's state as the launch authorization contract defines it, and SHALL keep uncertainty as evidence beside that state, never as a state that replaces it.
@@ -148,14 +152,18 @@ A worker SHALL hold an exclusive, kernel-released lock on its root for its whole
 - **THEN** it does not start
 
 ### Requirement: Format versioning
-A worker SHALL read the current and the previous journal format, SHALL migrate the previous one in a single transaction, SHALL never downgrade a journal, and SHALL fail startup on a newer or unknown format.
+A worker SHALL read the current journal format and every earlier format it lists, SHALL migrate an earlier one step by step in a single transaction, SHALL never downgrade a journal, and SHALL fail startup on a newer or unknown format.
 
 #### Scenario: Newer journal format
 - **WHEN** a worker finds a journal format newer than it supports
 - **THEN** it fails startup and leaves the journal unchanged
 
+#### Scenario: Two formats behind
+- **WHEN** a worker supporting format 4 opens a format 2 journal
+- **THEN** it migrates the journal through format 3 to format 4 in one transaction
+
 ### Requirement: Worker subtree rules
-The `worker/` subtree SHALL be created only by enrollment and closed to other accounts; its control records SHALL be owned by the worker's account, SHALL have no symbolic link on their path from the data root, and SHALL be on a local persistent filesystem. Workspace content SHALL follow its own rules, and workspace removal SHALL never delete a control record.
+The `worker/` subtree SHALL be created only by enrollment and closed to other accounts, except that a separate execution account's group SHALL only traverse `dataRoot`, `worker/`, and `worker/workspaces/` at mode `0710`; its control records SHALL be owned by the worker's account, SHALL have no symbolic link on their path from the data root, and SHALL be on a local persistent filesystem. Workspace content SHALL follow its own rules, and workspace removal SHALL never delete a control record.
 
 #### Scenario: Group-writable control-record directory
 - **WHEN** a control-record directory under `worker/` is writable by its group
@@ -164,3 +172,14 @@ The `worker/` subtree SHALL be created only by enrollment and closed to other ac
 #### Scenario: Symbolic link inside a workspace
 - **WHEN** a workspace under `worker/workspaces/` contains a symbolic link
 - **THEN** the worker starts normally
+
+#### Scenario: Execution account at the subtree
+- **WHEN** an execution under the separate execution account lists `worker/` or reads a control record
+- **THEN** both are refused, while the account can pass through to `worker/workspaces/`
+
+### Requirement: Expired operation
+W3 SHALL record an operation as `expired` when its deadline passed without a decision or the authority answered `expired`; such an operation of an execution without a grant, like a retryable rejection, SHALL allow a new operation for that execution, and W6 SHALL expire the operations of the execution that have no outcome.
+
+#### Scenario: Restart after an expired operation
+- **WHEN** the worker restarts with an execution whose last operation expired and no W4
+- **THEN** it authorizes the same execution under a new `operationId` that reports it has not started

@@ -8,6 +8,8 @@ import {
   type HardControl,
   type InstallationGuard,
   type OpenDelegation,
+  type PlacementQueue,
+  type PlacementRotation,
   type PlacementWorkers,
   type ProjectId,
   type ProviderCredentialId,
@@ -15,6 +17,7 @@ import {
   type RunId,
   type TaskLineage,
   type TaskLineageLink,
+  type WaitingPlacement,
   type WorkerOccupancy,
   type WorkerPlacementRecord,
 } from '@taskelith/scheduling';
@@ -30,7 +33,9 @@ interface WorkerRow {
   readonly revoked: boolean;
   readonly draining: boolean;
   readonly reachable: boolean;
+  readonly last_contact_at: Date | null;
   readonly admission_pressure_since: Date | null;
+  readonly capacity_refused_since: Date | null;
   readonly slots: number;
   readonly cpu_millicores: number;
   readonly memory_mebibytes: number;
@@ -39,8 +44,12 @@ interface WorkerRow {
 }
 
 // The columns placement reads; item 13 may add others to the table.
-const WORKER_COLUMNS = 'worker_id, enrolled, revoked, draining, reachable, admission_pressure_since, slots, cpu_millicores, memory_mebibytes, controls, protocol_version';
-export const ELIGIBLE = 'enrolled AND NOT revoked AND NOT draining AND reachable AND admission_pressure_since IS NULL AND protocol_version IS NOT NULL';
+const WORKER_COLUMNS = `worker_id, enrolled, revoked, draining, reachable, last_contact_at, admission_pressure_since, capacity_refused_since,
+  slots, cpu_millicores, memory_mebibytes, controls, protocol_version`;
+export const ELIGIBLE = `enrolled AND NOT revoked AND NOT draining AND reachable AND admission_pressure_since IS NULL
+  AND capacity_refused_since IS NULL AND protocol_version IS NOT NULL`;
+
+const HELD = "reservation_state = 'held'";
 
 export class PostgresPlacementWorkers implements PlacementWorkers {
   readonly #session: Session;
@@ -58,17 +67,26 @@ export class PostgresPlacementWorkers implements PlacementWorkers {
     const { rows } = await this.#session.query<{ slots: string }>(`SELECT coalesce(sum(slots), 0) AS slots FROM workers WHERE ${ELIGIBLE}`);
     return Number(rows[0]!.slots);
   }
+
+  async candidates(): Promise<readonly WorkerId[]> {
+    const { rows } = await this.#session.query<{ worker_id: string }>(
+      `SELECT worker_id FROM workers WHERE ${ELIGIBLE} ORDER BY (SELECT count(*) FROM assignments
+       WHERE assignments.worker_id = workers.worker_id AND ${HELD}), worker_id COLLATE "C"`,
+    );
+    return Object.freeze(rows.map((row) => row.worker_id as WorkerId));
+  }
 }
 
 function workerRecord(row: WorkerRow): WorkerPlacementRecord {
-  const since = row.admission_pressure_since === null ? undefined : instant(row.admission_pressure_since);
   return Object.freeze({
     workerId: row.worker_id as WorkerId,
     enrolled: row.enrolled,
     revoked: row.revoked,
     draining: row.draining,
     reachable: row.reachable,
-    ...(since === undefined ? {} : { admissionPressureSince: since }),
+    ...(row.last_contact_at === null ? {} : { lastContactAt: instant(row.last_contact_at) }),
+    ...(row.admission_pressure_since === null ? {} : { admissionPressureSince: instant(row.admission_pressure_since) }),
+    ...(row.capacity_refused_since === null ? {} : { capacityRefusedSince: instant(row.capacity_refused_since) }),
     slots: row.slots,
     cpuMillicores: row.cpu_millicores,
     memoryMebibytes: row.memory_mebibytes,
@@ -124,6 +142,88 @@ export class PostgresQuotaSettings implements QuotaSettings {
   }
 }
 
+interface WaitingRow {
+  readonly id: string;
+  readonly project_id: string;
+  readonly placement_waiting_since: Date;
+}
+
+// Reads the query columns the task repository writes; the partial index on
+// waiting tasks keeps the scan to them. Excludes, then ranks, before LIMIT.
+export class PostgresPlacementQueue implements PlacementQueue {
+  readonly #session: Session;
+
+  constructor(session: Session) {
+    this.#session = session;
+  }
+
+  async waiting(limit: number, excluding: readonly TaskId[], after: ProjectId | undefined): Promise<readonly WaitingPlacement<TaskId>[]> {
+    const { rows } = await this.#session.query<WaitingRow>(
+      `SELECT id, project_id, placement_waiting_since FROM (
+         SELECT tasks.id, task_lineage.project_id, tasks.placement_waiting_since,
+           row_number() OVER (PARTITION BY task_lineage.project_id
+             ORDER BY tasks.placement_waiting_since, tasks.id COLLATE "C") AS project_rank
+         FROM ${LINKED_WAITING} AND tasks.id <> ALL($2::text[])
+       ) AS waiting
+       ORDER BY project_rank, (project_id COLLATE "C" <= $3::text) IS TRUE, project_id COLLATE "C",
+         placement_waiting_since, id COLLATE "C"
+       LIMIT $1`,
+      [limit, excluding, after ?? null],
+    );
+    return Object.freeze(rows.map((row) => Object.freeze({
+      projectId: row.project_id as ProjectId,
+      waitingSince: instant(row.placement_waiting_since),
+      item: row.id as TaskId,
+    })));
+  }
+
+  async stillWaiting(taskIds: readonly TaskId[]): Promise<readonly TaskId[]> {
+    const { rows } = await this.#session.query<{ id: string }>(
+      `SELECT tasks.id FROM ${LINKED_WAITING} AND tasks.id = ANY($1::text[]) ORDER BY tasks.id COLLATE "C"`,
+      [taskIds],
+    );
+    return Object.freeze(rows.map((row) => row.id as TaskId));
+  }
+}
+
+// The installation's one row; an upsert, so the first move creates it.
+export class PostgresPlacementRotation implements PlacementRotation {
+  readonly #session: Session;
+
+  constructor(session: Session) {
+    this.#session = session;
+  }
+
+  async read(): Promise<ProjectId | undefined> {
+    const { rows } = await this.#session.query<{ project_id: string }>('SELECT project_id FROM placement_rotation');
+    return rows[0]?.project_id as ProjectId | undefined;
+  }
+
+  async advance(projectId: ProjectId): Promise<Result<void>> {
+    await this.#session.query(
+      'INSERT INTO placement_rotation (project_id) VALUES ($1) ON CONFLICT (singleton) DO UPDATE SET project_id = EXCLUDED.project_id',
+      [projectId],
+    );
+    return ok(undefined);
+  }
+
+  // No row is no cursor: without one expected, only a first move inserts.
+  async advanceFrom(expected: ProjectId | undefined, next: ProjectId): Promise<Result<void>> {
+    await this.#session.query(
+      expected === undefined
+        ? 'INSERT INTO placement_rotation (project_id) VALUES ($1) ON CONFLICT (singleton) DO NOTHING'
+        : 'UPDATE placement_rotation SET project_id = $1 WHERE project_id = $2',
+      expected === undefined ? [next] : [next, expected],
+    );
+    return ok(undefined);
+  }
+}
+
+// The tasks the placement queue reads, open for further conditions.
+const LINKED_WAITING = `tasks JOIN task_lineage ON task_lineage.task_id = tasks.id
+  WHERE tasks.awaits_placement
+    AND NOT EXISTS (SELECT 1 FROM assignments WHERE assignments.attempt_id = tasks.active_attempt_id AND ${HELD})`;
+
 interface LineageRow {
   readonly task_id: string;
   readonly parent_task_id: string | null;
@@ -167,7 +267,6 @@ export class PostgresTaskLineage implements TaskLineage {
   }
 }
 
-const HELD = "reservation_state = 'held'";
 const WAITING_PARENT = `attempt_id IN (SELECT parent_attempt_id FROM delegations WHERE closed_at IS NULL)`;
 // A held reservation charges its own run and the run of its root task.
 const CHARGES_RUN = '(run_id = $1 OR root_task_id IN (SELECT task_id FROM task_lineage WHERE run_id = $1))';

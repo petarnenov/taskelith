@@ -4,6 +4,7 @@ import type { TaskId } from '@taskelith/sdlc';
 import { DEFAULT_PROJECT_QUOTA, DEFAULT_RUN_QUOTA } from '../domain/capacity-limits.js';
 import type { ProjectId, ProviderCredentialId, RunId } from '../domain/capacity-reservation.js';
 import type { Assignment } from '../domain/assignment.js';
+import { byCodeUnits } from '../domain/code-unit-order.js';
 import type { TaskLineageLink } from '../domain/delegation-admission.js';
 import type { CapacityCharge, CapacityLedger, OpenDelegation, WorkerOccupancy } from '../ports/capacity-ledger.js';
 import type { InstallationGuard } from '../ports/installation-guard.js';
@@ -15,18 +16,42 @@ import type { TaskLineage } from '../ports/task-lineage.js';
 // read-only ones take their records from the test that builds them.
 
 export class InMemoryPlacementWorkers implements PlacementWorkers {
-  readonly #workers: ReadonlyMap<WorkerId, WorkerPlacementRecord>;
+  readonly #workers: Map<WorkerId, WorkerPlacementRecord>;
+  readonly #assignments: () => readonly Assignment[];
 
-  constructor(workers: readonly WorkerPlacementRecord[]) {
+  // The assignments supply the held reservations that order the candidates.
+  constructor(workers: readonly WorkerPlacementRecord[], assignments: () => readonly Assignment[] = () => []) {
     this.#workers = new Map(workers.map((worker) => [worker.workerId, worker]));
+    this.#assignments = assignments;
   }
 
   async get(workerId: WorkerId): Promise<WorkerPlacementRecord | undefined> {
     return this.#workers.get(workerId);
   }
 
+  // For InMemoryWorkerReports, which writes the records placement reads
+  // and reads them without awaiting.
+  current(workerId: WorkerId): WorkerPlacementRecord | undefined {
+    return this.#workers.get(workerId);
+  }
+
+  records(): readonly WorkerPlacementRecord[] {
+    return [...this.#workers.values()];
+  }
+
+  replace(worker: WorkerPlacementRecord): void {
+    this.#workers.set(worker.workerId, Object.freeze({ ...worker }));
+  }
+
   async eligibleSlots(): Promise<number> {
     return [...this.#workers.values()].filter(isEligibleForPlacement).reduce((slots, worker) => slots + worker.slots, 0);
+  }
+
+  async candidates(): Promise<readonly WorkerId[]> {
+    const held = (workerId: WorkerId) => this.#assignments()
+      .filter((assignment) => assignment.workerId === workerId && assignment.reservation.state === 'held').length;
+    const eligible = [...this.#workers.keys()].filter((workerId) => isEligibleForPlacement(this.#workers.get(workerId)!));
+    return Object.freeze(eligible.sort((left, right) => held(left) - held(right) || byCodeUnits(left, right)));
   }
 }
 

@@ -50,33 +50,80 @@ export {
   type AssignmentId,
   type AttemptId,
   type ExecutionId,
+  type HarnessPluginId,
+  type IdempotencyKey,
   type InstallationState,
   type LaunchAuthId,
+  type NativeRequestId,
   type OperationId,
+  type PrincipalId,
   type RecoveryEpoch,
   type WorkerId,
 } from './domain/identifiers.js';
 export {
+  ADMISSION_PRESSURE_CAUSES,
+  ASSIGNMENT_REFUSAL_REASONS,
   AUTHORIZATION_OUTCOMES,
+  COMMAND_REJECTION_REASONS,
+  TERMINATION_EVIDENCE_KINDS,
+  type AdmissionPressureCause,
+  type AssignmentRef,
+  type AssignmentRefusal,
+  type AssignmentRefusalReason,
   type AuthorizationOutcome,
   type CancellationTarget,
+  type CommandCause,
   type CommandId,
   type CommandRecording,
+  type CommandRejection,
+  type CommandRejectionReason,
+  type DeclaredCapacity,
+  type ExecutionExit,
+  type ExecutionProcess,
+  type ExecutionSubject,
   type InstallationId,
   type JournalBinding,
   type JournaledAuthorization,
   type JournaledCancellation,
   type JournaledCommand,
   type JournaledExecution,
+  type JournaledIntent,
+  type JournalInventory,
   type JournalSnapshot,
   type LaunchIntent,
   type ObservationFact,
+  type OutboxBacklog,
   type OutboxEntry,
+  type ProtocolWindow,
+  type ResourceRequest,
+  type TerminationEvidenceKind,
 } from './domain/journal-records.js';
-export { planJournalRecovery, type RecoveryAction } from './domain/journal-recovery.js';
+export {
+  assembleSnapshot,
+  classifyOmission,
+  highestAppliedSequence,
+  highestReceivedSnapshot,
+  isFreshReport,
+  isRolledBack,
+  isUnsolicited,
+  supersededReports,
+  type AcceptanceProvenance,
+  type InventoryPart,
+  type InventoryRequest,
+  type InventorySnapshot,
+  type JournalBound,
+  type OmissionClass,
+  type ReportedAssignment,
+  type ReportedExecution,
+  type ReportFreshness,
+  type SnapshotAssembly,
+} from './domain/inventory.js';
+export { planJournalRecovery, unconfirmedSealedExecutions, type RecoveryAction } from './domain/journal-recovery.js';
+export { unknownExecutionsOf, type UnknownExecution, type UnrecordedProcess } from './domain/reconciliation.js';
 export {
   authorizeLaunch,
   checkLaunchPreconditions,
+  REPORTED_SEALS_LIMIT,
   rejectUnknownAssignment,
   replayLaunchOperation,
   type GrantIssue,
@@ -87,6 +134,7 @@ export {
   type LaunchReservation,
   type LaunchOutcome,
   type ReplayOutcome,
+  type SealedExecution,
 } from './domain/launch-authorization.js';
 export {
   GRANT_STATES,
@@ -99,10 +147,12 @@ export {
   type LaunchParameters,
   type LaunchParametersInput,
 } from './domain/launch-grant.js';
+export { LAUNCH_RETRY_DELAY, launchRetryDelay } from './domain/launch-retry.js';
 export {
   LAUNCH_REJECTION_REASONS,
   RETRYABLE_LAUNCH_REJECTIONS,
   REVOCATION_REASONS,
+  endsAssignment,
   launchRejection,
   type LaunchRejection,
   type LaunchRejectionReason,
@@ -121,6 +171,7 @@ export {
   type Sequence,
   type SequenceClass,
 } from './domain/observation-sequence.js';
+export { isQuarantineEvidence } from './domain/observation-epoch.js';
 export {
   START_DECISIONS,
   decideStartObservation,
@@ -140,6 +191,7 @@ export {
   isLaunchAffected,
   openAttempt,
   openTask,
+  placementNeed,
   rebindAdmission,
   recordExecutionEvidence,
   recordExit,
@@ -154,27 +206,201 @@ export {
   type EvidenceReport,
   type ExecutionReport,
   type ExitReport,
+  type LaunchRevocation,
   type ObservationResult,
+  type PlacementNeed,
   type Task,
   type TaskOutcomeFact,
 } from './domain/task.js';
 export { InMemoryEvidenceRecords } from './adapters/in-memory-evidence.js';
+export {
+  ScriptedAgentHarness,
+  type ScriptStep,
+  type ScriptedAgentHarnessOptions,
+} from './adapters/scripted-agent-harness.js';
 export { InMemoryInbox } from './adapters/in-memory-inbox.js';
+export { InMemoryInventoryReports, InMemoryInventoryRequests } from './adapters/in-memory-inventory.js';
+export { InMemoryProducerCursors } from './adapters/in-memory-producer-cursors.js';
+export { InMemoryReconciliationQueue, InMemoryUnrecordedProcesses } from './adapters/in-memory-reconciliation.js';
 export { InMemoryTaskRepository } from './adapters/in-memory-task-repository.js';
+export {
+  ACCOUNT_SIGNALS,
+  AGENT_HARNESS_PORT_VERSION,
+  CLASSIFIED_OPERATION_KINDS,
+  DELEGATION_OUTCOMES,
+  HARNESS_CAPABILITIES,
+  HARNESS_FAILURES,
+  HARNESS_PLATFORMS,
+  MAX_HARNESS_TEXT_LENGTH,
+  PERMISSION_DECISIONS,
+  REQUIRED_HARNESS_CAPABILITIES,
+  SESSION_END_REASONS,
+  SUBSCRIPTION_MECHANISMS,
+  TURN_OUTCOMES,
+  type AccountSignal,
+  type AgentHarness,
+  type AgentHarnessCapabilities,
+  type AgentHarnessOperation,
+  type ClassifiedOperationData,
+  type ClassifiedOperationKind,
+  type DelegationOutcome,
+  type HarnessCapability,
+  type HarnessEventData,
+  type HarnessFailure,
+  type HarnessPlatform,
+  type InterruptRequest,
+  type PermissionDecision,
+  type PinnedBinaryData,
+  type RespondRequest,
+  type ResponseData,
+  type ResumeSessionRequest,
+  type SessionEndReason,
+  type SessionHandleData,
+  type SessionRequest,
+  type SlotCredentialData,
+  type StartSessionRequest,
+  type SubscriptionMechanism,
+  type TerminalProgramData,
+  type TurnOutcome,
+  type TurnRequest,
+} from './ports/agent-harness.js';
+export {
+  parseAgentHarnessCapabilities,
+  parseHarnessEvent,
+  parseOperationResult,
+  type ClassifiedOperation,
+  type HarnessEvent,
+  type HarnessRequestKind,
+  type ParsedAgentHarnessCapabilities,
+  type PinnedBinary,
+} from './ports/agent-harness-data.js';
+export {
+  runAgentHarnessConformance,
+  type AgentHarnessConformanceCheck,
+  type AgentHarnessConformanceFinding,
+  type AgentHarnessConformanceFixture,
+  type AgentHarnessConformancePrompts,
+  type AgentHarnessConformanceReport,
+} from './ports/agent-harness-conformance.js';
+export {
+  BOARD_COLUMNS,
+  CARD_WAIT_KINDS,
+  EVIDENCE_FRESHNESS,
+  FLEET_OBSTACLE_REASONS,
+  MERGE_GATE_STATES,
+  OBSTACLE_DISPOSITIONS,
+  OBSTACLE_SOURCES,
+  PLACEMENT_REJECTING_REASONS,
+  PLACEMENT_WAITING_REASONS,
+  RETRY_BACKOFF_REASON,
+  SESSION_ACTIVITIES,
+  TASK_END_KINDS,
+  WORKER_REFUSAL_REASONS,
+  type AdmissionView,
+  type Board,
+  type BoardCard,
+  type BoardColumn,
+  type BoardReadModel,
+  type CardWait,
+  type DelegationView,
+  type EvidenceFreshness,
+  type FleetObstacleReason,
+  type GateView,
+  type MergeGateState,
+  type ObstacleDisposition,
+  type ObstacleSource,
+  type PlacementObstacle,
+  type PlacementRejectingReason,
+  type PlacementWaitingReason,
+  type SessionActivity,
+  type SessionActivityState,
+  type StageSummary,
+  type StageView,
+  type TaskDetail,
+  type TaskEnd,
+  type TaskEndKind,
+  type TaskView,
+  type TraceLink,
+  type ViewStamp,
+  type WorkerRefusalReason,
+} from './ports/board-read-model.js';
+export {
+  SPEC_APPROVERS,
+  WORK_TYPES,
+  type SpecApprover,
+  type WorkType,
+} from './domain/task-defaults.js';
 export { EVIDENCE_RECORDS_CONFORMANCE, EVIDENCE_STORE_CONFORMANCE } from './ports/evidence-conformance.js';
+export type { EvidencePublisher } from './ports/evidence-publisher.js';
 export type { EvidenceRecords } from './ports/evidence-records.js';
 export type { EvidenceStore } from './ports/evidence-store.js';
 export type { Inbox, InboxOutcome } from './ports/inbox.js';
 export type { LaunchAuthorityClient, LaunchAuthorizationRequest } from './ports/launch-authority-client.js';
 export type { LaunchPredicate, LaunchRecords, RecordedLaunch, RecordedRejection } from './ports/launch-records.js';
+export {
+  ANSWERING_ROLES,
+  ESCALATION_REASONS,
+  MAX_INPUT_ANSWER_BYTES,
+  NEEDS_YOU_KINDS,
+  RECONCILIATION_REASONS,
+  type AnswerRequest,
+  type AnsweringRole,
+  type CardCount,
+  type CardSubject,
+  type EscalationReason,
+  type NeedsYouAnswer,
+  type NeedsYouCounts,
+  type NeedsYouFilter,
+  type NeedsYouInbox,
+  type NeedsYouItem,
+  type NeedsYouItemId,
+  type NeedsYouItemState,
+  type NeedsYouKind,
+  type NeedsYouList,
+  type NeedsYouResolution,
+  type NeedsYouScope,
+  type NeedsYouSource,
+  type NeedsYouSourceId,
+  type NeedsYouSubject,
+  type ReconciliationReason,
+  type SourcePage,
+  type WorkerProcessSubject,
+} from './ports/needs-you.js';
 export type { Outbox, OutboxMessage } from './ports/outbox.js';
+export type { InventoryReports } from './ports/inventory-reports.js';
+export type { InventoryRequests } from './ports/inventory-requests.js';
+export type { ProducerCursors, ProducerJournal } from './ports/producer-cursors.js';
+export type { ReconciliationQueue } from './ports/reconciliation-queue.js';
+export type { UnrecordedProcesses } from './ports/unrecorded-processes.js';
 // The outbox ports are structurally identical, so they share one suite.
 export { OUTBOX_CONFORMANCE } from '@taskelith/sdlc';
 export {
   INBOX_CONFORMANCE,
+  INVENTORY_REPORTS_CONFORMANCE,
+  INVENTORY_REQUESTS_CONFORMANCE,
   LAUNCH_RECORDS_CONFORMANCE,
+  PRODUCER_CURSORS_CONFORMANCE,
+  RECONCILIATION_QUEUE_CONFORMANCE,
   TASK_REPOSITORY_CONFORMANCE,
   type LaunchRecordsConformanceTarget,
+  type ReconciliationQueueConformanceTarget,
 } from './ports/repository-conformance.js';
+export {
+  STANDING_RULE_OPERATIONS,
+  STANDING_RULE_ORIGINS,
+  type StandingApprovalRules,
+  type StandingRule,
+  type StandingRuleId,
+  type StandingRuleOperation,
+  type StandingRuleOrigin,
+  type StandingRuleRevocation,
+  type StandingRuleUse,
+} from './ports/standing-approval-rules.js';
 export type { TaskRepository } from './ports/task-repository.js';
-export type { WorkerJournal } from './ports/worker-journal.js';
+export {
+  isJournalStop,
+  isSpaceRefusal,
+  JOURNAL_STOP_REASONS,
+  SPACE_REFUSAL_REASON,
+  type WorkerJournal,
+} from './ports/worker-journal.js';

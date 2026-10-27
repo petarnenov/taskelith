@@ -7,12 +7,12 @@ import {
   InMemoryAdmissionRepository,
   InMemoryCurrentRevisions,
   InMemoryGateRepository,
-  InMemoryOutbox,
   InMemoryRunCatalog,
   InMemoryWorkflowRunRepository,
   parseWorkflowDefinition,
 } from '@taskelith/sdlc';
 import { failed, value } from '@taskelith/testing';
+import { inMemoryCapacity } from './in-memory-capacity.ts';
 
 const DIGEST = `sha256:${'ab'.repeat(32)}`;
 const definition = value(parseWorkflowDefinition({
@@ -29,11 +29,13 @@ const binding = {
 // One shared set of in-memory stores; the use cases' logic, not atomicity,
 // is what these tests check.
 function store(): ControlPlaneStore {
+  const tasks = new InMemoryTaskRepository();
+  const lineage = new InMemoryTaskLineage();
   const transaction: ControlPlaneTransaction = {
     runs: new InMemoryWorkflowRunRepository(), catalog: new InMemoryRunCatalog(), admissions: new InMemoryAdmissionRepository(),
-    gates: new InMemoryGateRepository(), tasks: new InMemoryTaskRepository(), lineage: new InMemoryTaskLineage(), outbox: new InMemoryOutbox(),
+    gates: new InMemoryGateRepository(), tasks, lineage, ...inMemoryCapacity(tasks, lineage),
     evidence: new InMemoryEvidenceRecords(), producers: { heldGenerations: async () => ({ ok: true, value: [] }) },
-    fleet: { worker: async () => ({ ok: true, value: undefined }) },
+    fleet: { worker: async () => ({ ok: true, value: undefined }), replaceJournal: undefined as never },
     revisions: new InMemoryCurrentRevisions(),
     // Only the launch authority reads these.
     assignments: undefined as never, installation: undefined as never, launches: undefined as never,

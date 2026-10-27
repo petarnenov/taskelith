@@ -35,7 +35,7 @@ The CLI makes no network calls and writes no application state. The npm installa
 
 Read the [architecture and delivery plan](docs/architecture.md) for scope, risks, and acceptance criteria.
 
-Development follows the [bootstrap governance policy](https://github.com/petarnenov/taskelith/blob/main/docs/governance.md). The [foundation status](https://github.com/petarnenov/taskelith/blob/main/docs/foundation.md) records the foundation work; G0 was closed on 2026-10-24 ([ADR 0007](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0007-g0-closure.md)), with its open items deferred to later gates, and G1 on 2026-10-25 ([ADR 0010](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0010-g1-closure.md)).
+Development follows the [bootstrap governance policy](https://github.com/petarnenov/taskelith/blob/main/docs/governance.md). The [foundation status](https://github.com/petarnenov/taskelith/blob/main/docs/foundation.md) records the foundation work; G0 was closed on 2026-10-24 ([ADR 0007](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0007-g0-closure.md)), G1 on 2026-10-25 ([ADR 0010](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0010-g1-closure.md)), and G2 on 2026-10-27 ([ADR 0015](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0015-g2-closure.md)), each with its open items deferred to later gates.
 
 ## Development
 

@@ -1,0 +1,33 @@
+[
+  {
+    "definition": {
+      "id": "installation-smoke",
+      "version": "1",
+      "stages": [
+        {
+          "id": "specs",
+          "obligations": [
+            "intake",
+            "specification"
+          ],
+          "origin": "native",
+          "dependsOn": []
+        },
+        {
+          "id": "apply",
+          "obligations": [
+            "implementation",
+            "review",
+            "verification",
+            "closure"
+          ],
+          "origin": "native",
+          "dependsOn": [
+            "specs"
+          ]
+        }
+      ]
+    },
+    "digest": "sha256:6276768cab07b565538814c5d4f9d7c8b18995d25da8f6e3123b8720f0c0dbb5"
+  }
+]

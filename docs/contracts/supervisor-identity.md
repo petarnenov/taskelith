@@ -207,6 +207,7 @@ Items 15, 24, and 25 implement these through the deterministic test harness (ite
 - A spawn that fails before a child exists and a child that fails to execute its program each end with `exited` and the failure, without a second spawn.
 - A system suspend that outlasts the deadline between hand-off and claim leads to a seal, not a spawn.
 - A Linux worker without a delegated cgroup v2 containment fails its self-check.
+- A Linux worker whose home cgroup is at or under its containment parent fails its self-check.
 - A machine reboot ends every execution with an unknown status where no `exit` was written; after a container replacement with the data root kept and the old cgroups gone, an execution is `uncertain` unless the old namespace's end is proven.
 - A corrupt, newer-format, or impossible record gives `uncertain`.
 - A worker of the next version reads records written by a supervisor of the previous version.

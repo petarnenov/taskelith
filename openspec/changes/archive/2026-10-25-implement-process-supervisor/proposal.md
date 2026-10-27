@@ -1,6 +1,6 @@
 ## Why
 
-G2 item 15 in the [G2 work plan](../../../docs/g2-plan.md). The plan asks for the worker process adapter under the [supervisor identity contract](../../../docs/contracts/supervisor-identity.md). It covers launch by stable execution identity, adoption, exit observation, cancellation of the process tree, and uncertainty reported when neither start nor absence is proven, on Linux and macOS. It also adds crash points around launch and handle persistence. Decision D7 (c) makes the supervisor one small process per execution. Items 20 (worker runtime), 24 (failure scenarios), and 25 (native acceptance) build on it.
+G2 item 15 in the [G2 work plan](/docs/g2-plan.md). The plan asks for the worker process adapter under the [supervisor identity contract](/docs/contracts/supervisor-identity.md). It covers launch by stable execution identity, adoption, exit observation, cancellation of the process tree, and uncertainty reported when neither start nor absence is proven, on Linux and macOS. It also adds crash points around launch and handle persistence. Decision D7 (c) makes the supervisor one small process per execution. Items 20 (worker runtime), 24 (failure scenarios), and 25 (native acceptance) build on it.
 
 ## What Changes
 

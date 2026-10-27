@@ -1,41 +1,62 @@
-import type { Instant, Result } from '@taskelith/kernel';
-import type { AttemptId, EvidenceRecords, LaunchRecords, TaskRepository, WorkerId } from '@taskelith/execution';
-import type { EnrolledWorker } from '@taskelith/fleet';
-import type { AssignmentRepository, InstallationGuard, TaskLineage } from '@taskelith/scheduling';
+import type { Result } from '@taskelith/kernel';
 import type {
-  AdmissionRepository,
+  AttemptId,
+  EvidenceRecords,
+  Inbox,
+  InventoryReports,
+  InventoryRequests,
+  LaunchRecords,
+  ProducerCursors,
+  ReconciliationQueue,
+  UnrecordedProcesses,
+  WorkerId,
+} from '@taskelith/execution';
+import type { FleetRegistry } from '@taskelith/fleet';
+import type {
+  CapacityTransaction,
+  DelegationRequests,
+  OutboxLookup,
+  PlacementOutcomeRecords,
+  PlacementQueue,
+  PlacementRotation,
+  WorkerReports,
+} from '@taskelith/scheduling';
+import type {
   CurrentRevisions,
   GateRepository,
-  Outbox,
   OwnershipGeneration,
   RunCatalog,
   WorkflowRunRepository,
 } from '@taskelith/sdlc';
 
-// What the API's use cases read and write in one SERIALIZABLE transaction;
-// `now` is the database clock. PostgresTransaction provides it.
-export interface ControlPlaneTransaction {
+// What the use cases read and write in one SERIALIZABLE transaction, the
+// reservation's included. PostgresTransaction provides it.
+export interface ControlPlaneTransaction extends CapacityTransaction {
   readonly runs: WorkflowRunRepository;
   readonly catalog: RunCatalog;
-  readonly admissions: AdmissionRepository;
   readonly gates: GateRepository;
-  readonly tasks: TaskRepository;
-  readonly lineage: TaskLineage;
-  readonly outbox: Outbox;
   readonly evidence: EvidenceRecords;
   readonly producers: EvidenceProducers;
   readonly fleet: WorkerDirectory;
   readonly revisions: CurrentRevisions;
-  readonly assignments: AssignmentRepository;
-  readonly installation: InstallationGuard;
   readonly launches: LaunchRecords;
-  now(): Promise<Instant>;
+  readonly placements: PlacementQueue;
+  readonly rotation: PlacementRotation;
+  readonly placementOutcomes: PlacementOutcomeRecords;
+  readonly delegations: DelegationRequests;
+  readonly inbox: Inbox;
+  readonly cursors: ProducerCursors;
+  readonly reports: WorkerReports;
+  readonly inventoryRequests: InventoryRequests;
+  readonly inventoryReports: InventoryReports;
+  readonly outboxLookup: OutboxLookup;
+  readonly unrecordedProcesses: UnrecordedProcesses;
+  readonly reconciliation: ReconciliationQueue;
 }
 
-// An enrolled worker as the transaction reads it, revoked or not.
-export interface WorkerDirectory {
-  worker(workerId: WorkerId): Promise<Result<EnrolledWorker | undefined>>;
-}
+// An enrolled worker as the transaction reads it, revoked or not, and the
+// replacement of its journal by a new incarnation.
+export type WorkerDirectory = Pick<FleetRegistry, 'worker' | 'replaceJournal'>;
 
 // The generations at which a worker held an attempt, from its assignments.
 export interface EvidenceProducers {

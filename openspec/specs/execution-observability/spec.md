@@ -21,7 +21,7 @@ The observability module SHALL write each log record through a `LogSink` port as
 
 ### Requirement: Logs without secrets
 
-The logger SHALL replace the value of every field whose name may hold a secret with `[redacted]`, and SHALL remove URL user information and bearer tokens from text in fields and correlation, before any sink receives the record. Adapters SHALL NOT log message bodies or payloads.
+The logger SHALL replace the value of every field whose name may hold a secret with `[redacted]`, and SHALL remove URL user information, bearer tokens, `key=value` secrets, issued bearer secrets, NKey seeds, NATS JWTs, and `.creds` blocks from text in fields and correlation, in time linear in the text, before any sink receives the record. Adapters SHALL NOT log message bodies or payloads.
 
 #### Scenario: A failure message quotes a connection URL
 
@@ -32,6 +32,16 @@ The logger SHALL replace the value of every field whose name may hold a secret w
 
 - **WHEN** a field named like a password, token, API key, credential, or authorization is logged
 - **THEN** its value is `[redacted]`
+
+#### Scenario: A secret of a known shape in text
+
+- **WHEN** a field or correlation value holds an issued Taskelith secret, an NKey seed, a NATS JWT, or a `.creds` block, even glued to other text
+- **THEN** the record holds `[redacted]` in its place
+
+#### Scenario: Pathological log text
+
+- **WHEN** a field or correlation value holds tens of thousands of characters such as `a.`, `proxy-`, or `eyJ` repeated, or `.creds` begin markers without an end
+- **THEN** redacting it takes time linear in its length
 
 ### Requirement: G2 signal catalogue and metrics port
 
@@ -53,11 +63,11 @@ Every adapter of the log sink, metrics, and control-plane signal ports SHALL pas
 
 ### Requirement: Control-plane snapshot from PostgreSQL
 
-The PostgreSQL adapter SHALL read, in one read-only snapshot that takes no part in the writers' serialization checks and on the database clock, the age of the oldest unpublished outbox row and the unpublished count, the age of the oldest assignment still offered and their count, the number of unknown executions, the slots of the workers eligible for placement, and the held reservations. An age SHALL be zero when nothing waits or when a row was stamped in the future.
+The PostgreSQL adapter SHALL read, in one read-only snapshot that takes no part in the writers' serialization checks, the age of the oldest unpublished outbox row and their count, the age of the oldest offered assignment and their count, the unknown executions, the eligible workers' slots, and the held reservations. An age SHALL be the database's now() less the row's stamp, from the database default or, for an assignment, placement's tx.now(), and zero when nothing waits or the stamp is later.
 
 #### Scenario: A snapshot of waiting work
 
-- **WHEN** two outbox rows wait for 30 seconds, an offered assignment waits for 90 seconds, a task holds an uncertain execution, and one of two workers is eligible
+- **WHEN** two outbox rows were stamped 30 seconds ago and an offered assignment 90 seconds ago, on a database clock that has not stepped back since, a task holds an uncertain execution, and one of two workers is eligible
 - **THEN** the snapshot reads two pending rows with a lag of at least 30 seconds, one offered assignment aged at least 90 seconds, one unknown execution, the eligible worker's slots, and one held slot
 
 #### Scenario: A later position appended earlier
@@ -69,6 +79,16 @@ The PostgreSQL adapter SHALL read, in one read-only snapshot that takes no part 
 
 - **WHEN** the assignment is accepted and the outbox row is marked published
 - **THEN** the snapshot reads no outbox lag, no offered assignment, and the held slot only
+
+#### Scenario: Placement under a skewed application clock
+
+- **WHEN** a task is placed while the application clock runs six hours behind the database clock
+- **THEN** the assignment's change time is the database time of the placement transaction, within a second of its offer's append time
+
+#### Scenario: A stamp later than the read
+
+- **WHEN** an outbox row and an offered assignment carry stamps later than the database's now(), as after that clock stepped back
+- **THEN** both ages read zero
 
 ### Requirement: Unknown executions and query columns
 

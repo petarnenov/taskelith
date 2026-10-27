@@ -46,3 +46,104 @@ A worker killed before or after any W commit SHALL find on restart a journal fro
 #### Scenario: Gate without a mechanism
 - **WHEN** no mechanism surfaces every `F_FULLFSYNC` failure
 - **THEN** the record states the gate as open
+
+### Requirement: Credential storage
+Enrollment SHALL write the journal, then each credential file of the generation under `worker/credentials/` at mode `0600` by the durable file rule, then `worker/identity` with the generation and references. A reference outside `worker/credentials/`, a missing or empty credential, or an unsafe path SHALL fail with a root failure, never a guess.
+
+#### Scenario: Missing credential
+- **WHEN** the broker credential that the identity references is removed
+- **THEN** reading the credentials fails with reason `corrupt`
+
+### Requirement: Intake records
+W1 SHALL append the acceptance observation of an accepted offer and the refusal or rejection observation of a refused or rejected command in the transaction that journals the command, and an inventory read SHALL return the snapshot with the last assigned sequence in one transaction.
+
+#### Scenario: Accepted offer
+- **WHEN** an offer is accepted
+- **THEN** its launch intent and its `assignment-accepted` observation are committed together
+
+### Requirement: Execution facts with wire fields
+The journal SHALL store each execution fact with the assignment, attempt, ownership generation, and recovery epoch of the launch intent its execution belongs to, read in the commit itself, and an unrecorded process with the journal's recovery epoch; a start SHALL carry its process identity, and an exit its start proof, spawn failure, and termination evidence. A fact derived again SHALL keep its `observationId`.
+
+#### Scenario: Start fact
+- **WHEN** W5s commits a start with a process identity
+- **THEN** the outbox entry names the intent's assignment, attempt, generation, and recovery epoch, with the process
+
+#### Scenario: Epoch of the intent
+- **WHEN** an execution of an intent whose offer named epoch 3 is reported uncertain and then exits, under a journal of epoch 1
+- **THEN** both outbox entries and their published observations carry epoch 3
+
+### Requirement: Journal format 4
+The journal SHALL be format 4. Format 3 added to format 2 the `expired` operation outcome, terminal sequences, record removal, unproven terminations, and unapplied cancellations; format 4 adds the recovery epoch to every stored execution fact and unrecorded process. A worker SHALL migrate a format 1, 2, or 3 journal to format 4 in one transaction on start, expiring the pending operations of executions already `not-started`.
+
+#### Scenario: Format 2 journal
+- **WHEN** a worker opens a format 2 journal
+- **THEN** it is format 4 afterwards, keeps its records, and takes each terminal sequence from the outbox
+
+#### Scenario: Format 3 journal
+- **WHEN** a worker opens a format 3 journal whose outbox holds execution facts and an unrecorded process without an epoch
+- **THEN** each execution fact takes its intent's recovery epoch and the unrecorded process the journal's
+
+### Requirement: Removable execution records
+The journal SHALL list as removable each terminal execution whose terminal fact's outbox entry is confirmed and whose record is not yet removed, and SHALL commit a removal only for such an execution.
+
+#### Scenario: Terminal fact confirmed
+- **WHEN** the outbox entry of an execution's exit is confirmed
+- **THEN** the execution is removable until its removal is journaled
+
+### Requirement: Admission pressure facts
+The journal SHALL commit each `admission-pressure-changed` fact with its causes and a declaration number equal to the sequence it takes, so each change has its own `observationId` within the journal, and SHALL journal a `worker-admission-pressure` refusal with its causes. No journal format change SHALL be needed.
+
+#### Scenario: Two changes
+- **WHEN** the worker journals pressure with `journal-backlog` and then with no causes
+- **THEN** the outbox holds two `admission-pressure-changed` entries with different observation identities
+
+### Requirement: Outbox backlog
+The journal SHALL report the number of unconfirmed outbox entries and the bytes they store, counting the observation identity, the fact, and the recording time of each entry, in one read.
+
+#### Scenario: Confirmation lowers the backlog
+- **WHEN** the control plane confirms the first of two entries
+- **THEN** the backlog reports one entry and its stored bytes
+
+### Requirement: Volume space and buffered logs
+The adapter SHALL read the free and total bytes of the volume that holds a path, counting only blocks an unprivileged writer may use, and SHALL empty in place, through its descriptor, only a single-link regular file opened without following a final link and checked to be at its path inside the log directories recorded on traversal; a missing log directory SHALL truncate nothing.
+
+#### Scenario: Linked file in the logs
+- **WHEN** `worker/logs/` holds a link to a file outside it
+- **THEN** the linked file keeps its content, and the regular log files are emptied
+
+#### Scenario: Hard link to the journal
+- **WHEN** `worker/logs/` holds a hard link to the journal file
+- **THEN** the journal keeps its content
+
+#### Scenario: Log directory swapped for a link
+- **WHEN** a log directory is replaced by a link to the journal directory after traversal recorded it
+- **THEN** the journal keeps its content
+
+### Requirement: Exit type of the journal port
+The exit that the journal port's `recordExit` takes SHALL allow the termination evidence `boot-changed` or `namespace-ended` only with status `unknown`, so that the worker cannot journal recovery evidence with a known exit status.
+
+#### Scenario: Recovery evidence with a known status passed to the journal
+- **WHEN** code passes `recordExit` an exit with `namespace-ended` and an exit code
+- **THEN** type checking fails
+
+### Requirement: Writes refused for lack of space
+A write that SQLite refuses for lack of space SHALL roll back as a whole, leave the journal usable, fail with the reason `disk-full`, and call the hook the journal and the worker root accept for it, once per refusal.
+
+#### Scenario: Full disk at commit
+- **WHEN** the commit of a command is refused with `SQLITE_FULL`
+- **THEN** the journal holds no intent, the hook is called once, and the next write commits
+
+### Requirement: Execution group traversal
+Given an execution group, the adapter SHALL give `dataRoot`, `worker/`, and `worker/workspaces/` that group and mode `0710` at enrollment and at every start, after refusing a `worker/workspaces/` that is a symbolic link or owned by another account, SHALL leave every control-record directory at `0700`, and SHALL fail with `precondition-failed`, enrolling nothing, when the worker cannot give a directory that group.
+
+#### Scenario: Root enrolled before
+- **WHEN** a root enrolled without an execution group is opened with one
+- **THEN** `worker/` and `worker/workspaces/` have that group and mode `0710`
+
+#### Scenario: Worker outside the group
+- **WHEN** the worker, as root with only `CAP_SETUID`, `CAP_SETGID`, and `CAP_KILL`, enrolls without the execution group as a supplementary group
+- **THEN** enrollment fails and leaves no `worker/` subtree
+
+#### Scenario: Linked workspace root
+- **WHEN** `worker/workspaces/` is a symbolic link to a control-record directory and the worker starts with an execution group
+- **THEN** the start fails and the linked directory keeps mode `0700`

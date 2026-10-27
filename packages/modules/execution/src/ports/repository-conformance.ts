@@ -27,11 +27,26 @@ import {
 import { authorizeLaunch } from '../domain/launch-authorization.js';
 import { parseLaunchParameters } from '../domain/launch-grant.js';
 import { parseRecoveryEpoch } from '../domain/identifiers.js';
-import { claimOwnership, openAttempt, openTask, type Task } from '../domain/task.js';
+import { claimOwnership, openAttempt, openTask, recordExecutionEvidence, type Task } from '../domain/task.js';
 import { launchRejection } from '../domain/launch-rejection.js';
 import { revokeLaunch } from '../domain/task.js';
+import {
+  parseSequence,
+  recordAppliedSequence,
+  startProducerCursor,
+  type JournalId,
+  type ProducerCursor,
+} from '../domain/observation-sequence.js';
+import type { AssignmentId, WorkerId } from '../domain/identifiers.js';
+import type { InventoryPart, InventoryRequest } from '../domain/inventory.js';
+import type { UnrecordedProcess } from '../domain/reconciliation.js';
 import type { Inbox } from './inbox.js';
+import type { InventoryReports } from './inventory-reports.js';
+import type { InventoryRequests } from './inventory-requests.js';
+import type { ProducerCursors } from './producer-cursors.js';
 import type { LaunchRecords, RecordedLaunch } from './launch-records.js';
+import type { ReconciliationQueue } from './reconciliation-queue.js';
+import type { UnrecordedProcesses } from './unrecorded-processes.js';
 import type { TaskRepository } from './task-repository.js';
 
 // Shared suites that the in-memory and the database adapters of the
@@ -190,6 +205,111 @@ export const INBOX_CONFORMANCE: readonly ConformanceCase<Inbox>[] = Object.freez
   },
 ]);
 
+export const PRODUCER_CURSORS_CONFORMANCE: readonly ConformanceCase<ProducerCursors>[] = Object.freeze([
+  {
+    name: 'a cursor starts at zero, reads back as saved, and is kept per journal',
+    async check(cursors: ProducerCursors) {
+      const problems: string[] = [];
+      const workerId = must(parseIdentifier('WorkerId', 'worker-1')) as WorkerId;
+      const journal = (text: string) => must(parseIdentifier('JournalId', text)) as JournalId;
+      const first = journal('journal-1');
+      expectSame(problems, 'unknown', await cursors.get(workerId, first), startProducerCursor(workerId, first));
+      const applied = (cursor: ProducerCursor, ...sequences: number[]) => sequences.reduce(
+        (next, sequence) => must(recordAppliedSequence(next, must(parseSequence(sequence)))), cursor);
+      const gapped = applied(startProducerCursor(workerId, first), 1, 2, 4, 7);
+      expectSuccess(problems, 'save', await cursors.save(gapped));
+      expectSame(problems, 'saved', await cursors.get(workerId, first), gapped);
+      const closed = applied(gapped, 3);
+      expectSuccess(problems, 'save again', await cursors.save(closed));
+      expectSame(problems, 'replaced', await cursors.get(workerId, first), closed);
+      const other = journal('journal-2');
+      expectSame(problems, 'other journal', await cursors.get(workerId, other), startProducerCursor(workerId, other));
+      return problems;
+    },
+  },
+  {
+    name: 'a worker\'s journals are listed with their retirement and highest snapshot',
+    async check(cursors: ProducerCursors) {
+      const problems: string[] = [];
+      const workerId = id('WorkerId', 'worker-1') as WorkerId;
+      const [first, second, third] = ['journal-1', 'journal-2', 'journal-3'].map((text) => id('JournalId', text) as JournalId);
+      expectSame(problems, 'none', await cursors.listByWorker(workerId), []);
+      const saved = must(recordAppliedSequence(startProducerCursor(workerId, first!), must(parseSequence(1))));
+      expectSuccess(problems, 'save', await cursors.save(saved));
+      expectSuccess(problems, 'snapshot 4', await cursors.recordReportedSnapshot(workerId, first!, 4));
+      expectSuccess(problems, 'snapshot 2', await cursors.recordReportedSnapshot(workerId, first!, 2));
+      expectSuccess(problems, 'retire unknown', await cursors.retire(workerId, third!, AT));
+      expectSuccess(problems, 'retire again', await cursors.retire(workerId, third!, LATER));
+      expectSuccess(problems, 'snapshot unknown', await cursors.recordReportedSnapshot(workerId, second!, 1));
+      expectSuccess(problems, 'other worker', await cursors.retire(id('WorkerId', 'worker-2') as WorkerId, first!, AT));
+      expectSuccess(problems, 'save after snapshot', await cursors.save(saved));
+      expectSame(problems, 'listed', await cursors.listByWorker(workerId), [
+        { cursor: saved, reportedSnapshot: 4 },
+        { cursor: startProducerCursor(workerId, second!), reportedSnapshot: 1 },
+        { cursor: startProducerCursor(workerId, third!), retiredAt: AT, reportedSnapshot: 0 },
+      ]);
+      return problems;
+    },
+  },
+]);
+
+function inventoryRequest(workerText: string, requestId: string, sequence: number): InventoryRequest {
+  return {
+    workerId: id('WorkerId', workerText) as WorkerId, requestId, requestedAt: AT,
+    bound: [{ journalId: id('JournalId', 'journal-1') as JournalId, sequence, assignmentIds: [id('AssignmentId', 'assignment-1') as AssignmentId] }],
+  };
+}
+
+export const INVENTORY_REQUESTS_CONFORMANCE: readonly ConformanceCase<InventoryRequests>[] = Object.freeze([
+  {
+    name: 'only the latest request of each worker is current, with its bound',
+    async check(requests: InventoryRequests) {
+      const problems: string[] = [];
+      const workerId = id('WorkerId', 'worker-1') as WorkerId;
+      expectSame(problems, 'none', await requests.current(workerId), undefined);
+      expectSuccess(problems, 'first', await requests.save(inventoryRequest('worker-1', 'request-1', 9)));
+      expectSuccess(problems, 'other worker', await requests.save(inventoryRequest('worker-2', 'request-2', 1)));
+      expectSuccess(problems, 'second', await requests.save({ ...inventoryRequest('worker-1', 'request-3', 10), requestedAt: LATER, bound: [] }));
+      expectSame(problems, 'current', await requests.current(workerId), { ...inventoryRequest('worker-1', 'request-3', 10), requestedAt: LATER, bound: [] });
+      expectSame(problems, 'kept', await requests.current(id('WorkerId', 'worker-2') as WorkerId), inventoryRequest('worker-2', 'request-2', 1));
+      return problems;
+    },
+  },
+]);
+
+function inventoryPart(reportId: string, part: number, overrides: Partial<InventoryPart> = {}): InventoryPart {
+  return {
+    reportId, part, parts: 2, workerId: id('WorkerId', 'worker-1') as WorkerId, journalId: id('JournalId', 'journal-1') as JournalId,
+    snapshot: 1, throughSequence: 3,
+    assignments: [{ commandId: 'command-1', assignmentId: 'assignment-1', attemptId: 'attempt-1', ownershipGeneration: 2, state: 'accepted' }],
+    executions: [{ executionId: 'execution-1', assignmentId: 'assignment-1', state: 'started', uncertain: false }],
+    ...overrides,
+  };
+}
+
+export const INVENTORY_REPORTS_CONFORMANCE: readonly ConformanceCase<InventoryReports>[] = Object.freeze([
+  {
+    name: 'parts are stored once and listed per journal by snapshot, report, and part',
+    async check(reports: InventoryReports) {
+      const problems: string[] = [];
+      const workerId = id('WorkerId', 'worker-1') as WorkerId;
+      const journalId = id('JournalId', 'journal-1') as JournalId;
+      const later = inventoryPart('report-a', 1, { snapshot: 2, parts: 1, requestId: 'request-1', assignments: [], executions: [] });
+      const parts = [inventoryPart('report-b', 2), later, inventoryPart('report-b', 1)];
+      for (const part of parts) expectSuccess(problems, `add ${part.reportId}.${part.part}`, await reports.add(part));
+      expectCode(problems, 'add again', await reports.add(inventoryPart('report-b', 1, { snapshot: 9 })), 'conflict');
+      expectSuccess(problems, 'other journal', await reports.add(inventoryPart('report-c', 1, { journalId: id('JournalId', 'journal-2') as JournalId })));
+      expectSame(problems, 'listed', await reports.listByJournal(workerId, journalId), [inventoryPart('report-b', 1), inventoryPart('report-b', 2), later]);
+      expectSuccess(problems, 'remove report', await reports.remove('report-b'));
+      expectSame(problems, 'after remove', await reports.listByJournal(workerId, journalId), [later]);
+      expectSuccess(problems, 'remove journal', await reports.removeByJournal(workerId, journalId));
+      expectSame(problems, 'after journal', await reports.listByJournal(workerId, journalId), []);
+      expectSame(problems, 'other kept', (await reports.listByJournal(workerId, id('JournalId', 'journal-2') as JournalId)).length, 1);
+      return problems;
+    },
+  },
+]);
+
 // The grant index is kept by the task repository, so the two are one target.
 export interface LaunchRecordsConformanceTarget {
   readonly tasks: TaskRepository;
@@ -233,7 +353,7 @@ export const LAUNCH_RECORDS_CONFORMANCE: readonly ConformanceCase<LaunchRecordsC
       expectSame(problems, 'artifact', ids(await launches.liveGrants({ kind: 'artifact', artifactId: SPEC.artifactId })), ['launch-1', 'launch-2']);
       expectSame(problems, 'gates', ids(await launches.liveGrants({ kind: 'gates', gateIds: [passedGate().id] })), ['launch-1', 'launch-2']);
       expectSame(problems, 'no gates', ids(await launches.liveGrants({ kind: 'gates', gateIds: [] })), []);
-      const revoked = must(revokeLaunch(first, first.attempts[0]!.id, 'gate-not-passed', LATER));
+      const revoked = must(revokeLaunch(first, first.attempts[0]!.id, { grants: 'gate-not-passed', cancellation: 'launch-revoked' }, LATER));
       must(await tasks.replace(revoked, first.generation));
       expectSame(problems, 'all', ids(await launches.liveGrants({ kind: 'all' })), ['launch-2']);
       expectRead(problems, 'revoked still found', await launches.byLaunchAuthId(id('LaunchAuthId', 'launch-1')), recordedLaunch(first));
@@ -256,6 +376,65 @@ export const LAUNCH_RECORDS_CONFORMANCE: readonly ConformanceCase<LaunchRecordsC
       expectCode(problems, 'again', await launches.recordRejection(recorded), 'conflict');
       expectRead(problems, 'read', await launches.rejection(request.workerId, request.operationId), recorded);
       expectRead(problems, 'other worker', await launches.rejection(id('WorkerId', 'worker-2'), request.operationId), undefined);
+      return problems;
+    },
+  },
+]);
+
+// The queue reads the stored tasks and the recorded processes.
+export interface ReconciliationQueueConformanceTarget {
+  readonly tasks: TaskRepository;
+  readonly processes: UnrecordedProcesses;
+  readonly queue: ReconciliationQueue;
+}
+
+// The authorized execution of `authorizedTask`, made uncertain.
+function uncertainTask(taskId: string, launch: string, worker: string): Task {
+  const task = authorizedTask(taskId, launch, worker);
+  const report = { workerId: id('WorkerId', worker), executionId: id('ExecutionId', 'execution-1'), kind: 'uncertain' as const };
+  return must(recordExecutionEvidence(task, report, LATER)).task;
+}
+
+function unrecordedProcess(observation: string, recordedAt: Instant, worker = 'worker-1'): UnrecordedProcess {
+  return {
+    workerId: id('WorkerId', worker), journalId: id('JournalId', 'journal-1') as JournalId, observationId: id('ObservationId', observation),
+    containment: 'cgroup taskelith/unknown', processCount: 2, recordedAt,
+  };
+}
+
+export const RECONCILIATION_QUEUE_CONFORMANCE: readonly ConformanceCase<ReconciliationQueueConformanceTarget>[] = Object.freeze([
+  {
+    name: 'unknown executions are listed for their worker and their task, known ones never',
+    async check({ tasks, queue }) {
+      const problems: string[] = [];
+      const workerId = id('WorkerId', 'worker-1');
+      expectSame(problems, 'none', await queue.unknownExecutionsOfWorker(workerId), []);
+      const [second, first] = [uncertainTask('task-2', '2', 'worker-1'), uncertainTask('task-1', '1', 'worker-1')];
+      for (const task of [second!, first!, uncertainTask('task-3', '3', 'worker-2'), authorizedTask('task-4', '4', 'worker-1')]) {
+        must(await tasks.add(task));
+      }
+      const listed = (unknown: readonly { taskId: string; execution: { id: string } }[]) => unknown.map(({ taskId, execution }) => [taskId, execution.id]);
+      expectSame(problems, 'worker', listed(await queue.unknownExecutionsOfWorker(workerId)), [['task-1', 'execution-1'], ['task-2', 'execution-1']]);
+      expectSame(problems, 'task', await queue.unknownExecutionsOfTask(first!.id), [
+        { taskId: first!.id, attemptId: first!.attempts[0]!.id, execution: first!.attempts[0]!.executions[0] },
+      ]);
+      expectSame(problems, 'known', await queue.unknownExecutionsOfTask(id('TaskId', 'task-4')), []);
+      return problems;
+    },
+  },
+  {
+    name: 'an unrecorded process is recorded once per observation and listed for its worker',
+    async check({ processes, queue }) {
+      const problems: string[] = [];
+      const workerId = id('WorkerId', 'worker-1');
+      expectSame(problems, 'none', await queue.unrecordedProcessesOfWorker(workerId), []);
+      expectSuccess(problems, 'later', await processes.record(unrecordedProcess('observation-2', LATER)));
+      expectSuccess(problems, 'first', await processes.record(unrecordedProcess('observation-1', AT)));
+      expectSuccess(problems, 'repeat', await processes.record({ ...unrecordedProcess('observation-1', LATER), processCount: 9 }));
+      expectSuccess(problems, 'other worker', await processes.record(unrecordedProcess('observation-1', AT, 'worker-2')));
+      expectSame(problems, 'listed', await queue.unrecordedProcessesOfWorker(workerId), [
+        unrecordedProcess('observation-1', AT), unrecordedProcess('observation-2', LATER),
+      ]);
       return problems;
     },
   },

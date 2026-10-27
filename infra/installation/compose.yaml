@@ -1,0 +1,128 @@
+# Minimal local installation (G2 item 23); run it through the make targets,
+# which build the images and order the bootstrap (scripts/installation.sh).
+
+x-postgres-url: &postgres-url
+  postgres://taskelith:${TASKELITH_POSTGRES_PASSWORD:?set TASKELITH_POSTGRES_PASSWORD}@postgres:5432/taskelith
+
+services:
+  postgres:
+    image: postgres:18.6-trixie@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
+    environment:
+      POSTGRES_USER: taskelith
+      POSTGRES_PASSWORD: ${TASKELITH_POSTGRES_PASSWORD:?set TASKELITH_POSTGRES_PASSWORD}
+      POSTGRES_DB: taskelith
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pg_isready", "--host", "127.0.0.1", "--username", "taskelith", "--dbname", "taskelith"]
+      interval: 1s
+      timeout: 5s
+      retries: 60
+
+  # One-shot, as root: copies the broker trust from the control-plane data
+  # root and hands the NATS volumes to the broker's unprivileged user.
+  nats-setup:
+    image: nats:2.15.1-alpine@sha256:7ae34c25dfd6fe2e01c6483eabef20d796690fdcac6c4d94ca780a6cf9877fde
+    profiles: [setup]
+    entrypoint: ["sh", "-euc"]
+    command:
+      - >-
+        install -o 10002 -g 10002 -m 0400
+        /control-plane-data/control-plane/nats-authority.conf
+        /etc/nats/authority/nats-authority.conf
+        && chown 10002:10002 /etc/nats/authority /data
+    network_mode: none
+    volumes:
+      - control-plane-data:/control-plane-data:ro
+      - nats-authority:/etc/nats/authority
+      - nats-data:/data
+
+  nats:
+    image: nats:2.15.1-alpine@sha256:7ae34c25dfd6fe2e01c6483eabef20d796690fdcac6c4d94ca780a6cf9877fde
+    user: "10002:10002"
+    volumes:
+      - ./nats-server.conf:/etc/nats/nats-server.conf:ro
+      - nats-authority:/etc/nats/authority:ro
+      - nats-data:/data
+    # Plain connections on localhost only: TLS is G3 work.
+    ports:
+      - "127.0.0.1:${TASKELITH_NATS_PUBLISH_PORT-4222}:4222"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8222/healthz?js-enabled-only=true"]
+      interval: 1s
+      timeout: 5s
+      retries: 60
+
+  control-plane:
+    image: taskelith-control-plane:${TASKELITH_IMAGE_TAG:?run through scripts/installation.sh}
+    pull_policy: never
+    environment:
+      TASKELITH_POSTGRES_URL: *postgres-url
+      TASKELITH_NATS_URL: nats://nats:4222
+      # 1 GiB per stream fits the broker's file store (nats-server.conf).
+      TASKELITH_STREAM_MAX_BYTES: "1073741824"
+    volumes:
+      - control-plane-data:/var/lib/taskelith
+    # Plain HTTP on localhost only: TLS is G3 work.
+    ports:
+      - "127.0.0.1:${TASKELITH_API_PUBLISH_PORT-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      # The API has no health endpoint yet; an accepted connection counts.
+      test: ["CMD", "node", "-e", "require('net').connect(8080, '127.0.0.1').on('connect', () => process.exit(0)).on('error', () => process.exit(1))"]
+      interval: 1s
+      timeout: 5s
+      retries: 60
+
+  # One-shot administrative entry (installation contract section 4).
+  admin:
+    image: taskelith-control-plane:${TASKELITH_IMAGE_TAG:?run through scripts/installation.sh}
+    pull_policy: never
+    profiles: [admin]
+    entrypoint: ["node", "apps/control-plane/dist/admin/admin-main.js"]
+    environment:
+      TASKELITH_POSTGRES_URL: *postgres-url
+      TASKELITH_NATS_URL: nats://nats:4222
+    volumes:
+      - control-plane-data:/var/lib/taskelith
+
+  worker:
+    image: taskelith-worker:${TASKELITH_IMAGE_TAG:?run through scripts/installation.sh}
+    pull_policy: never
+    profiles: [worker]
+    # Root only for the entrypoint, which delegates the private cgroup
+    # namespace and keeps SETUID, SETGID, and KILL for the worker.
+    user: "0:0"
+    cgroup: private
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, KILL, SETGID, SETPCAP, SETUID, SYS_ADMIN]
+    # The remount of /sys/fs/cgroup needs no AppArmor profile in its way;
+    # the seccomp profile refuses namespaces despite SYS_ADMIN (seccomp/).
+    security_opt: ["apparmor=unconfined", "no-new-privileges=true", "seccomp=./seccomp/worker.json"]
+    # Reaps executions whose supervisor ended first.
+    init: true
+    environment:
+      TASKELITH_CONTROL_PLANE_URL: http://control-plane:8080
+      TASKELITH_NATS_URL: nats://nats:4222
+      # Read only on the first start, which enrolls the worker.
+      TASKELITH_ENROLLMENT_TOKEN: ${TASKELITH_ENROLLMENT_TOKEN:-}
+    volumes:
+      - worker-data:/var/lib/taskelith
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  control-plane-data:
+  nats-authority:
+  nats-data:
+  worker-data:

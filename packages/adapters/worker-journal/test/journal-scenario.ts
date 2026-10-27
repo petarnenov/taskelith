@@ -1,7 +1,7 @@
 import { writeSync } from 'node:fs';
 import { crashPointsFromEnvironment, id, value } from '@taskelith/testing';
 import { openWorkerRoot } from '@taskelith/worker-journal';
-import { assignment, grantFor, launchRequest, rootOptions } from './fixtures.ts';
+import { PROCESS, assignment, exitWith, grantFor, launchRequest, rootOptions } from './fixtures.ts';
 
 // A worker that runs one launch through its W commits; the crash point
 // harness kills it where TASKELITH_CRASH_POINT says. Prints each step.
@@ -22,8 +22,8 @@ if (scenario === 'seal') {
   value(journal.recordNotStarted(execution));
 } else {
   value(journal.recordExecutionRecordWritten(execution));
-  value(journal.recordStart(execution, id('LaunchAuthId', 'launch-auth-1')));
-  value(journal.recordExit(execution, { kind: 'code', code: 0 }));
+  value(journal.recordStart(execution, id('LaunchAuthId', 'launch-auth-1'), PROCESS));
+  value(journal.recordExit(execution, exitWith({ kind: 'code', code: 0 })));
 }
 root.close();
 console.log('done');

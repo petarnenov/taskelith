@@ -9,6 +9,7 @@ export {
   syncPath,
   type DataRootSources,
 } from '@taskelith/data-root';
+export { NODE_LOG_FILE_SYSTEM, truncateBufferedLogs, type LogFileSystem } from './buffered-logs.js';
 export { ExclusiveFileLock, LOCK_APPLICATION_ID } from './exclusive-file-lock.js';
 export { JOURNAL_APPLICATION_ID, JOURNAL_FORMAT } from './journal-database.js';
 export { checkJournalFault, hostBootId, recordJournalFault } from './journal-fault.js';
@@ -24,7 +25,31 @@ export {
   type JournalHooks,
   type WritePoint,
 } from './sqlite-worker-journal.js';
-export { checkVolume, parseDfMountPoint, parseMacMountOptions, probeVolume, type VolumeDescription, type VolumeProbe } from './volume.js';
-export { IDENTITY_FORMAT, readIdentity, type WorkerIdentity } from './worker-identity.js';
-export { enrollWorkerRoot, openWorkerRoot, startNewIncarnation, type WorkerRoot, type WorkerRootOptions } from './worker-root.js';
+export {
+  checkVolume,
+  parseDfMountPoint,
+  parseMacMountOptions,
+  probeVolume,
+  readVolumeSpace,
+  type VolumeDescription,
+  type VolumeProbe,
+  type VolumeSpace,
+  type VolumeSpaceReader,
+} from './volume.js';
+export {
+  credentialReferencesOf,
+  readWorkerCredentials,
+  type WorkerCredentials,
+  type WorkerEnrollment,
+} from './worker-credentials.js';
+export { IDENTITY_FORMAT, readIdentity, type CredentialReferences, type WorkerIdentity } from './worker-identity.js';
+export {
+  claimWorkerRoot,
+  enrollWorkerRoot,
+  openWorkerRoot,
+  startNewIncarnation,
+  type RootClaim,
+  type WorkerRoot,
+  type WorkerRootOptions,
+} from './worker-root.js';
 export { JOURNAL_FILE, workerPaths, type WorkerPaths } from './worker-paths.js';

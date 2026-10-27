@@ -168,7 +168,7 @@ test('an observation names its producer journal, a gapless sequence, and its att
   assert.ok(violations(checkMessageSchema('AssignmentAcceptedObservation', { ...accepted, metadata: withoutJournal })).some((text) => text.includes('journalId')));
   assert.ok(violations(checkMessageSchema('AssignmentAcceptedObservation', { ...accepted, metadata: { ...accepted.metadata, sequence: 0 } })).some((text) => text.includes('/metadata/sequence')));
   assert.ok(violations(checkMessageSchema('AssignmentAcceptedObservation', { ...accepted, metadata: withoutGeneration })).some((text) => text.includes('ownershipGeneration')));
-  const unrecorded = observation('execution.unrecorded-process', { containment: 'taskelith/unknown', processes: [PROCESS] });
+  const unrecorded = observation('execution.unrecorded-process', { containment: 'taskelith/unknown', recoveryEpoch: 1, processes: [PROCESS] });
   const { attemptId: _attemptId, ownershipGeneration: _ownership, ...unattributed } = unrecorded.metadata;
   assert.ok(checkMessageSchema('UnrecordedProcessObservation', { ...unrecorded, metadata: unattributed }).ok);
 });
@@ -188,21 +188,50 @@ test('a refusal under admission pressure names its causes', () => {
 
 test('execution facts carry the identities the launch authority checks', () => {
   const started = { executionId: 'execution-1', assignmentId: 'assignment-1', launchAuthId: 'launch-1', recoveryEpoch: 1, process: PROCESS };
-  const exited = { executionId: 'execution-1', status: { kind: 'signal', signal: 'SIGKILL' }, startProven: true, spawnFailed: false, terminationEvidence: 'containment-empty' };
-  const unproven = { executionId: 'execution-1', survivors: [{ ...PROCESS, platform: 'darwin', pid: 4300 }] };
+  const exited = { executionId: 'execution-1', recoveryEpoch: 1, status: { kind: 'signal', signal: 'SIGKILL' }, startProven: true, spawnFailed: false, terminationEvidence: 'containment-empty' };
+  const unproven = { executionId: 'execution-1', recoveryEpoch: 1, survivors: [{ ...PROCESS, platform: 'darwin', pid: 4300 }] };
 
   assert.ok(checkMessageSchema('ExecutionStartedObservation', observation('execution.started', started)).ok);
   assert.ok(checkMessageSchema('ExecutionExitedObservation', observation('execution.exited', exited, 2)).ok);
   assert.ok(checkMessageSchema('TerminationUnprovenObservation', observation('execution.termination-unproven', unproven)).ok);
-  assert.ok(checkMessageSchema('ExecutionNotStartedObservation', observation('execution.not-started', { executionId: 'execution-1' })).ok);
+  assert.ok(checkMessageSchema('ExecutionNotStartedObservation', observation('execution.not-started', { executionId: 'execution-1', recoveryEpoch: 1 })).ok);
   assert.ok(!checkMessageSchema('ExecutionStartedPayload', { ...started, launchAuthId: undefined }).ok);
   assert.ok(!checkMessageSchema('ExecutionExitedPayload', { ...exited, status: { kind: 'code', code: 256 } }).ok);
   assert.ok(!checkMessageSchema('ExitStatus', { kind: 'code', signal: 'SIGTERM' }).ok);
-  const spawnFailure = { executionId: 'execution-1', status: { kind: 'unknown' }, startProven: false, spawnFailed: true, spawnFailure: 'executable not found', terminationEvidence: 'never-spawned' };
+  const spawnFailure = { executionId: 'execution-1', recoveryEpoch: 1, status: { kind: 'unknown' }, startProven: false, spawnFailed: true, spawnFailure: 'executable not found', terminationEvidence: 'never-spawned' };
   assert.ok(checkMessageSchema('ExecutionExitedPayload', spawnFailure).ok);
   assert.ok(!checkMessageSchema('ExecutionExitedPayload', { ...spawnFailure, startProven: true }).ok);
   assert.ok(!checkMessageSchema('ExecutionExitedPayload', { ...spawnFailure, terminationEvidence: 'containment-empty' }).ok);
   assert.ok(!checkMessageSchema('ExecutionExitedPayload', { ...exited, terminationEvidence: 'never-spawned' }).ok);
+});
+
+test('every execution observation carries the recovery epoch it was observed at', () => {
+  const payloads: Record<string, Record<string, unknown>> = {
+    ExecutionExitedPayload: { executionId: 'execution-1', recoveryEpoch: 1, status: { kind: 'code', code: 0 }, startProven: true, spawnFailed: false, terminationEvidence: 'containment-empty' },
+    ExecutionNotStartedPayload: { executionId: 'execution-1', recoveryEpoch: 1 },
+    ExecutionUncertainPayload: { executionId: 'execution-1', recoveryEpoch: 1 },
+    TerminationUnprovenPayload: { executionId: 'execution-1', recoveryEpoch: 1, survivors: [] },
+    CancellationNotAppliedPayload: { commandId: 'command-1', executionId: 'execution-1', recoveryEpoch: 1, reason: 'adopting-supervisor' },
+    UnrecordedProcessPayload: { containment: 'taskelith/unknown', recoveryEpoch: 1, processes: [] },
+  };
+  for (const [name, payload] of Object.entries(payloads) as [Parameters<typeof checkMessageSchema>[0], Record<string, unknown>][]) {
+    const { recoveryEpoch: _epoch, ...withoutEpoch } = payload;
+    assert.ok(checkMessageSchema(name, payload).ok, name);
+    assert.ok(!checkMessageSchema(name, withoutEpoch).ok, name);
+    assert.ok(!checkMessageSchema(name, { ...payload, recoveryEpoch: 0 }).ok, name);
+  }
+});
+
+test('recovery on start may prove an unknown exit by a changed boot or an ended namespace', () => {
+  const recovered = { executionId: 'execution-1', recoveryEpoch: 1, status: { kind: 'unknown' }, startProven: true, spawnFailed: false };
+  for (const terminationEvidence of ['boot-changed', 'namespace-ended']) {
+    assert.ok(checkMessageSchema('ExecutionExitedPayload', { ...recovered, terminationEvidence }).ok);
+    assert.ok(!checkMessageSchema('ExecutionExitedPayload', { ...recovered, spawnFailed: true, spawnFailure: 'x', terminationEvidence }).ok);
+    for (const status of [{ kind: 'code', code: 0 }, { kind: 'signal', signal: 'SIGKILL' }]) {
+      assert.ok(!checkMessageSchema('ExecutionExitedPayload', { ...recovered, status, terminationEvidence }).ok);
+    }
+  }
+  assert.ok(!checkMessageSchema('ExecutionExitedPayload', { ...recovered, terminationEvidence: 'host-rebooted' }).ok);
 });
 
 test('a non-retryable launch rejection is an observation, a retryable one is not', () => {
@@ -210,6 +239,17 @@ test('a non-retryable launch rejection is an observation, a retryable one is not
 
   assert.ok(checkMessageSchema('LaunchRejectedObservation', observation('execution.launch.rejected', rejected)).ok);
   assert.ok(!checkMessageSchema('LaunchRejectedPayload', { ...rejected, reason: 'unavailable' }).ok);
+});
+
+test('a heartbeat names only the worker, its journal, and the time it was sent', () => {
+  const heartbeat = { messageType: 'worker.heartbeat', schemaVersion: 1, protocolVersion: 1, workerId: 'worker-1', journalId: 'journal-1', sentAt: AT };
+
+  assert.ok(checkMessageSchema('WorkerHeartbeat', heartbeat).ok);
+  assert.ok(!checkMessageSchema('WorkerHeartbeat', { ...heartbeat, slots: 2 }).ok);
+  assert.ok(!checkMessageSchema('WorkerHeartbeat', { ...heartbeat, messageType: 'worker.inventory.reported' }).ok);
+  for (const field of ['workerId', 'journalId', 'sentAt'] as const) {
+    assert.ok(!checkMessageSchema('WorkerHeartbeat', { ...heartbeat, [field]: undefined }).ok, field);
+  }
 });
 
 test('the control plane confirms a journal prefix and the worker reports its inventory', () => {

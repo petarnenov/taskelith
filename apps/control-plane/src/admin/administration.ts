@@ -10,9 +10,19 @@ import {
   type InitializedInstallation,
   type InstallationIdentity,
   type RotatedCredentials,
+  type WorkerCommandConsumers,
+  type WorkerRevocation,
 } from '@taskelith/fleet';
 import { err, failure, instantFromEpochMilliseconds, ok, type Instant, type Result } from '@taskelith/kernel';
-import { connectSystemAccount, NatsBrokerCredentials, type BrokerAuthority, type TransportTls } from '@taskelith/nats';
+import {
+  connectSystemAccount,
+  connectTransport,
+  NatsBrokerCredentials,
+  NatsCommandConsumers,
+  TransportAddress,
+  type BrokerAuthority,
+  type TransportTls,
+} from '@taskelith/nats';
 import type { Logger, Metrics } from '@taskelith/observability';
 import {
   CommittingInstallationTable,
@@ -93,7 +103,7 @@ export class Administration {
     return this.#asOperator(operatorSecret, (enrollment) => withWorkerId(workerId, (id) => enrollment.rotate(id)));
   }
 
-  revokeWorker(operatorSecret: string, workerId: string): Promise<Result<void>> {
+  revokeWorker(operatorSecret: string, workerId: string): Promise<Result<WorkerRevocation>> {
     return this.#asOperator(operatorSecret, (enrollment) => withWorkerId(workerId, (id) => enrollment.revoke(id)));
   }
 
@@ -123,7 +133,9 @@ export class Administration {
 
   // The enrollment service as the HTTP layer (item 16) uses it, with a
   // system connection for revocations that the caller closes.
-  async enrollmentService(): Promise<Result<{ service: EnrollmentService; close(): Promise<void> }>> {
+  async enrollmentService(
+    commandConsumers: WorkerCommandConsumers,
+  ): Promise<Result<{ service: EnrollmentService; close(): Promise<void> }>> {
     const identity = await this.verifiedInstallation();
     if (!identity.ok) return identity;
     const authority = this.brokerAuthority();
@@ -140,6 +152,7 @@ export class Administration {
       secrets: this.#secrets,
       ids: new RandomIdentifiers(),
       broker: new NatsBrokerCredentials(authority.value, system.value.connection),
+      commandConsumers,
       clock: this.#clock,
     });
     return ok({ service, close: () => system.value.close() });
@@ -148,12 +161,40 @@ export class Administration {
   async #asOperator<T>(operatorSecret: string, command: (enrollment: EnrollmentService) => Promise<Result<T>>): Promise<Result<T>> {
     const authenticated = await this.#operator.authenticate(operatorSecret);
     if (!authenticated.ok) return authenticated;
-    const enrollment = await this.enrollmentService();
+    const enrollment = await this.enrollmentService(this.#administrativeConsumers());
     if (!enrollment.ok) return enrollment;
     try {
       return await command(enrollment.value.service);
     } finally {
       await enrollment.value.close();
+    }
+  }
+
+  // The tool never enrolls; a revocation connects as the control plane to
+  // remove the worker's command consumer, after the revocation committed.
+  #administrativeConsumers(): WorkerCommandConsumers {
+    return {
+      ensure: async () => err(failure('unavailable', 'the administration tool does not enroll workers')),
+      remove: (workerId) => this.#withCommandConsumers((consumers) => consumers.remove(workerId)),
+    };
+  }
+
+  async #withCommandConsumers(command: (consumers: WorkerCommandConsumers) => Promise<Result<void>>): Promise<Result<void>> {
+    const identity = await this.verifiedInstallation();
+    if (!identity.ok) return identity;
+    const address = TransportAddress.of(identity.value.installationId);
+    if (!address.ok) return address;
+    const authority = this.brokerAuthority();
+    if (!authority.ok) return authority;
+    const transport = await connectTransport({
+      server: this.#settings.nats, address: address.value, creds: authority.value.user('control-plane', this.#epochSeconds()).creds,
+      ...(this.#settings.natsTls === undefined ? {} : { tls: this.#settings.natsTls }),
+    });
+    if (!transport.ok) return transport;
+    try {
+      return await command(new NatsCommandConsumers(transport.value.jsm, address.value));
+    } finally {
+      await transport.value.close();
     }
   }
 

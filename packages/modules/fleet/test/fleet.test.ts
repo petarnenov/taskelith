@@ -13,6 +13,7 @@ import {
   installationIdentity,
   parseWorkerId,
   type BrokerCredentials,
+  type WorkerCommandConsumers,
   type BrokerRevocation,
   type EnrollmentRequest,
 } from '@taskelith/fleet';
@@ -58,6 +59,24 @@ class MutableClock {
 
   advance(milliseconds: number): void {
     this.current = value(parseInstant(new Date(Date.parse(this.current) + milliseconds).toISOString()));
+  }
+}
+
+class RecordingConsumers implements WorkerCommandConsumers {
+  readonly ensured: string[] = [];
+  readonly removed: string[] = [];
+  down = false;
+
+  async ensure(workerId: string) {
+    if (this.down) return err(failure('unavailable', 'the broker is down'));
+    this.ensured.push(workerId);
+    return ok(undefined);
+  }
+
+  async remove(workerId: string) {
+    if (this.down) return err(failure('unavailable', 'the broker is down'));
+    this.removed.push(workerId);
+    return ok(undefined);
   }
 }
 
@@ -124,13 +143,14 @@ test('a database copy without its record, or a mismatch, keeps the installation 
 function enrollment() {
   const clock = new MutableClock();
   const broker = new RecordingBroker();
+  const consumers = new RecordingConsumers();
   const registry = new InMemoryFleetRegistry(() => clock.now());
   const service = new EnrollmentService({
     installation: value(installationIdentity('install-1', 1)),
     serverProtocolVersions: { minimum: 1, maximum: 1 },
-    registry, secrets: countingSecrets(), ids: countingIds(), broker, clock,
+    registry, secrets: countingSecrets(), ids: countingIds(), broker, commandConsumers: consumers, clock,
   });
-  return { clock, broker, registry, service };
+  return { clock, broker, consumers, registry, service };
 }
 
 function request(journalId = 'journal-1', overrides: Partial<EnrollmentRequest> = {}): EnrollmentRequest {
@@ -156,6 +176,19 @@ test('a token enrolls one worker with both credentials of generation 1', async (
   assert.equal(value(await registry.worker(enrolled.workerId))?.credentials.current.brokerUserKey, 'U-worker-1-1');
   const reuse = failed(await service.enroll(token, request('journal-2')));
   assert.deepEqual([reuse.code, reuse.details.reason], ['forbidden', 'token-invalid']);
+});
+
+test('enrollment ensures the command consumer first; without it the token stays unused', async () => {
+  const { consumers, registry, service } = enrollment();
+  const token = value(await service.issueToken({}));
+  consumers.down = true;
+  const refused = failed(await service.enroll(token, request()));
+  assert.equal(refused.code, 'unavailable');
+  assert.deepEqual(value(await registry.activeWorkerIds()), []);
+  consumers.down = false;
+  const enrolled = value(await service.enroll(token, request()));
+  assert.deepEqual(consumers.ensured, [enrolled.workerId]);
+  assert.deepEqual(value(await registry.activeWorkerIds()), [enrolled.workerId]);
 });
 
 test('enrollment refuses an unknown or expired token, another host, no common version, and a known journal', async () => {
@@ -226,17 +259,30 @@ test('a publication that throws after a committed rotation still returns the new
 });
 
 test('revocation denies every credential of the worker at once', async () => {
-  const { broker, service } = enrollment();
+  const { broker, consumers, service } = enrollment();
   const enrolled = value(await service.enroll(value(await service.issueToken({})), request()));
   value(await service.rotate(enrolled.workerId));
-  value(await service.revoke(enrolled.workerId));
+  assert.deepEqual(value(await service.revoke(enrolled.workerId)), { commandConsumerRemoved: true });
+  assert.deepEqual(consumers.removed, [enrolled.workerId], 'its command consumer is removed');
 
   assert.deepEqual(broker.revoked.sort(), ['U-worker-1-1', 'U-worker-1-2']);
   assert.equal(failed(await service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).code, 'forbidden');
   assert.equal(failed(await service.rotate(enrolled.workerId)).code, 'forbidden');
   const unknown = value(parseWorkerId('worker-9'));
   assert.equal(failed(await service.revoke(unknown)).code, 'not-found');
+  assert.deepEqual(consumers.removed, [enrolled.workerId], 'an unknown worker removes nothing');
   assert.equal(failed(await service.authenticateWorkerBearer('x')).details.reason, 'worker-not-authorized');
+});
+
+test('a consumer the broker cannot remove leaves the worker revoked', async () => {
+  const { consumers, registry, service } = enrollment();
+  const enrolled = value(await service.enroll(value(await service.issueToken({})), request()));
+  const active = value(await service.enroll(value(await service.issueToken({})), request('journal-2')));
+  consumers.down = true;
+  assert.deepEqual(value(await service.revoke(enrolled.workerId)), { commandConsumerRemoved: false });
+  assert.equal(failed(await service.authenticateWorkerBearer(enrolled.credentials.controlPlane)).code, 'forbidden');
+  assert.deepEqual(value(await registry.recentlyRevokedWorkerIds(10)), [enrolled.workerId]);
+  assert.deepEqual(value(await registry.activeWorkerIds()), [active.workerId]);
 });
 
 test('a worker bearer names its own worker and generation, and nothing else authenticates', async () => {

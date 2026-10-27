@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-G1 item 5 of the [G1 work plan](../../../docs/g1-plan.md), delegated by the integrating session under the owner's 2026-10-24 authorization to start and merge reviewed G1 items. Base revision: `47a0931` on `dev`. Scope: new domain files `display-text.ts`, `generation.ts`, `gate-subject.ts`, `gate-evidence.ts`, `gate.ts`, and `stage-progress.ts` in `packages/modules/sdlc/src/domain/`, the root exports in `src/index.ts`, `native-reference.ts` (now uses the shared display-text check, same behavior), three new test files in `packages/modules/sdlc/test/`, and this change. Prepared in a git worktree.
+G1 item 5 of the [G1 work plan](/docs/g1-plan.md), delegated by the integrating session under the owner's 2026-10-24 authorization to start and merge reviewed G1 items. Base revision: `47a0931` on `dev`. Scope: new domain files `display-text.ts`, `generation.ts`, `gate-subject.ts`, `gate-evidence.ts`, `gate.ts`, and `stage-progress.ts` in `packages/modules/sdlc/src/domain/`, the root exports in `src/index.ts`, `native-reference.ts` (now uses the shared display-text check, same behavior), three new test files in `packages/modules/sdlc/test/`, and this change. Prepared in a git worktree.
 
 ## Author self-check before review
 

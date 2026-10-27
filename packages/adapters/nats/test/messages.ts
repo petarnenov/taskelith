@@ -71,3 +71,7 @@ export function inventoryPart(reportId: string, part: number, workerId = 'worker
     executions: [],
   };
 }
+
+export function heartbeat(workerId: string) {
+  return { messageType: 'worker.heartbeat', schemaVersion: 1, protocolVersion: 1, workerId, journalId: 'journal-1', sentAt: AT };
+}

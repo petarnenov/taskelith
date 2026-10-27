@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Taskelith execution API",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "Worker enrollment, launch authorization (G2 decision D12 (a)), delegation, task results, and evidence. Worker operations use the per-worker credential and operator operations the installation bootstrap credential (G2 decision D10 (a))."
   },
   "paths": {
@@ -234,6 +234,26 @@
           },
           "422": {
             "description": "SDLC admission rejected the child task.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The delegation could not be decided or stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Failure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The credential store or the database is not available.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1054,7 +1074,7 @@
       "EnrollmentRequest": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Presented with a single-use enrollment token, after the worker created its journal.",
+        "description": "Presented with a single-use enrollment token, after the worker claimed its data root and before it creates its journal, which takes the journalId named here.",
         "required": [
           "journalId",
           "host",
@@ -1188,6 +1208,33 @@
           "reportsNotStarted": {
             "type": "boolean",
             "description": "The supervisor launch record of this execution shows that no spawn was claimed; required to authorize the same execution again."
+          },
+          "reportsNotStartedFor": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "description": "Every earlier execution of the attempt that the worker sealed and has not seen confirmed, oldest first; the authority applies them in this order.",
+            "items": {
+              "$ref": "#/components/schemas/SealedExecution"
+            }
+          }
+        }
+      },
+      "SealedExecution": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "An earlier execution of the attempt whose launch record the worker sealed; the authority records its not-started before the ownership rule, in the same transaction.",
+        "required": [
+          "executionId",
+          "operationId"
+        ],
+        "properties": {
+          "executionId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "operationId": {
+            "$ref": "#/components/schemas/Identifier",
+            "description": "The last operation the worker journaled as granted for that execution, else its last operation."
           }
         }
       },

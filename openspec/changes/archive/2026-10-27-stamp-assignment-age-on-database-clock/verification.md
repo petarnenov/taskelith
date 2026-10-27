@@ -1,0 +1,85 @@
+# Verification
+
+Date: 2026-10-27. The author's verification and review passes 1 and 2 are recorded below.
+
+## Scope and source
+
+A G2 follow-up found during B6 `stabilize-observability-lag-test`: the snapshot claimed the database clock stamps every row it ages, but `assignments.changed_at` is a caller-supplied time. Coordinator Niki first chose option (a), a database-stamped column; that implementation found the premise only partly right (placement already writes `changed_at` from `tx.now()`), and Niki then chose option B: keep the schema, state the convention, and test it. Worker session Maki developed it in a briefed and checked subagent ([subagent execution](/docs/agent-task-protocol.md#subagent-execution)), in worktree `taskelith-worktrees/stamp-assignment-age-on-database-clock` on branch `stamp-assignment-age-on-database-clock`. The option A commits are kept on local branch `stamp-assignment-age-option-a`.
+- **Base revision:** `b0d018a` on `dev`.
+- **Revision verified:** `2520ab2` (the comment, the test, and these records before this file); after review pass 1, `b93a6c0`, on which `make verify` ran; review pass 2 reviewed `cdbb2d0`, and its record changes only this file and `tasks.md`, so no further `make verify` ran.
+- **Scope:** the snapshot comment, a placement test, and the `execution-observability` delta.
+- **Out of scope:** schema and migrations, the acceptance writer of `changedAt` (`apps/control-plane/src/application/observation-effects.ts:78`, a coordinator follow-up), and the outbox stamp.
+
+## Author self-check
+
+- The comment names the real stamp of each age; the wrong contract section reference is gone.
+- `snapshotOf` already clamps each age at zero (`Math.max(0, …)`), so the later-stamp scenario describes existing code, covered by `a clock that stamped a row in the future never reads as a negative age`.
+- Every new comment is at most two lines of at most 80 characters; `npm run verify:comments` passes.
+- Commit types are `chore` and `docs`; only a comment and a test of the private `@taskelith/postgres` change, and no published package changes.
+
+## Evidence check
+
+- **Fails when placement uses the application clock.** Line 208 of `packages/modules/scheduling/src/application/capacity-operations.ts` was temporarily changed from `const at = await tx.now();` to `const at = new Date().toISOString() as Instant;`. After `npm run build`, `bash scripts/services.sh run taskelith-stamp-age node --experimental-strip-types --test --test-reporter=spec packages/adapters/postgres/test/resource-admission.integration.test.ts` gave 23 tests, 22 pass, 1 fail: `a placement stamps the assignment change time on the database clock` failed with `AssertionError [ERR_ASSERTION]: 21600.000195`, the six-hour offset. The file was restored with `git checkout` and rebuilt; nothing of this was committed.
+- **Passes on the new code.** The same command at `65fbc84`: 23 tests, 23 pass, 0 fail. After the pass 1 fixes (`a2ecb71`), the same command over `resource-admission.integration.test.ts` and `observability.integration.test.ts`: 31 tests, 31 pass, 0 fail, including the extended future-stamp test.
+- **Determinism.** The test compares two stamps of one transaction against a one-second bound while the fault is six hours; no retry, sleep, or widened timeout.
+- **Links.** The change adds no external link; every link is relative to the repository.
+
+## Checks
+
+- `npm run openspec -- validate stamp-assignment-age-on-database-clock --strict`: valid.
+- `make verify` at `2520ab2`: exit 0; 1937 tests, 1935 pass, 0 fail, 2 skipped; coverage lines 99.29%, branches 92.10%, functions 99.04%; contract compatibility, dependency inventory, `validate --all --strict` (70 passed), archive dry run, and package verification passed. No flaky rerun was needed.
+- `make verify` at `b93a6c0` (after the pass 1 fixes and their record): exit 0; 1937 tests, 1935 pass, 0 fail, 2 skipped; coverage lines 99.29%, branches 92.11%, functions 99.04%; `validate --all --strict` 70 passed; no flaky rerun was needed. This line is the only later change.
+
+Environment: macOS (Darwin 25.6.0), Node from `.nvmrc`, Docker test services started by `make verify` and `scripts/services.sh`.
+
+## Independent review
+
+### Review pass 1
+
+- **Reviewer:** OpenCode CLI, model `opencode-go/qwen3.8-max`, variant `medium`, `reviewer` agent (read-only), assigned and run by the coordinating session from the worktree.
+- **Invocation:** the kimi-k3.1-pro row of [the agent task protocol](/docs/agent-task-protocol.md) with the coordinator-assigned model: `opencode run --standalone --agent reviewer -m 'opencode-go/qwen3.8-max#medium' --format json --title stamp-assignment-age-on-database-clock "$(cat <prompt-file>)" < /dev/null > <log>`.
+- **Revision:** `848b5c3`, diff `b0d018a..848b5c3`.
+- **Model confirmation:** the stored assistant messages record provider `opencode-go`, model `qwen3.8-max`, variant `medium`; session `ses_e859acd6fffeoT7mVnXasEPE4I`.
+- **Snapshot:** `c2f4f735de3e2b419a960307e5d80caf93d600c0217b2c760470d7684ba797ea` before and after; unchanged.
+- **Limits:** the reviewer could not run npm (denied by its agent) and verified statically.
+- **Findings:** 0 Critical, 0 High, 1 Medium, 4 Low; all fixed in `a2ecb71` and `c88177d`, to be confirmed by pass 2.
+  1. **M1:** "written by the database or by placement from its clock" read as placement's application clock. **Fixed:** the requirement says the stamp comes from the database default or, for an assignment, placement's `tx.now()` (498 characters); the proposal says the database clock of placement's transaction.
+  2. **L2:** the reader and writer list was incomplete and unscoped. **Fixed:** it is scoped to product code, excludes test SQL, and names the backfill in `1792930400000_observability-signals.sql:16`.
+  3. **L3:** acceptance's production caller was not named. **Fixed:** `recordPosition` (`apps/control-plane/src/application/observation-service.ts:186`) passes `tx.now()`, verified in the source; the follow-up is the unguarded seam, not a current skew.
+  4. **L4:** the future-stamp clamp was tested only for the outbox. **Fixed:** the test also sets an offered assignment's `changed_at` an hour ahead and asserts both ages are zero; the scenario "A stamp later than the read" covers both ages.
+  5. **L5:** the placement test used `row!` without checking the row exists. **Fixed:** `assert.ok(row, 'the assignment and its offer row exist')` narrows the type, and the non-null assertions are gone.
+
+### Review pass 2
+
+- **Reviewer and invocation:** as in pass 1 (OpenCode CLI, `opencode-go/qwen3.8-max`, variant `medium`, `reviewer` agent, read-only).
+- **Revision:** `cdbb2d0`; the pass 1 resolutions are `848b5c3..cdbb2d0`, the whole change `b0d018a..cdbb2d0`.
+- **Model confirmation:** the stored assistant messages record provider `opencode-go`, model `qwen3.8-max`, variant `medium`; session `ses_e858ee27effeU92a3lE3as8XCI`.
+- **Snapshot:** `37fd4227d8c10138a16616276fc86267bcefc59dff1bae36130a99bb09cd98c2` before and after; unchanged.
+- **Limits:** the reviewer could not run npm (denied by its agent) and verified statically.
+- **Pass 1 findings:** all five resolved, including the shortened requirement phrases, which lose no meaning.
+- **New findings:** 0 Critical, 1 High (process), 0 Medium, 1 Low.
+  1. **H1 (process):** `opencode-go/qwen3.8-max` was not listed under "Authorized reviewers (owner)" in `docs/governance.md` at the reviewed base. **Resolution:** the owner approved OpenCode `opencode-go/qwen3.8-max#medium` (first with `xhigh`, then changed by the owner to `medium`) and `opencode-go/deepseek-v4-pro#high` directly in the coordinator's session on 2026-10-26; coordinator Niki relayed it, and the governance change `add-deepseek-qwen-reviewers` records both entries with that date, model, and variant. It is a recording issue, not a defect of this change, so it needs no code change and no further pass; that authorization makes passes 1 and 2 count. The merge of `dev` that brings the governance entry is added by the coordinator afterwards.
+  2. **L2:** "Revision verified" named no revision for the post-pass-1 state. **Fixed:** it names `b93a6c0` and `cdbb2d0` explicitly.
+
+## Limitations
+
+- The offered age is on the database clock by placement's convention, guarded by a test, not by the schema; a new writer of offered rows with another clock would skew it (design, rejected alternative).
+- Each age is a wall-clock difference on the database host: a clock step between stamp and read shifts it by the step, and a later stamp reads zero.
+
+## Remaining gates
+
+- Integration into dev by the coordinator (single pull request).
+
+## Merge of dev and reviewer authorization
+
+- After review pass 2, the worker session merged `origin/dev` at `cc7f998` into the branch (`c7240e8`) without conflicts. That `dev` carries `add-deepseek-qwen-reviewers` (pull request #320), which records in `docs/governance.md` the owner's approval of 2026-10-26 of OpenCode CLI (qwen3.8-max), model `opencode-go/qwen3.8-max` with the `medium` variant, relayed by the coordinator. This resolves finding H1 of pass 2: passes 1 and 2 ran with an authorized reviewer configuration.
+- Evidence freshness: the merge changes no requirement, contract, or implementation of this change. It changes other tests of `packages/adapters/postgres/test/observability.integration.test.ts` (from `stabilize-observability-lag-test`), not the tests this change adds or extends, and no living spec this change modifies. The reviewed evidence therefore stands; the checks below ran again on the merged and archived tree.
+
+## Archive checks
+
+Worker step 7, run by the worker session after review pass 2, its fixes, and the merge of `dev`. The checked state is the tree of the archive commit, which is the working tree these checks ran on after `npm run openspec -- archive stamp-assignment-age-on-database-clock --yes` (base `c7240e8`).
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `make verify`: exit 0; 1955 tests, 1953 pass, 0 fail, 2 skipped; coverage lines 99.28%, branches 92.09%, functions 99.04%.
+- `npm run openspec -- validate --archived --no-interactive`: the line of `change/2026-10-27-stamp-assignment-age-on-database-clock` passes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/execution-observability/spec.md`, where the requirement "Control-plane snapshot from PostgreSQL" takes the reviewed delta text and gains the scenarios "Placement under a skewed application clock" and "A stamp later than the read", the intended edit.

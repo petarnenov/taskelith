@@ -25,22 +25,30 @@ The checks SHALL be defined once, as `make verify`, which SHALL run with the `.n
 - **THEN** it runs `make test`, which runs `npm test` against integration services of its own and removes them afterwards
 
 ### Requirement: Local gate before push
-`make hooks` SHALL set `core.hooksPath` to `.githooks`, and the `.githooks/pre-push` hook SHALL run `make verify` and block the push when it fails. Because `make verify` checks the working tree, the hook SHALL first refuse a push that updates a ref to a commit other than the checked-out one, except a deletion.
+`make hooks` SHALL set `core.hooksPath` to `.githooks`, and the `.githooks/pre-push` hook SHALL run `make verify` and block the push when it fails, except a push whose every ref is a deletion, which it SHALL let through without `make verify`. Because `make verify` checks the working tree, the hook SHALL first refuse a push that updates a ref to a commit other than the checked-out one, except a deletion.
 
 #### Scenario: Failing check
 - **WHEN** a push is attempted with hooks enabled and a check fails
 - **THEN** the push is rejected
 
 #### Scenario: Branch deletion push
-- **WHEN** a remote branch is deleted with `git push origin --delete <branch>` with hooks enabled, a Node version that differs from `.nvmrc`, and no `.nvmrc` version available through nvm
-- **THEN** the `pre-push` hook runs `make verify`, its toolchain check fails, and the deletion is refused
+- **WHEN** a remote branch is deleted with `git push origin --delete <branch>` with hooks enabled
+- **THEN** the `pre-push` hook says that the push only deletes refs, skips `make verify`, and lets the deletion through
+
+#### Scenario: Deletion pushed with an update
+- **WHEN** one push deletes a remote branch and updates the checked-out branch
+- **THEN** the hook runs `make verify` and blocks the push when it fails
+
+#### Scenario: Hook input without refs
+- **WHEN** the hook receives no ref on its standard input
+- **THEN** it runs `make verify`
 
 #### Scenario: Another branch pushed
 - **WHEN** a push from a worktree updates a branch other than the checked-out commit
 - **THEN** the hook refuses it and names the ref to check out and push separately
 
 ### Requirement: Promotion flow and releases
-`dev` SHALL be the default branch for development; GitHub SHALL run the workflow only for pull requests into `main`, pushes to `main`, and manual dispatch; promotions from `dev` to `main` SHALL use a merge commit or rebase, not a squash; and pushes to `main` SHALL keep releasing qualifying Conventional Commits.
+`dev` SHALL be the default branch for development; GitHub SHALL run the release workflow only for pull requests into `main`, pushes to `main`, and manual dispatch, and any other workflow, such as the Linux acceptance workflow, only on manual dispatch; promotions from `dev` to `main` SHALL use a merge commit or rebase, not a squash; and pushes to `main` SHALL keep releasing qualifying Conventional Commits.
 
 #### Scenario: Push to dev
 - **WHEN** a commit is pushed to `dev`
@@ -49,6 +57,10 @@ The checks SHALL be defined once, as `make verify`, which SHALL run with the `.n
 #### Scenario: Promotion merged
 - **WHEN** a promotion pull request from `dev` is merged into `main` with a merge commit
 - **THEN** `make verify` runs and the release job analyzes every promoted Conventional Commit
+
+#### Scenario: Linux acceptance workflow
+- **WHEN** a commit is pushed to `main` or a pull request into `main` is opened
+- **THEN** the Linux acceptance workflow does not start; it starts only when someone dispatches it manually
 
 ### Requirement: Protected promotion branches
 The `main` branch SHALL accept changes only through a pull request whose `verify` check passed on an up-to-date branch, with administrators included and force pushes and deletion blocked; the `dev` branch SHALL block force pushes and deletion; and squash merging SHALL be disabled for the repository.
@@ -66,7 +78,7 @@ The `main` branch SHALL accept changes only through a pull request whose `verify
 - **THEN** only a merge commit or a rebase merge is offered
 
 ### Requirement: Parallel development in worktrees
-Each change to Taskelith SHALL be developed on its own feature branch in its own git worktree and merged into `dev` through a pull request, so that several changes can proceed in parallel; the `make verify` pre-push gate SHALL apply in every worktree.
+Each change to Taskelith SHALL be developed on its own feature branch in its own git worktree and merged into `dev` through a pull request, so that several changes can proceed in parallel; the `make verify` pre-push gate SHALL apply in every worktree, to every push except one whose every ref is a deletion.
 
 #### Scenario: Two changes at once
 - **WHEN** two changes are in progress
@@ -98,3 +110,34 @@ Each change to Taskelith SHALL be developed on its own feature branch in its own
 #### Scenario: Interrupted check
 - **WHEN** the check receives SIGINT or SIGTERM
 - **THEN** it stops the OpenSpec CLI, waits for it to exit, removes the temporary copy, and exits nonzero
+
+### Requirement: Record link check
+`make verify` SHALL run `npm run verify:links` before the archive dry run. It SHALL fail on each inline or reference Markdown link under `openspec/changes/`, `openspec/specs/`, and `docs/`, outside code and HTML, without a URI scheme, whose target or GitHub heading anchor is missing, that enters an active change, or that is relative and leaves its change directory, capability directory, or the repository, or sits in a spec delta. Active changes SHALL be checked at their archived path.
+
+#### Scenario: Link out of the change directory
+- **WHEN** an active change's `design.md` links `../../../../docs/governance.md`, which resolves once the change is archived
+- **THEN** `make verify` fails and prints the file, the line, the target, and that the link must be root-relative
+
+#### Scenario: Link that archiving would break
+- **WHEN** an active change links `../../../docs/governance.md`, which resolves only from the change's current directory
+- **THEN** the check fails before the change is archived
+
+#### Scenario: Root-relative link
+- **WHEN** a record links `/docs/governance.md#independent-review-process` and that heading exists
+- **THEN** the check passes
+
+#### Scenario: Missing anchor
+- **WHEN** a link names an anchor that no heading of its target produces, counting the `-1` suffix of a repeated heading
+- **THEN** the check fails and names the missing anchor
+
+#### Scenario: Link into an active change
+- **WHEN** a document or an archived record links into an active change's directory
+- **THEN** the check fails, because the target moves when that change is archived
+
+#### Scenario: Code and external links
+- **WHEN** a link is inside a code block, a code span, or raw HTML, or starts with a URI scheme such as `https:`, `mailto:`, or `tel:`
+- **THEN** the check ignores it
+
+#### Scenario: Archived record
+- **WHEN** an archived record holds a link that fails any of these rules
+- **THEN** the check fails on it; no list of accepted archived links exists

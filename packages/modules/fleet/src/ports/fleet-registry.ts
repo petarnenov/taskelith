@@ -1,6 +1,6 @@
 import type { Instant, Result } from '@taskelith/kernel';
 import type { SecretHash } from '@taskelith/access';
-import type { WorkerId } from '@taskelith/execution';
+import type { JournalId, WorkerId } from '@taskelith/execution';
 import type { BrokerRevocation, CredentialGeneration, EnrolledWorker, EnrollmentToken } from '../domain/enrollment.js';
 
 // Tokens, enrolled workers, and the durable list of broker users to revoke;
@@ -13,6 +13,13 @@ export interface FleetRegistry {
   // else `conflict`: `token-used`, `token-expired`, or `journal-enrolled`.
   enroll(tokenHash: SecretHash, worker: EnrolledWorker): Promise<Result<void>>;
   worker(workerId: WorkerId): Promise<Result<EnrolledWorker | undefined>>;
+  // A new journal incarnation: `conflict` unless `previous` is still enrolled
+  // and no worker holds `journalId`; `forbidden` if revoked.
+  replaceJournal(workerId: WorkerId, previous: JournalId, journalId: JournalId): Promise<Result<void>>;
+  // Every enrolled worker that is not revoked, in identifier order.
+  activeWorkerIds(): Promise<Result<readonly WorkerId[]>>;
+  // At most `limit` revoked workers, the latest revocation first.
+  recentlyRevokedWorkerIds(limit: number): Promise<Result<readonly WorkerId[]>>;
   // The worker, revoked or not, with this control-plane hash in its current
   // or predecessor generation; `internal` if two workers hold it.
   workerByCredentialHash(hash: SecretHash): Promise<Result<EnrolledWorker | undefined>>;

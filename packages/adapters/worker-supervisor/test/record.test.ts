@@ -11,6 +11,7 @@ import {
   parseLaunch,
   parseSupervisor,
   RECORD_FORMAT,
+  type ExitRecord,
 } from '@taskelith/worker-supervisor';
 import { identity, intent } from './fakes.ts';
 
@@ -38,6 +39,19 @@ test('a handle and an exit keep the spawn and the termination evidence', () => {
   assert.deepEqual(parseExit(encodeRecord(exit)), { ok: true, value: exit });
   assert.equal(parseExit(encodeRecord({ ...exit, status: { kind: 'code', code: 300 } })).ok, false);
   assert.equal(parseExit(encodeRecord({ ...exit, termination: 'guessed' })).ok, false);
+});
+
+test('an exit proven by recovery evidence has an unknown status', () => {
+  const recovered = { status: { kind: 'unknown' }, startProven: true, termination: 'boot-changed' };
+  for (const termination of ['boot-changed', 'namespace-ended']) {
+    assert.ok(parseExit(encodeRecord({ ...recovered, termination })).ok, termination);
+    for (const status of [{ kind: 'code', code: 0 }, { kind: 'signal', signal: 'SIGKILL' }]) {
+      assert.equal(parseExit(encodeRecord({ ...recovered, status, termination })).ok, false, termination);
+    }
+  }
+  // @ts-expect-error the exit record type rejects what the reader rejects
+  const known: ExitRecord = { status: { kind: 'code', code: 0 }, startProven: true, termination: 'boot-changed' };
+  assert.equal(parseExit(encodeRecord(known)).ok, false);
 });
 
 test('a corrupt, newer-format, or unversioned file is never guessed around', () => {

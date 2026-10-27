@@ -1,6 +1,6 @@
 ## Context
 
-G2 item 15 built the supervisor against the `DeadlineClock` and `ProcessInspector` ports and left the macOS platform failing closed until decision D-A. On 2026-10-25 the owner approved `koffi`, accepted its single maintainer and missing private reporting route as mitigated by the ports, and, on the coordinator's question, decided how to treat the `KERN_PROC_ALL` race (below). The contract is [the supervisor identity contract](../../../docs/contracts/supervisor-identity.md); the qualification proposal is [koffi-qualification.md](../archive/2026-10-25-implement-process-supervisor/koffi-qualification.md).
+G2 item 15 built the supervisor against the `DeadlineClock` and `ProcessInspector` ports and left the macOS platform failing closed until decision D-A. On 2026-10-25 the owner approved `koffi`, accepted its single maintainer and missing private reporting route as mitigated by the ports, and, on the coordinator's question, decided how to treat the `KERN_PROC_ALL` race (below). The contract is [the supervisor identity contract](/docs/contracts/supervisor-identity.md); the qualification proposal is [koffi-qualification.md](/openspec/changes/archive/2026-10-25-implement-process-supervisor/koffi-qualification.md).
 
 ## Goals / Non-Goals
 

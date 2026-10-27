@@ -1,6 +1,6 @@
 ## Why
 
-On 2026-10-25 the owner asked for an analysis of integrating Tailscale so that Taskelith can work with machines registered in a Tailscale network, then decided the outcome: connectivity to machines is a plugin/adapter capability; a plain local network is the default without Tailscale-like capabilities; a self-hosted Headscale adapter follows; the hosted Tailscale control plane comes last. [ADR 0012](../../../docs/decisions/0012-network-fabric-plugins.md) records the decision, the narrow closed-provider scope change for the hosted service, and the implementation order before any gate implements it.
+On 2026-10-25 the owner asked for an analysis of integrating Tailscale so that Taskelith can work with machines registered in a Tailscale network, then decided the outcome: connectivity to machines is a plugin/adapter capability; a plain local network is the default without Tailscale-like capabilities; a self-hosted Headscale adapter follows; the hosted Tailscale control plane comes last. [ADR 0012](/docs/decisions/0012-network-fabric-plugins.md) records the decision, the narrow closed-provider scope change for the hosted service, and the implementation order before any gate implements it.
 
 ## What Changes
 

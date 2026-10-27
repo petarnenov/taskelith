@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { err, ok, type Result } from '@taskelith/kernel';
 import type { ExecutionAccount } from './record.js';
 
@@ -23,6 +23,10 @@ catch (error) { process.exit(error.code === 'EACCES' || error.code === 'EPERM' ?
 // containment nor join another cgroup, and containments can be killed.
 export function checkLinuxContainment(options: LinuxSelfCheckOptions): Result<void, readonly string[]> {
   if (!existsSync(join(options.cgroupRoot, 'cgroup.controllers'))) return err(['cgroup v2 is not mounted']);
+  // Otherwise the containment scan would report the worker itself.
+  if (isAtOrUnder(options.home, options.containmentParent)) {
+    return err([`the home cgroup ${options.home} is at or under the containment parent ${options.containmentParent}`]);
+  }
   const probe = join(options.containmentParent, `self-check-${process.pid}`);
   try {
     // A probe left by an earlier check of a reused process ID is replaced.
@@ -37,6 +41,16 @@ export function checkLinuxContainment(options: LinuxSelfCheckOptions): Result<vo
     ...removalProblem(probe),
   ];
   return problems.length === 0 ? ok(undefined) : err(problems);
+}
+
+// Compares whole path segments, so that /a/bc is not under /a/b.
+function isAtOrUnder(cgroup: string, ancestor: string): boolean {
+  const cgroupSegments = segments(cgroup);
+  return segments(ancestor).every((segment, index) => cgroupSegments[index] === segment);
+}
+
+function segments(path: string): readonly string[] {
+  return resolve(path).split(sep).filter((segment) => segment !== '');
 }
 
 function removalProblem(probe: string): string[] {

@@ -50,11 +50,15 @@ Enrollment SHALL return a control-plane bearer secret and a NATS `.creds` file o
 - **THEN** the sweep keeps the previous credential, records no revocation, sets the stored expiry time back to the record's, and expires it only when that time has passed
 
 ### Requirement: Broker permissions and revocation
-A worker's broker user SHALL publish only to its own consumer API, acknowledgements, and observation subject, and subscribe only under its own inbox prefix. A revocation SHALL reach the server through the system account without a reload, and SHALL disconnect the user.
+A worker's broker user SHALL publish only to its own consumer API, acknowledgements, observation subject, and heartbeat subject, and subscribe only under its own inbox prefix. A revocation SHALL reach the server through the system account without a reload, and SHALL disconnect the user.
 
 #### Scenario: Forged observation
 - **WHEN** a worker publishes on another worker's observation subject
 - **THEN** the server reports a permissions violation
+
+#### Scenario: Forged heartbeat
+- **WHEN** a worker publishes a heartbeat on its own and on another worker's heartbeat subject
+- **THEN** only its own heartbeat is delivered, and the server reports a permissions violation for the other
 
 #### Scenario: Revoked worker
 - **WHEN** a connected worker is revoked
@@ -91,3 +95,33 @@ A worker's control-plane secret SHALL authenticate without its worker identifier
 #### Scenario: Revoked worker
 - **WHEN** a revoked worker presents its current control-plane secret
 - **THEN** authentication fails with `forbidden` and reason `worker-not-authorized`
+
+### Requirement: Worker command consumer
+Enrollment SHALL ensure the durable command consumer of the new worker before it uses the token, and SHALL fail with `unavailable` (503) without using the token when it cannot. A control-plane start SHALL ensure the consumer of every enrolled worker that is not revoked, and SHALL log a failure without failing the start.
+
+#### Scenario: Broker unavailable at enrollment
+- **WHEN** the consumer cannot be created during an enrollment
+- **THEN** the enrollment fails with `unavailable`, and the token can still enroll a worker
+
+#### Scenario: Lost consumer
+- **WHEN** an active worker's consumer was deleted while the control plane was stopped
+- **THEN** the next start creates it again
+
+#### Scenario: Consumer that cannot be ensured at start
+- **WHEN** the broker refuses one active worker's consumer during a start
+- **THEN** the failure is logged with the worker, the other consumers are ensured, and the start continues
+
+### Requirement: Revoked worker command consumer
+A revocation SHALL remove the worker's command consumer after the revocation commits, and SHALL report a failed removal without failing the revocation. A control-plane start SHALL remove the consumers of the most recently revoked workers, up to the bound of the operational targets, and SHALL log a failure without failing the start. A missing consumer SHALL count as removed.
+
+#### Scenario: Revoked worker's consumer
+- **WHEN** a worker is revoked
+- **THEN** its command consumer is removed, and the consumers of the active workers are untouched
+
+#### Scenario: Consumer that cannot be removed at revocation
+- **WHEN** the broker refuses the removal of a revoked worker's consumer
+- **THEN** the worker stays revoked, the revocation reports the consumer as not removed, and the next start that reaches the broker removes it while the worker is among the most recently revoked
+
+#### Scenario: Consumer already removed
+- **WHEN** the consumer of a revoked worker is removed again
+- **THEN** the removal succeeds
