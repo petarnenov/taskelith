@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Revocation, reinstatement, and removal
-Revoking a slot SHALL take it out of every pool and stop revealing its credential while keeping the credential encrypted; reinstating it SHALL return it to its pools unchanged; removing it SHALL destroy its credential and keep its record as a tombstone; a held reservation SHALL never block a revocation or removal, which SHALL cancel every attempt whose held reservation names the slot; none of them SHALL release a held reservation by itself.
+Revoking a slot SHALL take it out of every pool and stop revealing its credential while keeping the credential encrypted; reinstating it SHALL return it to its pools unchanged; removing it SHALL destroy its credential and keep its record as a tombstone; a held reservation SHALL block no revocation or removal; a revocation SHALL cancel each attempt holding the slot, and a removal SHALL drain or reject its in-flight sessions; none of them SHALL release a held reservation by itself.
 
 #### Scenario: Reinstated slot
 - **WHEN** a revoked slot is reinstated
@@ -10,6 +10,14 @@ Revoking a slot SHALL take it out of every pool and stop revealing its credentia
 #### Scenario: Revocation while reserved
 - **WHEN** an operator revokes a slot with a compromised credential while a running attempt's held reservation names it
 - **THEN** the revocation succeeds, the attempt's grants are revoked and its cancellation is written, the reservation stays held until the execution's terminal fact, and the worker redacts the run by the delivered value until it ends
+
+#### Scenario: Removal while reserved
+- **WHEN** an operator removes an active slot while a running attempt's held reservation names it
+- **THEN** the removal succeeds and destroys the credential, the attempt is drained or rejected by policy or an operator, its re-delivery is refused, and the reservation stays held until the execution's terminal fact
+
+#### Scenario: Removal after revocation
+- **WHEN** an operator removes a revoked slot whose running attempt the revocation cancelled
+- **THEN** the removal succeeds and destroys the credential, and the reservation stays held until the execution's terminal fact
 
 ### Requirement: Redacted slot credentials
 `SlotCredentials` SHALL store each slot credential encrypted at rest and reveal it only for the delivery to the run that reserved the slot; the delivery, not `SlotCredentials`, SHALL check that the reservation is held, names the slot, and belongs to the launched attempt, and that the slot is active; destroying a missing credential SHALL succeed, and a `SlotSecret` SHALL disclose its text only through `reveal()`.
