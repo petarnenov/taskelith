@@ -1,10 +1,10 @@
 # Verification
 
-Date: 2026-10-27. Draft: the author checks of the draft and of the evidence update are recorded below; the integration of the pending branches, the fresh-clone reproduction, `make verify`, and the independent review are not done yet.
+Date: 2026-10-27. Draft: the author checks of the draft and of the evidence updates are recorded below. Every G2 change is on `dev` at `bd6108d4`, and no blocker remains; the fresh-clone reproduction, `make verify`, the independent review, the owner's acceptance, the archive, and the integration are not done yet.
 
 ## Scope and source
 
-G2 work plan item 27, `close-g2`, assigned by coordinator Niki and developed in a briefed implementation subagent ([subagent execution](../../../docs/agent-task-protocol.md#subagent-execution)), in worktree `taskelith-worktrees/close-g2` on branch `close-g2`. Scope: `docs/decisions/0015-g2-closure.md` (new), `docs/foundation.md` (G2 section), and this change. Documentation only.
+G2 work plan item 27, `close-g2`, assigned by coordinator Niki and developed in a briefed implementation subagent ([subagent execution](../../../docs/agent-task-protocol.md#subagent-execution)), in worktree `taskelith-worktrees/close-g2` on branch `close-g2`. Scope: `docs/decisions/0015-g2-closure.md` (new), `docs/foundation.md` (G2 section), `docs/fleet.md` (the roster row removed by the owner's instruction of 2026-10-27), and this change. Documentation only.
 
 The evidence update of 2026-10-27 follows the coordinator's brief of that day: fill the placeholders for G2 work that is on `dev` or handed off on a branch, and add the deferrals the coordinator named, each with its source, its gate, and whether it blocks the closure.
 
@@ -15,6 +15,7 @@ The evidence update of 2026-10-27 follows the coordinator's brief of that day: f
 - `origin/dev` at `2a26714b` (#328, 25c) merged in as `3faaa03f`, a merge commit, without conflicts, after the coordinator reported that 25c had landed; the evidence edits were stashed across that merge and restored without conflicts. The archived 25c record on `dev` is identical to that of its branch head `5af2f9f8`. `npm ci --ignore-scripts` ran again, and `npm run verify:dependencies` again reported the inventory current.
 - The evidence update is the next commit on this branch, on top of `3faaa03f`.
 - `origin/dev` at `92f0830b` (#330) merged in as `8667c9e7`, a merge commit, without conflicts. It brings `run-g2-crash-windows-on-linux` (#329, merge `1e48c93b`) and `bound-failure-cause-userinfo-redaction` (#330, merge `92f0830b`). The archived Linux crash-windows record on `dev` is identical to that of its branch head `07568a20`. `npm ci --ignore-scripts` ran, and `npm run verify:dependencies` reported the inventory current ("Verified 731 package paths"), so it was not regenerated.
+- `origin/dev` at `bd6108d4` (#342) merged in as `31dbd30f`, a merge commit, without conflicts, after `git fetch origin`. It brings #331 to #342: `stabilize-placement-fair-order-test`, `stop-automatic-retry-of-unknown-exit`, 24c `run-g2-partition-and-races`, `require-finding-capability`, `fix-platform-probe-filesystem-label`, `break-fair-order-ties-by-task-id`, `align-fair-order-rotation`, `advance-placement-rotation-cursor`, `centralize-log-redaction-rules`, `alternate-reviewers-per-pass` (governance policy version 5), `back-off-relaunch-after-pre-w2-failure`, and `align-safe-to-retry-with-supervisor-identity`. `npm ci --ignore-scripts` ran after it, and `npm run verify:dependencies` reported the inventory current ("Verified 731 package paths"), so it was not regenerated.
 
 ## Evidence sources
 
@@ -41,7 +42,32 @@ On branches of `origin`, read with `git show <head>:<path>` after `git fetch ori
 
 Outside the repository: the away run `20261027T045006Z-opencode-96871` (`decision.md`, `meta.txt`, `packet.md`) in the coordinator's local away run directory, a local, unversioned record; the ADR names it as such. No web link is used; pull request numbers are those of the GitHub repository `petarnenov/taskelith`, each named with its merge commit.
 
-Not found in the repository or on any remote branch, so recorded only as the coordinator stated them: `stop-automatic-retry-of-unknown-exit` (named by the Linux crash-windows record; in review by Liki, by the coordinator's statement, with no branch on `origin`), `centralize-log-redaction-rules`, `advance-placement-rotation-cursor` (named by the `align-fair-order-rotation` record, not yet started), `check-change-record-links`, the worker image reproducibility follow-up, the quadratic behaviour of `redactText`, the 24c macOS hang, Desi's diagnostic of 2026-10-27 on the Intel iMac, `back-off-relaunch-after-pre-w2-failure`, and `align-safe-to-retry-with-supervisor-identity`.
+Not found in the repository or on any remote branch at the evidence update, so recorded then only as the coordinator stated them: `stop-automatic-retry-of-unknown-exit`, `centralize-log-redaction-rules`, `advance-placement-rotation-cursor`, `check-change-record-links`, the worker image reproducibility follow-up, the quadratic behaviour of `redactText`, the 24c macOS hang, Desi's diagnostic of 2026-10-27 on the Intel iMac, `back-off-relaunch-after-pre-w2-failure`, and `align-safe-to-retry-with-supervisor-identity`. Every branch in the table above and every one of these changes is now archived on `dev` ("Landed changes" below), and the 24c record and the `centralize-log-redaction-rules` proposal record the macOS hang and the quadratic rules. Still without a record in the repository: `check-change-record-links`, the worker image reproducibility follow-up, and Desi's diagnostic.
+
+### Landed changes
+
+On `dev` at `bd6108d4`, each archived under `openspec/changes/archive/2026-10-27-<change>/` and found with `git log --first-parent --diff-filter=A origin/dev -- <archive>/proposal.md`, which names the `dev` merge that added it:
+
+| Change | Pull request | `dev` merge |
+| --- | --- | --- |
+| `stabilize-placement-fair-order-test` | #331 | `477a423e` |
+| `stop-automatic-retry-of-unknown-exit` | #332 | `b79a2a3d` |
+| `run-g2-partition-and-races` | #333 | `744689cb` |
+| `require-finding-capability` (not a G2 row) | #334 | `9c0c1706` |
+| `fix-platform-probe-filesystem-label` | #335 | `627c8c03` |
+| `break-fair-order-ties-by-task-id` | #336 | `0864892f` |
+| `align-fair-order-rotation` | #337 | `37afc149` |
+| `advance-placement-rotation-cursor` | #338 | `3db26333` |
+| `centralize-log-redaction-rules` | #339 | `606df666` |
+| `alternate-reviewers-per-pass` (not a G2 row) | #340 | `d3e9e636` |
+| `back-off-relaunch-after-pre-w2-failure` | #341 | `1fc7006f` |
+| `align-safe-to-retry-with-supervisor-identity` | #342 | `bd6108d4` |
+
+Read from those archives: 24c `results.jsonl` on `dev` holds 34 records, all `passed`, of commit `36481ad9` (Linux 6.8.0-147-generic, `x64`), 17 with seed `20261026` and 17 with seed `7`; the branch head read earlier had `9630470a`, re-run after the return (its verification, "Revision and environment"). `stop-automatic-retry-of-unknown-exit` verification, "Evidence check": `make verify-linux-crash-windows` passed 29 of 29, CP9 included. The ADR's remaining code lines were re-checked on this branch: `placement-service.ts:51` (the `#after` field) and `:89` (its assignment) moved from `:47` and `:78`; the scheme-less user-information rule moved to `packages/modules/observability/src/domain/redaction-rules.ts:44` with #339; `signals.ts:21`, `control-plane-signals.ts:25`, `compose.yaml:108`, and `crash-windows.integration.test.ts:38` still hold. Lines the ADR no longer cites, because the entries now cite the landed change: `launch-orchestrator.ts`, `capacity-operations.ts`, `redaction.ts`, the two contract lines, and the probe script lines.
+
+### arm64 numbers
+
+`openspec/changes/archive/2026-10-26-run-g2-native-acceptance-arm64/results.jsonl`, lines 4 to 29, are the 26 crash windows, all of commit `4b3d6937`, host Darwin 25.6.0, arch `arm64`, target `harness-composition`: 15 `passed` and 11 `failed` with `D1:` in the detail (W3, W4, and W6 both sides; CP1, CP2, CP3, CP5, CP6). The file's 46 records hold 35 `passed` and 11 `failed`. `acceptance.md` of the same archive, line 20, the process ownership row of `macos-26-arm64`, states the same 15 and 11.
 
 ## Author self-check of the draft
 
@@ -84,11 +110,29 @@ Another coordinator item, found by Liki and recorded in commit `docs: defer alig
 
 A coordinator update of the same day, recorded in commit `docs: record the landed ReDoS fix and Linux crash windows in the G2 closure`: the ReDoS fix landed with #330 and no longer blocks the closure; `run-g2-crash-windows-on-linux` landed with #329, and its CP9 failure on L1 still blocks the closure through the fix of L1. The G2 blockers are now exactly three: 24c `run-g2-partition-and-races` (Zaki, in review), the fix of L1 `stop-automatic-retry-of-unknown-exit` (Liki, in review), and Maki's macOS arm64 process ownership re-run.
 
+## Owner and coordinator decisions of 2026-10-27, after #342
+
+From coordinator Niki's brief of 2026-10-27, which relays the owner's decisions of that day:
+
+1. **arm64 re-run deferred (owner).** The owner removed Maki from the fleet, because its session hung and could not be restarted remotely. The macOS arm64 process ownership crash-window re-run after the D1 fix is deferred to G3, to run when the owner has physical access to the MacBook Air. It is an owner-confirmed deferral, not an author's assignment. G2 closes on the one arm64 run of 25b (15 passed, 11 failed on D1; "arm64 numbers" above), the x86_64 macOS run of 25c, and the Linux crash windows of #329. Recorded in ADR 0015 decisions 3 and 5 and the foundation ledger.
+2. **No blockers remain (coordinator).** 24c landed with #333 and the fix of L1 with #332; the ReDoS fix had landed with #330. The ADR records each blocker as resolved, with its pull request, `dev` merge commit, and archive.
+3. **Landed follow-ups (coordinator).** `align-safe-to-retry-with-supervisor-identity` landed with #342, so its deferral is dropped from the ADR and the ledger and recorded as landed. The other deferrals whose follow-ups landed (`back-off-relaunch-after-pre-w2-failure`, `centralize-log-redaction-rules`, the fair-order changes, `fix-platform-probe-filesystem-label`, and the flaky fair-order test) are recorded the same way, each with the limitations its record leaves open; `placement-backoff-preserves-rotation`, which `advance-placement-rotation-cursor` names, is added to the ledger as after G2 and contract-first.
+4. **Fresh clone (coordinator).** The coordinator runs the fresh-clone reproduction; the ADR's decision 4 placeholder now lists its commands, checked against the `Makefile` (`verify-installation`, `installation-smoke`, `native-acceptance` with `RESULTS`), `scripts/native-acceptance.sh` (on Darwin the default entries are `macos linux`), and the 25c record (`DOCKER_CONFIG` on the iMac and the data-root disk floor of its design decision 2).
+
+### Roster
+
+By the owner's instruction of 2026-10-27, relayed by the coordinator, Maki is removed as an active worker:
+
+- `docs/fleet.md`: the roster row `| Maki | Worker | Another machine (macOS arm64) | |` is removed. No rule of that page names Maki or assigns arm64 tasks to a machine, so no rule changed.
+- ADR 0015: the blocker "Maki re-runs it before the closure" and the arm64 assignment of decision 3 are replaced by the owner's deferral; the deferral of archived record links now says that `check-change-record-links`, assigned to Maki, has no worker.
+- `docs/foundation.md`: the blocker sentence naming Maki's re-run is replaced.
+- Searched with `grep -rn Maki` outside `openspec/changes/archive/` and `.git`: no other active mention in `docs/architecture.md`, `AGENTS.md`, `.claude/`, or elsewhere (`architecture.md` matches only the word "Making"). Historical mentions in this record and everything under `openspec/changes/archive/` are kept.
+
 ## Remaining placeholders
 
-- ADR 0015 decision 1, "work items": archive dates on `dev` and pull requests of the branches still pending, and the fix changes still to come.
-- ADR 0015 decision 4, "fresh clone".
-- ADR 0015 decision 6, "closure statement".
+- ADR 0015 decision 4, "fresh clone", for the coordinator's run; it lists the commands.
+- ADR 0015 decision 6, "closure statement", pending the owner's acceptance; the ADR stays Proposed.
+- The "work items" placeholder of decision 1 is filled.
 - `docs/foundation.md`, G2 status: the closure sentence.
 
 ## Checks
@@ -101,19 +145,18 @@ Light checks only, because the host is shared with evidence runs; `make verify` 
 - Relaunch back-off deferral: `npm run openspec -- validate close-g2 --strict` passed; `npm run findings -- validate` passed (6 files); `npm run verify:comments` passed; `git diff --check` reported nothing.
 - Safe-to-retry deferral: `npm run openspec -- validate close-g2 --strict` passed; `npm run findings -- validate` passed (6 files); `npm run verify:comments` passed; `git diff --check` reported nothing.
 - Landed ReDoS fix and Linux crash windows: `npm run openspec -- validate close-g2 --strict` passed; `npm run findings -- validate` passed (8 files, with the two archives of #329 and #330); `npm run verify:comments` passed; `git diff --check` reported nothing.
+- Owner decisions after #342 (this update): `npm run openspec -- validate close-g2 --strict` passed ("Change 'close-g2' is valid"); `npm run openspec -- validate --all --strict` passed (70 passed, 0 failed); `npm run verify:comments` passed; `npm run findings -- validate` passed ("Every findings file is valid: 20 file(s)."); `git diff --check` reported nothing; every relative link in the ADR, the ledger, `docs/fleet.md`, and this change resolves (a scratch script over `](...)` targets). Archive test in a scratch copy of the tracked `openspec/` tree and this change, with this worktree's `node_modules`: `openspec archive close-g2 --yes` archived it as `2026-10-27-close-g2` (`foundation-closure` + 1), and `openspec validate --all --strict` then passed (69 passed, 0 failed).
 
 ## Independent review
 
-Not started. Assigned reviewer: OpenCode `opencode-go/kimi-k3.1-pro#high`.
+Not started. The record before this update named one reviewer, OpenCode `opencode-go/kimi-k3.1-pro#high`, under governance policy version 4. This task was briefed before version 5 reached `dev` (#340), but the coordinator assigned it under version 5 (Niki, 2026-10-27): reviewer A OpenCode `opencode-go/kimi-k3.1-pro#high`, reviewer B Codex `gpt-6.1-sol`. Governance "Tasks under the previous rule" would otherwise finish a task briefed before version 5 under version 4's one reviewer; the assignment above is the coordinator's.
 
 ## Remaining gates
 
-- The three G2 blockers set by the coordinator on 2026-10-27 (ADR 0015 decision 5): 24c `run-g2-partition-and-races` (Zaki, in review), returned to its worker for a hang of its tests on macOS; the fix of the Linux CP9 defect L1, `stop-automatic-retry-of-unknown-exit` (Liki, in review); and Maki's re-run of the macOS arm64 process ownership row after the D1 fix. The ReDoS fix landed with #330.
-- The integration into `dev` of the other branches marked "integration pending"; they do not block the closure.
-- Re-check of the ADR's evidence against `dev` after those land (task 2.8) and the row map (task 2.5); task 2.1 stays open until 24c lands.
-- The fresh-clone reproduction (tasks 3.1 to 3.4), run only after the three blockers land, because the host is shared.
+- The fresh-clone reproduction (tasks 3.1 to 3.4), run by the coordinator with the commands of ADR 0015 decision 4.
 - The owner's confirmation of each author's assignment and of the hosted-runner check left open, and the closure records (section 4 of `tasks.md`).
 - `make verify` and the link and evidence checks.
-- Independent review by OpenCode `opencode-go/kimi-k3.1-pro#high`, recorded here and in `findings.jsonl`.
+- Independent review under governance version 5: reviewer A OpenCode `opencode-go/kimi-k3.1-pro#high` (passes 1 and 3), reviewer B Codex `gpt-6.1-sol` (pass 2), recorded here and in `findings.jsonl`.
 - Owner acceptance of ADR 0015.
+- Archive of this change after review and verification, as the last commit of the branch.
 - Integration into dev by the coordinator (single pull request). Promotion to `main` is a later owner decision.
