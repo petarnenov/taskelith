@@ -5,7 +5,7 @@ A launch whose identifier, journal read, or deadline clock read fails before W2 
 
 #### Scenario: Unreadable deadline clock
 - **WHEN** the deadline clock cannot be read at any try of a launch
-- **THEN** the worker journals no W2 and sends no request, logs `worker.launch.deferred` with the clock's failure before each wait, each wait is within 5 s and 60 s, and a timer set before a try runs before the next try
+- **THEN** the worker journals no W2 and sends no request, logs `worker.launch.deferred` with the clock's failure before each wait, each wait is within 5 s and 60 s, and the event loop turns between tries, so a callback queued before a try runs before the next
 
 #### Scenario: Deadline clock readable again
 - **WHEN** the deadline clock can be read again after such waits
