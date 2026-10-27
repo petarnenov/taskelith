@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-27. The author's verification, `make verify` on `071822b`, and review pass 1 are recorded below; `make verify` after the pass 1 fixes and review pass 2 are pending.
+Date: 2026-10-27. The author's verification, `make verify` on `071822b` and on `b6ec617`, and review passes 1 and 2 are recorded below; review pass 3 is pending.
 
 ## Scope and source
 
@@ -50,7 +50,7 @@ A coordinator brief from Niki: fix the ReDoS in the scheme-less user-information
 - Package tests with coverage at `381629a8`: `node --experimental-strip-types --test --experimental-test-coverage --test-coverage-include='packages/adapters/worker-control-plane-client/dist/**/*.js' --test-reporter=spec packages/adapters/worker-control-plane-client/test/*.test.ts`: 35 tests, 35 pass, 0 fail; `failure-cause.js` lines 100%, branches 95.83%, functions 100%.
 - `make verify` on `071822b`, 2026-10-27 05:58:48 to 06:01:45 UTC, exit 0, run by the worker before review pass 1. `DOCKER_CONFIG` pointed at a scratch directory holding an empty `config.json` (`{}`), because Docker Desktop's credential helper hangs on this iMac; the pinned public images were pulled anonymously and no credentials were read. 2019 tests, 2017 passed, 0 failed, 2 skipped; coverage 99.29% lines, 92.14% branches, 99.05% functions; 0 breaking changes in all four contract documents against `fe643864b7b5` and "Contract documents have no undeclared breaking change."; OpenSpec `Totals: 70 passed, 0 failed (70 items)`; "Every active OpenSpec change archives into strictly valid specs."; "Every findings file is valid: 3 file(s)."; "Every comment is within the comment length rule."; "Packed file allowlist and installed CLI verification passed." This record had simply not been updated before the pass.
 - After the pass 1 fixes, at `2f078d3`: package tests with coverage, the same command, 37 tests, 37 pass, 0 fail, `failure-cause.js` lines 100%, branches 95.83%, functions 100%; `npm run build` exit 0; `tsc -p tsconfig.check.json` exit 0. With the pass 1 records: `npm run verify:comments`: every comment is within the comment length rule; `npm run openspec -- validate bound-failure-cause-userinfo-redaction --strict`: valid; a scratch copy of `openspec/` archived (1 requirement modified, gaining only the new scenario) and `openspec validate --all --strict --no-interactive`: 69 passed, 0 failed; `make findings ARGS="validate"`: every findings file is valid (3 files).
-- `make verify` after the pass 1 fixes: pending.
+- `make verify` on `b6ec617`, after the pass 1 fixes, 2026-10-27 07:41:38 to 07:44:35 UTC, exit 0, with the same `DOCKER_CONFIG` workaround. 2021 tests, 2019 passed, 0 failed, 2 skipped; coverage 99.29% lines, 92.14% branches, 99.05% functions; 0 breaking changes in all four contract documents against `fe643864b7b5` and "Contract documents have no undeclared breaking change."; OpenSpec `Totals: 70 passed, 0 failed (70 items)`; "Every active OpenSpec change archives into strictly valid specs."; "Every findings file is valid: 3 file(s)."; "Every comment is within the comment length rule."; "Packed file allowlist and installed CLI verification passed." It had not run when review pass 2 started (pass 2's M1).
 
 Environment: macOS (Darwin 25.6.0), Node 24.22.1 from `.nvmrc`.
 
@@ -71,7 +71,20 @@ Environment: macOS (Darwin 25.6.0), Node 24.22.1 from `.nvmrc`.
 
 ### Review pass 2
 
-Codex gpt-6.1-sol, pending.
+- **Reviewer:** Codex CLI, model `gpt-6.1-sol`, reasoning effort medium, read-only sandbox, all confirmed in the output header; run by the worker (Pepi) from the worktree, with the prompt and log outside it.
+- **Invocation:** the same as pass 1.
+- **Session:** `01a17c05-beb9-73e0-a18e-f33e380bc96d`.
+- **Revision:** `b6ec617`.
+- **Snapshot:** `8bb6db6a341a809a52912983ead08c6d21fa50c485c9899c9e92494039e54ccd` before and after; unchanged.
+- **Pass 1 findings:** M1, M2, and L1 confirmed fixed.
+- **Findings:** 0 Critical, 0 High, 1 Medium, 0 Low; fixed and recorded in `findings.jsonl`.
+  1. **M1:** this record's Checks said `make verify` after the pass 1 fixes was pending, though worker step 4 requires it after each round of fixes, and it had not run after the URL and JWT changes. **Fixed:** `make verify` ran on `b6ec617` with exit 0; the run and its results are under Checks.
+- **Other conclusions:** the three rewritten rules keep the old outputs, by structural inspection and 300,000 more random comparisons, with no counterexample and no newly surviving secret; each rule is linear, and the remaining local rules appear linear (measured at 20,000 to 80,000 characters); the four new tests pass, their prefixes isolate the rules, and the 200 ms bounds have headroom, with the scheduler-pause risk documented under Limitations; the delta is the requirement verbatim plus only the new scenario, and its claim matches the authorized scope.
+- **Reviewer limitation:** in its sandbox one existing test could not listen (`listen EPERM`), so it could not report a full suite pass; the `make verify` run on `b6ec617` covers the suite.
+
+### Review pass 3
+
+Pending. It is the last pass the governance cap allows.
 
 ## Limitations
 
@@ -80,7 +93,6 @@ Codex gpt-6.1-sol, pending.
 
 ## Remaining gates
 
-- `make verify` after the pass 1 fixes.
-- Review pass 2 (Codex gpt-6.1-sol), because pass 1 had Medium findings.
+- Review pass 3 (Codex gpt-6.1-sol), because pass 2 had a Medium finding; the last pass the cap allows.
 - Archive.
 - Integration into dev by the coordinator (single pull request).

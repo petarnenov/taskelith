@@ -26,5 +26,10 @@
 - [x] 5.2 Anchor the URL and JWT rules at the start of a run, compared exhaustively and randomly with the old rules
 - [x] 5.3 Measure every failure-cause rule and the logger's `redactText` on pathological runs
 - [x] 5.4 Scenario, proposal, design, `verification.md`, and `findings.jsonl` for pass 1
-- [ ] 5.5 `make verify` after the fixes
-- [ ] 5.6 Review pass 2, because pass 1 had Medium findings
+- [x] 5.5 `make verify` after the fixes, on `b6ec617`
+- [x] 5.6 Review pass 2, because pass 1 had Medium findings: 0 Critical, 0 High, 1 Medium, 0 Low, fixed
+
+## 6. Review pass 2 fixes
+
+- [x] 6.1 Record `make verify` on `b6ec617` in `verification.md`
+- [ ] 6.2 Review pass 3, the last pass the governance cap allows
