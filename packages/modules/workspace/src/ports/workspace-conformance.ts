@@ -2,7 +2,7 @@ import { parseIdentifier, type Result } from '@taskelith/kernel';
 import type { AttemptId } from '@taskelith/execution';
 import { expectCode, expectSame, expectSuccess, type ConformanceCase, type ProjectId, type TaskId } from '@taskelith/sdlc';
 import { isSameCodeHead, parseGitObjectId, type CodeHeadIdentity, type GitObjectId, type RepositoryId } from '../domain/code-head.js';
-import { taskBranchName, type HeadSnapshot, type Workspace, type WorkspaceCredential, type WorkspaceStatus, type WorkspaceTarget } from '../domain/workspace.js';
+import { WORKSPACE_LAYOUT, taskBranchName, workspaceDirectoryName, type HeadSnapshot, type Workspace, type WorkspaceCredential, type WorkspaceStatus, type WorkspaceTarget } from '../domain/workspace.js';
 import type { TreeEntry, WorkspaceFixture } from './workspace-fixture.js';
 import type { PrepareWorkspace } from './workspace-provider.js';
 
@@ -184,10 +184,13 @@ const WORKSPACE_PREPARATION: readonly ConformanceCase<WorkspaceFixture>[] = [
       const named = [['../attempt', 'feature/login'], ['a/b', 'a/b'], ['a_b', 'a_b'], ['..', 'v1.2']] as const;
       const workspaces: Workspace[] = [];
       for (const [attemptText, taskText] of named) {
+        const attemptId = attempt(attemptText);
         const taskId = id('TaskId', taskText) as TaskId;
-        const workspace = await prepared(problems, fixture, { attemptId: attempt(attemptText), taskId });
+        const workspace = await prepared(problems, fixture, { attemptId, taskId });
         if (workspace === undefined) return problems;
         expectSame(problems, `branch of ${taskText}`, workspace.branch, taskBranchName(taskId));
+        const directory = [fixture.dataRoot, WORKSPACE_LAYOUT.root, workspaceDirectoryName(attemptId), WORKSPACE_LAYOUT.checkout].join('/');
+        expectSame(problems, `working directory of ${attemptText}`, workspace.workingDirectory, directory);
         workspaces.push(workspace);
       }
       expectSame(problems, 'distinct branches', new Set(workspaces.map(({ branch }) => branch)).size, named.length);

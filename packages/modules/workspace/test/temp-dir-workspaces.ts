@@ -126,6 +126,9 @@ interface Metadata {
 // The safe form that names had to have before they were derived.
 const PRE_DERIVATION_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
+// A safe and distinct name that is not the derived one.
+const percentEncoded = (text: string) => text.replace(/[^A-Za-z0-9_-]/g, (character) => `%${character.charCodeAt(0).toString(16)}`);
+
 const STATE_FILE = join('.git', 'state.json');
 const OPERATION_FILE = join('.git', 'operation');
 const SNAPSHOT_TYPE = 'application/json';
@@ -140,6 +143,7 @@ export interface DoubleDefects {
   readonly removesDirty?: boolean;
   readonly acceptsMismatchedTree?: boolean;
   readonly namesBranchByRawTaskId?: boolean;
+  readonly namesDirectoryByEncoding?: boolean;
   readonly rejectsUnsafeNames?: boolean;
   readonly snapshotsCommit?: boolean;
   readonly snapshotsWithoutMetadata?: boolean;
@@ -184,7 +188,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     if (this.defects.rejectsUnsafeNames && ![request.attemptId, request.taskId].every((text) => PRE_DERIVATION_NAME.test(text))) {
       return err(failure('invalid', 'the identifier is not a safe name'));
     }
-    const name = workspaceDirectoryName(request.attemptId);
+    const name = this.directoryName(request.attemptId);
     const { target } = request;
     const taskBranch = this.defects.namesBranchByRawTaskId ? `${TASK_BRANCH_PREFIX}${request.taskId}` : taskBranchName(request.taskId);
     if (target.kind === 'at-head' && target.head.repository !== request.binding.repository) {
@@ -226,7 +230,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
   }
 
   async remove(attemptId: AttemptId): Promise<Result<void>> {
-    const target = join(this.root, workspaceDirectoryName(attemptId));
+    const target = join(this.root, this.directoryName(attemptId));
     if (!(await exists(target))) return ok(undefined);
     const current = await this.inspect(attemptId);
     if (!current.ok) return current;
@@ -237,7 +241,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
       await mkdir(this.root);
       return ok(undefined);
     }
-    const removing = join(this.root, `${WORKSPACE_LAYOUT.removingPrefix}${workspaceDirectoryName(attemptId)}`);
+    const removing = join(this.root, `${WORKSPACE_LAYOUT.removingPrefix}${this.directoryName(attemptId)}`);
     await rename(target, removing);
     await rm(removing, { recursive: true });
     return ok(undefined);
@@ -272,7 +276,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
   // The double models a worker whose executions share a separate account.
   private async handedOffElsewhere(attemptId: AttemptId): Promise<boolean> {
     const others = (await this.list()).filter((other) => other !== attemptId);
-    const records = others.map((other) => exists(join(this.root, workspaceDirectoryName(other), WORKSPACE_LAYOUT.handOffRecord)));
+    const records = others.map((other) => exists(join(this.root, this.directoryName(other), WORKSPACE_LAYOUT.handOffRecord)));
     return (await Promise.all(records)).includes(true);
   }
 
@@ -379,8 +383,12 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     return head;
   }
 
+  directoryName(attemptId: AttemptId): string {
+    return this.defects.namesDirectoryByEncoding ? percentEncoded(attemptId) : workspaceDirectoryName(attemptId);
+  }
+
   async checkoutOf(attemptId: AttemptId): Promise<Result<string>> {
-    const checkout = join(this.root, workspaceDirectoryName(attemptId), WORKSPACE_LAYOUT.checkout);
+    const checkout = join(this.root, this.directoryName(attemptId), WORKSPACE_LAYOUT.checkout);
     return (await exists(checkout)) ? ok(checkout) : err(failure('not-found', `no workspace ${attemptId}`));
   }
 
@@ -608,6 +616,7 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
   };
   const fixture: WorkspaceFixture = {
     provider,
+    dataRoot,
     binding,
     credentials: {
       read: credential('read', [repository], ['read-code']),
@@ -677,16 +686,16 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
       return Object.fromEntries(stored.map(([path, entry]) => [path, load(entry)]));
     },
     interruptPrepare: async (attemptId) => {
-      const staging = join(provider.root, `${WORKSPACE_LAYOUT.stagingPrefix}${workspaceDirectoryName(attemptId)}`, WORKSPACE_LAYOUT.checkout);
+      const staging = join(provider.root, `${WORKSPACE_LAYOUT.stagingPrefix}${provider.directoryName(attemptId)}`, WORKSPACE_LAYOUT.checkout);
       await mkdir(staging, { recursive: true });
       await symlink(join(dataRoot, 'worker/journal'), join(staging, 'journal-link'));
     },
     interruptRemove: async (attemptId) => {
-      const name = workspaceDirectoryName(attemptId);
+      const name = provider.directoryName(attemptId);
       await rename(join(provider.root, name), join(provider.root, `${WORKSPACE_LAYOUT.removingPrefix}${name}`));
     },
     leaveLinkedLeftover: async (attemptId) => {
-      const staging = `${WORKSPACE_LAYOUT.stagingPrefix}${workspaceDirectoryName(attemptId)}`;
+      const staging = `${WORKSPACE_LAYOUT.stagingPrefix}${provider.directoryName(attemptId)}`;
       await symlink(join(dataRoot, 'worker/executions'), join(provider.root, staging));
     },
     leftovers: async () => (await readdir(provider.root)).filter((entry) => entry.startsWith('.')).sort(),

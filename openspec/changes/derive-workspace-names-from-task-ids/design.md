@@ -16,7 +16,7 @@ The Git workspace contract named each workspace directory after the attempt iden
 
 ### D1. A name is a readable prefix and a digest
 
-A name is `<prefix>-<digest>`, or `<digest>` alone when the prefix is empty. The prefix keeps a name recognisable in `git branch` output and directory listings; the digest makes it unique. A safe identifier keeps the digest too: mapping safe identifiers to themselves would let `a-<digest of a/b>` collide with the derived name of `a/b`. One private function, `workspaceName`, computes it, and `workspaceDirectoryName` and `taskBranchName` apply it to attempt and task identifiers; both now return a string, because no identifier is refused.
+A name is `<prefix>-<digest>`, or `<digest>` alone when the prefix is empty. The prefix keeps a name recognisable in `git branch` output and directory listings; the digest makes it unique. A safe identifier keeps the digest too: mapping safe identifiers to themselves would let the safe identifier `a_b-<digest of a/b>` collide with the derived name of `a/b`. One private function, `workspaceName`, computes it, and `workspaceDirectoryName` and `taskBranchName` apply it to attempt and task identifiers; both now return a string, because no identifier is refused.
 
 ### D2. Prefix: ASCII letters, digits, `-`, and `_`, at most 40 characters
 
@@ -40,7 +40,7 @@ With every identifier named, nothing can be unsafe, so `unsafe-name` leaves `WOR
 
 ### D7. Tests and defects
 
-The domain tests check the form against hand-computed names, safety and determinism, Git branch validity through `git check-ref-format --branch`, shared prefixes, and the digest against `node:crypto`. The conformance case "derives distinct workspace names and task branches from any identifiers" prepares, lists, and removes workspaces for `../attempt`, `a/b`, `a_b`, and `..` with the tasks `feature/login`, `a/b`, `a_b`, and `v1.2`, and refuses the task `../unsafe` at a head with a foreign credential with `forbidden`. Two double defects must fail it: one that still refuses identifiers outside the former safe form, and one that names the branch by the raw task identifier; the former `checksTaskOnlyOnBranch` defect has no meaning any more and is removed.
+The domain tests check the form against hand-computed names, safety and determinism, Git branch validity through `git check-ref-format --branch`, shared prefixes, and the digest against `node:crypto`. The conformance case "derives distinct workspace names and task branches from any identifiers" prepares, lists, and removes workspaces for `../attempt`, `a/b`, `a_b`, and `..` with the tasks `feature/login`, `a/b`, `a_b`, and `v1.2`, checks each working directory against `worker/workspaces/<name>/checkout` under the fixture's data root, and refuses the task `../unsafe` at a head with a foreign credential with `forbidden`. Three double defects must fail it: one that still refuses identifiers outside the former safe form, one that names the branch by the raw task identifier, and one that names the workspace directory by a percent encoding of the attempt identifier; the former `checksTaskOnlyOnBranch` defect has no meaning any more and is removed.
 
 ## Risks / Trade-offs
 

@@ -68,3 +68,7 @@ Every workspace adapter SHALL pass `WORKSPACE_CONFORMANCE` through its `Workspac
 #### Scenario: Raw task branch name
 - **WHEN** the suite runs against an adapter that names the task branch `taskelith/` followed by the raw task identifier
 - **THEN** the name derivation case reports a finding
+
+#### Scenario: Misnamed workspace directory
+- **WHEN** the suite runs against an adapter whose working directory is not `worker/workspaces/<name>/checkout` under the data root, with the attempt's derived name
+- **THEN** the name derivation case reports a finding

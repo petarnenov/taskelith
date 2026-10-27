@@ -54,6 +54,7 @@ const DEFECTS: readonly [string, DoubleDefects, readonly string[]][] = [
   ['corrupts binary content in the snapshot', { corruptsBinary: true }, [SNAPSHOT]],
   ['misses untracked files', { ignoresUntracked: true }, [PREPARE, DIRTY, PUSH, SNAPSHOT, REMOVE]],
   ['rejects identifiers outside the former safe form', { rejectsUnsafeNames: true }, [NAMES]],
+  ['names the workspace directory by an encoding of the attempt identifier', { namesDirectoryByEncoding: true }, [NAMES]],
   ['names the task branch by the raw task identifier', { namesBranchByRawTaskId: true }, [PREPARE, CONTINUE, NAMES, PUSH]],
   ['accepts a tree that is not the commit tree', { acceptsMismatchedTree: true }, [REJECT]],
   ['puts the commit into the snapshot', { snapshotsCommit: true }, [SNAPSHOT]],

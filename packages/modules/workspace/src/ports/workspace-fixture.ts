@@ -20,6 +20,8 @@ export type TreeEntry =
 // Native helpers act as an agent or another party would, beside the port.
 export interface WorkspaceFixture {
   readonly provider: WorkspaceProvider;
+  // The data root whose `worker/workspaces/` holds the provider's workspaces.
+  readonly dataRoot: string;
   readonly binding: RepositoryBinding;
   readonly credentials: FixtureCredentials;
   // The base branch's tree; it holds `trackedPath` and ignores `ignoredPath`.
