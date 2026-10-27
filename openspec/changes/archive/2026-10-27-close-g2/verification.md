@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-27. Accepted: the owner accepted ADR 0015 and every author's assignment on 2026-10-27 ("Owner acceptance and post-review edits (2026-10-27)" below). The author checks of the draft and of the evidence updates are recorded below. Every G2 change is on `dev` at `bd6108d4`, and no blocker remains. The fresh-clone reproduction of `bd6108d4` passed on 2026-10-27 ("Fresh-clone reproduction" below), `make verify` passed on this branch at `d7bc65bd` and again at `1f8a04ba`, and review passes 1 to 3 are recorded; pass 3 confirmed every pass 2 fix and found nothing new, so the pass cap is reached. The edits after the owner's acceptance apply that acceptance and were not independently reviewed. The archive and the integration are not done yet.
+Date: 2026-10-27. Accepted: the owner accepted ADR 0015 and every author's assignment on 2026-10-27 ("Owner acceptance and post-review edits (2026-10-27)" below). The author checks of the draft and of the evidence updates are recorded below. Every G2 change is on `dev` at `bd6108d4`, and no blocker remains. The fresh-clone reproduction of `bd6108d4` passed on 2026-10-27 ("Fresh-clone reproduction" below), `make verify` passed on this branch at `d7bc65bd` and again at `1f8a04ba`, and review passes 1 to 3 are recorded; pass 3 confirmed every pass 2 fix and found nothing new, so the pass cap is reached. The edits after the owner's acceptance apply that acceptance and were not independently reviewed. The change is archived in the last commit of the branch ("Archive checks" below); the integration is not done yet.
 
 ## Scope and source
 
@@ -310,12 +310,27 @@ After the merge, `npm run verify:links` reported four problems in this branch: t
 Edits directed by the coordinator after the merge. They are record updates after review pass 3 and were not independently reviewed: the pass cap of three is reached.
 
 - This record: the two relative links that leave the change directory are root-relative, as step 6 requires; no other Markdown file of this change links out of it with `../`.
-- ADR 0015 decision 5: `placement-backoff-preserves-rotation`, the Linux crash windows in `make native-acceptance`, and `check-change-record-links` are recorded as landed, each with its pull request, merge, archive, and the limitations its record leaves open; the cursor citation is `placement-service.ts:51`, `:85`. `check-change-record-links` changes no archived record, so the broken archived links stay in its baseline and the `ext2/ext3` labels stay as written.
+- ADR 0015 decision 5: `placement-backoff-preserves-rotation`, the Linux crash windows in `make native-acceptance`, and `check-change-record-links` are recorded as landed, each with its pull request, merge, archive, and the limitations its record leaves open; the cursor citation is `placement-service.ts:51`, `:85`. `check-change-record-links` changes no archived record, so the broken archived links stay in its baseline and the `ext2/ext3` labels stay as written. Accepted limit, not open work (coordinator Niki's decision, 2026-10-27): archived records are never edited (decision D+A+B2 of the away run `20261027T062002Z-opencode-43478`, implemented by #346), so `scripts/record-links-baseline.tsv` is the disposition of the 332 archived links; the baseline only shrinks and the coordinator owns its upkeep. The `ext2/ext3` labels are what `stat -f` reported at the time; #335 fixed the probe, so they stay as historical evidence under the same disposition.
 - The foundation ledger: the three rows record the same landings.
 - This record: "Landed changes", the revision, this section, "Checks", and "Remaining gates".
 
+## Archive checks
+
+Checked state: the tree of the archive commit (`docs: archive the close-g2 change`), on top of `fb393342`, which is the working tree these checks ran on. Environment as in "Checks"; tasks 1.1 to 5.3 of `tasks.md` were all ticked before the archive (23 of 23).
+
+- `npm run openspec -- archive close-g2 --yes`: "Change 'close-g2' archived as '2026-10-27-close-g2'"; `foundation-closure` + 1 added.
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line passes (`change/2026-10-27-close-g2`); the command as a whole reports 185 passed, 13 failed, all 13 older archived changes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/foundation-closure/spec.md`, the added requirement "G2 closure" with its scenarios "Fresh clone", "Unfinished item", and "Placeholder left".
+- The moved change has `findings.jsonl` (10 lines), `passes.jsonl` (3 lines), and `fresh-clone-results.jsonl` (48 lines).
+- The two links of ADR 0015 to `fresh-clone-results.jsonl` (lines 58 and 86) point at `openspec/changes/archive/2026-10-27-close-g2/`; no other tracked file links the active path, and no Markdown file of the moved change links out of it with `../`.
+- `npm run verify:links`: "Every checked link conforms; 332 archived links remain in scripts/record-links-baseline.tsv."
+- `npm run findings -- validate`: "Every findings file is valid: 24 file(s); every pass summary file is valid: 4 file(s)."
+- `npm run verify:comments`: "Every comment is within the comment length rule."
+- `git diff --check` reported nothing.
+- `make verify` was not run on this tree by the author; the `pre-push` hook runs it on the archive tree before the branch is pushed.
+
 ## Remaining gates
 
-- Archive of this change, as the last commit of the branch; the archive commit points the ADR's links to `fresh-clone-results.jsonl` and this record at the archived path.
-- `make verify` on the head that is pushed, by the pre-push hook.
+- `make verify` on the head that is pushed, the tree of the archive commit, by the pre-push hook.
 - Integration into `dev` by the coordinator (single pull request). Promotion to `main` is a later owner decision.
