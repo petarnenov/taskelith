@@ -23,6 +23,8 @@ options=(
   --env TASKELITH_SCENARIO_COMMIT="$(git -C "$repository" rev-parse HEAD)"
 )
 if [ -n "${TASKELITH_TEST_SEED:-}" ]; then options+=(--env TASKELITH_TEST_SEED); fi
+# A native acceptance proof's context, for the scenarios' own records.
+if [ -n "${TASKELITH_ACCEPTANCE:-}" ]; then options+=(--env TASKELITH_ACCEPTANCE); fi
 # The file is created here, so it stays the caller's after root appends.
 if [ -n "${TASKELITH_SCENARIO_RESULTS:-}" ]; then
   touch "$TASKELITH_SCENARIO_RESULTS"
