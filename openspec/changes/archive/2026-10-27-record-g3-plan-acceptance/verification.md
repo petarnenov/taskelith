@@ -30,7 +30,12 @@ Run after both edits and the reviewer change, and again after the pass 1 fixes (
 | `make findings ARGS="validate"` | `Every findings file is valid: 32 file(s); every pass summary file is valid: 12 file(s).` |
 | `npm run verify:comments` | `Every comment is within the comment length rule.` |
 | `make verify` on `cb89d60c`, before pass 1 | Exit 0; last line `Packed file allowlist and installed CLI verification passed.` Run by the worker session on the macOS x86_64 iMac |
-| `make verify` on the tree of the archive commit | Pending; run by the worker session |
+| `make verify` on the tree of the archive commit, after merging `origin/dev` at `4fe09456` (#355) | Exit 0; last line `Packed file allowlist and installed CLI verification passed.`; `Every findings file is valid: 33 file(s); every pass summary file is valid: 13 file(s).` Run by the worker session on the macOS x86_64 iMac |
+| `npm run openspec -- archive record-g3-plan-acceptance --yes` | `Change 'record-g3-plan-acceptance' archived as '2026-10-27-record-g3-plan-acceptance'.` |
+| `npm run openspec -- validate --all --strict` on the tree of the archive commit | `Totals: 69 passed, 0 failed (69 items)` |
+| `npm run openspec -- validate --archived --no-interactive`, this change's line | `✓ change/2026-10-27-record-g3-plan-acceptance` |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` | Empty: the change skips specs |
+| Moved change files | `findings.jsonl` (2 lines) and `passes.jsonl` (2 lines) present; `make findings ARGS="validate"` passes inside `make verify` |
 
 ## Independent review
 
@@ -66,6 +71,4 @@ Reviewer A first assigned by the coordinator: OpenCode CLI `opencode-go/qwen3.8-
 
 ## Remaining gates
 
-- `make verify` on the tree of the archive commit, run by the worker session.
-- Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
