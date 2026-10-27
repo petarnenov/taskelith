@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Journaled launch authorization
-A worker SHALL commit W2 before the first request of an operation and W3 with each decision, and SHALL repeat a request that reached no decision with the same `operationId`, after a delay of 5 s doubling to 60 s with jitter, until its deadline. A retryable rejection SHALL be retried under a new `operationId`; a final one SHALL end the launch with its observation. A new or resumed execution SHALL report each sealed one of the intent that no later grant confirms, oldest first, at most 8.
+A worker SHALL commit W2 before an operation's first request and W3 with each decision, SHALL log each request failure, and SHALL repeat an undecided request under the same `operationId`, after a jittered delay of 5 s doubling to 60 s, until its deadline. A retryable rejection SHALL be retried under a new `operationId`; a final one SHALL end the launch with its observation. A new or resumed execution SHALL report the intent's sealed ones no later grant confirms, oldest first, at most 8.
 
 #### Scenario: No decision
 - **WHEN** the launch authority does not answer twice and then grants
@@ -14,6 +14,10 @@ A worker SHALL commit W2 before the first request of an operation and W3 with ea
 #### Scenario: Relaunch after a seal
 - **WHEN** a grant arrives after the deadline and the worker seals its execution and reports it `not-started`
 - **THEN** the request for the next execution reports the sealed execution with its granted operation
+
+#### Scenario: Logged authorization failure
+- **WHEN** a launch authorization request fails
+- **THEN** the worker logs `worker.launch.authorization-failed` with the failure's details, then the execution, the operation, and the failure's code and message, which no detail replaces, and, before its deadline, repeats the operation
 
 #### Scenario: Confirmed seal
 - **WHEN** a later execution's grant is journaled after an earlier execution was sealed
