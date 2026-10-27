@@ -5,8 +5,8 @@
 ## What Changes
 
 - `@taskelith/testing` exports `uncoveredEnvironment(base = process.env)`, a copy of an environment whose `NODE_V8_COVERAGE` key is present and `undefined`, which `spawn` neither copies back nor passes on, `withholdCoverageFromDescendants()`, which removes the variable from the test process's own `process.env`, and `COVERAGE_VARIABLE`.
-- Tests that start a Node process they may kill pass `uncoveredEnvironment()`: the crash-point tests (`crash-points.test.ts`, `journal-crash.test.ts`, the NATS and PostgreSQL recovery integration tests), the killed holders and tickers (`process-lock.test.ts`, `scenario-process.test.ts`, `worker-root.test.ts`, `file-adapters.test.ts`), and the processes of `process-reaper.test.ts`.
-- `darwin-supervisor.test.ts` and `worker-supervision.test.ts` drive product code that spawns with a copy of `process.env` and has no environment parameter, so they withhold coverage for the whole test file.
+- Tests that start a Node process they kill as part of the test pass `uncoveredEnvironment()`: the crash-point tests (`crash-points.test.ts`, `journal-crash.test.ts`, the NATS and PostgreSQL recovery integration tests), the killed holders and tickers (`process-lock.test.ts`, `scenario-process.test.ts`, `worker-root.test.ts`, `file-adapters.test.ts`), the processes of `process-reaper.test.ts`, and the archive check of `test/check-archive-dry-run.test.ts`, which forwards a `SIGTERM` to its `openspec` Node child.
+- `darwin-supervisor.test.ts`, `worker-supervision.test.ts`, and `linux-cgroup.privileged.ts` drive product code that spawns with a copy of `process.env` and has no environment parameter, so they withhold coverage for the whole test file.
 - `harness-composition.ts` uses the helper instead of its own destructuring, which makes the fix of `40aab95` effective.
 - No product code changes.
 
