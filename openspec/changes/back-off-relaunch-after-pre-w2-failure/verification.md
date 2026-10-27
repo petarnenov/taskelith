@@ -90,6 +90,10 @@ Environment: macOS 26.6.2 (`Darwin 25.6.0`, x86_64), Node v24.22.1 from `.nvmrc`
 
 The review pass 1 fix (`a6241671`, `d8a3a535`) came after this run; `make verify` on the final tree is part of the archive checks.
 
+## Merge of dev after review pass 1
+
+`914ecd1a` merges `origin/dev` `d3e9e636` (pull requests #338, advance the placement rotation cursor; #339, centralize the log redaction rules; #340, alternate reviewers per pass) without a conflict. It touches none of `apps/worker/src/launch-orchestrator.ts`, `packages/modules/execution/src/ports/worker-journal.ts`, `packages/adapters/worker-journal`, `docs/contracts/worker-journal.md`, or the `worker-runtime` requirements. Its only dependency change is two workspace dependencies (`@taskelith/observability` of the secrets adapter, `@taskelith/access` of `@taskelith/observability`), so `make setup` was run (all checks passed); the post-merge inventory check reported nothing stale. After the merge: `make findings ARGS="validate"`: "Every findings file is valid: 18 file(s)."; `npm run build`: exit 0; worker tests: 250 tests, 248 pass, 0 fail, 2 skipped.
+
 ## Independent review
 
 ### Review pass 1
