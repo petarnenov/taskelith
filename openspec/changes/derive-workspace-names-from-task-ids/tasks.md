@@ -28,4 +28,4 @@
 - [x] 6.1 Restore the active change by reverting the archive commit; `origin/dev` had not advanced past `93b5065b`, so no merge or delta reconciliation was needed
 - [x] 6.2 Fix the coordinator's finding: remove the hand-written `sha256.ts` and its tests, inject an `IdentifierDigest` that the double supplies with `node:crypto`, and add the fixture's digest, a conformance case with SHA-256 vectors, and two defective doubles that fail it
 - [x] 6.3 Update the contract, the spec delta, the design D5, the proposal, and `verification.md`, and run `make verify`, the strict validation, `make findings ARGS="validate"`, and `npm run verify:links`
-- [ ] 6.4 Review pass 3 by reviewer A confirming the fix of the coordinator's finding, then archive again
+- [x] 6.4 Review pass 3 by reviewer A confirming the fix of the coordinator's finding, then archive again

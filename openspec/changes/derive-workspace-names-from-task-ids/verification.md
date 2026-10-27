@@ -94,7 +94,7 @@ The finding has no line in `findings.jsonl`: the finding schema requires a revie
 - Counts: Critical 0, High 0, Medium 0, Low 6.
 - Pass 1 fixes: both confirmed resolved; their outcome stays `fixed`.
 - Reviewer checks: the hand-written SHA-256, removed after the coordinator's return, matched `node:crypto` for every length from 0 to 1100 bytes, for 3000 random Unicode strings, and for a 5 MB input, and gave the FIPS results for `"abc"` and `""`; `git check-ref-format --branch` accepted the branches of 310 random printable ASCII identifiers and of `@`, `@{-1}`, `HEAD`, `-`, `a.lock`, `refs/heads/x`, and `~^:?*[\`, the longest name being 73 characters; the requirement lengths, the review checklist, the fail-before result, and every cited line at `93b5065b` were confirmed; the package passed 65 of 65 tests.
-- A Low-only pass ends the review under governance "Low findings are fixed", so there is no pass 3; the six fixes, in `bb175e0d`, have the outcome `fixed-unreviewed`.
+- A Low-only pass ends the review under governance "Low findings are fixed"; the six fixes, in `bb175e0d`, have the outcome `fixed-unreviewed`. Pass 3 runs only to confirm the coordinator finding's fix and also confirmed these six.
 
 | # | Severity | Finding | Resolution | Commit |
 | --- | --- | --- | --- | --- |
@@ -105,6 +105,17 @@ The finding has no line in `findings.jsonl`: the finding schema requires a revie
 | 5 | Low | Design D5 did not name Web Crypto among the rejected alternatives | D5 rejects `crypto.subtle.digest` because it is asynchronous and would make `taskBranchName`, `workspaceDirectoryName`, and the suite's name constants asynchronous | `bb175e0d` |
 | 6 | Low | Contract section 2 said "printable ASCII characters", though `Identifier` excludes space | The contract and the proposal say "printable ASCII characters other than space"; the design and this record already said "without whitespace" | `bb175e0d` |
 
+### Pass 3, reviewer A
+
+- Reviewer: Codex, `gpt-6.1-sol`, reasoning effort medium, reviewed head `7b766e43`, run by worker Liki.
+- Invocation: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`.
+- Session: `01a17e99-d4c5-7141-8793-ceeb3841c750`.
+- Snapshot: `45b2d55567866505d86a231ff9244530aab2dc41737f31211552311587b201e9` before and after the pass, unchanged.
+- Scope: confirmation only, of the six pass 2 fixes and of the coordinator finding's fix (`git diff 7264c338..HEAD`).
+- Verdicts: all six pass 2 fixes and the coordinator finding's fix resolved; `sha256.ts` is gone, `IdentifierDigest` agrees across the contract, the spec delta, the design, the code, and the tests, and no Node types reach the domain. The digest case accepted SHA-256 over UTF-8 and caught the SHA-1 and Latin-1 doubles.
+- Reviewer checks: requirement lengths, record counts, citations, and gates confirmed; the TypeScript check gave no diagnostics; 17 domain tests passed and one was blocked by the read-only sandbox (`spawnSync git EPERM`).
+- Counts: Critical 0, High 0, Medium 0, Low 0.
+
 ## Limitations
 
 - Superseded: the module's own SHA-256 was removed after the coordinator's return. The conformance suite checks the injected digest with three vectors only (design D5); `node:crypto` is the established implementation behind it.
@@ -114,6 +125,5 @@ The finding has no line in `findings.jsonl`: the finding schema requires a revie
 
 ## Remaining gates
 
-- Review pass 3 by reviewer A (Codex gpt-6.1-sol) confirming the coordinator finding's fix
 - Archive of the change
 - Integration into dev by the coordinator (single pull request)
