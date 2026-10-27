@@ -140,16 +140,27 @@ test('the containment check fails when the probe fails for another reason than a
   assert.match(outcome.stderr, /cgroup\.procs probe failed: service "worker" is not running/);
 });
 
-// Answers the image ID of a tag ending in -first or -second from the setup;
-// FAKE_BUILD_STATUS is the exit status of a build.
+// Answers the image ID of a tag ending in -first or -second; a FAKE_ status
+// fails builds or removals, and FAKE_MOVE_HEAD commits during the first build.
 const buildDocker = `#!/bin/sh
 printf '%s\\n' "$*" >> "$FAKE_DOCKER_CALLS"
 case "$*" in
-  "build "*) exit "\${FAKE_BUILD_STATUS:-0}" ;;
+  "build "*)
+    case "$*" in *"-first "*) [ -z "$FAKE_MOVE_HEAD" ] || GIT_COMMITTER_DATE='@1800000000 +0000' \\
+      git -C "$FAKE_MOVE_HEAD" -c user.name=test -c user.email=test@example.invalid \\
+      commit --quiet --allow-empty --message moved ;; esac
+    exit "\${FAKE_BUILD_STATUS:-0}" ;;
   "image inspect --format {{.Id}} "*-first) echo "$FAKE_FIRST_ID" ;;
   "image inspect --format {{.Id}} "*-second) echo "$FAKE_SECOND_ID" ;;
+  "image rm "*) exit "\${FAKE_REMOVE_STATUS:-0}" ;;
 esac
 exit 0
+`;
+
+// Fails \`git stash create\` with FAKE_STASH_STATUS when it is set.
+const stashGit = `#!/bin/sh
+if [ -n "$FAKE_STASH_STATUS" ] && [ "$3 $4" = "stash create" ]; then exit "$FAKE_STASH_STATUS"; fi
+exec /usr/bin/git "$@"
 `;
 
 const COMMIT_TIME = 1700000000;
@@ -181,13 +192,18 @@ function runInFixture(script: string, args: readonly string[], environment: Reco
     assert.equal(git('commit', '--quiet', '--message', 'fixture').status, 0);
     const bin = join(root, 'bin');
     mkdirSync(bin);
-    writeFileSync(join(bin, 'docker'), buildDocker);
-    chmodSync(join(bin, 'docker'), 0o755);
+    for (const [name, source] of [['docker', buildDocker], ['git', stashGit]]) {
+      writeFileSync(join(bin, name), source);
+      chmodSync(join(bin, name), 0o755);
+    }
     const calls = join(root, 'calls');
     writeFileSync(calls, '');
     const run = spawnSync('bash', [join(repository, 'scripts', script), ...args.map((arg) => arg.replace('{root}', root))], {
       encoding: 'utf8',
-      env: { ...PINS, ...environment, PATH: [bin, '/usr/bin', '/bin'].join(':'), FAKE_DOCKER_CALLS: calls },
+      env: {
+        ...PINS, ...Object.fromEntries(Object.entries(environment).map(([name, value]) => [name, value.replace('{root}', root)])),
+        PATH: [bin, '/usr/bin', '/bin'].join(':'), FAKE_DOCKER_CALLS: calls,
+      },
     });
     const recorded = readFileSync(calls, 'utf8').trim().split('\n');
     return { status: run.status, stdout: run.stdout, stderr: run.stderr, calls: recorded };
@@ -196,9 +212,9 @@ function runInFixture(script: string, args: readonly string[], environment: Reco
   }
 }
 
-function checkReproducible(firstId: string, secondId: string): BuildOutcome {
+function checkReproducible(firstId: string, secondId: string, environment: Record<string, string> = {}): BuildOutcome {
   return runInFixture('installation.sh', ['check-reproducible', 'installation-script-test'], {
-    FAKE_FIRST_ID: firstId, FAKE_SECOND_ID: secondId,
+    FAKE_FIRST_ID: firstId, FAKE_SECOND_ID: secondId, ...environment,
   });
 }
 
@@ -242,4 +258,32 @@ test('the reproducibility check fails and names both image IDs when they differ'
   assert.equal(outcome.status, 1);
   assert.match(outcome.stderr, /two builds of one revision gave sha256:one and sha256:two/);
   assert.ok(outcome.calls.some((call) => /^image rm .*-first .*-second$/.test(call)), 'both images are removed');
+});
+
+test('a failed stash of the uncommitted edits stops the build before any image is built', () => {
+  for (const command of ['build', 'check-reproducible']) {
+    const outcome = runInFixture('installation.sh', [command, 'installation-script-test'], { FAKE_STASH_STATUS: '23' });
+    assert.notEqual(outcome.status, 0, command);
+    assert.equal(builds(outcome.calls).length, 0, command);
+  }
+});
+
+test('the reproducibility check builds one commit when HEAD moves between its builds', () => {
+  const outcome = checkReproducible('sha256:same', 'sha256:same', { FAKE_MOVE_HEAD: '{root}/repository' });
+  assert.equal(outcome.status, 0, outcome.stderr);
+  const calls = builds(outcome.calls);
+  assert.equal(calls.length, 2);
+  for (const call of calls) assert.ok(call.includes(COMMIT_EPOCH_ARGUMENT), call);
+});
+
+test('a failed removal of the images fails a passing check and reports it', () => {
+  const outcome = checkReproducible('sha256:same', 'sha256:same', { FAKE_REMOVE_STATUS: '1' });
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /were not removed/);
+});
+
+test('a failed build keeps its status when the removal of the images fails too', () => {
+  const outcome = checkReproducible('sha256:same', 'sha256:same', { FAKE_BUILD_STATUS: '3', FAKE_REMOVE_STATUS: '1' });
+  assert.equal(outcome.status, 3);
+  assert.match(outcome.stderr, /were not removed/);
 });

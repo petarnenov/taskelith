@@ -54,12 +54,13 @@ require_pins() {
   done
 }
 
-# The build context holds only tracked files, with their uncommitted edits,
-# so local credentials or state never reach an image.
+# The commit ID of the tracked files with their uncommitted edits: no local
+# credentials or state reach an image, and every step sees one commit.
 source_revision() {
   local revision
-  revision="$(git -C "$repository" stash create)"
-  echo "${revision:-HEAD}"
+  revision="$(git -C "$repository" stash create)" || return
+  if [ -z "$revision" ]; then revision="$(git -C "$repository" rev-parse --verify HEAD)" || return; fi
+  echo "$revision"
 }
 
 unpack_context() {
@@ -71,11 +72,25 @@ build() (
   require_pins installation-build
   context="$(mktemp -d)"
   trap 'rm -rf "$context"' EXIT
-  revision="$(source_revision)"
+  revision="$(source_revision)" || exit
   unpack_context "$revision" "$context"
   build_image "$context" "$revision" control-plane "$control_plane_image"
   build_image "$context" "$revision" worker "$worker_image"
 )
+
+# Removes the check's images; a failed removal fails a check that passed.
+finish_reproducible() {
+  local status="$1" image built=()
+  rm -rf "$context"
+  for image in "$first" "$second"; do
+    if docker image inspect "$image" >/dev/null 2>&1; then built+=("$image"); fi
+  done
+  if [ "${#built[@]}" -gt 0 ] && ! docker image rm "${built[@]}" >/dev/null; then
+    echo "installation.sh: the images ${built[*]} were not removed" >&2
+    if [ "$status" -eq 0 ]; then status=1; fi
+  fi
+  exit "$status"
+}
 
 # Builds the worker image twice from fresh contexts of one revision, without
 # the build cache, and passes only when both builds give one image ID.
@@ -83,8 +98,8 @@ check_reproducible() (
   local revision first="$worker_image-first" second="$worker_image-second" context="" image
   local first_id second_id
   require_pins verify-worker-image-reproducible
-  trap 'rm -rf "$context"; docker image rm "$first" "$second" >/dev/null 2>&1 || true' EXIT
-  revision="$(source_revision)"
+  trap 'finish_reproducible $?' EXIT
+  revision="$(source_revision)" || exit
   for image in "$first" "$second"; do
     rm -rf "$context"
     context="$(mktemp -d)"
