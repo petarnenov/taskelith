@@ -3,6 +3,7 @@ import test from 'node:test';
 import { createAccount, createUser } from '@nats-io/nkeys';
 import { parseInstallationId, parseWorkerId } from '@taskelith/fleet';
 import { failure } from '@taskelith/kernel';
+import { assertLinearOnRuns } from '@taskelith/testing';
 import { NodeSecrets, RandomIdentifiers, REDACTED, redactFailure, redactSecrets, scrubEnvironment } from '@taskelith/secrets';
 
 test('issued secrets carry their kind, differ, and match only their own hash', () => {
@@ -55,6 +56,19 @@ test('the user information of a URL is redacted, percent-encoded or not', () => 
   assert.deepEqual([failed.message, failed.details.url], [`cannot reach postgres://${REDACTED}@db`, `nats://${REDACTED}@host`]);
   assert.equal(redactSecrets('https://example.org/path?q=a@b'), 'https://example.org/path?q=a@b');
   assert.equal(redactSecrets('mail owner@example.org'), 'mail owner@example.org');
+});
+
+test('text is redacted in linear time on long runs', () => {
+  const units = ['a.', '.a', 'A.', 'a.b', 'a-', 'a+', 'eyJ.', 'eyJ', 'eyJ_', 'eyJa', 'eyJa.b.', 'proxy-', 'x.eyJ'];
+  assertLinearOnRuns(redactSecrets, [...units, 'tkop_', 'SA', 'a://', 'a://b@']);
+  const begin = '-----BEGIN NATS USER JWT-----';
+  assertLinearOnRuns(redactSecrets, [begin, `${begin}a`], 400_000);
+});
+
+test('a creds block without its end stays, and a URL may have empty user information', () => {
+  const begin = '-----BEGIN NATS USER JWT-----';
+  assert.equal(redactSecrets(`${begin} no end`), `${begin} no end`);
+  assert.equal(redactSecrets('nats://@host'), `nats://${REDACTED}@host`);
 });
 
 test('a child environment keeps no secret variable or value', () => {

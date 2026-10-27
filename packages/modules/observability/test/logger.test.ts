@@ -11,9 +11,16 @@ import {
   SILENT_LOGGER,
 } from '@taskelith/observability';
 import { parseInstant } from '@taskelith/kernel';
-import { SimulatedHost, value } from '@taskelith/testing';
+import { assertLinearOnRuns, SimulatedHost, value } from '@taskelith/testing';
 
 const START = value(parseInstant('2026-10-25T10:00:00.000Z'));
+
+const ISSUED = 'tkwk_0123456789abcdefghijABCDEFGHIJ-_xyzXYZ0123';
+const SEED = `SU${'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.repeat(2).slice(0, 56)}`;
+const JWT = 'eyJ0eXAiOiJKV1QifQ.eyJzdWIiOiJVIn0.c2lnbmF0dXJl';
+const CREDS_BEGIN = '-----BEGIN NATS USER JWT-----';
+const CREDS_END = '------END USER NKEY SEED------';
+const CREDS = `${CREDS_BEGIN}\n${JWT}\n------END NATS USER JWT------\n\n-----BEGIN USER NKEY SEED-----\n${SEED}\n${CREDS_END}`;
 
 function logger(): { sink: InMemoryLogSink; logger: Logger } {
   const sink = new InMemoryLogSink();
@@ -63,6 +70,23 @@ test('credentials inside text are redacted in fields and correlation', () => {
   assert.equal(record.fields['cause'], `connect postgres://${REDACTED}@localhost:5432/db failed; Bearer ${REDACTED}`);
   assert.equal(record.correlation.correlationId, `postgres://${REDACTED}@db/x`);
   assert.doesNotMatch(JSON.stringify(record), /taskelith:taskelith|pw@|abc\.def/);
+});
+
+test('issued secrets, seeds, JWTs, and creds blocks are redacted in fields and correlation', () => {
+  const { sink, logger: log } = logger();
+  log.with({ correlationId: `w-${ISSUED}` }).warn('e', { cause: `seed ${SEED} jwt x${JWT}`, creds: `creds:\n${CREDS}\nend` });
+  const record = sink.records[0]!;
+  assert.equal(record.correlation.correlationId, `w-${REDACTED}`);
+  assert.equal(record.fields['cause'], `seed ${REDACTED} jwt x${REDACTED}`);
+  assert.equal(record.fields['creds'], `creds:\n${REDACTED}\nend`);
+  assert.equal(redactText(`${CREDS_BEGIN} without an end`), `${CREDS_BEGIN} without an end`);
+  assert.equal(redactText('tkop_short and eyJa.b stay'), 'tkop_short and eyJa.b stay');
+});
+
+test('text is redacted in linear time on long runs', () => {
+  const units = ['a.', '.a', 'A.', 'a.b', 'a-', 'a+', 'eyJ.', 'eyJ', 'eyJ_', 'eyJa.b.', 'proxy-', 'x.eyJ'];
+  assertLinearOnRuns(redactText, [...units, 'bearer ', 'token=', 'tkop_', 'SA', 'a://', 'a://b@']);
+  assertLinearOnRuns(redactText, [CREDS_BEGIN, `${CREDS_BEGIN}a`], 400_000);
 });
 
 test('a name redacts only by whole segments', () => {
