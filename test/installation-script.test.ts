@@ -157,9 +157,11 @@ esac
 exit 0
 `;
 
-// Fails \`git stash create\` with FAKE_STASH_STATUS when it is set.
+// Fails \`git stash create\` with FAKE_STASH_STATUS and \`git log\` with
+// FAKE_LOG_STATUS when they are set.
 const stashGit = `#!/bin/sh
 if [ -n "$FAKE_STASH_STATUS" ] && [ "$3 $4" = "stash create" ]; then exit "$FAKE_STASH_STATUS"; fi
+if [ -n "$FAKE_LOG_STATUS" ] && [ "$3" = "log" ]; then exit "$FAKE_LOG_STATUS"; fi
 exec /usr/bin/git "$@"
 `;
 
@@ -286,4 +288,17 @@ test('a failed build keeps its status when the removal of the images fails too',
   const outcome = checkReproducible('sha256:same', 'sha256:same', { FAKE_BUILD_STATUS: '3', FAKE_REMOVE_STATUS: '1' });
   assert.equal(outcome.status, 3);
   assert.match(outcome.stderr, /were not removed/);
+});
+
+test('a failed read of the commit time stops every build before any image is built', () => {
+  const runs: ReadonlyArray<readonly [string, readonly string[], Record<string, string>]> = [
+    ['installation.sh', ['build', 'installation-script-test'], {}],
+    ['installation.sh', ['check-reproducible', 'installation-script-test'], {}],
+    ['harness-qualification.sh', ['{root}/out'], { PLATFORMS: 'linux/amd64' }],
+  ];
+  for (const [script, args, environment] of runs) {
+    const outcome = runInFixture(script, args, { ...environment, FAKE_LOG_STATUS: '24' });
+    assert.notEqual(outcome.status, 0, args[0]);
+    assert.equal(builds(outcome.calls).length, 0, args[0]);
+  }
 });

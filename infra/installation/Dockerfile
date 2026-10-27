@@ -2,8 +2,8 @@
 # from a git archive of the tracked files with the pins of the Makefile.
 ARG BASE
 
-# Each RUN clamps the mtimes it changes, but not those of the RUN mounts, to
-# SOURCE_DATE_EPOCH, the commit time: one commit gives the same layers.
+# Each RUN of the worker image's stages clamps the mtimes it writes, but not
+# those of the RUN mounts, to SOURCE_DATE_EPOCH, the commit time.
 FROM ${BASE} AS node-amd64
 ARG NODE_VERSION
 ARG NODE_SHA256_AMD64

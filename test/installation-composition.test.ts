@@ -36,6 +36,7 @@ interface Composition {
 interface Stage {
   readonly from: string;
   readonly user?: string;
+  readonly copiesFrom: readonly string[];
 }
 
 const DIGEST_PINNED = /^[^@\s]+@sha256:[0-9a-f]{64}$/;
@@ -62,11 +63,15 @@ function dockerfileStages(source: string): Map<string, Stage> {
   for (const line of source.split('\n')) {
     const from = /^FROM (\S+) AS (\S+)$/.exec(line);
     const user = /^USER (\S+)$/.exec(line);
+    const copy = /^COPY --from=(\S+) /.exec(line);
     if (from) {
-      current = { name: from[2], stage: { from: from[1] } };
+      current = { name: from[2], stage: { from: from[1], copiesFrom: [] } };
       stages.set(current.name, current.stage);
     } else if (user && current) {
       current.stage = { ...current.stage, user: user[1] };
+      stages.set(current.name, current.stage);
+    } else if (copy && current) {
+      current.stage = { ...current.stage, copiesFrom: [...current.stage.copiesFrom, copy[1]] };
       stages.set(current.name, current.stage);
     }
   }
@@ -122,14 +127,39 @@ function stageInstructions(name: string): readonly string[] {
   return dockerfile.slice(start, end === -1 ? undefined : end).replace(/ \\\n\s*/g, ' ').split('\n').slice(1);
 }
 
+// Every stage that a target is built from or copies from, for each
+// architecture of node-${TARGETARCH}.
+function stageChain(stages: Map<string, Stage>, target: string): ReadonlySet<string> {
+  const chain = new Set<string>();
+  const visit = (reference: string): void => {
+    for (const name of ['amd64', 'arm64'].map((architecture) => reference.replace('${TARGETARCH}', architecture))) {
+      const stage = stages.get(name);
+      if (stage === undefined || chain.has(name)) continue;
+      chain.add(name);
+      [stage.from, ...stage.copiesFrom].forEach(visit);
+    }
+  };
+  visit(target);
+  return chain;
+}
+
 const SOURCE_DATE_CLAMP = '-newermt "@${SOURCE_DATE_EPOCH:?}" -exec touch -h -d "@${SOURCE_DATE_EPOCH}" {} +';
 
-test('every RUN of the worker image clamps the mtimes it changes to SOURCE_DATE_EPOCH', () => {
-  for (const name of ['node-amd64', 'node-arm64', 'build', 'runtime', 'worker']) {
+test('the stage chain of a target follows its parents and copy sources', () => {
+  const sample = dockerfileStages([
+    'FROM ${BASE} AS node-amd64', 'FROM ${BASE} AS node-arm64', 'FROM node-${TARGETARCH} AS node',
+    'FROM ${BASE} AS added', 'FROM node AS worker', 'COPY --from=added /x /x', 'FROM worker AS other', '',
+  ].join('\n'));
+  assert.deepEqual([...stageChain(sample, 'worker')].sort(), ['added', 'node', 'node-amd64', 'node-arm64', 'worker']);
+});
+
+test('every RUN of the worker image ends with the clamp to SOURCE_DATE_EPOCH', () => {
+  const chain = stageChain(stages, 'worker');
+  for (const name of ['build', 'node-amd64', 'node-arm64', 'runtime', 'worker']) assert.ok(chain.has(name), name);
+  for (const name of chain) {
     const instructions = stageInstructions(name);
     const runs = instructions.filter((instruction) => instruction.startsWith('RUN '));
-    assert.ok(instructions.includes('ARG SOURCE_DATE_EPOCH'), name);
-    assert.notEqual(runs.length, 0, name);
+    if (runs.length > 0) assert.ok(instructions.includes('ARG SOURCE_DATE_EPOCH'), name);
     for (const run of runs) assert.ok(run.endsWith(SOURCE_DATE_CLAMP), `${name}: ${run}`);
   }
   assert.deepEqual(stageInstructions('node').filter((instruction) => instruction.trim() !== ''), ['COPY --from=node-files /node /usr/local']);
