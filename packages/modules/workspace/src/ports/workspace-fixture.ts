@@ -26,6 +26,9 @@ export interface WorkspaceFixture {
   readonly baseTree: Readonly<Record<string, TreeEntry>>;
   readonly trackedPath: string;
   readonly ignoredPath: string;
+  // Executions run under a separate account that all of them share, so the
+  // provider holds one handed-off workspace at a time (section 3).
+  readonly separateExecutionIdentity: boolean;
   // A new provider over the same data root, as after a worker restart.
   reopen(): WorkspaceProvider;
   writeFile(attemptId: AttemptId, path: string, text: string): Promise<void>;
@@ -55,6 +58,15 @@ export interface WorkspaceFixture {
   controlRecords(): Promise<string>;
   // The snapshot's tree, decoded by the adapter's format.
   readSnapshot(content: Uint8Array): Promise<Readonly<Record<string, TreeEntry>>>;
+  // A hard link outside the workspace to the checkout's file at `path`, as
+  // an agent leaves one; the returned function writes through it.
+  hardLinkOutside(attemptId: AttemptId, path: string): Promise<(text: string) => Promise<void>>;
+  // A symbolic link inside the checkout's Git directory to a control record.
+  linkInGitDirectory(attemptId: AttemptId): Promise<void>;
+  // Deletes the checkout's Git directory, as an agent can.
+  removeGitDirectory(attemptId: AttemptId): Promise<void>;
+  // A gitfile below the checkout's top naming `gitDirectory`, as a submodule.
+  nestGitFile(attemptId: AttemptId, gitDirectory: string): Promise<void>;
   // A staging entry holding a symbolic link to a control record.
   interruptPrepare(attemptId: AttemptId): Promise<void>;
   // The clean workspace renamed to its removing entry, not yet deleted.
