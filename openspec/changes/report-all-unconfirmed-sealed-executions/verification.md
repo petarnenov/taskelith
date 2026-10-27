@@ -56,6 +56,8 @@ Follow-up of defect D1 (`fix-launch-recovery-reauthorization`, archived), whose 
 
 ## Review
 
+The findings of every pass are also recorded one per line in `findings.jsonl` ([review findings record](../../../docs/agent-task-protocol.md#review-findings-record)): the 3 Low findings of pass 1, outcome `fixed-unreviewed`; passes 2 and 3 found nothing and add no line.
+
 ### Review pass 1
 
 OpenCode, model `opencode-go/kimi-k2.7-code`, run by the coordinator under the [review process](../../../docs/governance.md#independent-review-process). Session `ses_e85dbb9d5ffeIdmD4uBDZ38OXW`. Revision reviewed: `421ae58` (the merge of `origin/dev` at `843e293` into the branch). Findings: 0 Critical, 0 High, 0 Medium, 3 Low. The fixes below are **UNREVIEWED** (Low-only pass, governance); no further review follows.
@@ -118,6 +120,7 @@ Reviewed in review pass 3 above, with 0 findings.
   - `node --experimental-strip-types --test` on `packages/modules/execution/test/journal-recovery.test.ts`, `apps/worker/test/launch-orchestrator.test.ts`, and `apps/worker/test/start-reconciliation.test.ts`: 105 tests, 105 passed.
   - `npm run verify:comments`: `Every comment is within the comment length rule.`
   - Crash windows were not rerun: this round changes no code, and `make verify` runs them.
+- **Third merge:** `dev` moved on to `5c60c15` (#323 `record-review-findings`, #324 `stamp-assignment-age-on-database-clock`); `git merge origin/dev` as `b123ada`, without a conflict. #323 adds the review findings record (`findings.jsonl` in every active change, `docs/review-findings/`, `scripts/findings.ts`, `scripts/review-findings.ts`, `npm run verify:findings` in `make verify`, the `ajv` development dependency) and changes the protocol, governance, and fleet skill documents and the `agent-task-protocol` and `review-process` specs. #324 stamps the assignment age on the database clock (`control-plane-signals.ts` in the PostgreSQL adapter, its two integration tests, and the `execution-observability` spec). `git diff 656a34d origin/dev` shares no file with this change, and `-- openspec/specs` touches none of its three modified requirements, so no evidence above is invalidated and the deltas need no rewrite. `package-lock.json` and `docs/dependencies/` equal `dev`'s; the post-merge inventory check reported nothing stale. This change gained `findings.jsonl` with the 3 Low findings of pass 1; `make findings ARGS="validate"` passed.
 - **`make verify`:** it runs once on the reconciled tree, on the tree of the archive commit (step 7, Archive checks below), which contains the merge, the reconciliation, and this record. Before it, only the targeted checks above ran on this round's tree.
 
 ## Limitations
