@@ -19,10 +19,10 @@
 
 ## 3. Fresh-clone reproduction
 
-- [ ] 3.1 (Coordinator.) `git clone` the repository into a scratch directory outside it, check out `dev` after the changes above are archived, `nvm use`, and `make setup`.
-- [ ] 3.2 Run `make verify` and record tests, coverage, and checks.
-- [ ] 3.3 Run `make verify-installation`, the installation smoke (`make installation-smoke`), and `make native-acceptance` as 25b and 25c ran it (ADR 0015 decision 4 lists the commands), and record the results.
-- [ ] 3.4 Check `git status --short` afterwards and record host and toolchain; fill the ADR's fresh-clone placeholder.
+- [x] 3.1 (Worker Desi, in a host slot the coordinator granted.) `git clone` the repository into a scratch directory outside it, check out `dev` after the changes above are archived, `nvm use`, and `make setup`.
+- [x] 3.2 Run `make verify` and record tests, coverage, and checks.
+- [x] 3.3 Run `make verify-installation`, the installation smoke (`make installation-smoke`), and `make native-acceptance` as 25b and 25c ran it (ADR 0015 decision 4 lists the commands), and record the results; commit the native acceptance records as `fresh-clone-results.jsonl`.
+- [x] 3.4 Check `git status --short` afterwards and record host and toolchain; fill the ADR's fresh-clone placeholder.
 
 ## 4. Closure records
 

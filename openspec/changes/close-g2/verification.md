@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-27. Draft: the author checks of the draft and of the evidence updates are recorded below. Every G2 change is on `dev` at `bd6108d4`, and no blocker remains; the fresh-clone reproduction, `make verify`, the independent review, the owner's acceptance, the archive, and the integration are not done yet.
+Date: 2026-10-27. Draft: the author checks of the draft and of the evidence updates are recorded below. Every G2 change is on `dev` at `bd6108d4`, and no blocker remains. The fresh-clone reproduction of `bd6108d4` passed on 2026-10-27 ("Fresh-clone reproduction" below); `make verify` on this branch, the independent review, the owner's acceptance, the archive, and the integration are not done yet.
 
 ## Scope and source
 
@@ -16,6 +16,7 @@ The evidence update of 2026-10-27 follows the coordinator's brief of that day: f
 - The evidence update is the next commit on this branch, on top of `3faaa03f`.
 - `origin/dev` at `92f0830b` (#330) merged in as `8667c9e7`, a merge commit, without conflicts. It brings `run-g2-crash-windows-on-linux` (#329, merge `1e48c93b`) and `bound-failure-cause-userinfo-redaction` (#330, merge `92f0830b`). The archived Linux crash-windows record on `dev` is identical to that of its branch head `07568a20`. `npm ci --ignore-scripts` ran, and `npm run verify:dependencies` reported the inventory current ("Verified 731 package paths"), so it was not regenerated.
 - `origin/dev` at `bd6108d4` (#342) merged in as `31dbd30f`, a merge commit, without conflicts, after `git fetch origin`. It brings #331 to #342: `stabilize-placement-fair-order-test`, `stop-automatic-retry-of-unknown-exit`, 24c `run-g2-partition-and-races`, `require-finding-capability`, `fix-platform-probe-filesystem-label`, `break-fair-order-ties-by-task-id`, `align-fair-order-rotation`, `advance-placement-rotation-cursor`, `centralize-log-redaction-rules`, `alternate-reviewers-per-pass` (governance policy version 5), `back-off-relaunch-after-pre-w2-failure`, and `align-safe-to-retry-with-supervisor-identity`. `npm ci --ignore-scripts` ran after it, and `npm run verify:dependencies` reported the inventory current ("Verified 731 package paths"), so it was not regenerated.
+- Fresh-clone record: on top of `2af551b6`. The fresh clone ran `dev` at `bd6108d4`, the `dev` side of the merge `31dbd30f`; every commit of this branch after that merge changes documentation and this change only.
 
 ## Evidence sources
 
@@ -110,6 +111,37 @@ Another coordinator item, found by Liki and recorded in commit `docs: defer alig
 
 A coordinator update of the same day, recorded in commit `docs: record the landed ReDoS fix and Linux crash windows in the G2 closure`: the ReDoS fix landed with #330 and no longer blocks the closure; `run-g2-crash-windows-on-linux` landed with #329, and its CP9 failure on L1 still blocks the closure through the fix of L1. The G2 blockers are now exactly three: 24c `run-g2-partition-and-races` (Zaki, in review), the fix of L1 `stop-automatic-retry-of-unknown-exit` (Liki, in review), and Maki's macOS arm64 process ownership re-run.
 
+## Fresh-clone reproduction
+
+Run by worker Desi on 2026-10-27, 13:29:33 to 13:42:18 +0200, on the coordinator's Intel iMac in a host slot granted by coordinator Niki, with a script in the session's scratch directory that ran each step in order, logged it, and recorded its exit status and duration. The clone, the logs, and the script stay in that local scratch directory and are not committed; the native acceptance records are committed as [`fresh-clone-results.jsonl`](fresh-clone-results.jsonl), byte for byte (SHA-256 `e091dc3db09f1ccebdfb0f1ac205acac4bf50a230ac8431131aa3699fd1da670`).
+
+- Revision: `git rev-parse HEAD` of the clone, `bd6108d44142b697a3f1fde6be997ec83665a64f`, `dev` after #342; every record of `fresh-clone-results.jsonl` names it.
+- Host: `uname -a` Darwin 25.6.0, `x86_64`; `sw_vers` macOS 26.6.2, build 25G83. Toolchain: Node.js v24.22.1 and npm 12.2.1 from `.nvmrc` through `nvm use`; Docker Engine 29.5.2, server and client, of Docker Desktop.
+- Docker configuration: the script exported `DOCKER_CONFIG` for every step, set to a directory whose `config.json` is `{}`, because Docker Desktop's credential helper hangs on this host, as in 25c (its verification, "Environment re-check before the evidence run"). Steps 4 to 7 are the ones that call Docker.
+- Two differences from the commands of ADR 0015 decision 4: the clone checked out `dev` with `git clone --branch dev` instead of `git switch dev`, and `make setup` was not preceded by a separate `make doctor`, because `make setup` runs its checks.
+
+| # | Step | Exit | Duration | Result |
+| --- | --- | --- | --- | --- |
+| 1 | `git clone --branch dev https://github.com/petarnenov/taskelith.git <scratch>` | 0 | 3 s | Cloned `dev` at `bd6108d4` |
+| 2 | `nvm use` | 0 | 0 s | Node.js v24.22.1 (npm v12.2.1) from `.nvmrc` |
+| 3 | `make setup` | 0 | 7 s | `npm ci --ignore-scripts` added 595 packages; hooks and the inventory merge driver configured; "All checks passed." `npm ci` printed its audit summary, 2 vulnerabilities (1 moderate, 1 high), as on `dev`; not part of any check |
+| 4 | `make verify` | 0 | 193 s | Comments and 19 findings files valid; 2093 tests, 44 suites, 2091 passed, 0 failed, 0 cancelled, 2 skipped; coverage of all files 99.29 % lines, 92.12 % branches, 99.00 % functions; every product module in the report; contracts without a breaking change against `bd6108d44142`; "Verified 731 package paths"; `openspec validate --all --strict` 69 passed, 0 failed; no active change to archive; package allowlist and installed CLI verification passed. The log marks two Linux scan tests and the 24c cancellation-race, partition, and stale-generation scenarios as skipped outside Linux, as on the coordinator's iMac before |
+| 5 | `make verify-installation` | 0 | 75 s | "built, bootstrapped, started, enrolled, restarted, removed" |
+| 6 | `make installation-smoke` | 0 | 29 s | Run `installation-smoke-run` ended `exited` with code 0 and `startProven`; "submitted, assigned, executed, stored the result, removed" |
+| 7 | `make native-acceptance RESULTS=<scratch>/results.jsonl` | 0 | 457 s | Seed `3537894576`, entries `macos-26-x86_64` and `linux-ubuntu-24.04-x86_64`; "every proof passed"; 48 records, all `passed` |
+| 8 | `git status --short` | | | Empty |
+
+### Native acceptance records
+
+Read with `jq` from `fresh-clone-results.jsonl`: 48 records, each `passed`, seed `3537894576`, commit `bd6108d4`, host Darwin 25.6.0, arch `x64`; 15 records name an `acceptance-` proof and 33 are the scenario records under them.
+
+- `macos-26-x86_64`, 37 records: 2 `compose-installation` (the native worker lifecycle and its proof), 31 `harness-composition` (28 crash windows, the crash-window proof 28 of 28, duplicate delivery and its proof 1 of 1), and 4 `host-test-suite` proofs (supervisor suites 113 of 113, journal suites 99 of 99, cancellation suites 19 of 19, connectivity suites 25 of 25). By row: process ownership 30, service lifecycle 2, connectivity 3, journal and storage 1, cancellation 1.
+- `linux-ubuntu-24.04-x86_64` under Docker Desktop, 11 records: 6 `compose-installation` (worker lifecycle, worker kill, and worker disk loss, each with its proof) and 5 `linux-test-container` proofs (cgroup 14 of 14, journal suites 97 of 99 with 2 skipped, cgroup cancellation 2 of 2, cancellation suites 17 of 19 with 2 skipped, connectivity suites 25 of 25). By row: process ownership 3, journal and storage 3, cancellation 2, service lifecycle 2, connectivity 1.
+
+Compared with 25c's [`results.jsonl`](../archive/2026-10-27-run-g2-native-acceptance-x86-64/results.jsonl), lines 1 to 48 (commit `b82ad2f`, seed `4080300788`, the same host): the same 48 scenarios with the same entry, row, and target, all `passed`, and the same 15 proofs; the crash windows finish in another order. The only count that differs is the journal suites, 99 tests instead of 97 on both entries, because the journal tests grew on `dev` after `b82ad2f`. 25c's line 49, the namespace-confinement extra, was not part of this run. The results match.
+
+Content check: `grep` for token, secret, password, bearer, API key, authorization, and credential shapes found only the text "started again without a token" in the native lifecycle detail; no secret. Like 25c's committed records, one record names the local user `petarnenov` and the native data root under the user's temporary directory `/private/var/folders/...`; the session's scratch path does not appear. They are kept, consistent with 25c.
+
 ## Owner and coordinator decisions of 2026-10-27, after #342
 
 From coordinator Niki's brief of 2026-10-27, which relays the owner's decisions of that day:
@@ -130,10 +162,12 @@ By the owner's instruction of 2026-10-27, relayed by the coordinator, Maki is re
 
 ## Remaining placeholders
 
-- ADR 0015 decision 4, "fresh clone", for the coordinator's run; it lists the commands.
+Only the two owner-acceptance placeholders remain:
+
 - ADR 0015 decision 6, "closure statement", pending the owner's acceptance; the ADR stays Proposed.
-- The "work items" placeholder of decision 1 is filled.
-- `docs/foundation.md`, G2 status: the closure sentence.
+- `docs/foundation.md`, G2 status: the closure sentence "G2 is closed".
+
+The fresh-clone placeholder of decision 4 is filled, and the "work items" placeholder of decision 1 was filled earlier.
 
 ## Checks
 
@@ -146,6 +180,7 @@ Light checks only, because the host is shared with evidence runs; `make verify` 
 - Safe-to-retry deferral: `npm run openspec -- validate close-g2 --strict` passed; `npm run findings -- validate` passed (6 files); `npm run verify:comments` passed; `git diff --check` reported nothing.
 - Landed ReDoS fix and Linux crash windows: `npm run openspec -- validate close-g2 --strict` passed; `npm run findings -- validate` passed (8 files, with the two archives of #329 and #330); `npm run verify:comments` passed; `git diff --check` reported nothing.
 - Owner decisions after #342 (this update): `npm run openspec -- validate close-g2 --strict` passed ("Change 'close-g2' is valid"); `npm run openspec -- validate --all --strict` passed (70 passed, 0 failed); `npm run verify:comments` passed; `npm run findings -- validate` passed ("Every findings file is valid: 20 file(s)."); `git diff --check` reported nothing; every relative link in the ADR, the ledger, `docs/fleet.md`, and this change resolves (a scratch script over `](...)` targets). Archive test in a scratch copy of the tracked `openspec/` tree and this change, with this worktree's `node_modules`: `openspec archive close-g2 --yes` archived it as `2026-10-27-close-g2` (`foundation-closure` + 1), and `openspec validate --all --strict` then passed (69 passed, 0 failed).
+- Fresh-clone record (this update): `npm run openspec -- validate close-g2 --strict` passed ("Change 'close-g2' is valid"); `npm run openspec -- validate --all --strict` passed (70 passed, 0 failed); `npm run verify:comments` passed; `npm run findings -- validate` passed ("Every findings file is valid: 20 file(s)."); `git diff --check` reported nothing; the 93 relative link targets in the ADR, the ledger, `docs/fleet.md`, and this change's Markdown resolve, apart from the literal `](...)` in the check line above. Archive test in a scratch copy of the tracked `openspec/` tree and this change, with this worktree's `node_modules`: `openspec archive close-g2 --yes` archived it as `2026-10-27-close-g2` with `fresh-clone-results.jsonl` (`foundation-closure` + 1), and `openspec validate --all --strict` then passed (69 passed, 0 failed). `make verify` was not run on this branch.
 
 ## Independent review
 
@@ -153,10 +188,9 @@ Not started. The record before this update named one reviewer, OpenCode `opencod
 
 ## Remaining gates
 
-- The fresh-clone reproduction (tasks 3.1 to 3.4), run by the coordinator with the commands of ADR 0015 decision 4.
 - The owner's confirmation of each author's assignment and of the hosted-runner check left open, and the closure records (section 4 of `tasks.md`).
-- `make verify` and the link and evidence checks.
+- `make verify` on this branch, and the link and evidence checks before the review.
 - Independent review under governance version 5: reviewer A OpenCode `opencode-go/kimi-k3.1-pro#high` (passes 1 and 3), reviewer B Codex `gpt-6.1-sol` (pass 2), recorded here and in `findings.jsonl`.
 - Owner acceptance of ADR 0015.
-- Archive of this change after review and verification, as the last commit of the branch.
+- Archive of this change after review and verification, as the last commit of the branch; the archive commit points the ADR's links to `fresh-clone-results.jsonl` at the archived path.
 - Integration into dev by the coordinator (single pull request). Promotion to `main` is a later owner decision.

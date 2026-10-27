@@ -1,7 +1,7 @@
 # ADR 0015: G2 closure and deferrals
 
 Date: 2026-10-27
-Status: Proposed. Draft of [G2 work plan](../g2-plan.md) item 27 (change `close-g2`), prepared while items 24 and 25 were still running and updated on 2026-10-27 from `dev` at `bd6108d4` (#342), on which every G2 change named below is merged and archived. The marked placeholders that remain are filled from a fresh-clone reproduction and the owner's acceptance. Each deferral names the decision or record it follows; where none names a gate, the entry is marked as the author's assignment for the owner to confirm. Closing G2 starts no G3 implementation item: G3 item 0 runs first ([G3 work plan](../g3-plan.md)).
+Status: Proposed. Draft of [G2 work plan](../g2-plan.md) item 27 (change `close-g2`), prepared while items 24 and 25 were still running and updated on 2026-10-27 from `dev` at `bd6108d4` (#342), on which every G2 change named below is merged and archived. The fresh-clone reproduction ran on 2026-10-27 (decision 4); the marked placeholder that remains is filled at the owner's acceptance. Each deferral names the decision or record it follows; where none names a gate, the entry is marked as the author's assignment for the owner to confirm. Closing G2 starts no G3 implementation item: G3 item 0 runs first ([G3 work plan](../g3-plan.md)).
 
 ## Context
 
@@ -55,7 +55,7 @@ Each G2 exit criterion of [architecture section 13](../architecture.md#delivery-
 | Partition, cancellation races, stale generations | [`A/2026-10-27-run-g2-partition-and-races/`](../../openspec/changes/archive/2026-10-27-run-g2-partition-and-races/verification.md) | 2 |
 | Disk loss | 24a above; [`A/2026-10-26-run-g2-native-acceptance-arm64/acceptance.md`](../../openspec/changes/archive/2026-10-26-run-g2-native-acceptance-arm64/acceptance.md), 25c above, [`A/2026-10-27-run-g2-native-acceptance-linux-host/acceptance.md`](../../openspec/changes/archive/2026-10-27-run-g2-native-acceptance-linux-host/acceptance.md) | 2, 3 |
 | Native acceptance of the four matrix entries (D11 (a)) | 25b, 25c, and the Linux-host run above | 3 |
-| Fresh-clone reproduction | Pending | 4 |
+| Fresh-clone reproduction | [`fresh-clone-results.jsonl`](../../openspec/changes/close-g2/fresh-clone-results.jsonl) and the `close-g2` verification, "Fresh-clone reproduction" | 4 |
 
 ### 2. Exit evidence
 
@@ -77,18 +77,16 @@ D11 (a) named the GitHub-hosted runner labels for entries without a local host; 
 
 ### 4. Fresh-clone reproduction
 
-> **PLACEHOLDER — fresh clone (run by the coordinator; no blocker of decision 5 remains).** Record the revision of `dev`, the host and toolchain, and the result of each command, run in order in a scratch directory outside any clone:
->
-> 1. `git clone https://github.com/petarnenov/taskelith.git`, then `cd taskelith` and `git switch dev`.
-> 2. `nvm use` (Node.js of `.nvmrc`).
-> 3. `make setup` (dependencies and hooks).
-> 4. `make verify` (tests, coverage, and checks).
-> 5. `make verify-installation` (build, bootstrap, start, enroll, restart, and remove a throwaway installation).
-> 6. `make installation-smoke` (submit, assign, execute, and store a result).
-> 7. `make native-acceptance RESULTS=<scratch>/results.jsonl`: on macOS it runs the entries `macos` and `linux`, the latter in Docker Desktop's VM. It needs Docker Desktop running and free space above `max(5 GiB, 10 %)` of the temporary directory's volume, or `NATIVE_DATA_PARENT` on a volume that has it (25c design decision 2).
->
-> On the coordinator's iMac, steps 4 to 7 run with `DOCKER_CONFIG` set to a directory with an empty `config.json`, because Docker Desktop's credential helper hangs there (25c verification, "Environment re-check before the evidence run").
-> 8. `git status --short`, expected empty.
+Run on 2026-10-27, 13:29 to 13:42 +0200, by worker Desi on the coordinator's Intel iMac in a slot granted by coordinator Niki, in a scratch directory outside any clone. Revision: `dev` at `bd6108d44142b697a3f1fde6be997ec83665a64f` (#342), the base of this change. Host: macOS 26.6.2 (25G83), Darwin 25.6.0, x86_64; Node.js v24.22.1 and npm 12.2.1 from `.nvmrc`; Docker Desktop, Docker Engine 29.5.2. Every step exited 0 (`close-g2` verification, "Fresh-clone reproduction"):
+
+1. `git clone --branch dev https://github.com/petarnenov/taskelith.git`, then `nvm use` and `make setup`: every `make doctor` check passed.
+2. `make verify`: 2093 tests, 2091 passed, 0 failed, 2 skipped; coverage of all files 99.29 % lines, 92.12 % branches, 99.00 % functions; every check passed.
+3. `make verify-installation`: "built, bootstrapped, started, enrolled, restarted, removed".
+4. `make installation-smoke`: "submitted, assigned, executed, stored the result, removed".
+5. `make native-acceptance RESULTS=<scratch>/results.jsonl`, seed `3537894576`: "every proof passed"; 48 records, all `passed`, from 15 proofs, 37 for `macos-26-x86_64` and 11 for `linux-ubuntu-24.04-x86_64` under Docker Desktop, committed as [`fresh-clone-results.jsonl`](../../openspec/changes/close-g2/fresh-clone-results.jsonl). They are the same 48 scenarios on the same entries and rows as 25c's run of `b82ad2f` (decision 3); only the journal suites grew, from 97 to 99 tests.
+6. `git status --short` afterwards: empty.
+
+Docker ran with `DOCKER_CONFIG` set to an empty configuration (`{}`), because Docker Desktop's credential helper hangs on that host, as in 25c (decision 5). The reproduction covers the `x86_64` entries only; the arm64 entries keep the evidence of 25b (decision 3).
 
 ### 5. Deferrals
 
@@ -139,7 +137,7 @@ Containment and platforms:
 - **Image package inventories and vulnerability scans** of the worker and control-plane images (23a, `establish-g2-runtime-workspace`): author's assignment to G8, with the dependency qualification work ADR 0007 deferred there.
 - **Platform probe file-system name.** `stat -f -c %T` reported an ext4 Docker volume as `ext2/ext3`. Resolved by `fix-platform-probe-filesystem-label` (#335, merge `627c8c03`), which reads the mount's type with `findmnt` and falls back to `stat -f` where `findmnt` is missing; it leaves records already written unchanged (its verification, "Limitations"). No gate.
 - **Archived records with the `ext2/ext3` label and broken relative links.** The acceptance records of 25b, 25c, and the Linux-host run name the ext4 volumes `ext2/ext3`, and relative links written for the active change path do not resolve under `archive/` (25c verification, limitations). The coordinator assigned `check-change-record-links` to Maki, who has since left the fleet; it is not in the repository and has no worker. No G2 gate.
-- **Docker Desktop credential helper on the Intel iMac.** `docker-credential-desktop get` hung, so 25c ran the Docker CLI with an empty `DOCKER_CONFIG` against Docker Desktop's own engine (25c verification, "Environment re-check before the evidence run"). It is a pending item for the owner, not a product defect. No gate.
+- **Docker Desktop credential helper on the Intel iMac.** `docker-credential-desktop get` hung, so 25c ran the Docker CLI with an empty `DOCKER_CONFIG` against Docker Desktop's own engine (25c verification, "Environment re-check before the evidence run"). The fresh-clone reproduction ran the same way (decision 4). It is a pending item for the owner, not a product defect. No gate.
 - **GitHub-hosted `ubuntu-24.04` runner check for Linux x86_64.** Kept open by the coordinator's brief of 2026-10-27 (`run-g2-native-acceptance-linux-host` design decision 1); no G2 change ran it. Recorded as open under D11 (a); the coordinator set it as not blocking the closure on 2026-10-27 (owner to confirm).
 - **Residual process-identity risks.** PID reuse is mitigated, not eliminated (`harden-worker-supervisor-tests`), and the macOS `KERN_PROC_ALL` and reap-to-report races remain (supervisor identity contract section 8). Accepted residual risks; no gate.
 
@@ -164,7 +162,7 @@ G3 start:
 
 ### 6. G2 closure
 
-> **PLACEHOLDER — closure statement, pending the owner's acceptance; this ADR stays Proposed until then.** When the fresh-clone placeholder (decision 4) is filled and the owner accepts: "G2 is closed: its exit evidence was reproduced from a fresh clone, items 1 to 26 are merged and archived, item 27 is this closure, and the work left open is deferred above."
+> **PLACEHOLDER — closure statement, pending the owner's acceptance; this ADR stays Proposed until then.** When the owner accepts: "G2 is closed: its exit evidence was reproduced from a fresh clone, items 1 to 26 are merged and archived, item 27 is this closure, and the work left open is deferred above."
 
 ## Consequences
 
