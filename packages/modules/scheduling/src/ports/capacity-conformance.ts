@@ -17,6 +17,7 @@ import { fairPlacementOrder } from '../domain/fair-order.js';
 import type { AssignmentRepository } from './assignment-repository.js';
 import type { CapacityLedger } from './capacity-ledger.js';
 import type { PlacementQueue } from './placement-queue.js';
+import type { PlacementRotation } from './placement-rotation.js';
 import type { PlacementWorkers, WorkerPlacementRecord } from './placement-workers.js';
 import type { QuotaSettings } from './quota-settings.js';
 import type { TaskLineage } from './task-lineage.js';
@@ -403,6 +404,29 @@ export const PLACEMENT_QUEUE_CONFORMANCE: readonly ConformanceCase<PlacementQueu
       const unknown = id('TaskId', 'task-unknown') as TaskId;
       expectSame(problems, 'still waiting', await queue.stillWaiting([unknown, other.id, reserved.id, waiting.id]), [waiting.id, other.id]);
       expectSame(problems, 'none asked', await queue.stillWaiting([]), []);
+      return problems;
+    },
+  },
+]);
+
+export const PLACEMENT_ROTATION_CONFORMANCE: readonly ConformanceCase<PlacementRotation>[] = Object.freeze([
+  {
+    name: 'an installation has no cursor before the first move',
+    async check(rotation: PlacementRotation) {
+      const problems: string[] = [];
+      expectSame(problems, 'cursor', await rotation.read(), undefined);
+      return problems;
+    },
+  },
+  {
+    name: 'each move replaces the cursor',
+    async check(rotation: PlacementRotation) {
+      const problems: string[] = [];
+      expectSuccess(problems, 'first move', await rotation.advance(PROJECT));
+      expectSame(problems, 'after the first move', await rotation.read(), PROJECT);
+      const later = id('ProjectId', 'project-0') as ProjectId;
+      expectSuccess(problems, 'later move', await rotation.advance(later));
+      expectSame(problems, 'after the later move', await rotation.read(), later);
       return problems;
     },
   },

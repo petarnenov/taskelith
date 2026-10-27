@@ -9,6 +9,7 @@ import {
   type InstallationGuard,
   type OpenDelegation,
   type PlacementQueue,
+  type PlacementRotation,
   type PlacementWorkers,
   type ProjectId,
   type ProviderCredentialId,
@@ -182,6 +183,28 @@ export class PostgresPlacementQueue implements PlacementQueue {
       [taskIds],
     );
     return Object.freeze(rows.map((row) => row.id as TaskId));
+  }
+}
+
+// The installation's one row; an upsert, so the first move creates it.
+export class PostgresPlacementRotation implements PlacementRotation {
+  readonly #session: Session;
+
+  constructor(session: Session) {
+    this.#session = session;
+  }
+
+  async read(): Promise<ProjectId | undefined> {
+    const { rows } = await this.#session.query<{ project_id: string }>('SELECT project_id FROM placement_rotation');
+    return rows[0]?.project_id as ProjectId | undefined;
+  }
+
+  async advance(projectId: ProjectId): Promise<Result<void>> {
+    await this.#session.query(
+      'INSERT INTO placement_rotation (project_id) VALUES ($1) ON CONFLICT (singleton) DO UPDATE SET project_id = EXCLUDED.project_id',
+      [projectId],
+    );
+    return ok(undefined);
   }
 }
 

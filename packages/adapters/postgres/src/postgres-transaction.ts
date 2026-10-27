@@ -3,6 +3,7 @@ import {
   PostgresCapacityLedger,
   PostgresInstallationGuard,
   PostgresPlacementQueue,
+  PostgresPlacementRotation,
   PostgresPlacementWorkers,
   PostgresQuotaSettings,
   PostgresTaskLineage,
@@ -44,6 +45,7 @@ export class PostgresTransaction {
   readonly lineage: PostgresTaskLineage;
   readonly ledger: PostgresCapacityLedger;
   readonly placements: PostgresPlacementQueue;
+  readonly rotation: PostgresPlacementRotation;
   readonly delegations: PostgresDelegationRequests;
   readonly fleet: PostgresFleetRegistry;
   readonly catalog: PostgresRunCatalog;
@@ -79,6 +81,7 @@ export class PostgresTransaction {
     this.lineage = new PostgresTaskLineage(session);
     this.ledger = new PostgresCapacityLedger(session);
     this.placements = new PostgresPlacementQueue(session);
+    this.rotation = new PostgresPlacementRotation(session);
     this.delegations = new PostgresDelegationRequests(session);
     this.fleet = new PostgresFleetRegistry(session);
     this.catalog = new PostgresRunCatalog(session);

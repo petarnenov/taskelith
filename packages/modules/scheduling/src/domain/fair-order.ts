@@ -50,6 +50,11 @@ export class RotationCursor {
     this.#capacityRanOut = true;
   }
 
+  // Whether the next offer would still move it.
+  get moving(): boolean {
+    return !this.#capacityRanOut;
+  }
+
   get next(): ProjectId | undefined {
     return this.#lastPlaced ?? this.#lastDeclined ?? this.#start;
   }
