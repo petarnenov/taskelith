@@ -1,0 +1,1 @@
+{"change": "close-g2", "pass": 1, "role": "A", "reviewer": {"harness": "opencode", "model": "opencode-go/kimi-k3.1-pro", "variant": "high"}, "session": "ses_e82c9a9a6ffekHu2Tsz94tSyX6", "counts": {"critical": 0, "high": 1, "medium": 2, "low": 2}}
