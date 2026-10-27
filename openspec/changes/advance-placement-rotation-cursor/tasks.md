@@ -10,8 +10,8 @@
 
 ## 3. Fix
 
-- [ ] 3.1 `RotationCursor` in the scheduling domain.
-- [ ] 3.2 The placement service moves `#after` with `RotationCursor`, also when an outage stops the pass.
+- [x] 3.1 `RotationCursor` in the scheduling domain.
+- [x] 3.2 The placement service moves `#after` with `RotationCursor`, also when an outage stops the pass.
 
 ## 4. Verify
 

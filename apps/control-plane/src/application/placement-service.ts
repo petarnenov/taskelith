@@ -11,7 +11,8 @@ import {
 import { err, failure, ok, type Failure, type Instant, type Result } from '@taskelith/kernel';
 import {
   DEFAULT_ATTEMPT_REQUEST,
-  fairPlacementOrder,
+  RotationCursor,
+  fairWaitingOrder,
   placeInTransaction,
   placementBackoff,
   triesNextCandidate,
@@ -19,6 +20,7 @@ import {
   type PlacementQueue,
   type PlacementRequest,
   type ProjectId,
+  type WaitingPlacement,
 } from '@taskelith/scheduling';
 import type { TaskId } from '@taskelith/sdlc';
 import { derivedId, nextAttemptIdOf } from './attempt-identities.js';
@@ -43,7 +45,7 @@ export class PlacementService {
   readonly #passes: RetrySchedule<typeof PASS>;
   // The due time of each task's unplaced retry, fixed by one jitter draw.
   readonly #retries = new Map<TaskId, { readonly attemptId: AttemptId; readonly dueAt: number }>();
-  // The last project read; the next read starts after it.
+  // The rotation cursor; the next read starts after it.
   #after: ProjectId | undefined;
 
   constructor(store: ControlPlaneStore, timing: BackoffTiming) {
@@ -76,15 +78,32 @@ export class PlacementService {
     if (!read.ok) return read;
     const { anyCandidate, waiting, stillWaiting } = read.value;
     this.#forgetUnless(checked, stillWaiting);
-    this.#after = waiting.at(-1)?.projectId ?? this.#after;
+    const order = fairWaitingOrder(waiting, after);
+    if (!anyCandidate) {
+      for (const { item: taskId } of order) this.#settle(taskId, NO_CANDIDATE);
+      return ok({ waiting: waiting.length, placed: 0 });
+    }
+    const cursor = new RotationCursor(after);
+    const offered = await this.#offer(order, cursor);
+    this.#after = cursor.next;
+    return offered.ok ? ok({ waiting: waiting.length, placed: offered.value }) : offered;
+  }
+
+  // Offers each task until the store fails, recording each offer that ended
+  // and each placement in `cursor`; answers the number placed.
+  async #offer(order: readonly WaitingPlacement<TaskId>[], cursor: RotationCursor): Promise<Result<number>> {
     let placed = 0;
-    for (const taskId of fairPlacementOrder(waiting, after)) {
-      const outcome = anyCandidate ? await this.#store.transaction((tx) => placeTask(tx, taskId, this.#retryBackoff)) : NO_CANDIDATE;
+    for (const { item: taskId, projectId } of order) {
+      const outcome = await this.#store.transaction((tx) => placeTask(tx, taskId, this.#retryBackoff));
       if (!outcome.ok && isOutage(outcome.error.code)) return outcome;
-      if (outcome.ok && outcome.value.kind === 'placed') placed++;
+      cursor.offered(projectId);
+      if (outcome.ok && outcome.value.kind === 'placed') {
+        cursor.placed(projectId);
+        placed++;
+      }
       this.#settle(taskId, outcome);
     }
-    return ok({ waiting: waiting.length, placed });
+    return ok(placed);
   }
 
   // A retry that backs off is not read until due; a task placed or no

@@ -26,6 +26,30 @@ export function fairWaitingOrder<Item extends string>(
     || wrapped(left) - wrapped(right) || byCodeUnits(left.projectId, right.projectId) || byWaitingSince(left, right));
 }
 
+// Contract section 13: the next read starts after the project that last
+// received capacity, else after the last one offered, else where it was.
+export class RotationCursor {
+  readonly #start: ProjectId | undefined;
+  #lastOffered: ProjectId | undefined;
+  #lastPlaced: ProjectId | undefined;
+
+  constructor(start: ProjectId | undefined) {
+    this.#start = start;
+  }
+
+  offered(projectId: ProjectId): void {
+    this.#lastOffered = projectId;
+  }
+
+  placed(projectId: ProjectId): void {
+    this.#lastPlaced = projectId;
+  }
+
+  get next(): ProjectId | undefined {
+    return this.#lastPlaced ?? this.#lastOffered ?? this.#start;
+  }
+}
+
 function ranksWithinProject<Item extends string>(waiting: readonly WaitingPlacement<Item>[]): Map<WaitingPlacement<Item>, number> {
   const ranks = new Map<WaitingPlacement<Item>, number>();
   const counts = new Map<ProjectId, number>();
