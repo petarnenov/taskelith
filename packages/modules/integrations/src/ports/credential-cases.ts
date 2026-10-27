@@ -1,10 +1,9 @@
 import { parseInstant, type Result } from '@taskelith/kernel';
-import { fixtureStep, nothing, succeeds, type ConformanceCase } from './conformance-case.js';
+import { fixtureResult, nothing, succeeds, type ConformanceCase } from './conformance-case.js';
 import { isSameSet, isSubset } from './conformance-steps.js';
 import type { SourceControlConformanceFixture } from './source-control-fixture.js';
 import { readRunCredential } from './source-control-readers.js';
 import { SCM_PERMISSIONS, type RunCredential, type RunCredentialRequest } from './source-control.js';
-import { describeValue } from './untrusted-shapes.js';
 
 // Cases for run credentials: what each grant claims, and what the fixture
 // can natively do with it.
@@ -97,7 +96,7 @@ async function expectRefreshed(
   run.expect(refreshed.secret !== original.secret, 'refreshRunCredential must return a new secret');
   run.expect(
     Date.parse(refreshed.expiresAt) > Date.parse(original.expiresAt),
-    `refreshRunCredential must extend expiresAt beyond ${original.expiresAt}, not return ${refreshed.expiresAt}`,
+    'refreshRunCredential must extend expiresAt beyond the original expiry',
   );
   await expectEnded(run, fixture, original, 'after its refresh');
   await expectGrantedAccess(run, fixture, refreshed);
@@ -134,16 +133,16 @@ function grantOf(credential: RunCredential): RunCredentialRequest {
 }
 
 // Effective permissions may exceed the request where the service has no
-// narrower one, but never add write-code to a request without it.
+// narrower one, but never add write-code. Findings name no returned value.
 function checkGrant(run: ConformanceCase, operation: string, request: RunCredentialRequest, credential: RunCredential): void {
-  run.expect(credential.runId === request.runId, `${operation} returned run ${credential.runId}, not ${request.runId}`);
+  run.expect(credential.runId === request.runId, `${operation} returned another runId than requested`);
   run.expect(
     isSameSet(credential.repositories, request.repositories),
-    `${operation} granted ${describeValue(credential.repositories)}, not exactly ${describeValue(request.repositories)}`,
+    `${operation} granted other repositories than exactly the requested ones`,
   );
   run.expect(
     isSubset(request.permissions, credential.permissions) && isSubset(credential.permissions, SCM_PERMISSIONS),
-    `${operation} granted ${describeValue(credential.permissions)} for ${describeValue(request.permissions)}`,
+    `${operation} granted permissions that miss a requested one or are not port permissions`,
   );
   run.expect(
     request.permissions.includes('write-code') || !credential.permissions.includes('write-code'),
@@ -151,7 +150,7 @@ function checkGrant(run: ConformanceCase, operation: string, request: RunCredent
   );
   run.expect(
     parseInstant(credential.expiresAt).ok && Date.parse(credential.expiresAt) > Date.now(),
-    `${operation} returned expiresAt ${credential.expiresAt}, not a canonical future instant`,
+    `${operation} returned an expiresAt that is not a canonical future instant`,
   );
 }
 
@@ -183,19 +182,21 @@ async function expectEnded(
 
 async function expectAllowed(run: ConformanceCase, fixture: SourceControlConformanceFixture, probe: Probe): Promise<void> {
   const result = await attempt(run, fixture, probe);
-  run.expect(result.ok, `${describeProbe(probe)} must succeed`);
+  run.expect(result.ok, `${describeProbe(fixture, probe)} must succeed`);
 }
 
 async function expectRefused(run: ConformanceCase, fixture: SourceControlConformanceFixture, probe: Probe): Promise<void> {
   const result = await attempt(run, fixture, probe);
-  run.expect(!result.ok && result.error.code === 'forbidden', `${describeProbe(probe)} must fail with forbidden`);
+  run.expect(!result.ok && result.error.code === 'forbidden', `${describeProbe(fixture, probe)} must fail with forbidden`);
 }
 
-function attempt(run: ConformanceCase, fixture: SourceControlConformanceFixture, probe: Probe): Promise<Result<void>> {
-  return fixtureStep(run, 'attemptAction', () => fixture.attemptAction(probe.credential, probe.repository, probe.permission));
+function attempt(run: ConformanceCase, fixture: SourceControlConformanceFixture, probe: Probe): Promise<Result<unknown>> {
+  return fixtureResult(run, 'attemptAction', () => fixture.attemptAction(probe.credential, probe.repository, probe.permission));
 }
 
-function describeProbe(probe: Probe): string {
+// Names the probe by suite terms only, not by the credential's identifier.
+function describeProbe(fixture: SourceControlConformanceFixture, probe: Probe): string {
   const when = probe.when === undefined ? '' : ` ${probe.when}`;
-  return `${probe.permission} with credential ${probe.credential.credentialId} to ${probe.repository}${when}`;
+  const place = probe.repository === fixture.projectRepository ? 'the project repository' : 'the foreign repository';
+  return `${probe.permission} to ${place}${when}`;
 }

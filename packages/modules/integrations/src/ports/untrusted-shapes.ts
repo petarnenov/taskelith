@@ -109,15 +109,6 @@ function readValue(raw: { value?: unknown }): Reading<Result<unknown>> {
   }
 }
 
-// A checked plugin value, such as an array of strings, for a finding.
-export function describeValue(value: unknown): string {
-  try {
-    return JSON.stringify(value) ?? String(value);
-  } catch {
-    return 'an unprintable value';
-  }
-}
-
 const BUILT_IN_ERRORS: ReadonlyMap<unknown, string> = new Map<unknown, string>([
   [Error.prototype, 'an Error'],
   [TypeError.prototype, 'a TypeError'],

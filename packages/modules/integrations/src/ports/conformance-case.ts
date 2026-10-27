@@ -10,7 +10,8 @@ export interface SourceControlConformanceFinding {
 }
 
 // Ends a case early when a later step would only repeat the same failure.
-class CaseAborted extends Error {}
+// Known by identity, as a thrown value's prototype may run plugin code.
+const abortions = new WeakSet<object>();
 
 // One running case: it collects the case's findings.
 export class ConformanceCase {
@@ -28,17 +29,23 @@ export class ConformanceCase {
 
   abort(check: SourceControlConformanceCheck, message: string): never {
     this.report(check, message);
-    throw new CaseAborted(message);
+    const abortion = Object.freeze({ check });
+    abortions.add(abortion);
+    throw abortion;
   }
 
   async run(body: (run: ConformanceCase) => Promise<void>): Promise<readonly SourceControlConformanceFinding[]> {
     try {
       await body(this);
     } catch (error) {
-      if (!(error instanceof CaseAborted)) this.report('threw', `the case stopped: ${describeThrown(error)}`);
+      if (!isAbortion(error)) this.report('threw', `the case stopped: ${describeThrown(error)}`);
     }
     return this.findings;
   }
+}
+
+function isAbortion(thrown: unknown): boolean {
+  return typeof thrown === 'object' && thrown !== null && abortions.has(thrown);
 }
 
 export type ValueReader<Value> = (value: unknown) => Reading<Value>;
@@ -91,4 +98,12 @@ export async function fixtureStep<Value>(run: ConformanceCase, step: string, cal
   } catch (error) {
     return run.abort('fixture', `${step} threw: ${describeThrown(error)}`);
   }
+}
+
+// A fixture step that returns a Result, read as untrusted as a plugin's.
+export async function fixtureResult(run: ConformanceCase, step: string, call: () => Promise<unknown>): Promise<Result<unknown>> {
+  const raw = await fixtureStep(run, step, call);
+  const result = readResult(raw);
+  if (!result.ok) run.abort('fixture', `${step}: ${result.error.join('; ')}`);
+  return result.value;
 }
