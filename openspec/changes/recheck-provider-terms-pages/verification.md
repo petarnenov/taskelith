@@ -22,7 +22,7 @@ Branch `recheck-provider-terms-pages` from `origin/dev` at `4cbea974`, in its ow
 ## Author self-check and evidence check
 
 - Each added quote was checked as a substring of the fetched page text after removing tags, decoding entities, mapping U+2019 to an ASCII apostrophe, and collapsing whitespace (design D1), on the live page and on every Wayback snapshot that the record cites for it; all were present. The Sep 15, 2025 archive page of the Usage Policy was checked for the absence of "consumer subscriptions", "route requests", "sign-up", and "log-in": none occurs.
-- The Agent SDK sentence was also checked against the page's Markdown export (`https://code.claude.com/docs/en/agent-sdk/overview.md`, 19:03:58), and the legal page passages against `https://code.claude.com/docs/en/legal-and-compliance.md` (19:03:59); all matched.
+- The Agent SDK sentence was also checked against the page's Markdown export (`https://code.claude.com/docs/en/agent-sdk/overview.md`, 19:03:58), and the legal page passages against `https://code.claude.com/docs/en/legal-and-compliance.md` (19:03:59), after replacing each Markdown link with its text and removing the `**` and `*` emphasis markers, then normalizing as above (design D1); all matched. Without the markup removal the Agent SDK sentence and the first pass 2 M3 passage are not substrings of the exports, which write `[Anthropic's Commercial Terms of Service](…)` and `**The Claude Code binary must not be modified.**`; both results were rechecked on exports fetched at 19:26:12 for review pass 1.
 - The added text states facts, "text says" summaries, and ambiguities; the only statement on D15 and ADR 0005 decision 2 is the open question for the owner, without a recommendation.
 - External links added to the record are dated Wayback snapshots or pages already in its source table, which labels them unversioned with their access dates; repository links are relative within `docs/`, and this change's records link only inside the change directory or root-relative. `npm run verify:links`, part of `make verify`, checks them.
 - `git diff 4cbea974 -- docs` touches only the two qualification records.
@@ -67,13 +67,14 @@ The Wayback snapshot [20261024043009](https://web.archive.org/web/20261024043009
 
 ## Checks
 
-Run on 2026-10-27 on the working tree of this branch's two commits, before these results were written into the table; that was the only later edit.
+Run on 2026-10-27 at head `f54e1353`, the branch's three commits after the rebase onto `fac1fd4a`, with a clean working tree. The first run, before the rebase, counted 40 findings and 20 pass summary files; #363 added one of each.
 
 | Check | Result |
 | --- | --- |
 | `npm run openspec -- validate recheck-provider-terms-pages --strict` | Passed: "Change 'recheck-provider-terms-pages' is valid", with the note that `skip_specs` accepts zero deltas |
-| `make findings ARGS="validate"` | Passed: 40 findings files and 20 pass summary files valid |
-| `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | Passed (exit 0), including `verify:links` ("Every checked link conforms.") and `verify:archive` |
+| `make findings ARGS="validate"` | Passed: "Every findings file is valid: 41 file(s); every pass summary file is valid: 21 file(s)." |
+| `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | Passed (exit 0), last line "Packed file allowlist and installed CLI verification passed."; coverage over all files 99.28 % lines, 92.30 % branches, 98.94 % functions; OpenSpec "Totals: 70 passed, 0 failed (70 items)"; `verify:links` ("Every checked link conforms.") and `verify:archive` |
+| `npm run verify:links` | Passed: "Every checked link conforms." |
 
 ## Review
 
