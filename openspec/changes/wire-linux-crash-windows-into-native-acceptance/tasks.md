@@ -1,7 +1,7 @@
 ## 1. Change
 
 - [x] 1.1 Gate: confirm that the omission is not documented as intended
-- [x] 1.2 Create the change `wire-linux-crash-windows-into-native-acceptance`
+- [x] 1.2 Create the change `wire-linux-crash-windows-into-native-acceptance`, with empty `findings.jsonl` and `passes.jsonl`
 
 ## 2. Implementation
 
@@ -12,9 +12,9 @@
 
 ## 3. Evidence
 
-- [ ] 3.1 Real `make native-acceptance` run on this Linux host into a scratch results file
-- [ ] 3.2 `make verify`
-- [ ] 3.3 Record `verification.md`
+- [x] 3.1 Real `make native-acceptance` run on this Linux host into a scratch results file
+- [x] 3.2 `make verify`
+- [x] 3.3 Record `verification.md`
 
 ## 4. Review and archive
 

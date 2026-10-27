@@ -18,7 +18,7 @@ From `make findings ARGS="checklist --capability native-worker-acceptance,linux-
 2. contract-drift (1): the runner, the spec delta, and `docs/local-installation.md` must say the same.
 3. docs (1): the docs name the new proofs, the macOS report, `SKIP_PATTERN`, and `TASKELITH_ACCEPTANCE`.
 4. missing-fail-before-test (1): every new test is run on `bd6108d4` and fails there.
-5. process (1): OpenSpec change, `findings.jsonl`, no `passes.jsonl` (no such rule on `dev`), conventional commits.
+5. process (1): OpenSpec change, empty `findings.jsonl` and `passes.jsonl` (the rule of `dev` since #343, merged here), conventional commits.
 
 Record quality: docs (18), evidence-mismatch (16), stale-citation (10), spec-wording (9). Every count, result, and `file:line` in `verification.md` is checked against the tree and the logs.
 
