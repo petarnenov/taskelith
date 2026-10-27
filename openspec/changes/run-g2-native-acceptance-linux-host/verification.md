@@ -11,10 +11,11 @@ G2 work item 25, the Linux entry on a native Linux host, `run-g2-native-acceptan
 
 ## Revision and environment
 
-- Base: `dev` at `0d317f8`. Branch `run-g2-native-acceptance-linux-host`.
+- Base: the branch was created from `dev` at `0d317f8`, which the first `make verify` runs below used; `origin/dev` at `656a34d` was then merged in with a merge commit, `4a2b45a`, without conflicts, and every check from the host gate on runs on the tree of `4a2b45a`. Branch `run-g2-native-acceptance-linux-host`. The merge changed no dependency inventory (`make dependency-inventory` left the tree clean).
 - Host: native Ubuntu 26.04.1 LTS, `x86_64`, kernel 7.0.0-38-generic, cgroup v2; Node.js 24.22.1 from `.nvmrc` via `nvm use`.
-- Engine: Docker Engine 29.8.2 (not Docker Desktop), storage driver overlayfs. Worker and test images: the digest-pinned Ubuntu 24.04 base (`Makefile:11`).
-- `/tmp`: a 31 GiB `tmpfs` with `usrquota`, 85 % full with other projects' caches; every run sets `TMPDIR=/home/petar/.cache/taskelith-tmp`, on disk (design decision 6). Other projects' files were not deleted.
+- Engine: Docker Engine - Community 29.8.2 (not Docker Desktop), Docker Compose 5.6.0, storage driver overlayfs, cgroup version 2, Docker root `/var/lib/docker`; security options AppArmor (profile `default`), seccomp (profile `builtin`), and cgroupns. Worker and test images: the digest-pinned Ubuntu 24.04 base (`Makefile:11`), which reports Ubuntu 24.04.5 LTS.
+- Docker disk headroom: the root file system that holds `/var/lib/docker` is 467 GiB with 163 GiB free (64 % used); `docker system df` shows 26.73 GB of images, 24.75 GB of local volumes, and 5.0 GB of build cache. Nothing was pruned.
+- `/tmp`: a 31 GiB `tmpfs` with `usrquota`, 85 % full with other projects' caches at the first `make verify`, and 42 % full (18 GiB free) at the host gate on `4a2b45a`; every run sets `TMPDIR=/home/petar/.cache/taskelith-tmp`, on disk (design decision 6). Other projects' files were not deleted.
 
 ## Author self-check and evidence check
 
@@ -27,10 +28,13 @@ TODO: AGENTS.md, comment rule, ADR 0004, Docker hygiene, OpenSpec validation, an
 | `make setup` | Passed |
 | `make verify` on `dev` `0d317f8`, first run | Failed with "Unknown system error -122" (`EDQUOT`) while writing Node.js coverage to `/tmp`; a host condition (design decision 6), not a defect |
 | `make verify` on `dev` `0d317f8` with `TMPDIR` on disk | Exit 0: tests 1952, pass 1908, fail 0, skipped 44, cancelled 0; coverage of all files: lines 99.18 %, branches 91.82 %, functions 98.79 %; the packed allowlist and the installed CLI verification passed |
-| Dry run of the Linux entry | TODO |
+| `npm ci --ignore-scripts` and `make dependency-inventory` on `4a2b45a` | Passed; the inventory was unchanged (731 package paths) |
+| `make verify` on `4a2b45a` with `TMPDIR` on disk | Exit 0: tests 1973, suites 39, pass 1929, fail 0, skipped 44, cancelled 0, todo 0; coverage of all files: lines 99.18 %, branches 91.85 %, functions 98.80 %; `openspec validate --all --strict` 70 of 70, the archive dry run, and the packed allowlist and installed CLI verification passed |
+| `npm run build` on `4a2b45a` | Exit 0 |
+| Dry run of the Linux entry on `4a2b45a` | Passed, with no proof run and no record written. The runner has no dry-run mode, so the dry run is: `make -n native-acceptance RESULTS=… ENTRIES=linux`, which expands to `scripts/native-acceptance.sh` with the pins, `LINUX_TEST_IMAGE=taskelith-linux-cgroup:test`, and `SERVICES=taskelith-3913158916-acceptance`; `make linux-test-image` (exit 0); the runner's `platform linux`, `context`, and `seed` commands (exit 0); and `linux_entry` with `prove` replaced by a printer in a sourcing shell, which lists the eight proofs. The platform record is entry `linux-ubuntu-24.04-x86_64`, os "Ubuntu 24.04.5 LTS in containers of the pinned base on Ubuntu 26.04.1 LTS", architecture `x86_64`, kernel "Linux 7.0.0-38-generic", file system "ext2/ext3 on Docker volumes (…), storage driver overlayfs" (`stat -f` names the ext4 magic `ext2/ext3`), node `v24.22.1`, docker "Docker Engine - Community 29.8.2; Docker Compose 5.6.0" |
 | Evidence run of the Linux entry (`results.jsonl`) | TODO |
 | `make scenario-worker-namespace-confinement` on `x86_64` | TODO |
-| `npm run openspec -- validate run-g2-native-acceptance-linux-host --strict` | TODO |
+| `npm run openspec -- validate run-g2-native-acceptance-linux-host --strict` on `4a2b45a` | Passed: "Change 'run-g2-native-acceptance-linux-host' is valid" (`skip_specs`, zero deltas) |
 
 ## Independent review
 
