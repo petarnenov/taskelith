@@ -26,6 +26,10 @@ Root-relative links rather than one more `../`: worker step 6 requires root-rela
 
 The baseline is dropped rather than kept with zero entries. The spec required that it only lists links that failed when the check was introduced and fails on stale entries, so once empty it can never hold an entry again; keeping it would leave dead code, three tests, a file, and a requirement that describe nothing. A link that later fails in an archived record is fixed in that record, as decision B1 now allows. The checker loses `BASELINE_PATH`, `BaselineEntry`, `BaselineResult`, `parseBaseline`, `baselineLine`, and `applyBaseline`; its report lists every problem or prints `Every checked link conforms.`. The requirement "Record link baseline" is removed, and "Record link check" gains a scenario stating that an archived record's failing link fails the check.
 
+### Mapping fixtures
+
+`packages/plugins/sdlc-openspec/fixtures/working-copy/` holds byte-for-byte copies of three 2026-10-24 archived changes, and a test requires that they equal the archive. The rewrite changes `proposal.md`, `design.md`, and `verification.md` of `2026-10-24-draft-sdlc-framework-port`. The fixture copies take the rewritten files rather than the archive keeping its old links, because an exception for those links would need the baseline back. The `proposal.md` and `design.md` digests in `test/openspec-mapping-cases.ts` follow; `verification.md` is not a schema artifact and has no digest. The fixture working copy is outside the link check's directories, so its root-relative links need not resolve there.
+
 ## Risks / Trade-offs
 
 - Archived records change, which #346 avoided. The owner accepted this with decision B1; the link-only diff check in `verification.md` shows that only link destinations change.

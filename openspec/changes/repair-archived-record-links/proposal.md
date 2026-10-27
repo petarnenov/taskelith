@@ -8,7 +8,8 @@
 - **Baseline removed.** `scripts/record-links-baseline.tsv` and the baseline code of `scripts/check-record-links.ts` and its tests are removed; the check now fails on any failing archived link.
 - **Spec.** The `integration-flow` requirement "Record link check" gains the scenario "Archived record"; the requirement "Record link baseline" is removed.
 - **Docs.** Worker step 6 of `docs/agent-task-protocol.md` drops the baseline sentence. ADR 0015, the archived-links accepted limit (line 140), and `docs/foundation.md` line 89 note decision B1 and this repair.
-- **Scope addition (coordinator Niki, 2026-10-27).** ADR 0015 line 120, the decision 5 follow-up on the in-memory rotation cursor `#after`, keeps its text and gains a resolution note: `persist-placement-rotation-cursor` stores the cursor, and its citation `placement-service.ts:51`, `:85` is stale because that change removed `#after`.
+- **Mapping fixtures.** The `sdlc-openspec` mapping fixture `draft-sdlc-framework-port` must equal its archived change byte for byte, and three of its files hold rewritten links; the fixture copies take the rewritten files, the two artifact digests in `openspec-mapping-cases.ts` follow, and the fixture README notes it.
+- **Scope addition (coordinator Niki, 2026-10-27).** ADR 0015 line 120, the decision 5 follow-up on the in-memory rotation cursor `#after`, keeps its text and gains a resolution note: `persist-placement-rotation-cursor` (#349, merge `eda6c283`) stores the cursor, and its citation `placement-service.ts:51`, `:85` is stale because that change removed `#after`.
 
 ## Capabilities
 
@@ -22,4 +23,4 @@ None.
 
 ## Impact
 
-176 files of 83 archived changes, link destinations only; `scripts/check-record-links.ts`, `test/check-record-links.test.ts`, `scripts/record-links-baseline.tsv` (removed), `docs/agent-task-protocol.md`, `docs/decisions/0015-g2-closure.md` (lines 120 and 140 only), and `docs/foundation.md` (line 89 only). The published package does not change; commit types `docs` and `chore`.
+176 files of 83 archived changes, link destinations only; `scripts/check-record-links.ts`, `test/check-record-links.test.ts`, `scripts/record-links-baseline.tsv` (removed), `docs/agent-task-protocol.md`, `docs/decisions/0015-g2-closure.md` (lines 120 and 140 only), and `docs/foundation.md` (line 89 only); in the private `@taskelith/sdlc-openspec` package, three fixture files, two digests in `test/openspec-mapping-cases.ts`, and `fixtures/README.md`. The published package does not change; commit types `docs` and `chore`.
