@@ -149,3 +149,62 @@ test('a summary counts exactly the findings of its pass', () => {
   ]);
   assert.deepEqual(severityCounts(findings), { critical: 1, high: 0, medium: 1, low: 1 });
 });
+
+const NO_COUNTS = { critical: 0, high: 0, medium: 0, low: 0 };
+
+test('the schema accepts an artifact identifier and rejects other artifact values', () => {
+  const parsed = parse([JSON.stringify(summary({ artifact: 'item-0-plan' }))]);
+  assert.deepEqual(parsed.problems, []);
+  assert.equal(parsed.located[0].summary.artifact, 'item-0-plan');
+  assert.deepEqual(messagesOf([
+    JSON.stringify(summary({ artifact: 'Item 0' })),
+    JSON.stringify({ ...summary(), artifact: 7 }),
+    JSON.stringify(summary({ artifact: 'a'.repeat(65) })),
+  ]), [
+    'passes.jsonl:1: /artifact must match pattern "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"',
+    'passes.jsonl:2: /artifact must be string',
+    'passes.jsonl:3: /artifact must NOT have more than 64 characters',
+  ]);
+});
+
+test('a pass is summarized once per artifact, an absent artifact being its own', () => {
+  const lines = [summary(), summary({ artifact: 'x' }), summary({ artifact: 'y' }), summary({ artifact: 'x' })];
+  assert.deepEqual(messagesOf(lines.map((line) => JSON.stringify(line))), [
+    'passes.jsonl:4: pass 1 of artifact "x" is already summarized on line 2',
+  ]);
+});
+
+test('findings agree with the summary of their own artifact\'s pass', () => {
+  const summaries = [
+    summary({ artifact: 'x' }),
+    summary({ artifact: 'y', session: 'session-y', counts: { ...NO_COUNTS, high: 1 } }),
+  ];
+  const findings = [
+    finding({ artifact: 'x' }),
+    finding({ artifact: 'y', session: 'session-y', severity: 'high' }),
+  ];
+  assert.deepEqual(consistency(summaries, findings), []);
+  assert.deepEqual(consistency(summaries, [finding({ artifact: 'y' }), finding({ artifact: 'z' }), finding()]), [
+    'findings.jsonl:1: reviewer or session differs from the summary of pass 1 of artifact "y" in passes.jsonl',
+    'findings.jsonl:2: pass 1 of artifact "z" has no summary in passes.jsonl',
+    'findings.jsonl:3: pass 1 has no summary in passes.jsonl',
+    'passes.jsonl:1: counts of pass 1 of artifact "x" differ from its lines in findings.jsonl: medium 1 here, 0 there',
+    'passes.jsonl:2: counts of pass 1 of artifact "y" differ from its lines in findings.jsonl: high 1 here, 0 there, medium 0 here, 1 there',
+  ]);
+});
+
+test('missedBy names a pass of the finding\'s own artifact', () => {
+  const summaries = [
+    summary({ artifact: 'x', counts: NO_COUNTS }),
+    summary({ artifact: 'y', pass: 2, role: 'B' }),
+  ];
+  const missedOwn = finding({ artifact: 'y', pass: 2, missedBy: { pass: 1, role: 'A' } });
+  assert.deepEqual(consistency(summaries, [missedOwn]), [
+    'findings.jsonl:1: missedBy pass 1 of artifact "y" has no summary in passes.jsonl',
+  ]);
+  const withOwn = [...summaries, summary({ artifact: 'y', role: 'B', counts: NO_COUNTS })];
+  assert.deepEqual(consistency(withOwn, [missedOwn]), [
+    'findings.jsonl:1: missedBy role A is not role B of pass 1 of artifact "y" in passes.jsonl',
+  ]);
+  assert.deepEqual(consistency(withOwn, [{ ...missedOwn, missedBy: { pass: 1, role: 'B' } }]), []);
+});

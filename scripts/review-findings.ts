@@ -14,8 +14,20 @@ export type Severity = 'critical' | 'high' | 'medium' | 'low';
 export type Outcome = 'fixed' | 'fixed-unreviewed' | 'declined' | 'deferred' | 'owner-accepted';
 export type Role = 'A' | 'B';
 
-// An earlier pass of the same change, or the integration into dev.
+// An earlier pass of the same change and artifact, or the integration into
+// dev.
 export type MissedBy = { readonly pass: number; readonly role: Role } | 'integration';
+
+// A pass is identified by its artifact and number within its change.
+export interface PassCoordinates {
+  // Absent when the change reviews one artifact.
+  readonly artifact?: string;
+  readonly pass: number;
+}
+
+export function passName({ artifact, pass }: PassCoordinates): string {
+  return artifact === undefined ? `pass ${pass}` : `pass ${pass} of artifact "${artifact}"`;
+}
 
 export interface Reviewer {
   readonly harness: string;
@@ -25,6 +37,8 @@ export interface Reviewer {
 
 export interface Finding {
   readonly change: string;
+  // Absent when the change reviews one artifact.
+  readonly artifact?: string;
   readonly pass: number;
   readonly reviewer: Reviewer;
   readonly session: string;
@@ -165,7 +179,8 @@ function recordProblems(finding: Finding, change: string, categories: ReadonlySe
   }
   const { missedBy } = finding;
   if (typeof missedBy === 'object' && missedBy.pass >= finding.pass) {
-    problems.push(`missedBy pass ${missedBy.pass} is not earlier than this finding's pass ${finding.pass}`);
+    const missed = passName({ artifact: finding.artifact, pass: missedBy.pass });
+    problems.push(`missedBy ${missed} is not earlier than this finding's pass ${finding.pass}`);
   }
   return problems;
 }

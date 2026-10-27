@@ -260,6 +260,35 @@ test('validate checks missedBy against the summary of the missed pass', () => {
   }
 });
 
+test('validate keys pass summaries by artifact and pass', () => {
+  const active = 'openspec/changes/active-change';
+  const root = repository({
+    [`${active}/findings.jsonl`]: [
+      line('active-change', 'docs', 'Of x', { artifact: 'x' }),
+      line('active-change', 'docs', 'Missed by x', { artifact: 'y', pass: 2, missedBy: { pass: 1, role: 'A' } }),
+    ].join('\n') + '\n',
+    [`${active}/passes.jsonl`]: [
+      summary('active-change', 1, { low: 1 }, { artifact: 'x' }),
+      summary('active-change', 2, { low: 1 }, { artifact: 'y' }),
+      summary('active-change', 2, {}, { artifact: 'y' }),
+    ].join('\n') + '\n',
+  });
+  try {
+    assert.deepEqual(runFindings(['validate'], root).stderr.split('\n'), [
+      `${active}/passes.jsonl:3: pass 2 of artifact "y" is already summarized on line 2`,
+      `Review findings: 1 problem(s); ${FORMATS}.`,
+    ]);
+    const passes = `${summary('active-change', 1, { low: 1 }, { artifact: 'x' })}\n${summary('active-change', 2, { low: 1 }, { artifact: 'y' })}\n`;
+    writeFileSync(join(root, active, 'passes.jsonl'), passes);
+    assert.deepEqual(runFindings(['validate'], root).stderr.split('\n'), [
+      `${active}/findings.jsonl:2: missedBy pass 1 of artifact "y" has no summary in passes.jsonl`,
+      `Review findings: 1 problem(s); ${FORMATS}.`,
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 const STATISTICS_ARCHIVE = {
   'openspec/changes/archive/2026-10-05-summarized/findings.jsonl': [
     line('summarized', 'docs', 'Medium of pass 2', { pass: 2, severity: 'medium', reviewer: { harness: 'claude', model: 'claude-opus-5-5', variant: 'high' }, missedBy: { pass: 1, role: 'A' } }),

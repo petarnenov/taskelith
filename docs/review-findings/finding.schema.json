@@ -11,8 +11,12 @@
       "description": "Name of the OpenSpec change, without the archive date prefix.",
       "$ref": "#/$defs/identifier"
     },
+    "artifact": {
+      "description": "The artifact that a multi-artifact change reviews, each with its own reviewers and passes; omitted when the change reviews one artifact.",
+      "$ref": "#/$defs/identifier"
+    },
     "pass": {
-      "description": "Number of the review pass, counted as the review process counts passes; failed attempts are not passes.",
+      "description": "Number of the review pass of the finding's artifact, counted as the review process counts passes; failed attempts are not passes.",
       "type": "integer",
       "minimum": 1,
       "maximum": 9
@@ -91,7 +95,7 @@
       "pattern": "^[0-9a-f]{7,40}$"
     },
     "missedBy": {
-      "description": "What missed the finding before it was found: an earlier pass of this change, with that pass's role, which npm run findings checks against the pass's summary in passes.jsonl, or \"integration\" for work already integrated into dev.",
+      "description": "What missed the finding before it was found: an earlier pass of this change and of the finding's artifact, with that pass's role, which npm run findings checks against the pass's summary in passes.jsonl, or \"integration\" for work already integrated into dev.",
       "oneOf": [
         {
           "type": "object",
