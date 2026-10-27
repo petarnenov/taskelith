@@ -50,6 +50,16 @@ Not edited here (design decision 6):
 - `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: exit 0; `npm test` tests 2307, pass 2260, fail 0, skipped 47; all files 99.28 % lines, 92.33 % branches (92.35 % after review pass 1), 98.94 % functions; `Every comment is within the comment length rule.`; OpenSpec `Totals: 70 passed, 0 failed (70 items)`; `Every checked link conforms.`; `Every active OpenSpec change archives into strictly valid specs.`; findings 43 files and pass summaries 23 files valid. The same totals on `a09141f5`, `20b22bac`, and after review pass 1, except the branch coverage noted; only this record's results were added after each run.
 - `make findings ARGS="checklist --capability native-worker-acceptance,foundation-closure --files docs/foundation.md"`: the text in [design.md](design.md), "Review checklist".
 
+## Archive checks
+
+On the tree of the archive commit, after `npm run openspec -- archive record-hosted-runner-linux-acceptance --yes`:
+
+- `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 69 passed, 0 failed (69 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: `✓ change/2026-10-27-record-hosted-runner-linux-acceptance`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: empty, as `skip_specs` implies.
+- The moved change has `findings.jsonl` (2 findings) and `passes.jsonl` (1 pass); `make findings ARGS="validate"`: 43 findings files and 23 pass summary files valid.
+- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: exit 0; `npm test` tests 2307, pass 2260, fail 0, skipped 47; all files 99.28 % lines, 92.33 % branches, 98.94 % functions; OpenSpec `Totals: 69 passed, 0 failed (69 items)`; `Every checked link conforms.`; `Every active OpenSpec change archives into strictly valid specs.`
+
 ## Review
 
 Assigned reviewers ([review process](/docs/governance.md#independent-review-process)): reviewer A Codex CLI `gpt-6.1-sol` (passes 1 and 3), reviewer B Claude Code `claude-opus-5-5`, effort high (pass 2).
@@ -76,5 +86,4 @@ Pass 1 found Low findings only, so the review ends there ([review process](/docs
 
 ## Remaining gates
 
-- Archive of the change (worker step 7).
 - Integration into dev by the coordinator (single pull request).
