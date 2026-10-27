@@ -12,4 +12,4 @@
 
 - [x] 3.1 Run `npm run openspec -- validate close-verify-linux-cgroup-multi-arch --strict`.
 - [x] 3.2 Run `make verify`.
-- [ ] 3.3 Independent review.
+- [x] 3.3 Independent review.

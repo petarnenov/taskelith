@@ -36,7 +36,7 @@ Each citation of the ADR note was checked against the files on `af558eb0`:
 
 ## Independent review
 
-None yet.
+Pass 1, reviewer A: OpenCode CLI, invoked as `opencode run --standalone --agent reviewer -m 'opencode-go/kimi-k3.1-pro#high' --format json --title close-verify-linux-cgroup-multi-arch "$(cat <prompt-file>)" < /dev/null > <log>` on `b904a018` (`af558eb0..b904a018`). Session `ses_e822b620effebvx0Xnyq1Pykdp`. Model confirmation from the stored assistant messages of the session (`session_message`): provider `opencode-go`, model `kimi-k3.1-pro`, variant `high`, agent `reviewer`. The `opencode run` process exited with status 0. The SHA-256 snapshot of the worktree before and after the review was equal: `10dc5ef9ba6d1122ed780a63bc4643c4ba5afa249d70793456952758e42aecc6`. Findings: Critical 0, High 0, Medium 0, Low 0, as in `passes.jsonl`. The reviewer checked `73c0b2f7` and its ancestry to `4b3d693` and `b82ad2f`, the 25b and 25c records, `Makefile:95-111`, `docs/dependencies.md:127`, the requirement at `openspec/specs/native-worker-acceptance/spec.md:87-92`, the fresh amd64 result, and that only the allowed ADR 0015 and `docs/foundation.md` lines changed. With no finding above Low, reviewer B did not run, as the coordinator's brief and the [review process](/docs/governance.md#independent-review-process) set.
 
 ## Limitations
 
@@ -45,6 +45,4 @@ None yet.
 
 ## Remaining gates
 
-- Review pass 1 by reviewer A, OpenCode `opencode-go/kimi-k3.1-pro#high`.
-- Review pass 2 by reviewer B, Claude Code `claude-fable-5-1`, only if pass 1 has findings above Low.
 - Integration into dev by the coordinator (single pull request)
