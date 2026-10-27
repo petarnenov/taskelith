@@ -29,7 +29,7 @@ Each run was checked with the tree snapshot of the protocol; every snapshot was 
 | 16 | `claude-haiku-5-5`, low | dontAsk | json | write a file with Bash | written, outside the repository |
 | 18, 19, 21 | `claude-haiku-5-5`, low | plan | json, stream-json | prompt on stdin; stdin inherited; closed | exit 0 |
 
-The alias `haiku` resolved to `claude-sonnet-5-5` in plan mode (runs 3 and 4, and a short run), while `claude-haiku-5-5` stayed Haiku, so the rows keep full model IDs. The experiments cost about $7.25 at list prices over 23 CLI runs; four more log entries were quoting errors of the test harness that never started the CLI.
+The alias `haiku` resolved to `claude-sonnet-5-5` in plan mode (runs 3 and 4, and a short run), while `claude-haiku-5-5` stayed Haiku, so the rows keep full model IDs. The experiments cost about $7.25 at list prices over 23 investigation runs, plus four CLI invocations, caused by a quoting error of the test harness, that the CLI rejected during argument parsing before any model query.
 
 ### Excluded factors
 

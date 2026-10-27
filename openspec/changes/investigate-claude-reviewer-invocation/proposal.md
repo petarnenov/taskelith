@@ -6,7 +6,7 @@ On 2026-10-27 both Claude Code reviewer attempts of pass 2 of `stabilize-workspa
 
 - The two Claude Code rows of "Reviewer invocations" in `docs/agent-task-protocol.md` use `--output-format stream-json --verbose`, close stdin with `< /dev/null` in both rows, and redirect stdout to a log. The confirmation is the log's last `"type":"result"` line, which carries `session_id` and `modelUsage`.
 - The rows say why `json` is not used, that plan mode stays because under another permission mode a user-allowed Bash can write, and that plan mode does not sandbox Bash, so the snapshot remains the proof.
-- No other row, section, or file changes. No other tracked file documents the Claude Code reviewer invocation.
+- Outside this change's OpenSpec records, only those two rows change. No other current operational instruction documents the Claude Code reviewer invocation; archived records that quote the old invocation stay unchanged as history.
 
 ## Capabilities
 

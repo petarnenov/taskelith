@@ -16,13 +16,13 @@ Apple M3, macOS 26.6.2 (Darwin 25.6.0, arm64), Claude Code CLI 2.1.312 (native i
 
 - Against the brief: only the two Claude Code rows change; both keep `--permission-mode plan`, `--disallowedTools Edit Write NotebookEdit` after the prompt argument, the full model IDs, and `< /dev/null`, and redirect stdout to a log.
 - Against the governance rule "Authorized reviewers": the model and effort stay in the invocation, and the result line's `modelUsage` confirms the model.
-- Other files: `grep -rn "permission-mode plan" --include='*.md' .`, outside `node_modules` and archived changes, finds only the two rows; no file under `.claude/skills` contains `claude -p` or `--output-format json`. No other file needed a change.
+- Other files: `grep -rn "permission-mode plan" --include='*.md' .`, outside `node_modules` and archived changes, finds only the two rows; no file under `.claude/skills` contains `claude -p` or `--output-format json`. No other current operational instruction needed a change; archived records that quote the old invocation stay unchanged as history.
 - Comments: the change adds no code comments.
 - Evidence check: no external link. Repository links are root-relative and resolve, as `npm run verify:links` checks. The investigation's scripts and logs stayed in the session's scratch directory, outside the repository; `design.md` describes them.
 
 ## Investigation
 
-See `design.md`: the cause in the CLI's headless output, the runs that isolate it, the excluded factors, what is unproven, and the recommended invocation. Each run compared the tree snapshot of the protocol before and after; all were unchanged. The proof of the recommended invocation is run 20: Opus 5.5 high, the 2.9 KB review prompt adapted to the merged change, in the main clone; exit 0 after 254 s, 20 turns, the result line with `subtype` `success`, `is_error` false, a `session_id`, and `modelUsage` naming only `claude-opus-5-5`. Edits blocked: with `--disallowedTools` the Write tool is absent (runs 13b and 14). About $7.25 at list prices over 23 CLI runs.
+See `design.md`: the cause in the CLI's headless output, the runs that isolate it, the excluded factors, what is unproven, and the recommended invocation. Each run compared the tree snapshot of the protocol before and after; all were unchanged. The proof of the recommended invocation is run 20: Opus 5.5 high, the 2.9 KB review prompt adapted to the merged change, in the main clone; exit 0 after 254 s, 20 turns, the result line with `subtype` `success`, `is_error` false, a `session_id`, and `modelUsage` naming only `claude-opus-5-5`. Edits blocked: with `--disallowedTools` the Write tool is absent (runs 13b and 14). About $7.25 at list prices over 23 investigation runs, plus four CLI invocations rejected during argument parsing before any model query.
 
 ## Checks
 
