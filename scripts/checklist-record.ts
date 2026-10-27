@@ -18,8 +18,8 @@ import {
 
 export const CHECKLIST_FILE = 'checklist.json';
 export const CHECKLIST_SCHEMA_PATH = 'docs/review-findings/checklist.schema.json';
-// Active changes created on or after this day record their checklist.
-export const CHECKLIST_REQUIRED_FROM = '2026-10-28';
+// Active changes opened after this change's archive record their checklist.
+export const LANDING_CHANGE = 'measure-checklist-effect';
 
 export const SIZE_POINTS = { S: 1, 'S-M': 1.5, M: 2, 'M-L': 2.5, L: 3 } as const;
 export type Size = keyof typeof SIZE_POINTS;
@@ -116,18 +116,6 @@ export function formatChecklistRecord(record: ChecklistRecord): string {
   return `${JSON.stringify(record, null, 2)}\n`;
 }
 
-const CREATED_LINE = /^created:\s*['"]?(\d{4}-\d{2}-\d{2})['"]?\s*$/m;
-
-// The created date that `openspec new change` writes into .openspec.yaml.
-export function createdDate(openspecYaml: string | undefined): string | undefined {
-  return openspecYaml === undefined ? undefined : CREATED_LINE.exec(openspecYaml)?.[1];
-}
-
-// A change without a created date cannot show that it predates the rule.
-export function requiresChecklist(created: string | undefined): boolean {
-  return created === undefined || created >= CHECKLIST_REQUIRED_FROM;
-}
-
 export interface ParsedChecklist {
   readonly record?: ChecklistRecord;
   readonly problems: readonly string[];
@@ -158,15 +146,52 @@ function recordProblems(record: ChecklistRecord, change: string, categories: Rea
   return [
     ...(record.change === change ? [] : [`change "${record.change}" is not this change "${change}"`]),
     ...unknown.map((category) => `unknown category "${category}"; categories are listed in ${VOCABULARY_PATH}`),
+    ...timeProblems(record.generatedAt),
+    ...sectionProblems('review', record.review, record.query.top),
+    ...sectionProblems('recordQuality', record.recordQuality, record.query.top),
   ];
 }
 
-// A change directory's checklist.json and .openspec.yaml created date.
+// The schema checks the form; this rejects dates such as month 99.
+function timeProblems(generatedAt: string): string[] {
+  const time = new Date(generatedAt);
+  const real = !Number.isNaN(time.getTime()) && time.toISOString() === generatedAt;
+  return real ? [] : [`generatedAt "${generatedAt}" is not a real time`];
+}
+
+// A section is what the checklist command ranks: unique categories, most
+// frequent first, at most top of them, and a baseline that adds up.
+function sectionProblems(name: string, { categories, baseline }: ChecklistSection, top: number): string[] {
+  const problems: string[] = [];
+  if (categories.length > top) problems.push(`${name} lists ${categories.length} categories, more than top ${top}`);
+  categories.forEach(({ category, count }, index) => {
+    if (categories.findIndex((other) => other.category === category) < index) problems.push(`${name} lists category "${category}" twice`);
+    const previous = categories[index - 1];
+    if (previous !== undefined && previous.count < count) {
+      problems.push(`${name} is not ranked by count: "${category}" (${count}) follows "${previous.category}" (${previous.count})`);
+    }
+  });
+  return [...problems, ...baselineProblems(name, baseline)];
+}
+
+function baselineProblems(name: string, { all, mediumOrWorse }: Baseline): string[] {
+  const listedMore = (kind: string, { findings, inChecklist }: Share) =>
+    (inChecklist > findings ? [`${name} baseline ${kind} lists ${inChecklist} of ${findings} findings`] : []);
+  return [
+    ...listedMore('all', all),
+    ...listedMore('mediumOrWorse', mediumOrWorse),
+    ...(mediumOrWorse.findings > all.findings ? [`${name} baseline has ${mediumOrWorse.findings} Medium or worse findings of ${all.findings}`] : []),
+    ...(mediumOrWorse.inChecklist > all.inChecklist
+      ? [`${name} baseline lists ${mediumOrWorse.inChecklist} Medium or worse findings of ${all.inChecklist} listed`]
+      : []),
+  ];
+}
+
+// A change directory and its checklist.json, if any.
 export interface ChecklistLocation {
   readonly directory: string;
   readonly change: string;
   readonly archived: boolean;
-  readonly created?: string;
   readonly file?: { readonly path: string; readonly text: string };
 }
 
@@ -175,13 +200,14 @@ export interface LocatedChecklist {
   readonly record: ChecklistRecord;
 }
 
-export function missingChecklists(locations: readonly ChecklistLocation[]): Problem[] {
+// mustRecord says whether an active change was opened after the landing.
+export function missingChecklists(locations: readonly ChecklistLocation[], mustRecord: (directory: string) => boolean): Problem[] {
   return locations
-    .filter(({ archived, created, file }) => !archived && file === undefined && requiresChecklist(created))
+    .filter(({ archived, file, directory }) => !archived && file === undefined && mustRecord(directory))
     .map(({ directory, change }) => ({
       file: posix.join(directory, CHECKLIST_FILE),
-      message: `missing; an active change created on or after ${CHECKLIST_REQUIRED_FROM} records its brief's checklist `
-        + `here (checklist ... --save ${change})`,
+      message: `missing; an active change opened after ${LANDING_CHANGE} was archived records its brief's checklist here `
+        + `(checklist ... --save ${change} --at <dev commit of the brief>)`,
     }));
 }
 

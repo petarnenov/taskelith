@@ -3,13 +3,12 @@ import { posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { Ajv2020, type ErrorObject } from 'ajv/dist/2020.js';
-import { runChecklist, runEffect, type SaveTarget } from './checklist-commands.ts';
+import { runChecklist, runEffect, type ArchiveSource, type ChecklistCommand, type SaveTarget } from './checklist-commands.ts';
 import { GIT_ENVIRONMENT, type ChecklistEnvironment } from './checklist-environment.ts';
 import {
   CHECKLIST_FILE,
   CHECKLIST_SCHEMA_PATH,
   checkChecklists,
-  createdDate,
   isSize,
   missingChecklists,
   type ChecklistLocation,
@@ -38,7 +37,6 @@ import { formatReviewerStatistics, reviewerStatistics, type ReviewedChange } fro
 const CHANGES_DIRECTORY = 'openspec/changes';
 const ARCHIVE_DIRECTORY = 'archive';
 const FINDINGS_FILE = 'findings.jsonl';
-const OPENSPEC_METADATA = '.openspec.yaml';
 export const SCHEMA_PATH = 'docs/review-findings/finding.schema.json';
 export const PASS_SCHEMA_PATH = 'docs/review-findings/pass.schema.json';
 export const DEFAULT_TOP = 7;
@@ -51,8 +49,8 @@ export const USAGE = [
   '  reviewers [--json]       statistics of archived review passes per reviewer and role',
   `  checklist [--capability <a,b>] [--files <glob,glob>] [--top <1-${MAX_TOP}>]`,
   `                           most frequent archived categories (top ${DEFAULT_TOP})`,
-  '            [--json | --save <change> [--size <S|S-M|M|M-L|L>]]',
-  `                           as JSON, or saved as the change's ${CHECKLIST_FILE}`,
+  '            [--at <dev commit>] [--json | --save <change> [--size <S|S-M|M|M-L|L>]]',
+  `                           as of the brief's dev commit, as JSON, or saved as ${CHECKLIST_FILE}`,
   '  effect [--json]          pass-1 findings of archived changes against their checklist',
 ].join('\n');
 
@@ -60,7 +58,7 @@ export type Command =
   | { readonly name: 'validate' }
   | { readonly name: 'index' | 'reviewers'; readonly json: boolean }
   | { readonly name: 'effect'; readonly json: boolean }
-  | { readonly name: 'checklist'; readonly query: ChecklistQuery; readonly json: boolean; readonly save?: SaveTarget };
+  | ({ readonly name: 'checklist' } & ChecklistCommand);
 
 export class UsageError extends Error {}
 
@@ -70,6 +68,7 @@ const OPTIONS = {
   files: { type: 'string', multiple: true },
   top: { type: 'string' },
   save: { type: 'string' },
+  at: { type: 'string' },
   size: { type: 'string' },
 } as const;
 
@@ -77,7 +76,7 @@ const COMMAND_OPTIONS: Readonly<Record<Command['name'], readonly string[]>> = {
   validate: [],
   index: ['json'],
   reviewers: ['json'],
-  checklist: ['capability', 'files', 'top', 'json', 'save', 'size'],
+  checklist: ['capability', 'files', 'top', 'json', 'at', 'save', 'size'],
   effect: ['json'],
 };
 
@@ -92,18 +91,27 @@ export function parseCommand(args: readonly string[]): Command {
   if (name !== 'checklist') return { name, json: values.json === true };
   const query = checklistQuery(values.capability ?? [], values.files ?? [], values.top);
   const json = values.json === true;
-  const save = saveTarget(values.save, values.size, json);
-  return save === undefined ? { name, query, json } : { name, query, json, save };
+  const at = commitArgument(values.at);
+  const save = saveTarget(values.save, values.size, json, at);
+  return { name, query, json, ...(at === undefined ? {} : { at }), ...(save === undefined ? {} : { save }) };
 }
 
 const CHANGE_NAME = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+const COMMIT = /^[0-9a-f]{7,40}$/;
 
-function saveTarget(change: string | undefined, size: string | undefined, json: boolean): SaveTarget | undefined {
+// Only a hexadecimal SHA, so the value never reaches git as an option.
+function commitArgument(value: string | undefined): string | undefined {
+  if (value !== undefined && !COMMIT.test(value)) throw new UsageError('--at takes a commit SHA of 7 to 40 hexadecimal digits');
+  return value;
+}
+
+function saveTarget(change: string | undefined, size: string | undefined, json: boolean, at: string | undefined): SaveTarget | undefined {
   if (change === undefined) {
     if (size !== undefined) throw new UsageError('--size applies only with --save');
     return undefined;
   }
   if (json) throw new UsageError('--json and --save exclude each other');
+  if (at === undefined) throw new UsageError('--save needs --at <dev commit of the brief>');
   if (!CHANGE_NAME.test(change)) throw new UsageError('--save takes an OpenSpec change name');
   if (size === undefined) return { change };
   if (!isSize(size)) throw new UsageError('--size must be S, S-M, M, M-L, or L');
@@ -251,11 +259,7 @@ function loadRepository(root: string): Repository {
     passSchema: JSON.parse(read(PASS_SCHEMA_PATH)) as object,
     checklistSchema: JSON.parse(read(CHECKLIST_SCHEMA_PATH)) as object,
     capabilities: directories(root, SPECS_DIRECTORY),
-    checklists: locations.map((location) => ({
-      ...location,
-      created: createdDate(file(location.directory, OPENSPEC_METADATA)?.text),
-      file: file(location.directory, CHECKLIST_FILE),
-    })),
+    checklists: locations.map((location) => ({ ...location, file: file(location.directory, CHECKLIST_FILE) })),
   };
 }
 
@@ -337,19 +341,39 @@ function runCommand(command: Command, repository: Repository, workspace: Workspa
     ...vocabulary.problems,
     ...(validating ? repository.missing : []),
     ...checked.flatMap((change) => change.problems),
-    ...(validating ? missingChecklists(repository.checklists) : []),
+    ...(validating ? missingChecklists(repository.checklists, mustRecordChecklist(workspace)) : []),
     ...checklists.problems,
   ];
   if (problems.length > 0) return { exitCode: 1, stdout: '', stderr: [...problems.map(formatProblem), problemSummary(problems)].join('\n') };
   const archivedChanges = checked.filter(({ archived }) => archived);
   const archived: Finding[] = archivedChanges.flatMap(({ findings }) => findings);
-  if (command.name === 'checklist') return runChecklist(command, { ...workspace, archived, categories: vocabulary.categories });
+  if (command.name === 'checklist') {
+    const current = { commit: workspace.environment.devCommit(workspace.root), findings: archived };
+    const archiveAt = (commit: string) => archiveSource(workspace, commit, rules.archived);
+    return runChecklist(command, { ...workspace, categories: vocabulary.categories, current, archiveAt });
+  }
   if (command.name === 'effect') {
     const changes = repository.checklists.filter(({ archived: isArchived }) => isArchived).map(({ directory, change }) =>
       ({ directory, change, findings: archivedChanges.find((records) => records.change === change)?.findings ?? [] }));
     return runEffect(command.json, { ...workspace, archivedChanges: changes, checklists: checklists.located });
   }
   return { exitCode: 0, stdout: commandOutput(command, repository, archivedChanges, archived), stderr: '' };
+}
+
+// Before the landing commit exists, no active change needs a checklist.
+function mustRecordChecklist({ root, environment }: Workspace): (directory: string) => boolean {
+  const landing = environment.landingCommit(root);
+  return (directory) => landing !== undefined && environment.openedAfter(root, directory, landing);
+}
+
+function archiveSource({ root, environment }: Workspace, commit: string, rules: FindingRules): ArchiveSource | string {
+  const snapshot = environment.archiveAt(root, commit);
+  if (snapshot === undefined) return `unknown commit "${commit}"; give the dev commit that the brief's checklist names.`;
+  const parsed = snapshot.findings.map((file) =>
+    parseLocatedFindings({ ...file, change: changeOfDirectory(posix.basename(posix.dirname(file.path))) }, rules));
+  const problems = parsed.flatMap(({ problems: found }) => found);
+  if (problems.length > 0) return [`the archive at ${snapshot.commit} has invalid findings:`, ...problems.map(formatProblem)].join('\n');
+  return { commit: snapshot.commit, findings: parsed.flatMap(({ located }) => located.map(({ finding }) => finding)) };
 }
 
 function problemSummary(problems: readonly Problem[]): string {
