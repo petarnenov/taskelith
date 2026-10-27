@@ -30,11 +30,11 @@ import { query } from './test-database.ts';
 
 export async function seedWorker(url: URL, worker: WorkerPlacementRecord): Promise<void> {
   await query(url, `INSERT INTO workers (worker_id, enrolled, revoked, draining, reachable, admission_pressure_since,
-    slots, cpu_millicores, memory_mebibytes, controls, protocol_version, last_contact_at, capacity_refused_since)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`, [
+    slots, cpu_millicores, memory_mebibytes, controls, protocol_version, last_contact_at, capacity_refused_since, worker_admission)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`, [
     worker.workerId, worker.enrolled, worker.revoked, worker.draining, worker.reachable, worker.admissionPressureSince ?? null,
     worker.slots, worker.cpuMillicores, worker.memoryMebibytes, [...worker.controls], worker.protocolVersion ?? null,
-    worker.lastContactAt ?? null, worker.capacityRefusedSince ?? null,
+    worker.lastContactAt ?? null, worker.capacityRefusedSince ?? null, worker.admitted ? 'admitted' : 'awaiting-self-check',
   ]);
 }
 

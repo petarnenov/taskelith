@@ -40,7 +40,7 @@ const LOST_COMMIT = err(failure('unavailable', 'the commit outcome is unknown', 
 // Two slots, reachable since enrollment, so no observation is needed.
 const RECORD: WorkerPlacementRecord = {
   workerId: 'worker-1' as WorkerId, enrolled: true, revoked: false, draining: false, reachable: true, slots: 2,
-  cpuMillicores: 4000, memoryMebibytes: 8192, controls: [], protocolVersion: 1,
+  cpuMillicores: 4000, memoryMebibytes: 8192, controls: [], protocolVersion: 1, admitted: true,
 };
 
 // Shared in-memory stores without rollback, runs `run-a` in `p-a` and

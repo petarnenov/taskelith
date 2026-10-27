@@ -56,7 +56,7 @@ const DOWN = err(failure('unavailable', 'the store is down'));
 // Two slots, reachable since enrollment, so no observation is needed.
 const ROOMY: WorkerPlacementRecord = {
   workerId: 'worker-1' as WorkerId, enrolled: true, revoked: false, draining: false, reachable: true, slots: 2,
-  cpuMillicores: 4000, memoryMebibytes: 8192, controls: [], protocolVersion: 1,
+  cpuMillicores: 4000, memoryMebibytes: 8192, controls: [], protocolVersion: 1, admitted: true,
 };
 // Below the default attempt request, so no attempt fits on it.
 const SMALL: WorkerPlacementRecord = { ...ROOMY, cpuMillicores: 500 };

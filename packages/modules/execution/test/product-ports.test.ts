@@ -101,6 +101,7 @@ const CONTRACT_VALUES = [
       'resource-ceiling-exceeded',
       'control-not-enforceable',
       'worker-admission-pressure',
+      'worker-self-check-failed',
       'protocol-not-supported',
     ],
   ],

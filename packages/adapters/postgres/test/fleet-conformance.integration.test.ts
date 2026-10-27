@@ -4,6 +4,8 @@ import { OPERATOR_CREDENTIALS_CONFORMANCE } from '@taskelith/access';
 import {
   FLEET_REGISTRY_CONFORMANCE,
   INSTALLATION_TABLE_CONFORMANCE,
+  WORKER_ADMISSION_CONFORMANCE,
+  decideWorkerAdmission,
   fleetToken,
   fleetWorker,
   installationIdentity,
@@ -13,6 +15,7 @@ import {
   CommittingFleetRegistry,
   CommittingInstallationTable,
   CommittingOperatorCredentials,
+  CommittingWorkerAdmissions,
   PostgresDatabase,
 } from '@taskelith/postgres';
 import type { ConformanceCase } from '@taskelith/sdlc';
@@ -37,8 +40,11 @@ function runSuite<Port>(port: string, cases: readonly ConformanceCase<Port>[], c
 runSuite('fleet registry', FLEET_REGISTRY_CONFORMANCE, () => new CommittingFleetRegistry(database));
 runSuite('installation table', INSTALLATION_TABLE_CONFORMANCE, () => new CommittingInstallationTable(database));
 runSuite('operator credentials', OPERATOR_CREDENTIALS_CONFORMANCE, () => new CommittingOperatorCredentials(database));
+runSuite('worker admissions', WORKER_ADMISSION_CONFORMANCE, () => ({
+  registry: new CommittingFleetRegistry(database), admissions: new CommittingWorkerAdmissions(database),
+}));
 
-test('an enrolled worker is placeable once reachable, and a revoked one is not', { concurrency: false }, async () => {
+test('an enrolled worker is placeable once reachable and admitted, and a revoked one is not', { concurrency: false }, async () => {
   await truncateAll(url);
   const registry = new CommittingFleetRegistry(database);
   value(await registry.addToken(fleetToken('t1')));
@@ -48,8 +54,12 @@ test('an enrolled worker is placeable once reachable, and a revoked one is not',
 
   assert.deepEqual(value(await placement()), {
     workerId: worker.workerId, enrolled: true, revoked: false, draining: false, reachable: false,
-    slots: 2, cpuMillicores: 4000, memoryMebibytes: 8192, controls: ['cpu-limit', 'memory-limit'], protocolVersion: 1,
+    slots: 2, cpuMillicores: 4000, memoryMebibytes: 8192, controls: ['cpu-limit', 'memory-limit'], protocolVersion: 1, admitted: false,
   });
+  const passed = { checkId: 'linux-containment', outcome: 'passed', details: [] } as const;
+  const admissions = new CommittingWorkerAdmissions(database);
+  value(await admissions.record(worker.workerId, decideWorkerAdmission([passed], 'linux'), 1 as never, worker.enrolledAt));
+  assert.equal(value(await placement())?.admitted, true);
   value(await registry.revoke(worker.workerId, worker.enrolledAt));
   assert.equal(value(await placement())?.revoked, true);
 });

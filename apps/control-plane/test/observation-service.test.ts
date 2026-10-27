@@ -15,6 +15,7 @@ import {
   type AttemptId,
   type Execution,
   type ExecutionId,
+  type SelfCheckResult,
   type WorkerId,
 } from '@taskelith/execution';
 import { InMemoryFleetRegistry, fleetToken, fleetWorker, type EnrolledWorker } from '@taskelith/fleet';
@@ -50,7 +51,7 @@ const JOURNAL = 'journal-1';
 const AT = '2026-10-25T09:00:00.000Z' as Instant;
 const RECORD: WorkerPlacementRecord = {
   workerId: WORKER, enrolled: true, revoked: false, draining: false, reachable: false, slots: 2, cpuMillicores: 4000,
-  memoryMebibytes: 8192, controls: [], protocolVersion: 1,
+  memoryMebibytes: 8192, controls: [], protocolVersion: 1, admitted: true,
 };
 
 // One shared set of in-memory stores without rollback, so these tests take
@@ -76,7 +77,7 @@ async function fixture(enrolled: EnrolledWorker = fleetWorker(WORKER, JOURNAL)) 
   const service = new ObservationService(store, {
     newConfirmationId: () => `confirmation-${++confirmationIds}`, newRequestId: () => `request-${++confirmationIds}`,
   });
-  return { store, transaction, outbox, tasks: new TaskService(store), service };
+  return { store, transaction, outbox, tasks: new TaskService(store), service, workerAdmissions: capacity.workerAdmissions };
 }
 
 let observed = 0;
@@ -258,6 +259,81 @@ test('admission pressure makes the worker ineligible until it clears', async () 
   assert.deepEqual(await transaction.workers.candidates(), []);
   value(await service.apply(message('worker.admission-pressure.changed', 3, { causes: [] })));
   assert.deepEqual(await transaction.workers.candidates(), [WORKER]);
+});
+
+const PASSED = { checkId: 'linux-containment', outcome: 'passed', details: [] };
+const FAILED = { checkId: 'linux-containment', outcome: 'failed', details: ['cgroup v2 is not mounted'] };
+const notApplicable = (reason: string) => ({ checkId: 'linux-containment', outcome: 'not-applicable', details: [reason] });
+
+async function admissionOf({ workerAdmissions }: Fixture): Promise<[string | undefined, readonly SelfCheckResult[] | undefined]> {
+  const [entry] = value(await workerAdmissions.workers()).workers;
+  return [entry?.admission, entry?.results];
+}
+
+test('a failed self-check makes the worker ineligible, and a later passing report admits it again', async () => {
+  const admitted = await fixture();
+  const { service, transaction } = admitted;
+  value(await service.apply(message('worker.capacity.declared', 1, DECLARATION)));
+  assert.equal(value(await service.apply(message('worker.self-check.reported', 2, { results: [FAILED] }))), 'applied');
+  assert.deepEqual(await transaction.workers.candidates(), []);
+  assert.deepEqual(await admissionOf(admitted), ['self-check-failed', [FAILED]]);
+  value(await service.apply(message('worker.self-check.reported', 3, { results: [PASSED] })));
+  assert.deepEqual(await transaction.workers.candidates(), [WORKER]);
+  assert.deepEqual(await admissionOf(admitted), ['admitted', [PASSED]]);
+});
+
+test('a new journal incarnation awaits its own self-check before placement', async () => {
+  const admitted = await fixture();
+  const { service, transaction } = admitted;
+  value(await service.apply(message('worker.capacity.declared', 1, DECLARATION)));
+  value(await service.apply(message('worker.self-check.reported', 2, { results: [PASSED] })));
+  value(await service.apply(message('worker.capacity.declared', 1, DECLARATION, { journalId: 'journal-2' })));
+  assert.deepEqual(await transaction.workers.candidates(), []);
+  assert.deepEqual(await admissionOf(admitted), ['awaiting-self-check', []]);
+  value(await service.apply(message('worker.self-check.reported', 2, { results: [PASSED] }, { journalId: 'journal-2' })));
+  assert.deepEqual(await transaction.workers.candidates(), [WORKER]);
+});
+
+test('the control plane admits a macOS worker without the check, and refutes a Linux worker\'s claim', async () => {
+  const linux = await fixture();
+  value(await linux.service.apply(message('worker.self-check.reported', 1, { results: [notApplicable('platform-not-covered')] })));
+  const [state, results] = await admissionOf(linux);
+  assert.equal(state, 'self-check-failed');
+  assert.match(results?.[0]?.details[0] ?? '', /^not-applicable without a recognised reason/);
+  const macos = await fixture(fleetWorker(WORKER, JOURNAL, { host: { platform: 'darwin', architecture: 'arm64', hostname: 'mac-1' } }));
+  value(await macos.service.apply(message('worker.self-check.reported', 1, { results: [notApplicable('platform-not-covered')] })));
+  assert.deepEqual(await admissionOf(macos), ['admitted', [notApplicable('platform-not-covered')]]);
+});
+
+test('an offer refused after a failed self-check releases its assignment for another worker', async () => {
+  const placedFixture = await fixture();
+  const { store, service } = placedFixture;
+  value(await service.apply(message('worker.capacity.declared', 1, DECLARATION)));
+  value(await submit(placedFixture, 'task-1'));
+  value(await new PlacementService(store, { now: () => Date.parse(AT), draw: () => 0 }).placeWaiting());
+  const placed = await lastAttempt(placedFixture);
+  assert.equal(value(await service.apply(message('execution.assignment.refused', 2, {
+    commandId: placed.assignment.offerCommandId, assignmentId: placed.assignment.id, reason: 'worker-self-check-failed', retryable: false,
+  }, { attemptId: placed.attemptId, ownershipGeneration: placed.generation }))), 'applied');
+  const [refused] = await placedFixture.transaction.assignments.listByAttempt(placed.attemptId);
+  assert.deepEqual([refused?.end?.reason, refused?.end?.reason === 'refused' && refused.end.refusal], ['refused', 'worker-self-check-failed']);
+});
+
+test('a running execution keeps its assignment through a failed self-check and ends normally', async () => {
+  const placedFixture = await fixture();
+  const { store, service, tasks } = placedFixture;
+  value(await service.apply(message('worker.capacity.declared', 1, DECLARATION)));
+  value(await submit(placedFixture, 'task-1'));
+  value(await new PlacementService(store, { now: () => Date.parse(AT), draw: () => 0 }).placeWaiting());
+  const placed = await lastAttempt(placedFixture);
+  value(await service.apply(message('execution.assignment.accepted', 2, {
+    commandId: placed.assignment.offerCommandId, assignmentId: placed.assignment.id,
+  }, { attemptId: placed.attemptId, ownershipGeneration: placed.generation })));
+  value(await service.apply(message('worker.self-check.reported', 3, { results: [FAILED] })));
+  assert.equal((await lastAttempt(placedFixture)).assignment.end, undefined);
+  assert.equal(value(await exitWith(placedFixture, placed, { sequence: 4, code: 0 })), 'applied');
+  const result = value(await tasks.readTaskResult('run-1', 'task-1'));
+  assert.deepEqual([result.state, result.state === 'ended' && result.attemptId], ['ended', placed.attemptId]);
 });
 
 test('what no effect consumes, or cannot authenticate, is not consumed', async () => {

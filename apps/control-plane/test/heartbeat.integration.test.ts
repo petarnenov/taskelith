@@ -40,7 +40,7 @@ const observations = new ObservationService(database, {
 });
 
 beforeEach(async () => {
-  await sql('TRUNCATE workers, enrollment_tokens, inbox, outbox, producer_cursors, inventory_requests, inventory_report_parts');
+  await sql('TRUNCATE workers, worker_self_check_results, enrollment_tokens, inbox, outbox, producer_cursors, inventory_requests, inventory_report_parts');
 });
 
 // Each worker enrolls with a journal of its own.

@@ -33,7 +33,7 @@ const EMPTY = {
 function worker(workerId: string, draining: boolean) {
   return {
     workerId: id('WorkerId', workerId) as WorkerId, enrolled: true, revoked: false, draining, reachable: true, slots: 2,
-    cpuMillicores: 3500, memoryMebibytes: 7680, controls: [], protocolVersion: 1,
+    cpuMillicores: 3500, memoryMebibytes: 7680, controls: [], protocolVersion: 1, admitted: true,
   };
 }
 
