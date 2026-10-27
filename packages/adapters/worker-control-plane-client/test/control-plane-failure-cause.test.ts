@@ -222,6 +222,24 @@ test('a long run without a user-information end is redacted in linear time', asy
   }
 });
 
+test('a long run without a URL or JWT end is redacted in linear time', async () => {
+  const length = 60_000;
+  const secrets = [['token: ', 'a.'], ['password: ', 'A-'], ['secret: ', '.a'], ['authorization: ', 'a.b']];
+  const values = secrets.map(([key, unit]) => `${key}${unit.repeat(length / unit.length)}`);
+  for (const message of [...values, 'eyJ'.repeat(length / 3), 'eyJ_'.repeat(length / 4)]) {
+    const started = performance.now();
+    await failureOf(new Error(message));
+    const elapsed = performance.now() - started;
+    assert.ok(elapsed < 200, `${message.slice(0, 18)}… took ${Math.round(elapsed)} ms`);
+  }
+});
+
+test('a URL and a JWT are redacted after a prefix of their run, which is kept', async () => {
+  const message = '_x.go://h/p 1+svn+ssh://h -a://b ab_eyJx.y.z q-eyJa.b.c 9eyJeyJ.k.l';
+  const { cause } = (await failureOf(new Error(message))).details;
+  assert.equal(cause, 'Error: _x.[url] 1+[url] -[url] ab_[redacted] q-[redacted] 9[redacted]');
+});
+
 test('user information is redacted after leading colons, at any length, and after another', async () => {
   const long = 'u'.repeat(5_000);
   const message = `::owner:pw@a ${long}:${long}@b x:y@z:w@c e:@f`;
