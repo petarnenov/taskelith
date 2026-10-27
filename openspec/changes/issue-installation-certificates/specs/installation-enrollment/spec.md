@@ -6,7 +6,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Installation certificate authority
-`init` SHALL create an installation certificate authority once, keep its key in an owner-only file of the `control-plane/` namespace, and write its public certificate beside it. A rerun SHALL keep the authority, and an initialized installation without one SHALL fail with `precondition-failed`. Every NATS connection SHALL accept a CA and an optional client certificate, and SHALL stay plain without one.
+`init` SHALL create an installation certificate authority once, keep its key in an owner-only file of the `control-plane/` namespace, and write its public certificate beside it. A rerun SHALL keep the authority, and `init` and `issue-installation-certificates` of an initialized installation without it SHALL fail with `precondition-failed`. A NATS client SHALL accept a CA and an optional client certificate; when to require one is the nats-transport requirement "Installation broker TLS".
 
 #### Scenario: Wrong CA
 - **WHEN** a client trusts a CA that did not sign the server's certificate
@@ -34,7 +34,7 @@ Failures that leave the process SHALL have bearer secrets, NKey seeds, NATS JWTs
 ## ADDED Requirements
 
 ### Requirement: Installation server certificates
-The installation authority SHALL issue the server certificates of the worker API and of NATS, valid for 397 days, with the DNS names and IP addresses of `TASKELITH_API_HOSTS` and `TASKELITH_NATS_HOSTS`. `init` and `issue-installation-certificates` SHALL write each certificate and key as owner-only files of the namespace. An invalid host list SHALL fail and name its variable.
+The installation authority SHALL issue the server certificates of the worker API and of NATS, valid for 397 days, with the DNS names and IP addresses of `TASKELITH_API_HOSTS` and `TASKELITH_NATS_HOSTS`. `init` and `issue-installation-certificates` SHALL write each certificate and key as owner-only files of the namespace. An invalid host list SHALL fail and name its variable. An expired authority, or one that ends before the server certificate, SHALL be refused with `precondition-failed`.
 
 #### Scenario: Issued names
 - **WHEN** `issue-installation-certificates` runs with `TASKELITH_API_HOSTS=control-plane,127.0.0.1`
@@ -43,3 +43,7 @@ The installation authority SHALL issue the server certificates of the worker API
 #### Scenario: Wildcard host
 - **WHEN** `TASKELITH_NATS_HOSTS` holds `*.example.com`
 - **THEN** the command fails with `invalid` and names `TASKELITH_NATS_HOSTS`
+
+#### Scenario: Authority near its end
+- **WHEN** `issue-installation-certificates` runs while the authority expires within 397 days
+- **THEN** it fails with `precondition-failed`, names authority rollover as G6 work, and changes no file

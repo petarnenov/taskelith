@@ -12,7 +12,7 @@ G3 item 26 `secure-remote-connectivity` ([G3 plan](/docs/g3-plan.md#work-items),
 - **Redaction and repository hygiene.** PEM private-key blocks join the secret shapes; `scrubEnvironment` drops TLS key variables; `make verify` refuses tracked private-key files and PEM private-key blocks, and `.gitignore` ignores `*.pem` and `*.key`.
 - **Docs.** Installation contract sections 1 (O3), 3, 7, and 9, the local installation guide, the G3 plan's deferrals, and the dependency register.
 
-No OpenAPI or AsyncAPI document lists servers, so neither changes. PostgreSQL stays plain on localhost (G3 plan deferrals).
+No OpenAPI or AsyncAPI document lists servers, so neither changes. PostgreSQL stays plain on the Compose network, unpublished (G3 plan deferrals).
 
 ## Capabilities
 

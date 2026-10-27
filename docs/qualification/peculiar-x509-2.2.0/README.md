@@ -1,6 +1,6 @@
 # `@peculiar/x509` 2.2.0 qualification
 
-G3 sub-change 26a (`issue-installation-certificates`) installs `@peculiar/x509@2.2.0` as an exact-pinned runtime dependency of the private `@taskelith/certificates` adapter package, behind the `CertificateIssuer` port of `@taskelith/fleet`. It creates the installation CA and issues the API and NATS server certificates ([installation contract](../../contracts/installation-and-enrollment.md) section 7). The published `taskelith` package does not include it. Facts were observed on 2026-10-28 under Node 24.22.1 on macOS x86_64.
+G3 sub-change 26a (`issue-installation-certificates`) installs `@peculiar/x509@2.2.0` as an exact-pinned runtime dependency of the private `@taskelith/certificates` adapter package, behind the `CertificateIssuer` port of `@taskelith/fleet`. It creates the installation CA and issues the API and NATS server certificates ([installation contract](../../contracts/installation-and-enrollment.md) section 7). The published `taskelith` package does not include it. Facts were observed on 2026-10-28 under Node 24.22.1 on macOS 26.6.2 arm64 (Apple M3).
 
 ## Package
 

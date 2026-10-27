@@ -97,6 +97,6 @@ JetStream reserves the byte limit of each stream on the broker's disk when the s
 
 ## Limits
 
-- The API and NATS use TLS from the installation CA; PostgreSQL stays plain on the Compose network. Workers trust the CA as a file and pin no fingerprint, and the server certificates of a running worker host change only through `make installation-certificates`. Ports are published on localhost only. Worker CA pinning, certificate rotation delivery, and private-network binding are later G3 work.
+- The API and NATS use TLS from the installation CA; PostgreSQL stays plain on the Compose network, unpublished. Workers trust the CA as a file and pin no fingerprint, and the server certificates of a running installation change only through `make installation-certificates`. Ports are published on localhost only. Worker CA pinning, certificate rotation delivery, and private-network binding are later G3 work.
 - The enrollment token stays in the worker container's configuration. It is single-use and expires after 15 minutes.
 - The images are built locally; publishing them to a registry is not part of this item.

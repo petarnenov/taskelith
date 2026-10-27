@@ -8,7 +8,7 @@ The installation's broker SHALL require TLS on its installation certificate. Wit
 - **THEN** its broker connection trusts the installation CA of its data root
 
 #### Scenario: Before initialization
-- **WHEN** the data root has no installation CA and `TASKELITH_NATS_CA` is not set
+- **WHEN** the data root has neither an installation record nor an installation CA, and `TASKELITH_NATS_CA` is not set
 - **THEN** the settings name no broker CA
 
 #### Scenario: Lost installation CA
