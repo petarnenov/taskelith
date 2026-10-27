@@ -20,6 +20,7 @@ export interface AccountSlots {
 // Subscription tokens, encrypted with a key in the control-plane/ namespace;
 // not part of CapacityTransaction (contract sections 1, 6.2, and 7.1).
 export interface SlotCredentials {
+  // A rotation runs only on a revoked, unreserved slot (section 8.1).
   store(slotId: ProviderCredentialId, secret: SlotSecret): Promise<void>;
   // Checks nothing: the delivery checks the reservation first (section 7).
   reveal(slotId: ProviderCredentialId): Promise<Result<SlotSecret>>;

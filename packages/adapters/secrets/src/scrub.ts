@@ -1,10 +1,5 @@
-import {
-  REDACTED,
-  redactUrlUserinfoEvenEmpty,
-  redactWith,
-  SECRET_SHAPE_RULES,
-  type TextRule,
-} from '@taskelith/observability';
+import { REDACTED, redactUrlUserinfoEvenEmpty, redactWith, SECRET_SHAPE_RULES } from '@taskelith/observability';
+import { replaceSpans, revealedSpans } from './revealed-spans.js';
 
 export { REDACTED };
 
@@ -14,17 +9,11 @@ const SECRET_TEXT_RULES = [redactUrlUserinfoEvenEmpty, ...SECRET_SHAPE_RULES];
 // Environment variables whose names mark them as secrets.
 const SECRET_VARIABLE = /(?:TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDS|SEED|PRIVATE_KEY|API_KEY)/i;
 
-// Each credential revealed to a run, by its exact text, longest first so that
-// a credential inside another leaves no part of the longer one visible.
-function revealedValueRules(revealed: readonly string[]): TextRule[] {
-  const values = revealed.filter((value) => value.length > 0).sort((a, b) => b.length - a.length);
-  return values.map((value) => (text: string) => text.split(value).join(REDACTED));
-}
-
 // Redacts the credentials revealed to a run, which may have no known shape
 // (account pool contract section 7.4), then the installation's shapes.
 export function redactSecrets(text: string, revealed: readonly string[] = []): string {
-  return redactWith(text, [...revealedValueRules(revealed), ...SECRET_TEXT_RULES]);
+  const spans = revealedSpans(text, revealed, SECRET_TEXT_RULES);
+  return redactWith(replaceSpans(text, spans, REDACTED), SECRET_TEXT_RULES);
 }
 
 // Redacts every string of a failure's message and details before it leaves
@@ -34,8 +23,18 @@ export function redactFailure<T extends { readonly message: string; readonly det
   revealed: readonly string[] = [],
 ): T {
   const redact = (text: string) => redactSecrets(text, revealed);
-  const details = Object.fromEntries(Object.entries(failure.details).map(([key, value]) => [key, redact(value)]));
-  return { ...failure, message: redact(failure.message), details };
+  return { ...failure, message: redact(failure.message), details: redactDetails(failure.details, redact) };
+}
+
+// Keys are redacted too; values of keys that become equal are joined in order.
+function redactDetails(details: Readonly<Record<string, string>>, redact: (text: string) => string): Record<string, string> {
+  const redacted = new Map<string, string>();
+  for (const [key, value] of Object.entries(details)) {
+    const safeKey = redact(key);
+    const earlier = redacted.get(safeKey);
+    redacted.set(safeKey, earlier === undefined ? redact(value) : `${earlier}, ${redact(value)}`);
+  }
+  return Object.fromEntries(redacted);
 }
 
 // The environment a child process gets: no variable named like a secret, and

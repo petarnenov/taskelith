@@ -104,6 +104,44 @@ test('a credential inside another and an empty value leave nothing visible', () 
   assert.equal(redactSecrets('plain text', ['']), 'plain text');
 });
 
+test('a failure key that holds a credential is redacted too', () => {
+  const failed = failure('internal', 'failed', { [SLOT_TOKEN]: 'rejected', slot: 'slot-a' });
+  assert.deepEqual(redactFailure(failed, [SLOT_TOKEN]).details, { [REDACTED]: 'rejected', slot: 'slot-a' });
+  const worker = new NodeSecrets().issue('worker').secret;
+  assert.deepEqual(redactFailure(failure('internal', 'failed', { [worker]: 'x' })).details, { [REDACTED]: 'x' });
+});
+
+test('keys that become equal keep every value in order', () => {
+  const other = 'Zt5pWq2Lm9Xr';
+  const entries = [[SLOT_TOKEN, 'one'], [other, 'two'], ['__proto__', 'three'], ['toString', 'four']];
+  const failed = failure('internal', 'failed', Object.fromEntries(entries));
+  const details = redactFailure(failed, [SLOT_TOKEN, other]).details;
+  const expected = [[REDACTED, 'one, two'], ['__proto__', 'three'], ['toString', 'four']];
+  assert.deepEqual(Object.entries(details), expected);
+});
+
+test('overlapping and touching occurrences become one marker', () => {
+  assert.equal(redactSecrets('abcde', ['abc', 'cde']), REDACTED);
+  assert.equal(redactSecrets('ababa', ['aba']), REDACTED);
+  assert.equal(redactSecrets('x abcabc y', ['abc']), `x ${REDACTED} y`);
+  assert.equal(redactSecrets('one abc-cde two', ['abc', 'cde']), `one ${REDACTED}-${REDACTED} two`);
+});
+
+test('a marker is never redacted again and never grows', () => {
+  assert.equal(redactSecrets('secret', ['secret', 'e']), REDACTED);
+  assert.equal(redactSecrets('one secret', ['e', 'secret']), `on${REDACTED} ${REDACTED}`);
+  assert.equal(redactSecrets('e', Array.from({ length: 15 }, () => 'e')), REDACTED);
+});
+
+test('a credential that touches a shape secret leaves no part of either', () => {
+  const worker = new NodeSecrets().issue('worker').secret;
+  assert.equal(redactSecrets(`x ${worker} y`, [worker.slice(0, 9)]), `x ${REDACTED} y`);
+  assert.equal(redactSecrets(`x ${SLOT_TOKEN}${worker} y`, [SLOT_TOKEN]), `x ${REDACTED} y`);
+  assert.equal(redactSecrets(`x q8Rz${worker} y`, [`q8Rz${worker.slice(0, 9)}`]), `x ${REDACTED} y`);
+  assert.equal(redactSecrets(`${SLOT_TOKEN} ${worker}`, [SLOT_TOKEN]), `${REDACTED} ${REDACTED}`);
+});
+
 test('value redaction takes linear time on long runs', () => {
   assertLinearOnRuns((text) => redactSecrets(text, ['ab', 'aba']), ['a', 'ab', 'aba']);
+  assertLinearOnRuns((text) => redactSecrets(text, ['a'.repeat(64), 'b']), ['a', 'ab', 'a b']);
 });
