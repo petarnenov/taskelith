@@ -56,7 +56,7 @@ OpenCode CLI, model `opencode-go/kimi-k3.1-pro`, variant `high`, on `18da6cde`, 
 
 `opencode run --standalone --agent reviewer -m 'opencode-go/kimi-k3.1-pro#high' --format json --title alternate-reviewers-per-pass "<prompt>" < /dev/null`
 
-Read-only proof: the SHA-256 snapshot of all tracked and untracked files was `48e7b6e0f2c1cbcc871efb12cb21ee7745b2884dd993750dde1e3007d69e90fb` before and after the pass. Result: 0 Critical, 0 High, 3 Medium, 7 Low. All ten are in `findings.jsonl` with the outcome `fixed`, for pass 2 to check. Fixes in `ba93fa1e`:
+Read-only proof: the SHA-256 snapshot of all tracked and untracked files was `48e7b6e0f2c1cbcc871efb12cb21ee7745b2884dd993750dde1e3007d69e90fb` before and after the pass. Result: 0 Critical, 0 High, 3 Medium, 7 Low. All ten are in `findings.jsonl`. Pass 2 confirmed nine of them, which keep the outcome `fixed`; it found the Medium contract-drift finding not fully resolved, so that one is `fixed-unreviewed` until pass 3 confirms the remaining instances fixed after pass 2 (see "Pass 2 (reviewer B)"). Fixes in `ba93fa1e`:
 
 - Medium, contract-drift: the same-harness fallback contradicted unconditional "different harnesses" statements. The delta's "Authorized alternating reviewers", "Unavailable reviewer", and "Rotation order", governance "Two alternating reviewers per task", protocol worker step 5 and coordinator step 1, the `taskelith-task-protocol` skill, `AGENTS.md`, and the living `review-process` Purpose now carry the exception.
 - Medium, process: the governance "Rotation" fallback and the delta scenario "Reviewer B without another harness" tested whether a reviewer of another harness exists in the turn; they now test availability, as "No reviewer of another harness" does.
@@ -79,14 +79,18 @@ Next: pass 2 by reviewer B, Codex CLI `gpt-6.1-sol`, a full, independent review 
 
 `make verify` on `18da6cde`: exit 0 in 203 s on 2026-10-27. 2047 tests, 2045 passed, 0 failed, 0 cancelled, 2 skipped; coverage of all files 99.27 % lines, 91.97 % branches, 98.94 % functions. The Docker CLI ran with `DOCKER_CONFIG` set to an empty configuration (`{}`) in the session's scratch directory, because Docker Desktop's credential helper (`credsStore: desktop`) hangs on this iMac, as in [the x86_64 native acceptance record](../archive/2026-10-27-run-g2-native-acceptance-x86-64/verification.md); public images are pulled anonymously from the same engine, no credential was read, and the Makefile and the product were not changed.
 
+### make verify after the pass 1 and pass 2 fixes
+
+`PENDING: make verify on <head>`
+
 ## Limitations
 
 - The published UI POC artifact's version 7 predates the badge change and no longer matches the source; `docs/ui-poc/README.md` "Published build" now says so. Republishing it is an owner decision outside this change.
-- `make verify` ran with an empty Docker configuration, not the user's, because its credential helper hangs (see "make verify"); it has not run on the pass 1 fixes.
+- `make verify` ran with an empty Docker configuration, not the user's, because its credential helper hangs (see "make verify"); its run after the pass 1 and pass 2 fixes is pending.
 
 ## Remaining gates
 
-- `make verify` on the final tree, run by the `pre-push` hook.
+- `make verify` after the pass 1 and pass 2 fixes (see "make verify"), and again by the `pre-push` hook on the pushed tree.
 - Independent review: pass 2 by reviewer B.
 - Archive.
 - Integration into dev by the coordinator (single pull request).

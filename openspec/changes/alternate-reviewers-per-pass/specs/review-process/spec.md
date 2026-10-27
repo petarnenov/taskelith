@@ -25,7 +25,7 @@ Each Taskelith change without an owner-accepted review exception SHALL be indepe
 - **THEN** they are fixed without another pass, and reviewer B is not used
 
 #### Scenario: Second reviewer requested for the same change
-- **WHEN** a reviewer other than B is requested for a change whose reviewers A and B are available
+- **WHEN** a reviewer other than the assigned A or B is requested for a change whose reviewers A and B are available
 - **THEN** it is not used for that change
 
 #### Scenario: Review depends on external facts
@@ -36,11 +36,11 @@ Each Taskelith change without an owner-accepted review exception SHALL be indepe
 A reviewer whose review attempt does not run to a report SHALL NOT be used for any change for 30 minutes from that attempt; a pass that reports findings is not unavailability. The next authorized reviewer in the rotation that is not paused and meets the change's review requirements SHALL be proposed. A replacement of reviewer A or B SHALL differ in harness from the other unless "No reviewer of another harness" applies, and SHALL take that role with its remaining passes and their scope.
 
 #### Scenario: Assigned reviewer fails to run
-- **WHEN** a review attempt by reviewer B fails, for example without opening a session
+- **WHEN** a review attempt by reviewer B fails, for example without opening a session, and an authorized reviewer of a harness different from A's is available
 - **THEN** the next authorized reviewer in the rotation whose harness differs from A's is proposed and, once assigned, makes pass 2 as reviewer B
 
 #### Scenario: Reviewer A replaced before the third pass
-- **WHEN** reviewer A fails to run pass 3
+- **WHEN** reviewer A fails to run pass 3 and an authorized reviewer of a harness different from B's is available
 - **THEN** its replacement, of a harness different from B's, confirms only the pass 2 fixes
 
 #### Scenario: Pass count after a switch
@@ -63,7 +63,7 @@ A reviewer whose review attempt does not run to a report SHALL NOT be used for a
 Rotation SHALL follow the order of the governance policy's authorized reviewer list, wrapping around, and skip a reviewer that is unavailable, paused, or unable to meet the change's review requirements. Unless a change needs a particular one, a new change's reviewer A SHALL be the reviewer after the most recently assigned one, and its B the next after A of another harness while one is available. Same-harness reviewers SHALL NOT be adjacent in the list, including the last and the first.
 
 #### Scenario: Reviewers of a new change
-- **WHEN** a new change is assigned and the reviewer most recently assigned was another change's reviewer B
+- **WHEN** a new change is assigned, the reviewer most recently assigned was another change's reviewer B, and an authorized reviewer of a harness different from the new reviewer A's is available
 - **THEN** the new change's reviewer A is the next reviewer in the turn after that B, its reviewer B the next one after A whose harness differs from A's, and B becomes the most recently assigned
 
 #### Scenario: Reviewer after a replacement
