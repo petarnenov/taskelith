@@ -15,7 +15,8 @@ Base: `e66d0d72` `docs: archive the fair order tie-break change`, the head of th
 - `2b89e496` `docs: specify the fair placement order as the project rotation` (the spec delta).
 - `172bace0` `test: expect the fair placement order to follow the project rotation` (the failing tests alone).
 - `5cd4fe2b` `chore: offer waiting placements in the project rotation order` (the fix).
-- The commit that adds this record.
+- `4fbd8c77` `docs: record the verification of the fair order rotation change` (this record; the revision review pass 1 read).
+- Pass 1 fixes: `b3cf9293` `test: cover a rotation cursor between two waiting projects`, `e039b771` `docs: state the round order relative to the cursor in the waiting placements scenario`, and the commit that records these results.
 
 ## Environment
 
@@ -45,17 +46,26 @@ Ubuntu Linux 6.8.0-147-generic x86_64 (host `hpz600`), Node.js v24.22.0 through 
 - `npm run openspec -- validate align-fair-order-rotation --strict`: `Change 'align-fair-order-rotation' is valid`.
 - `npm run verify:comments`: `Every comment is within the comment length rule.`
 - `make findings ARGS="validate"`: `Every findings file is valid: 6 file(s).`
-- `make verify` passed (exit 0) on `5cd4fe2b`: 2,027 tests, 1,981 passed, 0 failed, 46 skipped; coverage 99.18 % lines, 91.84 % branches, 98.80 % functions; strict OpenSpec validation 70 passed, 0 failed; findings validation, contract compatibility, dependency inventory, archive dry run (`Every active OpenSpec change archives into strictly valid specs.`), and package verification passed.
+- Before review, `make verify` passed (exit 0) on `5cd4fe2b`: 2,027 tests, 1,981 passed, 0 failed, 46 skipped; coverage 99.18 % lines, 91.84 % branches, 98.80 % functions; strict OpenSpec validation 70 passed, 0 failed; findings validation, contract compatibility, dependency inventory, archive dry run (`Every active OpenSpec change archives into strictly valid specs.`), and package verification passed.
+
+- After the pass 1 fixes, on `e039b771`: `npm run openspec -- validate align-fair-order-rotation --strict`: valid; `node --experimental-strip-types --test packages/modules/scheduling/test/*.test.ts apps/control-plane/test/placement-service.test.ts`: 121 tests, 121 passed; the PostgreSQL conformance file through `bash scripts/services.sh run postgres ...`: 34 tests, 34 passed, the new case included.
+- After the pass 1 fixes, `make verify` passed (exit 0) on `e039b771`: 2,030 tests, 1,984 passed, 0 failed, 46 skipped; coverage 99.18 % lines, 91.86 % branches, 98.80 % functions; strict OpenSpec validation 70 passed, 0 failed; findings validation, contract compatibility, dependency inventory, archive dry run, and package verification passed. With the pass 1 line in `findings.jsonl`, `make findings ARGS="validate"`: `Every findings file is valid: 6 file(s).`; `npm run verify:comments`: within the rule.
 
 ## Independent review
 
 ### Pass 1
 
-Pending: Codex CLI, model `gpt-6.1-sol`, assigned by the coordinator, run by the session.
+- **Codex CLI v0.163.0, model `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only` (as the session header states), session `01a17c3e-96fd-7b91-b3ed-ab96f2940b3a`, revision `4fbd8c77` (diff `e66d0d72..4fbd8c77`), run by the coordinator.** Invocation: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`. The snapshot was `1b07ff811c3993b9b7c73905efead15368c30f184a104f44e3596e1ee6e84da5` before and after the pass. The reviewer ran 65 tests, strict OpenSpec validation, and `git diff --check`, all passing; it did not run the PostgreSQL tests or `make verify`, and `npm run verify:comments` failed in its sandbox (`spawnSync git EPERM`), so it checked the comments by reading them. It confirmed that the service uses the read's cursor, that the domain order matches the SQL for valid ASCII identifiers, with and without a cursor, and that the changed order without a cursor is stated and tested.
+- Findings: 0 Critical, 0 High, 1 Medium, 0 Low.
+  1. Medium (`specs/execution-placement/spec.md:19`, spec wording): the scenario "Equal oldest waiting times across projects" required the project with the first id first whenever the previous read ended with neither project, but with `project-a` and `project-c` waiting equally long and the cursor `project-b`, the SQL, the domain, and contract section 13 correctly take `project-c` first. Fixed, unreviewed: `e039b771` states the round order relative to a cursor between the two project ids; `b3cf9293` adds the domain test "a cursor between two waiting projects starts the round after it, then wraps" and the shared placement queue conformance case "a read after a project between two waiting ones starts after it, in the fair order". The code was already right, so these tests pass on `5cd4fe2b` and after; they guard the stated order. `findings.jsonl` records the finding as `fixed-unreviewed`.
+
+### Pass 2
+
+Pending: the same reviewer, on the pass 1 fixes.
 
 ## Limitations
 
-- The new conformance case covers one cursor example on both queues; the agreement of the domain with the SQL for other inputs is argued from the query text above.
+- The new conformance cases cover two cursor examples on both queues; the agreement of the domain with the SQL for other inputs is argued from the query text above.
 - The red runs used a temporary signature-only edit, not a committed revision, because the tests do not compile against the old signature.
 
 ## Follow-ups (out of scope, for `close-g2`)
@@ -65,6 +75,6 @@ Pending: Codex CLI, model `gpt-6.1-sol`, assigned by the coordinator, run by the
 
 ## Remaining gates
 
-- Independent review pass 1 (Codex CLI `gpt-6.1-sol`) and any further passes.
+- Independent review pass 2 (Codex CLI `gpt-6.1-sol`) of the pass 1 fixes.
 - Archive by the author after review, as the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
