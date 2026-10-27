@@ -89,9 +89,29 @@
       "description": "Abbreviated or full SHA of the commit that resolved the finding, when there is one.",
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}$"
+    },
+    "missedBy": {
+      "description": "What missed the finding before it was found: an earlier pass of this change, with that pass's role, which npm run findings checks against the pass's summary in passes.jsonl, or \"integration\" for work already integrated into dev.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pass", "role"],
+          "properties": {
+            "pass": { "$ref": "#/properties/pass" },
+            "role": { "$ref": "#/$defs/role" }
+          }
+        },
+        { "const": "integration" }
+      ]
     }
   },
   "$defs": {
+    "role": {
+      "description": "Reviewer role of the review process, A or B; under policy version 5 reviewer A makes passes 1 and 3 and reviewer B pass 2.",
+      "type": "string",
+      "enum": ["A", "B"]
+    },
     "identifier": {
       "description": "Lowercase letters, digits, and inner hyphens, starting with a letter.",
       "type": "string",

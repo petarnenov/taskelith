@@ -12,6 +12,10 @@ export const MAX_CATEGORY_LENGTH = 64;
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low';
 export type Outcome = 'fixed' | 'fixed-unreviewed' | 'declined' | 'deferred' | 'owner-accepted';
+export type Role = 'A' | 'B';
+
+// An earlier pass of the same change, or the integration into dev.
+export type MissedBy = { readonly pass: number; readonly role: Role } | 'integration';
 
 export interface Reviewer {
   readonly harness: string;
@@ -33,6 +37,7 @@ export interface Finding {
   readonly outcome: Outcome;
   readonly resolution: string;
   readonly commit?: string;
+  readonly missedBy?: MissedBy;
 }
 
 export interface Problem {
@@ -49,7 +54,7 @@ export interface Category {
 // Schema violations of one parsed value, as readable messages; none if valid.
 export type SchemaCheck = (value: unknown) => readonly string[];
 
-export interface FindingsSource {
+export interface RecordSource {
   readonly path: string;
   readonly change: string;
   readonly text: string;
@@ -66,6 +71,11 @@ export interface FindingRules {
 export interface ParsedFindings {
   readonly findings: readonly Finding[];
   readonly problems: readonly Problem[];
+}
+
+export interface LocatedFinding {
+  readonly line: number;
+  readonly finding: Finding;
 }
 
 export function formatProblem({ file, line, message }: Problem): string {
@@ -93,36 +103,49 @@ export function parseVocabulary(text: string): { categories: Category[]; problem
 }
 
 // The text's lines, without the empty one after a final newline.
-function contentLines(text: string): string[] {
+export function contentLines(text: string): string[] {
   if (text === '') return [];
   const lines = text.split('\n');
   return lines.at(-1) === '' ? lines.slice(0, -1) : lines;
 }
 
-export function parseFindings(source: FindingsSource, rules: FindingRules): ParsedFindings {
-  const findings: Finding[] = [];
+export function parseFindings(source: RecordSource, rules: FindingRules): ParsedFindings {
+  const { located, problems } = parseLocatedFindings(source, rules);
+  return { findings: located.map(({ finding }) => finding), problems };
+}
+
+export function parseLocatedFindings(source: RecordSource, rules: FindingRules) {
+  const located: LocatedFinding[] = [];
   const problems: Problem[] = [];
   contentLines(source.text).forEach((text, index) => {
     const parsed = parseLine(text, source.change, rules);
-    if (parsed.finding) findings.push(parsed.finding);
+    if (parsed.finding) located.push({ line: index + 1, finding: parsed.finding });
     problems.push(...parsed.problems.map((message) => ({ file: source.path, line: index + 1, message })));
   });
-  return { findings, problems };
+  return { located, problems };
 }
 
 function parseLine(text: string, change: string, rules: FindingRules): { finding?: Finding; problems: string[] } {
-  const bytes = Buffer.byteLength(text, 'utf8');
-  if (bytes > MAX_LINE_BYTES) return { problems: [`line is ${bytes} bytes (max ${MAX_LINE_BYTES})`] };
-  if (text.trim() === '') return { problems: ['empty line; a change without findings has an empty file'] };
-  const parsed = parseJson(text);
-  if (!parsed.ok) return { problems: ['not a JSON value'] };
-  // Schema diagnostics could echo the secret, so only this one is reported.
-  if (secretLikeStrings(parsed.value).length > 0) return { problems: ['holds a secret-like value; describe it instead'] };
-  const violations = rules.checkSchema(parsed.value);
-  if (violations.length > 0) return { problems: [...violations] };
-  const finding = parsed.value as Finding;
+  const checked = checkedValue(text, rules.checkSchema, 'empty line; a change without findings has an empty file');
+  if (!checked.ok) return { problems: checked.problems };
+  const finding = checked.value as Finding;
   const problems = [...recordProblems(finding, change, rules.categories), ...capabilityProblems(finding, rules.capabilities)];
   return problems.length > 0 ? { problems } : { finding, problems };
+}
+
+export type CheckedValue = { ok: true; value: unknown } | { ok: false; problems: string[] };
+
+// One bounded JSON line that holds no secret-like value and fits the schema.
+export function checkedValue(text: string, checkSchema: SchemaCheck, emptyLine: string): CheckedValue {
+  const bytes = Buffer.byteLength(text, 'utf8');
+  if (bytes > MAX_LINE_BYTES) return { ok: false, problems: [`line is ${bytes} bytes (max ${MAX_LINE_BYTES})`] };
+  if (text.trim() === '') return { ok: false, problems: [emptyLine] };
+  const parsed = parseJson(text);
+  if (!parsed.ok) return { ok: false, problems: ['not a JSON value'] };
+  // Schema diagnostics could echo the secret, so only this one is reported.
+  if (secretLikeStrings(parsed.value).length > 0) return { ok: false, problems: ['holds a secret-like value; describe it instead'] };
+  const violations = [...checkSchema(parsed.value)];
+  return violations.length > 0 ? { ok: false, problems: violations } : { ok: true, value: parsed.value };
 }
 
 // The parser's message quotes the input, so callers get no message.
@@ -139,6 +162,10 @@ function recordProblems(finding: Finding, change: string, categories: ReadonlySe
   if (finding.change !== change) problems.push(`change "${finding.change}" is not this file's change "${change}"`);
   if (!categories.has(finding.category)) {
     problems.push(`unknown category "${finding.category}"; categories are listed in ${VOCABULARY_PATH}`);
+  }
+  const { missedBy } = finding;
+  if (typeof missedBy === 'object' && missedBy.pass >= finding.pass) {
+    problems.push(`missedBy pass ${missedBy.pass} is not earlier than this finding's pass ${finding.pass}`);
   }
   return problems;
 }
@@ -243,7 +270,7 @@ function share(part: number, total: number): string {
 
 const COLUMN_WIDTH = 10;
 
-function row(cells: readonly string[], key: string): string {
+export function row(cells: readonly string[], key: string): string {
   return `${cells.map((cell) => cell.padStart(COLUMN_WIDTH)).join('')}  ${key}`;
 }
 

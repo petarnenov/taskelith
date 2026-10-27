@@ -19,6 +19,6 @@ The handoff message names:
 - a short summary;
 - the evidence;
 - the review passes, with the reviewer, A or B, session ID, and finding count of each;
-- that the review findings are recorded in the change's `findings.jsonl`, each code or doc finding with its capability;
+- that the review findings are recorded in the change's `findings.jsonl`, each code or doc finding with its capability, and each pass that ran to a report in its `passes.jsonl`;
 - the `make verify` totals;
 - the remaining gates.
