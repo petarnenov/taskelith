@@ -1,6 +1,6 @@
 # Installation and enrollment contract
 
-Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-25. This page states the rules of trust model sections 2 to 5 that item 13 implements, and the content of the credentials that the [execution wire contracts](execution-wire-contracts.md) leave to it. The modules are `@taskelith/access` and `@taskelith/fleet`. The adapters are `@taskelith/postgres`, `@taskelith/nats`, `@taskelith/control-plane-store`, and `@taskelith/secrets`. The administrative entry is `apps/control-plane/src/admin/admin-main.ts`.
+Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-25; the installation certificate authority and TLS of section 7 are G3 item 26a (`issue-installation-certificates`), 2026-10-28. This page states the rules of trust model sections 2 to 5 that item 13 implements, and the content of the credentials that the [execution wire contracts](execution-wire-contracts.md) leave to it. The modules are `@taskelith/access` and `@taskelith/fleet`. The adapters are `@taskelith/postgres`, `@taskelith/nats`, `@taskelith/control-plane-store`, and `@taskelith/secrets`. The administrative entry is `apps/control-plane/src/admin/admin-main.ts`.
 
 ## 1. Decisions
 
@@ -10,19 +10,20 @@ Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-
 | D10 (a) | Only the installation-owner bootstrap credential, as a hashed opaque token | Owner, 2026-10-25 |
 | O1 (b) | `@nats-io/nkeys@2.0.3` as a direct dependency, with a claims encoder of this repository for operator, account, and user JWTs: an owner-approved exception to the "established OSS" principle of ADR 0004 | Owner, 2026-10-25 |
 | O2 (a) | Operator mode with the `full` resolver and a system account; revocations are pushed through `$SYS.REQ.CLAIMS.UPDATE`, without a server reload | Owner, 2026-10-25 |
-| O3 (c) | TLS plumbing only: the client trusts the CA configured on it; tests use a test CA; the installation CA and its issuance at bootstrap are G3 item 26 | Owner, 2026-10-25 |
+| O3 (c) | TLS plumbing only in G2: the client trusts the CA configured on it; tests use a test CA. G3 item 26a adds the installation CA, its issuance at `init`, and TLS for the API and the installation broker (section 7) | Owner, 2026-10-25 |
+| 26a decisions 1, 2, 3, 5, 8 | The authority key as an owner-only file of `control-plane/`; authority 10 years and server certificate 397 days, provisional; workers keep bearer and broker credentials over server-only TLS, no client certificates; `@peculiar/x509` behind a port; two listeners | Owner's away delegate, away run `20261027T221048Z-claude-63826`, 2026-10-27; decisions 1, 2, 3, and 5 pending the owner's review |
 | O4 | Provisional enrollment token TTL `15 min` and rotation grace window `10 min` (operational targets), verified in G6 | Owner, 2026-10-25 |
 | C5 to C10 | The record outside the database, the neutral data-root package, the module placement, tokens and secrets, revocation and quarantine wiring, and the operator-mode test services, as below | Coordinator, 2026-10-25 |
 
 ## 2. Installation initialization
 
 - **Explicit only.** Only the administrative command `init` initializes an installation. It needs a direct invocation on the control-plane host, with an actor and a reason. No start of a worker, CLI, or service initializes anything.
-- **Order.** `init` applies the migrations, then creates or keeps the broker authority, then does the following:
+- **Order.** `init` applies the migrations, then creates or keeps the broker authority, then creates or keeps the installation certificate authority and issues the server certificates (section 7), then does the following:
   1. It writes `control-plane/installation` (`{format: 1, installationId, recoveryEpoch: 1}`) outside the database.
   2. It writes the copy in the `installation` table, not quarantined.
   3. It issues the bootstrap credential. The credential is printed once and only its hash is stored.
 
-  A rerun after a crash completes the same identity. A rerun after success fails with `conflict` and keeps the broker trust and its server fragment. A table copy without its record, or a record without its broker authority, fails with `precondition-failed`, because a new authority would not match the running broker.
+  A rerun after a crash completes the same identity. A rerun after success fails with `conflict` and keeps the broker trust and its server fragment. A table copy without its record, or a record without its broker authority or its installation certificate authority, fails with `precondition-failed`, because a new authority would not match the running broker or the workers' trust.
 - **Start check.** A command or service that needs the installation reads both records. They must exist and be equal. A mismatch, as after a database restore, fails closed with `precondition-failed` until G6's restore procedure. Item 13 never changes `recoveryEpoch`.
 - **Identifiers.** `installationId` is 32 hexadecimal characters and `workerId` is `w` followed by 32 hexadecimal characters, both from 128 random bits. Every identifier of this contract is 1-64 letters, digits, `_`, or `-`, because it becomes a NATS subject token and stream name.
 
@@ -37,6 +38,10 @@ Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-
 | `installation` | `installationId`, `recoveryEpoch` | Once, at `init` |
 | `broker-authority` | The operator, system account, and installation account seeds (`BrokerAuthorityKeys`) | Once, at `init` |
 | `nats-authority.conf` | The nats-server trust fragment: `operator`, `system_account`, the `full` resolver, and its preload of both accounts | At `init`, for the operator to include in the server configuration (item 23) |
+| `installation-authority` | The installation certificate authority: its certificate and its PKCS#8 private key, in PEM | Once, at `init` |
+| `installation-ca.pem` | The authority's public certificate, which clients trust | At `init` and at each `issue-installation-certificates` |
+| `api-certificate.pem`, `api-key.pem` | The worker API's server certificate and private key | At `init` and replaced at each `issue-installation-certificates` |
+| `nats-certificate.pem`, `nats-key.pem` | The broker's server certificate and private key, which the operator installs for nats-server | At `init` and replaced at each `issue-installation-certificates` |
 | `evidence/sha256/<first two hex digits>/<hex digest>` | Evidence content named by its SHA-256 digest (G2 item 19); its record is in PostgreSQL | Once per digest, at its first publication; a republication of the same content replaces a corrupt copy |
 
 ## 4. The operator credential
@@ -81,14 +86,23 @@ Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-
 
 ## 7. TLS
 
-`connectTransport`, `connectWorkerTransport`, and `connectSystemAccount` take an optional `tls` with the CA in PEM and an optional client certificate. Without one, the connection stays plain even where the server offers TLS. The administrative entry reads the CA from `TASKELITH_NATS_CA`. The test services give NATS a certificate from a test CA, made by the openssl of the pinned PostgreSQL image, and allow plain clients for the Toxiproxy route. The installation authority, certificate issuance, and TLS for the HTTP API and PostgreSQL are G3 item 26.
+G3 item 26a implements decision D11 (b) of the [G3 plan](../g3-plan.md#owner-decisions) for the API and the broker. Its decisions are those of section 1; the remote enrollment over TLS with the authority pinned is 26b.
+
+- **Authority.** `init` creates one ECDSA P-256 certificate authority, valid for 10 years, and keeps it in `installation-authority` (section 3). A rerun keeps it. An initialized installation without it fails with `precondition-failed`, and no command creates a new one: rollover is deferred to G6.
+- **Server certificates.** The authority issues ECDSA P-256 server certificates, valid for 397 days from one hour before their issuance, for the worker API and for NATS. Their subject alternative names are the DNS names and IP addresses of `TASKELITH_API_HOSTS` and `TASKELITH_NATS_HOSTS`, comma-separated, default `localhost,127.0.0.1,::1`; a wildcard or an invalid name fails with `invalid` and names the variable. `init` issues them, and `issue-installation-certificates` (`make installation-certificates`) issues them again. A certificate and its key are two files, so a crash between their writes leaves a pair that fails the next start until the command runs again.
+- **Provisional periods.** The 10-year and 397-day periods are provisional; authority rollover is deferred to G6.
+- **Listeners.** The control plane serves the worker API (`TASKELITH_API_HOST`, `TASKELITH_API_PORT`) over HTTPS on the API certificate, and the browser endpoint (`TASKELITH_BROWSER_HOST`, `TASKELITH_BROWSER_PORT`, default `127.0.0.1:8443`) over HTTPS on the operator's `TASKELITH_BROWSER_TLS_CERT` and `TASKELITH_BROWSER_TLS_KEY`, or on the API certificate when neither is set. Both refuse TLS below 1.2, and the service has no plain listener. Workers use only the worker API and never trust an operator's authority. One browser file without the other, an unreadable file, a key that does not match its certificate, and an expired certificate fail the start and name the setting or file.
+- **Broker.** The installation's nats-server requires TLS on the NATS certificate. `connectTransport`, `connectWorkerTransport`, and `connectSystemAccount` take an optional `tls` with the CA in PEM and an optional client certificate; without one the connection stays plain. The control plane and the administrative entry read the CA from `TASKELITH_NATS_CA`, or, when it is not set, from `installation-ca.pem` of their data root once it exists.
+- **Workers.** Workers authenticate with their bearer secret and broker credentials over TLS that authenticates the server only; client certificates were rejected (section 1). Until 26b pins the authority at enrollment, a worker trusts it through configuration: `TASKELITH_NATS_CA` for the broker and Node's `NODE_EXTRA_CA_CERTS` for the API.
+- **Test services.** The integration services give NATS a certificate from a test CA, made by the openssl of the pinned PostgreSQL image, and allow plain clients for the Toxiproxy route.
+- **PostgreSQL** stays plain on localhost while it is co-located with the control plane; its TLS is deferred to G6 and G7 ([G3 plan deferrals](../g3-plan.md#g2-closure-deferrals)).
 
 ## 8. Secret scrubbing
 
-`@taskelith/secrets` redacts this installation's bearer secrets (by their `tkop_`, `tken_`, `tkwk_` prefixes), NKey seeds, NATS JWTs, whole `.creds` blocks, and the user information of URLs, such as a database password, percent-encoded or not.
+`@taskelith/secrets` redacts this installation's bearer secrets (by their `tkop_`, `tken_`, `tkwk_` prefixes), NKey seeds, NATS JWTs, whole `.creds` blocks, PEM private-key blocks of any type, also cut ones, and the user information of URLs, such as a database password, percent-encoded or not. PEM certificates stay.
 - `redactSecrets` and `redactFailure` also take the credentials revealed to a run and redact each by its exact text, with one `[redacted]` for each run of overlapping or touching occurrences, because a slot credential has no known shape; `redactFailure` redacts detail keys too ([account pool contract](account-pool.md) section 7.4).
 - The administrative entry redacts every failure before printing it.
-- `scrubEnvironment` drops every variable named like a secret, or holding one, from a child process's environment, a service URL with user information included.
+- `scrubEnvironment` drops every variable named like a secret, including the names of TLS key files (`TLS_KEY`, `SSL_KEY`), or holding one, from a child process's environment, a service URL with user information included.
 - Failures name settings and identifiers, never secret values.
 - Logs are item 22's, which uses the same helpers.
 
@@ -98,7 +112,7 @@ Status: G2 item 13 (`implement-installation-bootstrap-and-enrollment`), 2026-10-
 - **Item 20:** the worker's storage of its credentials under `worker/` with the identity's credential generation, and the use of `connectWorkerTransport` with them. Change `implement-worker-runtime-bootstrap` implements both (section 10).
 - **Item 21:** the uncertain ownership of a revoked worker's attempts.
 - **Item 23:** the `make` targets that run the administrative entry and deploy `nats-authority.conf`.
-- **G3 item 26:** the installation CA and TLS for every endpoint.
+- **G3 item 26:** 26a implements the installation CA, the server certificates, and TLS for the API and the broker (section 7); 26b pins the authority at enrollment, 26c delivers rotated generations, and 26d binds the private network for a remote worker.
 - **G6:** restore quarantine and the epoch increment, and the verification of the provisional values.
 
 ## 10. Worker side
