@@ -6,7 +6,7 @@ Source: the owner's idea of 2026-10-28, with the plan agreed with the coordinato
 
 Phase 1, this design, covers research, design, and the contract (spec deltas and `docs/review-findings/route.schema.json`). Phase 2 implements and tests the modules without touching `scripts/findings.ts`, `docs/governance.md`, or `docs/agent-task-protocol.md`, because `adopt-process-performance-recommendations` (governance version 6, a conditional pass 3, `make record`) edits them and lands on `dev` first. Phase 3, after that merge, wires the command and edits the two documents ("Planned edits").
 
-Dependency: the reviewer assignment table of 2026-10-27 and `scripts/reviewer-keys.ts` (canonical reviewer keys) are on the branch `normalize-reviewer-keys`, archived but not yet on `dev` at the base revision. The rule table below follows that table as its archive commit `3161272d` states it; phase 2 starts after that branch reaches `dev` and reuses its reviewer keys.
+Dependency: the reviewer assignment table of 2026-10-27 and `scripts/reviewer-keys.ts` (canonical reviewer keys) came from the change `normalize-reviewer-keys`, which reached `dev` through pull request #377 (`92516221`) and was merged into this branch before phase 2 (`975e28c0`). The rule table below follows that table, and its pass plans use those canonical keys.
 
 ## Review checklist
 
@@ -93,7 +93,7 @@ The features are the router input and the only data that leaves the machine. All
 | `touches.contracts` | boolean | A changed path matches `packages/contracts/**`, `docs/contracts/**`, `**/*.openapi.*`, or `**/*.asyncapi.*`. |
 | `touches.specs` | boolean | `capabilities` is not empty. |
 | `touches.docker` | boolean | A changed path matches `**/Dockerfile`, `**/compose*.yaml`, `**/compose*.yml`, or `infra/**`. |
-| `touches.security` | boolean | A segment of a changed path, split at `/`, `.`, `-`, and `_`, is one of `auth`, `authentication`, `authorization`, `credential`, `credentials`, `redact`, `redaction`, `secret`, `secrets`, `seccomp`, `token`, `tokens`, `trust`. |
+| `touches.security` | boolean | A segment of a changed path, split at `/`, `.`, `-`, and `_` and compared case-insensitively, is one of `auth`, `authentication`, `authorization`, `credential`, `credentials`, `redact`, `redaction`, `secret`, `secrets`, `seccomp`, `token`, `tokens`, `trust`. |
 | `touches.docsOnly` | boolean | Every changed path ends in `.md` or lies under `docs/`, and no other `touches` flag except `specs` is set; true for an empty diff. |
 | `externalFacts` | boolean | The change's `design.md` has a line `## External facts`, the section governance "External facts" asks for. Decides reviewer A's network access. |
 | `size` | `S`, `S-M`, `M`, `M-L`, `L`, or null | The change's `checklist.json` `size`. |
@@ -126,9 +126,9 @@ Reviewers and effort per tier, within the owner's reviewer assignment of 2026-10
 | `elevated` | false | `codex gpt-6.1-sol#high` | `claude claude-opus-5-5#xhigh` |
 | `elevated` | true | `claude claude-fable-5-1#high` | `claude claude-opus-5-5#xhigh` |
 
-The keys are the canonical reviewer keys of `normalize-reviewer-keys` (`harness model#variant`). `standard` is exactly today's configuration, so the floor never weakens a review; `elevated` raises effort, chiefly for reviewer A, whose misses cause the third pass. Pass 3 is reviewer A again with pass 1's reviewer and effort. Claude Code accepts `--effort low|medium|high|xhigh|max` (local `claude --help`, Claude Code 2.1.312, 2026-10-28); the Codex value `high` for `model_reasoning_effort` is checked against the installed Codex CLI (0.163.0) in phase 2 before the table is final. The rule never picks an OpenCode reviewer, because the router cannot know whether its pause has ended; "Open questions" 1 offers the alternative.
+The keys are the canonical reviewer keys of `normalize-reviewer-keys` (`harness model#variant`). `standard` is exactly today's configuration, so the floor never weakens a review; `elevated` raises effort, chiefly for reviewer A, whose misses cause the third pass. Pass 3 is reviewer A again with pass 1's reviewer and effort. Claude Code accepts `--effort low|medium|high|xhigh|max` (local `claude --help`, Claude Code 2.1.312, 2026-10-28); for Codex, the installed CLI's local model catalog (`~/.codex/models_cache.json`, client 0.163.0, fetched 2026-10-27, read offline in phase 2) lists `low`, `medium`, `high`, `xhigh`, `max`, and `ultra` as the supported reasoning levels of `gpt-6.1-sol`, so `high` is a valid `model_reasoning_effort`. The rule never picks an OpenCode reviewer, because the router cannot know whether its pause has ended; "Open questions" 1 offers the alternative.
 
-Raising effort beyond the authorized list's settings needs the owner's authorization in governance: phase 3 adds it ("Planned edits"), and until then `route.json` is advisory and the brief's reviewers and effort apply.
+`route.json` is a recommendation only ("Decisions" 1). Authorizing the elevated efforts, `high` for reviewer A and `xhigh` for reviewer B, needs a later governance change that the owner approves; until then the brief's reviewers and today's configured effort apply.
 
 ## Port and adapters
 
@@ -139,8 +139,10 @@ Module layout follows the repository's tooling convention: flat modules under `s
 | `scripts/review-route.ts` | Domain and port: feature, decision, and route types; `ReviewRouter`; tier to reviewer mapping. Pure. |
 | `scripts/review-route-rules.ts` | `RuleRouter` adapter: the triggers and thresholds. Pure. |
 | `scripts/review-route-jev.ts` | `JevRouter` adapter: request mapping, HTTP call, response parsing, failure codes. |
-| `scripts/review-route-features.ts` | Feature derivation from a `RouteEnvironment` (git and file reads; extends `ChecklistEnvironment`). |
-| `scripts/review-route-command.ts` | `route` command: parse, derive, call both routers, validate, write. Composition of the adapters. |
+| `scripts/review-route-features.ts` | The `RouteEnvironment` port and the feature derivation over it. Pure apart from the port. |
+| `scripts/review-route-environment.ts` | The git adapter of `RouteEnvironment`: merge base, status, numstat, and file reads at a commit. |
+| `scripts/review-route-record.ts` | The `route.json` record: its shape, its validation (schema, change name, secret-like values, consistency), and its printed summary. Pure. |
+| `scripts/review-route-command.ts` | `route` command: parse, derive, call both routers, validate, write; `routeDependencies` is the composition root that reads the credential. |
 | `scripts/review-route-effect.ts` | The routing section of `effect`. Pure. |
 | `scripts/review-route-evaluation.ts` | The offline evaluation. |
 
@@ -205,7 +207,7 @@ export interface ReviewRouter<Decision> {
 
 - **`RuleRouter implements ReviewRouter<RuleDecision>`.** Pure; resolves synchronously wrapped in a promise; the triggers in a fixed order.
 - **`JevRouter implements ReviewRouter<ShadowDecision>`.** Constructed with a `JevSettings` value: `credential: Credential | undefined`, `endpoint` (default `https://api.typesafe.ai/v1/systemone`), `model` (default `jev-1.14.0`, a pinned version, not the alias `jev-latest`, which moves), `timeoutMs` (default 2000), and an injected `fetch` (default the global). Request: `POST`, `Content-Type: application/json`, `Authorization: Bearer <credential>`, body `{ model, state: <the features sent>, questions: { tier: <choice>, passes: <score> } }`. The `tier` question is a `choice` with criteria `standard` and `elevated`, each described in one sentence; the `passes` question is a `score` with the levels "1 pass", "2 passes", "3 passes" (score 0 to 2, so expected passes = score + 1). The Jev tier maps through the same reviewer table to its `passes`, so `route.json` shows what the shadow router would have assigned. No retry: a retry would exceed the 2 s budget.
-- **`FakeRouter`** in `test/`: returns a fixed decision or failure, so the command's tests need neither network nor credential.
+- **`FakeRouter`** in `test/review-route-fake.ts`: returns a fixed decision or failure, so the command's tests need neither network nor credential.
 - **Why no SDK.** The official `@typesafe-ai/sdk` reads `TYPESAFE_API_KEY`, defaults to a 10 s timeout and two retries, and would add a dependency with its transitive tree for one POST; `fetch` and `AbortSignal.timeout` are in Node.js 22+, which the repository already requires. The response is checked by a small hand-written parser of the documented fields, not by the SDK's types.
 
 ## Route record
@@ -258,7 +260,7 @@ make findings ARGS="route --change <change> [--json] [--no-shadow]"
 
 ## Offline evaluation
 
-A one-time measurement of the shadow router over the archived review records, run in phase 2 once the owner sets `JEV_MAF_LAB`:
+A one-time measurement of the shadow router over the archived review records, run live only after the owner confirms the items of "Owner actions" and sets `JEV_MAF_LAB` ("Decisions" 6):
 
 ```text
 make findings ARGS="route-evaluation --save route-reviewers-by-change-complexity"
@@ -268,12 +270,12 @@ make findings ARGS="route-evaluation --save route-reviewers-by-change-complexity
 - No future information. Features use the state at the change's own time: the diff of the change's first-reviewed revision, taken as the parent of the earliest branch commit whose subject names "pass 1", and otherwise the merged diff with `approximate: true`, because review fixes enlarge the merged diff; the capability history uses only changes merged before the change's base (`<merge>^1`), never the change itself. Jev receives the features and never an outcome, a change name, or a date. The model is pinned (`jev-1.14.0`).
 - Calls run sequentially with a 10 s timeout and one retry after 429 or 529 honoring `retry-after`, since the evaluation is not on a worker's path; failures are recorded per change with their code.
 - Output: `openspec/changes/route-reviewers-by-change-complexity/evaluation.jsonl`, one line per change with the features, the rule decision, the shadow decision or failure, and the outcome, validated by a schema `docs/review-findings/route-evaluation.schema.json`; `verification.md` records the aggregate figures of "Effect extension" for both routers, noting that the rule's figures are in-sample.
-- Estimated cost: about 600 input tokens per request, about 30,000 for the evaluation, at the published $0.042 per million input tokens, under one cent. Without the credential the command exits 1 with the `missing-credential` hint; `--rule-only` evaluates the rule alone, which phase 2 runs regardless.
+- Estimated cost: about 600 input tokens per request, about 30,000 for the evaluation, at the published $0.042 per million input tokens, under one cent. Without the credential the command exits 1 with the `missing-credential` hint; `--rule-only` evaluates the rule alone and needs no credential.
 - Restriction: TypeSafe's Master Customer Agreement section 2.3 forbids using output to train a model that imitates the service. The evaluation compares, and the rule is never fitted to Jev's answers.
 
 ## Coverage
 
-ADR 0004 asks for at least 75% of lines, branches, and functions. `npm test` measures product modules under `dist/`, not `scripts/`. Phase 2 measures the new modules separately with `node --experimental-strip-types --test --experimental-test-coverage --test-coverage-include='scripts/review-route*.ts' --test-coverage-lines=75 --test-coverage-branches=75 --test-coverage-functions=75 test/review-route*.test.ts` and records the figures in `verification.md`. The recorded-response test runs `JevRouter` against a local `node:http` server: until the owner sets the credential, the served body is built from the published OpenAPI schema's documented example shapes and is marked as such; after the first real call, a captured response with the credential absent replaces it.
+ADR 0004 asks for at least 75% of lines, branches, and functions. `npm test` measures product modules under `dist/`, not `scripts/`. Phase 2 measures the new modules separately with `node --experimental-strip-types --test --experimental-test-coverage --test-coverage-include='scripts/review-route*.ts' --test-coverage-lines=75 --test-coverage-branches=75 --test-coverage-functions=75 test/review-route*.test.ts` and records the figures in `verification.md`. The recorded response, `test/fixtures/review-route/jev-systemone-response.json`, is constructed from the published OpenAPI schema and its documented example shapes, not captured live, as its `README.md` and the test say. Tests feed it to `JevRouter` through an injected `fetch` and through a local `node:http` server; after the first real call, which waits for the owner ("Decisions" 6), a captured response with the credential absent replaces it.
 
 ## Planned edits
 
@@ -282,7 +284,7 @@ Phase 3, after `adopt-process-performance-recommendations` reaches `dev` and thi
 - `scripts/findings.ts`: add `route` and `route-evaluation` to `Command`, `COMMAND_OPTIONS`, `USAGE`, and `parseCommand` (options `change`, `no-shadow`, `rule-only`, reusing `json` and `save`); load `route.json` locations next to `checklist.json` in `loadRepository`; validate them in `runCommand` with the route schema; pass routes to `runEffect`. The routing logic stays in the new modules; `findings.ts` only dispatches and validates.
 - `scripts/checklist-environment.ts`: `archiveSnapshot` also reads `passes.jsonl` and spec delta directory names, for the capability history.
 - `Makefile`: the `findings` target comment names `route`.
-- `docs/governance.md`, "Independent review process": under the reviewer assignment, a rule that the coordinator assigns reviewers A and B from the table and the effort from the change's `route.json` tier, with `elevated` authorizing `high` for reviewer A and `xhigh` for Claude Code reviewer B; that the shadow router decides nothing; and, under "Authorized reviewers", that these effort values are authorized for the listed models. It is reconciled with version 6's conditional pass 3.
+- `docs/governance.md`, "Independent review process": under the reviewer assignment, a rule that the brief names reviewers A and B from the table, that `route.json` recommends their effort, that a reviewer A in `route.json` other than the brief's is reported to the coordinator, and that the shadow router decides nothing ("Decisions" 1 and 3). Authorizing `high` for reviewer A and `xhigh` for Claude Code reviewer B under "Authorized reviewers" is a separate governance change that the owner approves; phase 3 proposes it only with that approval. It is reconciled with version 6's conditional pass 3.
 - `docs/agent-task-protocol.md`: worker step 4 or 5 runs `route` after `make verify` and before pass 1; "Review findings record" gains "Route record" and the routing part of "Checklist effect"; the reviewer invocations table shows the effort as `<effort from route.json>`; `JEV_MAF_LAB` is named as the owner-set variable.
 - Skills `taskelith-task-protocol` and `taskelith-coordinator`: the same step and the brief's effort.
 
@@ -321,16 +323,28 @@ Before the shadow router can answer, the owner, not an agent:
 
 - **Small sample.** 50 changes, 16 third passes; thresholds are in-sample. Mitigation: the effect measures the rule on later changes; the thresholds are constants that a later change can move with evidence.
 - **Confounding.** The two-reviewer rule started on 2026-10-27, so older third passes came from one reviewer; part of the size effect may be policy history.
-- **Effort without authorization.** `elevated` effort is not yet in the authorized list; until phase 3's governance edit, `route.json` is advisory.
+- **Effort without authorization.** `elevated` effort is not yet in the authorized list; until an owner-approved governance change authorizes it, `route.json` is a recommendation only.
 - **Feature leakage of the merged diff** in the offline evaluation (review fixes enlarge it); mitigated by the first-reviewed revision where it can be found and the `approximate` flag where not.
 - **Third-party dependency at review time.** A Jev outage or price change cannot block a review: the shadow decides nothing and fails closed to the rule within 2 s.
 - **Data leaving the machine.** Only the listed structured features, asserted by an allowlist test; TypeSafe may keep them and their telemetry.
 - **Model drift.** A pinned model ID; the effect records the answering model per change.
 - **Heuristic security flag.** Misses and false hits are visible per change in `route.json`.
 
+## Decisions
+
+The coordinator decided the open questions of phase 1 on 2026-10-28; the numbers here are this section's own.
+
+1. **Recommendation only.** `route.json` recommends; it binds nothing. Authorizing the elevated efforts (`high` for reviewer A, `xhigh` for reviewer B) needs a later governance change that the owner approves.
+2. **When to route.** `route` runs after `make verify` passes and before review pass 1, not at planning time, because the diff features exist only then (former open question 4, option (a)).
+3. **Precedence.** The brief names the reviewers and `route.json` sets the effort, within decision 1; a `route.json` whose reviewer A differs from the brief's is reported to the coordinator (former open question 3, option (a)).
+4. **No light tier.** No tier lowers an effort below today's configured effort (former open question 2, option (a)).
+5. **Evaluation population.** The offline evaluation runs on the 50 archived changes with review records; the 20 of them without `passes.jsonl` are reported separately, as lower bounds.
+6. **Owner hard floor.** The TypeSafe account, the acceptance of the Master Customer Agreement, paid credits, and the consent to send the features ("Owner actions") are pending with the owner. Until the owner confirms them, `JevRouter` is tested only with a fake and the constructed response, no live call is made from any host, and the offline evaluation may be implemented and tested against a fake but is not run live.
+
+## Phase 2 scope
+
+Phase 2 implements the port, the rule and Jev routers, the fake, the feature derivation and its git adapter, the `route.json` writer and validation, and the composition root with the credential, each tested; the modules are not yet dispatched by `scripts/findings.ts`. The routing section of `effect` (`scripts/review-route-effect.ts`) and the offline evaluation (`scripts/review-route-evaluation.ts`, `route-evaluation.schema.json`) are not part of this step and remain open tasks.
+
 ## Open questions
 
 1. OpenCode as reviewer B of documentation-only `standard` changes. Options: (a) never, as designed; (b) the rule proposes it when `docsOnly` and the coordinator confirms the pause has ended. Recommendation: (a), until pauses are machine-readable.
-2. Lowering effort for small documentation-only changes (a third tier, `light`). Options: (a) no, the floor never goes below today's; (b) a `light` tier with reviewer B at `medium`. Recommendation: (a); 1 of 20 changes under 100 lines needed a third pass, so the gain is cost, not passes, and the owner asked for fewer passes.
-3. Precedence between the brief's reviewers and `route.json`. Options: (a) the brief names reviewers, `route.json` sets the effort, and a disagreement on reviewer A goes back to the coordinator; (b) `route.json` binds both. Recommendation: (a) until phase 3's governance edit decides.
-4. When to route. Options: (a) after `make verify`, before pass 1, as designed, because the diff exists only then; (b) at plan time with `checklist --save`, as the brief says, using only plan-time features (capabilities, size, external facts). Recommendation: (a).

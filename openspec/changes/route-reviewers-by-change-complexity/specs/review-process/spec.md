@@ -16,33 +16,33 @@
 - **THEN** the command exits 1 and writes nothing
 
 ### Requirement: Rule routing floor
-The rule router SHALL be deterministic and SHALL decide the reviewers and effort of passes 1 and 2. Its tier SHALL be `elevated` when at least one trigger fires (400 or more changed lines, 18 or more changed files, 3 or more capabilities, security, contract, or Docker paths, or size M-L or L) and `standard` otherwise. Its reviewers SHALL stay within the owner's reviewer assignment, and `standard` SHALL equal today's configured reviewers and effort.
+The rule router SHALL be deterministic and SHALL recommend the reviewers and effort of passes 1 and 2. Its tier SHALL be `elevated` when a trigger fires (400 or more changed lines, 18 or more changed files, 3 or more capabilities, security, contract, or Docker paths, or size M-L or L) and `standard` otherwise. Its reviewers SHALL stay within the owner's reviewer assignment, `standard` SHALL equal today's configured reviewers and effort, and no tier SHALL go below it.
 
 #### Scenario: Large change
 - **WHEN** a change without external facts changes 420 lines in 6 files of one capability
-- **THEN** the rule decides `elevated` with trigger `lines`, pass 1 `codex gpt-6.1-sol#high`, and pass 2 `claude claude-opus-5-5#xhigh`
+- **THEN** the rule recommends `elevated` with trigger `lines`, pass 1 `codex gpt-6.1-sol#high`, and pass 2 `claude claude-opus-5-5#xhigh`
 
 #### Scenario: Small change with external facts
 - **WHEN** a change whose `design.md` has an "External facts" section changes 40 lines and fires no trigger
-- **THEN** the rule decides `standard` with pass 1 `claude claude-fable-5-1#medium` and pass 2 `claude claude-opus-5-5#high`
+- **THEN** the rule recommends `standard` with pass 1 `claude claude-fable-5-1#medium` and pass 2 `claude claude-opus-5-5#high`
 
 #### Scenario: Same input, same decision
 - **WHEN** the rule router routes the same features twice
 - **THEN** both decisions are equal
 
 ### Requirement: Shadow routing
-The shadow router SHALL send TypeSafe AI's Jev model only the structured features: counts, capability identifiers, booleans, the size, and the capability history figures, never paths, commits, change names, diff or source text, or finding text. Its tier, confidence, probabilities, expected passes, and the pass plans its tier maps to SHALL be recorded beside the rule's and SHALL NOT change the decision.
+The shadow router SHALL send TypeSafe AI's Jev model only the structured features: counts, capability identifiers, booleans, the size, and the capability history figures, never paths, commits, change names, diff or source text, or finding text. Its tier, confidence, probabilities, expected passes, and the pass plans its tier maps to SHALL be recorded beside the rule's and SHALL NOT change the rule's recommendation.
 
 #### Scenario: Disagreement
 - **WHEN** the rule decides `standard` and the shadow router answers `elevated` with probability 0.8
-- **THEN** `route.json` records both and the pass plans of the rule decide
+- **THEN** `route.json` records both and the rule's pass plans stay the recommendation
 
 #### Scenario: Request content
 - **WHEN** the shadow router sends a request
 - **THEN** its `state` holds exactly the allowlisted feature keys
 
 ### Requirement: Shadow router failure
-When the credential is missing, no response arrives within 2 seconds, the connection fails, the HTTP status is not 2xx, or the response is invalid, the rule SHALL decide alone, the command SHALL exit 0, and `route.json` SHALL record the failure as one of `missing-credential`, `timeout`, `network`, `rate-limited`, `overloaded`, `http-error`, or `invalid-response`, with the HTTP status where there is one. The shadow router SHALL NOT retry within the 2 seconds.
+When the credential is missing, no response arrives within 2 seconds, the connection fails, the HTTP status is not 2xx, or the response is invalid, the rule SHALL route alone, the command SHALL exit 0, and `route.json` SHALL record the failure as one of `missing-credential`, `timeout`, `network`, `rate-limited`, `overloaded`, `http-error`, or `invalid-response`, with the HTTP status where there is one. The shadow router SHALL NOT retry within the 2 seconds.
 
 #### Scenario: Timeout
 - **WHEN** the shadow endpoint does not answer within 2 seconds
@@ -90,7 +90,7 @@ The shadow router's credential SHALL be read only from the environment variable 
 - **THEN** the change counts in the rule figures and not in the shadow figures
 
 ### Requirement: Archive routing evaluation
-`make findings ARGS="route-evaluation --save <change>"` SHALL route each archived single-artifact change with review records by both routers using only information from before its review: the diff of its first reviewed revision, or its merged diff marked approximate, and the capability history of changes merged before its base. It SHALL write one line per change with the outcome, and `--rule-only` SHALL skip the shadow router.
+`make findings ARGS="route-evaluation --save <change>"` SHALL route each archived single-artifact change with review records by both routers using only information from before its review: the diff of its first reviewed revision, or its merged diff marked approximate, and the capability history of changes merged before its base. It SHALL write one line per change with the outcome, SHALL report changes without `passes.jsonl` apart as lower bounds, and `--rule-only` SHALL skip the shadow router.
 
 #### Scenario: No future history
 - **WHEN** the evaluation routes a change merged before a later change of the same capability

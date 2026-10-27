@@ -9,13 +9,16 @@
 
 ## 2. Phase 2: implementation, after `normalize-reviewer-keys` reaches `dev`
 
-- [ ] 2.1 Merge `origin/dev` with `normalize-reviewer-keys`; align the pass plans with its canonical reviewer keys and its reviewer assignment text.
-- [ ] 2.2 Check that the installed Codex CLI accepts `model_reasoning_effort = "high"` for `gpt-6.1-sol`, and record it.
-- [ ] 2.3 Tests first, recorded as failing on the pre-implementation commit: `test/review-route-rules.test.ts` (every rule table row and trigger), `test/review-route-features.test.ts` (derivations against a temporary git repository), `test/review-route-jev.test.ts` (recorded response on a local server, the request allowlist, every failure code, the sentinel credential), `test/review-route-command.test.ts` (with the fake router), `test/review-route-effect.test.ts`, and `test/review-route-evaluation.test.ts` (no future history).
-- [ ] 2.4 Implement `scripts/review-route.ts`, `scripts/review-route-rules.ts`, `scripts/review-route-features.ts`, `scripts/review-route-jev.ts`, `scripts/review-route-command.ts`, `scripts/review-route-effect.ts`, and `scripts/review-route-evaluation.ts`, each with a runner that phase 3 dispatches.
-- [ ] 2.5 Add `docs/review-findings/route-evaluation.schema.json`.
-- [ ] 2.6 Measure the coverage of the new modules (at least 75% of lines, branches, and functions) and record it.
-- [ ] 2.7 Run the offline evaluation with `--rule-only`; once the owner has set `JEV_MAF_LAB`, run it with the shadow router and record `evaluation.jsonl` and the figures in `verification.md`.
+- [x] 2.1 Merge `origin/dev` with `normalize-reviewer-keys`; align the pass plans with its canonical reviewer keys and its reviewer assignment text.
+- [x] 2.2 Check that the installed Codex CLI accepts `model_reasoning_effort = "high"` for `gpt-6.1-sol`, and record it.
+- [x] 2.3 Record the coordinator's decisions of 2026-10-28 in `design.md` "Decisions", the deltas, and `proposal.md`: `route.json` only recommends, routing after `make verify`, the brief's reviewers with the routed effort, no light tier, the evaluation population, and the owner's pending hard-floor items.
+- [x] 2.4 Tests first, recorded as failing on the pre-implementation commit: `test/review-route-rules.test.ts` (every rule table row, trigger, and boundary), `test/review-route-features.test.ts` (derivations, and the git adapter against temporary repositories), `test/review-route-jev.test.ts` (the constructed recorded response through an injected `fetch` and a local server, the request allowlist, every failure code, the sentinel credential), `test/review-route-record.test.ts` (schema and consistency), and `test/review-route-command.test.ts` (with the fake router, the sentinel credential on every failure path, and the composed command without a credential).
+- [x] 2.5 Implement `scripts/review-route.ts`, `scripts/review-route-rules.ts`, `scripts/review-route-features.ts`, `scripts/review-route-environment.ts`, `scripts/review-route-jev.ts`, `scripts/review-route-record.ts`, and `scripts/review-route-command.ts`, with `runRoute` as the runner that phase 3 dispatches.
+- [x] 2.6 Measure the coverage of the new modules (at least 75% of lines, branches, and functions) and record it.
+- [ ] 2.7 Tests first, then `scripts/review-route-effect.ts` (the routing section of `effect`) with `test/review-route-effect.test.ts`.
+- [ ] 2.8 Tests first, then `scripts/review-route-evaluation.ts` with `test/review-route-evaluation.test.ts` (no future history, the shadow router only as a fake), and `docs/review-findings/route-evaluation.schema.json`.
+- [ ] 2.9 Run the offline evaluation with `--rule-only`.
+- [ ] 2.10 Pending with the owner (hard floor): the TypeSafe account, the acceptance of the Master Customer Agreement, paid credits, and the data consent. Only after the owner confirms them and sets `JEV_MAF_LAB`: run the offline evaluation with the shadow router, record `evaluation.jsonl` and the figures in `verification.md`, and replace the constructed response fixture with a captured one. Until then no live call is made from any host.
 
 ## 3. Phase 3: integration after `adopt-process-performance-recommendations` reaches `dev`
 
