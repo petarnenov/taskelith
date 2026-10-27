@@ -63,7 +63,7 @@ On every platform the worker's `handed-off` record in the attempt directory SHAL
 - **THEN** the push fails with `invalid` and reason `read-only-workspace`
 
 ### Requirement: One handed-off workspace per Linux worker
-A Linux worker whose executions share a separate account SHALL hold at most one handed-off workspace: it SHALL declare one slot, count a workspace with a hand-off record as holding it until the reclaim, refuse an assignment beyond it with `worker-slots-exhausted`, and declare its capacity again after the reclaim; `handOff` SHALL refuse while another workspace is handed off with `precondition-failed` and reason `other-workspace-handed-off`.
+A Linux worker whose executions share a separate account SHALL hold at most one handed-off workspace: it SHALL declare one slot, count a workspace with a hand-off record as holding it until the reclaim, refuse an assignment beyond it with `worker-slots-exhausted`, and declare its capacity again after the reclaim; `handOff` SHALL refuse while another workspace is handed off with `precondition-failed` and reason `other-workspace-handed-off`, checking and recording atomically per worker.
 
 #### Scenario: Second attempt on the worker
 - **WHEN** a Linux worker with a separate execution account holds a handed-off workspace and receives a second assignment
@@ -76,6 +76,10 @@ A Linux worker whose executions share a separate account SHALL hold at most one 
 #### Scenario: Second hand-off
 - **WHEN** one workspace is handed off and another workspace of the worker is handed off
 - **THEN** the second hand-off fails with reason `other-workspace-handed-off`, also after a restart
+
+#### Scenario: Concurrent hand-offs
+- **WHEN** two workspaces of the worker are handed off concurrently
+- **THEN** exactly one hand-off succeeds and the other fails with reason `other-workspace-handed-off`
 
 #### Scenario: Delegated child on a second worker
 - **WHEN** a parent's workspace is handed off on a Linux worker and the parent waits for its delegated child

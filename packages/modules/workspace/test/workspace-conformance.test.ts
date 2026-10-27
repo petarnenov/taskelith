@@ -39,6 +39,7 @@ const SWEEP = 'sweeps interrupted prepares and removals without following links,
 const HAND_OFF = 'hands the checkout to the execution and takes it back without outside links';
 const GIT_LINK = 'refuses Git work on a checkout whose Git directory holds a link, is gone, or is nested';
 const ONE_HAND_OFF = 'holds one handed-off workspace at a time where executions share a separate account';
+const CONCURRENT_HAND_OFF = 'lets one of two concurrent hand-offs through where executions share a separate account';
 
 // Each defect of the double breaks the guarantees of the named cases.
 const DEFECTS: readonly [string, DoubleDefects, readonly string[]][] = [
@@ -59,7 +60,8 @@ const DEFECTS: readonly [string, DoubleDefects, readonly string[]][] = [
   ['runs Git on a handed-off checkout', { ignoresHandOff: true }, [HAND_OFF]],
   ['keeps links from outside when it reclaims', { keepsOutsideLinks: true }, [HAND_OFF]],
   ['follows a link in the Git directory', { followsGitLinks: true }, [GIT_LINK]],
-  ['hands off a second workspace', { handsOffBeyondOne: true }, [ONE_HAND_OFF]],
+  ['hands off a second workspace', { handsOffBeyondOne: true }, [ONE_HAND_OFF, CONCURRENT_HAND_OFF]],
+  ['races two concurrent hand-offs', { racesHandOff: true }, [CONCURRENT_HAND_OFF]],
 ];
 
 for (const [name, defects, failing] of DEFECTS) {

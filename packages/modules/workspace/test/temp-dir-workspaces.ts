@@ -144,6 +144,21 @@ export interface DoubleDefects {
   readonly keepsOutsideLinks?: boolean;
   readonly followsGitLinks?: boolean;
   readonly handsOffBeyondOne?: boolean;
+  readonly racesHandOff?: boolean;
+}
+
+// One chain of hand-offs per workspace root, so that a hand-off checks
+// for another and writes its record before the next one checks.
+const handOffChains = new Map<string, Promise<unknown>>();
+
+function inHandOffChain<T>(root: string, work: () => Promise<T>): Promise<T> {
+  const run = (handOffChains.get(root) ?? Promise.resolve()).then(work, work);
+  const release = () => {
+    if (handOffChains.get(root) === run) handOffChains.delete(root);
+  };
+  handOffChains.set(root, run);
+  void run.then(release, release);
+  return run;
 }
 
 export class TempDirWorkspaces implements WorkspaceProvider {
@@ -235,11 +250,16 @@ export class TempDirWorkspaces implements WorkspaceProvider {
   async handOff(attemptId: AttemptId): Promise<Result<void>> {
     const checkout = await this.checkoutOf(attemptId);
     if (!checkout.ok) return checkout;
+    const handOff = () => this.handOffAlone(attemptId, checkout.value);
+    return this.defects.racesHandOff ? handOff() : inHandOffChain(this.root, handOff);
+  }
+
+  private async handOffAlone(attemptId: AttemptId, checkout: string): Promise<Result<void>> {
     if (!this.defects.handsOffBeyondOne && (await this.handedOffElsewhere(attemptId))) {
       return workspaceFailure('precondition-failed', 'other-workspace-handed-off', 'another workspace is handed off');
     }
-    await writeFile(handOffRecord(checkout.value), '', { mode: WORKSPACE_MODES.handOffRecord });
-    await chmod(checkout.value, WORKSPACE_MODES.checkoutHandedOff);
+    await writeFile(handOffRecord(checkout), '', { mode: WORKSPACE_MODES.handOffRecord });
+    await chmod(checkout, WORKSPACE_MODES.checkoutHandedOff);
     return ok(undefined);
   }
 

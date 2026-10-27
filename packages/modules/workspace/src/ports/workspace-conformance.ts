@@ -536,6 +536,24 @@ const HANDOFF: readonly ConformanceCase<WorkspaceFixture>[] = [
       return problems;
     },
   },
+  {
+    name: 'lets one of two concurrent hand-offs through where executions share a separate account',
+    async check(fixture) {
+      const problems: string[] = [];
+      if (!fixture.separateExecutionIdentity) return problems;
+      const { provider } = fixture;
+      for (const attemptId of [FIRST, SECOND]) {
+        if ((await prepared(problems, fixture, { attemptId })) === undefined) return problems;
+      }
+      const results = await Promise.all([provider.handOff(FIRST), provider.handOff(SECOND)]);
+      expectSame(problems, 'concurrent hand-offs that succeed', results.filter((result) => result.ok).length, 1);
+      const refused = results.find((result) => !result.ok);
+      if (refused !== undefined) {
+        expectReason(problems, 'concurrent hand-off', refused, 'precondition-failed', 'other-workspace-handed-off');
+      }
+      return problems;
+    },
+  },
 ];
 
 export const WORKSPACE_CONFORMANCE: readonly ConformanceCase<WorkspaceFixture>[] = Object.freeze([
