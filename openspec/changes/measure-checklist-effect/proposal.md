@@ -4,10 +4,11 @@ Since about 2026-10-27 11:07 local time every brief carries the review checklist
 
 ## What Changes
 
-- `make findings ARGS="checklist ... --save <change> [--size <S|S-M|M|M-L|L>]"` writes the active change's `checklist.json`, defined by the new `docs/review-findings/checklist.schema.json`: the query (capabilities, file globs, top), the generation time, the dev commit, the size, and the ranked review and record quality categories with counts and baselines. It never overwrites one. `checklist --json` prints both sections as JSON.
-- `make findings ARGS="validate"` checks every `checklist.json`, active and archived, and requires one in every active change created on or after 2026-10-28 by its `.openspec.yaml`, or without a created date.
+- The checklist text ends with the dev commit whose archive it ranked. `make findings ARGS="checklist ... --save <change> --at <commit> [--size <S|S-M|M|M-L|L>]"` writes the active change's `checklist.json` from the archive as of the brief's dev commit, defined by the new `docs/review-findings/checklist.schema.json`: the query (capabilities, file globs, top), the generation time, the dev commit, the size, and the ranked review and record quality categories with counts and baselines. It never overwrites one and refuses an unknown commit and the reserved `archive` name. `checklist --json` prints both sections and the dev commit as JSON.
+- `make findings ARGS="validate"` checks every `checklist.json`, active and archived, for schema, change, vocabulary, and consistency, and requires one in every active change opened after this change's archive commit landed, by the commit that first added its `.openspec.yaml`, or whose `.openspec.yaml` is uncommitted.
 - `make findings ARGS="effect [--json]"` reports, per archived change with `checklist.json` and per archive date, the observed share of pass-1 findings in listed categories against the expected share of its baseline, for code and record findings, all and Medium or worse, and pass-1 findings per size point or per 100 changed lines. Archived changes without `checklist.json` are listed and excluded.
 - `docs/agent-task-protocol.md` (worker step 2, coordinator step 1, "Review findings record") and the `taskelith-task-protocol` skill have workers save the brief's checklist at plan time.
+- Coordinator scope addition of 2026-10-27, after review pass 1: the `taskelith-coordinator` skill says the brief carries the exact checklist invocation, its dev commit for `--at`, and the task size. The `taskelith-worker` skill describes no plan-time step, only a pointer to the worker steps, so it needs no change.
 
 ## Capabilities
 
@@ -15,7 +16,7 @@ Since about 2026-10-27 11:07 local time every brief carries the review checklist
 
 ### Modified Capabilities
 
-- `review-process`: adds "Checklist record" and "Checklist effect".
+- `review-process`: adds "Checklist record", "Checklist record validation", and "Checklist effect".
 - `agent-task-protocol`: adds "Checklist record in the task flow".
 
 ## Impact

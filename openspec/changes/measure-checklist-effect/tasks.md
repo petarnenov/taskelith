@@ -14,10 +14,12 @@
 ## 4. Documentation
 
 - [x] 4.1 Update `docs/agent-task-protocol.md` worker step 2, coordinator step 1, and "Review findings record", the `taskelith-task-protocol` skill, and the `Makefile` comment of `findings`.
+- [x] 4.2 Coordinator scope addition: update the `taskelith-coordinator` skill's brief paragraph; check the `taskelith-worker` skill, which needs no change.
 
 ## 5. Verify
 
 - [x] 5.1 Save this change's `checklist.json` with the new command and create its empty `findings.jsonl` and `passes.jsonl`.
 - [x] 5.2 Run `npm run openspec -- validate measure-checklist-effect --strict`, `validate --all --strict`, `make findings ARGS="validate"`, `make findings ARGS="effect"`, and `make verify`.
 - [ ] 5.3 Independent review: pass 1 by reviewer A, pass 2 by reviewer B if needed, pass 3 by reviewer A if needed.
+  - [x] 5.3.1 Pass 1 by reviewer A, and its fixes with fail-before tests: `--at`, the landing rule, record consistency, the reserved `archive` name, and the `Makefile` comment.
 - [ ] 5.4 Archive the change.

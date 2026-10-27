@@ -1,22 +1,41 @@
 ## ADDED Requirements
 
 ### Requirement: Checklist record
-`make findings ARGS="checklist ... --save <change>"` SHALL write the active change's `checklist.json` per the checklist schema: query, generation time, dev commit, optional size, and both ranked category lists with counts and baseline. It SHALL NOT overwrite one. `--json` SHALL print the lists as JSON. Validation SHALL check every `checklist.json` and require one in each active change created on or after 2026-10-28, by its `.openspec.yaml`, or without a created date.
+`make findings ARGS="checklist ... --save <change> --at <commit>"` SHALL write the active change's `checklist.json` per the checklist schema from the archive as of the brief's dev commit `<commit>`: query, generation time, dev commit, optional size, and both ranked category lists with counts and baselines. It SHALL refuse an unknown commit, a name that is not an active change, and an existing file. The checklist text SHALL name its dev commit.
 
 #### Scenario: Saved checklist
-- **WHEN** a worker runs the brief's checklist invocation with `--save <change>` for an active change
-- **THEN** the change's `checklist.json` holds the invocation's capabilities, file globs, and top, the generation time, the dev commit, and the review and record quality categories with their counts and baselines
+- **WHEN** a worker runs the brief's checklist invocation with `--save <change> --at <commit>` for an active change
+- **THEN** the change's `checklist.json` holds the invocation's capabilities, file globs, and top, the generation time, the commit, and the review and record quality categories with their counts and baselines
+
+#### Scenario: Dev moved since the brief
+- **WHEN** a change was archived on `dev` after the brief's dev commit and before the save
+- **THEN** the saved checklist ranks the archive as of the brief's dev commit and leaves that change out
+
+#### Scenario: Unknown commit
+- **WHEN** `--at` names a commit that git does not know
+- **THEN** the command fails and writes nothing
 
 #### Scenario: Existing checklist
 - **WHEN** `--save` names a change that already has a `checklist.json`
 - **THEN** the command fails and leaves the file unchanged
 
-#### Scenario: Active change after the cutoff without a checklist
-- **WHEN** an active change created on or after 2026-10-28, or without a created date, has no `checklist.json`
+#### Scenario: Reserved archive name
+- **WHEN** `--save` names `archive` or a name without an active change directory
+- **THEN** the command fails and writes nothing
+
+### Requirement: Checklist record validation
+Validation SHALL check every `checklist.json` against the schema, its change, and the vocabulary, and SHALL reject a record with an impossible time, a duplicate or unranked category, more categories than `top`, or baseline counts above their totals. Once the commit that first archives `measure-checklist-effect` exists, it SHALL require `checklist.json` in each active change whose `.openspec.yaml` was first committed in a descendant of that commit or is uncommitted.
+
+#### Scenario: Before the landing
+- **WHEN** no commit has archived `measure-checklist-effect` yet
+- **THEN** validation requires no `checklist.json`
+
+#### Scenario: Change opened after the landing without a checklist
+- **WHEN** an active change's `.openspec.yaml` was first committed in a descendant of the landing commit, or is not committed, and it has no `checklist.json`
 - **THEN** validation fails and names the missing file
 
-#### Scenario: Active change before the cutoff
-- **WHEN** an active change created before 2026-10-28 has no `checklist.json`
+#### Scenario: Change opened before the landing
+- **WHEN** an active change's `.openspec.yaml` was first committed in a commit that does not descend from the landing commit, and it has no `checklist.json`
 - **THEN** validation passes without it
 
 #### Scenario: Archived change without a checklist
@@ -26,6 +45,10 @@
 #### Scenario: Invalid checklist record
 - **WHEN** a `checklist.json` does not match the schema, names another change, or names a category the vocabulary does not list
 - **THEN** validation fails and names the file
+
+#### Scenario: Impossible checklist record
+- **WHEN** a `checklist.json` lists more of a baseline's findings than it has, more Medium or worse findings than all, a category twice, categories out of count order, more categories than `top`, or a time such as month 99
+- **THEN** validation fails and names the file and the inconsistency
 
 ### Requirement: Checklist effect
 `make findings ARGS="effect [--json]"` SHALL report, per archived change with `checklist.json` and per archive date, the share of pass-1 code findings, all and Medium or worse, whose category is in its review list, and of pass-1 record findings in its record quality list, each beside the expected share from its baseline, and pass-1 findings per size point or per 100 changed lines. Changes without `checklist.json` SHALL be listed and excluded.
