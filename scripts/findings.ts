@@ -3,7 +3,7 @@ import { posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { Ajv2020, type ErrorObject } from 'ajv/dist/2020.js';
-import { runChecklist, runEffect, type ArchiveSource, type ChecklistCommand, type SaveTarget } from './checklist-commands.ts';
+import { runChecklist, runEffect, type ArchiveSource, type ChecklistCommand, type CommittedArchive, type SaveTarget } from './checklist-commands.ts';
 import { GIT_ENVIRONMENT, type ChecklistEnvironment } from './checklist-environment.ts';
 import {
   CHECKLIST_FILE,
@@ -49,8 +49,10 @@ export const USAGE = [
   '  reviewers [--json]       statistics of archived review passes per reviewer and role',
   `  checklist [--capability <a,b>] [--files <glob,glob>] [--top <1-${MAX_TOP}>]`,
   `                           most frequent archived categories (top ${DEFAULT_TOP})`,
-  '            [--at <dev commit>] [--json | --save <change> [--size <S|S-M|M|M-L|L>]]',
-  `                           as of the brief's dev commit, as JSON, or saved as ${CHECKLIST_FILE}`,
+  '            [--at <dev commit>] [--json]',
+  "                           as of the brief's dev commit, or as JSON",
+  '            --at <dev commit> --save <change> [--size <S|S-M|M|M-L|L>]',
+  `                           saved as the change's ${CHECKLIST_FILE}`,
   '  effect [--json]          pass-1 findings of archived changes against their checklist',
 ].join('\n');
 
@@ -92,8 +94,10 @@ export function parseCommand(args: readonly string[]): Command {
   const query = checklistQuery(values.capability ?? [], values.files ?? [], values.top);
   const json = values.json === true;
   const at = commitArgument(values.at);
-  const save = saveTarget(values.save, values.size, json, at);
-  return { name, query, json, ...(at === undefined ? {} : { at }), ...(save === undefined ? {} : { save }) };
+  const save = saveTarget(values.save, values.size, json);
+  if (save === undefined) return { name, query, json, ...(at === undefined ? {} : { at }) };
+  if (at === undefined) throw new UsageError('--save needs --at <dev commit of the brief>');
+  return { name, query, json: false, at, save };
 }
 
 const CHANGE_NAME = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
@@ -105,13 +109,12 @@ function commitArgument(value: string | undefined): string | undefined {
   return value;
 }
 
-function saveTarget(change: string | undefined, size: string | undefined, json: boolean, at: string | undefined): SaveTarget | undefined {
+function saveTarget(change: string | undefined, size: string | undefined, json: boolean): SaveTarget | undefined {
   if (change === undefined) {
     if (size !== undefined) throw new UsageError('--size applies only with --save');
     return undefined;
   }
   if (json) throw new UsageError('--json and --save exclude each other');
-  if (at === undefined) throw new UsageError('--save needs --at <dev commit of the brief>');
   if (!CHANGE_NAME.test(change)) throw new UsageError('--save takes an OpenSpec change name');
   if (size === undefined) return { change };
   if (!isSize(size)) throw new UsageError('--size must be S, S-M, M, M-L, or L');
@@ -194,6 +197,7 @@ export interface RecordFile {
 }
 
 export interface ChangeRecords {
+  readonly directory: string;
   readonly change: string;
   readonly archived: boolean;
   readonly findings?: RecordFile;
@@ -243,7 +247,7 @@ function loadRepository(root: string): Repository {
   };
   const locations = changeLocations(root);
   const located = locations.map(({ directory, change, archived }) =>
-    ({ directory, records: { change, archived, findings: file(directory, FINDINGS_FILE), passes: file(directory, PASSES_FILE) } }));
+    ({ directory, records: { directory, change, archived, findings: file(directory, FINDINGS_FILE), passes: file(directory, PASSES_FILE) } }));
   const changes: ChangeRecords[] = located.map(({ records }) => records);
   const missing = located.filter(({ records }) => !records.archived).flatMap(({ directory, records }) =>
     ([[FINDINGS_FILE, records.findings], [PASSES_FILE, records.passes]] as const)
@@ -292,6 +296,7 @@ interface Workspace {
 }
 
 interface CheckedChange extends ReviewedChange {
+  readonly directory: string;
   readonly archived: boolean;
   readonly problems: readonly Problem[];
 }
@@ -317,6 +322,7 @@ function checkChange(records: ChangeRecords, rules: ChangeRules): CheckedChange 
     })
     : [];
   return {
+    directory: records.directory,
     change,
     archived,
     findings: findings?.located.map(({ finding }) => finding) ?? [],
@@ -348,13 +354,13 @@ function runCommand(command: Command, repository: Repository, workspace: Workspa
   const archivedChanges = checked.filter(({ archived }) => archived);
   const archived: Finding[] = archivedChanges.flatMap(({ findings }) => findings);
   if (command.name === 'checklist') {
-    const current = { commit: workspace.environment.devCommit(workspace.root), findings: archived };
     const archiveAt = (commit: string) => archiveSource(workspace, commit, rules.archived);
+    const current = currentArchive(workspace, archiveAt, archived);
     return runChecklist(command, { ...workspace, categories: vocabulary.categories, current, archiveAt });
   }
   if (command.name === 'effect') {
     const changes = repository.checklists.filter(({ archived: isArchived }) => isArchived).map(({ directory, change }) =>
-      ({ directory, change, findings: archivedChanges.find((records) => records.change === change)?.findings ?? [] }));
+      ({ directory, change, findings: archivedChanges.find((records) => records.directory === directory)?.findings ?? [] }));
     return runEffect(command.json, { ...workspace, archivedChanges: changes, checklists: checklists.located });
   }
   return { exitCode: 0, stdout: commandOutput(command, repository, archivedChanges, archived), stderr: '' };
@@ -366,7 +372,16 @@ function mustRecordChecklist({ root, environment }: Workspace): (directory: stri
   return (directory) => landing !== undefined && environment.openedAfter(root, directory, landing);
 }
 
-function archiveSource({ root, environment }: Workspace, commit: string, rules: FindingRules): ArchiveSource | string {
+// The archive that the dev commit line names, so that --at <that commit>
+// reproduces the checklist; without a readable one, the tree's, unnamed.
+function currentArchive({ root, environment }: Workspace, archiveAt: (commit: string) => CommittedArchive | string,
+  tree: readonly Finding[]): ArchiveSource {
+  const devCommit = environment.devCommit(root);
+  const atDev = devCommit === undefined ? undefined : archiveAt(devCommit);
+  return atDev === undefined || typeof atDev === 'string' ? { findings: tree } : atDev;
+}
+
+function archiveSource({ root, environment }: Workspace, commit: string, rules: FindingRules): CommittedArchive | string {
   const snapshot = environment.archiveAt(root, commit);
   if (snapshot === undefined) return `unknown commit "${commit}"; give the dev commit that the brief's checklist names.`;
   const parsed = snapshot.findings.map((file) =>

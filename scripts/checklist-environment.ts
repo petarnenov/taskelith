@@ -25,10 +25,12 @@ export interface ArchiveSnapshot {
 
 const ARCHIVE_DIRECTORY = 'openspec/changes/archive';
 
-// The ceiling keeps git from using a repository above the given root.
+// Hook variables such as GIT_DIR are dropped, and the ceiling keeps git
+// from using a repository above the given root.
 function gitOutput(root: string, args: readonly string[]): string | undefined {
   try {
-    const env = { ...process.env, GIT_CEILING_DIRECTORIES: posix.dirname(root) };
+    const inherited = Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_'));
+    const env = { ...Object.fromEntries(inherited), GIT_CEILING_DIRECTORIES: posix.dirname(root) };
     return execFileSync('git', args, { cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
   } catch {
     return undefined;
@@ -47,17 +49,31 @@ function addingCommits(root: string, pathspec: string): string[] {
 
 const ARCHIVED_FINDINGS = /^openspec\/changes\/archive\/[^/]+\/findings\.jsonl$/;
 
+// Undefined when the listing or any file cannot be read, so that a git
+// failure never passes for an empty archive.
+export function archiveSnapshot(commit: string, listing: string | undefined, read: (path: string) => string | undefined): ArchiveSnapshot | undefined {
+  if (listing === undefined) return undefined;
+  const paths = listing.split('\n').filter((path) => ARCHIVED_FINDINGS.test(path)).sort();
+  const findings: { path: string; text: string }[] = [];
+  for (const path of paths) {
+    const text = read(path);
+    if (text === undefined) return undefined;
+    findings.push({ path, text });
+  }
+  return { commit, findings };
+}
+
 function archiveAt(root: string, commit: string): ArchiveSnapshot | undefined {
   const resolved = git(root, ['rev-parse', '--verify', '--quiet', `${commit}^{commit}`]);
   if (resolved === undefined) return undefined;
-  const paths = git(root, ['ls-tree', '-r', '--name-only', resolved, '--', ARCHIVE_DIRECTORY]) ?? '';
-  const findings = paths.split('\n').filter((path) => ARCHIVED_FINDINGS.test(path)).sort()
-    .map((path) => ({ path, text: gitOutput(root, ['cat-file', 'blob', `${resolved}:${path}`]) ?? '' }));
-  return { commit: resolved, findings };
+  const listing = git(root, ['ls-tree', '-r', '--name-only', resolved, '--', ARCHIVE_DIRECTORY]);
+  return archiveSnapshot(resolved, listing, (path) => gitOutput(root, ['cat-file', 'blob', `${resolved}:${path}`]));
 }
 
-// The first archive commit; a re-archive after a return comes later.
+// The first archive commit; a re-archive after a return comes later. A
+// shallow clone cannot tell, because its boundary commit adds every file.
 function landingCommit(root: string): string | undefined {
+  if (git(root, ['rev-parse', '--is-shallow-repository']) !== 'false') return undefined;
   return addingCommits(root, `${ARCHIVE_DIRECTORY}/*-${LANDING_CHANGE}/*`).at(-1);
 }
 

@@ -7,7 +7,6 @@ import {
   checklistRecord,
   checklistSections,
   formatChecklistRecord,
-  type ChecklistSections,
   type LocatedChecklist,
   type Size,
 } from './checklist-record.ts';
@@ -27,18 +26,20 @@ export interface SaveTarget {
   readonly size?: Size;
 }
 
-export interface ChecklistCommand {
-  readonly query: ChecklistQuery;
-  readonly json: boolean;
-  // The brief's dev commit, whose archive is ranked instead of the tree's.
-  readonly at?: string;
-  readonly save?: SaveTarget;
-}
+// --at names the brief's dev commit, whose archive is ranked; --save
+// needs it, so a saved record always names the commit it ranked.
+export type ChecklistCommand =
+  | { readonly query: ChecklistQuery; readonly json: boolean; readonly at?: string; readonly save?: undefined }
+  | { readonly query: ChecklistQuery; readonly json: false; readonly at: string; readonly save: SaveTarget };
 
 // Archived findings and the dev commit they are as of, when known.
 export interface ArchiveSource {
   readonly commit?: string;
   readonly findings: readonly Finding[];
+}
+
+export interface CommittedArchive extends ArchiveSource {
+  readonly commit: string;
 }
 
 export interface CommandResult {
@@ -51,36 +52,34 @@ export interface ChecklistContext {
   readonly root: string;
   readonly environment: ChecklistEnvironment;
   readonly categories: readonly Category[];
+  // The archive of the dev commit when git can read it, else the tree's.
   readonly current: ArchiveSource;
   // The archive as of a commit, or a message why it cannot be read.
-  archiveAt(commit: string): ArchiveSource | string;
+  archiveAt(commit: string): CommittedArchive | string;
 }
 
 const ACTIVE_DIRECTORY = 'openspec/changes';
 const RESERVED_DIRECTORY = 'archive';
 
-export function runChecklist({ query, json, at, save }: ChecklistCommand, context: ChecklistContext): CommandResult {
-  const source = at === undefined ? context.current : context.archiveAt(at);
+type SaveCommand = Extract<ChecklistCommand, { readonly save: SaveTarget }>;
+
+export function runChecklist(command: ChecklistCommand, context: ChecklistContext): CommandResult {
+  if (command.save !== undefined) return saveChecklist(command, context);
+  const source = command.at === undefined ? context.current : context.archiveAt(command.at);
   if (typeof source === 'string') return failure(source);
-  const sections = checklistSections(source.findings, context.categories, query);
-  if (json) return success(JSON.stringify({ query, devCommit: source.commit ?? null, ...sections }, null, 2));
+  const { sections, text } = renderChecklist(command.query, source, context.categories);
+  if (!command.json) return success(text);
+  return success(JSON.stringify({ query: command.query, devCommit: source.commit ?? null, ...sections }, null, 2));
+}
+
+function renderChecklist(query: ChecklistQuery, source: ArchiveSource, categories: readonly Category[]) {
+  const sections = checklistSections(source.findings, categories, query);
   const text = [
     formatChecklist(sections.review, query),
     formatRecordChecklist(sections.recordQuality),
     ...(source.commit === undefined ? [] : [`Dev commit: ${source.commit}.`]),
   ].join('\n\n');
-  if (save === undefined) return success(text);
-  if (source.commit === undefined) return failure('--save needs --at <dev commit of the brief>.');
-  return saveChecklist({ target: save, query, sections, text, devCommit: source.commit, findings: source.findings }, context);
-}
-
-interface Saving {
-  readonly target: SaveTarget;
-  readonly query: ChecklistQuery;
-  readonly sections: ChecklistSections;
-  readonly text: string;
-  readonly devCommit: string;
-  readonly findings: readonly Finding[];
+  return { sections, text };
 }
 
 function isActiveChange(root: string, change: string): boolean {
@@ -88,21 +87,18 @@ function isActiveChange(root: string, change: string): boolean {
   return change !== RESERVED_DIRECTORY && existsSync(directory) && statSync(directory).isDirectory();
 }
 
-function saveChecklist({ target, query, sections, text, devCommit, findings }: Saving, { root, environment }: ChecklistContext): CommandResult {
-  const directory = posix.join(ACTIVE_DIRECTORY, target.change);
+function saveChecklist({ query, at, save }: SaveCommand, { root, environment, categories, archiveAt }: ChecklistContext): CommandResult {
+  const archive = archiveAt(at);
+  if (typeof archive === 'string') return failure(archive);
+  const directory = posix.join(ACTIVE_DIRECTORY, save.change);
   const path = posix.join(directory, CHECKLIST_FILE);
-  if (!isActiveChange(root, target.change)) return failure(`${directory} is not an active change; create the change first.`);
+  if (!isActiveChange(root, save.change)) return failure(`${directory} is not an active change; create the change first.`);
   if (existsSync(posix.join(root, path))) {
     return failure(`${path} already exists; the checklist is recorded once, at plan time.`);
   }
-  const recordContext = {
-    change: target.change,
-    generatedAt: environment.now().toISOString(),
-    devCommit,
-    query,
-    size: target.size,
-  };
-  writeFileSync(posix.join(root, path), formatChecklistRecord(checklistRecord(recordContext, sections, findings)), { flag: 'wx' });
+  const { sections, text } = renderChecklist(query, archive, categories);
+  const recordContext = { change: save.change, generatedAt: environment.now().toISOString(), devCommit: archive.commit, query, size: save.size };
+  writeFileSync(posix.join(root, path), formatChecklistRecord(checklistRecord(recordContext, sections, archive.findings)), { flag: 'wx' });
   return success(`${text}\n\nSaved the checklist to ${path}.`);
 }
 

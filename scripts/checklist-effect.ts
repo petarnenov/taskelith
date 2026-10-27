@@ -204,7 +204,8 @@ function sectionLines({ review, recordQuality }: Normalized): string[] {
 function changeSize({ size, linesChanged, perSizePoint, per100Lines }: ChangeEffect): string {
   if (size !== null) return `size ${size}, ${perSizePoint!.toFixed(2)} per size point`;
   if (linesChanged === null) return 'size and changed lines unknown';
-  return `${linesChanged} changed lines, ${per100Lines === null ? 'no' : per100Lines.toFixed(2)} per 100 changed lines`;
+  const rate = per100Lines === null ? 'rate unknown' : `${per100Lines.toFixed(2)} per 100 changed lines`;
+  return `${linesChanged} changed lines, ${rate}`;
 }
 
 function dateSize({ perSizePoint, per100Lines }: DateEffect): string {
