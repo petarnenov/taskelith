@@ -410,6 +410,22 @@ test('a decline for a reason of its own backs the task off, a fleet capacity dec
   assert.deepEqual(placed, ['task-b1'], 'task-a1 waits, task-b1 does not');
 });
 
+test('a fleet capacity decline keeps the failure count of an own-reason backoff', async () => {
+  const { clock, timing: controlled } = timing();
+  const { state, store } = scriptedStore([UNPLACED, FULL, UNPLACED, PLACED]);
+  const service = new PlacementService(store, controlled);
+  value(await service.placeWaiting());
+  clock.at = 7_500;
+  value(await service.placeWaiting());
+  value(await service.placeWaiting());
+  assert.equal(state.opened, 3, 'the fleet decline set no new wait');
+  clock.at = 22_499;
+  value(await service.placeWaiting());
+  assert.equal(state.opened, 3, 'the second own wait doubles to 15 s');
+  clock.at = 22_500;
+  assert.deepEqual(value(await service.placeWaiting()), { waiting: 1, placed: 1 });
+});
+
 test('after several placements in a pass, the next read starts after the last one', async () => {
   const placed: string[] = [];
   const backlog: Backlog = [...A_BACKLOG, ['task-a4', 'p-a', 3], ['task-b1', 'p-b', 5], ['task-b2', 'p-b', 6], ['task-c1', 'p-c', 7]];
