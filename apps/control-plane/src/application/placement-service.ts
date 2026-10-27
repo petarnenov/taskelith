@@ -271,8 +271,8 @@ function placementRequest(task: Task): Omit<PlacementRequest, 'workerId'> {
   };
 }
 
-// Contract section 5: such a task keeps its wait unchanged, so the next
-// pass that reads it offers it in its place in the rotation.
+// Contract section 5: a failure for a fleet reason; the task keeps its wait,
+// so the next pass that reads it offers it in the rotation.
 function isFleetCapacityDecline(outcome: Result<TaskPlacement>): boolean {
   return !outcome.ok && lacksFleetCapacity(outcome.error.details.reason);
 }
