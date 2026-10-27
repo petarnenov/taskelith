@@ -144,6 +144,17 @@ Criteria: the ADR 0004 principles and the plan checklist of [design.md](design.m
 
 `passes.jsonl` holds the summary of pass 3; `findings.jsonl` gains no line from it.
 
+## Archive checks
+
+Worker step 7, after review pass 3, 2026-10-27. The checked state is the tree of the archive commit (`docs: archive the persist placement rotation cursor change`): the working tree these checks ran on after `npm run openspec -- archive persist-placement-rotation-cursor --yes` on `8a3936bb`. `origin/dev` was still `56346d92`, the merge base.
+
+- Archive: `Totals: + 1, ~ 1, - 0, → 0`; archived as `2026-10-27-persist-placement-rotation-cursor`, with `findings.jsonl` (ten rows) and `passes.jsonl` (three rows).
+- `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 69 passed, 0 failed (69 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: the line `✓ change/2026-10-27-persist-placement-rotation-cursor` passes; only this change's line counts.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/execution-placement/spec.md`, 27 lines added and none removed: the scenario "Restart" of "Project rotation", whose text is otherwise unchanged, and the requirement "Rotation cursor storage" with its five scenarios.
+- `make findings ARGS="validate"`: every findings file is valid (26 files), and every pass summary file is valid (6 files).
+- `make verify` (2026-10-27, 16:04:38 to 16:07:25 local): passed; tests 2167, pass 2165, fail 0, skipped 2; test run `duration_ms` 137261; all files 99.29% lines, 92.15% branches, 99.01% functions; OpenSpec 69 passed, 0 failed; findings 26 files and pass summaries 6 files valid; every active change archives into strictly valid specs; packed file allowlist and installed CLI verification passed.
+
 ## Limitations
 
 - Control-plane instances share one cursor and the last placement wins. An end-of-pass write does not overwrite another writer's change unless that writer set the same project back, and no instance otherwise coordinates its passes with another (design D7, D8).
@@ -152,5 +163,4 @@ Criteria: the ADR 0004 principles and the plan checklist of [design.md](design.m
 
 ## Remaining gates
 
-- Archive under worker step 7
 - Integration into dev by the coordinator (single pull request)
