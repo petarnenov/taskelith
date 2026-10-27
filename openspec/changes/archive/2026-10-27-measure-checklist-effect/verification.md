@@ -140,3 +140,14 @@ After review pass 1 the coordinator added the `taskelith-coordinator` skill to t
 - Archive of the change on its branch.
 - `make verify` by the `pre-push` hook on the pushed tree.
 - Integration into dev by the coordinator (single pull request).
+
+## Archive checks
+
+After `npm run openspec -- archive measure-checklist-effect --yes`:
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived`: `change/2026-10-27-measure-checklist-effect` valid; 208 passed and 13 failed, all 13 older archived changes from 2026-10-24 to 2026-10-26 that this change does not touch.
+- `git diff d21838c3 -- openspec/specs` (merge base): only the applied deltas, `review-process` (3 added, 1 modified) and `agent-task-protocol` (2 added).
+- `make findings ARGS="validate"`: 47 findings files and 27 pass summary files valid.
+- `make findings ARGS="effect"`: 1 change, this one: 5 pass-1 findings, size S-M, 3.33 per size point; review 60% observed against 52% expected, Medium or worse 75% against 66%; 220 archived changes without a checklist excluded.
+- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: passed.
