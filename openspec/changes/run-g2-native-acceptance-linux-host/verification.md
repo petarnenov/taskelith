@@ -33,8 +33,28 @@ TODO: AGENTS.md, comment rule, ADR 0004, Docker hygiene, OpenSpec validation, an
 | `npm run build` on `4a2b45a` | Exit 0 |
 | Dry run of the Linux entry on `4a2b45a` | Passed, with no proof run and no record written. The runner has no dry-run mode, so the dry run is: `make -n native-acceptance RESULTS=… ENTRIES=linux`, which expands to `scripts/native-acceptance.sh` with the pins, `LINUX_TEST_IMAGE=taskelith-linux-cgroup:test`, and `SERVICES=taskelith-3913158916-acceptance`; `make linux-test-image` (exit 0); the runner's `platform linux`, `context`, and `seed` commands (exit 0); and `linux_entry` with `prove` replaced by a printer in a sourcing shell, which lists the eight proofs. The platform record is entry `linux-ubuntu-24.04-x86_64`, os "Ubuntu 24.04.5 LTS in containers of the pinned base on Ubuntu 26.04.1 LTS", architecture `x86_64`, kernel "Linux 7.0.0-38-generic", file system "ext2/ext3 on Docker volumes (…), storage driver overlayfs" (`stat -f` names the ext4 magic `ext2/ext3`), node `v24.22.1`, docker "Docker Engine - Community 29.8.2; Docker Compose 5.6.0" |
 | Evidence run of the Linux entry (`results.jsonl`) | TODO |
-| `make scenario-worker-namespace-confinement` on `x86_64` | TODO |
+| `make scenario-worker-namespace-confinement` on `x86_64` | Held, not run: its inputs overlap the open change `report-all-unconfirmed-sealed-executions` (see "Dependency check for the namespace-confinement scenario") |
 | `npm run openspec -- validate run-g2-native-acceptance-linux-host --strict` on `4a2b45a` | Passed: "Change 'run-g2-native-acceptance-linux-host' is valid" (`skip_specs`, zero deltas) |
+
+## Dependency check for the namespace-confinement scenario
+
+On 2026-10-27 the coordinator asked for task 3.3 to run only if its inputs are disjoint from `report-all-unconfirmed-sealed-executions` (Pepi), which is not on `dev` yet. After `git fetch origin`, the branch `origin/report-all-unconfirmed-sealed-executions` at `ceea886` changes 30 files against `origin/dev` `656a34d` (`git diff --stat origin/dev...origin/report-all-unconfirmed-sealed-executions`). None of them is under `infra/`, `scripts/`, `Makefile`, or `packages/adapters/`.
+
+The scenario's inputs:
+
+- `Makefile:171` runs `SCENARIO_RUN` (`Makefile:158`), which is `npm run build` and then `scripts/installation.sh … scenario-worker-namespace-confinement`.
+- The scenario is `namespace_confinement_scenario` in `scripts/installation-scenarios.sh:487`. It submits a task through the control plane and probes the worker's execution.
+- `infra/installation/compose.yaml` takes the control plane and the worker from `infra/installation/Dockerfile`, whose build stage copies the whole checkout (`COPY . .`, line 19) and runs `apps/control-plane/dist/main.js` and `apps/worker/dist/main.js`. The same files apply `infra/installation/seccomp/worker.json` and `infra/installation/worker-entrypoint.sh`.
+- The installation's smoke fixtures are under `infra/installation/smoke/`.
+
+The inputs overlap, so the scenario was not run. The sealed change modifies runtime source that both images build and that a task's launch passes through:
+
+- `apps/worker/src/launch-orchestrator.ts`
+- `packages/modules/execution/src/domain/launch-authorization.ts`, `journal-recovery.ts`, and `index.ts`
+- `apps/control-plane/src/api/launch-wire.ts`
+- `packages/contracts/documents/execution.openapi.json`
+
+A run now would hold only until that change merges. Task 3.3 waits for it to land on `dev`.
 
 ## Independent review
 
