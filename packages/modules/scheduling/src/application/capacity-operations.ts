@@ -21,6 +21,7 @@ import {
   type Assignment,
   type Refusal,
 } from '../domain/assignment.js';
+import { isCertainEnd } from '../domain/automatic-retry.js';
 import { DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY } from '../domain/capacity-limits.js';
 import { reasonOutcome, type CapacityReason } from '../domain/capacity-reasons.js';
 import type { ProjectId, ProviderCredentialId, ReservationId, ResourceRequest } from '../domain/capacity-reservation.js';
@@ -267,7 +268,7 @@ function isReservable(task: Task, attemptId: AttemptId): boolean {
 // the task that ended without uncertainty and released its reservation.
 async function isSafeToRetry(tx: CapacityTransaction, task: Task, earlier: AttemptId): Promise<boolean> {
   const earlierOutcome = task.attempts.find((attempt) => attempt.id === earlier)?.outcome;
-  const certain = earlierOutcome?.kind === 'not-started' || (earlierOutcome?.kind === 'exited' && earlierOutcome.startProven);
+  const certain = earlierOutcome !== undefined && isCertainEnd(earlierOutcome);
   return certain && !(await tx.ledger.heldForAttempt(earlier));
 }
 
