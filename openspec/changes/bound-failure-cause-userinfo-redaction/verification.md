@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-27. The author's verification, `make verify` on `071822b` and on `b6ec617`, and review passes 1 and 2 are recorded below; review pass 3 is pending.
+Date: 2026-10-27. The author's verification, `make verify` on `071822b` and on `b6ec617`, and review passes 1, 2, and 3 are recorded below.
 
 ## Scope and source
 
@@ -85,7 +85,16 @@ Environment: macOS (Darwin 25.6.0), Node 24.22.1 from `.nvmrc`.
 
 ### Review pass 3
 
-Pending. It is the last pass the governance cap allows.
+- **Reviewer:** Codex CLI, model `gpt-6.1-sol`, reasoning effort medium, read-only sandbox, all confirmed in the output header; run by the worker (Pepi) from the worktree, with the prompt and log outside it.
+- **Invocation:** the same as pass 1.
+- **Session:** `01a17c53-785d-7f30-9590-08f22743f64f`.
+- **Revision:** `05263a4`.
+- **Snapshot:** `927169fc6cfdee9576968149ced0ea1cb6b322f78b6e796a6b0f4c9a71d222b5` before and after; unchanged.
+- **Pass 2 findings:** M1 confirmed fixed: `make verify` on `b6ec617` is recorded, and the findings line is accurate.
+- **Findings:** 0 Critical, 0 High, 0 Medium, 0 Low; nothing is added to `findings.jsonl`.
+- **Other conclusions:** the merge `c021a0f` of `dev` at `33d341a` touches neither package nor the `worker-runtime` spec, changes no dependency, and invalidates no evidence; 200,000 more deterministic comparisons per rule found no difference; the measurements at 20,000, 40,000, and 80,000 characters scale linearly; the delta is the requirement verbatim plus only the new scenario; comment and findings validation pass; the four added tests pass; the records accurately separate the local rules' guarantee from the logger's documented quadratic behaviour.
+- **Reviewer limitation:** in its sandbox one existing test could not listen (`listen EPERM`), and it did not rerun `make verify`.
+- Pass 3 is the last pass the governance cap allows; no further review follows.
 
 ## Limitations
 
@@ -94,6 +103,5 @@ Pending. It is the last pass the governance cap allows.
 
 ## Remaining gates
 
-- Review pass 3 (Codex gpt-6.1-sol), because pass 2 had a Medium finding; the last pass the cap allows.
 - Archive.
 - Integration into dev by the coordinator (single pull request).

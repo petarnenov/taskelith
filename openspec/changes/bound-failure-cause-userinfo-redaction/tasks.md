@@ -32,4 +32,4 @@
 ## 6. Review pass 2 fixes
 
 - [x] 6.1 Record `make verify` on `b6ec617` in `verification.md`
-- [ ] 6.2 Review pass 3, the last pass the governance cap allows
+- [x] 6.2 Review pass 3, the last pass the governance cap allows
