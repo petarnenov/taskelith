@@ -27,6 +27,9 @@ export interface SlotCredentials {
   reveal(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<Result<SlotSecret>>;
   // One version; succeeds for a missing one, so that a retry is safe.
   discard(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<void>;
+  // Every earlier version but `version`: the replaced and orphaned ones after
+  // a rotation's switch (section 8.1); keeps later stores, safe to retry.
+  discardAllExcept(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<void>;
   // Every version and every later store; succeeds for a missing credential.
   destroy(slotId: ProviderCredentialId): Promise<void>;
 }

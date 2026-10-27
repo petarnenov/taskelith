@@ -149,6 +149,7 @@ export const ACCOUNT_SLOTS_CONFORMANCE: readonly ConformanceCase<AccountSlots>[]
 
 const secret = (text: string) => must(SlotSecret.of(text));
 const CREDENTIAL_SLOT = id('ProviderCredentialId', 'slot-a-plain') as ProviderCredentialId;
+const OTHER_CREDENTIAL_SLOT = id('ProviderCredentialId', 'slot-b-other') as ProviderCredentialId;
 
 function expectRevealed(problems: string[], label: string, result: Result<SlotSecret>, text: string): void {
   if (!result.ok) problems.push(`${label}: expected the credential, got ${result.error.message}`);
@@ -179,6 +180,28 @@ export const SLOT_CREDENTIALS_CONFORMANCE: readonly ConformanceCase<SlotCredenti
       expectCode(problems, 'discarded', await credentials.reveal(CREDENTIAL_SLOT, FIRST_VERSION), 'not-found');
       await credentials.discard(CREDENTIAL_SLOT, FIRST_VERSION);
       expectRevealed(problems, 'other kept', await credentials.reveal(CREDENTIAL_SLOT, SECOND_VERSION), 'second-material');
+      return problems;
+    },
+  },
+  {
+    name: 'discards every version but the current one, idempotently, and keeps later stores',
+    async check(credentials: SlotCredentials) {
+      const problems: string[] = [];
+      const orphan = version('version-orphan');
+      await credentials.store(CREDENTIAL_SLOT, FIRST_VERSION, secret('replaced-material'));
+      await credentials.store(CREDENTIAL_SLOT, orphan, secret('orphaned-material'));
+      await credentials.store(CREDENTIAL_SLOT, SECOND_VERSION, secret('current-material'));
+      await credentials.store(OTHER_CREDENTIAL_SLOT, FIRST_VERSION, secret('other-material'));
+      await credentials.discardAllExcept(CREDENTIAL_SLOT, SECOND_VERSION);
+      expectCode(problems, 'replaced', await credentials.reveal(CREDENTIAL_SLOT, FIRST_VERSION), 'not-found');
+      expectCode(problems, 'orphaned', await credentials.reveal(CREDENTIAL_SLOT, orphan), 'not-found');
+      expectRevealed(problems, 'current', await credentials.reveal(CREDENTIAL_SLOT, SECOND_VERSION), 'current-material');
+      expectRevealed(problems, 'other slot', await credentials.reveal(OTHER_CREDENTIAL_SLOT, FIRST_VERSION), 'other-material');
+      await credentials.discardAllExcept(CREDENTIAL_SLOT, SECOND_VERSION);
+      await credentials.discardAllExcept(UNKNOWN_SLOT, FIRST_VERSION);
+      expectRevealed(problems, 'current again', await credentials.reveal(CREDENTIAL_SLOT, SECOND_VERSION), 'current-material');
+      await credentials.store(CREDENTIAL_SLOT, version('version-later'), secret('later-material'));
+      expectRevealed(problems, 'later store', await credentials.reveal(CREDENTIAL_SLOT, version('version-later')), 'later-material');
       return problems;
     },
   },

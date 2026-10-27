@@ -232,9 +232,18 @@ class InMemorySlotCredentials implements SlotCredentials {
     this.secrets.delete(this.keyOf(slotId, version));
   }
 
+  async discardAllExcept(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<void> {
+    const kept = this.keyOf(slotId, version);
+    for (const key of this.keysOf(slotId)) if (key !== kept) this.secrets.delete(key);
+  }
+
   async destroy(slotId: ProviderCredentialId): Promise<void> {
     this.destroyed.add(slotId);
-    for (const key of this.secrets.keys()) if (key.startsWith(`${slotId}\n`)) this.secrets.delete(key);
+    for (const key of this.keysOf(slotId)) this.secrets.delete(key);
+  }
+
+  protected keysOf(slotId: ProviderCredentialId): string[] {
+    return [...this.secrets.keys()].filter((key) => key.startsWith(`${slotId}\n`));
   }
 
   protected keyOf(slotId: ProviderCredentialId, version: SlotCredentialVersion): string {
@@ -290,6 +299,11 @@ class ResurrectingSlotCredentials extends InMemorySlotCredentials {
   }
 }
 
+// A superseded version stays until the slot is removed.
+class RetainingSlotCredentials extends InMemorySlotCredentials {
+  override async discardAllExcept(): Promise<void> {}
+}
+
 async function failingCases<Port>(cases: readonly ConformanceCase<Port>[], port: () => Port): Promise<string[]> {
   const failing: string[] = [];
   for (const conformance of cases) if ((await conformance.check(port())).length > 0) failing.push(conformance.name);
@@ -313,11 +327,18 @@ test('the slot credentials suite rejects an adapter that discloses a credential'
 test('the slot credentials suite rejects an adapter that replaces a version', async () => {
   assert.deepEqual(await failingCases(SLOT_CREDENTIALS_CONFORMANCE, () => new UnversionedSlotCredentials()), [
     'stores each version once and discards one, idempotently',
+    'discards every version but the current one, idempotently, and keeps later stores',
   ]);
 });
 
 test('the slot credentials suite rejects an adapter that keeps a store after destroy', async () => {
   assert.deepEqual(await failingCases(SLOT_CREDENTIALS_CONFORMANCE, () => new ResurrectingSlotCredentials()), [
     'destroys every version, idempotently, and keeps no later store',
+  ]);
+});
+
+test('the slot credentials suite rejects an adapter that retains superseded versions', async () => {
+  assert.deepEqual(await failingCases(SLOT_CREDENTIALS_CONFORMANCE, () => new RetainingSlotCredentials()), [
+    'discards every version but the current one, idempotently, and keeps later stores',
   ]);
 });
