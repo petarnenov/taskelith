@@ -18,7 +18,7 @@ The handoff message names:
 - the branch and its head, the archive commit;
 - a short summary;
 - the evidence;
-- the review passes, with session IDs and finding counts;
+- the review passes, with the reviewer, A or B, session ID, and finding count of each;
 - that the review findings are recorded in the change's `findings.jsonl`;
 - the `make verify` totals;
 - the remaining gates.
