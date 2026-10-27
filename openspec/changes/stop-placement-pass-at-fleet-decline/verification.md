@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-27. The author's verification and checks, and review pass 1 with its fixes, are recorded below; review passes 2 and 3 and the archive checks are pending.
+Date: 2026-10-27. The author's verification and checks, and review passes 1 and 2 with their fixes, are recorded below; review pass 3 and the archive checks are pending.
 
 ## Scope and source
 
@@ -8,7 +8,8 @@ Follow-up of the timing risk that review pass 3 of `advance-placement-rotation-c
 
 - **Base revision:** `21f399a5` (`origin/dev`, merge of pull request #344).
 - **Revision verified:** the records commit (`docs: record the verification of the stop-placement-pass-at-fleet-decline change`) on top of `bc02e042`: the contract, operational targets, spec delta, and proposal (`fa1de96b`), the tests (`ae9f5915`), the fix (`9086c800`), the design, tasks, and empty review records (`65072e2e`), and the comment of `FLEET_REASONS` (`bc02e042`). The checks ran on that working tree with this record, which the records commit holds with only the check results added.
-- **Revision after review pass 1:** the records commit of pass 1 (`docs: record review pass 1 of the stop-placement-pass-at-fleet-decline change`) on top of the fixes `f4d82827` (spec delta, contract, proposal, design, tasks) and `c7d4f298` (test); the section Checks records its checks.
+- **Revision after review pass 1:** the records commit of pass 1 (`docs: record review pass 1 of the stop-placement-pass-at-fleet-decline change`) on top of the fixes `f4d82827` (spec delta, contract, proposal, design, tasks) and `c7d4f298` (test); that records commit, `229e7596`, also corrected the citation of the unit test in `design.md`, Known limit (`:396` to `:403`). The section Checks records its checks.
+- **Revision after review pass 2:** the records commit of pass 2 (`docs: record review pass 2 of the stop-placement-pass-at-fleet-decline change`) on top of the fixes `f0a7d4f4` (spec delta, proposal, design, tasks) and `79f37fe6` (comments of `FLEET_REASONS` and the two tests); the section Checks records its checks.
 - **Scope:** capacity reservation contract sections 5 and 13, operational targets section 1, the `execution-placement` delta of "Project rotation", `PlacementService.#offer` and `#settle` in `@taskelith/control-plane`, the comment of `FLEET_REASONS` in `@taskelith/scheduling`, and the placement unit and PostgreSQL integration tests.
 - **Out of scope:** the rotation cursor rule and `RotationCursor`, the backoff of a fleet capacity decline (#344), the classification `lacksFleetCapacity`, per-task requests, and a load test.
 
@@ -22,7 +23,7 @@ The analysis is in `design.md`, Analysis. In short: the cursor ends where it end
 - **Code agrees.** `#offer` (`apps/control-plane/src/application/placement-service.ts:91`) calls `cursor.ranOutOfCapacity()` and leaves its loop (`:101`, `:102`) at the first offer that `isFleetCapacityDecline` (`:276`) classifies; a store outage still returns from the loop (`:96`), and every other outcome settles and continues. `#settle` (`:113`) is no longer given a fleet capacity decline, so its early return for one was removed and the wait stays unchanged as #344 decided.
 - **Adapters.** The rule is only in the service's loop; `InMemoryPlacementQueue` (`packages/modules/scheduling/src/adapters/in-memory-placement.ts:26`) and `PostgresPlacementQueue` (`packages/adapters/postgres/src/capacity-repositories.ts:159`) answer the same read as before and did not change. The unit tests run over the in-memory queue, the integration test over `PostgresDatabase`.
 - **Other statements checked**, by `grep` for "during a pass", "mid-pass", "rest of the pass", "later offer", "later project", "tasks after it", "pass continues", "pass stops", "stops the pass", "ends the pass", and "first decline" over `docs/`, `openspec/specs/`, `apps/`, and `packages/`, outside archived changes and `dist/`, and by reading the comments of `PlacementService` and `fair-order.ts`:
-  - Changed: contract sections 5 and 13 and the operational targets row above; the `execution-placement` requirement "Project rotation" in the delta (`openspec/changes/stop-placement-pass-at-fleet-decline/specs/execution-placement/spec.md:3`), which replaces the living requirement (`openspec/specs/execution-placement/spec.md:31`) only at archive, with its scenario "Capacity freed during a pass" (living `:50`), which expected a later project's placement in the same pass, "Many blocked projects", now blocked by the project's own limit, and the new scenarios "Fleet full for many passes" (`:26`, from review pass 1) and "Own decline during a pass"; the comments of `#offer` (`placement-service.ts:89`), `#settle` (`:111`), and `isOutage` (`:284`), which said a pass stops only when the store fails; the comment of `FLEET_REASONS` (`packages/modules/scheduling/src/domain/capacity-reasons.ts:32`).
+  - Changed: contract sections 5 and 13 and the operational targets row above; the `execution-placement` requirement "Project rotation" in the delta (`openspec/changes/stop-placement-pass-at-fleet-decline/specs/execution-placement/spec.md:3`), which replaces the living requirement (`openspec/specs/execution-placement/spec.md:31`) only at archive, with its scenario "Capacity freed during a pass" (living `:50`), which expected a later project's placement in the same pass, "Many blocked projects", now blocked by the project's own limit, and the new scenarios "Fleet full for many passes" (`:26`, from review pass 1) and "Own decline during a pass"; the comments of `#offer` (`placement-service.ts:89`) and `isOutage` (`:284`), which said a pass stops only when the store fails; the comment of `#settle` (`:111`), which listed a fleet capacity decline among the waits it settles; the comment of `FLEET_REASONS` (`packages/modules/scheduling/src/domain/capacity-reasons.ts:32`).
   - Agree and unchanged: `RotationCursor` (`packages/modules/scheduling/src/domain/fair-order.ts:29`), whose offers after the first fleet capacity decline no longer occur; `execution-placement` "Waiting placements" (`spec.md:8`), "Placement transaction" (`:66`), "Placement backoff" (`:89`), "Backoff forgetting" (`:108`), and "Candidate order" (`:119`); the comments of `placeWaiting` and `#placeDue` (`placement-service.ts:60`, `:70`); `docs/architecture.md`, which states no placement pass rule. The archived records of `advance-placement-rotation-cursor` and `placement-backoff-preserves-rotation` describe the earlier state and are not edited.
 - **Requirement length.** After review pass 1 the modified requirement is 498 characters; `MAX_REQUIREMENT_TEXT_LENGTH` of the pinned OpenSpec is 500. `openspec archive stop-placement-pass-at-fleet-decline --yes` in a scratch copy of `openspec/` at `c7d4f298`, then `openspec validate --specs --strict --no-interactive`: 69 passed, 0 failed; the archived requirement is 498 characters. Before pass 1 it was 500, with the same scratch result.
 - New and changed comments are at most two lines of at most 80 characters; `npm run verify:comments` passes within `make verify`.
@@ -38,7 +39,7 @@ The analysis is in `design.md`, Analysis. In short: the cursor ends where it end
 - **Passes after the fix.** At `9086c800`, the same two files with `packages/modules/scheduling/test/*.test.ts`: 167 tests, 167 pass.
 - **Replaced test.** `a slot freed after a capacity decline does not move the cursor past it` expected the freed slot to go to `task-d1` in the same pass, the behavior this change removes; the test at `placement-service.test.ts:384` replaces it with the same fleet and expects the rotation order `task-a1`, `task-b1`, `task-c1`, `task-d1`, `task-e1`.
 - **Review pass 1 test.** `a fleet that stays full keeps the cursor until capacity returns` (`placement-service.test.ts:369`), from `c7d4f298`, guards the scenario "Fleet full for many passes" with 120 projects: three full passes each read 100 tasks and place none, then the slot goes to the project after the cursor. It passes after the fix and, with `placement-service.ts` of `21f399a5`, before it, which shows that the full-fleet behavior predates this change.
-- **Citations.** Every file, line, and commit cited above was checked against the files of the records commit of review pass 1.
+- **Citations.** Every file, line, and commit cited above was checked against the files of the records commit of review pass 2.
 
 ## Checks
 
@@ -47,7 +48,8 @@ The analysis is in `design.md`, Analysis. In short: the cursor ends where it end
 - `make findings ARGS="validate"`: every findings file is valid, 22 files; every pass summary file is valid, 2 files.
 - `make verify` on the working tree of `65072e2e`: exit 0; 2138 tests, 2091 pass, 0 fail, 47 skipped; coverage lines 99.24%, branches 92.20%, functions 98.92%; every active OpenSpec change archives into strictly valid specs; `validate --all --strict` 70 passed. The new unit tests and the PostgreSQL test passed in it.
 - `make verify` on the working tree of `bc02e042` with this record: exit 0; 2138 tests, 2091 pass, 0 fail, 47 skipped; coverage lines 99.24%, branches 92.18%, functions 98.92%; every active OpenSpec change archives into strictly valid specs; `validate --all --strict` 70 passed.
-- After review pass 1, on the working tree of `c7d4f298` with this record: `npm run openspec -- validate stop-placement-pass-at-fleet-decline --strict`: valid; the scratch archive as in the self-check: 69 specs passed, 0 failed; `make findings ARGS="validate"`: every findings file is valid, 22 files; every pass summary file is valid, 2 files; `make verify`: exit 0; 2138 tests, 2091 pass, 0 fail, 47 skipped; coverage lines 99.24%, branches 92.19%, functions 98.92%; every active OpenSpec change archives into strictly valid specs; `validate --all --strict` 70 passed. The records commit of pass 1 holds this record with only these results added.
+- After review pass 1, on the working tree of `c7d4f298` with this record: `npm run openspec -- validate stop-placement-pass-at-fleet-decline --strict`: valid; the scratch archive as in the self-check: 69 specs passed, 0 failed; `make findings ARGS="validate"`: every findings file is valid, 22 files; every pass summary file is valid, 2 files; `make verify`: exit 0; 2138 tests, 2091 pass, 0 fail, 47 skipped; coverage lines 99.24%, branches 92.19%, functions 98.92%; every active OpenSpec change archives into strictly valid specs; `validate --all --strict` 70 passed. The records commit of pass 1, `229e7596`, holds this record with these results added, the `design.md` citation fix above, and the review records.
+- After review pass 2, on the working tree of `79f37fe6` with this record: `npm run openspec -- validate stop-placement-pass-at-fleet-decline --strict`: valid; the scratch archive as in the self-check: 69 specs passed, 0 failed, the archived requirement 498 characters; `make findings ARGS="validate"`: every findings file is valid, 22 files; every pass summary file is valid, 2 files; `make verify`: exit 0; 2138 tests, 2091 pass, 0 fail, 47 skipped; coverage lines 99.24%, branches 92.20%, functions 98.92%; every active OpenSpec change archives into strictly valid specs; `validate --all --strict` 70 passed. The records commit of pass 2 holds this record with these results added.
 
 Environment: Linux (`Linux 7.0.0-38-generic`, x86_64), Node.js 24.22.1 from `.nvmrc`, Docker test services started by `make verify` and `scripts/services.sh`, `TMPDIR` set to a directory on disk outside `/tmp` (`~/.cache/taskelith-tmp`) because of the stray `/tmp/.git` directory on this host.
 
@@ -70,11 +72,27 @@ The coordinator assigned reviewer A, OpenCode, model `opencode-go/kimi-k3.1-pro`
 
 ### Review pass 2
 
-Not run yet; reviewer B checks the resolutions of pass 1.
+- **Reviewer:** B, Claude Code, model `claude-opus-5-5`, effort `high`, session `3f53aef9-2a71-43b9-949f-452b0178a0a8`.
+- **Revision reviewed:** `229e7596`, from 2026-10-27T12:54:57Z to 13:02:50Z.
+- **Invocation:** `claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json < /dev/null`, with the prompt and the output outside the worktree; the invocation sets the effort.
+- **Model confirmation:** `claude-opus-5-5` is the only model in the JSON `modelUsage`; `is_error` is false.
+- **Snapshot:** before and after the pass `7a34db5553ecc8788442b4d645a8009c7b5fd6e5d2bbe6f7d9e23a69672ce7bc`, identical.
+- **Pass 1 fixes:** all four confirmed; M1 predates the change, as the archived `advance-placement-rotation-cursor` design (`openspec/changes/archive/2026-10-27-advance-placement-rotation-cursor/design.md:25`) shows. The reviewer confirmed the soundness of the stop through the order of `decidePlacement` (`packages/modules/scheduling/src/domain/placement-decision.ts:62`), found the hard-control caveat already in Risks, accepted `ranOutOfCapacity` as a domain guard, found the multi-replica claims labelled as reasoned, and checked the citations, commits, and counts.
+- **Result:** Critical 0, High 0, Medium 1, Low 9, all in the spec and the records. The file lines below are those of `229e7596`.
+- **M1, spec-wording** (`specs/execution-placement/spec.md:22`-`:24`): the scenario "Capacity freed during a pass" expected the next pass to place `p-b`'s task, which fails with one replica when earlier offers of the pass were declined for their own reasons and one placed: a second-round decline of `p-b` then leaves the cursor at the placed project, and the next read reaches a project after it before `p-b`, as section 13 requires. Fixed in `f0a7d4f4`: the WHEN now names the first offer of the pass, a task of `p-b`, and drops "before a task of a later project is offered". Both tests match it: the unit test (`apps/control-plane/test/placement-service.test.ts:384`) declines `task-b1` as the first offer of its pass, and the PostgreSQL test (`apps/control-plane/test/placement.integration.test.ts:197`) declines `task-1` as the first offer. `missedBy` pass 1, role A: the scenario was unchanged since `a12f4db2`.
+- **L1, docs** (`proposal.md:8`): "offered first among the projects after it" was false in that case. Fixed in `f0a7d4f4`: "offered before any project after it in the next read's rotation". `missedBy` pass 1.
+- **L2, docs** (`design.md:24`): "or are placed" dropped from the offers before the decline on a full fleet. Fixed in `f0a7d4f4`. `missedBy` pass 1.
+- **L3, docs** (`proposal.md:9`, `:22`): "one declined placement transaction per pass" now reads "at most one placement transaction per pass that a fleet capacity decline rolls back", as the design. Fixed in `f0a7d4f4`. `missedBy` pass 1.
+- **L4, evidence-mismatch** (`tasks.md:8`): task 2.1 listed the own-decline test among the tests that fail before the fix; it is now named a guard test that passes before and after. Fixed in `f0a7d4f4`. `missedBy` pass 1.
+- **L5, process** (`tasks.md:18`): task 4.2 ticked. Fixed in `f0a7d4f4`; introduced by the pass 1 records, so no `missedBy`.
+- **L6, evidence-mismatch** (this record, `:11`, `:50`): the records commit of pass 1 also changed the `design.md` citation; both lines now say so. Fixed in the records commit of pass 2; introduced by the pass 1 records, so no `missedBy`.
+- **L7, docs** (this record, `:25`): the old comment of `#settle` was about waits, not about when a pass stops; it is described apart. Fixed in the records commit of pass 2. `missedBy` pass 1.
+- **L8, naming** (`packages/modules/scheduling/src/domain/capacity-reasons.ts:32`): the comment of `FLEET_REASONS` cites "contract §5, §13" again. Fixed in `79f37fe6`. `missedBy` pass 1.
+- **L9, docs** (`apps/control-plane/test/placement-service.test.ts:419`, `apps/control-plane/test/placement.integration.test.ts:187`): "none for the rest" named later fleet declines that no longer happen; both comments now say the long jitter would apply were the fleet capacity decline to back off. Fixed in `79f37fe6`. `missedBy` pass 1: the comments predate the change and were stale at `a12f4db2`.
 
 ### Review pass 3
 
-Not run yet; reviewer A runs it only if pass 2 has findings above Low.
+Not run yet; pass 2 has a Medium finding, so reviewer A runs it to confirm the resolutions of pass 2.
 
 ## Limitations
 
@@ -87,6 +105,6 @@ Not run yet; reviewer A runs it only if pass 2 has findings above Low.
 
 ## Remaining gates
 
-- Independent review: pass 2 by reviewer B, and pass 3 by reviewer A if needed, with their records.
+- Independent review: pass 3 by reviewer A, which confirms the resolutions of pass 2, with its record.
 - Archive under worker step 7, with the checks of the archived tree.
 - Integration into dev by the coordinator (single pull request)
