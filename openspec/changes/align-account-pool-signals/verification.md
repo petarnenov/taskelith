@@ -45,11 +45,32 @@ Run on 2026-10-27 at head `dbabd5fb`, the branch's four commits on `b87abe75`, w
 | `make findings ARGS="validate"` | Passed: "Every findings file is valid: 43 file(s); every pass summary file is valid: 23 file(s)." |
 | `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | Passed (exit 0), last line "Packed file allowlist and installed CLI verification passed."; `verify:comments` "Every comment is within the comment length rule."; coverage over all files 99.28 % lines, 92.33 % branches, 98.94 % functions; OpenSpec "Totals: 70 passed, 0 failed (70 items)"; `verify:links` "Every checked link conforms."; `verify:archive` "Every active OpenSpec change archives into strictly valid specs." |
 
+After the review pass 1 fixes (`3745eaaf`) and with this record's pass 1 entries staged (tree `f9c3ef2f8719be91fef4ec782e173c2e84e7f94c`, which differs from the record commit only in this paragraph):
+
+- **`npm run openspec -- validate align-account-pool-signals --strict`**: `Change 'align-account-pool-signals' is valid`.
+- **`npm run openspec -- validate --all --strict`**: `Totals: 70 passed, 0 failed (70 items)`.
+- **`make findings ARGS="validate"`**: `Every findings file is valid: 43 file(s); every pass summary file is valid: 23 file(s).`
+- **`TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`**: exit 0, last line `Packed file allowlist and installed CLI verification passed.`; comments within the rule; coverage over all files 99.28 % lines, 92.33 % branches, 98.94 % functions; OpenSpec `Totals: 70 passed, 0 failed (70 items)`; links `Every checked link conforms.`; archive dry-run `Every active OpenSpec change archives into strictly valid specs.`
+
 `make verify` needs `TMPDIR` on this host because `/tmp` holds an empty `.git` directory.
 
 ## Independent review
 
-Not run yet. The coordinator assigns reviewers A and B ([independent review process](/docs/governance.md#independent-review-process)).
+The coordinator assigned the reviewers and ran the pass ([independent review process](/docs/governance.md#independent-review-process)).
+
+### Pass 1, reviewer A
+
+- Reviewer: Codex, `gpt-6.1-sol`, reasoning effort medium, reviewed head `d6b2ae1c`, run by the coordinator with the Codex CLI row of [reviewer invocations](/docs/agent-task-protocol.md#reviewer-invocations) (`codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`); model, effort, and session as the coordinator reported them.
+- Session: `01a17ef0-dbbf-7950-9182-235abcad61f4`.
+- Snapshot: `77fa31be9f58e5f8183ca99a4e78279ffdb0ba9f2b0977ecc4f1d598b117a1f5` before and after the pass, unchanged.
+- Counts: Critical 0, High 0, Medium 0, Low 3.
+- A Low-only pass ends the review under governance "Low findings are fixed", so reviewer B is not used and passes 2 and 3 do not run. The three fixes, in `3745eaaf`, have the outcome `fixed-unreviewed`.
+
+| # | Severity | Finding | Resolution | Commit |
+| --- | --- | --- | --- | --- |
+| 1 | Low (contract-drift) | `specs/account-pool-port/spec.md:26` and `design.md:24` equated code-unit order with the `"C"` collation unconditionally; they agree only for ASCII identifiers | The delta and design D7 say that the two orders agree for ASCII identifiers; the normative order stays code-unit order. The requirement body is now 408 characters | `3745eaaf` |
+| 2 | Low (docs) | `design.md:30` claimed that the window length bounds the error of a late usage report, though relay delay has no bound and a stale report gets a new end | The risk describes the derived window as an approximate validity after application; the length bounds only later use, not the report's age or its deviation from the provider's window | `3745eaaf` |
+| 3 | Low (evidence-mismatch) | `verification.md:27` said the `reset signal` grep finds one line; it also finds `docs/g3-plan.md:100`, `docs/qualification/codex.md:229`, and `docs/qualification/claude-code.md:216` | The record lists the four matches and why the plan row and the qualification records stay | `3745eaaf` |
 
 ## Limitations
 
@@ -58,6 +79,7 @@ Not run yet. The coordinator assigns reviewers A and B ([independent review proc
 
 ## Remaining gates
 
-- Independent review, passes 1 to 3 as needed
+Review pass 1 was Low-only, so passes 2 and 3 are not run.
+
 - Archive
 - Integration into dev by the coordinator (single pull request)

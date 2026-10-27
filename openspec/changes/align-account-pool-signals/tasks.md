@@ -16,10 +16,14 @@
 ## 3. Verification and review
 
 - [x] 3.1 Run strict validation of this change and of all, `make findings ARGS="validate"`, and `make verify`, and record them in `verification.md`.
-- [ ] 3.2 Review pass 1 by reviewer A, recorded in `verification.md`, `passes.jsonl`, and `findings.jsonl`.
-- [ ] 3.3 Review pass 2 by reviewer B, unless pass 1 is Low-only.
-- [ ] 3.4 Review pass 3 by reviewer A, if pass 2 leaves fixes to confirm.
+- [x] 3.2 Review pass 1 by reviewer A (Codex `gpt-6.1-sol`, effort medium), recorded in `verification.md`, `passes.jsonl`, and `findings.jsonl`.
+- [x] 3.3 Review pass 2 by reviewer B, unless pass 1 is Low-only: not run, pass 1 was Low-only.
+- [x] 3.4 Review pass 3 by reviewer A, if pass 2 leaves fixes to confirm: not run, no pass 2.
 
-## 4. Archive
+## 4. Review pass 1
 
-- [ ] 4.1 Archive the change in the last commit of the branch and record the archive checks.
+- [x] 4.1 Fix the three pass 1 Low findings without another review: the ASCII qualifier of the collation order, the derived window risk, and the recorded reset signal grep.
+
+## 5. Archive
+
+- [ ] 5.1 Archive the change in the last commit of the branch and record the archive checks.
