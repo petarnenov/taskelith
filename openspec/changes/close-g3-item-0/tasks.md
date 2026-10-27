@@ -10,8 +10,8 @@
 - [x] 2.4 List the delegate decisions with their source records as confirmed by the owner (coordinator message of 2026-10-27)
 - [x] 2.5 Record item 0 as done and wave 1 as next in `docs/foundation.md`
 - [x] 2.6 Run the checks without Docker and record `verification.md`
-- [ ] 2.7 Add the review checklist output to `design.md`
-- [ ] 2.8 Finalize the `align-product-ports-with-g2-lifecycle` entry and the closure date after it lands, and merge `origin/dev`
+- [x] 2.7 Add the review checklist output to `design.md` and save `checklist.json`
+- [x] 2.8 Merge `origin/dev` at `579c227d` and finalize the `align-product-ports-with-g2-lifecycle` entry (#372) and the closure date
 - [ ] 2.9 Run `make verify`
 
 ## 3. Review and archive
