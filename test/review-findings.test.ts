@@ -9,10 +9,13 @@ import {
   formatChecklist,
   formatIndex,
   formatProblem,
+  formatRecordChecklist,
+  isRecordFinding,
   MAX_LINE_BYTES,
   matchesQuery,
   parseFindings,
   parseVocabulary,
+  recordChecklist,
   reviewerKey,
   secretLikeStrings,
   VOCABULARY_PATH,
@@ -312,4 +315,26 @@ test('the checklist text names its scope, and an empty one says nothing matched'
   assert.equal(formatChecklist(checklist(archive, vocabulary.categories, none), none), 'Review checklist (files nothing/**): no archived findings match.');
   const all = { capabilities: [], files: [], top: 7 };
   assert.match(formatChecklist([], all), /\(all archived findings\)/);
+});
+
+test('a record finding is one whose file is under openspec/changes', () => {
+  assert.deepEqual(archive.map(isRecordFinding), [true, false, true, false, false]);
+  assert.equal(isRecordFinding(finding({ file: 'openspec/changes/archive/2026-10-01-old/design.md' })), true);
+  assert.equal(isRecordFinding(finding({ file: 'openspec/specs/review-process/spec.md' })), false);
+});
+
+test('the record checklist ranks the categories of record findings only', () => {
+  const items = recordChecklist(archive, vocabulary.categories, 7);
+  assert.deepEqual(items.map(({ category, count, example }) => [category, count, example]), [
+    ['docs', 1, 'Missing doc'],
+    ['stale-citation', 1, 'Old citation'],
+  ]);
+  assert.equal(recordChecklist(archive, vocabulary.categories, 1).length, 1);
+});
+
+test('the record checklist text names record quality, and an empty one says so', () => {
+  const text = formatRecordChecklist(recordChecklist(archive, vocabulary.categories, 7));
+  assert.match(text, /^Record quality \(archived findings under openspec\/changes\/\), most frequent finding categories first:\n/);
+  assert.match(text, /\n1\. docs \(1\): .+ Example: "Missing doc"\n2\. stale-citation \(1\): .+ Example: "Old citation"$/);
+  assert.equal(formatRecordChecklist([]), 'Record quality (archived findings under openspec/changes/): no archived findings match.');
 });

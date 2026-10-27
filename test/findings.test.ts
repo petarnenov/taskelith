@@ -153,7 +153,27 @@ test('index and checklist read only archived findings', () => {
     assert.deepEqual(json.category.map(({ key }) => key), ['stale-citation', 'docs']);
     const list = runFindings(['checklist', '--capability', 'review-process', '--top', '5'], root);
     assert.equal(list.exitCode, 0);
-    assert.match(list.stdout, /\n1\. stale-citation \(2\): .+ Example: "New citation"$/);
+    assert.match(list.stdout, /\n1\. stale-citation \(2\): .+ Example: "New citation"$/m);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('every checklist ends with the record quality of archived findings', () => {
+  const record = { file: 'openspec/changes/archive/2026-10-04-third/verification.md', capability: undefined };
+  const root = repository({
+    ...ARCHIVED,
+    'openspec/changes/archive/2026-10-04-third/findings.jsonl': `${line('third', 'evidence-mismatch', 'Wrong count', record)}\n`,
+  });
+  try {
+    const section = 'Record quality (archived findings under openspec/changes/), most frequent finding categories first:\n'
+      + '1. evidence-mismatch (1): A recorded result, count, or claim differs from what the checks show. Example: "Wrong count"';
+    for (const args of [[], ['--capability', 'review-process'], ['--files', 'docs/**'], ['--capability', 'none', '--files', 'none/**']]) {
+      const { exitCode, stdout } = runFindings(['checklist', ...args], root);
+      assert.equal(exitCode, 0, args.join(' '));
+      assert.ok(stdout.endsWith(`\n\n${section}`), args.join(' '));
+    }
+    assert.match(runFindings(['checklist', '--files', 'docs/**'], root).stdout, /^Review checklist \(files docs\/\*\*\), most frequent finding categories first:\n1\. docs \(1\)/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
