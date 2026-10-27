@@ -15,17 +15,17 @@
 
 ## 3. Item 2
 
-- [ ] 3.1 Pass 1 (reviewer A): full review of item 2; record it, its findings, and their resolutions
+- [x] 3.1 Pass 1 (reviewer A): full review of item 2; record it, its findings, and their resolutions
 - [ ] 3.2 Pass 2 (reviewer B): check the pass 1 resolutions and review item 2 independently, unless pass 1 was Low-only
 - [ ] 3.3 Pass 3 (reviewer A): confirm the pass 2 resolutions only, if pass 2 needs it
 - [ ] 3.4 Fill the item 2 row of "Summary per item" and its follow-up rows
 
 ## 4. Item 3
 
-- [ ] 4.1 Pass 1 (reviewer A): full review of item 3; record it, its findings, and their resolutions
-- [ ] 4.2 Pass 2 (reviewer B): check the pass 1 resolutions and review item 3 independently, unless pass 1 was Low-only
-- [ ] 4.3 Pass 3 (reviewer A): confirm the pass 2 resolutions only, if pass 2 needs it
-- [ ] 4.4 Fill the item 3 row of "Summary per item" and its follow-up rows
+- [x] 4.1 Pass 1 (reviewer A): full review of item 3; record it, its findings, and their resolutions
+- [x] 4.2 Pass 2 (reviewer B): check the pass 1 resolutions and review item 3 independently, unless pass 1 was Low-only (not run: pass 1 had no findings)
+- [x] 4.3 Pass 3 (reviewer A): confirm the pass 2 resolutions only, if pass 2 needs it (not run: pass 1 had no findings)
+- [x] 4.4 Fill the item 3 row of "Summary per item" and its follow-up rows
 
 ## 5. Item 5
 
@@ -36,14 +36,14 @@
 
 ## 6. Item 6
 
-- [ ] 6.1 Pass 1 (reviewer A): full review of item 6; record it, its findings, and their resolutions
+- [x] 6.1 Pass 1 (reviewer A): full review of item 6; record it, its findings, and their resolutions
 - [ ] 6.2 Pass 2 (reviewer B): check the pass 1 resolutions and review item 6 independently, unless pass 1 was Low-only
 - [ ] 6.3 Pass 3 (reviewer A): confirm the pass 2 resolutions only, if pass 2 needs it
 - [ ] 6.4 Fill the item 6 row of "Summary per item" and its follow-up rows
 
 ## 7. Item 7
 
-- [ ] 7.1 Pass 1 (reviewer A): full review of item 7; record it, its findings, and their resolutions
+- [x] 7.1 Pass 1 (reviewer A): full review of item 7; record it, its findings, and their resolutions
 - [ ] 7.2 Pass 2 (reviewer B): check the pass 1 resolutions and review item 7 independently, unless pass 1 was Low-only
 - [ ] 7.3 Pass 3 (reviewer A): confirm the pass 2 resolutions only, if pass 2 needs it
 - [ ] 7.4 Fill the item 7 row of "Summary per item" and its follow-up rows

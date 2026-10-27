@@ -100,17 +100,19 @@ Every item is reviewed against `AGENTS.md`, [ADR 0004](/docs/decisions/0004-firs
 
 ### D3. Reviewers
 
-Confirmed by the coordinator. A and B are of different harnesses for every item. Items 1 and 2 depend on external facts, so both of their reviewers have network access ("External facts").
+Confirmed by the coordinator. A and B are of different harnesses for every item, except where a replacement below records why not. Items 1 and 2 depend on external facts, so both of their reviewers have network access ("External facts").
 
-| Item | A | B |
-| --- | --- | --- |
-| 1 | OpenCode `kimi-k3.1-pro` | Claude Code `claude-fable-5-1` |
-| 2 | OpenCode `deepseek-v4-pro` | Claude Code `claude-opus-5-5` |
-| 3 | OpenCode `kimi-k2.7-code` | Codex `gpt-6-astra` |
-| 5 | OpenCode `qwen3.8-max` | Codex `gpt-6.1-sol` |
-| 6 | OpenCode `kimi-k3.1-pro` | Claude Code `claude-fable-5-1` |
-| 7 | OpenCode `deepseek-v4-pro` | Codex `gpt-6-astra` |
-| 8 | OpenCode `kimi-k2.7-code` | Claude Code `claude-opus-5-5` |
+| Item | A (original) | B (original) | A (replacement) | B (replacement) |
+| --- | --- | --- | --- | --- |
+| 1 | OpenCode `kimi-k3.1-pro` | Claude Code `claude-fable-5-1` | Claude Code `claude-fable-5-1` | Claude Code `claude-opus-5-5` |
+| 2 | OpenCode `deepseek-v4-pro` | Claude Code `claude-opus-5-5` | Pass 3: Claude Code `claude-fable-5-1` (proposed) | Unchanged |
+| 3 | OpenCode `kimi-k2.7-code` | Codex `gpt-6-astra` | Unchanged | Unchanged |
+| 5 | OpenCode `qwen3.8-max` | Codex `gpt-6.1-sol` | Codex `gpt-6.1-sol` | Claude Code `claude-opus-5-5` |
+| 6 | OpenCode `kimi-k3.1-pro` | Claude Code `claude-fable-5-1` | Pass 3: Codex `gpt-6-astra` (proposed) | Unchanged |
+| 7 | OpenCode `deepseek-v4-pro` | Codex `gpt-6-astra` | Pass 3: Claude Code `claude-fable-5-1` (proposed) | Unchanged |
+| 8 | OpenCode `kimi-k2.7-code` | Claude Code `claude-opus-5-5` | Codex `gpt-6-astra` | Unchanged |
+
+The OpenCode Go weekly quota paused all OpenCode reviewers on 2026-10-27, after pass 1 of items 2, 3, 6, and 7. The coordinator, Niki, assigned the replacements under "Unavailable reviewer"; the pass 3 replacements are proposed and await confirmation. Items 1 and 2 keep both reviewers in Claude Code, the only available harness with network access ([verification](verification.md), "Reviewers and replacements").
 
 Each reviewer runs with the invocation of the [agent task protocol](/docs/agent-task-protocol.md#reviewer-invocations), from this change's worktree. Prompt files, logs, and snapshots stay outside the worktree.
 
