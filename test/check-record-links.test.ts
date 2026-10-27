@@ -94,18 +94,19 @@ test('accepts same-directory, subtree, and root-relative links that resolve', ()
 });
 
 test('rejects a relative link that escapes the change directory', () => {
-  const problems = problemsIn({ ...BASE_FILES, [`${ACTIVE}/design.md`]: '[governance](../../../docs/governance.md)\n' });
+  const resolvesOnceArchived = '../../../../docs/governance.md';
+  const problems = problemsIn({ ...BASE_FILES, [`${ACTIVE}/design.md`]: `[governance](${resolvesOnceArchived})\n` });
   assert.deepEqual(problems, [{
     file: `${ACTIVE}/design.md`,
     line: 1,
-    target: '../../../docs/governance.md',
+    target: resolvesOnceArchived,
     reason: 'relative link leaves the change directory; use a root-relative link',
   }]);
 });
 
 test('checks an active change as if it were at its archived path', () => {
-  const twoLevels = '[governance](../../docs/governance.md)\n';
-  const problems = problemsIn({ ...BASE_FILES, [`${ACTIVE}/design.md`]: twoLevels });
+  const resolvesBeforeArchive = '[governance](../../../docs/governance.md)\n';
+  const problems = problemsIn({ ...BASE_FILES, [`${ACTIVE}/design.md`]: resolvesBeforeArchive });
   assert.equal(problems.length, 1);
   assert.match(problems[0].reason, /leaves the change directory/);
   const ownArchivedPath = `[proposal](/openspec/changes/archive/${ARCHIVE_DATE}-add-demo/proposal.md#why)\n`;
