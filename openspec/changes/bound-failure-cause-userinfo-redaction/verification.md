@@ -63,7 +63,7 @@ Environment: macOS (Darwin 25.6.0), Node 24.22.1 from `.nvmrc`.
 - **Session:** `01a17bf3-b5d4-7720-b031-8ad17b485dd0`.
 - **Revision:** `071822b`.
 - **Snapshot:** `b4f0ca84ee5045a3258fd6e5be00a1ee0d88535f8505587449a4e14dbd35bc04` before and after; unchanged.
-- **Findings:** 0 Critical, 0 High, 2 Medium, 1 Low; all fixed, to be confirmed by pass 2.
+- **Findings:** 0 Critical, 0 High, 2 Medium, 1 Low; all fixed in `ebceb80`, `2f078d3`, and `c6c2525`, to be confirmed by pass 2, and recorded in `findings.jsonl`.
   1. **M1:** the scenario "Pathological cause message" and the proposal promised that describing the whole cause takes linear time, but the `[url]` rule stayed quadratic on `a.` repeated, about 373, 1,895, and 5,952 ms at 20,000, 40,000, and 80,000 characters through the whole pipeline. **Fixed** by coordinator Niki's decision on 2026-10-27 to widen the scope rather than narrow the promise: the `[url]` rule and, found by the measurement of every rule, the JWT rule are linear with the same output (`ebceb80` test, `2f078d3` fix); the scenario says every failure-cause redaction rule takes linear time and names `a.` and `eyJ` among the shapes. The logger's `redactText` stays quadratic on such runs (Limitations).
   2. **M2:** this record said `make verify` had not run, though worker step 4 requires it before the first pass. **Fixed:** it had run on `071822b` before the pass and the record had not been updated; the run, its Docker workaround, and its results are under Checks, with the merge of `dev` at `fe643864`.
   3. **L1:** the design called the user-information rule's comment two lines; it is one. **Fixed** in the design's risks, which now describe the comments of all three rules.
