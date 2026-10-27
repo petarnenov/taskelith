@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, test } from 'node:test';
 import { err, failure, parseInstant, type Failure } from '@taskelith/kernel';
 import {
+  isJournalStop,
   isSpaceRefusal,
   parseSequence,
   type DeclaredCapacity,
@@ -304,13 +305,36 @@ test('an I/O error at COMMIT stops the journal until a restart', () => {
   };
   const faulty = value(SqliteWorkerJournal.open(database.handle, CLOCK, { onStop }));
   database.failNextCommit();
-  assert.equal(failureReason(failed(faulty.recordCommand(assignment()))), 'flush-failure');
+  const flushFailure = failed(faulty.recordCommand(assignment()));
+  assert.equal(failureReason(flushFailure), 'flush-failure');
+  assert.equal(isJournalStop(flushFailure), true);
   assert.deepEqual(stops, ['flush-failure']);
   assert.equal(faulty.fault?.details.recording, 'the fault record could not be written');
   assert.equal(faulty.fault?.details.reason, 'flush-failure');
   assert.equal(database.handle.isOpen, false);
   assert.equal(failureReason(failed(faulty.recordCommand(assignment(2)))), 'stopped');
-  assert.equal(failureReason(failed(faulty.snapshot())), 'stopped');
+  assert.equal(isJournalStop(failed(faulty.snapshot())), true);
+});
+
+test('a corrupt journal at COMMIT is a journal stop', () => {
+  const database = faultyDatabase(11);
+  const faulty = value(SqliteWorkerJournal.open(database.handle, CLOCK));
+  database.failNextCommit();
+  assert.equal(isJournalStop(failed(faulty.recordCommand(assignment()))), true);
+});
+
+test('another error at COMMIT rolls back as a whole and leaves the journal usable', () => {
+  const database = faultyDatabase(5);
+  const busy = value(SqliteWorkerJournal.open(database.handle, CLOCK));
+  database.failNextCommit();
+  const refused = failed(busy.recordCommand(assignment()));
+  assert.equal(refused.code, 'internal');
+  assert.deepEqual([isJournalStop(refused), isSpaceRefusal(refused)], [false, false]);
+  assert.equal(busy.fault, undefined);
+  assert.equal(value(busy.snapshot()).intents.length, 0);
+  value(busy.recordCommand(assignment()));
+  assert.equal(value(busy.snapshot()).intents.length, 1);
+  busy.close();
 });
 
 test('a write refused for lack of space rolls back and leaves the journal usable', () => {
