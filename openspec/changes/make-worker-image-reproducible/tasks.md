@@ -24,5 +24,5 @@
 
 ## 5. Review and archive
 
-- [ ] 5.1 Independent review passes assigned by the coordinator (pass 1 done, pass 2 pending)
+- [ ] 5.1 Independent review passes assigned by the coordinator (passes 1 and 2 done, pass 3 pending)
 - [ ] 5.2 Archive the change

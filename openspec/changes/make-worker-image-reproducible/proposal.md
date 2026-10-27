@@ -26,5 +26,6 @@ None.
 ## Impact
 
 - `infra/installation/Dockerfile`, `scripts/installation.sh`, `scripts/harness-qualification.sh`, `Makefile`, `docs/local-installation.md`.
+- At the coordinator's request, a bounded note on one line each of `docs/decisions/0015-g2-closure.md` (the deferral "Worker image not reproducible") and `docs/foundation.md` (the row "Worker image reproducibility"): resolved for builds without the cache, measured on the classic image store of Docker Engine 27.3.1; cached builds are not claimed.
 - `test/installation-script.test.ts`, `test/installation-composition.test.ts`.
 - Out of scope: the `worker-harnesses` variant's own `harnesses` stage, which still writes unclamped times, and the control-plane image beyond what the shared stages give it (design, open questions).
