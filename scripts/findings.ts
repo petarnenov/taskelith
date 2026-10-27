@@ -3,20 +3,26 @@ import { posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { Ajv2020, type ErrorObject } from 'ajv/dist/2020.js';
+import { runChecklist, runEffect, type SaveTarget } from './checklist-commands.ts';
+import { GIT_ENVIRONMENT, type ChecklistEnvironment } from './checklist-environment.ts';
+import {
+  CHECKLIST_FILE,
+  CHECKLIST_SCHEMA_PATH,
+  checkChecklists,
+  createdDate,
+  isSize,
+  missingChecklists,
+  type ChecklistLocation,
+} from './checklist-record.ts';
 import {
   changeOfDirectory,
-  checklist,
   findingsIndex,
-  formatChecklist,
   formatIndex,
   formatProblem,
-  formatRecordChecklist,
   parseLocatedFindings,
   parseVocabulary,
-  recordChecklist,
   SPECS_DIRECTORY,
   VOCABULARY_PATH,
-  type Category,
   type ChecklistQuery,
   type Finding,
   type FindingRules,
@@ -27,11 +33,12 @@ import { consistencyProblems, parsePassSummaries, PASSES_FILE, type PassSummary 
 import { formatReviewerStatistics, reviewerStatistics, type ReviewedChange } from './reviewer-statistics.ts';
 
 // npm run findings: validates the review records of OpenSpec changes and
-// reports on archived ones: index, brief checklist, reviewer statistics.
+// reports on archived ones: index, checklist, reviewers, checklist effect.
 
 const CHANGES_DIRECTORY = 'openspec/changes';
 const ARCHIVE_DIRECTORY = 'archive';
 const FINDINGS_FILE = 'findings.jsonl';
+const OPENSPEC_METADATA = '.openspec.yaml';
 export const SCHEMA_PATH = 'docs/review-findings/finding.schema.json';
 export const PASS_SCHEMA_PATH = 'docs/review-findings/pass.schema.json';
 export const DEFAULT_TOP = 7;
@@ -44,12 +51,16 @@ export const USAGE = [
   '  reviewers [--json]       statistics of archived review passes per reviewer and role',
   `  checklist [--capability <a,b>] [--files <glob,glob>] [--top <1-${MAX_TOP}>]`,
   `                           most frequent archived categories (top ${DEFAULT_TOP})`,
+  '            [--json | --save <change> [--size <S|S-M|M|M-L|L>]]',
+  `                           as JSON, or saved as the change's ${CHECKLIST_FILE}`,
+  '  effect [--json]          pass-1 findings of archived changes against their checklist',
 ].join('\n');
 
 export type Command =
   | { readonly name: 'validate' }
   | { readonly name: 'index' | 'reviewers'; readonly json: boolean }
-  | { readonly name: 'checklist'; readonly query: ChecklistQuery };
+  | { readonly name: 'effect'; readonly json: boolean }
+  | { readonly name: 'checklist'; readonly query: ChecklistQuery; readonly json: boolean; readonly save?: SaveTarget };
 
 export class UsageError extends Error {}
 
@@ -58,13 +69,16 @@ const OPTIONS = {
   capability: { type: 'string', multiple: true },
   files: { type: 'string', multiple: true },
   top: { type: 'string' },
+  save: { type: 'string' },
+  size: { type: 'string' },
 } as const;
 
 const COMMAND_OPTIONS: Readonly<Record<Command['name'], readonly string[]>> = {
   validate: [],
   index: ['json'],
   reviewers: ['json'],
-  checklist: ['capability', 'files', 'top'],
+  checklist: ['capability', 'files', 'top', 'json', 'save', 'size'],
+  effect: ['json'],
 };
 
 export function parseCommand(args: readonly string[]): Command {
@@ -75,8 +89,25 @@ export function parseCommand(args: readonly string[]): Command {
   const misplaced = Object.keys(values).find((option) => !COMMAND_OPTIONS[name].includes(option));
   if (misplaced !== undefined) throw new UsageError(`--${misplaced} does not apply to ${name}`);
   if (name === 'validate') return { name };
-  if (name === 'index' || name === 'reviewers') return { name, json: values.json === true };
-  return { name, query: checklistQuery(values.capability ?? [], values.files ?? [], values.top) };
+  if (name !== 'checklist') return { name, json: values.json === true };
+  const query = checklistQuery(values.capability ?? [], values.files ?? [], values.top);
+  const json = values.json === true;
+  const save = saveTarget(values.save, values.size, json);
+  return save === undefined ? { name, query, json } : { name, query, json, save };
+}
+
+const CHANGE_NAME = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+
+function saveTarget(change: string | undefined, size: string | undefined, json: boolean): SaveTarget | undefined {
+  if (change === undefined) {
+    if (size !== undefined) throw new UsageError('--size applies only with --save');
+    return undefined;
+  }
+  if (json) throw new UsageError('--json and --save exclude each other');
+  if (!CHANGE_NAME.test(change)) throw new UsageError('--save takes an OpenSpec change name');
+  if (size === undefined) return { change };
+  if (!isSize(size)) throw new UsageError('--size must be S, S-M, M, M-L, or L');
+  return { change, size };
 }
 
 function parseOrThrow(args: readonly string[]) {
@@ -169,7 +200,9 @@ interface Repository {
   readonly vocabularyText: string;
   readonly schema: object;
   readonly passSchema: object;
+  readonly checklistSchema: object;
   readonly capabilities: readonly string[];
+  readonly checklists: readonly ChecklistLocation[];
 }
 
 interface ChangeLocation {
@@ -200,7 +233,8 @@ function loadRepository(root: string): Repository {
     const path = posix.join(directory, name);
     return existsSync(posix.join(root, path)) ? { path, text: read(path) } : undefined;
   };
-  const located = changeLocations(root).map(({ directory, change, archived }) =>
+  const locations = changeLocations(root);
+  const located = locations.map(({ directory, change, archived }) =>
     ({ directory, records: { change, archived, findings: file(directory, FINDINGS_FILE), passes: file(directory, PASSES_FILE) } }));
   const changes: ChangeRecords[] = located.map(({ records }) => records);
   const missing = located.filter(({ records }) => !records.archived).flatMap(({ directory, records }) =>
@@ -215,7 +249,13 @@ function loadRepository(root: string): Repository {
     vocabularyText: read(VOCABULARY_PATH),
     schema: JSON.parse(read(SCHEMA_PATH)) as object,
     passSchema: JSON.parse(read(PASS_SCHEMA_PATH)) as object,
+    checklistSchema: JSON.parse(read(CHECKLIST_SCHEMA_PATH)) as object,
     capabilities: directories(root, SPECS_DIRECTORY),
+    checklists: locations.map((location) => ({
+      ...location,
+      created: createdDate(file(location.directory, OPENSPEC_METADATA)?.text),
+      file: file(location.directory, CHECKLIST_FILE),
+    })),
   };
 }
 
@@ -231,7 +271,7 @@ export interface RunResult {
   readonly stderr: string;
 }
 
-export function runFindings(args: readonly string[], root: string): RunResult {
+export function runFindings(args: readonly string[], root: string, environment: ChecklistEnvironment = GIT_ENVIRONMENT): RunResult {
   let command: Command;
   try {
     command = parseCommand(args);
@@ -239,7 +279,12 @@ export function runFindings(args: readonly string[], root: string): RunResult {
     if (!(error instanceof UsageError)) throw error;
     return { exitCode: 2, stdout: '', stderr: `${error.message}\n${USAGE}` };
   }
-  return runCommand(command, loadRepository(root));
+  return runCommand(command, loadRepository(root), { root, environment });
+}
+
+interface Workspace {
+  readonly root: string;
+  readonly environment: ChecklistEnvironment;
 }
 
 interface CheckedChange extends ReviewedChange {
@@ -276,36 +321,52 @@ function checkChange(records: ChangeRecords, rules: ChangeRules): CheckedChange 
   };
 }
 
-function runCommand(command: Command, repository: Repository): RunResult {
+function runCommand(command: Command, repository: Repository, workspace: Workspace): RunResult {
   const vocabulary = parseVocabulary(repository.vocabularyText);
-  const archivedRules = { checkSchema: ajvSchemaCheck(repository.schema), categories: new Set(vocabulary.categories.map(({ id }) => id)) };
+  const categoryIds = new Set(vocabulary.categories.map(({ id }) => id));
+  const archivedRules = { checkSchema: ajvSchemaCheck(repository.schema), categories: categoryIds };
   const rules = {
     archived: archivedRules,
     active: { ...archivedRules, capabilities: new Set(repository.capabilities) },
     passSchema: ajvSchemaCheck(repository.passSchema, [repository.schema]),
   };
   const checked = repository.changes.map((records) => checkChange(records, rules));
+  const checklists = checkChecklists(repository.checklists, ajvSchemaCheck(repository.checklistSchema, [repository.schema]), categoryIds);
+  const validating = command.name === 'validate';
   const problems = [
     ...vocabulary.problems,
-    ...(command.name === 'validate' ? repository.missing : []),
+    ...(validating ? repository.missing : []),
     ...checked.flatMap((change) => change.problems),
+    ...(validating ? missingChecklists(repository.checklists) : []),
+    ...checklists.problems,
   ];
-  if (problems.length > 0) {
-    const summary = `Review findings: ${problems.length} problem(s); the formats are ${SCHEMA_PATH} and ${PASS_SCHEMA_PATH}.`;
-    return { exitCode: 1, stdout: '', stderr: [...problems.map(formatProblem), summary].join('\n') };
+  if (problems.length > 0) return { exitCode: 1, stdout: '', stderr: [...problems.map(formatProblem), problemSummary(problems)].join('\n') };
+  const archivedChanges = checked.filter(({ archived }) => archived);
+  const archived: Finding[] = archivedChanges.flatMap(({ findings }) => findings);
+  if (command.name === 'checklist') return runChecklist(command, { ...workspace, archived, categories: vocabulary.categories });
+  if (command.name === 'effect') {
+    const changes = repository.checklists.filter(({ archived: isArchived }) => isArchived).map(({ directory, change }) =>
+      ({ directory, change, findings: archivedChanges.find((records) => records.change === change)?.findings ?? [] }));
+    return runEffect(command.json, { ...workspace, archivedChanges: changes, checklists: checklists.located });
   }
-  return { exitCode: 0, stdout: commandOutput(command, repository, checked, vocabulary.categories), stderr: '' };
+  return { exitCode: 0, stdout: commandOutput(command, repository, archivedChanges, archived), stderr: '' };
 }
 
-function commandOutput(command: Command, repository: Repository, checked: readonly CheckedChange[], categories: readonly Category[]): string {
+function problemSummary(problems: readonly Problem[]): string {
+  const formats = problems.some(({ file }) => posix.basename(file) === CHECKLIST_FILE)
+    ? `${SCHEMA_PATH}, ${PASS_SCHEMA_PATH}, and ${CHECKLIST_SCHEMA_PATH}`
+    : `${SCHEMA_PATH} and ${PASS_SCHEMA_PATH}`;
+  return `Review findings: ${problems.length} problem(s); the formats are ${formats}.`;
+}
+
+type ReportCommand = Extract<Command, { name: 'validate' | 'index' | 'reviewers' }>;
+
+function commandOutput(command: ReportCommand, repository: Repository, archivedChanges: readonly CheckedChange[], archived: readonly Finding[]): string {
   if (command.name === 'validate') return validOutput(repository.changes);
-  const archivedChanges = checked.filter(({ archived }) => archived);
   if (command.name === 'reviewers') {
     const statistics = reviewerStatistics(archivedChanges, repository.unrecordedArchived);
     return command.json ? JSON.stringify(statistics, null, 2) : formatReviewerStatistics(statistics);
   }
-  const archived: Finding[] = archivedChanges.flatMap(({ findings }) => findings);
-  if (command.name === 'checklist') return checklistOutput(command.query, archived, categories);
   const index = findingsIndex(archived);
   return command.json ? JSON.stringify(index, null, 2) : formatIndex(index);
 }
@@ -314,14 +375,6 @@ function validOutput(changes: readonly ChangeRecords[]): string {
   const findings = changes.filter((records) => records.findings !== undefined).length;
   const passes = changes.filter((records) => records.passes !== undefined).length;
   return `Every findings file is valid: ${findings} file(s); every pass summary file is valid: ${passes} file(s).`;
-}
-
-// Record quality is listed whatever the query, because record findings
-// often name no capability and no file of the task.
-function checklistOutput(query: ChecklistQuery, archived: readonly Finding[], categories: readonly Category[]): string {
-  const forQuery = formatChecklist(checklist(archived, categories, query), query);
-  const forRecords = formatRecordChecklist(recordChecklist(archived, categories, query.top));
-  return `${forQuery}\n\n${forRecords}`;
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
