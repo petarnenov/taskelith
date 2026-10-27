@@ -19,7 +19,7 @@ None.
 
 ### Modified Capabilities
 
-- `g2-failure-scenarios`: "Supervisor window crash recovery" gains the Linux scenarios of CP7 and CP9, and "Crash scenario records" runs the scenarios on Linux through the make target instead of skipping them there.
+- `g2-failure-scenarios`: "Supervisor window crash recovery" gains the Linux scenarios of CP7, CP8, and CP9, and "Crash scenario records" runs the scenarios on Linux through the make target instead of skipping them there.
 
 ## Impact
 

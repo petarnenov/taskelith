@@ -11,7 +11,11 @@ A crash of the worker or of the launch supervisor at each step CP1 to CP12, foll
 - **WHEN** the supervisor is killed after it claimed the launch record (CP7) in the Linux test container and the worker restarts
 - **THEN** the empty containment ends the execution with an exit of unknown status and an unproven start, and nothing spawned
 
-#### Scenario: Populated containment on Linux
+#### Scenario: Populated containment without a handle on Linux
+- **WHEN** the supervisor is killed after it spawned the child, before it wrote `handle` (CP8), in the Linux test container and the worker restarts while the child runs
+- **THEN** an adopting supervisor watches the containment, the execution exits with unknown status and an unproven start once the child is gone, the child spawned once, and the task opens no automatic retry
+
+#### Scenario: Populated containment with a handle on Linux
 - **WHEN** the supervisor is killed after it wrote `handle` (CP9) in the Linux test container and the worker restarts while the child runs
 - **THEN** an adopting supervisor watches the containment, the execution exits with unknown status and a proven start once the child is gone, the child spawned once, and the task opens no automatic retry
 
