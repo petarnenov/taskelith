@@ -6,9 +6,9 @@ Date: 2026-10-26. Status: proposed contract for G3 ([G3 work plan](../g3-plan.md
 
 | Port | Client | Implemented by |
 | --- | --- | --- |
-| `RunCredentialIssuer`: per-run credentials, refresh, revocation | The launch path, which delivers a credential to one run | SCM plugins |
+| `RunCredentialIssuer`: per-run credentials, refresh, revocation | The launch path, which delivers a credential to one run (item 21, section 10) | SCM plugins |
 | `ChangeRequestHost`: merge protection, change requests, commit statuses, merges | The integration and merge flow (items 21 and 23) | SCM plugins |
-| `WebhookVerifier`: verification of a delivery on its raw body | The webhook receiver, G3 work of items 9, 26, and 37 (section 6) | SCM plugins |
+| `WebhookVerifier`: verification of a delivery on its raw body | The webhook receiver, G3 work of items 9, 20, 26, and 37 (section 6) | SCM plugins |
 | `SourceControlProvider`: the three ports with the plugin's capabilities | The plugin registry | SCM plugins |
 
 The ports belong to the Integrations module, the "SCM / Tracker integrations" module of [architecture section 6](../architecture.md#modules), next to the [product ports](product-ports.md) of item 8. They are plugin-facing, so the module exports them through its `./port` entry, which holds only port types and constants, as `@taskelith/sdlc/port` does for the SDLC framework port ([ADR 0009](../decisions/0009-frozen-sdlc-framework-port.md)). Each client depends on the narrowest port it uses ([ADR 0004](../decisions/0004-first-class-engineering-principles.md) principle 2).
@@ -21,7 +21,7 @@ The ports belong to the Integrations module, the "SCM / Tracker integrations" mo
 4. **The plugin's own identity.** Change request, status, and merge operations act as the plugin's own identity. The identity that opens a change cannot approve it, so the port has no approval operation.
 5. **Failures.** Every operation returns a kernel `Result`. Callers branch on the kernel failure codes: `invalid` for a malformed request, `not-found`, `forbidden` for a refused credential or signature, `precondition-failed` for a refused merge, and `unavailable` for an undeclared merge method or a service that cannot be reached.
 6. **Instants.** Expiries are kernel instants: UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`. A plugin normalizes its service's format.
-7. **Draft status.** The port stays `0.1.0` until a second SCM maps onto it. Item 20 adds the plugin SDK re-export and the plugin API version; Forgejo's admission may revise the port.
+7. **Draft status.** The port stays a draft until a second SCM maps onto it. Item 20 adds the plugin SDK re-export and the plugin API version, and its refresh revision (section 3) raises the port from `0.1.0` to `0.2.0`; Forgejo's admission may revise the port again.
 
 ## 3. Credentials
 
@@ -32,10 +32,10 @@ The ports belong to the Integrations module, the "SCM / Tracker integrations" mo
 - `issueRunCredential` takes the run, its repositories, and the permissions it needs, and returns a credential for that run only, limited to those repositories for every permission, reads included, with its effective repositories, permissions, and expiry.
 - The effective permissions are what the credential can actually do: each one works in the project, and a permission not listed does not.
 - Effective permissions cover the request and may exceed it when the service has no narrower permission, and the plugin reports them; a credential requested without `write-code` never has it. A service whose only permission for change request or status writes also writes code therefore cannot serve a request for them without `write-code`, and the conformance suite reports such a grant (section 7 records this gate for Forgejo). The policy that accepts or refuses a wider set belongs to the module's use cases.
-- The secret goes only to its run and is never logged or stored. G2 has no mechanism for this: the redaction rules of `@taskelith/secrets` match only Taskelith's own secret shapes (`tkop_`, `tken_`, and `tkwk_` tokens, NKey seeds, JWTs, and `.creds` blocks), and no production path calls its `scrubEnvironment`. Both are G3 obligations: item 20 (`implement-github-scm-plugin`) adds the per-run SCM credential's secret to the redaction of `@taskelith/secrets`, and item 21 (`implement-review-and-verification-stages`), which owns the delivery of the credential to a run (section 10), scrubs it on that delivery path.
+- The secret goes only to its run and is never logged or stored. G2 has no mechanism for this: the redaction of log text and of `@taskelith/secrets` matches Taskelith's own secret shapes (`tkop_`, `tken_`, and `tkwk_` tokens, NKey seeds, JWTs, and `.creds` blocks) and secrets in marked positions (URL user information in both; `Bearer` tokens, `key=value` pairs, and log fields whose names mark a secret in logs), but no rule matches a bare SCM token outside these marked positions, and no production path calls `scrubEnvironment` of `@taskelith/secrets`. Both are G3 obligations: item 20 (`implement-github-scm-plugin`) adds the per-run SCM credential's secret shape to the shared `SECRET_SHAPE_RULES` of `@taskelith/observability`, which log redaction and `@taskelith/secrets` both use, and item 21 (`implement-review-and-verification-stages`), which owns the delivery of the credential to a run (section 10), scrubs it on that delivery path.
 - Credentials of different runs are independent: neither widens the other, and revoking one leaves the other usable.
 - `refreshRunCredential` returns a new secret for the same repositories and permissions with a later expiry, and ends the previous secret, reads included, so that a long run keeps working. `credentialId` may stay the same.
-- Delivery of a refreshed credential to a running run is open G3 work. Item 9 (`define-g3-wire-contracts`) defines the message that carries it to the worker, item 21 delivers it, and item 18 (`implement-harness-host-in-worker`) adopts it by passing the run's current credential to the item 16 workspace per operation. Because a refresh ends the previous secret on return, the run cannot work between that end and its adoption of the new secret, and a failed delivery leaves it with none. Item 20 revises the port so that the previous secret stays valid until the run confirms adoption, as item 26 does for worker credentials; until then, version `0.1.0` ends it on return.
+- Delivery of a refreshed credential to a running run is open G3 work. Item 9 (`define-g3-wire-contracts`) defines the message that carries it to the worker and the worker's confirmation that the run adopted it, item 21 delivers it, item 18 (`implement-harness-host-in-worker`) adopts it by passing the run's current credential to the item 16 workspace per operation and sends the confirmation, and item 21 ends the previous secret through the revised port when the confirmation arrives. Because a refresh ends the previous secret on return, the run cannot work between that end and its adoption of the new secret, and a failed delivery leaves it with none. Item 20 revises the port, as version `0.2.0`, so that the previous secret stays valid until the run confirms adoption, as item 26 does for worker credentials; until then, version `0.1.0` ends it on return.
 - `revokeRunCredential` ends the credential, reads included, and returns no value.
 
 ## 4. Change requests, statuses, and merges
@@ -70,7 +70,7 @@ A plugin declares its merge methods and review evidence in `SourceControlCapabil
 
 - `verifyWebhookDelivery` receives the headers, with names in lower case, and the body bytes exactly as received. It verifies the signature over those bytes before it trusts any payload.
 - It fails with `forbidden` for a missing signature, a signature made with another secret, or a body that was parsed and serialized again.
-- The receiver that calls it needs an ingress that the service can reach, with TLS. The G2 installation has neither: it publishes the control-plane API on `127.0.0.1` over plain HTTP ([local installation](../local-installation.md)). Item 9 (`define-g3-wire-contracts`) defines the receiver's HTTP operation, item 26 (`secure-remote-connectivity`) the TLS of D11 (b), and item 37 (`extend-installation-for-g3`) the installation that serves it. Until they merge, no service can deliver a webhook to an installation.
+- The receiver that calls it needs an ingress that the service can reach, with TLS. The G2 installation has neither: it publishes the control-plane API on `127.0.0.1` over plain HTTP ([local installation](../local-installation.md)). Item 9 (`define-g3-wire-contracts`) defines the receiver's HTTP operation, item 20 builds the receiver, item 26 (`secure-remote-connectivity`) provides the TLS of D11 (b), and item 37 (`extend-installation-for-g3`) the installation that serves it. Until they merge, no service can deliver a webhook to an installation.
 - The verified event carries an opaque `deliveryId` that every redelivery of the same delivery repeats and that differs between deliveries; the module deduplicates by it.
 
 ## 7. SCM mapping
@@ -109,13 +109,13 @@ The gaps are recorded, not hidden: Forgejo's coarser token scopes make the effec
 
 - This item: the suite against a test-only in-memory SCM, and against defective variants of it, each of which the suite must report.
 - Item 20: the suite through `make` against GitHub.com with the plugin's own credential and disposable repositories, including a run that outlives a credential's original expiry, and the revised refresh, whose previous secret works until the run confirms adoption.
-- Item 21: a refreshed credential delivered to a running run and adopted by it, and a failed delivery, after which the run keeps the previous secret.
+- Item 21: a refreshed credential delivered to a running run and adopted by it, the previous secret ended after the adoption is confirmed, and a failed delivery, after which the run keeps the previous secret.
 - Forgejo's admission: the suite against Forgejo, with the mapping of section 7 confirmed.
 
 ## 10. Not in this contract
 
 - SCM plugins and their I/O: item 20 for GitHub; Forgejo later.
 - The Git workspace and its use of the run credential: item 6, the [Git workspace contract](git-workspace.md).
-- The module's use cases: credential delivery to a run, a refreshed credential included (item 21, with its message in item 9 and its adoption in item 18), webhook deduplication, and merge orchestration (items 21 and 23).
+- The module's use cases: credential delivery to a run, a refreshed credential included (item 21, with its message and the adoption confirmation in item 9 and its adoption in item 18), webhook deduplication, and merge orchestration (items 21 and 23).
 - The plugin SDK re-export and the plugin API version: item 20.
 - Wire schemas, including the webhook receiver's HTTP operation: item 9.

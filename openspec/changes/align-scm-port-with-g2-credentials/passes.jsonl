@@ -1,1 +1,2 @@
 {"change": "align-scm-port-with-g2-credentials", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a17e30-c2d5-7432-a273-61e226b7223f", "counts": {"critical": 0, "high": 2, "medium": 2, "low": 1}}
+{"change": "align-scm-port-with-g2-credentials", "pass": 2, "role": "B", "reviewer": {"harness": "claude", "model": "claude-opus-5-5", "variant": "high"}, "session": "c8a4b74c-e6e5-4612-884d-720448756f3f", "counts": {"critical": 0, "high": 0, "medium": 5, "low": 7}}
