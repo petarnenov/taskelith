@@ -59,8 +59,8 @@ async function assertNeverLaunched(installation: ScenarioInstallation, worker: S
   return executed;
 }
 
-// The attempt ended cancelled; a started process, held, ended by the
-// cancel's SIGTERM, and no scripted process of the worker remains.
+// The attempt ended cancelled; a started process (held by c, e, f) ended
+// by the cancel's SIGTERM, and no scripted process of the worker remains.
 async function assertCancelled(installation: ScenarioInstallation, worker: ScenarioWorker, taskId: string): Promise<string> {
   await installation.ended(taskId);
   const outcome = (await installation.task(taskId)).attempts[0]!.outcome!;

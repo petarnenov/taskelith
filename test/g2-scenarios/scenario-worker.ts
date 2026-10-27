@@ -24,7 +24,8 @@ const STOP_MILLISECONDS = 30_000;
 const runningWorkers = new Set<ScenarioWorker>();
 // A scripted process that cannot end on its own, so only a signal or a
 // release ends it.
-export const HELD_RUN = Number.POSITIVE_INFINITY;
+export const HELD_RUN = 'held';
+export type ScriptedRun = number | typeof HELD_RUN;
 
 // Where a worker finds its installation: the API, and the base directory
 // that holds the scenario's data roots.
@@ -42,7 +43,7 @@ export interface ScenarioWorkerOptions {
   readonly nats: URL;
   // How long the scripted process runs before it exits with code 0; with
   // `HELD_RUN`, until the worker releases its scripted processes.
-  readonly runMilliseconds: number;
+  readonly runMilliseconds: ScriptedRun;
   // Wraps the HTTP launch authority, so a scenario can order requests.
   readonly authority?: (client: LaunchAuthorityClient) => LaunchAuthorityClient;
   // Free space of the data root's volume; ample unless a scenario says.
@@ -85,8 +86,8 @@ export class ScenarioWorker {
     return this.running.identity.workerId;
   }
 
-  // Held scripted processes end with code 0, now and when they start, until
-  // holdScriptedProcesses.
+  // Lets held scripted processes, running or future, exit 0 until the
+  // next hold.
   releaseScriptedProcesses(): void {
     writeFileSync(this.#releaseFile, '');
   }
@@ -120,7 +121,7 @@ export class ScenarioWorker {
     };
   }
 
-  #scriptedProcess(runMilliseconds: number) {
+  #scriptedProcess(runMilliseconds: ScriptedRun) {
     return runMilliseconds === HELD_RUN ? heldProcess(this.dataRoot, this.#releaseFile) : scriptedProcess(runMilliseconds, this.dataRoot);
   }
 
