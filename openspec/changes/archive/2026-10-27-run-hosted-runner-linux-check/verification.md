@@ -31,6 +31,16 @@ Linux 7.0.0-38-generic, x86_64; Node.js through `nvm use` from `.nvmrc`. This ho
 - `npm run openspec -- validate run-hosted-runner-linux-check --strict`: `Change 'run-hosted-runner-linux-check' is valid`.
 - `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` on the working tree of the change commit: passed (exit 0); tests 2193, pass 2146, fail 0, skipped 47; all files 99.24% lines, 92.19% branches, 98.92% functions; OpenSpec `Totals: 70 passed, 0 failed (70 items)`; every active change archives into strictly valid specs; findings 30 files and pass summaries 10 files valid.
 
+## Archive checks
+
+On the tree of the archive commit, after `npm run openspec -- archive run-hosted-runner-linux-check --yes`:
+
+- `npm run openspec -- validate --all --strict --no-interactive`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: `✓ change/2026-10-27-run-hosted-runner-linux-check`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only this change's edits, `integration-flow/spec.md` ("Promotion flow and releases" modified, 5 insertions, 1 deletion) and `native-worker-acceptance/spec.md` ("Hosted-runner Linux x86_64 check" added, 11 insertions).
+- The moved change has `findings.jsonl` (2 findings) and `passes.jsonl` (1 pass); `npm run findings -- validate`: 30 findings files and 10 pass summary files valid.
+- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: exit 0; `npm test` 2193 tests, 2146 passed, 0 failed, 47 skipped, all files 99.24 % lines; `npm run verify:links` `Every checked link conforms.`
+
 ## Independent review
 
 Pass 1, reviewer A: OpenCode CLI, invoked as `opencode run --standalone --agent reviewer -m 'opencode-go/deepseek-v4-pro#high' --format json --title run-hosted-runner-linux-check "$(cat <prompt-file>)" < /dev/null > <log>` on `4ea2b532` (`e8ce8a11..4ea2b532`), with network access to check the action pins. Session `ses_e820c60eaffex2o4DiDkSYJ45B`. Model confirmation from the stored assistant messages of the session (`session_message`): provider `opencode-go`, model `deepseek-v4-pro`, variant `high`, agent `reviewer`. The `opencode run` process exited with status 0. The SHA-256 snapshot of the worktree before and after the review was equal: `2540eb755ee0d0dce941c59971fa69e6277bf0c70d90740beab892207053e725`. The reviewer confirmed over the network that the three pinned SHAs are checkout v6, setup-node v6.5.0, and upload-artifact v7.0.2 (published 2026-10-07T10:08:14Z) and that every input used exists in them. Findings: Critical 0, High 0, Medium 0, Low 2, as in `passes.jsonl`; both fixed, unreviewed:
