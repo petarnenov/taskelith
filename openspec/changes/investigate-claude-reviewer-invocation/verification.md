@@ -27,7 +27,7 @@ See `design.md`: the cause in the CLI's headless output, the runs that isolate i
 ## Checks
 
 - `npm run openspec -- validate investigate-claude-reviewer-invocation --strict`: valid.
-- `make verify`, started at a load average of 1.89 (1 minute): exit 0; 2,292 tests, 2,289 passed, 0 failed, 3 skipped; coverage 99.34 % lines, 92.28 % branches, 99.03 % functions; strict OpenSpec validation 70 passed, 0 failed; findings, links, contract compatibility, archive dry run, and package verification passed. It ran on the working tree of the first commit, before these results were written into this file.
+- `make verify`, started at a load average of 1.89 (1 minute): exit 0; 2,292 tests, 2,289 passed, 0 failed, 3 skipped; coverage 99.34 % lines, 92.28 % branches, 99.03 % functions; strict OpenSpec validation 70 passed, 0 failed; findings, links, contract compatibility, archive dry run, and package verification passed. It ran on the tree of `e38eb14d` before these results were written into this file, the only difference.
 
 ## Independent review
 
