@@ -13,6 +13,8 @@
 - [x] 3.1 Strict OpenSpec validation of the change, `npm run verify:links`, `npm run verify:comments`, and `make findings ARGS="validate"`
 - [x] 3.2 `make verify` before the first review pass
 - [x] 3.3 Independent review pass 1 by reviewer A, Codex CLI `gpt-6.1-sol` (effort `medium`); its Low-only result ends the review
+- [x] 3.4 Restore the active change after the return, merge `origin/dev` at `99333004`, and reconcile the contract and the delta with #366
+- [ ] 3.5 Reviewer A reviews the resolved diff and the reconciliation
 
 ## 4. Archive
 
