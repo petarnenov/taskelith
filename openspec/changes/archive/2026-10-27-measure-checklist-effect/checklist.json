@@ -1,0 +1,89 @@
+{
+  "change": "measure-checklist-effect",
+  "generatedAt": "2026-10-27T20:20:31.099Z",
+  "devCommit": "b87abe75898697b816c080f93ed66b6d2a776f2f",
+  "query": {
+    "capabilities": [],
+    "files": [
+      "scripts/**"
+    ],
+    "top": 7
+  },
+  "size": "S-M",
+  "review": {
+    "categories": [
+      {
+        "category": "contract-drift",
+        "count": 11
+      },
+      {
+        "category": "error-handling",
+        "count": 6
+      },
+      {
+        "category": "redaction",
+        "count": 4
+      },
+      {
+        "category": "naming",
+        "count": 2
+      },
+      {
+        "category": "evidence-mismatch",
+        "count": 1
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 244,
+        "inChecklist": 127
+      },
+      "mediumOrWorse": {
+        "findings": 97,
+        "inChecklist": 64
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 50
+      },
+      {
+        "category": "docs",
+        "count": 41
+      },
+      {
+        "category": "spec-wording",
+        "count": 23
+      },
+      {
+        "category": "stale-citation",
+        "count": 21
+      },
+      {
+        "category": "process",
+        "count": 9
+      },
+      {
+        "category": "contract-drift",
+        "count": 7
+      },
+      {
+        "category": "scope",
+        "count": 5
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 156,
+        "inChecklist": 156
+      },
+      "mediumOrWorse": {
+        "findings": 27,
+        "inChecklist": 27
+      }
+    }
+  }
+}

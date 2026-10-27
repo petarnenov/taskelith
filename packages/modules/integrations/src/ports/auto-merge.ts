@@ -1,6 +1,6 @@
 import type { Identifier, Instant, Result } from '@taskelith/kernel';
 import type { PrincipalId } from '@taskelith/execution';
-import type { ProjectId, TaskId, WorkflowRunId } from '@taskelith/sdlc';
+import type { ProjectId, WorkflowRunId } from '@taskelith/sdlc';
 
 export type MergeRequestId = Identifier<'MergeRequestId'>;
 export type BranchName = Identifier<'BranchName'>;
@@ -67,11 +67,11 @@ export interface AutoMergeSettings {
   change(change: AutoMergeChange): Promise<Result<AutoMergeSetting>>;
 }
 
+// A run's change at one head; the run is the board card's key.
 export interface MergeRequest {
   readonly id: MergeRequestId;
   readonly projectId: ProjectId;
   readonly runId: WorkflowRunId;
-  readonly taskId: TaskId;
   readonly targetBranch: BranchName;
   readonly head: CodeHead;
   readonly state: MergeRequestState;
@@ -85,7 +85,6 @@ export interface MergeRequest {
 export interface MergeEnqueue {
   readonly projectId: ProjectId;
   readonly runId: WorkflowRunId;
-  readonly taskId: TaskId;
   readonly targetBranch: BranchName;
   readonly head: CodeHead;
 }
@@ -102,18 +101,18 @@ export type MergeClaim =
 export interface ManualMerge {
   readonly projectId: ProjectId;
   readonly runId: WorkflowRunId;
-  readonly taskId: TaskId;
   readonly targetBranch: BranchName;
   readonly head: CodeHead;
   readonly integratedRevision: IntegratedRevision;
 }
 
-// Serial per target branch; enqueueing is idempotent per run and head, and
-// every transition compares the revision. `latestForRun` may be `not-found`.
+// Serial per target branch, transitions compare the revision; enqueue is
+// idempotent per run and head but re-queues a request withdrawn as section 6.3.
 export interface MergeQueue {
   enqueue(request: MergeEnqueue): Promise<Result<MergeRequest>>;
   claimNext(projectId: ProjectId, targetBranch: BranchName): Promise<Result<MergeClaim>>;
   transition(id: MergeRequestId, expectedRevision: Revision, change: MergeTransition): Promise<Result<MergeRequest>>;
+  // `not-found` when the run has no request.
   latestForRun(runId: WorkflowRunId): Promise<Result<MergeRequest>>;
   recordManualMerge(merge: ManualMerge): Promise<Result<MergeRequest>>;
 }
