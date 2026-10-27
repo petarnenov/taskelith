@@ -1,6 +1,6 @@
 ## Why
 
-[G2 work plan](../../../docs/g2-plan.md) item 20 builds the worker application, split by the coordinator into five changes; this is 20c. After 20b the worker journals its commands and publishes their outcomes, but it never launches an accepted assignment. Invariant 13 and R27 require a launch only under a current launch authorization, journaled before it is requested and used; R06 requires the worker to launch through its supervisor and report what the supervisor proves.
+[G2 work plan](/docs/g2-plan.md) item 20 builds the worker application, split by the coordinator into five changes; this is 20c. After 20b the worker journals its commands and publishes their outcomes, but it never launches an accepted assignment. Invariant 13 and R27 require a launch only under a current launch authorization, journaled before it is requested and used; R06 requires the worker to launch through its supervisor and report what the supervisor proves.
 
 ## What Changes
 

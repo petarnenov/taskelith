@@ -4,7 +4,7 @@ Date: 2026-10-26. Author verification is recorded below; the coordinator records
 
 ## Scope and source
 
-[G2 work plan](../../../docs/g2-plan.md) item 20, split by the coordinator; this is 20d2. Its scope is coordinator decision Q1 (A) of the archived 20d change (`2026-10-26-implement-worker-start-reconciliation`): the heartbeat publisher, the `status()` watcher, offline mode and its deadlines, the inventory report on reconnect, and the failed-first-connect change, plus 20d's obligation to build the supervision host without `TASKELITH_WORKER_COMMAND`.
+[G2 work plan](/docs/g2-plan.md) item 20, split by the coordinator; this is 20d2. Its scope is coordinator decision Q1 (A) of the archived 20d change (`2026-10-26-implement-worker-start-reconciliation`): the heartbeat publisher, the `status()` watcher, offline mode and its deadlines, the inventory report on reconnect, and the failed-first-connect change, plus 20d's obligation to build the supervision host without `TASKELITH_WORKER_COMMAND`.
 
 - Base revision: `8a9abb6` on `dev`.
 - Out of scope: the `unrecorded-process` scan, 20e (admission pressure, the disk floor, the backlog limit), and any contract change.

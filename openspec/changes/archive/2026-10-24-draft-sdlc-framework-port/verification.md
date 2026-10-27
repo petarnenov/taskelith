@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-G1 item 6 of the [G1 work plan](../../../docs/g1-plan.md), delegated by the integrating session under the owner's 2026-10-24 authorization to start and merge reviewed G1 items. Base revision: `9f42dc5` on `dev`. Scope: new files `sdlc-framework.ts`, `sdlc-framework-conformance.ts`, and `plain-data.ts` in `packages/modules/sdlc/src/ports/`, the root exports in `src/index.ts`, the test file `packages/modules/sdlc/test/sdlc-framework-port.test.ts`, and this change. Prepared in a git worktree. The integrating session agreed with placing the port in `@taskelith/sdlc` and recording the boundary gap as an open question without changing the boundary rules.
+G1 item 6 of the [G1 work plan](/docs/g1-plan.md), delegated by the integrating session under the owner's 2026-10-24 authorization to start and merge reviewed G1 items. Base revision: `9f42dc5` on `dev`. Scope: new files `sdlc-framework.ts`, `sdlc-framework-conformance.ts`, and `plain-data.ts` in `packages/modules/sdlc/src/ports/`, the root exports in `src/index.ts`, the test file `packages/modules/sdlc/test/sdlc-framework-port.test.ts`, and this change. Prepared in a git worktree. The integrating session agreed with placing the port in `@taskelith/sdlc` and recording the boundary gap as an open question without changing the boundary rules.
 
 ## Author self-check before review
 

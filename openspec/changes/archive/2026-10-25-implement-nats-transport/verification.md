@@ -4,7 +4,7 @@ Date: 2026-10-25. Author verification and independent review are recorded below.
 
 ## Scope and source
 
-[G2 work plan](../../../docs/g2-plan.md) item 12. The coordinating session (Niki) assigned it to the worker session Pepi, with Claude Fable 5.1 (medium) as the reviewer by rotation. Base revision: `61946e7` on `dev`, with items 2, 8, 9, 10, and 11 merged and archived.
+[G2 work plan](/docs/g2-plan.md) item 12. The coordinating session (Niki) assigned it to the worker session Pepi, with Claude Fable 5.1 (medium) as the reviewer by rotation. Base revision: `61946e7` on `dev`, with items 2, 8, 9, 10, and 11 merged and archived.
 
 Scope: the row of item 12, the NATS adapter. Out of scope:
 - enrollment, credentials, and TLS (item 13);

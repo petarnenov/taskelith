@@ -1,6 +1,6 @@
 ## Why
 
-G2 work item 20 ([docs/g2-plan.md](../../../docs/g2-plan.md)) builds the worker application, which serves the exit evidence "Real worker protocol on one host" and R05 to R07 and R32. Before this change `apps/worker` was a placeholder without behavior. The coordinator split item 20 into five changes, 20a to 20e, each merged before the next; this is 20a.
+G2 work item 20 ([docs/g2-plan.md](/docs/g2-plan.md)) builds the worker application, which serves the exit evidence "Real worker protocol on one host" and R05 to R07 and R32. Before this change `apps/worker` was a placeholder without behavior. The coordinator split item 20 into five changes, 20a to 20e, each merged before the next; this is 20a.
 
 Item 13 left the worker's storage of its credentials under `worker/`, with the identity's credential generation, and the use of `connectWorkerTransport` with them, to item 20. Nothing on the worker called `enrollWorker`.
 

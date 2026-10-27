@@ -1,6 +1,6 @@
 ## Why
 
-On Linux a worker that lost its execution records still has their containments in the kernel. The [supervisor identity contract](../../../docs/contracts/supervisor-identity.md) section 9 requires the worker to list populated containments without a record as unrecorded processes, never as current work, and section 11 names the `unrecorded-process` fact. The control plane already consumes `execution.unrecorded-process` (inventory and launch reconciliation), but no worker produces it: start reconciliation (`implement-worker-start-reconciliation`, design D5) left the scan to this follow-up. The wire contracts also give no deterministic `observationId` source for the observation.
+On Linux a worker that lost its execution records still has their containments in the kernel. The [supervisor identity contract](/docs/contracts/supervisor-identity.md) section 9 requires the worker to list populated containments without a record as unrecorded processes, never as current work, and section 11 names the `unrecorded-process` fact. The control plane already consumes `execution.unrecorded-process` (inventory and launch reconciliation), but no worker produces it: start reconciliation (`implement-worker-start-reconciliation`, design D5) left the scan to this follow-up. The wire contracts also give no deterministic `observationId` source for the observation.
 
 ## What Changes
 

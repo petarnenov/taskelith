@@ -28,7 +28,7 @@ Non-goals: the GitHub plugin, item 8's product ports, SCM I/O, the module's use 
 
 ## SCM mapping
 
-The GitHub and Forgejo mapping is in section 7 of the [contract](../../../docs/contracts/source-control.md#7-scm-mapping). The Forgejo column is an unsourced assumption that the Forgejo plugin must confirm at a pinned version before admission.
+The GitHub and Forgejo mapping is in section 7 of the [contract](/docs/contracts/source-control.md#7-scm-mapping). The Forgejo column is an unsourced assumption that the Forgejo plugin must confirm at a pinned version before admission.
 
 ## Risks / Trade-offs
 

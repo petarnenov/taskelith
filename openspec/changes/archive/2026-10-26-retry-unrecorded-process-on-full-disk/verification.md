@@ -7,7 +7,7 @@ Date: 2026-10-26. Author verification is recorded below; the independent review 
 The limitation recorded in the verification of the archived `implement-worker-daemon-pressure` change (20e2): `recordUnrecordedProcess`, the Linux unrecorded-process report of the archived `implement-unrecorded-process-scan` change, was reported as a failure on a refusal for lack of space and not retried until the next start. It was developed by an implementation subagent that the worker session briefed and checks.
 
 - Base revision: `f9ba7a5` on `dev`.
-- Scope: the retry of that report through the existing `HeldWrites` of 20e2, with the [worker journal contract](../../../docs/contracts/worker-journal.md) section 6 identity and section 7 "Full disk" rules.
+- Scope: the retry of that report through the existing `HeldWrites` of 20e2, with the [worker journal contract](/docs/contracts/worker-journal.md) section 6 identity and section 7 "Full disk" rules.
 - Out of scope: failure scenarios (G2 item 24), the fate of leftover record directories, macOS (no scan), and any contract change.
 
 ### Values used
@@ -43,7 +43,7 @@ The limitation recorded in the verification of the archived `implement-worker-da
 
 OpenCode CLI, model `opencode-go/kimi-k3.1-pro`, variant `high`, read-only `reviewer` agent, session `ses_e87416b47ffeGJs4hLD9Oy0lMS`, invoked from the worktree as `opencode run --standalone --agent reviewer -m 'opencode-go/kimi-k3.1-pro#high' --format json --title retry-unrecorded-process-on-full-disk "$(cat <prompt-file>)" < /dev/null > <log>`, with the prompt and the log kept outside the worktree. The stored assistant messages record the model `kimi-k3.1-pro`, provider `opencode-go`, and variant `high`. Revision reviewed: `cca3f091c1b1b74450413417b53f6020c71f3b3a`. The snapshots before and after the pass matched (`e8e38d06eec225188c1fecced4b313eb4e5468d62eda07f4fbea6bf8ea6b4e50`). Findings: 0 Critical, 0 High, 0 Medium, 1 Low. The reviewer found no problem in the ordering, idempotence, backoff, failures other than a refusal for space, or a stopped journal, and called the test deterministic.
 
-- **Low (fixed in the commit that records this pass, unreviewed):** the author self-check did not record the evidence check that the [independent review process](../../../docs/governance.md#independent-review-process) requires before the first pass. It is now recorded above. As the pass found only a Low, it is fixed without another review under that process.
+- **Low (fixed in the commit that records this pass, unreviewed):** the author self-check did not record the evidence check that the [independent review process](/docs/governance.md#independent-review-process) requires before the first pass. It is now recorded above. As the pass found only a Low, it is fixed without another review under that process.
 
 The review is complete in one pass; the Low fix is unreviewed, as the governance rule allows for a Low-only pass.
 

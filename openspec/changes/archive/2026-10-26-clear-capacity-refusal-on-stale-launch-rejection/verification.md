@@ -29,7 +29,7 @@ An implementation subagent that the worker session briefed and checks developed 
 - Revision: `7852684` for the author check (the contract, code, and tests). This file was written after the run.
 - Environment: macOS 26.6.2 x86_64, Node v24.22.1, npm 12.2.1, Docker 29.5.2 with the Compose services of `make verify`.
 - Dependencies: no package added.
-- Published package: unchanged. Every changed package is a private workspace package, so the commits are `chore`, `test`, and `docs` ([releases](../../../docs/releases.md)).
+- Published package: unchanged. Every changed package is a private workspace package, so the commits are `chore`, `test`, and `docs` ([releases](/docs/releases.md)).
 
 ## Author self-check
 
@@ -98,7 +98,7 @@ The checked state is the tree of the archive commit: the working tree after `npm
 
 - Reviewer: Codex CLI, model `gpt-6.1-sol`, reasoning effort medium, read-only sandbox. The coordinator confirmed all three from the output header.
 - Session: `01a179f9-5997-7993-ac64-c5f789ef0b79`.
-- Invocation: run by the worker session from the worktree with `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>` ([agent task protocol](../../../docs/agent-task-protocol.md#reviewer-invocations)).
+- Invocation: run by the worker session from the worktree with `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>` ([agent task protocol](/docs/agent-task-protocol.md#reviewer-invocations)).
 - Revision reviewed: `f3fcc45`. The snapshots before and after the pass matched (`1aa9593cf5ca9ec72f079e7a2d66a4cf066fd5bb0dcdc3b699efc4a375f378bd`).
 - Findings: 0 Critical, 0 High, 2 Medium, 0 Low.
 
@@ -140,14 +140,14 @@ One Medium finding was fixed, so review pass 3, the last allowed, is required.
 - Reviewer: Codex CLI, model `gpt-6.1-sol`, reasoning effort medium, read-only sandbox, all confirmed in the output header.
 - Session: `01a17a14-01e0-7750-aa8b-eb813af9f886`.
 - Invocation: the same as in pass 1.
-- Revision reviewed: `b7f737d`, after the session merged `origin/dev` into the branch (a merge commit, no conflicts). That merge brought in the `streamline-task-integration` process change, including worker step 7 "Archive" of the [agent task protocol](../../../docs/agent-task-protocol.md). It touched none of this change's requirements, contracts, implementation, or tests.
+- Revision reviewed: `b7f737d`, after the session merged `origin/dev` into the branch (a merge commit, no conflicts). That merge brought in the `streamline-task-integration` process change, including worker step 7 "Archive" of the [agent task protocol](/docs/agent-task-protocol.md). It touched none of this change's requirements, contracts, implementation, or tests.
 - The snapshots before and after the pass matched (`4d033361a01a627e60ee40fcc70d80fe4b55e5f68c8a7072b0e9466d39663824`).
 - Pass 2 F3: confirmed resolved; F1 and F2 stay resolved; no new functional defect.
 - New findings: 0 Critical, 0 High, 0 Medium, 1 Low.
 
 **Low F4 (fixed, unreviewed), `proposal.md:18`.**
 - Finding: the proposal said the "Stale ownership generation" delta adds two scenarios, but it adds four.
-- Resolution: the proposal now says four scenarios. A Low-only pass is fixed without another review ([review process](../../../docs/governance.md#independent-review-process)), so this fix is unreviewed.
+- Resolution: the proposal now says four scenarios. A Low-only pass is fixed without another review ([review process](/docs/governance.md#independent-review-process)), so this fix is unreviewed.
 
 ## Limitations and remaining gates
 

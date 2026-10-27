@@ -4,7 +4,7 @@ Date: 2026-10-25. Author verification and independent review are recorded below.
 
 ## Scope and source
 
-[G2 work plan](../../../docs/g2-plan.md) item 20, first of the five changes the coordinator split it into (20a). The coordinating session (Niki) assigned it to the worker session Pepi. The reviewer is Claude Fable 5.1 (medium), by rotation after OpenCode; Antigravity is paused.
+[G2 work plan](/docs/g2-plan.md) item 20, first of the five changes the coordinator split it into (20a). The coordinating session (Niki) assigned it to the worker session Pepi. The reviewer is Claude Fable 5.1 (medium), by rotation after OpenCode; Antigravity is paused.
 - Base revision: `f83e36d` on `dev`.
 - Scope: the worker application's settings, composition root, and start sequence, with enrollment on the first start.
 - Item 13's obligation met here: the worker's storage of its credentials under `worker/` with the identity's credential generation, and the use of `connectWorkerTransport` with them.

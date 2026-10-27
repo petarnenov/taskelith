@@ -4,7 +4,7 @@ Date: 2026-10-26. Author verification is recorded below, followed by the three r
 
 ## Scope and source
 
-[G2 work plan](../../../docs/g2-plan.md) item 20, the third of the five changes the coordinator split it into (20c). The coordinating session (Niki) assigned it to the worker session Pepi. The reviewer is Claude Fable 5.1 (medium), as the coordinator assigned, with a cap of three passes.
+[G2 work plan](/docs/g2-plan.md) item 20, the third of the five changes the coordinator split it into (20c). The coordinating session (Niki) assigned it to the worker session Pepi. The reviewer is Claude Fable 5.1 (medium), as the coordinator assigned, with a cap of three passes.
 
 - Base revision: `190e2cc` on `dev`.
 - Scope: W2 and W3 of the worker journal contract, the `authorizeLaunch` retry loop (the same `operationId` without a decision, a backoff of 5 s to 60 s with jitter, a new `operationId` after the deadline), `workerLaunchDeadline` with its suspend cases, the supervisor's prepare, start, and seal, the observations `started`, `exited`, `not-started`, `uncertain`, and `launch.rejected`, cancellation forwarding, the offline rule, and the `publishEvidence` client (20a decision Q4 (b)). Obligations: item 17 (the retry loop, W2 and W3, the deadline) and R06.
@@ -100,7 +100,7 @@ After the fixes, `make verify` ran with every file tracked: exit 0. 1255 tests, 
 - Pass 2: every resolution confirmed.
 - Findings: 0 Critical, 0 High, 2 Medium, 7 Low.
 
-The review cap is reached, and the Medium findings left after the third pass went to the owner through the coordinator ([governance](../../../docs/governance.md#independent-review-process)). The owner's exception below reviewed these fixes independently.
+The review cap is reached, and the Medium findings left after the third pass went to the owner through the coordinator ([governance](/docs/governance.md#independent-review-process)). The owner's exception below reviewed these fixes independently.
 
 | Finding | Resolution (reviewed by the owner's exception) |
 | --- | --- |

@@ -1,6 +1,6 @@
 ## Context
 
-20b journals each command by W1 and publishes command outcomes. Item 14's journal already provides the commits W2 to W6, item 15's `@taskelith/worker-supervisor` provides `prepareRecord`, `startSupervisor`, `sealLaunch`, `requestCancellation`, `readReportedFacts`, and `recoverExecution`, and item 17 provides `LaunchAuthorityClient` with `HttpLaunchAuthorityClient`, `workerLaunchDeadline`, and `checkLaunchPreconditions`. This change connects them in the worker. The [launch authorization contract](../../../docs/contracts/launch-authorization.md), the [worker journal contract](../../../docs/contracts/worker-journal.md) section 5, and the [supervisor identity contract](../../../docs/contracts/supervisor-identity.md) section 4 fix the order.
+20b journals each command by W1 and publishes command outcomes. Item 14's journal already provides the commits W2 to W6, item 15's `@taskelith/worker-supervisor` provides `prepareRecord`, `startSupervisor`, `sealLaunch`, `requestCancellation`, `readReportedFacts`, and `recoverExecution`, and item 17 provides `LaunchAuthorityClient` with `HttpLaunchAuthorityClient`, `workerLaunchDeadline`, and `checkLaunchPreconditions`. This change connects them in the worker. The [launch authorization contract](/docs/contracts/launch-authorization.md), the [worker journal contract](/docs/contracts/worker-journal.md) section 5, and the [supervisor identity contract](/docs/contracts/supervisor-identity.md) section 4 fix the order.
 
 ## Coordinator decisions (2026-10-25)
 

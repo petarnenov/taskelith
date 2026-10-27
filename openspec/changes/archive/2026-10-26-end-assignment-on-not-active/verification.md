@@ -4,7 +4,7 @@ Date: 2026-10-26. The author's verification and the independent review are recor
 
 ## Scope and source
 
-This change makes the worker end an acknowledged assignment locally when launch authorization rejects it with `assignment-not-active`, as `docs/contracts/capacity-reservation.md:151` (section 8) requires. The coordinating session assigned it and ran it in a briefed subagent ([subagent execution](../../../docs/agent-task-protocol.md#subagent-execution)).
+This change makes the worker end an acknowledged assignment locally when launch authorization rejects it with `assignment-not-active`, as `docs/contracts/capacity-reservation.md:151` (section 8) requires. The coordinating session assigned it and ran it in a briefed subagent ([subagent execution](/docs/agent-task-protocol.md#subagent-execution)).
 - **Base revision:** `a38aefc` on `dev`.
 - **Revision verified:** `bedf3d7` (the fix, the tests, and these records before this file); after review pass 1, `f5ed7de`.
 - **Scope:** `endsAssignment` in the execution domain, the snapshot read of the SQLite worker journal, their tests, and the worker-runtime delta.

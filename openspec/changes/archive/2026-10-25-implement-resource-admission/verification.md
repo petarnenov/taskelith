@@ -4,7 +4,7 @@ Date: 2026-10-25. Author verification and independent review are recorded below.
 
 ## Scope and source
 
-G2 work item 18 in [docs/g2-plan.md](../../../docs/g2-plan.md), assigned by the coordinator under the agent task protocol. The branch was created from `origin/dev` at `a1a27a1`, which contains items 6, 7, 10, and 11. Scope: the Scheduling domain, ports, in-memory adapters, conformance suites, and application services for resource admission; the second `@taskelith/postgres` migration and the repositories of the capacity ports; integration tests against PostgreSQL; and provisional values in `docs/operational-targets.md` and the capacity contract. The change adds the `resource-admission` capability.
+G2 work item 18 in [docs/g2-plan.md](/docs/g2-plan.md), assigned by the coordinator under the agent task protocol. The branch was created from `origin/dev` at `a1a27a1`, which contains items 6, 7, 10, and 11. Scope: the Scheduling domain, ports, in-memory adapters, conformance suites, and application services for resource admission; the second `@taskelith/postgres` migration and the repositories of the capacity ports; integration tests against PostgreSQL; and provisional values in `docs/operational-targets.md` and the capacity contract. The change adds the `resource-admission` capability.
 
 The coordinator decided the design questions before implementation: Scheduling owns narrow read ports for workers, installation, quotas, lineage, and the ledger, with lineage, charges, delegations, and quotas as its own tables and minimal `workers` and `installation` tables that item 13 owns and extends (Q1 a); delegation admission is a Scheduling service called in the creating transaction (Q2 a); and the author's defaults, including the provisional bounds, which are to be recorded in the operational targets.
 
@@ -21,7 +21,7 @@ Checked against the ADR 0004 principles:
 - Coverage: every new Scheduling module has 100% line coverage; branch coverage is 80% for the service, 88.89% for the fair order, and 93–100% elsewhere.
 - Dependencies: none added.
 
-Evidence check: the reasons, budgets, and transaction steps follow [the capacity reservation contract](../../../docs/contracts/capacity-reservation.md) sections 2 to 7 and 11, and the owner decisions D-A, D-B, and D-C recorded in the archived `define-capacity-reservation-contract` change. One deviation from the brief: the coordinator accepted "full jitter" for the backoff, but full jitter can wait less than the contract's initial `5s`, so each delay is the doubling base plus jitter of up to one more base below the `60s` cap, which keeps it within `[5s, 60s]`.
+Evidence check: the reasons, budgets, and transaction steps follow [the capacity reservation contract](/docs/contracts/capacity-reservation.md) sections 2 to 7 and 11, and the owner decisions D-A, D-B, and D-C recorded in the archived `define-capacity-reservation-contract` change. One deviation from the brief: the coordinator accepted "full jitter" for the backoff, but full jitter can wait less than the contract's initial `5s`, so each delay is the doubling base plus jitter of up to one more base below the `60s` cap, which keeps it within `[5s, 60s]`.
 
 ## Checks
 

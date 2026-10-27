@@ -1,6 +1,6 @@
 ## Why
 
-The G2 crash window and duplicate delivery scenarios of item 24b (`run-g2-crash-windows`, archived on 2026-10-26) run only on macOS: on Linux the composed worker needs a delegated cgroup, an execution account, and the privileges to use them, and the only container that has them, the one of `make verify-linux-cgroup`, has no network for the `make` services. The coordinator assigned `run-g2-crash-windows-on-linux` on 2026-10-27 to run the same scenarios on Linux, chose option B (the privileged Linux test image with network to the services), and bound the Linux expectations to section 6 of the [supervisor identity contract](../../../docs/contracts/supervisor-identity.md).
+The G2 crash window and duplicate delivery scenarios of item 24b (`run-g2-crash-windows`, archived on 2026-10-26) run only on macOS: on Linux the composed worker needs a delegated cgroup, an execution account, and the privileges to use them, and the only container that has them, the one of `make verify-linux-cgroup`, has no network for the `make` services. The coordinator assigned `run-g2-crash-windows-on-linux` on 2026-10-27 to run the same scenarios on Linux, chose option B (the privileged Linux test image with network to the services), and bound the Linux expectations to section 6 of the [supervisor identity contract](/docs/contracts/supervisor-identity.md).
 
 ## What Changes
 

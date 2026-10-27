@@ -1,6 +1,6 @@
 ## Context
 
-The control plane, its administrative entry, and the worker start from environment settings and keep their state under a data root ([installation contract](../../../docs/contracts/installation-and-enrollment.md) sections 3, 4, and 10). `init` migrates the database and writes the broker authority, including `nats-authority.conf`, under `control-plane/`; the control plane needs an initialized installation and a running broker that loaded that file; a worker enrolls on its first start with a token. The worker refuses a data root on overlayfs or tmpfs, and both refuse a root that group or others can write.
+The control plane, its administrative entry, and the worker start from environment settings and keep their state under a data root ([installation contract](/docs/contracts/installation-and-enrollment.md) sections 3, 4, and 10). `init` migrates the database and writes the broker authority, including `nats-authority.conf`, under `control-plane/`; the control plane needs an initialized installation and a running broker that loaded that file; a worker enrolls on its first start with a token. The worker refuses a data root on overlayfs or tmpfs, and both refuse a root that group or others can write.
 
 ## Goals / Non-Goals
 

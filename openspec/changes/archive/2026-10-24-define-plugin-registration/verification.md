@@ -4,7 +4,7 @@ Date: 2026-10-24. Author verification and independent review are recorded below.
 
 ## Scope and source
 
-G1 work item 8 in [docs/g1-plan.md](../../../docs/g1-plan.md), started under the owner's G1 authorization recorded there; the owner's decisions D2 and D3 are recorded in the plan. Base revision: `47a0931` on `dev`. Scope: the new private workspace package `packages/plugin-sdk` (`@taskelith/plugin-sdk`) with its manifest schema, registration function, and tests; the exact-pinned runtime dependency `ajv@8.20.0` in that package; JSON support in the shared package TypeScript configuration; the contract tooling rows of the dependency register and the regenerated inventory; and this change, which adds the `plugin-registration` capability.
+G1 work item 8 in [docs/g1-plan.md](/docs/g1-plan.md), started under the owner's G1 authorization recorded there; the owner's decisions D2 and D3 are recorded in the plan. Base revision: `47a0931` on `dev`. Scope: the new private workspace package `packages/plugin-sdk` (`@taskelith/plugin-sdk`) with its manifest schema, registration function, and tests; the exact-pinned runtime dependency `ajv@8.20.0` in that package; JSON support in the shared package TypeScript configuration; the contract tooling rows of the dependency register and the regenerated inventory; and this change, which adds the `plugin-registration` capability.
 
 ## Author self-check before review
 

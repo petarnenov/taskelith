@@ -1,6 +1,6 @@
 ## Context
 
-A restore of PostgreSQL increments the installation's recovery epoch and puts the installation into restore quarantine ([trust model](../../../docs/trust-model.md), [launch authorization contract](../../../docs/contracts/launch-authorization.md) section 8). Until now only `execution.started` carried the epoch, and `decideStartObservation` returned `quarantine-evidence` for a start at another epoch or in quarantine. Every other execution observation was applied whatever epoch its worker held, so an exit reported from before a restore ended its attempt (bug B4, crash scenario 24c). The owner's delegate decided in away run `20261026T164615Z-opencode-20899` to extend the start rule's gate to every execution observation.
+A restore of PostgreSQL increments the installation's recovery epoch and puts the installation into restore quarantine ([trust model](/docs/trust-model.md), [launch authorization contract](/docs/contracts/launch-authorization.md) section 8). Until now only `execution.started` carried the epoch, and `decideStartObservation` returned `quarantine-evidence` for a start at another epoch or in quarantine. Every other execution observation was applied whatever epoch its worker held, so an exit reported from before a restore ended its attempt (bug B4, crash scenario 24c). The owner's delegate decided in away run `20261026T164615Z-opencode-20899` to extend the start rule's gate to every execution observation.
 
 ## Goals / Non-Goals
 

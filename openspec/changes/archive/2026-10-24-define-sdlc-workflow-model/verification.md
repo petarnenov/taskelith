@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-G1 item 4 of the [G1 work plan](../../../docs/g1-plan.md), delegated by the integrating session under the owner's 2026-10-24 authorization to start and merge reviewed G1 items. Base revision: `6df3ce5` on `dev`, with `origin/add-shared-kernel` at `0a155f4` (item 2, then in review) merged to build against the kernel; after pass 1, `origin/dev` at `029cf02`, which contains the merged and archived kernel, was merged (no rebase). Scope: the new package `packages/modules/sdlc` (`package.json`, `tsconfig.json`, `src/`, `test/`), the workspace link in `package-lock.json`, the regenerated `docs/dependencies/licenses.json` (lockfile provenance hash) and `docs/dependencies/sbom.cdx.json` (the private `@taskelith/sdlc` component), and this change. Prepared in a git worktree.
+G1 item 4 of the [G1 work plan](/docs/g1-plan.md), delegated by the integrating session under the owner's 2026-10-24 authorization to start and merge reviewed G1 items. Base revision: `6df3ce5` on `dev`, with `origin/add-shared-kernel` at `0a155f4` (item 2, then in review) merged to build against the kernel; after pass 1, `origin/dev` at `029cf02`, which contains the merged and archived kernel, was merged (no rebase). Scope: the new package `packages/modules/sdlc` (`package.json`, `tsconfig.json`, `src/`, `test/`), the workspace link in `package-lock.json`, the regenerated `docs/dependencies/licenses.json` (lockfile provenance hash) and `docs/dependencies/sbom.cdx.json` (the private `@taskelith/sdlc` component), and this change. Prepared in a git worktree.
 
 ## Author self-check before review
 
