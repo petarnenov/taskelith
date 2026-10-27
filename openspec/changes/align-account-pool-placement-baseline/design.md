@@ -2,13 +2,13 @@
 
 The account pool contract (`docs/contracts/account-pool.md`, G3 item 5) says that slot selection runs inside the reservation transaction, but not how it fits that transaction as G2 built it. Review pass 2 of item 5 in the G3 item 0 revalidation found three gaps, M3, L3, and L4 (`proposal.md`). This change fixes the contract text; G3 item 12 builds the selection.
 
-All citations below are at base `b87abe75` (`origin/dev`, #365), which this branch does not change outside documentation.
+All citations below were made at base `b87abe75` (#365) and rechecked on the merge of `origin/dev` at `99333004` (#366), which changed no code; this branch changes nothing outside documentation.
 
 ## Goals / Non-Goals
 
 Goals: state where selection runs in the placement transaction, the limit it checks, how its outcomes map onto waiting, rejection, backoff, and the placement outcome records of #360, the single slot write, and the serializable slot writers.
 
-Non-goals: implementing selection or its tests (item 12); capacity reservation section 10 and the `capacity-reservation` specification, which the parallel change `align-account-pool-signals` edits; reopening the decisions of #364; the signals themselves (item 3).
+Non-goals: implementing selection or its tests (item 12); capacity reservation section 10 and the `capacity-reservation` specification, which the parallel change `align-account-pool-signals` (#366) edited; reopening the decisions of #364 or #366; the signals themselves (item 3).
 
 ## Decisions
 
@@ -43,7 +43,7 @@ At the credential step, the worker and quota reasons come first, so a `reject` p
 
 ### D5. Serializable slot writers (L4)
 
-The writers come from the account pool contract: `add` (section 6.1), the signals (section 5), allowed projects and concurrency limit changes (section 2, rule 1), revoke, reinstate, and remove (section 8), and the rotation's switch and revision advance (section 8.1). They are listed in account pool section 2, rule 3, and the capacity reservation contract's section 4 list refers to it; section 13's per-table list gains one entry for the slot records, whose table item 12 names.
+The writers come from the account pool contract: `add` (section 6.1), the usage and limit signals and the credential authentication failures that the control plane applies to a slot (section 5, as #366 left it, with no reset signal), allowed projects and concurrency limit changes (section 2, rule 1), revoke, reinstate, and remove (section 8), and the rotation's switch and revision advance (section 8.1). They are listed in account pool section 2, rule 3, and the capacity reservation contract's section 4 list refers to it; section 13's per-table list gains one entry for the slot records, whose table item 12 names. Setting a harness's usage window length (section 2, rule 1) is not in the list: it changes no slot, and the selection reads only the window end that section 5 stores in a slot's `usage` when a report is applied.
 
 ### D6. Spec delta in `account-pool-port` only
 

@@ -23,7 +23,7 @@ A selection SHALL only read; the slot's reservation time SHALL be written only w
 - **THEN** the selected slot is written once, with the reservation on the second worker
 
 ### Requirement: Serializable slot changes
-Every slot change SHALL run at serializable isolation, because the reservation transaction reads slots: adding a slot, a load, limit, reset, or health signal, a change of the allowed projects or the concurrency limit, a revocation, reinstatement, or removal, and a rotation's switch and revision advance.
+Every slot change SHALL run at serializable isolation, because the reservation transaction reads slots: adding a slot, a usage or limit signal or a credential authentication failure applied to it, a change of the allowed projects or the concurrency limit, a revocation, reinstatement, or removal, and a rotation's switch and revision advance.
 
 #### Scenario: Revocation racing a selection
 - **WHEN** a slot's revocation and a reservation that selects the slot run concurrently
@@ -32,8 +32,12 @@ Every slot change SHALL run at serializable isolation, because the reservation t
 ## MODIFIED Requirements
 
 ### Requirement: Deterministic least-loaded order
-The least-loaded rule SHALL order eligible slots by held reservations, then by usage fraction only when every tied slot reports one within its current window, then by least recent reservation, then by lowest identifier, and the insert of the reservation SHALL record the time of the slot's reservation.
+The least-loaded rule SHALL order eligible slots by held reservations, then by usage fraction only when every tied slot has a usage report whose derived window end is after the selection time, then by least recent reservation, then by lowest identifier, and the insert of the reservation SHALL record the time of the slot's reservation.
 
 #### Scenario: Equal usage
 - **WHEN** two eligible slots tie on held reservations and report the same usage fraction
+- **THEN** the least recently reserved of the two is reserved
+
+#### Scenario: Ended usage window
+- **WHEN** two eligible slots tie on held reservations, report usage fractions 0.2 and 0.7, and the window of the 0.2 report has ended
 - **THEN** the least recently reserved of the two is reserved
