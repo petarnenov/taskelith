@@ -17,7 +17,8 @@ const CODE = /^[A-Z][A-Z0-9_]{0,30}$/;
 const BEFORE_REDACT_TEXT: readonly (readonly [RegExp, string])[] = [
   [/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' '],
   [/\b[a-z][a-z0-9+.-]*:\/\/\S*/gi, '[url]'],
-  [/[^\s/?#@:'"]+:[^\s/?#@'"]+@/g, `${REDACTED}@`],
+  // Tried once per run of user-information characters, so linear in time.
+  [/(?<![^\s/?#@'"])(:*)[^\s/?#@:'"]+:[^\s/?#@'"]+@/g, `$1${REDACTED}@`],
   [/\b((?:proxy-)?authorization)(["']?\s*[=:]\s*["']?)[^;,"']*/gi, `$1$2${REDACTED}`],
   [/\b(password|passwd|passphrase|pass|pwd|secret|token|credentials?|cookie|private[_-]?key|api[_-]?key)(["']?\s*:\s*)("(?:[^"\\]|\\.)*"?|'(?:[^'\\]|\\.)*'?|\S+)/gi, `$1$2${REDACTED}`],
 ];
