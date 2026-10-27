@@ -37,19 +37,34 @@ Branch `record-owner-decisions-2026-10-27` from `origin/dev` at `14e1a46e`, in i
 
 ### Pass 1
 
-Reviewer A: harness `claude`, model `claude-fable-5-1`, variant `medium`, session `4221f237-46ec-4eb0-be8f-e4892a627d76`, run by the coordinator at head `432647b1`. Snapshot before and after: `83c158d66c93e6a59ad74aa44ec67de6ae638cb7408b16d91b934c397ae1025c`, unchanged. The reviewer re-read the npm dist-tags, the LICENSE identity, the spec deltas, the citations, and the ADR 0008 terms. Counts: Critical 0, High 0, Medium 1, Low 8, as in `passes.jsonl`. Fixes in `58001692`, not yet reviewed; pass 2 by reviewer B follows because of the Medium finding.
+Reviewer A: harness `claude`, model `claude-fable-5-1`, variant `medium`, session `4221f237-46ec-4eb0-be8f-e4892a627d76`, run by the coordinator at head `432647b1`. Snapshot before and after: `83c158d66c93e6a59ad74aa44ec67de6ae638cb7408b16d91b934c397ae1025c`, unchanged. The reviewer re-read the npm dist-tags, the LICENSE identity, the spec deltas, the citations, and the ADR 0008 terms. Counts: Critical 0, High 0, Medium 1, Low 8, as in `passes.jsonl`. Fixes in `58001692`; pass 2 by reviewer B confirmed findings 1 to 8 as fixed and accepted the deferral of 9.
 
 | # | Severity | Finding | Resolution |
 | --- | --- | --- | --- |
-| 1 | Medium | The one-slot rule in both deltas and the G3 item 33 note was attributed to ADR 0005 decision 2, though it is the author's reading (design D2) | Fixed, unreviewed: they cite the account pool contract section 7.1, which states that it applies decision 2 as a one-slot limit because Taskelith cannot check accounts |
-| 2 | Low | The harness delta dropped "any number of slots MAY be added per harness" | Fixed, unreviewed: restored as "a harness MAY have any number of slots"; body 495 characters |
-| 3 | Low | `docs/integration-candidates.md:33` contradicted itself on API-billed endpoints | Fixed, unreviewed: "except for Claude Code" |
-| 4 | Low | ADR 0005 status and Risks still said the terms were not verified | Fixed, unreviewed: dated note for Claude Code in both |
-| 5 | Low | "no rotation" worded differently in the ADR, the G3 plan, and the qualification | Fixed, unreviewed: all three say "with no rotation to another account" |
-| 6 | Low | Section 7.1 did not say that the rotation rule is not checkable | Fixed, unreviewed |
-| 7 | Low | The ADR 0008 note's "of that run" was wrong for delegated child tasks | Fixed, unreviewed: "of its run, the card's run or a delegated child run" |
-| 8 | Low | Item 45's "Depends on" held "Not yet planned" | Fixed, unreviewed: "0 (planning pending)" |
+| 1 | Medium | The one-slot rule in both deltas and the G3 item 33 note was attributed to ADR 0005 decision 2, though it is the author's reading (design D2) | Fixed: they cite the account pool contract section 7.1, which states that it applies decision 2 as a one-slot limit because Taskelith cannot check accounts |
+| 2 | Low | The harness delta dropped "any number of slots MAY be added per harness" | Fixed: restored as "a harness MAY have any number of slots"; body 495 characters |
+| 3 | Low | `docs/integration-candidates.md:33` contradicted itself on API-billed endpoints | Fixed: "except for Claude Code" |
+| 4 | Low | ADR 0005 status and Risks still said the terms were not verified | Fixed: dated note for Claude Code in both |
+| 5 | Low | "no rotation" worded differently in the ADR, the G3 plan, and the qualification | Fixed: all three say "with no rotation to another account" |
+| 6 | Low | Section 7.1 did not say that the rotation rule is not checkable | Fixed |
+| 7 | Low | The ADR 0008 note's "of that run" was wrong for delegated child tasks | Fixed: "of its run, the card's run or a delegated child run" |
+| 8 | Low | Item 45's "Depends on" held "Not yet planned" | Fixed: "0 (planning pending)" |
 | 9 | Low | The workspace `list` order is not in the `git-workspace-port` spec | Deferred: out of scope; follow-up spec delta for the list order |
+
+### Pass 2
+
+Failed attempt, not a pass: started 2026-10-27 23:50 local with Claude Code `claude-opus-5-5`, effort `high`; it exited 1 with "Error: No messages returned from query" and empty stdout. The cause, found by Maki in `investigate-claude-reviewer-invocation`, is a bug of Claude Code CLI 2.1.312 in `--output-format json`: when a rate-limit event arrives after the result, the result is dropped. It has no `passes.jsonl` line.
+
+Reviewer B: harness `claude`, model `claude-opus-5-5`, variant `high`, session `70161b78-35df-4ea2-8f8a-1498cfcbb403`, run by the coordinator at head `30aa51ae` with `--output-format stream-json --verbose`, the result line read from the stream. Snapshot before and after: `c15f3431e07c8a1d876d88a86987a8b02df85d74a143a90958c2731c16259324`, unchanged. The reviewer confirmed the pass 1 fixes 1 to 8, accepted the deferral of 9, and judged the one-slot reading of design D2 faithful. Counts: Critical 0, High 0, Medium 0, Low 6, as in `passes.jsonl`. The pass is Low-only, so the review ends; the fixes in `167c80e5` are unreviewed and no pass 3 runs.
+
+| # | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| 1 | Low | Scenario "Second Claude Code slot" ended with an untestable clause on rotation | Fixed, unreviewed: the THEN ends at "the configuration is rejected" |
+| 2 | Low | `docs/qualification/claude-code.md:217` still named a subscription-only provider path | Fixed, unreviewed: adds the user's own API key, G3 item 45 |
+| 3 | Low | The Credential scope row (`claude-code.md:27`) missed the one Claude Code slot | Fixed, unreviewed: names it with contract section 7.1 |
+| 4 | Low | `docs/g3-plan.md:150` omitted item 45 among the items that depend only on item 0 | Fixed, unreviewed |
+| 5 | Low | "The owner's own account" undefined in the contract, operator and owner mixed | Fixed, unreviewed: quoted as the decision's words; the operator adds the slot for the account the decision allows; its role mapping is left to a further owner decision (design D2) |
+| 6 | Low | "Other harnesses are unchanged" missed that the decision is about Claude subscriptions | Fixed, unreviewed: ADR 0005 and D15 name other harnesses' own subscriptions and a later harness that can use a Claude subscription |
 
 ## Limitations
 
@@ -57,9 +72,10 @@ Reviewer A: harness `claude`, model `claude-fable-5-1`, variant `medium`, sessio
 - The slot limit names no `AccountSlots` read; G3 item 12 defines it (design D2).
 - G3 item 45 is unplanned.
 - Follow-up: a `git-workspace-port` spec delta for the `list` order (pass 1 finding 9, deferred).
+- Follow-up, out of scope: `docs/foundation.md:18` still calls the ADR 0005 provider terms pending (review pass 2).
 
 ## Remaining gates
 
-- Review passes by reviewers A and B under the independent review process.
+- Review complete: pass 1 (A) and pass 2 (B, Low-only); the pass 2 fixes are unreviewed, and no pass 3 runs.
 - Archive in the last commit of the branch, with its checks.
 - Integration into dev by the coordinator (single pull request)
