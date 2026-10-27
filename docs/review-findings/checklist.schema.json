@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:taskelith:review-checklist",
   "title": "Taskelith review checklist record",
-  "description": "An OpenSpec change's checklist.json: the review checklist of its brief, written by npm run findings -- checklist ... --save <change> before the first review pass. npm run findings -- effect compares the change's pass-1 findings with it. Unknown properties are rejected.",
+  "description": "An OpenSpec change's checklist.json: the review checklist of its brief, written by npm run findings -- checklist ... --save <change> --at <dev commit> before the first review pass, from the archive as of the brief's dev commit. npm run findings -- effect compares the change's pass-1 findings with it. Unknown properties are rejected.",
   "type": "object",
   "additionalProperties": false,
   "required": ["change", "generatedAt", "devCommit", "query", "review", "recordQuality"],
@@ -14,7 +14,7 @@
       "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
     },
     "devCommit": {
-      "description": "Full SHA of the dev commit whose archived findings the checklist ranks: the merge base of HEAD and origin/dev.",
+      "description": "Full SHA of the dev commit given with --at, the one that the brief's checklist names, whose archived findings the checklist ranks.",
       "type": "string",
       "pattern": "^[0-9a-f]{40}$"
     },

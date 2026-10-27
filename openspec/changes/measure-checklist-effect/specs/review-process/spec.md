@@ -1,3 +1,28 @@
+## MODIFIED Requirements
+
+### Requirement: Findings index and checklist
+`make findings ARGS="index"` SHALL count archived findings by category, capability, file, and reviewer, with the shares fixed (`fixed` and `fixed-unreviewed`), declined, and other. `make findings ARGS="checklist"` SHALL list the most frequent archived categories for the given capabilities and file globs, at most ten, each with its newest example title, SHALL always add the same list for record findings, and SHALL then name the dev commit it ranked, when there is one.
+
+#### Scenario: Index of archived findings
+- **WHEN** archived changes hold findings with the outcomes `fixed`, `fixed-unreviewed`, `declined`, and `deferred`
+- **THEN** the index counts the first two as fixed, `declined` as declined, and `deferred` as other, per category, capability, file, and reviewer
+
+#### Scenario: Checklist for a brief
+- **WHEN** the checklist is requested for a capability and a file glob
+- **THEN** it lists the categories of the archived findings whose capability matches or whose file matches the glob, most frequent first, each with its newest example title
+
+#### Scenario: Record quality in every checklist
+- **WHEN** the checklist is requested with any capabilities and file globs, or with none
+- **THEN** a "Record quality" section that ranks the categories of the archived record findings the same way follows the review checklist
+
+#### Scenario: Dev commit of the checklist
+- **WHEN** git has the merge base of `HEAD` and `origin/dev` and can read its archive
+- **THEN** the checklist ranks the archived findings as of that commit and ends with a line naming it, and without one it ranks the working tree's archive and names no commit
+
+#### Scenario: Active findings excluded
+- **WHEN** an active change holds findings
+- **THEN** neither the index nor the checklist counts them
+
 ## ADDED Requirements
 
 ### Requirement: Checklist record
@@ -24,7 +49,7 @@
 - **THEN** the command fails and writes nothing
 
 ### Requirement: Checklist record validation
-Validation SHALL check every `checklist.json` against the schema, its change, and the vocabulary, and SHALL reject a record with an impossible time, a duplicate or unranked category, more categories than `top`, or baseline counts above their totals. Once the commit that first archives `measure-checklist-effect` exists, it SHALL require `checklist.json` in each active change whose `.openspec.yaml` was first committed in a descendant of that commit or is uncommitted.
+Validation SHALL check every `checklist.json` against the schema, its change, and the vocabulary, and SHALL reject a record with an impossible time, a duplicate or unranked category, more categories than `top`, or baseline counts above their totals. Once the commit that first archives `measure-checklist-effect` exists, it SHALL require `checklist.json` in each active change whose `.openspec.yaml` was first committed in a descendant of that commit or is uncommitted, except in a shallow clone.
 
 #### Scenario: Before the landing
 - **WHEN** no commit has archived `measure-checklist-effect` yet
@@ -33,6 +58,10 @@ Validation SHALL check every `checklist.json` against the schema, its change, an
 #### Scenario: Change opened after the landing without a checklist
 - **WHEN** an active change's `.openspec.yaml` was first committed in a descendant of the landing commit, or is not committed, and it has no `checklist.json`
 - **THEN** validation fails and names the missing file
+
+#### Scenario: Shallow clone
+- **WHEN** validation runs in a shallow clone, whose boundary commit appears to add every file
+- **THEN** it requires no `checklist.json`
 
 #### Scenario: Change opened before the landing
 - **WHEN** an active change's `.openspec.yaml` was first committed in a commit that does not descend from the landing commit, and it has no `checklist.json`
