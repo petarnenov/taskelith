@@ -373,14 +373,31 @@ test('a decline after the fleet ran out of capacity does not move the cursor', a
   assert.deepEqual(placed, ['task-a1', 'task-b1', 'task-c1', 'task-d1']);
 });
 
-test('a slot freed after a capacity decline does not move the cursor past it', async () => {
+// task-b1 finds the fleet full and the free slot appears after it.
+test('a slot freed during a pass after a fleet capacity decline waits for the declined project', async () => {
   const placed: string[] = [];
   const fleet = oneSlot();
   const { clock, service } = serviceOf(await fleetStore(ONE_TASK_EACH, placed, fleet));
   await runPasses(service, clock, 1);
-  fleet.scripted = { 'task-b1': FULL, 'task-c1': FULL };
+  fleet.scripted = { 'task-b1': FULL };
+  await runPass(service, clock, (pass) => assert.deepEqual(value(pass), { waiting: 4, placed: 0 }));
   await runPasses(service, clock, 4);
-  assert.deepEqual(placed, ['task-a1', 'task-d1', 'task-b1', 'task-c1', 'task-e1']);
+  assert.deepEqual(placed, ['task-a1', 'task-b1', 'task-c1', 'task-d1', 'task-e1']);
+});
+
+test('a decline for a reason of its own does not end the pass', async () => {
+  const placed: string[] = [];
+  const fleet: Fleet = { ...oneSlot(), scripted: { 'task-a1': QUOTA_USED } };
+  const { clock, service } = serviceOf(await fleetStore(ONE_TASK_EACH.slice(0, 2), placed, fleet));
+  await runPass(service, clock, (pass) => assert.deepEqual(value(pass), { waiting: 2, placed: 1 }));
+  assert.deepEqual(placed, ['task-b1']);
+});
+
+test('a full fleet costs one placement transaction per pass', async () => {
+  const { state, store } = scriptedStore([FULL, FULL, FULL]);
+  state.waiting = ['task-1', 'task-2', 'task-3'];
+  assert.deepEqual(value(await new PlacementService(store, timing().timing).placeWaiting()), { waiting: 3, placed: 0 });
+  assert.equal(state.opened, 1);
 });
 
 // Fifty tasks of `p-big`, then one of `p-small`, waiting in id order.
