@@ -4,10 +4,10 @@ G3 item 0 ([G3 work plan](/docs/g3-plan.md#work-items), row 0) re-reviews the me
 
 ## What Changes
 
-- **`docs/g3-plan.md`.** Item 0 is marked done on 2026-10-27, and a new section "Item 0 closure" lists its changes with their pull requests, items, and subjects, the two related test changes, and the open owner confirmations of the away delegate's decisions in item 0's changes. The dependency text names wave 1's remaining items as next. The carried row of the GitHub-hosted runner check is resolved by #367.
+- **`docs/g3-plan.md`.** Item 0 is marked done on 2026-10-27, and a new section "Item 0 closure" lists its changes with their pull requests, items, and subjects, the two related test changes, and the away delegate's decisions in item 0's changes, which the owner confirmed on 2026-10-27. The dependency text names wave 1's remaining items as next. The carried row of the GitHub-hosted runner check is resolved by #367.
 - **`docs/foundation.md`.** The G2 status paragraph, the deferred-item row of the G3 groundwork re-review, and the delivery-sequence paragraph record item 0 as done and wave 1 as next.
 
-This change records facts only. It decides no owner confirmation and edits no ADR.
+This change records facts only and edits no ADR. The owner's confirmation of the four delegate decisions comes from the coordinator's message of 2026-10-27.
 
 ## Capabilities
 

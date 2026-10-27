@@ -7,7 +7,7 @@
 - [x] 2.1 Check each pull request of item 0 on `dev` and its archived change
 - [x] 2.2 Mark item 0 done in `docs/g3-plan.md` and add the section "Item 0 closure" with its changes
 - [x] 2.3 Resolve the plan's hosted-runner row by `record-hosted-runner-linux-acceptance` (#367)
-- [x] 2.4 List the open owner confirmations with their source records
+- [x] 2.4 List the delegate decisions with their source records as confirmed by the owner (coordinator message of 2026-10-27)
 - [x] 2.5 Record item 0 as done and wave 1 as next in `docs/foundation.md`
 - [x] 2.6 Run the checks without Docker and record `verification.md`
 - [ ] 2.7 Add the review checklist output to `design.md`
