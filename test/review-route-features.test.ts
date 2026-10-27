@@ -119,7 +119,7 @@ test('the capability history counts related reviewed changes only', () => {
 });
 
 test('an archived record that is not JSON lines is refused', () => {
-  const files = { [`${ARCHIVE}/2026-10-01-one/findings.jsonl`]: '{\n' };
+  const files: Readonly<Record<string, string>> = { [`${ARCHIVE}/2026-10-01-one/findings.jsonl`]: '{\n' };
   assert.throws(() => archivedReviewsOf(Object.keys(files), (path) => files[path]!), RouteRefusal);
 });
 
