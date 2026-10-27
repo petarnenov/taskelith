@@ -9,7 +9,7 @@
 
 ## Revision
 
-The branch `derive-workspace-names-from-task-ids`, from `origin/dev` at `93b5065b`. The first checks ran on the working tree of `1370e7aa`, with this record uncommitted; review pass 1 reviewed `625d64fa`, and the checks after its fixes ran on the working tree of `6690c3b7`, with this record uncommitted.
+The branch `derive-workspace-names-from-task-ids`, from `origin/dev` at `93b5065b`. The first checks ran on the working tree of `1370e7aa`, with this record uncommitted; review pass 1 reviewed `625d64fa`, and the checks after its fixes ran on the working tree of `6690c3b7`, with this record uncommitted. Review pass 2 reviewed `583eb088`, and the checks after its fixes ran on the clean tree of `bb175e0d`, before this record's pass 2 update.
 
 ## Environment
 
@@ -39,12 +39,17 @@ After review pass 1:
 
 The reviewer's in-memory provider with working directories such as `/outside/a%2Fb/checkout` and correct branches gave no finding before the fix and four after it.
 
+After review pass 2:
+
+| Test | Before (the pass 2 suite) | After |
+| --- | --- | --- |
+| `workspace-conformance.test.ts`: "a provider that removes a digest-only workspace under a name with a dash fails the suite" (finding 1) | Fails: the removal of `..` reports success without deleting and the suite removes only `../attempt`, so no case fails; 39 of 40 tests of the file pass | Passes: the name derivation case reports the workspaces still listed after every removal; the package's 66 of 66 tests pass |
+
 ## Checks and results
 
-- After the pass 1 fixes, `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: exit 0, 2254 tests, 2207 passed, 0 failed, 47 skipped; total coverage 99.28 % of lines, 92.28 % of branches, and 98.93 % of functions; the OpenSpec scenario check 70 passed, 0 failed. The strict validation of the change is valid, and `make findings ARGS="validate"` reports 37 valid findings files and 17 valid pass summary files.
-- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: exit 0. The test run reported 2253 tests, 2206 passed, 0 failed, 47 skipped; total coverage 99.28 % of lines, 92.25 % of branches, and 98.93 % of functions; `sha256.js` and `workspace.js` of `@taskelith/workspace` at 100 % on all three. The OpenSpec scenario check reported 70 passed, 0 failed. It includes `npm run verify:comments`, `npm run verify:links`, and the archive of every active change in a temporary copy.
-- `npm run openspec -- validate derive-workspace-names-from-task-ids --strict`: `Change 'derive-workspace-names-from-task-ids' is valid`.
-- `make findings ARGS="validate"`: `Every findings file is valid: 37 file(s); every pass summary file is valid: 17 file(s).`
+- On the working tree of `1370e7aa`, before review pass 1: `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: exit 0. The test run reported 2253 tests, 2206 passed, 0 failed, 47 skipped; total coverage 99.28 % of lines, 92.25 % of branches, and 98.93 % of functions; `sha256.js` and `workspace.js` of `@taskelith/workspace` at 100 % on all three. The OpenSpec scenario check reported 70 passed, 0 failed. It includes `npm run verify:comments`, `npm run verify:links`, and the archive of every active change in a temporary copy. `npm run openspec -- validate derive-workspace-names-from-task-ids --strict`: `Change 'derive-workspace-names-from-task-ids' is valid`. `make findings ARGS="validate"`: `Every findings file is valid: 37 file(s); every pass summary file is valid: 17 file(s).`
+- On the working tree of `6690c3b7`, after the pass 1 fixes: `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: exit 0, 2254 tests, 2207 passed, 0 failed, 47 skipped; total coverage 99.28 % of lines, 92.28 % of branches, and 98.93 % of functions; the OpenSpec scenario check 70 passed, 0 failed. The strict validation of the change is valid, and `make findings ARGS="validate"` reports 37 valid findings files and 17 valid pass summary files.
+- On the clean tree of `bb175e0d`, after the pass 2 fixes: `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: exit 0, 2255 tests, 2208 passed, 0 failed, 47 skipped; total coverage 99.28 % of lines, 92.27 % of branches, and 98.93 % of functions; `sha256.js` and `workspace.js` at 100 % on all three; the OpenSpec scenario check 70 passed, 0 failed. With this record's pass 2 update, the strict validation of the change is valid, `make findings ARGS="validate"` reports 37 valid findings files and 17 valid pass summary files, and `npm run verify:links` passes.
 - The review checklist in [design](design.md) is the exact output of `make findings ARGS="checklist --capability git-workspace-port,workspace-packages --files packages/modules/workspace/**,packages/adapters/**,docs/contracts/git-workspace.md"`.
 
 ## Independent review
@@ -64,15 +69,33 @@ The reviewer's in-memory provider with working directories such as `/outside/a%2
 | 1 | Medium | The name derivation case checked the branch but not the working directory, so a misnamed or misplaced directory passed | The fixture names its data root; the case compares each working directory with `worker/workspaces/<name>/checkout` under it; defective double that percent-encodes the directory name; contract section 12 and 13, design, and a spec scenario | `6690c3b7` |
 | 2 | Low | The design's example of why safe identifiers keep the digest did not collide | The example is the safe identifier `a_b-<digest of a/b>`; no other record or comment held it | `6690c3b7` |
 
+### Pass 2, reviewer B
+
+- Reviewer: Claude Code, `claude-opus-5-5`, effort high, reviewed head `583eb088`, run by the coordinator.
+- Session: `e9616865-3fb6-432d-9e1e-7131448d0cca`.
+- Snapshot: `022cfb5875fbb1d18d4ec8b238bb42172e637402ecf27c586493a80306cb3827` before and after the pass, unchanged.
+- Counts: Critical 0, High 0, Medium 0, Low 6.
+- Pass 1 fixes: both confirmed resolved; their outcome stays `fixed`.
+- Reviewer checks: the SHA-256 matched `node:crypto` for every length from 0 to 1100 bytes, for 3000 random Unicode strings, and for a 5 MB input, and gave the FIPS results for `"abc"` and `""`; `git check-ref-format --branch` accepted the branches of 310 random printable ASCII identifiers and of `@`, `@{-1}`, `HEAD`, `-`, `a.lock`, `refs/heads/x`, and `~^:?*[\`, the longest name being 73 characters; the requirement lengths, the review checklist, the fail-before result, and every cited line at `93b5065b` were confirmed; the package passed 65 of 65 tests.
+- A Low-only pass ends the review under governance "Low findings are fixed", so there is no pass 3; the six fixes, in `bb175e0d`, have the outcome `fixed-unreviewed`.
+
+| # | Severity | Finding | Resolution | Commit |
+| --- | --- | --- | --- | --- |
+| 1 | Low | Contract section 12 says the workspaces of all the case's identifiers can be removed, but the case removed only `../attempt`, so a removal that misnames another identifier passed | The case removes `../attempt`, checks that the other three stay listed, removes them, and checks that none is listed; a defective double that looks for the digest-only workspace of `..` under a name with a leading `-` passed before and fails the case after; contract sections 12 and 13, design D7, the proposal, and a spec scenario | `bb175e0d` |
+| 2 | Low | Nothing said whether the fixture's data root is canonical, so a string comparison of working directories could fail falsely where the temporary directory is a symbolic link, as `/var` on macOS | The fixture and contract section 12 require the canonical data root without symbolic links, design D7 says why, and the double's fixture resolves its temporary directory with `realpath` | `bb175e0d` |
+| 3 | Low | Task 2.2 said two new defects while the proposal and design D7 said three | Task 2.2, the proposal, and design D7 say four, with the defect of finding 1 | `bb175e0d` |
+| 4 | Low | The results before the pass 1 fixes had no head and sat after the later ones | Each result in "Checks and results" names its head, in time order | this record |
+| 5 | Low | Design D5 did not name Web Crypto among the rejected alternatives | D5 rejects `crypto.subtle.digest` because it is asynchronous and would make `taskBranchName`, `workspaceDirectoryName`, and the suite's name constants asynchronous | `bb175e0d` |
+| 6 | Low | Contract section 2 said "printable ASCII characters", though `Identifier` excludes space | The contract and the proposal say "printable ASCII characters other than space"; the design and this record already said "without whitespace" | `bb175e0d` |
+
 ## Limitations
 
 - The SHA-256 is the module's own code (design D5); its tests compare it with `node:crypto` for 1, 55, 56, 63, 64, 65, 119, 120, and 128 bytes and the other test identifiers, not with the FIPS test vectors directly.
 - The Git branch check runs `git check-ref-format --branch` for the test identifiers only; the claim for all identifiers rests on the name's character set (design D2).
 - No Git adapter exists yet (item 16), so no real clone or push uses a derived name.
+- The domain test runs the system `git`; the Linux test image (`tools/linux-cgroup/Dockerfile`) has no Git, so a manual `make linux-test-suites` run with that file would fail. Contract section 13 already requires Git in that image for item 16's Linux tests.
 
 ## Remaining gates
 
-- Review pass 2 by reviewer B (Claude Code `claude-opus-5-5`, effort high), which checks the pass 1 fixes and reviews the whole change
-- Review pass 3 by reviewer A (Codex `gpt-6.1-sol`), which confirms the pass 2 fixes, unless pass 2 finds nothing above Low
 - Archive of the change
 - Integration into dev by the coordinator (single pull request)

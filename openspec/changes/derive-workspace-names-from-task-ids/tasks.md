@@ -12,9 +12,13 @@
 ## 3. Verification and review
 
 - [x] 3.1 Run `make verify`, the strict validation of the change, and `make findings ARGS="validate"`
-- [ ] 3.2 Independent review under the governance process: pass 1 by reviewer A, pass 2 by reviewer B, and pass 3 by reviewer A unless pass 2 finds nothing above Low
-- [ ] 3.3 Record the review evidence in `verification.md`, `findings.jsonl`, and `passes.jsonl`
+- [x] 3.2 Independent review under the governance process: pass 1 by reviewer A, pass 2 by reviewer B, and pass 3 by reviewer A unless pass 2 finds nothing above Low
+- [x] 3.3 Record the review evidence in `verification.md`, `findings.jsonl`, and `passes.jsonl`
 
 ## 4. Review pass 1
 
 - [x] 4.1 Fix the two pass 1 findings: the working directory check in the name derivation case with a defective double that fails it, and the design's collision example
+
+## 5. Review pass 2
+
+- [x] 5.1 Fix the six pass 2 Low findings without another review: the removal of every workspace in the name derivation case with a defective double that fails it, the canonical data root, the defect count, the order and heads of the recorded checks, Web Crypto in design D5, and the identifier wording of the contract
