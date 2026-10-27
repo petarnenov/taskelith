@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-27. The author's verification, the merge of `dev`, and review passes 1 and 2 with their fixes are recorded below; review pass 3 is pending.
+Date: 2026-10-27. The author's verification, the merge of `dev`, and review passes 1 to 3 with their fixes are recorded below; the review has ended.
 
 ## Scope and source
 
@@ -21,7 +21,7 @@ Linux 6.8.0-147-generic, x86_64; Docker Engine 27.3.1, classic image store, stor
 - The gate of the brief does not apply: no new tool or dependency, the same digest-pinned base, no registry or publishing step (design, "Gate decision").
 - Every `RUN` of the stages the worker image is built or copies from (`node-amd64`, `node-arm64`, `build`, `runtime`, `worker`; `node-files` and `node` have none) declares `ARG SOURCE_DATE_EPOCH` and ends with the clamp; the test of decision 5 derives that chain and checks it.
 - Both callers of the Dockerfile pass `SOURCE_DATE_EPOCH`, read once by the caller: `scripts/installation.sh:47` (read at `:80` and `:108`) and `scripts/harness-qualification.sh:56` (read at `:130`); `Makefile` target `linux-test-image` builds `tools/linux-cgroup`, not this Dockerfile.
-- The new image has the same files as the old one. At `5dc42b19` (review pass 2, finding L8), the worker image built from a `git archive` of that commit with its Dockerfile (`sha256:0296d507fefd190973179bfe6d66a4e99598a992fd7da6d23296a0d5519cd05b`, the ID of the check below) and from the same context with the Dockerfile of `21f399a5` (`sha256:87b6ef47cf396d5a05d3620c294ebbc0943f474c247814c8dadba919a37ce36a`): a listing of path, mode, owner, size, and link target, 15551 lines each, differs only in the size of `/opt/taskelith/infra/installation/Dockerfile`, 2458 against 3497 bytes; the image is 315635233 against 373924894 bytes without the tarball layer. The first comparison, of builds A and F on `21f399a5` (15485 lines each), had the same result.
+- The new image has the same files as the old one. At `5dc42b19` (review pass 2, finding L8), the worker image built from a `git archive` of that commit with its Dockerfile (`sha256:0296d507fefd190973179bfe6d66a4e99598a992fd7da6d23296a0d5519cd05b`, the ID of the check below) and from the same context with the Dockerfile of `21f399a5` (`sha256:87b6ef47cf396d5a05d3620c294ebbc0943f474c247814c8dadba919a37ce36a`): a listing of path, mode, owner, size, and link target, 15551 lines each, differs only in the size of `/opt/taskelith/infra/installation/Dockerfile`: 3497 bytes in the new image (this change's Dockerfile) and 2458 bytes in the old one (the Dockerfile of `21f399a5`). The new image is 315635233 bytes and the old one 373924894 bytes; the new one has no tarball layer. The first comparison, of builds A and F on `21f399a5` (15485 lines each), had the same result.
 - Two existing assertions follow the Dockerfile: the `taskelith-exec` line ends with a continuation (`test/installation-composition.test.ts:204`), and the `harnesses` stage starts `FROM node` (`test/harness-image-pins.test.ts:127`).
 - New comments are at most two lines of at most 80 characters; `npm run verify:comments` passes within `make verify`.
 - Commit types are `docs` and `chore`; no published package changes.
@@ -83,11 +83,19 @@ Linux 6.8.0-147-generic, x86_64; Docker Engine 27.3.1, classic image store, stor
   6. **L5 (error-handling), `scripts/installation.sh:47` and `scripts/harness-qualification.sh:56`:** the commit time was read inside the build arguments, so a failed `git log` was not caught, and the check read it twice. Fixed in `5dc42b19`: each caller reads it once with `|| exit` and passes it. The test `a failed read of the commit time stops every build before any image is built` (`test/installation-script.test.ts:293`) fails on `89b42d55`'s scripts (16 tests, 15 pass, 1 fail; a build started) and passes after (16 of 16).
   7. **L6 (evidence-mismatch), `scripts/harness-qualification.sh`:** the harness build had not run with Docker after the change. Fixed: `make qualify-harnesses PLATFORMS=linux/amd64 OUT=<scratch>` on the clean tree of `5dc42b19`: exit 0 in 1 min 47 s, `linux/amd64 done`; `image.txt` names tree `5dc42b19bcfd322dce439f59a8e1946c83a67495`, engine 27.3.1, image `sha256:47a816c7bc2f49f169f7f67788dc74a9167ba1fbea2ee6d189a641327987e995`; `credential-files.txt` is empty.
   8. **L7 (docs, record), `proposal.md:10` and `:12`:** "Scripts" and "Tests" missed the pass 1 changes. Fixed in `68a6b3c5`.
-  9. **L8 (evidence-mismatch, record), `verification.md:24`:** the file comparison came from prototype F on `21f399a5`. Fixed in this record: repeated at `5dc42b19` (author self-check).
+  9. **L8 (evidence-mismatch, record), `verification.md:24`:** the file comparison came from prototype F on `21f399a5`. Fixed in this record: repeated at `5dc42b19` (author self-check); its sizes were corrected after pass 3, so it is **fixed, unreviewed**.
 
 ### Pass 3 (reviewer A)
 
-Pending.
+- **Reviewer:** Codex, model `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`, assigned and run by coordinator Niki, with the invocation of pass 1.
+- **Revision:** `78afaef7`.
+- **Model confirmation:** the session header names model `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`; session `01a17dc0-1fd5-78d2-8c69-7e82b07a2ca5`.
+- **Snapshot:** the same before and after the pass.
+- **Limit:** as in pass 1, the sandbox denied the Docker socket, so the reviewer could not confirm the Docker digests.
+- **Pass 2 status:** M1 and L1 to L7 resolved; L8 partly resolved, because the sizes of the repeated comparison were given in the wrong order. The bounded notes at `docs/decisions/0015-g2-closure.md:133` and `docs/foundation.md:88` touch only those lines and state exactly the proven scope.
+- **Findings:** 0 Critical, 0 High, 0 Medium, 1 Low:
+  1. **L1 (evidence-mismatch, record), `verification.md:24`:** the sentence named the new image first, but its sizes "2458 against 3497" were in the old image's order. **Fixed, unreviewed:** the author self-check gives each Dockerfile size and image size with its image. This fix also finishes pass 2 finding L8, which is therefore `fixed-unreviewed` as well.
+- The pass was the third and Low-only, so its fix takes no further pass (`docs/governance.md`, "Independent review process"); the review has ended.
 
 ## Limitations
 
@@ -98,6 +106,5 @@ Pending.
 
 ## Remaining gates
 
-- Review pass 3 (reviewer A), recorded in `passes.jsonl` and `findings.jsonl`.
 - Archive of the change (worker step 7).
 - Integration into dev by the coordinator (single pull request)
