@@ -6,7 +6,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Authorized alternating reviewers
-Each Taskelith change without a review exception accepted by the owner under the governance policy SHALL be independently reviewed by two owner-authorized reviewers of different harnesses, A and B, each invoked read-only with its model and effort set in the invocation. Pass 1 SHALL be A's full review, pass 2 B's full, independent review that also checks the pass 1 fixes, and pass 3 A's confirmation of the pass 2 fixes only. No other reviewer SHALL cross-review the change.
+Each Taskelith change without an owner-accepted review exception SHALL be independently reviewed by two owner-authorized reviewers, A and B, of different harnesses unless "No reviewer of another harness" applies, each invoked read-only with its model and effort set in the invocation. Pass 1 SHALL be A's full review, pass 2 B's full, independent review that also checks the pass 1 fixes, and pass 3 A's confirmation of the pass 2 fixes only. No other reviewer SHALL cross-review the change.
 
 #### Scenario: Review recorded
 - **WHEN** a change's `verification.md` records an independent review
@@ -33,7 +33,7 @@ Each Taskelith change without a review exception accepted by the owner under the
 - **THEN** both of its reviewers have network access
 
 ### Requirement: Unavailable reviewer
-A reviewer whose review attempt does not run to a report SHALL NOT be used for any change for 30 minutes from that attempt; a pass that reports findings is not unavailability. The next authorized reviewer in the rotation that is not paused, meets the change's review requirements, and has a harness different from the change's other reviewer SHALL be proposed and, once assigned, SHALL take the replaced reviewer's role, A or B, with its remaining passes and their scope.
+A reviewer whose review attempt does not run to a report SHALL NOT be used for any change for 30 minutes from that attempt; a pass that reports findings is not unavailability. The next authorized reviewer in the rotation that is not paused and meets the change's review requirements SHALL be proposed. A replacement of reviewer A or B SHALL differ in harness from the other unless "No reviewer of another harness" applies, and SHALL take that role with its remaining passes and their scope.
 
 #### Scenario: Assigned reviewer fails to run
 - **WHEN** a review attempt by reviewer B fails, for example without opening a session
@@ -60,7 +60,7 @@ A reviewer whose review attempt does not run to a report SHALL NOT be used for a
 - **THEN** the reviewer may be assigned again
 
 ### Requirement: Rotation order
-Rotation SHALL follow the order of the governance policy's authorized reviewer list, returning to the first after the last, and skip a reviewer that is unavailable, paused, or unable to meet the change's review requirements. Unless a change needs a particular one, a new change's reviewer A SHALL be the reviewer after the one most recently assigned, and its B the next after A of another harness. Same-harness reviewers SHALL NOT be adjacent in the list, including the last and the first.
+Rotation SHALL follow the order of the governance policy's authorized reviewer list, wrapping around, and skip a reviewer that is unavailable, paused, or unable to meet the change's review requirements. Unless a change needs a particular one, a new change's reviewer A SHALL be the reviewer after the most recently assigned one, and its B the next after A of another harness while one is available. Same-harness reviewers SHALL NOT be adjacent in the list, including the last and the first.
 
 #### Scenario: Reviewers of a new change
 - **WHEN** a new change is assigned and the reviewer most recently assigned was another change's reviewer B
@@ -85,7 +85,7 @@ Rotation SHALL follow the order of the governance policy's authorized reviewer l
 ## ADDED Requirements
 
 ### Requirement: Changes under the one-reviewer rule
-A change briefed before the alternating-reviewer rule reached `dev`, including one already in review, SHALL finish under the earlier rule: one assigned reviewer makes every pass, no second reviewer cross-reviews it, and an unavailable reviewer's replacement takes over the remaining passes, its first pass confirming the earlier findings and then reviewing the whole change.
+A change briefed before the alternating-reviewer rule reached `dev`, including one already in review, SHALL finish under the earlier rule: one assigned reviewer makes every pass, no second reviewer cross-reviews it, and an unavailable reviewer's replacement, the next reviewer in the rotation that is not paused and meets its review requirements, with no harness test, takes over the remaining passes, its first pass confirming the earlier findings and then reviewing the whole change.
 
 #### Scenario: Change in review at the rule change
 - **WHEN** a change had its first review pass before the rule reached `dev` and needs a second pass
@@ -99,5 +99,5 @@ When no authorized reviewer of a harness different from the change's other revie
 - **THEN** the coordinator may assign a reviewer of A's harness with a different model as reviewer B, and `verification.md` records why
 
 #### Scenario: Reviewer B without another harness
-- **WHEN** a new change is assigned and no reviewer in the turn has a harness different from reviewer A's
+- **WHEN** a new change is assigned and no authorized reviewer of a harness different from reviewer A's is available, because each is paused, unavailable, or unable to meet the change's review requirements
 - **THEN** the coordinator may assign another model of A's harness as reviewer B, and `verification.md` records why

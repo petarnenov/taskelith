@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-Coordinator brief from Niki, owner-approved on 2026-10-27 ("одобрявам смесен вариант"): replace "One reviewer per task" with two alternating reviewers per task, reviewer A for the full pass 1 and the confirmation-only pass 3, and reviewer B, of a different harness, for the full, independent pass 2 that also checks the pass 1 fixes. Assigned by the coordinator Niki; developed by subagents briefed and checked by the worker session Desi, under [subagent execution](../../../docs/agent-task-protocol.md#subagent-execution), in the git worktree `../taskelith-worktrees/alternate-reviewers-per-pass` on branch `alternate-reviewers-per-pass`. Base revision: `744689cb` on `dev`. Scope: `docs/governance.md`, `docs/agent-task-protocol.md`, the `taskelith-task-protocol`, `taskelith-worker`, and `taskelith-coordinator` skills, the review line of `AGENTS.md`, the `review-process` delta and the living spec's Purpose, the UI POC's Reviews badge, and a check of the findings tooling. Exclusions: review-pass statistics (a later `review-pass-statistics` change), a rebuild of the published UI POC artifact, and the findings schema and scripts, which need no change (`design.md`). Commit types `docs` and `chore`: nothing here is in the published package's `files` allowlist.
+Coordinator brief from Niki, which the owner approved on 2026-10-27 as the mixed option: replace "One reviewer per task" with two alternating reviewers per task, reviewer A for the full pass 1 and the confirmation-only pass 3, and reviewer B, of a different harness, for the full, independent pass 2 that also checks the pass 1 fixes. Assigned by the coordinator Niki; developed by subagents briefed and checked by the worker session Desi, under [subagent execution](../../../docs/agent-task-protocol.md#subagent-execution), in the git worktree `../taskelith-worktrees/alternate-reviewers-per-pass` on branch `alternate-reviewers-per-pass`. Base revision: `744689cb` on `dev`. Scope: `docs/governance.md`, `docs/agent-task-protocol.md`, the `taskelith-task-protocol`, `taskelith-worker`, and `taskelith-coordinator` skills, the review line of `AGENTS.md`, the `review-process` delta and the living spec's Purpose, the UI POC's Reviews badge and its README's published-build note, and a check of the findings tooling. Exclusions: review-pass statistics (a later `review-pass-statistics` change), a rebuild of the published UI POC artifact, and the findings schema and scripts, which need no change (`design.md`). Commit types `docs` and `chore`: nothing here is in the published package's `files` allowlist.
 
 ## Coordinator decisions
 
@@ -52,7 +52,7 @@ Pending. This change is a coordinator-authorized pilot of version 5: reviewer A 
 
 ## Limitations
 
-- `docs/ui-poc/README.md` says the published artifact's version 7 matches this source; after the badge change it no longer matches until the artifact is rebuilt.
+- The published UI POC artifact's version 7 predates the badge change and no longer matches the source; `docs/ui-poc/README.md` "Published build" now says so. Republishing it is an owner decision outside this change.
 - `make verify` has not been run yet.
 
 ## Remaining gates
