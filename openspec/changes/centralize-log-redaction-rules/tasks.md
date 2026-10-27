@@ -21,5 +21,5 @@
 
 - [x] 4.1 Proposal, design, the `execution-observability` delta, `verification.md`, and an empty `findings.jsonl`
 - [x] 4.2 `npm run openspec -- validate centralize-log-redaction-rules --strict` and a scratch archive
-- [ ] 4.3 `make verify` (scheduled by the coordinator)
-- [ ] 4.4 Independent review (OpenCode `opencode-go/kimi-k2.7-code`)
+- [x] 4.3 `make verify` on `9f7972f3`: passed
+- [x] 4.4 Independent review pass 1 (OpenCode `opencode-go/kimi-k2.7-code`): 1 Low, declined; Low-only, no further pass

@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-27. The author's verification is recorded below; `make verify` and the independent review are pending.
+Date: 2026-10-27. The author's verification, `make verify`, and the independent review are recorded below.
 
 ## Scope and source
 
@@ -44,11 +44,34 @@ Environment: macOS (Darwin 25.6.0), Node 24.22.1 from `.nvmrc`.
 - `npm run verify:dependencies` reported the inventory stale after the two new workspace dependencies; `make dependency-inventory` regenerated `docs/dependencies` (one package path's dependency list each), and the check then passed: "Verified 731 package paths".
 - `make findings ARGS="validate"`: "Every findings file is valid: 7 file(s)."
 - `npm run openspec -- validate centralize-log-redaction-rules --strict`: valid. A scratch copy of `openspec/` outside the worktree archived the change (1 requirement modified) and `openspec validate --all --strict --no-interactive` there gave 69 passed, 0 failed. `npm run verify:archive`: "Every active OpenSpec change archives into strictly valid specs."
-- `make verify`: not run by the worker; the coordinator schedules the host slot.
+- `make verify`: run on `9f7972f3`, below.
+
+## Merge of dev
+
+`git merge origin/dev` at `92f0830b` as `9f7972f3`, without a conflict. `92f0830b` merges #330 (`bound-failure-cause-userinfo-redaction`), whose archive commit `3d188855` was already this branch's base, and #329 (`run-g2-crash-windows-on-linux`). The merge changes `packages/testing/src/index.ts`, which gains the `SCENARIO_COMMIT_VARIABLE` export beside this change's `assertLinearOnRuns` export without touching it, `packages/testing/src/scenario-results.ts` and its test, the crash-window harness and Linux tooling, and the `g2-failure-scenarios` spec. It touches no redaction, secrets, observability, access, or failure-cause file, so no evidence above is invalidated.
+
+## make verify
+
+`make verify` on `9f7972f3`, 2026-10-27 08:53:05 to 08:56:06 UTC: exit 0. `DOCKER_CONFIG` pointed at a scratch directory with an empty `config.json`, because Docker Desktop's credential helper hangs on this iMac; the pinned public images were pulled anonymously and no credentials were read.
+
+- 2033 tests, 2031 passed, 0 failed, 2 skipped; coverage 99.27% lines, 91.97% branches, 98.97% functions.
+- 0 breaking changes in all four contract documents against `92f0830b291b`; "Contract documents have no undeclared breaking change."
+- "Verified 731 package paths; 41 with license coverage gaps (all reviewed; 4 declaration-only)".
+- OpenSpec `Totals: 70 passed, 0 failed (70 items)`; "Every active OpenSpec change archives into strictly valid specs."
+- "Every findings file is valid: 8 file(s)."; "Every comment is within the comment length rule."; "Packed file allowlist and installed CLI verification passed."
+- The integration tests the author's checks skipped, `apps/control-plane/test/administration.integration.test.ts` and `packages/adapters/nats/test/transport.integration.test.ts`, ran inside it.
 
 ## Independent review
 
-Independent review: OpenCode opencode-go/kimi-k2.7-code, pending.
+### Review pass 1
+
+OpenCode, model `opencode-go/kimi-k2.7-code` (default variant, none passed), run by the worker (Pepi) from the worktree as `opencode run --standalone --agent reviewer -m 'opencode-go/kimi-k2.7-code' --format json --title centralize-log-redaction-rules "$(cat <prompt-file>)" < /dev/null > <log>`, with the prompt and log outside the worktree. Session `ses_e836c905cffelr4c8b058ZRInr`. Revision reviewed: `9f7972f`. Findings: 0 Critical, 0 High, 0 Medium, 1 Low. Low-only pass: no further review pass follows (governance), so the resolution below is **UNREVIEWED**.
+
+- Read-only: `git ls-files -co --exclude-standard | xargs shasum -a 256 | shasum -a 256` before and after the run gave `9af27030eed0b0eef30dc07d37daac077a16d706dcc2c612cbce6d0be3b45387` both times.
+- The reviewer concluded: it found no counterexample to identical output for `redactSecrets` and `redactFailure`, for `sanitizeFailureText` and `describeFailureCause`, or for the former `redactText` against `MARKED_SECRET_RULES`; the `.creds` cut keeps every block the former code matched; the logger change only adds redaction; every rule is linear, and it found no superlinear input; observability → access is allowed and acyclic, imports go by name through the root export, and `package.json`, `tsconfig`, the lockfile, and the dependency inventory agree; the fail-before tests exist and are meaningful, and the 200 ms margin is large; the delta keeps the scenarios verbatim, and `installation-enrollment` and `worker-runtime` still hold without deltas; comments are within the rule.
+- **L1 (declined, UNREVIEWED):** `packages/modules/access/src/ports/secrets.ts:5-11`: `SECRET_PREFIXES` is a domain constant, not a port contract, and should move to access's domain with a re-export. Declined: `SecretKind`, which types the prefixes, is defined in access's ports, and `scripts/check-boundaries.ts:239` rejects a domain file importing its own module's ports, so a domain file could not type the prefixes by `SecretKind`; moving `SecretKind` into the domain would change the access module's port layout beyond this task's scope. Design decision 2 already records this placement. Follow-up option: move `SecretKind` and `SECRET_PREFIXES` into access's domain together, with the ports re-exporting `SecretKind`. Governance says Low findings are fixed; this one is declined with the rationale above instead, which the coordinator or owner may revisit.
+- Limitation: a standalone OpenCode session stores no model field in its JSON events, so the model is confirmed by the `-m` argument only.
+- Record checks after this pass: `make findings ARGS="validate"`: "Every findings file is valid: 8 file(s)."; `npm run verify:comments`: "Every comment is within the comment length rule."; `npm run openspec -- validate centralize-log-redaction-rules --strict`: valid.
 
 ## Limitations
 
@@ -59,7 +82,6 @@ Independent review: OpenCode opencode-go/kimi-k2.7-code, pending.
 
 ## Remaining gates
 
-- `make verify` on the branch head.
-- Independent review by OpenCode `opencode-go/kimi-k2.7-code`, with its findings in `findings.jsonl`.
+- Merge of the next `dev` change (`require-finding-capability`) before the archive.
 - Archive under worker step 7.
 - Integration into dev by the coordinator (single pull request).
