@@ -121,6 +121,9 @@ export const WORKER_REFUSAL_REASONS = Object.freeze([
 
 export type WorkerRefusalReason = (typeof WORKER_REFUSAL_REASONS)[number];
 
+// An automatic retry that is not placed yet backs off (contract §3.8).
+export const RETRY_BACKOFF_REASON = 'retry-backoff';
+
 export const OBSTACLE_SOURCES = Object.freeze(['scheduler', 'worker', 'fleet', 'automatic-retry'] as const);
 
 export type ObstacleSource = (typeof OBSTACLE_SOURCES)[number];
@@ -142,7 +145,12 @@ export type PlacementObstacle = ObstacleValues & (
   | { readonly source: 'scheduler'; readonly disposition: 'rejected'; readonly reason: PlacementRejectingReason }
   | { readonly source: 'worker'; readonly disposition: 'waiting'; readonly reason: WorkerRefusalReason }
   | { readonly source: 'fleet'; readonly disposition: 'waiting'; readonly reason: FleetObstacleReason }
-  | { readonly source: 'automatic-retry'; readonly disposition: 'waiting'; readonly retryNumber: number }
+  | {
+      readonly source: 'automatic-retry';
+      readonly disposition: 'waiting';
+      readonly reason: typeof RETRY_BACKOFF_REASON;
+      readonly retryNumber: number;
+    }
 );
 
 export const TASK_END_KINDS = Object.freeze([
