@@ -7,6 +7,7 @@ import test from 'node:test';
 import {
   ACCEPTANCE_VARIABLE,
   FileScenarioRecorder,
+  SCENARIO_COMMIT_VARIABLE,
   SCENARIO_RESULTS_VARIABLE,
   discardingScenarioRecorder,
   parseAcceptanceContext,
@@ -139,6 +140,15 @@ test('a results file in the environment records relative to the directory', asyn
 test('outside a git repository the environment cannot name a commit', async () => {
   await withTemporaryDirectory(async (directory) => {
     assert.throws(() => runEnvironment({ cwd: directory, env: gitFreeEnv }), /needs the commit, but git rev-parse HEAD failed/);
+  });
+});
+
+test('a named commit stands in for git outside the repository', async () => {
+  await withTemporaryDirectory(async (directory) => {
+    const commit = 'ab'.repeat(20);
+    assert.equal(runEnvironment({ cwd: directory, env: { ...gitFreeEnv, [SCENARIO_COMMIT_VARIABLE]: commit } }).commit, commit);
+    const short = { ...gitFreeEnv, [SCENARIO_COMMIT_VARIABLE]: 'f9ba7a5' };
+    assert.throws(() => runEnvironment({ cwd: directory, env: short }), /TASKELITH_SCENARIO_COMMIT must be a full commit hash/);
   });
 });
 
