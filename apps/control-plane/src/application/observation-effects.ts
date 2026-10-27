@@ -3,6 +3,7 @@ import { SUPPORTED_PROTOCOL_VERSIONS, commonProtocolVersion, type MessageSchemas
 import {
   decideStartObservation,
   endAttempt,
+  executionsUnderAssignment,
   isQuarantineEvidence,
   parseExitStatus,
   parseRecoveryEpoch,
@@ -163,7 +164,23 @@ async function selfCheckReport(tx: ControlPlaneTransaction, observation: Observa
   const worker = await tx.fleet.worker(workerId);
   if (!worker.ok) return worker;
   if (worker.value === undefined) return err(failure('not-found', `worker ${workerId} is not enrolled`, { worker: workerId }));
-  return tx.workerAdmissions.record(workerId, decideWorkerAdmission(results, worker.value.host.platform), sequence, at);
+  const decision = decideWorkerAdmission(results, worker.value.host.platform);
+  const recorded = await tx.workerAdmissions.record(workerId, decision, sequence, at);
+  if (!recorded.ok || decision.state !== 'self-check-failed') return recorded;
+  return freeUngrantedAssignments(tx, observation);
+}
+
+// Worker admission section 7: a worker whose self-check failed launches
+// nothing, so each assignment without a grant is freed; a granted one stays.
+async function freeUngrantedAssignments(tx: ControlPlaneTransaction, observation: Observation): Promise<Result<void>> {
+  for (const assignment of await tx.assignments.listUnfinishedByWorker(observation.position.workerId)) {
+    const task = await tx.tasks.get(assignment.reservation.scope.taskId);
+    if (!task.ok) return task;
+    if (executionsUnderAssignment(task.value, assignment.id).granted) continue;
+    const freed = await freeIdleAssignment(tx, assignment, commandIdentity(observation, assignment.id));
+    if (!freed.ok) return freed;
+  }
+  return ok(undefined);
 }
 
 // 21c decisions 14 and 15: the evidence beside the execution's state; the
