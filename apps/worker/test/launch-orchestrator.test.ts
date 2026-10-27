@@ -42,6 +42,7 @@ let delays: number[];
 let sink: InMemoryLogSink;
 let controller: AbortController;
 let orchestrator: LaunchOrchestrator;
+let newId: () => string;
 
 beforeEach(() => {
   ({ root, remove } = temporaryJournal());
@@ -54,8 +55,9 @@ beforeEach(() => {
   sink = new InMemoryLogSink();
   controller = new AbortController();
   let ids = 0;
+  newId = () => `id-${(ids += 1)}`;
   orchestrator = new LaunchOrchestrator({
-    journal, authority, supervision: supervisions.factory, clock, pressure, draw: () => 0.5, newId: () => `id-${(ids += 1)}`,
+    journal, authority, supervision: supervisions.factory, clock, pressure, draw: () => 0.5, newId: () => newId(),
     // Each sleep advances the clock and yields, so polling never spins; an
     // aborted signal returns at once, as the production sleep does.
     sleep: async (milliseconds, signal) => {
@@ -128,6 +130,33 @@ function callCount(supervision: FakeSupervision | undefined, call: string): numb
 
 function executions() {
   return value(journal.snapshot()).executions;
+}
+
+// The waits of the launch back-off, without the shorter polls.
+function backOffs(): number[] {
+  return delays.filter((delay) => delay >= LAUNCH_RETRY_DELAY.initialMilliseconds);
+}
+
+function deferrals() {
+  return sink.records.filter(({ event }) => event === 'worker.launch.deferred');
+}
+
+// Fails the first `failing` clock reads and stops the worker at read
+// `stopAt`; answers, per read, whether the event loop turned since the last.
+function failClockReads(failing: number, stopAt = Infinity): boolean[] {
+  const read = clock.read.bind(clock);
+  const turns: boolean[] = [];
+  let turned = true;
+  clock.read = () => {
+    turns.push(turned);
+    turned = false;
+    setImmediate(() => {
+      turned = true;
+    });
+    if (turns.length >= stopAt) controller.abort();
+    return turns.length <= failing ? err(failure('unavailable', 'the deadline clock cannot be read')) : read();
+  };
+  return turns;
 }
 
 test('a grant is journaled, the record written, and the supervisor started; its facts reach the outbox', async () => {
@@ -373,12 +402,151 @@ test('a reading from another boot never hands a grant out', async () => {
   assert.ok(supervisions.all.every((supervision) => !supervision.calls.includes('prepare')));
 });
 
-test('an unreadable clock requests nothing', async () => {
+test('an unreadable clock defers the launch on a timer: the event loop turns between tries', async () => {
   value(journal.recordCommand(offer()));
-  clock.readable = false;
+  const turns = failClockReads(Infinity, 3);
+  await orchestrator.run(controller.signal);
+
+  assert.deepEqual(turns, [true, true, true]);
+  assert.deepEqual(backOffs(), [7_500, 15_000]);
+  assert.deepEqual([authority.requests.length, executions().length], [0, 0]);
+});
+
+test('a launch deferred before W2 logs why, and its waits stay within [5 s, 60 s]', async () => {
+  value(journal.recordCommand(offer()));
+  failClockReads(Infinity, 8);
   await launchOnce();
-  assert.equal(authority.requests.length, 0);
-  assert.deepEqual(executions(), []);
+
+  assert.deepEqual(backOffs(), [7_500, 15_000, 30_000, 50_000, 60_000, 60_000, 60_000]);
+  assert.ok(backOffs().every((delay) => delay <= LAUNCH_RETRY_DELAY.maximumMilliseconds));
+  const [first] = deferrals();
+  assert.deepEqual({ level: first?.level, fields: first?.fields }, {
+    level: 'warn',
+    fields: {
+      assignmentId: value(journal.snapshot()).intents[0]?.assignmentId,
+      code: 'unavailable', message: 'the deadline clock cannot be read', retries: 1, delayMilliseconds: 7_500,
+    },
+  });
+  assert.equal(deferrals().length, 8);
+  assert.deepEqual([authority.requests.length, executions().length], [0, 0]);
+});
+
+test('a clock readable again after the waits begins the operation, and the back-off goes on from them', async () => {
+  value(journal.recordCommand(offer()));
+  failClockReads(2);
+  authority.answers = [ok({ kind: 'rejected', rejection: launchRejection('quarantined', 'restore') }), granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  await launchOnce();
+
+  assert.deepEqual(backOffs(), [7_500, 15_000, 30_000]);
+  const [first, second] = authority.requests;
+  assert.equal(first?.reportsNotStarted, false);
+  assert.equal(first?.executionId, second?.executionId);
+  assert.deepEqual(executions().map(({ state }) => state), ['exited']);
+});
+
+test('an identifier that cannot be parsed before W2 defers the launch', async () => {
+  value(journal.recordCommand(offer()));
+  const valid = newId;
+  let calls = 0;
+  newId = () => ((calls += 1) === 1 || calls === 3 ? 'not an identifier' : valid());
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  await launchOnce();
+
+  assert.deepEqual(deferrals().map(({ fields }) => fields.code), ['invalid', 'invalid']);
+  assert.deepEqual(backOffs(), [7_500, 15_000]);
+  assert.deepEqual(executions().map(({ state }) => state), ['exited']);
+});
+
+test('a journal read that fails before W2 defers the launch', async () => {
+  value(journal.recordCommand(offer()));
+  const snapshot = journal.snapshot.bind(journal);
+  let reads = 0;
+  journal.snapshot = () => ((reads += 1) === 2 ? err(failure('unavailable', 'the journal cannot be read')) : snapshot());
+  authority.answers = [granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  await launchOnce();
+  journal.snapshot = snapshot;
+
+  assert.deepEqual(deferrals().map(({ fields }) => fields.message), ['the journal cannot be read']);
+  assert.deepEqual(backOffs(), [7_500]);
+  assert.deepEqual(executions().map(({ state }) => state), ['exited']);
+});
+
+test('a journal read before W2 that finds the journal stopped ends the launch without a deferral', async () => {
+  value(journal.recordCommand(offer()));
+  const stopped = failure('unavailable', 'the journal stopped: disk I/O error', { reason: 'stopped' });
+  const snapshot = journal.snapshot.bind(journal);
+  let reads = 0;
+  // Read 1 is the pass; the stop at read 4 bounds a launch that defers.
+  journal.snapshot = () => {
+    if ((reads += 1) >= 4) controller.abort();
+    return reads === 1 ? snapshot() : err(stopped);
+  };
+  await launchOnce();
+  journal.snapshot = snapshot;
+
+  assert.deepEqual([deferrals().length, authority.requests.length, executions().length], [0, 0, 0]);
+});
+
+test('a W2 commit that fails and rolls back is tried again on a timer, with a new operation', async () => {
+  value(journal.recordCommand(offer()));
+  const beginAuthorization = journal.beginAuthorization.bind(journal);
+  const tried: string[] = [];
+  const turns: boolean[] = [];
+  let turned = true;
+  journal.beginAuthorization = (request) => {
+    tried.push(request.operationId);
+    turns.push(turned);
+    turned = false;
+    setImmediate(() => {
+      turned = true;
+    });
+    return tried.length <= 2 ? err(failure('internal', 'journal error: database is locked')) : beginAuthorization(request);
+  };
+  authority.answers = [unavailable()];
+  stopAfterRequests(1);
+  await orchestrator.run(controller.signal);
+  journal.beginAuthorization = beginAuthorization;
+
+  assert.deepEqual(turns, [true, true, true]);
+  assert.deepEqual(backOffs(), [7_500, 15_000]);
+  assert.equal(new Set(tried).size, 3);
+  assert.deepEqual(deferrals().map(({ fields }) => fields.message), Array(2).fill('journal error: database is locked'));
+  assert.deepEqual(authority.requests.map(({ operationId }) => operationId), [tried[2]]);
+  assert.deepEqual(executions()[0]?.authorizations.map(({ operationId }) => operationId), [tried[2]]);
+});
+
+test('a W2 commit that stops the journal ends the launch without a deferral', async () => {
+  value(journal.recordCommand(offer()));
+  const stopped = failure('unavailable', 'journal I/O error: disk I/O error', { reason: 'flush-failure' });
+  const beginAuthorization = journal.beginAuthorization.bind(journal);
+  journal.beginAuthorization = () => err(stopped);
+  await launchOnce();
+  journal.beginAuthorization = beginAuthorization;
+
+  assert.deepEqual([deferrals().length, authority.requests.length, executions().length], [0, 0, 0]);
+});
+
+test('a cancellation while a launch waits before W2 ends it without an operation or a seal', async () => {
+  value(journal.recordCommand(offer()));
+  failClockReads(Infinity);
+  const launched = launchOnce();
+  await until(() => deferrals().length >= 2);
+  value(journal.recordCommand(cancellation(1, { attemptId: 'attempt-1' })));
+  await orchestrator.pass(controller.signal);
+  await launched;
+  assert.deepEqual([authority.requests.length, executions().length, supervisions.all.length], [0, 0, 0]);
+  await launchOnce();
+  assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
+  assert.deepEqual(factKinds(), []);
 });
 
 test('a supervisor that seals reports not-started, and the intent is launched again', async () => {
