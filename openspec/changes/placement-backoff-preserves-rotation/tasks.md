@@ -17,4 +17,4 @@
 
 - [x] 4.1 Run `npm run openspec -- validate placement-backoff-preserves-rotation --strict`, `make findings ARGS="validate"`, and `make verify`, and record them in `verification.md`.
 - [x] 4.2 Review pass 1: the comments of `isFleetCapacityDecline` and `#placeDue` (M1, L1), a test of the kept failure count (L2), the request-dependent fleet reason (L3), and the spec citation of the record (L4).
-- [ ] 4.3 Review pass 2 by reviewer B, checking the pass 1 fixes, and any later pass.
+- [x] 4.3 Review pass 2 by reviewer B, checking the pass 1 fixes; its six Low findings are fixed as unreviewed fixes, so no pass 3 runs.
