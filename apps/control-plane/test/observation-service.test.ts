@@ -363,6 +363,24 @@ test('a failed self-check frees an accepted assignment that holds no grant', asy
   assert.deepEqual(await placedFixture.transaction.assignments.listUnfinishedByWorker(WORKER), []);
 });
 
+test('a late failed report below the fence neither changes admission nor frees an assignment', async () => {
+  const placedFixture = await fixture();
+  const { store, service, outbox } = placedFixture;
+  value(await service.apply(message('worker.capacity.declared', 1, DECLARATION)));
+  value(await service.apply(message('worker.self-check.reported', 4, { results: [PASSED] })));
+  value(await submit(placedFixture, 'task-1'));
+  value(await new PlacementService(store, { now: () => Date.parse(AT), draw: () => 0 }).placeWaiting());
+  const placed = await lastAttempt(placedFixture);
+  value(await service.apply(message('execution.assignment.accepted', 5, {
+    commandId: placed.assignment.offerCommandId, assignmentId: placed.assignment.id,
+  }, { attemptId: placed.attemptId, ownershipGeneration: placed.generation })));
+  assert.equal(value(await service.apply(message('worker.self-check.reported', 2, { results: [FAILED] }))), 'applied');
+  assert.deepEqual(await admissionOf(placedFixture), ['admitted', [PASSED]]);
+  const unfinished = await placedFixture.transaction.assignments.listUnfinishedByWorker(WORKER);
+  assert.deepEqual(unfinished.map((assignment) => assignment.id), [placed.assignment.id]);
+  assert.equal(outbox.messages.filter((sent) => sent.metadata.eventType === 'execution.assignment.end').length, 0);
+});
+
 // Authorizes and starts an execution under the placed attempt, as the
 // launch authority and the worker's start report would.
 async function startedUnder({ transaction }: Fixture, placed: PlacedAttempt): Promise<ExecutionId> {
