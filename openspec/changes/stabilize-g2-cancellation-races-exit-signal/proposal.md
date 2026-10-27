@@ -6,7 +6,7 @@ A `make verify` run on a Linux host failed in `test/g2-cancellation-races.test.t
 
 - The scenario worker gains a held scripted process, `HELD_RUN`: it cannot end on its own and exits with code 0 only after its worker releases it (`releaseScriptedProcesses`, `holdScriptedProcesses`).
 - Scenarios c, e, and f run held processes, so a cancelled attempt's started process can end only by the cancel's signal. Scenario f releases them only in a round whose held request was not granted, where the attempt must run to code 0 under a later assignment.
-- The fixed run times `LONG_RUN_MILLISECONDS` and `RACE_RUN_MILLISECONDS` go away. No timeout is widened and no product code changes.
+- The fixed run times `LONG_RUN_MILLISECONDS` and `RACE_RUN_MILLISECONDS` go away. No scenario bound or existing sleep is widened, and no product code changes.
 
 ## Capabilities
 
