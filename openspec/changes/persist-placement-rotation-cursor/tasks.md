@@ -19,6 +19,6 @@
 ## 4. Records
 
 - [x] 4.1 Contract section 13, spec delta, proposal, design, `verification.md`, empty `findings.jsonl` and `passes.jsonl`
-- [ ] 4.2 `make verify`
+- [x] 4.2 `make verify`
 - [ ] 4.3 Independent review
 - [ ] 4.4 Archive under worker step 7
