@@ -69,7 +69,7 @@ const TABLES = [
   'workflow_runs', 'gates', 'admissions', 'tasks', 'assignments', 'outbox', 'inbox', 'task_lineage', 'capacity_charges', 'delegations',
   'capacity_quotas', 'workers', 'installation', 'enrollment_tokens', 'delegation_requests', 'current_revisions', 'producer_cursors',
   'inventory_requests', 'inventory_report_parts', 'launch_authorizations', 'broker_revocations',
-  'launch_rejections', 'unrecorded_processes',
+  'launch_rejections', 'unrecorded_processes', 'placement_rotation',
 ];
 const WORKER = 'worker-a';
 const JOURNAL = 'journal-a';

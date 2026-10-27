@@ -55,7 +55,7 @@ export {
   InMemoryQuotaSettings,
   InMemoryTaskLineage,
 } from './adapters/in-memory-capacity.js';
-export { InMemoryDelegationRequests, InMemoryPlacementQueue } from './adapters/in-memory-placement.js';
+export { InMemoryDelegationRequests, InMemoryPlacementQueue, InMemoryPlacementRotation } from './adapters/in-memory-placement.js';
 export { InMemoryWorkerReports } from './adapters/in-memory-worker-reports.js';
 export { InMemoryOutboxLookup } from './adapters/in-memory-outbox-lookup.js';
 export {
@@ -64,6 +64,7 @@ export {
   CHILD_LINK,
   PLACEMENT_CANDIDATES_CONFORMANCE,
   PLACEMENT_QUEUE_CONFORMANCE,
+  PLACEMENT_ROTATION_CONFORMANCE,
   PLACEMENT_WORKERS_CONFORMANCE,
   PLACEMENT_WORKER_FIXTURES,
   QUOTA_FIXTURES,
@@ -184,6 +185,7 @@ export type { CapacityStore, CapacityTransaction } from './ports/capacity-store.
 export type { DelegationRequests } from './ports/delegation-requests.js';
 export type { InstallationGuard } from './ports/installation-guard.js';
 export type { PlacementQueue } from './ports/placement-queue.js';
+export type { PlacementRotation } from './ports/placement-rotation.js';
 export { isEligibleForPlacement, type PlacementWorkers, type WorkerPlacementRecord } from './ports/placement-workers.js';
 export type { QuotaSettings } from './ports/quota-settings.js';
 export type { TaskLineage } from './ports/task-lineage.js';

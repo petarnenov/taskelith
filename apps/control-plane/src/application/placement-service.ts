@@ -47,8 +47,6 @@ export class PlacementService {
   readonly #passes: RetrySchedule<typeof PASS>;
   // The due time of each task's unplaced retry, fixed by one jitter draw.
   readonly #retries = new Map<TaskId, { readonly attemptId: AttemptId; readonly dueAt: number }>();
-  // The rotation cursor; the next read starts after it.
-  #after: ProjectId | undefined;
 
   constructor(store: ControlPlaneStore, timing: BackoffTiming) {
     this.#store = store;
@@ -71,30 +69,36 @@ export class PlacementService {
   // that no candidate accepts rolls back, and the task still waits.
   async #placeDue(): Promise<Result<PlacementPass>> {
     const checked = this.#tasks.pastDue();
-    const after = this.#after;
-    const read = await this.#store.readCommitted(async (tx) => ok({
-      anyCandidate: (await tx.workers.candidates()).length > 0,
-      waiting: await tx.placements.waiting(PLACEMENT_BATCH, this.#tasks.notDue(), after),
-      stillWaiting: await stillWaitingAmong(tx.placements, checked),
-    }));
+    const read = await this.#store.readCommitted(async (tx) => {
+      const after = await tx.rotation.read();
+      return ok({
+        after,
+        anyCandidate: (await tx.workers.candidates()).length > 0,
+        waiting: await tx.placements.waiting(PLACEMENT_BATCH, this.#tasks.notDue(), after),
+        stillWaiting: await stillWaitingAmong(tx.placements, checked),
+      });
+    });
     if (!read.ok) return read;
-    const { anyCandidate, waiting, stillWaiting } = read.value;
+    const { after, anyCandidate, waiting, stillWaiting } = read.value;
     this.#forgetUnless(checked, stillWaiting);
     if (!anyCandidate) return ok({ waiting: waiting.length, placed: 0 });
-    const { outcome, next } = await this.#offer(fairWaitingOrder(waiting, after), after);
-    this.#after = next;
-    return outcome.ok ? ok({ waiting: waiting.length, placed: outcome.value }) : outcome;
+    const { outcome, next, stored } = await this.#offer(fairWaitingOrder(waiting, after), after);
+    if (!outcome.ok) return outcome;
+    const kept = await this.#storeUnstoredMove(after, next, stored);
+    return kept.ok ? ok({ waiting: waiting.length, placed: outcome.value }) : kept;
   }
 
   // Offers each task until the store fails or the fleet lacks capacity;
   // answers the number placed, or the outage, and the cursor for the next read.
   async #offer(order: readonly WaitingPlacement<TaskId>[], after: ProjectId | undefined): Promise<Offers> {
     const cursor = new RotationCursor(after);
+    let stored = after;
     let placed = 0;
     for (const { item: taskId, projectId } of order) {
-      const outcome = await this.#store.transaction((tx) => placeTask(tx, taskId, this.#retryBackoff));
-      if (!outcome.ok && isOutage(outcome.error.code)) return { outcome, next: cursor.next };
+      const outcome = await this.#store.transaction((tx) => placeMovingCursor(tx, taskId, this.#retryBackoff, projectId));
+      if (!outcome.ok && isOutage(outcome.error.code)) return { outcome, next: cursor.next, stored };
       if (outcome.ok && outcome.value.kind === 'placed') {
+        stored = projectId;
         cursor.placed(projectId);
         placed++;
       } else if (isFleetCapacityDecline(outcome)) {
@@ -105,7 +109,16 @@ export class PlacementService {
       }
       this.#settle(taskId, outcome);
     }
-    return { outcome: ok(placed), next: cursor.next };
+    return { outcome: ok(placed), next: cursor.next, stored };
+  }
+
+  // Section 13: a decline-only move of a pass without an outage, which may
+  // hide a commit, is stored once, and only over the cursor the pass read.
+  async #storeUnstoredMove(
+    after: ProjectId | undefined, next: ProjectId | undefined, stored: ProjectId | undefined,
+  ): Promise<Result<void>> {
+    if (next === undefined || next === stored) return ok(undefined);
+    return this.#store.transaction((tx) => tx.rotation.advanceFrom(after, next));
   }
 
   // Never given a fleet capacity decline, which keeps the wait. A backing-off
@@ -151,6 +164,8 @@ interface Offers {
   // The number of tasks placed, or the outage that stopped the pass.
   readonly outcome: Result<number>;
   readonly next: ProjectId | undefined;
+  // The cursor as the pass's placement transactions left it stored.
+  readonly stored: ProjectId | undefined;
 }
 
 const PASS = 'pass';
@@ -175,6 +190,17 @@ interface UnplacedRetry {
 
 // The retry's due time in epoch milliseconds while it still backs off.
 type RetryBackoff = (taskId: TaskId, retry: UnplacedRetry) => number | undefined;
+
+// Capacity reservation section 13: a placement moves the cursor to its
+// project in its own transaction, so a crash after the commit keeps it.
+async function placeMovingCursor(
+  tx: ControlPlaneTransaction, taskId: TaskId, retryBackoff: RetryBackoff, projectId: ProjectId,
+): Promise<Result<TaskPlacement>> {
+  const placement = await placeTask(tx, taskId, retryBackoff);
+  if (!placement.ok || placement.value.kind !== 'placed') return placement;
+  const moved = await tx.rotation.advance(projectId);
+  return moved.ok ? placement : moved;
+}
 
 // Reads the candidates in the task's transaction, so that each placement,
 // and each rerun of it, sees the reservations held before it.
