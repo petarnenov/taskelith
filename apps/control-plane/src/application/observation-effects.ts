@@ -166,8 +166,9 @@ async function selfCheckReport(tx: ControlPlaneTransaction, observation: Observa
   if (worker.value === undefined) return err(failure('not-found', `worker ${workerId} is not enrolled`, { worker: workerId }));
   const decision = decideWorkerAdmission(results, worker.value.host.platform);
   const recorded = await tx.workerAdmissions.record(workerId, decision, sequence, at);
-  if (!recorded.ok || decision.state !== 'self-check-failed') return recorded;
-  return freeUngrantedAssignments(tx, observation);
+  if (!recorded.ok) return recorded;
+  const appliedFailure = recorded.value === 'applied' && decision.state === 'self-check-failed';
+  return appliedFailure ? freeUngrantedAssignments(tx, observation) : ok(undefined);
 }
 
 // Worker admission section 7: a worker whose self-check failed launches

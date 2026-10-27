@@ -1,6 +1,7 @@
 import { err, failure, ok, parseInstant, type Instant, type Result } from '@taskelith/kernel';
 import type { Sequence, SelfCheckOutcome, SelfCheckResult, WorkerId } from '@taskelith/execution';
 import type {
+  AdmissionRecording,
   WorkerAdmissionDecision,
   WorkerAdmissionEntry,
   WorkerAdmissions,
@@ -37,14 +38,17 @@ export class PostgresWorkerAdmissions implements WorkerAdmissions, WorkerAdmissi
     this.#session = session;
   }
 
-  async record(workerId: WorkerId, decision: WorkerAdmissionDecision, sequence: Sequence, at: Instant): Promise<Result<void>> {
+  async record(
+    workerId: WorkerId, decision: WorkerAdmissionDecision, sequence: Sequence, at: Instant,
+  ): Promise<Result<AdmissionRecording>> {
     const updated = await this.#session.query(
       `UPDATE workers SET worker_admission = $2, self_check_sequence = $3, self_check_reported_at = $4
        WHERE worker_id = $1 AND self_check_sequence < $3`,
       [workerId, decision.state, sequence, at],
     );
-    if (updated.rowCount === 0) return this.#exists(workerId);
-    return this.#replaceResults(workerId, decision.results);
+    if (updated.rowCount === 0) return this.#fenced(workerId);
+    const replaced = await this.#replaceResults(workerId, decision.results);
+    return replaced.ok ? ok('applied') : replaced;
   }
 
   async awaitSelfCheck(workerId: WorkerId): Promise<Result<void>> {
@@ -88,7 +92,12 @@ export class PostgresWorkerAdmissions implements WorkerAdmissions, WorkerAdmissi
     return ok(undefined);
   }
 
-  // An update its fence skips still succeeds; only a missing worker fails.
+  // An update its fence skips is `fenced`; only a missing worker fails.
+  async #fenced(workerId: WorkerId): Promise<Result<AdmissionRecording>> {
+    const exists = await this.#exists(workerId);
+    return exists.ok ? ok('fenced') : exists;
+  }
+
   async #exists(workerId: WorkerId): Promise<Result<void>> {
     const { rowCount } = await this.#session.query('SELECT 1 FROM workers WHERE worker_id = $1 AND enrollment IS NOT NULL', [workerId]);
     return rowCount === 0 ? err(failure('not-found', `worker ${workerId} has no record`, { worker: workerId })) : ok(undefined);
@@ -120,7 +129,9 @@ export class CommittingWorkerAdmissions implements WorkerAdmissions, WorkerAdmis
     this.#database = database;
   }
 
-  record(workerId: WorkerId, decision: WorkerAdmissionDecision, sequence: Sequence, at: Instant): Promise<Result<void>> {
+  record(
+    workerId: WorkerId, decision: WorkerAdmissionDecision, sequence: Sequence, at: Instant,
+  ): Promise<Result<AdmissionRecording>> {
     return this.#database.transaction((tx) => tx.workerAdmissions.record(workerId, decision, sequence, at));
   }
 

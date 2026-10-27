@@ -67,6 +67,7 @@ export {
 export type { SelfCheckRun, WorkerAdmissionCheck } from './ports/worker-admission-check.js';
 export { WORKER_ADMISSION_CONFORMANCE, stubAdmissionCheck, type WorkerAdmissionFixture } from './ports/worker-admission-conformance.js';
 export type {
+  AdmissionRecording,
   WorkerAdmissionEntry,
   WorkerAdmissionSnapshot,
   WorkerAdmissions,

@@ -1,7 +1,7 @@
 import { parseInstant, type Result } from '@taskelith/kernel';
 import type { Sequence, SelfCheckResult, WorkerId } from '@taskelith/execution';
 import type { SecretHash } from '@taskelith/access';
-import { expectCode, expectSame, expectSuccess, type ConformanceCase } from '@taskelith/sdlc';
+import { expectCode, expectRead, expectSame, expectSuccess, type ConformanceCase } from '@taskelith/sdlc';
 import {
   LINUX_CONTAINMENT_CHECK_ID,
   LINUX_CONTAINMENT_SCOPE,
@@ -88,6 +88,19 @@ export const WORKER_ADMISSION_CONFORMANCE: readonly ConformanceCase<WorkerAdmiss
       const passed = await entryOf(admissions, workerId);
       expectSame(problems, 'admitted', passed?.admission, 'admitted');
       expectSame(problems, 'replaced results', passed?.results, [PASSED]);
+      return problems;
+    },
+  },
+  {
+    name: 'a report says whether it was applied or fenced, and a fenced one keeps the state',
+    async check({ registry, admissions }) {
+      const problems: string[] = [];
+      const workerId = await enrolled(registry, 'w1', 'j1');
+      expectRead(problems, 'above', await admissions.record(workerId, decision(PASSED), sequence(4), REPORTED_AT), 'applied');
+      expectRead(problems, 'below', await admissions.record(workerId, decision(FAILED), sequence(2), LATER), 'fenced');
+      expectRead(problems, 'at', await admissions.record(workerId, decision(FAILED), sequence(4), LATER), 'fenced');
+      const entry = await entryOf(admissions, workerId);
+      expectSame(problems, 'kept', [entry?.admission, entry?.results], ['admitted', [PASSED]]);
       return problems;
     },
   },

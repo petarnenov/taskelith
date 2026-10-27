@@ -2,7 +2,13 @@ import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import type { Sequence, SelfCheckResult, WorkerId } from '@taskelith/execution';
 import type { WorkerAdmissionDecision, WorkerAdmissionState } from '../domain/worker-admission.js';
 import type { FleetRegistry } from '../ports/fleet-registry.js';
-import type { WorkerAdmissionEntry, WorkerAdmissionSnapshot, WorkerAdmissions, WorkerAdmissionView } from '../ports/worker-admissions.js';
+import type {
+  AdmissionRecording,
+  WorkerAdmissionEntry,
+  WorkerAdmissionSnapshot,
+  WorkerAdmissions,
+  WorkerAdmissionView,
+} from '../ports/worker-admissions.js';
 
 interface StoredAdmission {
   readonly state: WorkerAdmissionState;
@@ -30,12 +36,14 @@ export class InMemoryWorkerAdmissions implements WorkerAdmissions, WorkerAdmissi
     this.#options = options;
   }
 
-  async record(workerId: WorkerId, decision: WorkerAdmissionDecision, sequence: Sequence, at: Instant): Promise<Result<void>> {
+  async record(
+    workerId: WorkerId, decision: WorkerAdmissionDecision, sequence: Sequence, at: Instant,
+  ): Promise<Result<AdmissionRecording>> {
     const known = await this.#known(workerId);
     if (!known.ok) return known;
-    if (sequence <= this.#current(workerId).fence) return ok(undefined);
+    if (sequence <= this.#current(workerId).fence) return ok('fenced');
     this.#store(workerId, { state: decision.state, fence: sequence, reportedAt: at, results: decision.results });
-    return ok(undefined);
+    return ok('applied');
   }
 
   async awaitSelfCheck(workerId: WorkerId): Promise<Result<void>> {
