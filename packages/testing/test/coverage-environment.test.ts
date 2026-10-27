@@ -21,13 +21,18 @@ test('an uncovered environment keeps every variable, from process.env by default
 });
 
 test('a child started with an uncovered environment writes no coverage file, and a covered one does', (t) => {
+  const original = process.env[COVERAGE_VARIABLE];
   const directory = mkdtempSync(join(tmpdir(), 'taskelith-coverage-'));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
-  const covered = { ...process.env, [COVERAGE_VARIABLE]: directory };
+  t.after(() => {
+    if (original === undefined) delete process.env[COVERAGE_VARIABLE];
+    else process.env[COVERAGE_VARIABLE] = original;
+    rmSync(directory, { recursive: true, force: true });
+  });
+  process.env[COVERAGE_VARIABLE] = directory;
 
-  childCoverage(uncoveredEnvironment(covered));
+  childCoverage(uncoveredEnvironment());
   assert.deepEqual(readdirSync(directory), []);
-  childCoverage(covered);
+  childCoverage();
   assert.equal(readdirSync(directory).length, 1);
 });
 
