@@ -243,37 +243,34 @@ test('the projects of a round follow project id order by code unit', () => {
 
 test('the rotation cursor moves to the project of the last placement', () => {
   const cursor = new RotationCursor(projectId('a'));
-  cursor.offered(projectId('b'));
   cursor.placed(projectId('b'));
-  cursor.offered(projectId('c'));
   cursor.placed(projectId('c'));
-  cursor.offered(projectId('d'));
+  cursor.declined(projectId('d'));
   assert.equal(cursor.next, projectId('c'));
 });
 
-test('without a placement the rotation cursor moves to the last offer', () => {
+test('without a placement the rotation cursor moves to the last decline', () => {
   const cursor = new RotationCursor(projectId('a'));
-  cursor.offered(projectId('b'));
-  cursor.offered(projectId('c'));
+  cursor.declined(projectId('b'));
+  cursor.declined(projectId('c'));
   assert.equal(cursor.next, projectId('c'));
 });
 
-test('after the fleet runs out of capacity, offers no longer move the cursor', () => {
+test('after the fleet runs out of capacity, no offer moves the cursor', () => {
   const cursor = new RotationCursor(projectId('a'));
-  cursor.offered(projectId('b'));
+  cursor.declined(projectId('b'));
   cursor.ranOutOfCapacity();
-  cursor.offered(projectId('c'));
-  assert.equal(cursor.next, projectId('b'));
+  cursor.declined(projectId('c'));
   cursor.placed(projectId('d'));
-  assert.equal(cursor.next, projectId('d'));
+  assert.equal(cursor.next, projectId('b'));
 });
 
-test('only quarantine, worker eligibility, and worker capacity lack fleet capacity', () => {
-  for (const reason of ['quarantined', 'worker-not-eligible', 'worker-capacity-exhausted'] as const) {
+test('only quarantine, worker eligibility, worker capacity, and no candidate lack fleet capacity', () => {
+  for (const reason of ['quarantined', 'worker-not-eligible', 'worker-capacity-exhausted', 'no-candidate']) {
     assert.equal(lacksFleetCapacity(reason), true, reason);
   }
-  for (const reason of ['control-not-enforceable', 'project-quota-exhausted', 'run-quota-exhausted', 'retry-budget-exhausted'] as const) {
-    assert.equal(lacksFleetCapacity(reason), false, reason);
+  for (const reason of ['control-not-enforceable', 'project-quota-exhausted', 'run-quota-exhausted', 'retry-budget-exhausted', undefined]) {
+    assert.equal(lacksFleetCapacity(reason), false, String(reason));
   }
 });
 
