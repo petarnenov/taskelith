@@ -59,7 +59,7 @@ After the confirmed decisions, on the working tree of that commit: `npm run veri
 
 After review pass 1, on the working tree of `27553d4a`: `npm run build` and `npm run check:boundaries` exit 0; unit tests of the touched packages (26 files) with coverage, 396 tests, 396 pass, 0 fail, `board-read-model.js`, `needs-you.js`, `standing-approval-rules.js`, and `auto-merge.js` 100% lines, branches, and functions each, the modules' total 86.58% lines, 93.01% branches, 87.02% functions; `verify:comments`, `verify:links`, and `verify:archive` pass; `verify:findings` and `make findings ARGS="validate"`: 43 findings files, 23 pass summary files valid; `validate align-product-ports-with-g2-lifecycle --strict` valid; `validate --all --strict` 70 passed, 0 failed. `make verify` after the pass 1 fixes, on the working tree of `a7c9970b`, run by the coordinator with Docker: exit 0; 2306 tests, 44 suites, 2303 pass, 0 fail, 0 cancelled, 3 skipped, 0 todo; coverage of all files lines 99.33%, branches 92.27%, functions 99.03%; every product module is in the coverage report; `validate --all --strict` 70 passed, 0 failed; every checked link conforms; every active OpenSpec change archives into strictly valid specs; the package verification passed; verified 731 package paths, 41 with license coverage gaps (all reviewed; 4 declaration-only). The author checked these numbers against the run's log.
 
-After review pass 2, on the working tree of `9510346f`: `npm run build` and `npm run check:boundaries` exit 0; unit tests of the touched packages (26 files) with coverage, 396 tests, 396 pass, 0 fail, `board-read-model.js`, `needs-you.js`, `standing-approval-rules.js`, and `auto-merge.js` 100% lines, branches, and functions each, the modules' total 86.58% lines, 93.01% branches, 87.02% functions; `verify:comments`, `verify:links`, and `verify:archive` pass; `verify:findings` and `make findings ARGS="validate"`: 43 findings files, 23 pass summary files valid; `validate align-product-ports-with-g2-lifecycle --strict` valid; `validate --all --strict` 70 passed, 0 failed. `make verify` after these fixes is pending the coordinator's Docker slot.
+After review pass 2, on the working tree of `9510346f`: `npm run build` and `npm run check:boundaries` exit 0; unit tests of the touched packages (26 files) with coverage, 396 tests, 396 pass, 0 fail, `board-read-model.js`, `needs-you.js`, `standing-approval-rules.js`, and `auto-merge.js` 100% lines, branches, and functions each, the modules' total 86.58% lines, 93.01% branches, 87.02% functions; `verify:comments`, `verify:links`, and `verify:archive` pass; `verify:findings` and `make findings ARGS="validate"`: 43 findings files, 23 pass summary files valid; `validate align-product-ports-with-g2-lifecycle --strict` valid; `validate --all --strict` 70 passed, 0 failed. `make verify` after the pass 2 fixes, on the working tree of `d9db145b`, run by the coordinator with Docker: exit 0; 2306 tests, 44 suites, 2303 pass, 0 fail, 0 cancelled, 3 skipped, 0 todo; coverage of all files lines 99.33%, branches 92.26%, functions 99.03%; every product module is in the coverage report; `validate --all --strict` 70 passed, 0 failed; every checked link conforms; every active OpenSpec change archives into strictly valid specs; the package verification passed; verified 731 package paths, 41 with license coverage gaps (all reviewed; 4 declaration-only). The author checked these numbers against the run's log.
 
 `make verify` on the working tree of `120c6842`, run by the coordinator with Node.js from `.nvmrc` and Docker available: exit 0; 2305 tests, 44 suites, 2302 pass, 0 fail, 0 cancelled, 3 skipped, 0 todo; coverage of all files lines 99.33%, branches 92.27%, functions 99.03%; every product module is in the coverage report; `validate --all --strict` 70 passed, 0 failed; every checked link conforms; every active OpenSpec change archives into strictly valid specs; the package verification passed; verified 731 package paths, 41 with license coverage gaps (all reviewed; 4 declaration-only). The author checked these numbers against the run's log.
 
@@ -108,14 +108,19 @@ After review pass 2, on the working tree of `9510346f`: `npm run build` and `npm
 | N12 (`verification.md:30`): the citation check omits the pass 1 citations | Fixed: listed with the revision checked |
 | N13 (`product-ports.md:92`, design): citations at doc comments | Fixed: `stage-progress.ts:39`, `worker-revocation.ts:10` |
 
+### Pass 3
+
+- **Reviewer:** A, Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, read-only sandbox; run by the coordinator with the invocation of pass 1. Model confirmation: the Codex session header, as reported by the coordinator. Session `01a17f19-30c4-7a93-ada7-7a2603ca0dbf`.
+- **Reviewed revision:** `d9db145b`. Snapshot of the worktree before and after the pass: `e58d84fc278ccebcf6f20005b560bcab9ab53f58220511ad0f8b495e902be150` both.
+- **Pass 2 fixes:** N1 to N13 confirmed; none partial, none not fixed. The reviewer judged the pre-merge stage choice of N4 sound, since G2 `startStage` (`packages/modules/sdlc/src/domain/stage-progress.ts:55`) requires a stage's dependencies to have passed, so requiring the Close stage's dependents before the merge would be circular.
+- **Counts:** critical 0, high 0, medium 0, low 0 (`passes.jsonl`). Verdict: pass. The review is complete after three passes.
+
 ## Limitations
 
 - The contract fixes values and rules only; item 15 implements the projections, item 23 the queue entry rule, and item 44 `implement-readmission-and-reconciliation-surface` of the [G3 work plan](/docs/g3-plan.md) the reconciliation surface.
 
 ## Remaining gates
 
-- `make verify` after the pass 2 fixes.
-- Review pass 3 by reviewer A, Codex `gpt-6.1-sol`: pass 2 has Medium findings.
 - Merge of `origin/dev` once `bind-product-writers-to-launch-invalidation` lands, and reconciliation of its section 5 "Invalidation" bullet.
 - The owner's confirmation of the optional ADR 0008 editorial note (run and admissions wording); this change does not edit the ADR.
 - Archive.
