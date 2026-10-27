@@ -1,0 +1,102 @@
+{
+  "change": "record-owner-decisions-2026-10-27",
+  "generatedAt": "2026-10-27T21:29:39.461Z",
+  "devCommit": "14e1a46e361a0f070bdea104917e2261ec66f8e9",
+  "query": {
+    "capabilities": [],
+    "files": [
+      "docs/decisions/**",
+      "docs/account-pool.md",
+      "docs/g3-plan.md",
+      "docs/integration-candidates.md",
+      "docs/qualification/**",
+      "docs/contracts/git-workspace.md"
+    ],
+    "top": 7
+  },
+  "size": "S-M",
+  "review": {
+    "categories": [
+      {
+        "category": "docs",
+        "count": 15
+      },
+      {
+        "category": "spec-wording",
+        "count": 11
+      },
+      {
+        "category": "contract-drift",
+        "count": 4
+      },
+      {
+        "category": "stale-citation",
+        "count": 4
+      },
+      {
+        "category": "process",
+        "count": 3
+      },
+      {
+        "category": "concurrency-race",
+        "count": 2
+      },
+      {
+        "category": "error-handling",
+        "count": 1
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 274,
+        "inChecklist": 192
+      },
+      "mediumOrWorse": {
+        "findings": 110,
+        "inChecklist": 86
+      }
+    }
+  },
+  "recordQuality": {
+    "categories": [
+      {
+        "category": "evidence-mismatch",
+        "count": 57
+      },
+      {
+        "category": "docs",
+        "count": 43
+      },
+      {
+        "category": "spec-wording",
+        "count": 25
+      },
+      {
+        "category": "stale-citation",
+        "count": 23
+      },
+      {
+        "category": "process",
+        "count": 10
+      },
+      {
+        "category": "contract-drift",
+        "count": 9
+      },
+      {
+        "category": "scope",
+        "count": 5
+      }
+    ],
+    "baseline": {
+      "all": {
+        "findings": 172,
+        "inChecklist": 172
+      },
+      "mediumOrWorse": {
+        "findings": 28,
+        "inChecklist": 28
+      }
+    }
+  }
+}
