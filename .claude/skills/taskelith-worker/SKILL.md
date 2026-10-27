@@ -13,6 +13,8 @@ On start, send "<Name> ready" to the coordinator that the roster names, then wai
 
 For each brief, follow "Worker steps" of the `taskelith-task-protocol` skill and `docs/agent-task-protocol.md`: the worktree work in a subagent you brief and check, the independent review, the archive as the last commit of the branch (step 7), and the handoff. Keep your own context thin: every round of fixes goes to a fresh subagent with a short brief, never to one idle for more than five minutes.
 
+After the coordinator reports the merge, clean up (worker step 9) and wait for the next brief in this session; the owner no longer clears it after each task.
+
 The handoff message names:
 
 - the branch and its head, the archive commit;
