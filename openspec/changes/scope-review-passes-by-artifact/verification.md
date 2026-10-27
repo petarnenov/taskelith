@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-27. The author's verification and checks, `make verify` before review, and review pass 1 are recorded below; `make verify` after the pass 1 fix is still to come.
+Date: 2026-10-27. The author's verification and checks, `make verify` before review, review pass 1, and `make verify` after the pass 1 fix are recorded below.
 
 ## Scope and source
 
@@ -65,8 +65,11 @@ Not run: pass 1 was Low-only, so reviewer B is not used.
 
 Not run: pass 1 was Low-only.
 
+## Make verify after the pass 1 fix
+
+`make verify` ran on `edea1619`, the merge of `origin/dev` `e4ea6077` (pull request #351, which touches no review-record file) into the change and its pass 1 fix and records: exit 0; coverage of all files 99.29 % lines, 92.15 % branches, 99.01 % functions; OpenSpec validation 70 passed, 0 failed; the link, archive, and package checks passed.
+
 ## Remaining gates
 
-- `make verify` after the pass 1 fix.
 - Archive in the last commit of the branch, with its checks.
 - Integration into dev by the coordinator (single pull request).

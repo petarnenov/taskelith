@@ -21,4 +21,4 @@
 - [x] 4.3 Review pass 1 by reviewer A, Codex CLI, model `gpt-6.1-sol`.
 - [x] 4.4 Review pass 2 by reviewer B, OpenCode CLI, model `opencode-go/qwen3.8-max#medium` (not run: pass 1 was Low-only).
 - [x] 4.5 Review pass 3 by reviewer A, if pass 2 has findings above Low (not run: pass 1 was Low-only).
-- [ ] 4.6 Run `make verify` after the pass 1 fix and record it in `verification.md`.
+- [x] 4.6 Run `make verify` after the pass 1 fix and record it in `verification.md`.
