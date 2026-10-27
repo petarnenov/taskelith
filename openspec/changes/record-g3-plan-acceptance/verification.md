@@ -29,7 +29,8 @@ Run after both edits and the reviewer change, with the results below.
 | `npm run verify:links` | `Every checked link conforms.` |
 | `make findings ARGS="validate"` | `Every findings file is valid: 32 file(s); every pass summary file is valid: 12 file(s).` |
 | `npm run verify:comments` | `Every comment is within the comment length rule.` |
-| `make verify` | Pending; run by the worker session |
+| `make verify` on `cb89d60c`, before pass 1 | Exit 0; last line `Packed file allowlist and installed CLI verification passed.` Run by the worker session on the macOS x86_64 iMac |
+| `make verify` on the tree of the archive commit | Pending; run by the worker session |
 
 ## Independent review
 
@@ -38,7 +39,7 @@ Reviewer A first assigned by the coordinator: OpenCode CLI `opencode-go/qwen3.8-
 ### Unavailable reviewer
 
 - The review attempt by OpenCode CLI `opencode-go/qwen3.8-max#medium` on 2026-10-27 at about 17:30 local time (OpenCode session `ses_e82021465ffecfkYs61mTgKNYg`) did not run to a report: HTTP 429 `GoUsageLimitError`, weekly limit, retry after about 462444 s. Snapshot unchanged. No pass is recorded.
-- The reviewer is only paused from use; the attempt is not a pass. The coordinator assigned Codex CLI `gpt-6-astra`, reasoning effort `medium`, as the replacement reviewer A for the single pass; a Low-only pass ends the review.
+- The reviewer is only paused from use; the attempt is not a pass. The worker session proposed Codex CLI `gpt-6-astra`, reasoning effort `medium`, and coordinator Niki assigned it as the replacement reviewer A, after the OpenCode Go reviewers were paused; a Low-only pass ends the review. Its harness, Codex, differs from that of the developing session, Claude Code, so the Claude Code reviewers next in the rotation were not proposed.
 
 ### Pass 1 (reviewer A)
 
@@ -51,7 +52,7 @@ Pending, by Codex CLI `gpt-6-astra`.
 
 ## Remaining gates
 
-- `make verify`, run by the worker session.
-- Independent review pass 1 by replacement reviewer A, Codex CLI `gpt-6-astra`.
+- `make verify` on the tree of the archive commit, run by the worker session.
+- Independent review pass 2 by reviewer A, Codex CLI `gpt-6-astra`, to confirm the pass 1 fixes.
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
