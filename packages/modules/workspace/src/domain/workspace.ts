@@ -29,8 +29,19 @@ export const WORKSPACE_MODES = Object.freeze({
 
 export const TASK_BRANCH_PREFIX = 'taskelith/';
 
-// A safe single path segment and Git ref component; never `.` or `..`.
-const WORKSPACE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+// A workspace name: a readable prefix of the identifier and a digest of it
+// (contract section 2), so any identifier gives a safe, distinct name.
+export const WORKSPACE_NAME_RULES = Object.freeze({
+  prefixMaxLength: 40,
+  digestHexLength: 32,
+});
+
+// SHA-256 of the identifier's UTF-8 bytes as 64 lowercase hexadecimal
+// characters, supplied by the adapter; a name keeps its first 32.
+export type IdentifierDigest = (identifier: string) => string;
+
+const OUTSIDE_NAME_CHARACTERS = /[^A-Za-z0-9_-]/gu;
+const LEADING_SEPARATORS = /^[_-]+/;
 
 export const WORKSPACE_KINDS = Object.freeze(['task-branch', 'at-head'] as const);
 
@@ -43,7 +54,6 @@ export type DirtyReason = (typeof DIRTY_REASONS)[number];
 
 // The `reason` detail of a workspace failure (contract section 9).
 export const WORKSPACE_FAILURE_REASONS = Object.freeze([
-  'unsafe-name',
   'head-mismatch',
   'workspace-dirty',
   'credential-out-of-scope',
@@ -100,13 +110,12 @@ export interface HeadSnapshot {
   readonly content: Uint8Array;
 }
 
-export function workspaceDirectoryName(attemptId: AttemptId): Result<string> {
-  return safeName('attemptId', attemptId);
+export function workspaceDirectoryName(attemptId: AttemptId, digest: IdentifierDigest): string {
+  return workspaceName(attemptId, digest);
 }
 
-export function taskBranchName(taskId: TaskId): Result<string> {
-  const name = safeName('taskId', taskId);
-  return name.ok ? ok(`${TASK_BRANCH_PREFIX}${name.value}`) : name;
+export function taskBranchName(taskId: TaskId, digest: IdentifierDigest): string {
+  return `${TASK_BRANCH_PREFIX}${workspaceName(taskId, digest)}`;
 }
 
 // A head for head-bound evidence comes only from a clean workspace.
@@ -129,7 +138,10 @@ export function workspaceFailure(
   return err(failure(code, message, { reason }));
 }
 
-function safeName(field: string, text: string): Result<string> {
-  if (WORKSPACE_NAME.test(text)) return ok(text);
-  return workspaceFailure('invalid', 'unsafe-name', `${field} must be letters, digits, '-' or '_', starting with a letter or digit`);
+function workspaceName(identifier: string, digestOf: IdentifierDigest): string {
+  const { prefixMaxLength, digestHexLength } = WORKSPACE_NAME_RULES;
+  const readable = identifier.replace(OUTSIDE_NAME_CHARACTERS, '_').replace(LEADING_SEPARATORS, '');
+  const prefix = readable.slice(0, prefixMaxLength);
+  const digest = digestOf(identifier).slice(0, digestHexLength);
+  return prefix === '' ? digest : `${prefix}-${digest}`;
 }

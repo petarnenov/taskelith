@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { parseIdentifier } from '@taskelith/kernel';
 import type { AttemptId } from '@taskelith/execution';
@@ -11,6 +13,7 @@ import {
   WORKSPACE_KINDS,
   WORKSPACE_LAYOUT,
   WORKSPACE_MODES,
+  WORKSPACE_NAME_RULES,
   checkCredentialScope,
   cleanHead,
   isSameCodeHead,
@@ -18,6 +21,7 @@ import {
   taskBranchName,
   workspaceDirectoryName,
   type CodeHeadIdentity,
+  type IdentifierDigest,
   type RepositoryId,
   type WorkspaceCredential,
 } from '@taskelith/workspace';
@@ -30,7 +34,7 @@ const CONTRACT_VALUES = [
   [
     'WORKSPACE_FAILURE_REASONS',
     WORKSPACE_FAILURE_REASONS,
-    ['unsafe-name', 'head-mismatch', 'workspace-dirty', 'credential-out-of-scope', 'remote-moved', 'not-fast-forward', 'read-only-workspace',
+    ['head-mismatch', 'workspace-dirty', 'credential-out-of-scope', 'remote-moved', 'not-fast-forward', 'read-only-workspace',
       'workspace-handed-off', 'other-workspace-handed-off', 'reclaim-failed', 'unsafe-checkout'],
   ],
 ] as const;
@@ -52,6 +56,8 @@ test('the layout, branch prefix, and evidence kind hold the contract values', ()
     attempt: 0o710, checkoutReclaimed: 0o2700, checkoutHandedOff: 0o2770, metadata: 0o600, handOffRecord: 0o600,
   });
   assert.ok(Object.isFrozen(WORKSPACE_MODES));
+  assert.deepEqual(WORKSPACE_NAME_RULES, { prefixMaxLength: 40, digestHexLength: 32 });
+  assert.ok(Object.isFrozen(WORKSPACE_NAME_RULES));
   assert.equal(TASK_BRANCH_PREFIX, 'taskelith/');
   assert.equal(HEAD_SNAPSHOT_EVIDENCE_KIND, 'code-head-snapshot');
 });
@@ -102,14 +108,54 @@ function identifier<Kind extends string>(kind: Kind, text: string) {
   return parsed.value;
 }
 
-test('names are single safe segments, and a task branch carries the prefix', () => {
-  assert.deepEqual(workspaceDirectoryName(identifier('AttemptId', 'attempt_1-a') as AttemptId), { ok: true, value: 'attempt_1-a' });
-  assert.deepEqual(taskBranchName(identifier('TaskId', 'task-1') as TaskId), { ok: true, value: 'taskelith/task-1' });
-  for (const text of ['..', '.hidden', 'a/b', '-lead', 'a.lock', 'a:b']) {
-    const named = workspaceDirectoryName(identifier('AttemptId', text) as AttemptId);
-    assert.ok(!named.ok);
-    assert.deepEqual([named.error.code, named.error.details.reason], ['invalid', 'unsafe-name']);
-    assert.ok(!taskBranchName(identifier('TaskId', text) as TaskId).ok);
+const sha256: IdentifierDigest = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
+const attemptOf = (text: string) => workspaceDirectoryName(text as AttemptId, sha256);
+const branchOf = (text: string) => taskBranchName(text as TaskId, sha256);
+const digestOf = (text: string) => sha256(text).slice(0, 32);
+const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+const NAMED = ['task-1', 'feature/login', 'v1.2', '..', '.hidden', '-lead', 'a.lock', 'a:b', '@', 'x'.repeat(128), 'café/ü'];
+
+test('a name is the readable prefix of the identifier and its digest', () => {
+  assert.equal(attemptOf('attempt_1-a'), `attempt_1-a-${digestOf('attempt_1-a')}`);
+  assert.equal(branchOf('task-1'), `taskelith/task-1-${digestOf('task-1')}`);
+  assert.equal(branchOf('feature/login'), `taskelith/feature_login-${digestOf('feature/login')}`);
+  assert.equal(attemptOf('v1.2'), `v1_2-${digestOf('v1.2')}`);
+  assert.equal(attemptOf('..'), digestOf('..'));
+  assert.equal(attemptOf('-lead'), `lead-${digestOf('-lead')}`);
+  assert.equal(attemptOf('café/ü'), `caf___-${digestOf('café/ü')}`);
+  assert.equal(attemptOf('x'.repeat(128)), `${'x'.repeat(40)}-${digestOf('x'.repeat(128))}`);
+});
+
+test('a name keeps the first 32 characters of the injected digest', () => {
+  const digest: IdentifierDigest = () => `${'a'.repeat(32)}${'b'.repeat(32)}`;
+  assert.equal(workspaceDirectoryName('x/y' as AttemptId, digest), `x_y-${'a'.repeat(32)}`);
+  assert.equal(taskBranchName('..' as TaskId, digest), `taskelith/${'a'.repeat(32)}`);
+});
+
+test('any identifier gives a safe path segment of at most 73 characters', () => {
+  for (const text of NAMED) {
+    const name = attemptOf(text);
+    assert.match(name, SAFE_NAME, text);
+    assert.ok(name.length <= 73, text);
+    assert.equal(attemptOf(text), name, `${text} is deterministic`);
+  }
+});
+
+test('any identifier gives a branch that Git accepts', () => {
+  for (const text of NAMED) {
+    const branch = branchOf(text);
+    assert.equal(execFileSync('git', ['check-ref-format', '--branch', branch], { encoding: 'utf8' }).trim(), branch, text);
+  }
+});
+
+test('identifiers with the same readable prefix get distinct names', () => {
+  const pairs = [['a/b', 'a_b'], ['a.b', 'a:b'], ['..', '.'], ['x'.repeat(40), `${'x'.repeat(40)}y`]] as const;
+  for (const [one, other] of pairs) {
+    const [first, second] = [attemptOf(one), attemptOf(other)];
+    assert.match(first, SAFE_NAME);
+    assert.equal(first.slice(0, -32), second.slice(0, -32), `${one} and ${other} share a prefix`);
+    assert.notEqual(first, second);
+    assert.notEqual(branchOf(one), branchOf(other));
   }
 });
 
