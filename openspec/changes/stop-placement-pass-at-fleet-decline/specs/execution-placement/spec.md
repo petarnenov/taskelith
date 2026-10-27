@@ -20,7 +20,7 @@ Each waiting read SHALL take each project's oldest task before any project's nex
 - **THEN** the passes place `a1`, `b1`, `a2`, `b2`, `a3`, `b3`
 
 #### Scenario: Capacity freed during a pass
-- **WHEN** a pass declines a task of `p-b` for lack of fleet capacity, a slot frees before a task of a later project is offered, and nothing else changes
+- **WHEN** the first offer of a pass, a task of `p-b`, is declined for lack of fleet capacity, a slot frees during the rest of the pass, and nothing else changes
 - **THEN** the pass offers no later task, and the next pass places the task of `p-b` in that slot
 
 #### Scenario: Fleet full for many passes

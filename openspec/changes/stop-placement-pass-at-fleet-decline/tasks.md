@@ -5,7 +5,7 @@
 
 ## 2. Tests first
 
-- [x] 2.1 `PlacementService` unit tests, failing on the current pass: a slot freed during a pass after a fleet capacity decline waits for the declined project; a full fleet costs one placement transaction per pass; an own-reason decline does not end the pass.
+- [x] 2.1 `PlacementService` unit tests, failing on the current pass: a slot freed during a pass after a fleet capacity decline waits for the declined project; a full fleet costs one placement transaction per pass. A guard test, passing before and after: an own-reason decline does not end the pass.
 - [x] 2.2 PostgreSQL integration test of a slot freed right after a fleet capacity decline.
 
 ## 3. Fix
@@ -15,6 +15,6 @@
 ## 4. Verify
 
 - [x] 4.1 Run `npm run openspec -- validate stop-placement-pass-at-fleet-decline --strict`, `make findings ARGS="validate"`, and `make verify`, and record them in `verification.md`.
-- [ ] 4.2 Review pass 1 by reviewer A.
+- [x] 4.2 Review pass 1 by reviewer A.
 - [ ] 4.3 Review pass 2 by reviewer B.
 - [ ] 4.4 Review pass 3 by reviewer A, if pass 2 has findings above Low.
