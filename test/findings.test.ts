@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { DEFAULT_TOP, PASS_SCHEMA_PATH, parseCommand, runFindings, SCHEMA_PATH, splitList, UsageError, USAGE } from '../scripts/findings.ts';
 import { matchesQuery, VOCABULARY_PATH, type Finding } from '../scripts/review-findings.ts';
+import { CHECKLIST_SCHEMA_PATH } from '../scripts/checklist-record.ts';
 
 function line(change: string, category: string, title: string, extra: Record<string, unknown> = {}): string {
   return JSON.stringify({
@@ -40,7 +41,7 @@ function summary(change: string, pass: number, counts: Partial<typeof NO_COUNTS>
 
 function repository(files: Readonly<Record<string, string>>): string {
   const root = mkdtempSync(join(tmpdir(), 'findings-'));
-  for (const path of [SCHEMA_PATH, PASS_SCHEMA_PATH, VOCABULARY_PATH]) cpSync(path, join(root, path));
+  for (const path of [SCHEMA_PATH, PASS_SCHEMA_PATH, VOCABULARY_PATH, CHECKLIST_SCHEMA_PATH]) cpSync(path, join(root, path));
   mkdirSync(join(root, 'openspec/changes/archive/2026-10-01-old-change'), { recursive: true });
   mkdirSync(join(root, 'openspec/specs/review-process'), { recursive: true });
   for (const [path, text] of Object.entries(files)) {

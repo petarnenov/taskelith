@@ -140,11 +140,12 @@ test('--save writes the record of the invocation with its baselines', () => {
 });
 
 test('--save refuses an existing record and a change that is not active', () => {
-  withRepository({ ...ARCHIVE, ...activeChange('new-change', '2026-10-28'), 'openspec/changes/new-change/checklist.json': 'old\n' }, (root) => {
+  const saved = `${JSON.stringify(SAVED)}\n`;
+  withRepository({ ...ARCHIVE, ...activeChange('new-change', '2026-10-28'), 'openspec/changes/new-change/checklist.json': saved }, (root) => {
     const existing = runFindings(['checklist', '--save', 'new-change'], root, ENVIRONMENT);
     assert.equal(existing.exitCode, 1);
     assert.equal(existing.stderr, 'openspec/changes/new-change/checklist.json already exists; the checklist is recorded once, at plan time.');
-    assert.equal(readFileSync(join(root, 'openspec/changes/new-change/checklist.json'), 'utf8'), 'old\n');
+    assert.equal(readFileSync(join(root, 'openspec/changes/new-change/checklist.json'), 'utf8'), saved);
     const absent = runFindings(['checklist', '--save', 'other-change'], root, ENVIRONMENT);
     assert.equal(absent.exitCode, 1);
     assert.equal(absent.stderr, 'openspec/changes/other-change is not an active change; create the change first.');

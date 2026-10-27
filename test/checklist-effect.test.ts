@@ -44,9 +44,8 @@ function record(change: string, size: Size | undefined, review: readonly string[
   };
 }
 
-// alpha, size M (2 points): review lists contract-drift and naming with
-// baseline 5 of 10 (50%), Medium or worse 1 of 4 (25%); record quality lists
-// evidence-mismatch, 2 of 5 (40%), Medium or worse 1 of 2 (50%).
+// alpha, size M: review baseline 5 of 10 (50%), >=Medium 1 of 4 (25%);
+// record quality baseline 2 of 5 (40%), >=Medium 1 of 2 (50%).
 const ALPHA: ArchivedChecklist = {
   change: 'alpha',
   archivedOn: '2026-10-28',
