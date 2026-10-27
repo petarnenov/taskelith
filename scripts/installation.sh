@@ -315,10 +315,11 @@ verify() {
   broker_config
   start
   enroll
+  certificates
   stop
   start
   check_running
-  remove_throwaway "built, bootstrapped, started, enrolled, restarted, removed"
+  remove_throwaway "built, bootstrapped, started, enrolled, certificates re-issued, restarted, removed"
 }
 
 # The control plane's published API port, for example 127.0.0.1:55012.
