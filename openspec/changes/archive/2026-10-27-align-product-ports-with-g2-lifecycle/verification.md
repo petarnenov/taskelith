@@ -131,13 +131,22 @@ After review pass 2, on the working tree of `9510346f`: `npm run build` and `npm
   - Counts: critical 0, high 0, medium 0, low 1. Verdict: pass. Confirmed: every #369 text is kept, the section 5 and 6.3 resolutions agree with launch authorization section 5 and design D8, and the three MODIFIED requirements keep every living scenario, "Use after a revocation" included.
   - L1 (`verification.md:125`, evidence-mismatch): the record attributed 344 characters to the requirement text on `dev`, which is 303; 344 is the delta's MODIFIED text. Fixed as an unreviewed fix of a Low-only review ([governance](/docs/governance.md#independent-review-process), "Low findings are fixed"); the bullet above names both lengths.
 
+## Archive
+
+Checked state: the tree of the archive commit (`docs: archive the align-product-ports-with-g2-lifecycle change`), the working tree on which the checks below ran, on top of `0f3ffb88`, with `origin/dev` at `d21838c3`, the merge base.
+
+- `npm run openspec -- archive align-product-ports-with-g2-lifecycle --yes`: `product-ports` updated, 6 added, 3 modified, 0 removed; the change moved to `openspec/changes/archive/2026-10-27-align-product-ports-with-g2-lifecycle/` with its `findings.jsonl` and `passes.jsonl`.
+- `npm run openspec -- validate --all --strict --no-interactive`: 69 passed, 0 failed.
+- This change's line in `npm run openspec -- validate --archived --no-interactive`: `✓ change/2026-10-27-align-product-ports-with-g2-lifecycle`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/product-ports/spec.md`, 133 insertions and 3 deletions: the six added requirements and the three modified ones, whose old texts are the three deleted lines; #369's requirements and its scenario "Use after a revocation", once, are kept.
+- `make findings ARGS="validate"`, `npm run verify:comments`, `npm run verify:links`, and `npm run verify:archive`: pass.
+- `make verify`, run by the coordinator with Docker: exit 0; every findings file valid, 47 files, and every pass summary file valid, 27 files; 2306 tests, 44 suites, 2303 pass, 0 fail, 0 cancelled, 3 skipped, 0 todo; coverage of all files lines 99.33%, branches 92.27%, functions 99.03%; every product module is in the coverage report; verified 731 package paths, 41 with license coverage gaps (all reviewed; 4 declaration-only); `validate --all --strict` 69 passed, 0 failed; every checked link conforms; no active OpenSpec change, nothing to archive; the package verification passed. The author checked these numbers against the run's log.
+
 ## Limitations
 
 - The contract fixes values and rules only; item 15 implements the projections, item 23 the queue entry rule, and item 44 `implement-readmission-and-reconciliation-surface` of the [G3 work plan](/docs/g3-plan.md) the reconciliation surface.
 
 ## Remaining gates
 
-- `make verify` on the merged tree.
 - The owner's confirmation of the optional ADR 0008 editorial note (run and admissions wording); this change does not edit the ADR.
-- Archive.
 - Integration into dev by the coordinator (single pull request)
