@@ -85,7 +85,7 @@ function withChange(body: (context: RecordContext) => void): void {
 // What a passing make verify of the clean HEAD prints, with its stamp.
 function verifyLog(context: RecordContext, extra = ''): string {
   const result = finishVerify({ ...context, toolchain: TOOLCHAIN, environment: {} }, 'full', startTree(context.git), NOW);
-  return `ℹ tests 12\nℹ suites 0\nℹ pass 10\nℹ fail 0\nℹ skipped 2\nℹ all files | 99.24 | 92.18 | 98.92 |\n${extra}${result}\n`;
+  return `make verify: profile full (test)\nℹ tests 12\nℹ suites 0\nℹ pass 10\nℹ fail 0\nℹ skipped 2\nℹ all files | 99.24 | 92.18 | 98.92 |\n${extra}${result}\n`;
 }
 
 function record(context: RecordContext): string {
@@ -94,20 +94,50 @@ function record(context: RecordContext): string {
 
 test('a make verify log gives the result, counts, and coverage', () => {
   const tree = 'a'.repeat(40);
-  const parsed = parseVerifyLog(`ℹ tests 3\nℹ pass 3\nℹ fail 0\nℹ skipped 0\nℹ all files | 90.00 | 80.50 | 70.25 |\nmake verify: passed, profile full, tree ${tree}; stamp written\n`);
+  const parsed = parseVerifyLog(`make verify: profile full (x)\nℹ tests 3\nℹ pass 3\nℹ fail 0\nℹ skipped 0\nℹ all files | 90.00 | 80.50 | 70.25 |\nmake verify: passed, profile full, tree ${tree}; stamp written\n`);
   assert.deepEqual(parsed, {
     profile: 'full', tree, counts: 'tests 3, pass 3, fail 0, skipped 0',
     coverage: 'all files 90.00% lines, 80.50% branches, 70.25% functions',
   });
-  const docsOnly = parseVerifyLog(`make verify: passed, profile docs-only, tree ${tree}; stamp written\n`);
+  const docsOnly = parseVerifyLog(`make verify: profile docs-only (x)\nmake verify: passed, profile docs-only, tree ${tree}; stamp written\n`);
   assert.equal(docsOnly.counts, 'no test totals in the log');
   assert.equal(docsOnly.coverage, 'no coverage totals');
 });
 
 test('a log without a stamped passing run is refused', () => {
   for (const log of ['make: *** [verify-checks] Error 1\n', 'make verify: passed, profile full, uncommitted working tree; no stamp written\n']) {
-    assert.throws(() => parseVerifyLog(log), /no passing make verify of a clean tree with a stamp/);
+    assert.throws(() => parseVerifyLog(log), /does not end with a passing make verify of a clean tree with a stamp/);
   }
+});
+
+const TREE = 'a'.repeat(40);
+const STAMPED = `make verify: passed, profile full, tree ${TREE}; stamp written`;
+const COVERAGE = 'ℹ all files | 90.00 | 80.50 | 70.25 |';
+
+function fullRun(totals: string, coverage = COVERAGE): string {
+  return `make verify: profile full (x)\n${totals}\n${coverage}\n${STAMPED}\n`;
+}
+
+// Review finding 11: one log must not mix runs or hide a later failure.
+test('only the last complete run of a log counts', () => {
+  const failed = 'make verify: profile full (x)\nℹ tests 3\nℹ pass 2\nℹ fail 1\nℹ skipped 0\nmake: *** [test] Error 1\n';
+  const parsed = parseVerifyLog(`${failed}${fullRun('ℹ tests 3\nℹ pass 3\nℹ fail 0\nℹ skipped 0')}`);
+  assert.equal(parsed.counts, 'tests 3, pass 3, fail 0, skipped 0');
+  const refused: Array<[string, RegExp]> = [
+    [`${fullRun('ℹ tests 3\nℹ pass 3\nℹ fail 0\nℹ skipped 0')}ℹ fail 1\n`, /does not end with a passing make verify/],
+    [fullRun('ℹ tests 3\nℹ pass 3\nℹ fail 0\nℹ skipped 0\nℹ tests 4'), /reports 2 "tests" total lines/],
+    [fullRun('ℹ tests 5\nℹ pass 3\nℹ fail 0\nℹ skipped 0'), /totals contradict each other: tests 5, pass 3/],
+    [fullRun('ℹ tests 3\nℹ pass 2\nℹ fail 1\nℹ skipped 0'), /reports 1 failed and 0 cancelled tests/],
+    [fullRun('ℹ tests 3\nℹ pass 2\nℹ fail 0\nℹ skipped 0\nℹ cancelled 1'), /reports 0 failed and 1 cancelled tests/],
+    [fullRun('ℹ pass 3'), /the full run reports no test totals/],
+    [fullRun('ℹ tests 3\nℹ pass 3\nℹ fail 0\nℹ skipped 0', ''), /the full run reports no coverage totals/],
+    [fullRun('ℹ tests 3\nℹ pass 3\nℹ fail 0\nℹ skipped 0', `${COVERAGE}\n${COVERAGE}`), /reports 2 coverage total lines/],
+    [`${STAMPED}\n`, /no make verify profile line before its result/],
+    [`make verify: profile docs-only (x)\n${STAMPED}\n`, /started with profile docs-only but stamped full/],
+  ];
+  for (const [log, message] of refused) assert.throws(() => parseVerifyLog(log), message, log);
+  const todo = parseVerifyLog(fullRun('ℹ tests 4\nℹ pass 3\nℹ fail 0\nℹ skipped 0\nℹ todo 1'));
+  assert.equal(todo.counts, 'tests 4, pass 3, fail 0, skipped 0');
 });
 
 test('make record writes the generated part before the review section', () => {
@@ -155,6 +185,44 @@ test('make record-check passes on the recorded tree and fails on drift', () => {
     assert.match(drift.stderr, /stale or missing: - Review passes in `passes.jsonl`:/);
     assert.match(drift.stderr, /the working tree differs from the verified tree [0-9a-f]{12}: openspec\/changes\/demo-change\/passes\.jsonl/);
     assert.match(drift.stderr, /make record-check: \d+ problem\(s\)\n$/);
+  });
+});
+
+function recordFromLog(context: RecordContext): void {
+  const logPath = join(context.root, '..', `${CHANGE}-edit.log`);
+  writeFileSync(logPath, verifyLog(context));
+  try {
+    assert.equal(runCommand(['write', CHANGE, logPath], context).status, 0);
+  } finally {
+    rmSync(logPath, { force: true });
+  }
+}
+
+// Review finding 10: record-check must catch a hand edit of every field.
+test('a hand edit of the recorded counts or coverage fails the check', () => {
+  withChange((context) => {
+    recordFromLog(context);
+    assert.deepEqual(checkRecord(context, CHANGE), []);
+    const original = record(context);
+    const edits = ['tests 12,', 'pass 10,', 'fail 0,', 'skipped 2;', '99.24% lines', '92.18% branches', '98.92% functions'];
+    for (const field of edits) {
+      writeFileSync(join(context.root, RECORD), original.replace(field, field.replace(/\d+/, '7')));
+      assert.match(checkRecord(context, CHANGE).join('\n'), /the make verify line differs from the one make record wrote from the log/, field);
+    }
+  });
+});
+
+test('make record refuses a log whose run has no stamp in this clone', () => {
+  withChange((context) => {
+    const logPath = join(context.root, '..', `${CHANGE}-nostamp.log`);
+    writeFileSync(logPath, fullRun('ℹ tests 3\nℹ pass 3\nℹ fail 0\nℹ skipped 0'));
+    try {
+      const result = runCommand(['write', CHANGE, logPath], context);
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /no full make verify stamp of tree aaaaaaaaaaaa in this clone/);
+    } finally {
+      rmSync(logPath, { force: true });
+    }
   });
 });
 

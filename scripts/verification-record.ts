@@ -4,7 +4,10 @@ import { join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runFindings } from './findings.ts';
 import { reviewerKey, type Reviewer } from './review-findings.ts';
-import { currentToolchain, gitIn, readStamp, stampDirectory, stampFields, type Git, type Toolchain, type VerifyProfile } from './verify-stamp.ts';
+import {
+  currentToolchain, gitIn, mergeBase, readStamp, stampDirectory, stampFields, stampKey, type Git, type Toolchain,
+  type VerifyProfile,
+} from './verify-stamp.ts';
 
 // make record and make record-check: the mechanical part of a change's
 // verification.md, generated between markers and checked against the tree.
@@ -13,8 +16,9 @@ export const BEGIN = '<!-- make record: begin -->';
 export const END = '<!-- make record: end -->';
 const CHANGES = 'openspec/changes';
 const BASE_REF = 'origin/dev';
-const VERIFIED = /^make verify: passed, profile (full|docs-only), tree ([0-9a-f]{40,64}); stamp written$/m;
-const VERIFY_LINE = /^- `make verify`: passed, profile (full|docs-only), tree `([0-9a-f]{40,64})`/m;
+const VERIFIED = /^make verify: passed, profile (full|docs-only), tree ([0-9a-f]{40,64}); stamp written$/;
+const RUN_START = /^make verify: profile (full|docs-only) \(/;
+const VERIFY_LINE = /^- `make verify`: passed, profile (full|docs-only), tree `([0-9a-f]{40,64})`/;
 
 export class RecordError extends Error {}
 
@@ -55,25 +59,60 @@ export interface VerifyResult {
   readonly coverage: string;
 }
 
-function count(log: string, name: string): string | undefined {
-  return [...log.matchAll(new RegExp(`^\\S* ?${name} (\\d+)$`, 'gm'))].at(-1)?.[1];
+const TOTALS = ['tests', 'pass', 'fail', 'skipped', 'cancelled', 'todo'] as const;
+type Total = typeof TOTALS[number];
+
+// The last run of the log: from its profile line to the stamp line, which
+// must end the log, so that no later failure or second run is mixed in.
+function lastRun(log: string): { readonly profile: VerifyProfile; readonly tree: string; readonly lines: string[] } {
+  const lines = log.split('\n').map((line) => line.trimEnd()).filter((line) => line !== '');
+  const result = VERIFIED.exec(lines.at(-1) ?? '');
+  if (result === null) throw new RecordError('the log does not end with a passing make verify of a clean tree with a stamp');
+  const start = lines.map((line) => RUN_START.test(line)).lastIndexOf(true);
+  if (start === -1) throw new RecordError('the log has no make verify profile line before its result');
+  const startProfile = RUN_START.exec(lines[start])?.[1];
+  if (startProfile !== result[1]) throw new RecordError(`the run started with profile ${startProfile} but stamped ${result[1]}`);
+  return { profile: result[1] as VerifyProfile, tree: result[2], lines: lines.slice(start) };
 }
 
-// Reads the result line of verify-stamp.ts write, the test runner's totals,
-// and its coverage totals from a make verify log.
+function single(lines: readonly string[], pattern: RegExp, what: string): RegExpExecArray | undefined {
+  const matches = lines.map((line) => pattern.exec(line)).filter((match) => match !== null);
+  if (matches.length > 1) throw new RecordError(`the run reports ${matches.length} ${what} lines`);
+  return matches[0];
+}
+
+function testTotals(lines: readonly string[]): Partial<Record<Total, number>> {
+  const totals: Partial<Record<Total, number>> = {};
+  for (const name of TOTALS) {
+    const match = single(lines, new RegExp(`^\\S* ?${name} (\\d+)$`), `"${name}" total`);
+    if (match !== undefined) totals[name] = Number(match[1]);
+  }
+  return totals;
+}
+
+function countsText(totals: Partial<Record<Total, number>>, profile: VerifyProfile): string {
+  const { tests, pass, fail, skipped, cancelled = 0, todo = 0 } = totals;
+  if (tests === undefined || pass === undefined || fail === undefined || skipped === undefined) {
+    if (profile === 'full') throw new RecordError('the full run reports no test totals');
+    return 'no test totals in the log';
+  }
+  if (fail !== 0 || cancelled !== 0) throw new RecordError(`the run reports ${fail} failed and ${cancelled} cancelled tests`);
+  if (tests !== pass + fail + skipped + cancelled + todo) throw new RecordError(`the run's totals contradict each other: tests ${tests}, pass ${pass}, skipped ${skipped}, todo ${todo}`);
+  return `tests ${tests}, pass ${pass}, fail ${fail}, skipped ${skipped}`;
+}
+
+// Reads the last run of a make verify log: its stamped result line, the
+// test runner's totals, and its coverage totals; rejects a mixed log.
 export function parseVerifyLog(log: string): VerifyResult {
-  const result = VERIFIED.exec(log);
-  if (result === null) throw new RecordError('the log has no passing make verify of a clean tree with a stamp');
-  const totals = ['tests', 'pass', 'fail', 'skipped'].map((name) => [name, count(log, name)] as const);
-  const counts = totals.every(([, value]) => value !== undefined)
-    ? totals.map(([name, value]) => `${name} ${value}`).join(', ')
-    : 'no test totals in the log';
-  const coverage = /all files\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)/.exec(log);
+  const run = lastRun(log);
+  const counts = countsText(testTotals(run.lines), run.profile);
+  const coverage = single(run.lines, /all files\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)/, 'coverage total');
+  if (coverage === undefined && run.profile === 'full') throw new RecordError('the full run reports no coverage totals');
   return {
-    profile: result[1] as VerifyProfile,
-    tree: result[2],
+    profile: run.profile,
+    tree: run.tree,
     counts,
-    coverage: coverage === null ? 'no coverage totals' : `all files ${coverage[1]}% lines, ${coverage[2]}% branches, ${coverage[3]}% functions`,
+    coverage: coverage === undefined ? 'no coverage totals' : `all files ${coverage[1]}% lines, ${coverage[2]}% branches, ${coverage[3]}% functions`,
   };
 }
 
@@ -174,12 +213,29 @@ export function insertBlock(text: string, block: string): string {
   return `${text.replace(/\n*$/, '\n\n')}${block}\n`;
 }
 
+// make record stores the line it generated next to the run's stamp, so
+// that record-check can tell it from a hand edit; both stay in this clone.
+function stampRecordPath(context: RecordContext, tree: string, profile: VerifyProfile): string | undefined {
+  const fields = stampFields(context.root, { tree, base: mergeBase(context.git) }, profile, context.toolchain());
+  const directory = stampDirectory(context.git);
+  return readStamp(directory, fields) === undefined ? undefined : join(directory, `${stampKey(fields)}.record`);
+}
+
+function recordedVerifyLine(context: RecordContext, log: string): string {
+  const result = parseVerifyLog(log);
+  const line = verifyLine(result);
+  const path = stampRecordPath(context, result.tree, result.profile);
+  if (path === undefined) throw new RecordError(`no ${result.profile} make verify stamp of tree ${result.tree.slice(0, 12)} in this clone`);
+  writeFileSync(path, `${line}\n`);
+  return line;
+}
+
 export function writeRecord(context: RecordContext, change: string, log: string | undefined): string {
   const location = locateChange(context.root, change);
   const path = posix.join(location.directory, 'verification.md');
   const verify = log === undefined
     ? '- `make verify`: not recorded; run `make record` with `LOG=<make verify log>`.'
-    : verifyLine(parseVerifyLog(log));
+    : recordedVerifyLine(context, log);
   const block = renderBlock(verify, derivedLines(context, location));
   writeFileSync(join(context.root, path), insertBlock(readText(context.root, path), block));
   return `make record: wrote the generated part of ${path}`;
@@ -191,8 +247,12 @@ function changedSince(git: Git, tree: string): string[] {
   return [...tracked, ...untracked].filter((line) => line !== '');
 }
 
-function verifyProblems(context: RecordContext, block: string, recordPath: string): string[] {
-  const recorded = VERIFY_LINE.exec(block);
+function storedLine(path: string): string | undefined {
+  return existsSync(path) ? readFileSync(path, 'utf8').trim() : undefined;
+}
+
+function verifyProblems(context: RecordContext, verify: string, recordPath: string): string[] {
+  const recorded = VERIFY_LINE.exec(verify);
   if (recorded === null) return ['the make verify line records no passing run; run make record with LOG'];
   const profile = recorded[1] as VerifyProfile;
   const tree = recorded[2];
@@ -202,8 +262,9 @@ function verifyProblems(context: RecordContext, block: string, recordPath: strin
     : changedSince(context.git, tree).filter((path) => path !== recordPath);
   if (changed === undefined) problems.push(`the verified tree ${tree.slice(0, 12)} is not in this clone`);
   else if (changed.length > 0) problems.push(`the working tree differs from the verified tree ${tree.slice(0, 12)}: ${changed.join(', ')}`);
-  const stamp = readStamp(stampDirectory(context.git), stampFields(context.root, tree, profile, context.toolchain()));
-  if (stamp === undefined) problems.push(`no ${profile} make verify stamp of tree ${tree.slice(0, 12)} in this clone`);
+  const stored = stampRecordPath(context, tree, profile);
+  if (stored === undefined) problems.push(`no ${profile} make verify stamp of tree ${tree.slice(0, 12)} in this clone`);
+  else if (storedLine(stored) !== verify) problems.push('the make verify line differs from the one make record wrote from the log');
   return problems;
 }
 
@@ -217,7 +278,7 @@ export function checkRecord(context: RecordContext, change: string): string[] {
   const expected = renderBlock(verify, derivedLines(context, location)).split('\n');
   const stale = expected.filter((line, index) => lines[index] !== line).map((line) => `stale or missing: ${line}`);
   if (lines.length !== expected.length) stale.push(`the generated part has ${lines.length} lines, expected ${expected.length}`);
-  return [...stale, ...verifyProblems(context, block, path)].map((problem) => `${path}: ${problem}`);
+  return [...stale, ...verifyProblems(context, verify, path)].map((problem) => `${path}: ${problem}`);
 }
 
 function output(command: string, args: readonly string[], root: string): { readonly ok: boolean; readonly text: string } {
