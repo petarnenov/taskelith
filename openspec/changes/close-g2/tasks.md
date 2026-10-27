@@ -7,11 +7,13 @@
 ## 2. Evidence from the changes in progress
 
 - [ ] 2.1 Fill the 24c `run-g2-partition-and-races` placeholder: scenarios, `results.jsonl` lines, commit, host, open rows.
-- [ ] 2.2 Fill the 25c `run-g2-native-acceptance-x86_64` placeholder for `macos-26-x86_64` and `linux-ubuntu-24.04-x86_64` under Docker Desktop.
-- [ ] 2.3 Fill the `run-g2-native-acceptance-linux-host` placeholder, and resolve or assign the AppArmor or SELinux, Linux crash-window, duplicate-delivery, and supplementary-groups deferrals.
-- [ ] 2.4 Record whether the macOS arm64 process ownership row was re-run after `fix-launch-recovery-reauthorization`.
+- [x] 2.2 Fill the 25c `run-g2-native-acceptance-x86_64` placeholder for `macos-26-x86_64` and `linux-ubuntu-24.04-x86_64` under Docker Desktop.
+- [x] 2.3 Fill the `run-g2-native-acceptance-linux-host` placeholder, and resolve or assign the AppArmor or SELinux, Linux crash-window, duplicate-delivery, and supplementary-groups deferrals.
+- [x] 2.4 Record whether the macOS arm64 process ownership row was re-run after `fix-launch-recovery-reauthorization`.
 - [ ] 2.5 Update the row map with the archive names and dates of these changes and any fix changes they produce.
-- [ ] 2.6 Resolve or keep the `bound-failure-cause-userinfo-redaction` and `keep-coverage-out-of-killed-test-processes` deferrals.
+- [x] 2.6 Resolve or keep the `bound-failure-cause-userinfo-redaction` and `keep-coverage-out-of-killed-test-processes` deferrals.
+- [x] 2.7 Fill the blocking and deferred items the coordinator named on 2026-10-27; keep each without a record marked as the coordinator's statement.
+- [ ] 2.8 After each branch marked "integration pending" lands on `dev`, and after the fix of L1 lands, check the ADR's evidence against `dev` and replace the integration notes.
 
 ## 3. Fresh-clone reproduction
 

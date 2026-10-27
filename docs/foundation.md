@@ -56,16 +56,16 @@ G1 delivered the kernel, the SDLC workflow model, gates, task admission, plugin 
 
 ## G2 status
 
-> **Draft (change `close-g2`).** G2 is not closed until [ADR 0015](decisions/0015-g2-closure.md) is accepted. When it is, update the "As of" line and the G0 and G1 sentences at the top, and replace every placeholder below.
+> **Draft (change `close-g2`).** G2 is not closed until [ADR 0015](decisions/0015-g2-closure.md) is accepted. When it is, update the "As of" line and the G0 and G1 sentences at the top, and replace every placeholder below. The Linux CP9 defect L1 and the integration of the branches still pending block the closure ([ADR 0015](decisions/0015-g2-closure.md) decision 5).
 
 G2 delivered PostgreSQL state and outbox, NATS transport, installation bootstrap and enrollment, the worker journal, the per-execution supervisor on Linux and macOS, the control-plane API, launch authority, resource admission, the evidence store, the worker runtime, execution reconciliation, observability signals, the minimal local installation, and the Linux harness qualification in the worker image ([G2 work plan](g2-plan.md), items 1 to 26). **PLACEHOLDER:** its exit evidence was reproduced from a fresh clone (change `close-g2`), and G2 is closed ([ADR 0015](decisions/0015-g2-closure.md)).
 
 | Matrix entry | G2 native acceptance |
 | --- | --- |
-| `macos-26-arm64` | 25b `run-g2-native-acceptance-arm64`: no row fully accepted; open parts in ADR 0015 decision 3 |
+| `macos-26-arm64` | 25b `run-g2-native-acceptance-arm64`: no row fully accepted; process ownership failed on D1 and was not re-run on arm64; open parts in ADR 0015 decision 3 |
 | `linux-ubuntu-24.04-arm64` | 25b, under Docker Desktop: no row fully accepted; open parts in ADR 0015 decision 3 |
-| `macos-26-x86_64` | **PLACEHOLDER:** 25c `run-g2-native-acceptance-x86_64` |
-| `linux-ubuntu-24.04-x86_64` | **PLACEHOLDER:** 25c under Docker Desktop, and `run-g2-native-acceptance-linux-host` |
+| `macos-26-x86_64` | 25c `run-g2-native-acceptance-x86-64`: every proof passed; process ownership and journal and storage met in their G2 part; no row fully accepted |
+| `linux-ubuntu-24.04-x86_64` | 25c under Docker Desktop and `run-g2-native-acceptance-linux-host` on a native Ubuntu 26.04.1 host: every proof passed; journal and storage met in its G2 part; no row fully accepted; the hosted-runner check stays open |
 
 | Deferred item | Gate |
 | --- | --- |
@@ -79,7 +79,9 @@ G2 delivered PostgreSQL state and outbox, NATS transport, installation bootstrap
 | Maximum offline duration of a running execution; more than 8 unconfirmed sealed executions; per-execution seccomp filter | G6 |
 | PostgreSQL failover, pool sizing, and expand/contract migrations | G6–G7 |
 | Image package inventories and vulnerability scans | G8 |
-| **PLACEHOLDER:** Linux-host rows (AppArmor or SELinux, composed crash windows and duplicate delivery) left open by `run-g2-native-acceptance-linux-host` | **PLACEHOLDER** |
+| AppArmor and SELinux confinement of the worker (`apparmor=unconfined`) | G6 (author's assignment) |
+| Linux composed crash windows and duplicate delivery beyond one x86_64 host and the test image; supplementary groups of an execution | Before Linux worker support is claimed (author's assignment) |
+| Fair-order rotation and its in-memory cursor; logger redaction rules; worker image reproducibility; `make native-acceptance` without the Linux crash windows; archived record links and file-system labels; hosted-runner Linux x86_64 check | Follow-ups without a G2 gate (author's assignment) |
 
 ## Later phases
 
