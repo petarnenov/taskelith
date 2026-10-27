@@ -12,7 +12,14 @@ import type {
   WorkerId,
 } from '@taskelith/execution';
 import type { FleetRegistry } from '@taskelith/fleet';
-import type { CapacityTransaction, DelegationRequests, OutboxLookup, PlacementQueue, WorkerReports } from '@taskelith/scheduling';
+import type {
+  CapacityTransaction,
+  DelegationRequests,
+  OutboxLookup,
+  PlacementQueue,
+  PlacementRotation,
+  WorkerReports,
+} from '@taskelith/scheduling';
 import type {
   CurrentRevisions,
   GateRepository,
@@ -33,6 +40,7 @@ export interface ControlPlaneTransaction extends CapacityTransaction {
   readonly revisions: CurrentRevisions;
   readonly launches: LaunchRecords;
   readonly placements: PlacementQueue;
+  readonly rotation: PlacementRotation;
   readonly delegations: DelegationRequests;
   readonly inbox: Inbox;
   readonly cursors: ProducerCursors;

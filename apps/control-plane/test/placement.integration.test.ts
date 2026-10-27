@@ -61,6 +61,7 @@ const binding = {
 const TABLES = [
   'workflow_runs', 'gates', 'admissions', 'tasks', 'assignments', 'outbox', 'task_lineage', 'capacity_charges', 'delegations',
   'capacity_quotas', 'workers', 'installation', 'enrollment_tokens', 'delegation_requests', 'current_revisions', 'producer_cursors',
+  'placement_rotation',
 ];
 const CORRELATION = 'correlation-1' as CorrelationId;
 const tasks = new TaskService(database);
@@ -287,6 +288,18 @@ describe('placement', () => {
     await waitingSince('task-3', '2026-10-25T09:00:02.000Z');
     assert.deepEqual(value(await placement.placeWaiting()), { waiting: 3, placed: 2 });
     assert.deepEqual(await placedTasks(), ['task-1', 'task-3'], 'project-2 is served before project-1 again');
+  });
+
+  test('a new service over the same database continues the rotation after a restart', async () => {
+    await enroll('worker-a', { slots: 2 });
+    await submit('task-1');
+    assert.deepEqual(value(await placement.placeWaiting()), { waiting: 1, placed: 1 });
+    await createSecondRun();
+    await submit('task-2');
+    await submit('task-3', 'run-2');
+    assert.deepEqual(value(await new PlacementService(database, TIMING).placeWaiting()), { waiting: 2, placed: 1 });
+    assert.deepEqual(await placedTasks(), ['task-1', 'task-3'], 'project-1 is not served twice in a row');
+    assert.deepEqual(await sql('SELECT project_id FROM placement_rotation'), [{ project_id: 'project-2' }]);
   });
 
   test('within a project the task waiting longest is placed, not the first submitted', async () => {
