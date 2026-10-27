@@ -10,7 +10,7 @@ With one free slot, project `p-a` waiting with `a1`, `a2`, and `a3` since `t0`, 
 - `InMemoryPlacementQueue.waiting` orders with `fairWaitingOrder` before its limit instead of its own copy of the rule (`rankedByProject`).
 - `PlacementService` offers in `fairPlacementOrder(waiting, after)` with the cursor value it passed to the read, captured before it moves the cursor.
 - The capacity reservation contract (section 5 and section 13, item 18 "Fair order") describes the rotation; section 12's guarantee is kept.
-- The `execution-placement` requirement "Waiting placements" describes the offer order as the rotation; its scenario "Equal oldest waiting times across projects" becomes "Round order across projects".
+- The `execution-placement` requirement "Waiting placements" describes the offer order as the rotation; its scenario "Equal oldest waiting times across projects" is rewritten for the rotation, and the scenario "Round order across projects" is added.
 
 ## Capabilities
 
