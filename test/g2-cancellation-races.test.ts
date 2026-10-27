@@ -124,9 +124,13 @@ describe('cancellation races', () => {
         }
         await waitFor(() => intentEnded(worker, cancelled.assignmentId), 20_000, 'the cancelled intent ends');
         gate.open();
-        await waitFor(() => authority.answered.length >= 1, 20_000, 'the first answer');
-        const [answered] = authority.answered;
-        assert.ok(answered!.answer.ok && answered!.answer.value.kind === 'rejected', 'the held request is rejected');
+        // The re-placement's request passes the opened gate too and may be
+        // answered first, so the held request's answer is found by request.
+        const [held] = authority.sent;
+        const answerToHeld = () => authority.answered.find(({ request }) => request === held);
+        await waitFor(() => answerToHeld() !== undefined, 20_000, 'the answer to the held request');
+        const answered = answerToHeld();
+        assert.ok(answered!.answer.ok && answered!.answer.value.kind === 'rejected', `the held request is rejected: ${JSON.stringify(answered?.answer)}`);
         const reason = answered!.answer.value.kind === 'rejected' ? answered!.answer.value.rejection.reason : '';
         assert.ok(CANCELLED_REASONS.includes(reason), reason);
         await assertNeverLaunched(installation, worker, 'task-b', cancelled);
