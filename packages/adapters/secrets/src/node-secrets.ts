@@ -1,19 +1,11 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import type { IssuedSecret, SecretHash, SecretKind, Secrets } from '@taskelith/access';
+import { SECRET_PREFIXES, type IssuedSecret, type SecretHash, type SecretKind, type Secrets } from '@taskelith/access';
 import type { IdentifierSource } from '@taskelith/fleet';
 
 // 256 random bits make a bearer secret that cannot be guessed, so a plain
 // SHA-256 is its stored form (decision D10 (a)); no slow hash is needed.
 const SECRET_BYTES = 32;
 const IDENTIFIER_BYTES = 16;
-
-// The prefix names the kind, so a leaked secret is recognizable and the
-// scrubber can find it in text.
-export const SECRET_PREFIXES: Readonly<Record<SecretKind, string>> = Object.freeze({
-  operator: 'tkop',
-  enrollment: 'tken',
-  worker: 'tkwk',
-});
 
 export class NodeSecrets implements Secrets {
   issue(kind: SecretKind): IssuedSecret {

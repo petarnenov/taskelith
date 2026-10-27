@@ -303,7 +303,7 @@ export function ReviewsScreen() {
         description="Independent review gates. Reviewers are read-only and never the identity that implemented the change."
         aside={
           <Group gap="xs">
-            <Badge variant="default">One reviewer per task</Badge>
+            <Badge variant="default">Reviewers A and B per task</Badge>
             <Badge variant="default">At most 3 passes</Badge>
             <Badge variant="default">Low-only: fixed without another pass</Badge>
             <Badge variant="default">After pass 3 the owner decides open Critical, High, Medium</Badge>

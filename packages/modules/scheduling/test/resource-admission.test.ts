@@ -11,10 +11,12 @@ import {
   reasonOutcome,
   PLACEMENT_RETRY_ATTEMPTS,
   ResourceAdmissionService,
+  RotationCursor,
   decideDelegation,
   decidePlacement,
   fairPlacementOrder,
   isWaitingReason,
+  lacksFleetCapacity,
   parseResourceRequest,
   placementBackoff,
   type CapacityStore,
@@ -189,13 +191,92 @@ test('a delegation that would leave no free unit waits up to the bound, then is 
   assert.deepEqual(decideDelegation({ ...full[0]!, now: late }), { outcome: 'rejected', reason: 'delegation-awaiting-capacity' });
 });
 
-test('waiting placements alternate between projects, oldest first in each', () => {
+const projectId = (project: string) => id('ProjectId', project) as ProjectId;
+
+test('waiting placements rotate across projects in id order, oldest first in each', () => {
   const entry = (project: string, minute: number, item: string) => ({
-    projectId: id('ProjectId', project) as ProjectId, waitingSince: at(`2026-10-25T09:0${minute}:00.000Z`), item,
+    projectId: projectId(project), waitingSince: at(`2026-10-25T09:0${minute}:00.000Z`), item,
   });
-  const order = fairPlacementOrder([entry('a', 1, 'a1'), entry('a', 2, 'a2'), entry('a', 3, 'a3'), entry('b', 4, 'b1'), entry('c', 0, 'c1')]);
-  assert.deepEqual(order, ['c1', 'a1', 'b1', 'a2', 'a3']);
-  assert.deepEqual(fairPlacementOrder([]), []);
+  const waiting = [entry('a', 1, 'a1'), entry('a', 2, 'a2'), entry('a', 3, 'a3'), entry('b', 4, 'b1'), entry('c', 0, 'c1')];
+  assert.deepEqual(fairPlacementOrder(waiting, undefined), ['a1', 'b1', 'c1', 'a2', 'a3']);
+  assert.deepEqual(fairPlacementOrder(waiting, projectId('a')), ['b1', 'c1', 'a1', 'a2', 'a3']);
+  assert.deepEqual(fairPlacementOrder(waiting, projectId('c')), ['a1', 'b1', 'c1', 'a2', 'a3']);
+  assert.deepEqual(fairPlacementOrder([], projectId('a')), []);
+});
+
+test('a project after the cursor is offered before the older backlog of the cursor project', () => {
+  const entry = (project: string, minute: number, item: string) => ({
+    projectId: projectId(project), waitingSince: at(`2026-10-25T09:0${minute}:00.000Z`), item,
+  });
+  const waiting = [entry('p-a', 1, 'a2'), entry('p-a', 2, 'a3'), entry('p-b', 5, 'b1')];
+  assert.deepEqual(fairPlacementOrder(waiting, projectId('p-a')), ['b1', 'a2', 'a3']);
+  assert.deepEqual(fairPlacementOrder([...waiting].reverse(), projectId('p-a')), ['b1', 'a2', 'a3']);
+});
+
+test('a cursor between two waiting projects starts the round after it, then wraps', () => {
+  const entry = (project: string, item: string) => ({
+    projectId: projectId(project), waitingSince: at('2026-10-25T09:00:00.000Z'), item,
+  });
+  const waiting = [entry('project-a', 'task-a'), entry('project-c', 'task-c')];
+  assert.deepEqual(fairPlacementOrder(waiting, projectId('project-b')), ['task-c', 'task-a']);
+  assert.deepEqual(fairPlacementOrder(waiting, undefined), ['task-a', 'task-c']);
+});
+
+test('waiting placements with equal waiting times follow task id order', () => {
+  const entry = (project: string, item: string) => ({
+    projectId: projectId(project), waitingSince: at('2026-10-25T09:00:00.000Z'), item,
+  });
+  const waiting = [entry('a', 'task-B'), entry('a', 'task-a'), entry('b', 'task-c'), entry('a', 'task-A')];
+  const expected = ['task-A', 'task-c', 'task-B', 'task-a'];
+  assert.deepEqual(fairPlacementOrder(waiting, undefined), expected);
+  assert.deepEqual(fairPlacementOrder([...waiting].reverse(), undefined), expected);
+});
+
+test('the projects of a round follow project id order by code unit', () => {
+  const entry = (project: string, minute: number, item: string) => ({
+    projectId: projectId(project), waitingSince: at(`2026-10-25T09:0${minute}:00.000Z`), item,
+  });
+  const waiting = [entry('beta', 0, 'task-1'), entry('Gamma', 1, 'task-2')];
+  assert.deepEqual(fairPlacementOrder(waiting, undefined), ['task-2', 'task-1']);
+  assert.deepEqual(fairPlacementOrder([...waiting].reverse(), undefined), ['task-2', 'task-1']);
+});
+
+test('the rotation cursor moves to the project of the last placement', () => {
+  const cursor = new RotationCursor(projectId('a'));
+  cursor.placed(projectId('b'));
+  cursor.placed(projectId('c'));
+  cursor.declined(projectId('d'));
+  assert.equal(cursor.next, projectId('c'));
+});
+
+test('without a placement the rotation cursor moves to the last decline', () => {
+  const cursor = new RotationCursor(projectId('a'));
+  cursor.declined(projectId('b'));
+  cursor.declined(projectId('c'));
+  assert.equal(cursor.next, projectId('c'));
+});
+
+test('after the fleet runs out of capacity, no offer moves the cursor', () => {
+  const cursor = new RotationCursor(projectId('a'));
+  cursor.declined(projectId('b'));
+  cursor.ranOutOfCapacity();
+  cursor.declined(projectId('c'));
+  cursor.placed(projectId('d'));
+  assert.equal(cursor.next, projectId('b'));
+});
+
+test('only quarantine, worker eligibility, worker capacity, and no candidate lack fleet capacity', () => {
+  for (const reason of ['quarantined', 'worker-not-eligible', 'worker-capacity-exhausted', 'no-candidate']) {
+    assert.equal(lacksFleetCapacity(reason), true, reason);
+  }
+  for (const reason of ['control-not-enforceable', 'project-quota-exhausted', 'run-quota-exhausted', 'retry-budget-exhausted', undefined]) {
+    assert.equal(lacksFleetCapacity(reason), false, String(reason));
+  }
+});
+
+test('without an offer the rotation cursor stays where it started', () => {
+  assert.equal(new RotationCursor(projectId('a')).next, projectId('a'));
+  assert.equal(new RotationCursor(undefined).next, undefined);
 });
 
 test('backoff doubles from five seconds, jitters, and never exceeds sixty', () => {

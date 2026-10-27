@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": []
   },
-  "references": [{ "path": "../../kernel" }, { "path": "../../testing" }, { "path": "../sdlc" }]
+  "references": [{ "path": "../../kernel" }, { "path": "../../testing" }, { "path": "../access" }, { "path": "../sdlc" }]
 }

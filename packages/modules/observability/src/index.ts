@@ -13,7 +13,27 @@ export {
   type LogRecord,
   type LogValue,
 } from './domain/log-record.js';
-export { isSecretFieldName, REDACTED, redactCorrelation, redactFields, redactText } from './domain/redaction.js';
+export { isSecretFieldName, redactCorrelation, redactFields, redactText } from './domain/redaction.js';
+export {
+  MARKED_SECRET_RULES,
+  REDACTED,
+  redactAuthorizationValues,
+  redactBearerTokens,
+  redactCredsBlocks,
+  redactIssuedSecrets,
+  redactJwts,
+  redactJwtsWithEmptyParts,
+  redactKeyColonValues,
+  redactKeyValuePairs,
+  redactNkeySeeds,
+  redactSchemelessUserinfo,
+  redactUrlUserinfo,
+  redactUrlUserinfoEvenEmpty,
+  redactWith,
+  SECRET_SHAPE_RULES,
+  textRule,
+  type TextRule,
+} from './domain/redaction-rules.js';
 export {
   G2_SIGNALS,
   measurement,
