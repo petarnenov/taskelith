@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-27. The author's verification is recorded below; the independent review and the archive checks are pending.
+Date: 2026-10-27. The author's verification, review pass 1 and its fixes, and the checks after them are recorded below; review pass 2 and the archive checks are pending.
 
 ## Scope and source
 
@@ -18,7 +18,7 @@ Follow-up `placement-backoff-preserves-rotation`, recorded by review pass 2 (fin
 - **Code agrees.** `#settle` (`placement-service.ts:112`) returns at once on such a decline, counting no failure and forgetting nothing, so "Backoff forgetting" holds. A pass without a candidate (`:83`) settles nothing now; its loop over `NO_CANDIDATE` and that constant were removed, since a `no-candidate` outcome is such a decline.
 - **Adapters.** The backoff lives only in the service's `RetrySchedule` and reaches the stores as the `excluding` argument of `PlacementQueue.waiting`, which `InMemoryPlacementQueue` (`packages/modules/scheduling/src/adapters/in-memory-placement.ts:26`) and `PostgresPlacementQueue` (`packages/adapters/postgres/src/capacity-repositories.ts:159`) both honour; reasons come from `decidePlacement` (`packages/modules/scheduling/src/domain/placement-decision.ts:62`) for either store. No adapter changed; both are covered by the same fifty-to-one case.
 - **Other statements checked**, by `grep` for "backoff", "back off", "backs off", "capacity wait", "waiting for capacity", "no candidate accepts", and "lack of fleet capacity" over `docs/`, `openspec/specs/`, `apps/`, and `packages/`, outside `docs/qualification/`, archived changes, and `dist/`:
-  - Changed: the contract and operational-targets lines above; the `execution-placement` requirement "Placement backoff" (`openspec/specs/execution-placement/spec.md:89`); the comments of `PLACEMENT_BACKOFF_INITIAL_MILLISECONDS` (`packages/modules/scheduling/src/domain/capacity-limits.ts:26`), which said capacity waits back off, and of `FLEET_REASONS` (`capacity-reasons.ts:31`); the comments of `placeWaiting` and `#settle`.
+  - Changed: the contract and operational-targets lines above; the `execution-placement` requirement "Placement backoff", in the delta `openspec/changes/placement-backoff-preserves-rotation/specs/execution-placement/spec.md:3`, which replaces the living requirement (`openspec/specs/execution-placement/spec.md:89`) only at archive; the comments of `PLACEMENT_BACKOFF_INITIAL_MILLISECONDS` (`packages/modules/scheduling/src/domain/capacity-limits.ts:26`), which said capacity waits back off, and of `FLEET_REASONS` (`capacity-reasons.ts:31`); the comments of `placeWaiting`, `#placeDue`, `#settle`, and `isFleetCapacityDecline`.
   - Agree and unchanged: contract section 5 "Fair admission" and section 13 "Fair order" (`capacity-reservation.md:235`), whose "backoff" among a project's own limits is the retry backoff; `execution-placement` "Waiting placements" (`spec.md:8`), "Project rotation" (`:31`), "Placement transaction" and its scenario "No capacity" (`:66`), and "Backoff forgetting" (`:104`); `observation-consumption` "Retry backoff" (`openspec/specs/observation-consumption/spec.md:133`); `capacity-reservation` "Bounded automatic retry" (`openspec/specs/capacity-reservation/spec.md:98`); `docs/architecture.md:409`; `RetrySchedule` (`apps/control-plane/src/application/retry-schedule.ts`) and `placementBackoff`. The other backoffs (`postgres-state`, `nats-transport`, `launch-authorization`, `worker-runtime`, `worker-journal.md:118`) concern other loops.
 - **Requirement length.** The modified requirement is 499 characters, within the 500 of `MAX_REQUIREMENT_TEXT_LENGTH` of the pinned OpenSpec. `openspec archive placement-backoff-preserves-rotation --yes` in a scratch copy of `openspec/`, then `openspec validate --specs --strict`: 69 passed, 0 failed, at `43b914e7`.
 - New and changed comments are at most two lines of at most 80 characters; `npm run verify:comments` passes within `make verify`.
@@ -30,7 +30,8 @@ Follow-up `placement-backoff-preserves-rotation`, recorded by review pass 2 (fin
   - `node --experimental-strip-types --test apps/control-plane/test/placement-service.test.ts`: 24 tests, 21 pass, 3 fail. `a freed slot follows the rotation after a fleet capacity decline, not a backoff` (`apps/control-plane/test/placement-service.test.ts:391`) failed with actual `[ 'task-big-01', 'task-big-02', 'task-small' ]`, expected `[ 'task-big-01', 'task-small', 'task-big-02' ]`: the large project took the freed slot while the small project's task backed off. `a decline for a reason of its own backs the task off, a fleet capacity decline does not` (`:402`) failed with actual `[]`, expected `[ 'task-b1' ]`; `without a candidate no transaction is opened and the tasks do not back off` (`:109`) failed with actual `{ waiting: 0, placed: 0 }`, expected `{ waiting: 1, placed: 1 }`.
   - Against PostgreSQL (`make services-up`), `node --experimental-strip-types --test apps/control-plane/test/placement.integration.test.ts`: 23 tests, 21 pass, 2 fail. `a slot freed after a fleet capacity decline goes to the next project, not the larger backlog` (`apps/control-plane/test/placement.integration.test.ts:181`) failed with actual `[ 'task-a01', 'task-a02' ]`, expected `[ 'task-a01', 'task-b' ]`; `without capacity nothing is written and the task still waits` (`:171`) failed with message `it does not back off`, actual `{ waiting: 0, placed: 0 }`, expected `{ waiting: 1, placed: 0 }`.
   - The tests were run before the fix was written, so no stash was needed: the built sources were those of `bd6108d4`.
-- **Passes after the fix.** The same files at `41ef68fb`: 24 of 24 and 23 of 23 pass.
+- **Passes after the fix.** The same files at `41ef68fb`: 24 of 24 and 23 of 23 pass; with the pass 1 test (`dfe54076`), 25 of 25 unit tests.
+- **Kept failure count (pass 1, L2).** `a fleet capacity decline keeps the failure count of an own-reason backoff` (`apps/control-plane/test/placement-service.test.ts:413`) runs an own decline, a fleet decline once due, and a second own decline, and expects the second wait to be 15 s. With the early return of `#settle` replaced by `this.#forget(taskId)` it failed with `the second own wait doubles to 15 s`; replaced by `this.#tasks.failed(taskId)`, the base behavior, it failed with `the fleet decline set no new wait`. The source was restored and rebuilt; the test passes.
 - **Fixture.** Both fifty-to-one tests draw a long jitter (0.9) for the first decline, the small project's task, and none for the rest, so before the fix its backoff outlasts the large project's; after the fix no decline draws.
 - **Citations.** Every file and line cited above was checked against the files of the records commit.
 
@@ -47,12 +48,22 @@ Environment: Linux (`Linux 7.0.0-38-generic`, x86_64), Node from `.nvmrc`, Docke
 
 ### Review pass 1
 
-- **Reviewer:** A, OpenCode CLI, model `opencode-go/qwen3.8-max`, variant `medium`. Pending.
-- **Invocation, revision, model confirmation, session, snapshot, findings, resolutions:** pending.
+- **Reviewer:** A, OpenCode CLI, model `opencode-go/qwen3.8-max`, variant `medium`, agent `reviewer`, read-only, assigned and run by the coordinator from the worktree, 2026-10-27T11:42:35Z to 11:56:59Z.
+- **Invocation:** `opencode run --standalone --agent reviewer -m 'opencode-go/qwen3.8-max#medium' --format json --title placement-backoff-preserves-rotation "$(cat <prompt-file>)" < /dev/null > <log>`, with the prompt and the log kept outside the worktree.
+- **Revision:** `5f159bc1`.
+- **Model confirmation:** the stored assistant messages record provider `opencode-go`, model `qwen3.8-max`, variant `medium`, agent `reviewer`; session `ses_e82d4a6baffec8jvO13lmt2pyR`.
+- **Snapshot:** `6e12da5881b9a70816343a980ed5285381637c9931fe6aa006bfbff8d33c0785` before and after; unchanged.
+- **Scope of the check:** the reviewer had no shell, so it ran no tests, no `make verify`, and checked no commit hash; it checked the fail-before values by reasoning, and confirmed that both adapters behave the same and that no other statement still backs off a capacity wait.
+- **Findings:** 0 Critical, 0 High, 1 Medium, 4 Low. All five are **fixed**, to be checked by review pass 2 (reviewer B, Claude Code, model `claude-opus-5-5`, effort `high`); `findings.jsonl` holds one line for each.
+  1. **M1 (contract-drift):** the comment of `isFleetCapacityDecline` (`placement-service.ts:274`) promised an offer in the next pass, without the batch qualifier of contract section 5. **Fixed** (`5cb42104`): the next pass that reads it offers it in its place in the rotation.
+  2. **L1 (docs):** the comment of `#placeDue` (`placement-service.ts:70`) said a declined task keeps waiting unchanged, against the spec's term for the kept wait. **Fixed** (`5cb42104`): it rolls back, and the task still waits.
+  3. **L2 (missing-fail-before-test):** the design decision that a fleet capacity decline keeps an own-reason failure count had no test. **Fixed** (`dfe54076`): the test at `placement-service.test.ts:413`, which fails both if `#settle` forgets and if it counts a failure on such a decline (evidence check).
+  4. **L3 (docs):** `worker-capacity-exhausted` depends on the task's own request, so the `FLEET_REASONS` comment (`capacity-reasons.ts:31`) was too absolute. **Fixed** (`5cb42104` and the records commit): the comment says the set is exact while all requests are equal, and the design's Risks say that per-task requests must revisit the reason.
+  5. **L4 (evidence-mismatch):** this record cited the living spec as changed, although the branch changes only the delta. **Fixed** (the records commit): the self-check cites the delta and notes that the living requirement changes at archive.
 
 ### Review pass 2
 
-- **Reviewer:** B, Claude Code, model `claude-opus-5-5`, effort `high`. Pending, if pass 1 has findings above Low.
+- **Reviewer:** B, Claude Code, model `claude-opus-5-5`, effort `high`. Pending; it checks the pass 1 fixes, since pass 1 had a Medium finding.
 
 ### Review pass 3
 
