@@ -184,7 +184,7 @@ describe('placement', () => {
     await createSecondRun();
     await submit('task-b', 'run-2');
     const clock = { at: Date.now() };
-    // A long jitter for the first decline, task-b's; none for the rest.
+    // A long jitter, were the fleet capacity decline to back off.
     const draws = [0.9];
     const timed = new PlacementService(database, { now: () => clock.at, draw: () => draws.shift() ?? 0 });
     assert.deepEqual(value(await timed.placeWaiting()), { waiting: 51, placed: 1 });

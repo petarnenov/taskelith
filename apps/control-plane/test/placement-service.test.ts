@@ -416,7 +416,7 @@ const BIG_AND_SMALL: Backlog = [
 test('a freed slot follows the rotation after a fleet capacity decline, not a backoff', async () => {
   const placed: string[] = [];
   const clock = { at: 0 };
-  // A long jitter for the first decline, task-small's; none for the rest.
+  // A long jitter, were the fleet capacity decline to back off.
   const draws = [0.9];
   const timed = { now: () => clock.at, draw: () => draws.shift() ?? 0 };
   const service = new PlacementService(await fleetStore(BIG_AND_SMALL, placed, oneSlot()), timed);
