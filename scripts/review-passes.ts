@@ -1,16 +1,20 @@
 import {
   checkedValue,
   contentLines,
+  passName,
   reviewerKey,
   type Finding,
   type RecordSource,
   type LocatedFinding,
+  type PassCoordinates,
   type Problem,
   type Reviewer,
   type Role,
   type SchemaCheck,
   type Severity,
 } from './review-findings.ts';
+
+export { passName, type PassCoordinates } from './review-findings.ts';
 
 // Pure rules of the pass summaries in passes.jsonl and their agreement with
 // findings.jsonl. File access stays in scripts/findings.ts.
@@ -19,13 +23,6 @@ export const PASSES_FILE = 'passes.jsonl';
 export const SEVERITIES: readonly Severity[] = ['critical', 'high', 'medium', 'low'];
 
 export type SeverityCounts = Readonly<Record<Severity, number>>;
-
-// A pass is identified by its artifact and number within its change.
-export interface PassCoordinates {
-  // Absent when the change reviews one artifact.
-  readonly artifact?: string;
-  readonly pass: number;
-}
 
 export interface PassSummary extends PassCoordinates {
   readonly change: string;
@@ -50,10 +47,6 @@ const EMPTY_LINE = 'empty line; a change without review passes has an empty file
 // Identifiers hold no space, so the key cannot collide across artifacts.
 export function passKey({ artifact, pass }: PassCoordinates): string {
   return `${artifact ?? ''} ${pass}`;
-}
-
-export function passName({ artifact, pass }: PassCoordinates): string {
-  return artifact === undefined ? `pass ${pass}` : `pass ${pass} of artifact "${artifact}"`;
 }
 
 function samePass(one: PassCoordinates, other: PassCoordinates): boolean {
