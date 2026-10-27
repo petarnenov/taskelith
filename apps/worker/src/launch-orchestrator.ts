@@ -465,6 +465,7 @@ class Launch {
     while (!this.#signal.aborted) {
       const next = this.#nextExecution(resume);
       if (!next.ok) {
+        if (isJournalStop(next.error)) return;
         await this.#deferBeforeW2(next.error);
         continue;
       }

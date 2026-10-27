@@ -22,7 +22,7 @@ The wait is `Launch.#backOff`'s: `launchRetryDelay` of the launch's retry count 
 
 ### D3. Where the retries happen
 
-- `Launch.run`: when the next execution cannot be named (identifier or journal read), the launch backs off and tries again, keeping a resumed execution.
+- `Launch.run`: when the next execution cannot be named (identifier or journal read), the launch backs off and tries again, keeping a resumed execution, unless the read found the journal stopped (D5).
 - `Launch.#authorize`: the steps before W2 (contact and pressure waits, the stop and cancellation checks, the operation identifier, the clock read, then W2) form a loop, `#beginOperation`; a failed identifier, clock read, or W2 commit backs off and repeats the loop from the contact check, with a new operation identifier and a new clock reading, so W2 still follows the last contact and pressure checks with no await between. Repeating inside `#authorize` keeps the `reportsNotStarted` value of the try, which `#execute` would otherwise set for a re-authorization.
 
 ### D4. The logged reason
@@ -36,11 +36,12 @@ What the journal guarantees on a failed commit, from `JournalConnection.transact
 - A write that returns a failure, such as a precondition or a conflict, is rolled back, and so is an SQLite error at any statement or at `COMMIT` that is neither a device fault (`SQLITE_IOERR`, `SQLITE_CANTOPEN`, `SQLITE_READONLY`, `SQLITE_PROTOCOL`) nor corruption (`SQLITE_CORRUPT`, `SQLITE_NOTADB`); a refusal for space (`SQLITE_FULL`, `disk-full`) is such a rollback, and any other one fails as `internal`. Nothing of the failed W2 is journaled, so the retry can neither journal it twice nor find its operation.
 - A device fault (`flush-failure`) or corruption (`corrupt`) stops the journal: the state on the device is unknown, every later read and write fails with `stopped`, and worker journal contract section 7 keeps the worker stopped until a host restart or a new incarnation.
 
-So a failed W2 commit is tried again only when it rolled back. The retry takes a new `operationId` and a new deadline reading, because the failed operation was never journaled or sent; the execution is the same, which for a new execution was not journaled either. A W2 commit that stops the journal ends the launch as before: the next pass's snapshot fails with `stopped`, so nothing is launched again and no request leaves. The Execution port names the stop reasons in `isJournalStop`, beside `isSpaceRefusal`, so the worker never reads an adapter's vocabulary directly; a journal adapter test pins them to the failures the adapter returns.
+So a failed W2 commit is tried again only when it rolled back. The retry takes a new `operationId` and a new deadline reading, because the failed operation was never journaled or sent; the execution is the same, which for a new execution was not journaled either. A W2 commit that stops the journal ends the launch as before: the next pass's snapshot fails with `stopped`, so nothing is launched again and no request leaves. A journal read for the next execution that fails because the journal stopped ends the launch the same way, without a deferral: every later read fails with `stopped` too, so a retry could never succeed (review pass 1, L1). The Execution port names the stop reasons in `isJournalStop`, beside `isSpaceRefusal`, so the worker never reads an adapter's vocabulary directly; a journal adapter test pins them to the failures the adapter returns.
 
 A W2 that fails on a precondition, which no runtime path of the launch should produce, now waits and retries instead of ending; each try reads the journal again, so it commits once the state allows and never sends a request before.
 
 ## Risks / Trade-offs
 
+- A stopped journal ends the launch rather than deferring it, whether W2 or the read for the next execution found it stopped; a retry would only log a deferral per back-off until the worker stops, and section 7 already keeps the worker stopped.
 - A launch whose clock never becomes readable now stays registered and retries at most every 60 s, instead of being relaunched in a loop; this is the intended behaviour, and a cancellation or a stop ends it.
 - A W2 commit that keeps failing on a precondition keeps the launch registered, retrying at most every 60 s; while it lives, the orchestrator neither relaunches the intent nor reconciles its executions, as for any live launch. A cancellation or a stop ends it.

@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Launch failure before W2 commits
-A launch whose identifier, journal read, deadline clock read, or W2 commit fails SHALL send no request. Unless the commit was refused for space or stopped the journal, it SHALL log `worker.launch.deferred` with the failure's code and message and try the intent again, with a new operation, after a jittered delay of 5 s doubling to 60 s, waited on a timer, until W2 commits, the intent is cancelled, or the worker stops.
+A launch whose identifier, journal read, deadline clock read, or W2 commit fails SHALL send no request. Unless the commit was refused for space or the failure stopped the journal, it SHALL log `worker.launch.deferred` with the failure's code and message and try the intent again, with a new operation, after a jittered delay of 5 s doubling to 60 s, waited on a timer, until W2 commits, the intent is cancelled, or the worker stops.
 
 #### Scenario: Unreadable deadline clock
 - **WHEN** the deadline clock cannot be read at any try of a launch
@@ -22,3 +22,7 @@ A launch whose identifier, journal read, deadline clock read, or W2 commit fails
 #### Scenario: Journal stopped at W2
 - **WHEN** the W2 commit of a launch fails with an I/O error that stops the journal
 - **THEN** the launch ends without a deferral and sends no request, and the worker stays stopped under the journal's write-failure rules
+
+#### Scenario: Journal stopped at a read
+- **WHEN** the journal read for a launch's next execution fails because the journal stopped
+- **THEN** the launch ends without a deferral and sends no request
