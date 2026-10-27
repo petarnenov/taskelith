@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Subscription account slots
-Taskelith SHALL manage harness accounts as slots, each bound to exactly one harness plugin, authenticated only through a subscription mechanism that plugin declares and for which Taskelith has a delivery admitted for that harness, and allowed to serve only the projects explicitly listed for it; one slot MAY serve several listed projects. Claude Code SHALL have at most one non-removed slot (ADR 0005 decision 2, amended 2026-10-27), and by D6 only the `subscription-token` delivery.
+Taskelith SHALL manage harness accounts as slots, each bound to exactly one harness plugin, authenticated only through a subscription mechanism that plugin declares and that has a delivery admitted for that harness, and allowed to serve only the projects explicitly listed for it; a harness MAY have any number of slots, and one slot MAY serve several listed projects. Claude Code SHALL have at most one non-removed slot (account pool contract 7.1), with D6's `subscription-token` delivery only.
 
 #### Scenario: Slot shared by two projects
 - **WHEN** a slot lists projects A and B

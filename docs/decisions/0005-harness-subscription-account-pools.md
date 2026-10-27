@@ -1,7 +1,7 @@
 # ADR 0005: Harness subscription account pools
 
 Date: 2026-10-24
-Status: Decided by the owner on 2026-10-24 in the project conversation. Decisions 1, 2, and 8 record the owner's request; decisions 3 to 7 were proposed by the author and approved by the owner the same day. Decisions 4 and 5 were amended by the owner on 2026-10-25, and decision 2 on 2026-10-27. Recorded; not implemented. Provider terms for pooled subscriptions are not yet verified.
+Status: Decided by the owner on 2026-10-24 in the project conversation. Decisions 1, 2, and 8 record the owner's request; decisions 3 to 7 were proposed by the author and approved by the owner the same day. Decisions 4 and 5 were amended by the owner on 2026-10-25, and decision 2 on 2026-10-27. Recorded; not implemented. Provider terms for pooled subscriptions are not yet verified. Note, 2026-10-27: the Claude Code terms were reviewed on 2026-10-25 and rechecked on 2026-10-27 ([Claude Code qualification](../qualification/claude-code.md#provider-terms-review)), and decision 2 was amended accordingly.
 
 ## Context
 
@@ -20,7 +20,7 @@ The [Claude Code qualification](../qualification/claude-code.md) used one subscr
 
 ## Risks
 
-- Provider terms: subscriptions are usually personal accounts. Whether each vendor's terms allow pooled subscriptions for automated use has not been verified. Per ADR 0003 decision 2, each harness plugin records these terms before admission; the owner decides whether any remaining risk is acceptable.
+- Provider terms: subscriptions are usually personal accounts. Whether each vendor's terms allow pooled subscriptions for automated use has not been verified. Note, 2026-10-27: for Claude Code they were reviewed on 2026-10-25 and rechecked on 2026-10-27, and decision 2 was amended accordingly. Per ADR 0003 decision 2, each harness plugin records these terms before admission; the owner decides whether any remaining risk is acceptable.
 - Credential exposure: whether an agent's own commands can read an injected credential has not been tested. Each harness qualification must test it.
 - Load signals: harnesses may not report usage or reset times. A plugin without them falls back to active-session counts and a bounded default cooldown.
 

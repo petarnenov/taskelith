@@ -30,7 +30,7 @@ These rank eligible candidates. Failing one does not make a candidate ineligible
 
 - A stable, vendor-supported programmatic interface rather than an experimental one ([architecture section 2](architecture.md#established-open-source-technology-policy) prefers stable releases over pre-release APIs on critical paths).
 - An official TypeScript SDK.
-- A provider path that a harness plugin can authenticate with a subscription; since [ADR 0005](decisions/0005-harness-subscription-account-pools.md), harness authentication is subscription-only, so account-free or API-billed endpoints are not a goal. ADR 0005 decision 2, as amended on 2026-10-27, puts the user's own API key first for Claude Code.
+- A provider path that a harness plugin can authenticate with a subscription; since [ADR 0005](decisions/0005-harness-subscription-account-pools.md), harness authentication is subscription-only, so account-free or API-billed endpoints are not a goal, except for Claude Code, where ADR 0005 decision 2 as amended on 2026-10-27 puts the user's own API key first.
 - A private security reporting channel rather than public issues only.
 - SCM: an LTS line (ADR 0003 decision 3) and built-in CI.
 - SCM adapter criteria proposed by this assessment, not by the architecture: repository-scoped API credentials, pull request and review APIs, HMAC-signed webhooks, a commit-status API, and server-enforced merge blocking on required statuses and reviews. They are a proposed way to meet the G3 review and verification evidence.
