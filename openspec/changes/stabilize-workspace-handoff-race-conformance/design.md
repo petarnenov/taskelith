@@ -17,9 +17,10 @@ Make the defect test deterministic without sleeps or wider bounds, and keep its 
 
 ## Decisions
 
-- **A check barrier forces the race.** `CheckBarrier` (`temp-dir-workspaces.ts:188-208`) counts the hand-offs in flight. With `racesHandOff`, `handOff` (lines 298-303) calls `racingHandOff` (lines 310-321), which enters the barrier synchronously, before its first `await`, so both calls of `Promise.all` are counted before either proceeds. After its check a hand-off waits in `arrive` until every hand-off in flight has checked, and only then writes. Both hand-offs therefore see no other record and both succeed, whatever the scheduling. A hand-off whose `checkoutOf` fails leaves the barrier without waiting.
+- **A check barrier forces the race.** `CheckBarrier` (`temp-dir-workspaces.ts:188-218`) counts the hand-offs in flight. With `racesHandOff`, `handOff` (lines 308-313) calls `racingHandOff` (lines 320-325), which runs its check, `handOffCheck` (lines 327-331), through `afterAllChecks`. That method counts the caller before its first `await`, so both calls of `Promise.all` are counted before either proceeds. After its check a hand-off waits in `arrive` until every hand-off in flight has checked, and only then writes. Both hand-offs therefore see no other record and both succeed, whatever the scheduling.
+- **Every caller leaves the barrier exactly once.** A check that resolves, including one that finds no workspace, arrives; a check that throws leaves without waiting and rethrows its own error, so the other hand-off and later calls on the same provider are never held forever (review pass 1, finding 1).
 - **Sequential hand-offs do not wait.** A lone hand-off is the only one in flight, so `arrive` resolves at once and the other cases keep passing with this defect, as the test expects.
-- **The conforming path is unchanged** apart from extracted helpers: it still uses the per-root chain; `markHandedOff` and `otherWorkspaceHandedOff` (lines 529-538) and `mustWait` (lines 323-325) are shared by both paths.
+- **The conforming path is unchanged** apart from extracted helpers: it still uses the per-root chain; `markHandedOff` and `otherWorkspaceHandedOff` (lines 539-548) and `mustWait` (lines 333-335) are shared by both paths.
 
 ## Review checklist
 
@@ -45,7 +46,7 @@ Record quality (archived findings under openspec/changes/), most frequent findin
 7. scope (5): The change does more or less than its assigned scope.
 ```
 
-The record-quality examples are omitted above. Applied: concurrency-race is the subject of the change and the barrier keeps the earlier fix, the chain, on the conforming path; error-handling covers the early `leave` on a missing workspace; stale-citation and evidence-mismatch are checked against the cited lines and the command output in `verification.md`.
+The record-quality examples are omitted above. Applied: concurrency-race is the subject of the change and the barrier keeps the earlier fix, the chain, on the conforming path; error-handling covers a check that throws or finds no workspace; stale-citation and evidence-mismatch are checked against the cited lines and the command output in `verification.md`.
 
 ## Risks / Trade-offs
 

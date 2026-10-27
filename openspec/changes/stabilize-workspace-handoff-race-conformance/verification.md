@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-Assigned on 2026-10-27 by the coordinator to the worker session Maki. Source: `packages/modules/workspace/test/workspace-conformance.test.ts:76`, "a provider that races two concurrent hand-offs fails the suite", added in #359 (`align-git-workspace-with-execution-boundary`), failed 3 of 4 `make verify` runs at a load average of about 10 to 12 on an Apple M3 and passed alone. Base revision: `b87abe75` on `dev`. Prepared in the git worktree `../taskelith-worktrees/stabilize-workspace-handoff-race-conformance` on branch `stabilize-workspace-handoff-race-conformance`; the fix is commit `cd2abc0c`. Scope: the test double `packages/modules/workspace/test/temp-dir-workspaces.ts` and this change. No product code, conformance case, or requirement changes, so `.openspec.yaml` sets `skip_specs: true`. Commit types `test` and `docs`; the package is private.
+Assigned on 2026-10-27 by the coordinator to the worker session Maki. Source: `packages/modules/workspace/test/workspace-conformance.test.ts:76`, "a provider that races two concurrent hand-offs fails the suite", added in #359 (`align-git-workspace-with-execution-boundary`), failed 3 of 4 `make verify` runs at a load average of about 10 to 12 on an Apple M3 and passed alone. Base revision: `b87abe75` on `dev`. Prepared in the git worktree `../taskelith-worktrees/stabilize-workspace-handoff-race-conformance` on branch `stabilize-workspace-handoff-race-conformance`; the fix is commit `f8d26280`, and the fix of review pass 1 is `3b29f979`. The unpushed branch was rebuilt after pass 1 to retitle the fix commit (finding 2): `cd2abc0c`, `135f501c`, and `b4c1f8d7` became `f8d26280`, `512649b5`, and `95fe17cb`, with the same trees. Scope: the test double `packages/modules/workspace/test/temp-dir-workspaces.ts` and this change. No product code, conformance case, or requirement changes, so `.openspec.yaml` sets `skip_specs: true`. Commit types `test` and `docs`; the package is private.
 
 ## Environment
 
@@ -13,7 +13,7 @@ Apple M3 (8 CPUs), macOS 26.6.2 (Darwin 25.6.0, arm64), Node.js v24.22.1. The ho
 - Against the requirement "One handed-off workspace per Linux worker", scenario "Concurrent hand-offs": the conformance case still expects exactly one of two concurrent hand-offs to succeed; the double with `racesHandOff` now lets both succeed every time, so the test proves that the case detects that race. The conforming double keeps the per-root chain and passes the case.
 - Against "Workspace conformance suite": every other case keeps its expected result with each defect; the defect list in the test file is unchanged.
 - Against the brief: the root cause is a scheduling assumption of the double, reproduced without load; the fix uses a barrier, not a sleep or a wider bound; mutation checks M1 and M2 show the test still fails against a double that does not race and against a case that does not count.
-- Comments: the two new comments and the moved one are within the comment length rule (`npm run verify:comments`).
+- Comments: the new comments and the moved one are within the comment length rule (`npm run verify:comments`).
 - Evidence check: no external link; each number below comes from the command named next to it. Logs and scripts of the load runs were kept in the session's scratch directory, outside the repository.
 
 ## Diagnosis
@@ -21,6 +21,8 @@ Apple M3 (8 CPUs), macOS 26.6.2 (Darwin 25.6.0, arm64), Node.js v24.22.1. The ho
 See `design.md`. Observed failure under load: `Expected values to be strictly deep-equal`, actual `[]`, expected `['lets one of two concurrent hand-offs through where executions share a separate account']`, at `workspace-conformance.test.ts:76:3`. The old double ran the racy hand-offs without any ordering, so under load one hand-off often wrote its record before the other checked, and the case correctly saw one success.
 
 ## Checks
+
+Unless named otherwise, the checks in the first three sections below ran on the tree of `f8d26280`, before review pass 1.
 
 ### Deterministic perturbation
 
@@ -62,17 +64,31 @@ Load averages (1, 5, 15 minutes) are `sysctl -n vm.loadavg` before and after eac
 
 Every failure printed the observed assertion. All `yes` processes were stopped afterwards; `pgrep -fl yes` printed nothing.
 
+After the pass-1 fix, on `3b29f979`, the same runner without `yes` processes ran the race test 30 times: 30 passed, 0 failed, load before 2.51 3.88 5.91, after 3.75 4.12 5.98.
+
 ### Other checks
 
-- `node --experimental-strip-types --test packages/modules/workspace/test/*.test.ts` on `cd2abc0c`: 69 tests, 68 passed, 0 failed, 1 skipped ("the clone writes into a checkout that is set-group-ID already", skipped on this host).
+- `node --experimental-strip-types --test packages/modules/workspace/test/*.test.ts` on `f8d26280`: 69 tests, 68 passed, 0 failed, 1 skipped ("the clone writes into a checkout that is set-group-ID already", skipped on this host).
 - `npx tsc -p tsconfig.check.json`: no errors.
 - `npm run verify:comments`: every comment is within the rule.
 - `npm run openspec -- validate stabilize-workspace-handoff-race-conformance --strict`: valid.
-- `make verify` passed (exit 0) on `135f501c`, started at a load average of 3.38 (1 minute): 2,289 tests, 2,286 passed, 0 failed, 3 skipped; coverage 99.33 % lines, 92.29 % branches, 99.03 % functions; strict OpenSpec validation 70 passed, 0 failed; findings, links, contract compatibility, archive dry run, and package verification passed.
+- `make verify` passed (exit 0) on `135f501c`, whose tree is that of `512649b5`, started at a load average of 3.38 (1 minute): 2,289 tests, 2,286 passed, 0 failed, 3 skipped; coverage 99.33 % lines, 92.29 % branches, 99.03 % functions; strict OpenSpec validation 70 passed, 0 failed; findings, links, contract compatibility, archive dry run, and package verification passed.
+
+### Checks after review pass 1
+
+- Fail-before of finding 1 (not committed): with `this.leave();` removed from the `catch` of `afterAllChecks`, `node --experimental-strip-types --test --test-timeout=5000 --test-name-pattern='racing|race again' packages/modules/workspace/test/temp-dir-workspaces.test.ts` reported the three new tests `not ok` with `test timed out after 5000ms`. With the fix they pass.
+- `node --experimental-strip-types --test --test-timeout=20000 packages/modules/workspace/test/*.test.ts` on `3b29f979`: 72 tests, 71 passed, 0 failed, 1 skipped.
+- `npm run verify:comments`: every comment is within the rule.
+- `make findings ARGS="validate"`: every findings file and pass summary file is valid.
 
 ## Independent review
 
-None yet.
+- **Pass 1, reviewer A: Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, read-only sandbox, session `01a17f11-f2e8-7282-a761-476950315c06`, range `b87abe75..b4c1f8d7`.** Run by the coordinator. Invocation: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`. Model confirmation: the model, effort, and read-only sandbox are confirmed in the session header. The tree snapshot was identical before and after the pass. The reviewer confirmed the root cause, found no product gap and no scope creep, and checked the concurrent, single, sequential, and early not-found paths and that the conforming path is kept. Findings: 0 Critical, 0 High, 1 Medium, 1 Low.
+  1. Medium (`packages/modules/workspace/test/temp-dir-workspaces.ts:313`, `error-handling`, `git-workspace-port`): a racing hand-off whose `checkoutOf` or `mustWait` threw never left the barrier, so the other hand-off and every later call on the provider waited forever; the reviewer reproduced it with an injected throw. Fixed in `3b29f979`: `CheckBarrier.afterAllChecks` runs the check, leaves on a throw, and rethrows the original error; three tests in `temp-dir-workspaces.test.ts` cover the rejection with the original error, the release of the waiting check, and a barrier and a provider that race again afterwards.
+  2. Low (`verification.md:5`, `process`): the fix commit was titled `test: wip …` and the record cited it. Fixed by rebuilding the unpushed branch: `git cherry-pick -n cd2abc0c` on `b87abe75`, committed as `f8d26280` `test: make the racing hand-off double deterministic`, then the two record commits cherry-picked, the trees compared equal, and the branch moved with `git branch -f`.
+
+  Both fixes are to be checked by pass 2.
+- **Pass 2, reviewer B:** to come.
 
 ## Limitations
 
@@ -81,6 +97,6 @@ None yet.
 
 ## Remaining gates
 
-- Independent review (reviewers assigned by the coordinator).
+- Review pass 2 by reviewer B, and pass 3 if needed.
 - Archive of the change after the review.
 - Integration into dev by the coordinator (single pull request).
