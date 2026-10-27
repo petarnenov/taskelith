@@ -139,6 +139,7 @@ export {
   STANDING_REASONS,
   WAITING_REASONS,
   WORKER_REASONS,
+  isRejectingReason,
   isWaitingReason,
   lacksFleetCapacity,
   reasonOutcome,
