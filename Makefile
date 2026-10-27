@@ -43,10 +43,11 @@ verify-stamped: toolchain
 		$(MAKE) --no-print-directory verify-checks VERIFY_PROFILE="$$profile" && \
 		$(VERIFY_STAMP) write "$$profile" "$$tree"
 
+# VERIFY_PROFILE=docs-only skips only the Docker test suites of make test.
 verify-checks: toolchain
 	npm run verify:comments
 	npm run verify:findings
-	$(MAKE) --no-print-directory test
+	$(if $(filter docs-only,$(VERIFY_PROFILE)),@echo "make verify: docs-only profile skips make test",$(MAKE) --no-print-directory test)
 	$(MAKE) contract-compatibility
 	npm run verify:dependencies
 	npm run openspec -- validate --all --strict --no-interactive

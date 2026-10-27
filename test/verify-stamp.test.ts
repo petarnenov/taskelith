@@ -267,3 +267,23 @@ test('a dry run of make verify writes no stamp', () => {
     assert.equal(checkStamp(context, 'full').verified, false);
   });
 });
+
+function dryRunChecks(profile: string): string {
+  const repository = join(import.meta.dirname, '..');
+  return execFileSync('make', ['-n', '--no-print-directory', 'verify-checks', `VERIFY_PROFILE=${profile}`], {
+    cwd: repository, encoding: 'utf8', env: { ...fixtureEnv, MAKEFLAGS: '' },
+  });
+}
+
+test('the docs-only profile skips make test and keeps every other check', () => {
+  const docsOnly = dryRunChecks('docs-only');
+  const full = dryRunChecks('full');
+  assert.match(docsOnly, /make verify: docs-only profile skips make test/);
+  assert.doesNotMatch(docsOnly, /services\.sh run/);
+  assert.match(full, /services\.sh run/);
+  const others = ['verify:comments', 'verify:findings', 'check-contract-compatibility.ts', 'verify:dependencies', 'validate --all --strict', 'verify:links', 'verify:archive', 'verify:package'];
+  for (const check of others) {
+    assert.ok(docsOnly.includes(check), `docs-only lacks ${check}`);
+    assert.ok(full.includes(check), `full lacks ${check}`);
+  }
+});
