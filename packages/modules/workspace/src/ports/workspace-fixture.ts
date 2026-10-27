@@ -60,6 +60,8 @@ export interface WorkspaceFixture {
   hardLinkOutside(attemptId: AttemptId, path: string): Promise<(text: string) => Promise<void>>;
   // A symbolic link inside the checkout's Git directory to a control record.
   linkInGitDirectory(attemptId: AttemptId): Promise<void>;
+  // Deletes the checkout's Git directory, as an agent can.
+  removeGitDirectory(attemptId: AttemptId): Promise<void>;
   // A staging entry holding a symbolic link to a control record.
   interruptPrepare(attemptId: AttemptId): Promise<void>;
   // The clean workspace renamed to its removing entry, not yet deleted.

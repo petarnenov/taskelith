@@ -10,6 +10,8 @@ export const WORKSPACE_LAYOUT = Object.freeze({
   checkout: 'checkout',
   // The worker's own record of the workspace, beside its checkout.
   metadata: 'workspace',
+  // The worker's hand-off state, present while the checkout is handed off.
+  handOffRecord: 'handed-off',
   stagingPrefix: '.staging-',
   removingPrefix: '.removing-',
 });
@@ -18,10 +20,11 @@ export const WORKSPACE_LAYOUT = Object.freeze({
 export const WORKSPACE_MODES = Object.freeze({
   // The attempt directory: the execution group may pass, not list.
   attempt: 0o710,
-  checkoutReclaimed: 0o700,
-  // Set-group-ID, so every new entry keeps the execution group.
+  // Set-group-ID from creation, so every entry gets the execution group.
+  checkoutReclaimed: 0o2700,
   checkoutHandedOff: 0o2770,
   metadata: 0o600,
+  handOffRecord: 0o600,
 });
 
 export const TASK_BRANCH_PREFIX = 'taskelith/';

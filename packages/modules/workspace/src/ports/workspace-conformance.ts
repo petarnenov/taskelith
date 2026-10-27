@@ -434,18 +434,42 @@ const CLEANUP: readonly ConformanceCase<WorkspaceFixture>[] = [
   },
 ];
 
+// An at-head workspace stays read-only while handed off.
+async function expectReadOnlyWhileHandedOff(problems: string[], fixture: WorkspaceFixture, head: CodeHeadIdentity) {
+  const { provider } = fixture;
+  if ((await prepared(problems, fixture, { attemptId: THIRD, target: { kind: 'at-head', head } })) === undefined) return;
+  expectSuccess(problems, 'hand off at a head', await provider.handOff(THIRD));
+  const pushed = await provider.push({ attemptId: THIRD, credential: fixture.credentials.write, expectedRemoteHead: null });
+  expectReason(problems, 'push at a head while handed off', pushed, 'invalid', 'read-only-workspace');
+}
+
+async function expectUnsafeCheckout(problems: string[], fixture: WorkspaceFixture, attemptId: AttemptId) {
+  const { provider, credentials } = fixture;
+  const refusals: [string, Result<unknown>][] = [
+    ['inspect', await provider.inspect(attemptId)],
+    ['snapshot', await provider.snapshot(attemptId)],
+    ['push', await provider.push({ attemptId, credential: credentials.write, expectedRemoteHead: null })],
+    ['remove', await provider.remove(attemptId)],
+  ];
+  for (const [label, result] of refusals) {
+    expectReason(problems, `${label} of ${attemptId}`, result, 'precondition-failed', 'unsafe-checkout');
+  }
+}
+
 const HANDOFF: readonly ConformanceCase<WorkspaceFixture>[] = [
   {
     name: 'hands the checkout to the execution and takes it back without outside links',
     async check(fixture) {
       const problems: string[] = [];
       const { provider } = fixture;
-      if ((await prepared(problems, fixture)) === undefined) return problems;
+      const workspace = await prepared(problems, fixture);
+      if (workspace === undefined) return problems;
       expectSuccess(problems, 'hand off', await provider.handOff(FIRST));
       expectSuccess(problems, 'hand off again', await provider.handOff(FIRST));
-      const write = fixture.credentials.write;
+      const { write, foreign } = fixture.credentials;
       const refusals: [string, Result<unknown>][] = [
         ['inspect', await provider.inspect(FIRST)],
+        ['inspect after a restart', await fixture.reopen().inspect(FIRST)],
         ['snapshot', await provider.snapshot(FIRST)],
         ['push', await provider.push({ attemptId: FIRST, credential: write, expectedRemoteHead: null })],
         ['remove', await provider.remove(FIRST)],
@@ -456,6 +480,10 @@ const HANDOFF: readonly ConformanceCase<WorkspaceFixture>[] = [
       // A removal that went through leaves nothing more to check.
       if (refusals.some(([, result]) => result.ok)) return problems;
       expectSame(problems, 'listed while handed off', await provider.list(), [FIRST]);
+      // The kind and the credential are checked before the hand-off.
+      const foreignPush = await provider.push({ attemptId: FIRST, credential: foreign, expectedRemoteHead: null });
+      expectReason(problems, 'foreign push while handed off', foreignPush, 'forbidden', 'credential-out-of-scope');
+      await expectReadOnlyWhileHandedOff(problems, fixture, workspace.head);
       await fixture.writeFile(FIRST, fixture.trackedPath, 'agent\n');
       const writeOutside = await fixture.hardLinkOutside(FIRST, fixture.trackedPath);
       expectSuccess(problems, 'reclaim', await provider.reclaim(FIRST));
@@ -469,17 +497,17 @@ const HANDOFF: readonly ConformanceCase<WorkspaceFixture>[] = [
     },
   },
   {
-    name: 'refuses Git work on a checkout whose Git directory holds a link',
+    name: 'refuses Git work on a checkout whose Git directory holds a link or is gone',
     async check(fixture) {
       const problems: string[] = [];
       const before = await fixture.controlRecords();
-      if ((await prepared(problems, fixture)) === undefined) return problems;
+      for (const attemptId of [FIRST, SECOND]) {
+        if ((await prepared(problems, fixture, { attemptId })) === undefined) return problems;
+      }
       await fixture.linkInGitDirectory(FIRST);
-      const { provider } = fixture;
-      expectReason(problems, 'inspect', await provider.inspect(FIRST), 'precondition-failed', 'unsafe-checkout');
-      expectReason(problems, 'snapshot', await provider.snapshot(FIRST), 'precondition-failed', 'unsafe-checkout');
-      expectReason(problems, 'remove', await provider.remove(FIRST), 'precondition-failed', 'unsafe-checkout');
-      expectSame(problems, 'listed', await provider.list(), [FIRST]);
+      await fixture.removeGitDirectory(SECOND);
+      for (const attemptId of [FIRST, SECOND]) await expectUnsafeCheckout(problems, fixture, attemptId);
+      expectSame(problems, 'listed', await fixture.provider.list(), [FIRST, SECOND]);
       expectSame(problems, 'control records', await fixture.controlRecords(), before);
       return problems;
     },

@@ -5,10 +5,12 @@ The revalidation review of the Git workspace contract (G3 item 6, reviewer pass 
 ## What Changes
 
 - Scope: coordinator Niki's brief of 2026-10-27, and its scope update of the same day after review pass 2 (task size L): the root worker premise, the modes of `worker/` and `workspaces/<attemptId>/`, who makes the clone, `safe.directory` for the adapter and the harness, the worker journal contract, spec, and adapter, a Linux test with real uids where the existing Linux test container allows it, L1, and L2. Client-chosen task identifiers against safe branch names are out of scope.
+- Scope addition by the coordinator (Niki), 2026-10-27, after review pass 1: apply the owner's away delegate's decisions on the two open questions (Claude, away run `20261027T160711Z-claude-46821`): question 1 option (a), at most one handed-off workspace per Linux worker, with (b), a uid pool, deferred; question 2 option (a), accept that the execution group can stat named paths under `worker/`, so names there never encode secrets.
+- Review pass 1 fixes: the checkout gets the execution group and set-group-ID before the clone; the hand-off state becomes a worker record on every platform, which also names the reclaim program's containment; the Git directory checks cover the owner and a missing `.git`; Git runs without inherited configuration; the refusal order of the operations is fixed; the worker refuses a linked `worker/workspaces/`.
 - Git workspace contract (`docs/contracts/git-workspace.md`): the worker and execution identities; the traverse-only execution group modes of `dataRoot`, `worker/`, `worker/workspaces/`, and the attempt directory; the worker's workspace record beside the checkout; the hand-off and reclaim of the checkout; the Git process identity and cgroup; Git directory checks and `safe.directory`; the corrected section 1 citation; and the item 16 tests: real uids, `/proc/<pid>/cgroup`, and no secret in a log, which depends on the change `align-scm-port-with-g2-credentials`.
 - Worker journal contract and installation contract: the execution group's traversal of `dataRoot`, `worker/`, and `worker/workspaces/`.
-- `@taskelith/workspace`: `WORKSPACE_MODES`, `WORKSPACE_LAYOUT.metadata`, the reasons `workspace-handed-off` and `unsafe-checkout`, `handOff` and `reclaim` on `WorkspaceLifecycle`, two conformance cases with two fixture helpers, and the test double and its tests.
-- `@taskelith/worker-journal`: the `executionGroup` root option, which gives the three directories the group and mode `0710` at enrollment and every start, with unit tests and a privileged Linux test in `make verify-linux-cgroup`.
+- `@taskelith/workspace`: `WORKSPACE_MODES`, `WORKSPACE_LAYOUT.metadata` and `handOffRecord`, the reasons `workspace-handed-off` and `unsafe-checkout`, `handOff` and `reclaim` on `WorkspaceLifecycle`, two conformance cases with three fixture helpers, and the test double and its tests.
+- `@taskelith/worker-journal`: the `executionGroup` root option, which gives the three directories the group and mode `0710` at enrollment and every start after refusing a linked or foreign `worker/workspaces/`, with unit tests and a privileged Linux test in `make verify-linux-cgroup`.
 - G3 plan row 16 names the obligations.
 - No Git adapter, no reclaim program, no worker app or container wiring: those are item 16.
 
@@ -20,7 +22,7 @@ None.
 
 ### Modified Capabilities
 
-- `git-workspace-port`: the workspace record, the hand-off and reclaim, the Git process identity, the Git directory checks, and the extended conformance suite.
+- `git-workspace-port`: the workspace record, the hand-off and reclaim, the hand-off state, one handed-off workspace per Linux worker, the reclaim program's containment, the Git process identity, the Git directory checks, the Git configuration scope, and the extended conformance suite.
 - `worker-journal`: the execution group's traversal of the subtree.
 - `worker-journal-adapter`: the execution group root option.
 

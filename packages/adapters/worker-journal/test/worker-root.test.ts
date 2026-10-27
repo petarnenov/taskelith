@@ -105,6 +105,17 @@ test('a root enrolled without an execution group is opened to it on start', () =
   assert.deepEqual(modeAndGroup(root.paths.workspaces), [0o710, OWN_GROUP]);
 });
 
+test('a workspace root linked to a control-record directory fails start and opens nothing', () => {
+  enroll().close();
+  opened.splice(0);
+  const paths = workerPaths(dataRoot);
+  rmSync(paths.workspaces, { recursive: true });
+  symlinkSync(paths.journalDirectory, paths.workspaces);
+  const refused = failed(openWorkerRoot(rootOptions(dataRoot, { executionGroup: OWN_GROUP })));
+  assert.equal(refused.details.reason, 'unsafe-path');
+  assert.equal(statSync(paths.journalDirectory).mode & 0o7777, 0o700);
+});
+
 test('a group the worker does not belong to fails enrollment and leaves no subtree', { skip: process.getuid?.() === 0 }, () => {
   const refused = failed(enrollWorkerRoot(rootOptions(dataRoot, { executionGroup: FOREIGN_GROUP }), ENROLLMENT));
   assert.equal(refused.code, 'precondition-failed');

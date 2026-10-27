@@ -242,7 +242,11 @@ function withRootLock(paths: WorkerPaths, use: (lock: ExclusiveFileLock) => Resu
 
 function checkRecordsThen(paths: WorkerPaths, use: () => Result<WorkerRoot>): Result<WorkerRoot> {
   const uid = ownerUid();
-  const records = [paths.identity, paths.credentials, paths.fault, paths.journal, `${paths.journal}-wal`, paths.executions, paths.logs];
+  // The workspace root too: the execution group's grant must not follow it.
+  const records = [
+    paths.identity, paths.credentials, paths.fault, paths.journal, `${paths.journal}-wal`, paths.executions, paths.logs,
+    paths.workspaces,
+  ];
   for (const record of records) {
     const safe = checkControlPath(paths.dataRoot, record, uid);
     if (!safe.ok) return safe;

@@ -1,5 +1,6 @@
-import { createHash } from 'node:crypto';
-import { chmod, link, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { createHash, randomBytes } from 'node:crypto';
+import { constants } from 'node:fs';
+import { chmod, link, lstat, mkdir, mkdtemp, open, readFile, readdir, readlink, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
@@ -229,9 +230,11 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     }
   }
 
+  // The record first, so the state survives where no mode changes.
   async handOff(attemptId: AttemptId): Promise<Result<void>> {
     const checkout = await this.checkoutOf(attemptId);
     if (!checkout.ok) return checkout;
+    await writeFile(handOffRecord(checkout.value), '', { mode: WORKSPACE_MODES.handOffRecord });
     await chmod(checkout.value, WORKSPACE_MODES.checkoutHandedOff);
     return ok(undefined);
   }
@@ -243,6 +246,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     if (!(await handedOff(checkout.value))) return ok(undefined);
     await normalize(checkout.value, !this.defects.keepsOutsideLinks);
     await chmod(checkout.value, WORKSPACE_MODES.checkoutReclaimed);
+    await rm(handOffRecord(checkout.value));
     return ok(undefined);
   }
 
@@ -253,10 +257,17 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     if (!this.defects.ignoresHandOff && (await handedOff(checkout.value))) {
       return workspaceFailure('precondition-failed', 'workspace-handed-off', `workspace ${attemptId} is handed off`);
     }
-    if (!this.defects.followsGitLinks && (await unsafeGitDirectory(join(checkout.value, '.git')))) {
+    if (await this.unsafeGitDirectory(join(checkout.value, '.git'))) {
       return workspaceFailure('precondition-failed', 'unsafe-checkout', `the Git directory of ${attemptId} is not safe`);
     }
     return checkout;
+  }
+
+  // A `.git` that is missing, no directory, or holds a link or redirection.
+  private async unsafeGitDirectory(gitDirectory: string): Promise<boolean> {
+    const status = await lstat(gitDirectory).catch(() => undefined);
+    if (status === undefined || !status.isDirectory()) return true;
+    return !this.defects.followsGitLinks && holdsRedirection(gitDirectory);
   }
 
   async inspect(attemptId: AttemptId): Promise<Result<WorkspaceStatus>> {
@@ -403,14 +414,12 @@ async function readMetadata(checkout: string): Promise<Metadata> {
   return JSON.parse(await readFile(join(dirname(checkout), WORKSPACE_LAYOUT.metadata), 'utf8')) as Metadata;
 }
 
-async function handedOff(checkout: string): Promise<boolean> {
-  return ((await lstat(checkout)).mode & 0o070) !== 0;
+function handOffRecord(checkout: string): string {
+  return join(dirname(checkout), WORKSPACE_LAYOUT.handOffRecord);
 }
 
-// A `.git` that is no directory, or holds a link or a redirection.
-async function unsafeGitDirectory(gitDirectory: string): Promise<boolean> {
-  const status = await lstat(gitDirectory);
-  return !status.isDirectory() || holdsRedirection(gitDirectory);
+async function handedOff(checkout: string): Promise<boolean> {
+  return exists(handOffRecord(checkout));
 }
 
 async function holdsRedirection(directory: string): Promise<boolean> {
@@ -433,13 +442,31 @@ async function normalize(directory: string, copiesLinked: boolean): Promise<void
       continue;
     }
     const status = await lstat(path);
-    if (copiesLinked && status.nlink > 1) {
-      const copy = `${path}.reclaim`;
-      await writeFile(copy, await readFile(path));
-      await rename(copy, path);
-    }
-    await chmod(path, (status.mode & 0o700) | ((status.mode & 0o700) >> 3));
+    const mode = sharedMode(status.mode);
+    await chmod(path, mode);
+    if (copiesLinked && status.nlink > 1) await replaceWithCopy(path, mode);
   }
+}
+
+// Read and write for the owner and the group, executable if it was.
+function sharedMode(mode: number): number {
+  return (mode & 0o111) === 0 ? 0o660 : 0o770;
+}
+
+// The copy gets a fresh name, created exclusively, so no entry of the agent
+// is written through or replaced; the source is read without a link.
+async function replaceWithCopy(path: string, mode: number): Promise<void> {
+  const source = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const content = await source.readFile().finally(() => source.close());
+  const copyPath = join(dirname(path), `.reclaim-${randomBytes(8).toString('hex')}`);
+  const copy = await open(copyPath, 'wx', mode);
+  try {
+    await copy.writeFile(content);
+    await copy.chmod(mode);
+  } finally {
+    await copy.close();
+  }
+  await rename(copyPath, path);
 }
 
 async function readState(checkout: string): Promise<LocalState> {
@@ -564,6 +591,7 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
     linkInGitDirectory: async (attemptId) => {
       await symlink(join(dataRoot, 'worker/journal'), join(await checkout(attemptId), '.git', 'objects'));
     },
+    removeGitDirectory: async (attemptId) => rm(join(await checkout(attemptId), '.git'), { recursive: true }),
     beginOperation: async (attemptId) => writeFile(join(await checkout(attemptId), OPERATION_FILE), 'merge'),
     switchBranch: async (attemptId, branch) => update(attemptId, (current) => ({ ...current, branch })),
     remoteHead: async (branch) => service.branches.get(branch),

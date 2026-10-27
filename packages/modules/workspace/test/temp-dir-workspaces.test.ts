@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { chmod, link, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { parseIdentifier, type Result } from '@taskelith/kernel';
@@ -76,5 +77,58 @@ test('a rewritten Git state in an at-head checkout cannot make it publish', () =
   for (const result of [read, pushed]) {
     assert.equal(result.ok, false);
     if (!result.ok) assert.equal(result.error.details.reason, 'read-only-workspace');
+  }
+}));
+
+test('a hand-off survives a restart without a mode change, as on one account', () => withFixture(async (fixture, provider) => {
+  const checkout = must(await provider.prepare(request(fixture))).workingDirectory;
+  must(await provider.handOff(FIRST));
+  await chmod(checkout, WORKSPACE_MODES.checkoutReclaimed);
+  const inspected = await fixture.reopen().inspect(FIRST);
+  assert.equal(inspected.ok, false);
+  if (!inspected.ok) assert.equal(inspected.error.details.reason, 'workspace-handed-off');
+}));
+
+test('a reclaim gives back files the agent closed, also hard-linked ones', () => withFixture(async (fixture, provider) => {
+  const checkout = must(await provider.prepare(request(fixture))).workingDirectory;
+  must(await provider.handOff(FIRST));
+  const outside = await mkdtemp(join(tmpdir(), 'taskelith-outside-'));
+  try {
+    await writeFile(join(checkout, 'closed.txt'), 'closed\n');
+    await writeFile(join(checkout, 'read-only.sh'), 'run\n');
+    await link(join(checkout, 'closed.txt'), join(outside, 'closed.txt'));
+    await chmod(join(checkout, 'closed.txt'), 0o000);
+    await chmod(join(checkout, 'read-only.sh'), 0o500);
+    must(await provider.reclaim(FIRST));
+    assert.equal(await modeOf(join(checkout, 'closed.txt')), 0o660);
+    assert.equal(await modeOf(join(checkout, 'read-only.sh')), 0o770);
+    assert.equal(await readFile(join(checkout, 'closed.txt'), 'utf8'), 'closed\n');
+  } finally {
+    await rm(outside, { recursive: true, force: true });
+  }
+}));
+
+test('a reclaim never writes through or over an entry the agent named like its copy', () => withFixture(async (fixture, provider) => {
+  const checkout = must(await provider.prepare(request(fixture))).workingDirectory;
+  must(await provider.handOff(FIRST));
+  const outside = await mkdtemp(join(tmpdir(), 'taskelith-outside-'));
+  try {
+    await writeFile(join(outside, 'target'), 'target\n');
+    await writeFile(join(outside, 'linked'), 'linked\n');
+    await writeFile(join(checkout, 'a.txt'), 'a\n');
+    await writeFile(join(checkout, 'b.txt'), 'b\n');
+    await writeFile(join(checkout, 'c.txt'), 'c\n');
+    for (const name of ['a.txt', 'b.txt', 'c.txt']) await link(join(checkout, name), join(outside, `${name}.link`));
+    await symlink(join(outside, 'target'), join(checkout, 'a.txt.reclaim'));
+    await link(join(outside, 'linked'), join(checkout, 'b.txt.reclaim'));
+    await writeFile(join(checkout, 'c.txt.reclaim'), 'project\n');
+    must(await provider.reclaim(FIRST));
+    assert.equal(await readFile(join(outside, 'target'), 'utf8'), 'target\n');
+    assert.equal(await readFile(join(outside, 'linked'), 'utf8'), 'linked\n');
+    assert.equal(await readFile(join(checkout, 'b.txt.reclaim'), 'utf8'), 'linked\n');
+    assert.equal(await readFile(join(checkout, 'c.txt.reclaim'), 'utf8'), 'project\n');
+    for (const name of ['a.txt', 'b.txt', 'c.txt']) assert.equal(await readFile(join(checkout, name), 'utf8'), `${name[0]}\n`);
+  } finally {
+    await rm(outside, { recursive: true, force: true });
   }
 }));

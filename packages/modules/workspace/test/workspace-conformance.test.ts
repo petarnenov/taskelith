@@ -37,7 +37,7 @@ const SNAPSHOT = 'snapshots exactly the clean head tree, in bytes that depend on
 const REMOVE = 'removes only its own clean workspace, keeps a dirty one, and never a control record';
 const SWEEP = 'sweeps interrupted prepares and removals without following links, across a restart';
 const HAND_OFF = 'hands the checkout to the execution and takes it back without outside links';
-const GIT_LINK = 'refuses Git work on a checkout whose Git directory holds a link';
+const GIT_LINK = 'refuses Git work on a checkout whose Git directory holds a link or is gone';
 
 // Each defect of the double breaks the guarantees of the named cases.
 const DEFECTS: readonly [string, DoubleDefects, readonly string[]][] = [
