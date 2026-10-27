@@ -65,6 +65,7 @@ Before review pass 1:
 - `git diff --stat origin/dev -- openspec/changes/archive`: empty.
 - `make verify` on `e68d1528` (2026-10-27, worker session, Docker Desktop, iMac slot): failed at `npm run verify:dependencies` with `Dependency inventory is stale; changed inputs: package.json`, because the new `verify:links` script changed `package.json`. `make dependency-inventory` regenerated `docs/dependencies/licenses.json`, committed as `a0c58359`.
 - `make verify` on `a0c58359` (finished 2026-10-27T12:00:41Z): passed. 2131 tests, 2129 passed, 0 failed, 2 skipped; coverage of all files 99.29 % lines, 92.11 % branches, 99.00 % functions; contract documents without undeclared breaking change; 731 package paths verified; OpenSpec 70 passed, 0 failed; `Every checked link conforms; 331 archived links remain in scripts/record-links-baseline.tsv.`; every active change archives into strictly valid specs; packed file allowlist and installed CLI verification passed.
+- `make verify` on `34feb40b`, after the review pass 1 fixes (finished 2026-10-27T12:13:52Z): passed. 2137 tests, 2135 passed, 0 failed, 2 skipped; coverage of all files 99.29 % lines, 92.10 % branches, 99.00 % functions; contract documents without undeclared breaking change; 731 package paths verified; OpenSpec 70 passed, 0 failed; `Every checked link conforms; 331 archived links remain in scripts/record-links-baseline.tsv.`; every active change archives into strictly valid specs; packed file allowlist and installed CLI verification passed.
 
 ## Independent review
 
@@ -87,7 +88,6 @@ Reviewer A, Codex CLI (gpt-6-astra), model `gpt-6-astra`, effort medium, sandbox
 
 ## Remaining gates
 
-- `make verify` after the review pass 1 fixes.
 - Independent review pass 2 by reviewer B, and pass 3 by reviewer A if pass 2 has findings above Low.
 - Archive in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request)
