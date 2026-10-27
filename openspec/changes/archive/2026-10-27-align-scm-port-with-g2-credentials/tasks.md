@@ -15,7 +15,7 @@
 ## 3. Evidence
 
 - [x] 3.1 Integrations tests with coverage, build, boundaries, comments, links, findings, OpenSpec, and archive dry run
-- [ ] 3.2 `make verify` (run by the coordinator)
+- [x] 3.2 `make verify` (run by the coordinator; the run on the tree of the archive commit is the last one)
 - [x] 3.3 Record `verification.md`
 
 ## 4. Review and archive
@@ -23,4 +23,4 @@
 - [x] 4.1 Independent review pass 1 (reviewer A) and its fixes
 - [x] 4.2 Independent review pass 2 (reviewer B) and its fixes
 - [x] 4.3 Independent review pass 3 (reviewer A)
-- [ ] 4.4 Archive the change
+- [x] 4.4 Archive the change

@@ -57,6 +57,18 @@ macOS 26.6.2 (Darwin 25.6.0), x86_64, the Intel iMac; Node.js v24.22.1 through `
 - `make verify` on `8e8ce090`, after the pass 1 fixes and before pass 2, by the coordinator (Niki's worker session, macOS x86_64 iMac): exit 0, last line `Packed file allowlist and installed CLI verification passed.`
 - `make verify` on `97344117`, after the pass 2 fixes and before pass 3, by the coordinator (Niki's worker session, macOS x86_64 iMac): exit 0, last line `Packed file allowlist and installed CLI verification passed.`
 
+## Archive checks
+
+On the tree of the archive commit, after `npm run openspec -- archive align-scm-port-with-g2-credentials --yes` (`scm-port`: 3 added, 4 modified):
+
+- `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 69 passed, 0 failed (69 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line is `✓ change/2026-10-27-align-scm-port-with-g2-credentials`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `scm-port/spec.md` (41 insertions, 4 deletions): "Draft SCM port", "Opaque SCM identifiers", "Effective permissions", and "Credential refresh and revocation" modified, each `dev`'s current text with this change's edits (`origin/dev` has not changed `scm-port` since the merge base), and "Run credential secret", "Refreshed credential delivery", and "Conformance findings without payloads" added, as in the delta.
+- The moved change has `findings.jsonl` (17 findings) and `passes.jsonl` (3 passes); `make findings ARGS="validate"`: `Every findings file is valid: 35 file(s); every pass summary file is valid: 15 file(s).`
+- `npm run verify:links`: `Every checked link conforms.`
+- `npm run verify:comments`: `Every comment is within the comment length rule.`
+- `make verify` on the tree of the archive commit: exit 0; last line `Packed file allowlist and installed CLI verification passed.`; `Every findings file is valid: 35 file(s); every pass summary file is valid: 15 file(s).` Run by the worker session on the macOS x86_64 iMac.
+
 ## Independent review
 
 - Pass 1, reviewer A: Codex CLI `gpt-6.1-sol`, invoked as `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`. Model confirmation from the session header: model `gpt-6.1-sol`, reasoning effort medium, sandbox read-only, session `01a17e30-c2d5-7432-a273-61e226b7223f`. Run by the coordinator on HEAD `60cc4b80a5c52fc8a6232a8c8359f9cb1f831a92`; the worktree snapshot before and after was equal. The reviewer confirmed 77 of 77 tests and that the 16 tests of `29e42d82` fail on the code of `4fe09456`. Findings: Critical 0, High 2, Medium 2, Low 1, as in `passes.jsonl`; all fixed, reviewed in pass 2:
