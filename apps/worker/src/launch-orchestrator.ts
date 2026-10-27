@@ -22,7 +22,7 @@ import {
   type SealedExecution,
   type WorkerJournal,
 } from '@taskelith/execution';
-import { ok, parseIdentifier, type Result } from '@taskelith/kernel';
+import { ok, parseIdentifier, type Failure, type Result } from '@taskelith/kernel';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import type { AdmissionCheck } from './admission-pressure.js';
 import {
@@ -199,7 +199,7 @@ export class LaunchOrchestrator {
     if (authority === undefined || intent === undefined || unsettled || this.#launches.has(assignmentId)) return false;
     // Registered before it runs, so a cancellation always finds it.
     const launch = new Launch({
-      options: this.#options, authority, watch: this.#watch, space: this.#space, intent, stopping: signal,
+      options: this.#options, authority, watch: this.#watch, space: this.#space, logger: this.#logger, intent, stopping: signal,
       cancellations: (executionId) => this.#cancellationsOf(assignmentId, executionId),
       ...(resume === undefined ? {} : { resume }),
     });
@@ -409,6 +409,7 @@ interface LaunchContext {
   readonly authority: LaunchAuthorityClient;
   readonly watch: ExecutionWatch;
   readonly space: SpaceRetry;
+  readonly logger: Logger;
   readonly intent: JournaledIntent;
   readonly stopping: AbortSignal;
   readonly cancellations: (executionId: ExecutionId) => Result<readonly CommandId[]>;
@@ -522,6 +523,7 @@ class Launch {
       const answer = await this.#context.authority.authorize(sent);
       if (this.#stopping.aborted) return { kind: 'end' };
       if (!answer.ok) {
+        this.#authorizationFailed(executionId, operationId, answer.error);
         if (!this.#beforeDeadline(reading.value, DEFAULT_PARAMETERS)) return this.#expired(executionId, operationId);
         await this.#backOff();
         await this.#awaitAdmission();
@@ -540,6 +542,12 @@ class Launch {
           return this.#rejected(executionId, operationId, outcome.rejection);
       }
     }
+  }
+
+  // The details name the cause, such as the code of a lost connection;
+  // they never replace the known fields.
+  #authorizationFailed(executionId: ExecutionId, operationId: OperationId, { code, message, details }: Failure): void {
+    this.#context.logger.warn('worker.launch.authorization-failed', { ...details, executionId, operationId, code, message });
   }
 
   // Capacity reservation section 8: the launch waits, keeping its
