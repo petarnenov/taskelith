@@ -265,14 +265,6 @@ test('after the fleet runs out of capacity, no offer moves the cursor', () => {
   assert.equal(cursor.next, projectId('b'));
 });
 
-test('the rotation cursor moves until the fleet runs out of capacity', () => {
-  const cursor = new RotationCursor(undefined);
-  cursor.placed(projectId('a'));
-  assert.equal(cursor.moving, true);
-  cursor.ranOutOfCapacity();
-  assert.equal(cursor.moving, false);
-});
-
 test('only quarantine, worker eligibility, worker capacity, and no candidate lack fleet capacity', () => {
   for (const reason of ['quarantined', 'worker-not-eligible', 'worker-capacity-exhausted', 'no-candidate']) {
     assert.equal(lacksFleetCapacity(reason), true, reason);

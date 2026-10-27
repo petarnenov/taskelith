@@ -88,15 +88,14 @@ export class PlacementService {
     return kept.ok ? ok({ waiting: waiting.length, placed: outcome.value }) : kept;
   }
 
-  // Offers each task until the store fails; answers the number placed, or
-  // the outage, and the cursor as the pass moved it and as it stored it.
+  // Offers each task until the store fails or the fleet lacks capacity;
+  // answers the number placed, or the outage, and the cursor for the next read.
   async #offer(order: readonly WaitingPlacement<TaskId>[], after: ProjectId | undefined): Promise<Offers> {
     const cursor = new RotationCursor(after);
     let stored = after;
     let placed = 0;
     for (const { item: taskId, projectId } of order) {
-      const moveTo = cursor.moving ? projectId : undefined;
-      const outcome = await this.#store.transaction((tx) => placeMovingCursor(tx, taskId, this.#retryBackoff, moveTo));
+      const outcome = await this.#store.transaction((tx) => placeMovingCursor(tx, taskId, this.#retryBackoff, projectId));
       if (!outcome.ok && isOutage(outcome.error.code)) return { outcome, next: cursor.next, stored };
       if (outcome.ok && outcome.value.kind === 'placed') {
         if (outcome.value.cursorStored) stored = projectId;
@@ -104,6 +103,7 @@ export class PlacementService {
         placed++;
       } else if (isFleetCapacityDecline(outcome)) {
         cursor.ranOutOfCapacity();
+        break;
       } else {
         cursor.declined(projectId);
       }
@@ -119,10 +119,9 @@ export class PlacementService {
     return this.#store.transaction((tx) => tx.rotation.advance(next));
   }
 
-  // A fleet capacity decline keeps the wait, a backing-off retry waits until
-  // due, a task placed or not waiting has none; any other backs off again.
+  // Never given a fleet capacity decline, which keeps the wait. A backing-off
+  // retry waits until due, one placed or not waiting has none; others back off.
   #settle(taskId: TaskId, outcome: Result<TaskPlacement>): void {
-    if (isFleetCapacityDecline(outcome)) return;
     if (outcome.ok && outcome.value.kind === 'backing-off') this.#tasks.delayUntil(taskId, outcome.value.dueAt);
     else if (outcome.ok || noLongerWaits(outcome.error)) this.#forget(taskId);
     else this.#tasks.failed(taskId);
@@ -192,14 +191,14 @@ interface UnplacedRetry {
 // The retry's due time in epoch milliseconds while it still backs off.
 type RetryBackoff = (taskId: TaskId, retry: UnplacedRetry) => number | undefined;
 
-// Capacity reservation section 13: a placement that moves the cursor stores
-// it in the same transaction, so that a crash after the commit keeps it.
+// Capacity reservation section 13: a placement moves the cursor to its
+// project in its own transaction, so a crash after the commit keeps it.
 async function placeMovingCursor(
-  tx: ControlPlaneTransaction, taskId: TaskId, retryBackoff: RetryBackoff, moveTo: ProjectId | undefined,
+  tx: ControlPlaneTransaction, taskId: TaskId, retryBackoff: RetryBackoff, projectId: ProjectId,
 ): Promise<Result<TaskPlacement>> {
   const placement = await placeTask(tx, taskId, retryBackoff);
-  if (moveTo === undefined || !placement.ok || placement.value.kind !== 'placed') return placement;
-  const moved = await tx.rotation.advance(moveTo);
+  if (!placement.ok || placement.value.kind !== 'placed') return placement;
+  const moved = await tx.rotation.advance(projectId);
   return moved.ok ? ok(PLACED_WITH_CURSOR) : moved;
 }
 
@@ -308,7 +307,7 @@ function noLongerWaits(error: Failure): boolean {
   return error.details.reason === NOT_WAITING;
 }
 
-// A pass stops when the store fails; a task that is not placed does not.
+// A store failure, which stops the pass and backs off the next passes.
 function isOutage(code: string): boolean {
   return code === 'unavailable' || code === 'internal';
 }
