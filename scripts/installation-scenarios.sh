@@ -633,7 +633,7 @@ volume_of() {
   if command -v diskutil >/dev/null; then
     kind="$(diskutil info "$mount_point" | sed -n 's/^ *File System Personality: *//p')"
   else
-    kind="$(stat -f -c %T "$mount_point")"
+    kind="$(sh -c "$FILE_SYSTEM_PROBE" sh "$mount_point")"
   fi
   echo "$kind at '$mount_point' with $(df -Pk "$1" | tail -n 1 | awk '{ print int($4 / 1048576) }') GiB free"
 }
