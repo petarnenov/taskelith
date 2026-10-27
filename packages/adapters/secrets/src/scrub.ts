@@ -6,8 +6,9 @@ export { REDACTED };
 // A URL's user information, even empty, then the shapes of trust model 5.
 const SECRET_TEXT_RULES = [redactUrlUserinfoEvenEmpty, ...SECRET_SHAPE_RULES];
 
-// Environment variables whose names mark them as secrets.
-const SECRET_VARIABLE = /(?:TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDS|SEED|PRIVATE_KEY|API_KEY)/i;
+// Environment variables whose names mark them as secrets, TLS key files
+// included (installation contract section 8).
+const SECRET_VARIABLE = /(?:TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDS|SEED|PRIVATE_KEY|API_KEY|TLS_KEY|SSL_KEY)/i;
 
 // Redacts the credentials revealed to a run, which may have no known shape
 // (account pool contract section 7.4), then the installation's shapes.

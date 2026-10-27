@@ -82,8 +82,33 @@ export function redactCredsBlocks(text: string): string {
   return `${text.slice(0, cut).replace(CREDS_BLOCK, REDACTED)}${text.slice(cut)}`;
 }
 
+// A PEM private key of any type, such as `PRIVATE KEY`, `EC PRIVATE KEY`,
+// or `ENCRYPTED PRIVATE KEY`; certificates and public keys stay.
+const PEM_KEY_BEGIN = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/g;
+const PEM_KEY_END = /-----END [A-Z0-9 ]*PRIVATE KEY-----/g;
+
+// Each begin marker hides the text up to the next end marker, and without
+// one to the end of the text, since a cut key is still secret. One scan.
+export function redactPemPrivateKeys(text: string): string {
+  let redacted = '';
+  let from = 0;
+  PEM_KEY_BEGIN.lastIndex = 0;
+  for (let begin = PEM_KEY_BEGIN.exec(text); begin !== null; begin = PEM_KEY_BEGIN.exec(text)) {
+    PEM_KEY_END.lastIndex = PEM_KEY_BEGIN.lastIndex;
+    const end = PEM_KEY_END.exec(text);
+    redacted += `${text.slice(from, begin.index)}${REDACTED}`;
+    from = end === null ? text.length : PEM_KEY_END.lastIndex;
+    if (end === null) break;
+    PEM_KEY_BEGIN.lastIndex = from;
+  }
+  return `${redacted}${text.slice(from)}`;
+}
+
 // Secrets marked by their syntax: URL user information, a bearer token, and
 // a `key=value` pair.
 export const MARKED_SECRET_RULES: readonly TextRule[] = [redactUrlUserinfo, redactBearerTokens, redactKeyValuePairs];
-// Bearer secrets, NKey seeds, `.creds` blocks, and JWTs (trust model 5).
-export const SECRET_SHAPE_RULES: readonly TextRule[] = [redactIssuedSecrets, redactCredsBlocks, redactNkeySeeds, redactJwts];
+// Bearer secrets, NKey seeds, `.creds` blocks, JWTs (trust model 5), and PEM
+// private keys, first, so no other rule cuts a key's markers apart.
+export const SECRET_SHAPE_RULES: readonly TextRule[] = [
+  redactPemPrivateKeys, redactIssuedSecrets, redactCredsBlocks, redactNkeySeeds, redactJwts,
+];

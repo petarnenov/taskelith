@@ -26,6 +26,7 @@ export {
   redactKeyColonValues,
   redactKeyValuePairs,
   redactNkeySeeds,
+  redactPemPrivateKeys,
   redactSchemelessUserinfo,
   redactUrlUserinfo,
   redactUrlUserinfoEvenEmpty,
