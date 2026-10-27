@@ -14,6 +14,7 @@ cancellation_pattern='cancel|descendant'
 crash_windows='apps/control-plane/test/crash-windows.integration.test.ts'
 duplicate_pattern='redelivered'
 failed_proofs=''
+not_applicable_proofs=''
 node_test='node --experimental-strip-types --test'
 
 tool() {
@@ -81,6 +82,29 @@ macos_entry() {
   }
 }
 
+# Reports a proof this host cannot run: ROW SCENARIO REASON; it never fails.
+not_applicable() {
+  echo "native-acceptance.sh: $entry $1: $2 is not applicable on $(uname -s): $3" >&2
+  not_applicable_proofs="$not_applicable_proofs $entry/$2"
+}
+
+# The composed crash windows need the host network of a Linux Docker host.
+linux_crash_window_proofs() {
+  local target="$make_command --no-print-directory verify-linux-crash-windows"
+  local reason='make verify-linux-crash-windows needs a Linux Docker host'
+  if [ "$(uname -s)" != Linux ]; then
+    not_applicable process-ownership acceptance-crash-windows "$reason"
+    not_applicable connectivity acceptance-duplicate-delivery "$reason"
+    return
+  fi
+  # shellcheck disable=SC2086
+  prove process-ownership acceptance-crash-windows harness-composition \
+    $target SKIP_PATTERN="$duplicate_pattern"
+  # shellcheck disable=SC2086
+  prove connectivity acceptance-duplicate-delivery harness-composition \
+    $target PATTERN="$duplicate_pattern"
+}
+
 linux_entry() {
   local suites="$make_command --no-print-directory linux-test-suites"
   # shellcheck disable=SC2086
@@ -100,6 +124,7 @@ linux_entry() {
       $suites SUITES="$cancellation_suites" PATTERN="$cancellation_pattern"
     prove connectivity acceptance-connectivity-suites linux-test-container $suites SUITES="$connectivity_suites"
   }
+  linux_crash_window_proofs
 }
 
 # Removes FILE on any exit, after the EXIT trap that was already set.
@@ -149,11 +174,15 @@ main() {
     "${kind}_entry"
   done
   rm -f "$platform_file"
+  local unrun=''
+  if [ -n "$not_applicable_proofs" ]; then
+    unrun="; not applicable on $(uname -s):$not_applicable_proofs"
+  fi
   if [ -n "$failed_proofs" ]; then
-    echo "native-acceptance.sh: failed proofs:$failed_proofs; see $results" >&2
+    echo "native-acceptance.sh: failed proofs:$failed_proofs$unrun; see $results" >&2
     exit 1
   fi
-  echo "native-acceptance.sh: every proof passed; see $results" >&2
+  echo "native-acceptance.sh: every proof passed$unrun; see $results" >&2
 }
 
 # Tests source this file for its functions; only a run calls main.

@@ -54,6 +54,7 @@
     "verify:dependencies": "node --experimental-strip-types scripts/inventory-dependencies.ts --check",
     "verify:archive": "node --experimental-strip-types scripts/check-archive-dry-run.ts",
     "verify:comments": "node --experimental-strip-types scripts/check-comment-length.ts",
+    "verify:links": "node --experimental-strip-types scripts/check-record-links.ts",
     "findings": "node --experimental-strip-types scripts/findings.ts",
     "verify:findings": "node --experimental-strip-types scripts/findings.ts validate"
   },
@@ -72,6 +73,7 @@
     "ajv": "8.20.0",
     "conventional-changelog-conventionalcommits": "9.3.1",
     "json-schema-to-typescript": "16.0.0",
+    "marked": "15.0.12",
     "openapi-typescript": "7.13.0",
     "semantic-release": "25.0.9",
     "typescript": "5.9.3"
