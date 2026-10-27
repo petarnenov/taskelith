@@ -1,0 +1,1 @@
+{"change": "stabilize-g2-cancellation-races-exit-signal", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a17e79-ef7e-78a3-acc1-5f17b16919fa", "counts": {"critical": 0, "high": 0, "medium": 2, "low": 2}}

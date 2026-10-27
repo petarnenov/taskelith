@@ -31,6 +31,7 @@ Linux 6.8.0-147-generic x86_64 (Ubuntu 24.04.5 LTS), 8 CPUs, 23 GiB memory, cgro
 | Evidence run on `cc0a82ee`, 2026-10-27, Node.js v24.22.1 from `.nvmrc` first on the path: `TASKELITH_SCENARIO_RESULTS=openspec/changes/stabilize-g2-cancellation-races-exit-signal/results.jsonl bash scripts/services.sh run taskelith-zaki-evidence node --experimental-strip-types --test test/g2-cancellation-races.test.ts` | Exit 0: 9 tests, 8 passed, 0 failed, 1 skipped (g, N/A on Linux, which records no row). `results.jsonl` holds 8 rows, all `passed`, 8 distinct scenarios, target `harness-composition`, host `Linux 6.8.0-147-generic`, arch `x64`, commit `cc0a82ee`, seed `3876534849`. Scenario c ended by `SIGTERM` after W4 before the start, e by `SIGTERM` restarted before the ack wait, and f had two rejected rounds and one granted round that ended by `SIGTERM`. |
 | `npm run openspec -- validate stabilize-g2-cancellation-races-exit-signal --strict` | `Change 'stabilize-g2-cancellation-races-exit-signal' is valid` |
 | `make verify` on `67e20abe` with this change's proposal, design, tasks, and empty findings files (before this record) | Exit 0 in 3 min 52 s: 2193 tests, 2146 passed, 0 failed, 47 skipped; coverage 99.24 % lines, 92.20 % branches, 98.92 % functions; comment rule, findings files (30 findings and 10 pass summary files), contract compatibility (0 breaking changes against `e8ce8a11`), dependency inventory, `openspec validate --all --strict` (70 of 70), `verify:links`, archive dry run, and package verification passed |
+| `make findings ARGS="validate"` and `make verify` on `b6531977` with the review pass 1 records (before this row), Node.js v24.22.1 | Findings: 30 findings files and 10 pass summary files valid. `make verify`: exit 0 in 3 min 30 s: 2193 tests, 2146 passed, 0 failed, 47 skipped; coverage 99.24 % lines, 92.21 % branches, 98.92 % functions; comment rule, contract compatibility (0 breaking changes against `e8ce8a11`), dependency inventory, `openspec validate --all --strict` (70 of 70), `verify:links`, archive dry run, and package verification passed |
 
 Seeds of the loop before: 2541591296, 2448509289, 722750197, 1136287814, 1562078247, 1254127224, 1566733704, 3254818334, 4185324733, 2304648741, 2016352741, 3646044752, 3561704494, 3071226712, 2437001467, 984866087, 2401953362, 905166302, 2499808758, 3103586253, 1873819861, 2270512534, 912094540, 222247033, 1870462344, 4065461604, 3074831983, 2806314963, 1727853383, 1571408465, 4205462523, 496614073, 4100687381, 2339721662, 492923541, 212746893, 1349471903, 2781307133, 2635986144, 228983992, 42524342, 1274550159, 1231235996, 2475543769, 3891903067, 4201063681, 2606752013, 3709338447, 4159681762, 1933382136.
 
@@ -38,7 +39,16 @@ Seeds of the loop after: 643241266, 3243994778, 2991625628, 2515174527, 22816847
 
 ## Independent review
 
-Not yet performed. Reviewer A: Codex CLI `gpt-6-astra`, passes 1 and 3. Reviewer B: Claude Code `claude-fable-5-1`, pass 2. The coordinator replaced the planned OpenCode CLI `kimi-k2.7-code` reviewer, paused by the OpenCode Go weekly quota (HTTP 429) until about 2026-11-02 02:00. The [review process](/docs/governance.md#independent-review-process) applies.
+### Review pass 1
+
+Reviewer A: Codex CLI, invoked by the coordinator as `codex exec -m gpt-6-astra -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>` on `82e79272` (`e8ce8a11..82e79272`). The output header confirmed model `gpt-6-astra`, reasoning effort `medium`, sandbox `read-only`, session `01a17e79-ef7e-78a3-acc1-5f17b16919fa`. The SHA-256 snapshot of the worktree before and after the review was equal: `f873dd7e328a4c93a0f1a1526b7f7275eee51f24da07a2610767a2accb94d54a`. The reviewer ran `npm run verify:links` and `git diff --check` (both passed); its sandbox blocked `npm run verify:comments` (`spawnSync git EPERM`), and it ran neither `make verify` nor the suite. Findings: Critical 0, High 0, Medium 2, Low 2, as in `findings.jsonl` and `passes.jsonl`:
+
+- Medium, process: `skip_specs` for a change that is not documentation-only. Declined: [the OpenSpec mapping](/docs/sdlc-framework-mapping.md) says a change without capabilities sets `skip_specs: true`, as four earlier test-only changes did, and both requirements are unchanged; `design.md` now cites that rule and those changes (`cc0a82ee`).
+- Medium, evidence-mismatch: no recorded scenario results. Fixed: the evidence run of `cc0a82ee` above wrote `results.jsonl`, and the load and perturbation rows name their uncommitted instrumentation (`cc0a82ee`, `b6531977`).
+- Low, docs: the lost-cancel risk said that the old test passed with code 0. Fixed in `cc0a82ee`.
+- Low, evidence-mismatch: the claim of no added wait overlooked the held process's 50 ms release poll. Fixed in `cc0a82ee`.
+
+Pass 2 by reviewer B, Claude Code `claude-fable-5-1`, is still to come, and pass 3 by reviewer A if needed. The coordinator replaced the planned OpenCode CLI `kimi-k2.7-code` reviewer, paused by the OpenCode Go weekly quota (HTTP 429) until about 2026-11-02 02:00. The [review process](/docs/governance.md#independent-review-process) applies.
 
 ## Limitations
 
@@ -49,6 +59,6 @@ Not yet performed. Reviewer A: Codex CLI `gpt-6-astra`, passes 1 and 3. Reviewer
 
 ## Remaining gates
 
-- Independent review: reviewer A pass 1, reviewer B pass 2, and reviewer A pass 3 if needed.
+- Independent review: reviewer B pass 2, and reviewer A pass 3 if needed.
 - Archive after review and verification.
 - Integration into dev by the coordinator (single pull request)
