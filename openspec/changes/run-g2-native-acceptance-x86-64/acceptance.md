@@ -1,15 +1,37 @@
 # G2 native acceptance: x86_64 entries (item 25c)
 
-Pending the evidence run of `make native-acceptance` into `results.jsonl` of this directory. The rows are the G2 rows of the [native acceptance gates](../../../docs/worker-platforms.md#native-acceptance-gates), as in 25b's [table](../archive/2026-10-26-run-g2-native-acceptance-arm64/acceptance.md); resource budgets and real integrations belong to later gates and are not listed.
+Recorded 2026-10-27 by `make native-acceptance` on commit `b82ad2f` (the dev merge `46a6a59` and the findings record), seed `4080300788`, into [results.jsonl](results.jsonl) (49 lines; "line N" below): lines 1 to 48 are the acceptance run, line 49 the namespace confinement extra (design decision 7). Each acceptance line carries an `acceptance` field with its matrix entry, row, command, and platform. The rows are the G2 rows of the [native acceptance gates](../../../docs/worker-platforms.md#native-acceptance-gates), as in 25b's [table](../archive/2026-10-26-run-g2-native-acceptance-arm64/acceptance.md); resource budgets and real integrations belong to later gates and are not listed.
 
 ## Platforms
 
-Pending; the preflight observed the facts in [verification.md](verification.md) ("Revision and environment").
+| Entry | OS | Architecture | Kernel | File system | Node.js | Docker |
+| --- | --- | --- | --- | --- | --- | --- |
+| `macos-26-x86_64` | macOS 26.6.2 (25G83), natively | x86_64 (records: `x64`) | Darwin 25.6.0 | APFS, case-insensitive, at `/System/Volumes/Data` (boot data volume), which holds the temporary directory of the suites and the native worker's data root (design decision 2; 510 GiB free at the run) | v24.22.1 | Docker Desktop 4.75.0 (227598), Engine 29.5.2, Compose 5.1.3 (installation and services only) |
+| `linux-ubuntu-24.04-x86_64` | Ubuntu 24.04.5 LTS (pinned base) in the worker image and its base, under Docker Desktop | x86_64 | Linux 6.12.76-linuxkit | ext2/ext3 as reported by `stat -f` on Docker volumes (worker data root, test `/tmp`); storage driver overlay2 | v24.22.1 (linux-x64 tarball) | Docker Desktop 4.75.0 (227598), Engine 29.5.2, Compose 5.1.3 |
 
 ## Table
 
-Pending.
+Outcome is that of the proofs that ran; a row is **met (G2 part)** only when every listed proof passed and nothing of its G2 part is open.
+
+| Row | Entry | Proof (target) | Outcome | Records | Open or failed reason |
+| --- | --- | --- | --- | --- | --- |
+| Service lifecycle | `macos-26-x86_64` | `make scenario-native-worker-lifecycle` (`compose-installation`, native worker against the installation) | Passed: install (enroll), start, `SIGTERM` stop with status 0, restart without a token, identity and enrollment kept, two tasks exited 0; data root path with spaces on the boot volume, `worker/` 0700 | lines 1, 2 | Partly open: no dedicated service account (the worker ran as the invoking user) and no launchd service, reboot, logout and login, or drain before upgrade; launchd and service packaging are G6 (D5). |
+| Service lifecycle | `linux-ubuntu-24.04-x86_64` | `make scenario-worker-lifecycle` (`compose-installation`) | Passed: fresh install, enroll, task as the execution account (uid 10003) in `executions/`, installation stop and start, same identity file and no new enrollment, new process reconciled and reached the broker, containment kept (`KILL`, `SETGID`, `SETUID` only), second task as uid 10003 | lines 38, 39 | Partly open: reboot, a host supervisor (systemd or equivalent), and drain before upgrade are G6. |
+| Process ownership | `macos-26-x86_64` | supervisor suites on the host (`host-test-suite`); 24b crash windows W1 to W6 (W5 as W5s and W5e) before and after, CP1 to CP12, and two sequence cases (`harness-composition`) | Passed: supervisor suites 113 of 113; crash windows 28 of 28, including those that failed on D1 in 25b (W3, W4, W6 both sides; CP1, CP2, CP3, CP5, CP6) | lines 3 to 32 | Met (G2 part). |
+| Process ownership | `linux-ubuntu-24.04-x86_64` | `make scenario-worker-kill` (`compose-installation`); `make verify-linux-cgroup` (`linux-test-container`) | Passed: `SIGKILL` after a planned pause of 788 ms (1005 ms measured from the submission's answer), the restarted worker reconciled and the control plane's result agreed with the journal; privileged cgroup tests 14 of 14 | lines 40 to 42 | Open: the composed crash windows of 24b on Linux, which need a privileged composition with a delegated cgroup and network to the services (design "Rows that stay open"). |
+| Journal and storage | `macos-26-x86_64` | journal and data-root suites on the host (`host-test-suite`) | Passed: 97 of 97, including interrupted writes, flush failure, full disk, permissions, lock ownership, corrupt and missing journals, a data root path with spaces, and a case-variant path of a held root locked on case-insensitive APFS | line 35 | Met (G2 part) at suite level; the composed worker's disk loss ran on Linux only. |
+| Journal and storage | `linux-ubuntu-24.04-x86_64` | the same suites in the test image (`linux-test-container`); `make scenario-worker-disk-loss` (`compose-installation`) | Passed: 95 of 97, 2 skipped (the case-insensitive test on a case-sensitive volume and a macOS-only volume test); disk loss: missing journal refused, data root lost, worker revoked, new worker enrolled, old execution `started` with uncertain evidence and its reservation held, a new task exited 0 | lines 43 to 45 | Met (G2 part). |
+| Cancellation | `macos-26-x86_64` | supervisor and command intake suites, tests named `cancel` or `descendant` (`host-test-suite`) | Passed: 19 of 19 | line 36 | Open: start/cancel/result races, disconnected workers, and stale generations at system level are 24c (`run-g2-partition-and-races`), not merged. |
+| Cancellation | `linux-ubuntu-24.04-x86_64` | `make verify-linux-cgroup PATTERN=...`; the same suites in the test image (`linux-test-container`) | Passed: 2 of 2 privileged; suites 17 of 19, 2 macOS-only skipped | lines 46, 47 | Open: as on macOS, 24c. |
+| Connectivity (G2) | `macos-26-x86_64` | 24b duplicate delivery (`harness-composition`); offline launch and worker contact suites (`host-test-suite`) | Passed: duplicate delivery (1 copy during, 3 after; one intent, one execution, one result); suites 25 of 25 | lines 33, 34, 37 | Open: partition and reconnect and stale writes (24c); sleep and wake and network changes (no G2 procedure); credential rotation delivery (G3 item 26); epoch quarantine (G6). |
+| Connectivity (G2) | `linux-ubuntu-24.04-x86_64` | offline launch and worker contact suites in the test image (`linux-test-container`) | Passed: 25 of 25 | line 48 | Open: duplicate delivery on the composed Linux worker (same composition as the crash windows), partition and reconnect and stale writes (24c), rotation (G3), epoch quarantine (G6). Revocation was exercised by the disk loss (line 44). |
+
+## Extra: namespace confinement
+
+| Entry | Proof (target) | Outcome | Record |
+| --- | --- | --- | --- |
+| `linux-ubuntu-24.04-x86_64` | `make scenario-worker-namespace-confinement` (`compose-installation`, item 25a), run after the acceptance run into the same results file, with its own seed `4100903782` and no `acceptance` field | Passed: the applied seccomp profile equals `infra/installation/seccomp/worker.json`; as the execution account (uid 10003, no effective capabilities, `NoNewPrivs` 1, seccomp filter mode), `unshare -U`, `unshare -Urm` with a `tmpfs` mount, `clone` with `CLONE_NEWUSER`, and `setns` were refused with `EPERM`, and `clone3` answered `ENOSYS`; the task exited 0 | line 49 |
 
 ## Summary
 
-Pending.
+Every proof of both x86_64 entries passed: 48 records, all `passed`, and the confinement extra passed. With D1 fixed on `dev`, the macOS process ownership row is met for its G2 part, unlike in 25b's arm64 run. No row is fully accepted otherwise: each keeps an open part that later G2 work (24c, a Linux privileged composition) or later gates (G3, G6) own. No candidate product defect was observed.
