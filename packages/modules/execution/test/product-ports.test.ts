@@ -3,17 +3,25 @@ import test from 'node:test';
 import {
   ANSWERING_ROLES,
   BOARD_COLUMNS,
+  CARD_WAIT_KINDS,
   ESCALATION_REASONS,
   EVIDENCE_FRESHNESS,
+  FLEET_OBSTACLE_REASONS,
   MAX_INPUT_ANSWER_BYTES,
   MERGE_GATE_STATES,
   NEEDS_YOU_KINDS,
+  OBSTACLE_DISPOSITIONS,
+  OBSTACLE_SOURCES,
+  PLACEMENT_REJECTING_REASONS,
+  PLACEMENT_WAITING_REASONS,
+  RECONCILIATION_REASONS,
   SESSION_ACTIVITIES,
   SPEC_APPROVERS,
   STANDING_RULE_OPERATIONS,
   STANDING_RULE_ORIGINS,
-  WAITING_REASONS,
+  TASK_END_KINDS,
   WORK_TYPES,
+  WORKER_REFUSAL_REASONS,
 } from '@taskelith/execution';
 
 // The values the product ports contract fixes; a change here is a contract
@@ -26,7 +34,9 @@ const CONTRACT_VALUES = [
     MERGE_GATE_STATES,
     [
       'not-ready',
+      'ready',
       'awaiting-manual-merge',
+      'withdrawn',
       'queued',
       'merging',
       'resolving-conflict',
@@ -48,11 +58,63 @@ const CONTRACT_VALUES = [
       'process-uncertain',
     ],
   ],
-  ['WAITING_REASONS', WAITING_REASONS, ['person', 'stage-admission', 'reviewer', 'capacity', 'merge-queue']],
+  ['CARD_WAIT_KINDS', CARD_WAIT_KINDS, ['person', 'stage-admission', 'reviewer', 'capacity', 'merge-queue']],
+  [
+    'PLACEMENT_WAITING_REASONS',
+    PLACEMENT_WAITING_REASONS,
+    [
+      'quarantined',
+      'worker-not-eligible',
+      'worker-capacity-exhausted',
+      'project-quota-exhausted',
+      'run-quota-exhausted',
+      'provider-concurrency-exhausted',
+      'control-not-enforceable',
+      'delegation-awaiting-capacity',
+      'no-candidate',
+    ],
+  ],
+  [
+    'PLACEMENT_REJECTING_REASONS',
+    PLACEMENT_REJECTING_REASONS,
+    [
+      'resource-ceiling-exceeded',
+      'spend-limit-not-enforceable',
+      'delegation-depth-exceeded',
+      'delegation-chain-exceeds-quota',
+      'delegation-budget-exhausted',
+      'retry-budget-exhausted',
+    ],
+  ],
+  [
+    'FLEET_OBSTACLE_REASONS',
+    FLEET_OBSTACLE_REASONS,
+    ['quarantined', 'worker-not-eligible', 'worker-capacity-exhausted', 'no-candidate'],
+  ],
+  [
+    'WORKER_REFUSAL_REASONS',
+    WORKER_REFUSAL_REASONS,
+    [
+      'worker-slots-exhausted',
+      'worker-capacity-exhausted',
+      'resource-ceiling-exceeded',
+      'control-not-enforceable',
+      'worker-admission-pressure',
+      'protocol-not-supported',
+    ],
+  ],
+  ['OBSTACLE_SOURCES', OBSTACLE_SOURCES, ['scheduler', 'worker', 'fleet', 'automatic-retry']],
+  ['OBSTACLE_DISPOSITIONS', OBSTACLE_DISPOSITIONS, ['waiting', 'rejected']],
+  ['TASK_END_KINDS', TASK_END_KINDS, ['cancelled', 'rejected', 'retries-exhausted', 'uncertain-exit']],
   ['EVIDENCE_FRESHNESS', EVIDENCE_FRESHNESS, ['current', 'stale', 'missing']],
-  ['NEEDS_YOU_KINDS', NEEDS_YOU_KINDS, ['permission-request', 'input-request', 'spec-approval', 'escalation']],
+  [
+    'NEEDS_YOU_KINDS',
+    NEEDS_YOU_KINDS,
+    ['permission-request', 'input-request', 'spec-approval', 'escalation', 'reconciliation'],
+  ],
   ['ESCALATION_REASONS', ESCALATION_REASONS, ['conflict-budget-spent', 'spec-reconciliation-failed', 'no-reviewer']],
-  ['ANSWERING_ROLES', ANSWERING_ROLES, ['project-operator', 'project-maintainer']],
+  ['RECONCILIATION_REASONS', RECONCILIATION_REASONS, ['unknown-execution', 'unrecorded-process']],
+  ['ANSWERING_ROLES', ANSWERING_ROLES, ['project-operator', 'project-maintainer', 'installation-owner']],
   ['STANDING_RULE_OPERATIONS', STANDING_RULE_OPERATIONS, ['push-to-task-branch']],
   ['STANDING_RULE_ORIGINS', STANDING_RULE_ORIGINS, ['maintainer', 'auto-merge']],
   ['SPEC_APPROVERS', SPEC_APPROVERS, ['delegated-reviewer', 'project-maintainer']],
@@ -67,4 +129,13 @@ for (const [name, actual, expected] of CONTRACT_VALUES) {
 
 test('an input answer is bounded at 64 KiB', () => {
   assert.equal(MAX_INPUT_ANSWER_BYTES, 65_536);
+});
+
+test('the fleet obstacle reasons are placement waiting reasons', () => {
+  for (const reason of FLEET_OBSTACLE_REASONS) assert.ok(PLACEMENT_WAITING_REASONS.includes(reason), reason);
+});
+
+test('a placement reason is either waiting or rejecting, never both', () => {
+  const rejecting: readonly string[] = PLACEMENT_REJECTING_REASONS;
+  for (const reason of PLACEMENT_WAITING_REASONS) assert.ok(!rejecting.includes(reason), reason);
 });
