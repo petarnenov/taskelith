@@ -1,9 +1,7 @@
-// A node killed while it writes its coverage file at exit leaves it empty,
-// and the runner then fails the coverage report of the whole run.
 export const COVERAGE_VARIABLE = 'NODE_V8_COVERAGE';
 
-// spawn copies the variable from process.env unless env has the key, so it
-// stays undefined, which spawn leaves out of the child's environment.
+// A Node process killed while it writes its coverage file leaves it empty,
+// which fails the run's report; spawn skips this key only when undefined.
 export function uncoveredEnvironment(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   return { ...base, [COVERAGE_VARIABLE]: undefined };
 }
