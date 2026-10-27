@@ -1,6 +1,6 @@
 # Verification: run-g2-native-acceptance-x86-64 (25c)
 
-Date: 2026-10-26, updated 2026-10-27. This record holds the setup and preflight, the evidence run and the confinement extra on the merged head, the checks, and review passes 1 and 2.
+Date: 2026-10-26, updated 2026-10-27. This record holds the setup and preflight, the evidence run and the confinement extra on the merged head, the checks, review passes 1 and 2, and the archive checks.
 
 ## Scope and source
 
@@ -85,6 +85,22 @@ Self-check of the evidence run (`46a6a59` to the final commit):
 | `make verify` on `000c6ca` with this record's and `tasks.md`'s uncommitted updates, `DOCKER_CONFIG` as above | Exit 0 in 2 min 53 s (173 s), 07:54:23 to 07:57:16 +0200, first run: `npm run verify:findings` found every findings file valid (3 files); 2018 tests, 2016 passed, 0 failed, 2 skipped; coverage of all files 99.29 % lines, 92.14 % branches, 99.05 % functions; package allowlist and installed CLI verification passed |
 | `npm run openspec -- validate run-g2-native-acceptance-x86-64 --strict`, `npm run findings -- validate`, `npm run verify:comments` on the same tree | Valid (`skip_specs`); every findings file valid (3 files); every comment within the rule |
 
+## Archive checks
+
+State checked: the tree of the archive commit `docs: archive the G2 native acceptance x86_64 change`, the working tree after `npm run openspec -- archive run-g2-native-acceptance-x86-64 --yes` on `4187c0e`, with the links of `docs/worker-platforms.md`, `docs/local-installation.md`, and the Ubuntu row of `docs/dependencies.md` pointed at `openspec/changes/archive/2026-10-27-run-g2-native-acceptance-x86-64/acceptance.md`.
+
+| Check | Result |
+| --- | --- |
+| `npm run openspec -- archive run-g2-native-acceptance-x86-64 --yes` | Task status complete; archived as `2026-10-27-run-g2-native-acceptance-x86-64` with `findings.jsonl` (10 lines) |
+| `npm run openspec -- validate --all --strict` | Exit 0: 69 passed, 0 failed |
+| This change's line in `npm run openspec -- validate --archived --no-interactive` | `✓ change/2026-10-27-run-g2-native-acceptance-x86-64`; the command fails as a whole (164 passed, 13 failed) on older archived changes only |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`, merge base `fe64386` | Empty, as `skip_specs` expects |
+| `npm run findings -- validate` | Every findings file is valid (3 files), including this change's archived `findings.jsonl` |
+| `npm run verify:comments` | Every comment within the rule |
+| `node --experimental-strip-types --test test/native-acceptance-runner.test.ts test/native-acceptance.test.ts` | 18 of 18 passed |
+| `git grep --untracked "changes/run-g2-native-acceptance-x86-64"` outside the archived change | No match; inside it, only the change name and finding file paths in `findings.jsonl` and the `RESULTS=` path of the evidence command in `proposal.md` and this record, which name the path the run used |
+| `make verify`, with `DOCKER_CONFIG` at an empty configuration as before | Exit 0 in 2 min 49 s on 2026-10-27: 2018 tests, 2016 passed, 0 failed, 2 skipped; coverage of all files 99.29 % lines, 92.14 % branches, 99.05 % functions; every findings file valid; package allowlist and installed CLI verification passed |
+
 ## Independent review
 
 ### Pass 1
@@ -149,9 +165,8 @@ None: every proof passed, so task 2.4 had nothing to report.
 - The run used an empty Docker configuration because the user's credential helper hung (Environment re-check); the engine, images, and plugins were Docker Desktop's own.
 - One run per entry: timing-sensitive proofs (the worker kill after a planned pause of 788 ms, the duplicate delivery's 1 copy during and 3 after) ran once with seed `4080300788`; no other session's container was running before or after the run, but the host was not otherwise isolated.
 - The native worker ran as the invoking user on the boot volume's APFS; no other macOS file system or a case-sensitive APFS volume was exercised.
-- The three documents link to this change's active path; the archive step points them at the archived change.
+- The relative links inside this change's records to `docs/` and to the 25a and 25b archives were written for the active path and do not resolve under `archive/`, as in 25b; the reviewer of pass 2 noted it, the coordinator was told, and they are not changed here.
 
 ## Remaining gates
 
-- At archive: the links of `docs/worker-platforms.md`, `docs/local-installation.md`, and `docs/dependencies.md` to this change's `acceptance.md` move to the archived path.
 - Integration into dev by the coordinator (single pull request).
