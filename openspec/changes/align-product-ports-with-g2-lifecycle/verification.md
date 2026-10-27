@@ -115,13 +115,26 @@ After review pass 2, on the working tree of `9510346f`: `npm run build` and `npm
 - **Pass 2 fixes:** N1 to N13 confirmed; none partial, none not fixed. The reviewer judged the pre-merge stage choice of N4 sound, since G2 `startStage` (`packages/modules/sdlc/src/domain/stage-progress.ts:55`) requires a stage's dependencies to have passed, so requiring the Close stage's dependents before the merge would be circular.
 - **Counts:** critical 0, high 0, medium 0, low 0 (`passes.jsonl`). Verdict: pass. The review is complete after three passes.
 
+## Merge of dev and reconciliation
+
+- **Merged revision:** `4539da0b` merges `origin/dev` at `d21838c3` into the branch at `3421829e` (merge base `b87abe75`). `dev` had gained `bind-product-writers-to-launch-invalidation` (#369), `align-account-pool-signals` (#366), and `record-hosted-runner-linux-acceptance` (#367); only #369 touches this change's files.
+- **Conflicts:** two, both in `docs/contracts/product-ports.md`, resolved by keeping both sides:
+  - Section 5: this branch's "Scope", "Auto-merge rule", "Revision scope", and "Use" bullets, followed by #369's "Use transaction" and "Invalidation" bullets unchanged in substance. The "Invalidation" bullet now adds that none of recording, revoking, or using a rule, nor changing the auto-merge setting, changes a policy revision, so none is an invalidating writer and only a writer of a new current policy revision is; "Revision scope" points to it instead of repeating it (design D8, unchanged).
+  - Section 6.3: this branch's "Conflicts" bullet, with the card vocabulary, followed by #369's "Invalidation" bullet unchanged.
+  - #369's section 4.1 paragraphs "Spec gates invalidate launches" and "After a revocation" and its section 7 tests merged without conflict, after this branch's reconciliation items; they use "task" for the G2 task, as this contract's vocabulary defines it.
+- **Reconciled requirements** (`git diff b87abe75 origin/dev -- openspec/specs`): of the three requirements the delta modifies, only "Standing approval rules recorded and audited" changed on `dev`, by #369's scenario "Use after a revocation"; the delta's MODIFIED text now carries it, with the requirement text itself unchanged on `dev` (344 characters). "Board columns from the framework mapping" and "Needs you items answered once by their source" are unchanged on `dev`. #369's added requirements ("Product writers invalidate launches", "Revoked attempt ends before re-admission", "Standing rule use checked in one transaction") are not touched by the delta.
+- **Citations:** `design.md` cites no contract line. The `product-ports.md:<line>` citations in the review tables above are the lines of the revisions those passes reviewed and are kept as recorded.
+- **Checks after the merge**, on the working tree of the reconciliation commit (`docs: reconcile the align-product-ports-with-g2-lifecycle change with dev`): `npm run build` and `npm run check:boundaries` exit 0; unit tests of the touched packages (26 files) with coverage, 396 tests, 396 pass, 0 fail, the four port files 100% lines, branches, and functions; `verify:comments`, `verify:links`, and `verify:archive` pass; `verify:findings`: 47 findings files, 27 pass summary files valid; `verify:dependencies`: verified 731 package paths, 41 with license coverage gaps (all reviewed; 4 declaration-only), so the dependency inventory is not stale; `validate align-product-ports-with-g2-lifecycle --strict` valid; `validate --all --strict` 70 passed, 0 failed. `make verify` on the merged tree is pending the coordinator's Docker slot.
+- **Review:** the resolved diff and the reconciliation wait for reviewer A ([agent task protocol](/docs/agent-task-protocol.md), worker step 10).
+
 ## Limitations
 
 - The contract fixes values and rules only; item 15 implements the projections, item 23 the queue entry rule, and item 44 `implement-readmission-and-reconciliation-surface` of the [G3 work plan](/docs/g3-plan.md) the reconciliation surface.
 
 ## Remaining gates
 
-- Merge of `origin/dev` once `bind-product-writers-to-launch-invalidation` lands, and reconciliation of its section 5 "Invalidation" bullet.
+- `make verify` on the merged tree.
+- Review of the resolved merge diff and the reconciliation by reviewer A.
 - The owner's confirmation of the optional ADR 0008 editorial note (run and admissions wording); this change does not edit the ADR.
 - Archive.
 - Integration into dev by the coordinator (single pull request)

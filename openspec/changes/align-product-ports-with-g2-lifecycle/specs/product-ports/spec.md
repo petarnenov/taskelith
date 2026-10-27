@@ -153,6 +153,10 @@ A standing rule SHALL record its author, scope as a normalized operation, policy
 - **WHEN** a native permission request cannot be classified into a normalized operation
 - **THEN** no standing rule answers it, and it waits in the inbox
 
+#### Scenario: Use after a revocation
+- **WHEN** a rule's revocation is serialized before a use of the rule for a request
+- **THEN** the use answers nothing and records no use
+
 #### Scenario: Push in a run at another revision
 - **WHEN** auto-merge is on and a push request comes from an unclosed run whose current policy revision differs from the project's current one
 - **THEN** the auto-merge rule recorded at that run's revision answers it
