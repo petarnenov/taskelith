@@ -3,7 +3,7 @@
 # home is init/, and its launches run in executions/ as taskelith-exec.
 set -euo pipefail
 
-# shellcheck source=cgroup-layout.sh
+# shellcheck source=tools/linux-cgroup/cgroup-layout.sh
 source /usr/local/lib/taskelith/cgroup-layout.sh
 TASKELITH_CONTAINMENT_PARENT="$cgroup/executions"
 TASKELITH_EXECUTION_UID="$(id -u taskelith-exec)"

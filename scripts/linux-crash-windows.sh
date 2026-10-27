@@ -7,6 +7,10 @@ if [ "$#" -lt 1 ]; then
   echo "usage: linux-crash-windows.sh IMAGE [NODE_TEST_ARGS...]" >&2
   exit 2
 fi
+if [ -z "${TASKELITH_SERVICES_SECRETS:-}" ]; then
+  echo "linux-crash-windows.sh: TASKELITH_SERVICES_SECRETS is not set; run it through services.sh run" >&2
+  exit 2
+fi
 image="$1"
 shift
 repository="$(cd "$(dirname "$0")/.." && pwd)"

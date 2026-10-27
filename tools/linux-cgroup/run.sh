@@ -3,7 +3,7 @@
 # of cgroup-layout.sh.
 set -euo pipefail
 
-# shellcheck source=cgroup-layout.sh
+# shellcheck source=tools/linux-cgroup/cgroup-layout.sh
 source /usr/local/lib/taskelith/cgroup-layout.sh
 cd /repo
 exec node --experimental-strip-types --test "$@" packages/adapters/worker-supervisor/test/linux-cgroup.privileged.ts
