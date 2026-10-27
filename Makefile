@@ -25,7 +25,7 @@ SPECKIT_BASE := python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e0717
 SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
-.PHONY: verify verify-stamped verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility findings \
+.PHONY: verify verify-stamped verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility findings integrate \
 	test docker-slot services-up services-down verify-linux-cgroup verify-linux-crash-windows installation-build installation-bootstrap installation-broker-config installation-start \
 	installation-stop installation-enroll installation-enrollment-token verify-installation verify-worker-image-reproducible installation-smoke qualify-harnesses \
 	scenario-fresh-composition scenario-worker-disk-loss scenario-worker-kill \
@@ -251,6 +251,12 @@ speckit-lock:
 	docker run --rm --user "$$(id -u):$$(id -g)" --env HOME=/tmp --volume "$(CURDIR)/tools/speckit:/work" --workdir /work $(SPECKIT_BASE) sh -c \
 		'pip install --quiet --target /tmp/uv uv==$(UV_PIN) && /tmp/uv/bin/uv pip compile --quiet --generate-hashes \
 		--python-version 3.13 --python-platform x86_64-unknown-linux-gnu --no-header --output-file requirements.txt requirements.in'
+
+# Coordinator: integrates the archived change BRANCH into dev with one pull
+# request (scripts/integrate.sh); RESUME=1 continues a stopped integration.
+integrate:
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use \
+		bash scripts/integrate.sh $(if $(RESUME),--resume) "$$BRANCH" "$$TITLE" "$$BODY"
 
 # Checks that this clone can build and verify; changes nothing.
 # Uses the .nvmrc Node.js when nvm has it.
