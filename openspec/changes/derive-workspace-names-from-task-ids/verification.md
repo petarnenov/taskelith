@@ -100,13 +100,3 @@ After review pass 2:
 
 - Archive of the change
 - Integration into dev by the coordinator (single pull request)
-
-## Archive checks
-
-After `npm run openspec -- archive derive-workspace-names-from-task-ids --yes`:
-
-- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
-- `npm run openspec -- validate --archived`: `change/2026-10-27-derive-workspace-names-from-task-ids` valid.
-- `git diff 93b5065b -- openspec/specs` (merge base): `git-workspace-port` only, 37 insertions and 6 deletions, matching the delta (1 added, 4 modified requirements).
-- `make findings ARGS="validate"`: 37 findings files and 17 pass summary files valid.
-- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: passed.
