@@ -26,7 +26,7 @@ Every mutating command and query is authorized against `installationId`, `projec
 
 | Role | Scope | Capabilities |
 | --- | --- | --- |
-| `installation-owner` | Installation-wide | Manage installation settings, operator principals, worker enrollment/revocation/drain, disaster recovery quarantine, and project creation/deletion. |
+| `installation-owner` | Installation-wide | Manage installation settings, operator principals, worker enrollment/revocation/drain, disaster recovery quarantine, and project creation/deletion; answer the installation-scoped Needs you inbox for processes without a task or project (`acknowledge-process`). |
 | `project-maintainer` | Per project | Configure project defaults (including default SDLC framework and policy revisions), approve SDLC gates and framework migrations, manage project integrations, reconcile an attempt whose execution state is uncertain with an audited decision and its evidence (owner decision of 2026-10-25), and perform all `project-operator` actions. |
 | `project-operator` | Per project | Submit tasks, interact with sessions/turns, respond to native runtime permission/input requests for admitted attempts, and trigger cancellations or retries within project budgets. |
 | `project-viewer` | Per project | Read project tasks, workflow stages, artifacts, evidence snapshots, and project-scoped knowledge records. |
