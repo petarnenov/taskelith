@@ -9,7 +9,7 @@ The acceptance context of a proof SHALL name the OS release, architecture, kerne
 
 #### Scenario: An ext4 volume on Linux
 - **WHEN** the Linux entry's Docker volume or the worker data root is on ext4, whose magic number `stat -f` names `ext2/ext3`
-- **THEN** the Linux platform and the platform row of the installation scenarios name the file system `ext4`
+- **THEN** the Linux platform, the platform row of the installation scenarios, and the native worker volume name the file system `ext4`
 
 #### Scenario: No mount type readable
 - **WHEN** `findmnt` is missing or fails in the container

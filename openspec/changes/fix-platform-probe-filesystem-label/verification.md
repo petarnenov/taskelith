@@ -1,14 +1,14 @@
 # Verification
 
-Date: 2026-10-27. The author's verification is recorded below; the independent review is pending.
+Date: 2026-10-27. The author's verification and review pass 1 are recorded below; review pass 2 is pending.
 
 ## Scope and source
 
 Coordinator Niki assigned `fix-platform-probe-filesystem-label` after another worker session saw the native acceptance platform probe name an ext4 file system `ext2/ext3` on its Ubuntu host. The session developed it in a briefed and checked subagent ([subagent execution](../../../docs/agent-task-protocol.md#subagent-execution)), in worktree `taskelith-worktrees/fix-platform-probe-filesystem-label` on branch `fix-platform-probe-filesystem-label`.
 
 - **Base revision:** `fe64386` on `dev`.
-- **Revision verified:** `c87ada8` (the probe, its tests, and the OpenSpec records before this file), on which `make verify` ran.
-- **Scope:** the file system probe of `linuxPlatform` in `scripts/native-acceptance.ts` and of `platform` in `scripts/installation-scenarios.sh`, their tests, and the `native-worker-acceptance` delta.
+- **Revision verified:** `c87ada8` (the probe, its tests, and the OpenSpec records before this file), on which `make verify` ran; after review pass 1, `082ff61` with the M1 fix, on which `make verify` ran again with these records.
+- **Scope:** the file system probe of `linuxPlatform` in `scripts/native-acceptance.ts` and of `platform` and `volume_of` in `scripts/installation-scenarios.sh`, their tests, and the `native-worker-acceptance` delta.
 - **Out of scope:** the macOS entry (`diskutil`), the other platform facts, and any record already written with `ext2/ext3`.
 
 ## Environment
@@ -18,7 +18,8 @@ This Linux host: Ubuntu 24.04.5 LTS, kernel Linux 6.8.0-147-generic, Docker engi
 ## Author self-check
 
 - One probe, `findmnt -no FSTYPE --target "$1" 2>/dev/null || stat -f -c %T "$1"`, is `FILE_SYSTEM_PROBE` in both files; a test checks the shell variable equals the TypeScript constant.
-- The macOS path is untouched; its test still passes unchanged.
+- The macOS path is untouched; its test still passes unchanged. `volume_of` keeps its macOS `diskutil` branch.
+- After pass 1, `grep -rn 'stat -f' scripts/ infra/ Makefile` finds no other file system label: the remaining `stat -f %Lp` in `mode_of` is the BSD form that prints a file mode.
 - Every new comment is at most two lines of at most 80 characters; `npm run verify:comments` passes.
 - Commit types are `chore` and `docs`; only scripts, tests, and records change, and no published package.
 - **Redaction:** the probe prints only a file system type name; no secret, path outside the probed one, or private value reaches output, logs, or records. The environment above names only public host facts.
@@ -29,6 +30,7 @@ This Linux host: Ubuntu 24.04.5 LTS, kernel Linux 6.8.0-147-generic, Docker engi
 
 - **Fails on the old code.** With `FILE_SYSTEM_PROBE` exported but `linuxPlatform` still running `stat -f -c %T /probe`, `node --experimental-strip-types --test test/native-acceptance.test.ts` gave 11 tests, 10 pass, 1 fail: `the Linux entry is the image release under the engine architecture` failed with `Error: unexpected command: docker run --rm --volume /probe ubuntu:24.04@sha256:68ee stat -f -c %T /probe`. With the old `platform` in the shell library, `node --experimental-strip-types --test test/installation-scenarios.test.ts` gave 43 tests, 41 pass, 2 fail: `the platform row names the type of the worker data root mount` (actual `file system ext2/ext3 (worker data root)`) and `the platform row probes the file system as the native acceptance does` (actual empty).
 - **Passes on the new code.** Both files together: 54 tests, 54 pass, 0 fail.
+- **Review pass 1 (M1).** With the old `volume_of` (`4b5d2d0`), `node --experimental-strip-types --test test/installation-scenarios.test.ts` gave 44 tests, 43 pass, 1 fail: `the native worker volume names the type of its Linux mount` (actual `ext2/ext3 at '/' with 524 GiB free`). With the fix (`082ff61`), both files: 55 tests, 55 pass, 0 fail. On this host `volume_of .` in the worktree prints `ext4 at '/' with 524 GiB free`. The test runs with `PATH` limited to the stubs, `/usr/bin`, and `/bin`, so a macOS `diskutil` in `/usr/sbin` does not take the macOS branch.
 - **Determinism.** The tests run stub `findmnt` and `stat` programs from a temporary directory and answer fixed text; no timing is involved.
 
 ## Checks
@@ -41,7 +43,18 @@ This Linux host: Ubuntu 24.04.5 LTS, kernel Linux 6.8.0-147-generic, Docker engi
 
 ### Pass 1
 
-Pending: the independent review by OpenCode CLI, model `opencode-go/kimi-k2.7-code`, assigned by the coordinator, run by the session.
+- **Reviewer:** OpenCode CLI, model `opencode-go/kimi-k2.7-code`, default variant, `reviewer` agent (read-only), assigned by the coordinator and run by the session from the worktree.
+- **Invocation:** `opencode run --standalone --agent reviewer -m 'opencode-go/kimi-k2.7-code' --format json --title fix-platform-probe-filesystem-label "$(cat <prompt-file>)" < /dev/null > <log>`.
+- **Revision:** `e75e173`, diff `fe64386..e75e173`.
+- **Session:** `ses_e8406820effepKVtaNp0QOzyYp`.
+- **Snapshot:** `ff385e7059a32ba3bcbabca2bb05fab1192ee9f705d982cb7e3f0ffebe5fbf35` before and after; unchanged.
+- **Findings:** 0 Critical, 0 High, 1 Medium, 0 Low; fixed in `4b5d2d0` and `082ff61`, to be confirmed by pass 2. Recorded in `findings.jsonl` as `fixed-unreviewed`.
+  1. **M1 (contract-drift):** `volume_of` in `scripts/installation-scenarios.sh:636` still named a Linux native worker's file system with `stat -f -c %T`, so its lifecycle record could say `ext2/ext3` for ext4. **Fixed:** its Linux branch runs `sh -c "$FILE_SYSTEM_PROBE" sh "$mount_point"`; the macOS branch is unchanged. The test `the native worker volume names the type of its Linux mount` failed before and passes after; the delta's ext4 scenario, the proposal, and the design name the native worker volume. No other `stat -f` file system label is left in `scripts/`.
+- **Checklist with no findings:** redaction and error handling (fallback quoting, `findmnt` stderr, a failing `stat` still failing).
+
+### Pass 2
+
+Pending: the same reviewer, on the pass 1 resolutions.
 
 ## Limitations
 
