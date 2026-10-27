@@ -13,7 +13,7 @@
 
 ## 3. Review and archive
 
-- [ ] 3.1 Independent review, pass 1 (reviewer A, Codex CLI, `gpt-6.1-sol`)
-- [ ] 3.2 Independent review, pass 2 (reviewer B, Claude Code, `claude-opus-5-5`, effort high)
-- [ ] 3.3 Independent review, pass 3 (reviewer A), unless an earlier pass ends the review
+- [x] 3.1 Independent review, pass 1 (reviewer A, Codex CLI, `gpt-6.1-sol`): Low only, fixed unreviewed
+- [x] 3.2 Independent review, pass 2 (reviewer B, Claude Code, `claude-opus-5-5`, effort high): not run, because pass 1 was Low only
+- [x] 3.3 Independent review, pass 3 (reviewer A): not run, because pass 1 was Low only
 - [ ] 3.4 Archive the change

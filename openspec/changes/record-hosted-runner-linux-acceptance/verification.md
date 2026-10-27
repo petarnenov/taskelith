@@ -12,7 +12,7 @@ A worker task of size S that the coordinator assigned on 2026-10-27, developed i
 
 - Base: `origin/dev` at `b87abe75`. Branch `record-hosted-runner-linux-acceptance`.
 - Tested revision of the run: `4fe094562e6ccb9e568dee91be24ff2c93108004`, the merge commit of #355 (`run-hosted-runner-linux-check`), parents `a00cbe3a` and `9aed75c5`. `git merge-base --is-ancestor 4fe09456 origin/dev` succeeds; it lies 10 first-parent commits before `b87abe75` on `origin/dev`, and `git diff --stat 4fe09456 b87abe75` outside `openspec/` and `docs/` changes 63 files, including code the run exercises (design decision 1).
-- The checks below ran on the working tree of the second commit, which no longer marks process ownership met; they gave the same results as on the first commit.
+- The checks below first ran on `a09141f5` and again, with the same results, on `20b22bac`, which no longer marks process ownership met. After review pass 1 they ran on the working tree of the commit that records the pass, on top of the fixes `03b00411`.
 
 ## Environment
 
@@ -47,18 +47,25 @@ Not edited here (design decision 6):
 ## Checks and results
 
 - `npm run openspec -- validate record-hosted-runner-linux-acceptance --strict`: `Change 'record-hosted-runner-linux-acceptance' is valid`.
-- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: exit 0; `npm test` tests 2307, pass 2260, fail 0, skipped 47; all files 99.28 % lines, 92.33 % branches, 98.94 % functions; `Every comment is within the comment length rule.`; OpenSpec `Totals: 70 passed, 0 failed (70 items)`; `Every checked link conforms.`; `Every active OpenSpec change archives into strictly valid specs.`; findings 43 files and pass summaries 23 files valid. Only this record's results were added after the run.
+- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: exit 0; `npm test` tests 2307, pass 2260, fail 0, skipped 47; all files 99.28 % lines, 92.33 % branches (92.35 % after review pass 1), 98.94 % functions; `Every comment is within the comment length rule.`; OpenSpec `Totals: 70 passed, 0 failed (70 items)`; `Every checked link conforms.`; `Every active OpenSpec change archives into strictly valid specs.`; findings 43 files and pass summaries 23 files valid. The same totals on `a09141f5`, `20b22bac`, and after review pass 1, except the branch coverage noted; only this record's results were added after each run.
 - `make findings ARGS="checklist --capability native-worker-acceptance,foundation-closure --files docs/foundation.md"`: the text in [design.md](design.md), "Review checklist".
 
 ## Review
 
-Not yet run. Assigned reviewers ([review process](/docs/governance.md#independent-review-process)):
+Assigned reviewers ([review process](/docs/governance.md#independent-review-process)): reviewer A Codex CLI `gpt-6.1-sol` (passes 1 and 3), reviewer B Claude Code `claude-opus-5-5`, effort high (pass 2).
 
-- Pass 1, reviewer A: Codex CLI, `gpt-6.1-sol`. Not run.
-- Pass 2, reviewer B: Claude Code, `claude-opus-5-5`, effort high. Not run.
-- Pass 3, reviewer A: Codex CLI, `gpt-6.1-sol`, unless an earlier pass ends the review. Not run.
+### Pass 1, reviewer A
 
-`findings.jsonl` and `passes.jsonl` are empty.
+- Reviewer: Codex CLI, `gpt-6.1-sol`, reasoning effort medium, read-only sandbox, run by the coordinator on `20b22bac` (`b87abe75..20b22bac`).
+- Invocation: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`.
+- Model confirmation: the output header names model `gpt-6.1-sol`, reasoning effort medium, and the read-only sandbox.
+- Session: `01a17ef3-f8c8-76f1-88ce-ffdf7a1e36c2`.
+- Snapshot: the SHA-256 snapshot of the worktree before and after the review was equal, `f96ef6c81f5bd9c5ae856d093d641420f5d2835f63e63b7f451401c1d859999a`.
+- Findings: Critical 0, High 0, Medium 0, Low 2, as in `passes.jsonl`; both fixed in `03b00411`, unreviewed (`fixed-unreviewed` in `findings.jsonl`):
+  - Low (evidence-mismatch, `acceptance.md:51`, also `acceptance.md:28` and `design.md:44`): the records said the run shows no kill of the worker during a running execution, but the disk-loss proof killed the worker with its attempt started (`results.jsonl` line 7). The claim now names the `scenario-worker-kill` proof, whose kill came after the task had exited, and says the run does not show a restart with a kept journal after a kill during a running execution; `verification.md` and `docs/foundation.md:66` name the same proof.
+  - Low (evidence-mismatch, `acceptance.md:10`, also `verification.md:27`): the quoted last line of `run.log` left out its suffix; both now quote the full line.
+
+Pass 1 found Low findings only, so the review ends there ([review process](/docs/governance.md#independent-review-process)): passes 2 and 3 did not run.
 
 ## Limitations
 
@@ -69,6 +76,5 @@ Not yet run. Assigned reviewers ([review process](/docs/governance.md#independen
 
 ## Remaining gates
 
-- Independent review: pass 1 (reviewer A), pass 2 (reviewer B), and pass 3 (reviewer A) as the review process requires.
-- Archive of the change after review.
+- Archive of the change (worker step 7).
 - Integration into dev by the coordinator (single pull request).
