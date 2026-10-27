@@ -17,7 +17,7 @@ The coordinator Niki decided on 2026-10-27, after the first round of this change
 
 ## Revision
 
-Rule text and change records: `52049334` and `8914f3dc` on base `744689cb`, and the first verification record `58bd811b`. Merge `a4f223d0` merged `origin/dev` at `9c0c1706`, which brought pull request #334 (`require-finding-capability`). Its conflicts in `docs/agent-task-protocol.md` worker steps 5 and 6, `.claude/skills/taskelith-coordinator/SKILL.md`, and `.claude/skills/taskelith-worker/SKILL.md` were resolved by keeping both `dev`'s capability and record-quality wording and this change's A and B wording. The coordinator decisions above are in the commits after `a4f223d0`.
+Rule text and change records: `52049334` and `8914f3dc` on base `744689cb`, and the first verification record `58bd811b`. Merge `a4f223d0` merged `origin/dev` at `9c0c1706`, which brought pull request #334 (`require-finding-capability`). Its conflicts in `docs/agent-task-protocol.md` worker steps 5 and 6, `.claude/skills/taskelith-coordinator/SKILL.md`, and `.claude/skills/taskelith-worker/SKILL.md` were resolved by keeping both `dev`'s capability and record-quality wording and this change's A and B wording. The coordinator decisions above are in the commits after `a4f223d0`, up to `18da6cde`, which review pass 1 and `make verify` ran on. Review pass 1 fixes: `ba93fa1e`; their record follows it.
 
 ## Environment
 
@@ -27,7 +27,7 @@ macOS 26.6.2 (Darwin 25.6.0, x86_64), Node.js v24.22.1 from `.nvmrc`.
 
 Against the review checklist of the brief (`make findings ARGS="checklist --capability review-process --files docs/**,.claude/**"`) and ADR 0004:
 
-1. Redaction: no credential, token, or local path beyond the repository's worktree convention is added; `findings.jsonl` is empty.
+1. Redaction: no credential, token, or local path beyond the repository's worktree convention is added; `findings.jsonl` was empty before the review.
 2. Contract drift: governance, the protocol, the three skills, `AGENTS.md`, and the delta state the same rule. The author searched for `one reviewer`, `reviewer per task`, `same reviewer`, `cross-review`, and `assigned reviewer` across `docs/`, `.claude/`, `AGENTS.md`, and `openspec/specs/`. Remaining hits after the coordinator decisions: the governance version history and the version 4 rule kept for tasks already under it, and the `agent-task-protocol` spec's "assigned reviewer" of a returned branch, which governance now defines as reviewer A.
 3. Docs: links resolve to existing anchors (`governance.md#independent-review-process`); every new governance entry names its source and date.
 4. Error handling: the unavailable-reviewer path is defined for A and for B, with the harness constraint and the scope of each role's remaining passes.
@@ -41,23 +41,52 @@ Evidence check: no external link is added.
 - `npm run verify:comments`: `Every comment is within the comment length rule.`
 - `npm run openspec -- validate --all --strict --no-interactive`: 70 passed, 0 failed.
 - `npm run findings -- validate`: `Every findings file is valid: 12 file(s).`
-- Requirement bodies: "Authorized alternating reviewers" 476, "Unavailable reviewer" 471, "Rotation order" 489, "Changes under the one-reviewer rule" 374, and "No reviewer of another harness" 358 characters.
+- Requirement bodies after the pass 1 fixes: "Authorized alternating reviewers" 491, "Unavailable reviewer" 490, "Rotation order" 490, "Changes under the one-reviewer rule" 485, and "No reviewer of another harness" 358 characters.
 - Archive test in a scratch copy of the worktree after the merge and the coordinator decisions: `npm run openspec -- archive alternate-reviewers-per-pass --yes` applied 2 added, 3 modified, and 1 renamed requirement to `review-process`; `npm run openspec -- validate --all --strict --no-interactive` then reported 69 passed, 0 failed, and the archived spec kept the edited Purpose.
 - The UI POC was neither type-checked nor built: it is outside the workspaces and builds only in a scratch copy with its own installed libraries (`docs/ui-poc/README.md` "Rebuilding"); the change is one badge string.
 - The findings tests were not run, because the findings tooling is unchanged.
 
 ## Independent review
 
-Pending. This change is a coordinator-authorized pilot of version 5: reviewer A = OpenCode `opencode-go/kimi-k3.1-pro#high`, reviewer B = Codex `gpt-6.1-sol` if pass 2 is needed (coordinator Niki, 2026-10-27).
+This change is a coordinator-authorized pilot of version 5: reviewer A = OpenCode `opencode-go/kimi-k3.1-pro#high`, reviewer B = Codex `gpt-6.1-sol` if pass 2 is needed (coordinator Niki, 2026-10-27).
+
+### Pass 1 (reviewer A)
+
+OpenCode CLI, model `opencode-go/kimi-k3.1-pro`, variant `high`, on `18da6cde`, run 11:42:20 to 11:50:34 local time on 2026-10-27, session `ses_e8342b9e5ffeQTL5N2okB34vPg`:
+
+`opencode run --standalone --agent reviewer -m 'opencode-go/kimi-k3.1-pro#high' --format json --title alternate-reviewers-per-pass "<prompt>" < /dev/null`
+
+Read-only proof: the SHA-256 snapshot of all tracked and untracked files was `48e7b6e0f2c1cbcc871efb12cb21ee7745b2884dd993750dde1e3007d69e90fb` before and after the pass. Result: 0 Critical, 0 High, 3 Medium, 7 Low. All ten are in `findings.jsonl` with the outcome `fixed`, for pass 2 to check. Fixes in `ba93fa1e`:
+
+- Medium, contract-drift: the same-harness fallback contradicted unconditional "different harnesses" statements. The delta's "Authorized alternating reviewers", "Unavailable reviewer", and "Rotation order", governance "Two alternating reviewers per task", protocol worker step 5 and coordinator step 1, the `taskelith-task-protocol` skill, `AGENTS.md`, and the living `review-process` Purpose now carry the exception.
+- Medium, process: the governance "Rotation" fallback and the delta scenario "Reviewer B without another harness" tested whether a reviewer of another harness exists in the turn; they now test availability, as "No reviewer of another harness" does.
+- Medium, process: a task under the previous rule has no other reviewer. Governance "Unavailable reviewer", the protocol's unavailable-reviewer paragraph, the skill, and the delta's "Unavailable reviewer" scope the harness test to tasks with reviewers A and B; governance "Tasks under the previous rule" and the delta's "Changes under the one-reviewer rule" keep version 4's replacement choice, with no harness test.
+- Low, stale-citation (4): `design.md`'s file and line citations of the findings tooling now match the tree after the `dev` merge.
+- Low, docs (2): `design.md` and this record paraphrase the owner's approval in English instead of quoting it in Bulgarian.
+- Low, docs: `docs/ui-poc/README.md` says that the published version 7 predates the badge change and no longer matches the source.
+
+After the fixes, on `ba93fa1e` with this record, the checks were repeated:
+
+- `npm run openspec -- validate alternate-reviewers-per-pass --strict`: `Change 'alternate-reviewers-per-pass' is valid`.
+- `npm run openspec -- validate --all --strict --no-interactive`: 70 passed, 0 failed.
+- `npm run verify:comments`: `Every comment is within the comment length rule.`
+- `npm run findings -- validate`: `Every findings file is valid: 12 file(s).`
+- Archive test in a scratch copy: `archive alternate-reviewers-per-pass --yes` applied 2 added, 3 modified, and 1 renamed requirement; `validate --all --strict --no-interactive` then reported 69 passed, 0 failed, the archived bodies kept the lengths above, and the edited Purpose stayed.
+
+Next: pass 2 by reviewer B, Codex CLI `gpt-6.1-sol`, a full, independent review that also checks the pass 1 fixes.
+
+## make verify
+
+`make verify` on `18da6cde`: exit 0 in 203 s on 2026-10-27. 2047 tests, 2045 passed, 0 failed, 0 cancelled, 2 skipped; coverage of all files 99.27 % lines, 91.97 % branches, 98.94 % functions. The Docker CLI ran with `DOCKER_CONFIG` set to an empty configuration (`{}`) in the session's scratch directory, because Docker Desktop's credential helper (`credsStore: desktop`) hangs on this iMac, as in [the x86_64 native acceptance record](../archive/2026-10-27-run-g2-native-acceptance-x86-64/verification.md); public images are pulled anonymously from the same engine, no credential was read, and the Makefile and the product were not changed.
 
 ## Limitations
 
 - The published UI POC artifact's version 7 predates the badge change and no longer matches the source; `docs/ui-poc/README.md` "Published build" now says so. Republishing it is an owner decision outside this change.
-- `make verify` has not been run yet.
+- `make verify` ran with an empty Docker configuration, not the user's, because its credential helper hangs (see "make verify"); it has not run on the pass 1 fixes.
 
 ## Remaining gates
 
-- `make verify`.
-- Independent review.
+- `make verify` on the final tree, run by the `pre-push` hook.
+- Independent review: pass 2 by reviewer B.
 - Archive.
 - Integration into dev by the coordinator (single pull request).
