@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Record link check
-`make verify` SHALL run `npm run verify:links` before `npm run verify:archive`. It SHALL fail on each Markdown link under `openspec/changes/`, `openspec/specs/`, and `docs/`, outside code and not `http`, `https`, or `mailto`, whose target or GitHub heading anchor is missing, that enters an active change, or that is relative and leaves its change directory, capability directory, or the repository, or sits in a spec delta. Active changes SHALL be checked at their archived path.
+`make verify` SHALL run `npm run verify:links` before the archive dry run. It SHALL fail on each inline or reference Markdown link under `openspec/changes/`, `openspec/specs/`, and `docs/`, outside code and HTML, without a URI scheme, whose target or GitHub heading anchor is missing, that enters an active change, or that is relative and leaves its change directory, capability directory, or the repository, or sits in a spec delta. Active changes SHALL be checked at their archived path.
 
 #### Scenario: Link out of the change directory
 - **WHEN** an active change's `design.md` links `../../../../docs/governance.md`, which resolves once the change is archived
@@ -24,7 +24,7 @@
 - **THEN** the check fails, because the target moves when that change is archived
 
 #### Scenario: Code and external links
-- **WHEN** a link is inside a fenced code block or inline code, or is an `http`, `https`, or `mailto` link
+- **WHEN** a link is inside a code block, a code span, or raw HTML, or starts with a URI scheme such as `https:`, `mailto:`, or `tel:`
 - **THEN** the check ignores it
 
 ### Requirement: Record link baseline

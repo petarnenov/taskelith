@@ -4,7 +4,7 @@
 
 ## What Changes
 
-- New `scripts/check-record-links.ts`, run as `npm run verify:links` by `make verify` immediately before `npm run verify:archive`. It checks every Markdown link under `openspec/changes/`, `openspec/specs/`, and `docs/`, outside code blocks and inline code and other than `http`, `https`, and `mailto` links:
+- New `scripts/check-record-links.ts`, run as `npm run verify:links` by `make verify` immediately before `npm run verify:archive`. It reads each Markdown file under `openspec/changes/`, `openspec/specs/`, and `docs/` with the GFM lexer of `marked`, added as an exact-pinned development dependency, and checks every inline or reference-style link outside code and raw HTML that has no URI scheme such as `https:` or `mailto:`:
   - the target and any heading anchor exist, with GitHub's heading slugs;
   - no link enters an active change, because that change moves when archived;
   - a relative link in a change record stays inside the change directory, a relative link in a spec delta is rejected, and one in a main spec stays inside its capability directory;
@@ -25,6 +25,6 @@
 
 ## Impact
 
-Repository tooling and process documentation only: `scripts/`, `test/`, `docs/`, `package.json`, and `Makefile`, outside the published package's `files` allowlist, so the published `taskelith` package does not change. No new dependency. A branch whose active change or documents hold a failing link fails `make verify` after it merges `dev`, with a message naming the file, line, target, and reason.
+Repository tooling and process documentation only: `scripts/`, `test/`, `docs/`, `package.json`, `package-lock.json`, and `Makefile`. The published package's runtime code and packaged documents do not change; its `package.json` gains the `verify:links` script and the `marked` development dependency, which the tarball does not contain. A branch whose active change or documents hold a failing link fails `make verify` after it merges `dev`, with a message naming the file, line, target, and reason.
 
 Exclusions: no file under `openspec/changes/archive/` changes; the archived links stay as they are and only leave the baseline when a later change corrects them. The packaged README and `docs/architecture.md` keep the relative links that `scripts/verify-package.ts` requires.
