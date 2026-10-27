@@ -15,7 +15,7 @@
 
 ## 3. Verification and review
 
-- [ ] 3.1 Run strict validation of this change and of all, `make findings ARGS="validate"`, and `make verify`, and record them in `verification.md`.
+- [x] 3.1 Run strict validation of this change and of all, `make findings ARGS="validate"`, and `make verify`, and record them in `verification.md`.
 - [ ] 3.2 Review pass 1 by reviewer A, recorded in `verification.md`, `passes.jsonl`, and `findings.jsonl`.
 - [ ] 3.3 Review pass 2 by reviewer B, unless pass 1 is Low-only.
 - [ ] 3.4 Review pass 3 by reviewer A, if pass 2 leaves fixes to confirm.
