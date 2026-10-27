@@ -15,7 +15,7 @@ tool() {
   case "$1" in
     context) echo "{\\"row\\":\\"$3\\",\\"proof\\":\\"$4\\"}" ;;
     record) echo "record $2 $3 $4 $5 $6" ;;
-    seed) echo 7 ;;
+    seed) echo 'drew the seed' >&2; echo 7 ;;
   esac
 }
 build_checkout() { echo 'built the checkout' >&2; }
@@ -70,7 +70,7 @@ ENTRIES=macos main results.jsonl`);
 test('the checkout is built before the seed, which needs the built harness', () => {
   const run = runner(`ENTRIES=windows main results.jsonl`);
   assert.equal(run.status, 2);
-  assert.match(run.stderr, /^built the checkout\nnative-acceptance.sh: seed 7,/m);
+  assert.match(run.stderr, /^built the checkout\ndrew the seed\n/m);
 });
 
 test('an early exit removes the platform file and keeps an earlier exit trap', () => {
