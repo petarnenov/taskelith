@@ -106,17 +106,15 @@ test('a retry that backs off is not read until its due time, and keeps no failur
   assert.deepEqual([state.opened, state.excluded.at(-1)], [2, ['task-1']], 'its first failure delays it 7.5 s');
 });
 
-test('without a candidate no transaction is opened and the tasks back off', async () => {
-  const { clock, timing: controlled } = timing();
+test('without a candidate no transaction is opened and the tasks do not back off', async () => {
   const { state, store } = scriptedStore([PLACED]);
   state.candidates = [];
-  const service = new PlacementService(store, controlled);
+  const service = new PlacementService(store, timing().timing);
   assert.deepEqual(value(await service.placeWaiting()), { waiting: 1, placed: 0 });
-  state.candidates = ['worker-a'];
-  value(await service.placeWaiting());
   assert.equal(state.opened, 0);
-  clock.at = 7_500;
+  state.candidates = ['worker-a'];
   assert.deepEqual(value(await service.placeWaiting()), { waiting: 1, placed: 1 });
+  assert.deepEqual(state.excluded, [[], []]);
 });
 
 test('after an outage the passes back off, and a successful pass resets them', async () => {
@@ -266,6 +264,7 @@ type Backlog = readonly (readonly [taskId: string, projectId: string, seconds: n
 interface Fleet { slots: readonly number[]; candidates: string[]; full: Result<unknown>; scripted: Record<string, Result<unknown>> }
 
 const FULL = err(failure('precondition-failed', 'every candidate is full', { reason: 'worker-capacity-exhausted' }));
+const QUOTA_USED = err(failure('precondition-failed', 'the project quota is used', { reason: 'project-quota-exhausted' }));
 const NONE_IN_TRANSACTION = err(failure('precondition-failed', 'no candidate accepted it', { reason: 'no-candidate' }));
 const oneSlot = (): Fleet => ({ slots: [1], candidates: ['worker-a'], full: FULL, scripted: {} });
 
@@ -382,6 +381,50 @@ test('a slot freed after a capacity decline does not move the cursor past it', a
   fleet.scripted = { 'task-b1': FULL, 'task-c1': FULL };
   await runPasses(service, clock, 4);
   assert.deepEqual(placed, ['task-a1', 'task-d1', 'task-b1', 'task-c1', 'task-e1']);
+});
+
+// Fifty tasks of `p-big`, then one of `p-small`, waiting in id order.
+const BIG_AND_SMALL: Backlog = [
+  ...Array.from({ length: 50 }, (_, index) => [`task-big-${String(index + 1).padStart(2, '0')}`, 'p-big', index] as const),
+  ['task-small', 'p-small', 50],
+];
+
+test('a freed slot follows the rotation after a fleet capacity decline, not a backoff', async () => {
+  const placed: string[] = [];
+  const clock = { at: 0 };
+  // A long jitter for the first decline, task-small's; none for the rest.
+  const draws = [0.9];
+  const timed = { now: () => clock.at, draw: () => draws.shift() ?? 0 };
+  const service = new PlacementService(await fleetStore(BIG_AND_SMALL, placed, oneSlot()), timed);
+  for (let pass = 0; pass < 3; pass++, clock.at += 5_000) value(await service.placeWaiting());
+  assert.deepEqual(placed, ['task-big-01', 'task-small', 'task-big-02']);
+});
+
+test('a decline for a reason of its own backs the task off, a fleet capacity decline does not', async () => {
+  const placed: string[] = [];
+  const fleet: Fleet = { ...oneSlot(), slots: [0, 1] };
+  fleet.scripted = { 'task-a1': QUOTA_USED };
+  const { clock, service } = serviceOf(await fleetStore([['task-a1', 'p-a', 0], ['task-b1', 'p-b', 1]], placed, fleet));
+  value(await service.placeWaiting());
+  clock.at += 1_000;
+  value(await service.placeWaiting());
+  assert.deepEqual(placed, ['task-b1'], 'task-a1 waits, task-b1 does not');
+});
+
+test('a fleet capacity decline keeps the failure count of an own-reason backoff', async () => {
+  const { clock, timing: controlled } = timing();
+  const { state, store } = scriptedStore([UNPLACED, FULL, UNPLACED, PLACED]);
+  const service = new PlacementService(store, controlled);
+  value(await service.placeWaiting());
+  clock.at = 7_500;
+  value(await service.placeWaiting());
+  value(await service.placeWaiting());
+  assert.equal(state.opened, 3, 'the fleet decline set no new wait');
+  clock.at = 22_499;
+  value(await service.placeWaiting());
+  assert.equal(state.opened, 3, 'the second own wait doubles to 15 s');
+  clock.at = 22_500;
+  assert.deepEqual(value(await service.placeWaiting()), { waiting: 1, placed: 1 });
 });
 
 test('after several placements in a pass, the next read starts after the last one', async () => {

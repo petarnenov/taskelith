@@ -23,7 +23,8 @@ export const ADMISSION_PRESSURE_SUPERSESSION_BOUND_MILLISECONDS = 10 * 60_000;
 // A placement that fails for a transient reason is tried this often in all.
 export const PLACEMENT_RETRY_ATTEMPTS = 5;
 
-// Backoff for placement retries and capacity waits (contract section 5).
+// Backoff for placement retries and waits for a task's own reason (contract
+// section 5); a decline for lack of fleet capacity does not back off.
 export const PLACEMENT_BACKOFF_INITIAL_MILLISECONDS = 5_000;
 export const PLACEMENT_BACKOFF_MAX_MILLISECONDS = 60_000;
 

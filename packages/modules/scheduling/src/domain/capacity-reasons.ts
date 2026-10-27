@@ -28,7 +28,8 @@ export const WORKER_REASONS = Object.freeze(['worker-not-eligible', 'worker-capa
 // A placement that found no candidate worker reports this reason.
 export const NO_CANDIDATE_REASON = 'no-candidate';
 
-// Reasons that no task's own limit explains: the fleet has no room for it.
+// Reasons the fleet's lack of room explains, exact while all requests are
+// equal: they stop the rotation cursor and back off no task (contract §5, §13).
 export const FLEET_REASONS = Object.freeze([
   'quarantined', 'worker-not-eligible', 'worker-capacity-exhausted', NO_CANDIDATE_REASON,
 ] as const);
