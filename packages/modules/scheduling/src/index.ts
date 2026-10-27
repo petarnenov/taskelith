@@ -195,12 +195,10 @@ export type { PlacementRotation } from './ports/placement-rotation.js';
 export type { PlacementOutcomeRecords } from './ports/placement-outcome-records.js';
 export { PLACEMENT_OUTCOME_RECORDS_CONFORMANCE } from './ports/placement-outcome-conformance.js';
 export {
-  OUTCOME_DISPOSITIONS,
   OUTCOME_SOURCES,
   isRecordedWaitingReason,
   type OutcomeDisposition,
   type OutcomeSource,
-  type OutcomeValues,
   type PlacementOutcomeRecord,
   type RecordedWaitingReason,
 } from './domain/placement-outcome-record.js';
