@@ -8,8 +8,8 @@ Host: Linux 6.8.0-147-generic, x86_64; Docker Engine 27.3.1 with the classic ima
 
 | Build | Options | Image ID |
 | --- | --- | --- |
-| A | as `installation.sh` builds it (with cache) | `sha256:d16ac5ba4eed08bdaf14eb082d72c19603f0e8ec25e3afe27358a99449d67527` |
-| B | `--no-cache` | `sha256:6f0e03d7dee93a4fe3143b4988cd532cc9be522deb431a46e45d635483a66f75` |
+| A | the arguments of `build_image`, with the build cache | `sha256:d16ac5ba4eed08bdaf14eb082d72c19603f0e8ec25e3afe27358a99449d67527` |
+| B | the same with `--no-cache`; BuildKit still took the checksum-pinned `ADD` from its cache | `sha256:6f0e03d7dee93a4fe3143b4988cd532cc9be522deb431a46e45d635483a66f75` |
 
 Of the 7 layers, 5 differ (layers 1, the base, and 6, the empty `WORKDIR`, match). Every difference is a time:
 

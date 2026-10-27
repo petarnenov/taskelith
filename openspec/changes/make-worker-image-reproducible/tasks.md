@@ -18,9 +18,9 @@
 
 ## 4. Verification
 
-- [ ] 4.1 Run `make verify-worker-image-reproducible` on a clean commit and record both image IDs
-- [ ] 4.2 `npm run openspec -- validate make-worker-image-reproducible --strict` and `make verify`
-- [ ] 4.3 Record `verification.md`
+- [x] 4.1 Run `make verify-worker-image-reproducible` on a clean commit and record both image IDs
+- [x] 4.2 `npm run openspec -- validate make-worker-image-reproducible --strict` and `make verify`
+- [x] 4.3 Record `verification.md`
 
 ## 5. Review and archive
 
