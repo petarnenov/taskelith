@@ -28,7 +28,9 @@ async function failingCases(defects: DoubleDefects): Promise<string[]> {
 }
 
 const PREPARE = 'prepares a task branch workspace at the base head';
-const REJECT = 'rejects unsafe names, foreign or mismatched heads, and missing sources, leaving nothing';
+const CONTINUE = 'continues the task branch when the remote has it';
+const REJECT = 'rejects foreign or mismatched heads and missing sources, leaving nothing';
+const NAMES = 'derives distinct workspace names and task branches from any identifiers';
 const CREDENTIAL = 'refuses an out-of-scope credential before any remote call and never stores one';
 const DIRTY = 'reports modified and untracked files, ignores ignored ones, and is clean after a commit';
 const STAGED = 'reports a change staged and then reverted in the working tree, and keeps that workspace';
@@ -51,11 +53,12 @@ const DEFECTS: readonly [string, DoubleDefects, readonly string[]][] = [
   ['ignores the index', { ignoresIndex: true }, [STAGED]],
   ['corrupts binary content in the snapshot', { corruptsBinary: true }, [SNAPSHOT]],
   ['misses untracked files', { ignoresUntracked: true }, [PREPARE, DIRTY, PUSH, SNAPSHOT, REMOVE]],
-  ['checks the task only for a task branch', { checksTaskOnlyOnBranch: true }, [REJECT]],
+  ['rejects identifiers outside the former safe form', { rejectsUnsafeNames: true }, [NAMES]],
+  ['names the task branch by the raw task identifier', { namesBranchByRawTaskId: true }, [PREPARE, CONTINUE, NAMES, PUSH]],
   ['accepts a tree that is not the commit tree', { acceptsMismatchedTree: true }, [REJECT]],
   ['puts the commit into the snapshot', { snapshotsCommit: true }, [SNAPSHOT]],
   ['loses modes and link targets in the snapshot', { snapshotsWithoutMetadata: true }, [SNAPSHOT]],
-  ['removes beyond its workspace', { removesWorkspacesRoot: true }, [REMOVE]],
+  ['removes beyond its workspace', { removesWorkspacesRoot: true }, [NAMES, REMOVE]],
   ['follows links when it sweeps', { sweepFollowsLinks: true }, [SWEEP]],
   ['runs Git on a handed-off checkout', { ignoresHandOff: true }, [HAND_OFF]],
   ['keeps links from outside when it reclaims', { keepsOutsideLinks: true }, [HAND_OFF]],
