@@ -110,13 +110,14 @@ verify-linux-cgroup:
 	docker run --rm --privileged --cgroupns=private --network none --volume "$(CURDIR):/repo:ro" $(LINUX_CGROUP_IMAGE) \
 		$(if $(PATTERN),--test-name-pattern='$(PATTERN)')
 
-# Opt-in G2 crash windows and duplicate delivery on Linux: the privileged
-# test image on the host network of its own services, out of make verify.
+# Opt-in G2 crash windows on Linux (privileged, host network), out of make
+# verify; PATTERN selects and SKIP_PATTERN skips tests by name.
 verify-linux-crash-windows:
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run build
 	@$(MAKE) --no-print-directory linux-test-image
 	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use bash scripts/services.sh run taskelith-$(SERVICES_ID)-crash-windows \
-		bash scripts/linux-crash-windows.sh $(LINUX_CGROUP_IMAGE) $(if $(PATTERN),--test-name-pattern='$(PATTERN)')
+		bash scripts/linux-crash-windows.sh $(LINUX_CGROUP_IMAGE) $(if $(PATTERN),--test-name-pattern='$(PATTERN)') \
+		$(if $(SKIP_PATTERN),--test-skip-pattern='$(SKIP_PATTERN)')
 
 # Opt-in: runs the test files of SUITES in the Linux test image, without
 # privileges or network, as an unprivileged user, on a fresh volume.
