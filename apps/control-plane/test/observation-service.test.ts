@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  LaunchAuthority,
   ObservationService,
   PlacementService,
   RunService,
@@ -20,6 +21,11 @@ import {
   type Execution,
   type ExecutionId,
   type LaunchAuthId,
+  type LaunchAuthorizationRequest,
+  type LaunchGrant,
+  type LaunchRecords,
+  type RecordedLaunch,
+  type RecordedRejection,
   type OperationId,
   type SelfCheckResult,
   type Task,
@@ -339,6 +345,24 @@ test('an offer refused after a failed self-check releases its assignment for ano
   assert.deepEqual([refused?.end?.reason, refused?.end?.reason === 'refused' && refused.end.refusal], ['refused', 'worker-self-check-failed']);
 });
 
+test('a failed self-check frees an accepted assignment that holds no grant', async () => {
+  const placedFixture = await fixture();
+  const { store, service, outbox } = placedFixture;
+  value(await service.apply(message('worker.capacity.declared', 1, DECLARATION)));
+  value(await submit(placedFixture, 'task-1'));
+  value(await new PlacementService(store, { now: () => Date.parse(AT), draw: () => 0 }).placeWaiting());
+  const placed = await lastAttempt(placedFixture);
+  value(await service.apply(message('execution.assignment.accepted', 2, {
+    commandId: placed.assignment.offerCommandId, assignmentId: placed.assignment.id,
+  }, { attemptId: placed.attemptId, ownershipGeneration: placed.generation })));
+  value(await service.apply(message('worker.self-check.reported', 3, { results: [FAILED] })));
+  const [freed] = await placedFixture.transaction.assignments.listByAttempt(placed.attemptId);
+  assert.deepEqual([freed?.end?.reason, freed?.reservation.state], ['superseded', 'released']);
+  const ends = outbox.messages.filter((sent) => sent.metadata.eventType === 'execution.assignment.end');
+  assert.deepEqual(ends.map((sent) => (sent.payload['payload'] as { assignmentId?: string }).assignmentId), [placed.assignment.id]);
+  assert.deepEqual(await placedFixture.transaction.assignments.listUnfinishedByWorker(WORKER), []);
+});
+
 // Authorizes and starts an execution under the placed attempt, as the
 // launch authority and the worker's start report would.
 async function startedUnder({ transaction }: Fixture, placed: PlacedAttempt): Promise<ExecutionId> {
@@ -400,6 +424,57 @@ test('a running execution keeps its ownership, reservation, and grant through a 
   }, { attemptId: placed.attemptId, ownershipGeneration: placed.generation }))), 'applied');
   const result = value(await tasks.readTaskResult('run-1', 'task-1'));
   assert.deepEqual([result.state, result.state === 'ended' && result.attemptId], ['ended', placed.attemptId]);
+});
+
+// Launch records over the in-memory tasks, which keep every grant.
+function taskLaunches(tasks: InMemoryTaskRepository): LaunchRecords {
+  const rejections: RecordedRejection[] = [];
+  const recorded = (task: Task, grant: LaunchGrant): RecordedLaunch => ({
+    launchAuthId: grant.launchAuthId, taskId: task.id, attemptId: grant.attemptId, assignmentId: grant.assignmentId,
+    executionId: grant.executionId, workerId: grant.workerId,
+  });
+  const grants = () => tasks.all().flatMap((task) => task.attempts.flatMap((attempt) => attempt.executions)
+    .flatMap((execution) => execution.grants.map((grant) => recorded(task, grant))));
+  return {
+    byOperation: async (workerId, operationId) => ok(tasks.all().flatMap((task) => task.attempts.flatMap((attempt) => attempt.executions)
+      .flatMap((execution) => execution.grants).filter((grant) => grant.workerId === workerId && grant.operationId === operationId)
+      .map((grant) => recorded(task, grant)))[0]),
+    byLaunchAuthId: async (launchAuthId) => ok(grants().find((grant) => grant.launchAuthId === launchAuthId)),
+    liveGrants: async () => ok([]),
+    rejection: async (workerId, operationId) => ok(rejections.find(({ request }) => request.workerId === workerId && request.operationId === operationId)),
+    recordRejection: async (rejection) => { rejections.push(rejection); return ok(undefined); },
+  };
+}
+
+test('only an admitted worker gets a new launch grant, and a recorded grant is still replayed', async () => {
+  const placedFixture = await fixture();
+  const { store, service, transaction } = placedFixture;
+  (transaction as { launches: LaunchRecords }).launches = taskLaunches(transaction.tasks as InMemoryTaskRepository);
+  let issued = 0;
+  const authority = new LaunchAuthority(store, {
+    workflows: new WorkflowRegistry([{ definition, digest: DIGEST }]), newLaunchAuthId: () => `launch-${++issued}`,
+    parameters: value(parseLaunchParameters({ ttlMilliseconds: 600_000, skewMilliseconds: 5_000 })),
+  });
+  value(await service.apply(message('worker.capacity.declared', 1, DECLARATION)));
+  value(await service.apply(message('worker.self-check.reported', 2, { results: [PASSED] })));
+  value(await submit(placedFixture, 'task-1'));
+  value(await new PlacementService(store, { now: () => Date.parse(AT), draw: () => 0 }).placeWaiting());
+  const placed = await lastAttempt(placedFixture);
+  const task = value(await transaction.tasks.get(placed.assignment.reservation.scope.taskId));
+  const admission = value(await transaction.admissions.get(task.admissionId));
+  const request = (operation: string, execution: string): LaunchAuthorizationRequest => ({
+    operationId: operation as OperationId, recoveryEpoch: value(parseRecoveryEpoch(1)), assignmentId: placed.assignment.id,
+    attemptId: placed.attemptId, ownershipGeneration: task.ownershipGeneration, executionId: execution as ExecutionId,
+    admissionId: task.admissionId, admissionGeneration: admission.generation, reportsNotStarted: false,
+  });
+  const principal = { workerId: WORKER, generation: 1 };
+  assert.equal(value(await authority.authorize(principal, request('operation-1', 'execution-1'))).kind, 'granted');
+
+  value(await service.apply(message('worker.self-check.reported', 3, { results: [FAILED] })));
+  const refused = value(await authority.authorize(principal, request('operation-2', 'execution-2')));
+  assert.deepEqual(refused.kind === 'rejected' && [refused.rejection.reason, refused.rejection.retryable], ['worker-not-authorized', false]);
+  const replayed = value(await authority.authorize(principal, request('operation-1', 'execution-1')));
+  assert.deepEqual([replayed.kind, replayed.kind === 'granted' && replayed.grant.launchAuthId], ['granted', 'launch-1']);
 });
 
 test('what no effect consumes, or cannot authenticate, is not consumed', async () => {

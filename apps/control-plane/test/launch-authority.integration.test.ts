@@ -97,6 +97,7 @@ test('a launch is granted once, recorded with its values, and its replay never e
   const other = fleetWorker('worker-2', 'journal-2');
   value(await fleet.addToken(fleetToken('token-2')));
   value(await fleet.enroll(fleetToken('token-2').hash, other));
+  await sql(url, "UPDATE workers SET worker_admission = 'admitted' WHERE worker_id = $1", [other.workerId]);
   const stranger = { workerId: other.workerId, generation: 1 };
   assert.equal(kindOf(await authority.authorize(stranger, request)), 'rejected:assignment-not-active', "another enrolled worker's replay gets nothing");
   assert.equal(grantOf(await authority.authorize(PRINCIPAL, request)).launchAuthId, grant.launchAuthId, "and changes nothing of A's");

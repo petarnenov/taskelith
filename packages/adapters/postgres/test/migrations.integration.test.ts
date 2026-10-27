@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { endAttempt, openTask, recordExecutionEvidence } from '@taskelith/execution';
 import { fleetWorker } from '@taskelith/fleet';
-import { MIGRATIONS_DIRECTORY, migrate } from '@taskelith/postgres';
+import { MIGRATIONS_DIRECTORY, PostgresDatabase, migrate } from '@taskelith/postgres';
 import { value } from '@taskelith/testing';
 import { authorizedUnder, placedTask, usedAdmission } from './capacity-fixtures.ts';
 import { AT, assignment } from './fixtures.ts';
@@ -428,6 +428,28 @@ test('the placement outcomes table rejects a disposition or source outside its v
   await assert.rejects(insert('rejected', 'worker'), /placement_outcomes_source_check/);
   await insert('rejected', 'scheduler');
   assert.deepEqual(await query(url, 'SELECT disposition, source FROM placement_outcomes'), [{ disposition: 'rejected', source: 'scheduler' }]);
+});
+
+test('the worker admission migration leaves every existing worker awaiting its self-check', async () => {
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  const directory = await copiedMigrations();
+  const held = join(directory, `${WORKER_ADMISSION}.sql`);
+  const content = await readFile(held, 'utf8');
+  await unlink(held);
+  assert.equal((await migrate(url, directory)).ok, true);
+  await query(url, `INSERT INTO workers (worker_id, enrolled, revoked, draining, reachable, slots, cpu_millicores,
+    memory_mebibytes, controls, control_plane_hash, protocol_version) VALUES ('w1', true, false, false, true, 2, 4000, 8192, '{}', 'cp-1', 1)`);
+  await writeFile(held, content);
+  assert.deepEqual(await migrate(url, directory), { ok: true, value: [WORKER_ADMISSION] });
+  assert.deepEqual(await query(url, 'SELECT worker_admission, self_check_sequence, self_check_reported_at FROM workers'),
+    [{ worker_admission: 'awaiting-self-check', self_check_sequence: '0', self_check_reported_at: null }]);
+  const database = new PostgresDatabase(url);
+  try {
+    const placement = value(await database.transaction(async (tx) => ({ ok: true as const, value: [await tx.workers.get('w1' as never), await tx.workers.candidates()] as const })));
+    assert.deepEqual([placement[0]?.admitted, placement[1]], [false, []]);
+  } finally {
+    await database.close();
+  }
 });
 
 test('the worker admission down migration removes the admission columns and results', async () => {
