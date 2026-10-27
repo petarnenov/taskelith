@@ -412,3 +412,7 @@ A control-plane request without an answer SHALL fail with `unavailable` and the 
 #### Scenario: Unbounded server reason
 - **WHEN** the control plane answers with a message and a reason of hundreds of characters holding a secret, or with a property name of 2,000 characters that its schema forbids
 - **THEN** the failure's message, `reason`, and `violation` hold at most 160 characters of them and no secret
+
+#### Scenario: Pathological cause message
+- **WHEN** a cause message is tens of thousands of characters with no end of user information, a URL, or a JWT, such as `a`, `a:`, `a:a`, `a.`, or `eyJ` repeated
+- **THEN** every failure-cause redaction rule takes time linear in its length, and user information, a URL, or a JWT of any length is still redacted

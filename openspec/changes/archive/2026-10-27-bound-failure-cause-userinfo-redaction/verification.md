@@ -102,7 +102,20 @@ Environment: macOS (Darwin 25.6.0), Node 24.22.1 from `.nvmrc`.
 - The time tests are wall-clock, with a margin of about a hundred times the fixed time and a fifth or less of the base time; a long scheduler pause on a loaded CI runner could still exceed 200 ms.
 - The logger's `redactText` in `@taskelith/observability`, which the failure-cause pipeline calls between its rules, is quadratic on the same runs: alone, at 20,000, 40,000, and 80,000 characters, `a.` repeated takes 159, 635, and 2,537 ms, and `.a`, `A.`, `a.b`, `eyJ.`, and `proxy-` behave alike. Describing a bare 60,000-character `a.` run therefore still takes about 1.5 seconds (3.1 seconds before this change). It is outside this task's scope and is reported to the coordinator for a follow-up.
 
+## Archive checks
+
+State checked: the tree of the archive commit `docs: archive the bound failure-cause user-information redaction change`, the working tree after `npm run openspec -- archive bound-failure-cause-userinfo-redaction --yes` on `52109cdf`, which records the merge `bc4956c8` of `dev` at `2a26714b`.
+
+| Check | Result |
+| --- | --- |
+| `npm run openspec -- archive bound-failure-cause-userinfo-redaction --yes` | Task status complete; `worker-runtime` updated (1 modified requirement); archived as `2026-10-27-bound-failure-cause-userinfo-redaction` with `findings.jsonl`; one non-blocking warning that the proposal's Why section exceeds 1,000 characters |
+| `npm run openspec -- validate --all --strict --no-interactive` | 69 passed, 0 failed |
+| This change's line in `npm run openspec -- validate --archived --no-interactive` | `✓ change/2026-10-27-bound-failure-cause-userinfo-redaction`; the command fails as a whole on older archived changes only |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`, merge base `2a26714b` | Only the added scenario "Pathological cause message" of `worker-runtime` |
+| `make findings ARGS="validate"` | Every findings file is valid (6 files), including this change's archived `findings.jsonl` |
+| `npm run verify:comments` | Every comment is within the comment length rule |
+| `make verify`, with `DOCKER_CONFIG` at an empty configuration because Docker Desktop's credential helper hangs on this host (anonymous pulls of pinned public images, no credentials read) | Exit 0, from 2026-10-27T07:53:00Z to 07:55:59Z: 2026 tests, 2024 passed, 0 failed, 2 skipped; coverage of all files 99.27 % lines, 91.95 % branches, 98.97 % functions; 0 breaking changes in each of the four contract documents against `2a26714bd56c`; OpenSpec 69 passed, 0 failed; archive dry run: no active OpenSpec change; every findings file valid (6 files); every comment within the rule; package allowlist and installed CLI verification passed |
+
 ## Remaining gates
 
-- Archive.
-- Integration into dev by the coordinator (single pull request).
+- Integration into `dev` by the coordinator (single pull request).
