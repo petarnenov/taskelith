@@ -31,6 +31,10 @@ test('an indented or JSON-escaped PEM private key is refused too', () => {
   assert.equal(keyFileProblem('installation-authority', () => JSON.stringify({ format: 1, privateKey })), 'holds a PEM private key');
   assert.equal(keyFileProblem('crlf.json', () => JSON.stringify({ privateKey: privateKey.replaceAll('\n', '\r\n') })), 'holds a PEM private key');
   assert.equal(keyFileProblem('template.ts', () => `\`${marker('BEGIN', 'PRIVATE KEY')}\\n\${body}\``), undefined);
+  const nested = JSON.stringify({ payload: JSON.stringify({ privateKey }) });
+  assert.equal(keyFileProblem('nested.json', () => nested), 'holds a PEM private key');
+  assert.equal(keyFileProblem('one-line.txt', () => privateKey.replaceAll('\n', ' ')), 'holds a PEM private key');
+  assert.equal(keyFileProblem('prose.md', () => `the ${marker('BEGIN', 'PRIVATE KEY')} line starts a key`), undefined);
 });
 
 test('the check fails on a tracked key and passes without one', () => {
@@ -44,6 +48,7 @@ test('the check fails on a tracked key and passes without one', () => {
     assert.match(run(), /No tracked file/);
     writeFileSync(join(root, 'leaked.txt'), KEY);
     git('add', 'leaked.txt');
+    writeFileSync(join(root, 'leaked.txt'), 'cleaned in the working copy only\n');
     assert.throws(run, (error: { stderr: string }) => /leaked\.txt holds a PEM private key/.test(error.stderr) && !error.stderr.includes('MHcC'));
   } finally {
     rmSync(root, { recursive: true, force: true });
