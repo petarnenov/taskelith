@@ -7,6 +7,7 @@ import {
 } from '@taskelith/execution';
 import { err, failure, ok, parseIdentifier, parseInstant, type Result } from '@taskelith/kernel';
 import { postForm, statusFailure } from './control-plane-http.js';
+import { sanitizeFailureText } from './failure-cause.js';
 import type { ControlPlaneClientSettings } from './http-launch-authority-client.js';
 
 // `publishEvidence` over HTTP: the record and its content as the two parts
@@ -27,7 +28,7 @@ export class HttpEvidencePublisher implements EvidencePublisher {
     const { status, body } = answered.value;
     if (status !== 200 && status !== 201) return err(statusFailure('publishEvidence', answered.value));
     const checked = checkHttpSchema('EvidenceRecord', body);
-    if (!checked.ok) return err(failure('internal', 'the evidence record violates its schema', { violation: checked.error[0] ?? '' }));
+    if (!checked.ok) return err(failure('internal', 'the evidence record violates its schema', { violation: sanitizeFailureText(checked.error[0] ?? '') }));
     const record = parseRecord(body as HttpSchemas['EvidenceRecord']);
     if (!record.ok) return err(failure('internal', `the evidence record is not valid: ${record.error.message}`));
     if (record.value.evidenceId !== publication.evidenceId) {
