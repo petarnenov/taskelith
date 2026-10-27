@@ -4,7 +4,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: installation.sh build|bootstrap|broker-config|start|stop|enroll|enrollment-token|verify|smoke|check-containment|scenario-fresh-composition|scenario-worker-disk-loss|scenario-worker-kill|scenario-worker-namespace-confinement|scenario-worker-lifecycle|scenario-native-worker-lifecycle PROJECT" >&2
+  echo "usage: installation.sh build|bootstrap|broker-config|start|stop|enroll|enrollment-token|verify|check-reproducible|smoke|check-containment|scenario-fresh-composition|scenario-worker-disk-loss|scenario-worker-kill|scenario-worker-namespace-confinement|scenario-worker-lifecycle|scenario-native-worker-lifecycle PROJECT" >&2
   exit 2
 }
 
@@ -36,27 +36,89 @@ require() {
   fi
 }
 
+# EPOCH, the commit time of the built revision, fixes the image's dates.
 build_image() {
-  local context="$1" target="$2" image="$3"
-  docker build --file "$context/infra/installation/Dockerfile" --target "$target" --tag "$image" \
+  local context="$1" epoch="$2" target="$3" image="$4"
+  shift 4
+  docker build "$@" --file "$context/infra/installation/Dockerfile" --target "$target" --tag "$image" \
     --build-arg BASE="$TASKELITH_UBUNTU_BASE" --build-arg NODE_VERSION="$TASKELITH_NODE_VERSION" \
     --build-arg NODE_SHA256_AMD64="$TASKELITH_NODE_SHA256_AMD64" \
-    --build-arg NODE_SHA256_ARM64="$TASKELITH_NODE_SHA256_ARM64" "$context"
+    --build-arg NODE_SHA256_ARM64="$TASKELITH_NODE_SHA256_ARM64" \
+    --build-arg SOURCE_DATE_EPOCH="$epoch" "$context"
 }
 
-# The build context holds only tracked files, with their uncommitted edits,
-# so local credentials or state never reach an image.
-build() (
-  local name revision context
+commit_time() {
+  git -C "$repository" log -1 --format=%ct "$1"
+}
+
+require_pins() {
+  local name
   for name in TASKELITH_UBUNTU_BASE TASKELITH_NODE_VERSION TASKELITH_NODE_SHA256_AMD64 TASKELITH_NODE_SHA256_ARM64; do
-    require "$name" "run through make installation-build"
+    require "$name" "run through make $1"
   done
+}
+
+# The commit ID of the tracked files with their uncommitted edits: no local
+# credentials or state reach an image, and every step sees one commit.
+source_revision() {
+  local revision
+  revision="$(git -C "$repository" stash create)" || return
+  if [ -z "$revision" ]; then revision="$(git -C "$repository" rev-parse --verify HEAD)" || return; fi
+  echo "$revision"
+}
+
+unpack_context() {
+  git -C "$repository" archive --format=tar "$1" | tar -xf - -C "$2"
+}
+
+build() (
+  local revision epoch context
+  require_pins installation-build
   context="$(mktemp -d)"
   trap 'rm -rf "$context"' EXIT
-  revision="$(git -C "$repository" stash create)"
-  git -C "$repository" archive --format=tar "${revision:-HEAD}" | tar -xf - -C "$context"
-  build_image "$context" control-plane "$control_plane_image"
-  build_image "$context" worker "$worker_image"
+  revision="$(source_revision)" || exit
+  epoch="$(commit_time "$revision")" || exit
+  unpack_context "$revision" "$context"
+  build_image "$context" "$epoch" control-plane "$control_plane_image"
+  build_image "$context" "$epoch" worker "$worker_image"
+)
+
+# Removes the check's images; a failed removal fails a check that passed.
+finish_reproducible() {
+  local status="$1" image built=()
+  rm -rf "$context"
+  for image in "$first" "$second"; do
+    if docker image inspect "$image" >/dev/null 2>&1; then built+=("$image"); fi
+  done
+  if [ "${#built[@]}" -gt 0 ] && ! docker image rm "${built[@]}" >/dev/null; then
+    echo "installation.sh: the images ${built[*]} were not removed" >&2
+    if [ "$status" -eq 0 ]; then status=1; fi
+  fi
+  exit "$status"
+}
+
+# Builds the worker image twice from fresh contexts of one revision, without
+# the build cache, and passes only when both builds give one image ID.
+check_reproducible() (
+  local revision epoch first="$worker_image-first" second="$worker_image-second" context="" image
+  local first_id second_id
+  require_pins verify-worker-image-reproducible
+  trap 'finish_reproducible $?' EXIT
+  revision="$(source_revision)" || exit
+  epoch="$(commit_time "$revision")" || exit
+  for image in "$first" "$second"; do
+    rm -rf "$context"
+    context="$(mktemp -d)"
+    unpack_context "$revision" "$context"
+    build_image "$context" "$epoch" worker "$image" --no-cache
+  done
+  first_id="$(docker image inspect --format '{{.Id}}' "$first")"
+  second_id="$(docker image inspect --format '{{.Id}}' "$second")"
+  if [ "$first_id" != "$second_id" ]; then
+    echo "installation.sh: two builds of one revision gave $first_id and $second_id" >&2
+    exit 1
+  fi
+  echo "installation.sh: both builds gave the worker image $first_id"
 )
 
 # Prints the init result once: it holds the operator secret (contract 4).
@@ -304,6 +366,7 @@ case "$command" in
   enroll) enroll ;;
   enrollment-token) enrollment_token ;;
   verify) verify ;;
+  check-reproducible) check_reproducible ;;
   smoke) smoke ;;
   check-containment) check_containment ;;
   scenario-fresh-composition) fresh_composition_scenario ;;
