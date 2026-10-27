@@ -1,5 +1,5 @@
 import type { AttemptId } from '@taskelith/execution';
-import type { RepositoryBinding, WorkspaceCredential } from '../domain/workspace.js';
+import type { IdentifierDigest, RepositoryBinding, WorkspaceCredential } from '../domain/workspace.js';
 import type { WorkspaceProvider } from './workspace-provider.js';
 
 export interface FixtureCredentials {
@@ -20,6 +20,11 @@ export type TreeEntry =
 // Native helpers act as an agent or another party would, beside the port.
 export interface WorkspaceFixture {
   readonly provider: WorkspaceProvider;
+  // The canonical data root, without symbolic links, whose
+  // `worker/workspaces/` holds the provider's workspaces.
+  readonly dataRoot: string;
+  // The digest the provider names its workspaces and task branches with.
+  readonly identifierDigest: IdentifierDigest;
   readonly binding: RepositoryBinding;
   readonly credentials: FixtureCredentials;
   // The base branch's tree; it holds `trackedPath` and ignores `ignoredPath`.

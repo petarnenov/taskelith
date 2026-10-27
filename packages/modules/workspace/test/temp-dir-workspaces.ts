@@ -7,6 +7,7 @@ import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kerne
 import type { AttemptId } from '@taskelith/execution';
 import {
   DIRTY_REASONS,
+  TASK_BRANCH_PREFIX,
   WORKSPACE_LAYOUT,
   WORKSPACE_MODES,
   checkCredentialScope,
@@ -20,6 +21,7 @@ import {
   type DirtyReason,
   type GitObjectId,
   type HeadSnapshot,
+  type IdentifierDigest,
   type PrepareWorkspace,
   type PushTaskBranch,
   type RemoteAccess,
@@ -116,9 +118,26 @@ interface LocalState {
 
 // The worker's record beside the checkout, closed to the execution.
 interface Metadata {
+  readonly attemptId: AttemptId;
   readonly kind: WorkspaceKind;
   readonly expectedBranch: string | null;
   readonly remote: string;
+}
+
+// The safe form that names had to have before they were derived.
+const PRE_DERIVATION_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+
+// A safe and distinct name that is not the derived one.
+const percentEncoded = (text: string) => text.replace(/[^A-Za-z0-9_-]/g, (character) => `%${character.charCodeAt(0).toString(16)}`);
+
+const sha256Digest: IdentifierDigest = (identifier) => createHash('sha256').update(identifier, 'utf8').digest('hex');
+
+// The digest the composition supplies, or a defective one that a wrong
+// adapter would use consistently for its names and its fixture.
+function identifierDigest(defects: DoubleDefects): IdentifierDigest {
+  if (defects.digestsWithSha1) return sha1;
+  if (defects.digestsLatin1Bytes) return (identifier) => createHash('sha256').update(identifier, 'latin1').digest('hex');
+  return sha256Digest;
 }
 
 const STATE_FILE = join('.git', 'state.json');
@@ -134,7 +153,12 @@ export interface DoubleDefects {
   readonly snapshotsStaleTree?: boolean;
   readonly removesDirty?: boolean;
   readonly acceptsMismatchedTree?: boolean;
-  readonly checksTaskOnlyOnBranch?: boolean;
+  readonly namesBranchByRawTaskId?: boolean;
+  readonly namesDirectoryByEncoding?: boolean;
+  readonly digestsWithSha1?: boolean;
+  readonly digestsLatin1Bytes?: boolean;
+  readonly removesDigestOnlyNameWithDash?: boolean;
+  readonly rejectsUnsafeNames?: boolean;
   readonly snapshotsCommit?: boolean;
   readonly snapshotsWithoutMetadata?: boolean;
   readonly sweepFollowsLinks?: boolean;
@@ -165,22 +189,24 @@ export class TempDirWorkspaces implements WorkspaceProvider {
   readonly root: string;
   readonly service: FakeGitService;
   readonly repository: RepositoryId;
+  readonly digest: IdentifierDigest;
   readonly defects: DoubleDefects;
 
-  constructor(dataRoot: string, service: FakeGitService, repository: RepositoryId, defects: DoubleDefects = {}) {
+  constructor(dataRoot: string, service: FakeGitService, repository: RepositoryId, digest: IdentifierDigest, defects: DoubleDefects = {}) {
     this.root = join(dataRoot, WORKSPACE_LAYOUT.root);
     this.service = service;
     this.repository = repository;
+    this.digest = digest;
     this.defects = defects;
   }
 
   async prepare(request: PrepareWorkspace): Promise<Result<Workspace>> {
-    const name = workspaceDirectoryName(request.attemptId);
-    if (!name.ok) return name;
+    if (this.defects.rejectsUnsafeNames && ![request.attemptId, request.taskId].every((text) => PRE_DERIVATION_NAME.test(text))) {
+      return err(failure('invalid', 'the identifier is not a safe name'));
+    }
+    const name = this.directoryName(request.attemptId);
     const { target } = request;
-    const lenient = this.defects.checksTaskOnlyOnBranch && target.kind === 'at-head';
-    const taskBranch = lenient ? ok(request.taskId) : taskBranchName(request.taskId);
-    if (!taskBranch.ok) return taskBranch;
+    const taskBranch = this.defects.namesBranchByRawTaskId ? `${TASK_BRANCH_PREFIX}${request.taskId}` : taskBranchName(request.taskId, this.digest);
     if (target.kind === 'at-head' && target.head.repository !== request.binding.repository) {
       return err(failure('invalid', 'the head belongs to another repository'));
     }
@@ -188,21 +214,21 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     const scope = this.scope(request.credential, request.binding.repository, 'read-code');
     if (!scope.ok) return scope;
     this.service.calls += 1;
-    const commit = this.startCommit(request, taskBranch.value);
+    const commit = this.startCommit(request, taskBranch);
     if (commit === undefined) return err(failure('not-found', 'the base branch or the head is unknown'));
     if (target.kind === 'at-head' && this.service.commits.get(commit)?.tree !== target.head.tree && !this.defects.acceptsMismatchedTree) {
       return workspaceFailure('invalid', 'head-mismatch', 'the tree is not the commit tree');
     }
-    const final = join(this.root, name.value);
-    if (await exists(final)) return err(failure('conflict', `workspace ${name.value} exists`));
-    const branch = target.kind === 'task-branch' ? taskBranch.value : null;
+    const final = join(this.root, name);
+    if (await exists(final)) return err(failure('conflict', `workspace ${request.attemptId} exists`));
+    const branch = target.kind === 'task-branch' ? taskBranch : null;
     const secret = this.defects.storesSecret ? `https://${request.credential.secret}@` : '';
     const remote = `${secret}${request.binding.remote}`;
     const index = storeTree(this.service.entries(commit));
-    const staging = join(this.root, `${WORKSPACE_LAYOUT.stagingPrefix}${name.value}`);
+    const staging = join(this.root, `${WORKSPACE_LAYOUT.stagingPrefix}${name}`);
     await mkdir(staging, { mode: WORKSPACE_MODES.attempt });
     await chmod(staging, WORKSPACE_MODES.attempt);
-    const metadata: Metadata = { kind: target.kind, expectedBranch: branch, remote };
+    const metadata: Metadata = { attemptId: request.attemptId, kind: target.kind, expectedBranch: branch, remote };
     await writeFile(join(staging, WORKSPACE_LAYOUT.metadata), JSON.stringify(metadata), { mode: WORKSPACE_MODES.metadata });
     await this.checkout(join(staging, WORKSPACE_LAYOUT.checkout), { branch, commit, index });
     await rename(staging, final);
@@ -212,15 +238,15 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     });
   }
 
+  // The attempt comes from the record, as a name does not hold it whole.
   async list(): Promise<readonly AttemptId[]> {
-    const names = (await readdir(this.root)).filter((entry) => !entry.startsWith('.')).sort();
-    return names.map((entry) => mustParse(parseIdentifier('AttemptId', entry)));
+    const names = (await readdir(this.root)).filter((entry) => !entry.startsWith('.'));
+    const records = await Promise.all(names.map((entry) => readMetadata(join(this.root, entry, WORKSPACE_LAYOUT.checkout))));
+    return records.map((record) => record.attemptId).sort();
   }
 
   async remove(attemptId: AttemptId): Promise<Result<void>> {
-    const name = workspaceDirectoryName(attemptId);
-    if (!name.ok) return name;
-    const target = join(this.root, name.value);
+    const target = join(this.root, this.removalName(attemptId));
     if (!(await exists(target))) return ok(undefined);
     const current = await this.inspect(attemptId);
     if (!current.ok) return current;
@@ -231,7 +257,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
       await mkdir(this.root);
       return ok(undefined);
     }
-    const removing = join(this.root, `${WORKSPACE_LAYOUT.removingPrefix}${name.value}`);
+    const removing = join(this.root, `${WORKSPACE_LAYOUT.removingPrefix}${this.directoryName(attemptId)}`);
     await rename(target, removing);
     await rm(removing, { recursive: true });
     return ok(undefined);
@@ -266,7 +292,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
   // The double models a worker whose executions share a separate account.
   private async handedOffElsewhere(attemptId: AttemptId): Promise<boolean> {
     const others = (await this.list()).filter((other) => other !== attemptId);
-    const records = others.map((other) => exists(join(this.root, other, WORKSPACE_LAYOUT.handOffRecord)));
+    const records = others.map((other) => exists(join(this.root, this.directoryName(other), WORKSPACE_LAYOUT.handOffRecord)));
     return (await Promise.all(records)).includes(true);
   }
 
@@ -373,11 +399,19 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     return head;
   }
 
+  directoryName(attemptId: AttemptId): string {
+    return this.defects.namesDirectoryByEncoding ? percentEncoded(attemptId) : workspaceDirectoryName(attemptId, this.digest);
+  }
+
+  // The defect writes a digest-only name as an empty prefix and a `-`.
+  private removalName(attemptId: AttemptId): string {
+    const name = this.directoryName(attemptId);
+    return this.defects.removesDigestOnlyNameWithDash && !name.includes('-') ? `-${name}` : name;
+  }
+
   async checkoutOf(attemptId: AttemptId): Promise<Result<string>> {
-    const name = workspaceDirectoryName(attemptId);
-    if (!name.ok) return name;
-    const checkout = join(this.root, name.value, WORKSPACE_LAYOUT.checkout);
-    return (await exists(checkout)) ? ok(checkout) : err(failure('not-found', `no workspace ${name.value}`));
+    const checkout = join(this.root, this.directoryName(attemptId), WORKSPACE_LAYOUT.checkout);
+    return (await exists(checkout)) ? ok(checkout) : err(failure('not-found', `no workspace ${attemptId}`));
   }
 
   private async taskBranchOf(attemptId: AttemptId, credential: WorkspaceCredential, access: RemoteAccess): Promise<Result<{ branch: string }>> {
@@ -581,7 +615,7 @@ function credential(credentialId: string, repositories: string[], permissions: s
 
 // A fresh data root with control records, a service, and the fixture.
 export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixture: WorkspaceFixture; dispose: () => Promise<void> }> {
-  const dataRoot = await mkdtemp(join(tmpdir(), 'taskelith-workspace-'));
+  const dataRoot = await realpath(await mkdtemp(join(tmpdir(), 'taskelith-workspace-')));
   for (const [path, text] of Object.entries(CONTROL_RECORDS)) {
     await mkdir(dirname(join(dataRoot, path)), { recursive: true });
     await writeFile(join(dataRoot, path), text);
@@ -589,7 +623,8 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
   await mkdir(join(dataRoot, WORKSPACE_LAYOUT.root), { recursive: true });
   const service = new FakeGitService(BASE_BRANCH, BASE_TREE);
   const repository = mustParse(parseIdentifier('RepositoryId', 'acme/project')) as RepositoryId;
-  const make = () => new TempDirWorkspaces(dataRoot, service, repository, defects);
+  const digest = identifierDigest(defects);
+  const make = () => new TempDirWorkspaces(dataRoot, service, repository, digest, defects);
   const provider = make();
   const binding: RepositoryBinding = { repository, remote: 'https://scm.example/acme/project.git', baseBranch: BASE_BRANCH };
   const checkout = async (attemptId: AttemptId) => mustParse(await provider.checkoutOf(attemptId));
@@ -604,6 +639,8 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
   };
   const fixture: WorkspaceFixture = {
     provider,
+    dataRoot,
+    identifierDigest: digest,
     binding,
     credentials: {
       read: credential('read', [repository], ['read-code']),
@@ -673,15 +710,17 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
       return Object.fromEntries(stored.map(([path, entry]) => [path, load(entry)]));
     },
     interruptPrepare: async (attemptId) => {
-      const staging = join(provider.root, `${WORKSPACE_LAYOUT.stagingPrefix}${attemptId}`, WORKSPACE_LAYOUT.checkout);
+      const staging = join(provider.root, `${WORKSPACE_LAYOUT.stagingPrefix}${provider.directoryName(attemptId)}`, WORKSPACE_LAYOUT.checkout);
       await mkdir(staging, { recursive: true });
       await symlink(join(dataRoot, 'worker/journal'), join(staging, 'journal-link'));
     },
     interruptRemove: async (attemptId) => {
-      await rename(join(provider.root, attemptId), join(provider.root, `${WORKSPACE_LAYOUT.removingPrefix}${attemptId}`));
+      const name = provider.directoryName(attemptId);
+      await rename(join(provider.root, name), join(provider.root, `${WORKSPACE_LAYOUT.removingPrefix}${name}`));
     },
     leaveLinkedLeftover: async (attemptId) => {
-      await symlink(join(dataRoot, 'worker/executions'), join(provider.root, `${WORKSPACE_LAYOUT.stagingPrefix}${attemptId}`));
+      const staging = `${WORKSPACE_LAYOUT.stagingPrefix}${provider.directoryName(attemptId)}`;
+      await symlink(join(dataRoot, 'worker/executions'), join(provider.root, staging));
     },
     leftovers: async () => (await readdir(provider.root)).filter((entry) => entry.startsWith('.')).sort(),
   };
