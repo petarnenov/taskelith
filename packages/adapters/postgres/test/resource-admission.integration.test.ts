@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { after, beforeEach, test } from 'node:test';
+import { after, beforeEach, mock, test } from 'node:test';
 import type { Result } from '@taskelith/kernel';
 import { endAttempt, recordNotStarted, type AssignmentId, type AttemptId, type Task, type WorkerId } from '@taskelith/execution';
 import { PostgresDatabase } from '@taskelith/postgres';
@@ -119,6 +119,22 @@ test('a placement writes the held reservation, its assignment, the charge, and t
   assert.deepEqual(offer!.metadata.sdlc, { runId: ROOT_LINK.runId, stageId: 'specs', admissionId: `admission-${task.id}`, admissionGeneration: 2 });
   assert.deepEqual([offer!.payload.protocolVersion, offer!.payload.recoveryEpoch], [1, 1]);
   assert.equal(kind(await service.reserve(placement(task, 'b'))), 'standing:attempt-already-reserved');
+});
+
+// The assignment age (execution observability) reads changed_at against the
+// database clock; a skewed application Date must not move it.
+test('a placement stamps the assignment change time on the database clock', async () => {
+  const task = await rootTask('task-clock');
+  mock.timers.enable({ apis: ['Date'], now: Date.now() - 6 * 60 * 60 * 1000 });
+  try {
+    assert.equal(kind(await service.reserve(placement(task, 'clock'))), 'placed');
+  } finally {
+    mock.timers.reset();
+  }
+  const [row] = await query<{ gap: number }>(url, `SELECT extract(epoch FROM o.appended_at - a.changed_at)::float8 AS gap
+    FROM assignments a, outbox o WHERE a.id = 'assignment-clock' AND o.event_id = 'offer-clock'`);
+  assert.ok(row, 'the assignment and its offer row exist');
+  assert.ok(Math.abs(row.gap) < 1, String(row.gap));
 });
 
 test('two replicas placing the same attempt leave one assignment and one held reservation', async () => {
