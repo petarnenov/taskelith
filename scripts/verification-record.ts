@@ -251,7 +251,15 @@ function storedLine(path: string): string | undefined {
   return existsSync(path) ? readFileSync(path, 'utf8').trim() : undefined;
 }
 
-function verifyProblems(context: RecordContext, verify: string, recordPath: string): string[] {
+// The files a change's own record flow edits after make verify: the record,
+// the ticked verify task, and the review passes and their findings.
+const RECORD_FILES = ['verification.md', 'tasks.md', 'findings.jsonl', 'passes.jsonl'];
+
+function isRecordFile(directory: string, path: string): boolean {
+  return RECORD_FILES.some((file) => path === posix.join(directory, file));
+}
+
+function verifyProblems(context: RecordContext, verify: string, directory: string): string[] {
   const recorded = VERIFY_LINE.exec(verify);
   if (recorded === null) return ['the make verify line records no passing run; run make record with LOG'];
   const profile = recorded[1] as VerifyProfile;
@@ -259,7 +267,7 @@ function verifyProblems(context: RecordContext, verify: string, recordPath: stri
   const problems: string[] = [];
   const changed = attempt(context.git, ['cat-file', '-e', `${tree}^{tree}`]) === undefined
     ? undefined
-    : changedSince(context.git, tree).filter((path) => path !== recordPath);
+    : changedSince(context.git, tree).filter((path) => !isRecordFile(directory, path));
   if (changed === undefined) problems.push(`the verified tree ${tree.slice(0, 12)} is not in this clone`);
   else if (changed.length > 0) problems.push(`the working tree differs from the verified tree ${tree.slice(0, 12)}: ${changed.join(', ')}`);
   const stored = stampRecordPath(context, tree, profile);
@@ -278,7 +286,7 @@ export function checkRecord(context: RecordContext, change: string): string[] {
   const expected = renderBlock(verify, derivedLines(context, location)).split('\n');
   const stale = expected.filter((line, index) => lines[index] !== line).map((line) => `stale or missing: ${line}`);
   if (lines.length !== expected.length) stale.push(`the generated part has ${lines.length} lines, expected ${expected.length}`);
-  return [...stale, ...verifyProblems(context, verify, path)].map((problem) => `${path}: ${problem}`);
+  return [...stale, ...verifyProblems(context, verify, location.directory)].map((problem) => `${path}: ${problem}`);
 }
 
 function output(command: string, args: readonly string[], root: string): { readonly ok: boolean; readonly text: string } {

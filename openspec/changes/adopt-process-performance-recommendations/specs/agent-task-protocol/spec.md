@@ -65,7 +65,7 @@ The repository SHALL provide `make integrate BRANCH=<change> TITLE=<title> BODY=
 - **THEN** only the text between the generated markers of `verification.md` changes
 
 #### Scenario: Stale record
-- **WHEN** the working tree differs from the recorded verified tree in any file other than the change's `verification.md`, or a recomputed part differs
+- **WHEN** the working tree differs from the recorded verified tree in any file other than the change's `verification.md`, `tasks.md`, `findings.jsonl`, or `passes.jsonl`, or a recomputed part differs
 - **THEN** `make record-check` fails and names the stale part
 
 #### Scenario: Edited result

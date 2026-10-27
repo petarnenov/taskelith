@@ -183,8 +183,36 @@ test('make record-check passes on the recorded tree and fails on drift', () => {
     const drift = runCommand(['check', CHANGE], context);
     assert.equal(drift.status, 1);
     assert.match(drift.stderr, /stale or missing: - Review passes in `passes.jsonl`:/);
-    assert.match(drift.stderr, /the working tree differs from the verified tree [0-9a-f]{12}: openspec\/changes\/demo-change\/passes\.jsonl/);
-    assert.match(drift.stderr, /make record-check: \d+ problem\(s\)\n$/);
+    assert.doesNotMatch(drift.stderr, /the working tree differs/);
+    write(context.root, 'openspec/specs/demo/spec.md', '# demo\n\ndrifted\n');
+    const tree = runCommand(['check', CHANGE], context);
+    assert.match(tree.stderr, /the working tree differs from the verified tree [0-9a-f]{12}: openspec\/specs\/demo\/spec\.md/);
+    assert.match(tree.stderr, /make record-check: \d+ problem\(s\)\n$/);
+  });
+});
+
+function recordedChange(context: RecordContext): void {
+  const logPath = join(context.root, '..', `${CHANGE}-files.log`);
+  writeFileSync(logPath, verifyLog(context));
+  try {
+    assert.equal(runCommand(['write', CHANGE, logPath], context).status, 0);
+  } finally {
+    rmSync(logPath, { force: true });
+  }
+}
+
+test('record-check accepts later edits of the change record files only', () => {
+  withChange((context) => {
+    recordedChange(context);
+    write(context.root, `openspec/changes/${CHANGE}/tasks.md`, '- [x] 1.1 Run make verify\n');
+    write(context.root, `openspec/changes/${CHANGE}/findings.jsonl`, '{}\n');
+    assert.deepEqual(checkRecord(context, CHANGE), []);
+    for (const path of [`openspec/changes/${CHANGE}/design.md`, 'scripts/other.ts']) {
+      write(context.root, path, 'drift\n');
+      const problems = checkRecord(context, CHANGE).join('\n');
+      assert.match(problems, new RegExp(`the working tree differs from the verified tree [0-9a-f]{12}: ${path}$`), path);
+      rmSync(join(context.root, path));
+    }
   });
 });
 
