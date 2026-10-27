@@ -373,4 +373,10 @@ export {
   type StandingRuleUse,
 } from './ports/standing-approval-rules.js';
 export type { TaskRepository } from './ports/task-repository.js';
-export { isSpaceRefusal, SPACE_REFUSAL_REASON, type WorkerJournal } from './ports/worker-journal.js';
+export {
+  isJournalStop,
+  isSpaceRefusal,
+  JOURNAL_STOP_REASONS,
+  SPACE_REFUSAL_REASON,
+  type WorkerJournal,
+} from './ports/worker-journal.js';

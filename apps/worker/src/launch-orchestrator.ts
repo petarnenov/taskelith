@@ -1,4 +1,5 @@
 import {
+  isJournalStop,
   launchRejection,
   launchRetryDelay,
   parseLaunchParameters,
@@ -568,11 +569,23 @@ class Launch {
         continue;
       }
       const request = this.#request(execution, operationId.value, reportsNotStarted);
-      // No request leaves before W2 commits (journal contract section 5).
-      const write = () => this.#options.journal.beginAuthorization(request);
-      if (!(await this.#commitWrite(execution.executionId, write))) return { kind: 'end' };
-      return { kind: 'begun', operationId: operationId.value, request, reading: reading.value };
+      const failed = await this.#commitW2(request);
+      if (failed === undefined) return { kind: 'begun', operationId: operationId.value, request, reading: reading.value };
+      if (this.#stopping.aborted || isJournalStop(failed)) return { kind: 'end' };
+      await this.#deferBeforeW2(failed);
     }
+  }
+
+  // No request leaves before W2 commits (journal contract section 5); answers
+  // the last failure when W2 did not commit.
+  async #commitW2(request: LaunchRequest): Promise<Failure | undefined> {
+    let failed: Failure | undefined;
+    const write = () => {
+      const written = this.#options.journal.beginAuthorization(request);
+      failed = written.ok ? undefined : written.error;
+      return written;
+    };
+    return (await this.#commitWrite(request.executionId, write)) ? undefined : failed;
   }
 
   // Nothing was committed or sent; the launch waits its back-off on a

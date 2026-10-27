@@ -8,12 +8,12 @@
 
 - [x] 2.1 An unreadable clock through `run`: event loop turns, back-off spaced, logged; failing before 3.1
 - [x] 2.2 Upper bound, recovery, identifier and journal read failures, cancellation during the wait
-- [ ] 2.3 A failed W2 commit through `run`, a W2 commit that stops the journal, adapter stop reasons; failing before 3.2
+- [x] 2.3 A failed W2 commit through `run`, a W2 commit that stops the journal, adapter stop reasons; failing before 3.2
 
 ## 3. Fix
 
 - [x] 3.1 `Launch` backs off and retries a failure before W2
-- [ ] 3.2 `Launch` backs off and retries a failed W2 commit that rolled back; `isJournalStop`
+- [x] 3.2 `Launch` backs off and retries a failed W2 commit that rolled back; `isJournalStop`
 
 ## 4. Records
 

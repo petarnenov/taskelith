@@ -74,3 +74,11 @@ export const SPACE_REFUSAL_REASON = 'disk-full';
 export function isSpaceRefusal(failure: Failure): boolean {
   return failure.details.reason === SPACE_REFUSAL_REASON;
 }
+
+// The `reason`s of a failure after which the journal stopped: its state on
+// the device is unknown (worker journal contract sections 7 and 8).
+export const JOURNAL_STOP_REASONS: readonly string[] = Object.freeze(['flush-failure', 'corrupt', 'stopped']);
+
+export function isJournalStop(failure: Failure): boolean {
+  return JOURNAL_STOP_REASONS.includes(failure.details.reason ?? '');
+}
