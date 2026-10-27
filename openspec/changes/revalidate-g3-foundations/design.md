@@ -146,6 +146,8 @@ Each substantive finding is assigned to a follow-up change. One follow-up change
 - a size: S (records or one contract section), M (a contract, its spec, and its port types), or L (several capabilities, or code beyond port types);
 - the findings it resolves.
 
+A port's own readers and conformance cases under `src/ports/**` count as port types.
+
 The coordinator distributes them to workers. Item 0 is done when each of them has landed in `dev`.
 
 ## Risks / Trade-offs
