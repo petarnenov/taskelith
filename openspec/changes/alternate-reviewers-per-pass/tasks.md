@@ -18,5 +18,5 @@
 
 - [x] 4.1 Create this change's empty `findings.jsonl`.
 - [x] 4.2 Run `npm run openspec -- validate alternate-reviewers-per-pass --strict`, `npm run verify:comments`, `npm run findings -- validate`, and an archive of the change in a scratch copy with `validate --all --strict`.
-- [ ] 4.3 Run `make verify`.
-- [ ] 4.4 Independent review: pass 1 by reviewer A, pass 2 by reviewer B if needed, pass 3 by reviewer A if needed.
+- [x] 4.3 Run `make verify`.
+- [x] 4.4 Independent review: pass 1 by reviewer A, pass 2 by reviewer B if needed, pass 3 by reviewer A if needed.

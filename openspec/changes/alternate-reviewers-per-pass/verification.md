@@ -17,7 +17,7 @@ The coordinator Niki decided on 2026-10-27, after the first round of this change
 
 ## Revision
 
-Rule text and change records: `52049334` and `8914f3dc` on base `744689cb`, and the first verification record `58bd811b`. Merge `a4f223d0` merged `origin/dev` at `9c0c1706`, which brought pull request #334 (`require-finding-capability`). Its conflicts in `docs/agent-task-protocol.md` worker steps 5 and 6, `.claude/skills/taskelith-coordinator/SKILL.md`, and `.claude/skills/taskelith-worker/SKILL.md` were resolved by keeping both `dev`'s capability and record-quality wording and this change's A and B wording. The coordinator decisions above are in the commits after `a4f223d0`, up to `18da6cde`, which review pass 1 and `make verify` ran on. Review pass 1 fixes: `ba93fa1e`; their record `e1781486`, which review pass 2 ran on. Review pass 2 fixes: `9894a699`; their record follows it.
+Rule text and change records: `52049334` and `8914f3dc` on base `744689cb`, and the first verification record `58bd811b`. Merge `a4f223d0` merged `origin/dev` at `9c0c1706`, which brought pull request #334 (`require-finding-capability`). Its conflicts in `docs/agent-task-protocol.md` worker steps 5 and 6, `.claude/skills/taskelith-coordinator/SKILL.md`, and `.claude/skills/taskelith-worker/SKILL.md` were resolved by keeping both `dev`'s capability and record-quality wording and this change's A and B wording. The coordinator decisions above are in the commits after `a4f223d0`, up to `18da6cde`, which review pass 1 and `make verify` ran on. Review pass 1 fixes: `ba93fa1e`; their record `e1781486`, which review pass 2 ran on. Review pass 2 fixes: `9894a699`; their record `d811a69e`. Merge `bc6683a3` merged `origin/dev` at `0864892f` (#336) without touching this change's files; the `make verify` record `07fd1c01` followed, which review pass 3 ran on. Review pass 3 fix: `b77e2e97`; its record follows it.
 
 ## Environment
 
@@ -56,7 +56,7 @@ OpenCode CLI, model `opencode-go/kimi-k3.1-pro`, variant `high`, on `18da6cde`, 
 
 `opencode run --standalone --agent reviewer -m 'opencode-go/kimi-k3.1-pro#high' --format json --title alternate-reviewers-per-pass "<prompt>" < /dev/null`
 
-Read-only proof: the SHA-256 snapshot of all tracked and untracked files was `48e7b6e0f2c1cbcc871efb12cb21ee7745b2884dd993750dde1e3007d69e90fb` before and after the pass. Result: 0 Critical, 0 High, 3 Medium, 7 Low. All ten are in `findings.jsonl`. Pass 2 confirmed nine of them, which keep the outcome `fixed`; it found the Medium contract-drift finding not fully resolved, so that one is `fixed-unreviewed` until pass 3 confirms the remaining instances fixed after pass 2 (see "Pass 2 (reviewer B)"). Fixes in `ba93fa1e`:
+Read-only proof: the SHA-256 snapshot of all tracked and untracked files was `48e7b6e0f2c1cbcc871efb12cb21ee7745b2884dd993750dde1e3007d69e90fb` before and after the pass. Result: 0 Critical, 0 High, 3 Medium, 7 Low. All ten are in `findings.jsonl`. Pass 2 confirmed nine of them, which keep the outcome `fixed`; it found the Medium contract-drift finding not fully resolved, and pass 3 confirmed its remaining instances, fixed in `9894a699`, so it is `fixed` too (see "Pass 2 (reviewer B)" and "Pass 3 (reviewer A)"). Fixes in `ba93fa1e`:
 
 - Medium, contract-drift: the same-harness fallback contradicted unconditional "different harnesses" statements. The delta's "Authorized alternating reviewers", "Unavailable reviewer", and "Rotation order", governance "Two alternating reviewers per task", protocol worker step 5 and coordinator step 1, the `taskelith-task-protocol` skill, `AGENTS.md`, and the living `review-process` Purpose now carry the exception.
 - Medium, process: the governance "Rotation" fallback and the delta scenario "Reviewer B without another harness" tested whether a reviewer of another harness exists in the turn; they now test availability, as "No reviewer of another harness" does.
@@ -94,12 +94,12 @@ Confirmation of the pass 1 fixes:
 | Low, docs (2): the owner's approval quoted in Bulgarian | Resolved |
 | Low, docs: the UI POC README's published-build note | Resolved |
 
-Result: 0 Critical, 0 High, 3 Medium, 1 Low, all in `findings.jsonl` with the outcome `fixed-unreviewed`, for pass 3 to confirm. Fixes in `9894a699`:
+Result: 0 Critical, 0 High, 3 Medium, 1 Low, all in `findings.jsonl`; pass 3 confirmed all four fixes, so their outcome is `fixed`. Fixes in `9894a699`:
 
 - Medium, spec-wording: the delta scenario "Second reviewer requested for the same change" barred "a reviewer other than B", which includes A; it now names "a reviewer other than the assigned A or B".
 - Medium, contract-drift, the remainder of the pass 1 contract-drift finding: the delta scenarios "Assigned reviewer fails to run", "Reviewer A replaced before the third pass", and "Reviewers of a new change" required another harness without the fallback; their WHEN now requires an available authorized reviewer of another harness, and the fallback scenarios under "No reviewer of another harness" stay. A search of the change, `docs/`, `.claude/`, `AGENTS.md`, and the living spec for unqualified "different harness" statements also qualified `proposal.md`'s policy summary and `design.md` decision 3; the scope paragraph above keeps the brief as the owner approved it.
 - Medium, process: this record deferred `make verify` on the pass 1 fixes to the `pre-push` hook. "make verify" now records the run after the pass 1 and pass 2 fixes (on `bc6683a3`), and "Limitations" and "Remaining gates" no longer defer it.
-- Low, evidence-mismatch: the pass 1 findings had the outcome `fixed` before a later pass had checked them. Pass 2 has now confirmed nine, which keep `fixed` with that confirmation in their resolution; the contract-drift finding is `fixed-unreviewed` until pass 3, and "Pass 1 (reviewer A)" above says so.
+- Low, evidence-mismatch: the pass 1 findings had the outcome `fixed` before a later pass had checked them. Pass 2 has now confirmed nine, which keep `fixed` with that confirmation in their resolution; the contract-drift finding stayed `fixed-unreviewed` until pass 3 confirmed it, and "Pass 1 (reviewer A)" above says so.
 
 After the fixes, on `9894a699` with this record, the checks were repeated:
 
@@ -110,7 +110,35 @@ After the fixes, on `9894a699` with this record, the checks were repeated:
 - Requirement bodies are unchanged: 491, 490, 490, 485, and 358 characters.
 - Archive test in a scratch copy: `archive alternate-reviewers-per-pass --yes` applied 2 added, 3 modified, and 1 renamed requirement; `validate --all --strict --no-interactive` then reported 69 passed, 0 failed, and the archived spec holds the edited scenarios and Purpose.
 
-Next: pass 3 by reviewer A, OpenCode `opencode-go/kimi-k3.1-pro#high`, which confirms the pass 2 fixes only, with no new scope. It reaches the three-pass cap.
+Pass 3 by reviewer A followed, which confirmed the pass 2 fixes only, with no new scope.
+
+### Pass 3 (reviewer A)
+
+OpenCode CLI, model `opencode-go/kimi-k3.1-pro`, variant `high`, as OpenCode recorded for the session, on `07fd1c01`, run 12:08:20 to 12:12:40 local time on 2026-10-27, session `ses_e832aebf0ffeGDCRhC48QIydt6`, scope: confirmation of the pass 2 fixes only, with no new scope:
+
+`opencode run --standalone --agent reviewer -m 'opencode-go/kimi-k3.1-pro#high' --format json --title alternate-reviewers-per-pass-pass3 "<prompt>" < /dev/null`
+
+Read-only proof: the SHA-256 snapshot of all tracked and untracked files was `a7d866592fe1e9d359ed7a93e779865562ece3fa75a99ae4b70d74dcc2dad4d5` before and after the pass.
+
+Confirmation of the pass 2 fixes:
+
+| Finding | Pass 3 result |
+| --- | --- |
+| Medium, contract-drift: the remainder of the pass 1 finding (M1) | Resolved |
+| Medium, spec-wording: the scenario barring a second reviewer | Resolved |
+| Medium, contract-drift: three delta scenarios without the fallback | Resolved |
+| Medium, process: `make verify` deferred to pre-push | Resolved |
+| Low, evidence-mismatch: pass 1 outcomes `fixed` before a later pass | Resolved |
+
+It also confirmed that `findings.jsonl` matches the schema and categories and that the requirement bodies are 491, 490, 490, 485, and 358 characters.
+
+Result: 0 Critical, 0 High, 0 Medium, 1 Low, in `findings.jsonl` with the outcome `fixed-unreviewed`:
+
+- Low, evidence-mismatch: the resolution of the pass 2 `make verify` finding at `findings.jsonl:13` still said its section was pending, and the reviewer said `verification.md:101` did too. At `07fd1c01` both said so; `verification.md:101` had been corrected in the working tree before the pass but not committed. Fix `b77e2e97` commits that line and rewrites the resolution: `make verify` completed on `bc6683a3` with exit 0 and is recorded below.
+
+The fix is a Low of the last pass, so it is made without another review, under the pass cap and the Low-only rule. The three-pass cap is now reached; no further review follows.
+
+After the fix, `npm run findings -- validate` reported `Every findings file is valid: 14 file(s).`
 
 ## make verify
 
@@ -127,7 +155,6 @@ Next: pass 3 by reviewer A, OpenCode `opencode-go/kimi-k3.1-pro#high`, which con
 
 ## Remaining gates
 
+- Archive, in the next commit.
 - `make verify` by the `pre-push` hook on the pushed tree.
-- Independent review: pass 3 by reviewer A, confirmation of the pass 2 fixes only; the pass cap is reached after it.
-- Archive.
-- Integration into dev by the coordinator (single pull request).
+- Integration into `dev` by the coordinator (single pull request).
