@@ -19,10 +19,14 @@
 - [x] 4.1 Create this change's empty `findings.jsonl`.
 - [x] 4.2 Run the checker's tests with coverage, the type check, `npm run verify:links`, `npm run verify:comments`, `npm run verify:findings`, `npm run openspec -- validate --all --strict`, and `npm run verify:archive`.
 - [x] 4.3 Run `make verify`.
-- [ ] 4.4 Independent review.
+- [x] 4.4 Independent review.
 
 ## 5. Review pass 1 fixes
 
 - [x] 5.1 Write a failing test for each Medium finding and for reference-style links, and run them against the script of `848802f7` (they fail).
 - [x] 5.2 Parse links and headings with `marked` 15.0.12, exact-pinned as a development dependency, register it in `docs/dependencies.md`, and regenerate the dependency inventory.
 - [x] 5.3 Apply the spec delta rule to fragment-only links, and align the requirement, proposal, and design with the checked link forms, the URI scheme exclusion, and the package impact.
+
+## 6. Review pass 2 fixes
+
+- [x] 6.1 Cite the current `docs/dependencies.md` line in the proposal (unreviewed Low fix).
