@@ -54,6 +54,33 @@ G1 delivered the kernel, the SDLC workflow model, gates, task admission, plugin 
 | Code-head identity for head-bound verification and review | G3 |
 | SpecKit admission evidence | G8 |
 
+## G2 status
+
+> **Draft (change `close-g2`).** G2 is not closed until [ADR 0015](decisions/0015-g2-closure.md) is accepted. When it is, update the "As of" line and the G0 and G1 sentences at the top, and replace every placeholder below.
+
+G2 delivered PostgreSQL state and outbox, NATS transport, installation bootstrap and enrollment, the worker journal, the per-execution supervisor on Linux and macOS, the control-plane API, launch authority, resource admission, the evidence store, the worker runtime, execution reconciliation, observability signals, the minimal local installation, and the Linux harness qualification in the worker image ([G2 work plan](g2-plan.md), items 1 to 26). **PLACEHOLDER:** its exit evidence was reproduced from a fresh clone (change `close-g2`), and G2 is closed ([ADR 0015](decisions/0015-g2-closure.md)).
+
+| Matrix entry | G2 native acceptance |
+| --- | --- |
+| `macos-26-arm64` | 25b `run-g2-native-acceptance-arm64`: no row fully accepted; open parts in ADR 0015 decision 3 |
+| `linux-ubuntu-24.04-arm64` | 25b, under Docker Desktop: no row fully accepted; open parts in ADR 0015 decision 3 |
+| `macos-26-x86_64` | **PLACEHOLDER:** 25c `run-g2-native-acceptance-x86_64` |
+| `linux-ubuntu-24.04-x86_64` | **PLACEHOLDER:** 25c under Docker Desktop, and `run-g2-native-acceptance-linux-host` |
+
+| Deferred item | Gate |
+| --- | --- |
+| Delivery of rotated worker credentials; TLS and the installation certificate authority | G3 item 26 |
+| Writers that invalidate launches; re-admission and a reconciliation queue surface; evidence retirement entry and per-project download authorization; worker self-check admission (G3 item 27) | G3 |
+| Harness user-namespace sandboxes under the seccomp profile; model-calling harness scenarios on Linux | G3 item 35 (Claude Code), G4 (Codex) |
+| G3 groundwork re-review against G2 as built | G3 item 0, before any other G3 item |
+| Restore quarantine, with stale-epoch observation payloads and restored journals with a rolled-back snapshot counter | G6 |
+| Provisional operational-target values | G6 |
+| macOS journal durability (`F_FULLFSYNC`), service account, launchd, reboot, drain, sleep and wake; Linux reboot, host supervisor, and drain | G6 |
+| Maximum offline duration of a running execution; more than 8 unconfirmed sealed executions; per-execution seccomp filter | G6 |
+| PostgreSQL failover, pool sizing, and expand/contract migrations | G6–G7 |
+| Image package inventories and vulnerability scans | G8 |
+| **PLACEHOLDER:** Linux-host rows (AppArmor or SELinux, composed crash windows and duplicate delivery) left open by `run-g2-native-acceptance-linux-host` | **PLACEHOLDER** |
+
 ## Later phases
 
 G1 introduced domain transitions and framework-neutral SDLC contracts and is closed ([ADR 0010](decisions/0010-g1-closure.md)). G2 adds durable execution. Its work items and decisions are in the [G2 work plan](g2-plan.md), and it starts when the G1 closure merges into `dev`. G3 adds the web product and first real agent. Both-framework replacement, learning, and fleet validation remain later gates. See [the delivery sequence](architecture.md#delivery-sequence). G0 is closed ([ADR 0007](decisions/0007-g0-closure.md)); runtime readiness is not claimed here.
