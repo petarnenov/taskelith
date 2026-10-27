@@ -10,17 +10,25 @@ export function automaticRetryOf(task: Task, attemptId: AttemptId): boolean {
   return retries < MAX_AUTOMATIC_RETRIES && isRetryableOutcome(outcome);
 }
 
-function isRetryableOutcome(outcome: AttemptOutcome): boolean {
+// Not started, or exited with a known status after a proven start; anything
+// else is uncertain, with a retry budget of 0 (supervisor contract 6).
+export function endedWithoutUncertainty(outcome: AttemptOutcome): boolean {
   if (outcome.kind === 'not-started') return true;
-  return outcome.kind === 'exited' && outcome.startProven && isFailedExit(outcome.status);
+  return outcome.kind === 'exited' && outcome.startProven && exitVerdict(outcome.status) !== 'unknown';
 }
 
-// A clean exit is not acceptance, and the gates decide it (invariant 11). An
-// unknown status is uncertain execution, with no retry (supervisor contract 6).
-function isFailedExit(status: ExitStatus): boolean {
+function isRetryableOutcome(outcome: AttemptOutcome): boolean {
+  if (outcome.kind === 'not-started') return true;
+  return outcome.kind === 'exited' && outcome.startProven && exitVerdict(outcome.status) === 'failed';
+}
+
+type ExitVerdict = 'clean' | 'failed' | 'unknown';
+
+// A clean exit is not acceptance, and the gates decide it (invariant 11).
+function exitVerdict(status: ExitStatus): ExitVerdict {
   switch (status.kind) {
-    case 'code': return status.code !== 0;
-    case 'signal': return true;
-    case 'unknown': return false;
+    case 'code': return status.code === 0 ? 'clean' : 'failed';
+    case 'signal': return 'failed';
+    case 'unknown': return 'unknown';
   }
 }
