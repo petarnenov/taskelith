@@ -259,6 +259,16 @@ function exit(sequence: number, at: Placed, executionId: ExecutionId, code: numb
   const payload = startProven
     ? { executionId, recoveryEpoch: 1, status: { kind: 'code', code }, startProven: true, spawnFailed: false, terminationEvidence: 'containment-empty' }
     : { executionId, recoveryEpoch: 1, status: { kind: 'unknown' }, startProven: false, spawnFailed: true, spawnFailure: 'spawn failed', terminationEvidence: 'never-spawned' };
+  return exited(sequence, at, payload);
+}
+
+function unknownExit(sequence: number, at: Placed, executionId: ExecutionId) {
+  return exited(sequence, at, {
+    executionId, recoveryEpoch: 1, status: { kind: 'unknown' }, startProven: true, spawnFailed: false, terminationEvidence: 'containment-empty',
+  });
+}
+
+function exited(sequence: number, at: Placed, payload: Record<string, unknown>) {
   return observe('execution.exited', { sequence, attemptId: at.attemptId, ownershipGeneration: at.generation }, payload);
 }
 
@@ -587,6 +597,22 @@ describe('outcomes', () => {
     value(await exit(2, at, await launch(at), 1, false));
     const task = await stored(at.taskId);
     assert.deepEqual([task.attempts.length, task.attempts[0]!.outcome?.kind], [1, 'exited']);
+  });
+
+  test('an exit with an unknown status after a proven start opens no retry', async () => {
+    await enroll(WORKER, JOURNAL, 3);
+    value(await declare(1, { slots: 3 }));
+    const parent = await placed('task-parent');
+    value(await new DelegationService(database).requestDelegation({ workerId: WORKER as WorkerId, generation: 1 }, {
+      delegationId: 'delegation-1', attemptId: parent.attemptId, ownershipGeneration: parent.generation, runId: 'run-1',
+      child: { taskId: 'task-child', kind: 'planning', stageId: 'specs' },
+    }, CORRELATION));
+    const child = await placeAgain('task-child');
+    value(await unknownExit(2, child, await launch(child)));
+    const task = await stored(child.taskId);
+    assert.deepEqual([task.attempts.length, task.attempts[0]!.outcome?.kind], [1, 'exited']);
+    const [row] = await sql<{ closed_at: Date | null }>('SELECT closed_at FROM delegations');
+    assert.ok(row?.closed_at instanceof Date, 'the delegation is closed');
   });
 
   test('a not-started without cancellation keeps the attempt and its reservation; with one it ends both', async () => {

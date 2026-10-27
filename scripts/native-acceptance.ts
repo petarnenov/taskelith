@@ -43,6 +43,10 @@ export class AcceptanceFailure extends Error {}
 const MACOS_MAJOR = '26';
 const LINUX_RELEASE = 'Ubuntu 24.04';
 
+// The type of the mount holding $1: stat -f alone names ext4 "ext2/ext3",
+// the name of their shared magic number, so it is only the fallback.
+export const FILE_SYSTEM_PROBE = 'findmnt -no FSTYPE --target "$1" 2>/dev/null || stat -f -c %T "$1"';
+
 // A macOS 26 host, arm64 or x86_64, with the file system of its temporary
 // directory, where the suites and the native worker keep their roots.
 export function macosPlatform(run: Run, facts: MacosFacts): EntryPlatform {
@@ -72,7 +76,7 @@ export function linuxPlatform(run: Run, images: LinuxImages): EntryPlatform {
   const architecture = matrixArchitecture(engineArchitecture ?? '');
   const distribution = osReleaseName(run('docker', ['run', '--rm', images.base, 'cat', '/etc/os-release']));
   if (!distribution.startsWith(LINUX_RELEASE)) throw new AcceptanceFailure(`${distribution} is not a matrix entry; it needs ${LINUX_RELEASE}`);
-  const volume = run('docker', ['run', '--rm', '--volume', '/probe', images.base, 'stat', '-f', '-c', '%T', '/probe']).trim();
+  const volume = run('docker', ['run', '--rm', '--volume', '/probe', images.base, 'sh', '-c', FILE_SYSTEM_PROBE, 'sh', '/probe']).trim();
   return {
     entry: `linux-ubuntu-24.04-${architecture}`,
     platform: {
