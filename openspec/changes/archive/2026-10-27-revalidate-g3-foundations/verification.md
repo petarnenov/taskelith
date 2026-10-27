@@ -32,6 +32,13 @@ G3 item 0 ([G3 work plan](/docs/g3-plan.md#work-items), row 0), by the owner's d
 - **Pass 1 records** (2026-10-27): `npm run verify:findings`, `npm run verify:links`, `npm run openspec -- validate revalidate-g3-foundations --strict`, and `npm run verify:comments` pass.
 - **Wave 2 records** (2026-10-27): the same four checks pass. Each report's listed findings match its own counts per severity, so `passes.jsonl` carries the reported counts.
 - **Pass 3 records** (2026-10-27): `npm run openspec -- validate revalidate-g3-foundations --strict`, `make findings ARGS="validate"`, `npm run verify:links`, and `npm run verify:comments` pass.
+- **Archive** (2026-10-27), on the tree of the archive commit, the working tree the checks ran on:
+  - `npm run openspec -- archive revalidate-g3-foundations --yes`: `Change 'revalidate-g3-foundations' archived as '2026-10-27-revalidate-g3-foundations'.`
+  - `npm run openspec -- validate --all --strict`: `Totals: 69 passed, 0 failed (69 items)`.
+  - `npm run openspec -- validate --archived --no-interactive`, this change's line: `✓ change/2026-10-27-revalidate-g3-foundations`.
+  - `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: empty, because the change skips specs.
+  - Moved change files: `findings.jsonl` (77 lines) and `passes.jsonl` (17 lines) present; `make findings ARGS="validate"`: `Every findings file is valid: 32 file(s); every pass summary file is valid: 12 file(s).`
+  - `make verify`: exit 0; last line `Packed file allowlist and installed CLI verification passed.` Coverage over all files: 99.29 % lines, 92.15 % branches, 99.01 % functions. OpenSpec: 69 passed, 0 failed. Findings: 32 findings files and 12 pass summary files valid. Links conform. Run by the worker session on the macOS iMac.
 
 ## Summary per item
 
@@ -272,7 +279,5 @@ Reviewer A: Codex `gpt-6-astra`, replacing OpenCode `kimi-k2.7-code`. Reviewer B
 
 ## Remaining gates
 
-- `make verify` on the final records
-- Archive of this change, with the checks of the archived tree
 - Integration into dev by the coordinator (single pull request)
 - Follow-up fixes land before any other G3 item starts

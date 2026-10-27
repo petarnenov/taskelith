@@ -1,8 +1,8 @@
 ## 1. Preparation
 
-- [ ] 1.1 Read row 0 of the G3 work plan, ADR 0015 decisions 1 to 5, foundation "G2 status", and #344, #348, and #349, and write the baseline of design D1
-- [ ] 1.2 Write the per-item checks (design D2), the reviewer table (D3), and the records format (D5)
-- [ ] 1.3 Write the pass 1 prompt of each item outside the worktree
+- [x] 1.1 Read row 0 of the G3 work plan, ADR 0015 decisions 1 to 5, foundation "G2 status", and #344, #348, and #349, and write the baseline of design D1
+- [x] 1.2 Write the per-item checks (design D2), the reviewer table (D3), and the records format (D5)
+- [x] 1.3 Write the pass 1 prompt of each item outside the worktree
 - [x] 1.4 Merge `scope-review-passes-by-artifact` from `dev` before the first finding or pass line is recorded
 - [x] 1.5 Author self-check and evidence check, recorded in `verification.md`
 
@@ -59,4 +59,4 @@
 
 - [x] 9.1 Complete "Follow-up changes": a proposed name, item, size, and findings for every deferred finding, and hand the list to the coordinator
 - [x] 9.2 `npm run openspec -- validate revalidate-g3-foundations --strict`, `npm run verify:links`, `npm run verify:findings`, and `make verify`, recorded in `verification.md`
-- [ ] 9.3 Archive under worker step 7, with the checks of the archived tree
+- [x] 9.3 Archive under worker step 7, with the checks of the archived tree
