@@ -24,7 +24,7 @@ On `dev` at `2a26714b`:
 - `openspec/changes/archive/2026-10-27-run-g2-native-acceptance-x86-64/` (`acceptance.md`, `verification.md`; #328, merge `2a26714b`).
 - `openspec/changes/archive/2026-10-27-keep-coverage-out-of-killed-test-processes/` (`proposal.md`, `verification.md`; #326, merge `3b1d1e33`), and `openspec/changes/archive/2026-10-26-run-g2-crash-windows/verification.md` for the `40aab95` claim.
 - `openspec/changes/archive/2026-10-26-fix-launch-recovery-reauthorization/verification.md` and its `results.jsonl` (host Darwin 25.6.0, arch `x64`), and `openspec/changes/archive/2026-10-27-report-all-unconfirmed-sealed-executions/results.jsonl` (the same host and arch), for the arm64 re-run question.
-- Code lines cited by the ADR: `apps/control-plane/src/application/placement-service.ts:47`, `:78`; `packages/adapters/worker-control-plane-client/src/failure-cause.ts:20` (`:19` in the draft is the URL rule); `packages/modules/observability/src/domain/redaction.ts:26`; `packages/modules/observability/src/domain/signals.ts:21`; `packages/adapters/postgres/src/control-plane-signals.ts:25`; `infra/installation/compose.yaml:108`; `scripts/native-acceptance.ts:75`; `scripts/installation-scenarios.sh:478`, `:633`.
+- Code lines cited by the ADR: `apps/control-plane/src/application/placement-service.ts:47`, `:78`; `packages/adapters/worker-control-plane-client/src/failure-cause.ts:20` (`:19` in the draft is the URL rule); `packages/modules/observability/src/domain/redaction.ts:26`; `packages/modules/observability/src/domain/signals.ts:21`; `packages/adapters/postgres/src/control-plane-signals.ts:25`; `infra/installation/compose.yaml:108`; `scripts/native-acceptance.ts:75`; `scripts/installation-scenarios.sh:478`, `:633`; `apps/worker/src/launch-orchestrator.ts:143-144` (`continue-launch` calls `#launch`), `:296` (`#track`'s cleanup calls `#wake`), `:514-515` (the clock read ends the launch without a back-off). Commit `e5db6610` was checked to be on `origin/run-g2-partition-and-races` and not an ancestor of `origin/dev`.
 
 On branches of `origin`, read with `git show <head>:<path>` after `git fetch origin`. `git ls-remote origin` showed these heads, none is an ancestor of `dev`, and `gh pr list --head <branch>` showed no pull request for any of them:
 
@@ -39,7 +39,7 @@ On branches of `origin`, read with `git show <head>:<path>` after `git fetch ori
 
 Outside the repository: the away run `20261027T045006Z-opencode-96871` (`decision.md`, `meta.txt`, `packet.md`) in the coordinator's local away run directory, a local, unversioned record; the ADR names it as such. No web link is used; pull request numbers are those of the GitHub repository `petarnenov/taskelith`, each named with its merge commit.
 
-Not found in the repository or on any remote branch, so recorded only as the coordinator stated them: `stop-automatic-retry-of-unknown-exit` (named by the Linux crash-windows record, not yet started), the ReDoS fix change, `centralize-log-redaction-rules`, `advance-placement-rotation-cursor` (named by the `align-fair-order-rotation` record, not yet started), `check-change-record-links`, the worker image reproducibility follow-up, the quadratic behaviour of `redactText`, and the 24c macOS hang.
+Not found in the repository or on any remote branch, so recorded only as the coordinator stated them: `stop-automatic-retry-of-unknown-exit` (named by the Linux crash-windows record, not yet started), the ReDoS fix change, `centralize-log-redaction-rules`, `advance-placement-rotation-cursor` (named by the `align-fair-order-rotation` record, not yet started), `check-change-record-links`, the worker image reproducibility follow-up, the quadratic behaviour of `redactText`, the 24c macOS hang, Desi's diagnostic of 2026-10-27 on the Intel iMac, and `back-off-relaunch-after-pre-w2-failure`.
 
 ## Author self-check of the draft
 
@@ -76,6 +76,8 @@ Recorded in the ADR in commit `docs: record the G2 closure blockers set by the c
 
 The G2 blockers are exactly 24c, the fix of L1, the ReDoS fix, and the macOS arm64 re-run.
 
+A further coordinator item of the same day, recorded in commit `docs: defer the relaunch back-off after a pre-W2 launch failure`: the relaunch without back-off after a launch fails before W2 is a deferral, not a blocker, with the follow-up `back-off-relaunch-after-pre-w2-failure`, assigned after the G2 closure unless it lands first.
+
 ## Remaining placeholders
 
 - ADR 0015 decision 1, "work items": archive dates on `dev` and pull requests of the branches still pending, and the fix changes still to come.
@@ -90,6 +92,7 @@ Light checks only, because the host is shared with evidence runs; `make verify` 
 - Draft, at `0bec0a6`: `npm run openspec -- validate close-g2 --strict` passed; `npm run verify:comments` passed; `make findings ARGS="validate"` passed (3 files).
 - Evidence update, in `ee66935f`: `npm run openspec -- validate close-g2 --strict` passed ("Change 'close-g2' is valid"); `npm run findings -- validate` passed ("Every findings file is valid: 6 file(s)."); `npm run verify:comments` passed ("Every comment is within the comment length rule."); `git diff --check` reported nothing.
 - Blocker update: `npm run openspec -- validate close-g2 --strict` passed; `npm run findings -- validate` passed (6 files); `npm run verify:comments` passed; `git diff --check` reported nothing.
+- Relaunch back-off deferral: `npm run openspec -- validate close-g2 --strict` passed; `npm run findings -- validate` passed (6 files); `npm run verify:comments` passed; `git diff --check` reported nothing.
 
 ## Independent review
 
