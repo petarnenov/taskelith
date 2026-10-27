@@ -442,6 +442,29 @@ test('validate accepts canonical reviewer keys in active changes and legacy ones
   }
 });
 
+test('validate rejects an OpenCode model with an empty part only in active changes', () => {
+  const reviewer = { harness: 'opencode', model: 'opencode-go/', variant: 'default' };
+  const records = (directory: string, change: string) => ({
+    [`${directory}/findings.jsonl`]: `${line(change, 'docs', 'Finding', { reviewer })}\n`,
+    [`${directory}/passes.jsonl`]: `${summary(change, 1, { low: 1 }, { reviewer })}\n`,
+  });
+  const archived = repository(records('openspec/changes/archive/2026-10-10-empty-model', 'empty-model'));
+  const active = repository(records('openspec/changes/empty-model', 'empty-model'));
+  const reason = 'reviewer "opencode opencode-go/#default" is not canonical: '
+    + 'an OpenCode model is <provider>/<model>, both parts non-empty';
+  try {
+    assert.equal(runFindings(['validate'], archived).exitCode, 0);
+    assert.deepEqual(runFindings(['validate'], active).stderr.split('\n'), [
+      `openspec/changes/empty-model/findings.jsonl:1: ${reason}`,
+      `openspec/changes/empty-model/passes.jsonl:1: ${reason}`,
+      `Review findings: 2 problem(s); ${FORMATS}.`,
+    ]);
+  } finally {
+    rmSync(archived, { recursive: true, force: true });
+    rmSync(active, { recursive: true, force: true });
+  }
+});
+
 const OPUS = { harness: 'claude', model: 'claude-opus-5-5', variant: 'high' };
 const KIMI_K2_7_CODE = { harness: 'opencode', model: 'opencode-go/kimi-k2.7-code', variant: 'default' };
 

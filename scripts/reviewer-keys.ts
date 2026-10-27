@@ -38,12 +38,16 @@ function harnessProblem({ harness }: Reviewer): string | undefined {
 }
 
 function modelProblem({ harness, model }: Reviewer): string | undefined {
-  const prefixed = model.includes('/');
-  if (harness === PROVIDER_PREFIXED_HARNESS && !prefixed) {
+  const separator = model.indexOf('/');
+  if (harness !== PROVIDER_PREFIXED_HARNESS) {
+    if (separator === -1) return undefined;
+    return `only an OpenCode model has a provider prefix; name the model as the ${harness} CLI takes it`;
+  }
+  if (separator === -1) {
     return `an OpenCode model names its provider as its CLI takes it, for example opencode-go/${model}`;
   }
-  if (harness !== PROVIDER_PREFIXED_HARNESS && prefixed) {
-    return `only an OpenCode model has a provider prefix; name the model as the ${harness} CLI takes it`;
+  if (separator === 0 || separator === model.length - 1) {
+    return 'an OpenCode model is <provider>/<model>, both parts non-empty';
   }
   return undefined;
 }

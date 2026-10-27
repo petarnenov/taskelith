@@ -36,7 +36,7 @@ The schema validates archived records too, and one archived pass summary has no 
 
 ### D3. What "as the harness CLI takes it" checks
 
-The script can check the provider prefix, not a model list: an `opencode` model must contain `/` (OpenCode takes `<provider>/<model>`), and a model of any other harness must not. A list of known models would need an update for every new reviewer and is not requested.
+The script can check the provider prefix, not a model list: an `opencode` model must be `<provider>/<model>` with both parts around its first `/` non-empty (OpenCode takes that form), and a model of any other harness must contain no `/`. A list of known models would need an update for every new reviewer and is not requested.
 
 ### D4. Messages
 
@@ -44,6 +44,7 @@ Each broken rule is one problem on the line, so a line can have several:
 
 - `reviewer "<key>" is not canonical: harness "<harness>" is none of claude, codex, opencode, agy`
 - `reviewer "<key>" is not canonical: an OpenCode model names its provider as its CLI takes it, for example opencode-go/<model>`
+- `reviewer "<key>" is not canonical: an OpenCode model is <provider>/<model>, both parts non-empty`
 - `reviewer "<key>" is not canonical: only an OpenCode model has a provider prefix; name the model as the <harness> CLI takes it`
 - `reviewer "<key>" is not canonical: variant is missing; record the effort, "default" when the harness default ran`
 
@@ -60,6 +61,7 @@ The owner's table goes under "Two alternating reviewers per task" in `docs/gover
 - New tasks take reviewers from the table, not the turn; "Rotation" now orders only replacements, starting after the replaced reviewer, and skips a reviewer that the table bars from the role.
 - The table names Claude Code (claude-fable-5-1) for tasks that need network access "because Codex has no network access", which concerns role A; B stays Claude Code (claude-opus-5-5), which has network access. That pair shares a harness, so "Authorized alternating reviewers" and governance allow one harness when the assignment pairs it.
 - OpenCode reviewers are never A, also not as replacements, and B only of documentation-only tasks.
+- Every selection and fallback counts only reviewers that may take the role: the replacement under "Unavailable reviewer" and the same-harness fallback under "No reviewer of another harness" (review pass 1, finding 2). A barred reviewer of another harness therefore does not block that fallback. The spec delta modifies both requirements, whose scenarios "Assigned reviewer fails to run" and "Unavailable reviewer at assignment" named the next reviewer without the role test.
 - Coordinator decisions (Niki, 2026-10-27) on these readings: for a task that needs network access, Claude Code (claude-fable-5-1) is reviewer A, passes 1 and 3, and Claude Code (claude-opus-5-5), effort `high`, stays reviewer B, the same harness being allowed by this assignment and named in `verification.md`; the turn orders only the replacements under "Unavailable reviewer", starting after the replaced reviewer and skipping reviewers that the table bars from that role; the statistics are given as measured, over all archived passes of each reviewer, not pass 1 only, naming only OpenCode CLI (deepseek-v4-pro) and OpenCode CLI (kimi-k3.1-pro) for the 1.7 and 1.9 misses per pass; and the spec scope below is accepted.
 - The spec delta adds "Reviewer assignment", modifies "Rotation order" (its scenarios "Reviewers of a new change" and "Reviewer after a replacement" described the turn for new tasks and are replaced), and modifies "Authorized alternating reviewers".
 

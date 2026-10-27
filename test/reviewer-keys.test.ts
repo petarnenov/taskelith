@@ -60,3 +60,13 @@ test('every broken rule of a reviewer is reported', () => {
       + 'record the effort, "default" when the harness default ran',
   ]);
 });
+
+test('an OpenCode model needs a non-empty provider and a non-empty model', () => {
+  const problems = (model: string) => reviewerKeyProblems({ harness: 'opencode', model, variant: 'default' });
+  for (const model of ['opencode-go/', '/kimi-k2.7-code']) {
+    assert.deepEqual(problems(model), [
+      `reviewer "opencode ${model}#default" is not canonical: an OpenCode model is <provider>/<model>, both parts non-empty`,
+    ], model);
+  }
+  assert.deepEqual(problems('opencode-go/kimi-k2.7-code'), []);
+});
