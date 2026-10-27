@@ -22,7 +22,7 @@
 ## 5. Verify
 
 - [x] 5.1 Run the checks of `make verify` that need no Docker and record them in `verification.md`.
-- [ ] 5.2 Run `make verify`, which needs Docker, once the coordinator approves it.
+- [x] 5.2 Run `make verify`, which needs Docker, once the coordinator approves it.
 - [ ] 5.3 Review pass 1 by reviewer A.
 - [ ] 5.4 Review pass 2 by reviewer B.
 - [ ] 5.5 Review pass 3 by reviewer A, if pass 2 has findings above Low.
