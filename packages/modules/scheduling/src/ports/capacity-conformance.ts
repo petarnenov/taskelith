@@ -13,6 +13,7 @@ import {
 import { createAssignment, endAssignment, type Assignment } from '../domain/assignment.js';
 import { parseResourceRequest, type ProjectId, type ProviderCredentialId, type RunId } from '../domain/capacity-reservation.js';
 import type { TaskLineageLink } from '../domain/delegation-admission.js';
+import { fairPlacementOrder } from '../domain/fair-order.js';
 import type { AssignmentRepository } from './assignment-repository.js';
 import type { CapacityLedger } from './capacity-ledger.js';
 import type { PlacementQueue } from './placement-queue.js';
@@ -347,6 +348,26 @@ export const PLACEMENT_QUEUE_CONFORMANCE: readonly ConformanceCase<PlacementQueu
       expectSame(problems, 'limited after b', await queue.waiting(2, [], afterB), [c1, a1]);
       const afterC = id('ProjectId', 'project-c') as ProjectId;
       expectSame(problems, 'after the last', await queue.waiting(2, [], afterC), [a1, b1]);
+      return problems;
+    },
+  },
+  {
+    name: 'a read after a project offers the next project before its backlog, in the fair order',
+    async check({ queue, tasks, lineage }: PlacementQueueConformanceTarget) {
+      const problems: string[] = [];
+      const placed = [
+        [queuedTask('task-a2', at(1)), 'project-a'], [queuedTask('task-a3', at(2)), 'project-a'],
+        [queuedTask('task-b1', at(5)), 'project-b'],
+      ] as const;
+      for (const [task, project] of placed) {
+        expectSuccess(problems, `add ${task.id}`, await tasks.add(task));
+        expectSuccess(problems, `link ${task.id}`, await lineage.add(rootLink(task.id, project)));
+      }
+      const [a2, a3, b1] = placed.map(([task]) => task.id);
+      const afterA = id('ProjectId', 'project-a') as ProjectId;
+      const read = await queue.waiting(10, [], afterA);
+      expectSame(problems, 'after a', read.map((entry) => entry.item), [b1, a2, a3]);
+      expectSame(problems, 'fair order', fairPlacementOrder(read, afterA), [b1, a2, a3]);
       return problems;
     },
   },
