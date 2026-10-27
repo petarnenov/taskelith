@@ -231,6 +231,10 @@ async function wire(settings: ControlPlaneSettings, logger: Logger, metrics: InM
   return ok({ api: listening.value, browser: browser.value, metrics, stopped, stop });
 }
 
+const REISSUE = 'run make installation-certificates';
+const setting = (variable: string) => ({ name: variable, details: { variable } });
+const BROWSER_ORIGIN = { certificate: setting('TASKELITH_BROWSER_TLS_CERT'), key: setting('TASKELITH_BROWSER_TLS_KEY') };
+
 interface ListenerTls {
   readonly worker: ServerTls;
   readonly browser: ServerTls;
@@ -243,10 +247,12 @@ function listenerTls(admin: Administration, settings: ControlPlaneSettings): Res
   const stored = admin.serverCertificate('api');
   if (!stored.ok) return stored;
   const installation = { certificate: stored.value.certificatePem, key: stored.value.privateKeyPem };
-  const worker = checkServerTls(installation, { name: stored.value.path, details: { path: stored.value.path } }, now);
+  const file = (path: string) => ({ name: path, details: { path } });
+  const installationOrigin = { certificate: file(stored.value.path), key: file(stored.value.keyPath), remedy: REISSUE };
+  const worker = checkServerTls(installation, installationOrigin, now);
   if (!worker.ok) return worker;
   if (settings.browser.tls === undefined) return ok({ worker: worker.value, browser: worker.value });
-  const browser = checkServerTls(settings.browser.tls, { name: 'TASKELITH_BROWSER_TLS_CERT', details: { variable: 'TASKELITH_BROWSER_TLS_CERT' } }, now);
+  const browser = checkServerTls(settings.browser.tls, BROWSER_ORIGIN, now);
   return browser.ok ? ok({ worker: worker.value, browser: browser.value }) : browser;
 }
 

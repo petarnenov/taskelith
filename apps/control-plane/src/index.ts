@@ -25,7 +25,7 @@ export {
   type ApiServer,
   type Upload,
 } from './api/api-server.js';
-export { MINIMUM_TLS_VERSION, checkServerTls, type ServerTls, type TlsOrigin } from './api/server-tls.js';
+export { MINIMUM_TLS_VERSION, checkServerTls, type ServerTls, type TlsOrigin, type TlsSource } from './api/server-tls.js';
 export { ControlPlaneApi, type ApiServices } from './api/control-plane-api.js';
 export { DelegationService, type DelegationAnswer, type DelegationRequestBody } from './application/delegation-service.js';
 export { EvidenceService, type EvidenceDownload, type Publication } from './application/evidence-service.js';

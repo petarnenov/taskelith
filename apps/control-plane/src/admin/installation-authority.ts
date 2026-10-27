@@ -94,9 +94,10 @@ function writeServerCertificate(namespace: ControlPlaneNamespace, name: ServerNa
   return key.ok ? namespace.writeText(files.certificate, issued.certificatePem) : key;
 }
 
-// A server certificate with the path of its file, for failures to name.
+// A server certificate with the paths of its files, for failures to name.
 export interface StoredServerCertificate extends IssuedCertificate {
   readonly path: string;
+  readonly keyPath: string;
 }
 
 // A server's certificate and key as the namespace holds them; a missing
@@ -108,7 +109,8 @@ export function readServerCertificate(namespace: ControlPlaneNamespace, name: Se
   const privateKeyPem = readRequired(namespace, files.key);
   if (!privateKeyPem.ok) return privateKeyPem;
   const path = join(namespace.directory, files.certificate);
-  return ok({ certificatePem: certificatePem.value, privateKeyPem: privateKeyPem.value, path });
+  const keyPath = join(namespace.directory, files.key);
+  return ok({ certificatePem: certificatePem.value, privateKeyPem: privateKeyPem.value, path, keyPath });
 }
 
 function readRequired(namespace: ControlPlaneNamespace, name: string): Result<string> {

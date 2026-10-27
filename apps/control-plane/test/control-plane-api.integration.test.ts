@@ -231,8 +231,22 @@ describe('TLS listeners', () => {
     const mismatched = { certificate: BROWSER_TLS.certificate, key: operatorAuthority.privateKeyPem };
     const refused = failed(await startControlPlane({ ...SETTINGS, browser: { host: '127.0.0.1', port: 0, tls: mismatched } }));
     assert.equal(refused.code, 'precondition-failed');
-    assert.equal(refused.details.variable, 'TASKELITH_BROWSER_TLS_CERT');
+    assert.equal(refused.details.variable, 'TASKELITH_BROWSER_TLS_KEY');
+    assert.match(refused.message, /TASKELITH_BROWSER_TLS_KEY does not match TASKELITH_BROWSER_TLS_CERT/);
     assert.doesNotMatch(refused.message, /PRIVATE KEY/);
+  });
+
+  test('an API key of another certificate fails the start, names the key file and the remedy', async () => {
+    const keyPath = join(dataRoot, 'control-plane', 'api-key.pem');
+    const kept = readFileSync(keyPath, 'utf8');
+    writeFileSync(keyPath, readFileSync(join(dataRoot, 'control-plane', 'nats-key.pem'), 'utf8'));
+    try {
+      const refused = failed(await startControlPlane({ ...SETTINGS, browser: { host: '127.0.0.1', port: 0 } }));
+      assert.deepEqual([refused.code, refused.details.path], ['precondition-failed', keyPath]);
+      assert.match(refused.message, /api-key\.pem does not match .*api-certificate\.pem; run make installation-certificates/);
+    } finally {
+      writeFileSync(keyPath, kept);
+    }
   });
 });
 

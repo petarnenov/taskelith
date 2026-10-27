@@ -89,7 +89,9 @@ test('server certificates are written owner-only and read back with their path',
   }
   const api = value(readServerCertificate(store, 'api'));
   assert.equal(api.path, issued.apiCertificate);
-  value(checkServerTls({ certificate: api.certificatePem, key: api.privateKeyPem }, { name: api.path, details: { path: api.path } }, NOW));
+  const file = (path: string) => ({ name: path, details: { path } });
+  value(checkServerTls({ certificate: api.certificatePem, key: api.privateKeyPem }, { certificate: file(api.path), key: file(api.keyPath) }, NOW));
+  assert.equal(api.keyPath, join(store.directory, 'api-key.pem'));
 });
 
 test('a missing server file names its path, and a refused issuance writes nothing', async () => {
@@ -120,26 +122,32 @@ const leaf = value(await issuer.issueServerCertificate(authority, {
   commonName: 'Test server', hosts: [{ kind: 'ip', name: '127.0.0.1' }], validity: { notBefore: NOW, notAfter: later(1) },
 }));
 const TLS = { certificate: leaf.certificatePem, key: leaf.privateKeyPem };
-const ORIGIN = { name: 'TASKELITH_BROWSER_TLS_CERT', details: { variable: 'TASKELITH_BROWSER_TLS_CERT' } };
+const ORIGIN = {
+  certificate: { name: 'TASKELITH_BROWSER_TLS_CERT', details: { variable: 'TASKELITH_BROWSER_TLS_CERT' } },
+  key: { name: 'TASKELITH_BROWSER_TLS_KEY', details: { variable: 'TASKELITH_BROWSER_TLS_KEY' } },
+};
 
 function later(days: number): Instant {
   return value(parseInstant(new Date(Date.parse(NOW) + days * 86_400_000).toISOString()));
 }
 
-test('a certificate with another key, an unparsable one, or an expired one is refused by name', () => {
+test('a certificate with another key, an unparsable one, or an expired one is refused by the file at fault', () => {
   assert.deepEqual(value(checkServerTls(TLS, ORIGIN, NOW)), TLS);
+  const { certificate, key } = ORIGIN;
   const refusals = [
-    [{ ...TLS, key: authority.privateKeyPem }, NOW, /does not match its key/],
-    [{ ...TLS, certificate: 'not a certificate' }, NOW, /is not a PEM certificate/],
-    [{ ...TLS, key: 'not a key' }, NOW, /is not a PEM certificate/],
-    [TLS, later(2), /expired on/],
+    [{ ...TLS, key: authority.privateKeyPem }, NOW, key, /^TASKELITH_BROWSER_TLS_KEY does not match TASKELITH_BROWSER_TLS_CERT$/],
+    [{ ...TLS, certificate: 'not a certificate' }, NOW, certificate, /^TASKELITH_BROWSER_TLS_CERT is not a PEM certificate$/],
+    [{ ...TLS, key: 'not a key' }, NOW, key, /^TASKELITH_BROWSER_TLS_KEY is not a PEM private key$/],
+    [TLS, later(2), certificate, /^the certificate of TASKELITH_BROWSER_TLS_CERT expired on /],
   ] as const;
-  for (const [tls, now, problem] of refusals) {
+  for (const [tls, now, file, problem] of refusals) {
     const refused = failed(checkServerTls(tls, ORIGIN, now));
-    assert.deepEqual([refused.code, refused.details], ['precondition-failed', ORIGIN.details]);
+    assert.deepEqual([refused.code, refused.details], ['precondition-failed', file.details]);
     assert.match(refused.message, problem);
     assert.doesNotMatch(refused.message, /PRIVATE KEY|not a key/);
   }
+  const remedy = failed(checkServerTls({ ...TLS, key: authority.privateKeyPem }, { ...ORIGIN, remedy: 'run make installation-certificates' }, NOW));
+  assert.match(remedy.message, /; run make installation-certificates$/);
 });
 
 const handlers: ApiHandlers = {
