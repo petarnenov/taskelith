@@ -16,9 +16,9 @@
 ## 3. Evidence
 
 - [x] 3.1 Tests with coverage of the touched packages, build, boundaries, comments, links, findings, OpenSpec, and archive dry run
-- [x] 3.2 `make verify` (run by the coordinator, on `bf7c0335`)
+- [x] 3.2 `make verify` (in the coordinator's Docker slot, on `bf7c0335`)
 - [x] 3.3 Record `verification.md`
-- [ ] 3.4 `make verify` again after the review pass 1 fixes (run by the coordinator)
+- [x] 3.4 `make verify` again after the review pass 1 fixes (in the coordinator's Docker slot, on `b00cdde8`)
 
 ## 4. Review and archive
 

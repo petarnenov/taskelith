@@ -65,6 +65,7 @@ macOS 26.6.2 (Darwin 25.6.0), x86_64, the Intel iMac; Node.js v24.22.1 through `
 - After the removal correction (the commit after `b0bf842e`): `npm run openspec -- validate align-slot-credential-delivery --strict`: `Change 'align-slot-credential-delivery' is valid`; `npm run verify:comments`: `Every comment is within the comment length rule.`; `npm run verify:links`: `Every checked link conforms.`; `make findings ARGS="validate"`: `Every findings file is valid: 36 file(s); every pass summary file is valid: 16 file(s).`; `npm run verify:archive`: `Every active OpenSpec change archives into strictly valid specs.` No code changed, so the tests and coverage of `b99def5e` stand.
 - Archive dry run after the removal correction, in a scratch copy of the worktree with these changes, deleted afterwards: `npm run openspec -- archive align-slot-credential-delivery --yes` (`Totals: + 6, ~ 3, - 0, → 0`), then `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 69 passed, 0 failed (69 items)`; `git diff --stat -- openspec/specs`: `account-pool-port/spec.md` and `harness-account-pools/spec.md`, 82 insertions and 4 deletions.
 - `make verify` on `bf7c0335`, in the coordinator's Docker slot: exit 0; its last checks printed `Totals: 70 passed, 0 failed (70 items)`, `Every checked link conforms.`, `Every active OpenSpec change archives into strictly valid specs.`, and `Packed file allowlist and installed CLI verification passed.`
+- `make verify` on `b00cdde8`, after the review pass 1 fixes and the removal correction, in the coordinator's Docker slot: exit 0, with the same four closing lines, including `Totals: 70 passed, 0 failed (70 items)`.
 
 ## Independent review
 
@@ -80,7 +81,6 @@ macOS 26.6.2 (Darwin 25.6.0), x86_64, the Intel iMac; Node.js v24.22.1 through `
 
 ## Remaining gates
 
-- `make verify` again after the review pass 1 fixes and the removal correction; it last ran on `bf7c0335`.
 - Independent review passes 2 (reviewer B) and, if needed, 3 (reviewer A).
 - Device-login delivery, its state directory format, its compare-and-set write-back, and the add-slot refusal of a `device-login` slot: revisit only if item 35 overturns D6.
 - The tests of section 9 that items 12 and 18 own: delivery, re-delivery to an adopted execution and its refusals, rotation refusal, revocation and removal of a reserved slot, journal and outbox secrecy, a new delivery after recovery and adoption, and run redaction by value.
