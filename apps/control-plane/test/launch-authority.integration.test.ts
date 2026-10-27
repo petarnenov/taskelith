@@ -197,7 +197,7 @@ test('a new execution that reports the sealed owner is granted, and the owner en
   grantOf(await authority.authorize(PRINCIPAL, request));
   const relaunch = {
     ...request, operationId: id('OperationId', 'operation-2') as never, executionId: id('ExecutionId', 'execution-2') as never,
-    reportsNotStartedFor: { executionId: request.executionId, operationId: request.operationId },
+    reportsNotStartedFor: [{ executionId: request.executionId, operationId: request.operationId }],
   };
   const lost = authorityOn(open(new CrashPoints({ point: 'LaunchAuthorizationCommit.before', occurrence: 1, action: 'throw' })));
   await assert.rejects(lost.authorize(PRINCIPAL, relaunch), SimulatedCrash);
@@ -210,6 +210,31 @@ test('a new execution that reports the sealed owner is granted, and the owner en
     { execution_id: request.executionId, live: false },
   ]);
   assert.equal(grantOf(await authority.authorize(PRINCIPAL, relaunch)).launchAuthId, second.launchAuthId, 'a retry replays the grant');
+});
+
+test('a relaunch that reports two sealed executions ends both not-started and is granted in one commit', async () => {
+  const { taskId, request } = await placed();
+  grantOf(await authority.authorize(PRINCIPAL, request));
+  const sealed = (execution: string, operation: string) => ({ executionId: id('ExecutionId', execution) as never, operationId: id('OperationId', operation) as never });
+  const relaunch = (execution: string, operation: string, reportsNotStartedFor: ReturnType<typeof sealed>[]) => ({
+    ...request, operationId: id('OperationId', operation) as never, executionId: id('ExecutionId', execution) as never, reportsNotStartedFor,
+  });
+  const first = sealed(request.executionId, request.operationId);
+  grantOf(await authority.authorize(PRINCIPAL, relaunch('execution-2', 'operation-2', [first])));
+  const second = sealed('execution-2', 'operation-2');
+  const conflicting = relaunch('execution-3', 'operation-3', [second, sealed('execution-3', 'operation-3')]);
+  assert.equal(kindOf(await authority.authorize(PRINCIPAL, conflicting)), 'rejected:execution-conflict');
+  const live = 'SELECT execution_id, live FROM launch_authorizations ORDER BY execution_id';
+  const beforeThird = [{ execution_id: 'execution-2', live: true }, { execution_id: request.executionId, live: false }];
+  assert.deepEqual(await rows(live), beforeThird, 'a conflict in the second entry writes nothing');
+  const third = relaunch('execution-3', 'operation-4', [first, second]);
+  const lost = authorityOn(open(new CrashPoints({ point: 'LaunchAuthorizationCommit.before', occurrence: 1, action: 'throw' })));
+  await assert.rejects(lost.authorize(PRINCIPAL, third), SimulatedCrash);
+  assert.deepEqual(await rows(live), beforeThird, 'nothing of a lost decision commits');
+  assert.equal(grantOf(await authority.authorize(PRINCIPAL, third)).executionId, 'execution-3');
+  const task = value(await database.transaction((tx) => tx.tasks.get(taskId)));
+  const states = task.attempts.flatMap(({ executions }) => executions).map(({ id: execution, state }) => [execution, state]);
+  assert.deepEqual(states, [[request.executionId, 'not-started'], ['execution-2', 'not-started'], ['execution-3', 'authorized']]);
 });
 
 test('a replay after the deadline is expired, and expiry changes nothing stored', async () => {

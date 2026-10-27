@@ -52,6 +52,10 @@ interface CrashWindow {
   // Holds the sealed execution's `not-started` until the relaunch is
   // answered: the race of defect D1, which the relaunch's report wins.
   readonly holdsNotStarted?: boolean;
+  // The executions the journal ends with sealed, when not one.
+  readonly sealed?: number;
+  // The first run's first preparation fails, a seal at runtime.
+  readonly failsFirstPrepare?: boolean;
 }
 
 const exitedOnce = (window: string, ...points: string[]): CrashWindow => ({ window, points, outcome: 'exited-code-0', spawns: 1, childRelease: 'after-restart' });
@@ -83,6 +87,10 @@ const WINDOWS: readonly CrashWindow[] = [
   exitedOnce('CP4', 'CP4'),
   relaunched('CP5', 'CP5'),
   relaunched('CP6', 'CP6'),
+  // One crash after a seal at runtime, and a double fault on start: the
+  // relaunch reports both sealed executions, and the first still owns.
+  { ...relaunched('W2.after@2 after a runtime seal', 'W2.after@2'), sealed: 2, failsFirstPrepare: true },
+  { ...relaunched('W3.after then W2.after', 'W3.after', 'W2.after'), sealed: 2 },
   { window: 'CP7', points: ['CP7'], outcome: 'uncertain', spawns: 0, childRelease: 'after-restart' },
   { window: 'CP8', points: ['CP8'], outcome: 'uncertain', spawns: 1, childRelease: 'after-restart' },
   // A macOS adopter only observes; once the child is gone nothing proves
@@ -97,7 +105,7 @@ const WINDOWS: readonly CrashWindow[] = [
 const SUPERVISOR_POINTS: ReadonlySet<string> = new Set(['CP5', 'CP6', 'CP7', 'CP8', 'CP9', 'CP11']);
 
 function scenarioName(window: string): string {
-  return `crash-window-${window.toLowerCase().replace('.', '-')}`;
+  return `crash-window-${window.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 }
 
 // Records the scenario's result, `failed` with the error before rethrowing.
@@ -126,6 +134,7 @@ function runSeed(run: number): number {
 interface ScenarioOptions {
   readonly signal: AbortSignal;
   readonly holdNotStarted?: boolean;
+  readonly failsFirstPrepare?: boolean;
 }
 
 class Scenario {
@@ -152,10 +161,12 @@ class Scenario {
   }
 
   async startWorker(armed?: string): Promise<ComposedWorker> {
-    const { signal, holdNotStarted } = this.#options;
+    const { signal, holdNotStarted, failsFirstPrepare } = this.#options;
+    const first = this.#workers.length === 0;
     const run = {
       installation: this.installation, seed: runSeed(this.#workers.length), signal,
       ...(armed === undefined ? {} : { armed }), ...(holdNotStarted === true ? { holdNotStarted } : {}),
+      ...(first && failsFirstPrepare === true ? { failsFirstPrepare } : {}),
     };
     const worker = await ComposedWorker.start(run, this.#token);
     this.#workers.push(worker);
@@ -176,9 +187,14 @@ class Scenario {
     await worker.stop();
   }
 
-  // The control plane's task once it holds the outcome.
+  // The control plane's task once it holds the outcome; a final launch
+  // rejection never reaches one, so it fails at once with its reason.
   settled(outcome: Outcome): Promise<Task> {
-    return this.taskWhere(`the ${outcome} outcome`, (task) => outcomeReached(task, outcome));
+    return this.taskWhere(`the ${outcome} outcome`, (task) => {
+      const rejections = this.installation.launchRejections();
+      if (rejections.length > 0) throw new Error(`a launch was rejected: ${JSON.stringify(rejections)}`);
+      return outcomeReached(task, outcome);
+    });
   }
 
   async taskWhere(what: string, reached: (task: Task) => boolean): Promise<Task> {
@@ -215,13 +231,13 @@ function isUncertain(execution: Execution): boolean {
   return execution.evidence.some((evidence) => evidence.kind === 'uncertain');
 }
 
-// The authority granted E1, then E2 before E1's `not-started` went out, so
-// E2's report alone ended E1 at the authority (defect D1).
-async function assertRelaunchBeforeNotStarted(scenario: Scenario, relaunch: Execution): Promise<void> {
+// The authority granted E1, then the relaunch before E1's `not-started`
+// went out, so the relaunch's report ended E1 there (defect D1).
+async function assertRelaunchBeforeNotStarted(scenario: Scenario, relaunch: Execution, count: number): Promise<void> {
   const { installation } = scenario;
   assert.deepEqual(installation.launchRejections(), [], 'no launch rejection');
   const sealed = journalSnapshot(installation).executions.filter(({ state }) => state === 'not-started');
-  assert.equal(sealed.length, 1, `one sealed execution: ${JSON.stringify(sealed)}`);
+  assert.equal(sealed.length, count, `${count} sealed execution(s): ${JSON.stringify(sealed)}`);
   const [first] = sealed as [JournaledExecution];
   const order = establishedOrder(installation);
   const granted = order.indexOf(`answered ${first.executionId} granted`);
@@ -275,7 +291,8 @@ async function adoption(scenario: Scenario): Promise<string[]> {
 
 async function runCrashWindow(window: CrashWindow, signal: AbortSignal): Promise<string> {
   const { points, outcome, spawns, childRelease } = window;
-  const scenario = await Scenario.start({ signal, holdNotStarted: window.holdsNotStarted === true });
+  const failsFirstPrepare = window.failsFirstPrepare === true;
+  const scenario = await Scenario.start({ signal, holdNotStarted: window.holdsNotStarted === true, failsFirstPrepare });
   try {
     const { installation } = scenario;
     if (childRelease === 'at-once') releaseChild(installation);
@@ -294,7 +311,8 @@ async function runCrashWindow(window: CrashWindow, signal: AbortSignal): Promise
     await scenario.settled(outcome);
     await restarted.stop();
     const execution = await recoveredExecution(scenario, outcome);
-    if (window.holdsNotStarted === true) await assertRelaunchBeforeNotStarted(scenario, execution);
+    if (window.holdsNotStarted === true) await assertRelaunchBeforeNotStarted(scenario, execution, window.sealed ?? 1);
+    if (failsFirstPrepare) assert.ok(establishedOrder(installation).includes('prepare failed'), 'the first preparation failed');
     await scenario.noLeftovers();
     assert.equal(spawnedChildren(installation).length, spawns, 'spawns of the scripted child');
     const order = establishedOrder(installation);

@@ -14,7 +14,7 @@ import {
   type Upload,
 } from '@taskelith/control-plane';
 import { checkHttpSchema } from '@taskelith/contracts';
-import { parseLaunchParameters, type LaunchGrant, type LaunchOutcome } from '@taskelith/execution';
+import { parseLaunchParameters, REPORTED_SEALS_LIMIT, type LaunchGrant, type LaunchOutcome } from '@taskelith/execution';
 import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { failed, value } from '@taskelith/testing';
@@ -351,7 +351,7 @@ test('authorizeLaunch maps every outcome to its contract shape, and needs a work
   assert.equal(failed(await api.handle('authorizeLaunch', { ...request, body: { ...body, recoveryEpoch: 0 } }, '')).code, 'invalid');
 });
 
-test('authorizeLaunch passes a reported sealed execution to the authority and refuses an invalid one', async () => {
+test('authorizeLaunch passes the reported sealed executions to the authority and refuses an invalid list', async () => {
   const received: unknown[] = [];
   const api = new ControlPlaneApi({
     runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, enrollment: undefined as never,
@@ -361,18 +361,22 @@ test('authorizeLaunch passes a reported sealed execution to the authority and re
       return ok({ kind: 'expired' });
     } },
   });
+  const sealed = (index: number) => ({ executionId: `execution-${index}`, operationId: `operation-${index}` });
+  const limit = Array.from({ length: REPORTED_SEALS_LIMIT }, (_, index) => sealed(index + 1));
   const body = {
-    operationId: 'operation-2', recoveryEpoch: 1, assignmentId: 'assignment-1', attemptId: 'attempt-1', ownershipGeneration: 1,
-    executionId: 'execution-2', admissionId: 'admission-1', admissionGeneration: 2, reportsNotStarted: false,
-    reportsNotStartedFor: { executionId: 'execution-1', operationId: 'operation-1' },
+    operationId: 'operation-9', recoveryEpoch: 1, assignmentId: 'assignment-1', attemptId: 'attempt-1', ownershipGeneration: 1,
+    executionId: 'execution-9', admissionId: 'admission-1', admissionGeneration: 2, reportsNotStarted: false,
+    reportsNotStartedFor: limit,
   };
   assert.ok(checkHttpSchema('LaunchAuthorizationRequest', body).ok);
   const request = { parameters: [], body, query: new URLSearchParams(), correlationId: 'c' as never, worker: { workerId: 'worker-1' as never, generation: 1 } };
   value(await api.handle('authorizeLaunch', request, ''));
   const { reportsNotStartedFor: _sealed, ...unreported } = body;
   value(await api.handle('authorizeLaunch', { ...request, body: unreported }, ''));
-  assert.deepEqual(received.map((values) => (values as { reportsNotStartedFor?: unknown }).reportsNotStartedFor), [body.reportsNotStartedFor, undefined]);
-  for (const reportsNotStartedFor of [{ executionId: '', operationId: 'operation-1' }, { executionId: 'execution-1', operationId: '' }]) {
+  assert.deepEqual(received.map((values) => (values as { reportsNotStartedFor?: unknown }).reportsNotStartedFor), [limit, undefined]);
+  const invalid = [[], [...limit, sealed(9)], [{ executionId: '', operationId: 'operation-1' }], [sealed(1), { executionId: 'execution-2', operationId: '' }]];
+  assert.equal(checkHttpSchema('LaunchAuthorizationRequest', { ...body, reportsNotStartedFor: invalid[1] }).ok, false);
+  for (const reportsNotStartedFor of invalid) {
     assert.equal(failed(await api.handle('authorizeLaunch', { ...request, body: { ...body, reportsNotStartedFor } }, '')).code, 'invalid');
   }
   assert.equal(received.length, 2);
