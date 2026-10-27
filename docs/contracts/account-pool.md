@@ -115,7 +115,7 @@ The agent harness port (item 3) defines the `usage` and `limit` signals, the `re
 - **Load.** The usage window is a pool concern: the `usage` signal carries a fraction and no window. The pool configuration sets a usage window length per harness plugin, a positive whole number of minutes. A usage report replaces `usage` with its fraction and `windowEndsAt`, the database time at which the control plane applies it plus that length. When the configuration sets no length for the slot's harness, the window end is unknown, and the report clears `usage`. The tie-breaker skips a slot without `usage` or whose window has ended (section 4.2).
 - **Health.** A slot becomes `unhealthy` when a session on it reports that the slot's credential fails authentication: a turn that ends `failed` with the failure `authentication`, or a start or resume that fails with `forbidden` (agent harness port contract section 9). It becomes `healthy` again only when a rotation switches it to a new credential (section 8.1); no credential check runs outside a session.
 
-Cooldown and ill health make a slot ineligible for new reservations and release no held reservation (capacity reservation contract section 10). A plugin that reports no usage or reset time, or a harness without a usage window length, falls back to the held-reservation count and the default cooldown (ADR 0005 "Risks").
+Cooldown and ill health make a slot ineligible for new reservations and release no held reservation (capacity reservation contract section 10). A plugin that reports no usage, or a harness without a usage window length, falls back to the held-reservation count, and a limit without a reset time to the default cooldown (ADR 0005 "Risks").
 
 ## 6. Ports
 
