@@ -1,6 +1,6 @@
 ## Why
 
-The archived `implement-worker-daemon-pressure` change (20e2) retries journal writes refused for lack of space (`SQLITE_FULL`, failure reason `disk-full`) after the `5s` to `60s` backoff with jitter. Its verification records one limitation: `recordUnrecordedProcess`, the Linux unrecorded-process report of the archived `implement-unrecorded-process-scan` change, is reported as a failure on a refusal for space and waits for the next start's scan. The [worker journal contract](../../../docs/contracts/worker-journal.md) section 7 ("Full disk") asks the worker to truncate `worker/logs/` and retry a refused write with the backoff of the operational targets.
+The archived `implement-worker-daemon-pressure` change (20e2) retries journal writes refused for lack of space (`SQLITE_FULL`, failure reason `disk-full`) after the `5s` to `60s` backoff with jitter. Its verification records one limitation: `recordUnrecordedProcess`, the Linux unrecorded-process report of the archived `implement-unrecorded-process-scan` change, is reported as a failure on a refusal for space and waits for the next start's scan. The [worker journal contract](/docs/contracts/worker-journal.md) section 7 ("Full disk") asks the worker to truncate `worker/logs/` and retry a refused write with the backoff of the operational targets.
 
 ## What Changes
 

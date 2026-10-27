@@ -42,7 +42,7 @@ Assigned reviewer: Claude Code with `claude -p <prompt> --model claude-fable-5-1
   7. Low: the evidence requirement named every image, while only proposed images list platform digests; it now says "each container image it proposes".
   8. Low: task 2.1 was unchecked. Checked.
 
-By the [review process](../../../docs/governance.md#independent-review-process), a pass with only Low findings is fixed without another review; these fixes are **unreviewed**. After the fixes, strict validation and `make verify` passed again (see Checks).
+By the [review process](/docs/governance.md#independent-review-process), a pass with only Low findings is fixed without another review; these fixes are **unreviewed**. After the fixes, strict validation and `make verify` passed again (see Checks).
 
 ## Limitations
 

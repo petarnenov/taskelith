@@ -1,6 +1,6 @@
 ## Why
 
-G1 item 10 in the [G1 work plan](../../../docs/g1-plan.md). Before the SDLC framework port freezes (item 12), shared mapping fixtures from both native workflows must exist (architecture section 13, requirement R34): the OpenSpec adapter (item 11) has to pass them, and item 12 runs the SpecKit fixtures through a test-only normaliser. Items 6 (the draft port and its conformance suite) and 9 (the pinned SpecKit capture) are merged. The task was assigned by the coordinating session Niki.
+G1 item 10 in the [G1 work plan](/docs/g1-plan.md). Before the SDLC framework port freezes (item 12), shared mapping fixtures from both native workflows must exist (architecture section 13, requirement R34): the OpenSpec adapter (item 11) has to pass them, and item 12 runs the SpecKit fixtures through a test-only normaliser. Items 6 (the draft port and its conformance suite) and 9 (the pinned SpecKit capture) are merged. The task was assigned by the coordinating session Niki.
 
 ## What Changes
 

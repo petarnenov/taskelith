@@ -1,6 +1,6 @@
 ## Scope and source
 
-G2 work item 26, `qualify-harnesses-in-worker-image`, assigned by the coordinator on 2026-10-25. The scope: add the pinned Claude Code and Codex packages to the Linux worker image as a digest-pinned image variant, with the default worker image unchanged; run their qualification steps inside it on the architectures D11 selects; update both qualification records. The work qualifies; it does not admit, and both harnesses stay `candidate`. Sources: [docs/g2-plan.md](../../../docs/g2-plan.md) item 26 and D11, [ADR 0007](../../../docs/decisions/0007-g0-closure.md), the two qualification records, and the archived 23a change `2026-10-25-compose-minimal-local-installation-images`.
+G2 work item 26, `qualify-harnesses-in-worker-image`, assigned by the coordinator on 2026-10-25. The scope: add the pinned Claude Code and Codex packages to the Linux worker image as a digest-pinned image variant, with the default worker image unchanged; run their qualification steps inside it on the architectures D11 selects; update both qualification records. The work qualifies; it does not admit, and both harnesses stay `candidate`. Sources: [docs/g2-plan.md](/docs/g2-plan.md) item 26 and D11, [ADR 0007](/docs/decisions/0007-g0-closure.md), the two qualification records, and the archived 23a change `2026-10-25-compose-minimal-local-installation-images`.
 
 Decisions taken during the task:
 

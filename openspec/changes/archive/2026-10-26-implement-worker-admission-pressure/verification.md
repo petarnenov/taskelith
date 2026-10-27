@@ -4,7 +4,7 @@ Date: 2026-10-26. Author verification is recorded below; the independent review 
 
 ## Scope and source
 
-[G2 work plan](../../../docs/g2-plan.md) item 20, split by the coordinator; this is 20e (Non-Goals of the archived `implement-worker-start-reconciliation` design). It was developed by an implementation subagent that the worker session briefed and checks.
+[G2 work plan](/docs/g2-plan.md) item 20, split by the coordinator; this is 20e (Non-Goals of the archived `implement-worker-start-reconciliation` design). It was developed by an implementation subagent that the worker session briefed and checks.
 
 - Base revision: `8a9abb6` on `dev`.
 - Scope: the worker-side admission pressure, the disk floor, and the backlog limit, as the design states.
@@ -12,7 +12,7 @@ Date: 2026-10-26. Author verification is recorded below; the independent review 
 
 ### Dependency gate
 
-20e needs nothing from 20d2. A pressure change is a journal fact published by the existing outbox publisher (`apps/worker/src/worker-start.ts`, `runObservationPublisher`), and the heartbeat carries no pressure ([execution wire contracts](../../../docs/contracts/execution-wire-contracts.md) section 6).
+20e needs nothing from 20d2. A pressure change is a journal fact published by the existing outbox publisher (`apps/worker/src/worker-start.ts`, `runObservationPublisher`), and the heartbeat carries no pressure ([execution wire contracts](/docs/contracts/execution-wire-contracts.md) section 6).
 
 ## Evidence
 
@@ -57,7 +57,7 @@ Codex, `gpt-6.1-sol` (`medium`, model and effort confirmed from the session head
 
 Codex, `gpt-6.1-sol` (`medium`, model and effort confirmed from the session header), read-only, session `01a177fb-3f8b-7f91-9d73-a900f7ef9d66`, invoked as in pass 1, at `c235ca5`. The snapshots before and after the pass matched (`2cd80136a2476b529dc5221e8f2d5a79024cb3748d868e962bc41dc525d300a7`). Findings: 0 Critical, 0 High, 0 Medium, 0 Low.
 
-- **Pass 2 High:** acceptably mitigated within the trusted-host boundary of the [trust model](../../../docs/trust-model.md). The race is not eliminated: the reviewer reproduced the coordinated double-swap bypass in an in-memory harness, as design D6 documents. The check is not atomic containment and does not protect against a malicious process with the worker account's file system authority.
+- **Pass 2 High:** acceptably mitigated within the trusted-host boundary of the [trust model](/docs/trust-model.md). The race is not eliminated: the reviewer reproduced the coordinated double-swap bypass in an in-memory harness, as design D6 documents. The check is not atomic containment and does not protect against a malicious process with the worker account's file system authority.
 - **Pass 1 High 2, Medium, Low:** remain resolved.
 - **Whole change:** nothing more found.
 - The reviewer ran `npm run verify:comments`, the strict OpenSpec validation, `git diff --check`, and in-memory checks; being read-only, it did not run `make verify`.

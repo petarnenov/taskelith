@@ -1,6 +1,6 @@
 ## Context
 
-Defect D1 of G2 item 24b, decided by the owner's delegate in away run `20261026T161148Z-opencode-90873`, option (b): `LaunchRequest` gets an optional `reportsNotStartedFor { executionId, operationId }`; the authority applies the referenced execution's `not-started` first, then the ownership rule for the new execution, in one transaction; the worker's continue-launch and relaunch requests fill it from the sealed execution. The [launch authorization contract](../../../docs/contracts/launch-authorization.md) sections 4, 6, and 9 and the [worker journal contract](../../../docs/contracts/worker-journal.md) section 5 are the sources.
+Defect D1 of G2 item 24b, decided by the owner's delegate in away run `20261026T161148Z-opencode-90873`, option (b): `LaunchRequest` gets an optional `reportsNotStartedFor { executionId, operationId }`; the authority applies the referenced execution's `not-started` first, then the ownership rule for the new execution, in one transaction; the worker's continue-launch and relaunch requests fill it from the sealed execution. The [launch authorization contract](/docs/contracts/launch-authorization.md) sections 4, 6, and 9 and the [worker journal contract](/docs/contracts/worker-journal.md) section 5 are the sources.
 
 ## Goals / Non-Goals
 

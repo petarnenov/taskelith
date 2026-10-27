@@ -4,7 +4,7 @@ Date: 2026-10-26. Author verification is recorded below. Review passes are recor
 
 ## Scope and source
 
-The worker's home cgroup layout check, left open by the archived [`implement-unrecorded-process-scan`](../archive/2026-10-26-implement-unrecorded-process-scan/design.md) design ("Risks / Trade-offs", the worker's own cgroup is not excluded). The owner's delegate chose option A in away run `20261026T130340Z-opencode-33653`, relayed by the coordinator. The scope is as design.md "Owner decision" states.
+The worker's home cgroup layout check, left open by the archived [`implement-unrecorded-process-scan`](/openspec/changes/archive/2026-10-26-implement-unrecorded-process-scan/design.md) design ("Risks / Trade-offs", the worker's own cgroup is not excluded). The owner's delegate chose option A in away run `20261026T130340Z-opencode-33653`, relayed by the coordinator. The scope is as design.md "Owner decision" states.
 
 - Base revision: `311c40d` on `dev`.
 - Implementation revision: `eb6cce2`.

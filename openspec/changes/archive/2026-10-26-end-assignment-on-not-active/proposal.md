@@ -1,6 +1,6 @@
 ## Why
 
-The [capacity reservation contract](../../../docs/contracts/capacity-reservation.md) section 8 (line 151) says the worker ends an acknowledged assignment locally when it receives an assignment-ended command or a launch authorization rejection with `assignment-not-active`, and stops counting it. The worker ended an assignment only on `execution.assignment.end`: after an `assignment-not-active` rejection it kept counting the assignment against its slots and reported it as `accepted` in its inventory until the end command arrived.
+The [capacity reservation contract](/docs/contracts/capacity-reservation.md) section 8 (line 151) says the worker ends an acknowledged assignment locally when it receives an assignment-ended command or a launch authorization rejection with `assignment-not-active`, and stops counting it. The worker ended an assignment only on `execution.assignment.end`: after an `assignment-not-active` rejection it kept counting the assignment against its slots and reported it as `accepted` in its inventory until the end command arrived.
 
 ## What Changes
 

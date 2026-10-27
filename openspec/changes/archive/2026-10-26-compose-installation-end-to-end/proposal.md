@@ -1,8 +1,8 @@
 ## Why
 
-G2 work item 23 ([docs/g2-plan.md](../../../docs/g2-plan.md)) was split by the coordinator ([23a proposal](../archive/2026-10-25-compose-minimal-local-installation-images/proposal.md)): 23a packaged the images, the composition, and the `make` targets; 23b, this change, adds "the end-to-end smoke (submit, assign, execute) and anything the later runtime needs", now that items 20 and 21 are merged.
+G2 work item 23 ([docs/g2-plan.md](/docs/g2-plan.md)) was split by the coordinator ([23a proposal](/openspec/changes/archive/2026-10-25-compose-minimal-local-installation-images/proposal.md)): 23a packaged the images, the composition, and the `make` targets; 23b, this change, adds "the end-to-end smoke (submit, assign, execute) and anything the later runtime needs", now that items 20 and 21 are merged.
 
-The runtime needs more of the Linux worker container than 23a gave it. A Linux launch needs a delegated cgroup v2 containment parent and an execution account that owns no cgroup of the worker (supervisor identity contract section 8), and item 20d2 left the obligation that the Linux worker image always sets `TASKELITH_CONTAINMENT_PARENT`, so that start reconciliation and the unrecorded-process scan run ([20d2 design](../archive/2026-10-26-implement-worker-contact-and-offline/design.md) OQ2). The 23a container runs the worker as the unprivileged `taskelith` user in a read-only cgroup namespace, where none of this is possible.
+The runtime needs more of the Linux worker container than 23a gave it. A Linux launch needs a delegated cgroup v2 containment parent and an execution account that owns no cgroup of the worker (supervisor identity contract section 8), and item 20d2 left the obligation that the Linux worker image always sets `TASKELITH_CONTAINMENT_PARENT`, so that start reconciliation and the unrecorded-process scan run ([20d2 design](/openspec/changes/archive/2026-10-26-implement-worker-contact-and-offline/design.md) OQ2). The 23a container runs the worker as the unprivileged `taskelith` user in a read-only cgroup namespace, where none of this is possible.
 
 ## What Changes
 

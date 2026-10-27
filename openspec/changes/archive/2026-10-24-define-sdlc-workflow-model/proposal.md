@@ -1,6 +1,6 @@
 ## Why
 
-G1 item 4 in the [G1 work plan](../../../docs/g1-plan.md). Gates and transitions (item 5), the `SdlcFramework` port (item 6), and task admission (item 7) all need a framework-neutral model of what a workflow is and what a workflow run is bound to. Architecture section 6 requires workflows to be versioned stage graphs rather than one linear state enum, every lifecycle obligation to be covered natively or by a platform-managed stage, and each run to persist an immutable framework binding (invariant 12).
+G1 item 4 in the [G1 work plan](/docs/g1-plan.md). Gates and transitions (item 5), the `SdlcFramework` port (item 6), and task admission (item 7) all need a framework-neutral model of what a workflow is and what a workflow run is bound to. Architecture section 6 requires workflows to be versioned stage graphs rather than one linear state enum, every lifecycle obligation to be covered natively or by a platform-managed stage, and each run to persist an immutable framework binding (invariant 12).
 
 ## What Changes
 

@@ -1,6 +1,6 @@
 ## Why
 
-G2 item 15 (`implement-process-supervisor`) left the macOS adapter failing closed, so a macOS supervisor sealed every launch: reading `kinfo_proc` and `mach_continuous_time` needs a native mechanism, decision D-A, which it deferred to the owner with a `koffi` qualification proposal ([koffi-qualification.md](../archive/2026-10-25-implement-process-supervisor/koffi-qualification.md)). On 2026-10-25 the owner approved `koffi` (decision D-A of item 15) and accepted its governance risks, mitigated by keeping it behind the ports. The coordinator assigned this change to implement the macOS native process evidence and enable the macOS launch path.
+G2 item 15 (`implement-process-supervisor`) left the macOS adapter failing closed, so a macOS supervisor sealed every launch: reading `kinfo_proc` and `mach_continuous_time` needs a native mechanism, decision D-A, which it deferred to the owner with a `koffi` qualification proposal ([koffi-qualification.md](/openspec/changes/archive/2026-10-25-implement-process-supervisor/koffi-qualification.md)). On 2026-10-25 the owner approved `koffi` (decision D-A of item 15) and accepted its governance risks, mitigated by keeping it behind the ports. The coordinator assigned this change to implement the macOS native process evidence and enable the macOS launch path.
 
 ## What Changes
 

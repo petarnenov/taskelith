@@ -1,0 +1,1 @@
+{"change": "repair-archived-record-links", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a17dbf-8e90-7591-9c30-5cfea401bfe1", "counts": {"critical": 0, "high": 0, "medium": 0, "low": 1}}

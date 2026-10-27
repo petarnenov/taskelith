@@ -4,7 +4,7 @@ Date: 2026-10-25. Author verification and independent review are recorded below.
 
 ## Scope and source
 
-[G2 work plan](../../../docs/g2-plan.md) item 21, part 21a. The coordinating session (Niki) assigned it to the worker session Maki. The reviewer is Codex CLI `gpt-6.1-sol` (medium), assigned by the rotation.
+[G2 work plan](/docs/g2-plan.md) item 21, part 21a. The coordinating session (Niki) assigned it to the worker session Maki. The reviewer is Codex CLI `gpt-6.1-sol` (medium), assigned by the rotation.
 - **Base revision:** `ee7936e` on `dev`. `origin/dev` at `f83e36d` was merged in before review pass 1 to take item 17 (launch authority), as the coordinator asked.
 - **Scope:** the placement loop, the candidates query, the placement queue and its query columns, and `requestDelegation` with its persisted state.
 - **Out of scope:** 21b, 21c, 21d, and items 20 and 24, as the proposal lists.

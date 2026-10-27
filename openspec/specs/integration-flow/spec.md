@@ -134,21 +134,6 @@ Each change to Taskelith SHALL be developed on its own feature branch in its own
 - **WHEN** a link is inside a code block, a code span, or raw HTML, or starts with a URI scheme such as `https:`, `mailto:`, or `tel:`
 - **THEN** the check ignores it
 
-### Requirement: Record link baseline
-`scripts/record-links-baseline.tsv` SHALL list, sorted and one line per occurrence, each archived link that broke the record link check when it was introduced, as its file and target separated by a tab. The check SHALL accept only those occurrences, SHALL reject an entry outside `openspec/changes/archive/`, SHALL fail on an entry that no longer occurs, and SHALL report how many baselined links remain.
-
-#### Scenario: Known archived link
-- **WHEN** an archived record still holds a baselined link
-- **THEN** the check passes and counts it among the remaining baselined links
-
-#### Scenario: New problem in an archived record
-- **WHEN** an archived record holds a failing link that the baseline does not list
-- **THEN** the check fails on it
-
-#### Scenario: Stale entry
-- **WHEN** a baselined link no longer occurs, for example because its record was corrected
-- **THEN** the check fails and names the entry to remove
-
-#### Scenario: Entry outside the archive
-- **WHEN** the baseline lists a file outside `openspec/changes/archive/`
-- **THEN** the check fails without suppressing anything
+#### Scenario: Archived record
+- **WHEN** an archived record holds a link that fails any of these rules
+- **THEN** the check fails on it; no list of accepted archived links exists

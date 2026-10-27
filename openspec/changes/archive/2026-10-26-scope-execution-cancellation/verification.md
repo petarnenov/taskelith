@@ -4,7 +4,7 @@ Date: 2026-10-26. The author's verification and the independent review are recor
 
 ## Scope and source
 
-This change fixes bug B2, found by Zaki's G2 item 24c, scenario h: a cancellation that names one execution stopped the whole intent, including the owning execution. The coordinating session (Niki) assigned it to the worker session (Desi), which ran it in a briefed subagent ([subagent execution](../../../docs/agent-task-protocol.md#subagent-execution)).
+This change fixes bug B2, found by Zaki's G2 item 24c, scenario h: a cancellation that names one execution stopped the whole intent, including the owning execution. The coordinating session (Niki) assigned it to the worker session (Desi), which ran it in a briefed subagent ([subagent execution](/docs/agent-task-protocol.md#subagent-execution)).
 - **Base revision:** `cd2f909` on `dev`.
 - **Scope:** the cancellation path of `apps/worker/src/launch-orchestrator.ts` (`#forward` and `Launch.runs`), its tests, and the worker-runtime delta.
 - **Out of scope:** the recovery plan's reading of execution-target cancellations (design, Risks), the relaunch path of the launch orchestrator, which another change covers, and the scenario h test of item 24c, which stays a `todo`.

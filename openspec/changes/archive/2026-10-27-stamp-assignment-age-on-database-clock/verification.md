@@ -4,7 +4,7 @@ Date: 2026-10-27. The author's verification and review passes 1 and 2 are record
 
 ## Scope and source
 
-A G2 follow-up found during B6 `stabilize-observability-lag-test`: the snapshot claimed the database clock stamps every row it ages, but `assignments.changed_at` is a caller-supplied time. Coordinator Niki first chose option (a), a database-stamped column; that implementation found the premise only partly right (placement already writes `changed_at` from `tx.now()`), and Niki then chose option B: keep the schema, state the convention, and test it. Worker session Maki developed it in a briefed and checked subagent ([subagent execution](../../../docs/agent-task-protocol.md#subagent-execution)), in worktree `taskelith-worktrees/stamp-assignment-age-on-database-clock` on branch `stamp-assignment-age-on-database-clock`. The option A commits are kept on local branch `stamp-assignment-age-option-a`.
+A G2 follow-up found during B6 `stabilize-observability-lag-test`: the snapshot claimed the database clock stamps every row it ages, but `assignments.changed_at` is a caller-supplied time. Coordinator Niki first chose option (a), a database-stamped column; that implementation found the premise only partly right (placement already writes `changed_at` from `tx.now()`), and Niki then chose option B: keep the schema, state the convention, and test it. Worker session Maki developed it in a briefed and checked subagent ([subagent execution](/docs/agent-task-protocol.md#subagent-execution)), in worktree `taskelith-worktrees/stamp-assignment-age-on-database-clock` on branch `stamp-assignment-age-on-database-clock`. The option A commits are kept on local branch `stamp-assignment-age-option-a`.
 - **Base revision:** `b0d018a` on `dev`.
 - **Revision verified:** `2520ab2` (the comment, the test, and these records before this file); after review pass 1, `b93a6c0`, on which `make verify` ran; review pass 2 reviewed `cdbb2d0`, and its record changes only this file and `tasks.md`, so no further `make verify` ran.
 - **Scope:** the snapshot comment, a placement test, and the `execution-observability` delta.
@@ -37,7 +37,7 @@ Environment: macOS (Darwin 25.6.0), Node from `.nvmrc`, Docker test services sta
 ### Review pass 1
 
 - **Reviewer:** OpenCode CLI, model `opencode-go/qwen3.8-max`, variant `medium`, `reviewer` agent (read-only), assigned and run by the coordinating session from the worktree.
-- **Invocation:** the kimi-k3.1-pro row of [the agent task protocol](../../../docs/agent-task-protocol.md) with the coordinator-assigned model: `opencode run --standalone --agent reviewer -m 'opencode-go/qwen3.8-max#medium' --format json --title stamp-assignment-age-on-database-clock "$(cat <prompt-file>)" < /dev/null > <log>`.
+- **Invocation:** the kimi-k3.1-pro row of [the agent task protocol](/docs/agent-task-protocol.md) with the coordinator-assigned model: `opencode run --standalone --agent reviewer -m 'opencode-go/qwen3.8-max#medium' --format json --title stamp-assignment-age-on-database-clock "$(cat <prompt-file>)" < /dev/null > <log>`.
 - **Revision:** `848b5c3`, diff `b0d018a..848b5c3`.
 - **Model confirmation:** the stored assistant messages record provider `opencode-go`, model `qwen3.8-max`, variant `medium`; session `ses_e859acd6fffeoT7mVnXasEPE4I`.
 - **Snapshot:** `c2f4f735de3e2b419a960307e5d80caf93d600c0217b2c760470d7684ba797ea` before and after; unchanged.

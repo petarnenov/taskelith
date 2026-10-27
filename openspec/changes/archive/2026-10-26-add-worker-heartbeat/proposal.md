@@ -1,6 +1,6 @@
 ## Why
 
-G2 work items 20 (`implement-worker-agent-runtime`, report reachability) and 21 (`implement-execution-reconciliation`) both need lost contact ([docs/g2-plan.md](../../../docs/g2-plan.md), rows 20 and 21). Item 21b records first contact from observations, but nothing ever marks a worker unreachable, so a silent worker stays eligible for placement forever. A worker that has nothing to observe also sends nothing, so observations alone cannot tell a quiet worker from a lost one.
+G2 work items 20 (`implement-worker-agent-runtime`, report reachability) and 21 (`implement-execution-reconciliation`) both need lost contact ([docs/g2-plan.md](/docs/g2-plan.md), rows 20 and 21). Item 21b records first contact from observations, but nothing ever marks a worker unreachable, so a silent worker stays eligible for placement forever. A worker that has nothing to observe also sends nothing, so observations alone cannot tell a quiet worker from a lost one.
 
 On 2026-10-26 the coordinator moved this change ahead of item 20d and assigned the contract and the control-plane side. The worker-side publisher stays in 20d.
 

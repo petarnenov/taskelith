@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-Owner request on 2026-10-25: an analysis of integrating Tailscale so that Taskelith can work with machines registered in a Tailscale network, followed by the owner's decision recorded in [ADR 0012](../../../docs/decisions/0012-network-fabric-plugins.md): network connectivity to machines is a plugin/adapter capability; a plain local network is the default without Tailscale-like capabilities; a self-hosted Headscale adapter comes next; the hosted Tailscale control plane comes last. Prepared in the git worktree `../taskelith-worktrees/record-network-fabric-decision` on branch `record-network-fabric-decision`, created from `origin/dev` at `61e81f4`.
+Owner request on 2026-10-25: an analysis of integrating Tailscale so that Taskelith can work with machines registered in a Tailscale network, followed by the owner's decision recorded in [ADR 0012](/docs/decisions/0012-network-fabric-plugins.md): network connectivity to machines is a plugin/adapter capability; a plain local network is the default without Tailscale-like capabilities; a self-hosted Headscale adapter comes next; the hosted Tailscale control plane comes last. Prepared in the git worktree `../taskelith-worktrees/record-network-fabric-decision` on branch `record-network-fabric-decision`, created from `origin/dev` at `61e81f4`.
 
 The change is documentation only: ADR 0012, one row in the architecture's open-decisions table, an update to acceptance requirement R35 for the narrow closed-provider exception, and one paragraph in the dependency register (with the R35 update added after pass 3). The `integration-decisions` requirement "Recorded owner integration decisions" already requires this record, so `.openspec.yaml` sets `skip_specs: true`.
 
