@@ -13,7 +13,8 @@
 
 - [x] 3.1 Rerun the 50-run loop alone and the perturbation, and record both in `verification.md`.
 - [x] 3.2 Run `npm run openspec -- validate stabilize-g2-cancellation-races-exit-signal --strict` and `make verify`.
-- [ ] 3.3 Independent review, recorded in `verification.md`.
+- [x] 3.3 Record an evidence run of the suite in `results.jsonl` (requirement "Recorded scenario results").
+- [ ] 3.4 Independent review, recorded in `verification.md`.
 
 ## Review checklist
 
