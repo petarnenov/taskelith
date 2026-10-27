@@ -39,6 +39,7 @@ export class X509CertificateIssuer implements CertificateIssuer {
   async issueServerCertificate(authority: IssuedCertificate, request: ServerCertificateRequest): Promise<Result<IssuedCertificate>> {
     const signer = await readAuthority(authority);
     if (!signer.ok) return signer;
+    if (endsBefore(authority, request.validity)) return err(failure('precondition-failed', AUTHORITY_ENDS_FIRST));
     if (request.hosts.length === 0) return err(failure('invalid', 'a server certificate needs at least one host'));
     return issuing(`the ${request.commonName} certificate`, async () => {
       const keys = await generateKeys();
@@ -76,6 +77,13 @@ async function readAuthority(authority: IssuedCertificate): Promise<Result<Signe
   } catch {
     return err(failure('precondition-failed', 'the installation authority is not an ECDSA P-256 certificate and key'));
   }
+}
+
+const AUTHORITY_ENDS_FIRST = 'the installation authority ends before the server certificate would; authority rollover is G6 work';
+
+// An expired authority ends before any new server certificate does.
+function endsBefore(authority: IssuedCertificate, validity: CertificateValidity): boolean {
+  return Date.parse(new X509Certificate(authority.certificatePem).validTo) < Date.parse(validity.notAfter);
 }
 
 function isCaWithKey(authority: IssuedCertificate): boolean {

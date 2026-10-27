@@ -1,4 +1,4 @@
-import { parseInstant, type Result } from '@taskelith/kernel';
+import { instantFromEpochMilliseconds, parseInstant, type Result } from '@taskelith/kernel';
 import { expectCode, expectSame, type ConformanceCase } from '@taskelith/sdlc';
 import { authorityValidity, serverCertificateValidity } from '../domain/installation-certificates.js';
 import type { CertificateIssuer, IssuedCertificate, ServerHost } from './certificate-issuer.js';
@@ -30,6 +30,7 @@ export interface CertificateIssuerConformanceTarget {
 const NOW = must(parseInstant('2026-10-28T12:00:00.000Z'));
 const HOSTS: readonly ServerHost[] = [{ kind: 'dns', name: 'control-plane' }, { kind: 'ip', name: '127.0.0.1' }, { kind: 'ip', name: '::1' }];
 const SERVER_AUTHENTICATION = '1.3.6.1.5.5.7.3.1';
+const DAY_MILLISECONDS = 86_400_000;
 
 function must<T>(result: Result<T>): T {
   if (!result.ok) throw new Error(`conformance fixture: ${result.error.message}`);
@@ -113,6 +114,18 @@ export const CERTIFICATE_ISSUER_CONFORMANCE: readonly ConformanceCase<Certificat
       expectRefusal(problems, 'another key', await serverOf(issuer, mixed), 'BEGIN');
       const leaf = must(await serverOf(issuer, authority));
       expectRefusal(problems, 'no CA', await serverOf(issuer, leaf), 'BEGIN');
+      return problems;
+    },
+  },
+  {
+    name: 'an expired authority, or one that ends before the server certificate, is refused',
+    async check({ issuer }) {
+      const problems: string[] = [];
+      const days = (count: number) => must(instantFromEpochMilliseconds(Date.parse(NOW) + count * DAY_MILLISECONDS));
+      const ending = must(await issuer.createAuthority({ commonName: 'Ending authority', validity: { notBefore: NOW, notAfter: days(30) } }));
+      expectRefusal(problems, 'ends first', await serverOf(issuer, ending), 'BEGIN');
+      const expired = must(await issuer.createAuthority({ commonName: 'Expired authority', validity: { notBefore: days(-800), notAfter: days(-400) } }));
+      expectRefusal(problems, 'expired', await serverOf(issuer, expired), 'BEGIN');
       return problems;
     },
   },
