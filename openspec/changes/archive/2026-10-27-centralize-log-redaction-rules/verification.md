@@ -81,8 +81,23 @@ OpenCode, model `opencode-go/kimi-k2.7-code` (default variant, none passed), run
 - The time bound is wall-clock and can be hit by a long scheduler pause on a loaded host.
 - The identical-output proof is a scratch comparison against copies of the base build, not a committed test.
 
+## Archive checks
+
+Checked state: the tree of the archive commit (`docs: archive the centralize log redaction rules change`), on top of `353cbb2d`, which records the merge of `dev` at `9c0c1706`. Every task in `tasks.md` was already ticked.
+
+- `npm run openspec -- archive centralize-log-redaction-rules --yes`: `execution-observability: update`, `Totals: + 0, ~ 1, - 0, → 0`, "Change 'centralize-log-redaction-rules' archived as '2026-10-27-centralize-log-redaction-rules'."
+- `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 69 passed, 0 failed (69 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: `✓ change/2026-10-27-centralize-log-redaction-rules`; the run as a whole reports `Totals: 173 passed, 13 failed (186 items)`, the failures being older archived changes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/execution-observability/spec.md`, 11 insertions and 1 deletion, all in the "Logs without secrets" requirement: its statement and the two new scenarios "A secret of a known shape in text" and "Pathological log text".
+- The archived change has `findings.jsonl`; `make findings ARGS="validate"`: "Every findings file is valid: 12 file(s)."
+- `npm run verify:comments`: "Every comment is within the comment length rule."
+- `make verify`, 2026-10-27 09:38:03 to 09:40:52 UTC: exit 0. `DOCKER_CONFIG` pointed at a scratch directory with an empty `config.json`, because Docker Desktop's credential helper hangs on this iMac; the pinned public images were pulled anonymously and no credentials were read. It ran on the archive commit's tree before this section was written; the section changes only this record.
+    - 2053 tests, 2051 passed, 0 failed, 2 skipped; coverage 99.28% lines, 91.99% branches, 98.94% functions; "Every product module is in the coverage report."
+    - 0 breaking changes in all four contract documents against `9c0c1706aadc`; "Contract documents have no undeclared breaking change."
+    - "Verified 731 package paths; 41 with license coverage gaps (all reviewed; 4 declaration-only)".
+    - OpenSpec `Totals: 69 passed, 0 failed (69 items)`; "No active OpenSpec change; nothing to archive." and "Every active OpenSpec change archives into strictly valid specs."
+    - "Every findings file is valid: 12 file(s)."; "Every comment is within the comment length rule."; "Packed file allowlist and installed CLI verification passed."
+
 ## Remaining gates
 
-- Merge of the next `dev` change (`require-finding-capability`) before the archive.
-- Archive under worker step 7.
-- Integration into dev by the coordinator (single pull request).
+- Integration into `dev` by the coordinator (single pull request).

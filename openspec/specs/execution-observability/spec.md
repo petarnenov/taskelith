@@ -21,7 +21,7 @@ The observability module SHALL write each log record through a `LogSink` port as
 
 ### Requirement: Logs without secrets
 
-The logger SHALL replace the value of every field whose name may hold a secret with `[redacted]`, and SHALL remove URL user information and bearer tokens from text in fields and correlation, before any sink receives the record. Adapters SHALL NOT log message bodies or payloads.
+The logger SHALL replace the value of every field whose name may hold a secret with `[redacted]`, and SHALL remove URL user information, bearer tokens, `key=value` secrets, issued bearer secrets, NKey seeds, NATS JWTs, and `.creds` blocks from text in fields and correlation, in time linear in the text, before any sink receives the record. Adapters SHALL NOT log message bodies or payloads.
 
 #### Scenario: A failure message quotes a connection URL
 
@@ -32,6 +32,16 @@ The logger SHALL replace the value of every field whose name may hold a secret w
 
 - **WHEN** a field named like a password, token, API key, credential, or authorization is logged
 - **THEN** its value is `[redacted]`
+
+#### Scenario: A secret of a known shape in text
+
+- **WHEN** a field or correlation value holds an issued Taskelith secret, an NKey seed, a NATS JWT, or a `.creds` block, even glued to other text
+- **THEN** the record holds `[redacted]` in its place
+
+#### Scenario: Pathological log text
+
+- **WHEN** a field or correlation value holds tens of thousands of characters such as `a.`, `proxy-`, or `eyJ` repeated, or `.creds` begin markers without an end
+- **THEN** redacting it takes time linear in its length
 
 ### Requirement: G2 signal catalogue and metrics port
 
