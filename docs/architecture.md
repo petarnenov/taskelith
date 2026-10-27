@@ -347,7 +347,7 @@ An adapter implements a port. A plugin packages and registers adapters with meta
 Plugin contracts include:
 
 - Stable ID, package version, supported plugin API range, and declared protocol capabilities.
-- Validated configuration schema and explicit credential requirements; harness plugins declare their subscription mechanisms and the load, limit, and reset signals they report for account pools ([ADR 0005](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0005-harness-subscription-account-pools.md)).
+- Validated configuration schema and explicit credential requirements; harness plugins declare their subscription mechanisms and the usage, limit, and reset-time signals they report for account pools ([ADR 0005](https://github.com/petarnenov/taskelith/blob/main/docs/decisions/0005-harness-subscription-account-pools.md)).
 - Factory plus initialize, health, drain, and shutdown hooks where applicable.
 - Capability discovery for chat, terminal, resume, approval handling, interruption, and platform support.
 - Explicit error mapping and cancellation behavior.
