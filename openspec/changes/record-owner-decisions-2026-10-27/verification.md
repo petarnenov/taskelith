@@ -35,13 +35,28 @@ Branch `record-owner-decisions-2026-10-27` from `origin/dev` at `14e1a46e`, in i
 
 ## Review
 
-Not run yet. The coordinator assigns reviewers A and B; each pass is recorded here, in `passes.jsonl`, and in `findings.jsonl`.
+### Pass 1
+
+Reviewer A: harness `claude`, model `claude-fable-5-1`, variant `medium`, session `4221f237-46ec-4eb0-be8f-e4892a627d76`, run by the coordinator at head `432647b1`. Snapshot before and after: `83c158d66c93e6a59ad74aa44ec67de6ae638cb7408b16d91b934c397ae1025c`, unchanged. The reviewer re-read the npm dist-tags, the LICENSE identity, the spec deltas, the citations, and the ADR 0008 terms. Counts: Critical 0, High 0, Medium 1, Low 8, as in `passes.jsonl`. Fixes in `58001692`, not yet reviewed; pass 2 by reviewer B follows because of the Medium finding.
+
+| # | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| 1 | Medium | The one-slot rule in both deltas and the G3 item 33 note was attributed to ADR 0005 decision 2, though it is the author's reading (design D2) | Fixed, unreviewed: they cite the account pool contract section 7.1, which states that it applies decision 2 as a one-slot limit because Taskelith cannot check accounts |
+| 2 | Low | The harness delta dropped "any number of slots MAY be added per harness" | Fixed, unreviewed: restored as "a harness MAY have any number of slots"; body 495 characters |
+| 3 | Low | `docs/integration-candidates.md:33` contradicted itself on API-billed endpoints | Fixed, unreviewed: "except for Claude Code" |
+| 4 | Low | ADR 0005 status and Risks still said the terms were not verified | Fixed, unreviewed: dated note for Claude Code in both |
+| 5 | Low | "no rotation" worded differently in the ADR, the G3 plan, and the qualification | Fixed, unreviewed: all three say "with no rotation to another account" |
+| 6 | Low | Section 7.1 did not say that the rotation rule is not checkable | Fixed, unreviewed |
+| 7 | Low | The ADR 0008 note's "of that run" was wrong for delegated child tasks | Fixed, unreviewed: "of its run, the card's run or a delegated child run" |
+| 8 | Low | Item 45's "Depends on" held "Not yet planned" | Fixed, unreviewed: "0 (planning pending)" |
+| 9 | Low | The workspace `list` order is not in the `git-workspace-port` spec | Deferred: out of scope; follow-up spec delta for the list order |
 
 ## Limitations
 
 - The npm dist-tags were read once; they may move after 2026-10-27 21:28 UTC.
 - The slot limit names no `AccountSlots` read; G3 item 12 defines it (design D2).
 - G3 item 45 is unplanned.
+- Follow-up: a `git-workspace-port` spec delta for the `list` order (pass 1 finding 9, deferred).
 
 ## Remaining gates
 

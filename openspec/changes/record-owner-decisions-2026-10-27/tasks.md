@@ -18,7 +18,8 @@
 ## 4. Verification and review
 
 - [x] 4.1 Run strict validation of this change and of all changes, `make findings ARGS="validate"`, and `make verify`.
-- [ ] 4.2 Review pass 1 by reviewer A, recorded in `verification.md`, `passes.jsonl`, and `findings.jsonl`.
+- [x] 4.2 Review pass 1 by reviewer A, recorded in `verification.md`, `passes.jsonl`, and `findings.jsonl`.
+- [x] 4.2.1 Fix the pass 1 findings 1 to 8 and defer finding 9.
 - [ ] 4.3 Review pass 2 by reviewer B, unless pass 1 is Low-only.
 - [ ] 4.4 Review pass 3 by reviewer A, if pass 2 leaves fixes to confirm.
 
