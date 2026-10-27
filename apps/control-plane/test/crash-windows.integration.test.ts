@@ -11,6 +11,7 @@ import {
   HarnessInstallation,
   journalSnapshot,
   leftoverProcesses,
+  LINUX_LAUNCH,
   reapLeftovers,
   releaseChild,
   releasedOnFailure,
@@ -31,11 +32,15 @@ const SCENARIO_TIMEOUT = 180_000;
 const TEARDOWN_MARGIN = 30_000;
 const LEFTOVER_MILLISECONDS = 15_000;
 const QUIET_MILLISECONDS = 1_000;
-const MACOS_ONLY = 'the composed worker supervises natively on macOS only; item 25 runs it on Linux';
-const NATIVE = { skip: process.platform === 'darwin' ? false : MACOS_ONLY, timeout: SCENARIO_TIMEOUT };
+const LINUX = process.platform === 'linux';
+// On Linux the composed worker contains its launches only in the container
+// of make verify-linux-crash-windows, which sets LINUX_LAUNCH.
+const SUPERVISES = process.platform === 'darwin' || LINUX_LAUNCH !== undefined;
+const UNSUPERVISED = 'the composed worker supervises natively on macOS, and on Linux in make verify-linux-crash-windows';
+const NATIVE = { skip: SUPERVISES ? false : UNSUPERVISED, timeout: SCENARIO_TIMEOUT };
 const BY_THE_BOUND = 'by the bound';
 
-type Outcome = 'exited-code-0' | 'uncertain';
+type Outcome = 'exited-code-0' | 'exited-unknown' | 'uncertain';
 // When the scripted child may exit: an exit fact needs it gone before the
 // crash, and an adoption needs it alive until the adopter runs.
 type ChildRelease = 'at-once' | 'after-restart' | 'after-adoption';
@@ -56,14 +61,46 @@ interface CrashWindow {
   readonly sealed?: number;
   // The first run's first preparation fails, a seal at runtime.
   readonly failsFirstPrepare?: boolean;
+  // Whether the exit proves the start; false only without a `handle`.
+  readonly startProven?: boolean;
+  // A known product defect the scenario fails on, until it is fixed.
+  readonly defect?: KnownDefect;
+}
+
+interface KnownDefect {
+  readonly name: string;
+  // Matches the scenario's error, so any other failure stays red.
+  readonly signature: RegExp;
 }
 
 const exitedOnce = (window: string, ...points: string[]): CrashWindow => ({ window, points, outcome: 'exited-code-0', spawns: 1, childRelease: 'after-restart' });
 const afterExit = (window: string): CrashWindow => ({ ...exitedOnce(window, window), childRelease: 'at-once' });
 const relaunched = (window: string, ...points: string[]): CrashWindow => ({ ...exitedOnce(window, ...points), holdsNotStarted: true });
 
+// Supervisor identity contract section 6: with no live supervisor and no
+// `exit`, macOS cannot prove that no descendant lives once the child is gone.
+const MACOS_UNSUPERVISED: readonly CrashWindow[] = [
+  { window: 'CP7', points: ['CP7'], outcome: 'uncertain', spawns: 0, childRelease: 'after-restart' },
+  { window: 'CP8', points: ['CP8'], outcome: 'uncertain', spawns: 1, childRelease: 'after-restart' },
+  // A macOS adopter only observes; once the child is gone nothing proves
+  // that no descendant lives (supervisor identity contract, section 6).
+  { window: 'CP9', points: ['CP9'], outcome: 'uncertain', spawns: 1, childRelease: 'after-adoption' },
+];
+
+// Candidate defect L1 (verification.md): an unknown exit with a proven start
+// is retried; stop-automatic-retry-of-unknown-exit removes this and its use.
+const L1: KnownDefect = { name: 'L1', signature: /one attempt: .*"retryOf":"t[0-9a-f]+"/ };
+
+// The same section on Linux: the containment decides. An empty one ends the
+// execution, a populated one is adopted until it empties; both exit unknown.
+const LINUX_UNSUPERVISED: readonly CrashWindow[] = [
+  { window: 'CP7', points: ['CP7'], outcome: 'exited-unknown', startProven: false, spawns: 0, childRelease: 'after-restart' },
+  { window: 'CP8', points: ['CP8'], outcome: 'exited-unknown', startProven: false, spawns: 1, childRelease: 'after-adoption' },
+  { window: 'CP9', points: ['CP9'], outcome: 'exited-unknown', startProven: true, spawns: 1, childRelease: 'after-adoption', defect: L1 },
+];
+
 // The expected results follow the recovery tables: journal contract
-// section 5 and, for macOS, supervisor identity contract section 6.
+// section 5 and supervisor identity contract section 6 for the host.
 const WINDOWS: readonly CrashWindow[] = [
   exitedOnce('W1.before', 'W1.before'),
   exitedOnce('W1.after', 'W1.after'),
@@ -91,11 +128,7 @@ const WINDOWS: readonly CrashWindow[] = [
   // relaunch reports both sealed executions, and the first still owns.
   { ...relaunched('W2.after@2 after a runtime seal', 'W2.after@2'), sealed: 2, failsFirstPrepare: true },
   { ...relaunched('W3.after then W2.after', 'W3.after', 'W2.after'), sealed: 2 },
-  { window: 'CP7', points: ['CP7'], outcome: 'uncertain', spawns: 0, childRelease: 'after-restart' },
-  { window: 'CP8', points: ['CP8'], outcome: 'uncertain', spawns: 1, childRelease: 'after-restart' },
-  // A macOS adopter only observes; once the child is gone nothing proves
-  // that no descendant lives (supervisor identity contract, section 6).
-  { window: 'CP9', points: ['CP9'], outcome: 'uncertain', spawns: 1, childRelease: 'after-adoption' },
+  ...(LINUX ? LINUX_UNSUPERVISED : MACOS_UNSUPERVISED),
   { ...exitedOnce('CP10', 'CP10'), journaled: 'started' },
   afterExit('CP11'),
   { ...afterExit('CP12'), journaled: 'exited' },
@@ -217,6 +250,8 @@ class Scenario {
   }
 }
 
+const EXIT_STATUS = { 'exited-code-0': { kind: 'code', code: 0 }, 'exited-unknown': { kind: 'unknown' } } as const;
+
 function outcomeReached(task: Task, outcome: Outcome): boolean {
   return outcome === 'uncertain'
     ? executions(task).some(isUncertain)
@@ -251,7 +286,7 @@ async function assertRelaunchBeforeNotStarted(scenario: Scenario, relaunch: Exec
 
 // The control plane agrees with the worker's journal on every execution it
 // knows; the journal's others never had a grant.
-async function recoveredExecution(scenario: Scenario, outcome: Outcome): Promise<Execution> {
+async function recoveredExecution(scenario: Scenario, outcome: Outcome, startProven = true): Promise<Execution> {
   const journal = journalSnapshot(scenario.installation);
   assert.equal(journal.intents.length, 1, 'one launch intent');
   const journaled = new Map(journal.executions.map((execution) => [execution.executionId as string, execution]));
@@ -260,12 +295,12 @@ async function recoveredExecution(scenario: Scenario, outcome: Outcome): Promise
     return entry?.state === execution.state && entry.uncertain === isUncertain(execution);
   });
   const task = await scenario.taskWhere(`the control plane to agree with ${JSON.stringify(journal.executions)}`, agrees);
-  assert.equal(task.attempts.length, 1, 'one attempt');
+  assert.equal(task.attempts.length, 1, `one attempt: ${JSON.stringify(task.attempts)}`);
   const live = executions(task).filter(({ state }) => state !== 'not-started');
   assert.equal(live.length, 1, `one execution beyond not-started: ${JSON.stringify(executions(task))}`);
   const [execution] = live as [Execution];
   if (outcome === 'uncertain') assert.ok(isUncertain(execution) && execution.state !== 'exited', JSON.stringify(execution));
-  else assert.deepEqual([execution.state, execution.exit?.status, execution.exit?.startProven], ['exited', { kind: 'code', code: 0 }, true]);
+  else assert.deepEqual([execution.state, execution.exit?.status, execution.exit?.startProven], ['exited', EXIT_STATUS[outcome], startProven]);
   const known = new Set(executions(task).map(({ id }) => id as string));
   for (const other of journal.executions.filter(({ executionId }) => !known.has(executionId))) {
     assert.ok((other.state ?? 'not-started') === 'not-started' && other.authorizations.every(({ outcome: decided }) => decided !== 'granted'), `never granted: ${JSON.stringify(other)}`);
@@ -310,7 +345,7 @@ async function runCrashWindow(window: CrashWindow, signal: AbortSignal): Promise
     releaseChild(installation);
     await scenario.settled(outcome);
     await restarted.stop();
-    const execution = await recoveredExecution(scenario, outcome);
+    const execution = await recoveredExecution(scenario, outcome, window.startProven);
     if (window.holdsNotStarted === true) await assertRelaunchBeforeNotStarted(scenario, execution, window.sealed ?? 1);
     if (failsFirstPrepare) assert.ok(establishedOrder(installation).includes('prepare failed'), 'the first preparation failed');
     await scenario.noLeftovers();
@@ -426,7 +461,9 @@ test('a redelivered offer and assignment give one execution and one result', NAT
 describe('a crash at each launch and supervisor window recovers to one durable outcome', { concurrency: 4 }, () => {
   for (const window of WINDOWS) {
     const relaunch = window.holdsNotStarted === true ? ', relaunched before the not-started went out' : '';
-    const name = `a crash at ${window.window} ends ${window.outcome} with ${window.spawns} spawn(s)${relaunch}`;
-    test(name, NATIVE, (context) => recorded(scenarioName(window.window), () => runCrashWindow(window, scenarioSignal(context))));
+    const failing = window.defect === undefined ? '' : `, failing on ${window.defect.name}`;
+    const name = `a crash at ${window.window} ends ${window.outcome} with ${window.spawns} spawn(s)${relaunch}${failing}`;
+    const options = window.defect === undefined ? NATIVE : { ...NATIVE, expectFailure: window.defect.signature };
+    test(name, options, (context) => recorded(scenarioName(window.window), () => runCrashWindow(window, scenarioSignal(context))));
   }
 });
