@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, test } from 'node:test';
 import { failure } from '@taskelith/kernel';
-import { ScenarioProcess, failed, id, value } from '@taskelith/testing';
+import { ScenarioProcess, failed, id, uncoveredEnvironment, value } from '@taskelith/testing';
 import {
   ExclusiveFileLock,
   JOURNAL_APPLICATION_ID,
@@ -175,7 +175,7 @@ test('the root lock of a killed process is free, and a live holder keeps it', as
     '-e',
     `import { ExclusiveFileLock } from '@taskelith/worker-journal';
      ExclusiveFileLock.acquire(${JSON.stringify(lockFile)}); console.log('held'); setInterval(() => {}, 1000);`,
-  ], { cwd: process.cwd() });
+  ], { cwd: process.cwd(), env: uncoveredEnvironment() });
   await holder.waitForOutput('held');
   assert.equal(reasonOf(ExclusiveFileLock.acquire(lockFile)), 'root-locked');
   holder.kill();

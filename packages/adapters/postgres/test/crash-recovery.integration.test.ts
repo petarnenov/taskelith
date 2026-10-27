@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { beforeEach, test } from 'node:test';
-import { ScenarioProcess, crashEnvironment } from '@taskelith/testing';
+import { ScenarioProcess, crashEnvironment, uncoveredEnvironment } from '@taskelith/testing';
 import { createMigratedDatabase, query, truncateAll } from './test-database.ts';
 
 const PLACEMENT = join(import.meta.dirname, 'fixtures', 'crashing-placement.ts');
@@ -10,7 +10,7 @@ beforeEach(() => truncateAll(url));
 
 async function placeWithCrashAt(point: string): Promise<{ signal: string | null; stdout: string }> {
   const child = await ScenarioProcess.start(process.execPath, ['--experimental-strip-types', PLACEMENT, url.href], {
-    env: { ...process.env, ...crashEnvironment(point) },
+    env: { ...uncoveredEnvironment(), ...crashEnvironment(point) },
   });
   let timedOut = false;
   const timer = setTimeout(() => {

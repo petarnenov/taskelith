@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { ScenarioProcess } from '@taskelith/testing';
+import { ScenarioProcess, uncoveredEnvironment } from '@taskelith/testing';
 import {
   FileRecordStore,
   hostPlatform,
@@ -80,7 +80,7 @@ test('the execution lock is exclusive within a process and across processes, and
        console.log(held.ok && held.value ? 'held' : 'busy');
        setTimeout(() => {}, 60000);
      });`,
-  ]);
+  ], { env: uncoveredEnvironment() });
   await holder.waitForOutput('held');
   assert.deepEqual(lock.tryAcquire(), { ok: true, value: undefined });
   holder.kill('SIGKILL');
