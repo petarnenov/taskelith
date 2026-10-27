@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-27. The author's verification and the checks without Docker are recorded below; `make verify`, which needs Docker, waits for the coordinator's slot, and the review passes follow.
+Date: 2026-10-27. The author's verification and the checks without Docker are recorded below; `make verify`, which needs Docker, passed at `120c6842` (Checks), and the review passes follow.
 
 ## Scope and source
 
@@ -55,7 +55,7 @@ Run on the working tree of `0574128a` with Node.js 24.22.1 and npm 12.2.1, witho
 
 After the confirmed decisions, on the working tree of that commit: `npm run verify:comments`, `npm run verify:links`, and `npm run verify:findings` (43 findings files, 23 pass summary files) pass; `validate align-product-ports-with-g2-lifecycle --strict` is valid; `validate --all --strict` gives 70 passed, 0 failed; `git diff origin/dev -- 'docs/decisions/0008-*'` is empty; `grep -n acknowledge-process docs/trust-model.md` matches line 29. Only Markdown changed, so the build and tests were not rerun.
 
-`make verify`: pending; the coordinator holds the Docker slot and runs or approves it.
+`make verify` on the working tree of `120c6842`, run by the coordinator with Node.js from `.nvmrc` and Docker available: exit 0; 2305 tests, 44 suites, 2302 pass, 0 fail, 0 cancelled, 3 skipped, 0 todo; coverage of all files lines 99.33%, branches 92.27%, functions 99.03%; every product module is in the coverage report; `validate --all --strict` 70 passed, 0 failed; every checked link conforms; every active OpenSpec change archives into strictly valid specs; the package verification passed; verified 731 package paths, 41 with license coverage gaps (all reviewed; 4 declaration-only). The author checked these numbers against the run's log.
 
 ## Review
 
@@ -67,7 +67,6 @@ No review pass has run yet.
 
 ## Remaining gates
 
-- `make verify` with Docker.
 - Review pass 1 by reviewer A, Codex `gpt-6.1-sol`.
 - Review pass 2 by reviewer B, Claude Code `claude-opus-5-5`, effort `high`.
 - Review pass 3 by reviewer A, if pass 2 has findings above Low.
