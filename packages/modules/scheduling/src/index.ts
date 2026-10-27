@@ -55,7 +55,12 @@ export {
   InMemoryQuotaSettings,
   InMemoryTaskLineage,
 } from './adapters/in-memory-capacity.js';
-export { InMemoryDelegationRequests, InMemoryPlacementQueue, InMemoryPlacementRotation } from './adapters/in-memory-placement.js';
+export {
+  InMemoryDelegationRequests,
+  InMemoryPlacementOutcomeRecords,
+  InMemoryPlacementQueue,
+  InMemoryPlacementRotation,
+} from './adapters/in-memory-placement.js';
 export { InMemoryWorkerReports } from './adapters/in-memory-worker-reports.js';
 export { InMemoryOutboxLookup } from './adapters/in-memory-outbox-lookup.js';
 export {
@@ -134,6 +139,7 @@ export {
   STANDING_REASONS,
   WAITING_REASONS,
   WORKER_REASONS,
+  isRejectingReason,
   isWaitingReason,
   lacksFleetCapacity,
   reasonOutcome,
@@ -186,6 +192,16 @@ export type { DelegationRequests } from './ports/delegation-requests.js';
 export type { InstallationGuard } from './ports/installation-guard.js';
 export type { PlacementQueue } from './ports/placement-queue.js';
 export type { PlacementRotation } from './ports/placement-rotation.js';
+export type { PlacementOutcomeRecords } from './ports/placement-outcome-records.js';
+export { PLACEMENT_OUTCOME_RECORDS_CONFORMANCE } from './ports/placement-outcome-conformance.js';
+export {
+  OUTCOME_SOURCES,
+  isRecordedWaitingReason,
+  type OutcomeDisposition,
+  type OutcomeSource,
+  type PlacementOutcomeRecord,
+  type RecordedWaitingReason,
+} from './domain/placement-outcome-record.js';
 export { isEligibleForPlacement, type PlacementWorkers, type WorkerPlacementRecord } from './ports/placement-workers.js';
 export type { QuotaSettings } from './ports/quota-settings.js';
 export type { TaskLineage } from './ports/task-lineage.js';

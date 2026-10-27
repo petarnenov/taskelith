@@ -13,7 +13,7 @@ export async function checkWebhookDelivery(run: ConformanceCase, fixture: Source
   const second = await signedDelivery(run, fixture, event);
   const firstId = await verifiedDeliveryId(run, fixture, first, event);
   const secondId = await verifiedDeliveryId(run, fixture, second, event);
-  run.expect(firstId !== secondId, `two deliveries must have distinct deliveryIds, not both ${firstId}`);
+  run.expect(firstId !== secondId, 'two deliveries must have distinct deliveryIds');
   await expectRefused(run, fixture, 'a tampered body', withBody(first, flippedByte(first.rawBody)));
   const reformatted = reserializedJson(first.rawBody);
   if (reformatted) await expectRefused(run, fixture, 'a re-serialized body', withBody(first, reformatted));
@@ -26,7 +26,7 @@ export async function checkWebhookDelivery(run: ConformanceCase, fixture: Source
 // The same delivery without its signature, every other header kept.
 function withoutSignature(run: ConformanceCase, fixture: SourceControlConformanceFixture, delivery: WebhookDelivery): WebhookDelivery {
   const { [fixture.signatureHeader]: signature, ...headers } = delivery.headers;
-  if (signature === undefined) run.abort('fixture', `signDelivery returned no ${fixture.signatureHeader} header`);
+  if (signature === undefined) run.abort('fixture', 'signDelivery returned no signature header');
   return { headers, rawBody: new Uint8Array(delivery.rawBody) };
 }
 
@@ -50,7 +50,7 @@ async function verifiedDeliveryId(
   const verified = await verify(run, fixture, delivery);
   run.expect(
     verified.kind === signed.kind && verified.repository === signed.repository && verified.changeRequest === signed.changeRequest,
-    `verifyWebhookDelivery returned ${verified.kind} ${verified.repository} ${String(verified.changeRequest)}`,
+    'verifyWebhookDelivery returned another kind, repository, or changeRequest than signed',
   );
   const repeated = await verify(run, fixture, delivery);
   run.expect(repeated.deliveryId === verified.deliveryId, 'a repeated delivery must keep its deliveryId');

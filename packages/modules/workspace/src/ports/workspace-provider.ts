@@ -44,6 +44,11 @@ export interface WorkspaceLifecycle {
   remove(attemptId: AttemptId): Promise<Result<void>>;
   // Removes leftovers of an interrupted prepare or remove.
   sweep(): Promise<void>;
+  // Opens the checkout to the execution account; Git work on it is then
+  // refused with `workspace-handed-off` until `reclaim` (section 3).
+  handOff(attemptId: AttemptId): Promise<Result<void>>;
+  // Only after the attempt's process sets are proven empty; idempotent.
+  reclaim(attemptId: AttemptId): Promise<Result<void>>;
 }
 
 // Read by verification, review, and the evidence path (sections 6 and 10).

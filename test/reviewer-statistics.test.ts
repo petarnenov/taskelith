@@ -87,3 +87,47 @@ test('the text names the source of the passes and every column', () => {
   const empty = formatReviewerStatistics(reviewerStatistics([], 0));
   assert.match(empty, /^Reviewer statistics of archived changes: 0 change\(s\) with review records, 0 pass\(es\)\.\n\n0 archived change\(s\) have neither .+\n\nEvery archived change with review records has passes\.jsonl/);
 });
+
+test('passes of several artifacts count apart per reviewer and role, misses per artifact', () => {
+  const multi = {
+    change: 'multi',
+    summaries: [
+      { ...summary(1, 'A', CODEX), change: 'multi', artifact: 'x' },
+      { ...summary(1, 'A', CODEX, { low: 1 }), change: 'multi', artifact: 'y' },
+      { ...summary(2, 'B', OPUS, { medium: 1 }), change: 'multi', artifact: 'y' },
+    ],
+    findings: [
+      finding({ change: 'multi', artifact: 'y' }),
+      finding({ change: 'multi', artifact: 'y', pass: 2, reviewer: OPUS, severity: 'medium', missedBy: { pass: 1, role: 'A' } }),
+    ],
+  };
+  const statistics = reviewerStatistics([multi], 0);
+  assert.equal(statistics.passes, 3);
+  const rows = (list: typeof statistics.reviewers) => list.map(({ key, passes, low, medium, misses }) => [key, passes, low, medium, misses]);
+  assert.deepEqual(rows(statistics.reviewers), [
+    ['codex gpt-6.1-sol#medium', 2, 1, 0, 1],
+    ['claude claude-opus-5-5#high', 1, 0, 1, 0],
+  ]);
+  assert.deepEqual(rows(statistics.roles), [['A', 2, 1, 0, 1], ['B', 1, 0, 1, 0]]);
+  assert.equal(statistics.unattributedMisses, 0);
+});
+
+test('a change without summaries derives one pass per artifact and pass number', () => {
+  const derivedMulti = {
+    change: 'derived-multi',
+    findings: [
+      finding({ change: 'derived-multi', artifact: 'x' }),
+      finding({ change: 'derived-multi', artifact: 'y', reviewer: OPUS }),
+      finding({ change: 'derived-multi', artifact: 'y', reviewer: OPUS }),
+      finding({ change: 'derived-multi', artifact: 'x', pass: 2, missedBy: { pass: 1, role: 'A' } }),
+      finding({ change: 'derived-multi', artifact: 'z', pass: 2, missedBy: { pass: 1, role: 'A' } }),
+    ],
+  };
+  const statistics = reviewerStatistics([derivedMulti], 0);
+  assert.equal(statistics.passes, 4);
+  const opus = statistics.reviewers.find(({ key }) => key === 'claude claude-opus-5-5#high')!;
+  assert.deepEqual([opus.passes, opus.low, opus.misses], [1, 2, 0]);
+  const codex = statistics.reviewers.find(({ key }) => key === 'codex gpt-6.1-sol#medium')!;
+  assert.deepEqual([codex.passes, codex.low, codex.misses], [3, 3, 1]);
+  assert.equal(statistics.unattributedMisses, 1, 'artifact z has no pass 1');
+});
