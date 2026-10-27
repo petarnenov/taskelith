@@ -417,3 +417,14 @@ test('the placement outcomes down migration removes the outcome records', async 
   await query(url, content.slice(content.indexOf('-- Down Migration')));
   assert.deepEqual(await query(url, "SELECT 1 FROM information_schema.tables WHERE table_name = 'placement_outcomes'"), []);
 });
+
+test('the placement outcomes table rejects a disposition or source outside its values', async () => {
+  const url = databaseUrl(SERVER_URL, await createTestDatabase());
+  assert.equal((await migrate(url)).ok, true);
+  const insert = (disposition: string, source: string) => query(url, `INSERT INTO placement_outcomes
+    (task_id, disposition, reason, source, recorded_at) VALUES ('task-1', $1, 'retry-budget-exhausted', $2, now())`, [disposition, source]);
+  await assert.rejects(insert('standing', 'scheduler'), /placement_outcomes_disposition_check/);
+  await assert.rejects(insert('rejected', 'worker'), /placement_outcomes_source_check/);
+  await insert('rejected', 'scheduler');
+  assert.deepEqual(await query(url, 'SELECT disposition, source FROM placement_outcomes'), [{ disposition: 'rejected', source: 'scheduler' }]);
+});

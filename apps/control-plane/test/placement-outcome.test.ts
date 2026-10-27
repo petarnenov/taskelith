@@ -61,26 +61,32 @@ const ROOMY: WorkerPlacementRecord = {
 // Below the default attempt request, so no attempt fits on it.
 const SMALL: WorkerPlacementRecord = { ...ROOMY, cpuMillicores: 500 };
 
+// Which writes of placement outcome records fail as a down store does.
+interface WriteFailures {
+  readonly records: boolean;
+  readonly removals: boolean;
+}
+
 // Applies one transaction's writes only when it commits, as the database
 // does; the other in-memory stores of the fixture do not roll back.
 class StagedOutcomes implements PlacementOutcomeRecords {
   readonly #committed: PlacementOutcomeRecords;
-  readonly #writesFail: boolean;
+  readonly #failing: WriteFailures;
   readonly #writes: (() => Promise<Result<void>>)[] = [];
 
-  constructor(committed: PlacementOutcomeRecords, writesFail: boolean) {
+  constructor(committed: PlacementOutcomeRecords, failing: WriteFailures) {
     this.#committed = committed;
-    this.#writesFail = writesFail;
+    this.#failing = failing;
   }
 
   async record(outcome: PlacementOutcomeRecord): Promise<Result<void>> {
-    if (this.#writesFail) return DOWN;
+    if (this.#failing.records) return DOWN;
     this.#writes.push(() => this.#committed.record(outcome));
     return ok(undefined);
   }
 
   async remove(taskId: TaskId): Promise<Result<void>> {
-    if (this.#writesFail) return DOWN;
+    if (this.#failing.removals) return DOWN;
     this.#writes.push(() => this.#committed.remove(taskId));
     return ok(undefined);
   }
@@ -114,11 +120,11 @@ async function fixture(worker: WorkerPlacementRecord = ROOMY) {
     fleet: { worker: async () => ok(undefined), replaceJournal: undefined as never },
     revisions: new InMemoryCurrentRevisions(), launches: undefined as never, now,
   };
-  const hooks = { beforeTransaction: async () => {}, writesFail: false };
+  const hooks = { beforeTransaction: async () => {}, failing: { records: false, removals: false } };
   const store: ControlPlaneStore = {
     transaction: async <Value>(work: (tx: ControlPlaneTransaction) => Promise<Result<Value>>) => {
       await hooks.beforeTransaction();
-      const staged = new StagedOutcomes(capacity.placementOutcomes, hooks.writesFail);
+      const staged = new StagedOutcomes(capacity.placementOutcomes, { ...hooks.failing });
       const result = await work({ ...transaction, placementOutcomes: staged });
       if (result.ok) await staged.commit();
       return result;
@@ -215,12 +221,12 @@ test('a failed write of a waiting record stops the pass', async () => {
   context.projectQuotas.set('p-a' as ProjectId, 0);
   const declined = await context.submit('task-a1', 'run-a');
   await context.submit('task-b1', 'run-b');
-  context.hooks.writesFail = true;
+  context.hooks.failing = { records: true, removals: false };
   assert.equal(failed(await context.placement.placeWaiting()).code, 'unavailable');
   assert.deepEqual([context.placed(), await context.outcomeOf(declined)], [[], undefined], 'task-b1 is not offered');
 });
 
-test('a placement whose removal of the record fails is not placed and keeps the record', async () => {
+test('a placement whose removal of the record fails fails the pass and keeps the record', async () => {
   const context = await fixture();
   const taskId = await context.submit('task-1');
   context.projectQuotas.set('p-a' as ProjectId, 0);
@@ -228,7 +234,18 @@ test('a placement whose removal of the record fails is not placed and keeps the 
   const waiting = await context.outcomeOf(taskId);
   context.projectQuotas.delete('p-a' as ProjectId);
   context.clock.at = START + 60_000;
-  context.hooks.writesFail = true;
+  context.hooks.failing = { records: false, removals: true };
   assert.equal(failed(await context.placement.placeWaiting()).code, 'unavailable');
   assert.deepEqual(await context.outcomeOf(taskId), waiting);
+});
+
+test('candidates that vanish before the placement transaction record no-candidate', async () => {
+  const context = await fixture();
+  const taskId = await context.submit('task-1');
+  let transactions = 0;
+  context.hooks.beforeTransaction = async () => {
+    if (++transactions === 1) context.workers.replace({ ...ROOMY, draining: true });
+  };
+  assert.deepEqual(value(await context.placement.placeWaiting()), { waiting: 1, placed: 0 });
+  assert.deepEqual(await context.outcomeOf(taskId), await waitingRecord(context, taskId, 'no-candidate', START));
 });
