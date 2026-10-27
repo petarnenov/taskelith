@@ -18,4 +18,4 @@
 - [x] 4.1 Proposal, design, `verification.md`, empty `findings.jsonl`
 - [x] 4.2 `npm run openspec -- validate align-safe-to-retry-with-supervisor-identity --strict` and `make verify`
 - [x] 4.3 Independent review pass 1 (4 Low), fixed unreviewed: two renames, a comment, spec wording
-- [ ] 4.4 Archive under worker step 7
+- [x] 4.4 Archive under worker step 7

@@ -64,7 +64,17 @@ Passes 2 and 3 were not run: a Low-only pass 1 ends the review, so reviewer B (C
 - The test sets the earlier attempt's `exited` outcome directly on the task instead of recording it through a launch, because no domain path records an exit with a proven start without a full launch; the control-plane path to the same outcome is covered by `an exit with an unknown status after a proven start opens no retry` (`apps/control-plane/test/observation.integration.test.ts:602`).
 - No reachable path in this revision places a retry of an unknown exit, so the fix changes no observed behavior today; it closes the contract conflict and guards later callers.
 
+## Archive
+
+Checked state: the tree of the archive commit (`docs: archive the align-safe-to-retry-with-supervisor-identity change`), on top of `acf8b993`, which is the working tree these checks ran on. Environment and `TMPDIR` as in "Checks".
+
+- `npm run openspec -- archive align-safe-to-retry-with-supervisor-identity --yes`: archived as `2026-10-27-align-safe-to-retry-with-supervisor-identity`; `resource-admission` 1 modified.
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line passes (`change/2026-10-27-align-safe-to-retry-with-supervisor-identity`).
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/resource-admission/spec.md`, the "Quotas and budgets" requirement with "a known status (exit code or signal)" and the new scenario "Retry of an unknown exit".
+- The moved change has `findings.jsonl` (4 lines); `make findings ARGS="validate"`: every findings file is valid, 18 files.
+- `make verify`: exit 0; 2101 tests, 2054 pass, 0 fail, 47 skipped; coverage lines 99.22%, branches 92.08%, functions 98.86%; every active OpenSpec change archives into strictly valid specs.
+
 ## Remaining gates
 
-- Archive under worker step 7, with its checks recorded here.
 - Integration into dev by the coordinator (single pull request).
