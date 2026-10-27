@@ -16,12 +16,13 @@
 ## 3. Evidence
 
 - [x] 3.1 Tests with coverage of the touched packages, build, boundaries, comments, links, findings, OpenSpec, and archive dry run
-- [ ] 3.2 `make verify` (run by the coordinator)
+- [x] 3.2 `make verify` (run by the coordinator, on `bf7c0335`)
 - [x] 3.3 Record `verification.md`
+- [ ] 3.4 `make verify` again after the review pass 1 fixes (run by the coordinator)
 
 ## 4. Review and archive
 
-- [ ] 4.1 Independent review pass 1 (reviewer A) and its fixes
+- [x] 4.1 Independent review pass 1 (reviewer A) and its fixes
 - [ ] 4.2 Independent review pass 2 (reviewer B) and its fixes
 - [ ] 4.3 Independent review pass 3 (reviewer A)
 - [ ] 4.4 Archive the change
