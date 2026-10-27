@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Revocation, reinstatement, and removal
-Revoking a slot SHALL take it out of every pool and stop revealing its credential while keeping the credential encrypted; reinstating it SHALL return it to its pools unchanged; removing it SHALL destroy its credential and keep its record as a tombstone; a held reservation SHALL block no revocation or removal; a revocation SHALL cancel each attempt holding the slot, and a removal SHALL drain or reject its in-flight sessions; none of them SHALL release a held reservation by itself.
+Revoking a slot SHALL take it out of every pool and stop revealing its credential while keeping it encrypted; reinstating it SHALL return it to its pools unchanged; removing it SHALL destroy every version of its credential and keep its record as a tombstone; no held reservation SHALL block either; a revocation SHALL cancel each attempt holding the slot, which releases reservations as capacity reservation section 6 says; a removal SHALL drain or reject them and release none itself.
 
 #### Scenario: Reinstated slot
 - **WHEN** a revoked slot is reinstated
@@ -10,6 +10,10 @@ Revoking a slot SHALL take it out of every pool and stop revealing its credentia
 #### Scenario: Revocation while reserved
 - **WHEN** an operator revokes a slot with a compromised credential while a running attempt's held reservation names it
 - **THEN** the revocation succeeds, the attempt's grants are revoked and its cancellation is written, the reservation stays held until the execution's terminal fact, and the worker redacts the run by the delivered value until it ends
+
+#### Scenario: Revocation of a reserved attempt not yet launched
+- **WHEN** an operator revokes a slot whose held reservation belongs to an attempt with no `authorized` or `started` execution
+- **THEN** the revocation cancels the attempt and releases the reservation in the same transaction
 
 #### Scenario: Removal while reserved
 - **WHEN** an operator removes an active slot while a running attempt's held reservation names it
@@ -20,7 +24,7 @@ Revoking a slot SHALL take it out of every pool and stop revealing its credentia
 - **THEN** the removal succeeds and destroys the credential, and the reservation stays held until the execution's terminal fact
 
 ### Requirement: Redacted slot credentials
-`SlotCredentials` SHALL store each slot credential encrypted at rest and reveal it only for the delivery to the run that reserved the slot; the delivery, not `SlotCredentials`, SHALL check that the reservation is held, names the slot, and belongs to the launched attempt, and that the slot is active; destroying a missing credential SHALL succeed, and a `SlotSecret` SHALL disclose its text only through `reveal()`.
+`SlotCredentials` SHALL store each slot credential encrypted under a new version it never replaces, and reveal the slot record's version only to deliver it to the reserving run; the delivery, not `SlotCredentials`, SHALL check that the reservation is held, names the slot, and belongs to the launched attempt, and that the slot is active; destroying SHALL remove every version and any later store, and succeed when none exists; a `SlotSecret` SHALL disclose its text only through `reveal()`.
 
 #### Scenario: Credential for another attempt
 - **WHEN** a worker launches an attempt whose reservation does not name the slot
@@ -34,25 +38,37 @@ Revoking a slot SHALL take it out of every pool and stop revealing its credentia
 - **WHEN** a slot's credential is destroyed twice
 - **THEN** both calls succeed and no credential can be revealed for the slot
 
+#### Scenario: Store after destruction
+- **WHEN** a credential is stored for a slot after its credential was destroyed
+- **THEN** no version of it is kept or revealed
+
 ## ADDED Requirements
 
-### Requirement: Subscription token delivery only
-Slot credential delivery SHALL deliver only `subscription-token` credentials: the add-slot command SHALL reject a `device-login` slot with `invalid`, and the delivery SHALL reveal nothing for a slot of another mechanism. This restriction SHALL be revisited only if G3 item 35 overturns G3 decision D6, which chose a subscription token per slot.
+### Requirement: Admitted credential deliveries only
+A slot's credential SHALL be delivered only through a delivery admitted for the slot's harness and mechanism: the add-slot command SHALL reject a slot whose mechanism has no admitted delivery for its harness with `invalid`, and the delivery SHALL reveal nothing for such a slot. By G3 decision D6, the only delivery admitted for Claude Code, the only harness G3 admits, SHALL be `subscription-token`.
 
-#### Scenario: Device login slot
-- **WHEN** an operator adds a slot whose mechanism is `device-login`
+#### Scenario: Device login slot without an admitted delivery
+- **WHEN** an operator adds a slot whose mechanism is `device-login` and its harness has no admitted `device-login` delivery, as Claude Code has none under D6
 - **THEN** the command fails with `invalid` and no slot or credential is stored
 
 ### Requirement: Credential rotation only on an unreserved revoked slot
-Replacing a slot's stored credential SHALL be refused with `conflict` unless the slot is revoked and no held reservation names it, so that every delivery to a run, a re-delivery included, reveals the credential that the run started with.
+A rotation SHALL store the new credential under a new version and then, in one capacity transaction, switch the slot record to it by compare-and-set only while the slot is revoked, no held reservation names it, and its version is still the one the rotation read; otherwise it SHALL fail with `conflict` and discard the new version, so that every delivery to a run, a re-delivery included, reveals the credential that the run started with.
 
 #### Scenario: Rotation while reserved
 - **WHEN** an operator rotates the credential of a revoked slot that a held reservation still names
-- **THEN** the rotation fails with `conflict` and the stored credential is unchanged
+- **THEN** the rotation fails with `conflict` and the slot keeps its credential
 
 #### Scenario: Rotation of an active slot
 - **WHEN** an operator rotates the credential of an active slot
-- **THEN** the rotation fails with `conflict` and the stored credential is unchanged
+- **THEN** the rotation fails with `conflict` and the slot keeps its credential
+
+#### Scenario: Reinstatement during a rotation
+- **WHEN** a revoked slot is reinstated after a rotation stored its new credential but before the rotation switched to it
+- **THEN** the rotation fails with `conflict`, its new version is discarded, and every delivery reveals the old credential
+
+#### Scenario: Removal during a rotation
+- **WHEN** a revoked slot is removed while a rotation stores its new credential
+- **THEN** the rotation fails with `conflict`, and no version of the slot's credential is kept
 
 ### Requirement: Credential kept out of worker records
 A delivered slot credential SHALL be held only in the worker host's memory for the execution it was delivered to, and SHALL never enter the worker journal, a launch authorization grant, `worker/executions/<executionId>/`, `worker/logs/`, or the local outbox; every execution after its W3 commit, a recovered or adopted one included, SHALL request it again through a new delivery with the delivery's checks.
@@ -66,18 +82,26 @@ A delivered slot credential SHALL be held only in the worker host's memory for t
 - **THEN** it requests the credential again before it redacts or injects anything with it
 
 ### Requirement: Re-delivery to an adopted execution
-A re-delivery to an adopted execution SHALL need no new launch authorization; it SHALL be made only while the authenticated worker holds the attempt's assignment at its current ownership generation, the execution is the attempt's non-terminal owning execution with no revoked grant, and the attempt's held reservation names the active slot; otherwise it SHALL reveal nothing, and the worker SHALL send none of the run's output off its host.
+A re-delivery to an adopted execution SHALL need no new launch authorization; it SHALL be made only after the launch authorization checks that a started execution still passes (quarantine, recovery epoch, worker, assignment, ownership generation, attempt, owning execution without a revoked grant), the reservation and slot checks, and the admitted delivery check; otherwise it SHALL reveal nothing, and the worker SHALL discard the run's output and never send it.
 
 #### Scenario: Adoption after the grant expired
 - **WHEN** a worker restarts after its execution's launch authorization expired and adopts the execution, which still owns its attempt and holds the slot's reservation
 - **THEN** the credential is delivered again without a new launch authorization
 
 #### Scenario: Adoption after cancellation
-- **WHEN** a worker adopts an execution whose attempt was cancelled or whose grant was revoked
-- **THEN** the re-delivery is refused with `attempt-not-launchable` or `execution-conflict`, and none of the run's harness output or logs leaves the host
+- **WHEN** a worker adopts an execution whose attempt was cancelled
+- **THEN** the re-delivery is refused with `attempt-not-launchable`, and none of the run's harness output or logs is written or leaves the host, even after the run ends
+
+#### Scenario: Adoption after a revoked grant
+- **WHEN** a worker adopts an execution whose attempt is live but whose grant was revoked
+- **THEN** the re-delivery is refused with `execution-conflict`
+
+#### Scenario: Re-delivery in quarantine
+- **WHEN** a worker requests a re-delivery while the installation is in restore quarantine
+- **THEN** the re-delivery is refused with `quarantined` and no credential is revealed
 
 ### Requirement: Run redaction by credential value
-Every text of a run that leaves the harness host, its harness output, logs, and failures with their detail keys included, SHALL be redacted by the exact text of each slot credential revealed to the run, from the delivery to the run's end, because a subscription token has no known shape; overlapping or touching occurrences SHALL become one `[redacted]`, and no part of a credential or of a shape secret it touches SHALL stay visible.
+Every text of a run, whatever its channel, SHALL be redacted by the exact text of each slot credential revealed to the run, from the delivery to the run's end, before it is written to a worker record or leaves the host; a stream SHALL be redacted over a window that finds a credential split across chunks, and text truncated only after redaction; overlapping or touching occurrences SHALL become one `[redacted]`, and no part of a credential or of a shape secret in its word SHALL stay visible.
 
 #### Scenario: Token without a known prefix
 - **WHEN** a run's harness output or failure holds a revealed credential that matches no shape rule
@@ -88,11 +112,15 @@ Every text of a run that leaves the harness host, its harness output, logs, and 
 - **THEN** the redacted failure's keys and values contain no credential text
 
 #### Scenario: Overlapping occurrences
-- **WHEN** revealed credentials occur overlapping, touching, or inside a shape secret of the installation
+- **WHEN** revealed credentials occur overlapping, touching, or in one whitespace-free word with a shape secret of the installation
 - **THEN** no character of either is visible, and each covered run is one `[redacted]`
 
+#### Scenario: Credential split across stream chunks
+- **WHEN** a run's harness output stream carries a revealed credential split across two chunks
+- **THEN** neither chunk's part of it is written or sent
+
 ### Requirement: Confidential credential transport
-A slot credential SHALL be delivered only over the TLS of G3 item 26 or to a worker co-located with the control plane on its host, never over plain HTTP or NATS to a remote worker.
+A slot credential SHALL be delivered only in the control plane's API response to the worker, over the TLS of G3 item 26 or to a worker co-located with the control plane on its host, never over plain HTTP to a remote worker and never in a broker message.
 
 #### Scenario: Remote worker before TLS
 - **WHEN** a remote worker launches an attempt and the installation has no TLS for the worker's connection
