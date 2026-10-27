@@ -254,3 +254,68 @@ test('the report lists problems and stale entries, or counts the baseline', () =
 test('the archive date is the local calendar date', () => {
   assert.equal(localDate(new Date(2026, 0, 5, 23, 59)), '2026-01-05');
 });
+
+test('extracts destinations with parentheses, titles in parentheses, and line breaks', () => {
+  const text = ['[a](missing(foo).md)', '[b](b.md (title))', 'See [c](', 'c.md) here.'].join('\n');
+  assert.deepEqual(markdownLinks(text), [
+    { line: 1, target: 'missing(foo).md' },
+    { line: 2, target: 'b.md' },
+    { line: 3, target: 'c.md' },
+  ]);
+});
+
+test('ignores indented code, fences in block quotes, and multi-line code spans', () => {
+  const text = [
+    'Text.',
+    '',
+    '    [indented](missing.md)',
+    '',
+    '> ```',
+    '> [quoted](missing.md)',
+    '> ```',
+    '',
+    'A `span over',
+    '[spanned](missing.md)` ends.',
+    '',
+    '```',
+    '[a](missing.md)',
+    '``` not a closing fence',
+    '[b](missing.md)',
+    '```',
+    '[c](c.md)',
+  ].join('\n');
+  assert.deepEqual(markdownLinks(text), [{ line: 17, target: 'c.md' }]);
+});
+
+test('derives anchors from the rendered text of ATX and Setext headings', () => {
+  const text = ['# _Hello_', '# A &amp; B', 'Title', '=====', '', 'Title', '-----', '# A & B'].join('\n');
+  assert.deepEqual([...headingAnchors(text)], ['hello', 'a--b', 'title', 'title-1', 'a--b-1']);
+});
+
+test('rejects a fragment-only link in a spec delta', () => {
+  const problems = problemsIn({
+    ...BASE_FILES,
+    [`${ACTIVE}/specs/demo/spec.md`]: '## ADDED Requirements\n\n[section](#added-requirements)\n',
+  });
+  assert.deepEqual(problems.map(({ line, reason }) => ({ line, reason })), [
+    { line: 3, reason: 'relative link in a spec delta; use a root-relative link' },
+  ]);
+});
+
+test('checks reference-style links at each use', () => {
+  const problems = problemsIn({
+    ...BASE_FILES,
+    'docs/plan.md': ['See [plan][missing] and [governance][gov].', '', '[missing]: missing.md', '[gov]: governance.md'].join('\n'),
+  });
+  assert.deepEqual(problems.map(({ line, target, reason }) => ({ line, target, reason })), [
+    { line: 1, target: 'missing.md', reason: 'target does not exist' },
+  ]);
+});
+
+test('ignores every link with a URI scheme and checks a path with a colon later', () => {
+  const problems = problemsIn({
+    ...BASE_FILES,
+    'docs/plan.md': ['[web](https://example.com)', '[call](tel:+15550100)', '[file](file:///etc/hosts)', '[gone](gone.md#a:b)'].join('\n'),
+  });
+  assert.deepEqual(problems.map(({ line, target }) => ({ line, target })), [{ line: 4, target: 'gone.md#a:b' }]);
+});
