@@ -198,6 +198,16 @@ test('waiting placements alternate between projects, oldest first in each', () =
   assert.deepEqual(fairPlacementOrder([]), []);
 });
 
+test('waiting placements with equal waiting times follow task id order', () => {
+  const entry = (project: string, item: string) => ({
+    projectId: id('ProjectId', project) as ProjectId, waitingSince: at('2026-10-25T09:00:00.000Z'), item,
+  });
+  const waiting = [entry('a', 'task-B'), entry('a', 'task-a'), entry('b', 'task-c'), entry('a', 'task-A')];
+  const expected = ['task-A', 'task-c', 'task-B', 'task-a'];
+  assert.deepEqual(fairPlacementOrder(waiting), expected);
+  assert.deepEqual(fairPlacementOrder([...waiting].reverse()), expected);
+});
+
 test('backoff doubles from five seconds, jitters, and never exceeds sixty', () => {
   assert.deepEqual([1, 2, 3, 4, 5, 30].map((retry) => placementBackoff(retry, 0)), [5000, 10000, 20000, 40000, 60000, 60000]);
   assert.equal(placementBackoff(1, 0.999), 9995);
