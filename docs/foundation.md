@@ -63,9 +63,9 @@ G2 delivered PostgreSQL state and outbox, NATS transport, installation bootstrap
 | Matrix entry | G2 native acceptance |
 | --- | --- |
 | `macos-26-arm64` | 25b `run-g2-native-acceptance-arm64`: no row fully accepted; process ownership failed on D1 (15 crash windows passed, 11 failed), re-run after the fix deferred to G3 by the owner; the cancellation and connectivity parts left to 24c deferred to G3; open parts in ADR 0015 decision 3 |
-| `linux-ubuntu-24.04-arm64` | 25b, under Docker Desktop: no row fully accepted; open parts in ADR 0015 decision 3 |
+| `linux-ubuntu-24.04-arm64` | 25b, under Docker Desktop: no row fully accepted; the cancellation and connectivity parts left to 24c deferred to G3; open parts in ADR 0015 decision 3 |
 | `macos-26-x86_64` | 25c `run-g2-native-acceptance-x86-64`: every proof passed; process ownership and journal and storage met in their G2 part; the cancellation and connectivity parts left to 24c deferred to G3; no row fully accepted |
-| `linux-ubuntu-24.04-x86_64` | 25c under Docker Desktop and `run-g2-native-acceptance-linux-host` on a native Ubuntu 26.04.1 host: every proof passed; journal and storage met in its G2 part; no row fully accepted; the hosted-runner check stays open |
+| `linux-ubuntu-24.04-x86_64` | 25c under Docker Desktop and `run-g2-native-acceptance-linux-host` on a native Ubuntu 26.04.1 host: every proof passed; journal and storage met in its G2 part; the cancellation and connectivity parts left to 24c deferred to G3; no row fully accepted; the hosted-runner check stays open |
 
 | Deferred item | Gate |
 | --- | --- |
@@ -80,12 +80,13 @@ G2 delivered PostgreSQL state and outbox, NATS transport, installation bootstrap
 | PostgreSQL failover, pool sizing, and expand/contract migrations | G6–G7 |
 | Image package inventories and vulnerability scans | G8 |
 | macOS arm64 process ownership re-run after the D1 fix, on the MacBook Air | G3 (owner's decision, 2026-10-27) |
-| macOS cancellation race g (an adopting supervisor that ignores a cancel) and the macOS cancellation and connectivity parts that 25b and 25c leave to 24c, whose suites run on Linux only | G3 (author's assignment) |
-| Placement back-off that preserves the project rotation (`placement-backoff-preserves-rotation`) | After G2; contract-first |
+| Cancellation race g (an adopting macOS supervisor that ignores a cancel) and the cancellation and connectivity parts that 25b, 25c, and the Linux-host run leave to 24c on all four entries; 24c's records come from the test-side process-group launch host on Linux x64, not the cgroup supervisor or a native worker | G3 (author's assignment) |
+| Placement back-off that preserves the project rotation (`placement-backoff-preserves-rotation`) | Non-blocking follow-up after G2, contract-first; owned by the coordinator (author's assignment) |
 | AppArmor and SELinux confinement of the worker (`apparmor=unconfined`) | G6 (author's assignment) |
 | Linux composed crash windows and duplicate delivery beyond one x86_64 host and the test image; supplementary groups of an execution | Before Linux worker support is claimed (author's assignment) |
-| In-memory placement rotation cursor; worker image reproducibility; `make native-acceptance` without the Linux crash windows; hosted-runner Linux x86_64 check | Follow-ups without a G2 gate (author's assignment) |
-| Archived record links and file-system labels (`check-change-record-links`) | Open follow-up owned by Pepi, in progress; no G2 gate |
+| In-memory placement rotation cursor; `make native-acceptance` without the Linux crash windows; hosted-runner Linux x86_64 check; multi-architecture `make verify-linux-cgroup` | Non-blocking follow-ups without a G2 gate, owned by the coordinator (author's assignment) |
+| Worker image reproducibility | Non-blocking follow-up owned by Liki; no G2 gate (author's assignment) |
+| Archived record links and file-system labels (`check-change-record-links`) | Non-blocking follow-up owned by Pepi, in progress; no G2 gate |
 
 ## Later phases
 
