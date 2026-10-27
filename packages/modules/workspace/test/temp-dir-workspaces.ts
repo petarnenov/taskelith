@@ -185,12 +185,45 @@ function inHandOffChain<T>(root: string, work: () => Promise<T>): Promise<T> {
   return run;
 }
 
+// Holds each racing hand-off after its check until every hand-off in
+// flight has checked, so that none sees the record of another.
+export class CheckBarrier {
+  private inFlight = 0;
+  private readonly held: (() => void)[] = [];
+
+  // Counts the caller before its first await, as concurrent calls need.
+  async afterAllChecks<T>(check: () => Promise<T>): Promise<T> {
+    this.inFlight += 1;
+    let checked: T;
+    try {
+      checked = await check();
+    } catch (error) {
+      this.leave();
+      throw error;
+    }
+    await this.arrive();
+    return checked;
+  }
+
+  private leave(): void {
+    this.inFlight -= 1;
+    if (this.inFlight === 0) for (const release of this.held.splice(0)) release();
+  }
+
+  private arrive(): Promise<void> {
+    this.leave();
+    if (this.inFlight === 0) return Promise.resolve();
+    return new Promise((release) => this.held.push(release));
+  }
+}
+
 export class TempDirWorkspaces implements WorkspaceProvider {
   readonly root: string;
   readonly service: FakeGitService;
   readonly repository: RepositoryId;
   readonly digest: IdentifierDigest;
   readonly defects: DoubleDefects;
+  private readonly racingChecks = new CheckBarrier();
 
   constructor(dataRoot: string, service: FakeGitService, repository: RepositoryId, digest: IdentifierDigest, defects: DoubleDefects = {}) {
     this.root = join(dataRoot, WORKSPACE_LAYOUT.root);
@@ -272,21 +305,33 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     }
   }
 
-  // The record first, so the state survives where no mode changes.
   async handOff(attemptId: AttemptId): Promise<Result<void>> {
+    if (this.defects.racesHandOff) return this.racingHandOff(attemptId);
     const checkout = await this.checkoutOf(attemptId);
     if (!checkout.ok) return checkout;
-    const handOff = () => this.handOffAlone(attemptId, checkout.value);
-    return this.defects.racesHandOff ? handOff() : inHandOffChain(this.root, handOff);
+    return inHandOffChain(this.root, () => this.handOffAlone(attemptId, checkout.value));
   }
 
   private async handOffAlone(attemptId: AttemptId, checkout: string): Promise<Result<void>> {
-    if (!this.defects.handsOffBeyondOne && (await this.handedOffElsewhere(attemptId))) {
-      return workspaceFailure('precondition-failed', 'other-workspace-handed-off', 'another workspace is handed off');
-    }
-    await writeFile(handOffRecord(checkout), '', { mode: WORKSPACE_MODES.handOffRecord });
-    await chmod(checkout, WORKSPACE_MODES.checkoutHandedOff);
-    return ok(undefined);
+    if (await this.mustWait(attemptId)) return otherWorkspaceHandedOff();
+    return markHandedOff(checkout);
+  }
+
+  private async racingHandOff(attemptId: AttemptId): Promise<Result<void>> {
+    const checked = await this.racingChecks.afterAllChecks(() => this.handOffCheck(attemptId));
+    if (!checked.ok) return checked;
+    const { checkout, mustWait } = checked.value;
+    return mustWait ? otherWorkspaceHandedOff() : markHandedOff(checkout);
+  }
+
+  private async handOffCheck(attemptId: AttemptId): Promise<Result<{ checkout: string; mustWait: boolean }>> {
+    const checkout = await this.checkoutOf(attemptId);
+    if (!checkout.ok) return checkout;
+    return ok({ checkout: checkout.value, mustWait: await this.mustWait(attemptId) });
+  }
+
+  private async mustWait(attemptId: AttemptId): Promise<boolean> {
+    return !this.defects.handsOffBeyondOne && this.handedOffElsewhere(attemptId);
   }
 
   // The double models a worker whose executions share a separate account.
@@ -489,6 +534,17 @@ function handOffRecord(checkout: string): string {
 
 async function handedOff(checkout: string): Promise<boolean> {
   return exists(handOffRecord(checkout));
+}
+
+// The record first, so the state survives where no mode changes.
+async function markHandedOff(checkout: string): Promise<Result<void>> {
+  await writeFile(handOffRecord(checkout), '', { mode: WORKSPACE_MODES.handOffRecord });
+  await chmod(checkout, WORKSPACE_MODES.checkoutHandedOff);
+  return ok(undefined);
+}
+
+function otherWorkspaceHandedOff(): Result<void> {
+  return workspaceFailure('precondition-failed', 'other-workspace-handed-off', 'another workspace is handed off');
 }
 
 async function holdsRedirection(directory: string): Promise<boolean> {
