@@ -9,10 +9,13 @@ import {
   formatChecklist,
   formatIndex,
   formatProblem,
+  formatRecordChecklist,
+  isRecordFinding,
   MAX_LINE_BYTES,
   matchesQuery,
   parseFindings,
   parseVocabulary,
+  recordChecklist,
   reviewerKey,
   secretLikeStrings,
   VOCABULARY_PATH,
@@ -184,6 +187,37 @@ test('the category comes from the vocabulary and the change from the directory',
   ]);
 });
 
+const activeRules = { ...rules, capabilities: new Set(['review-process']) };
+
+function activeMessagesOf(findings: readonly Finding[]): string[] {
+  const text = findings.map((item) => `${JSON.stringify(item)}\n`).join('');
+  return parseFindings({ path: 'findings.jsonl', change: 'demo-change', text }, activeRules).problems.map(formatProblem);
+}
+
+test('an active code or doc finding needs an existing capability', () => {
+  assert.deepEqual(activeMessagesOf([
+    finding({ file: 'scripts/a.ts', capability: undefined }),
+    finding({ file: 'docs/a.md', capability: 'no-such-capability' }),
+    finding({ file: 'scripts/a.ts' }),
+  ]), [
+    'findings.jsonl:1: capability is required outside openspec/changes/; name the closest one under openspec/specs',
+    'findings.jsonl:2: unknown capability "no-such-capability"; capabilities are the directories under openspec/specs',
+  ]);
+});
+
+test('a record finding needs no capability, but one it names must exist', () => {
+  assert.deepEqual(activeMessagesOf([
+    finding({ capability: undefined }),
+    finding({ file: 'openspec/changes/archive/2026-10-01-old/design.md', capability: undefined }),
+    finding({ capability: 'no-such-capability' }),
+  ]), ['findings.jsonl:3: unknown capability "no-such-capability"; capabilities are the directories under openspec/specs']);
+});
+
+test('without the capability rule a code finding may omit its capability', () => {
+  assert.deepEqual(messagesOf([JSON.stringify(finding({ file: 'scripts/a.ts', capability: 'no-such-capability' }))]), []);
+  assert.deepEqual(messagesOf([JSON.stringify(finding({ file: 'scripts/a.ts', capability: undefined }))]), []);
+});
+
 test('secret-like values are rejected wherever they appear', () => {
   const token = `ghp_${'a'.repeat(36)}`;
   assert.deepEqual(messagesOf([JSON.stringify(finding({ resolution: `Removed ${token}.` }))]), [
@@ -281,4 +315,26 @@ test('the checklist text names its scope, and an empty one says nothing matched'
   assert.equal(formatChecklist(checklist(archive, vocabulary.categories, none), none), 'Review checklist (files nothing/**): no archived findings match.');
   const all = { capabilities: [], files: [], top: 7 };
   assert.match(formatChecklist([], all), /\(all archived findings\)/);
+});
+
+test('a record finding is one whose file is under openspec/changes', () => {
+  assert.deepEqual(archive.map(isRecordFinding), [true, false, true, false, false]);
+  assert.equal(isRecordFinding(finding({ file: 'openspec/changes/archive/2026-10-01-old/design.md' })), true);
+  assert.equal(isRecordFinding(finding({ file: 'openspec/specs/review-process/spec.md' })), false);
+});
+
+test('the record checklist ranks the categories of record findings only', () => {
+  const items = recordChecklist(archive, vocabulary.categories, 7);
+  assert.deepEqual(items.map(({ category, count, example }) => [category, count, example]), [
+    ['docs', 1, 'Missing doc'],
+    ['stale-citation', 1, 'Old citation'],
+  ]);
+  assert.equal(recordChecklist(archive, vocabulary.categories, 1).length, 1);
+});
+
+test('the record checklist text names record quality, and an empty one says so', () => {
+  const text = formatRecordChecklist(recordChecklist(archive, vocabulary.categories, 7));
+  assert.match(text, /^Record quality \(archived findings under openspec\/changes\/\), most frequent finding categories first:\n/);
+  assert.match(text, /\n1\. docs \(1\): .+ Example: "Missing doc"\n2\. stale-citation \(1\): .+ Example: "Old citation"$/);
+  assert.equal(formatRecordChecklist([]), 'Record quality (archived findings under openspec/changes/): no archived findings match.');
 });

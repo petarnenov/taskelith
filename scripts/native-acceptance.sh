@@ -68,7 +68,6 @@ harness_proofs() {
 }
 
 macos_entry() {
-  npm run --silent build
   # shellcheck disable=SC2086
   {
     prove service-lifecycle acceptance-native-worker-lifecycle compose-installation \
@@ -111,6 +110,11 @@ remove_on_exit() {
   trap "${previous:+$previous; }rm -f '$1'" EXIT
 }
 
+# The seed, the recorder, and the suites need the built harness.
+build_checkout() {
+  npm run --silent build
+}
+
 # Every entry runs all its proofs; the run fails if any proof failed.
 main() {
   local results kind
@@ -123,6 +127,7 @@ main() {
     *) results="$PWD/$1" ;;
   esac
   cd "$repository"
+  build_checkout
   TASKELITH_TEST_SEED="$(tool seed)"
   export TASKELITH_TEST_SEED TASKELITH_SCENARIO_RESULTS="$results"
   echo "native-acceptance.sh: seed $TASKELITH_TEST_SEED, results $results" >&2

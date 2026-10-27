@@ -1,3 +1,5 @@
+import { requestFailure } from './request-failure.js';
+
 const STREAMS = ['upstream', 'downstream'] as const;
 const REQUEST_TIMEOUT_MILLISECONDS = 5000;
 
@@ -26,11 +28,14 @@ export class Toxiproxy {
   async #request(method: string, path: string, body?: object): Promise<unknown> {
     const url = new URL(this.#api);
     url.pathname = `${url.pathname.replace(/\/$/, '')}${path}`;
+    const sent = Date.now();
     const response = await fetch(url, {
       method,
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS),
       headers: body === undefined ? undefined : { 'content-type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
+    }).catch((error: unknown) => {
+      throw requestFailure('Toxiproxy', method, url, sent, error);
     });
     const text = await response.text();
     if (!response.ok) throw new Error(`Toxiproxy ${method} ${path} failed with ${response.status}: ${text}`);
