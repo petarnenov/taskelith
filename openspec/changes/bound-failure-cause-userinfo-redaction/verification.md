@@ -6,14 +6,15 @@ Date: 2026-10-27. The author's verification, `make verify` on `071822b` and on `
 
 A coordinator brief from Niki: fix the ReDoS in the scheme-less user-information rule that #322 added to `packages/adapters/worker-control-plane-client/src/failure-cause.ts`, found by Pepi during the integration of #322. Developed in a briefed and checked subagent ([subagent execution](../../../docs/agent-task-protocol.md#subagent-execution)), in worktree `taskelith-worktrees/bound-failure-cause-userinfo-redaction` on branch `bound-failure-cause-userinfo-redaction`.
 
-- **Base revision:** `5c60c15e` on `dev`; `dev` merged at `fe643864` as `071822b`.
+- **Base revision:** `5c60c15e` on `dev`; `dev` merged at `fe643864` as `071822b` and at `33d341a9` as `c021a0f9`.
 - **Revision verified:** `381629a8` (the test `258e45cc` and the fix `381629a8`), then `2f078d3` (the pass 1 test `ebceb80` and fix `2f078d3`), plus this change's records.
 - **Scope:** the user-information rule, two tests, and the `worker-runtime` delta. **Widened** by coordinator Niki on 2026-10-27 in response to review pass 1's M1: every redaction rule of `failure-cause.ts` is linear-time, which also changes the `[url]` and JWT rules and adds two tests.
 - **Out of scope:** the logger's `redactText` in `@taskelith/observability`, which is only measured (see Limitations), and centralizing the log redaction rules (a separate next task).
 
 ## Merge of dev
 
-`origin/dev` at `fe643864` merged cleanly as `071822b`. It brings #325, which changes the requirements "Journaled launch authorization" and "Execution ownership", not "Control-plane failure cause", and no file of `@taskelith/worker-control-plane-client`.
+- `origin/dev` at `fe643864` merged cleanly as `071822b`. It brings #325, which changes the requirements "Journaled launch authorization" and "Execution ownership", not "Control-plane failure cause", and no file of `@taskelith/worker-control-plane-client`.
+- `origin/dev` at `33d341a9` merged cleanly as `c021a0f9`. It brings #326 and #327, which keep coverage out of killed test processes, add a requirement to `deterministic-test-harness`, and change tests; not "Control-plane failure cause", no file of `@taskelith/worker-control-plane-client` or `@taskelith/observability`, and no dependency.
 
 ## Rules
 
