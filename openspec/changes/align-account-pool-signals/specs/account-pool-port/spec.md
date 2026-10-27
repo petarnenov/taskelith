@@ -23,7 +23,7 @@ A limit without a future reset time SHALL put a slot in cooldown for the install
 - **THEN** its cooldown still ends at 10:00
 
 ### Requirement: Slot store compare-and-set
-`AccountSlots` SHALL store a new slot only at revision 1, SHALL replace a slot only at its expected revision with the next revision, failing with `conflict` for another stored revision and `invalid` for another new revision, and SHALL return a project's pool for a harness as its active allowed slots in the code-unit order of their identifiers, the order of the "C" collation.
+`AccountSlots` SHALL store a new slot only at revision 1, SHALL replace a slot only at its expected revision with the next revision, failing with `conflict` for another stored revision and `invalid` for another new revision, and SHALL return a project's pool for a harness as its active allowed slots in the code-unit order of their identifiers, which for ASCII identifiers is the order of the "C" collation.
 
 #### Scenario: Concurrent replaces
 - **WHEN** two replaces of one slot run at the same expected revision
