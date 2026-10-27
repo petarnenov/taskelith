@@ -89,6 +89,16 @@ Reviewer B, OpenCode CLI (kimi-k2.7-code). Invocation: `opencode run --standalon
 
 - L1 stale-citation, `proposal.md` line 13: it cited `docs/dependencies.md:126`, which the `marked` register row moved to line 127. The line now cites 127 and names 126 as the line on `bd6108d4`, and the problem statement names `bd6108d4` too (`7eb31bda`). UNREVIEWED: a Low-only pass is fixed without another review pass.
 
+## Archive checks
+
+Checked state: the tree of the archive commit, the working tree the checks ran on, after `npm run openspec -- archive check-change-record-links --yes` on `fe6811a7`.
+
+- `npm run openspec -- validate --all --strict --no-interactive`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line `✓ change/2026-10-27-check-change-record-links`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only this change's four added requirements, in `agent-task-protocol` (15 lines), `integration-flow` (46 lines), and `review-process` (7 lines).
+- The moved change has its `findings.jsonl` (8 findings) and `passes.jsonl` (2 passes); `make findings ARGS="validate"`, run by `make verify`, passed.
+- `make verify` (finished 2026-10-27T12:34:16Z): passed. 2141 tests, 2139 passed, 0 failed, 2 skipped; coverage of all files 99.29 % lines, 92.14 % branches, 99.00 % functions; contract documents without undeclared breaking change; 731 package paths verified; OpenSpec 69 passed, 0 failed; `Every checked link conforms; 332 archived links remain in scripts/record-links-baseline.tsv.`; every active change archives into strictly valid specs; packed file allowlist and installed CLI verification passed.
+
 ## Limitations
 
 - The author subagent ran neither `make verify` nor `npm test`, because the machine's Docker slot was held by another session; the worker session ran `make verify`, which includes the tests, as recorded under Checks.
@@ -96,5 +106,4 @@ Reviewer B, OpenCode CLI (kimi-k2.7-code). Invocation: `opencode run --standalon
 
 ## Remaining gates
 
-- Archive in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request)
