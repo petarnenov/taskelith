@@ -43,11 +43,11 @@
       "enum": ["S", "S-M", "M", "M-L", "L"]
     },
     "review": {
-      "description": "The review checklist section, whose baseline counts the archived findings outside openspec/changes/ that match the query.",
+      "description": "The review checklist section, whose baseline counts every archived finding outside openspec/changes/, whatever the query.",
       "$ref": "#/$defs/section"
     },
     "recordQuality": {
-      "description": "The record quality section, whose baseline counts the archived findings under openspec/changes/.",
+      "description": "The record quality section, whose baseline counts every archived finding under openspec/changes/.",
       "$ref": "#/$defs/section"
     }
   },
