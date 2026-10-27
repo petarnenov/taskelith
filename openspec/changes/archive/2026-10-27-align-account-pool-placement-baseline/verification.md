@@ -33,6 +33,13 @@ Out of scope: slot selection code and its tests (G3 item 12, [design](design.md)
 | `make verify` on `9477eb83`, after the pass 1 fix and its records | Exit 0; `Totals: 70 passed, 0 failed (70 items)`; `Every findings file is valid: 43 file(s); every pass summary file is valid: 23 file(s).`; last line `Packed file allowlist and installed CLI verification passed.` Run on the Apple M3 host |
 | `npm run openspec -- validate align-account-pool-placement-baseline --strict` after the reconciliation | `Change 'align-account-pool-placement-baseline' is valid` |
 | `make verify` on `70701af2`, the merge of `origin/dev` at `99333004` | Exit 0 on the second run, at a load average of about 8; `Totals: 70 passed, 0 failed (70 items)`; `Every findings file is valid: 44 file(s); every pass summary file is valid: 24 file(s).`; last line `Packed file allowlist and installed CLI verification passed.` The first run, at a load average of about 12, failed only `a provider that races two concurrent hand-offs fails the suite` (`packages/modules/workspace/test/workspace-conformance.test.ts:76`), a timing-bound test of a module that this change does not touch. Run on the Apple M3 host |
+| `git fetch origin` before archiving again | `origin/dev` still at `99333004`; no further merge needed |
+| `npm run openspec -- archive align-account-pool-placement-baseline --yes` | `Totals: + 3, ~ 1, - 0, → 0`; `Change 'align-account-pool-placement-baseline' archived as '2026-10-27-align-account-pool-placement-baseline'.` |
+| `npm run openspec -- validate --all --strict` on the tree of the archive commit | `Totals: 69 passed, 0 failed (69 items)` |
+| `npm run openspec -- validate --archived --no-interactive`, this change's line | `✓ change/2026-10-27-align-account-pool-placement-baseline` |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` | Only `openspec/specs/account-pool-port/spec.md` (30 insertions, 1 deletion): the final clause of "Deterministic least-loaded order" and the three added requirements; #366's text is unchanged |
+| Moved change files | `findings.jsonl` (1 line) and `passes.jsonl` (2 lines) present; `make findings ARGS="validate"`: `Every findings file is valid: 44 file(s); every pass summary file is valid: 24 file(s).` |
+| `make verify` on the tree of the archive commit | `uptime` before: load averages 2.42, 6.65, 8.06. Exit 0 on the first run; `Totals: 69 passed, 0 failed (69 items)`; `ℹ fail 0`; last line `Packed file allowlist and installed CLI verification passed.` Run on the Apple M3 host |
 
 ## Independent review
 
