@@ -17,10 +17,13 @@
 ## 3. Evidence
 
 - [x] 3.1 Non-Docker checks and the new tests with coverage of the new scripts
-- [ ] 3.2 `make verify` (Docker) by the worker
-- [ ] 3.3 Record `verification.md`
+- [x] 3.2 `make verify` (Docker) by the worker: passed on `f726edbf`
+- [x] 3.3 Record `verification.md`: `make record` and `make record-check` passed on `16987d29`
 
 ## 4. Review and archive
 
-- [ ] 4.1 Independent review
-- [ ] 4.2 Archive the change
+- [x] 4.1 Review pass 1 (reviewer A) and its fixes
+- [ ] 4.2 `make verify`, `make record`, and `make record-check` of the pass 1 fixes
+- [ ] 4.3 Review pass 2 (reviewer B) and its fixes
+- [ ] 4.4 Review pass 3 (reviewer A), if "Conditional third pass" requires it
+- [ ] 4.5 Archive the change
