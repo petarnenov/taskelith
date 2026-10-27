@@ -41,7 +41,7 @@ leaves the change directory: 7
 Rewrote 332 links in 176 files.
 ```
 
-`git diff --stat 56346d92 baf368c0`: 176 files changed, 244 insertions, 244 deletions, all under `openspec/changes/archive/`. Reproducibility: in a separate detached worktree at `56346d92` with the script of `4e6a664a`, the same command printed the same output, `git diff --quiet baf368c0 -- openspec/changes/archive` exited 0, and a second run printed `Rewrote 0 links in 0 files.`
+`git diff --stat 56346d92 baf368c0 -- openspec/changes/archive`: 176 files changed, 244 insertions, 244 deletions. Reproducibility: in a separate detached worktree at `56346d92` with the script of `4e6a664a`, the same command printed the same output, `git diff --quiet baf368c0 -- openspec/changes/archive` exited 0, and a second run printed `Rewrote 0 links in 0 files.`
 
 ## Link-only diff check
 
@@ -83,7 +83,11 @@ On `54d2b2d2` with this record, except the test count of the checker, run on `b8
 
 ## Independent review
 
-None yet.
+Pass 1, reviewer A: Codex CLI `gpt-6-astra`, invoked as `codex exec -m gpt-6-astra -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>` on `0a06da1e` (`56346d92..0a06da1e`). The output header confirmed model `gpt-6-astra`, reasoning effort `medium`, sandbox `read-only`, and session `01a17dbf-8e90-7591-9c30-5cfea401bfe1`. The worktree snapshot was `3b5706a7c286f538b6be7224cb3781cb9d2c8883ecc368ce67595a4ca3cd1274` before and after the pass. Findings: Critical 0, High 0, Medium 0, Low 1, as in `passes.jsonl`.
+
+- Low (evidence-mismatch, this record, "Rewrite"): the recorded `git diff --stat 56346d92 baf368c0` covers the whole tree (184 files, 451 insertions, 576 deletions), not the 176 recorded files. Fixed, unreviewed: the command is limited to `-- openspec/changes/archive`, whose output is 176 files, 244 insertions, 244 deletions.
+
+The reviewer confirmed the 332 rewritten destinations in 176 files of 83 changes, no other changed byte in the archived records, all 60 anchors and the `ext2/ext3` labels preserved, the 324/1/7 split, the baseline removal consistent across checker, tests, delta, and docs, and ADR edits on the allowed lines only. A Low-only pass ends the review ([review process](/docs/governance.md#independent-review-process)), so passes 2 and 3 did not run and the fix is unreviewed.
 
 ## Limitations
 
@@ -91,7 +95,4 @@ None yet.
 
 ## Remaining gates
 
-- Review pass 1 by reviewer A (Codex `gpt-6-astra` or OpenCode `qwen3.8-max#medium`)
-- Review pass 2 by reviewer B (Claude Code `claude-opus-5-5`, high)
-- Review pass 3 by reviewer A
 - Integration into dev by the coordinator (single pull request)

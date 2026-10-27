@@ -23,4 +23,4 @@
 
 - [x] 5.1 Run the checker's tests, `npm run verify:links`, `npm run verify:comments`, and `npm run openspec -- validate repair-archived-record-links --strict`.
 - [x] 5.2 Run `make verify`.
-- [ ] 5.3 Independent review.
+- [x] 5.3 Independent review.
