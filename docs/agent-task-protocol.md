@@ -62,6 +62,16 @@ The owner set this rule on 2026-10-26; it applies to tasks assigned from that da
 - **Protocol in the session.** The session keeps the protocol steps: messages to the coordinator or the owner, owner questions, the independent review, whose results the subagent may record as the session provides them, and the handoff. A subagent does not hand off, open pull requests, or decide owner questions.
 - **Fresh subagents** (owner, 2026-10-27). A session does not resume a subagent that has been idle for more than five minutes, because a resumed subagent rereads its whole context. For a round of review fixes it starts a fresh subagent with a short brief: the findings, the files they name, the checks to run, and where the task's records are.
 
+## Test authoring
+
+The owner set this rule on 2026-10-27 to stop flaky tests where they are written, not in follow-up changes:
+
+- **No sleeps for synchronization.** A test that waits for concurrent work waits on a barrier, an event, or a condition the work signals, or drives an injected clock; it never waits a fixed time and hopes the work is done.
+- **Wide timing bounds.** A bound on stubbed work is at least six times that work, for example at least 600 ms for 100 ms of stubbed work, because loaded hosts such as the coordinator's iMac stretch timings.
+- **No scheduling luck.** A test does not depend on the order in which the runtime happens to schedule timers, promises, or processes, or on state shared with another test.
+
+Reviewers file a breach as the category `test-flakiness` of [`categories.txt`](review-findings/categories.txt), which the plan checklist of every brief already ranks.
+
 ## Context size
 
 The owner set this rule on 2026-10-25. Since 2026-10-27 (owner) sessions keep their context thin so that they rarely reach the limit:
@@ -115,7 +125,7 @@ Snapshot before and after each pass, and compare the two. Include any external e
 git ls-files -co --exclude-standard | xargs shasum -a 256 | shasum -a 256
 ```
 
-The prompt names the criteria (`AGENTS.md`, [ADR 0004](decisions/0004-first-class-engineering-principles.md), the governance review process, and the specifications the change touches). It asks for every instance of a problem with its severity, file and line, and a fix, and for counts per severity at the end. For pass 2, it names pass 1's session and asks reviewer B to check each pass 1 fix and then review the whole change independently. For pass 3, it names pass 2's session and asks reviewer A only to confirm each pass 2 fix, with no new scope. A task under the [previous rule](governance.md#independent-review-process) keeps its later-pass prompt: confirm each earlier finding's resolution, then review the whole change again.
+The prompt names the criteria (`AGENTS.md`, [ADR 0004](decisions/0004-first-class-engineering-principles.md), the governance review process, the [test-authoring rule](#test-authoring), and the specifications the change touches). It asks for every instance of a problem with its severity, file and line, and a fix, and for counts per severity at the end. For pass 2, it names pass 1's session and asks reviewer B to check each pass 1 fix and then review the whole change independently. For pass 3, it names pass 2's session and asks reviewer A only to confirm each pass 2 fix, with no new scope. A task under the [previous rule](governance.md#independent-review-process) keeps its later-pass prompt: confirm each earlier finding's resolution, then review the whole change again.
 
 ### Reviewer pauses
 
