@@ -175,8 +175,23 @@ describe('placement', () => {
     assert.deepEqual(value(await placement.placeWaiting()), { waiting: 1, placed: 0 });
     assert.deepEqual(await stored('task-1'), before);
     assert.deepEqual([await assignmentsOf('task-1'), await offers()], [[], []]);
-    assert.deepEqual(value(await placement.placeWaiting()), { waiting: 0, placed: 0 }, 'it backs off');
-    assert.deepEqual(value(await new PlacementService(database, TIMING).placeWaiting()), { waiting: 1, placed: 0 });
+    assert.deepEqual(value(await placement.placeWaiting()), { waiting: 1, placed: 0 }, 'it does not back off');
+  });
+
+  test('a slot freed after a fleet capacity decline goes to the next project, not the larger backlog', async () => {
+    await enroll('worker-a', { slots: 1 });
+    for (let index = 1; index <= 50; index++) await submit(`task-a${String(index).padStart(2, '0')}`);
+    await createSecondRun();
+    await submit('task-b', 'run-2');
+    const clock = { at: Date.now() };
+    // A long jitter for the first decline, task-b's; none for the rest.
+    const draws = [0.9];
+    const timed = new PlacementService(database, { now: () => clock.at, draw: () => draws.shift() ?? 0 });
+    assert.deepEqual(value(await timed.placeWaiting()), { waiting: 51, placed: 1 });
+    await sql('UPDATE workers SET slots = slots + 1');
+    clock.at += 5_000;
+    assert.equal(value(await timed.placeWaiting()).placed, 1);
+    assert.deepEqual(await placedTasks(), ['task-a01', 'task-b']);
   });
 
   test('without a candidate no placement transaction is opened', async () => {
