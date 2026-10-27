@@ -32,7 +32,7 @@ Every transaction that changes a compared value SHALL run serializably and SHALL
 - **THEN** the result is either a rejection or a revocation with a cancellation command, never an unrevoked stale authorization
 
 ### Requirement: Execution ownership
-An attempt SHALL have at most one owning execution, spawned at most once across all its grants. Expiry SHALL end the permission to spawn but not ownership; another execution identity SHALL be authorized only after the owner has a recorded exit or a `not-started` recorded after its seal, including one the request reports, recorded first in the same transaction.
+An attempt SHALL have at most one owning execution, spawned at most once across all its grants. Expiry SHALL end the permission to spawn but not ownership; another execution identity SHALL be authorized only after the owner has a recorded exit or a `not-started` recorded after its seal, including one the request reports in its list of at most 8 sealed executions, recorded in list order first in the same transaction.
 
 #### Scenario: Expired grant without a recorded start
 - **WHEN** an authorization expired and no start or terminal fact is recorded
@@ -54,9 +54,17 @@ An attempt SHALL have at most one owning execution, spawned at most once across 
 - **WHEN** the reported execution is already `not-started`, or the authority never granted it
 - **THEN** the report changes nothing and the new execution is decided by the ownership rule
 
+#### Scenario: Several reported seals
+- **WHEN** a request reports an execution the authority never granted, one already `not-started`, and the `authorized` owner, in that order
+- **THEN** each entry is applied in order in one transaction, the owner ends `not-started`, and the new execution is granted
+
 #### Scenario: Refused seal report
-- **WHEN** the report names the requested execution itself, or the reported execution is `started` or `exited` or belongs to another attempt or worker, or the reported operation granted another execution
+- **WHEN** any entry of the report names the requested execution itself, or an execution that is `started` or `exited` or belongs to another attempt or worker, or an operation that granted another execution
 - **THEN** the request is rejected with `execution-conflict`, the task is unchanged, and the rejection is final for the operation
+
+#### Scenario: Too many reported seals
+- **WHEN** a request reports 9 sealed executions, or an empty list
+- **THEN** the request is refused as `invalid` and nothing is decided, while a list of 8 is decided
 
 ### Requirement: Idempotent replay without reuse of stale grants
 A repeated request with the same operation ID from the same worker SHALL return the recorded grant only while it is granted, unexpired, its execution not terminal, and the quarantine state, epoch, and worker credential are current; a reused operation ID with different values SHALL be rejected.

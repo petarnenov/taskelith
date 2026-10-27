@@ -30,5 +30,5 @@
   - [x] Merge `origin/dev` at `656a34d` (#322) as `eda2e56`, one conflict in the launch authorization contract; "Journaled launch authorization" delta keeps #322's logging; review pass 3: 0 findings
   - [x] Merge `origin/dev` at `5c60c15` (#323, #324) as `b123ada`, without a conflict; no delta change; `make verify` runs on the archive commit's tree
 - [x] 4.9 Review pass 2 of the resolution and reconciliation: 0 findings
-- [ ] 4.10 Archive again on the branch (protocol step 7); integration into `dev` is the coordinator's
+- [x] 4.10 Archive again on the branch (protocol step 7); integration into `dev` is the coordinator's
 - [x] 4.11 Review pass 3 of Return 1, second round (merge of `656a34d` and reconciliation), before 4.10: 0 findings
