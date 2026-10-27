@@ -6,11 +6,18 @@ Owner decisions of 2026-10-27, recorded here because they change gates or `AGENT
 
 ## Coordinator decisions
 
-- **D1 Docs-only path set.** `docs/**`, `openspec/**`, and root-level `*.md` files except `CHANGELOG.md`. `.claude/**`, `scripts/**`, and everything else are not documentation and get the full profile. The docs-only profile skips only the Docker test suites; every other check of `make verify` still runs. It applies only to branches; integration always runs the full profile.
+- **D1 Docs-only path set.** `docs/**` except `docs/review-findings/**` and `docs/qualification/**`, `openspec/**`, and root-level `*.md` files except `CHANGELOG.md`. Tests read `docs/review-findings/**` and `docs/qualification/**`, so a change to them gets the full profile (coordinator decision of 2026-10-27). `.claude/**`, `scripts/**`, and everything else are not documentation and get the full profile. The docs-only profile skips only the Docker test suites; every other check of `make verify` still runs. It applies only to branches; integration always runs the full profile.
 - **D2 Verified-tree stamp.** Stored in `$(git rev-parse --git-common-dir)/taskelith-verify-stamps/<key>`, shared by the worktrees of a clone and never tracked. The key covers the HEAD tree, the Node.js and npm versions, the lockfile hash, the test image digests, and the profile, so a docs-only stamp never satisfies a full requirement. A dirty tree or any key change means a full run, and no stamp is written for a dirty tree. Promotion CI from `dev` to `main` never skips.
 - **D3 Docker slot lock.** The lock directory is `${XDG_STATE_HOME:-$HOME/.local/state}/taskelith/docker-slot.lock`: a `mkdir`-based first-in, first-out queue with stale-lock recovery by process ID, portable to macOS, which has no `flock`, and Linux, with a wait and hold log next to it; a waiter prints the holder. It is host-wide per user.
-- **D4 Context warning hook.** A hook in the tracked `.claude/settings.json` estimates the context from the transcript, warns near 150,000 tokens, only warns and never blocks, stays fast, never prints transcript content, and is documented as an estimate.
+- **D4 Context warning hook.** A hook in the tracked `.claude/settings.json` estimates the context from the transcript, warns near 150,000 tokens, only warns and never blocks, stays fast, never prints transcript content, and is documented as an estimate. Refinement accepted by the coordinator on 2026-10-27: the estimate comes from the usage of the last main-thread assistant message in the transcript's last 1 MiB, and the transcript size divided by four only when there is none.
 - **D5 Integration script.** `scripts/integrate.sh` keeps the pause file of the coordinator's former `resume.sh`, now in the lock's state directory, and its 2400 s alarm, both as options. `make integrate` always requires a full stamp of the merged tree.
+
+Coordinator decisions of 2026-10-27, taken during the work:
+
+- **Unpushed coordinator merge.** `make integrate` commits the merge of `origin/dev` on the local `itg-<branch>` and pushes it only after the full `make verify` passed. On a return the coordinator deletes the local `itg-<branch>` and its worktree, so a returned branch never carries a coordinator merge.
+- **Tested documentation paths.** `docs/review-findings/**` and `docs/qualification/**` leave the docs-only path set of D1, because tests read them.
+- **Stamp and the handoff push.** Documented only: the stamp rarely spares a worker's handoff push, because recording the `make verify` result in `verification.md` changes the tree after the stamped run.
+- **Context estimate.** The D4 refinement above.
 
 ## Decisions per recommendation
 
@@ -55,6 +62,11 @@ How this change meets it: contract-drift: the Makefile, hook, scripts, protocol,
 
 ## Risks
 
-- A docs-only branch skips the tests that read files under `docs/` (for example the findings vocabulary and schemas in `docs/review-findings/`); the full `make verify` at integration still runs them.
+- A change under `docs/review-findings/**` or `docs/qualification/**`, which tests read, gets the full profile; a test that reads another file under `docs/` runs on a docs-only branch only in the full `make verify` at integration.
+- The stamp rarely spares a worker's handoff push: recording the `make verify` result in `verification.md` changes the tree after the stamped run.
 - A stamp is local to a clone, so another machine runs `make verify` again.
 - The context estimate depends on the transcript format of Claude Code; when it changes, the hook falls back to the size estimate or prints nothing.
+
+## Follow-ups
+
+- `pre-push` accepts a full stamp whose tree differs from HEAD only in the change's `verification.md` and runs only the non-Docker checks; this needs an owner decision.

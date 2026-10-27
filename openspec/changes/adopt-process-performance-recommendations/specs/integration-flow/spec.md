@@ -72,7 +72,7 @@ The checks SHALL be defined once, as `make verify`, which SHALL run with the `.n
 - **THEN** the stamp does not satisfy it
 
 ### Requirement: Docs-only verify profile
-`make verify` SHALL use the docs-only profile, which skips only `make test`, on a feature branch whose committed, staged, unstaged, and untracked changes since its merge base with `origin/dev` touch only `docs/**`, `openspec/**`, or root-level Markdown files other than `CHANGELOG.md`. Every other branch, `dev`, `main`, CI, an empty change, a missing merge base, and `TASKELITH_VERIFY_PROFILE=full` SHALL get the full profile.
+`make verify` SHALL use the docs-only profile, which skips only `make test`, on a feature branch whose committed, staged, unstaged, and untracked changes since its merge base with `origin/dev` touch only `docs/**` except `docs/review-findings/**` and `docs/qualification/**`, `openspec/**`, or root-level Markdown other than `CHANGELOG.md`. Every other branch, `dev`, `main`, CI, an empty change, a missing merge base, and `TASKELITH_VERIFY_PROFILE=full` SHALL get the full profile.
 
 #### Scenario: Documentation branch
 - **WHEN** a feature branch changes only `docs/governance.md` and its OpenSpec change
@@ -81,6 +81,10 @@ The checks SHALL be defined once, as `make verify`, which SHALL run with the `.n
 #### Scenario: Script changed
 - **WHEN** the branch also changes a file under `scripts/` or `.claude/`
 - **THEN** `make verify` runs the full profile and names that file
+
+#### Scenario: Tested documentation changed
+- **WHEN** the branch also changes a file under `docs/review-findings/` or `docs/qualification/`
+- **THEN** `make verify` runs the full profile, because tests read those files
 
 #### Scenario: Integration
 - **WHEN** the coordinator integrates a documentation branch

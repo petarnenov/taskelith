@@ -28,7 +28,7 @@
 
 ## Checks and commits
 
-- Run `make setup` once per worktree (it installs the dependencies and enables the hooks, which are shared repository configuration); `make doctor` checks the environment. `make verify` must pass before every push except one that only deletes remote refs; the `pre-push` hook enforces it and reuses the stamp of a passing run on the same clean tree. On a feature branch that changes only `docs/**`, `openspec/**`, or root-level Markdown files other than `CHANGELOG.md`, `make verify` runs its docs-only profile, which skips only the Docker test suites; integration always runs the full profile (owner decision, 2026-10-27).
+- Run `make setup` once per worktree (it installs the dependencies and enables the hooks, which are shared repository configuration); `make doctor` checks the environment. `make verify` must pass before every push except one that only deletes remote refs; the `pre-push` hook enforces it and reuses the stamp of a passing run on the same clean tree. On a feature branch that changes only `docs/**` other than `docs/review-findings/**` and `docs/qualification/**`, which tests read, `openspec/**`, or root-level Markdown files other than `CHANGELOG.md`, `make verify` runs its docs-only profile, which skips only the Docker test suites; integration always runs the full profile (owner decision, 2026-10-27).
 - Develop each change on its own feature branch in its own git worktree, so changes can proceed in parallel, and target `dev`, the default branch. Only promotion pull requests from `dev` target `main` (see [docs/releases.md](docs/releases.md)).
 - Inspect the actual package tarball before publishing; never include credentials or local state.
 - Use conventional commit messages without attribution or session trailers.
