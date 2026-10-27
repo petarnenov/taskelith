@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-Owner-approved task relayed by the coordinator brief on 2026-10-27: record findings reach every brief through a "Record quality" checklist section, and code and doc findings of active changes name an existing capability. Developed by a subagent briefed by the coordinator session, under [subagent execution](../../../docs/agent-task-protocol.md#subagent-execution), in the git worktree `../taskelith-worktrees/require-finding-capability` on branch `require-finding-capability`. Base revision: `477a423e` on `dev`. Scope: `scripts/review-findings.ts`, `scripts/findings.ts`, their tests, `docs/agent-task-protocol.md` "Review findings record", the capability description of `docs/review-findings/finding.schema.json`, the `taskelith-task-protocol`, `taskelith-worker`, and `taskelith-coordinator` skills, and this change with its empty `findings.jsonl`. Exclusions: no rewrite of archived findings, no schema-level capability rule, no change to the index. Commit types `chore`, `test`, and `docs`: the touched files are outside the published package's `files` allowlist.
+Owner-approved task relayed by the coordinator brief on 2026-10-27: record findings reach every brief through a "Record quality" checklist section, and code and doc findings of active changes name an existing capability. Developed by a subagent briefed by the coordinator session, under [subagent execution](../../../../docs/agent-task-protocol.md#subagent-execution), in the git worktree `../taskelith-worktrees/require-finding-capability` on branch `require-finding-capability`. Base revision: `477a423e` on `dev`. Scope: `scripts/review-findings.ts`, `scripts/findings.ts`, their tests, `docs/agent-task-protocol.md` "Review findings record", the capability description of `docs/review-findings/finding.schema.json`, the `taskelith-task-protocol`, `taskelith-worker`, and `taskelith-coordinator` skills, and this change with its empty `findings.jsonl`. Exclusions: no rewrite of archived findings, no schema-level capability rule, no change to the index. Commit types `chore`, `test`, and `docs`: the touched files are outside the published package's `files` allowlist.
 
 ## Archived findings on the base
 
@@ -15,7 +15,7 @@ In all, 26 archived findings are record findings (9 of them name a capability): 
 
 ## Revision
 
-Implementation and documentation at `54dec1e4`; this record in `e25d3151`. Review pass 1 fixes at `8e38e16a`; their record in `a6f58114`. `23b7b811` merges `origin/dev` at `744689cb`; `make verify` ran on that merge, and its record is in the following commit.
+Implementation and documentation at `54dec1e4`; this record in `e25d3151`. Review pass 1 fixes at `8e38e16a`; their record in `a6f58114`. `23b7b811` merges `origin/dev` at `744689cb`; `make verify` ran on that merge, and its record is in `ce3383f1`. The archive commit, the last of the branch, follows it.
 
 ## Environment
 
@@ -53,7 +53,7 @@ Each rule's tests were committed before its implementation and run on the code b
 
 ### Pass 1
 
-Claude Code, model `claude-fable-5-1`, effort medium, session `7abb7178-7435-4fe5-88a6-3db2089d4b29`, on `e25d3151`. Result: 0 Critical, 0 High, 0 Medium, 3 Low. All three are in `findings.jsonl` with the outcome `fixed-unreviewed`: under the [review process](../../../docs/governance.md#independent-review-process) a Low-only pass is fixed without another review. Fixes in `8e38e16a`:
+Claude Code, model `claude-fable-5-1`, effort medium, session `7abb7178-7435-4fe5-88a6-3db2089d4b29`, on `e25d3151`. Result: 0 Critical, 0 High, 0 Medium, 3 Low. All three are in `findings.jsonl` with the outcome `fixed-unreviewed`: under the [review process](../../../../docs/governance.md#independent-review-process) a Low-only pass is fixed without another review. Fixes in `8e38e16a`:
 
 - evidence-mismatch, `verification.md`: the finding `dev` added after the brief is a record finding of `stabilize-placement-fair-order-test` (PR #331), not `docs/dependencies.md`; at `92f0830b` all four code and doc findings already existed, so the brief's 20 split as 16 record and 4 code or doc findings, and its "3 others" was off by one. Corrected under "Archived findings on the base".
 - contract-drift, the `review-process` delta and the schema: the requirement now says that any named capability exists under `openspec/specs`, a scenario covers a record finding with an unknown capability, and the schema's `capability` description says the same.
@@ -67,7 +67,19 @@ After the fixes the checks above were repeated with the same results (40 of 40 t
 
 ## make verify
 
-`make verify` on `23b7b811`: exit 0 in 185 s on 2026-10-27. 2047 tests, 2045 passed, 0 failed, 0 cancelled, 2 skipped; coverage of all files 99.27 % lines, 91.96 % branches, 98.94 % functions; every comment within the rule; every findings file valid (11 files); package allowlist and installed CLI verification passed. The Docker CLI ran with `DOCKER_CONFIG` set to an empty configuration (`{}`) in the session's scratch directory, because Docker Desktop's credential helper (`credsStore: desktop`) hangs on this iMac, as in [the x86_64 native acceptance record](../archive/2026-10-27-run-g2-native-acceptance-x86-64/verification.md); public images are pulled anonymously from the same engine, no credential was read, and the Makefile and the product were not changed.
+`make verify` on `23b7b811`: exit 0 in 185 s on 2026-10-27. 2047 tests, 2045 passed, 0 failed, 0 cancelled, 2 skipped; coverage of all files 99.27 % lines, 91.96 % branches, 98.94 % functions; every comment within the rule; every findings file valid (11 files); package allowlist and installed CLI verification passed. The Docker CLI ran with `DOCKER_CONFIG` set to an empty configuration (`{}`) in the session's scratch directory, because Docker Desktop's credential helper (`credsStore: desktop`) hangs on this iMac, as in [the x86_64 native acceptance record](../2026-10-27-run-g2-native-acceptance-x86-64/verification.md); public images are pulled anonymously from the same engine, no credential was read, and the Makefile and the product were not changed.
+
+## Archive checks
+
+On the tree of the archive commit, the working tree right after `npm run openspec -- archive require-finding-capability --yes`, which moved the change to `openspec/changes/archive/2026-10-27-require-finding-capability/` and applied 2 modified requirements to `review-process` (`+ 0, ~ 2, - 0`):
+
+- `npm run openspec -- validate --all --strict --no-interactive`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line is `✓ change/2026-10-27-require-finding-capability`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/review-process/spec.md` changes. "Review findings record" and "Findings index and checklist" take this change's text, and the scenarios "Code finding without a capability", "Record finding without a capability", "Record finding with an unknown capability", "Archived finding without a capability", and "Record quality in every checklist" are added; every other requirement and scenario is unchanged.
+- The moved change has its `findings.jsonl` with the 3 lines of pass 1, and `npm run findings -- validate` reports `Every findings file is valid: 11 file(s).`
+- `npm run verify:comments`: every comment is within the rule.
+- No link in the repository points to `openspec/changes/require-finding-capability/`. The three relative links of this record were rewritten to resolve from the archive directory. The `file` fields in `findings.jsonl` keep the active path, which is what a record finding means.
+- `make verify` on this tree was not run by the author; the `pre-push` hook runs it before the push.
 
 ## Limitations
 
@@ -77,6 +89,5 @@ After the fixes the checks above were repeated with the same results (40 of 40 t
 
 ## Remaining gates
 
-- Archive, the next commit.
 - `make verify` on the archive commit, run by the `pre-push` hook.
 - Integration into dev by the coordinator (single pull request).
