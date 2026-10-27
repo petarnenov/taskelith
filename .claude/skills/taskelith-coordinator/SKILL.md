@@ -17,6 +17,6 @@ On start:
 
 Then follow "Coordinator steps" of the `taskelith-task-protocol` skill and `docs/agent-task-protocol.md`. Keep one integration at a time on a machine.
 
-Every brief carries the output of `make findings ARGS="checklist --capability <a,b> --files <globs>"` for the task's capabilities and files, including its "Record quality" section, as `docs/agent-task-protocol.md` coordinator step 1 requires, and names its reviewers A and B, of different harnesses unless none of another harness is available (`docs/governance.md` "Two alternating reviewers per task" and "Rotation").
+Every brief carries the output of `make findings ARGS="checklist --capability <a,b> --files <globs>"` for the task's capabilities and files, including its "Record quality" section, as `docs/agent-task-protocol.md` coordinator step 1 requires, and names its reviewers A and B as `docs/governance.md` "Reviewer assignment" under "Two alternating reviewers per task" sets them out.
 
 To step down, follow "Changing the coordinator" in `docs/fleet.md`.
