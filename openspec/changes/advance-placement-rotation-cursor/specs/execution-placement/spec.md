@@ -24,7 +24,7 @@ A task SHALL wait for placement while it has no attempt, or while its active att
 - **THEN** the other project's task is offered before the first project's next task
 
 ### Requirement: Project rotation
-Each waiting read SHALL take each project's oldest task before any project's next, and SHALL start with the projects after the rotation cursor, wrapping around. After a pass the cursor SHALL be the project of its last placement; when it placed nothing, of its last offer before a decline for lack of fleet capacity, an offer the store failed not counting; else it SHALL stay, so that every project with a waiting task is read within a bounded number of passes.
+Each waiting read SHALL take each project's oldest task before any project's next, and SHALL start with the projects after the rotation cursor, wrapping around. After a pass the cursor SHALL move only by its offers before its first decline for lack of fleet capacity, an offer the store failed not counting: to the project of the last of them placed, else of the last of them, else it SHALL stay, so that every project with a waiting task is read within a bounded number of passes.
 
 #### Scenario: Many blocked projects
 - **WHEN** 1200 older projects each have a blocked waiting task and a later project has a placeable one
@@ -41,6 +41,10 @@ Each waiting read SHALL take each project's oldest task before any project's nex
 #### Scenario: Full fleet between placements
 - **WHEN** one slot frees every other pass, with `p-a` and `p-b` waiting as in "One free slot", and the fleet is full in the passes between
 - **THEN** the passes place `a1`, `b1`, `a2`, `b2`, `a3`, `b3`
+
+#### Scenario: Capacity freed during a pass
+- **WHEN** a pass declines a task of `p-b` for lack of fleet capacity and then places a task of a later project
+- **THEN** the next read starts with `p-b`
 
 #### Scenario: Several placements in a pass
 - **WHEN** a pass places tasks of several projects
