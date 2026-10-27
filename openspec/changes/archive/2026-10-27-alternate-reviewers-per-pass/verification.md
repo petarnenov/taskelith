@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-Coordinator brief from Niki, which the owner approved on 2026-10-27 as the mixed option: replace "One reviewer per task" with two alternating reviewers per task, reviewer A for the full pass 1 and the confirmation-only pass 3, and reviewer B, of a different harness, for the full, independent pass 2 that also checks the pass 1 fixes. Assigned by the coordinator Niki; developed by subagents briefed and checked by the worker session Desi, under [subagent execution](../../../docs/agent-task-protocol.md#subagent-execution), in the git worktree `../taskelith-worktrees/alternate-reviewers-per-pass` on branch `alternate-reviewers-per-pass`. Base revision: `744689cb` on `dev`. Scope: `docs/governance.md`, `docs/agent-task-protocol.md`, the `taskelith-task-protocol`, `taskelith-worker`, and `taskelith-coordinator` skills, the review line of `AGENTS.md`, the `review-process` delta and the living spec's Purpose, the UI POC's Reviews badge and its README's published-build note, and a check of the findings tooling. Exclusions: review-pass statistics (a later `review-pass-statistics` change), a rebuild of the published UI POC artifact, and the findings schema and scripts, which need no change (`design.md`). Commit types `docs` and `chore`: nothing here is in the published package's `files` allowlist.
+Coordinator brief from Niki, which the owner approved on 2026-10-27 as the mixed option: replace "One reviewer per task" with two alternating reviewers per task, reviewer A for the full pass 1 and the confirmation-only pass 3, and reviewer B, of a different harness, for the full, independent pass 2 that also checks the pass 1 fixes. Assigned by the coordinator Niki; developed by subagents briefed and checked by the worker session Desi, under [subagent execution](../../../../docs/agent-task-protocol.md#subagent-execution), in the git worktree `../taskelith-worktrees/alternate-reviewers-per-pass` on branch `alternate-reviewers-per-pass`. Base revision: `744689cb` on `dev`. Scope: `docs/governance.md`, `docs/agent-task-protocol.md`, the `taskelith-task-protocol`, `taskelith-worker`, and `taskelith-coordinator` skills, the review line of `AGENTS.md`, the `review-process` delta and the living spec's Purpose, the UI POC's Reviews badge and its README's published-build note, and a check of the findings tooling. Exclusions: review-pass statistics (a later `review-pass-statistics` change), a rebuild of the published UI POC artifact, and the findings schema and scripts, which need no change (`design.md`). Commit types `docs` and `chore`: nothing here is in the published package's `files` allowlist.
 
 ## Coordinator decisions
 
@@ -142,11 +142,25 @@ After the fix, `npm run findings -- validate` reported `Every findings file is v
 
 ## make verify
 
-`make verify` on `18da6cde`: exit 0 in 203 s on 2026-10-27. 2047 tests, 2045 passed, 0 failed, 0 cancelled, 2 skipped; coverage of all files 99.27 % lines, 91.97 % branches, 98.94 % functions. The Docker CLI ran with `DOCKER_CONFIG` set to an empty configuration (`{}`) in the session's scratch directory, because Docker Desktop's credential helper (`credsStore: desktop`) hangs on this iMac, as in [the x86_64 native acceptance record](../archive/2026-10-27-run-g2-native-acceptance-x86-64/verification.md); public images are pulled anonymously from the same engine, no credential was read, and the Makefile and the product were not changed.
+`make verify` on `18da6cde`: exit 0 in 203 s on 2026-10-27. 2047 tests, 2045 passed, 0 failed, 0 cancelled, 2 skipped; coverage of all files 99.27 % lines, 91.97 % branches, 98.94 % functions. The Docker CLI ran with `DOCKER_CONFIG` set to an empty configuration (`{}`) in the session's scratch directory, because Docker Desktop's credential helper (`credsStore: desktop`) hangs on this iMac, as in [the x86_64 native acceptance record](../2026-10-27-run-g2-native-acceptance-x86-64/verification.md); public images are pulled anonymously from the same engine, no credential was read, and the Makefile and the product were not changed.
 
 ### make verify after the pass 1 and pass 2 fixes
 
 `make verify` on `bc6683a3`, which merges `origin/dev` `0864892f` (#336) into the branch after the pass 2 fixes `9894a699` and their record `d811a69e`; the merge touches none of this change's files: exit 0 in 181 s on 2026-10-27. 2054 tests, 2052 passed, 0 failed, 0 cancelled, 2 skipped; coverage of all files 99.27 % lines, 91.97 % branches, 98.94 % functions; findings validation 14 file(s). The Docker configuration was the same empty one as above.
+
+## Archive checks
+
+Checked state: the tree of the archive commit, which is the working tree the checks ran on, after the pass 3 record `145e3fb0`.
+
+- `npm run openspec -- archive alternate-reviewers-per-pass --yes`: `review-process` got 2 added, 3 modified, and 1 renamed requirement; the change moved to `openspec/changes/archive/2026-10-27-alternate-reviewers-per-pass`.
+- `npm run openspec -- validate --all --strict --no-interactive`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line is `✓ change/2026-10-27-alternate-reviewers-per-pass`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` touches only `openspec/specs/review-process/spec.md`: the edited Purpose, "Authorized single-reviewer review" renamed to "Authorized alternating reviewers" and modified, "Unavailable reviewer" and "Rotation order" modified, and "Changes under the one-reviewer rule" and "No reviewer of another harness" added.
+- The moved change has its `findings.jsonl`, 15 findings; `npm run findings -- validate`: `Every findings file is valid: 14 file(s).`
+- `npm run verify:comments`: `Every comment is within the comment length rule.`
+- The two relative links of this record were moved one level deeper and resolve; no other file links to the active change's path.
+
+`make verify` on the archive tree runs in the `pre-push` hook.
 
 ## Limitations
 
@@ -155,6 +169,5 @@ After the fix, `npm run findings -- validate` reported `Every findings file is v
 
 ## Remaining gates
 
-- Archive, in the next commit.
 - `make verify` by the `pre-push` hook on the pushed tree.
 - Integration into `dev` by the coordinator (single pull request).
