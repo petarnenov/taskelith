@@ -23,6 +23,7 @@ export {
   workspaceFailure,
   type DirtyReason,
   type HeadSnapshot,
+  type IdentifierDigest,
   type RemoteAccess,
   type RepositoryBinding,
   type Workspace,

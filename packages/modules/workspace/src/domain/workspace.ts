@@ -3,7 +3,6 @@ import type { AttemptId } from '@taskelith/execution';
 import type { RunCredential } from '@taskelith/integrations';
 import type { ProjectId, TaskId } from '@taskelith/sdlc';
 import type { CodeHeadIdentity, RepositoryId } from './code-head.js';
-import { sha256Hex } from './sha256.js';
 
 // Paths relative to `dataRoot` (G3 plan D4 (a), contract section 2).
 export const WORKSPACE_LAYOUT = Object.freeze({
@@ -36,6 +35,10 @@ export const WORKSPACE_NAME_RULES = Object.freeze({
   prefixMaxLength: 40,
   digestHexLength: 32,
 });
+
+// SHA-256 of the identifier's UTF-8 bytes as 64 lowercase hexadecimal
+// characters, supplied by the adapter; a name keeps its first 32.
+export type IdentifierDigest = (identifier: string) => string;
 
 const OUTSIDE_NAME_CHARACTERS = /[^A-Za-z0-9_-]/gu;
 const LEADING_SEPARATORS = /^[_-]+/;
@@ -107,12 +110,12 @@ export interface HeadSnapshot {
   readonly content: Uint8Array;
 }
 
-export function workspaceDirectoryName(attemptId: AttemptId): string {
-  return workspaceName(attemptId);
+export function workspaceDirectoryName(attemptId: AttemptId, digest: IdentifierDigest): string {
+  return workspaceName(attemptId, digest);
 }
 
-export function taskBranchName(taskId: TaskId): string {
-  return `${TASK_BRANCH_PREFIX}${workspaceName(taskId)}`;
+export function taskBranchName(taskId: TaskId, digest: IdentifierDigest): string {
+  return `${TASK_BRANCH_PREFIX}${workspaceName(taskId, digest)}`;
 }
 
 // A head for head-bound evidence comes only from a clean workspace.
@@ -135,10 +138,10 @@ export function workspaceFailure(
   return err(failure(code, message, { reason }));
 }
 
-function workspaceName(identifier: string): string {
+function workspaceName(identifier: string, digestOf: IdentifierDigest): string {
   const { prefixMaxLength, digestHexLength } = WORKSPACE_NAME_RULES;
   const readable = identifier.replace(OUTSIDE_NAME_CHARACTERS, '_').replace(LEADING_SEPARATORS, '');
   const prefix = readable.slice(0, prefixMaxLength);
-  const digest = sha256Hex(identifier).slice(0, digestHexLength);
+  const digest = digestOf(identifier).slice(0, digestHexLength);
   return prefix === '' ? digest : `${prefix}-${digest}`;
 }

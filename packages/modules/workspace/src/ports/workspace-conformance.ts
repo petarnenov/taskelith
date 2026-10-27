@@ -17,13 +17,19 @@ const id = <Kind extends string>(kind: Kind, text: string) => must(parseIdentifi
 const attempt = (text: string) => id('AttemptId', text) as AttemptId;
 const PROJECT = id('ProjectId', 'project-1') as ProjectId;
 const TASK = id('TaskId', 'task-1') as TaskId;
-const TASK_BRANCH = taskBranchName(TASK);
 const FIRST = attempt('attempt-1');
 const SECOND = attempt('attempt-2');
 const THIRD = attempt('attempt-3');
 const UNKNOWN_COMMIT = must(parseGitObjectId('0'.repeat(40)));
 const TASK_BRANCH_TARGET: WorkspaceTarget = Object.freeze({ kind: 'task-branch' });
 // Bytes that are not valid UTF-8, so a text round trip would change them.
+const taskBranch = (fixture: WorkspaceFixture) => taskBranchName(TASK, fixture.identifierDigest);
+// SHA-256 vectors: FIPS 180-2 "abc", the empty input, and a UTF-8 one.
+const DIGEST_VECTORS = [
+  ['abc', 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'],
+  ['', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'],
+  ['café/ü', '918664c864dbe6fd7343a3870228e439ac88c05dfeb5c52de793f0662f5325ce'],
+] as const;
 const BINARY = Uint8Array.of(0, 128, 255);
 const text = (value: string) => new TextEncoder().encode(value);
 
@@ -111,11 +117,11 @@ const WORKSPACE_PREPARATION: readonly ConformanceCase<WorkspaceFixture>[] = [
       const problems: string[] = [];
       const workspace = await prepared(problems, fixture);
       if (workspace === undefined) return problems;
-      const expected: Partial<Workspace> = { attemptId: FIRST, projectId: PROJECT, taskId: TASK, kind: 'task-branch', branch: TASK_BRANCH };
+      const expected: Partial<Workspace> = { attemptId: FIRST, projectId: PROJECT, taskId: TASK, kind: 'task-branch', branch: taskBranch(fixture) };
       expectSame(problems, 'record', { ...workspace, workingDirectory: undefined, head: undefined }, expected);
       expectSame(problems, 'repository', workspace.head.repository, fixture.binding.repository);
       expectSame(problems, 'base head', workspace.head.commit, await fixture.remoteHead(fixture.binding.baseBranch));
-      expectSame(problems, 'status', await fixture.provider.inspect(FIRST), { ok: true, value: { head: workspace.head, branch: TASK_BRANCH, dirtyReasons: [] } });
+      expectSame(problems, 'status', await fixture.provider.inspect(FIRST), { ok: true, value: { head: workspace.head, branch: taskBranch(fixture), dirtyReasons: [] } });
       expectSame(problems, 'listed', await fixture.provider.list(), [FIRST]);
       await fixture.writeFile(FIRST, 'kept.txt', 'kept\n');
       expectCode(problems, 'prepare again', await fixture.provider.prepare(request(fixture)), 'conflict');
@@ -127,9 +133,9 @@ const WORKSPACE_PREPARATION: readonly ConformanceCase<WorkspaceFixture>[] = [
     name: 'continues the task branch when the remote has it',
     async check(fixture) {
       const problems: string[] = [];
-      await fixture.advanceRemote(TASK_BRANCH);
+      await fixture.advanceRemote(taskBranch(fixture));
       const workspace = await prepared(problems, fixture);
-      if (workspace !== undefined) expectSame(problems, 'task head', workspace.head.commit, await fixture.remoteHead(TASK_BRANCH));
+      if (workspace !== undefined) expectSame(problems, 'task head', workspace.head.commit, await fixture.remoteHead(taskBranch(fixture)));
       return problems;
     },
   },
@@ -178,6 +184,16 @@ const WORKSPACE_PREPARATION: readonly ConformanceCase<WorkspaceFixture>[] = [
     },
   },
   {
+    name: 'names workspaces with SHA-256 of the identifier in lowercase hexadecimal',
+    async check(fixture) {
+      const problems: string[] = [];
+      for (const [input, digest] of DIGEST_VECTORS) {
+        expectSame(problems, `digest of "${input}"`, fixture.identifierDigest(input), digest);
+      }
+      return problems;
+    },
+  },
+  {
     name: 'derives distinct workspace names and task branches from any identifiers',
     async check(fixture) {
       const problems: string[] = [];
@@ -188,8 +204,8 @@ const WORKSPACE_PREPARATION: readonly ConformanceCase<WorkspaceFixture>[] = [
         const taskId = id('TaskId', taskText) as TaskId;
         const workspace = await prepared(problems, fixture, { attemptId, taskId });
         if (workspace === undefined) return problems;
-        expectSame(problems, `branch of ${taskText}`, workspace.branch, taskBranchName(taskId));
-        const directory = [fixture.dataRoot, WORKSPACE_LAYOUT.root, workspaceDirectoryName(attemptId), WORKSPACE_LAYOUT.checkout].join('/');
+        expectSame(problems, `branch of ${taskText}`, workspace.branch, taskBranchName(taskId, fixture.identifierDigest));
+        const directory = [fixture.dataRoot, WORKSPACE_LAYOUT.root, workspaceDirectoryName(attemptId, fixture.identifierDigest), WORKSPACE_LAYOUT.checkout].join('/');
         expectSame(problems, `working directory of ${attemptText}`, workspace.workingDirectory, directory);
         workspaces.push(workspace);
       }
@@ -230,7 +246,7 @@ const CREDENTIAL_USE: readonly ConformanceCase<WorkspaceFixture>[] = [
       await refused('push with read-only', () => fixture.provider.push({ ...push, credential: read }));
       await refused('push with a foreign writer', () => fixture.provider.push({ ...push, credential: foreign }));
       await refused('remote head with a foreign credential', () => fixture.provider.readRemoteHead({ attemptId: FIRST, credential: foreign }));
-      expectSame(problems, 'nothing pushed', await fixture.remoteHead(TASK_BRANCH), undefined);
+      expectSame(problems, 'nothing pushed', await fixture.remoteHead(taskBranch(fixture)), undefined);
       expectSuccess(problems, 'push with write', await fixture.provider.push({ ...push, credential: write }));
       expectSame(problems, 'secrets in the workspace', secretsIn(await fixture.workspaceText(FIRST), [read, write, foreign]), []);
       return problems;
@@ -289,7 +305,7 @@ const HEAD_STATE: readonly ConformanceCase<WorkspaceFixture>[] = [
       expectReason(problems, 'snapshot', await fixture.provider.snapshot(FIRST), 'precondition-failed', 'workspace-dirty');
       expectReason(problems, 'push', await fixture.provider.push(push), 'precondition-failed', 'workspace-dirty');
       expectReason(problems, 'remove', await fixture.provider.remove(FIRST), 'precondition-failed', 'workspace-dirty');
-      expectSame(problems, 'nothing pushed', await fixture.remoteHead(TASK_BRANCH), undefined);
+      expectSame(problems, 'nothing pushed', await fixture.remoteHead(taskBranch(fixture)), undefined);
       expectSame(problems, 'kept', await fixture.provider.list(), [FIRST]);
       await expectDirty(problems, fixture, FIRST, ['modified']);
       return problems;
@@ -330,7 +346,7 @@ const PUSHES: readonly ConformanceCase<WorkspaceFixture>[] = [
       const current = await status(problems, fixture, FIRST);
       if (pushed === undefined || current === undefined) return problems;
       sameHead(problems, 'pushed head', pushed, current.head);
-      expectSame(problems, 'remote task branch', await fixture.remoteHead(TASK_BRANCH), pushed.commit);
+      expectSame(problems, 'remote task branch', await fixture.remoteHead(taskBranch(fixture)), pushed.commit);
       expectSame(problems, 'base unchanged', await fixture.remoteHead(fixture.binding.baseBranch), base);
       // A later attempt continues from the head the port reports.
       if ((await prepared(problems, fixture, { attemptId: SECOND })) === undefined) return problems;
@@ -342,16 +358,16 @@ const PUSHES: readonly ConformanceCase<WorkspaceFixture>[] = [
       const second = value(problems, 'continuing push', await fixture.provider.push(next));
       if (second === undefined) return problems;
       // Recovery after another party moved the branch.
-      await fixture.advanceRemote(TASK_BRANCH);
+      await fixture.advanceRemote(taskBranch(fixture));
       await fixture.writeFile(SECOND, 'third.txt', 'third\n');
       await fixture.commitAll(SECOND, 'third');
       const stale = await fixture.provider.push({ ...next, expectedRemoteHead: second.commit });
       expectReason(problems, 'remote moved', stale, 'conflict', 'remote-moved');
       const moved = await remoteHead(problems, fixture, SECOND);
-      expectSame(problems, 'moved remote head', moved, await fixture.remoteHead(TASK_BRANCH));
+      expectSame(problems, 'moved remote head', moved, await fixture.remoteHead(taskBranch(fixture)));
       const diverged = await fixture.provider.push({ ...next, expectedRemoteHead: moved ?? null });
       expectReason(problems, 'not fast-forward', diverged, 'conflict', 'not-fast-forward');
-      expectSame(problems, 'remote kept', await fixture.remoteHead(TASK_BRANCH), moved);
+      expectSame(problems, 'remote kept', await fixture.remoteHead(taskBranch(fixture)), moved);
       return problems;
     },
   },

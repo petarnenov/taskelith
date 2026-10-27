@@ -21,6 +21,7 @@ import {
   taskBranchName,
   workspaceDirectoryName,
   type CodeHeadIdentity,
+  type IdentifierDigest,
   type RepositoryId,
   type WorkspaceCredential,
 } from '@taskelith/workspace';
@@ -107,9 +108,10 @@ function identifier<Kind extends string>(kind: Kind, text: string) {
   return parsed.value;
 }
 
-const attemptOf = (text: string) => workspaceDirectoryName(text as AttemptId);
-const branchOf = (text: string) => taskBranchName(text as TaskId);
-const digestOf = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 32);
+const sha256: IdentifierDigest = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
+const attemptOf = (text: string) => workspaceDirectoryName(text as AttemptId, sha256);
+const branchOf = (text: string) => taskBranchName(text as TaskId, sha256);
+const digestOf = (text: string) => sha256(text).slice(0, 32);
 const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 const NAMED = ['task-1', 'feature/login', 'v1.2', '..', '.hidden', '-lead', 'a.lock', 'a:b', '@', 'x'.repeat(128), 'café/ü'];
 
@@ -124,11 +126,10 @@ test('a name is the readable prefix of the identifier and its digest', () => {
   assert.equal(attemptOf('x'.repeat(128)), `${'x'.repeat(40)}-${digestOf('x'.repeat(128))}`);
 });
 
-test('the digest is SHA-256 across the padding and block boundaries', () => {
-  for (const length of [1, 55, 56, 63, 64, 65, 119, 120, 128]) {
-    const text = 'y'.repeat(length);
-    assert.equal(attemptOf(text), `${text.slice(0, 40)}-${digestOf(text)}`, `length ${length}`);
-  }
+test('a name keeps the first 32 characters of the injected digest', () => {
+  const digest: IdentifierDigest = () => `${'a'.repeat(32)}${'b'.repeat(32)}`;
+  assert.equal(workspaceDirectoryName('x/y' as AttemptId, digest), `x_y-${'a'.repeat(32)}`);
+  assert.equal(taskBranchName('..' as TaskId, digest), `taskelith/${'a'.repeat(32)}`);
 });
 
 test('any identifier gives a safe path segment of at most 73 characters', () => {

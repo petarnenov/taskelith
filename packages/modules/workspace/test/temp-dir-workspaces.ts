@@ -21,6 +21,7 @@ import {
   type DirtyReason,
   type GitObjectId,
   type HeadSnapshot,
+  type IdentifierDigest,
   type PrepareWorkspace,
   type PushTaskBranch,
   type RemoteAccess,
@@ -129,6 +130,16 @@ const PRE_DERIVATION_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 // A safe and distinct name that is not the derived one.
 const percentEncoded = (text: string) => text.replace(/[^A-Za-z0-9_-]/g, (character) => `%${character.charCodeAt(0).toString(16)}`);
 
+const sha256Digest: IdentifierDigest = (identifier) => createHash('sha256').update(identifier, 'utf8').digest('hex');
+
+// The digest the composition supplies, or a defective one that a wrong
+// adapter would use consistently for its names and its fixture.
+function identifierDigest(defects: DoubleDefects): IdentifierDigest {
+  if (defects.digestsWithSha1) return sha1;
+  if (defects.digestsLatin1Bytes) return (identifier) => createHash('sha256').update(identifier, 'latin1').digest('hex');
+  return sha256Digest;
+}
+
 const STATE_FILE = join('.git', 'state.json');
 const OPERATION_FILE = join('.git', 'operation');
 const SNAPSHOT_TYPE = 'application/json';
@@ -144,6 +155,8 @@ export interface DoubleDefects {
   readonly acceptsMismatchedTree?: boolean;
   readonly namesBranchByRawTaskId?: boolean;
   readonly namesDirectoryByEncoding?: boolean;
+  readonly digestsWithSha1?: boolean;
+  readonly digestsLatin1Bytes?: boolean;
   readonly removesDigestOnlyNameWithDash?: boolean;
   readonly rejectsUnsafeNames?: boolean;
   readonly snapshotsCommit?: boolean;
@@ -176,12 +189,14 @@ export class TempDirWorkspaces implements WorkspaceProvider {
   readonly root: string;
   readonly service: FakeGitService;
   readonly repository: RepositoryId;
+  readonly digest: IdentifierDigest;
   readonly defects: DoubleDefects;
 
-  constructor(dataRoot: string, service: FakeGitService, repository: RepositoryId, defects: DoubleDefects = {}) {
+  constructor(dataRoot: string, service: FakeGitService, repository: RepositoryId, digest: IdentifierDigest, defects: DoubleDefects = {}) {
     this.root = join(dataRoot, WORKSPACE_LAYOUT.root);
     this.service = service;
     this.repository = repository;
+    this.digest = digest;
     this.defects = defects;
   }
 
@@ -191,7 +206,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     }
     const name = this.directoryName(request.attemptId);
     const { target } = request;
-    const taskBranch = this.defects.namesBranchByRawTaskId ? `${TASK_BRANCH_PREFIX}${request.taskId}` : taskBranchName(request.taskId);
+    const taskBranch = this.defects.namesBranchByRawTaskId ? `${TASK_BRANCH_PREFIX}${request.taskId}` : taskBranchName(request.taskId, this.digest);
     if (target.kind === 'at-head' && target.head.repository !== request.binding.repository) {
       return err(failure('invalid', 'the head belongs to another repository'));
     }
@@ -385,7 +400,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
   }
 
   directoryName(attemptId: AttemptId): string {
-    return this.defects.namesDirectoryByEncoding ? percentEncoded(attemptId) : workspaceDirectoryName(attemptId);
+    return this.defects.namesDirectoryByEncoding ? percentEncoded(attemptId) : workspaceDirectoryName(attemptId, this.digest);
   }
 
   // The defect writes a digest-only name as an empty prefix and a `-`.
@@ -608,7 +623,8 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
   await mkdir(join(dataRoot, WORKSPACE_LAYOUT.root), { recursive: true });
   const service = new FakeGitService(BASE_BRANCH, BASE_TREE);
   const repository = mustParse(parseIdentifier('RepositoryId', 'acme/project')) as RepositoryId;
-  const make = () => new TempDirWorkspaces(dataRoot, service, repository, defects);
+  const digest = identifierDigest(defects);
+  const make = () => new TempDirWorkspaces(dataRoot, service, repository, digest, defects);
   const provider = make();
   const binding: RepositoryBinding = { repository, remote: 'https://scm.example/acme/project.git', baseBranch: BASE_BRANCH };
   const checkout = async (attemptId: AttemptId) => mustParse(await provider.checkoutOf(attemptId));
@@ -624,6 +640,7 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
   const fixture: WorkspaceFixture = {
     provider,
     dataRoot,
+    identifierDigest: digest,
     binding,
     credentials: {
       read: credential('read', [repository], ['read-code']),
