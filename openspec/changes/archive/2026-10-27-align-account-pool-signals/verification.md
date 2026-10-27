@@ -83,3 +83,13 @@ Review pass 1 was Low-only, so passes 2 and 3 are not run.
 
 - Archive
 - Integration into dev by the coordinator (single pull request)
+
+## Archive checks
+
+After `npm run openspec -- archive align-account-pool-signals --yes`:
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived`: `change/2026-10-27-align-account-pool-signals` valid; 204 passed and 13 failed, all 13 older archived changes from 2026-10-24 to 2026-10-26 that this change does not touch.
+- `git diff b87abe75 -- openspec/specs` (merge base): only the applied deltas, `account-pool-port` (3 added, 3 modified) and `harness-account-pools` (1 modified).
+- `make findings ARGS="validate"`: 43 findings files and 23 pass summary files valid.
+- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: passed.
