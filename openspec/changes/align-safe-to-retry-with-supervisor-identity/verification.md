@@ -37,6 +37,8 @@ Follow-up of defect L1 (`stop-automatic-retry-of-unknown-exit`, pull request #33
 - `make findings ARGS="checklist --capability resource-admission,capacity-reservation,supervisor-identity --files packages/modules/scheduling/**"`: the most frequent categories are docs, naming, and contract-drift; this record addresses them in the self-check above.
 - `make verify` at `be44f48e`: exit 0; 2101 tests, 2054 pass, 0 fail, 47 skipped; coverage lines 99.22%, branches 92.10%, functions 98.86%; `validate --all --strict` 70 passed; package verification passed. The PostgreSQL test `an automatic retry needs a certain, released earlier attempt and stays within two retries` passed in it.
 
+- After the pass 1 fixes, at `96855e5b` with the findings record: `npm run openspec -- validate align-safe-to-retry-with-supervisor-identity --strict` valid; `make findings ARGS="validate"` valid (18 files); `make verify` exit 0, 2101 tests, 2054 pass, 0 fail, 47 skipped, coverage lines 99.22%, branches 92.06%, functions 98.86%, `validate --all --strict` 70 passed, package verification passed. The new tests and the PostgreSQL retry test passed in it.
+
 Environment: Linux (`Linux 7.0.0-38-generic`, x86_64), Node from `.nvmrc`, Docker test services started by the make targets, `TMPDIR` set to a directory on disk outside `/tmp` (`~/.cache/taskelith-tmp`) because of the stray `/tmp/.git` directory on this host recorded by `stop-automatic-retry-of-unknown-exit`.
 
 ## Independent review
