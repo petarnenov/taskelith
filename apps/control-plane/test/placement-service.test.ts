@@ -264,6 +264,7 @@ type Backlog = readonly (readonly [taskId: string, projectId: string, seconds: n
 interface Fleet { slots: readonly number[]; candidates: string[]; full: Result<unknown>; scripted: Record<string, Result<unknown>> }
 
 const FULL = err(failure('precondition-failed', 'every candidate is full', { reason: 'worker-capacity-exhausted' }));
+const QUOTA_USED = err(failure('precondition-failed', 'the project quota is used', { reason: 'project-quota-exhausted' }));
 const NONE_IN_TRANSACTION = err(failure('precondition-failed', 'no candidate accepted it', { reason: 'no-candidate' }));
 const oneSlot = (): Fleet => ({ slots: [1], candidates: ['worker-a'], full: FULL, scripted: {} });
 
@@ -382,7 +383,7 @@ test('a slot freed after a capacity decline does not move the cursor past it', a
   assert.deepEqual(placed, ['task-a1', 'task-d1', 'task-b1', 'task-c1', 'task-e1']);
 });
 
-// Fifty tasks of `p-big`, then one of `p-small`, all older than the passes.
+// Fifty tasks of `p-big`, then one of `p-small`, waiting in id order.
 const BIG_AND_SMALL: Backlog = [
   ...Array.from({ length: 50 }, (_, index) => [`task-big-${String(index + 1).padStart(2, '0')}`, 'p-big', index] as const),
   ['task-small', 'p-small', 50],
@@ -402,7 +403,7 @@ test('a freed slot follows the rotation after a fleet capacity decline, not a ba
 test('a decline for a reason of its own backs the task off, a fleet capacity decline does not', async () => {
   const placed: string[] = [];
   const fleet: Fleet = { ...oneSlot(), slots: [0, 1] };
-  fleet.scripted = { 'task-a1': UNPLACED };
+  fleet.scripted = { 'task-a1': QUOTA_USED };
   const { clock, service } = serviceOf(await fleetStore([['task-a1', 'p-a', 0], ['task-b1', 'p-b', 1]], placed, fleet));
   value(await service.placeWaiting());
   clock.at += 1_000;
