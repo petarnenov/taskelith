@@ -15,11 +15,11 @@ Linux 7.0.0-38-generic, x86_64; Node.js through `nvm use` from `.nvmrc`. This ho
 
 ## Author self-check
 
-- `.github/workflows/linux-acceptance.yml`: `on: workflow_dispatch` only; top-level `permissions: contents: read`; `concurrency` group `linux-acceptance-${{ github.ref }}` with `cancel-in-progress: false`; one job `linux-x86_64` on `ubuntu-24.04` with `timeout-minutes: 60`; no job permissions, secrets, or `id-token`. Checkout and setup-node use the full SHAs of `release.yml`, checkout with `persist-credentials: false`; the npm install and `npm ci` lines are those of `release.yml`. The environment step writes `environment.txt`; the cleanup step writes `disk-before.txt` and `disk-after.txt`; the acceptance step runs `make native-acceptance ENTRIES=linux RESULTS="$RUNNER_TEMP/acceptance/results.jsonl"` under `set -o pipefail` into `run.log`; the upload step runs with `if: always()`, `if-no-files-found: error`, and `retention-days: 90`.
+- `.github/workflows/linux-acceptance.yml`: `on: workflow_dispatch` only; top-level `permissions: contents: read`; `concurrency` group `linux-acceptance-${{ github.ref }}` with `cancel-in-progress: false`; one job `linux-x86_64` on `ubuntu-24.04` with `timeout-minutes: 60`; no job permissions, secrets, or `id-token`. Checkout and setup-node use the full SHAs of `release.yml`, checkout with `persist-credentials: false`; the npm install and `npm ci` lines are those of `release.yml`. The environment step writes `environment.txt`; the cleanup step writes `disk-before.txt` and `disk-after.txt`; the acceptance step runs `make native-acceptance ENTRIES=linux RESULTS="$RUNNER_TEMP/acceptance/results.jsonl"` under `set -o pipefail` into `run.log`; the upload step runs with `if: always() && steps.environment.outcome != 'skipped'`, `if-no-files-found: error`, and `retention-days: 90`.
 - Variable names: `Makefile:205-208` requires `RESULTS` and passes `ENTRIES` to `scripts/native-acceptance.sh`, which exits 1 at the end when any proof failed (its `main`); with `pipefail` that status fails the step.
 - npm pin readers: `Makefile:3`, `scripts/collect-toolchain-metadata.ts:5`, and `scripts/inventory-dependencies.ts:11` read `.github/workflows/release.yml` only; the new file does not change their input. `INVENTORY_INPUTS` (`scripts/inventory-provenance.ts:12-15`) lists no workflow, so the dependency inventory stays current.
-- `actions/upload-artifact` pin: `gh api repos/actions/upload-artifact/git/ref/tags/v7.0.2` gave commit `cf430e030ddbb5b0abf93d22962f4752f3646cd9`, and its release was published 2026-10-07T10:08:14Z, 20 days before 2026-10-27, so the two-week age rule holds.
-- Spec deltas: `integration-flow` MODIFIED "Promotion flow and releases" (body 408 characters; both existing scenarios kept, scenario "Linux acceptance workflow" added); `native-worker-acceptance` ADDED "Hosted-runner Linux x86_64 check" (body 342 characters, two scenarios).
+- `actions/upload-artifact` pin: `gh api repos/actions/upload-artifact/git/ref/tags/v7.0.2` gave commit `cf430e030ddbb5b0abf93d22962f4752f3646cd9`, and its release was published 2026-10-07T10:08:14Z, 20 days before 2026-10-27.
+- Spec deltas: `integration-flow` MODIFIED "Promotion flow and releases" (body 408 characters; both existing scenarios kept, scenario "Linux acceptance workflow" added); `native-worker-acceptance` ADDED "Hosted-runner Linux x86_64 check" (body 343 characters, two scenarios).
 - Documents: `docs/foundation.md:11`, `docs/releases.md:7`, and `docs/dependencies.md:41` name the new workflow; the line 11 edit keeps lines 66 and 87 where they were. A search of `docs/`, `openspec/specs/`, `README.md`, and `AGENTS.md` for statements about the repository's workflows also found `docs/releases.md:64` and `:69` (the npm trusted publisher names `release.yml`, still true) and `docs/decisions/0015-g2-closure.md:76` and `:142` (no hosted-runner workflow was added in G2; an accepted record, left unchanged; the follow-up updates the living status in `docs/foundation.md`).
 - Plan checklist: [design.md](design.md), section "Plan checklist".
 
@@ -33,7 +33,12 @@ Linux 7.0.0-38-generic, x86_64; Node.js through `nvm use` from `.nvmrc`. This ho
 
 ## Independent review
 
-Not yet run. Reviewer A: OpenCode `opencode-go/deepseek-v4-pro#high` (passes 1 and 3); reviewer B: Claude Code `claude-opus-5-5`, effort high (pass 2). `findings.jsonl` and `passes.jsonl` are empty.
+Pass 1, reviewer A: OpenCode CLI, invoked as `opencode run --standalone --agent reviewer -m 'opencode-go/deepseek-v4-pro#high' --format json --title run-hosted-runner-linux-check "$(cat <prompt-file>)" < /dev/null > <log>` on `4ea2b532` (`e8ce8a11..4ea2b532`), with network access to check the action pins. Session `ses_e820c60eaffex2o4DiDkSYJ45B`. Model confirmation from the stored assistant messages of the session (`session_message`): provider `opencode-go`, model `deepseek-v4-pro`, variant `high`, agent `reviewer`. The `opencode run` process exited with status 0. The SHA-256 snapshot of the worktree before and after the review was equal: `2540eb755ee0d0dce941c59971fa69e6277bf0c70d90740beab892207053e725`. The reviewer confirmed over the network that the three pinned SHAs are checkout v6, setup-node v6.5.0, and upload-artifact v7.0.2 (published 2026-10-07T10:08:14Z) and that every input used exists in them. Findings: Critical 0, High 0, Medium 0, Low 2, as in `passes.jsonl`; both fixed, unreviewed:
+
+- Low (stale-citation, `design.md:15`, `verification.md:21`): the upload-artifact pin was justified by a two-week age rule that no repository document states. The rule reference is removed; the publish date and age stay.
+- Low (error-handling, `.github/workflows/linux-acceptance.yml:50`): with `if: always()` and `if-no-files-found: error`, a failure before the evidence directory exists made the upload fail a second time. The environment step has `id: environment`, and the upload runs with `if: always() && steps.environment.outcome != 'skipped'`; the requirement and proposal now say the artifact is uploaded even when a proof fails (the requirement body is 343 characters).
+
+A Low-only pass ends the review ([review process](/docs/governance.md#independent-review-process)), so reviewer B and pass 3 did not run.
 
 ## Limitations
 
@@ -43,9 +48,5 @@ Not yet run. Reviewer A: OpenCode `opencode-go/deepseek-v4-pro#high` (passes 1 a
 
 ## Remaining gates
 
-- Review pass 1 by reviewer A (OpenCode `opencode-go/deepseek-v4-pro#high`).
-- Review pass 2 by reviewer B (Claude Code `claude-opus-5-5`, effort high).
-- Review pass 3 by reviewer A.
-- Archive of the change (worker step 7).
 - Integration into dev by the coordinator (single pull request).
 - Manual dispatch of the workflow on `dev` and the follow-up change `record-hosted-runner-linux-acceptance`.

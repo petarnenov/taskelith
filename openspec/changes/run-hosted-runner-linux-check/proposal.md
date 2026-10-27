@@ -4,7 +4,7 @@ ADR 0015 (`/docs/decisions/0015-g2-closure.md`, section 3 and its open items) ke
 
 ## What Changes
 
-- A new workflow, `.github/workflows/linux-acceptance.yml`, that runs only on manual dispatch. Its one job, `linux-x86_64`, runs on `ubuntu-24.04` with `contents: read`, no secrets, and no `id-token`; it records the runner's environment, frees disk space, runs `make native-acceptance ENTRIES=linux`, and uploads `results.jsonl`, `run.log`, and the environment and disk records as an artifact kept for 90 days, even when a step fails. A failed proof fails the run.
+- A new workflow, `.github/workflows/linux-acceptance.yml`, that runs only on manual dispatch. Its one job, `linux-x86_64`, runs on `ubuntu-24.04` with `contents: read`, no secrets, and no `id-token`; it records the runner's environment, frees disk space, runs `make native-acceptance ENTRIES=linux`, and uploads `results.jsonl`, `run.log`, and the environment and disk records as an artifact kept for 90 days, even when a proof fails. A failed proof fails the run.
 - `integration-flow`: "Promotion flow and releases" names the release workflow's triggers and allows a second workflow that runs only on manual dispatch.
 - `native-worker-acceptance`: adds "Hosted-runner Linux x86_64 check".
 - `docs/foundation.md` (line 11), `docs/releases.md`, and `docs/dependencies.md` name the new workflow and its `actions/upload-artifact` pin.
