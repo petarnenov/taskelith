@@ -17,4 +17,5 @@
 
 - [x] 4.1 Run `npm run openspec -- validate advance-placement-rotation-cursor --strict`, `npm run verify:comments`, `make findings ARGS="validate"`, and `make verify`, and record them in `verification.md`.
 - [x] 4.2 Review pass 1: a full fleet keeps the cursor (H1), stronger outage and no-candidate tests (M1, L1, L2), `#offer` returns the cursor (L3), contract, port comment, and spec wording (L4 to L6).
-- [ ] 4.3 Independent review pass 2 and record it in `verification.md`.
+- [x] 4.3 Review pass 2: the cursor stops at the first fleet capacity decline (L3), one cursor event per offer (L5), service tests for a decline after it and a transaction without a candidate (L6), one name for the fleet reasons (L7), the records (L1, L2, L4), and the backoff follow-up (M1, deferred).
+- [ ] 4.4 Independent review pass 3 and record it in `verification.md`.

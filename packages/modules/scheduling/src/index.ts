@@ -128,6 +128,7 @@ export {
 } from './domain/capacity-limits.js';
 export {
   FLEET_REASONS,
+  NO_CANDIDATE_REASON,
   REJECTING_REASONS,
   STANDING_REASONS,
   WAITING_REASONS,

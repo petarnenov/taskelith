@@ -11,6 +11,7 @@ import {
 import { err, failure, ok, type Failure, type Instant, type Result } from '@taskelith/kernel';
 import {
   DEFAULT_ATTEMPT_REQUEST,
+  NO_CANDIDATE_REASON,
   RotationCursor,
   fairWaitingOrder,
   lacksFleetCapacity,
@@ -84,9 +85,9 @@ export class PlacementService {
       for (const { item: taskId } of order) this.#settle(taskId, NO_CANDIDATE);
       return ok({ waiting: waiting.length, placed: 0 });
     }
-    const { placed, next } = await this.#offer(order, after);
+    const { outcome, next } = await this.#offer(order, after);
     this.#after = next;
-    return placed.ok ? ok({ waiting: waiting.length, placed: placed.value }) : placed;
+    return outcome.ok ? ok({ waiting: waiting.length, placed: outcome.value }) : outcome;
   }
 
   // Offers each task until the store fails; answers the number placed, or
@@ -96,16 +97,18 @@ export class PlacementService {
     let placed = 0;
     for (const { item: taskId, projectId } of order) {
       const outcome = await this.#store.transaction((tx) => placeTask(tx, taskId, this.#retryBackoff));
-      if (!outcome.ok && isOutage(outcome.error.code)) return { placed: outcome, next: cursor.next };
-      if (!outcome.ok && lacksCapacity(outcome.error)) cursor.ranOutOfCapacity();
-      cursor.offered(projectId);
+      if (!outcome.ok && isOutage(outcome.error.code)) return { outcome, next: cursor.next };
       if (outcome.ok && outcome.value.kind === 'placed') {
         cursor.placed(projectId);
         placed++;
+      } else if (!outcome.ok && lacksFleetCapacity(outcome.error.details.reason)) {
+        cursor.ranOutOfCapacity();
+      } else {
+        cursor.declined(projectId);
       }
       this.#settle(taskId, outcome);
     }
-    return { placed: ok(placed), next: cursor.next };
+    return { outcome: ok(placed), next: cursor.next };
   }
 
   // A retry that backs off is not read until due; a task placed or no
@@ -148,13 +151,13 @@ async function stillWaitingAmong(queue: PlacementQueue, taskIds: readonly TaskId
 }
 
 interface Offers {
-  readonly placed: Result<number>;
+  // The number of tasks placed, or the outage that stopped the pass.
+  readonly outcome: Result<number>;
   readonly next: ProjectId | undefined;
 }
 
 const PASS = 'pass';
 const NOT_WAITING = 'not-waiting';
-const NO_CANDIDATE_REASON = 'no-candidate';
 const NO_CANDIDATE: Result<never> = err(failure('precondition-failed', 'no candidate worker exists', { reason: NO_CANDIDATE_REASON }));
 
 // What a placement transaction committed: an assignment, the end of an
@@ -270,12 +273,6 @@ function placementRequest(task: Task): Omit<PlacementRequest, 'workerId'> {
     providerCredentials: [],
     ...(retryOf === undefined ? {} : { automaticRetryOf: retryOf }),
   };
-}
-
-// Contract section 13: a decline that no task's own limit explains.
-function lacksCapacity(error: Failure): boolean {
-  const { reason } = error.details;
-  return reason === NO_CANDIDATE_REASON || (typeof reason === 'string' && lacksFleetCapacity(reason));
 }
 
 function noLongerWaits(error: Failure): boolean {

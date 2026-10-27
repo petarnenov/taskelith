@@ -26,11 +26,11 @@ export function fairWaitingOrder<Item extends string>(
     || wrapped(left) - wrapped(right) || byCodeUnits(left.projectId, right.projectId) || byWaitingSince(left, right));
 }
 
-// Contract section 13: after the project that last received capacity, else
-// the last one offered before the fleet ran out of it, else where it was.
+// Contract section 13: one event per offer; the offers after the first that
+// lacked fleet capacity do not move it.
 export class RotationCursor {
   readonly #start: ProjectId | undefined;
-  #lastOffered: ProjectId | undefined;
+  #lastDeclined: ProjectId | undefined;
   #lastPlaced: ProjectId | undefined;
   #capacityRanOut = false;
 
@@ -38,20 +38,20 @@ export class RotationCursor {
     this.#start = start;
   }
 
-  offered(projectId: ProjectId): void {
-    if (!this.#capacityRanOut) this.#lastOffered = projectId;
+  placed(projectId: ProjectId): void {
+    if (!this.#capacityRanOut) this.#lastPlaced = projectId;
+  }
+
+  declined(projectId: ProjectId): void {
+    if (!this.#capacityRanOut) this.#lastDeclined = projectId;
   }
 
   ranOutOfCapacity(): void {
     this.#capacityRanOut = true;
   }
 
-  placed(projectId: ProjectId): void {
-    this.#lastPlaced = projectId;
-  }
-
   get next(): ProjectId | undefined {
-    return this.#lastPlaced ?? this.#lastOffered ?? this.#start;
+    return this.#lastPlaced ?? this.#lastDeclined ?? this.#start;
   }
 }
 
