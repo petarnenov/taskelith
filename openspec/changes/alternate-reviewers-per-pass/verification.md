@@ -118,16 +118,16 @@ Next: pass 3 by reviewer A, OpenCode `opencode-go/kimi-k3.1-pro#high`, which con
 
 ### make verify after the pass 1 and pass 2 fixes
 
-`PENDING: make verify on <head>`
+`make verify` on `bc6683a3`, which merges `origin/dev` `0864892f` (#336) into the branch after the pass 2 fixes `9894a699` and their record `d811a69e`; the merge touches none of this change's files: exit 0 in 181 s on 2026-10-27. 2054 tests, 2052 passed, 0 failed, 0 cancelled, 2 skipped; coverage of all files 99.27 % lines, 91.97 % branches, 98.94 % functions; findings validation 14 file(s). The Docker configuration was the same empty one as above.
 
 ## Limitations
 
 - The published UI POC artifact's version 7 predates the badge change and no longer matches the source; `docs/ui-poc/README.md` "Published build" now says so. Republishing it is an owner decision outside this change.
-- `make verify` ran with an empty Docker configuration, not the user's, because its credential helper hangs (see "make verify"); its run after the pass 1 and pass 2 fixes is pending.
+- `make verify` ran with an empty Docker configuration, not the user's, because its credential helper hangs (see "make verify"), including its run after the pass 1 and pass 2 fixes.
 
 ## Remaining gates
 
-- `make verify` after the pass 1 and pass 2 fixes (see "make verify"), and again by the `pre-push` hook on the pushed tree.
+- `make verify` by the `pre-push` hook on the pushed tree.
 - Independent review: pass 3 by reviewer A, confirmation of the pass 2 fixes only; the pass cap is reached after it.
 - Archive.
 - Integration into dev by the coordinator (single pull request).
