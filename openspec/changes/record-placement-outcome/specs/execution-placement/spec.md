@@ -32,9 +32,13 @@ The placement transaction that places a task SHALL remove its outcome record, an
 - **WHEN** no candidate has room for a waiting task and its placement transaction rolls back
 - **THEN** the task still waits and its record has the disposition `waiting` and the reason `worker-capacity-exhausted`
 
-#### Scenario: No longer waiting before the write
-- **WHEN** a task stops waiting, because it is placed or cancelled, after its placement transaction rolled back for a waiting reason and before its waiting record is written
+#### Scenario: No longer waiting before the read
+- **WHEN** a task stops waiting, because it is placed or cancelled, after its placement transaction rolled back for a waiting reason and before the waiting record's transaction reads whether it still waits
 - **THEN** no waiting record is written
+
+#### Scenario: Placed during the write
+- **WHEN** a placement of the task commits after the waiting record's transaction read that it still waits and before that transaction commits
+- **THEN** that transaction loses its serialization race, runs again, and leaves no record
 
 #### Scenario: Rejected in the transaction
 - **WHEN** the placement transaction ends a task's attempt with `retry-budget-exhausted`
