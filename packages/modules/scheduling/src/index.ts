@@ -127,11 +127,14 @@ export {
   UNACKNOWLEDGED_SUPERSESSION_BOUND_MILLISECONDS,
 } from './domain/capacity-limits.js';
 export {
+  FLEET_REASONS,
+  NO_CANDIDATE_REASON,
   REJECTING_REASONS,
   STANDING_REASONS,
   WAITING_REASONS,
   WORKER_REASONS,
   isWaitingReason,
+  lacksFleetCapacity,
   reasonOutcome,
   triesNextCandidate,
   type CapacityReason,
@@ -164,7 +167,7 @@ export {
   type DelegationState,
   type DelegationValues,
 } from './domain/delegation-request.js';
-export { fairPlacementOrder, type WaitingPlacement } from './domain/fair-order.js';
+export { RotationCursor, fairPlacementOrder, fairWaitingOrder, type WaitingPlacement } from './domain/fair-order.js';
 export { placementBackoff } from './domain/placement-backoff.js';
 export {
   decidePlacement,

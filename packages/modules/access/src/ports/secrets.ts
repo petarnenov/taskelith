@@ -2,6 +2,14 @@ import type { SecretHash } from '../domain/secret-hash.js';
 
 export type SecretKind = 'operator' | 'enrollment' | 'worker';
 
+// An issued secret starts with its kind's prefix and `_`, so a leaked secret
+// is recognizable and redaction can find it in text.
+export const SECRET_PREFIXES: Readonly<Record<SecretKind, string>> = Object.freeze({
+  operator: 'tkop',
+  enrollment: 'tken',
+  worker: 'tkwk',
+});
+
 export interface IssuedSecret {
   readonly secret: string;
   readonly hash: SecretHash;
