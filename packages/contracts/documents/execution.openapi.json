@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Taskelith execution API",
-    "version": "0.3.1",
+    "version": "0.4.0",
     "description": "Worker enrollment, launch authorization (G2 decision D12 (a)), delegation, task results, and evidence. Worker operations use the per-worker credential and operator operations the installation bootstrap credential (G2 decision D10 (a))."
   },
   "paths": {
@@ -1210,7 +1210,13 @@
             "description": "The supervisor launch record of this execution shows that no spawn was claimed; required to authorize the same execution again."
           },
           "reportsNotStartedFor": {
-            "$ref": "#/components/schemas/SealedExecution"
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "description": "Every earlier execution of the attempt that the worker sealed and has not seen confirmed, oldest first; the authority applies them in this order.",
+            "items": {
+              "$ref": "#/components/schemas/SealedExecution"
+            }
           }
         }
       },

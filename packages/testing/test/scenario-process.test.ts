@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import test from 'node:test';
-import { ScenarioProcess } from '@taskelith/testing';
+import { ScenarioProcess, uncoveredEnvironment } from '@taskelith/testing';
 
 const TICKER = join(import.meta.dirname, 'fixtures', 'ticker.ts');
 
 async function startTicker(): Promise<{ ticker: ScenarioProcess; pids: number[] }> {
-  const ticker = await ScenarioProcess.start(process.execPath, ['--experimental-strip-types', TICKER]);
+  const ticker = await ScenarioProcess.start(process.execPath, ['--experimental-strip-types', TICKER], { env: uncoveredEnvironment() });
   await ticker.waitForOutput('\n');
   const pids = ticker.stdout.trim().split(' ').slice(1).map(Number);
   return { ticker, pids };

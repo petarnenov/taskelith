@@ -16,9 +16,9 @@ import { SYSTEM_CLOCK } from '@taskelith/node-observability';
 import { InMemoryLogSink } from '@taskelith/observability';
 import { PostgresDatabase } from '@taskelith/postgres';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
-import { CRASH_POINT_VARIABLE, crashEnvironment, integrationEndpoint, integrationSecret, ScenarioProcess, SEED_VARIABLE, value } from '@taskelith/testing';
+import { CRASH_POINT_VARIABLE, crashEnvironment, integrationEndpoint, integrationSecret, ScenarioProcess, SEED_VARIABLE, uncoveredEnvironment, value } from '@taskelith/testing';
 import { openWorkerRoot } from '@taskelith/worker-journal';
-import { CRASH_TRACE_VARIABLE, HOLD_NOT_STARTED_VARIABLE, ORDER_TRACE_VARIABLE } from './fixtures/crash-hook.ts';
+import { CRASH_TRACE_VARIABLE, FAIL_FIRST_PREPARE_VARIABLE, HOLD_NOT_STARTED_VARIABLE, ORDER_TRACE_VARIABLE } from './fixtures/crash-hook.ts';
 
 // A test-side composition of the real control plane and a real worker
 // process against the make services, for the G2 crash scenarios (item 24b).
@@ -349,9 +349,11 @@ export interface WorkerRun {
   readonly seed: number;
   // Aborts every wait of the run, as the scenario's deadline passes.
   readonly signal: AbortSignal;
-  // The crash point TASKELITH_CRASH_POINT arms in this run, if any.
+  // The crash point TASKELITH_CRASH_POINT arms in this run, if any, as
+  // `<point>` or `<point>@<occurrence>`.
   readonly armed?: string;
   readonly holdNotStarted?: boolean;
+  readonly failsFirstPrepare?: boolean;
 }
 
 type ProcessExit = Awaited<ScenarioProcess['exited']>;
@@ -369,10 +371,10 @@ export class ComposedWorker {
 
   static async start(run: WorkerRun, enrollmentToken: string): Promise<ComposedWorker> {
     const { installation, seed, armed } = run;
-    // A crash kills mid-write the coverage file of an inheriting child.
-    const { [CRASH_POINT_VARIABLE]: _unarmed, NODE_V8_COVERAGE: _uncovered, ...inherited } = process.env;
+    const { [CRASH_POINT_VARIABLE]: _unarmed, ...inherited } = uncoveredEnvironment();
     const env = {
-      ...inherited, ...(armed === undefined ? {} : crashEnvironment(armed)), ...(run.holdNotStarted === true ? { [HOLD_NOT_STARTED_VARIABLE]: '1' } : {}),
+      ...inherited, ...(armed === undefined ? {} : armedEnvironment(armed)), ...(run.holdNotStarted === true ? { [HOLD_NOT_STARTED_VARIABLE]: '1' } : {}),
+      ...(run.failsFirstPrepare === true ? { [FAIL_FIRST_PREPARE_VARIABLE]: '1' } : {}),
       [SEED_VARIABLE]: String(seed), [CRASH_TRACE_VARIABLE]: crashTrace(installation), [ORDER_TRACE_VARIABLE]: orderTrace(installation),
       TASKELITH_DATA_DIR: join(installation.base, 'worker'), TASKELITH_CONTROL_PLANE_URL: installation.apiUrl,
       TASKELITH_NATS_URL: NATS.href, TASKELITH_ENROLLMENT_TOKEN: enrollmentToken, TASKELITH_WORKER_COMMAND: childCommand(installation),
@@ -425,6 +427,11 @@ export class ComposedWorker {
       throw new Error(`the worker's exit after ${what} did not come: ${this.#process.stderr.slice(-2000)}`, { cause: error });
     }
   }
+}
+
+function armedEnvironment(armed: string): Record<string, string> {
+  const [point, occurrence] = armed.split('@') as [string, string?];
+  return crashEnvironment(point, occurrence === undefined ? 1 : Number(occurrence));
 }
 
 export function crashTrace(installation: HarnessInstallation): string {

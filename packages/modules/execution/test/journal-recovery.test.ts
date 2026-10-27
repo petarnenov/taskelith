@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseGeneration, parseOwnershipGeneration } from '@taskelith/sdlc';
 import {
-  lastSealedExecution,
   parseRecoveryEpoch,
   planJournalRecovery,
+  REPORTED_SEALS_LIMIT,
+  unconfirmedSealedExecutions,
   type AuthorizationOutcome,
   type ExecutionId,
   type ExecutionState,
@@ -139,14 +140,38 @@ test('an attempt cancellation still stops every execution of its intent', () => 
   assert.deepEqual(plan([superseded, execution(['rejected-retryable'])], [attemptCancellation(true)]), []);
 });
 
-test("a new execution reports the intent's last sealed one with its last granted, else last, operation", () => {
-  const snapshot = (executions: JournaledExecution[]): JournalSnapshot => ({ intents: [INTENT], cancellations: [], executions });
-  const later = { ...execution(['expired', 'granted', 'expired'], 'not-started'), executionId: id('ExecutionId', 'execution-2') };
-  const other = { ...later, executionId: id('ExecutionId', 'execution-3'), assignmentId: id('AssignmentId', 'assignment-2') };
-  const sealed = lastSealedExecution(snapshot([execution(['granted'], 'not-started'), later, other]), INTENT.assignmentId);
-  assert.deepEqual(sealed, { executionId: 'execution-2', operationId: 'operation-1' });
-  const ungranted = lastSealedExecution(snapshot([execution(['expired', 'expired'], 'not-started')]), INTENT.assignmentId);
-  assert.deepEqual(ungranted, { executionId: EXECUTION, operationId: 'operation-1' });
-  assert.equal(lastSealedExecution(snapshot([execution(['granted'], 'exited')]), INTENT.assignmentId), undefined);
-  assert.equal(lastSealedExecution(snapshot([]), INTENT.assignmentId), undefined);
+function unconfirmed(executions: JournaledExecution[]) {
+  const snapshot: JournalSnapshot = { intents: [INTENT], cancellations: [], executions };
+  return unconfirmedSealedExecutions(snapshot, INTENT.assignmentId);
+}
+
+function numbered(index: number, outcomes: AuthorizationOutcome[], state?: ExecutionState): JournaledExecution {
+  return { ...execution(outcomes, state), executionId: id('ExecutionId', `execution-${index}`) };
+}
+
+test('each unconfirmed sealed execution is reported with its last granted, else last, operation', () => {
+  const later = numbered(2, ['expired', 'expired'], 'not-started');
+  const other = { ...numbered(3, ['pending'], 'not-started'), assignmentId: id('AssignmentId', 'assignment-2') };
+  assert.deepEqual(unconfirmed([execution(['expired', 'granted', 'expired'], 'not-started'), later, other]), [
+    { executionId: EXECUTION, operationId: 'operation-1' },
+    { executionId: 'execution-2', operationId: 'operation-1' },
+  ]);
+  assert.deepEqual(unconfirmed([execution(['granted'], 'exited')]), []);
+  assert.deepEqual(unconfirmed([execution([], 'not-started')]), []);
+  assert.deepEqual(unconfirmed([]), []);
+});
+
+test('a grant of a later execution confirms every sealed one journaled before it', () => {
+  const runtimeSeal = [numbered(1, ['granted'], 'not-started'), numbered(2, ['expired'], 'not-started')];
+  assert.deepEqual(unconfirmed(runtimeSeal).map(({ executionId }) => executionId), ['execution-1', 'execution-2']);
+  const confirmed = [numbered(1, ['pending'], 'not-started'), numbered(2, ['granted'], 'not-started'), numbered(3, ['expired'], 'not-started')];
+  assert.deepEqual(unconfirmed(confirmed).map(({ executionId }) => executionId), ['execution-2', 'execution-3']);
+  const resumed = [numbered(1, ['granted'], 'not-started'), numbered(2, ['granted'], 'started')];
+  assert.deepEqual(unconfirmed(resumed), []);
+});
+
+test('at most REPORTED_SEALS_LIMIT unconfirmed sealed executions are reported, the oldest first', () => {
+  const sealed = Array.from({ length: REPORTED_SEALS_LIMIT + 2 }, (_, index) => numbered(index + 1, ['expired'], 'not-started'));
+  const reported = unconfirmed(sealed).map(({ executionId }) => executionId);
+  assert.deepEqual(reported, sealed.slice(0, REPORTED_SEALS_LIMIT).map(({ executionId }) => executionId));
 });

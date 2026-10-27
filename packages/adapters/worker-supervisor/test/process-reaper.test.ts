@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
-import { ScenarioProcess } from '@taskelith/testing';
+import { ScenarioProcess, uncoveredEnvironment } from '@taskelith/testing';
 import { ProcessReaper, REAL_PROCESS_TEST_TIMEOUT } from './process-reaper.ts';
 
 const SLEEP = ['-e', 'setTimeout(() => {}, 60000)'];
@@ -18,7 +18,7 @@ interface Started {
 // A detached process in its own session, as a supervisor or a child is; it
 // joins `started` before its spawn is awaited, so that cleanup always sees it.
 async function detached(args: readonly string[], started: Started[]): Promise<{ exited: Promise<NodeJS.Signals | null> }> {
-  const child = spawn(process.execPath, [...args], { detached: true, stdio: 'ignore' });
+  const child = spawn(process.execPath, [...args], { detached: true, env: uncoveredEnvironment(), stdio: 'ignore' });
   const exited = new Promise<NodeJS.Signals | null>((resolve) => child.once('exit', (_code, signal) => resolve(signal)));
   started.push({ exited, kill: () => child.kill('SIGKILL') });
   await new Promise((resolve, reject) => {
@@ -29,7 +29,7 @@ async function detached(args: readonly string[], started: Started[]): Promise<{ 
 }
 
 async function scenario(args: readonly string[], started: Started[]): Promise<ScenarioProcess> {
-  const scenarioProcess = await ScenarioProcess.start(process.execPath, args);
+  const scenarioProcess = await ScenarioProcess.start(process.execPath, args, { env: uncoveredEnvironment() });
   started.push({ exited: scenarioProcess.exited, kill: () => killGroup(scenarioProcess) });
   return scenarioProcess;
 }

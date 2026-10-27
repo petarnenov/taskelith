@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { after, test } from 'node:test';
 import { planJournalRecovery, type ObservationFact, type RecoveryAction } from '@taskelith/execution';
-import { crashEnvironment, ScenarioProcess, id, value } from '@taskelith/testing';
+import { crashEnvironment, ScenarioProcess, id, uncoveredEnvironment, value } from '@taskelith/testing';
 import { enrollWorkerRoot, openWorkerRoot } from '@taskelith/worker-journal';
 import { ENROLLMENT, T0, assignment, rootOptions, temporaryDataRoot } from './fixtures.ts';
 
@@ -49,7 +49,7 @@ async function crashAt(scenario: string, point: string): Promise<{ dataRoot: str
   cleanups.push(remove);
   value(enrollWorkerRoot(rootOptions(dataRoot), ENROLLMENT)).close();
   const worker = await ScenarioProcess.start(process.execPath, ['--experimental-strip-types', SCENARIO, dataRoot, scenario], {
-    env: { ...process.env, ...crashEnvironment(point) },
+    env: { ...uncoveredEnvironment(), ...crashEnvironment(point) },
   });
   const exit = await worker.exited;
   assert.equal(exit.signal, 'SIGKILL', `the worker was not killed at ${point}: ${worker.stderr}`);
