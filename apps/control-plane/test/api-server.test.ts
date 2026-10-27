@@ -99,6 +99,24 @@ test('a correlation that carries a secret is replaced, so no log line holds it',
   assert.doesNotMatch(JSON.stringify(sink.records), /tkop_/);
 });
 
+test('every response closes its connection, so no idle socket is reused', async () => {
+  answers = { readTaskResult: () => ok({ state: 'pending', runId: 'r', taskId: 't' }) };
+  let connections = 0;
+  const counted = () => { connections++; };
+  server.on('connection', counted);
+  try {
+    const headers = { authorization: `Bearer ${OPERATOR}` };
+    for (let request = 0; request < 2; request++) {
+      const response = await fetch(`${base}/runs/r/tasks/t/result`, { headers });
+      await response.arrayBuffer();
+      assert.equal(response.headers.get('connection'), 'close');
+    }
+    assert.equal(connections, 2);
+  } finally {
+    server.off('connection', counted);
+  }
+});
+
 test('a redrive sequence that is not a positive safe integer is 400 before the broker', async () => {
   let redriven = 0;
   const api = new ControlPlaneApi({
@@ -331,6 +349,33 @@ test('authorizeLaunch maps every outcome to its contract shape, and needs a work
   const { worker: _worker, ...anonymous } = request;
   assert.equal(failed(await api.handle('authorizeLaunch', anonymous, '')).code, 'internal');
   assert.equal(failed(await api.handle('authorizeLaunch', { ...request, body: { ...body, recoveryEpoch: 0 } }, '')).code, 'invalid');
+});
+
+test('authorizeLaunch passes a reported sealed execution to the authority and refuses an invalid one', async () => {
+  const received: unknown[] = [];
+  const api = new ControlPlaneApi({
+    runs: undefined as never, tasks: undefined as never, evidence: undefined as never, operator: undefined as never, enrollment: undefined as never,
+    quarantine: undefined as never, delegations: undefined as never,
+    launches: { authorize: async (_principal, values) => {
+      received.push(values);
+      return ok({ kind: 'expired' });
+    } },
+  });
+  const body = {
+    operationId: 'operation-2', recoveryEpoch: 1, assignmentId: 'assignment-1', attemptId: 'attempt-1', ownershipGeneration: 1,
+    executionId: 'execution-2', admissionId: 'admission-1', admissionGeneration: 2, reportsNotStarted: false,
+    reportsNotStartedFor: { executionId: 'execution-1', operationId: 'operation-1' },
+  };
+  assert.ok(checkHttpSchema('LaunchAuthorizationRequest', body).ok);
+  const request = { parameters: [], body, query: new URLSearchParams(), correlationId: 'c' as never, worker: { workerId: 'worker-1' as never, generation: 1 } };
+  value(await api.handle('authorizeLaunch', request, ''));
+  const { reportsNotStartedFor: _sealed, ...unreported } = body;
+  value(await api.handle('authorizeLaunch', { ...request, body: unreported }, ''));
+  assert.deepEqual(received.map((values) => (values as { reportsNotStartedFor?: unknown }).reportsNotStartedFor), [body.reportsNotStartedFor, undefined]);
+  for (const reportsNotStartedFor of [{ executionId: '', operationId: 'operation-1' }, { executionId: 'execution-1', operationId: '' }]) {
+    assert.equal(failed(await api.handle('authorizeLaunch', { ...request, body: { ...body, reportsNotStartedFor } }, '')).code, 'invalid');
+  }
+  assert.equal(received.length, 2);
 });
 
 test('an undecided launch operation is 503, never 500', async () => {

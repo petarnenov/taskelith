@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   type AdmissionPressureCause,
+  launchRejection,
   parseLaunchParameters,
   parseRecoveryEpoch,
   type ExecutionExit,
@@ -107,6 +108,20 @@ export function unavailable(): Result<LaunchOutcome> {
 
 export function granted(ttlMilliseconds = 30_000): (request: LaunchAuthorizationRequest) => Result<LaunchOutcome> {
   return (request) => ok({ kind: 'granted', grant: grantFor(request, ttlMilliseconds) });
+}
+
+// Grants as the ownership rule allows: another execution only once the
+// owning one is reported sealed (launch authorization section 4).
+export function grantedToOwner(initialOwner?: string): (request: LaunchAuthorizationRequest) => Result<LaunchOutcome> {
+  let owner = initialOwner;
+  return (request) => {
+    const sealed = request.reportsNotStartedFor?.executionId;
+    if (owner !== undefined && owner !== request.executionId && owner !== sealed) {
+      return ok({ kind: 'rejected', rejection: launchRejection('execution-conflict', `execution ${owner} owns the attempt`) });
+    }
+    owner = request.executionId;
+    return ok({ kind: 'granted', grant: grantFor(request) });
+  };
 }
 
 export function grantFor(request: LaunchAuthorizationRequest, ttlMilliseconds = 30_000): LaunchGrant {

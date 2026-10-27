@@ -104,7 +104,7 @@ A worker SHALL answer every `worker.inventory.requested` addressed to it with a 
 - **THEN** the worker publishes a snapshot without a `requestId`, and tries again with backoff until it is published or the connection is down again
 
 ### Requirement: Journaled launch authorization
-A worker SHALL commit W2 before the first request of an operation and W3 with each decision, and SHALL repeat a request that reached no decision with the same `operationId`, after a delay of 5 s doubling to 60 s with jitter, until its deadline. A retryable rejection SHALL be retried under a new `operationId`; a final one SHALL end the launch with its observation.
+A worker SHALL commit W2 before the first request of an operation and W3 with each decision, and SHALL repeat a request that reached no decision with the same `operationId`, after a delay of 5 s doubling to 60 s with jitter, until its deadline. A retryable rejection SHALL be retried under a new `operationId`; a final one SHALL end the launch with its observation. A new or resumed execution SHALL report the intent's last sealed one. Each failed request SHALL be logged with its failure.
 
 #### Scenario: No decision
 - **WHEN** the launch authority does not answer twice and then grants
@@ -113,6 +113,14 @@ A worker SHALL commit W2 before the first request of an operation and W3 with ea
 #### Scenario: Final rejection
 - **WHEN** the authority rejects with `gate-not-passed`
 - **THEN** the worker journals the rejection with its `execution.launch.rejected` observation and never requests again for the intent
+
+#### Scenario: Relaunch after a seal
+- **WHEN** a grant arrives after the deadline and the worker seals its execution and reports it `not-started`
+- **THEN** the request for the next execution reports the sealed execution with its granted operation
+
+#### Scenario: Logged authorization failure
+- **WHEN** a launch authorization request fails
+- **THEN** the worker logs `worker.launch.authorization-failed` with the failure's details, then the execution, the operation, and the failure's code and message, which no detail replaces, and, before its deadline, repeats the operation
 
 ### Requirement: Launch deadline
 A worker SHALL hand a grant to its supervisor only before the deadline from its suspend-inclusive clock read before the operation's first request, in the same boot. An operation past its deadline without a decision, or answered `expired`, SHALL be journaled `expired`, and the same execution SHALL be authorized again reporting it has not started. An unusable grant's execution SHALL be sealed and reported `not-started`.
@@ -152,7 +160,7 @@ A worker SHALL start no launch without a grant, whatever the state of its broker
 - **THEN** the operation is journaled `expired`, and the same execution is authorized again only once the worker is online
 
 ### Requirement: Cancellation forwarding
-A cancellation of an attempt SHALL stop its intent's launch; one of an execution SHALL stop only that execution, and a launch only while it runs it. Either SHALL seal an execution before its supervisor starts and write the `cancel` file of a started one. Its evidence SHALL be recorded once no launch it stops is live and every execution it names is `exited`, `not-started`, or rejected without a grant, and at once when there is none.
+A cancellation of an attempt SHALL stop its intent's launch; one of an execution SHALL stop only that execution, a launch only while it runs it, and a retry or relaunch only as the intent's last. Either SHALL seal an execution before its supervisor starts and write the `cancel` file of a started one. Its evidence SHALL be recorded once no launch it stops is live and every execution it names is `exited`, `not-started`, or rejected without a grant, and at once when there is none.
 
 #### Scenario: Cancelled after W4
 - **WHEN** a cancellation names an execution whose supervisor runs
@@ -169,6 +177,14 @@ A cancellation of an attempt SHALL stop its intent's launch; one of an execution
 #### Scenario: Attempt cancelled while an execution runs
 - **WHEN** a cancellation names the attempt of an intent whose launch runs an execution
 - **THEN** the launch stops and the running execution gets `cancel`
+
+#### Scenario: Superseded execution cancelled before a restart
+- **WHEN** the worker starts with a journaled cancellation of a superseded execution of an intent whose last execution awaits a retry or ended `not-started`
+- **THEN** the worker retries the last execution's authorization or launches the intent again
+
+#### Scenario: Last execution cancelled before a restart
+- **WHEN** the worker starts with a journaled cancellation of an intent's last execution, sealed `not-started` before its supervisor started
+- **THEN** the worker launches the intent no more, and a new attempt is left to the control plane
 
 ### Requirement: Launch settings
 A worker SHALL launch only when `TASKELITH_WORKER_COMMAND` names its program; on Linux a launch SHALL also need the containment parent and the execution account. On Linux the worker SHALL read the containment parent whenever it is set, with or without the command. Without the command it SHALL accept assignments and launch none.
@@ -193,7 +209,7 @@ On its first pass after a start, a worker with a supervision host SHALL reconcil
 
 #### Scenario: Pending W2 on start
 - **WHEN** the worker starts with a W2 that has no outcome
-- **THEN** it seals the execution, reports `not-started`, and, with a launch command, launches the intent under a new execution once online
+- **THEN** it seals the execution, reports `not-started`, and, with a launch command, launches the intent under a new execution once online, whose request reports the sealed one, so it runs although the observation has not reached the authority
 
 #### Scenario: Recovery asks to retry
 - **WHEN** the recovery table answers that the supervisor's liveness is not yet decided
@@ -342,3 +358,45 @@ On a journal write refused for lack of space a worker SHALL empty the buffered l
 #### Scenario: Unrecorded process refused for space
 - **WHEN** the commit of an unrecorded process found at start is refused for lack of space twice
 - **THEN** no pass tries it within the backoff, and the outbox then holds one `unrecorded-process` with its containment's identity, without a second scan or a reported failure
+
+### Requirement: Assignment ended by a launch rejection
+A worker SHALL end an acknowledged assignment locally once it journaled a launch authorization rejection with `assignment-not-active`, as an assignment end does: it SHALL stop counting it except through an execution that still holds a slot, SHALL launch nothing more for it, and SHALL report it as ended, also after a restart. A later assignment end SHALL be journaled once and SHALL change and publish nothing more.
+
+#### Scenario: Rejected as not active
+- **WHEN** a worker with one slot journals an `assignment-not-active` rejection for its only assignment, and another offer arrives
+- **THEN** it accepts the offer, and the first assignment is ended
+
+#### Scenario: Rejected as not active after a grant
+- **WHEN** a worker with one slot journals an `assignment-not-active` rejection for an assignment whose execution is still `authorized`, and another offer arrives
+- **THEN** it refuses the offer with `worker-slots-exhausted` until that execution is sealed `not-started`
+
+#### Scenario: Late assignment end
+- **WHEN** an assignment end arrives for an assignment ended by such a rejection
+- **THEN** it is journaled once, its outbox gains no entry, and recovery plans nothing for the assignment
+
+### Requirement: Control-plane failure cause
+A control-plane request without an answer SHALL fail with `unavailable` and the details `cause`, the first four links of the thrown error's cause chain, each its name, code of under 32 characters, and message, in at most 512 characters, and `causeCode`, the innermost code of the first 16 links. A message, and a server's message, reason, and schema violation, SHALL be one line of at most 160 characters with no URL, bearer or key-value secret, JWT, or run of 32 or more of `[A-Za-z0-9_+=/-]`.
+
+#### Scenario: Reset connection
+- **WHEN** `fetch` fails with a cause whose code is `ECONNRESET`
+- **THEN** the failure is `unavailable`, `cause` names `fetch failed` and `ECONNRESET`, and `causeCode` is `ECONNRESET`
+
+#### Scenario: Secrets in a cause message
+- **WHEN** a cause message holds a URL with user information, a bearer or Basic credential in text or JSON, a quoted `password=` or `password:` value, a JWT, standard base64, or a token, wherever a length limit cuts it
+- **THEN** `cause` holds no part of them
+
+#### Scenario: Long cause chain
+- **WHEN** the cause chain is longer than four links, cyclic, or holds a message of thousands of characters
+- **THEN** `cause` has at most four links and 512 characters, and `causeCode` is still the code of the innermost of the first 16 links
+
+#### Scenario: No cause
+- **WHEN** the thrown error has no cause and no code
+- **THEN** `cause` names only that error, and there is no `causeCode`
+
+#### Scenario: Throwing thrown value
+- **WHEN** reading the name, message, or cause of the thrown value throws
+- **THEN** the failure is `unavailable` with `cause` `unknown`, and the request returns it instead of rejecting
+
+#### Scenario: Unbounded server reason
+- **WHEN** the control plane answers with a message and a reason of hundreds of characters holding a secret, or with a property name of 2,000 characters that its schema forbids
+- **THEN** the failure's message, `reason`, and `violation` hold at most 160 characters of them and no secret

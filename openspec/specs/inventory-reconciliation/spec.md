@@ -6,7 +6,7 @@ The control plane's reconciliation of worker inventory: inventory requests and t
 ## Requirements
 
 ### Requirement: Inventory request
-The control plane SHALL request a worker's inventory by appending `worker.inventory.requested` with a fresh random `requestId` to the worker's command subject, and SHALL keep only the latest request of each worker as its current one. The outbox publisher SHALL send an inventory request without a `Nats-Msg-Id` header.
+The control plane SHALL request a worker's inventory by appending `worker.inventory.requested` with a fresh random `requestId` to the worker's command subject, and SHALL keep only the latest request of each worker as its current one. A report that carries a `requestId` SHALL NOT request inventory, even when that request is no longer current. The outbox publisher SHALL send an inventory request without a `Nats-Msg-Id` header.
 
 #### Scenario: Unsolicited report
 - **WHEN** a worker's report arrives without a `requestId`
@@ -19,6 +19,14 @@ The control plane SHALL request a worker's inventory by appending `worker.invent
 #### Scenario: Newer request
 - **WHEN** a second request is sent to a worker before the first is answered
 - **THEN** only the second is the worker's current request, and a snapshot answering the first is not fresh
+
+#### Scenario: Answer to a superseded request
+- **WHEN** a snapshot answers a request that is no longer the worker's current one
+- **THEN** it is not fresh, and no inventory request is appended
+
+#### Scenario: Overlapping requests settle
+- **WHEN** two requests are outstanding for a worker, and the worker answers each in turn with a growing `snapshot`
+- **THEN** no further inventory request is appended
 
 #### Scenario: Request published
 - **WHEN** the outbox publisher sends an inventory request
@@ -109,7 +117,7 @@ Applying a snapshot SHALL change only the handling of the worker's unfinished as
 - **THEN** the execution stays `started`
 
 ### Requirement: Omitted assignments
-An omitted assignment whose acceptance was applied from the snapshot's journal at a sequence up to `throughSequence`, or from an earlier journal of the worker, SHALL be reconciled as having lost its local history. Any other omitted assignment SHALL only be re-sent while no grant was ever recorded for its attempt, and a snapshot without the current `requestId` that omits one SHALL request the worker's inventory.
+An omitted assignment whose acceptance was applied from the snapshot's journal at a sequence up to `throughSequence`, or from an earlier journal of the worker, SHALL be reconciled as having lost its local history. Any other omitted assignment SHALL only be re-sent while no grant was ever recorded for its attempt, and only an unsolicited snapshot, one without a `requestId`, that omits one SHALL request the worker's inventory.
 
 #### Scenario: Restored journal lost an acknowledged offer
 - **WHEN** a worker's journal restored from an older copy lost only an acknowledged offer whose acceptance was applied, no grant exists, and the snapshot omits the assignment
@@ -122,6 +130,14 @@ An omitted assignment whose acceptance was applied from the snapshot's journal a
 #### Scenario: Offer not yet received
 - **WHEN** an unsolicited snapshot omits an offered assignment with no applied acceptance and no grant
 - **THEN** the offer is re-sent, an inventory request is appended, and no execution changes
+
+#### Scenario: Superseded answer omits an offer
+- **WHEN** a snapshot answering a request that is no longer current omits an offered assignment with no applied acceptance and no grant
+- **THEN** the offer is re-sent, and no inventory request is appended
+
+#### Scenario: Omitted offer under overlapping requests
+- **WHEN** two requests are outstanding, and the worker answers each in turn with a growing `snapshot` that omits an offered assignment with no applied acceptance and no grant
+- **THEN** each answer re-sends the offer, and no further inventory request is appended
 
 ### Requirement: New journal incarnation
 An observation or inventory report of an enrolled worker that is not revoked, whose `journalId` the control plane has never seen from that worker and no other worker holds, SHALL replace the worker's enrolled journal, retire the previous journal, log the replacement with the previous and the new `journalId`, restart the worker's report fences, and reconcile every unfinished assignment of the worker as having lost its local history, in its transaction.

@@ -105,6 +105,7 @@ export {
   highestReceivedSnapshot,
   isFreshReport,
   isRolledBack,
+  isUnsolicited,
   supersededReports,
   type AcceptanceProvenance,
   type InventoryPart,
@@ -117,7 +118,7 @@ export {
   type ReportFreshness,
   type SnapshotAssembly,
 } from './domain/inventory.js';
-export { planJournalRecovery, type RecoveryAction } from './domain/journal-recovery.js';
+export { lastSealedExecution, planJournalRecovery, type RecoveryAction } from './domain/journal-recovery.js';
 export { unknownExecutionsOf, type UnknownExecution, type UnrecordedProcess } from './domain/reconciliation.js';
 export {
   authorizeLaunch,
@@ -132,6 +133,7 @@ export {
   type LaunchReservation,
   type LaunchOutcome,
   type ReplayOutcome,
+  type SealedExecution,
 } from './domain/launch-authorization.js';
 export {
   GRANT_STATES,
@@ -149,6 +151,7 @@ export {
   LAUNCH_REJECTION_REASONS,
   RETRYABLE_LAUNCH_REJECTIONS,
   REVOCATION_REASONS,
+  endsAssignment,
   launchRejection,
   type LaunchRejection,
   type LaunchRejectionReason,

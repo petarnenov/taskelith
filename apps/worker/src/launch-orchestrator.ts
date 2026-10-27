@@ -1,4 +1,5 @@
 import {
+  lastSealedExecution,
   launchRejection,
   launchRetryDelay,
   parseLaunchParameters,
@@ -18,9 +19,10 @@ import {
   type LaunchRequest,
   type OperationId,
   type RecoveryAction,
+  type SealedExecution,
   type WorkerJournal,
 } from '@taskelith/execution';
-import { ok, parseIdentifier, type Result } from '@taskelith/kernel';
+import { ok, parseIdentifier, type Failure, type Result } from '@taskelith/kernel';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import type { AdmissionCheck } from './admission-pressure.js';
 import {
@@ -197,7 +199,7 @@ export class LaunchOrchestrator {
     if (authority === undefined || intent === undefined || unsettled || this.#launches.has(assignmentId)) return false;
     // Registered before it runs, so a cancellation always finds it.
     const launch = new Launch({
-      options: this.#options, authority, watch: this.#watch, space: this.#space, intent, stopping: signal,
+      options: this.#options, authority, watch: this.#watch, space: this.#space, logger: this.#logger, intent, stopping: signal,
       cancellations: (executionId) => this.#cancellationsOf(assignmentId, executionId),
       ...(resume === undefined ? {} : { resume }),
     });
@@ -393,6 +395,13 @@ type Authorized =
 // How one execution ended: launch another, or stop launching the intent.
 type Executed = 'relaunch' | 'end';
 
+// The execution a launch authorizes: a resumed one was authorized before.
+interface LaunchedExecution {
+  readonly executionId: ExecutionId;
+  readonly authorizedBefore: boolean;
+  readonly reportsNotStartedFor?: SealedExecution;
+}
+
 // What one intent's launches work with; `resume` continues an execution
 // whose last operation closed without a grant.
 interface LaunchContext {
@@ -400,6 +409,7 @@ interface LaunchContext {
   readonly authority: LaunchAuthorityClient;
   readonly watch: ExecutionWatch;
   readonly space: SpaceRetry;
+  readonly logger: Logger;
   readonly intent: JournaledIntent;
   readonly stopping: AbortSignal;
   readonly cancellations: (executionId: ExecutionId) => Result<readonly CommandId[]>;
@@ -444,10 +454,10 @@ class Launch {
   async run(): Promise<void> {
     let resume = this.#context.resume;
     while (!this.#signal.aborted) {
-      const executionId = resume ?? this.#newId('ExecutionId');
-      if (executionId === undefined) return;
-      this.#executing = executionId;
-      const executed = await this.#execute(executionId, resume !== undefined);
+      const execution = this.#nextExecution(resume);
+      if (execution === undefined) return;
+      this.#executing = execution.executionId;
+      const executed = await this.#execute(execution);
       this.#executing = undefined;
       if (executed === 'end') return;
       resume = undefined;
@@ -455,11 +465,23 @@ class Launch {
     }
   }
 
+  // A new or resumed execution reports the intent's last sealed one, whose
+  // `not-started` may not have reached the authority yet (journal section 5).
+  #nextExecution(resume: ExecutionId | undefined): LaunchedExecution | undefined {
+    const executionId = resume ?? this.#newId('ExecutionId');
+    const snapshot = this.#options.journal.snapshot();
+    if (executionId === undefined || !reported(this.#options, snapshot)) return undefined;
+    const sealed = lastSealedExecution(snapshot.value, this.#intent.assignmentId);
+    const report = sealed === undefined ? {} : { reportsNotStartedFor: sealed };
+    return { executionId, authorizedBefore: resume !== undefined, ...report };
+  }
+
   // An execution authorized again reports that it has not started, so a
   // grant the authority recorded for an earlier operation is renewed.
-  async #execute(executionId: ExecutionId, authorizedBefore: boolean): Promise<Executed> {
-    for (let reportsNotStarted = authorizedBefore; ; reportsNotStarted = true) {
-      const authorized = await this.#authorize(executionId, reportsNotStarted);
+  async #execute(execution: LaunchedExecution): Promise<Executed> {
+    const { executionId } = execution;
+    for (let reportsNotStarted = execution.authorizedBefore; ; reportsNotStarted = true) {
+      const authorized = await this.#authorize(execution, reportsNotStarted);
       switch (authorized.kind) {
         case 'end':
           return 'end';
@@ -477,7 +499,8 @@ class Launch {
 
   // W2, then one operation's requests until a decision (design D2). W2
   // follows the last contact and pressure checks with no await between.
-  async #authorize(executionId: ExecutionId, reportsNotStarted: boolean): Promise<Authorized> {
+  async #authorize(execution: LaunchedExecution, reportsNotStarted: boolean): Promise<Authorized> {
+    const { executionId } = execution;
     const { contact } = this.#options;
     while (!this.#signal.aborted) {
       if (contact?.offline === true) await contact.whenOnline(this.#signal);
@@ -490,7 +513,7 @@ class Launch {
     const operationId = this.#newId('OperationId');
     const reading = this.#options.clock.read();
     if (operationId === undefined || !reading.ok) return { kind: 'end' };
-    const request = this.#request(executionId, operationId, reportsNotStarted);
+    const request = this.#request(execution, operationId, reportsNotStarted);
     // No request leaves before W2 commits (journal contract section 5).
     if (!(await this.#commitWrite(executionId, () => this.#options.journal.beginAuthorization(request)))) return { kind: 'end' };
     const { workerId: _worker, ...sent } = request;
@@ -500,6 +523,7 @@ class Launch {
       const answer = await this.#context.authority.authorize(sent);
       if (this.#stopping.aborted) return { kind: 'end' };
       if (!answer.ok) {
+        this.#authorizationFailed(executionId, operationId, answer.error);
         if (!this.#beforeDeadline(reading.value, DEFAULT_PARAMETERS)) return this.#expired(executionId, operationId);
         await this.#backOff();
         await this.#awaitAdmission();
@@ -518,6 +542,12 @@ class Launch {
           return this.#rejected(executionId, operationId, outcome.rejection);
       }
     }
+  }
+
+  // The details name the cause, such as the code of a lost connection;
+  // they never replace the known fields.
+  #authorizationFailed(executionId: ExecutionId, operationId: OperationId, { code, message, details }: Failure): void {
+    this.#context.logger.warn('worker.launch.authorization-failed', { ...details, executionId, operationId, code, message });
   }
 
   // Capacity reservation section 8: the launch waits, keeping its
@@ -637,12 +667,13 @@ class Launch {
     return 'end';
   }
 
-  #request(executionId: ExecutionId, operationId: OperationId, reportsNotStarted: boolean): LaunchRequest {
+  #request(execution: LaunchedExecution, operationId: OperationId, reportsNotStarted: boolean): LaunchRequest {
     const { workerId } = this.#options.journal.binding;
     const { recoveryEpoch, assignmentId, attemptId, ownershipGeneration, admissionId, admissionGeneration } = this.#intent;
+    const { executionId, reportsNotStartedFor } = execution;
     return {
       operationId, workerId, recoveryEpoch, assignmentId, attemptId, ownershipGeneration, executionId, admissionId, admissionGeneration,
-      reportsNotStarted,
+      reportsNotStarted, ...(reportsNotStartedFor === undefined ? {} : { reportsNotStartedFor }),
     };
   }
 

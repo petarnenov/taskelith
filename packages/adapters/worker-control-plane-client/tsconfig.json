@@ -5,6 +5,7 @@
     { "path": "../../kernel" },
     { "path": "../../modules/execution" },
     { "path": "../../modules/fleet" },
+    { "path": "../../modules/observability" },
     { "path": "../../modules/sdlc" },
     { "path": "../../testing" }
   ]

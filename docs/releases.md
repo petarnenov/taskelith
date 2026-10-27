@@ -5,7 +5,7 @@ Taskelith uses semantic-release and GitHub Actions. The repository checks are de
 ## Branch flow
 
 1. Each change is developed on its own feature branch in its own git worktree, so several changes can proceed in parallel, and is merged into `dev`, the default branch, through a pull request. Pushes and pull requests targeting `dev` run no workflow.
-2. Before every push, `make verify` must pass locally. Run `make hooks` once per clone; the `pre-push` hook then runs `make verify` and blocks the push on failure. The target first checks that Node matches `.nvmrc` and npm matches the CI pin.
+2. Before every push, `make verify` must pass locally, except for a push whose every ref is a deletion. Run `make hooks` once per clone; the `pre-push` hook then runs `make verify` and blocks the push on failure, and lets a delete-only push through without it. The target first checks that Node matches `.nvmrc` and npm matches the CI pin.
 3. A promotion pull request from `dev` into `main` runs `make verify` in GitHub.
 4. Merging the promotion into `main` runs `make verify` again and releases qualifying changes.
 
@@ -27,7 +27,7 @@ Push each branch from its own worktree: the `pre-push` hook refuses a push of an
 Two pitfalls, both observed on 2026-10-24:
 
 - `gh pr merge --delete-branch` run from a worktree merges the pull request but leaves the remote branch in place: before deleting the local branch, `gh` switches the worktree to `dev`, which fails because the main clone has `dev` checked out, and `gh` stops before it deletes the remote branch. After confirming that the pull request is merged, delete the remote branch from the main clone with `git push origin --delete <change>`.
-- The `pre-push` hook runs `make verify` for every push, including a branch deletion such as `git push origin --delete <change>`. `make verify` switches to the `.nvmrc` Node.js through nvm when nvm has it; without it, the toolchain check fails and the deletion is refused.
+- The `pre-push` hook ran `make verify` for every push, including a branch deletion such as `git push origin --delete <change>`, and refused the deletion when the `.nvmrc` Node.js was missing. Since 2026-10-26 a push whose every ref is a deletion skips `make verify`; a push that also updates a ref still runs it.
 
 ## Branch protection
 
