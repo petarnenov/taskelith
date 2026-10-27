@@ -44,7 +44,7 @@ The owner resolved the merge conflicts with "ауто мърдж побежда�
      - Accept and integrate is the merge gate between Review and Archived.
      - Each card shows its framework's native step, or "platform-managed" where the [framework mapping](../sdlc-framework-mapping.md) records a gap.
      - Merging closes and archives the change and stops its agent session.
-   - **Task detail.** It shows the gate states (pending, passed, failed, stale, blocked), traceability, the run binding, and the admission.
+   - **Task detail.** It shows the gate states (pending, passed, failed, stale, blocked), traceability, the run binding, and the admission. *Editorial note, 2026-10-27 (owner-confirmed; terms of the [product ports contract](../contracts/product-ports.md#33-card) section 3.3):* a board card is one root workflow run, keyed by `runId`. Each of its tasks is a G2 task, admitted to one stage (`stageId`) and optionally one work item (`workItem`) of that run; the "admission" that the task detail shows is the run's list of those task admissions. No decision of this ADR changes.
    - **Screens.** Agent session (with a composer that stays visible), reviews, workers and account pools, new task, knowledge, a "Needs you" inbox that every screen updates, SCM integrations, and plugins.
    - **Board states.**
      - The board defines first run, empty, loading, load error, live updates lost, no workers online, and read-only states. On first run it guides the user through setup instead of showing an empty board.

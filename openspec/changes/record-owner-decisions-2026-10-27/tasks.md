@@ -8,7 +8,7 @@
 
 ## 2. ADR 0008 editorial note (part B)
 
-- [ ] 2.1 Apply the note drafted in `design.md` D4 to ADR 0008, with the terms of D1 of `align-product-ports-with-g2-lifecycle` as merged: pending q40 landing.
+- [x] 2.1 Merge `origin/dev` with `align-product-ports-with-g2-lifecycle` (#372) and add the editorial note to ADR 0008 in the terms of its design D1 (design D4).
 
 ## 3. Stale rows (part C)
 
