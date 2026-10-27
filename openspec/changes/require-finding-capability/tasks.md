@@ -19,4 +19,4 @@
 - [x] 4.1 Create this change's empty `findings.jsonl`.
 - [x] 4.2 Run the findings tests with coverage, `npm run findings -- validate`, the checklist, `npm run verify:comments`, `npm run openspec -- validate require-finding-capability --strict`, and the archive in a scratch copy.
 - [ ] 4.3 Run `make verify`.
-- [ ] 4.4 Independent review.
+- [x] 4.4 Independent review.

@@ -15,7 +15,7 @@ In all, 26 archived findings are record findings (9 of them name a capability): 
 
 ## Revision
 
-Implementation and documentation at `54dec1e4`; this record is in the following commit.
+Implementation and documentation at `54dec1e4`; this record in `e25d3151`. Review pass 1 fixes at `8e38e16a`; their record is in the following commit.
 
 ## Environment
 
@@ -27,7 +27,7 @@ macOS 26.6.2 (Darwin 25.6.0, x86_64), Node.js v24.22.1 from `.nvmrc`, dependenci
 - Redaction: the new diagnostics quote only the capability, which has passed the schema's identifier pattern and the secret-like value check before the rule runs, as the category does; no other input is printed.
 - Contract-drift: the protocol, the schema description, the skills, and the modified requirements say the same rule: record findings are those under `openspec/changes/`; in an active change every other finding names a capability, and any named capability must exist; archived findings keep the earlier rules. Record findings matching a query still appear in the query section, so the existing checklist contract is unchanged except for the added section.
 - Error-handling: a missing capability and an unknown capability each give one diagnostic with the file and line and fail validation; a missing `openspec/specs` directory yields an empty set, so every named capability is reported, not skipped.
-- Requirements: the two modified requirements have 455 and 451 characters, under OpenSpec's 500; the archive was tested in a scratch copy (below).
+- Requirements: the two modified requirements have 497 and 451 characters, under OpenSpec's 500; the archive was tested in a scratch copy (below).
 - Coverage: the two script modules, measured separately because `npm test` covers only built product modules, are at 100 % lines and functions, 97.89 % and 99.21 % branches.
 - Evidence check: the numbers above and the results below come from the commands listed; no external link is added.
 
@@ -51,7 +51,15 @@ Each rule's tests were committed before its implementation and run on the code b
 
 ## Independent review
 
-Pending: Claude Code, model `claude-fable-5-1`, effort medium.
+### Pass 1
+
+Claude Code, model `claude-fable-5-1`, effort medium, session `7abb7178-7435-4fe5-88a6-3db2089d4b29`, on `e25d3151`. Result: 0 Critical, 0 High, 0 Medium, 3 Low. All three are in `findings.jsonl` with the outcome `fixed-unreviewed`: under the [review process](../../../docs/governance.md#independent-review-process) a Low-only pass is fixed without another review. Fixes in `8e38e16a`:
+
+- evidence-mismatch, `verification.md`: the finding `dev` added after the brief is a record finding of `stabilize-placement-fair-order-test` (PR #331), not `docs/dependencies.md`; at `92f0830b` all four code and doc findings already existed, so the brief's 20 split as 16 record and 4 code or doc findings, and its "3 others" was off by one. Corrected under "Archived findings on the base".
+- contract-drift, the `review-process` delta and the schema: the requirement now says that any named capability exists under `openspec/specs`, a scenario covers a record finding with an unknown capability, and the schema's `capability` description says the same.
+- docs, `docs/agent-task-protocol.md` worker step 5: it now asks for the capability of any finding outside `openspec/changes/`, as the `taskelith-task-protocol` skill does.
+
+After the fixes the checks above were repeated with the same results (40 of 40 tests, 9 valid findings files, comments within the rule, the change valid with `--strict`), and the archive in a scratch copy again applied 2 modified requirements with 69 passed, 0 failed. The coverage run was not repeated: the fixes touch no script.
 
 ## Limitations
 
@@ -62,6 +70,5 @@ Pending: Claude Code, model `claude-fable-5-1`, effort medium.
 ## Remaining gates
 
 - `make verify`.
-- The independent review (Claude Code `claude-fable-5-1`, medium).
 - Archive.
 - Integration into dev by the coordinator (single pull request).
