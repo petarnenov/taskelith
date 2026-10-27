@@ -10,8 +10,11 @@ import {
   formatChecklist,
   formatIndex,
   formatProblem,
+  formatRecordChecklist,
   parseFindings,
   parseVocabulary,
+  recordChecklist,
+  SPECS_DIRECTORY,
   VOCABULARY_PATH,
   type Category,
   type ChecklistQuery,
@@ -148,6 +151,7 @@ interface Repository {
   readonly missing: readonly Problem[];
   readonly vocabularyText: string;
   readonly schema: object;
+  readonly capabilities: readonly string[];
 }
 
 interface ChangeLocation {
@@ -177,6 +181,7 @@ function loadRepository(root: string): Repository {
     missing: missing.map(({ path }) => ({ file: path, message: 'missing; an active change records its findings here, empty if none' })),
     vocabularyText: read(VOCABULARY_PATH),
     schema: JSON.parse(read(SCHEMA_PATH)) as object,
+    capabilities: directories(root, SPECS_DIRECTORY),
   };
 }
 
@@ -206,7 +211,9 @@ export function runFindings(args: readonly string[], root: string): RunResult {
 function runCommand(command: Command, repository: Repository): RunResult {
   const vocabulary = parseVocabulary(repository.vocabularyText);
   const rules = { checkSchema: ajvSchemaCheck(repository.schema), categories: new Set(vocabulary.categories.map(({ id }) => id)) };
-  const parsed = repository.sources.map((source) => ({ source, ...parseFindings(source, rules) }));
+  const activeRules = { ...rules, capabilities: new Set(repository.capabilities) };
+  const parsed = repository.sources.map((source) =>
+    ({ source, ...parseFindings(source, source.archived ? rules : activeRules) }));
   const problems = [
     ...vocabulary.problems,
     ...(command.name === 'validate' ? repository.missing : []),
@@ -222,9 +229,17 @@ function runCommand(command: Command, repository: Repository): RunResult {
 
 function commandOutput(command: Command, archived: readonly Finding[], files: number, categories: readonly Category[]): string {
   if (command.name === 'validate') return `Every findings file is valid: ${files} file(s).`;
-  if (command.name === 'checklist') return formatChecklist(checklist(archived, categories, command.query), command.query);
+  if (command.name === 'checklist') return checklistOutput(command.query, archived, categories);
   const index = findingsIndex(archived);
   return command.json ? JSON.stringify(index, null, 2) : formatIndex(index);
+}
+
+// Record quality is listed whatever the query, because record findings
+// often name no capability and no file of the task.
+function checklistOutput(query: ChecklistQuery, archived: readonly Finding[], categories: readonly Category[]): string {
+  const forQuery = formatChecklist(checklist(archived, categories, query), query);
+  const forRecords = formatRecordChecklist(recordChecklist(archived, categories, query.top));
+  return `${forQuery}\n\n${forRecords}`;
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
