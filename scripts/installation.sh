@@ -4,7 +4,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: installation.sh build|bootstrap|broker-config|start|stop|enroll|enrollment-token|verify|check-reproducible|smoke|check-containment|scenario-fresh-composition|scenario-worker-disk-loss|scenario-worker-kill|scenario-worker-namespace-confinement|scenario-worker-lifecycle|scenario-native-worker-lifecycle PROJECT" >&2
+  echo "usage: installation.sh build|bootstrap|broker-config|certificates|installation-ca|start|stop|enroll|enrollment-token|verify|check-reproducible|smoke|check-containment|scenario-fresh-composition|scenario-worker-disk-loss|scenario-worker-kill|scenario-worker-namespace-confinement|scenario-worker-lifecycle|scenario-native-worker-lifecycle PROJECT" >&2
   exit 2
 }
 
@@ -130,9 +130,35 @@ bootstrap() {
   broker_config
 }
 
-# Installs the broker trust that init wrote; repeatable after a failure.
+# Installs the broker trust and TLS files that init wrote, and the public
+# CA for the worker; repeatable after a failure.
 broker_config() {
   compose run --rm --no-deps -T nats-setup >&2
+}
+
+# Issues new server certificates from the kept authority, installs the
+# broker's, and restarts the broker and control plane that run.
+certificates() {
+  local service running=()
+  compose run --rm --no-deps -T admin issue-installation-certificates
+  broker_config
+  for service in nats control-plane; do
+    if [ -n "$(compose ps --quiet --status running "$service")" ]; then running+=("$service"); fi
+  done
+  if [ "${#running[@]}" -gt 0 ]; then compose restart "${running[@]}" >&2; fi
+}
+
+# Prints the installation's public CA certificate, which clients trust.
+installation_ca() {
+  compose run --rm --no-deps -T --entrypoint cat admin /var/lib/taskelith/control-plane/installation-ca.pem
+}
+
+# Exports the installation CA for this script's Node.js tools, which reach
+# the API over HTTPS; remove_project deletes the file.
+trust_installation_ca() {
+  ca_file="$(mktemp "${TMPDIR:-/tmp}/taskelith-installation-ca.XXXXXX")"
+  installation_ca > "$ca_file"
+  export NODE_EXTRA_CA_CERTS="$ca_file"
 }
 
 start() {
@@ -232,6 +258,7 @@ check_running() {
 
 remove_project() {
   if [ -n "${sentinel:-}" ]; then rm -f "$repository/$sentinel"; fi
+  if [ -n "${ca_file:-}" ]; then rm -f "$ca_file"; fi
   compose --profile setup --profile admin --profile worker down --volumes --remove-orphans >/dev/null 2>&1 \
     && docker image rm "$control_plane_image" "$worker_image" >/dev/null 2>&1
 }
@@ -302,7 +329,7 @@ api_url() {
     echo "installation.sh: the control-plane API port is not published" >&2
     exit 1
   fi
-  echo "http://$address"
+  echo "https://$address"
 }
 
 # The capabilities of the worker process: KILL, SETGID, and SETUID only.
@@ -348,6 +375,7 @@ smoke() {
   enroll
   check_containment
   local url
+  trust_installation_ca
   url="$(api_url)"
   node --experimental-strip-types "$repository/scripts/installation-smoke.ts" "$url" "$smoke_directory/workflows.json"
   remove_throwaway "submitted, assigned, executed, stored the result, removed"
@@ -361,6 +389,8 @@ case "$command" in
   build) build ;;
   bootstrap) bootstrap ;;
   broker-config) broker_config ;;
+  certificates) certificates ;;
+  installation-ca) installation_ca ;;
   start) start ;;
   stop) stop ;;
   enroll) enroll ;;

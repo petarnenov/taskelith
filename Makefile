@@ -24,7 +24,7 @@ SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
 .PHONY: verify verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility findings \
-	test services-up services-down verify-linux-cgroup verify-linux-crash-windows installation-build installation-bootstrap installation-broker-config installation-start \
+	test services-up services-down verify-linux-cgroup verify-linux-crash-windows installation-build installation-bootstrap installation-broker-config installation-certificates installation-ca installation-start \
 	installation-stop installation-enroll installation-enrollment-token verify-installation verify-worker-image-reproducible installation-smoke qualify-harnesses \
 	scenario-fresh-composition scenario-worker-disk-loss scenario-worker-kill \
 	scenario-worker-namespace-confinement worker-seccomp-profile linux-test-image linux-test-suites \
@@ -143,6 +143,15 @@ installation-bootstrap:
 # Installs the broker trust again, for example after a failed bootstrap.
 installation-broker-config:
 	@bash scripts/installation.sh broker-config $(INSTALLATION)
+
+# Issues the API and NATS server certificates again (397 days, provisional)
+# and restarts the running broker and control plane to load them.
+installation-certificates:
+	@bash scripts/installation.sh certificates $(INSTALLATION)
+
+# Prints the installation's public CA, for a native worker to trust.
+installation-ca:
+	@bash scripts/installation.sh installation-ca $(INSTALLATION)
 
 installation-start:
 	@bash scripts/installation.sh start $(INSTALLATION)

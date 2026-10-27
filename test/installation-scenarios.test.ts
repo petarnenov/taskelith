@@ -454,6 +454,7 @@ build() { :; }
 bootstrap_operator() { :; }
 start() { :; }
 api_url() { echo http://stub; }
+trust_installation_ca() { ca_file="$stubs/ca.pem"; }
 compose() { case "$*" in 'port nats 4222') echo 127.0.0.1:4222 ;; esac; }
 enrollment_token() { echo '{"enrollmentToken":"t"}'; }
 field() { cat > /dev/null; echo t; }

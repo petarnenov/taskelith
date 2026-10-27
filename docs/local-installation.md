@@ -1,6 +1,6 @@
 # Minimal local installation
 
-Status: G2 item 23, parts 23a (`compose-minimal-local-installation-images`) and 23b (`compose-installation-end-to-end`). The composition runs the control plane, PostgreSQL, NATS, and a Linux worker on one Docker host and enrolls workers. `make installation-smoke` proves the end-to-end path (submit, assign, execute, store the result) on a throwaway project with a test-only workflow and scripted process. The default installation installs no workflow and no launch command, so its control plane refuses every run: G2 has no workflow resolution, and its only launch command is the test-only scripted process.
+Status: G2 item 23, parts 23a (`compose-minimal-local-installation-images`) and 23b (`compose-installation-end-to-end`), with the TLS of G3 item 26a (`issue-installation-certificates`). The composition runs the control plane, PostgreSQL, NATS, and a Linux worker on one Docker host and enrolls workers. `make installation-smoke` proves the end-to-end path (submit, assign, execute, store the result) on a throwaway project with a test-only workflow and scripted process. The default installation installs no workflow and no launch command, so its control plane refuses every run: G2 has no workflow resolution, and its only launch command is the test-only scripted process.
 
 ## Parts
 
@@ -20,18 +20,19 @@ The Compose project is named per worktree (`taskelith-<id>-installation`), like 
 Every target except the build needs `TASKELITH_POSTGRES_PASSWORD` in the environment; it goes into a `postgres:` URL, so use URL-safe characters. Keep it, because the database volume keeps the first one.
 
 1. `make installation-build` builds both images. A new file must be staged (`git add`) to be part of them.
-2. `make installation-bootstrap ACTOR=<who> REASON=<why>` starts PostgreSQL, runs `init` of the administrative entry ([installation contract](contracts/installation-and-enrollment.md) section 2), and copies the generated `nats-authority.conf` into the broker's configuration volume. It prints the operator secret once; store it, because only its hash is kept. If the copy fails after `init` succeeded, `make installation-broker-config` repeats only the copy; a second bootstrap fails with `conflict`.
+2. `make installation-bootstrap ACTOR=<who> REASON=<why>` starts PostgreSQL, runs `init` of the administrative entry ([installation contract](contracts/installation-and-enrollment.md) section 2), and copies the generated `nats-authority.conf`, the broker's server certificate and key, and the public installation CA into the broker's configuration volume and the worker's read-only trust volume. `init` creates the installation CA and issues the API and NATS server certificates with the host names of `TASKELITH_API_HOSTS` and `TASKELITH_NATS_HOSTS`, by default the service name, `localhost`, and `127.0.0.1` ([installation contract](contracts/installation-and-enrollment.md) section 7). It prints the operator secret once; store it, because only its hash is kept. If the copy fails after `init` succeeded, `make installation-broker-config` repeats only the copy; a second bootstrap fails with `conflict`.
 3. `make installation-start` starts PostgreSQL, NATS, and the control plane, and restarts an enrolled worker container. If the control plane does not become healthy, the target stops it, so that it does not restart in a loop, prints its last error, and fails.
 4. `make installation-enroll`, with `TASKELITH_OPERATOR_TOKEN` set to the operator secret, issues a single-use enrollment token and starts the Linux worker container, which enrolls on its first start; the target fails unless the worker stores its identity within a minute.
 5. `make installation-stop` stops the containers and keeps the volumes.
+6. `make installation-certificates` issues the API and NATS server certificates again from the kept CA, installs the broker's, and restarts the broker and control plane that run. Server certificates are valid for 397 days and the CA for ten years; both periods are provisional, and CA rollover is G6 work.
 
-The control-plane API is on `http://127.0.0.1:8080` and NATS on `nats://127.0.0.1:4222`. `TASKELITH_API_PUBLISH_PORT` and `TASKELITH_NATS_PUBLISH_PORT` change the host ports.
+The worker API is on `https://127.0.0.1:8080`, the browser endpoint on `https://127.0.0.1:8443`, and NATS on `nats://127.0.0.1:4222`, which requires TLS. Both listeners refuse plain HTTP and TLS older than 1.2. The browser endpoint serves the operator's certificate when `TASKELITH_BROWSER_TLS_CERT` and `TASKELITH_BROWSER_TLS_KEY` name its PEM files, and the installation's API certificate otherwise. `make installation-ca` prints the installation CA, which clients trust, for example through `NODE_EXTRA_CA_CERTS` or `curl --cacert`. `TASKELITH_API_PUBLISH_PORT`, `TASKELITH_BROWSER_PUBLISH_PORT`, and `TASKELITH_NATS_PUBLISH_PORT` change the host ports.
 
 `make` passes `ACTOR`, `REASON`, `PLATFORM`, `ARCHITECTURE`, and `WORKER_HOSTNAME` to the script through the environment, never as shell text; `make` itself still expands `$(...)` in them.
 
 ### A native macOS worker
 
-`make installation-enrollment-token PLATFORM=darwin ARCHITECTURE=arm64`, with `TASKELITH_OPERATOR_TOKEN` set, prints a token; `WORKER_HOSTNAME` restricts it to one host name. Then, in a built checkout, run the worker with `TASKELITH_CONTROL_PLANE_URL=http://127.0.0.1:8080`, `TASKELITH_NATS_URL=nats://127.0.0.1:4222`, and the token in `TASKELITH_ENROLLMENT_TOKEN`: `node apps/worker/dist/main.js`. A launchd service is G6 work.
+`make installation-enrollment-token PLATFORM=darwin ARCHITECTURE=arm64`, with `TASKELITH_OPERATOR_TOKEN` set, prints a token; `WORKER_HOSTNAME` restricts it to one host name. Then save the output of `make installation-ca` to a file and, in a built checkout, run the worker with `TASKELITH_CONTROL_PLANE_URL=https://127.0.0.1:8080`, `TASKELITH_NATS_URL=nats://127.0.0.1:4222`, `TASKELITH_NATS_CA` and `NODE_EXTRA_CA_CERTS` both naming that file, and the token in `TASKELITH_ENROLLMENT_TOKEN`: `node apps/worker/dist/main.js`. A launchd service is G6 work.
 
 ### Launch settings
 
@@ -96,6 +97,6 @@ JetStream reserves the byte limit of each stream on the broker's disk when the s
 
 ## Limits
 
-- Connections are plain: the control-plane API is HTTP, and NATS and PostgreSQL use no TLS. Ports are published on localhost only. TLS and the installation CA are G3 work.
+- The API and NATS use TLS from the installation CA; PostgreSQL stays plain on the Compose network. Workers trust the CA as a file and pin no fingerprint, and the server certificates of a running worker host change only through `make installation-certificates`. Ports are published on localhost only. Worker CA pinning, certificate rotation delivery, and private-network binding are later G3 work.
 - The enrollment token stays in the worker container's configuration. It is single-use and expires after 15 minutes.
 - The images are built locally; publishing them to a registry is not part of this item.
