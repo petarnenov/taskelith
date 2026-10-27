@@ -273,6 +273,7 @@ openspec/changes/archive/2026-10-27-fix-control-plane-api-keep-alive-race/verifi
 openspec/changes/archive/2026-10-27-fix-control-plane-api-keep-alive-race/verification.md	../../../docs/governance.md#independent-review-process
 openspec/changes/archive/2026-10-27-fix-platform-probe-filesystem-label/verification.md	../../../docs/agent-task-protocol.md#subagent-execution
 openspec/changes/archive/2026-10-27-fix-platform-probe-filesystem-label/verification.md	../../../docs/governance.md#independent-review-process
+openspec/changes/archive/2026-10-27-placement-backoff-preserves-rotation/verification.md	../../../docs/agent-task-protocol.md#subagent-execution
 openspec/changes/archive/2026-10-27-record-review-findings/verification.md	../../../docs/agent-task-protocol.md#subagent-execution
 openspec/changes/archive/2026-10-27-report-all-unconfirmed-sealed-executions/verification.md	../../../docs/agent-task-protocol.md#review-findings-record
 openspec/changes/archive/2026-10-27-report-all-unconfirmed-sealed-executions/verification.md	../../../docs/contracts/execution-wire-contracts.md

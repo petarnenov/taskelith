@@ -56,4 +56,4 @@ How this change addresses the top categories:
 - Root-relative links resolve on GitHub but not in every local Markdown viewer; records are read on GitHub, and the packaged documents keep relative links.
 - The slug rules follow GitHub's for the forms the tests cover; a heading whose rendered text differs in another way, for example through inline HTML that GitHub keeps, would show as a reported missing anchor.
 - A link that spans block quote lines is reported at the line of the previous match.
-- The baseline accepts the 331 archived links for as long as the archived records keep them.
+- The baseline accepts the 332 archived links for as long as the archived records keep them.

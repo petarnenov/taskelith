@@ -9,7 +9,7 @@
   - no link enters an active change, because that change moves when archived;
   - a relative link in a change record stays inside the change directory, a relative link in a spec delta is rejected, and one in a main spec stays inside its capability directory;
   - an active change is checked at the path that `openspec archive` will give it.
-- `scripts/record-links-baseline.tsv` lists the 331 archived links that break the rule, one line per occurrence; the check accepts only those, fails on an entry that no longer occurs, and reports how many remain.
+- `scripts/record-links-baseline.tsv` lists the 332 archived links (331 on `bd6108d4`, and 1 from the archive of `placement-backoff-preserves-rotation`, merged with `21f399a5`) that break the rule, one line per occurrence; the check accepts only those, fails on an entry that no longer occurs, and reports how many remain.
 - `docs/dependencies.md:127` (line 126 on `bd6108d4`) links the archived record of `compose-minimal-local-installation-images`.
 - Worker step 6 of [the agent task protocol](/docs/agent-task-protocol.md#worker-steps) states the record link rule, and the evidence check of [the review process](/docs/governance.md#independent-review-process) includes it.
 
