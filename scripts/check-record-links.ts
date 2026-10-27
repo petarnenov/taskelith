@@ -5,7 +5,6 @@ import { Lexer, marked, type Token } from 'marked';
 // Checks the links of OpenSpec records and docs; an active change is checked
 // at its future archived path, so a link that archiving breaks fails now.
 
-export const BASELINE_PATH = 'scripts/record-links-baseline.tsv';
 const SCANNED_DIRS = ['docs', 'openspec/specs', 'openspec/changes'];
 const CHANGES_DIR = 'openspec/changes';
 const ARCHIVE_DIR = 'openspec/changes/archive';
@@ -21,20 +20,11 @@ export interface MarkdownLink {
   target: string;
 }
 
-export interface BaselineEntry {
+export interface LinkProblem {
   file: string;
-  target: string;
-}
-
-export interface LinkProblem extends BaselineEntry {
   line: number;
+  target: string;
   reason: string;
-}
-
-export interface BaselineResult {
-  unbaselined: LinkProblem[];
-  baselined: number;
-  stale: BaselineEntry[];
 }
 
 // A record directory as it sits once archived, and as it sits now.
@@ -242,37 +232,6 @@ export function findLinkProblems(root: string, archiveDate: string): LinkProblem
     checker.problemsOf(locate(file, archiveDate), readFileSync(posix.join(root, file), 'utf8')));
 }
 
-export function baselineLine(entry: BaselineEntry): string {
-  return `${entry.file}\t${entry.target}`;
-}
-
-export function parseBaseline(text: string): BaselineEntry[] {
-  return text.split('\n').filter((line) => line !== '').map((line, index) => {
-    const [file, target, ...extra] = line.split('\t');
-    if (target === undefined || extra.length > 0) {
-      throw new Error(`Baseline line ${index + 1} is not a path and a target separated by one tab.`);
-    }
-    if (!file.startsWith(`${ARCHIVE_DIR}/`)) {
-      throw new Error(`Baseline entry ${file} is outside ${ARCHIVE_DIR}/; fix the link instead.`);
-    }
-    return { file, target };
-  });
-}
-
-// Each entry suppresses one occurrence; entries left over are stale.
-export function applyBaseline(problems: readonly LinkProblem[], baseline: readonly BaselineEntry[]): BaselineResult {
-  const remaining = new Map<string, number>();
-  for (const entry of baseline) remaining.set(baselineLine(entry), (remaining.get(baselineLine(entry)) ?? 0) + 1);
-  const take = (entry: BaselineEntry) => {
-    const count = remaining.get(baselineLine(entry)) ?? 0;
-    if (count > 0) remaining.set(baselineLine(entry), count - 1);
-    return count > 0;
-  };
-  const unbaselined = problems.filter((problem) => !take(problem));
-  const stale = baseline.filter(take);
-  return { unbaselined, baselined: problems.length - unbaselined.length, stale };
-}
-
 // The archive date of `openspec archive`: the local calendar date.
 export function localDate(now: Date): string {
   const pad = (value: number) => String(value).padStart(2, '0');
@@ -285,16 +244,11 @@ export interface LinkReport {
 }
 
 export function linkReport(root: string, archiveDate: string): LinkReport {
-  const baselinePath = posix.join(root, BASELINE_PATH);
-  const baseline = existsSync(baselinePath) ? parseBaseline(readFileSync(baselinePath, 'utf8')) : [];
-  const { unbaselined, baselined, stale } = applyBaseline(findLinkProblems(root, archiveDate), baseline);
-  const errors = [
-    ...unbaselined.map(({ file, line, target, reason }) => `${file}:${line}: ${reason}: ${target}`),
-    ...stale.map((entry) => `${BASELINE_PATH}: stale entry, remove it: ${baselineLine(entry)}`),
-  ];
+  const errors = findLinkProblems(root, archiveDate)
+    .map(({ file, line, target, reason }) => `${file}:${line}: ${reason}: ${target}`);
   const summary = errors.length > 0
-    ? `Record link problems: ${unbaselined.length}, stale baseline entries: ${stale.length}; see docs/agent-task-protocol.md step 6.`
-    : `Every checked link conforms; ${baselined} archived links remain in ${BASELINE_PATH}.`;
+    ? `Record link problems: ${errors.length}; see docs/agent-task-protocol.md step 6.`
+    : 'Every checked link conforms.';
   return { errors, summary };
 }
 

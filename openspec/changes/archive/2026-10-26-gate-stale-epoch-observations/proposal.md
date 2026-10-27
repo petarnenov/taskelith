@@ -1,6 +1,6 @@
 ## Why
 
-The crash scenario 24c of G2 item 24 found bug B4: an `execution.exited` from a worker that holds an old recovery epoch still ends its attempt, because the control plane checks the recovery epoch only on `execution.started` ([launch authorization contract](../../../docs/contracts/launch-authorization.md) section 7). The owner's delegate decided in away run `20261026T164615Z-opencode-20899` to extend the start rule's evidence-only gate to every execution observation: one whose recovery epoch is not current, or that arrives in restore quarantine, is kept as evidence for quarantine reconciliation and changes no current state; current-epoch observations behave as before.
+The crash scenario 24c of G2 item 24 found bug B4: an `execution.exited` from a worker that holds an old recovery epoch still ends its attempt, because the control plane checks the recovery epoch only on `execution.started` ([launch authorization contract](/docs/contracts/launch-authorization.md) section 7). The owner's delegate decided in away run `20261026T164615Z-opencode-20899` to extend the start rule's evidence-only gate to every execution observation: one whose recovery epoch is not current, or that arrives in restore quarantine, is kept as evidence for quarantine reconciliation and changes no current state; current-epoch observations behave as before.
 
 ## What Changes
 

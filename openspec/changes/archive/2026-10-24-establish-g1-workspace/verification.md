@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-G1 item 1 of the [G1 work plan](../../../docs/g1-plan.md). Owner decision D1 on 2026-10-24: npm workspaces with private packages under `packages/`, each created with its first real use. The owner authorized starting the next task and merging completed, reviewed tasks without separate approval. Base revision: `41787eb` on `dev`. Scope: `package.json`, `package-lock.json` (workspace list only), `tsconfig.check.json`, `tsconfig.package.json` (new), `scripts/build-workspaces.ts` and `scripts/workspace-packages.ts` (new), `scripts/check-coverage-scope.ts`, `scripts/check-boundaries.ts`, `scripts/dependency-inventory.ts`, their tests, `docs/dependencies/licenses.json` (provenance hashes of the root manifest, lockfile, and inventory script), architecture section 6, ADR 0004 principle 9, and this change. Prepared in a git worktree.
+G1 item 1 of the [G1 work plan](/docs/g1-plan.md). Owner decision D1 on 2026-10-24: npm workspaces with private packages under `packages/`, each created with its first real use. The owner authorized starting the next task and merging completed, reviewed tasks without separate approval. Base revision: `41787eb` on `dev`. Scope: `package.json`, `package-lock.json` (workspace list only), `tsconfig.check.json`, `tsconfig.package.json` (new), `scripts/build-workspaces.ts` and `scripts/workspace-packages.ts` (new), `scripts/check-coverage-scope.ts`, `scripts/check-boundaries.ts`, `scripts/dependency-inventory.ts`, their tests, `docs/dependencies/licenses.json` (provenance hashes of the root manifest, lockfile, and inventory script), architecture section 6, ADR 0004 principle 9, and this change. Prepared in a git worktree.
 
 ## Author self-check before review
 

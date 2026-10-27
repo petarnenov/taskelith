@@ -4,7 +4,7 @@ Date: 2026-10-25. Author verification and independent review are recorded below.
 
 ## Scope and source
 
-G1 item 12 of the [G1 work plan](../../../docs/g1-plan.md). The coordinating session (Niki) assigned it, with the owner's 2026-10-25 port-access decision. Items 10 and 11 are merged. Base revision: `61d180b` on `dev`. Prepared in its own git worktree from a fresh `origin/dev`.
+G1 item 12 of the [G1 work plan](/docs/g1-plan.md). The coordinating session (Niki) assigned it, with the owner's 2026-10-25 port-access decision. Items 10 and 11 are merged. Base revision: `61d180b` on `dev`. Prepared in its own git worktree from a fresh `origin/dev`.
 
 Scope:
 

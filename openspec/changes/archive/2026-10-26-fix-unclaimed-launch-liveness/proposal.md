@@ -1,6 +1,6 @@
 ## Why
 
-The crash-window scenario of G2 item 24b found defect O1: when the process supervisor dies at CP5 ([supervisor identity contract](../../../docs/contracts/supervisor-identity.md) section 4), after it took `lock` and before it claims the launch record, and the worker keeps running, the execution stays `authorized` with no observation until the worker restarts. `ExecutionWatch.observe` asks the recovery table about the supervisor's liveness only for a claimed record. The owner's delegate decided in away run `20261026T161148Z-opencode-90873` that this is a defect, fixed in G2: the liveness check extends to a record that is authorized but not claimed, past its spawn deadline, so a dead supervisor is found without a worker restart.
+The crash-window scenario of G2 item 24b found defect O1: when the process supervisor dies at CP5 ([supervisor identity contract](/docs/contracts/supervisor-identity.md) section 4), after it took `lock` and before it claims the launch record, and the worker keeps running, the execution stays `authorized` with no observation until the worker restarts. `ExecutionWatch.observe` asks the recovery table about the supervisor's liveness only for a claimed record. The owner's delegate decided in away run `20261026T161148Z-opencode-90873` that this is a defect, fixed in G2: the liveness check extends to a record that is authorized but not claimed, past its spawn deadline, so a dead supervisor is found without a worker restart.
 
 ## What Changes
 

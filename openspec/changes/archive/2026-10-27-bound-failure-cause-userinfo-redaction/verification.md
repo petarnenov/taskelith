@@ -4,7 +4,7 @@ Date: 2026-10-27. The author's verification, `make verify` on `071822b` and on `
 
 ## Scope and source
 
-A coordinator brief from Niki: fix the ReDoS in the scheme-less user-information rule that #322 added to `packages/adapters/worker-control-plane-client/src/failure-cause.ts`, found by Pepi during the integration of #322. Developed in a briefed and checked subagent ([subagent execution](../../../docs/agent-task-protocol.md#subagent-execution)), in worktree `taskelith-worktrees/bound-failure-cause-userinfo-redaction` on branch `bound-failure-cause-userinfo-redaction`.
+A coordinator brief from Niki: fix the ReDoS in the scheme-less user-information rule that #322 added to `packages/adapters/worker-control-plane-client/src/failure-cause.ts`, found by Pepi during the integration of #322. Developed in a briefed and checked subagent ([subagent execution](/docs/agent-task-protocol.md#subagent-execution)), in worktree `taskelith-worktrees/bound-failure-cause-userinfo-redaction` on branch `bound-failure-cause-userinfo-redaction`.
 
 - **Base revision:** `5c60c15e` on `dev`; `dev` merged at `fe643864` as `071822b` and at `33d341a9` as `c021a0f9`.
 - **Revision verified:** `381629a8` (the test `258e45cc` and the fix `381629a8`), then `2f078d3` (the pass 1 test `ebceb80` and fix `2f078d3`), plus this change's records.

@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-G2 item 9 of the [G2 work plan](../../../docs/g2-plan.md), `establish-g2-runtime-workspace`, which depends on item 1. Sources: the owner's start of G2 on 2026-10-25, decisions D1 (a), D2 (a), D5 (a), and D8 (a), D14 (a) (items start in dependency order and merge without a per-item approval), and the owner's approval on 2026-10-25 of the proposals of the [G2 infrastructure evaluation](../../../docs/g2-infrastructure.md) (image variants and `pg@8.23.1` with `@types/pg@8.23.1`). Base revision: `ddef6d2` on `dev`. Prepared in a git worktree on branch `establish-g2-runtime-workspace`.
+G2 item 9 of the [G2 work plan](/docs/g2-plan.md), `establish-g2-runtime-workspace`, which depends on item 1. Sources: the owner's start of G2 on 2026-10-25, decisions D1 (a), D2 (a), D5 (a), and D8 (a), D14 (a) (items start in dependency order and merge without a per-item approval), and the owner's approval on 2026-10-25 of the proposals of the [G2 infrastructure evaluation](/docs/g2-infrastructure.md) (image variants and `pg@8.23.1` with `@types/pg@8.23.1`). Base revision: `ddef6d2` on `dev`. Prepared in a git worktree on branch `establish-g2-runtime-workspace`.
 
 Scope: `scripts/services.sh`, `apps/control-plane` and `apps/worker`, `infra/services/`, the `Makefile` targets `test`, `services-up`, and `services-down`, `package.json`, `package-lock.json`, `tsconfig.check.json`, `scripts/check-boundaries.ts` and its tests, `test/workspace-packages.test.ts`, the dependency inventory with two license reviews, the G2 rows of `docs/dependencies.md`, architecture section 6, README, `docs/releases.md`, and this change. Excluded: Toxiproxy (item 10), NATS client packages, migrations, adapters, and images.
 

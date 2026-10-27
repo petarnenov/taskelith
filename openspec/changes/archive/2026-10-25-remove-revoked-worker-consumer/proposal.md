@@ -1,6 +1,6 @@
 ## Why
 
-The worker command intake change (20b of the [G2 work plan](../../../docs/g2-plan.md) item 20) makes the control plane create each worker's durable command consumer at enrollment and repair the consumers of the active workers at every start. Nothing removes the consumer of a revoked worker, so the commands stream keeps one consumer for every worker ever revoked. This G2 follow-up removes it.
+The worker command intake change (20b of the [G2 work plan](/docs/g2-plan.md) item 20) makes the control plane create each worker's durable command consumer at enrollment and repair the consumers of the active workers at every start. Nothing removes the consumer of a revoked worker, so the commands stream keeps one consumer for every worker ever revoked. This G2 follow-up removes it.
 
 ## What Changes
 
@@ -17,4 +17,4 @@ The worker command intake change (20b of the [G2 work plan](../../../docs/g2-pla
 
 - Specification: `installation-enrollment`, a new requirement "Revoked worker command consumer" beside "Worker command consumer".
 - Code: `@taskelith/fleet`, `@taskelith/nats`, `@taskelith/postgres`, and `@taskelith/control-plane`.
-- Documentation: the control-plane background loops row of [operational targets](../../../docs/operational-targets.md).
+- Documentation: the control-plane background loops row of [operational targets](/docs/operational-targets.md).

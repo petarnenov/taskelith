@@ -4,7 +4,7 @@ Date: 2026-10-25. Author verification and independent review are recorded below.
 
 ## Scope and source
 
-[G2 work plan](../../../docs/g2-plan.md) item 22 and owner decision D13 (a). The coordinating session (Niki) assigned it to the worker session Maki, with Claude Fable 5.1 (medium) as the reviewer by rotation. Base revision: `5878679` on `dev`, with items 11 (PostgreSQL state and outbox) and 12 (NATS transport) merged and archived.
+[G2 work plan](/docs/g2-plan.md) item 22 and owner decision D13 (a). The coordinating session (Niki) assigned it to the worker session Maki, with Claude Fable 5.1 (medium) as the reviewer by rotation. Base revision: `5878679` on `dev`, with items 11 (PostgreSQL state and outbox) and 12 (NATS transport) merged and archived.
 
 Scope: the row of item 22. That covers structured logs with command and attempt correlation and no secrets, and the architecture section 12 signals that G2 produces, behind a log sink and a metrics port with adapters outside the domain. Out of scope:
 - dashboards, alerting, and an exporter deployment;

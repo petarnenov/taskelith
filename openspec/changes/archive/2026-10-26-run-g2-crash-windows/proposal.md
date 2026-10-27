@@ -1,6 +1,6 @@
 ## Why
 
-G2 work item 24, `run-g2-failure-scenarios` ([docs/g2-plan.md](../../../docs/g2-plan.md)), is G2 exit evidence for R05 to R08 and R27 of [docs/architecture.md](../../../docs/architecture.md). The coordinator split it in three; this change is 24b: a crash at each process-launch window, followed by a restart and recovery, and duplicate delivery of an offer, run through the harness with recorded results. 24a (`run-g2-failure-scenarios-composition`) adds the results recorder and the Compose scenarios; 24c (`run-g2-partition-and-races`) runs partition and reconnect, cancellation races, and stale generations.
+G2 work item 24, `run-g2-failure-scenarios` ([docs/g2-plan.md](/docs/g2-plan.md)), is G2 exit evidence for R05 to R08 and R27 of [docs/architecture.md](/docs/architecture.md). The coordinator split it in three; this change is 24b: a crash at each process-launch window, followed by a restart and recovery, and duplicate delivery of an offer, run through the harness with recorded results. 24a (`run-g2-failure-scenarios-composition`) adds the results recorder and the Compose scenarios; 24c (`run-g2-partition-and-races`) runs partition and reconnect, cancellation races, and stale generations.
 
 ## What Changes
 

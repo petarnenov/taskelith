@@ -1,6 +1,6 @@
 ## Why
 
-The [start reconciliation change](../archive/2026-10-26-implement-worker-start-reconciliation/verification.md) left two follow-ups. A failed assertion in the macOS real-process supervisor tests leaves the supervisor child running, so `make verify` hung for about two hours instead of failing. And the journal port's `recordExit` still accepts the recovery evidence `boot-changed` or `namespace-ended` with a known exit status, although the supervisor record reader and the wire contract reject that combination.
+The [start reconciliation change](/openspec/changes/archive/2026-10-26-implement-worker-start-reconciliation/verification.md) left two follow-ups. A failed assertion in the macOS real-process supervisor tests leaves the supervisor child running, so `make verify` hung for about two hours instead of failing. And the journal port's `recordExit` still accepts the recovery evidence `boot-changed` or `namespace-ended` with a known exit status, although the supervisor record reader and the wire contract reject that combination.
 
 ## What Changes
 

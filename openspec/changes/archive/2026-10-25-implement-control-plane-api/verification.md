@@ -4,7 +4,7 @@ Date: 2026-10-25. Author verification and independent review are recorded below.
 
 ## Scope and source
 
-[G2 work plan](../../../docs/g2-plan.md) item 16, assigned by the coordinating session (Niki) to the worker session Pepi, with Codex `gpt-6.1-sol` (medium) as the reviewer.
+[G2 work plan](/docs/g2-plan.md) item 16, assigned by the coordinating session (Niki) to the worker session Pepi, with Codex `gpt-6.1-sol` (medium) as the reviewer.
 - Base revision: `9e6febd` on `dev`, with items 8, 11, 12, 13, 18, and 22 merged and archived.
 - Scope: the row of item 16, plus the obligations items 12, 13, 18, and 22 left to it.
 - Out of scope: launch authority (item 17) and the evidence store (item 19).

@@ -1,6 +1,6 @@
 ## Why
 
-G2 work item 23 ([docs/g2-plan.md](../../../docs/g2-plan.md)) packages the minimal local installation that decision D5 (a) selected: Docker Compose with PostgreSQL, NATS, a control-plane image, and a Linux worker image, run by `make` targets, with a macOS worker as a native process. Items 12, 13, and 16 left obligations to it: the `make` targets that run the administrative entry, the deployment of `nats-authority.conf`, and the images that run `apps/control-plane/src/main.ts` and `apps/worker/src/main.ts`.
+G2 work item 23 ([docs/g2-plan.md](/docs/g2-plan.md)) packages the minimal local installation that decision D5 (a) selected: Docker Compose with PostgreSQL, NATS, a control-plane image, and a Linux worker image, run by `make` targets, with a macOS worker as a native process. Items 12, 13, and 16 left obligations to it: the `make` targets that run the administrative entry, the deployment of `nats-authority.conf`, and the images that run `apps/control-plane/src/main.ts` and `apps/worker/src/main.ts`.
 
 Item 23 depends on items 13, 16, 20, and 21. Items 13 and 16 are merged; of items 20 and 21 only 20a (worker bootstrap) and 21a (placement) are. The coordinator split item 23 so that the packaging starts now:
 

@@ -4,7 +4,7 @@ Date: 2026-10-24. Author verification and independent review are recorded below.
 
 ## Scope and source
 
-G1 work item 2 in [docs/g1-plan.md](../../../docs/g1-plan.md), started under the owner's G1 authorization recorded there. Base revision: `41787eb` on `dev`; `origin/dev` at `c5848a9`, which contains item 1, was merged into the branch afterwards. Scope: the new private workspace package `packages/kernel` (`@taskelith/kernel`) with its tests, and this change, which adds the `shared-kernel` capability. It depends on item 1, `establish-g1-workspace`, which supplies the npm workspace, the package build, the test and coverage globs, and the boundary rules for packages.
+G1 work item 2 in [docs/g1-plan.md](/docs/g1-plan.md), started under the owner's G1 authorization recorded there. Base revision: `41787eb` on `dev`; `origin/dev` at `c5848a9`, which contains item 1, was merged into the branch afterwards. Scope: the new private workspace package `packages/kernel` (`@taskelith/kernel`) with its tests, and this change, which adds the `shared-kernel` capability. It depends on item 1, `establish-g1-workspace`, which supplies the npm workspace, the package build, the test and coverage globs, and the boundary rules for packages.
 
 ## Author self-check before review
 

@@ -1,6 +1,6 @@
 ## Why
 
-G1 item 11 in the [G1 work plan](../../../docs/g1-plan.md): the OpenSpec plugin that implements the draft SDLC framework port through the pinned CLI (decision D6 (a)), registered through the plugin SDK, and passing the conformance suite on the OpenSpec mapping fixtures before the port freezes in item 12. Items 6 (the draft port and its conformance suite), 8 (`registerPlugin`), and 10 (the fixtures) are merged. The task was assigned by the coordinating session Niki.
+G1 item 11 in the [G1 work plan](/docs/g1-plan.md): the OpenSpec plugin that implements the draft SDLC framework port through the pinned CLI (decision D6 (a)), registered through the plugin SDK, and passing the conformance suite on the OpenSpec mapping fixtures before the port freezes in item 12. Items 6 (the draft port and its conformance suite), 8 (`registerPlugin`), and 10 (the fixtures) are merged. The task was assigned by the coordinating session Niki.
 
 ## What Changes
 

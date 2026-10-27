@@ -47,7 +47,7 @@ The race itself is not reproduced in the suite: a test would need a stall of sev
 ### Pass 1
 
 - **Reviewer:** OpenCode CLI, model `opencode-go/deepseek-v4-pro`, variant `high`, `reviewer` agent (read-only), assigned by the coordinator.
-- **Invocation:** the `kimi-k3.1-pro` row of [docs/agent-task-protocol.md](../../../docs/agent-task-protocol.md) with the coordinator-assigned model, because the `deepseek` row had not landed on `dev` yet. From the worktree: `opencode run --standalone --agent reviewer -m 'opencode-go/deepseek-v4-pro#high' --format json --title fix-control-plane-api-keep-alive-race "$(cat <prompt-file>)" < /dev/null > <log>`.
+- **Invocation:** the `kimi-k3.1-pro` row of [docs/agent-task-protocol.md](/docs/agent-task-protocol.md) with the coordinator-assigned model, because the `deepseek` row had not landed on `dev` yet. From the worktree: `opencode run --standalone --agent reviewer -m 'opencode-go/deepseek-v4-pro#high' --format json --title fix-control-plane-api-keep-alive-race "$(cat <prompt-file>)" < /dev/null > <log>`.
 - **Revision:** `774a060` (diff `370fa59..774a060`).
 - **Model confirmation:** the stored assistant messages record provider `opencode-go`, model `deepseek-v4-pro`, variant `high`; session `ses_e85b9c2f7ffeZoHy4yZyfJ6p95`.
 - **Read-only check:** worktree snapshot `7380b551f884fdd541023ad7b5a284edd6199f48f2a031eb330248e6a9c0fb8c` before and after, unchanged.
@@ -55,7 +55,7 @@ The race itself is not reproduced in the suite: a test would need a stall of sev
   - L1: `proposal.md` named the commit types `chore` and `test`, but the branch has `chore(control-plane)` (fix and test) and `docs`. Resolved: the text names the actual types; history is not rewritten.
   - L2: symptom d of B6 was named out of scope without a description, and symptom c was not mentioned. Resolved: the proposal, design, and this record describe all four symptoms of B6.
 - **Confirmed without a finding:** the fix covers every response, error paths included; no streaming responses exist; the test's connection count is deterministic; the decision not to change the contract is right.
-- The fixes of L1 and L2 are unreviewed, as the Low-only rule of the [independent review process](../../../docs/governance.md#independent-review-process) allows.
+- The fixes of L1 and L2 are unreviewed, as the Low-only rule of the [independent review process](/docs/governance.md#independent-review-process) allows.
 
 ## Archive checks
 

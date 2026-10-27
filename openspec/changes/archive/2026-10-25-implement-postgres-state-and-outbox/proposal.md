@@ -1,6 +1,6 @@
 ## Why
 
-G2 work item 11 ([docs/g2-plan.md](../../../docs/g2-plan.md)): PostgreSQL state and outbox, serving R05 (durable assignment). Decision D6 (a) selects SQL first with `pg@8.23.1` and `node-pg-migrate@9.0.0`. Architecture section 9 requires state and outbox records to commit atomically and persisted inbox identities on the receiving side; the launch authorization contract (sections 3 and 5) and the capacity reservation contract (section 4) require SERIALIZABLE transactions retried as a whole, and one held reservation per attempt. Before this change only `AdmissionRepository` existed, without a shared conformance suite, and no module had a port for runs, gates, tasks, assignments, an outbox, or an inbox.
+G2 work item 11 ([docs/g2-plan.md](/docs/g2-plan.md)): PostgreSQL state and outbox, serving R05 (durable assignment). Decision D6 (a) selects SQL first with `pg@8.23.1` and `node-pg-migrate@9.0.0`. Architecture section 9 requires state and outbox records to commit atomically and persisted inbox identities on the receiving side; the launch authorization contract (sections 3 and 5) and the capacity reservation contract (section 4) require SERIALIZABLE transactions retried as a whole, and one held reservation per attempt. Before this change only `AdmissionRepository` existed, without a shared conformance suite, and no module had a port for runs, gates, tasks, assignments, an outbox, or an inbox.
 
 ## What Changes
 

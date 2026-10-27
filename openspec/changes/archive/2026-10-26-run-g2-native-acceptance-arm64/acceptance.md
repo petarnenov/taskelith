@@ -1,6 +1,6 @@
 # G2 native acceptance: arm64 entries (item 25b)
 
-Recorded 2026-10-26 by `make native-acceptance` on commit `4b3d693` (after the review pass 1 fixes), seed `2762193735`, into [results.jsonl](results.jsonl) (46 lines; "line N" below). Each line carries an `acceptance` field with its matrix entry, row, command, and platform. The rows are the G2 rows of the [native acceptance gates](../../../docs/worker-platforms.md#native-acceptance-gates); resource budgets and real integrations belong to later gates and are not listed. The x86_64 entries are 25c's.
+Recorded 2026-10-26 by `make native-acceptance` on commit `4b3d693` (after the review pass 1 fixes), seed `2762193735`, into [results.jsonl](results.jsonl) (46 lines; "line N" below). Each line carries an `acceptance` field with its matrix entry, row, command, and platform. The rows are the G2 rows of the [native acceptance gates](/docs/worker-platforms.md#native-acceptance-gates); resource budgets and real integrations belong to later gates and are not listed. The x86_64 entries are 25c's.
 
 ## Platforms
 

@@ -4,7 +4,7 @@ Date: 2026-10-27. The author's verification, review passes 1 and 2, and the arch
 
 ## Scope and source
 
-Coordinator Niki assigned `fix-platform-probe-filesystem-label` after another worker session saw the native acceptance platform probe name an ext4 file system `ext2/ext3` on its Ubuntu host. The session developed it in a briefed and checked subagent ([subagent execution](../../../docs/agent-task-protocol.md#subagent-execution)), in worktree `taskelith-worktrees/fix-platform-probe-filesystem-label` on branch `fix-platform-probe-filesystem-label`.
+Coordinator Niki assigned `fix-platform-probe-filesystem-label` after another worker session saw the native acceptance platform probe name an ext4 file system `ext2/ext3` on its Ubuntu host. The session developed it in a briefed and checked subagent ([subagent execution](/docs/agent-task-protocol.md#subagent-execution)), in worktree `taskelith-worktrees/fix-platform-probe-filesystem-label` on branch `fix-platform-probe-filesystem-label`.
 
 - **Base revision:** `fe64386` on `dev`.
 - **Revision verified:** `c87ada8` (the probe, its tests, and the OpenSpec records before this file), on which `make verify` ran; after review pass 1, `082ff61` with the M1 fix and `d7537a7` with its records, on which `make verify` ran again.
@@ -60,7 +60,7 @@ This Linux host: Ubuntu 24.04.5 LTS, kernel Linux 6.8.0-147-generic, Docker engi
 - **Session:** `ses_e83fb7fd2ffetIk8iBAk6L8p7d`.
 - **Snapshot:** `0692e9e4243541ccc1a604d8d07065c635cad141144fdb3cab06d49e9075bf75` before and after; unchanged.
 - **Pass 1 findings:** M1 resolved: `volume_of` runs the shared probe, its macOS branch is unchanged, and no other `stat -f` file system label is left in `scripts/`.
-- **New findings:** 0 Critical, 0 High, 0 Medium, 1 Low. A Low-only pass is fixed without another review ([review process](../../../docs/governance.md#independent-review-process)).
+- **New findings:** 0 Critical, 0 High, 0 Medium, 1 Low. A Low-only pass is fixed without another review ([review process](/docs/governance.md#independent-review-process)).
   1. **L1 (docs):** task 3.1 in `tasks.md:17` called `findings.jsonl` empty although it holds M1. **Fixed, unreviewed:** the task names `findings.jsonl` with the review findings; recorded in `findings.jsonl` as `fixed-unreviewed`.
 - **Checklist with no findings:** redaction, contract drift apart from L1, and error handling.
 

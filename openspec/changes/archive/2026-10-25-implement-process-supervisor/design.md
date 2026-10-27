@@ -1,6 +1,6 @@
 ## Context
 
-The [supervisor identity contract](../../../docs/contracts/supervisor-identity.md) (G2 item 4) defines the execution record, the launch sequence CP1 to CP12, recovery, termination evidence, and native evidence per operating system. Decision D7 (c) makes the supervisor one small process per execution. The worker journal contract (item 5) gives the durable file rule and the root lock. Item 14 implements both helpers in its adapter, and this item reuses them when item 14 merges. The deterministic test harness (item 10) provides crash points, scenario processes, and a simulated host.
+The [supervisor identity contract](/docs/contracts/supervisor-identity.md) (G2 item 4) defines the execution record, the launch sequence CP1 to CP12, recovery, termination evidence, and native evidence per operating system. Decision D7 (c) makes the supervisor one small process per execution. The worker journal contract (item 5) gives the durable file rule and the root lock. Item 14 implements both helpers in its adapter, and this item reuses them when item 14 merges. The deterministic test harness (item 10) provides crash points, scenario processes, and a simulated host.
 
 On 2026-10-25 the coordinator brought four mechanism questions to the owner. A Claude Fable 5.1 subagent decided them under the owner's delegation; they are not the owner's own decisions:
 
