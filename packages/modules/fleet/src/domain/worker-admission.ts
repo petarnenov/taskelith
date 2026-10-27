@@ -50,16 +50,23 @@ export interface WorkerAdmissionDecision {
   readonly results: readonly SelfCheckResult[];
 }
 
-// A required check that is missing, or a not-applicable claim the worker's
-// enrolled platform or the check's scope refutes, counts as failed.
+// A required check that is missing or reported more than once, or a refuted
+// not-applicable claim, counts as failed; each check is stored once.
 export function decideWorkerAdmission(results: readonly SelfCheckResult[], platform: HostPlatform): WorkerAdmissionDecision {
-  const checked = results.map((result) => checkedResult(result, platform));
+  const checked = onePerCheck(results).map((result) => checkedResult(result, platform));
   const reported = new Set(checked.map((result) => result.checkId));
   const missing = [...REQUIRED_SELF_CHECKS.keys()].filter((checkId) => !reported.has(checkId))
     .map((checkId) => failed(checkId, 'the check was not reported'));
   const all = Object.freeze([...checked, ...missing].sort(byCheckId));
   const state = all.some((result) => result.outcome === 'failed') ? 'self-check-failed' : 'admitted';
   return Object.freeze({ state, results: all });
+}
+
+function onePerCheck(results: readonly SelfCheckResult[]): SelfCheckResult[] {
+  const byId = new Map<string, SelfCheckResult[]>();
+  for (const result of results) byId.set(result.checkId, [...(byId.get(result.checkId) ?? []), result]);
+  return [...byId.entries()].map(([checkId, reports]) => (
+    reports.length === 1 ? reports[0]! : failed(checkId, 'the check was reported more than once')));
 }
 
 function checkedResult(result: SelfCheckResult, platform: HostPlatform): SelfCheckResult {

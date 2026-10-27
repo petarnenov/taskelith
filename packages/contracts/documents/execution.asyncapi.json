@@ -2147,6 +2147,7 @@
         ],
         "properties": {
           "results": {
+            "description": "One result per composed check. A schema cannot require distinct checkIds; the control plane decides a check named more than once as one failed result.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SelfCheckResult"
