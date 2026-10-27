@@ -7,8 +7,9 @@ import { fileURLToPath } from 'node:url';
 // generate keys and certificates at run time, so none is ever committed.
 
 export const KEY_FILE_EXTENSIONS: ReadonlySet<string> = new Set(['.pem', '.key', '.p12', '.pfx']);
-// A begin marker at the start of a line, then a line of base64 or a header.
-const PEM_PRIVATE_KEY = /^-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----\r?\n[A-Za-z0-9+/=:,-]/m;
+// A begin marker, then a line break, raw and maybe indented as in YAML or
+// escaped as in JSON, then base64 or a header; a bare marker in code stays.
+const PEM_PRIVATE_KEY = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----(?:\r?\n[ \t]*|(?:\\r)?\\n)[A-Za-z0-9+/=:,-]/;
 
 export function keyFileProblem(file: string, readText: () => string): string | undefined {
   if (KEY_FILE_EXTENSIONS.has(posix.extname(file).toLowerCase())) return 'is a key or certificate file';

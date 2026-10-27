@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { generateKeyPairSync } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -21,6 +22,15 @@ test('key files and PEM private-key blocks are refused; certificates and markers
   assert.equal(keyFileProblem('ca.txt', () => CERTIFICATE), undefined);
   assert.equal(keyFileProblem('rules.ts', () => `const begin = /${marker('BEGIN', '[A-Z ]*PRIVATE KEY')}/;\n`), undefined);
   assert.equal(keyFileProblem('quoted.ts', () => `'${marker('BEGIN', 'PRIVATE KEY')}', 'x'\n`), undefined);
+});
+
+test('an indented or JSON-escaped PEM private key is refused too', () => {
+  const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256', privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
+  const yaml = `tls:\n  key: |\n${privateKey.replace(/^/gm, '    ')}`;
+  assert.equal(keyFileProblem('values.yaml', () => yaml), 'holds a PEM private key');
+  assert.equal(keyFileProblem('installation-authority', () => JSON.stringify({ format: 1, privateKey })), 'holds a PEM private key');
+  assert.equal(keyFileProblem('crlf.json', () => JSON.stringify({ privateKey: privateKey.replaceAll('\n', '\r\n') })), 'holds a PEM private key');
+  assert.equal(keyFileProblem('template.ts', () => `\`${marker('BEGIN', 'PRIVATE KEY')}\\n\${body}\``), undefined);
 });
 
 test('the check fails on a tracked key and passes without one', () => {
