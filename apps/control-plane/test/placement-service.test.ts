@@ -35,13 +35,14 @@ interface ScriptedRotation {
   projectOf(taskId: string): Promise<ProjectId>;
 }
 
-// Runs the work over the rotation; a placement, which reads its task first,
-// answers `placementOf` that task instead and, if placed, moves the cursor.
+// A placement reads its task first and answers `placementOf` it, moving the
+// cursor if placed; a waiting record's work finds no waiting task.
 async function scriptedTransaction(
   work: Work, { rotation, projectOf }: ScriptedRotation, placementOf: (taskId: string) => Result<unknown>,
 ): Promise<Result<unknown>> {
   const asked: string[] = [];
-  const result = await work({ tasks: { get: async (taskId: string) => (asked.push(taskId), UNPLACED) }, rotation } as never);
+  const tasks = { get: async (taskId: string) => (asked.push(taskId), UNPLACED) };
+  const result = await work({ tasks, rotation, placements: { stillWaiting: async () => [] } } as never);
   if (asked[0] === undefined) return result;
   const placement = placementOf(asked[0]);
   if (placement.ok && (placement.value as { kind: string }).kind === 'placed') value(await rotation.advance(await projectOf(asked[0])));
@@ -57,7 +58,7 @@ function rotationOver(rotation: PlacementRotation, lineage: InMemoryTaskLineage)
 function scriptedStore(placements: Result<unknown>[]) {
   const state = {
     waiting: ['task-1'], candidates: ['worker-a'], excluded: [] as string[][], checked: [] as string[][],
-    reads: 0, opened: 0, read: ok(undefined) as Result<void>,
+    reads: 0, opened: 0, transactions: 0, read: ok(undefined) as Result<void>,
   };
   const placementOf = (taskId: string) => ({ projectId: 'project-1', waitingSince: '2026-10-25T09:00:00.000Z', item: taskId });
   const rotation = new InMemoryPlacementRotation();
@@ -80,10 +81,10 @@ function scriptedStore(placements: Result<unknown>[]) {
         },
       });
     },
-    transaction: (work: Work) => scriptedTransaction(work, { rotation, projectOf: async () => 'project-1' as ProjectId }, () => {
+    transaction: (work: Work) => (state.transactions++, scriptedTransaction(work, { rotation, projectOf: async () => 'project-1' as ProjectId }, () => {
       state.opened++;
       return placements.shift() ?? UNPLACED;
-    }),
+    })),
   } as unknown as ControlPlaneStore;
   return { state, store };
 }
@@ -124,6 +125,20 @@ test('a task whose attempt a rejecting reason ended is not placed and keeps no b
   assert.deepEqual(value(await service.placeWaiting()), { waiting: 1, placed: 0 });
   value(await service.placeWaiting());
   assert.deepEqual([state.opened, state.excluded], [2, [[], []]], 'read again at once');
+});
+
+test('only a waiting decline opens a transaction of its own for its outcome record', async () => {
+  const STANDING = err(failure('precondition-failed', 'the attempt stands', { reason: 'attempt-already-reserved' }));
+  const WAITS = err(failure('precondition-failed', 'the project quota is used', { reason: 'project-quota-exhausted' }));
+  const { clock, timing: controlled } = timing();
+  const { state, store } = scriptedStore([STANDING, UNPLACED, WAITS]);
+  const service = new PlacementService(store, controlled);
+  for (const at of [0, 7_500, 22_500]) {
+    clock.at = at;
+    value(await service.placeWaiting());
+  }
+  // Besides the three placements, the first pass's move and one record.
+  assert.deepEqual([state.opened, state.transactions], [3, 5]);
 });
 
 test('a retry that backs off is not read until its due time, and keeps no failure count', async () => {

@@ -21,14 +21,13 @@ import {
 import {
   PARTITION_TIMEOUT_MILLISECONDS, SCENARIO_HOST, guardScenarioFile, recordScenario, withInstallation, withPartitions,
 } from './g2-scenarios/scenario-run.ts';
-import { ScenarioWorker, type ScenarioWorkerOptions } from './g2-scenarios/scenario-worker.ts';
+import { HELD_RUN, ScenarioWorker, type ScenarioWorkerOptions } from './g2-scenarios/scenario-worker.ts';
 import { Gate, waitFor } from './g2-scenarios/waiting.ts';
 
 // G2 item 24c: cancellation races. Without an operator cancel API, each
 // cancel is a test-side invalidation writer's transaction.
 const SEED = seedFromEnvironment();
 console.log(`g2 cancellation races: ${rerunHint(SEED)}`);
-const LONG_RUN_MILLISECONDS = 20_000;
 const CANCELLED_REASONS = ['assignment-not-active', 'attempt-not-launchable'];
 guardScenarioFile();
 
@@ -60,8 +59,8 @@ async function assertNeverLaunched(installation: ScenarioInstallation, worker: S
   return executed;
 }
 
-// The attempt ended cancelled; a started process ended by the cancel's
-// SIGTERM, and no scripted process of the worker remains.
+// The attempt ended cancelled; a started process (held by c, e, f) ended
+// by the cancel's SIGTERM, and no scripted process of the worker remains.
 async function assertCancelled(installation: ScenarioInstallation, worker: ScenarioWorker, taskId: string): Promise<string> {
   await installation.ended(taskId);
   const outcome = (await installation.task(taskId)).attempts[0]!.outcome!;
@@ -154,7 +153,7 @@ describe('cancellation races', SCENARIO_HOST, () => {
       const supervisorHeld = new Gate();
       if (afterStart) supervisorHeld.open();
       const worker = await startedWorker(installation, 'cancel-after-w4', random, {
-        runMilliseconds: LONG_RUN_MILLISECONDS, beforeSupervisorStart: () => supervisorHeld.wait('the held supervisor start'),
+        runMilliseconds: HELD_RUN, beforeSupervisorStart: () => supervisorHeld.wait('the held supervisor start'),
       });
       try {
         await installation.submitTask('task-c');
@@ -221,7 +220,7 @@ describe('cancellation races', SCENARIO_HOST, () => {
       const name = 'cancel-crash';
       const crashing = await CrashingWorker.start({
         apiUrl: installation.apiUrl.href, base: installation.base, nats: installation.nats.href, name, seed: SEED,
-        enrollmentToken: await installation.enrollmentToken(), runMilliseconds: LONG_RUN_MILLISECONDS, commandType: CANCELLATION,
+        enrollmentToken: await installation.enrollmentToken(), runMilliseconds: HELD_RUN, commandType: CANCELLATION,
       });
       let worker: ScenarioWorker | undefined;
       try {
@@ -234,7 +233,7 @@ describe('cancellation races', SCENARIO_HOST, () => {
         if (restartAfterAckWait) await delay(SCENARIO_LIMITS.ackWaitMilliseconds + 500);
         let acknowledged = 0;
         worker = new ScenarioWorker(installation, {
-          name, random: new SeededRandom(SEED + 1), nats: installation.nats, runMilliseconds: LONG_RUN_MILLISECONDS,
+          name, random: new SeededRandom(SEED + 1), nats: installation.nats, runMilliseconds: HELD_RUN,
           transport: (transport) => interceptAck(transport, CANCELLATION, (ack) => { acknowledged += 1; ack(); }),
         });
         await worker.start();
@@ -260,12 +259,13 @@ describe('cancellation races', SCENARIO_HOST, () => {
       // A refused re-placement can keep the worker ineligible (B5), so each
       // round has its own slot.
       const worker = await startedWorker(installation, 'invalidation-race', random, {
-        authority: authority.wrap, runMilliseconds: RACE_RUN_MILLISECONDS, slots: RACE_ROUNDS + 1,
+        authority: authority.wrap, runMilliseconds: HELD_RUN, slots: RACE_ROUNDS + 1,
       });
       const outcomes: string[] = [];
       try {
         for (let round = 0; round < RACE_ROUNDS; round += 1) {
           const taskId = `task-f-${round}`;
+          worker.holdScriptedProcesses();
           const gate = new Gate();
           authority.beforeRequest = gate;
           const sent = authority.sent.length;
@@ -347,13 +347,12 @@ describe('cancellation races', SCENARIO_HOST, () => {
 const CANCELLATION = 'execution.cancellation.request';
 const RACE_ROUNDS = 3;
 const RACE_WINDOW_MILLISECONDS = 25;
-// Long enough for a revoked grant's cancel to arrive while it runs.
-const RACE_RUN_MILLISECONDS = 5_000;
 
-// A round ends with its task: rejected, the attempt runs again elsewhere;
-// granted, the revoked grant is cancelled before or after the spawn.
+// A round ends with its task: granted, the revoked grant is cancelled
+// before or after the spawn; otherwise a released run ends it elsewhere.
 async function settleRace(installation: ScenarioInstallation, worker: ScenarioWorker, taskId: string, answer: string): Promise<string> {
   if (answer === 'granted') return `granted then revoked, ${await assertCancelled(installation, worker, taskId)}`;
+  worker.releaseScriptedProcesses();
   await assertExitedOnce(installation, taskId);
   return `${answer}, ran under a later assignment`;
 }

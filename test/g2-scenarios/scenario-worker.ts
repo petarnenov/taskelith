@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { LaunchAuthorityClient } from '@taskelith/execution';
@@ -21,6 +22,10 @@ const GIBIBYTE = 2 ** 30;
 const EXT4_MAGIC = 0xef53n;
 const STOP_MILLISECONDS = 30_000;
 const runningWorkers = new Set<ScenarioWorker>();
+// A scripted process that cannot end on its own, so only a signal or a
+// release ends it.
+export const HELD_RUN = 'held';
+export type ScriptedRun = number | typeof HELD_RUN;
 
 // Where a worker finds its installation: the API, and the base directory
 // that holds the scenario's data roots.
@@ -36,8 +41,9 @@ export interface ScenarioWorkerOptions {
   readonly enrollmentToken?: string;
   // `proxied` routes the worker's broker connection through Toxiproxy.
   readonly nats: URL;
-  // How long the scripted process runs before it exits with code 0.
-  readonly runMilliseconds: number;
+  // How long the scripted process runs before it exits with code 0; with
+  // `HELD_RUN`, until the worker releases its scripted processes.
+  readonly runMilliseconds: ScriptedRun;
   // Wraps the HTTP launch authority, so a scenario can order requests.
   readonly authority?: (client: LaunchAuthorityClient) => LaunchAuthorityClient;
   // Free space of the data root's volume; ample unless a scenario says.
@@ -55,6 +61,7 @@ export interface ScenarioWorkerOptions {
 export class ScenarioWorker {
   readonly logs = new InMemoryLogSink();
   readonly dataRoot: string;
+  readonly #releaseFile: string;
   readonly #site: WorkerSite;
   readonly #options: ScenarioWorkerOptions;
   #running: RunningWorker | undefined;
@@ -63,6 +70,7 @@ export class ScenarioWorker {
     this.#site = site;
     this.#options = options;
     this.dataRoot = join(site.base, options.name);
+    this.#releaseFile = `${this.dataRoot}.released`;
   }
 
   get running(): RunningWorker {
@@ -76,6 +84,16 @@ export class ScenarioWorker {
 
   get workerId(): string {
     return this.running.identity.workerId;
+  }
+
+  // Lets held scripted processes, running or future, exit 0 until the
+  // next hold.
+  releaseScriptedProcesses(): void {
+    writeFileSync(this.#releaseFile, '');
+  }
+
+  holdScriptedProcesses(): void {
+    rmSync(this.#releaseFile, { force: true });
   }
 
   async start(): Promise<RunningWorker> {
@@ -98,9 +116,13 @@ export class ScenarioWorker {
       dataRoot: this.dataRoot, controlPlaneUrl: this.#site.apiUrl, natsUrl: this.#options.nats,
       host: { platform: 'linux', architecture: process.arch === 'arm64' ? 'arm64' : 'x64', hostname: this.#options.name },
       capacity: { slots: this.#options.slots ?? 2, cpuMillicores: 4_000, memoryMebibytes: 8_192, controls: [] },
-      launch: { command: scriptedProcess(runMilliseconds, this.dataRoot) },
+      launch: { command: this.#scriptedProcess(runMilliseconds) },
       ...(enrollmentToken === undefined ? {} : { enrollmentToken }),
     };
+  }
+
+  #scriptedProcess(runMilliseconds: ScriptedRun) {
+    return runMilliseconds === HELD_RUN ? heldProcess(this.dataRoot, this.#releaseFile) : scriptedProcess(runMilliseconds, this.dataRoot);
   }
 
   #dependencies(): WorkerDependencies {
@@ -129,7 +151,7 @@ export class ScenarioWorker {
       sleep: scaledSleep, draw, logger,
       launching: {
         authority: (credential) => wrap(new HttpLaunchAuthorityClient({ ...endpoint, credential })),
-        host: (_settings, executions) => ok(processGroupHost(executions, scriptedProcess(this.#options.runMilliseconds, this.dataRoot), this.#options.beforeSupervisorStart)),
+        host: (_settings, executions) => ok(processGroupHost(executions, this.#scriptedProcess(this.#options.runMilliseconds), this.#options.beforeSupervisorStart)),
         sleep: scaledSleep, draw, newId: () => ids.next(), pollMilliseconds: LAUNCH_POLL_MILLISECONDS, logger,
         onFailure: (error) => logger.warn('scenario.launch.failed', { message: String((error as Error)?.message ?? error) }),
       },
@@ -157,6 +179,13 @@ export function runningWorkerNames(): string[] {
 // scenario's cleanup finds what it left running.
 export function scriptedProcess(runMilliseconds: number, marker: string) {
   return { executable: process.execPath, arguments: ['-e', `setTimeout(() => {}, ${runMilliseconds})`, marker] };
+}
+
+// Polls for the release file and exits with code 0 once it exists.
+function heldProcess(marker: string, releaseFile: string) {
+  const script = `const { existsSync } = require('node:fs');
+(function wait() { if (!existsSync(process.argv[2])) setTimeout(wait, 50); })();`;
+  return { executable: process.execPath, arguments: ['-e', script, marker, releaseFile] };
 }
 
 function scaledSleep(milliseconds: number, signal: AbortSignal): Promise<void> {

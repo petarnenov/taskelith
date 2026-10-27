@@ -1,6 +1,6 @@
 import { SeededRandom } from '@taskelith/testing';
 import { interceptAck } from '../ack-interception.ts';
-import { ScenarioWorker } from '../scenario-worker.ts';
+import { ScenarioWorker, type ScriptedRun } from '../scenario-worker.ts';
 
 // A scenario worker in its own process, killed by SIGKILL when it would
 // acknowledge a command of the armed type: after W1, before the ack.
@@ -11,7 +11,7 @@ export interface CrashingWorkerArguments {
   readonly name: string;
   readonly seed: number;
   readonly enrollmentToken: string;
-  readonly runMilliseconds: number;
+  readonly runMilliseconds: ScriptedRun;
   readonly commandType: string;
 }
 

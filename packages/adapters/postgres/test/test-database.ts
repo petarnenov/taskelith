@@ -13,7 +13,7 @@ const TABLES = [
   'task_lineage', 'capacity_charges', 'delegations', 'capacity_quotas', 'workers', 'installation',
   'operator_credentials', 'audit_events', 'enrollment_tokens', 'broker_revocations', 'evidence', 'launch_authorizations',
   'launch_rejections', 'current_revisions', 'delegation_requests', 'producer_cursors', 'inventory_requests', 'inventory_report_parts',
-  'unrecorded_processes', 'placement_rotation',
+  'unrecorded_processes', 'placement_rotation', 'placement_outcomes',
 ];
 let created = 0;
 
