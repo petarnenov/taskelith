@@ -1,0 +1,2 @@
+{"change": "align-account-pool-placement-baseline", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a17ef1-8b1c-7c71-98f8-ac9674b14291", "counts": {"critical": 0, "high": 0, "medium": 0, "low": 1}}
+{"change": "align-account-pool-placement-baseline", "pass": 2, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a17f08-9faf-7a73-a796-8d46e2401dd5", "counts": {"critical": 0, "high": 0, "medium": 0, "low": 0}}
