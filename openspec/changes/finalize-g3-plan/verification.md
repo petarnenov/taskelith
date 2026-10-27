@@ -24,7 +24,7 @@ Out of scope: new owner decisions, changes to D1 to D18, starting any G3 item, e
 
 ## Checks
 
-Run after merging `origin/dev` at `eda6c283` and applying the coordinator's answers, and again after the pass 1 fixes (`1682cddd`) with the pass 1 records, with the same results; `verify:findings` was run as `make findings ARGS="validate"`.
+Run after merging `origin/dev` at `eda6c283` and applying the coordinator's answers, again after the pass 1 fixes (`1682cddd`) with the pass 1 records, and again after the pass 2 fixes (`5328dd84`) with the pass 2 records, with the same results; `verify:findings` was run as `make findings ARGS="validate"`.
 
 | Check | Result |
 | --- | --- |
@@ -60,7 +60,14 @@ Reviewers assigned by the coordinator: reviewer A, Claude Code `claude-fable-5-1
 
 ### Pass 2 (reviewer B)
 
-Not yet run.
+- Reviewer B: Codex CLI `gpt-6.1-sol`, reasoning effort `medium`, run by the worker session; reviewed head `175d08d48eef41b93ee03b259f05524ccb498594`.
+- Invocation, as in the [agent task protocol](/docs/agent-task-protocol.md#reviewer-invocations) row "Codex CLI (gpt-6.1-sol)": `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`.
+- Model confirmation: model `gpt-6.1-sol`, reasoning effort `medium`, and the read-only sandbox in the output header. Session `01a17dcb-b994-78c0-975d-68e84d63787b`. Snapshot before and after: equal. Both as relayed by the worker session.
+- The reviewer confirmed the seven pass 1 fixes and the record of the PostgreSQL TLS decision.
+- Findings: 0 Critical, 0 High, 1 Medium, 2 Low, matching its `passes.jsonl` line. All were fixed in `5328dd84`:
+  - **G1 (Medium, evidence-mismatch):** this record and `tasks.md` gave no `make verify` result or revision. "Checks" records the runs on `7aa10924` and `175d08d4`, both exit 0, and a pending run before pass 3; task 2.2 stays open until the archive.
+  - **G2 (Low, docs):** the starting point said a slot freed during a pass goes to the declined project in the next pass. It now follows #348's limits: freed capacity is offered in the next pass, in rotation order, where another replica or a task earlier in the rotation may take it first.
+  - **G3 (Low, spec-wording):** the deferral table's legend called entries without a gate not open work and used "—" for the open Docker Desktop credential helper item. The legend now separates "Not G3" (open outside G3: another gate, a follow-up without a gate, or its owner) from "—" (resolved or accepted), and that row is "Not G3".
 
 ### Pass 3 (reviewer A)
 
