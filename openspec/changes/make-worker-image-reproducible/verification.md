@@ -49,6 +49,7 @@ Linux 6.8.0-147-generic, x86_64; Docker Engine 27.3.1, classic image store, stor
 - `make verify` at `a8c1d6e2`, after the merge of `dev` and the pass 1 fixes: exit 0; 2177 tests, 2130 pass, 0 fail, 47 skipped; coverage lines 99.24%, branches 92.17%, functions 98.92%; `validate --all --strict` 70 passed; `verify:links`: every checked link conforms, 332 archived links in the baseline; package verification passed.
 - `make findings ARGS="validate"` with the pass 1 records: valid.
 - `make verify` at `5dc42b19`: exit 0; 2179 tests, 2132 pass, 0 fail, 47 skipped; coverage lines 99.24%, branches 92.18%, functions 98.92%; `validate --all --strict` 70 passed; `verify:links`: every checked link conforms, 332 archived links in the baseline; package verification passed.
+- `make verify` at `7f43fdea`, the pass 2 record: a first run failed one test outside this change, `e. a crash between W1 and the ack of a cancellation is applied once after redelivery` (`test/g2-cancellation-races.test.ts:217`, exit `code 0` where `SIGTERM` was expected; 2179 tests, 2131 pass, 1 fail); the rerun passed: exit 0, 2179 tests, 2132 pass, 0 fail, 47 skipped, coverage lines 99.24%, branches 92.19%, functions 98.92%. This change touches no code that the scenario runs.
 
 ## Independent review
 
