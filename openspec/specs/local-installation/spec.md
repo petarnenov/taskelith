@@ -6,11 +6,15 @@ The packaged minimal local installation of Taskelith: the control-plane and Linu
 ## Requirements
 
 ### Requirement: Pinned image inputs
-The control-plane and worker images SHALL build from the digest-pinned Ubuntu 24.04 base and SHALL install Node.js only from a release tarball verified against a pinned SHA-256. Every image the composition pulls SHALL be pinned by digest.
+The control-plane and worker images SHALL build from the digest-pinned Ubuntu 24.04 base and SHALL install Node.js only from a release tarball verified against a pinned SHA-256. Every image the composition pulls SHALL be pinned by digest. Two builds of the worker image from one commit without the build cache, on one Docker engine with the classic image store, SHALL give the same image ID, with the image's dates and file times no later than the commit time.
 
 #### Scenario: Unpinned or altered input
 - **WHEN** a pulled image lacks a digest or a Node.js tarball does not match its checksum
 - **THEN** `make verify` or the image build fails
+
+#### Scenario: Two builds of one commit
+- **WHEN** the worker image is built twice from one commit without the build cache, on one Docker engine with the classic image store
+- **THEN** both builds give the same image ID
 
 ### Requirement: Unprivileged services with volume data
 The control plane and NATS SHALL run as non-root users. The worker container SHALL start as root only for its entrypoint, and the worker SHALL then run with no capability but `SETUID`, `SETGID`, and `KILL`, so that a child under the execution account has none. The data of PostgreSQL, NATS, the control plane, and the worker SHALL live on named volumes. The images SHALL contain no credentials and no data-root state, and SHALL be built only from tracked files.
@@ -112,4 +116,15 @@ The worker's seccomp profile SHALL be derived from a tracked, byte-for-byte copy
 
 #### Scenario: Profile drift
 - **WHEN** the upstream copy no longer matches its pinned SHA-256, or the tracked profile differs from its derivation
+- **THEN** `make verify` fails
+
+### Requirement: Opt-in reproducibility check
+`make verify-worker-image-reproducible` SHALL build the worker image twice from fresh build contexts of one revision without the build cache, SHALL fail and name both image IDs when they differ, and SHALL remove both images. `make verify` SHALL check, without building, that every `RUN` of the stages the worker image is built or copies from ends with the clamp of file times to `SOURCE_DATE_EPOCH`.
+
+#### Scenario: Differing builds
+- **WHEN** the two builds of `make verify-worker-image-reproducible` give different image IDs
+- **THEN** the target prints both IDs and fails
+
+#### Scenario: Unclamped step
+- **WHEN** a `RUN` of a stage the worker image is built or copies from does not end with the clamp
 - **THEN** `make verify` fails
