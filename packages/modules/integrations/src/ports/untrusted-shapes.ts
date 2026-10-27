@@ -1,4 +1,4 @@
-import { isFailureCode, type Failure, type Result } from '@taskelith/kernel';
+import { isFailureCode, parseIdentifier, type Failure, type Result } from '@taskelith/kernel';
 
 // Readers for untrusted plugin output: each reads a field once and returns a
 // frozen copy of the declared fields, or the problems it found.
@@ -11,11 +11,30 @@ export type Reading<Value> = Result<Value, readonly string[]>;
 
 export const text: FieldCheck = (value) => (typeof value === 'string' ? undefined : 'must be a string');
 
-export const identifier: FieldCheck = (value) =>
+export const nonEmptyText: FieldCheck = (value) =>
   typeof value === 'string' && value.length > 0 ? undefined : 'must be a non-empty string';
 
 export const texts: FieldCheck = (value) =>
   Array.isArray(value) && value.every((item) => typeof item === 'string') ? undefined : 'must be an array of strings';
+
+// An identifier the module issues, such as a run's, in kernel syntax.
+export const kernelIdentifier: FieldCheck = (value) =>
+  typeof value === 'string' && parseIdentifier('identifier', value).ok ? undefined : 'must be a kernel identifier';
+
+// An identifier the SCM issues, such as a repository's: opaque and bounded.
+export const MAX_EXTERNAL_IDENTIFIER_LENGTH = 1024;
+
+function isExternalIdentifier(value: unknown): boolean {
+  return typeof value === 'string' && value.length > 0 && value.length <= MAX_EXTERNAL_IDENTIFIER_LENGTH;
+}
+
+const BOUND = `of at most ${MAX_EXTERNAL_IDENTIFIER_LENGTH} characters`;
+
+export const externalIdentifier: FieldCheck = (value) =>
+  isExternalIdentifier(value) ? undefined : `must be a non-empty string ${BOUND}`;
+
+export const externalIdentifiers: FieldCheck = (value) =>
+  Array.isArray(value) && value.every(isExternalIdentifier) ? undefined : `must be an array of non-empty strings ${BOUND}`;
 
 const present: FieldCheck = (value) => (value === undefined ? 'is missing' : undefined);
 
@@ -27,7 +46,7 @@ export const textRecord: FieldCheck = (value) => {
   try {
     return Object.values(value).every((item) => typeof item === 'string') ? undefined : 'must be a record of strings';
   } catch (error) {
-    return `could not be read: ${describe(error)}`;
+    return `could not be read: ${describeThrown(error)}`;
   }
 };
 
@@ -64,7 +83,7 @@ function readFields(record: Record<string, unknown>, names: readonly string[]): 
       .map(([name, value]) => [name, Array.isArray(value) ? Object.freeze([...value]) : value]);
     return { ok: true, value: Object.fromEntries(entries) };
   } catch (error) {
-    return { ok: false, error: describe(error) };
+    return { ok: false, error: describeThrown(error) };
   }
 }
 
@@ -78,7 +97,7 @@ export function readResult(raw: unknown): Reading<Result<unknown>> {
   if (!failed.ok) return failed;
   const error = readRecord<Failure>('result.error', failed.value.error, { code: text, message: text, details: textRecord });
   if (!error.ok) return error;
-  if (!isFailureCode(error.value.code)) return { ok: false, error: [`result.error.code ${error.value.code} is not a kernel failure code`] };
+  if (!isFailureCode(error.value.code)) return { ok: false, error: ['result.error.code is not a kernel failure code'] };
   return { ok: true, value: { ok: false, error: error.value } };
 }
 
@@ -86,15 +105,40 @@ function readValue(raw: { value?: unknown }): Reading<Result<unknown>> {
   try {
     return { ok: true, value: { ok: true, value: raw.value } };
   } catch (error) {
-    return { ok: false, error: [`result.value could not be read: ${describe(error)}`] };
+    return { ok: false, error: [`result.value could not be read: ${describeThrown(error)}`] };
   }
 }
 
-export function describe(value: unknown): string {
+// A checked plugin value, such as an array of strings, for a finding.
+export function describeValue(value: unknown): string {
   try {
-    if (value instanceof Error) return `${value.name}: ${value.message}`;
     return JSON.stringify(value) ?? String(value);
   } catch {
     return 'an unprintable value';
+  }
+}
+
+const BUILT_IN_ERRORS: ReadonlyMap<unknown, string> = new Map<unknown, string>([
+  [Error.prototype, 'an Error'],
+  [TypeError.prototype, 'a TypeError'],
+  [RangeError.prototype, 'a RangeError'],
+  [ReferenceError.prototype, 'a ReferenceError'],
+  [SyntaxError.prototype, 'a SyntaxError'],
+  [URIError.prototype, 'a URIError'],
+  [EvalError.prototype, 'an EvalError'],
+  [AggregateError.prototype, 'an AggregateError'],
+]);
+
+const NOT_AN_ERROR = 'a value that is not an Error';
+
+// A thrown value as a fixed category: its message, name, or payload may
+// hold a secret, so no part of it reaches a finding.
+export function describeThrown(thrown: unknown): string {
+  try {
+    const builtIn = BUILT_IN_ERRORS.get(Object.getPrototypeOf(thrown));
+    if (builtIn !== undefined) return builtIn;
+    return thrown instanceof Error ? 'an Error of another class' : NOT_AN_ERROR;
+  } catch {
+    return NOT_AN_ERROR;
   }
 }

@@ -2,7 +2,7 @@ import { fixtureStep, failsWith, succeeds, type ConformanceCase } from './confor
 import type { SourceControlConformanceFixture } from './source-control-fixture.js';
 import { readCapabilities, readChangeRequest, readCommitStatus, readMergeProtection } from './source-control-readers.js';
 import type { ChangeRequestData, MergeProtectionData, SourceControlCapabilities, SourceControlProvider } from './source-control.js';
-import { describe } from './untrusted-shapes.js';
+import { describeThrown } from './untrusted-shapes.js';
 
 // Steps that several cases share; each checks what the plugin returns.
 
@@ -30,7 +30,7 @@ export function declaredCapabilities(run: ConformanceCase, provider: SourceContr
   try {
     raw = provider.capabilities;
   } catch (error) {
-    run.abort('threw', `capabilities could not be read: ${describe(error)}`);
+    run.abort('threw', `capabilities could not be read: ${describeThrown(error)}`);
   }
   const capabilities = readCapabilities(raw);
   if (!capabilities.ok) run.abort('shape', capabilities.error.join('; '));

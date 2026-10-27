@@ -15,7 +15,7 @@ function cases(lines: readonly string[]): string[] {
 test('a throwing operation is reported and the suite continues', async () => {
   const lines = await patched(() => ({ readChangeRequest: async () => { throw new Error('service down'); } }));
   assert.ok(lines.length > 1 && lines.every((line) => line.includes(' threw: ')));
-  assert.match(lines[0]!, /^change request threw: readChangeRequest threw instead of returning a Result: Error: service down/);
+  assert.match(lines[0]!, /^change request threw: readChangeRequest threw instead of returning a Result: an Error$/);
 });
 
 test('an unknown state string is a shape finding', async () => {
@@ -47,13 +47,13 @@ test('a value that is not a Result is reported', async () => {
 test('a failure with an unknown code or malformed details is reported', async () => {
   const unknownCode = await patched(() => ({ revokeRunCredential: async () => err({ code: 'gone', message: 'no', details: {} }) as never }));
   assert.deepEqual(headings(unknownCode), ['revoked credential result', 'credential isolation result']);
-  assert.equal(unknownCode[0], 'revoked credential result: revokeRunCredential: result.error.code gone is not a kernel failure code');
+  assert.equal(unknownCode[0], 'revoked credential result: revokeRunCredential: result.error.code is not a kernel failure code');
   const badDetails = await patched(() => ({ revokeRunCredential: async () => err({ code: 'internal', message: 'no', details: 123 }) as never }));
   assert.equal(badDetails[0], 'revoked credential result: revokeRunCredential: result.error.details must be a record of strings');
   const throwingDetails = await patched(() => ({
     revokeRunCredential: async () => err({ code: 'internal', message: 'no', details: { get reason() { throw new Error('no getter'); } } }) as never,
   }));
-  assert.match(throwingDetails[0]!, /result.error.details could not be read: Error: no getter/);
+  assert.match(throwingDetails[0]!, /result.error.details could not be read: an Error$/);
 });
 
 test('a revocation that returns a value is a shape finding', async () => {
@@ -276,7 +276,7 @@ test('a throwing fixture step and an empty signed body are fixture findings', as
     signDelivery: async () => ({ headers: {}, rawBody: new Uint8Array() }),
   });
   assert.ok(lines.every((line) => line.includes(' fixture: ')));
-  assert.ok(lines.includes('change request fixture: prepareHeadBranch threw: Error: no git'));
+  assert.ok(lines.includes('change request fixture: prepareHeadBranch threw: an Error'));
   const empty = await findings({ ...new InMemoryScm().fixture(), signDelivery: async () => ({ headers: {}, rawBody: new Uint8Array() }) });
   assert.deepEqual(empty, ['webhook delivery fixture: signDelivery returned an empty body']);
 });

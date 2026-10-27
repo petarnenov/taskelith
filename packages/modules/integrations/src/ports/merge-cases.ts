@@ -18,7 +18,7 @@ import {
 import type { SourceControlConformanceFixture } from './source-control-fixture.js';
 import { readMergeResult } from './source-control-readers.js';
 import { MERGE_METHODS, REVIEW_EVIDENCE_KINDS, type ChangeRequestData } from './source-control.js';
-import { describe } from './untrusted-shapes.js';
+import { describeValue } from './untrusted-shapes.js';
 
 // Cases for capabilities, merge protection, and merges.
 
@@ -37,12 +37,12 @@ export async function checkCapabilities(run: ConformanceCase, fixture: SourceCon
   const { mergeMethods, reviewEvidence } = declaredCapabilities(run, fixture.provider);
   run.expect(
     mergeMethods.length > 0 && isSubset(mergeMethods, MERGE_METHODS),
-    `capabilities.mergeMethods ${describe(mergeMethods)} must be a non-empty subset of ${MERGE_METHODS.join(', ')}`,
+    `capabilities.mergeMethods ${describeValue(mergeMethods)} must be a non-empty subset of ${MERGE_METHODS.join(', ')}`,
   );
   run.expect(mergeMethods.includes(fixture.mergeMethod), `capabilities.mergeMethods must include ${fixture.mergeMethod}`);
   run.expect(
     isSubset(reviewEvidence, REVIEW_EVIDENCE_KINDS),
-    `capabilities.reviewEvidence ${describe(reviewEvidence)} must be a subset of ${REVIEW_EVIDENCE_KINDS.join(', ')}`,
+    `capabilities.reviewEvidence ${describeValue(reviewEvidence)} must be a subset of ${REVIEW_EVIDENCE_KINDS.join(', ')}`,
   );
   run.expect(reviewEvidence.includes('required-status'), 'capabilities.reviewEvidence must include required-status');
 }
@@ -52,7 +52,7 @@ export async function checkMergeProtection(run: ConformanceCase, fixture: Source
   run.expect(protection.bindsProvider, 'ensureMergeProtection must bind the provider identity');
   run.expect(
     isSubset(SUITE_CONTEXTS, protection.requiredStatuses),
-    `ensureMergeProtection listed ${describe(protection.requiredStatuses)}, not the required statuses`,
+    `ensureMergeProtection listed ${describeValue(protection.requiredStatuses)}, not the required statuses`,
   );
   run.expect(
     protection.repository === fixture.projectRepository && protection.branch === fixture.baseBranch,

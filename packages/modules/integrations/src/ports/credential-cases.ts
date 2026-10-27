@@ -4,13 +4,15 @@ import { isSameSet, isSubset } from './conformance-steps.js';
 import type { SourceControlConformanceFixture } from './source-control-fixture.js';
 import { readRunCredential } from './source-control-readers.js';
 import { SCM_PERMISSIONS, type RunCredential, type RunCredentialRequest } from './source-control.js';
-import { describe } from './untrusted-shapes.js';
+import { describeValue } from './untrusted-shapes.js';
 
 // Cases for run credentials: what each grant claims, and what the fixture
 // can natively do with it.
 
 const READ_ONLY = Object.freeze(['read-code']);
 const READ_WRITE = Object.freeze(['read-code', 'write-code']);
+// Without write-code: a grant that also writes code fails these requests
+// (contract section 7, Forgejo admission gate).
 const CHANGE_REQUESTS = Object.freeze(['read-code', 'write-change-requests']);
 const STATUSES = Object.freeze(['read-code', 'write-statuses']);
 
@@ -137,11 +139,11 @@ function checkGrant(run: ConformanceCase, operation: string, request: RunCredent
   run.expect(credential.runId === request.runId, `${operation} returned run ${credential.runId}, not ${request.runId}`);
   run.expect(
     isSameSet(credential.repositories, request.repositories),
-    `${operation} granted ${describe(credential.repositories)}, not exactly ${describe(request.repositories)}`,
+    `${operation} granted ${describeValue(credential.repositories)}, not exactly ${describeValue(request.repositories)}`,
   );
   run.expect(
     isSubset(request.permissions, credential.permissions) && isSubset(credential.permissions, SCM_PERMISSIONS),
-    `${operation} granted ${describe(credential.permissions)} for ${describe(request.permissions)}`,
+    `${operation} granted ${describeValue(credential.permissions)} for ${describeValue(request.permissions)}`,
   );
   run.expect(
     request.permissions.includes('write-code') || !credential.permissions.includes('write-code'),

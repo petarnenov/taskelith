@@ -1,5 +1,5 @@
 import type { FailureCode, Result } from '@taskelith/kernel';
-import { describe, readResult, type Reading } from './untrusted-shapes.js';
+import { describeThrown, readResult, type Reading } from './untrusted-shapes.js';
 
 export type SourceControlConformanceCheck = 'threw' | 'result' | 'shape' | 'outcome' | 'bypass' | 'fixture';
 
@@ -35,7 +35,7 @@ export class ConformanceCase {
     try {
       await body(this);
     } catch (error) {
-      if (!(error instanceof CaseAborted)) this.report('threw', `the case stopped: ${describe(error)}`);
+      if (!(error instanceof CaseAborted)) this.report('threw', `the case stopped: ${describeThrown(error)}`);
     }
     return this.findings;
   }
@@ -77,7 +77,7 @@ async function settle(run: ConformanceCase, operation: string, call: () => Promi
   try {
     raw = await call();
   } catch (error) {
-    run.abort('threw', `${operation} threw instead of returning a Result: ${describe(error)}`);
+    run.abort('threw', `${operation} threw instead of returning a Result: ${describeThrown(error)}`);
   }
   const result = readResult(raw);
   if (!result.ok) run.abort('result', `${operation}: ${result.error.join('; ')}`);
@@ -89,6 +89,6 @@ export async function fixtureStep<Value>(run: ConformanceCase, step: string, cal
   try {
     return await call();
   } catch (error) {
-    return run.abort('fixture', `${step} threw: ${describe(error)}`);
+    return run.abort('fixture', `${step} threw: ${describeThrown(error)}`);
   }
 }
