@@ -32,7 +32,9 @@ Run after merging `origin/dev` at `eda6c283` and applying the coordinator's answ
 | `npm run verify:links` | `Every checked link conforms; 332 archived links remain in scripts/record-links-baseline.tsv.` |
 | `npm run verify:findings` | `Every findings file is valid: 27 file(s); every pass summary file is valid: 7 file(s).` (after merging #349; 26 and 6 before) |
 | `npm run verify:comments` | `Every comment is within the comment length rule.` |
-| `make verify` | Not run by the subagent; run by the coordinator's session before review |
+| `make verify` on `7aa10924`, after merging `origin/dev` at `eda6c283`, before pass 1 | Exit 0; last line `Packed file allowlist and installed CLI verification passed.` Run by the worker session on the macOS x86_64 iMac |
+| `make verify` on `175d08d4`, after the pass 1 fixes, before pass 2 | Exit 0. Run by the worker session on the macOS x86_64 iMac |
+| `make verify` after the pass 2 fixes, before pass 3 | Pending: run by the worker session |
 
 ## Review checklist
 
@@ -72,7 +74,7 @@ Not yet run.
 
 ## Remaining gates
 
-- `make verify` on the branch head.
+- `make verify` after the pass 2 fixes, before pass 3, and on the archive commit (task 2.2 stays open until then).
 - Independent review passes 1 to 3 and their records.
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
