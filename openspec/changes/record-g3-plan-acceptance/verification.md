@@ -21,7 +21,7 @@ Out of scope: every other edit of the plan or the protocol, new owner decisions,
 
 ## Checks
 
-Run after both edits and the reviewer change, with the results below.
+Run after both edits and the reviewer change, and again after the pass 1 fixes (`1dab286e`) with the pass 1 records, with the results below.
 
 | Check | Result |
 | --- | --- |
@@ -43,7 +43,17 @@ Reviewer A first assigned by the coordinator: OpenCode CLI `opencode-go/qwen3.8-
 
 ### Pass 1 (reviewer A)
 
-Pending, by Codex CLI `gpt-6-astra`.
+- Reviewer A: Codex CLI `gpt-6-astra`, reasoning effort `medium`, run by the worker session; reviewed head `cb89d60caffadca800a122c484520d3c5de3c757`.
+- Invocation, as in the [agent task protocol](/docs/agent-task-protocol.md#reviewer-invocations) row "Codex CLI (gpt-6-astra)": `codex exec -m gpt-6-astra -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`.
+- Model confirmation: model `gpt-6-astra`, reasoning effort `medium`, and the read-only sandbox in the output header. Session `01a17e03-ee3a-7190-8080-27d75dc0e246`. Snapshot before and after: equal. Both as relayed by the worker session.
+- The reviewer confirmed the sentence and its placement, the plan otherwise identical, the four reviewer pauses, and the record of the failed attempt.
+- Findings: 0 Critical, 0 High, 1 Medium, 1 Low, matching its `passes.jsonl` line. Both were fixed in `1dab286e`:
+  - **P1 (Medium, evidence-mismatch):** `make verify` was pending at review time in this record, `tasks.md`, and the remaining gates. "Checks" records the run on `cb89d60c`, exit 0, and a pending row for the archive commit; task 2.2 and the remaining gates name both runs.
+  - **P2 (Low, process):** the choice of `gpt-6-astra` was not explained against the rotation. "Unavailable reviewer" now gives the reason: proposed by the worker session and assigned by coordinator Niki after the OpenCode Go reviewers were paused, with a harness, Codex, other than the developing session's, Claude Code.
+
+### Pass 2 (reviewer A)
+
+Pending, by Codex CLI `gpt-6-astra`, to confirm the pass 1 fixes, because pass 1 had a Medium finding.
 
 ## Limitations
 
