@@ -104,7 +104,20 @@ Linux 6.8.0-147-generic, x86_64; Docker Engine 27.3.1, classic image store, stor
 - Builds of one commit on different days were not run; the only day-dependent content found, the `/etc/shadow` day, now comes from the epoch.
 - The `worker-harnesses` variant and the control-plane image are not claimed to be reproducible.
 
+## Merge of `dev` before the archive
+
+After pass 3 (`e3102efe`; `make verify` there: exit 0, 2179 tests, 2132 pass, 0 fail, 47 skipped, coverage lines 99.24%, branches 92.20%, functions 98.92%), `origin/dev` at `eda6c283` (#349) was merged as `bd05e83f`, a merge commit without conflicts. Since the merge base `56346d92` it changed 29 files of the placement rotation cursor work and the `execution-placement` living spec, and none of this change's inputs: the Dockerfile, `scripts/installation.sh`, `scripts/harness-qualification.sh`, the `Makefile`, `docs/local-installation.md`, `docs/decisions/0015-g2-closure.md`, `docs/foundation.md`, the `local-installation` spec, or this change's tests. The evidence above therefore stands.
+
+## Archive
+
+Checked state: the tree of the archive commit, the working tree after `npm run openspec -- archive make-worker-image-reproducible --yes` on `bd05e83f`, with every task of `tasks.md` ticked.
+
+- `npm run openspec -- validate --all --strict --no-interactive`: 69 passed, 0 failed.
+- `make verify`: exit 0; 2196 tests, 2149 pass, 0 fail, 47 skipped; coverage lines 99.24%, branches 92.19%, functions 98.92%; `validate --all --strict` 69 passed; `verify:links`: every checked link conforms, 332 archived links in the baseline; every active change archives into strictly valid specs; package verification passed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line is `✓ change/2026-10-27-make-worker-image-reproducible`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/local-installation/spec.md`, 16 insertions and 1 deletion: the modified "Pinned image inputs" with its scenario "Two builds of one commit", and the added "Opt-in reproducibility check" with its two scenarios.
+- The moved change has `findings.jsonl` (13 lines) and `passes.jsonl` (3 lines); `make findings ARGS="validate"`: valid (27 findings files, 7 pass summary files).
+
 ## Remaining gates
 
-- Archive of the change (worker step 7).
 - Integration into dev by the coordinator (single pull request)

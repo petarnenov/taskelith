@@ -25,4 +25,4 @@
 ## 5. Review and archive
 
 - [x] 5.1 Independent review passes assigned by the coordinator (passes 1 to 3)
-- [ ] 5.2 Archive the change
+- [x] 5.2 Archive the change
