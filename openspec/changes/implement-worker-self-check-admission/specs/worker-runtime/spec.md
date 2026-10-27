@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Self-check at every start
-At every start, before its broker session, a worker SHALL run each admission check it composes, the Linux containment check included, and, after its capacity declaration and pressure report, SHALL journal one `worker.self-check.reported` with every result. A check that throws SHALL be `failed`; a failed check SHALL NOT fail the start. Details SHALL be redacted and bounded. More than 8 checks, or a repeated or malformed check id, SHALL fail the start before enrollment.
+At every start, before its broker session, a worker SHALL run each admission check it composes, the Linux containment check included, and, after its capacity declaration and pressure report, SHALL journal one `worker.self-check.reported` with every result. A check that throws SHALL be `failed`; a failed check SHALL NOT fail the start. Details SHALL be redacted and bounded. More than 8 checks, or a repeated or malformed check id, SHALL fail the start before it enrolls or opens its journal.
 
 #### Scenario: Containment not delegated
 - **WHEN** a Linux worker with a launch command starts and its containment parent is not delegated
@@ -13,7 +13,7 @@ At every start, before its broker session, a worker SHALL run each admission che
 
 #### Scenario: Too many checks
 - **WHEN** a worker composes 9 admission checks
-- **THEN** its start fails before enrollment, and no check runs
+- **THEN** its start fails before it enrolls or opens its journal, and no check runs
 
 #### Scenario: Throwing check
 - **WHEN** a check throws an error whose message holds a worker secret

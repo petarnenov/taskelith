@@ -52,7 +52,8 @@ The check proves what [supervisor identity](supervisor-identity.md) section 8 re
 
 ## 4a. The control plane decision
 
-The control plane decides the worker admission from the report and the enrolled host platform (`decideWorkerAdmission`):
+The control plane decides the worker admission from the report and the enrolled host platform (`decideWorkerAdmission`). **Trust model.** The self-check is self-attested: the enrolled worker runs it and reports it, and the control plane cannot prove a `passed` or a `no-launch-command` result. What the control plane enforces is the consequence of the state: placement (section 7) and new launch grants go only to an `admitted` worker.
+
 
 - A `not-applicable` result counts as `failed`, with the detail `not-applicable without a recognised reason: ...`, unless it holds exactly one recognised reason that agrees with the enrolled platform and, for a check the control plane knows, with its scope: `platform-not-covered` only for a platform outside the scope, and `no-launch-command` only for one inside it.
 - A required check missing from the report counts as `failed` with the detail `the check was not reported`; in G3 `linux-containment` is required.
@@ -81,7 +82,7 @@ In the observation consumption transaction, at `SERIALIZABLE`, a report replaces
 
 ## 7. Placement
 
-Placement offers work only to an `admitted` worker, in addition to the eligibility rules of [capacity reservation](capacity-reservation.md) section 11 (`worker-not-eligible`). An ungranted assignment on a worker that is not admitted is due for supersession at once, as on a draining worker. A running execution on a worker whose self-check failed keeps its ownership and its reservation until it ends normally; the failed self-check revokes no grant.
+Placement offers work only to an `admitted` worker, in addition to the eligibility rules of [capacity reservation](capacity-reservation.md) section 11 (`worker-not-eligible`). An ungranted assignment on a worker that is not admitted is due for supersession at once, as on a draining worker; when a report makes the worker `self-check-failed`, the same transaction frees each of its unfinished assignments that holds no grant, as a revocation does. The launch authority gives a new operation of a worker that is not `admitted` the non-retryable rejection `worker-not-authorized` ([launch authorization](launch-authorization.md) section 9), which releases its assignment. A replay of a recorded grant is answered as before, and a running execution on a worker whose self-check failed keeps its ownership and its reservation until it ends normally; the failed self-check revokes no grant.
 
 ## 8. The workers view
 
@@ -89,7 +90,9 @@ Placement offers work only to an `admitted` worker, in addition to the eligibili
 
 ## 9. Required tests
 
-- Placement offers nothing to an `awaiting-self-check` or `self-check-failed` worker, and supersedes an ungranted assignment on one at once.
+- Placement offers nothing to an `awaiting-self-check` or `self-check-failed` worker, and a failed report frees an accepted assignment that holds no grant.
+- The launch authority refuses a new operation of a worker that is not admitted with `worker-not-authorized`, and still replays a recorded grant.
+- Existing workers are `awaiting-self-check` after the migration.
 - Each transition of section 5, a stale report, and an all-`not-applicable` report.
 - The worker journals one report per start before any broker connection; a throwing check is `failed` and the start succeeds; details are redacted and bounded.
 - The worker refuses an offer with `worker-self-check-failed` and requests no grant while its self-check failed.

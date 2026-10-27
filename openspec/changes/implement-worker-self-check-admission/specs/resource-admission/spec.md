@@ -8,5 +8,5 @@
 - **THEN** it ends as superseded, its reservation is released, and the worker gets an assignment-ended command
 
 #### Scenario: Worker whose self-check failed
-- **WHEN** the worker of an ungranted assignment becomes `self-check-failed`
-- **THEN** the assignment is due for supersession at once, and superseding it releases its reservation
+- **WHEN** the worker of an accepted assignment without a grant becomes `self-check-failed`
+- **THEN** the assignment is due at once, the report's transaction frees it as superseded, its reservation is released, and the worker gets an assignment-ended command

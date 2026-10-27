@@ -56,3 +56,14 @@ When a worker becomes `self-check-failed`, each of its executions already runnin
 #### Scenario: Execution running during a failed self-check
 - **WHEN** a worker with an accepted, running attempt reports a failed self-check
 - **THEN** the assignment does not end, and the attempt's later exit ends the task as usual
+
+### Requirement: New grants only for admitted workers
+The launch authority SHALL refuse a new launch operation of a worker that is not `admitted` with the non-retryable `worker-not-authorized`, and SHALL answer a replay of a grant recorded earlier as it would for an admitted worker.
+
+#### Scenario: Grant after a failed self-check
+- **WHEN** a `self-check-failed` worker requests a new launch operation
+- **THEN** the operation is rejected with `worker-not-authorized`, final for that operation
+
+#### Scenario: Replay after a failed self-check
+- **WHEN** a worker that became `self-check-failed` repeats an operation that was granted while it was `admitted`
+- **THEN** the recorded grant is answered
