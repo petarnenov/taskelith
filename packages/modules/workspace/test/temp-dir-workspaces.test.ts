@@ -9,7 +9,7 @@ import { parseIdentifier, type Result } from '@taskelith/kernel';
 import type { AttemptId } from '@taskelith/execution';
 import type { ProjectId, TaskId } from '@taskelith/sdlc';
 import { WORKSPACE_LAYOUT, WORKSPACE_MODES, type PrepareWorkspace, type WorkspaceFixture } from '@taskelith/workspace';
-import { createFixture, type TempDirWorkspaces } from './temp-dir-workspaces.ts';
+import { CheckBarrier, createFixture, type TempDirWorkspaces } from './temp-dir-workspaces.ts';
 
 // The double's own modes and records, which the suite cannot see through
 // the port; the Linux checks with real accounts belong to item 16.
@@ -157,3 +157,64 @@ test('a reclaim never opens a hard-linked special file', () => withFixture(async
     await rm(outside, { recursive: true, force: true });
   }
 }));
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void; reject: (error: unknown) => void } {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((settle, fail) => {
+    resolve = settle;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+// Whether the promise settles once every pending reaction has run.
+async function settlesNow(promise: Promise<unknown>): Promise<boolean> {
+  let settled = false;
+  const settle = () => {
+    settled = true;
+  };
+  void promise.then(settle, settle);
+  await new Promise(setImmediate);
+  return settled;
+}
+
+test('a racing check that throws rejects with its error and releases the one waiting', async () => {
+  const barrier = new CheckBarrier();
+  const failure = new Error('the listing failed');
+  const failing = deferred<string>();
+  const waiting = barrier.afterAllChecks(async () => 'checked');
+  const thrown = barrier.afterAllChecks(() => failing.promise);
+  assert.equal(await settlesNow(waiting), false);
+  failing.reject(failure);
+  await assert.rejects(thrown, (error) => error === failure);
+  assert.equal(await waiting, 'checked');
+});
+
+test('the racing barrier holds a pair of checks again after a check threw', async () => {
+  const barrier = new CheckBarrier();
+  await assert.rejects(barrier.afterAllChecks(() => Promise.reject(new Error('the listing failed'))));
+  const late = deferred<string>();
+  const first = barrier.afterAllChecks(async () => 'first');
+  const second = barrier.afterAllChecks(() => late.promise);
+  assert.equal(await settlesNow(first), false);
+  late.resolve('second');
+  assert.deepEqual(await Promise.all([first, second]), ['first', 'second']);
+});
+
+test('racing hand-offs whose listing fails reject with its error and race again later', async () => {
+  const { fixture, dispose } = await createFixture({ racesHandOff: true });
+  try {
+    const provider = fixture.provider as TempDirWorkspaces;
+    for (const attemptId of [FIRST, SECOND]) must(await provider.prepare(request(fixture, { attemptId })));
+    const recordless = join(provider.root, 'recordless');
+    await mkdir(recordless);
+    const failed = await Promise.allSettled([provider.handOff(FIRST), provider.handOff(SECOND)]);
+    assert.deepEqual(failed.map((outcome) => outcome.status === 'rejected' && outcome.reason.code), ['ENOENT', 'ENOENT']);
+    await rm(recordless, { recursive: true });
+    const raced = await Promise.all([provider.handOff(FIRST), provider.handOff(SECOND)]);
+    assert.deepEqual(raced.map((result) => result.ok), [true, true]);
+  } finally {
+    await dispose();
+  }
+});
