@@ -49,12 +49,13 @@ After the review pass 1 fixes (`ce677cbf`), on the working tree of the record co
 
 ### Pass 1 (reviewer A)
 
-- Reviewer: Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, role A, run by the coordinator's session (Pepi).
+- Reviewer: Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, role A, run by the worker session (Pepi).
 - Invocation: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, read-only sandbox.
-- Model confirmation: the output header named `gpt-6.1-sol` with reasoning effort `medium`, as the coordinator reported.
+- Model confirmation: the output header named `gpt-6.1-sol` with reasoning effort `medium` and sandbox `read-only`, as Pepi read it.
 - Session: `01a17eee-d6f8-7763-9617-f04c0007e6f1`. Reviewed HEAD `eb0520aa`.
 - Snapshot: `79284628e5921e9ce4936c6fdfb75c4e399f7f8b9d281d4fec172647f551855f` before and after, unchanged.
-- Findings: critical 0, high 0, medium 4, low 2. All fixed in `ce677cbf`.
+- Findings: critical 0, high 0, medium 4, low 2. All fixed in `ce677cbf`; `19cbad02` reworded the M3 fix so that it reads independent of commit order.
+- After the fixes, `make verify` on `19cbad02`: exit 0; tests 2289, pass 2286, fail 0, skipped 3.
 
 | Finding | Resolution |
 | --- | --- |
@@ -66,7 +67,6 @@ After the review pass 1 fixes (`ce677cbf`), on the working tree of the record co
 | L2 (Low, evidence-mismatch): the record said the merge of `b87abe75` brought only an archive, although it also changed two qualification documents (`verification.md:9`) | The Revision section names `docs/qualification/claude-code.md` and `docs/qualification/codex.md`, which are no inputs of this change |
 
 ### Later passes
-
 
 - Pass 2 (reviewer B): Claude Code `claude-opus-5-5`, effort `high`. Pending.
 - Pass 3 (reviewer A): Codex `gpt-6.1-sol`. Pending.
