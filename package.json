@@ -53,7 +53,9 @@
     "inventory:dependencies": "node --experimental-strip-types scripts/inventory-dependencies.ts",
     "verify:dependencies": "node --experimental-strip-types scripts/inventory-dependencies.ts --check",
     "verify:archive": "node --experimental-strip-types scripts/check-archive-dry-run.ts",
-    "verify:comments": "node --experimental-strip-types scripts/check-comment-length.ts"
+    "verify:comments": "node --experimental-strip-types scripts/check-comment-length.ts",
+    "findings": "node --experimental-strip-types scripts/findings.ts",
+    "verify:findings": "node --experimental-strip-types scripts/findings.ts validate"
   },
   "publishConfig": {
     "access": "public"
@@ -67,6 +69,7 @@
     "@semantic-release/npm": "13.2.0",
     "@semantic-release/release-notes-generator": "14.1.1",
     "@types/node": "24.19.2",
+    "ajv": "8.20.0",
     "conventional-changelog-conventionalcommits": "9.3.1",
     "json-schema-to-typescript": "16.0.0",
     "openapi-typescript": "7.13.0",

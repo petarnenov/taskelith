@@ -1,0 +1,18 @@
+# Review finding categories: one category per line, its id, then a space and
+# its description. Adding a category is adding one line. Lines starting with
+# a hash sign are comments.
+stale-citation A cited file line, commit, or record no longer matches its target.
+evidence-mismatch A recorded result, count, or claim differs from what the checks show.
+contract-drift Code, a contract document, and its specification disagree.
+spec-wording A requirement or scenario is ambiguous, untestable, or inaccurate.
+requirement-length A requirement exceeds the length that strict validation accepts after archive.
+missing-fail-before-test A fix has no test that fails before it and passes after it.
+test-flakiness A test depends on timing, ordering, or shared state and can fail at random.
+clock-mixing Times from different clocks, or wall and monotonic time, are compared.
+concurrency-race Concurrent operations can interleave into a wrong state or result.
+error-handling A failure is swallowed, misreported, or leaves inconsistent state.
+redaction A secret or private value can leak into output, logs, or records.
+scope The change does more or less than its assigned scope.
+naming A name hides intent or uses two terms for one concept.
+docs Documentation is missing, wrong, or out of date with the change.
+process A protocol, governance, or review rule was not followed.
