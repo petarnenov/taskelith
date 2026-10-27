@@ -342,7 +342,23 @@ test('a grant that arrives after the deadline is journaled and never used', asyn
   assert.equal(authority.requests.length, 2);
   assert.equal(authority.requests[0]?.reportsNotStartedFor, undefined);
   const sealed = { executionId: first?.executionId, operationId: authority.requests[0]?.operationId };
-  assert.deepEqual(authority.requests[1]?.reportsNotStartedFor, sealed);
+  assert.deepEqual(authority.requests[1]?.reportsNotStartedFor, [sealed]);
+});
+
+test('a later grant confirms the sealed executions before it, so the next request reports only the newer one', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  authority.onRequest = () => {
+    if (authority.requests.length <= 2) clock.milliseconds += 25_000;
+    else controller.abort();
+  };
+  await launchOnce();
+
+  const [, second] = executions();
+  assert.equal(authority.requests.length, 3);
+  assert.equal(authority.requests[1]?.reportsNotStartedFor?.length, 1);
+  const sealed = { executionId: second?.executionId, operationId: authority.requests[1]?.operationId };
+  assert.deepEqual(authority.requests[2]?.reportsNotStartedFor, [sealed]);
 });
 
 test('a reading from another boot never hands a grant out', async () => {
@@ -561,7 +577,7 @@ test('cancellation names a superseded execution: the running one goes on, and ev
   assert.equal(callCount(supervisions.byExecution.get(running), 'cancel'), 0);
   assert.equal(executions()[1]?.state, 'started');
   assert.equal(executions().length, 2);
-  assert.equal(authority.requests[1]?.reportsNotStartedFor?.executionId, superseded);
+  assert.deepEqual(authority.requests[1]?.reportsNotStartedFor?.map(({ executionId }) => executionId), [superseded]);
   assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
 });
 

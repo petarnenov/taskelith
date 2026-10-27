@@ -104,7 +104,7 @@ A worker SHALL answer every `worker.inventory.requested` addressed to it with a 
 - **THEN** the worker publishes a snapshot without a `requestId`, and tries again with backoff until it is published or the connection is down again
 
 ### Requirement: Journaled launch authorization
-A worker SHALL commit W2 before the first request of an operation and W3 with each decision, and SHALL repeat a request that reached no decision with the same `operationId`, after a delay of 5 s doubling to 60 s with jitter, until its deadline. A retryable rejection SHALL be retried under a new `operationId`; a final one SHALL end the launch with its observation. A new or resumed execution SHALL report the intent's last sealed one. Each failed request SHALL be logged with its failure.
+A worker SHALL commit W2 before an operation's first request and W3 with each decision, SHALL log each request failure, and SHALL repeat an undecided request under the same `operationId`, after a jittered delay of 5 s doubling to 60 s, until its deadline. A retryable rejection SHALL be retried under a new `operationId`; a final one SHALL end the launch with its observation. A new or resumed execution SHALL report the intent's sealed ones no later grant confirms, oldest first, at most 8.
 
 #### Scenario: No decision
 - **WHEN** the launch authority does not answer twice and then grants
@@ -121,6 +121,14 @@ A worker SHALL commit W2 before the first request of an operation and W3 with ea
 #### Scenario: Logged authorization failure
 - **WHEN** a launch authorization request fails
 - **THEN** the worker logs `worker.launch.authorization-failed` with the failure's details, then the execution, the operation, and the failure's code and message, which no detail replaces, and, before its deadline, repeats the operation
+
+#### Scenario: Confirmed seal
+- **WHEN** a later execution's grant is journaled after an earlier execution was sealed
+- **THEN** the next request reports only the sealed executions from that later one on
+
+#### Scenario: Crash after a runtime seal
+- **WHEN** a granted execution is sealed at runtime before its `not-started` is delivered, and the worker crashes after the next execution's W2
+- **THEN** after the restart the request reports both sealed executions, oldest first, and the intent runs once
 
 ### Requirement: Launch deadline
 A worker SHALL hand a grant to its supervisor only before the deadline from its suspend-inclusive clock read before the operation's first request, in the same boot. An operation past its deadline without a decision, or answered `expired`, SHALL be journaled `expired`, and the same execution SHALL be authorized again reporting it has not started. An unusable grant's execution SHALL be sealed and reported `not-started`.
@@ -210,6 +218,10 @@ On its first pass after a start, a worker with a supervision host SHALL reconcil
 #### Scenario: Pending W2 on start
 - **WHEN** the worker starts with a W2 that has no outcome
 - **THEN** it seals the execution, reports `not-started`, and, with a launch command, launches the intent under a new execution once online, whose request reports the sealed one, so it runs although the observation has not reached the authority
+
+#### Scenario: Double fault on start
+- **WHEN** the worker crashes after a grant, and the next start seals that execution and crashes again after the new execution's W2
+- **THEN** the following start reports both sealed executions with the next request, and the intent runs once
 
 #### Scenario: Recovery asks to retry
 - **WHEN** the recovery table answers that the supervisor's liveness is not yet decided

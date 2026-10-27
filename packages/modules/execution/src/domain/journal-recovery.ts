@@ -1,5 +1,5 @@
 import type { AssignmentId, ExecutionId } from './identifiers.js';
-import type { SealedExecution } from './launch-authorization.js';
+import { REPORTED_SEALS_LIMIT, type SealedExecution } from './launch-authorization.js';
 import type {
   AuthorizationOutcome,
   CancellationTarget,
@@ -27,14 +27,28 @@ export function planJournalRecovery(snapshot: JournalSnapshot): readonly Recover
   return Object.freeze([...cancellations, ...launches].map((action) => Object.freeze(action)));
 }
 
-// The intent's last sealed execution, which a new execution reports, so the
-// authority ends it first; its last granted operation, else its last one.
-export function lastSealedExecution(snapshot: JournalSnapshot, assignmentId: AssignmentId): SealedExecution | undefined {
-  const sealed = snapshot.executions.filter((execution) => execution.assignmentId === assignmentId && execution.state === 'not-started').at(-1);
-  const latest = [...(sealed?.authorizations ?? [])].reverse();
+// The intent's sealed executions that no later grant confirms, oldest
+// first and at most REPORTED_SEALS_LIMIT (journal contract section 5).
+export function unconfirmedSealedExecutions(snapshot: JournalSnapshot, assignmentId: AssignmentId): readonly SealedExecution[] {
+  const executions = snapshot.executions.filter((execution) => execution.assignmentId === assignmentId);
+  const lastGranted = executions.map((execution) => isGranted(execution)).lastIndexOf(true);
+  const unconfirmed = executions.slice(Math.max(lastGranted, 0)).filter((execution) => execution.state === 'not-started')
+    .flatMap((execution) => sealedExecution(execution) ?? []);
+  return Object.freeze(unconfirmed.slice(0, REPORTED_SEALS_LIMIT));
+}
+
+// A grant proves every execution journaled before it had ended at the
+// authority, which grants only while no other one owns the attempt.
+function isGranted(execution: JournaledExecution): boolean {
+  return execution.authorizations.some(({ outcome }) => outcome === 'granted');
+}
+
+// Its last granted operation, else its last one.
+function sealedExecution(execution: JournaledExecution): SealedExecution | undefined {
+  const latest = [...execution.authorizations].reverse();
   const operation = latest.find(({ outcome }) => outcome === 'granted') ?? latest[0];
-  if (sealed === undefined || operation === undefined) return undefined;
-  return Object.freeze({ executionId: sealed.executionId, operationId: operation.operationId });
+  if (operation === undefined) return undefined;
+  return Object.freeze({ executionId: execution.executionId, operationId: operation.operationId });
 }
 
 // An ended assignment launches nothing more, like a cancelled one.
