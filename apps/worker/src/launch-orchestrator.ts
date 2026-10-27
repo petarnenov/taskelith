@@ -1,4 +1,5 @@
 import {
+  isJournalStop,
   launchRejection,
   launchRetryDelay,
   parseLaunchParameters,
@@ -395,6 +396,14 @@ type Authorized =
 // How one execution ended: launch another, or stop launching the intent.
 type Executed = 'relaunch' | 'end';
 
+// An operation whose W2 committed, with the request it journaled.
+interface Begun {
+  readonly kind: 'begun';
+  readonly operationId: OperationId;
+  readonly request: LaunchRequest;
+  readonly reading: DeadlineReading;
+}
+
 // The execution a launch authorizes: a resumed one was authorized before.
 interface LaunchedExecution {
   readonly executionId: ExecutionId;
@@ -454,8 +463,13 @@ class Launch {
   async run(): Promise<void> {
     let resume = this.#context.resume;
     while (!this.#signal.aborted) {
-      const execution = this.#nextExecution(resume);
-      if (execution === undefined) return;
+      const next = this.#nextExecution(resume);
+      if (!next.ok) {
+        if (isJournalStop(next.error)) return;
+        await this.#deferBeforeW2(next.error);
+        continue;
+      }
+      const execution = next.value;
       this.#executing = execution.executionId;
       const executed = await this.#execute(execution);
       this.#executing = undefined;
@@ -467,13 +481,14 @@ class Launch {
 
   // A new or resumed execution reports the intent's unconfirmed sealed ones,
   // whose `not-started` may not have reached the authority (journal, 5).
-  #nextExecution(resume: ExecutionId | undefined): LaunchedExecution | undefined {
-    const executionId = resume ?? this.#newId('ExecutionId');
+  #nextExecution(resume: ExecutionId | undefined): Result<LaunchedExecution> {
+    const executionId = resume === undefined ? this.#newId('ExecutionId') : ok(resume);
+    if (!executionId.ok) return executionId;
     const snapshot = this.#options.journal.snapshot();
-    if (executionId === undefined || !reported(this.#options, snapshot)) return undefined;
+    if (!reported(this.#options, snapshot)) return snapshot;
     const sealed = unconfirmedSealedExecutions(snapshot.value, this.#intent.assignmentId);
     const report = sealed.length === 0 ? {} : { reportsNotStartedFor: sealed };
-    return { executionId, authorizedBefore: resume !== undefined, ...report };
+    return ok({ executionId: executionId.value, authorizedBefore: resume !== undefined, ...report });
   }
 
   // An execution authorized again reports that it has not started, so a
@@ -497,25 +512,12 @@ class Launch {
     }
   }
 
-  // W2, then one operation's requests until a decision (design D2). W2
-  // follows the last contact and pressure checks with no await between.
+  // W2, then one operation's requests until a decision (design D2).
   async #authorize(execution: LaunchedExecution, reportsNotStarted: boolean): Promise<Authorized> {
+    const begun = await this.#beginOperation(execution, reportsNotStarted);
+    if (begun.kind !== 'begun') return begun;
     const { executionId } = execution;
-    const { contact } = this.#options;
-    while (!this.#signal.aborted) {
-      if (contact?.offline === true) await contact.whenOnline(this.#signal);
-      else if (this.#pressured()) await this.#pressurePause();
-      else break;
-    }
-    if (this.#stopping.aborted) return { kind: 'end' };
-    // A cancel before W2 begins no operation, as one during a back-off.
-    if (this.#cancelled) return { kind: reportsNotStarted ? 'abandon' : 'end' };
-    const operationId = this.#newId('OperationId');
-    const reading = this.#options.clock.read();
-    if (operationId === undefined || !reading.ok) return { kind: 'end' };
-    const request = this.#request(execution, operationId, reportsNotStarted);
-    // No request leaves before W2 commits (journal contract section 5).
-    if (!(await this.#commitWrite(executionId, () => this.#options.journal.beginAuthorization(request)))) return { kind: 'end' };
+    const { operationId, request, reading } = begun;
     const { workerId: _worker, ...sent } = request;
     for (;;) {
       if (this.#stopping.aborted) return { kind: 'end' };
@@ -524,16 +526,16 @@ class Launch {
       if (this.#stopping.aborted) return { kind: 'end' };
       if (!answer.ok) {
         this.#authorizationFailed(executionId, operationId, answer.error);
-        if (!this.#beforeDeadline(reading.value, DEFAULT_PARAMETERS)) return this.#expired(executionId, operationId);
+        if (!this.#beforeDeadline(reading, DEFAULT_PARAMETERS)) return this.#expired(executionId, operationId);
         await this.#backOff();
         await this.#awaitAdmission();
-        if (!this.#beforeDeadline(reading.value, DEFAULT_PARAMETERS)) return this.#expired(executionId, operationId);
+        if (!this.#beforeDeadline(reading, DEFAULT_PARAMETERS)) return this.#expired(executionId, operationId);
         continue;
       }
       const outcome = answer.value;
       switch (outcome.kind) {
         case 'granted':
-          return this.#granted(outcome.grant, reading.value);
+          return this.#granted(outcome.grant, reading);
         case 'expired':
           return this.#expired(executionId, operationId);
         case 'revoked':
@@ -542,6 +544,59 @@ class Launch {
           return this.#rejected(executionId, operationId, outcome.rejection);
       }
     }
+  }
+
+  // W2 follows the last contact and pressure checks with no await between;
+  // a failure before it is tried again after a back-off.
+  async #beginOperation(execution: LaunchedExecution, reportsNotStarted: boolean): Promise<Begun | Authorized> {
+    const { contact } = this.#options;
+    for (;;) {
+      while (!this.#signal.aborted) {
+        if (contact?.offline === true) await contact.whenOnline(this.#signal);
+        else if (this.#pressured()) await this.#pressurePause();
+        else break;
+      }
+      if (this.#stopping.aborted) return { kind: 'end' };
+      // A cancel before W2 begins no operation, as one during a back-off.
+      if (this.#cancelled) return { kind: reportsNotStarted ? 'abandon' : 'end' };
+      const operationId = this.#newId('OperationId');
+      if (!operationId.ok) {
+        await this.#deferBeforeW2(operationId.error);
+        continue;
+      }
+      const reading = this.#options.clock.read();
+      if (!reading.ok) {
+        await this.#deferBeforeW2(reading.error);
+        continue;
+      }
+      const request = this.#request(execution, operationId.value, reportsNotStarted);
+      const failed = await this.#commitW2(request);
+      if (failed === undefined) return { kind: 'begun', operationId: operationId.value, request, reading: reading.value };
+      if (this.#stopping.aborted || isJournalStop(failed)) return { kind: 'end' };
+      await this.#deferBeforeW2(failed);
+    }
+  }
+
+  // No request leaves before W2 commits (journal contract section 5); answers
+  // the last failure when W2 did not commit.
+  async #commitW2(request: LaunchRequest): Promise<Failure | undefined> {
+    let failed: Failure | undefined;
+    const write = () => {
+      const written = this.#options.journal.beginAuthorization(request);
+      failed = written.ok ? undefined : written.error;
+      return written;
+    };
+    return (await this.#commitWrite(request.executionId, write)) ? undefined : failed;
+  }
+
+  // Nothing was committed or sent; the launch waits its back-off on a
+  // timer, so the worker's other work runs (journal contract section 5).
+  async #deferBeforeW2({ code, message, details }: Failure): Promise<void> {
+    const delayMilliseconds = this.#nextRetryDelay();
+    const { assignmentId } = this.#intent;
+    const fields = { ...details, assignmentId, code, message, retries: this.#retries, delayMilliseconds };
+    this.#context.logger.warn('worker.launch.deferred', fields);
+    await this.#options.sleep(delayMilliseconds, this.#signal);
   }
 
   // The details name the cause, such as the code of a lost connection;
@@ -677,15 +732,18 @@ class Launch {
     };
   }
 
-  // The retry counter grows across operations and executions of the launch.
   async #backOff(): Promise<void> {
+    await this.#options.sleep(this.#nextRetryDelay(), this.#signal);
+  }
+
+  // The retry counter grows across operations and executions of the launch.
+  #nextRetryDelay(): number {
     this.#retries += 1;
-    await this.#options.sleep(launchRetryDelay(this.#retries, this.#options.draw()), this.#signal);
+    return launchRetryDelay(this.#retries, this.#options.draw());
   }
 
   #newId<Kind extends 'ExecutionId' | 'OperationId'>(kind: Kind) {
-    const parsed = parseIdentifier(kind, this.#options.newId());
-    return parsed.ok ? parsed.value : undefined;
+    return parseIdentifier(kind, this.#options.newId());
   }
 }
 
