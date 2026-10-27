@@ -15,6 +15,8 @@ import {
   decideDelegation,
   decidePlacement,
   fairPlacementOrder,
+  isRecordedWaitingReason,
+  isRejectingReason,
   isWaitingReason,
   lacksFleetCapacity,
   parseResourceRequest,
@@ -93,6 +95,17 @@ test('waiting reasons leave a task queued, rejecting ones end it, standing ones 
   assert.deepEqual(
     ['delegation-awaiting-capacity', 'retry-budget-exhausted', 'attempt-already-reserved', 'attempt-not-reservable'].map((reason) => reasonOutcome(reason as never)),
     ['waiting', 'rejected', 'standing', 'standing'],
+  );
+});
+
+test('a recorded outcome waits for a waiting reason or no candidate, and rejects for a rejecting one', () => {
+  assert.deepEqual(
+    ['worker-capacity-exhausted', 'no-candidate', 'attempt-already-reserved', 'retry-budget-exhausted', undefined].map(isRecordedWaitingReason),
+    [true, true, false, false, false],
+  );
+  assert.deepEqual(
+    ['retry-budget-exhausted', 'project-quota-exhausted', 'attempt-not-reservable'].map((reason) => isRejectingReason(reason as never)),
+    [true, false, false],
   );
 });
 

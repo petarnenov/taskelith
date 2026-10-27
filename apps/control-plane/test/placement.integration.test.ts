@@ -15,7 +15,7 @@ import {
 } from '@taskelith/control-plane';
 import { openAttempt, type AttemptId, type Task, type WorkerId } from '@taskelith/execution';
 import { fleetToken, fleetWorker, type EnrolledWorker } from '@taskelith/fleet';
-import type { CorrelationId } from '@taskelith/kernel';
+import { err, failure, ok, type CorrelationId } from '@taskelith/kernel';
 import { PostgresDatabase, migrate, type PostgresTransaction } from '@taskelith/postgres';
 import { endAssignment } from '@taskelith/scheduling';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
@@ -61,7 +61,7 @@ const binding = {
 const TABLES = [
   'workflow_runs', 'gates', 'admissions', 'tasks', 'assignments', 'outbox', 'task_lineage', 'capacity_charges', 'delegations',
   'capacity_quotas', 'workers', 'installation', 'enrollment_tokens', 'delegation_requests', 'current_revisions', 'producer_cursors',
-  'placement_rotation',
+  'placement_rotation', 'placement_outcomes',
 ];
 const CORRELATION = 'correlation-1' as CorrelationId;
 const tasks = new TaskService(database);
@@ -201,21 +201,25 @@ describe('placement', () => {
     await submit('task-1');
     await submit('task-3', 'run-2');
     await sql('UPDATE workers SET slots = 0');
-    let transactions = 0;
-    // Frees the slot right after the first placement transaction ends.
+    // task-1's outcome after each SERIALIZABLE transaction; the slot frees
+    // right after the first, the declined placement of task-1.
+    const recorded: (string | undefined)[] = [];
     const freeing: ControlPlaneStore = {
       readCommitted: (work) => database.readCommitted(work),
       transaction: async (work) => {
         const outcome = await database.transaction(work);
-        if (++transactions === 1) await sql('UPDATE workers SET slots = 1');
+        const record = await outcomeRecord('task-1');
+        recorded.push(record && `${record.disposition} ${record.reason}`);
+        if (recorded.length === 1) await sql('UPDATE workers SET slots = 1');
         return outcome;
       },
     };
     const pass = new PlacementService(freeing, TIMING);
     assert.deepEqual(value(await pass.placeWaiting()), { waiting: 2, placed: 0 });
-    assert.deepEqual([transactions, await placedTasks()], [1, []]);
+    assert.deepEqual(recorded, [undefined, 'waiting worker-capacity-exhausted'], 'a rollback, then its waiting record');
+    assert.deepEqual(await placedTasks(), []);
     assert.deepEqual(value(await pass.placeWaiting()), { waiting: 2, placed: 1 });
-    assert.deepEqual(await placedTasks(), ['task-1']);
+    assert.deepEqual([await placedTasks(), await outcomeRecord('task-1')], [['task-1'], undefined]);
   });
 
   test('without a candidate no placement transaction is opened', async () => {
@@ -381,7 +385,102 @@ describe('placement', () => {
     assert.equal(before.ownershipGeneration, 2);
     assert.deepEqual((await assignmentsOf('task-1')).map((row) => row.reservation_state), ['released']);
   });
+
+  test('a waiting outcome outlives the rolled-back placement, without the attempt it opened', async () => {
+    await enroll('worker-a', { cpuMillicores: 500 });
+    await submit('task-1');
+    assert.deepEqual(value(await placement.placeWaiting()), { waiting: 1, placed: 0 });
+    assert.deepEqual((await stored('task-1')).attempts, []);
+    const { recordedAt, ...outcome } = (await outcomeRecord('task-1'))!;
+    assert.deepEqual(outcome, { taskId: 'task-1', disposition: 'waiting', reason: 'worker-capacity-exhausted', source: 'scheduler' });
+    assert.match(recordedAt, /^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  test('a placement removes the task\'s waiting outcome', async () => {
+    await enroll('worker-a');
+    await submit('task-1');
+    await sql("INSERT INTO capacity_quotas (scope, scope_id, quota) VALUES ('project', 'project-1', 0)");
+    value(await placement.placeWaiting());
+    assert.equal((await outcomeRecord('task-1'))?.reason, 'project-quota-exhausted');
+    await sql('DELETE FROM capacity_quotas');
+    assert.deepEqual(value(await new PlacementService(database, TIMING).placeWaiting()), { waiting: 1, placed: 1 });
+    assert.equal(await outcomeRecord('task-1'), undefined);
+  });
+
+  test('a placement whose removal of the outcome fails writes nothing and keeps the outcome', async () => {
+    await enroll('worker-a');
+    await submit('task-1');
+    await sql("INSERT INTO capacity_quotas (scope, scope_id, quota) VALUES ('project', 'project-1', 0)");
+    value(await placement.placeWaiting());
+    const [waiting, cursor] = [await outcomeRecord('task-1'), await sql('SELECT project_id FROM placement_rotation')];
+    await sql('DELETE FROM capacity_quotas');
+    const failing: ControlPlaneStore = {
+      transaction: (work) => database.transaction((tx) => work({ ...tx, now: () => tx.now(), placementOutcomes: failingRemoval(tx) })),
+      readCommitted: (work) => database.readCommitted(work),
+    };
+    assert.equal(failed(await new PlacementService(failing, TIMING).placeWaiting()).code, 'unavailable');
+    assert.deepEqual(await outcomeRecord('task-1'), waiting);
+    assert.deepEqual([await assignmentsOf('task-1'), await offers()], [[], []]);
+    assert.deepEqual(await sql('SELECT project_id FROM placement_rotation'), cursor);
+  });
+
+  for (const earlier of [false, true]) {
+    test(`a placement that overlaps the waiting record's transaction leaves no record, ${earlier ? 'replacing' : 'without'} an earlier one`, async () => {
+      await enroll('worker-a', { slots: 1 });
+      await submit('task-1');
+      if (earlier) {
+        await sql(`INSERT INTO placement_outcomes (task_id, disposition, reason, source, recorded_at)
+          VALUES ('task-1', 'waiting', 'project-quota-exhausted', 'scheduler', now())`);
+      }
+      await sql('UPDATE workers SET slots = 0');
+      let overlapping = { waiting: 0, placed: 0 };
+      const paused = pausingStore(async () => {
+        await sql('UPDATE workers SET slots = 1');
+        overlapping = value(await new PlacementService(database, TIMING).placeWaiting());
+      });
+      assert.deepEqual(value(await new PlacementService(paused.store, TIMING).placeWaiting()), { waiting: 1, placed: 0 });
+      assert.deepEqual(overlapping, { waiting: 1, placed: 1 });
+      assert.equal(paused.count(), 2, 'the waiting record\'s transaction lost its race and ran again');
+      assert.deepEqual([await placedTasks(), await outcomeRecord('task-1')], [['task-1'], undefined]);
+    });
+  }
 });
+
+// Removals of placement outcome records fail as an unavailable store does.
+function failingRemoval(tx: PostgresTransaction): ControlPlaneTransaction['placementOutcomes'] {
+  const outcomes = tx.placementOutcomes;
+  return {
+    record: (outcome) => outcomes.record(outcome), remove: async () => err(failure('unavailable', 'the store is down')),
+    get: (taskId) => outcomes.get(taskId), list: (taskIds) => outcomes.list(taskIds),
+  };
+}
+
+// The first waiting read in a SERIALIZABLE transaction, the waiting
+// record's, awaits `overlap` before it answers; `count` counts such reads.
+function pausingStore(overlap: () => Promise<void>) {
+  let reads = 0;
+  const pausing = (tx: PostgresTransaction): ControlPlaneTransaction => ({
+    ...tx,
+    now: () => tx.now(),
+    placements: {
+      waiting: (limit, excluding, after) => tx.placements.waiting(limit, excluding, after),
+      stillWaiting: async (taskIds) => {
+        const waiting = await tx.placements.stillWaiting(taskIds);
+        if (++reads === 1) await overlap();
+        return waiting;
+      },
+    },
+  });
+  const store: ControlPlaneStore = {
+    transaction: (work) => database.transaction((tx) => work(pausing(tx))),
+    readCommitted: (work) => database.readCommitted(work),
+  };
+  return { store, count: () => reads };
+}
+
+async function outcomeRecord(taskId: string) {
+  return value(await database.transaction(async (tx) => ok(await tx.placementOutcomes.get(taskId as TaskId))));
+}
 
 describe('delegation', () => {
   const PRINCIPAL = { workerId: 'worker-a' as WorkerId, generation: 1 };

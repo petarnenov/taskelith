@@ -16,6 +16,7 @@ import type {
   CapacityTransaction,
   DelegationRequests,
   OutboxLookup,
+  PlacementOutcomeRecords,
   PlacementQueue,
   PlacementRotation,
   WorkerReports,
@@ -41,6 +42,7 @@ export interface ControlPlaneTransaction extends CapacityTransaction {
   readonly launches: LaunchRecords;
   readonly placements: PlacementQueue;
   readonly rotation: PlacementRotation;
+  readonly placementOutcomes: PlacementOutcomeRecords;
   readonly delegations: DelegationRequests;
   readonly inbox: Inbox;
   readonly cursors: ProducerCursors;
