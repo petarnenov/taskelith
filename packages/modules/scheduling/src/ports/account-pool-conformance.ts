@@ -4,6 +4,7 @@ import { expectCode, expectOneWinner, expectRead, expectSame, expectSuccess, typ
 import { DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY } from '../domain/capacity-limits.js';
 import {
   FIRST_SLOT_REVISION,
+  parseSlotCredentialVersion,
   type AccountSlot,
   type SlotCredentialVersion,
   type SubscriptionMechanismId,
@@ -28,9 +29,7 @@ const HARNESS = id('HarnessPluginId', 'harness-1') as HarnessPluginId;
 const OTHER_HARNESS = id('HarnessPluginId', 'harness-2') as HarnessPluginId;
 const MECHANISM = id('SubscriptionMechanismId', 'mechanism-1') as SubscriptionMechanismId;
 const UNKNOWN_SLOT = id('ProviderCredentialId', 'slot-unknown') as ProviderCredentialId;
-const version = (text: string) => id('SlotCredentialVersion', text) as SlotCredentialVersion;
-const FIRST_VERSION = version('version-1');
-const SECOND_VERSION = version('version-2');
+const FIRST_VERSION = must(parseSlotCredentialVersion(1));
 
 function slot(text: string, overrides: Partial<AccountSlot> = {}): AccountSlot {
   return Object.freeze({
@@ -164,44 +163,75 @@ function customInspection(value: SlotSecret): string | undefined {
   return typeof custom === 'function' ? String(custom.call(value)) : undefined;
 }
 
+// Each version must be above every earlier version of its slot.
+function expectAbove(
+  problems: string[],
+  label: string,
+  version: SlotCredentialVersion,
+  earlier: readonly SlotCredentialVersion[],
+): void {
+  const highest = Math.max(0, ...earlier);
+  if (!(version > highest)) problems.push(`${label}: expected a version above ${highest}, got ${version}`);
+}
+
 export const SLOT_CREDENTIALS_CONFORMANCE: readonly ConformanceCase<SlotCredentials>[] = Object.freeze([
   {
-    name: 'stores each version once and discards one, idempotently',
+    name: 'stores each credential under a new version and discards one, idempotently',
     async check(credentials: SlotCredentials) {
       const problems: string[] = [];
       expectCode(problems, 'none yet', await credentials.reveal(CREDENTIAL_SLOT, FIRST_VERSION), 'not-found');
-      await credentials.store(CREDENTIAL_SLOT, FIRST_VERSION, secret('first-material'));
-      await credentials.store(CREDENTIAL_SLOT, SECOND_VERSION, secret('second-material'));
-      await credentials.store(CREDENTIAL_SLOT, FIRST_VERSION, secret('replacing-material'));
-      expectRevealed(problems, 'first kept', await credentials.reveal(CREDENTIAL_SLOT, FIRST_VERSION), 'first-material');
-      expectRevealed(problems, 'second', await credentials.reveal(CREDENTIAL_SLOT, SECOND_VERSION), 'second-material');
-      expectCode(problems, 'other slot', await credentials.reveal(UNKNOWN_SLOT, FIRST_VERSION), 'not-found');
-      await credentials.discard(CREDENTIAL_SLOT, FIRST_VERSION);
-      expectCode(problems, 'discarded', await credentials.reveal(CREDENTIAL_SLOT, FIRST_VERSION), 'not-found');
-      await credentials.discard(CREDENTIAL_SLOT, FIRST_VERSION);
-      expectRevealed(problems, 'other kept', await credentials.reveal(CREDENTIAL_SLOT, SECOND_VERSION), 'second-material');
+      const first = await credentials.store(CREDENTIAL_SLOT, secret('first-material'));
+      const second = await credentials.store(CREDENTIAL_SLOT, secret('second-material'));
+      expectRevealed(problems, 'first kept', await credentials.reveal(CREDENTIAL_SLOT, first), 'first-material');
+      expectRevealed(problems, 'second', await credentials.reveal(CREDENTIAL_SLOT, second), 'second-material');
+      expectCode(problems, 'other slot', await credentials.reveal(UNKNOWN_SLOT, first), 'not-found');
+      await credentials.discard(CREDENTIAL_SLOT, first);
+      expectCode(problems, 'discarded', await credentials.reveal(CREDENTIAL_SLOT, first), 'not-found');
+      await credentials.discard(CREDENTIAL_SLOT, first);
+      expectRevealed(problems, 'other kept', await credentials.reveal(CREDENTIAL_SLOT, second), 'second-material');
       return problems;
     },
   },
   {
-    name: 'discards every version but the current one, idempotently, and keeps later stores',
+    name: 'versions strictly increase per slot and are never reused after a discard or destroy',
     async check(credentials: SlotCredentials) {
       const problems: string[] = [];
-      const orphan = version('version-orphan');
-      await credentials.store(CREDENTIAL_SLOT, FIRST_VERSION, secret('replaced-material'));
-      await credentials.store(CREDENTIAL_SLOT, orphan, secret('orphaned-material'));
-      await credentials.store(CREDENTIAL_SLOT, SECOND_VERSION, secret('current-material'));
-      await credentials.store(OTHER_CREDENTIAL_SLOT, FIRST_VERSION, secret('other-material'));
-      await credentials.discardAllExcept(CREDENTIAL_SLOT, SECOND_VERSION);
-      expectCode(problems, 'replaced', await credentials.reveal(CREDENTIAL_SLOT, FIRST_VERSION), 'not-found');
-      expectCode(problems, 'orphaned', await credentials.reveal(CREDENTIAL_SLOT, orphan), 'not-found');
-      expectRevealed(problems, 'current', await credentials.reveal(CREDENTIAL_SLOT, SECOND_VERSION), 'current-material');
-      expectRevealed(problems, 'other slot', await credentials.reveal(OTHER_CREDENTIAL_SLOT, FIRST_VERSION), 'other-material');
-      await credentials.discardAllExcept(CREDENTIAL_SLOT, SECOND_VERSION);
-      await credentials.discardAllExcept(UNKNOWN_SLOT, FIRST_VERSION);
-      expectRevealed(problems, 'current again', await credentials.reveal(CREDENTIAL_SLOT, SECOND_VERSION), 'current-material');
-      await credentials.store(CREDENTIAL_SLOT, version('version-later'), secret('later-material'));
-      expectRevealed(problems, 'later store', await credentials.reveal(CREDENTIAL_SLOT, version('version-later')), 'later-material');
+      const first = await credentials.store(CREDENTIAL_SLOT, secret('first-material'));
+      if (!parseSlotCredentialVersion(first).ok) problems.push(`first: ${first} is not a positive integer`);
+      const versions = [first];
+      const second = await credentials.store(CREDENTIAL_SLOT, secret('second-material'));
+      expectAbove(problems, 'second', second, versions);
+      versions.push(second);
+      const racing = await Promise.all([1, 2].map((n) => credentials.store(CREDENTIAL_SLOT, secret(`racing-${n}`))));
+      for (const raced of racing) expectAbove(problems, 'concurrent', raced, versions);
+      expectSame(problems, 'concurrent stores differ', new Set(racing).size, racing.length);
+      versions.push(...racing);
+      const highest = versions.reduce((left, right) => (right > left ? right : left));
+      await credentials.discard(CREDENTIAL_SLOT, highest);
+      const afterDiscard = await credentials.store(CREDENTIAL_SLOT, secret('after-discard'));
+      expectAbove(problems, 'after a discard', afterDiscard, versions);
+      versions.push(afterDiscard);
+      await credentials.destroy(CREDENTIAL_SLOT);
+      expectAbove(problems, 'after destroy', await credentials.store(CREDENTIAL_SLOT, secret('late')), versions);
+      return problems;
+    },
+  },
+  {
+    name: 'discards only the lower versions of a slot, idempotently, and keeps the rest',
+    async check(credentials: SlotCredentials) {
+      const problems: string[] = [];
+      const lower = await credentials.store(CREDENTIAL_SLOT, secret('lower-material'));
+      const named = await credentials.store(CREDENTIAL_SLOT, secret('named-material'));
+      const higher = await credentials.store(CREDENTIAL_SLOT, secret('higher-material'));
+      const other = await credentials.store(OTHER_CREDENTIAL_SLOT, secret('other-material'));
+      for (const pass of ['first', 'repeated']) {
+        await credentials.discardOlderThan(CREDENTIAL_SLOT, named);
+        expectCode(problems, `${pass}: lower`, await credentials.reveal(CREDENTIAL_SLOT, lower), 'not-found');
+        expectRevealed(problems, `${pass}: named`, await credentials.reveal(CREDENTIAL_SLOT, named), 'named-material');
+        expectRevealed(problems, `${pass}: higher`, await credentials.reveal(CREDENTIAL_SLOT, higher), 'higher-material');
+        expectRevealed(problems, `${pass}: other slot`, await credentials.reveal(OTHER_CREDENTIAL_SLOT, other), 'other-material');
+      }
+      await credentials.discardOlderThan(UNKNOWN_SLOT, named);
       return problems;
     },
   },
@@ -209,14 +239,14 @@ export const SLOT_CREDENTIALS_CONFORMANCE: readonly ConformanceCase<SlotCredenti
     name: 'destroys every version, idempotently, and keeps no later store',
     async check(credentials: SlotCredentials) {
       const problems: string[] = [];
-      await credentials.store(CREDENTIAL_SLOT, FIRST_VERSION, secret('first-material'));
-      await credentials.store(CREDENTIAL_SLOT, SECOND_VERSION, secret('second-material'));
+      const first = await credentials.store(CREDENTIAL_SLOT, secret('first-material'));
+      const second = await credentials.store(CREDENTIAL_SLOT, secret('second-material'));
       await credentials.destroy(CREDENTIAL_SLOT);
-      expectCode(problems, 'first destroyed', await credentials.reveal(CREDENTIAL_SLOT, FIRST_VERSION), 'not-found');
-      expectCode(problems, 'second destroyed', await credentials.reveal(CREDENTIAL_SLOT, SECOND_VERSION), 'not-found');
+      expectCode(problems, 'first destroyed', await credentials.reveal(CREDENTIAL_SLOT, first), 'not-found');
+      expectCode(problems, 'second destroyed', await credentials.reveal(CREDENTIAL_SLOT, second), 'not-found');
       await credentials.destroy(CREDENTIAL_SLOT);
-      await credentials.store(CREDENTIAL_SLOT, version('version-late'), secret('late-material'));
-      expectCode(problems, 'late store', await credentials.reveal(CREDENTIAL_SLOT, version('version-late')), 'not-found');
+      const late = await credentials.store(CREDENTIAL_SLOT, secret('late-material'));
+      expectCode(problems, 'late store', await credentials.reveal(CREDENTIAL_SLOT, late), 'not-found');
       return problems;
     },
   },
@@ -224,8 +254,8 @@ export const SLOT_CREDENTIALS_CONFORMANCE: readonly ConformanceCase<SlotCredenti
     name: 'a revealed credential prints and serializes as redacted',
     async check(credentials: SlotCredentials) {
       const problems: string[] = [];
-      await credentials.store(CREDENTIAL_SLOT, FIRST_VERSION, secret(SECRET_TEXT));
-      const revealed = await credentials.reveal(CREDENTIAL_SLOT, FIRST_VERSION);
+      const stored = await credentials.store(CREDENTIAL_SLOT, secret(SECRET_TEXT));
+      const revealed = await credentials.reveal(CREDENTIAL_SLOT, stored);
       if (!revealed.ok) return [...problems, `reveal: ${revealed.error.message}`];
       const forms = [String(revealed.value), `${revealed.value}`, JSON.stringify({ revealed: revealed.value })];
       for (const form of forms) if (form.includes(SECRET_TEXT)) problems.push(`form discloses the credential: ${form}`);

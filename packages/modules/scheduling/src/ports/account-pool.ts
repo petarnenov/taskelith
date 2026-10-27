@@ -20,16 +20,16 @@ export interface AccountSlots {
 // Subscription tokens, encrypted with a key in the control-plane/ namespace;
 // not part of CapacityTransaction (contract sections 1, 6.2, and 7.1).
 export interface SlotCredentials {
-  // Never replaces a version, and keeps nothing after destroy (section 6.2);
-  // a rotation switches the slot record to the new version (section 8.1).
-  store(slotId: ProviderCredentialId, version: SlotCredentialVersion, secret: SlotSecret): Promise<void>;
+  // A new version from a stored per-slot counter, never reused; keeps
+  // nothing after destroy (section 6.2), but still returns a version.
+  store(slotId: ProviderCredentialId, secret: SlotSecret): Promise<SlotCredentialVersion>;
   // Checks nothing: the delivery checks the reservation first (section 7).
   reveal(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<Result<SlotSecret>>;
   // One version; succeeds for a missing one, so that a retry is safe.
   discard(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<void>;
-  // Every earlier version but `version`: the replaced and orphaned ones after
-  // a rotation's switch (section 8.1); keeps later stores, safe to retry.
-  discardAllExcept(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<void>;
+  // Only the slot's versions lower than `version`, after a rotation's switch
+  // (section 8.1); keeps it and higher ones, so that a retry is safe.
+  discardOlderThan(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<void>;
   // Every version and every later store; succeeds for a missing credential.
   destroy(slotId: ProviderCredentialId): Promise<void>;
 }

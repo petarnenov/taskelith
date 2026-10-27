@@ -20,6 +20,7 @@ import {
   SLOT_WAITING_REASON,
   SlotSecret,
   parseAccountSlot,
+  parseSlotCredentialVersion,
   parseSlotRequest,
   type AccountSlot,
   type AccountSlots,
@@ -81,6 +82,12 @@ function identifier<Kind extends string>(kind: Kind, text: string) {
   return parsed.value;
 }
 
+function credentialVersion(value: number): SlotCredentialVersion {
+  const parsed = parseSlotCredentialVersion(value);
+  assert.ok(parsed.ok);
+  return parsed.value;
+}
+
 const PROJECT = identifier('ProjectId', 'project-1') as ProjectId;
 const parsedWindowEnd = parseInstant('2026-10-26T10:00:00.000Z');
 assert.ok(parsedWindowEnd.ok);
@@ -89,7 +96,7 @@ const VALID_SLOT: AccountSlot = {
   id: identifier('ProviderCredentialId', 'slot-1') as ProviderCredentialId,
   harnessId: identifier('HarnessPluginId', 'harness-1') as HarnessPluginId,
   mechanismId: identifier('SubscriptionMechanismId', 'mechanism-1') as SubscriptionMechanismId,
-  credentialVersion: identifier('SlotCredentialVersion', 'version-1') as SlotCredentialVersion,
+  credentialVersion: credentialVersion(1),
   allowedProjects: [PROJECT],
   concurrencyLimit: DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY,
   state: 'active',
@@ -119,6 +126,7 @@ const INVALID_SLOTS: readonly [string, Partial<AccountSlot>][] = [
   ['zero concurrency', { concurrencyLimit: 0 }],
   ['fractional concurrency', { concurrencyLimit: 1.5 }],
   ['zero revision', { revision: 0 }],
+  ['a fractional credential version', { credentialVersion: 1.5 as SlotCredentialVersion }],
   ['usage above 1', { usage: { fraction: 1.2, windowEndsAt: WINDOW_END } }],
   ['usage not a number', { usage: { fraction: Number.NaN, windowEndsAt: WINDOW_END } }],
 ];
@@ -214,40 +222,45 @@ class InMemoryAccountSlots implements AccountSlots {
 }
 
 class InMemorySlotCredentials implements SlotCredentials {
-  protected readonly secrets = new Map<string, SlotSecret>();
+  protected readonly versions = new Map<ProviderCredentialId, Map<SlotCredentialVersion, SlotSecret>>();
   protected readonly destroyed = new Set<ProviderCredentialId>();
+  readonly #lastVersions = new Map<ProviderCredentialId, number>();
 
-  async store(slotId: ProviderCredentialId, version: SlotCredentialVersion, secret: SlotSecret): Promise<void> {
-    const key = this.keyOf(slotId, version);
-    if (this.destroyed.has(slotId) || this.secrets.has(key)) return;
-    this.secrets.set(key, secret);
+  async store(slotId: ProviderCredentialId, secret: SlotSecret): Promise<SlotCredentialVersion> {
+    const version = this.nextVersion(slotId);
+    if (!this.destroyed.has(slotId)) this.versionsOf(slotId).set(version, secret);
+    return version;
   }
 
   async reveal(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<Result<SlotSecret>> {
-    const secret = this.secrets.get(this.keyOf(slotId, version));
+    const secret = this.versions.get(slotId)?.get(version);
     return secret === undefined ? err(failure('not-found', 'no such credential version')) : ok(secret);
   }
 
   async discard(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<void> {
-    this.secrets.delete(this.keyOf(slotId, version));
+    this.versions.get(slotId)?.delete(version);
   }
 
-  async discardAllExcept(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<void> {
-    const kept = this.keyOf(slotId, version);
-    for (const key of this.keysOf(slotId)) if (key !== kept) this.secrets.delete(key);
+  async discardOlderThan(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<void> {
+    const stored = this.versionsOf(slotId);
+    for (const older of stored.keys()) if (older < version) stored.delete(older);
   }
 
   async destroy(slotId: ProviderCredentialId): Promise<void> {
     this.destroyed.add(slotId);
-    for (const key of this.keysOf(slotId)) this.secrets.delete(key);
+    this.versions.delete(slotId);
   }
 
-  protected keysOf(slotId: ProviderCredentialId): string[] {
-    return [...this.secrets.keys()].filter((key) => key.startsWith(`${slotId}\n`));
+  protected nextVersion(slotId: ProviderCredentialId): SlotCredentialVersion {
+    const next = (this.#lastVersions.get(slotId) ?? 0) + 1;
+    this.#lastVersions.set(slotId, next);
+    return credentialVersion(next);
   }
 
-  protected keyOf(slotId: ProviderCredentialId, version: SlotCredentialVersion): string {
-    return `${slotId}\n${version}`;
+  protected versionsOf(slotId: ProviderCredentialId): Map<SlotCredentialVersion, SlotSecret> {
+    const stored = this.versions.get(slotId) ?? new Map<SlotCredentialVersion, SlotSecret>();
+    this.versions.set(slotId, stored);
+    return stored;
   }
 }
 
@@ -280,14 +293,18 @@ class LeakingSlotCredentials extends InMemorySlotCredentials {
   }
 }
 
-// One credential per slot: a store replaces it, whatever its version.
+// One credential per slot: a store replaces every earlier version.
 class UnversionedSlotCredentials extends InMemorySlotCredentials {
-  protected override keyOf(slotId: ProviderCredentialId): string {
-    return `${slotId}\n`;
+  override async store(slotId: ProviderCredentialId, secret: SlotSecret): Promise<SlotCredentialVersion> {
+    this.versions.delete(slotId);
+    return super.store(slotId, secret);
   }
+}
 
-  override async store(slotId: ProviderCredentialId, _version: SlotCredentialVersion, secret: SlotSecret): Promise<void> {
-    if (!this.destroyed.has(slotId)) this.secrets.set(this.keyOf(slotId), secret);
+// One more than the highest surviving version, so a deleted one comes back.
+class ReusingSlotCredentials extends InMemorySlotCredentials {
+  protected override nextVersion(slotId: ProviderCredentialId): SlotCredentialVersion {
+    return credentialVersion(Math.max(0, ...(this.versions.get(slotId)?.keys() ?? [])) + 1);
   }
 }
 
@@ -299,9 +316,17 @@ class ResurrectingSlotCredentials extends InMemorySlotCredentials {
   }
 }
 
-// A superseded version stays until the slot is removed.
+// A lower version stays until the slot is removed.
 class RetainingSlotCredentials extends InMemorySlotCredentials {
-  override async discardAllExcept(): Promise<void> {}
+  override async discardOlderThan(): Promise<void> {}
+}
+
+// Every version but the named one, a higher one that is current included.
+class OverDiscardingSlotCredentials extends InMemorySlotCredentials {
+  override async discardOlderThan(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<void> {
+    const stored = this.versionsOf(slotId);
+    for (const other of stored.keys()) if (other !== version) stored.delete(other);
+  }
 }
 
 async function failingCases<Port>(cases: readonly ConformanceCase<Port>[], port: () => Port): Promise<string[]> {
@@ -326,8 +351,14 @@ test('the slot credentials suite rejects an adapter that discloses a credential'
 
 test('the slot credentials suite rejects an adapter that replaces a version', async () => {
   assert.deepEqual(await failingCases(SLOT_CREDENTIALS_CONFORMANCE, () => new UnversionedSlotCredentials()), [
-    'stores each version once and discards one, idempotently',
-    'discards every version but the current one, idempotently, and keeps later stores',
+    'stores each credential under a new version and discards one, idempotently',
+    'discards only the lower versions of a slot, idempotently, and keeps the rest',
+  ]);
+});
+
+test('the slot credentials suite rejects an adapter that reuses a deleted version', async () => {
+  assert.deepEqual(await failingCases(SLOT_CREDENTIALS_CONFORMANCE, () => new ReusingSlotCredentials()), [
+    'versions strictly increase per slot and are never reused after a discard or destroy',
   ]);
 });
 
@@ -337,8 +368,14 @@ test('the slot credentials suite rejects an adapter that keeps a store after des
   ]);
 });
 
-test('the slot credentials suite rejects an adapter that retains superseded versions', async () => {
+test('the slot credentials suite rejects an adapter that retains lower versions', async () => {
   assert.deepEqual(await failingCases(SLOT_CREDENTIALS_CONFORMANCE, () => new RetainingSlotCredentials()), [
-    'discards every version but the current one, idempotently, and keeps later stores',
+    'discards only the lower versions of a slot, idempotently, and keeps the rest',
+  ]);
+});
+
+test('the slot credentials suite rejects an adapter that discards higher versions', async () => {
+  assert.deepEqual(await failingCases(SLOT_CREDENTIALS_CONFORMANCE, () => new OverDiscardingSlotCredentials()), [
+    'discards only the lower versions of a slot, idempotently, and keeps the rest',
   ]);
 });

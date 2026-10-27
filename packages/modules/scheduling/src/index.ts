@@ -214,6 +214,7 @@ export {
   SLOT_INELIGIBILITY_REASONS,
   SLOT_STATES,
   parseAccountSlot,
+  parseSlotCredentialVersion,
   type AccountSlot,
   type CooldownSource,
   type SlotCooldown,
