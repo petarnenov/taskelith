@@ -210,3 +210,21 @@ test('user information without a scheme and colon pairs of other secret keys are
   assert.ok(cause?.startsWith('Error: connect [redacted]@cp.example:8443 failed;'), cause);
 });
 
+
+test('a long run without a user-information end is redacted in linear time', async () => {
+  const length = 60_000;
+  const shapes = ['a', 'a:', 'a:a', 'ab:cd ', 'a::'].map((unit) => unit.repeat(length / unit.length));
+  for (const message of [...shapes, `${'a'.repeat(length / 2)}:${'b'.repeat(length / 2)}`]) {
+    const started = performance.now();
+    await failureOf(new Error(message));
+    const elapsed = performance.now() - started;
+    assert.ok(elapsed < 200, `${message.slice(0, 6)}… took ${Math.round(elapsed)} ms`);
+  }
+});
+
+test('user information is redacted after leading colons, at any length, and after another', async () => {
+  const long = 'u'.repeat(5_000);
+  const message = `::owner:pw@a ${long}:${long}@b x:y@z:w@c e:@f`;
+  const { cause } = (await failureOf(new Error(message))).details;
+  assert.equal(cause, 'Error: ::[redacted]@a [redacted]@b [redacted]@[redacted]@c e:@f');
+});
