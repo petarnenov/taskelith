@@ -1,5 +1,6 @@
 import type { Instant } from '@taskelith/kernel';
 import type { ProjectId } from './capacity-reservation.js';
+import { byCodeUnits } from './code-unit-order.js';
 
 export interface WaitingPlacement<Item> {
   readonly projectId: ProjectId;
@@ -24,11 +25,5 @@ export function fairPlacementOrder<Item extends string>(waiting: readonly Waitin
 
 function byWaitingSince<Item extends string>(left: WaitingPlacement<Item>, right: WaitingPlacement<Item>): number {
   return Date.parse(left.waitingSince) - Date.parse(right.waitingSince)
-    || left.projectId.localeCompare(right.projectId) || byCodeUnits(left.item, right.item);
-}
-
-// The order of PostgreSQL's "C" collation for ASCII identifiers.
-function byCodeUnits(left: string, right: string): number {
-  if (left === right) return 0;
-  return left < right ? -1 : 1;
+    || byCodeUnits(left.projectId, right.projectId) || byCodeUnits(left.item, right.item);
 }
