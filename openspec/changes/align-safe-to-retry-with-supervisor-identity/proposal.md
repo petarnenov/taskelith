@@ -5,8 +5,8 @@ Supervisor identity contract section 6 says that an exit with an unknown status 
 ## What Changes
 
 - **Contract.** Capacity reservation contract section 13, bullet "Automatic retries": an earlier `exited` attempt is certain only with a proven start and a known status (an exit code or a signal); one with an unknown status is uncertain, citing supervisor identity contract section 6, and gets `retry-budget-exhausted`.
-- **Spec.** The `resource-admission` requirement "Quotas and budgets" gives no allowance after an exit without a known status, and gains the scenario "Retry of an unknown exit".
-- **Code.** `isSafeToRetry` uses `endedWithoutUncertainty` of `packages/modules/scheduling/src/domain/automatic-retry.ts`, which shares one exhaustive `ExitStatus` classification (`exitVerdict`) with `automaticRetryOf`.
+- **Spec.** The `resource-admission` requirement "Quotas and budgets" gives no allowance after an exit without a known status (exit code or signal), and gains the scenario "Retry of an unknown exit".
+- **Code.** `isSafeToRetry` uses `isCertainEnd` of `packages/modules/scheduling/src/domain/automatic-retry.ts`, which shares one exhaustive `ExitStatus` classification (`classifyExit`) with `automaticRetryOf`.
 - **Tests.** A scheduling unit test places an automatic retry through `placeInTransaction` over in-memory adapters after a proven exit with a known and with an unknown status.
 
 No schema, wire message, or published package changes.

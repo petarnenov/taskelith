@@ -7,7 +7,7 @@
 
 - [x] 2.1 Capacity reservation contract section 13: an unknown exit is uncertain
 - [x] 2.2 `resource-admission` delta: requirement "Quotas and budgets" and its unknown exit scenario
-- [x] 2.3 `isSafeToRetry` uses `endedWithoutUncertainty`, sharing `exitVerdict` with `automaticRetryOf`
+- [x] 2.3 `isSafeToRetry` uses `isCertainEnd`, sharing `classifyExit` with `automaticRetryOf`
 
 ## 3. Tests
 

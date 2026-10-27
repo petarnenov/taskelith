@@ -7,17 +7,17 @@
 ## Decisions
 
 - **D1: contract first.** Capacity reservation contract section 13 is changed to agree with supervisor identity contract section 6 before the code. Section 5 ("an attempt whose execution is uncertain has `0`"), the section 11 reason table, the operational targets, and the `capacity-reservation` requirement "Bounded automatic retry" already agree and stay.
-- **D2: one classification of the exit status.** `isFailedExit` becomes `exitVerdict`, an exhaustive switch returning `clean`, `failed`, or `unknown`. `automaticRetryOf` retries a `failed` verdict; the new `endedWithoutUncertainty` accepts `not-started` and any known verdict after a proven start. A new status kind fails type checking in one place.
-- **D3: a clean exit stays certain.** `endedWithoutUncertainty` is not "retryable": an exit with code 0 after a proven start is certain, so a retry naming it keeps its allowance, as before. Whether such a retry is opened is `automaticRetryOf`'s decision, unchanged.
+- **D2: one classification of the exit status.** `isFailedExit` becomes `classifyExit`, an exhaustive switch returning `clean`, `failed`, or `unknown`. `automaticRetryOf` retries a `failed` verdict; the new `isCertainEnd` accepts `not-started` and any known verdict after a proven start. A new status kind fails type checking in one place.
+- **D3: a clean exit stays certain.** `isCertainEnd` is not "retryable": an exit with code 0 after a proven start is certain, so a retry naming it keeps its allowance, as before. Whether such a retry is opened is `automaticRetryOf`'s decision, unchanged.
 - **D4: the test drives the application path.** `isSafeToRetry` is private, so the test calls `placeInTransaction` with in-memory adapters; a positive case with exit code 1 shows the fixture can place, so the unknown case fails only on the retry check.
 
-## Outcomes examined by `endedWithoutUncertainty`
+## Outcomes examined by `isCertainEnd`
 
 - `not-started`: certain.
 - `exited` after a proven start with code 0, another code, or a signal: certain.
 - `exited` after a proven start with `unknown`: uncertain (this change).
 - `exited` without a proven start: uncertain, as before.
-- `operator-resolved`: uncertain, as before.
+- `operator-resolved`: not certain enough for an automatic retry, as before; an operator's reconciliation is not a proven end.
 
 ## Risks / Trade-offs
 
