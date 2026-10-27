@@ -76,3 +76,8 @@ test('an attempt gets an automatic retry only after an uncertain-free failure, t
   assert.equal(automaticRetryOf(endedTask(failedExit, failedExit, failedExit), 'attempt-3' as AttemptId), false, 'the second retry');
   assert.equal(automaticRetryOf(endedTask(failedExit), 'attempt-x' as AttemptId), false, 'an unknown attempt');
 });
+
+test('an exit with an unknown status gets no automatic retry', () => {
+  const unknownExit = exited({ kind: 'unknown' });
+  assert.equal(automaticRetryOf(endedTask(unknownExit), 'attempt-1' as AttemptId), false);
+});
