@@ -1,0 +1,23 @@
+## 1. Analysis
+
+- [x] 1.1 Read capacity reservation sections 5 and 13, `RotationCursor`, and the requirement "Project rotation"
+- [x] 1.2 Compare options (a), (b), (c), and (a'); the coordinator approved (a)
+
+## 2. Implementation
+
+- [x] 2.1 `PlacementRotation` port, in-memory adapter, `RotationCursor.moving`, and a conformance suite
+- [x] 2.2 Migration `1792932500000_placement-rotation` and `PostgresPlacementRotation`, exposed as `rotation`
+- [x] 2.3 `PlacementService` reads the stored cursor and writes it in the placing transaction or once at the end of the pass
+
+## 3. Tests
+
+- [x] 3.1 In-memory restart and crash tests, failing before 2.3
+- [x] 3.2 Unit tests for a decline-only move, a decline after the first fleet decline, an unchanged cursor, and a failed end write, failing before 2.3
+- [x] 3.3 PostgreSQL restart, conformance, and migration tests (not run in this environment)
+
+## 4. Records
+
+- [x] 4.1 Contract section 13, spec delta, proposal, design, `verification.md`, empty `findings.jsonl` and `passes.jsonl`
+- [ ] 4.2 `make verify`
+- [ ] 4.3 Independent review
+- [ ] 4.4 Archive under worker step 7
