@@ -46,3 +46,15 @@ See `design.md`: the cause in the CLI's headless output, the runs that isolate i
 ## Remaining gates
 
 - Integration into dev by the coordinator (single pull request).
+
+## Archive checks
+
+Worker step 7, after review pass 1. Before archiving, `origin/dev` at `579c227d` was merged into the branch with the merge commit `f5db9b23`, without conflicts; `dev` had changed other paragraphs of `docs/agent-task-protocol.md`, not the two Claude Code rows. This change was opened before the checklist record rule, so it has no `checklist.json`. `make verify` on `f5db9b23`, started at a load average of 1.62 (1 minute), passed (exit 0): 2,334 tests, 2,331 passed, 0 failed, 3 skipped; coverage 99.34 % lines, 92.29 % branches, 99.03 % functions; strict OpenSpec validation 70 passed, 0 failed.
+
+The checked state is the tree of the archive commit, which is the working tree these checks ran on after `npm run openspec -- archive investigate-claude-reviewer-invocation --yes` (base `f5db9b23`). The archive commit also points the findings' `file` at the moved records.
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `make verify`, started at a load average of 16.94 (1 minute): exit 0; 2,334 tests, 2,331 passed, 0 failed, 3 skipped; coverage 99.33 % lines, 92.26 % branches, 99.03 % functions; strict OpenSpec validation 69 passed, 0 failed; findings, links, contract compatibility, archive dry run, and package verification passed.
+- `npm run openspec -- validate --archived --no-interactive`: the line of `change/2026-10-28-investigate-claude-reviewer-invocation` passes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: empty, as intended for a change with `skip_specs: true`.
+- The moved change has its `findings.jsonl` with the two pass-1 lines and its `passes.jsonl` with the pass-1 line, and `make findings ARGS="validate"` passes.
