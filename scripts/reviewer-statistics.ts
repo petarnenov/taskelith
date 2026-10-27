@@ -1,5 +1,13 @@
 import { reviewerKey, row, type Finding, type Reviewer, type Role } from './review-findings.ts';
-import { PASSES_FILE, SEVERITIES, severityCounts, type PassSummary, type SeverityCounts } from './review-passes.ts';
+import {
+  passKey,
+  PASSES_FILE,
+  SEVERITIES,
+  severityCounts,
+  type PassCoordinates,
+  type PassSummary,
+  type SeverityCounts,
+} from './review-passes.ts';
 
 // Pure statistics per reviewer and role over archived review records.
 
@@ -14,9 +22,8 @@ export interface ReviewedChange {
   readonly findings: readonly Finding[];
 }
 
-interface PassRecord {
+interface PassRecord extends PassCoordinates {
   readonly change: string;
-  readonly pass: number;
   readonly role: Role | typeof UNKNOWN_ROLE;
   readonly reviewer: Reviewer;
   readonly counts: SeverityCounts;
@@ -45,12 +52,27 @@ export interface ReviewerStatistics {
 }
 
 function passRecords({ change, summaries, findings }: ReviewedChange): PassRecord[] {
-  if (summaries !== undefined) return summaries.map(({ pass, role, reviewer, counts }) => ({ change, pass, role, reviewer, counts }));
-  const passes = [...new Set(findings.map(({ pass }) => pass))].sort((a, b) => a - b);
-  return passes.map((pass) => {
-    const ofPass = findings.filter((finding) => finding.pass === pass);
-    return { change, pass, role: UNKNOWN_ROLE, reviewer: ofPass[0].reviewer, counts: severityCounts(ofPass) };
-  });
+  if (summaries !== undefined) {
+    return summaries.map(({ artifact, pass, role, reviewer, counts }) => ({ change, artifact, pass, role, reviewer, counts }));
+  }
+  return derivedPasses(findings).map(({ artifact, pass, findings: ofPass }) =>
+    ({ change, artifact, pass, role: UNKNOWN_ROLE, reviewer: ofPass[0].reviewer, counts: severityCounts(ofPass) }));
+}
+
+interface DerivedPass extends PassCoordinates {
+  readonly findings: readonly Finding[];
+}
+
+// One pass per distinct artifact and pass number of the findings.
+function derivedPasses(findings: readonly Finding[]): DerivedPass[] {
+  const byPass = new Map<string, DerivedPass & { findings: Finding[] }>();
+  for (const finding of findings) {
+    const key = passKey(finding);
+    const derived = byPass.get(key) ?? { artifact: finding.artifact, pass: finding.pass, findings: [] };
+    derived.findings.push(finding);
+    byPass.set(key, derived);
+  }
+  return [...byPass.values()].sort((a, b) => a.pass - b.pass);
 }
 
 interface Tally {
@@ -116,13 +138,14 @@ export function reviewerStatistics(changes: readonly ReviewedChange[], unrecorde
   let integrationMisses = 0;
   let unattributedMisses = 0;
   for (const { change, findings } of changes) {
-    for (const { missedBy } of findings) {
+    for (const { artifact, missedBy } of findings) {
       if (missedBy === undefined) continue;
       if (missedBy === 'integration') {
         integrationMisses += 1;
         continue;
       }
-      const missed = records.find((record) => record.change === change && record.pass === missedBy.pass);
+      const key = passKey({ artifact, pass: missedBy.pass });
+      const missed = records.find((record) => record.change === change && passKey(record) === key);
       if (missed === undefined) {
         unattributedMisses += 1;
         continue;

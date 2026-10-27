@@ -20,9 +20,15 @@ export const SEVERITIES: readonly Severity[] = ['critical', 'high', 'medium', 'l
 
 export type SeverityCounts = Readonly<Record<Severity, number>>;
 
-export interface PassSummary {
-  readonly change: string;
+// A pass is identified by its artifact and number within its change.
+export interface PassCoordinates {
+  // Absent when the change reviews one artifact.
+  readonly artifact?: string;
   readonly pass: number;
+}
+
+export interface PassSummary extends PassCoordinates {
+  readonly change: string;
   readonly role: Role;
   readonly reviewer: Reviewer;
   readonly session: string;
@@ -41,6 +47,19 @@ export interface ParsedSummaries {
 
 const EMPTY_LINE = 'empty line; a change without review passes has an empty file';
 
+// Identifiers hold no space, so the key cannot collide across artifacts.
+export function passKey({ artifact, pass }: PassCoordinates): string {
+  return `${artifact ?? ''} ${pass}`;
+}
+
+export function passName({ artifact, pass }: PassCoordinates): string {
+  return artifact === undefined ? `pass ${pass}` : `pass ${pass} of artifact "${artifact}"`;
+}
+
+function samePass(one: PassCoordinates, other: PassCoordinates): boolean {
+  return passKey(one) === passKey(other);
+}
+
 export function parsePassSummaries(source: RecordSource, checkSchema: SchemaCheck): ParsedSummaries {
   const located: LocatedSummary[] = [];
   const problems: Problem[] = [];
@@ -57,8 +76,8 @@ export function parsePassSummaries(source: RecordSource, checkSchema: SchemaChec
 function summaryProblems(summary: PassSummary, change: string, earlier: readonly LocatedSummary[]): string[] {
   const problems: string[] = [];
   if (summary.change !== change) problems.push(`change "${summary.change}" is not this file's change "${change}"`);
-  const duplicate = earlier.find((other) => other.summary.pass === summary.pass);
-  if (duplicate !== undefined) problems.push(`pass ${summary.pass} is already summarized on line ${duplicate.line}`);
+  const duplicate = earlier.find((other) => samePass(other.summary, summary));
+  if (duplicate !== undefined) problems.push(`${passName(summary)} is already summarized on line ${duplicate.line}`);
   return problems;
 }
 
@@ -78,7 +97,7 @@ export interface ReviewRecords {
 // Every finding's pass and missedBy pass has a summary that agrees with it,
 // and every summary counts exactly its pass's findings.
 export function consistencyProblems(records: ReviewRecords): Problem[] {
-  const byPass = new Map(records.summaries.map(({ summary }) => [summary.pass, summary]));
+  const byPass = new Map(records.summaries.map(({ summary }) => [passKey(summary), summary]));
   const findings = records.findings.map(({ finding }) => finding);
   return [
     ...records.findings.flatMap(({ line, finding }) =>
@@ -88,29 +107,33 @@ export function consistencyProblems(records: ReviewRecords): Problem[] {
   ];
 }
 
-function findingProblems(finding: Finding, byPass: ReadonlyMap<number, PassSummary>): string[] {
+type SummariesByPass = ReadonlyMap<string, PassSummary>;
+
+function findingProblems(finding: Finding, byPass: SummariesByPass): string[] {
   const problems: string[] = [];
-  const summary = byPass.get(finding.pass);
+  const summary = byPass.get(passKey(finding));
   if (summary === undefined) {
-    problems.push(`pass ${finding.pass} has no summary in ${PASSES_FILE}`);
+    problems.push(`${passName(finding)} has no summary in ${PASSES_FILE}`);
   } else if (reviewerKey(summary.reviewer) !== reviewerKey(finding.reviewer) || summary.session !== finding.session) {
-    problems.push(`reviewer or session differs from the summary of pass ${finding.pass} in ${PASSES_FILE}`);
+    problems.push(`reviewer or session differs from the summary of ${passName(finding)} in ${PASSES_FILE}`);
   }
   return [...problems, ...missedByProblems(finding, byPass)];
 }
 
-function missedByProblems({ missedBy }: Finding, byPass: ReadonlyMap<number, PassSummary>): string[] {
+// The missed pass belongs to the finding's own artifact.
+function missedByProblems({ artifact, missedBy }: Finding, byPass: SummariesByPass): string[] {
   if (missedBy === undefined || missedBy === 'integration') return [];
-  const missed = byPass.get(missedBy.pass);
-  if (missed === undefined) return [`missedBy pass ${missedBy.pass} has no summary in ${PASSES_FILE}`];
+  const coordinates = { artifact, pass: missedBy.pass };
+  const missed = byPass.get(passKey(coordinates));
+  if (missed === undefined) return [`missedBy ${passName(coordinates)} has no summary in ${PASSES_FILE}`];
   if (missed.role === missedBy.role) return [];
-  return [`missedBy role ${missedBy.role} is not role ${missed.role} of pass ${missedBy.pass} in ${PASSES_FILE}`];
+  return [`missedBy role ${missedBy.role} is not role ${missed.role} of ${passName(coordinates)} in ${PASSES_FILE}`];
 }
 
 function countProblems(summary: PassSummary, findings: readonly Finding[]): string[] {
-  const found = severityCounts(findings.filter((finding) => finding.pass === summary.pass));
+  const found = severityCounts(findings.filter((finding) => samePass(finding, summary)));
   const differing = SEVERITIES.filter((severity) => found[severity] !== summary.counts[severity]);
   if (differing.length === 0) return [];
   const details = differing.map((severity) => `${severity} ${summary.counts[severity]} here, ${found[severity]} there`);
-  return [`counts of pass ${summary.pass} differ from its lines in findings.jsonl: ${details.join(', ')}`];
+  return [`counts of ${passName(summary)} differ from its lines in findings.jsonl: ${details.join(', ')}`];
 }

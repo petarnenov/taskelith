@@ -14,7 +14,8 @@ export type Severity = 'critical' | 'high' | 'medium' | 'low';
 export type Outcome = 'fixed' | 'fixed-unreviewed' | 'declined' | 'deferred' | 'owner-accepted';
 export type Role = 'A' | 'B';
 
-// An earlier pass of the same change, or the integration into dev.
+// An earlier pass of the same change and artifact, or the integration into
+// dev.
 export type MissedBy = { readonly pass: number; readonly role: Role } | 'integration';
 
 export interface Reviewer {
@@ -25,6 +26,8 @@ export interface Reviewer {
 
 export interface Finding {
   readonly change: string;
+  // Absent when the change reviews one artifact.
+  readonly artifact?: string;
   readonly pass: number;
   readonly reviewer: Reviewer;
   readonly session: string;
