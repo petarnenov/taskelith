@@ -5,7 +5,7 @@ Taskelith uses semantic-release and GitHub Actions. The repository checks are de
 ## Branch flow
 
 1. Each change is developed on its own feature branch in its own git worktree, so several changes can proceed in parallel, and is merged into `dev`, the default branch, through a pull request. Pushes and pull requests targeting `dev` run no workflow. The Linux acceptance workflow, `.github/workflows/linux-acceptance.yml`, runs only when dispatched manually; no push or pull request starts it.
-2. Before every push, `make verify` must pass locally, except for a push whose every ref is a deletion. Run `make hooks` once per clone; the `pre-push` hook then runs `make verify` and blocks the push on failure, and lets a delete-only push through without it. The target first checks that Node matches `.nvmrc` and npm matches the CI pin.
+2. Before every push, `make verify` must pass locally, except for a push whose every ref is a deletion. Run `make hooks` once per clone; the `pre-push` hook then runs `make verify` and blocks the push on failure, and lets a delete-only push through without it, as well as a push whose clean HEAD tree has the stamp of a passing `make verify` of its profile. On a feature branch that changes only `docs/**`, `openspec/**`, or root-level Markdown other than `CHANGELOG.md`, `make verify` runs its docs-only profile, which skips `make test`; CI, `dev`, `main`, and integration always run the full profile ([agent task protocol](agent-task-protocol.md#worker-steps) step 4). The target first checks that Node matches `.nvmrc` and npm matches the CI pin.
 3. A promotion pull request from `dev` into `main` runs `make verify` in GitHub.
 4. Merging the promotion into `main` runs `make verify` again and releases qualifying changes.
 
