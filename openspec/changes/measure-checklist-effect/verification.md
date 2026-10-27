@@ -6,7 +6,7 @@ Coordinator brief from Niki of 2026-10-27, owner priority, size S-M: measure whe
 
 ## Revision
 
-Contract (spec deltas and `docs/review-findings/checklist.schema.json`): `7408813b`. Tests: `b3f0faf7` and `c8c66414`. Implementation: `d320ea08` and `643f387b`. Protocol and skill: `6bb2369e`. This change's `checklist.json`, `findings.jsonl`, and `passes.jsonl`: `ea3610e7`. Proposal, design, tasks, and the schema description fix: `4d32cab7`, which the checks of "Checks" ran on. Verification record `e43cfc55`. The coordinator merged `origin/dev` `99333004` into the branch as `8cc4459e`, which review pass 1 ran on. Pass 1 fixes: tests `abd0d26c`, code and `Makefile` `e2efb487`, documentation, spec deltas, and change records `eb0ad015`; the pass 1 record follows it.
+Contract (spec deltas and `docs/review-findings/checklist.schema.json`): `7408813b`. Tests: `b3f0faf7` and `c8c66414`. Implementation: `d320ea08` and `643f387b`. Protocol and skill: `6bb2369e`. This change's `checklist.json`, `findings.jsonl`, and `passes.jsonl`: `ea3610e7`. Proposal, design, tasks, and the schema description fix: `4d32cab7`, which the checks of "Checks" ran on. Verification record `e43cfc55`. The coordinator merged `origin/dev` `99333004` into the branch as `8cc4459e`, which review pass 1 ran on. Pass 1 fixes: tests `abd0d26c`, code and `Makefile` `e2efb487`, documentation, spec deltas, and change records `eb0ad015`; pass 1 record `c5c86462`. The coordinator merged `origin/dev` `10eeab69` (documentation only, #367) as `163f0635`, which review pass 2 ran on. Pass 2 fixes: tests `d778371f`, code `a9b1fc35`, documentation and deltas `a24d8156`; the pass 2 record follows them. The checks of each pass section ran on the tree they name.
 
 ## Environment
 
@@ -69,6 +69,43 @@ After the fixes, on `eb0ad015` with the pass 1 lines of `findings.jsonl` and `pa
 - End to end in a scratch worktree of `eb0ad015` with the pass 1 records (removed afterwards): after `npm run openspec -- archive measure-checklist-effect --yes` and a commit, a new change `probe-after` without `checklist.json` fails validation with `openspec/changes/probe-after/checklist.json: missing; an active change opened after measure-checklist-effect was archived records its brief's checklist here (checklist ... --save probe-after --at <dev commit of the brief>)`, and `effect` reports `2026-10-27 measure-checklist-effect: 5 pass-1 finding(s), size S-M, 3.33 per size point`, review 3 of 5 listed, 60% observed against 52% expected, Medium or worse 3 of 4, 75% against 66%. To give that scratch worktree an `origin/dev`, the run moved the shared `refs/remotes/origin/dev` ref; `git fetch origin` restored it right after.
 - `make verify` (with `TMPDIR=/home/petar/.cache/taskelith-verify-tmp`): exit 0. `npm test`: 2324 tests, 2277 passed, 0 failed, 47 skipped; coverage of all files 99.28% lines, 92.30% branches, 98.94% functions. Contract compatibility: 0 breaking changes in each of the four documents against `99333004`. `validate --all --strict`: 70 passed, 0 failed. `verify:comments`, `verify:findings` (44 and 24 files), `verify:links`, `verify:archive`, and `verify:package` passed.
 
+### Pass 2 (reviewer B)
+
+Claude Code, model `claude-opus-5-5`, effort `high`, permission mode `plan`, editing tools disallowed, on `163f0635`, session `19915468-91ce-478f-b6b7-6c0c4b7fd33f`, run by the coordinator:
+
+`claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json < /dev/null`
+
+Model confirmation and read-only proof, as the coordinator reported them: `claude-opus-5-5` with effort `high`; the SHA-256 snapshot was `cc4c2bae72261cf5403208a8eb429e485e43f992cda4824c505cbbbce95cbac2` before and after the pass. Reviewer B confirmed every pass 1 fix (M1 to M4, L5). Result: 0 Critical, 0 High, 1 Medium, 13 Low, recorded in `findings.jsonl` (with `missedBy` pass 1, role A, for L-3, L-10, L-12, and L-13, which existed when pass 1 ran; the others arose from the pass 1 fixes or later merges) and summarized in `passes.jsonl`. Fixes in `a9b1fc35` (code), `a24d8156` (documentation and deltas), and this record, with tests in `d778371f`:
+
+| Id | Severity | Category | Finding | Resolution |
+| --- | --- | --- | --- | --- |
+| M-1 | Medium | contract-drift | Without `--at`, the checklist ranked the working tree's archive but named the merge-base dev commit, so `--save --at` could save another checklist. | With a readable dev commit, the checklist ranks that commit's archive; otherwise the tree's, with no dev commit line (`design.md` decision 2). The test that pinned the old behavior now asserts the new one. |
+| L-1 | Low | error-handling | In a shallow clone, as in CI, the boundary commit appears to add every file, so every active change would need `checklist.json`. | `landingCommit` returns none in a shallow clone (`git rev-parse --is-shallow-repository`); the full-clone `pre-push` `make verify` enforces the rule. Test with a depth 1 clone. |
+| L-2 | Low | error-handling | A failed `ls-tree` or `cat-file` gave an empty archive that could be ranked and saved. | `archiveSnapshot` returns undefined when the listing or any file cannot be read. |
+| L-3 | Low | error-handling | `effect` looked up findings by change name, so a reused name took the first archive's. | Lookup by archive directory; test with two archives of one name. |
+| L-4 | Low | contract-drift | An unreachable `--save` without `--at` check. | `ChecklistCommand` is a union in which `--save` carries `--at`; the check is gone. |
+| L-5 | Low | docs | The schema did not mention `--at` and called `devCommit` the merge base. | Both descriptions name `--at`. |
+| L-6 | Low | docs | The usage showed `--at` as optional with `--save`. | The usage lists the listing and saving forms apart. |
+| L-7 | Low | spec-wording | The living "Findings index and checklist" says the checklist ends with "Record quality". | MODIFIED delta (471 characters) with a "Dev commit of the checklist" scenario. |
+| L-8 | Low | evidence-mismatch | The proposal, this record, and design decision 9 said the text checklist output was unchanged. | They say it gains the dev commit line. |
+| L-9 | Low | evidence-mismatch | "Revision" lacked the merges `8cc4459e` and `163f0635`, and counts were of an older tree. | Revision updated; counts rerun below. |
+| L-10 | Low | test-flakiness | The effect test's git helper lacked `commit.gpgsign=false` and duplicated another; `test/findings.test.ts` used the real git environment implicitly. | One shared `test/checklist-git-fixture.ts` (signing off, hook `GIT_*` variables dropped through `fixtureEnv`); `test/findings.test.ts` injects `NO_GIT`. The adapter itself also drops inherited `GIT_*` variables now, so a hook's `GIT_DIR` cannot redirect it. |
+| L-11 | Low | missing-fail-before-test | No test for a change opened before the landing on a branch that later merges it, or for an unknown `--at` with `--save`. | Both added; they pass on the pass 1 code as well, as coverage of the rule. |
+| L-12 | Low | spec-wording | The coordinator's brief duties were only in documentation and skills. | ADDED "Checklist in the brief" (295 characters) in the `agent-task-protocol` delta. |
+| L-13 | Low | naming | Zero changed lines read "no per 100 changed lines". | It reads "rate unknown". |
+
+Fail-before evidence: on `163f0635`, the tests of `d778371f` fail as follows. `test/checklist-record.test.ts` fails 2 of 8, the dev commit ranking (M-1) and the JSON dev commit; `test/checklist-effect.test.ts` fails 2 of 8, the reused name (L-3) and "rate unknown" (L-13); `test/checklist-git.test.ts` fails to load (no `archiveSnapshot` export). With only a stub of that export added in a scratch worktree, it fails 2 of 7, the shallow clone (L-1) and the snapshot (L-2), and the two L-11 tests pass.
+
+After the fixes, on `a24d8156` with the pass 2 lines of `findings.jsonl` and `passes.jsonl`:
+
+- `npm run openspec -- validate measure-checklist-effect --strict`: valid. Requirement bodies: modified "Findings index and checklist" 471, "Checklist record" 447, "Checklist record validation" 496, "Checklist effect" 446, "Checklist record in the task flow" 398, and "Checklist in the brief" 295 characters.
+- `npm run openspec -- validate --all --strict --no-interactive`: 70 passed, 0 failed.
+- `make findings ARGS="validate"`: `Every findings file is valid: 45 file(s); every pass summary file is valid: 25 file(s).`
+- `make findings ARGS="effect"`: `Checklist effect over archived changes with checklist.json: 0 change(s); 218 archived change(s) without one are excluded.`, then `none` in both sections and the names.
+- `make findings ARGS="checklist --files scripts/**"` ends with `Dev commit: 10eeab69f9cacb5a81d14acc8da7ed5ae43fe920.`
+- Coverage of the new modules (the command of pass 1): 44 tests; all files 100.00% lines, 97.79% branches, 100.00% functions (`checklist-commands.ts` 97.37% branches, `checklist-effect.ts` 95.35%, `checklist-environment.ts` 100%, `checklist-record.ts` 100%, `findings.ts` 97.87%).
+- `make verify` (with `TMPDIR=/home/petar/.cache/taskelith-verify-tmp`): exit 0. `npm test`: 2330 tests, 2283 passed, 0 failed, 47 skipped; coverage of all files 99.28% lines, 92.34% branches, 98.94% functions. Contract compatibility: 0 breaking changes in each of the four documents against `10eeab69`. `validate --all --strict`: 70 passed, 0 failed. `verify:comments`, `verify:findings` (45 and 25 files), `verify:links`, `verify:archive`, and `verify:package` passed.
+
 ### Coordinator scope addition
 
 After review pass 1 the coordinator added the `taskelith-coordinator` skill to the scope: its brief paragraph now names the exact checklist invocation, the dev commit for `--at`, and the task size, consistent with `docs/agent-task-protocol.md` coordinator step 1 and the `taskelith-task-protocol` skill (`eb0ad015`). The `taskelith-worker` skill has no plan-time step, only a pointer to the worker steps, so it is unchanged. This is not a review finding.
@@ -81,7 +118,7 @@ After review pass 1 the coordinator added the `taskelith-coordinator` skill to t
 
 ## Remaining gates
 
-- Independent review: pass 2 by reviewer B, which checks the pass 1 fixes and reviews the whole change, and pass 3 by reviewer A if needed.
+- Independent review: pass 3 by reviewer A, which confirms the pass 2 fixes.
 - Archive of the change on its branch.
 - `make verify` by the `pre-push` hook on the pushed tree.
 - Integration into dev by the coordinator (single pull request).
