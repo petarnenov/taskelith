@@ -17,4 +17,5 @@
 
 - [x] 4.1 Proposal, design, `verification.md`, empty `findings.jsonl`
 - [x] 4.2 `npm run openspec -- validate stop-automatic-retry-of-unknown-exit --strict` and `make verify`
-- [ ] 4.3 Independent review
+- [x] 4.3 Independent review pass 1 (3 Low), fixed unreviewed: wording, integration test, follow-up
+- [x] 4.4 Archive under worker step 7
