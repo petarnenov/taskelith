@@ -36,6 +36,7 @@ verify:
 
 verify-checks: toolchain
 	npm run verify:comments
+	npm run verify:private-keys
 	npm run verify:findings
 	$(MAKE) --no-print-directory test
 	$(MAKE) contract-compatibility
