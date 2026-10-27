@@ -26,12 +26,12 @@
 
 ## 4. Closure records
 
-- [ ] 4.1 Have the owner confirm each author's assignment in ADR 0015.
-- [ ] 4.2 Replace the closure placeholder; update the foundation ledger, the G2 work plan status, architecture sections 13 and 15, README, and the protocol version note in `docs/contracts/execution-wire-contracts.md` section 5.
-- [ ] 4.3 Check that no placeholder remains in ADR 0015 or the ledger.
+- [x] 4.1 Have the owner confirm each author's assignment in ADR 0015. (The owner accepted every item on 2026-10-27, relayed by coordinator Niki; `verification.md`, "Owner acceptance and post-review edits (2026-10-27)".)
+- [x] 4.2 Replace the closure placeholder; update the foundation ledger, the G2 work plan status, architecture sections 13 and 15, README, and the protocol version note in `docs/contracts/execution-wire-contracts.md` section 5.
+- [x] 4.3 Check that no placeholder remains in ADR 0015 or the ledger.
 
 ## 5. Verification and review
 
 - [x] 5.1 Run `make verify` and the link and evidence checks.
 - [x] 5.2 Obtain independent review under governance version 5, reviewer A OpenCode `opencode-go/kimi-k3.1-pro#high` and reviewer B Codex `gpt-6.1-sol`, by the coordinator's two exceptions of 2026-10-27, and record results in `verification.md` and `findings.jsonl`.
-- [ ] 5.3 Owner acceptance of ADR 0015; set its status.
+- [x] 5.3 Owner acceptance of ADR 0015; set its status. (Accepted by the owner on 2026-10-27, relayed by coordinator Niki; status Accepted.)

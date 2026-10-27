@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-27. Draft: the author checks of the draft and of the evidence updates are recorded below. Every G2 change is on `dev` at `bd6108d4`, and no blocker remains. The fresh-clone reproduction of `bd6108d4` passed on 2026-10-27 ("Fresh-clone reproduction" below), `make verify` passed on this branch at `d7bc65bd` and again at `1f8a04ba`, and review passes 1 to 3 are recorded; pass 3 confirmed every pass 2 fix and found nothing new, so the pass cap is reached. The archive, the owner's acceptance, and the integration are not done yet.
+Date: 2026-10-27. Accepted: the owner accepted ADR 0015 and every author's assignment on 2026-10-27 ("Owner acceptance and post-review edits (2026-10-27)" below). The author checks of the draft and of the evidence updates are recorded below. Every G2 change is on `dev` at `bd6108d4`, and no blocker remains. The fresh-clone reproduction of `bd6108d4` passed on 2026-10-27 ("Fresh-clone reproduction" below), `make verify` passed on this branch at `d7bc65bd` and again at `1f8a04ba`, and review passes 1 to 3 are recorded; pass 3 confirmed every pass 2 fix and found nothing new, so the pass cap is reached. The edits after the owner's acceptance apply that acceptance and were not independently reviewed. The archive and the integration are not done yet.
 
 ## Scope and source
 
@@ -174,12 +174,7 @@ From coordinator Niki's brief of 2026-10-27:
 
 ## Remaining placeholders
 
-Only the two owner-acceptance placeholders remain:
-
-- ADR 0015 decision 6, "closure statement", pending the owner's acceptance; the ADR stays Proposed.
-- `docs/foundation.md`, G2 status: the closure sentence "G2 is closed".
-
-The fresh-clone placeholder of decision 4 is filled, and the "work items" placeholder of decision 1 was filled earlier.
+None. The two owner-acceptance placeholders, ADR 0015 decision 6 and the closure sentence of the foundation ledger's G2 status, were replaced at the owner's acceptance ("Owner acceptance and post-review edits (2026-10-27)" below); the fresh-clone placeholder of decision 4 and the "work items" placeholder of decision 1 were filled earlier.
 
 ## Checks
 
@@ -199,6 +194,7 @@ Light checks only until `d7bc65bd`, because the host is shared with evidence run
 - Follow-up owners set by the coordinator (this update): `npm run openspec -- validate close-g2 --strict` passed ("Change 'close-g2' is valid"); `npm run openspec -- validate --all --strict` passed (70 passed, 0 failed); `npm run verify:comments` passed; `npm run findings -- validate` passed ("Every findings file is valid: 21 file(s); every pass summary file is valid: 2 file(s)."); `git diff --check` reported nothing; the 95 relative link targets in the ADR, the ledger, `docs/fleet.md`, and this change's Markdown resolve. `make verify` was not run; this commit changes documentation only.
 - `make verify` at `1f8a04ba`, after the pass 2 fixes and the follow-up owners, 2026-10-27: exit 0 in 166 s; 2113 tests, 2111 passed, 0 failed, 0 cancelled, 2 skipped; coverage of all files 99.29 % lines, 92.11 % branches, 99.00 % functions; findings valid (21 files) and pass summaries valid (2 files). Docker ran with `DOCKER_CONFIG` set to an empty configuration, as above.
 - Pass 3 record (this update): `npm run findings -- validate` passed ("Every findings file is valid: 21 file(s); every pass summary file is valid: 2 file(s)."); `npm run openspec -- validate close-g2 --strict` passed ("Change 'close-g2' is valid"); `npm run openspec -- validate --all --strict` passed (70 passed, 0 failed); `npm run verify:comments` passed; `git diff --check` reported nothing. `make verify` was not run again; this commit changes records only.
+- Owner acceptance (this update): `npm run openspec -- validate close-g2 --strict` passed ("Change 'close-g2' is valid"); `npm run openspec -- validate --all --strict` passed (70 passed, 0 failed); `npm run verify:comments` passed; `npm run findings -- validate` passed ("Every findings file is valid: 21 file(s); every pass summary file is valid: 2 file(s)."); `git diff --check` reported nothing; the 126 relative link targets in the ADR, the ledger, the G2 plan, the execution wire contracts, architecture, README, `docs/fleet.md`, and this change's Markdown resolve; a search for the capitalized placeholder marker in `docs`, this change, and `README.md` finds nothing. Archive test in a scratch copy of the tracked `openspec/` tree and this change, with this worktree's `node_modules`: `openspec archive close-g2 --yes` archived it as `2026-10-27-close-g2` (`foundation-closure` + 1), `openspec validate --all --strict` then passed (69 passed, 0 failed), and `openspec validate --archived --strict` passed `change/2026-10-27-close-g2` (13 earlier archives fail it on incomplete tasks, none of them this change). `make verify` was not run; these commits change documentation and records only.
 
 ## Independent review
 
@@ -268,9 +264,32 @@ Next: pass 2 by reviewer B, Codex `gpt-6.1-sol`, a full independent review of th
 
 The pass cap of three is reached; no further review pass follows.
 
+## Owner acceptance and post-review edits (2026-10-27)
+
+On 2026-10-27 the owner accepted ADR 0015 and every item of the list the coordinator presented; coordinator Niki relayed the acceptance the same day. The owner accepted everything on the list:
+
+1. ADR 0015 and its closure statement.
+2. The G3 deferral of cancellation race g and of the 24c-dependent cancellation and connectivity rows on macOS (arm64 and x86_64) and Linux (both container entries and the native host).
+3. The macOS arm64 process ownership re-run deferred to G3 (already confirmed by the owner earlier that day).
+4. Keeping the placement rotation cursor `#after` in memory.
+5. The gated deferrals as listed, with their gates: a restored journal with a rolled-back snapshot counter, G6; more than 8 unconfirmed sealed executions, G6; the maximum offline duration, G6; re-admission and the reconciliation queue surface, G3; AppArmor and SELinux, G6; a per-execution seccomp filter, G6; the Linux composed crash windows and duplicate delivery, before Linux worker support is claimed; supplementary groups, before that claim; macOS `F_FULLFSYNC`, G6; sleep, wake, and network changes, G6; image inventories and vulnerability scans, G8; PostgreSQL failover, pool sizing, and migrations, G6 and G7.
+6. Worker image reproducibility with no G2 gate.
+7. The Docker Desktop credential helper on the Intel iMac as an owner item.
+8. The GitHub-hosted `ubuntu-24.04` x86_64 runner check left open and non-blocking.
+
+The same day the coordinator assigned worker image reproducibility to Zaki as change `make-worker-image-reproducible`; it replaces the coordinator as owner in item 4 of "Coordinator answers of 2026-10-27, after the fresh clone".
+
+Edits made after review pass 3, directed by the owner's acceptance. They apply that acceptance and were not independently reviewed: the pass cap of three is reached.
+
+- `docs/decisions/0015-g2-closure.md`: status Accepted (owner, 2026-10-27, relayed by coordinator Niki); decision 6 holds the closure statement instead of the placeholder; every "author's assignment (owner to confirm)" reads "owner-confirmed at acceptance (2026-10-27)", the items of the list above included; the credential helper and the hosted-runner check are marked owner-confirmed; image reproducibility is owned by Zaki as `make-worker-image-reproducible`; the protocol version 1 note is recorded as updated.
+- `docs/foundation.md`: "As of 2026-10-27" and a G2 sentence at the top; the draft note removed; the closure sentence and G3 next in the G2 status; the ledger rows that were the author's assignment marked owner-confirmed; image reproducibility owned by Zaki; "Later phases" with G2 closed and G3 next.
+- Consequences of ADR 0015: `docs/g2-plan.md` status closed and its recorded limitations pointed at decision 5; `docs/architecture.md` section 13 (G2 row closed 2026-10-27, ADR 0015) and section 15 (readiness: G2 closed, the pre-G2 contracts resolved by G2 items 3 to 6); `README.md` (G2 closed on 2026-10-27, ADR 0015).
+- `docs/contracts/execution-wire-contracts.md` section 5: the protocol version 1 pre-release exception ended with the G2 closure (ADR 0015 decision 5 and task 4.2).
+- This change: tasks 4.1 to 4.3 and 5.3 ticked with their source; the status line, "Remaining placeholders", "Checks", and "Remaining gates" of this record; the word marking placeholders in `design.md` decision 1 no longer in capitals, so that a search for the marker finds none.
+
 ## Remaining gates
 
+- Merge `dev` into this branch after the two integrations running on 2026-10-27, and pass `npm run verify:links` if `dev` then has it.
 - Archive of this change, as the last commit of the branch; the archive commit points the ADR's links to `fresh-clone-results.jsonl` and this record at the archived path.
 - `make verify` on the head that is pushed, by the pre-push hook.
-- Owner acceptance of ADR 0015 and the owner's confirmation of each author's assignment, the widened deferral "Cancellation race g and the 24c-dependent rows on macOS and Linux" and the in-memory rotation cursor included (the follow-up owners of ADR 0015 decision 5 are the coordinator's decision of 2026-10-27), and of the hosted-runner check left open; then the closure records (section 4 of `tasks.md`).
-- Integration into dev by the coordinator (single pull request). Promotion to `main` is a later owner decision.
+- Integration into `dev` by the coordinator (single pull request). Promotion to `main` is a later owner decision.

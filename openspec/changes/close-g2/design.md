@@ -4,7 +4,7 @@ ADR 0007 closed G0 and ADR 0010 closed G1 with reproduced exit evidence and defe
 
 ## Decisions
 
-1. **Draft with placeholders.** The ADR is written now with status Proposed. Every section that depends on unfinished work holds a block quote marked **PLACEHOLDER** that names the change and what to record from it. No placeholder may remain when the owner accepts the ADR; the tasks list each one.
+1. **Draft with placeholders.** The ADR is written now with status Proposed. Every section that depends on unfinished work holds a block quote marked as a placeholder that names the change and what to record from it. No placeholder may remain when the owner accepts the ADR; the tasks list each one.
 2. **Row map from proposals.** Each archived change is mapped to the plan row its proposal names ("item 20", "21b", "24c"). Changes that name no row but fix a G2 defect are listed under the row whose scenario found the defect (the B and D series under item 24) or whose code they fix. Changes that only adjust governance, reviewers, or G3 groundwork are not G2 rows and are left out.
 3. **Deferrals cite their source.** Each deferral names the archived change or decision that recorded it. Where no record names a gate, the ADR marks it as the author's assignment for the owner to confirm, as ADR 0010 did. Items resolved before the closure stay listed when the coordinator named them, with the resolving change.
 4. **Protocol version exception ends.** `gate-stale-epoch-observations` design D2 bounded its protocol version 1 exception by the G2 closure. The ADR states that it ends; the contract note changes when the ADR is accepted, so that a rejected draft leaves the contract as it is.
