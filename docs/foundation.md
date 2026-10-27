@@ -58,7 +58,7 @@ G1 delivered the kernel, the SDLC workflow model, gates, task admission, plugin 
 
 > **Draft (change `close-g2`).** G2 is not closed until [ADR 0015](decisions/0015-g2-closure.md) is accepted. When it is, update the "As of" line and the G0 and G1 sentences at the top, and replace every placeholder below. No item blocks the closure: 24c `run-g2-partition-and-races` (#333) and the fix of the Linux CP9 defect L1, `stop-automatic-retry-of-unknown-exit` (#332), landed, and the owner deferred the macOS arm64 process ownership re-run to G3 on 2026-10-27 ([ADR 0015](decisions/0015-g2-closure.md) decision 5). The fresh-clone reproduction passed on 2026-10-27; the owner's acceptance remains.
 
-G2 delivered PostgreSQL state and outbox, NATS transport, installation bootstrap and enrollment, the worker journal, the per-execution supervisor on Linux and macOS, the control-plane API, launch authority, resource admission, the evidence store, the worker runtime, execution reconciliation, observability signals, the minimal local installation, and the Linux harness qualification in the worker image ([G2 work plan](g2-plan.md), items 1 to 26). Its exit evidence was reproduced from a fresh clone of `dev` at `bd6108d4` on 2026-10-27 (change `close-g2`; [ADR 0015](decisions/0015-g2-closure.md) decision 4). **PLACEHOLDER:** G2 is closed ([ADR 0015](decisions/0015-g2-closure.md)).
+G2 delivered PostgreSQL state and outbox, NATS transport, installation bootstrap and enrollment, the worker journal, the per-execution supervisor on Linux and macOS, the control-plane API, launch authority, resource admission, the evidence store, the worker runtime, execution reconciliation, observability signals, the minimal local installation, and the Linux harness qualification in the worker image ([G2 work plan](g2-plan.md), items 1 to 26). Its exit evidence was reproduced from a fresh clone of `dev` at `bd6108d4` on 2026-10-27 (change `close-g2`; [ADR 0015](decisions/0015-g2-closure.md) decision 4). Follow-ups resolved before the closure, each with the limits ADR 0015 decision 5 records: the flaky fair-order test (#331), the platform probe file-system label (#335), the fair-order rotation (#336 to #338), the logger redaction rules (#339), the relaunch back-off after a launch fails before W2 (#341), and the safe-to-retry rule (#342). **PLACEHOLDER:** G2 is closed ([ADR 0015](decisions/0015-g2-closure.md)).
 
 | Matrix entry | G2 native acceptance |
 | --- | --- |
@@ -83,7 +83,8 @@ G2 delivered PostgreSQL state and outbox, NATS transport, installation bootstrap
 | Placement back-off that preserves the project rotation (`placement-backoff-preserves-rotation`) | After G2; contract-first |
 | AppArmor and SELinux confinement of the worker (`apparmor=unconfined`) | G6 (author's assignment) |
 | Linux composed crash windows and duplicate delivery beyond one x86_64 host and the test image; supplementary groups of an execution | Before Linux worker support is claimed (author's assignment) |
-| In-memory placement rotation cursor; worker image reproducibility; `make native-acceptance` without the Linux crash windows; archived record links and file-system labels; hosted-runner Linux x86_64 check | Follow-ups without a G2 gate (author's assignment) |
+| In-memory placement rotation cursor; worker image reproducibility; `make native-acceptance` without the Linux crash windows; hosted-runner Linux x86_64 check | Follow-ups without a G2 gate (author's assignment) |
+| Archived record links and file-system labels (`check-change-record-links`) | Open follow-up owned by Pepi, in progress; no G2 gate |
 
 ## Later phases
 
