@@ -43,23 +43,42 @@ export function routeSubject(root: string, change: string, environment: RouteEnv
   const devCommit = required(environment.mergeBase(root), 'no merge base of HEAD and origin/dev');
   const headCommit = required(environment.head(root), 'HEAD does not name a commit');
   refuseUncommitted(required(environment.uncommittedPaths(root), 'cannot read the working tree status'), change);
-  const changed = required(environment.changedFiles(root, devCommit, headCommit), 'cannot read the diff against the merge base');
-  const changeFiles = required(environment.listFiles(root, headCommit, changeDirectory(change)), 'cannot list the change');
-  if (changeFiles.length === 0) throw new RouteRefusal(`no committed active change "${change}"`);
-  const capabilities = capabilitiesUnder(changeFiles, changeDirectory(change));
-  const reviews = archivedReviews(environment, root, devCommit);
+  const revision = { devCommit, revision: headCommit, directory: changeDirectory(change) };
+  const features = featuresAt(root, environment, revision, (commit) => archivedReviews(environment, root, commit));
+  if (features === undefined) throw new RouteRefusal(`no committed active change "${change}"`);
+  return { devCommit, headCommit, features };
+}
+
+// The git facts that the features of one revision need.
+export type FeatureEnvironment = Pick<RouteEnvironment, 'changedFiles' | 'listFiles' | 'readFile'>;
+
+// A change directory as of a revision, diffed against its dev commit.
+export interface FeatureRevision {
+  readonly devCommit: string;
+  readonly revision: string;
+  readonly directory: string;
+}
+
+// Undefined when the directory has no file at the revision. The history
+// is read as of the dev commit, so it holds no later change.
+export function featuresAt(
+  root: string,
+  environment: FeatureEnvironment,
+  { devCommit, revision, directory }: FeatureRevision,
+  reviewsAt: (commit: string) => readonly ArchivedReview[],
+): RouteFeatures | undefined {
+  const changeFiles = required(environment.listFiles(root, revision, directory), 'cannot list the change');
+  if (changeFiles.length === 0) return undefined;
+  const changed = required(environment.changedFiles(root, devCommit, revision), 'cannot read the diff against the merge base');
+  const capabilities = capabilitiesUnder(changeFiles, directory);
   return {
-    devCommit,
-    headCommit,
-    features: {
-      linesChanged: changed.reduce((sum, { lines }) => sum + lines, 0),
-      filesChanged: changed.length,
-      capabilities,
-      touches: touchesOf(changed.map(({ path }) => path), capabilities),
-      externalFacts: hasExternalFacts(environment.readFile(root, headCommit, `${changeDirectory(change)}/design.md`)),
-      size: sizeOf(environment.readFile(root, headCommit, `${changeDirectory(change)}/checklist.json`)),
-      capabilityHistory: capabilityHistory(reviews, capabilities),
-    },
+    linesChanged: changed.reduce((sum, { lines }) => sum + lines, 0),
+    filesChanged: changed.length,
+    capabilities,
+    touches: touchesOf(changed.map(({ path }) => path), capabilities),
+    externalFacts: hasExternalFacts(environment.readFile(root, revision, `${directory}/design.md`)),
+    size: sizeOf(environment.readFile(root, revision, `${directory}/checklist.json`)),
+    capabilityHistory: capabilityHistory(reviewsAt(devCommit), capabilities),
   };
 }
 
@@ -156,7 +175,7 @@ const REVIEW_FILES = new Set(['findings.jsonl', 'passes.jsonl']);
 
 // The archived changes with review records as of a commit; no later
 // change can count, so the history holds no future information.
-function archivedReviews(environment: RouteEnvironment, root: string, commit: string): ArchivedReview[] {
+export function archivedReviews(environment: FeatureEnvironment, root: string, commit: string): ArchivedReview[] {
   const files = required(environment.listFiles(root, commit, ARCHIVE_DIRECTORY), 'cannot list the archive');
   const read = (path: string) => required(environment.readFile(root, commit, path), `cannot read ${path}`);
   return archivedReviewsOf(files, read);

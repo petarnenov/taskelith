@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:taskelith:review-route-evaluation",
+  "title": "Taskelith review route evaluation line",
+  "description": "One line of the offline route evaluation's evaluation.jsonl: an archived change with review records, its features as of the revision that review pass 1 reviewed, the rule and shadow decisions on those features, and the review outcome. It reuses definitions of the route schema, urn:taskelith:review-route, and the finding schema, urn:taskelith:review-finding. Unknown properties are rejected, and no property holds free text.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["change", "mergeCommit", "devCommit", "reviewedCommit", "approximate", "features", "rule", "shadow", "outcome"],
+  "properties": {
+    "change": { "$ref": "urn:taskelith:review-finding#/properties/change" },
+    "mergeCommit": {
+      "description": "Full SHA of the pull request merge that brought the archived change into dev.",
+      "$ref": "urn:taskelith:review-route#/$defs/sha"
+    },
+    "devCommit": {
+      "description": "Full SHA of the dev commit that the features were diffed against and the capability history was read at.",
+      "$ref": "urn:taskelith:review-route#/$defs/sha"
+    },
+    "reviewedCommit": {
+      "description": "Full SHA of the revision that the features describe: the parent of the earliest branch commit whose subject names pass 1, or the merge commit when approximate.",
+      "$ref": "urn:taskelith:review-route#/$defs/sha"
+    },
+    "approximate": {
+      "description": "True when no branch commit names pass 1, so the features come from the merged diff, which review fixes enlarge.",
+      "type": "boolean"
+    },
+    "features": { "$ref": "urn:taskelith:review-route#/$defs/features" },
+    "rule": { "$ref": "urn:taskelith:review-route#/properties/rule" },
+    "shadow": { "$ref": "urn:taskelith:review-route#/properties/shadow" },
+    "outcome": {
+      "description": "The review outcome from the archived findings.jsonl and passes.jsonl.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passesNeeded", "thirdPass", "passSummaries", "findings"],
+      "properties": {
+        "passesNeeded": {
+          "description": "The highest recorded pass, at least 1; a lower bound when passSummaries is false, because passes without findings were then not recorded.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 99
+        },
+        "thirdPass": { "description": "passesNeeded is 3 or more.", "type": "boolean" },
+        "passSummaries": { "description": "The change has passes.jsonl.", "type": "boolean" },
+        "findings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pass1", "pass2"],
+          "properties": {
+            "pass1": { "$ref": "#/$defs/severityCounts" },
+            "pass2": { "$ref": "#/$defs/severityCounts" }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "severityCounts": {
+      "description": "Number of the pass's findings per severity.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["critical", "high", "medium", "low"],
+      "properties": {
+        "critical": { "$ref": "urn:taskelith:review-route#/$defs/count" },
+        "high": { "$ref": "urn:taskelith:review-route#/$defs/count" },
+        "medium": { "$ref": "urn:taskelith:review-route#/$defs/count" },
+        "low": { "$ref": "urn:taskelith:review-route#/$defs/count" }
+      }
+    }
+  }
+}

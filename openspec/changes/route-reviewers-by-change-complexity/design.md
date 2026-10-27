@@ -77,6 +77,8 @@ Third pass share by feature (50 changes):
 
 The capability history was computed without future information, from earlier changes only; it does not separate the groups and is therefore recorded as a feature but is no trigger of rule version 1. The rule of "Rule table" puts 17 changes in `elevated`, of which 9 (53%) needed a third pass, and 33 in `standard`, of which 7 (21%) did; over the 30 changes with `passes.jsonl`, 7 of 11 (64%) against 5 of 19 (26%). These figures are in-sample, because the thresholds were read off the same records, so they overstate the rule's accuracy; "Effect extension" measures it on later changes.
 
+Correction of phase 2: the rule figures above do not apply the `contracts` trigger as "Features" defines it. The scratch analysis counted one contract change, but `docs/contracts/**` matches 18 of the 50 changes. The rule-only offline evaluation applies the rule as implemented and gives 27 `elevated` changes, of which 13 (48%) needed a third pass, and 23 `standard`, of which 3 (13%) did; without the `contracts` trigger the same features give 9 of 15 and 7 of 35. `verification.md` records the run and the comparison; the rule is unchanged, so whether a later rule version narrows the trigger is a decision for the coordinator.
+
 ## Features
 
 The features are the router input and the only data that leaves the machine. All are derived from committed state; the command refuses a working tree with changes outside the change directory, so that `route.json` names the commit it describes.
@@ -126,7 +128,7 @@ Reviewers and effort per tier, within the owner's reviewer assignment of 2026-10
 | `elevated` | false | `codex gpt-6.1-sol#high` | `claude claude-opus-5-5#xhigh` |
 | `elevated` | true | `claude claude-fable-5-1#high` | `claude claude-opus-5-5#xhigh` |
 
-The keys are the canonical reviewer keys of `normalize-reviewer-keys` (`harness model#variant`). `standard` is exactly today's configuration, so the floor never weakens a review; `elevated` raises effort, chiefly for reviewer A, whose misses cause the third pass. Pass 3 is reviewer A again with pass 1's reviewer and effort. Claude Code accepts `--effort low|medium|high|xhigh|max` (local `claude --help`, Claude Code 2.1.312, 2026-10-28); for Codex, the installed CLI's local model catalog (`~/.codex/models_cache.json`, client 0.163.0, fetched 2026-10-27, read offline in phase 2) lists `low`, `medium`, `high`, `xhigh`, `max`, and `ultra` as the supported reasoning levels of `gpt-6.1-sol`, so `high` is a valid `model_reasoning_effort`. The rule never picks an OpenCode reviewer, because the router cannot know whether its pause has ended; "Open questions" 1 offers the alternative.
+The keys are the canonical reviewer keys of `normalize-reviewer-keys` (`harness model#variant`). `standard` is exactly today's configuration, so the floor never weakens a review; `elevated` raises effort, chiefly for reviewer A, whose misses cause the third pass. Pass 3 is reviewer A again with pass 1's reviewer and effort. Claude Code accepts `--effort low|medium|high|xhigh|max` (local `claude --help`, Claude Code 2.1.312, 2026-10-28); for Codex, the installed CLI's local model catalog (`~/.codex/models_cache.json`, client 0.163.0, fetched 2026-10-27, read offline in phase 2) lists `low`, `medium`, `high`, `xhigh`, `max`, and `ultra` as the supported reasoning levels of `gpt-6.1-sol`, so `high` is a valid `model_reasoning_effort`. The rule never picks an OpenCode reviewer ("Decisions" 7).
 
 `route.json` is a recommendation only ("Decisions" 1). Authorizing the elevated efforts, `high` for reviewer A and `xhigh` for reviewer B, needs a later governance change that the owner approves; until then the brief's reviewers and today's configured effort apply.
 
@@ -143,7 +145,7 @@ Module layout follows the repository's tooling convention: flat modules under `s
 | `scripts/review-route-environment.ts` | The git adapter of `RouteEnvironment`: merge base, status, numstat, and file reads at a commit. |
 | `scripts/review-route-record.ts` | The `route.json` record: its shape, its validation (schema, change name, secret-like values, consistency), and its printed summary. Pure. |
 | `scripts/review-route-command.ts` | `route` command: parse, derive, call both routers, validate, write; `routeDependencies` is the composition root that reads the credential. |
-| `scripts/review-route-effect.ts` | The routing section of `effect`. Pure. |
+| `scripts/review-route-effect.ts` | The routing figures of `effect` and the offline evaluation. Pure. |
 | `scripts/review-route-evaluation.ts` | The offline evaluation. |
 
 ```ts
@@ -257,19 +259,22 @@ make findings ARGS="route --change <change> [--json] [--no-shadow]"
 - Per change: rule tier and triggers, shadow tier and probability of `elevated` or the failure code, the reviewers that actually ran passes 1 and 2 (from `passes.jsonl`), whether they match the route, passes needed (highest pass), pass-1 and pass-2 findings by severity, and whether a third pass ran.
 - Aggregate: agreement between rule and shadow tiers (share and Cohen's kappa); per router, a two-by-two table of tier against third pass needed, with the third pass share per tier; the shadow's Brier score of P(`elevated`) and the mean absolute error of its expected passes against passes needed; and the share of changes whose actual reviewers followed the route.
 - Changes without `route.json`, or with a failed shadow, are listed and excluded from the shadow figures; the rule figures include every change with `route.json`.
+- Phase 2 implements the aggregate as `routingFigures` in `scripts/review-route-effect.ts`, which the offline evaluation shares: per router and tier the changes, third passes, mean passes, pass-1 findings, and Medium or worse findings of passes 1 and 2; the agreement share and Cohen's kappa; the Brier score; the mean absolute error of passes; and the failure counts. Loading `route.json` and `passes.jsonl` into per-change rows, the reviewers that followed the route, and the `effect` output wait for phase 3, because they live in `scripts/findings.ts`.
 
 ## Offline evaluation
 
 A one-time measurement of the shadow router over the archived review records, run live only after the owner confirms the items of "Owner actions" and sets `JEV_MAF_LAB` ("Decisions" 6):
 
 ```text
-make findings ARGS="route-evaluation --save route-reviewers-by-change-complexity"
+make findings ARGS="route-evaluation [--at <revision>] [--rule-only] [--save <change>] [--json]"
 ```
 
+`runRouteEvaluation` in `scripts/review-route-evaluation.ts` is the entry that phase 3 dispatches from `scripts/findings.ts`; `routeEvaluationDependencies` is its composition root, the only reader of the credential. `--at` names the dev commit whose archive is evaluated, by default the merge base of `HEAD` and `origin/dev`; the recorded run uses `3f23516a`, the base revision, so that its population is that of "Archived statistics".
+
 - Population: the archived single-artifact changes with review records whose merge into `dev` is a pull request merge (50 at `3f23516a`), in merge order. Outcome: passes needed and whether a third pass ran; the 20 changes without `passes.jsonl` are reported apart, because their pass count is a lower bound.
-- No future information. Features use the state at the change's own time: the diff of the change's first-reviewed revision, taken as the parent of the earliest branch commit whose subject names "pass 1", and otherwise the merged diff with `approximate: true`, because review fixes enlarge the merged diff; the capability history uses only changes merged before the change's base (`<merge>^1`), never the change itself. Jev receives the features and never an outcome, a change name, or a date. The model is pinned (`jev-1.14.0`).
-- Calls run sequentially with a 10 s timeout and one retry after 429 or 529 honoring `retry-after`, since the evaluation is not on a worker's path; failures are recorded per change with their code.
-- Output: `openspec/changes/route-reviewers-by-change-complexity/evaluation.jsonl`, one line per change with the features, the rule decision, the shadow decision or failure, and the outcome, validated by a schema `docs/review-findings/route-evaluation.schema.json`; `verification.md` records the aggregate figures of "Effect extension" for both routers, noting that the rule's figures are in-sample.
+- No future information. Features use the state at the change's own time: the diff of the change's first-reviewed revision, taken as the parent of the earliest branch commit whose subject names "pass 1", against its merge base with dev, and otherwise the merged diff (`<merge>^1` to `<merge>`) with `approximate: true`, because review fixes enlarge the merged diff; the capability history reads the archive as of that dev commit, as `route` does, so it holds only changes merged before the change's base and never the change itself. Limitation: a branch whose fixes precede the first commit naming pass 1 is measured after those fixes. Jev receives the features and never an outcome, a change name, or a date. The model is pinned (`jev-1.14.0`).
+- Calls run sequentially with a 10 s timeout and one retry after 429 or 529, since the evaluation is not on a worker's path; failures are recorded per change with their code. The retry waits a fixed 5 s instead of honoring `retry-after`, because `JevRouter` drops response headers by design ("Secret handling").
+- Output: `openspec/changes/route-reviewers-by-change-complexity/evaluation.jsonl`, one line per change with the merge, dev, and reviewed commits, `approximate`, the features, the rule decision, the shadow decision or failure (`skipped` under `--rule-only`), and the outcome (passes needed, third pass, whether `passes.jsonl` exists, and the findings of passes 1 and 2 by severity), validated by `docs/review-findings/route-evaluation.schema.json` and the secret-shaped value check before anything is written; `--save` refuses an existing file. The printed figures, or `--json`, cover all changes, those with pass summaries, and those without as lower bounds, each per router and tier, and the third pass share per lines band; `verification.md` records them, noting that the rule's figures are in-sample.
 - Estimated cost: about 600 input tokens per request, about 30,000 for the evaluation, at the published $0.042 per million input tokens, under one cent. Without the credential the command exits 1 with the `missing-credential` hint; `--rule-only` evaluates the rule alone and needs no credential.
 - Restriction: TypeSafe's Master Customer Agreement section 2.3 forbids using output to train a model that imitates the service. The evaluation compares, and the rule is never fitted to Jev's answers.
 
@@ -340,11 +345,12 @@ The coordinator decided the open questions of phase 1 on 2026-10-28; the numbers
 4. **No light tier.** No tier lowers an effort below today's configured effort (former open question 2, option (a)).
 5. **Evaluation population.** The offline evaluation runs on the 50 archived changes with review records; the 20 of them without `passes.jsonl` are reported separately, as lower bounds.
 6. **Owner hard floor.** The TypeSafe account, the acceptance of the Master Customer Agreement, paid credits, and the consent to send the features ("Owner actions") are pending with the owner. Until the owner confirms them, `JevRouter` is tested only with a fake and the constructed response, no live call is made from any host, and the offline evaluation may be implemented and tested against a fake but is not run live.
+7. **No OpenCode reviewer.** The rule never proposes OpenCode, also not as reviewer B of a documentation-only `standard` change, because the coordinator decided that there is no light tier (decision 4) and the router cannot know whether OpenCode's pause has ended (former open question 1, option (a)).
 
 ## Phase 2 scope
 
-Phase 2 implements the port, the rule and Jev routers, the fake, the feature derivation and its git adapter, the `route.json` writer and validation, and the composition root with the credential, each tested; the modules are not yet dispatched by `scripts/findings.ts`. The routing section of `effect` (`scripts/review-route-effect.ts`) and the offline evaluation (`scripts/review-route-evaluation.ts`, `route-evaluation.schema.json`) are not part of this step and remain open tasks.
+Phase 2 implements the port, the rule and Jev routers, the fake, the feature derivation and its git adapter, the `route.json` writer and validation, and the composition root with the credential, each tested; the modules are not yet dispatched by `scripts/findings.ts`. Its second step adds the routing figures (`scripts/review-route-effect.ts`), the offline evaluation (`scripts/review-route-evaluation.ts`, its git adapter in `scripts/review-route-environment.ts`, and `route-evaluation.schema.json`), and the rule-only run over the archive. The feature derivation of one revision, `featuresAt`, is shared by `route` and the evaluation. The `effect` per-change rows and the dispatch of `route` and `route-evaluation` wait for phase 3.
 
 ## Open questions
 
-1. OpenCode as reviewer B of documentation-only `standard` changes. Options: (a) never, as designed; (b) the rule proposes it when `docsOnly` and the coordinator confirms the pause has ended. Recommendation: (a), until pauses are machine-readable.
+None. The former open question 1 is "Decisions" 7.

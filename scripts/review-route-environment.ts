@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { posix } from 'node:path';
+import type { CommitInfo, EvaluationEnvironment } from './review-route-evaluation.ts';
 import { CHANGES_DIRECTORY, type ChangedFile, type RouteEnvironment } from './review-route-features.ts';
 
 // The git adapter of RouteEnvironment. Every method returns undefined
@@ -57,4 +58,38 @@ export const GIT_ROUTE_ENVIRONMENT: RouteEnvironment = {
     return output === undefined ? undefined : nulEntries(output);
   },
   readFile: (root, commit, path) => gitOutput(root, ['cat-file', 'blob', `${commit}:${path}`]),
+};
+
+const COMMIT_FORMAT = '--format=%H%x00%P%x00%s';
+
+// One commit per line: "sha NUL parents NUL subject".
+export function commitInfos(output: string): CommitInfo[] {
+  return output.split('\n').filter((line) => line !== '').map((line) => {
+    const [sha, parents, subject] = line.split('\0') as [string, string, string];
+    return { sha, parents: parents.split(' ').filter((parent) => parent !== ''), subject };
+  });
+}
+
+function lines(output: string): string[] {
+  return output.split('\n').filter((line) => line !== '');
+}
+
+export const GIT_EVALUATION_ENVIRONMENT: EvaluationEnvironment = {
+  changedFiles: GIT_ROUTE_ENVIRONMENT.changedFiles,
+  listFiles: GIT_ROUTE_ENVIRONMENT.listFiles,
+  readFile: GIT_ROUTE_ENVIRONMENT.readFile,
+  resolve: (root, revision) => gitOutput(root, ['rev-parse', '--verify', '--quiet', `${revision}^{commit}`])?.trim(),
+  mergeBase: (root, first, second) => gitOutput(root, ['merge-base', first, second])?.trim(),
+  firstParentHistory: (root, at) => {
+    const output = gitOutput(root, ['rev-list', '--first-parent', at]);
+    return output === undefined ? undefined : lines(output);
+  },
+  addingCommit: (root, at, directory) => {
+    const output = gitOutput(root, ['log', '--first-parent', '--diff-filter=A', COMMIT_FORMAT, at, '--', `${directory}/`]);
+    return output === undefined ? undefined : (commitInfos(output).at(-1) ?? null);
+  },
+  branchCommits: (root, base, tip) => {
+    const output = gitOutput(root, ['log', '--reverse', '--topo-order', COMMIT_FORMAT, `${base}..${tip}`]);
+    return output === undefined ? undefined : commitInfos(output);
+  },
 };
