@@ -49,6 +49,22 @@ After the review pass 2 fixes (`d9589bdb`), on the working tree of the record co
 
 After the M3 plan amendment (`12aa98e6`), on the working tree of its record commit, without Docker, the same six checks passed again with the same output; `git diff origin/dev -- docs/g3-plan.md` shows only item 44's row.
 
+### Archive
+
+Checked state: the tree of the archive commit, the working tree after `npm run openspec -- archive bind-product-writers-to-launch-invalidation --yes` on `a3ae6150`, without Docker. The archive applied to `openspec/specs/product-ports/spec.md`: 3 added, 1 modified, 0 removed.
+
+| Check | Result |
+| --- | --- |
+| `npm run openspec -- validate --all --strict` | `Totals: 69 passed, 0 failed (69 items)` |
+| `npm run openspec -- validate --archived --no-interactive`, this change's line | `✓ change/2026-10-27-bind-product-writers-to-launch-invalidation` |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` | Only `openspec/specs/product-ports/spec.md`, 45 insertions: the scenario "Use after a revocation" and the requirements "Product writers invalidate launches", "Revoked attempt ends before re-admission", and "Standing rule use checked in one transaction" with their scenarios |
+| Moved change directory | Has `findings.jsonl` (17 lines) and `passes.jsonl` (3 lines) |
+| `make findings ARGS="validate"` | `Every findings file is valid: 43 file(s); every pass summary file is valid: 23 file(s).` |
+| `npm run verify:links` | `Every checked link conforms.` |
+| `npm run verify:comments` | `Every comment is within the comment length rule.` |
+| `npm run verify:archive` | `Every active OpenSpec change archives into strictly valid specs.` |
+| `make verify` on the archive tree | Exit 0; tests 2289, pass 2286, fail 0, skipped 3; `Packed file allowlist and installed CLI verification passed.` |
+
 ## Review
 
 ### Pass 1 (reviewer A)
@@ -112,5 +128,4 @@ After the M3 plan amendment (`12aa98e6`), on the working tree of its record comm
 ## Remaining gates
 
 - Owner confirmation of the item 44 plan amendment.
-- Archive of the change.
 - Integration into dev by the coordinator (single pull request)
