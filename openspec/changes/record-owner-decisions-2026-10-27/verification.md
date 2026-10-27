@@ -31,7 +31,7 @@ Branch `record-owner-decisions-2026-10-27` from `origin/dev` at `14e1a46e`, in i
 | `npm run openspec -- validate --all --strict` | Passed: 70 passed, 0 failed |
 | `make findings ARGS="validate"` | Passed: 50 findings files, 30 pass summary files valid |
 | `npm run verify:links` | Passed: "Every checked link conforms" |
-| `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` on the working tree after the merge and the part B note | Passed, exit 0, including the archive dry run ("Every active OpenSpec change archives into strictly valid specs") and the package check |
+| `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` on the working tree after the merge and the part B note, and again on `364c1191` | Passed both times, exit 0, including the archive dry run ("Every active OpenSpec change archives into strictly valid specs") and the package check |
 
 ## Review
 
