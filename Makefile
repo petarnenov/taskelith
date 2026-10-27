@@ -26,7 +26,7 @@ SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
 .PHONY: verify verify-stamped verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility findings \
-	test services-up services-down verify-linux-cgroup verify-linux-crash-windows installation-build installation-bootstrap installation-broker-config installation-start \
+	test docker-slot services-up services-down verify-linux-cgroup verify-linux-crash-windows installation-build installation-bootstrap installation-broker-config installation-start \
 	installation-stop installation-enroll installation-enrollment-token verify-installation verify-worker-image-reproducible installation-smoke qualify-harnesses \
 	scenario-fresh-composition scenario-worker-disk-loss scenario-worker-kill \
 	scenario-worker-namespace-confinement worker-seccomp-profile linux-test-image linux-test-suites \
@@ -81,9 +81,14 @@ findings:
 	@set -f; NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use npm run --silent findings -- $(ARGS)
 
 # Runs npm test with the .nvmrc Node.js against its own services, which stop
-# also when tests fail; fails closed without Docker.
+# also when tests fail; fails closed without Docker. Holds the Docker slot.
 test:
-	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use bash scripts/services.sh run $(VERIFY_SERVICES) npm test
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use node --experimental-strip-types scripts/docker-slot.ts run -- \
+		bash scripts/services.sh run $(VERIFY_SERVICES) npm test
+
+# Prints who holds the Docker slot of make test and who waits for it.
+docker-slot:
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use node --experimental-strip-types scripts/docker-slot.ts status
 
 # Starts PostgreSQL, NATS, and Toxiproxy for manual integration test runs
 # and prints the URLs to export.
