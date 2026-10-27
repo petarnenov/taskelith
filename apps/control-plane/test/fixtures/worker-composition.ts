@@ -14,7 +14,7 @@ import {
   type WorkerDependencies,
   type WorkerSettings,
 } from '@taskelith/worker';
-import { startDetachedProcess } from '@taskelith/worker-supervisor';
+import { startDetachedProcess, supervisorCommand } from '@taskelith/worker-supervisor';
 import { armedPoint, FAIL_FIRST_PREPARE_VARIABLE, HOLD_NOT_STARTED_VARIABLE, noteOrder, reachCrashPoint } from './crash-hook.ts';
 
 // The real worker of a crash scenario: the production composition with
@@ -160,7 +160,15 @@ function reachedOn<T>(result: Result<T>, point: string): Result<T> {
 // The launch supervisor is the real program with armed crash points; an
 // adopting one stays the product's, so recovery runs unchanged.
 function startArmedSupervisor(directory: string): Promise<Result<void>> {
-  return startDetachedProcess({ executable: process.execPath, arguments: ['--experimental-strip-types', ARMED_SUPERVISOR, 'launch', directory] });
+  // The product's arguments past its main module, which the armed replaces.
+  const [, ...programArguments] = supervisorCommand({ mode: 'launch', directory, ...containmentParent() }).arguments;
+  return startDetachedProcess({ executable: process.execPath, arguments: ['--experimental-strip-types', ARMED_SUPERVISOR, ...programArguments] });
+}
+
+// On Linux, the parent the worker's settings name, as CP4 passes it.
+function containmentParent(): { containmentParent?: string } {
+  const parent = process.env.TASKELITH_CONTAINMENT_PARENT;
+  return process.platform === 'linux' && parent !== undefined ? { containmentParent: parent } : {};
 }
 
 const writeLine = (line: string) => void process.stderr.write(`${line}\n`);
