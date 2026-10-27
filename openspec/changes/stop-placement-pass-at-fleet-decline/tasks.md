@@ -1,7 +1,7 @@
 ## 1. Contract and spec
 
 - [x] 1.1 State in `docs/contracts/capacity-reservation.md` sections 5 and 13 and in `docs/operational-targets.md` that a pass ends at its first decline for lack of fleet capacity, and what a full fleet costs per pass.
-- [x] 1.2 Modify the `execution-placement` requirement "Project rotation", its scenarios "Capacity freed during a pass" and "Many blocked projects", and add "Own decline during a pass"; validate the change strictly, also after an archive in a scratch copy.
+- [x] 1.2 Modify the `execution-placement` requirement "Project rotation", its scenarios "Capacity freed during a pass" and "Many blocked projects", and add "Fleet full for many passes" and "Own decline during a pass"; validate the change strictly, also after an archive in a scratch copy.
 
 ## 2. Tests first
 
