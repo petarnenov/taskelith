@@ -33,7 +33,18 @@ Out of scope: slot selection code and its tests (G3 item 12, [design](design.md)
 
 ## Independent review
 
-Not yet reviewed. The coordinator assigns the reviewers; the passes are recorded here, in `passes.jsonl`, and in `findings.jsonl`.
+Reviewers assigned by the coordinator: reviewer A, Codex CLI `gpt-6.1-sol` (reasoning effort `medium`), and reviewer B, Claude Code `claude-opus-5-5` (effort `high`).
+
+### Pass 1 (reviewer A)
+
+- Reviewer A: Codex CLI `gpt-6.1-sol`, reasoning effort `medium`, run by the worker session; reviewed head `4c8a6a42`.
+- Invocation, as in the [agent task protocol](/docs/agent-task-protocol.md#reviewer-invocations): `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`.
+- Model confirmation: the output header showed model `gpt-6.1-sol`, reasoning effort `medium`, the read-only sandbox, and the session. Session `01a17ef1-8b1c-7c71-98f8-ac9674b14291`. Snapshot (`git ls-files -co --exclude-standard | xargs shasum -a 256 | shasum -a 256`) before and after: equal. Both as relayed by the worker session.
+- The reviewer confirmed every other G2 claim and file and line citation against the code, and that the MODIFIED requirement keeps the existing text apart from its intended edit.
+- Findings: 0 Critical, 0 High, 0 Medium, 1 Low, matching its `passes.jsonl` line:
+  - **L1 (Low, docs):** account pool section 4.7 and `design.md` D2 said that a `reject` policy rejects only an attempt that would otherwise fit, although the charge check follows the credential step, so an attempt with an exhausted delegation budget gets the slot rejection. Fixed in `35878f2b`, an unreviewed fix: both places now limit the claim to an attempt that passed the installation, attempt, request, worker, and quota checks and say that the charge check follows. The spec delta makes no such claim; its scenario "Rejecting policy behind a full quota" concerns the quota check only and is unchanged.
+
+The review ended with pass 1: under governance "Low findings are fixed", a pass with only Low findings is fixed without another review, so reviewer B, Claude Code `claude-opus-5-5` (effort `high`), was not used.
 
 ## Limitations
 
@@ -42,6 +53,4 @@ Not yet reviewed. The coordinator assigns the reviewers; the passes are recorded
 
 ## Remaining gates
 
-- Independent review by the reviewers that the coordinator assigns.
-- Archive in the last commit of the branch, with the checks of the archived tree.
 - Integration into dev by the coordinator (single pull request).
