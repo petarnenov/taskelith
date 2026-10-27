@@ -15,8 +15,8 @@ macOS (Darwin 25.6.0), Node.js v24.22.1 and npm 12.2.1 from `.nvmrc`. Docker Des
 ## Author self-check
 
 - Each writer is bound in the section that defines it: spec approval in section 4.1, the conflict flow and the return to Specify in section 6.3, policy revision changes in section 5; the waits are in section 4.1, "After a revocation", which section 6.3 refers to.
-- The spec delta's requirements match the contract text; the modified requirement keeps the living spec's text unchanged and adds one scenario. Requirement bodies are 303, 429, 242, and 411 characters after the review pass 1 fixes, under the limit that strict validation after archive enforces.
-- Every `file:line` cited in [design](design.md) was re-read on `9b0e6fd9`: `launch-invalidation.ts:32` and `:38`, `worker-revocation.ts:11`, `gate.ts:18` to `:24`, `:84`, `:114`, and `:133`, `launch-authority.integration.test.ts:254`, the two conformance suites at `:79` and `:93`, `task.ts:116`, `:120`, and `:121`, `launch-authorization.md:63`, `:77`, and `:173`, and `0015-g2-closure.md:112` and `:113`.
+- The spec delta's requirements match the contract text; the modified requirement keeps the living spec's text unchanged and adds one scenario. Requirement bodies are 303, 487, 242, and 443 characters after the review pass 2 fixes, under the limit that strict validation after archive enforces.
+- Every `file:line` cited in [design](design.md) was re-read on `9b0e6fd9`: `launch-invalidation.ts:32` and `:38`, `worker-revocation.ts:11`, `gate.ts:18` to `:24`, `:84`, `:114`, `:129` to `:146`, and `:133`, `current-revisions.ts:7` to `:13`, `launch-authority.ts:103`, `capacity-operations.ts:78` and `:306`, `launch-authority.integration.test.ts:254`, the two conformance suites at `:79` and `:93`, `task.ts:116`, `:120`, and `:121`, `launch-authorization.md:50`, `:63`, `:169`, and `:173`, and `0015-g2-closure.md:112` and `:113`.
 - The contract edits add paragraphs and bullets only and change no existing line ([design](design.md) D7).
 
 ## Checks and results
@@ -34,7 +34,7 @@ macOS (Darwin 25.6.0), Node.js v24.22.1 and npm 12.2.1 from `.nvmrc`. Docker Des
 | `npm run verify:package` | After `npm run build`: `Packed file allowlist and installed CLI verification passed.` (without a build it fails on the missing `dist/cli.js`, which `make test` builds) |
 | `make verify` on `4a502431` | Exit 0; tests 2289, pass 2286, fail 0, skipped 3; `Packed file allowlist and installed CLI verification passed.` |
 
-After the review pass 1 fixes (`ce677cbf`), on the working tree of the record commit, without Docker; `make verify` is the coordinator's to run again:
+After the review pass 1 fixes (`ce677cbf`), on the working tree of the record commit, without Docker; the worker (Pepi) runs `make verify`, recorded under pass 1:
 
 | Check | Result |
 | --- | --- |
@@ -44,6 +44,8 @@ After the review pass 1 fixes (`ce677cbf`), on the working tree of the record co
 | `npm run verify:comments` | `Every comment is within the comment length rule.` |
 | `npm run verify:archive` | `Every active OpenSpec change archives into strictly valid specs.` |
 | `make contract-compatibility` | `Contract documents have no undeclared breaking change.` |
+
+After the review pass 2 fixes (`d9589bdb`), on the working tree of the record commit, without Docker, the same six checks gave the same results; `verify:findings` again reported 43 findings files and 23 pass summary files, all valid, and `make contract-compatibility` checked against `b87abe75`.
 
 ## Review
 
@@ -68,16 +70,41 @@ After the review pass 1 fixes (`ce677cbf`), on the working tree of the record co
 
 ### Later passes
 
-- Pass 2 (reviewer B): Claude Code `claude-opus-5-5`, effort `high`. Pending.
+### Pass 2 (reviewer B)
+
+- Reviewer: Claude Code, model `claude-opus-5-5`, effort `high`, role B, run by the worker session (Pepi).
+- Invocation: `claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json < /dev/null`.
+- Model confirmation: `claude-opus-5-5` in the JSON `modelUsage`, as Pepi read it.
+- Session: `84349d0e-ff53-4732-a920-7e63750965bd`. Reviewed HEAD `ebdcb23f`.
+- Snapshot: `315688f150f02a0005f6830589aa9688281b2c7ebe7030b87cd01f1d46d3a1b2` before and after, unchanged.
+- Pass 1 fixes M1 to M4, L1, and L2: confirmed resolved.
+- Findings: critical 0, high 0, medium 4, low 7. All but M3 fixed in `d9589bdb`; L7 in the record commit. M3 awaits the coordinator's decision.
+
+| Finding | Resolution |
+| --- | --- |
+| M1 (Medium, contract-drift): a return to Specify was said to make passed spec gates stale, although `markGateStale` needs a revision that outdates the gate (`docs/contracts/product-ports.md:185`) | Section 6.3, the spec delta, and design D2: the transaction that records the new revision makes the outdated gates stale and revokes; a return without a new revision cancels the active attempt by assignment, revoking its grants with `attempt-not-launchable` |
+| M2 (Medium, contract-drift): the new revision writer did not update the run's current revision, which only a G3 writer of `CurrentRevisions` can do (`docs/contracts/product-ports.md:185`) | Section 6.3 and the requirement update it through `CurrentRevisions` in the same transaction, which its first writer extends; the artifact race test asserts it |
+| M3 (Medium, scope): plan item 44 covers only an attempt rejected under a stale admission, not a revoked one (`docs/g3-plan.md:141`) | Pending the coordinator's decision |
+| M4 (Medium, contract-drift): section 5 said a rule change revokes no grant, while D2 left the policy revision open (`docs/contracts/product-ports.md:160`) | Section 5: no grant is revoked unless the run's policy revision changes; D2 aligned |
+| L1 (Low, spec-wording): the policy revision race test had no owner (`docs/contracts/product-ports.md:201`) | Assigned to the item that adds a command that changes the run's policy revision, in section 7, D5, and the proposal |
+| L2 (Low, spec-wording): the writer requirement omitted reopening and was ambiguous (`specs/product-ports/spec.md:17`) | Rewritten as every transaction that changes a spec gate's state, a new artifact revision, and a policy revision change |
+| L3 (Low, spec-wording): "dispatched under" ignored that ownership advances on each placement (`docs/contracts/product-ports.md:159`) | Section 5 and the requirement compare with the request's assignment and the admission it names |
+| L4 (Low, spec-wording): no scenarios for a policy revision or ownership change before a use (`specs/product-ports/spec.md:38`) | Two scenarios added, in serialization order |
+| L5 (Low, stale-citation): D3 cited section 5 for the kept ownership (`design.md:23`) | D3 cites section 4 (`launch-authorization.md:50`) and `task.ts:120` and `:121` |
+| L6 (Low, docs): the proposal described section 4.1 as before (`proposal.md:7`) | The proposal matches sections 4.1, 5, 6.3, and 7 |
+| L7 (Low, evidence-mismatch): pass 1 M3's commit, the `make verify` owner, and the remaining gates were inconsistent (`verification.md:37`) | Pass 1 M3 names `19cbad02`; the record says the worker runs `make verify`; the remaining gates name pass 3 |
+
 - Pass 3 (reviewer A): Codex `gpt-6.1-sol`. Pending.
 
 ## Limitations
 
-- Documentation and specification only; the race tests are obligations on items 18, 22, 23, and 24, not run here.
+- Documentation and specification only; the race tests are obligations on items 18, 22, 23, and 24 and on the item that adds a policy revision command, not run here.
 - The comparison of policy revisions remains with `align-product-ports-with-g2-lifecycle`; the standing rule use transaction refers to "the run's current policy revision" without defining it.
 
 ## Remaining gates
 
-- Independent review passes 1 to 3.
+- Coordinator decision on review pass 2 M3 (plan item 44).
+- `make verify` after the review pass 2 fixes.
+- Independent review pass 3.
 - Archive of the change.
 - Integration into dev by the coordinator (single pull request)
