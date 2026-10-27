@@ -70,11 +70,11 @@ The coordinator, Niki, assigned the replacements on 2026-10-27 under the governa
 | Item | Pass 1 A | Pass 2 B | Pass 3 A |
 | --- | --- | --- | --- |
 | 1 | Claude Code `claude-fable-5-1`, replacing OpenCode `kimi-k3.1-pro` | Claude Code `claude-opus-5-5`, replacing `claude-fable-5-1` (same harness: network) | Claude Code `claude-fable-5-1` |
-| 2 | OpenCode `deepseek-v4-pro` (ran) | Claude Code `claude-opus-5-5` | Claude Code `claude-fable-5-1`, replacing OpenCode (paused); same harness as B for network; proposed to the coordinator |
+| 2 | OpenCode `deepseek-v4-pro` (ran) | Claude Code `claude-opus-5-5` | Claude Code `claude-fable-5-1`, replacing OpenCode (paused); same harness as B for network; confirmed by the coordinator |
 | 3 | OpenCode `kimi-k2.7-code` (ran) | Not used: pass 1 had no findings | Not used |
 | 5 | Codex `gpt-6.1-sol`, replacing OpenCode `qwen3.8-max` | Claude Code `claude-opus-5-5`, replacing Codex `gpt-6.1-sol` | Codex `gpt-6.1-sol` |
-| 6 | OpenCode `kimi-k3.1-pro` (ran) | Claude Code `claude-fable-5-1` | Codex `gpt-6-astra`, replacing OpenCode (paused); proposed to the coordinator |
-| 7 | OpenCode `deepseek-v4-pro` (ran) | Codex `gpt-6-astra` | Claude Code `claude-fable-5-1`, replacing OpenCode (paused); proposed to the coordinator |
+| 6 | OpenCode `kimi-k3.1-pro` (ran) | Claude Code `claude-fable-5-1` | Codex `gpt-6-astra`, replacing OpenCode (paused); confirmed by the coordinator |
+| 7 | OpenCode `deepseek-v4-pro` (ran) | Codex `gpt-6-astra` | Claude Code `claude-fable-5-1`, replacing OpenCode (paused); confirmed by the coordinator |
 | 8 | Codex `gpt-6-astra`, replacing OpenCode `kimi-k2.7-code` | Claude Code `claude-opus-5-5` | Codex `gpt-6-astra` |
 
 ### Item 1
@@ -90,7 +90,7 @@ Reviewer A: Claude Code `claude-fable-5-1`, replacing OpenCode `kimi-k3.1-pro`. 
 
 ### Item 2
 
-Reviewer A: OpenCode `deepseek-v4-pro`, variant `high`; pass 3 by Claude Code `claude-fable-5-1`, proposed to the coordinator. Reviewer B: Claude Code `claude-opus-5-5`.
+Reviewer A: OpenCode `deepseek-v4-pro`, variant `high`; pass 3 by Claude Code `claude-fable-5-1`, confirmed by the coordinator. Reviewer B: Claude Code `claude-opus-5-5`.
 
 - Pass 1 (reviewer A): OpenCode `opencode-go/deepseek-v4-pro#high`, session `ses_e820b5099ffe47tEDDDalELhZs`, with the common facts above. The reviewer checked the cited provider pages on the web, accessed 2026-10-27. Findings: critical 0, high 2, medium 1, low 2. Verdict: needs a fix.
 - Pass 2 (reviewer B): not run.
@@ -130,7 +130,7 @@ Reviewer A: Codex `gpt-6.1-sol`, replacing OpenCode `qwen3.8-max`. Reviewer B: C
 
 ### Item 6
 
-Reviewer A: OpenCode `kimi-k3.1-pro`, variant `high`; pass 3 by Codex `gpt-6-astra`, proposed to the coordinator. Reviewer B: Claude Code `claude-fable-5-1`.
+Reviewer A: OpenCode `kimi-k3.1-pro`, variant `high`; pass 3 by Codex `gpt-6-astra`, confirmed by the coordinator. Reviewer B: Claude Code `claude-fable-5-1`.
 
 - Pass 1 (reviewer A): OpenCode `opencode-go/kimi-k3.1-pro#high`, session `ses_e820b523fffeM2gZJeWSk2ZIaJ`, with the common facts above. Findings: critical 0, high 1, medium 1, low 0. Verdict: needs a fix.
 - Pass 2 (reviewer B): not run.
@@ -145,7 +145,7 @@ The reviewer found the `<attemptId>` rule consistent with G2's attempt identitie
 
 ### Item 7
 
-Reviewer A: OpenCode `deepseek-v4-pro`, variant `high`; pass 3 by Claude Code `claude-fable-5-1`, proposed to the coordinator. Reviewer B: Codex `gpt-6-astra`.
+Reviewer A: OpenCode `deepseek-v4-pro`, variant `high`; pass 3 by Claude Code `claude-fable-5-1`, confirmed by the coordinator. Reviewer B: Codex `gpt-6-astra`.
 
 - Pass 1 (reviewer A): OpenCode `opencode-go/deepseek-v4-pro#high`, session `ses_e820b51e7ffe7wuRbbCB2OJ9La`, with the common facts above. Findings: critical 0, high 1, medium 1, low 1. Verdict: needs a fix.
 - Pass 2 (reviewer B): not run.
@@ -172,7 +172,7 @@ Reviewer A: Codex `gpt-6-astra`, replacing OpenCode `kimi-k2.7-code`. Reviewer B
 
 ## Limitations
 
-- The pass 3 replacements of items 2, 6, and 7 are proposed to the coordinator and not yet confirmed.
+- The coordinator confirmed the pass 3 replacements of items 2, 6, and 7 on 2026-10-27; item 2's pass 3 is by the same harness as its reviewer B because only Claude Code has network access among the available reviewers.
 - Medium or higher findings deferred to a follow-up are not re-reviewed in this change; each follow-up has its own review ([design](design.md) D4).
 
 ## Remaining gates

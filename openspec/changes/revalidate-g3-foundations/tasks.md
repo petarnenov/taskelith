@@ -3,7 +3,7 @@
 - [ ] 1.1 Read row 0 of the G3 work plan, ADR 0015 decisions 1 to 5, foundation "G2 status", and #344, #348, and #349, and write the baseline of design D1
 - [ ] 1.2 Write the per-item checks (design D2), the reviewer table (D3), and the records format (D5)
 - [ ] 1.3 Write the pass 1 prompt of each item outside the worktree
-- [ ] 1.4 Merge `scope-review-passes-by-artifact` from `dev` before the first finding or pass line is recorded
+- [x] 1.4 Merge `scope-review-passes-by-artifact` from `dev` before the first finding or pass line is recorded
 - [ ] 1.5 Author self-check and evidence check, recorded in `verification.md`
 
 ## 2. Item 1

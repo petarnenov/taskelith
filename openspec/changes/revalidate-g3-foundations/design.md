@@ -134,7 +134,7 @@ Here a "fix" between passes is a correction of this change's own records only. A
 
 - **`findings.jsonl`** holds one line per finding, per the [review findings record](/docs/agent-task-protocol.md#review-findings-record), with an `artifact` property, `item-1` to `item-8`, that names the reviewed item. The capability is the artifact's (for item 2, `harness-qualification` or `scm-qualification` per file), or none for a record finding of this change.
 - **`passes.jsonl`** holds one summary per pass, keyed by (`artifact`, `pass`), so that pass 1 of item 3 and pass 1 of item 5 are distinct.
-- **Prerequisite.** Neither schema has an `artifact` property today, and the validator keys summaries by `pass` alone. The tooling change `scope-review-passes-by-artifact` adds the property to both schemas and keys passes by (`artifact`, `pass`). It is not merged yet. No finding or pass line is written before it lands in `dev` and is merged into this branch; until then both files stay empty, and `npm run verify:findings` passes on them.
+- **Prerequisite.** The tooling change `scope-review-passes-by-artifact`, merged into `dev` as #353, adds the `artifact` property to both schemas and keys passes by (`artifact`, `pass`). It is not merged yet. No finding or pass line is written before it lands in `dev` and is merged into this branch; until then both files stay empty, and `npm run verify:findings` passes on them.
 - **`verification.md`** records each pass per item, with the reviewer, invocation, model confirmation, session, snapshots, and findings. It also holds the summary per item and the follow-up table.
 
 ### D6. Follow-up changes
