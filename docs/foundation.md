@@ -80,6 +80,7 @@ G2 delivered PostgreSQL state and outbox, NATS transport, installation bootstrap
 | PostgreSQL failover, pool sizing, and expand/contract migrations | G6–G7 |
 | Image package inventories and vulnerability scans | G8 |
 | Relaunch back-off after a launch fails before W2 (`back-off-relaunch-after-pre-w2-failure`) | After the G2 closure unless it lands first |
+| Safe-to-retry rule aligned with the supervisor identity contract (`align-safe-to-retry-with-supervisor-identity`) | After the G2 closure; contract-first |
 | AppArmor and SELinux confinement of the worker (`apparmor=unconfined`) | G6 (author's assignment) |
 | Linux composed crash windows and duplicate delivery beyond one x86_64 host and the test image; supplementary groups of an execution | Before Linux worker support is claimed (author's assignment) |
 | Fair-order rotation and its in-memory cursor; logger redaction rules; worker image reproducibility; `make native-acceptance` without the Linux crash windows; archived record links and file-system labels; hosted-runner Linux x86_64 check | Follow-ups without a G2 gate (author's assignment) |
