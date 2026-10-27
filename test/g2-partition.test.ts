@@ -12,7 +12,6 @@ import { Gate, waitFor } from './g2-scenarios/waiting.ts';
 // broker connection and of the control plane's PostgreSQL connection.
 const SEED = seedFromEnvironment();
 console.log(`g2 partition scenarios: ${rerunHint(SEED)}`);
-const INVENTORY_LOOP = 'product bug B1: inventory request loop after a reconnect (openspec/changes/run-g2-partition-and-races/verification.md)';
 const SETTLE_MILLISECONDS = 3_000;
 const TRAIL_REPORTS = 4;
 
@@ -62,9 +61,8 @@ describe('worker to NATS', () => {
     })));
   });
 
-  // Expected to fail: after a reconnect, an answer to a superseded inventory
-  // request counts as unsolicited and asks again, in a loop (verification.md).
-  test('the inventory exchange settles after a reconnect', { timeout: PARTITION_TIMEOUT_MILLISECONDS, todo: INVENTORY_LOOP }, async () => {
+  // Guards the B1 fix (#311): after a reconnect, inventory requests settle.
+  test('the inventory exchange settles after a reconnect', { timeout: PARTITION_TIMEOUT_MILLISECONDS }, async () => {
     const random = new SeededRandom(SEED);
     await recordScenario({ scenario: 'partition-worker-nats-inventory-settles', seed: SEED }, () => withPartitions((toxiproxy) => withInstallation({ postgres: 'direct', toxiproxy }, async (installation) => {
       const nats = toxiproxy.proxy('nats');

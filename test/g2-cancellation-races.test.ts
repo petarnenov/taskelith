@@ -26,7 +26,6 @@ import { Gate, waitFor } from './g2-scenarios/waiting.ts';
 // cancel is a test-side invalidation writer's transaction.
 const SEED = seedFromEnvironment();
 console.log(`g2 cancellation races: ${rerunHint(SEED)}`);
-const REFUSAL_KEPT = 'product bug B5 (clear-capacity-refusal-on-stale-launch-rejection): a stale launch rejection keeps the capacity refusal (openspec/changes/run-g2-partition-and-races/verification.md)';
 const LONG_RUN_MILLISECONDS = 20_000;
 const CANCELLED_REASONS = ['assignment-not-active', 'attempt-not-launchable'];
 
@@ -289,9 +288,9 @@ describe('cancellation races', () => {
     }));
   });
 
-  // Expected to fail until B5: a refused re-placement stays refused, as the
-  // control plane fences the launch rejection as stale (verification.md).
-  test('a launch rejected after a cancel frees its worker slot (B3)', { timeout: 90_000, todo: REFUSAL_KEPT }, async () => {
+  // Guards the B3 (#300) and B5 (#316) fixes: a rejected launch frees its
+  // slot, and its stale rejection clears the capacity refusal.
+  test('a launch rejected after a cancel frees its worker slot (B3)', { timeout: 90_000 }, async () => {
     const random = new SeededRandom(SEED);
     await recordScenario({ scenario: 'rejected-launch-frees-slot', seed: SEED }, () => withInstallation({ postgres: 'direct' }, async (installation) => {
       const authority = new OrderedAuthority();
