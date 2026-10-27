@@ -256,7 +256,7 @@ test('without a launch authority the start reconciles, removes records, and laun
   assert.deepEqual(supervisions.byExecution.get('execution-1')?.calls, ['seal']);
   assert.deepEqual(supervisions.byExecution.get('execution-2')?.calls, ['recover']);
   const deferred = sink.records.filter(({ event }) => event === 'worker.reconciliation.deferred').map(({ fields }) => fields);
-  assert.deepEqual(deferred, [{ executionId: 'execution-3', reason: 'no launch command' }]);
+  assert.deepEqual(deferred, [{ executionId: 'execution-3', reason: 'no launch authority' }]);
 
   const sequence = value(journal.dueForPublication(T0)).at(-1)?.position.sequence;
   assert.ok(sequence !== undefined);
