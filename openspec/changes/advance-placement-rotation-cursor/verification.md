@@ -15,7 +15,8 @@ Base: `d5f3baf3` `docs: archive the fair order rotation change`, the head of the
 - `2d7695e2` `docs: specify the rotation cursor as the project that last received capacity` (the spec delta).
 - `552adee2` `test: expect the rotation cursor to follow the project that last received capacity` (the failing tests alone).
 - `0d28a18b` `chore: advance the placement rotation cursor past the project that last received capacity` (the fix).
-- The commit that adds this record.
+- `bb04761f` `docs: record the verification of the rotation cursor change` (this record; the revision review pass 1 read).
+- Pass 1 fixes, unreviewed: `b729ee61` `docs: keep the rotation cursor when the fleet lacks capacity in the capacity contract`, `7bcb5117` `docs: specify that a full fleet keeps the rotation cursor`, `c89346e0` `test: expect a full fleet and an early outage to keep the rotation cursor`, `ca27bf74` `chore: keep the placement rotation cursor while the fleet lacks capacity`, and the commit that records pass 1.
 
 ## Environment
 
@@ -23,16 +24,17 @@ Ubuntu Linux 6.8.0-147-generic x86_64 (host `hpz600`), Node.js v24.22.0 through 
 
 ## Author self-check
 
-- **Cursor rule.** After a pass, `#after` is the project of the last task the pass placed, in offer order; when it placed nothing, the project of the last task it offered, an offer being a placement transaction that ended without an outage (`placed`, `ended`, `backing-off`, not accepted, or not waiting); when it offered nothing (empty read, no candidate worker, or an outage at the first offer), the cursor is unchanged. An outage stops the pass and the cursor still moves by the offers before it; the failed task is not counted.
+- **Cursor rule (after the pass 1 fixes).** After a pass, `#after` is the project of the last task the pass placed, in offer order. When it placed nothing, it is the project of the last task offered before the first decline for lack of fleet capacity; an offer is a placement transaction that ended without an outage (`placed`, `ended`, `backing-off`, declined, or not waiting), and a decline for lack of fleet capacity has the reason `quarantined`, `worker-not-eligible`, `worker-capacity-exhausted`, or `no-candidate` (`FLEET_REASONS` and `lacksFleetCapacity` in `domain/capacity-reasons.ts`, plus the service's `no-candidate`). Otherwise (empty read, no candidate worker, an outage at the first offer, or a full fleet at the first offer) the cursor is unchanged. An outage stops the pass and the cursor still moves by the offers before it; the failed task is not counted. `control-not-enforceable` is a worker reason but the task's own requirement, so it counts as an offer and such a task cannot pin the cursor.
+- **Outcome shapes checked (H1).** `PlacementWorkers.candidates()` returns every eligible worker, full ones included (`ports/placement-workers.ts:31`, `adapters/in-memory-capacity.ts:50`), so a full fleet keeps `anyCandidate` true; `placeTask` returns `precondition-failed` with `details.reason` set to the last candidate's reason, which for a full fleet is `worker-capacity-exhausted` after `triesNextCandidate` tried every candidate, and `quarantined` breaks at the first candidate.
 - **Why not keep the cursor when nothing was placed.** Projects with no capacity-eligible task would hold the rotation: with 1200 blocked older projects, every read would return the same first 100, and the "Many blocked projects" test would fail. Moving to the last offer skips only projects that were offered and declined, so such a pass jumps past its whole read, as the code did before.
 - **Why keep it without a candidate.** No transaction is opened and no project is offered capacity, so none loses its turn.
-- **Section 12.** A pass that places moves the cursor past the last project served; one that places nothing moves it past every project it read; the cursor stays only when nothing was offered. A project declined because the capacity ran out is offered first in the next pass; a blocked project is offered again and declined, costing a transaction, not capacity. The 1200-project test passes unchanged.
-- **Boundaries.** The rule is a small domain class with no I/O; the service records offers and placements into it and stores `next`. The service offers in `fairWaitingOrder(waiting, after)` (entries carry the project id); `fairPlacementOrder` keeps its conformance callers. The no-candidate path settles every task with `NO_CANDIDATE` as before, without the loop. `npm run check:boundaries` passed.
+- **Section 12.** A pass that places moves the cursor past the last project served; one that places nothing moves it past every project it offered before the fleet ran out of capacity; while the fleet is full, the cursor stays, so the projects that waited are offered first when a slot frees. A project declined because the capacity ran out is offered first in the next pass; a blocked project is offered again and declined, costing a transaction, not capacity. The 1200-project test passes unchanged.
+- **Boundaries.** The rule is a small domain class with no I/O; the service's `#offer(order, after)` builds it, records offers, capacity declines, and placements, and returns the count or the outage with `next`, which `#placeDue` stores. The service offers in `fairWaitingOrder(waiting, after)` (entries carry the project id); `fairPlacementOrder` keeps its conformance callers. The no-candidate path settles every task with `NO_CANDIDATE` as before, without the loop. `npm run check:boundaries` passed.
 - **Queues unchanged.** Both queues already start after the cursor they are given; the PostgreSQL query is untouched.
-- **Spec.** The `MODIFIED` delta copies the living "Waiting placements" and "Project rotation" in full. "Waiting placements" now names the rotation cursor instead of the previous read's project (text and two scenarios, same names); "Project rotation" states the cursor rule (410 characters; "Waiting placements" 459) and adds the scenarios "One free slot", "Several placements in a pass", "No candidate worker", and "Outage during a pass".
-- **Contract.** Section 5 says the rotation starts after the project that last received capacity; section 13 "Fair order" states the full rule. Section 12 is unchanged.
+- **Spec.** The `MODIFIED` delta copies the living "Waiting placements" and "Project rotation" in full. "Waiting placements" now names the rotation cursor instead of the previous read's project (text and two scenarios, same names); "Project rotation" states the cursor rule, including that a decline for lack of fleet capacity stops it and an offer the store failed does not count (460 characters; "Waiting placements" 459), and adds the scenarios "One free slot", "Full fleet between placements", "Several placements in a pass", "No candidate worker", and "Outage during a pass".
+- **Contract.** Section 5 says the rotation starts after the rotation cursor that item 18 fixes; section 13 "Fair order" states the full rule. Section 12 is unchanged. The placement queue port comment names the rotation cursor.
 - **Comments.** New comments are at most two lines of at most 80 characters; `npm run verify:comments` passed.
-- **Tests.** The one-slot store became `fleetStore(backlog, placed, fleet)` with a configurable slot count, candidates, and one-shot outages; the existing one-slot test keeps its expectation.
+- **Tests.** The one-slot store became `fleetStore(backlog, placed, fleet)` with free slots per read (cycling), candidates, and one-shot outages; a pass without a free slot declines with `worker-capacity-exhausted`. `runPass` checks every pass result. The existing one-slot test keeps its expectation.
 - Evidence check: no external link; the results below come from the commands listed.
 
 ## Checks
@@ -50,15 +52,38 @@ Ubuntu Linux 6.8.0-147-generic x86_64 (host `hpz600`), Node.js v24.22.0 through 
 - `make findings ARGS="validate"`: `Every findings file is valid: 7 file(s).`
 - Before review, `make verify` passed (exit 0) on `0d28a18b`: 2,037 tests, 1,991 passed, 0 failed, 46 skipped; coverage 99.18 % lines, 91.87 % branches, 98.80 % functions; strict OpenSpec validation 70 passed, 0 failed; comments within the rule; findings validation (`Every findings file is valid: 7 file(s).`), contract compatibility, dependency inventory, archive dry run (`Every active OpenSpec change archives into strictly valid specs.`), and package verification passed.
 
+- After the pass 1 fixes, H1 failing before, at `c89346e0` (tests only) on the code of `bb04761f`: `npx tsc -p tsconfig.check.json` failed with `TS2305: Module '"@taskelith/scheduling"' has no exported member 'lacksFleetCapacity'.` and `TS2339: Property 'ranOutOfCapacity' does not exist on type 'RotationCursor'.` (the domain tests). `node --experimental-strip-types --test --test-reporter=spec apps/control-plane/test/placement-service.test.ts` after `npm run build`: 19 tests, 18 passed, 1 failed: `a pass that finds the fleet full keeps the rotation cursor` (free slots 1, 0, 1, 0, ... over 12 passes), actual `[ 'task-a1', 'task-a2', 'task-a3', 'task-b1', 'task-b2', 'task-b3' ]`, expected `[ 'task-a1', 'task-b1', 'task-a2', 'task-b2', 'task-a3', 'task-b3' ]`.
+- M1 and L1 failing before: the strengthened outage tests and the no-candidate test pass on `bb04761f`, whose cursor handled those cases; they guard against the defects the reviewer named. On `ca27bf74` with temporary, uncommitted mutants of `placement-service.ts`, restored after each run, the same test file gave 19 tests and:
+  - outage returning the read's cursor (`next: after`): 1 failed, `after an outage stops a pass, the next read starts after its last placement`, actual `[ 'task-a1', 'task-a2', 'task-b1', 'task-c1', 'task-d1', 'task-b2' ]`, expected `[ 'task-a1', 'task-b1', 'task-c1', 'task-d1', 'task-a2', 'task-b2' ]`;
+  - the failed offer counted (`cursor.offered` before the outage check): 2 failed, `an outage at the first offer of a pass keeps the rotation cursor`, actual `[ 'task-a1', 'task-c1', 'task-a2', 'task-b1' ]`, expected `[ 'task-a1', 'task-b1', 'task-c1', 'task-a2' ]`, and the full-fleet test;
+  - no candidate resetting the cursor to `undefined`: 1 failed, `a pass without a candidate worker keeps the rotation cursor`, actual `[ 'task-a1', 'task-a2', 'task-b1' ]`, expected `[ 'task-a1', 'task-b1', 'task-a2' ]`.
+- Passing after, at `ca27bf74`: `npm run build`, `npx tsc -p tsconfig.check.json`, and `npm run check:boundaries` passed; `node --experimental-strip-types --test apps/control-plane/test/placement-service.test.ts packages/modules/scheduling/test/*.test.ts`: 132 tests, 132 passed, the 1200-project test included.
+- After the pass 1 fixes: `npm run openspec -- validate advance-placement-rotation-cursor --strict`: valid; `npm run verify:comments`: within the rule; with the pass 1 lines in `findings.jsonl`, `make findings ARGS="validate"`: `Every findings file is valid: 7 file(s).`
+- After the pass 1 fixes, `make verify` passed (exit 0) on `ca27bf74`: 2,041 tests, 1,995 passed, 0 failed, 46 skipped; coverage 99.18 % lines, 91.87 % branches, 98.80 % functions; strict OpenSpec validation 70 passed, 0 failed; comments within the rule; findings validation, contract compatibility, dependency inventory, archive dry run, and package verification passed.
+
 ## Independent review
 
 ### Pass 1
 
-Pending: Claude Code, model `claude-opus-5-5`, effort `high`, run by the developing session.
+- **Claude Code, model `claude-opus-5-5` (confirmed in the JSON `modelUsage`), effort `high`, permission mode `plan`, session `679eabab-950b-467c-a37e-b3a924366d8b`, revision `bb04761f` (diff `d5f3baf3..bb04761f`), run by the developing session.** Invocation: `claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json < /dev/null`. The snapshot was `ed5bc513c49fd5003f6c881d187c0d506a612a25e49d9983926b190c8504c27d` before and after the pass. The reviewer ran no tests; it traced the code by hand. It confirmed the rotation with a free slot in every pass, the 1200-project bound, the empty-read, no-candidate, and first-offer-outage cases, the domain tests, the requirement lengths, the boundaries, and the comments.
+- Findings: 0 Critical, 1 High, 1 Medium, 6 Low, all fixed unreviewed and recorded as `fixed-unreviewed` in `findings.jsonl`:
+  1. High (`placement-service.ts:98`, contract drift): a full fleet still has candidates, every offer is declined with `worker-capacity-exhausted` and counted, so the cursor became the read's last project and free slots 1, 0, 1, 0, ... placed `a1`, `a2`, `a3` first. Verified by the new test failing on `bb04761f`. Fixed: a decline for lack of fleet capacity is not an offer, and with nothing placed the cursor stops before the first one (`b729ee61`, `7bcb5117`, `c89346e0`, `ca27bf74`).
+  2. Medium (`placement-service.test.ts:353`, missing fail-before test): the outage test could not tell a cursor left unmoved or a counted failed offer. Fixed in `c89346e0`: `task-a2` added, expecting `a1`, `b1`, `c1`, `d1`, `a2`, `b2`, and a test of an outage at the first offer with a cursor set.
+  3. Low (`placement-service.test.ts:342`): the no-candidate test started without a cursor. Fixed in `c89346e0`.
+  4. Low (`placement-service.test.ts:305`): the pass runner discarded results. Fixed in `c89346e0` (`runPass` checks each).
+  5. Low (`placement-service.ts:92`): `#offer` mutated a cursor parameter and answered a count. Fixed in `ca27bf74`: `#offer(order, after)` returns `{ placed, next }`.
+  6. Low (contract section 5): "starts after the project that last received capacity". Fixed in `b729ee61`.
+  7. Low (`placement-queue.ts:8`): the port comment named the last project read. Fixed in `ca27bf74`.
+  8. Low (spec delta): no clause that an offer the store failed does not count. Fixed in `7bcb5117`.
+
+### Pass 2
+
+Pending: Claude Code, model `claude-opus-5-5`, effort `high`, on the pass 1 fixes.
 
 ## Limitations
 
-- The service tests use an in-memory queue and a scripted transaction; the PostgreSQL queue is unchanged and covered by its existing conformance cases, which take the cursor as an argument.
+- The service tests use an in-memory queue and a scripted transaction that declines with `worker-capacity-exhausted` when no slot is free; the PostgreSQL queue is unchanged and covered by its existing conformance cases, which take the cursor as an argument. The fleet reasons are classified from `placeTask`'s failure details, not by an end-to-end test against the PostgreSQL reservation transaction.
+- The M1 and L1 red runs used temporary mutants, because those tests pass on the code they guard.
 - The bounded-pass argument for mixed backlogs is reasoned in the design; the tests cover blocked projects (1200), one and two slots per pass, no candidate, and an outage.
 
 ## Follow-ups (out of scope)
@@ -67,5 +92,5 @@ Pending: Claude Code, model `claude-opus-5-5`, effort `high`, run by the develop
 
 ## Remaining gates
 
-- Independent review pass 1 (Claude Code, `claude-opus-5-5`, effort `high`).
+- Independent review pass 2 (Claude Code, `claude-opus-5-5`, effort `high`) on the pass 1 fixes.
 - Integration into dev by the coordinator (single pull request), after `align-fair-order-rotation` (and `break-fair-order-ties-by-task-id`), on which this branch is based.
