@@ -32,8 +32,9 @@ A check found not applicable is not run, and its result is journaled with its re
 
 ## 3. The self-check report
 
+- **Composition.** At most 8 checks, each with a distinct, well-formed `checkId`. A worker composed otherwise fails its start before enrollment or any journal write, so no check is ever left out of a report.
 - **When.** At every start, before the broker session, the worker runs every composed check in `checkId` order, then journals one `self-check-reported` fact after the capacity declaration and the admission pressure report. A check that throws or rejects is `failed`, with its message as the detail. A failed check never fails the start.
-- **Bounds.** At most 8 results, each `checkId` once, and at most 8 details per result. Each detail is redacted by `redactSecrets` and cut to 1024 characters with no control characters (`DisplayText`).
+- **Bounds.** One result per composed check, so at most 8, and at most 8 details per result. Each detail is redacted by `redactSecrets` and cut to 1024 characters with no control characters (`DisplayText`).
 - **Wire.** The fact is published as `worker.self-check.reported` on the worker's observation subject ([execution wire contracts](execution-wire-contracts.md) section 5). Its declaration number equals its journal sequence, so its `observationId` is unique per report within the journal.
 - **Worker side.** While the report of its current start holds a `failed` result, the worker refuses every new offer with `worker-self-check-failed`, which ends the assignment, and requests no launch authorization. It still applies cancellations and assignment ends, reconciles, answers inventory requests, and sends heartbeats.
 
@@ -55,6 +56,8 @@ The control plane decides the worker admission from the report and the enrolled 
 
 - A `not-applicable` result counts as `failed`, with the detail `not-applicable without a recognised reason: ...`, unless it holds exactly one recognised reason that agrees with the enrolled platform and, for a check the control plane knows, with its scope: `platform-not-covered` only for a platform outside the scope, and `no-launch-command` only for one inside it.
 - A required check missing from the report counts as `failed` with the detail `the check was not reported`; in G3 `linux-containment` is required.
+- A check named more than once, with equal or different results, is stored once as `failed` with the detail `the check was reported more than once`; the schema cannot refuse it, and it never leaves the worker admitted.
+- A `not-applicable` result whose reason is not `platform-not-covered` or `no-launch-command` is malformed: the schema refuses the report, which is quarantined unapplied ([execution wire contracts](execution-wire-contracts.md) section 2), and the worker admission is unchanged. The rules above decide only reports that pass the schema; the decision still counts such a result as `failed` if one reaches it.
 - The stored results are ordered by `checkId`.
 
 ## 5. Worker admission states
@@ -94,7 +97,7 @@ Placement offers work only to an `admitted` worker, in addition to the eligibili
 - The control plane counts a `not-applicable` result without a recognised reason, and a missing required check, as `failed`.
 - A running execution keeps its assignment through a failed self-check and ends normally.
 - The `linux-containment` adapter for each row of section 4.
-- A shared conformance suite for the view's adapters, including `unavailable`.
+- A shared conformance suite for the store and view adapters: a check named twice, and a source that cannot be read, which is `unavailable` with no partial data.
 
 ## 10. Not in this contract
 

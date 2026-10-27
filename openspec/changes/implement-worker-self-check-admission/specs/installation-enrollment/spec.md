@@ -31,16 +31,20 @@ A worker SHALL be `awaiting-self-check` from its enrollment and from each new jo
 - **WHEN** an `admitted` worker's journal is replaced
 - **THEN** it is `awaiting-self-check` and its stored results are cleared
 
-### Requirement: Not-applicable results checked by the control plane
-The control plane SHALL count a `not-applicable` result as `failed` unless it holds exactly one recognised reason that agrees with the worker's enrolled platform and the check's scope, and SHALL count a required check missing from a report as `failed`.
+### Requirement: Report results checked by the control plane
+For a report that passes the wire schema, the control plane SHALL count a `not-applicable` result as `failed` unless it holds exactly one recognised reason that agrees with the worker's enrolled platform and the check's scope, SHALL count a required check missing from a report as `failed`, and SHALL store a check named more than once as one `failed` result.
 
 #### Scenario: Linux worker claiming another platform
 - **WHEN** a Linux worker reports `linux-containment` as `not-applicable` with `platform-not-covered`
 - **THEN** the result is stored as `failed` and the worker is `self-check-failed`
 
-#### Scenario: Unrecognised reason
-- **WHEN** a report names a check as `not-applicable` with a reason that is not recognised
-- **THEN** the result is stored as `failed` and the worker is `self-check-failed`
+#### Scenario: Malformed reason
+- **WHEN** a report names a check as `not-applicable` with a reason other than `platform-not-covered` or `no-launch-command`
+- **THEN** the wire schema refuses the report, it is quarantined unapplied, and the worker admission and stored results are unchanged
+
+#### Scenario: Check reported twice
+- **WHEN** an `admitted` worker's report names `linux-containment` twice, with equal or different results
+- **THEN** one `failed` result is stored for it and the worker is `self-check-failed`
 
 #### Scenario: Missing required check
 - **WHEN** a report omits `linux-containment`
