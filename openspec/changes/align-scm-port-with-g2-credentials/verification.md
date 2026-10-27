@@ -16,7 +16,7 @@ A worker task the coordinator (Niki) assigned on 2026-10-27, developed in a brie
 - `b74d1954` `chore(integrations): keep plugin and fixture values out of every SCM conformance finding` (pass 1 findings R1 to R3, with tests).
 - `8e8ce090` `docs: record review pass 1 of the align-scm-port-with-g2-credentials change` (the contract and spec for R1, and the pass 1 records, R4 and R5); reviewer B's pass 2 reviewed this head.
 - `1883aee3` `chore(integrations): report a revoked Proxy result as a shape finding` (pass 2, L4, with its test).
-- A later `docs` commit: the pass 2 fixes to the contract, the plan rows, the spec delta, and the records.
+- `457b6ea9` `docs: resolve review pass 2 of the align-scm-port-with-g2-credentials change` (the pass 2 fixes to the contract, the plan rows, the spec delta, and the records); a later `docs` commit records its hash in `findings.jsonl` and here.
 
 ## Environment
 
