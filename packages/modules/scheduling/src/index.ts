@@ -201,6 +201,7 @@ export {
   type AccountSlot,
   type CooldownSource,
   type SlotCooldown,
+  type SlotCredentialVersion,
   type SlotHealth,
   type SlotIneligibilityReason,
   type SlotState,

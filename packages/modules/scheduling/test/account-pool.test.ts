@@ -26,6 +26,7 @@ import {
   type SubscriptionMechanismId,
   type ProjectId,
   type ProviderCredentialId,
+  type SlotCredentialVersion,
   type SlotCredentials,
   type SlotRequest,
 } from '@taskelith/scheduling';
@@ -88,6 +89,7 @@ const VALID_SLOT: AccountSlot = {
   id: identifier('ProviderCredentialId', 'slot-1') as ProviderCredentialId,
   harnessId: identifier('HarnessPluginId', 'harness-1') as HarnessPluginId,
   mechanismId: identifier('SubscriptionMechanismId', 'mechanism-1') as SubscriptionMechanismId,
+  credentialVersion: identifier('SlotCredentialVersion', 'version-1') as SlotCredentialVersion,
   allowedProjects: [PROJECT],
   concurrencyLimit: DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY,
   state: 'active',
@@ -212,19 +214,31 @@ class InMemoryAccountSlots implements AccountSlots {
 }
 
 class InMemorySlotCredentials implements SlotCredentials {
-  readonly #secrets = new Map<ProviderCredentialId, SlotSecret>();
+  protected readonly secrets = new Map<string, SlotSecret>();
+  protected readonly destroyed = new Set<ProviderCredentialId>();
 
-  async store(slotId: ProviderCredentialId, secret: SlotSecret): Promise<void> {
-    this.#secrets.set(slotId, secret);
+  async store(slotId: ProviderCredentialId, version: SlotCredentialVersion, secret: SlotSecret): Promise<void> {
+    const key = this.keyOf(slotId, version);
+    if (this.destroyed.has(slotId) || this.secrets.has(key)) return;
+    this.secrets.set(key, secret);
   }
 
-  async reveal(slotId: ProviderCredentialId): Promise<Result<SlotSecret>> {
-    const secret = this.#secrets.get(slotId);
-    return secret === undefined ? err(failure('not-found', 'no credential for the slot')) : ok(secret);
+  async reveal(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<Result<SlotSecret>> {
+    const secret = this.secrets.get(this.keyOf(slotId, version));
+    return secret === undefined ? err(failure('not-found', 'no such credential version')) : ok(secret);
+  }
+
+  async discard(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<void> {
+    this.secrets.delete(this.keyOf(slotId, version));
   }
 
   async destroy(slotId: ProviderCredentialId): Promise<void> {
-    this.#secrets.delete(slotId);
+    this.destroyed.add(slotId);
+    for (const key of this.secrets.keys()) if (key.startsWith(`${slotId}\n`)) this.secrets.delete(key);
+  }
+
+  protected keyOf(slotId: ProviderCredentialId, version: SlotCredentialVersion): string {
+    return `${slotId}\n${version}`;
   }
 }
 
@@ -249,11 +263,30 @@ class LenientAccountSlots extends InMemoryAccountSlots {
 }
 
 class LeakingSlotCredentials extends InMemorySlotCredentials {
-  override async reveal(slotId: ProviderCredentialId): Promise<Result<SlotSecret>> {
-    const revealed = await super.reveal(slotId);
+  override async reveal(slotId: ProviderCredentialId, version: SlotCredentialVersion): Promise<Result<SlotSecret>> {
+    const revealed = await super.reveal(slotId, version);
     if (!revealed.ok) return revealed;
     const text = revealed.value.reveal();
     return ok(Object.assign(Object.create(SlotSecret.prototype) as SlotSecret, { reveal: () => text, toJSON: () => text }));
+  }
+}
+
+// One credential per slot: a store replaces it, whatever its version.
+class UnversionedSlotCredentials extends InMemorySlotCredentials {
+  protected override keyOf(slotId: ProviderCredentialId): string {
+    return `${slotId}\n`;
+  }
+
+  override async store(slotId: ProviderCredentialId, _version: SlotCredentialVersion, secret: SlotSecret): Promise<void> {
+    if (!this.destroyed.has(slotId)) this.secrets.set(this.keyOf(slotId), secret);
+  }
+}
+
+// A store after destroy brings the slot's credential back.
+class ResurrectingSlotCredentials extends InMemorySlotCredentials {
+  override async destroy(slotId: ProviderCredentialId): Promise<void> {
+    await super.destroy(slotId);
+    this.destroyed.delete(slotId);
   }
 }
 
@@ -274,5 +307,17 @@ test('the account slots suite rejects an adapter without compare-and-set', async
 test('the slot credentials suite rejects an adapter that discloses a credential', async () => {
   assert.deepEqual(await failingCases(SLOT_CREDENTIALS_CONFORMANCE, () => new LeakingSlotCredentials()), [
     'a revealed credential prints and serializes as redacted',
+  ]);
+});
+
+test('the slot credentials suite rejects an adapter that replaces a version', async () => {
+  assert.deepEqual(await failingCases(SLOT_CREDENTIALS_CONFORMANCE, () => new UnversionedSlotCredentials()), [
+    'stores each version once and discards one, idempotently',
+  ]);
+});
+
+test('the slot credentials suite rejects an adapter that keeps a store after destroy', async () => {
+  assert.deepEqual(await failingCases(SLOT_CREDENTIALS_CONFORMANCE, () => new ResurrectingSlotCredentials()), [
+    'destroys every version, idempotently, and keeps no later store',
   ]);
 });

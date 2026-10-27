@@ -2,7 +2,12 @@ import type { HarnessPluginId } from '@taskelith/execution';
 import { parseIdentifier, parseInstant, type Instant, type Result } from '@taskelith/kernel';
 import { expectCode, expectOneWinner, expectRead, expectSame, expectSuccess, type ConformanceCase } from '@taskelith/sdlc';
 import { DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY } from '../domain/capacity-limits.js';
-import { FIRST_SLOT_REVISION, type AccountSlot, type SubscriptionMechanismId } from '../domain/account-slot.js';
+import {
+  FIRST_SLOT_REVISION,
+  type AccountSlot,
+  type SlotCredentialVersion,
+  type SubscriptionMechanismId,
+} from '../domain/account-slot.js';
 import type { ProjectId, ProviderCredentialId } from '../domain/capacity-reservation.js';
 import { SlotSecret } from '../domain/slot-secret.js';
 import type { AccountSlots, SlotCredentials } from './account-pool.js';
@@ -23,12 +28,16 @@ const HARNESS = id('HarnessPluginId', 'harness-1') as HarnessPluginId;
 const OTHER_HARNESS = id('HarnessPluginId', 'harness-2') as HarnessPluginId;
 const MECHANISM = id('SubscriptionMechanismId', 'mechanism-1') as SubscriptionMechanismId;
 const UNKNOWN_SLOT = id('ProviderCredentialId', 'slot-unknown') as ProviderCredentialId;
+const version = (text: string) => id('SlotCredentialVersion', text) as SlotCredentialVersion;
+const FIRST_VERSION = version('version-1');
+const SECOND_VERSION = version('version-2');
 
 function slot(text: string, overrides: Partial<AccountSlot> = {}): AccountSlot {
   return Object.freeze({
     id: id('ProviderCredentialId', text) as ProviderCredentialId,
     harnessId: HARNESS,
     mechanismId: MECHANISM,
+    credentialVersion: FIRST_VERSION,
     allowedProjects: Object.freeze([PROJECT]),
     concurrencyLimit: DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY,
     state: 'active' as const,
@@ -156,19 +165,35 @@ function customInspection(value: SlotSecret): string | undefined {
 
 export const SLOT_CREDENTIALS_CONFORMANCE: readonly ConformanceCase<SlotCredentials>[] = Object.freeze([
   {
-    name: 'stores, replaces, and destroys a slot credential, idempotently',
+    name: 'stores each version once and discards one, idempotently',
     async check(credentials: SlotCredentials) {
       const problems: string[] = [];
-      expectCode(problems, 'none yet', await credentials.reveal(CREDENTIAL_SLOT), 'not-found');
-      await credentials.store(CREDENTIAL_SLOT, secret('first-material'));
-      expectRevealed(problems, 'stored', await credentials.reveal(CREDENTIAL_SLOT), 'first-material');
-      await credentials.store(CREDENTIAL_SLOT, secret('second-material'));
-      expectRevealed(problems, 'rotated', await credentials.reveal(CREDENTIAL_SLOT), 'second-material');
-      expectCode(problems, 'other slot', await credentials.reveal(UNKNOWN_SLOT), 'not-found');
+      expectCode(problems, 'none yet', await credentials.reveal(CREDENTIAL_SLOT, FIRST_VERSION), 'not-found');
+      await credentials.store(CREDENTIAL_SLOT, FIRST_VERSION, secret('first-material'));
+      await credentials.store(CREDENTIAL_SLOT, SECOND_VERSION, secret('second-material'));
+      await credentials.store(CREDENTIAL_SLOT, FIRST_VERSION, secret('replacing-material'));
+      expectRevealed(problems, 'first kept', await credentials.reveal(CREDENTIAL_SLOT, FIRST_VERSION), 'first-material');
+      expectRevealed(problems, 'second', await credentials.reveal(CREDENTIAL_SLOT, SECOND_VERSION), 'second-material');
+      expectCode(problems, 'other slot', await credentials.reveal(UNKNOWN_SLOT, FIRST_VERSION), 'not-found');
+      await credentials.discard(CREDENTIAL_SLOT, FIRST_VERSION);
+      expectCode(problems, 'discarded', await credentials.reveal(CREDENTIAL_SLOT, FIRST_VERSION), 'not-found');
+      await credentials.discard(CREDENTIAL_SLOT, FIRST_VERSION);
+      expectRevealed(problems, 'other kept', await credentials.reveal(CREDENTIAL_SLOT, SECOND_VERSION), 'second-material');
+      return problems;
+    },
+  },
+  {
+    name: 'destroys every version, idempotently, and keeps no later store',
+    async check(credentials: SlotCredentials) {
+      const problems: string[] = [];
+      await credentials.store(CREDENTIAL_SLOT, FIRST_VERSION, secret('first-material'));
+      await credentials.store(CREDENTIAL_SLOT, SECOND_VERSION, secret('second-material'));
       await credentials.destroy(CREDENTIAL_SLOT);
-      expectCode(problems, 'destroyed', await credentials.reveal(CREDENTIAL_SLOT), 'not-found');
+      expectCode(problems, 'first destroyed', await credentials.reveal(CREDENTIAL_SLOT, FIRST_VERSION), 'not-found');
+      expectCode(problems, 'second destroyed', await credentials.reveal(CREDENTIAL_SLOT, SECOND_VERSION), 'not-found');
       await credentials.destroy(CREDENTIAL_SLOT);
-      expectCode(problems, 'destroyed twice', await credentials.reveal(CREDENTIAL_SLOT), 'not-found');
+      await credentials.store(CREDENTIAL_SLOT, version('version-late'), secret('late-material'));
+      expectCode(problems, 'late store', await credentials.reveal(CREDENTIAL_SLOT, version('version-late')), 'not-found');
       return problems;
     },
   },
@@ -176,8 +201,8 @@ export const SLOT_CREDENTIALS_CONFORMANCE: readonly ConformanceCase<SlotCredenti
     name: 'a revealed credential prints and serializes as redacted',
     async check(credentials: SlotCredentials) {
       const problems: string[] = [];
-      await credentials.store(CREDENTIAL_SLOT, secret(SECRET_TEXT));
-      const revealed = await credentials.reveal(CREDENTIAL_SLOT);
+      await credentials.store(CREDENTIAL_SLOT, FIRST_VERSION, secret(SECRET_TEXT));
+      const revealed = await credentials.reveal(CREDENTIAL_SLOT, FIRST_VERSION);
       if (!revealed.ok) return [...problems, `reveal: ${revealed.error.message}`];
       const forms = [String(revealed.value), `${revealed.value}`, JSON.stringify({ revealed: revealed.value })];
       for (const form of forms) if (form.includes(SECRET_TEXT)) problems.push(`form discloses the credential: ${form}`);

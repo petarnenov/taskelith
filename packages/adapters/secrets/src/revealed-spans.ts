@@ -71,8 +71,8 @@ function merged(spans: readonly Span[]): Span[] {
   return result;
 }
 
-// A shape secret never holds whitespace, so a value that touches one shares
-// its word; such a word is redacted whole, or the shape would match no more.
+// Shape secrets hold no whitespace, except a .creds block, whose parts match
+// on their own; a word holding a value and a shape secret is redacted whole.
 function wordsTouchingShapes(text: string, spans: readonly Span[], shapeRules: readonly TextRule[]): Span[] {
   const result: Span[] = [];
   for (const word of wordsOf(text, spans)) {

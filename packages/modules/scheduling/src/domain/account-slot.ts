@@ -5,6 +5,9 @@ import type { ProjectId, ProviderCredentialId } from './capacity-reservation.js'
 // Opaque to the pool: no harness or vendor is ever named (contract section 1).
 export type SubscriptionMechanismId = Identifier<'SubscriptionMechanismId'>;
 
+// New for each store, so that two rotations never share one (section 6.2).
+export type SlotCredentialVersion = Identifier<'SlotCredentialVersion'>;
+
 export const SLOT_STATES = Object.freeze(['active', 'revoked', 'removed'] as const);
 export const SLOT_HEALTH = Object.freeze(['healthy', 'unhealthy'] as const);
 export const COOLDOWN_SOURCES = Object.freeze(['reported-reset', 'default'] as const);
@@ -44,6 +47,7 @@ export interface AccountSlot {
   readonly id: ProviderCredentialId;
   readonly harnessId: HarnessPluginId;
   readonly mechanismId: SubscriptionMechanismId;
+  readonly credentialVersion: SlotCredentialVersion;
   readonly allowedProjects: readonly ProjectId[];
   readonly concurrencyLimit: number;
   readonly state: SlotState;
