@@ -6,6 +6,8 @@ import { posix } from 'node:path';
 export const MAX_LINE_BYTES = 4096;
 export const VOCABULARY_PATH = 'docs/review-findings/categories.txt';
 export const NO_CAPABILITY = '(none)';
+export const RECORD_DIRECTORY = 'openspec/changes/';
+export const SPECS_DIRECTORY = 'openspec/specs';
 export const MAX_CATEGORY_LENGTH = 64;
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low';
@@ -56,6 +58,9 @@ export interface FindingsSource {
 export interface FindingRules {
   readonly checkSchema: SchemaCheck;
   readonly categories: ReadonlySet<string>;
+  // Existing capabilities, given only for active changes: archived findings
+  // predate the capability rule.
+  readonly capabilities?: ReadonlySet<string>;
 }
 
 export interface ParsedFindings {
@@ -116,7 +121,7 @@ function parseLine(text: string, change: string, rules: FindingRules): { finding
   const violations = rules.checkSchema(parsed.value);
   if (violations.length > 0) return { problems: [...violations] };
   const finding = parsed.value as Finding;
-  const problems = recordProblems(finding, change, rules.categories);
+  const problems = [...recordProblems(finding, change, rules.categories), ...capabilityProblems(finding, rules.capabilities)];
   return problems.length > 0 ? { problems } : { finding, problems };
 }
 
@@ -136,6 +141,20 @@ function recordProblems(finding: Finding, change: string, categories: ReadonlySe
     problems.push(`unknown category "${finding.category}"; categories are listed in ${VOCABULARY_PATH}`);
   }
   return problems;
+}
+
+// A finding about a change's own records, for example its verification.md.
+export function isRecordFinding(finding: Finding): boolean {
+  return finding.file.startsWith(RECORD_DIRECTORY);
+}
+
+function capabilityProblems(finding: Finding, capabilities: ReadonlySet<string> | undefined): string[] {
+  if (capabilities === undefined) return [];
+  const { capability } = finding;
+  if (capability !== undefined) {
+    return capabilities.has(capability) ? [] : [`unknown capability "${capability}"; capabilities are the directories under ${SPECS_DIRECTORY}`];
+  }
+  return isRecordFinding(finding) ? [] : [`capability is required outside ${RECORD_DIRECTORY}; name the closest one under ${SPECS_DIRECTORY}`];
 }
 
 // Common token shapes: Taskelith and GitHub tokens, JWTs, private keys, NATS
@@ -271,10 +290,17 @@ export function matchesQuery(finding: Finding, query: ChecklistQuery): boolean {
   return capability || query.files.some((glob) => posix.matchesGlob(finding.file, glob));
 }
 
-// Findings are in archive order, so the last one of a category is the newest.
 export function checklist(findings: readonly Finding[], categories: readonly Category[], query: ChecklistQuery): ChecklistItem[] {
-  const matched = findings.filter((finding) => matchesQuery(finding, query));
-  return tallyBy(matched, DIMENSION_KEYS.category).slice(0, query.top).map(({ key, total }) => ({
+  return rankCategories(findings.filter((finding) => matchesQuery(finding, query)), categories, query.top);
+}
+
+export function recordChecklist(findings: readonly Finding[], categories: readonly Category[], top: number): ChecklistItem[] {
+  return rankCategories(findings.filter(isRecordFinding), categories, top);
+}
+
+// Findings are in archive order, so the last one of a category is the newest.
+function rankCategories(matched: readonly Finding[], categories: readonly Category[], top: number): ChecklistItem[] {
+  return tallyBy(matched, DIMENSION_KEYS.category).slice(0, top).map(({ key, total }) => ({
     category: key,
     description: categories.find((category) => category.id === key)?.description ?? '',
     count: total,
@@ -291,9 +317,16 @@ function describeQuery({ capabilities, files }: ChecklistQuery): string {
 }
 
 export function formatChecklist(items: readonly ChecklistItem[], query: ChecklistQuery): string {
-  const scope = describeQuery(query);
-  if (items.length === 0) return `Review checklist (${scope}): no archived findings match.`;
+  return formatRanking(`Review checklist (${describeQuery(query)})`, items);
+}
+
+export function formatRecordChecklist(items: readonly ChecklistItem[]): string {
+  return formatRanking(`Record quality (archived findings under ${RECORD_DIRECTORY})`, items);
+}
+
+function formatRanking(title: string, items: readonly ChecklistItem[]): string {
+  if (items.length === 0) return `${title}: no archived findings match.`;
   const lines = items.map(({ category, description, count, example }, index) =>
     `${index + 1}. ${category} (${count}): ${description} Example: "${example}"`);
-  return [`Review checklist (${scope}), most frequent finding categories first:`, ...lines].join('\n');
+  return [`${title}, most frequent finding categories first:`, ...lines].join('\n');
 }
