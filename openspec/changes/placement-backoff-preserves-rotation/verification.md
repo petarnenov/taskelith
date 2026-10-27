@@ -42,6 +42,8 @@ Follow-up `placement-backoff-preserves-rotation`, recorded by review pass 2 (fin
 - `make findings ARGS="checklist --capability execution-placement --files apps/control-plane/**"`: the most frequent categories are docs, missing-fail-before-test, contract-drift, naming, and spec-wording; the self-check, the evidence check, and the limitations above address them.
 - `make verify`: exit 0; 2114 tests, 2067 pass, 0 fail, 47 skipped; coverage lines 99.24%, branches 92.17%, functions 98.95%; every active OpenSpec change archives into strictly valid specs, `validate --all --strict` 70 passed. The new unit tests and both PostgreSQL tests above passed in it.
 
+- After the pass 1 fixes, on the working tree of `206c9e3d` with the findings record and these results, which the commit `docs: record review pass 1 of the placement-backoff-preserves-rotation change` holds: `npm run openspec -- validate placement-backoff-preserves-rotation --strict` valid; `make findings ARGS="validate"` valid (20 files); `make verify` exit 0, 2115 tests, 2068 pass, 0 fail, 47 skipped, coverage lines 99.24%, branches 92.20%, functions 98.92%, `validate --all --strict` 70 passed. The pass 1 test and both PostgreSQL tests passed in it.
+
 Environment: Linux (`Linux 7.0.0-38-generic`, x86_64), Node from `.nvmrc`, Docker test services started by the make targets, `TMPDIR` set to a directory on disk outside `/tmp` (`~/.cache/taskelith-tmp`) because of the stray `/tmp/.git` directory on this host.
 
 ## Independent review
@@ -58,8 +60,8 @@ Environment: Linux (`Linux 7.0.0-38-generic`, x86_64), Node from `.nvmrc`, Docke
   1. **M1 (contract-drift):** the comment of `isFleetCapacityDecline` (`placement-service.ts:274`) promised an offer in the next pass, without the batch qualifier of contract section 5. **Fixed** (`5cb42104`): the next pass that reads it offers it in its place in the rotation.
   2. **L1 (docs):** the comment of `#placeDue` (`placement-service.ts:70`) said a declined task keeps waiting unchanged, against the spec's term for the kept wait. **Fixed** (`5cb42104`): it rolls back, and the task still waits.
   3. **L2 (missing-fail-before-test):** the design decision that a fleet capacity decline keeps an own-reason failure count had no test. **Fixed** (`dfe54076`): the test at `placement-service.test.ts:413`, which fails both if `#settle` forgets and if it counts a failure on such a decline (evidence check).
-  4. **L3 (docs):** `worker-capacity-exhausted` depends on the task's own request, so the `FLEET_REASONS` comment (`capacity-reasons.ts:31`) was too absolute. **Fixed** (`5cb42104` and the records commit): the comment says the set is exact while all requests are equal, and the design's Risks say that per-task requests must revisit the reason.
-  5. **L4 (evidence-mismatch):** this record cited the living spec as changed, although the branch changes only the delta. **Fixed** (the records commit): the self-check cites the delta and notes that the living requirement changes at archive.
+  4. **L3 (docs):** `worker-capacity-exhausted` depends on the task's own request, so the `FLEET_REASONS` comment (`capacity-reasons.ts:31`) was too absolute. **Fixed** (`5cb42104`, `206c9e3d`): the comment says the set is exact while all requests are equal, and the design's Risks say that per-task requests must revisit the reason.
+  5. **L4 (evidence-mismatch):** this record cited the living spec as changed, although the branch changes only the delta. **Fixed** (`206c9e3d`): the self-check cites the delta and notes that the living requirement changes at archive.
 
 ### Review pass 2
 
