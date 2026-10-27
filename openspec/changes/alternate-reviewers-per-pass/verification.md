@@ -17,7 +17,7 @@ The coordinator Niki decided on 2026-10-27, after the first round of this change
 
 ## Revision
 
-Rule text and change records: `52049334` and `8914f3dc` on base `744689cb`, and the first verification record `58bd811b`. Merge `a4f223d0` merged `origin/dev` at `9c0c1706`, which brought pull request #334 (`require-finding-capability`). Its conflicts in `docs/agent-task-protocol.md` worker steps 5 and 6, `.claude/skills/taskelith-coordinator/SKILL.md`, and `.claude/skills/taskelith-worker/SKILL.md` were resolved by keeping both `dev`'s capability and record-quality wording and this change's A and B wording. The coordinator decisions above are in the commits after `a4f223d0`, up to `18da6cde`, which review pass 1 and `make verify` ran on. Review pass 1 fixes: `ba93fa1e`; their record follows it.
+Rule text and change records: `52049334` and `8914f3dc` on base `744689cb`, and the first verification record `58bd811b`. Merge `a4f223d0` merged `origin/dev` at `9c0c1706`, which brought pull request #334 (`require-finding-capability`). Its conflicts in `docs/agent-task-protocol.md` worker steps 5 and 6, `.claude/skills/taskelith-coordinator/SKILL.md`, and `.claude/skills/taskelith-worker/SKILL.md` were resolved by keeping both `dev`'s capability and record-quality wording and this change's A and B wording. The coordinator decisions above are in the commits after `a4f223d0`, up to `18da6cde`, which review pass 1 and `make verify` ran on. Review pass 1 fixes: `ba93fa1e`; their record `e1781486`, which review pass 2 ran on. Review pass 2 fixes: `9894a699`; their record follows it.
 
 ## Environment
 
@@ -75,6 +75,43 @@ After the fixes, on `ba93fa1e` with this record, the checks were repeated:
 
 Next: pass 2 by reviewer B, Codex CLI `gpt-6.1-sol`, a full, independent review that also checks the pass 1 fixes.
 
+### Pass 2 (reviewer B)
+
+Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, on `e1781486`, run 11:56:41 to 11:58:54 local time on 2026-10-27, session `01a17cca-65ab-7710-92f5-7ce2a5d16de3`:
+
+`codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`
+
+The session header confirmed model `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`, and `codex-cli` v0.164.0. Read-only proof: the SHA-256 snapshot of all tracked and untracked files was `8d1f3a76588bf81309b372e03b990eb23624e12b78cd84e376d38f2de35362a9` before and after the pass.
+
+Confirmation of the pass 1 fixes:
+
+| Pass 1 finding | Pass 2 result |
+| --- | --- |
+| Medium, contract-drift: unconditional "different harnesses" statements | Not fully resolved: three delta scenarios still lacked the exception (finding 2 below) |
+| Medium, process: the rotation fallback tested existence, not availability | Resolved |
+| Medium, process: the harness test bound tasks under the previous rule | Resolved |
+| Low, stale-citation (4): `design.md` citations of the findings tooling | Resolved |
+| Low, docs (2): the owner's approval quoted in Bulgarian | Resolved |
+| Low, docs: the UI POC README's published-build note | Resolved |
+
+Result: 0 Critical, 0 High, 3 Medium, 1 Low, all in `findings.jsonl` with the outcome `fixed-unreviewed`, for pass 3 to confirm. Fixes in `9894a699`:
+
+- Medium, spec-wording: the delta scenario "Second reviewer requested for the same change" barred "a reviewer other than B", which includes A; it now names "a reviewer other than the assigned A or B".
+- Medium, contract-drift, the remainder of the pass 1 contract-drift finding: the delta scenarios "Assigned reviewer fails to run", "Reviewer A replaced before the third pass", and "Reviewers of a new change" required another harness without the fallback; their WHEN now requires an available authorized reviewer of another harness, and the fallback scenarios under "No reviewer of another harness" stay. A search of the change, `docs/`, `.claude/`, `AGENTS.md`, and the living spec for unqualified "different harness" statements also qualified `proposal.md`'s policy summary and `design.md` decision 3; the scope paragraph above keeps the brief as the owner approved it.
+- Medium, process: this record deferred `make verify` on the pass 1 fixes to the `pre-push` hook. "make verify" now holds a pending section for the run after the pass 1 and pass 2 fixes, and "Limitations" and "Remaining gates" no longer defer it.
+- Low, evidence-mismatch: the pass 1 findings had the outcome `fixed` before a later pass had checked them. Pass 2 has now confirmed nine, which keep `fixed` with that confirmation in their resolution; the contract-drift finding is `fixed-unreviewed` until pass 3, and "Pass 1 (reviewer A)" above says so.
+
+After the fixes, on `9894a699` with this record, the checks were repeated:
+
+- `npm run openspec -- validate alternate-reviewers-per-pass --strict`: `Change 'alternate-reviewers-per-pass' is valid`.
+- `npm run openspec -- validate --all --strict --no-interactive`: 70 passed, 0 failed.
+- `npm run verify:comments`: `Every comment is within the comment length rule.`
+- `npm run findings -- validate`: `Every findings file is valid: 12 file(s).`
+- Requirement bodies are unchanged: 491, 490, 490, 485, and 358 characters.
+- Archive test in a scratch copy: `archive alternate-reviewers-per-pass --yes` applied 2 added, 3 modified, and 1 renamed requirement; `validate --all --strict --no-interactive` then reported 69 passed, 0 failed, and the archived spec holds the edited scenarios and Purpose.
+
+Next: pass 3 by reviewer A, OpenCode `opencode-go/kimi-k3.1-pro#high`, which confirms the pass 2 fixes only, with no new scope. It reaches the three-pass cap.
+
 ## make verify
 
 `make verify` on `18da6cde`: exit 0 in 203 s on 2026-10-27. 2047 tests, 2045 passed, 0 failed, 0 cancelled, 2 skipped; coverage of all files 99.27 % lines, 91.97 % branches, 98.94 % functions. The Docker CLI ran with `DOCKER_CONFIG` set to an empty configuration (`{}`) in the session's scratch directory, because Docker Desktop's credential helper (`credsStore: desktop`) hangs on this iMac, as in [the x86_64 native acceptance record](../archive/2026-10-27-run-g2-native-acceptance-x86-64/verification.md); public images are pulled anonymously from the same engine, no credential was read, and the Makefile and the product were not changed.
@@ -91,6 +128,6 @@ Next: pass 2 by reviewer B, Codex CLI `gpt-6.1-sol`, a full, independent review 
 ## Remaining gates
 
 - `make verify` after the pass 1 and pass 2 fixes (see "make verify"), and again by the `pre-push` hook on the pushed tree.
-- Independent review: pass 2 by reviewer B.
+- Independent review: pass 3 by reviewer A, confirmation of the pass 2 fixes only; the pass cap is reached after it.
 - Archive.
 - Integration into dev by the coordinator (single pull request).
