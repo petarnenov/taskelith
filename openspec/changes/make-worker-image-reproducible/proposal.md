@@ -1,6 +1,6 @@
 ## Why
 
-`run-g2-native-acceptance-linux-host` built the worker image twice from one commit and got two image digests (its verification, "Limitations"), so an image ID could not identify what a worker ran. The G2 closure (ADR 0015 on branch `close-g2`, decision 5, "Worker image not reproducible") left it as a non-blocking follow-up named `make-worker-image-reproducible`. The diagnosis (design) found that only timestamps differ: the image's dates, the file times that each build step writes, and the password-change day in `/etc/shadow`.
+`run-g2-native-acceptance-linux-host` built the worker image twice from one commit and got two image digests (its verification, "Limitations"), so an image ID could not identify what a worker ran. The G2 closure (ADR 0015, `docs/decisions/0015-g2-closure.md:133`, decision 5, "Worker image not reproducible") left it as a non-blocking follow-up named `make-worker-image-reproducible`. The diagnosis (design) found that only timestamps differ: the image's dates, the file times that each build step writes, and the password-change day in `/etc/shadow`.
 
 ## What Changes
 

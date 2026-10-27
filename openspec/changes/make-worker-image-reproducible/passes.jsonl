@@ -1,0 +1,1 @@
+{"change": "make-worker-image-reproducible", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a17d91-4a33-7ff1-9ba4-92bf7fada3b5", "counts": {"critical": 0, "high": 0, "medium": 2, "low": 1}}
