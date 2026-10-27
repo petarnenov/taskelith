@@ -55,6 +55,8 @@ Ubuntu Linux 6.8.0-147-generic x86_64 (host `hpz600`), Node.js v24.22.0 through 
 
 - After the pass 2 fixes (records only), on `18ca564c`: `npm run openspec -- validate align-fair-order-rotation --strict`: valid; `npm run verify:comments`: within the rule; `make findings ARGS="validate"`: `Every findings file is valid: 6 file(s).`; `make verify` passed (exit 0): 2,030 tests, 1,984 passed, 0 failed, 46 skipped; coverage 99.18 % lines, 91.84 % branches, 98.80 % functions; strict OpenSpec validation 70 passed, 0 failed; archive dry run and package verification passed.
 
+- Archive, on the tree of the archive commit `docs: archive the fair order rotation change` (the working tree the checks ran on): `npm run openspec -- archive align-fair-order-rotation --yes` moved the change to `openspec/changes/archive/2026-10-27-align-fair-order-rotation` and updated `execution-placement` (1 requirement modified). `npm run openspec -- validate --all --strict`: 69 passed, 0 failed. `npm run openspec -- validate --archived --no-interactive`: `✓ change/2026-10-27-align-fair-order-rotation` (and `✓ change/2026-10-27-break-fair-order-ties-by-task-id`). `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `33d341a9`) changes only the requirement "Waiting placements" of `execution-placement`: the edits of the archived `break-fair-order-ties-by-task-id` (base `e66d0d72`, not yet in `dev`: the tie-break text and the scenarios "Equal waiting times" and "Equal oldest waiting times across projects") and of this change (the rotation text, the rewritten "Equal oldest waiting times across projects", and the new "Round order across projects"); `git diff e66d0d72 -- openspec/specs` shows only this change's edits. The moved change has its `findings.jsonl` with two `fixed` lines. `make verify` passed (exit 0): 2,030 tests, 1,984 passed, 0 failed, 46 skipped; coverage 99.18 % lines, 91.87 % branches, 98.80 % functions; comments within the rule; `Every findings file is valid: 6 file(s).`; strict OpenSpec validation 69 passed, 0 failed; archive dry run and package verification passed.
+
 ## Independent review
 
 ### Pass 1
@@ -71,7 +73,9 @@ Ubuntu Linux 6.8.0-147-generic x86_64 (host `hpz600`), Node.js v24.22.0 through 
 
 ### Pass 3
 
-Pending: the same reviewer, on the pass 2 fixes.
+- **Codex CLI v0.163.0, model `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only` (session header), session `01a17c4b-01a0-7ac0-b49d-ada175196bfe`, revision `24b5e763` (diff `e66d0d72..24b5e763`), run by the coordinator.** Same invocation as pass 1. The snapshot was `7a249ec5384c1b05c23ebc3b95fd08b846d68169add9bc2c1ad4b909975b2dd1` before and after the pass. The reviewer ran 121 tests, 12,000 comparisons of the domain order against a reference implementation of the SQL keys, strict OpenSpec validation, `git diff --check`, and the comment check, all without problems; it did not run the PostgreSQL tests or `make verify`.
+- It confirmed M1 and M2 as resolved, and in a full re-review the SQL order for valid ASCII identifiers with an equal, absent, or `undefined` cursor, the ties, the changed order without a cursor, and that the service uses the read's cursor.
+- Findings: 0 Critical, 0 High, 0 Medium, 0 Low. Both lines of `findings.jsonl` are now `fixed`.
 
 ## Limitations
 
@@ -85,6 +89,4 @@ Pending: the same reviewer, on the pass 2 fixes.
 
 ## Remaining gates
 
-- Independent review pass 3 (Codex CLI `gpt-6.1-sol`) of the pass 2 fixes.
-- Archive by the author after review, as the last commit of the branch.
-- Integration into dev by the coordinator (single pull request).
+- Integration into dev by the coordinator (single pull request), after `break-fair-order-ties-by-task-id`.
