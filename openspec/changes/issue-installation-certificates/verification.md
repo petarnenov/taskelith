@@ -121,6 +121,8 @@ Fails before the fixes, each run before its fix was written: L2, the new conform
 
 **The refusal of the pinned broker.** Checked against `nats:2.15.1-alpine` at the pinned digest `sha256:7ae34c25…77fde`, with a certificate made at run time and user and password authorization: with TLS required, a plain client gets the INFO line with `"tls_required":true`, then the server logs "TLS handshake error: tls: first record does not look like a TLS handshake" and closes, with no `-ERR`. The binary holds the text `Secure Connection - TLS Required`, so that error also counts as the refusal. With `allow_non_tls` the INFO line has `"tls_available":true` without `tls_required`, and the plain client gets `-ERR 'Authorization Violation'`, which the old probe took as a refusal for TLS.
 
+**Deviation from the decision, accepted.** The away decision asked the probe to pass only on the refusal text and to fail on a close without it. The pinned broker sends no refusal text: it advertises `tls_required` and closes. So the probe also passes on that close after a `tls_required` INFO; a login refusal still fails it. The coordinator, Niki, accepted this deviation on 2026-10-28.
+
 **Fails before and passes after.** The new test "a broker that refuses a plain client only for its login fails the probe" uses a stand-in with `allow_non_tls` and authorization that refuses the plain login with `Authorization Violation`. On `9c97bf65` it failed: `reissueProblems` returned no problem instead of "NATS does not refuse a plain client as requiring TLS". On `af0e67d1` it passes, with the positive cases: the TLS stand-in that closes on the failed handshake and one that sends the TLS required error pass the probe; `PONG`, `+OK`, `Authorization Violation` after a `tls_required` INFO, a missing or false `tls_required`, a malformed INFO, a close before INFO, and a refused connection fail it.
 
 ## Limitations
@@ -131,9 +133,9 @@ Fails before the fixes, each run before its fix was written: L2, the new conform
 
 ## Remaining gates
 
-- Owner review of the away delegate's decision on the pass 3 Medium (fixed without review, no pass 4), and the owner's decision on the deferred M3.
+- Owner review of the away delegate's decision on the pass 3 Medium (fixed without review, no pass 4).
 - Owner review of decisions 1, 2, 3, and 5 of the away run.
 - Archive under worker step 7.
-- On a Linux host: the G2 scenario suites (`test/g2-cancellation-races.test.ts`, `test/g2-partition.test.ts`, `test/g2-stale-generations.test.ts`) with services, `make verify-linux-cgroup`, `make verify-linux-crash-windows`, and the G2 failure scenarios on the composition. The coordinator chose to run the full `make verify` and these G2 Linux suites on a native Ubuntu x86_64 host (Liki); their results are recorded later.
+- On a Linux host: the G2 scenario suites (`test/g2-cancellation-races.test.ts`, `test/g2-partition.test.ts`, `test/g2-stale-generations.test.ts`) with services, `make verify-linux-cgroup`, `make verify-linux-crash-windows`, and the G2 failure scenarios on the composition. The coordinator, Niki, decided M3: the full `make verify` and these G2 Linux suites run on a native Ubuntu x86_64 host (Liki) before integration; their results are recorded later.
 - On a host with free disk above the worker's floor: `make scenario-native-worker-lifecycle`.
 - Integration into dev by the coordinator (single pull request).
