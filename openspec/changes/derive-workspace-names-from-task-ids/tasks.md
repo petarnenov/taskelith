@@ -12,5 +12,9 @@
 ## 3. Verification and review
 
 - [x] 3.1 Run `make verify`, the strict validation of the change, and `make findings ARGS="validate"`
-- [ ] 3.2 Independent review under the governance process: pass 1 by reviewer A, pass 2 by reviewer B, and pass 3 by reviewer A
+- [ ] 3.2 Independent review under the governance process: pass 1 by reviewer A, pass 2 by reviewer B, and pass 3 by reviewer A unless pass 2 finds nothing above Low
 - [ ] 3.3 Record the review evidence in `verification.md`, `findings.jsonl`, and `passes.jsonl`
+
+## 4. Review pass 1
+
+- [x] 4.1 Fix the two pass 1 findings: the working directory check in the name derivation case with a defective double that fails it, and the design's collision example
