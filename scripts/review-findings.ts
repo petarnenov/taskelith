@@ -6,6 +6,8 @@ import { posix } from 'node:path';
 export const MAX_LINE_BYTES = 4096;
 export const VOCABULARY_PATH = 'docs/review-findings/categories.txt';
 export const NO_CAPABILITY = '(none)';
+export const RECORD_DIRECTORY = 'openspec/changes/';
+export const SPECS_DIRECTORY = 'openspec/specs';
 export const MAX_CATEGORY_LENGTH = 64;
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low';
@@ -56,6 +58,9 @@ export interface FindingsSource {
 export interface FindingRules {
   readonly checkSchema: SchemaCheck;
   readonly categories: ReadonlySet<string>;
+  // Existing capabilities, given only for active changes: archived findings
+  // predate the capability rule.
+  readonly capabilities?: ReadonlySet<string>;
 }
 
 export interface ParsedFindings {
@@ -116,7 +121,7 @@ function parseLine(text: string, change: string, rules: FindingRules): { finding
   const violations = rules.checkSchema(parsed.value);
   if (violations.length > 0) return { problems: [...violations] };
   const finding = parsed.value as Finding;
-  const problems = recordProblems(finding, change, rules.categories);
+  const problems = [...recordProblems(finding, change, rules.categories), ...capabilityProblems(finding, rules.capabilities)];
   return problems.length > 0 ? { problems } : { finding, problems };
 }
 
@@ -136,6 +141,20 @@ function recordProblems(finding: Finding, change: string, categories: ReadonlySe
     problems.push(`unknown category "${finding.category}"; categories are listed in ${VOCABULARY_PATH}`);
   }
   return problems;
+}
+
+// A finding about a change's own records, for example its verification.md.
+export function isRecordFinding(finding: Finding): boolean {
+  return finding.file.startsWith(RECORD_DIRECTORY);
+}
+
+function capabilityProblems(finding: Finding, capabilities: ReadonlySet<string> | undefined): string[] {
+  if (capabilities === undefined) return [];
+  const { capability } = finding;
+  if (capability !== undefined) {
+    return capabilities.has(capability) ? [] : [`unknown capability "${capability}"; capabilities are the directories under ${SPECS_DIRECTORY}`];
+  }
+  return isRecordFinding(finding) ? [] : [`capability is required outside ${RECORD_DIRECTORY}; name the closest one under ${SPECS_DIRECTORY}`];
 }
 
 // Common token shapes: Taskelith and GitHub tokens, JWTs, private keys, NATS

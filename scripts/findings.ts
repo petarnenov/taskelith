@@ -12,6 +12,7 @@ import {
   formatProblem,
   parseFindings,
   parseVocabulary,
+  SPECS_DIRECTORY,
   VOCABULARY_PATH,
   type Category,
   type ChecklistQuery,
@@ -148,6 +149,7 @@ interface Repository {
   readonly missing: readonly Problem[];
   readonly vocabularyText: string;
   readonly schema: object;
+  readonly capabilities: readonly string[];
 }
 
 interface ChangeLocation {
@@ -177,6 +179,7 @@ function loadRepository(root: string): Repository {
     missing: missing.map(({ path }) => ({ file: path, message: 'missing; an active change records its findings here, empty if none' })),
     vocabularyText: read(VOCABULARY_PATH),
     schema: JSON.parse(read(SCHEMA_PATH)) as object,
+    capabilities: directories(root, SPECS_DIRECTORY),
   };
 }
 
@@ -206,7 +209,9 @@ export function runFindings(args: readonly string[], root: string): RunResult {
 function runCommand(command: Command, repository: Repository): RunResult {
   const vocabulary = parseVocabulary(repository.vocabularyText);
   const rules = { checkSchema: ajvSchemaCheck(repository.schema), categories: new Set(vocabulary.categories.map(({ id }) => id)) };
-  const parsed = repository.sources.map((source) => ({ source, ...parseFindings(source, rules) }));
+  const activeRules = { ...rules, capabilities: new Set(repository.capabilities) };
+  const parsed = repository.sources.map((source) =>
+    ({ source, ...parseFindings(source, source.archived ? rules : activeRules) }));
   const problems = [
     ...vocabulary.problems,
     ...(command.name === 'validate' ? repository.missing : []),
