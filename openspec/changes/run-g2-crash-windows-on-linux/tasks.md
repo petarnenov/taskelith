@@ -17,4 +17,4 @@
 - [x] 3.2 Record the CP9 failure as candidate defect L1 without a product fix
 - [x] 3.3 Mark CP9 on Linux `expectFailure` on L1's signature (coordinator decision) and rerun the evidence
 - [x] 3.4 `make verify`, `make verify-linux-cgroup`, strict validation, and the comment check
-- [ ] 3.5 Independent review (Claude Code `claude-fable-5-1`)
+- [x] 3.5 Independent review (OpenCode CLI `kimi-k2.7-code`, pass 1, Low-only, fixed unreviewed; Claude Code `claude-fable-5-1` failed to start)
