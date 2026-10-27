@@ -17,4 +17,4 @@
 - [x] 3.1 Evidence run into `results.jsonl`, `make verify`, and `verification.md`
 - [x] 3.2 Independent review (pass 1 and pass 2 done and fixed)
 - [x] 3.3 Return after the macOS integration hang: revert the archive, merge `dev`, bound the waits and cleanup, skip off Linux, refresh the evidence
-- [ ] 3.4 Review pass 3 and its fixes, then archive again
+- [x] 3.4 Review pass 3 and its fixes, then archive again
