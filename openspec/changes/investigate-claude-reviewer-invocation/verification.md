@@ -31,7 +31,10 @@ See `design.md`: the cause in the CLI's headless output, the runs that isolate i
 
 ## Independent review
 
-Not yet run.
+- **Pass 1, reviewer A: Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, read-only sandbox, session `01a17f5c-de84-74e2-8ab9-dc4641a34ad4`, range `6b68d6c7..166ed0d7`.** Run by the coordinator. Invocation: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`. Model confirmation: the model, effort, and read-only sandbox are confirmed in the output header. The tree snapshot was identical before and after the pass. The reviewer confirmed both invocations: model, effort, plan mode, and the disallowed tools kept, the prompt before the variadic flag, and stdin closed; that run 20 shows `session_id` and `modelUsage` in the result line; that the trigger is labelled as inferred; that the Bash note is accurate; and that no other protocol row or section changed. Findings: 0 Critical, 0 High, 0 Medium, 2 Low.
+  1. Low (`proposal.md:9`, `docs`): the proposal said no other file changes and no other tracked file documents the invocation, though the change adds its OpenSpec records and archived records, for example `/openspec/changes/archive/2026-10-25-plan-g2-work-items/verification.md`, quote the old invocation. Fixed in `05a5b6a2`, unreviewed: the proposal and the self-check say that only the two rows change outside the change's records, that no other current operational instruction needs an update, and that archived records stay unchanged.
+  2. Low (`design.md:32`, `evidence-mismatch`): the design said four quoting errors never started the CLI, though their stderr shows the CLI's own `error: unknown option`. Fixed in `05a5b6a2`, unreviewed: `design.md` and this file count 23 investigation runs plus four CLI invocations rejected during argument parsing before any model query.
+- **End of review.** Pass 1 found only Low findings, so under the governance rule "Low findings are fixed" they are fixed as unreviewed fixes and the review ends after pass 1; reviewer B, Claude Code `claude-opus-5-5` with effort `high`, was not used.
 
 ## Limitations
 
@@ -42,6 +45,4 @@ Not yet run.
 
 ## Remaining gates
 
-- Independent review (reviewers A and B as assigned).
-- Archive after the review.
 - Integration into dev by the coordinator (single pull request).

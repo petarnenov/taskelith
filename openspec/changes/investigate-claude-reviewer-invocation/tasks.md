@@ -11,7 +11,7 @@
 ## 3. Verify
 
 - [x] 3.1 Run `npm run openspec -- validate investigate-claude-reviewer-invocation --strict` and `make verify`.
-- [ ] 3.2 Independent review and record it in `verification.md`.
+- [x] 3.2 Independent review and record it in `verification.md`.
 
 ## 4. Archive
 
