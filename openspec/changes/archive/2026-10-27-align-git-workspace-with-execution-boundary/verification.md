@@ -159,3 +159,13 @@ A Low-only pass ends the review (governance "Two alternating reviewers per task"
 - Before item 41 starts: if the D14 remote worker is not eligible for the acceptance task (wrong harness or platform), escalate to the owner.
 - Later work, not in this change: (i) a uid pool, an execution account per slot, which lifts the one-workspace cap; (ii) the shared execution account uid 10003 lets executions of one Linux worker signal each other's processes, an exposure since G2.
 - Integration into dev by the coordinator (single pull request)
+
+## Archive checks
+
+After `npm run openspec -- archive align-git-workspace-with-execution-boundary --yes`:
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived`: `change/2026-10-27-align-git-workspace-with-execution-boundary` valid.
+- `git diff a00cbe3a -- openspec/specs` (merge base): `git-workspace-port` 117 lines added, `worker-journal-adapter` 15 added, `worker-journal` 6 changed, 135 insertions and 3 deletions in 3 files, matching the deltas.
+- `make findings ARGS="validate"`: 32 findings files and 12 pass summary files valid.
+- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: passed.
