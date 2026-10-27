@@ -75,6 +75,7 @@ const TABLES = [
   'workflow_runs', 'gates', 'admissions', 'tasks', 'assignments', 'outbox', 'inbox', 'task_lineage', 'capacity_charges', 'delegations',
   'capacity_quotas', 'workers', 'installation', 'enrollment_tokens', 'delegation_requests', 'current_revisions', 'producer_cursors',
   'inventory_requests', 'inventory_report_parts', 'launch_authorizations', 'launch_rejections', 'broker_revocations', 'unrecorded_processes',
+  'placement_rotation',
 ];
 const CORRELATION = 'correlation-1' as CorrelationId;
 const WORKER = 'worker-a';

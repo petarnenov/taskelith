@@ -7,6 +7,7 @@ import type { DelegationId, DelegationRecord } from '../domain/delegation-reques
 import { fairWaitingOrder, type WaitingPlacement } from '../domain/fair-order.js';
 import type { DelegationRequests } from '../ports/delegation-requests.js';
 import type { PlacementQueue } from '../ports/placement-queue.js';
+import type { PlacementRotation } from '../ports/placement-rotation.js';
 import type { TaskLineage } from '../ports/task-lineage.js';
 import { byCodeUnits } from '../domain/code-unit-order.js';
 
@@ -48,6 +49,25 @@ export class InMemoryPlacementQueue implements PlacementQueue {
     const attemptId = activeAttempt(task)?.id;
     const held = this.#assignments().some((assignment) => assignment.attemptId === attemptId && assignment.reservation.state === 'held');
     return placementNeed(task) !== undefined && !held;
+  }
+}
+
+// One installation's cursor, kept for every service over the same store.
+export class InMemoryPlacementRotation implements PlacementRotation {
+  #cursor: ProjectId | undefined;
+
+  async read(): Promise<ProjectId | undefined> {
+    return this.#cursor;
+  }
+
+  async advance(projectId: ProjectId): Promise<Result<void>> {
+    this.#cursor = projectId;
+    return ok(undefined);
+  }
+
+  async advanceFrom(expected: ProjectId | undefined, next: ProjectId): Promise<Result<void>> {
+    if (this.#cursor === expected) this.#cursor = next;
+    return ok(undefined);
   }
 }
 

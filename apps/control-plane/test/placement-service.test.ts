@@ -3,7 +3,14 @@ import test from 'node:test';
 import { PLACEMENT_BATCH, PlacementService, RetrySchedule, type ControlPlaneStore } from '@taskelith/control-plane';
 import type { Task } from '@taskelith/execution';
 import { err, failure, ok, parseInstant, type Result } from '@taskelith/kernel';
-import { InMemoryPlacementQueue, InMemoryTaskLineage, type ProjectId, type RunId } from '@taskelith/scheduling';
+import {
+  InMemoryPlacementQueue,
+  InMemoryPlacementRotation,
+  InMemoryTaskLineage,
+  type PlacementRotation,
+  type ProjectId,
+  type RunId,
+} from '@taskelith/scheduling';
 import { FIRST_GENERATION, parseOwnershipGeneration, type AdmissionId, type TaskId } from '@taskelith/sdlc';
 import { failed, value } from '@taskelith/testing';
 
@@ -20,6 +27,31 @@ const GONE = err(failure('precondition-failed', 'it does not wait', { reason: 'n
 const PLACED = ok({ kind: 'placed' });
 const ENDED = ok({ kind: 'ended' });
 
+type Work = (tx: never) => Promise<Result<unknown>>;
+
+// The cursor a scripted store keeps and the project of each of its tasks.
+interface ScriptedRotation {
+  readonly rotation: PlacementRotation;
+  projectOf(taskId: string): Promise<ProjectId>;
+}
+
+// Runs the work over the rotation; a placement, which reads its task first,
+// answers `placementOf` that task instead and, if placed, moves the cursor.
+async function scriptedTransaction(
+  work: Work, { rotation, projectOf }: ScriptedRotation, placementOf: (taskId: string) => Result<unknown>,
+): Promise<Result<unknown>> {
+  const asked: string[] = [];
+  const result = await work({ tasks: { get: async (taskId: string) => (asked.push(taskId), UNPLACED) }, rotation } as never);
+  if (asked[0] === undefined) return result;
+  const placement = placementOf(asked[0]);
+  if (placement.ok && (placement.value as { kind: string }).kind === 'placed') value(await rotation.advance(await projectOf(asked[0])));
+  return placement;
+}
+
+function rotationOver(rotation: PlacementRotation, lineage: InMemoryTaskLineage): ScriptedRotation {
+  return { rotation, projectOf: async (taskId) => (await lineage.get(taskId as TaskId))!.projectId };
+}
+
 // Answers the waiting read and each placement transaction from scripts,
 // counting both; the transactions themselves run in the integration tests.
 function scriptedStore(placements: Result<unknown>[]) {
@@ -28,11 +60,13 @@ function scriptedStore(placements: Result<unknown>[]) {
     reads: 0, opened: 0, read: ok(undefined) as Result<void>,
   };
   const placementOf = (taskId: string) => ({ projectId: 'project-1', waitingSince: '2026-10-25T09:00:00.000Z', item: taskId });
+  const rotation = new InMemoryPlacementRotation();
   const store = {
     readCommitted: async (work: (tx: unknown) => Promise<unknown>) => {
       state.reads++;
       if (!state.read.ok) return state.read;
       return work({
+        rotation,
         workers: { candidates: async () => state.candidates },
         placements: {
           waiting: async (_limit: number, excluding: readonly string[]) => {
@@ -46,10 +80,10 @@ function scriptedStore(placements: Result<unknown>[]) {
         },
       });
     },
-    transaction: async () => {
+    transaction: (work: Work) => scriptedTransaction(work, { rotation, projectOf: async () => 'project-1' as ProjectId }, () => {
       state.opened++;
       return placements.shift() ?? UNPLACED;
-    },
+    }),
   } as unknown as ControlPlaneStore;
   return { state, store };
 }
@@ -231,14 +265,11 @@ async function blockedProjectsStore(): Promise<ControlPlaneStore> {
     value(await lineage.add({ taskId, rootTaskId: taskId, depth: 0, projectId, runId: 'run-1' as RunId }));
   }
   const placements = new InMemoryPlacementQueue(() => tasks, lineage, () => []);
+  const rotation = new InMemoryPlacementRotation();
   return {
-    readCommitted: (work) => work({ workers: { candidates: async () => ['worker-a'] }, placements } as never),
+    readCommitted: (work) => work({ workers: { candidates: async () => ['worker-a'] }, placements, rotation } as never),
     // Places the placeable task only; the others stay blocked.
-    transaction: async (work) => {
-      const asked: string[] = [];
-      await work({ tasks: { get: async (taskId: string) => (asked.push(taskId), UNPLACED) } } as never);
-      return (asked.includes(PLACEABLE) ? PLACED : UNPLACED) as never;
-    },
+    transaction: (work) => scriptedTransaction(work, rotationOver(rotation, lineage), (taskId) => (taskId === PLACEABLE ? PLACED : UNPLACED)) as never,
   };
 }
 
@@ -270,7 +301,9 @@ const oneSlot = (): Fleet => ({ slots: [1], candidates: ['worker-a'], full: FULL
 
 // Tasks waiting since their seconds; a placed task no longer waits, and the
 // placed ones are appended to `placed` in the order they were placed.
-async function fleetStore(backlog: Backlog, placed: string[], fleet: Fleet): Promise<ControlPlaneStore> {
+async function fleetStore(
+  backlog: Backlog, placed: string[], fleet: Fleet, rotation: PlacementRotation = new InMemoryPlacementRotation(),
+): Promise<ControlPlaneStore> {
   const lineage = new InMemoryTaskLineage();
   let waiting: Task[] = [];
   for (const [taskId, projectId, seconds] of backlog) {
@@ -286,23 +319,20 @@ async function fleetStore(backlog: Backlog, placed: string[], fleet: Fleet): Pro
   return {
     readCommitted: (work) => {
       freeSlots = fleet.slots[reads++ % fleet.slots.length]!;
-      return work({ workers: { candidates: async () => fleet.candidates }, placements } as never);
+      return work({ workers: { candidates: async () => fleet.candidates }, placements, rotation } as never);
     },
-    transaction: async (work) => {
-      const asked: string[] = [];
-      await work({ tasks: { get: async (taskId: string) => (asked.push(taskId), UNPLACED) } } as never);
-      const scripted = asked.find((taskId) => taskId in fleet.scripted);
+    transaction: (work) => scriptedTransaction(work, rotationOver(rotation, lineage), (taskId) => {
+      const scripted = fleet.scripted[taskId];
       if (scripted !== undefined) {
-        const result = fleet.scripted[scripted]!;
-        delete fleet.scripted[scripted];
-        return result as never;
+        delete fleet.scripted[taskId];
+        return scripted;
       }
-      if (freeSlots === 0) return fleet.full as never;
+      if (freeSlots === 0) return fleet.full;
       freeSlots--;
-      placed.push(...asked);
-      waiting = waiting.filter((task) => !asked.includes(task.id));
-      return PLACED as never;
-    },
+      placed.push(taskId);
+      waiting = waiting.filter((task) => task.id !== taskId);
+      return PLACED;
+    }) as never,
   };
 }
 
@@ -497,4 +527,71 @@ test('an outage at the first offer of a pass keeps the rotation cursor', async (
   await runPass(service, clock, failed);
   await runPasses(service, clock, 3);
   assert.deepEqual(placed, ['task-a1', 'task-b1', 'task-c1', 'task-a2']);
+});
+
+// Records each cursor write that the store commits.
+function recordingRotation() {
+  const rotation = new InMemoryPlacementRotation();
+  const writes: string[] = [];
+  const recording: PlacementRotation = {
+    read: () => rotation.read(),
+    advance: (projectId) => (writes.push(projectId), rotation.advance(projectId)),
+    advanceFrom: (expected, projectId) => (writes.push(projectId), rotation.advanceFrom(expected, projectId)),
+  };
+  return { writes, rotation: recording };
+}
+
+test('a new service over the same store starts after the stored cursor', async () => {
+  const placed: string[] = [];
+  const fleet = oneSlot();
+  const { rotation } = recordingRotation();
+  const store = await fleetStore([...A_BACKLOG, ...B_BACKLOG], placed, fleet, rotation);
+  const first = serviceOf(store);
+  await runPasses(first.service, first.clock, 1);
+  const restarted = serviceOf(store);
+  await runPasses(restarted.service, restarted.clock, 1);
+  assert.deepEqual(placed, ['task-a1', 'task-b1'], 'p-a is not served twice in a row');
+});
+
+test('a move by an own-reason decline alone is stored at the end of the pass', async () => {
+  const placed: string[] = [];
+  const fleet: Fleet = { ...oneSlot(), slots: [0], scripted: { 'task-a1': QUOTA_USED } };
+  const { writes, rotation } = recordingRotation();
+  const store = await fleetStore([['task-a1', 'p-a', 0], ['task-b1', 'p-b', 1]], placed, fleet, rotation);
+  const first = serviceOf(store);
+  await runPasses(first.service, first.clock, 1);
+  assert.deepEqual(writes, ['p-a']);
+  fleet.slots = [1];
+  const restarted = serviceOf(store);
+  await runPasses(restarted.service, restarted.clock, 1);
+  assert.deepEqual(placed, ['task-b1'], 'the restarted service starts after p-a');
+});
+
+test('a pass that a fleet capacity decline stops does not write the unchanged cursor', async () => {
+  const placed: string[] = [];
+  const fleet = oneSlot();
+  const { writes, rotation } = recordingRotation();
+  const { clock, service } = serviceOf(await fleetStore(ONE_TASK_EACH.slice(0, 3), placed, fleet, rotation));
+  await runPasses(service, clock, 1);
+  fleet.slots = [0];
+  await runPasses(service, clock, 1);
+  assert.deepEqual(writes, ['p-a'], 'the unchanged cursor is not written again');
+  fleet.slots = [1];
+  await runPasses(service, clock, 1);
+  assert.deepEqual(placed, ['task-a1', 'task-b1']);
+});
+
+test('a pass that an outage stops does not store its decline-only move', async () => {
+  const fleet: Fleet = { ...oneSlot(), scripted: { 'task-a1': QUOTA_USED, 'task-b1': DOWN } };
+  const { writes, rotation } = recordingRotation();
+  const store = await fleetStore([['task-a1', 'p-a', 0], ['task-b1', 'p-b', 1]], [], fleet, rotation);
+  failed(await serviceOf(store).service.placeWaiting());
+  assert.deepEqual(writes, [], 'the outage may hide a committed placement');
+});
+
+test('a failed write of a decline-only move fails the pass', async () => {
+  const fleet: Fleet = { ...oneSlot(), slots: [0], scripted: { 'task-a1': QUOTA_USED } };
+  const failing: PlacementRotation = { read: async () => undefined, advance: async () => DOWN, advanceFrom: async () => DOWN };
+  const store = await fleetStore([['task-a1', 'p-a', 0], ['task-b1', 'p-b', 1]], [], fleet, failing);
+  assert.equal(failed(await serviceOf(store).service.placeWaiting()).code, 'unavailable');
 });
