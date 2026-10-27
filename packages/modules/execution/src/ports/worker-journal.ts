@@ -16,6 +16,7 @@ import type {
   JournalSnapshot,
   OutboxBacklog,
   OutboxEntry,
+  SelfCheckResult,
 } from '../domain/journal-records.js';
 import type { Sequence } from '../domain/observation-sequence.js';
 
@@ -50,6 +51,8 @@ export interface WorkerJournal {
   recordCapacity(capacity: DeclaredCapacity): Result<void>;
   // The current causes of admission pressure; an empty list clears it.
   recordAdmissionPressure(causes: readonly AdmissionPressureCause[]): Result<void>;
+  // The worker admission check results of this start.
+  recordSelfCheck(results: readonly SelfCheckResult[]): Result<void>;
   snapshot(): Result<JournalSnapshot>;
   // Executions whose terminal fact is confirmed and whose record remains.
   removableRecords(): Result<readonly ExecutionId[]>;

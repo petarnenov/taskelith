@@ -52,3 +52,5 @@ export {
 } from './inventory-report.js';
 export { ExecutionWatch, LIVENESS_POLLS, WATCH_POLL_MILLISECONDS, type WatchOptions, type WatchTarget, type Watched } from './execution-watch.js';
 export { launchFailureLine, productionDependencies, serveUntilStopped, workerMain, type ServiceProcess } from './main.js';
+export { hasFailedCheck, runSelfCheck } from './self-check.js';
+export { LINUX_PROBE, linuxContainmentCheck, type LinuxContainmentProbe } from './linux-containment-check.js';

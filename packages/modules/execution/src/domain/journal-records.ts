@@ -67,6 +67,7 @@ export const ASSIGNMENT_REFUSAL_REASONS = Object.freeze([
   'worker-slots-exhausted',
   'worker-capacity-exhausted',
   'worker-admission-pressure',
+  'worker-self-check-failed',
 ] as const);
 
 export type AssignmentRefusalReason = (typeof ASSIGNMENT_REFUSAL_REASONS)[number];
@@ -86,6 +87,24 @@ export type AdmissionPressureCause = (typeof ADMISSION_PRESSURE_CAUSES)[number];
 export type AssignmentRefusal =
   | { readonly reason: Exclude<AssignmentRefusalReason, 'worker-admission-pressure'> }
   | { readonly reason: 'worker-admission-pressure'; readonly pressureCauses: readonly AdmissionPressureCause[] };
+
+// The outcomes of a worker admission check (worker admission contract).
+export const SELF_CHECK_OUTCOMES = Object.freeze(['passed', 'failed', 'not-applicable'] as const);
+
+export type SelfCheckOutcome = (typeof SELF_CHECK_OUTCOMES)[number];
+
+// Why a check does not apply at this start; nothing else may be one.
+export const NOT_APPLICABLE_REASONS = Object.freeze(['platform-not-covered', 'no-launch-command'] as const);
+
+export type NotApplicableReason = (typeof NOT_APPLICABLE_REASONS)[number];
+
+// `details` holds a failed check's problems, at least one, and the one
+// reason of a check that does not apply; a passed check has none.
+export interface SelfCheckResult {
+  readonly checkId: string;
+  readonly outcome: SelfCheckOutcome;
+  readonly details: readonly string[];
+}
 
 export interface ProtocolWindow {
   readonly minimum: number;
@@ -233,6 +252,7 @@ export type ObservationFact =
     readonly declaration: number;
     readonly causes: readonly AdmissionPressureCause[];
   }
+  | { readonly kind: 'self-check-reported'; readonly declaration: number; readonly results: readonly SelfCheckResult[] }
   | ({ readonly kind: 'launch-rejected' } & ExecutionSubject & {
     readonly operationId: OperationId;
     readonly reason: LaunchRejectionReason;

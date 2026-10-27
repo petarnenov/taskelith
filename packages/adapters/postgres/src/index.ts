@@ -23,6 +23,7 @@ export { PostgresCurrentRevisions, PostgresLaunchRecords } from './launch-reposi
 export { PostgresInventoryReports, PostgresInventoryRequests } from './inventory-repositories.js';
 export { MIGRATIONS_DIRECTORY, migrate } from './migrations.js';
 export { PostgresProducerCursors, PostgresWorkerReports } from './observation-repositories.js';
+export { CommittingWorkerAdmissions, PostgresWorkerAdmissions } from './worker-admission-repositories.js';
 export { PostgresOutboxRelay } from './outbox-relay.js';
 export { PostgresReconciliationQueue, PostgresUnrecordedProcesses } from './reconciliation-repositories.js';
 export {

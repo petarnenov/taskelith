@@ -48,7 +48,7 @@ export const CHILD_LINK: TaskLineageLink = Object.freeze({
 function worker(text: string, overrides: Partial<WorkerPlacementRecord>): WorkerPlacementRecord {
   return Object.freeze({
     workerId: id('WorkerId', text) as WorkerId, enrolled: true, revoked: false, draining: false, reachable: true,
-    slots: 2, cpuMillicores: 3500, memoryMebibytes: 7680, controls: Object.freeze(['memory-limit' as const]), protocolVersion: 1, ...overrides,
+    slots: 2, cpuMillicores: 3500, memoryMebibytes: 7680, controls: Object.freeze(['memory-limit' as const]), protocolVersion: 1, admitted: true, ...overrides,
   });
 }
 
@@ -61,6 +61,7 @@ export const PLACEMENT_WORKER_FIXTURES: readonly WorkerPlacementRecord[] = Objec
   worker('worker-unreachable', { reachable: false }),
   worker('worker-pressured', { admissionPressureSince: AT }),
   worker('worker-without-protocol', { protocolVersion: undefined }),
+  worker('worker-not-admitted', { admitted: false }),
 ]);
 
 // Quotas a test stores for project-1 and run-1; others keep the defaults.
