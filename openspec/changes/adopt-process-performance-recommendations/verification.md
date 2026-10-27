@@ -7,12 +7,12 @@ A task (size L) from the coordinator's process and token analysis, whose ten rec
 ## Revision
 
 - Base: `origin/dev` `10eeab69`.
-- Commits, one or more per recommendation, in this order: `5950682a` change documents; `f3e7acaa` recommendation 1 (stamp and `pre-push` skip); `9126d1e1` recommendation 2 (Docker slot); `2a2d413b` recommendation 7 (docs-only profile, `AGENTS.md`); `aa3511cb` `make integrate`; `ba7c290e` recommendation 4 (`make record`); `4f9fdd61` recommendation 3 (conditional pass 3); `4424e155` protocol text for `make integrate`, the profiles, the stamp, and the slot; `f9c971db` recommendations 5 and 6 (context hook, thin sessions, fresh subagents); `f2945283` recommendation 9 (no owner `/clear`); `aefce4e0` recommendation 10 (test-authoring rule); `3bd2360c` a test cleanup; `d718fdb7` `docs/releases.md`; then this record.
-- Not yet merged: `origin/dev` moved to `d21838c3` during the work; the worker merges it before `make verify`.
+- Commits, one or more per recommendation, in this order: `5950682a` change documents; `f3e7acaa` recommendation 1 (stamp and `pre-push` skip); `9126d1e1` recommendation 2 (Docker slot); `2a2d413b` recommendation 7 (docs-only profile, `AGENTS.md`); `aa3511cb` `make integrate`; `ba7c290e` recommendation 4 (`make record`); `4f9fdd61` recommendation 3 (conditional pass 3); `4424e155` protocol text for `make integrate`, the profiles, the stamp, and the slot; `f9c971db` recommendations 5 and 6 (context hook, thin sessions, fresh subagents); `f2945283` recommendation 9 (no owner `/clear`); `aefce4e0` recommendation 10 (test-authoring rule); `3bd2360c` a test cleanup; `d718fdb7` `docs/releases.md`; `ef246a1d` this record; `a7da856a` and `db7943dd` the coordinator decisions of 2026-10-27 (tested documentation excluded from the docs-only profile; the unpushed merge, the stamp limitation, and the context estimate recorded); `2e81f539` the review checklist saved as `checklist.json`.
+- Merges of `origin/dev`: `1cfe104f` (`6b68d6c7`, no conflict); `f93316de` (`14e1a46e`, a conflict in `docs/agent-task-protocol.md` resolved by taking `dev`'s coordinator step 1 and keeping this change's step 2; `dev` changed no requirement that the spec deltas modify); `f726edbf` (`579c227d`, no conflict). `make verify` ran on `f726edbf`.
 
 ## Environment
 
-macOS 26.6.2 (Darwin 25.6.0, x86_64), the coordinator's iMac; Node.js 24.22.1 and npm 12.2.1 through `nvm use`; git 2.33.0; GNU bash 3.2.57; Perl 5.34.1. No Docker was used for the checks of this record.
+macOS 26.6.2 (Darwin 25.6.0, x86_64), the coordinator's iMac; Node.js 24.22.1 and npm 12.2.1 through `nvm use`; git 2.33.0; GNU bash 3.2.57; Perl 5.34.1. Docker Desktop for `make verify`, in a slot the coordinator granted; the other checks used no Docker.
 
 ## Author self-check
 
@@ -46,10 +46,10 @@ macOS 26.6.2 (Darwin 25.6.0, x86_64), the coordinator's iMac; Node.js 24.22.1 an
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: not recorded; run `make record` with `LOG=<make verify log>`.
+- `make verify`: passed, profile full, tree `de5a07028782e9a60d937c93d94008248ea0114a`; tests 2403, pass 2400, fail 0, skipped 3; all files 99.34% lines, 92.28% branches, 99.03% functions.
 - `npm run openspec -- validate adopt-process-performance-recommendations --strict`: passed, `Change 'adopt-process-performance-recommendations' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 45 file(s); every pass summary file is valid: 25 file(s).`.
-- Spec diff against the merge base `10eeab69f9ca` with `origin/dev`: no change under `openspec/specs`.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 50 file(s); every pass summary file is valid: 30 file(s).`.
+- Spec diff against the merge base `579c227d5593` with `origin/dev`: no change under `openspec/specs`.
 - Review passes in `passes.jsonl`: none yet.
 <!-- make record: end -->
 
