@@ -220,6 +220,6 @@ export {
   type SlotRequestKind,
   type SlotSelection,
 } from './domain/slot-selection.js';
-export { REDACTED, SlotSecret } from './domain/slot-secret.js';
+export { SlotSecret } from './domain/slot-secret.js';
 export type { AccountSlots, SlotCredentials } from './ports/account-pool.js';
 export { ACCOUNT_SLOTS_CONFORMANCE, SLOT_CREDENTIALS_CONFORMANCE } from './ports/account-pool-conformance.js';

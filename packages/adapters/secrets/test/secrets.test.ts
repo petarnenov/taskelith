@@ -80,3 +80,30 @@ test('a child environment keeps no secret variable or value', () => {
     DATABASE_LINK: 'postgres://owner:p@ssword@db/taskelith',
   }), { PATH: '/usr/bin', HOME: '/home/w', TASKELITH_NATS_URL: 'nats://127.0.0.1:4222' });
 });
+
+// A subscription token shape that no rule knows (account pool section 7.4).
+const SLOT_TOKEN = 'q8Rz3vLmN2pXw7Kd';
+
+test('a revealed credential without a known prefix is redacted by value', () => {
+  assert.equal(redactSecrets(`harness said ${SLOT_TOKEN}`), `harness said ${SLOT_TOKEN}`, 'no shape matches it');
+  const output = `auth ${SLOT_TOKEN} failed;x${SLOT_TOKEN}y\n${SLOT_TOKEN}`;
+  assert.equal(redactSecrets(output, [SLOT_TOKEN]), `auth ${REDACTED} failed;x${REDACTED}y\n${REDACTED}`);
+  const worker = new NodeSecrets().issue('worker').secret;
+  assert.equal(redactSecrets(`${SLOT_TOKEN} ${worker}`, [SLOT_TOKEN]), `${REDACTED} ${REDACTED}`, 'shapes still apply');
+});
+
+test('a failure of a run is redacted by the value of its credentials', () => {
+  const failed = failure('internal', `harness exited: ${SLOT_TOKEN}`, { stderr: `token=${SLOT_TOKEN}x`, slot: 'slot-a' });
+  const redacted = redactFailure(failed, [SLOT_TOKEN]);
+  assert.deepEqual([redacted.message, redacted.details], [`harness exited: ${REDACTED}`, { stderr: `token=${REDACTED}x`, slot: 'slot-a' }]);
+});
+
+test('a credential inside another and an empty value leave nothing visible', () => {
+  const longer = `${SLOT_TOKEN}-tail`;
+  assert.equal(redactSecrets(`a ${longer} b ${SLOT_TOKEN}`, [SLOT_TOKEN, longer, '']), `a ${REDACTED} b ${REDACTED}`);
+  assert.equal(redactSecrets('plain text', ['']), 'plain text');
+});
+
+test('value redaction takes linear time on long runs', () => {
+  assertLinearOnRuns((text) => redactSecrets(text, ['ab', 'aba']), ['a', 'ab', 'aba']);
+});

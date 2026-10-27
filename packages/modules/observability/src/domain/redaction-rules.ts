@@ -1,6 +1,7 @@
 import { SECRET_PREFIXES } from '@taskelith/access';
+import { REDACTED } from '@taskelith/kernel';
 
-export const REDACTED = '[redacted]';
+export { REDACTED };
 
 // Rewrites the secrets of one kind in a text. Every rule takes linear time.
 export type TextRule = (text: string) => string;

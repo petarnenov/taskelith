@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { inspect } from 'node:util';
 import type { HarnessPluginId } from '@taskelith/execution';
-import { err, failure, ok, parseIdentifier, parseInstant, type Result } from '@taskelith/kernel';
+import { err, failure, ok, parseIdentifier, parseInstant, REDACTED, type Result } from '@taskelith/kernel';
 import type { ConformanceCase } from '@taskelith/sdlc';
 import {
   ACCOUNT_SLOTS_CONFORMANCE,
@@ -10,7 +10,6 @@ import {
   DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY,
   FIRST_SLOT_REVISION,
   NO_SLOT_POLICIES,
-  REDACTED,
   SLOT_COOLDOWN_DEFAULT_MINUTES,
   SLOT_CREDENTIALS_CONFORMANCE,
   SLOT_HEALTH,
@@ -30,6 +29,7 @@ import {
   type SlotCredentials,
   type SlotRequest,
 } from '@taskelith/scheduling';
+import * as scheduling from '@taskelith/scheduling';
 
 // The values the account pool contract fixes; a change here is a contract
 // change and needs the contract and the wire schemas updated with it.
@@ -68,6 +68,10 @@ test('a slot secret reveals its text only through reveal()', () => {
   assert.equal(String(made.value), REDACTED);
   assert.equal(JSON.stringify({ secret: made.value }), `{"secret":"${REDACTED}"}`);
   assert.equal(inspect({ secret: made.value }), `{ secret: ${REDACTED} }`);
+});
+
+test('the redaction text is the kernel\'s, not a second export', () => {
+  assert.ok(!('REDACTED' in scheduling));
 });
 
 function identifier<Kind extends string>(kind: Kind, text: string) {

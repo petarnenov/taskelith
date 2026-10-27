@@ -17,11 +17,11 @@ export interface AccountSlots {
   replace(slot: AccountSlot, expectedRevision: number): Promise<Result<void>>;
 }
 
-// Encrypted at rest with a key kept outside the slot store; not part of
-// CapacityTransaction (contract sections 6.2 and 7).
+// Subscription tokens, encrypted with a key in the control-plane/ namespace;
+// not part of CapacityTransaction (contract sections 1, 6.2, and 7.1).
 export interface SlotCredentials {
   store(slotId: ProviderCredentialId, secret: SlotSecret): Promise<void>;
-  // Only for delivery to the run that reserved the slot (contract section 7).
+  // Checks nothing: the delivery checks the reservation first (section 7).
   reveal(slotId: ProviderCredentialId): Promise<Result<SlotSecret>>;
   // Succeeds for a missing credential, so that a retry is safe.
   destroy(slotId: ProviderCredentialId): Promise<void>;

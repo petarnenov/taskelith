@@ -14,4 +14,5 @@ export {
 export { FAILURE_CODES, failure, isFailureCode, type Failure, type FailureCode } from './failure.js';
 export { MAX_IDENTIFIER_LENGTH, parseIdentifier, type Identifier } from './identifier.js';
 export { instantFromEpochMilliseconds, parseInstant, type Instant } from './instant.js';
+export { REDACTED } from './redacted.js';
 export { err, ok, type Err, type Ok, type Result } from './result.js';
