@@ -163,4 +163,14 @@ These 11 findings are recorded in `findings.jsonl`, L8 as `deferred` and the oth
 - The scenarios run on a test-side composition against the `make` services, not on the Compose installation, with scaled worker timers and the process-group launch host; the Linux cgroup supervisor and macOS adoption are not exercised.
 - The unauthorized start and the epoch advance are test-side writes; no G2 product path writes either.
 - Duplicate delivery is out of scope; the coordinator decided it stays with 24b. It appears here only as the redelivered cancellation of e and the redelivered observations of the database partitions.
-- Remaining gates: integration by the coordinator, and the archive. Merged with `9dc068a`, and no longer gates of this change: the B1 and B5 fixes, D1, and the B6 follow-up, whose `fix-control-plane-api-keep-alive-race` addresses the `ECONNRESET` above and the "the control plane did not answer" failure of `apps/control-plane/test/control-plane-api.integration.test.ts`. Not covered by B6 and not seen again after the merge: the start timeout of scenario e.
+- Remaining gates: Integration into dev by the coordinator (single pull request). Merged with `9dc068a`, and no longer gates of this change: the B1 and B5 fixes, D1, and the B6 follow-up, whose `fix-control-plane-api-keep-alive-race` addresses the `ECONNRESET` above and the "the control plane did not answer" failure of `apps/control-plane/test/control-plane-api.integration.test.ts`. Not covered by B6 and not seen again after the merge: the start timeout of scenario e.
+
+## Archive checks
+
+Worker step 7, run after review pass 2 and its unreviewed Low fixes. The checked state is the tree of the archive commit: the working tree these checks ran on after `npm run openspec -- archive run-g2-partition-and-races --yes` (base `d0c48ef`), which added 10 requirements to `g2-failure-scenarios`. `origin/dev` was last merged at `5c60c15` (`be9bacf`); a `git fetch origin` after the checks showed `origin/dev` at `fe64386` (#325), not merged here.
+
+- `npm run openspec -- validate --all --strict --no-interactive`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: `change/2026-10-27-run-g2-partition-and-races` passed. The command as a whole reports 163 passed and 13 failed, all of the failures in older archived changes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `5c60c15`): additions only, 86 lines in `openspec/specs/g2-failure-scenarios/spec.md`: the 10 requirements of this change's delta, from "Worker broker partition" to "Stale recovery epoch".
+- The moved `findings.jsonl` exists with 17 findings: pass 1 with 10 `fixed` and 1 `deferred` (L8), pass 2 with 6 `fixed-unreviewed`. `make findings ARGS="validate"` passed.
+- `make verify` passed: 2027 tests, 1982 passed, 0 failed, 45 skipped, 0 todo, 0 cancelled; coverage 99.22 % lines, 92.07 % branches, 98.85 % functions; every findings file valid; strict OpenSpec validation 69 passed, 0 failed; no active change to archive in the dry run; package verification passed.
