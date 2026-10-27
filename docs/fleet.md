@@ -9,7 +9,6 @@ Status: the roster of named agent sessions that develop Taskelith and the rules 
 | Niki | Coordinator | The owner's 2020 Intel iMac (macOS x86_64) | |
 | Pepi | Worker | The same iMac | |
 | Desi | Worker | The same iMac | Owner rule: every UI-related task goes to Desi. |
-| Maki | Worker | Another machine (macOS arm64) | |
 | Zaki | Worker | Another machine (Linux) | |
 | Liki | Worker | Another machine (Linux) | |
 

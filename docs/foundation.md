@@ -1,6 +1,6 @@
 # Foundation status
 
-As of 2026-10-25. This is a readiness ledger, not evidence that the architecture is implemented. **G1 is closed** on `dev` ([ADR 0010](decisions/0010-g1-closure.md)); see [G1 status](#g1-status). **G0 is closed** on `dev` by the owner's decision ([ADR 0007](decisions/0007-g0-closure.md)): its exit evidence was reproduced from a fresh clone, and the open work items below are deferred to named later gates.
+As of 2026-10-27. This is a readiness ledger, not evidence that the architecture is implemented. **G2 is closed** on `dev` ([ADR 0015](decisions/0015-g2-closure.md)); see [G2 status](#g2-status). **G1 is closed** on `dev` ([ADR 0010](decisions/0010-g1-closure.md)); see [G1 status](#g1-status). **G0 is closed** on `dev` by the owner's decision ([ADR 0007](decisions/0007-g0-closure.md)): its exit evidence was reproduced from a fresh clone, and the open work items below are deferred to named later gates.
 
 ## Established bootstrap
 
@@ -54,6 +54,40 @@ G1 delivered the kernel, the SDLC workflow model, gates, task admission, plugin 
 | Code-head identity for head-bound verification and review | G3 |
 | SpecKit admission evidence | G8 |
 
+## G2 status
+
+G2 delivered PostgreSQL state and outbox, NATS transport, installation bootstrap and enrollment, the worker journal, the per-execution supervisor on Linux and macOS, the control-plane API, launch authority, resource admission, the evidence store, the worker runtime, execution reconciliation, observability signals, the minimal local installation, and the Linux harness qualification in the worker image ([G2 work plan](g2-plan.md), items 1 to 26). Its exit evidence was reproduced from a fresh clone of `dev` at `bd6108d4` on 2026-10-27 (change `close-g2`; [ADR 0015](decisions/0015-g2-closure.md) decision 4). Follow-ups resolved before the closure, each with the limits ADR 0015 decision 5 records: the flaky fair-order test (#331), the platform probe file-system label (#335), the fair-order rotation (#336 to #338), the logger redaction rules (#339), the relaunch back-off after a launch fails before W2 (#341), and the safe-to-retry rule (#342). G2 is closed ([ADR 0015](decisions/0015-g2-closure.md)), accepted by the owner on 2026-10-27; G3 is next, and its item 0 runs first ([G3 work plan](g3-plan.md)). Each gate, owner, or disposition below that no record named was the author's assignment and is owner-confirmed at the acceptance of ADR 0015.
+
+| Matrix entry | G2 native acceptance |
+| --- | --- |
+| `macos-26-arm64` | 25b `run-g2-native-acceptance-arm64`: no row fully accepted; process ownership failed on D1 (15 crash windows passed, 11 failed), re-run after the fix deferred to G3 by the owner; the cancellation and connectivity parts left to 24c deferred to G3; open parts in ADR 0015 decision 3 |
+| `linux-ubuntu-24.04-arm64` | 25b, under Docker Desktop: no row fully accepted; the cancellation and connectivity parts left to 24c deferred to G3; open parts in ADR 0015 decision 3 |
+| `macos-26-x86_64` | 25c `run-g2-native-acceptance-x86-64`: every proof passed; process ownership and journal and storage met in their G2 part; the cancellation and connectivity parts left to 24c deferred to G3; no row fully accepted |
+| `linux-ubuntu-24.04-x86_64` | 25c under Docker Desktop and `run-g2-native-acceptance-linux-host` on a native Ubuntu 26.04.1 host: every proof passed; journal and storage met in its G2 part; the cancellation and connectivity parts left to 24c deferred to G3; no row fully accepted; the hosted-runner check stays open |
+
+| Deferred item | Gate |
+| --- | --- |
+| Delivery of rotated worker credentials; TLS and the installation certificate authority | G3 item 26 |
+| Writers that invalidate launches; re-admission and a reconciliation queue surface; evidence retirement entry and per-project download authorization; worker self-check admission (G3 item 27) | G3 |
+| Harness user-namespace sandboxes under the seccomp profile; model-calling harness scenarios on Linux | G3 item 35 (Claude Code), G4 (Codex) |
+| G3 groundwork re-review against G2 as built | G3 item 0, before any other G3 item |
+| Restore quarantine, with stale-epoch observation payloads and restored journals with a rolled-back snapshot counter | G6 |
+| Provisional operational-target values | G6 |
+| macOS journal durability (`F_FULLFSYNC`), service account, launchd, reboot, drain, sleep and wake; Linux reboot, host supervisor, and drain | G6 |
+| Maximum offline duration of a running execution; more than 8 unconfirmed sealed executions; per-execution seccomp filter | G6 |
+| PostgreSQL failover, pool sizing, and expand/contract migrations | G6–G7 |
+| Image package inventories and vulnerability scans | G8 |
+| macOS arm64 process ownership re-run after the D1 fix, on the MacBook Air | G3 (owner's decision, 2026-10-27) |
+| Cancellation race g (an adopting macOS supervisor that ignores a cancel) and the cancellation and connectivity parts that 25b, 25c, and the Linux-host run leave to 24c on all four entries; 24c's records come from the test-side process-group launch host on Linux x64, not the cgroup supervisor or a native worker | G3 (owner-confirmed at acceptance, 2026-10-27) |
+| Placement back-off that preserves the project rotation (`placement-backoff-preserves-rotation`) | Non-blocking follow-up after G2, contract-first, owned by Liki (coordinator's decision, 2026-10-27); landed with #344 (merge `21f399a5`, archive `2026-10-27-placement-backoff-preserves-rotation`); no gate |
+| AppArmor and SELinux confinement of the worker (`apparmor=unconfined`) | G6 (owner-confirmed at acceptance, 2026-10-27) |
+| Linux composed crash windows and duplicate delivery beyond one x86_64 host and the test image; supplementary groups of an execution | Before Linux worker support is claimed (owner-confirmed at acceptance, 2026-10-27) |
+| In-memory placement rotation cursor | Non-blocking follow-up without a G2 gate, owned by the coordinator (coordinator's decision, 2026-10-27); keeping it in memory is owner-confirmed at acceptance, 2026-10-27 |
+| `make native-acceptance` without the Linux crash windows | Non-blocking follow-up without a G2 gate, owned by Zaki (coordinator's decision, 2026-10-27); landed with #345 as `wire-linux-crash-windows-into-native-acceptance` (merge `5f915ad7`, archive `2026-10-27-wire-linux-crash-windows-into-native-acceptance`); the arm64 Linux entry is not covered |
+| Hosted-runner Linux x86_64 check; multi-architecture `make verify-linux-cgroup` | Non-blocking follow-ups without a G2 gate, owned by the coordinator (coordinator's decision, 2026-10-27); the hosted-runner check left open (owner-confirmed at acceptance, 2026-10-27) |
+| Worker image reproducibility | Non-blocking follow-up owned by Zaki as change `make-worker-image-reproducible` (coordinator's decision, 2026-10-27); no G2 gate (owner-confirmed at acceptance, 2026-10-27) |
+| Archived record links and file-system labels (`check-change-record-links`) | Non-blocking follow-up owned by Pepi (coordinator's decision, 2026-10-27); landed with #346 (merge `8aa75985`, archive `2026-10-27-check-change-record-links`): the record link check and its baseline; archived records unchanged; their 332 broken links and the `ext2/ext3` labels are an accepted limit (coordinator's decision, 2026-10-27): the baseline only shrinks and the coordinator owns its upkeep; no G2 gate |
+
 ## Later phases
 
-G1 introduced domain transitions and framework-neutral SDLC contracts and is closed ([ADR 0010](decisions/0010-g1-closure.md)). G2 adds durable execution. Its work items and decisions are in the [G2 work plan](g2-plan.md), and it starts when the G1 closure merges into `dev`. G3 adds the web product and first real agent. Both-framework replacement, learning, and fleet validation remain later gates. See [the delivery sequence](architecture.md#delivery-sequence). G0 is closed ([ADR 0007](decisions/0007-g0-closure.md)); runtime readiness is not claimed here.
+G1 introduced domain transitions and framework-neutral SDLC contracts and is closed ([ADR 0010](decisions/0010-g1-closure.md)). G2 added durable execution and is closed ([ADR 0015](decisions/0015-g2-closure.md)); its work items and decisions are in the [G2 work plan](g2-plan.md). G3 adds the web product and first real agent; its work items are in the [G3 work plan](g3-plan.md), and its item 0 re-reviews the merged G3 groundwork against G2 as built before any other G3 item starts. Both-framework replacement, learning, and fleet validation remain later gates. See [the delivery sequence](architecture.md#delivery-sequence). G0 is closed ([ADR 0007](decisions/0007-g0-closure.md)); runtime readiness is not claimed here.
