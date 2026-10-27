@@ -4,12 +4,12 @@
 
 ## What Changes
 
-- **Spec.** The `local-installation` requirement "Pinned image inputs" requires that two builds of the worker image from one commit on one Docker engine, with or without the build cache, give the same image ID, and gains the scenario "Two builds of one commit". The added requirement "Opt-in reproducibility check" defines `make verify-worker-image-reproducible` and the static check of `make verify`.
-- **Docs.** `docs/local-installation.md` describes the fixed dates and the new target.
-- **Dockerfile.** Every stage of the worker image declares `SOURCE_DATE_EPOCH`, and each of its `RUN` steps clamps the file times it changes to it. Node.js is unpacked in its download stage and copied into the images, so the tarball no longer ships as a layer.
-- **Scripts.** `scripts/installation.sh` passes the commit time of the built revision as `SOURCE_DATE_EPOCH` and gains the command `check-reproducible`; `scripts/harness-qualification.sh` passes it too, because the shared stages now require it.
+- **Spec.** The `local-installation` requirement "Pinned image inputs" requires that two builds of the worker image from one commit without the build cache, on one Docker engine with the classic image store, give the same image ID, and gains the scenario "Two builds of one commit". The added requirement "Opt-in reproducibility check" defines `make verify-worker-image-reproducible` and the static check of `make verify`.
+- **Docs.** `docs/local-installation.md` describes the fixed dates, the limit to builds without the cache, and the new target.
+- **Dockerfile.** Every stage the worker image is built or copies from declares `SOURCE_DATE_EPOCH` where it runs commands, and each of its `RUN` steps ends with a clamp of the file times it writes to it. Node.js is unpacked in its download stage and copied into the images, so the tarball no longer ships as a layer.
+- **Scripts.** `scripts/installation.sh` resolves the built revision once to a commit ID (`HEAD` or the `git stash create` commit), reads its commit time once, passes it as `SOURCE_DATE_EPOCH`, and stops before any build when either step fails. It gains the command `check-reproducible`, which builds that one commit twice, reports a failed removal of its images, and keeps the status of a failed build. `scripts/harness-qualification.sh` reads the commit time once and passes it too, because the shared stages now require it.
 - **Make.** The opt-in target `make verify-worker-image-reproducible`.
-- **Tests.** Script tests of the epoch, the check's pass and failure, and the harness build; a Dockerfile test that every `RUN` of the worker image clamps its file times.
+- **Tests.** Script tests of the epoch, of a failed stash and a failed commit-time read, of `HEAD` moving between the check's builds, of the check's pass and failure, of failed image removal, and of the harness build; Dockerfile tests that derive the stages of the worker image and require the clamp at the end of each of their `RUN` steps.
 
 No new tool, dependency, base image, registry, or publishing step. No contract, schema, wire message, or published package changes.
 
