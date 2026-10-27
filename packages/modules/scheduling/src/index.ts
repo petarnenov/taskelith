@@ -127,11 +127,13 @@ export {
   UNACKNOWLEDGED_SUPERSESSION_BOUND_MILLISECONDS,
 } from './domain/capacity-limits.js';
 export {
+  FLEET_REASONS,
   REJECTING_REASONS,
   STANDING_REASONS,
   WAITING_REASONS,
   WORKER_REASONS,
   isWaitingReason,
+  lacksFleetCapacity,
   reasonOutcome,
   triesNextCandidate,
   type CapacityReason,

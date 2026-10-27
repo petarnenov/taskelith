@@ -16,4 +16,5 @@
 ## 4. Verify
 
 - [x] 4.1 Run `npm run openspec -- validate advance-placement-rotation-cursor --strict`, `npm run verify:comments`, `make findings ARGS="validate"`, and `make verify`, and record them in `verification.md`.
-- [ ] 4.2 Independent review pass 1 and record it in `verification.md`.
+- [x] 4.2 Review pass 1: a full fleet keeps the cursor (H1), stronger outage and no-candidate tests (M1, L1, L2), `#offer` returns the cursor (L3), contract, port comment, and spec wording (L4 to L6).
+- [ ] 4.3 Independent review pass 2 and record it in `verification.md`.

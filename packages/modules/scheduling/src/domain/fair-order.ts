@@ -26,19 +26,24 @@ export function fairWaitingOrder<Item extends string>(
     || wrapped(left) - wrapped(right) || byCodeUnits(left.projectId, right.projectId) || byWaitingSince(left, right));
 }
 
-// Contract section 13: the next read starts after the project that last
-// received capacity, else after the last one offered, else where it was.
+// Contract section 13: after the project that last received capacity, else
+// the last one offered before the fleet ran out of it, else where it was.
 export class RotationCursor {
   readonly #start: ProjectId | undefined;
   #lastOffered: ProjectId | undefined;
   #lastPlaced: ProjectId | undefined;
+  #capacityRanOut = false;
 
   constructor(start: ProjectId | undefined) {
     this.#start = start;
   }
 
   offered(projectId: ProjectId): void {
-    this.#lastOffered = projectId;
+    if (!this.#capacityRanOut) this.#lastOffered = projectId;
+  }
+
+  ranOutOfCapacity(): void {
+    this.#capacityRanOut = true;
   }
 
   placed(projectId: ProjectId): void {

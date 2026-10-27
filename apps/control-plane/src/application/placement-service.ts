@@ -13,6 +13,7 @@ import {
   DEFAULT_ATTEMPT_REQUEST,
   RotationCursor,
   fairWaitingOrder,
+  lacksFleetCapacity,
   placeInTransaction,
   placementBackoff,
   triesNextCandidate,
@@ -83,19 +84,20 @@ export class PlacementService {
       for (const { item: taskId } of order) this.#settle(taskId, NO_CANDIDATE);
       return ok({ waiting: waiting.length, placed: 0 });
     }
-    const cursor = new RotationCursor(after);
-    const offered = await this.#offer(order, cursor);
-    this.#after = cursor.next;
-    return offered.ok ? ok({ waiting: waiting.length, placed: offered.value }) : offered;
+    const { placed, next } = await this.#offer(order, after);
+    this.#after = next;
+    return placed.ok ? ok({ waiting: waiting.length, placed: placed.value }) : placed;
   }
 
-  // Offers each task until the store fails, recording each offer that ended
-  // and each placement in `cursor`; answers the number placed.
-  async #offer(order: readonly WaitingPlacement<TaskId>[], cursor: RotationCursor): Promise<Result<number>> {
+  // Offers each task until the store fails; answers the number placed, or
+  // the outage, and the rotation cursor for the next read.
+  async #offer(order: readonly WaitingPlacement<TaskId>[], after: ProjectId | undefined): Promise<Offers> {
+    const cursor = new RotationCursor(after);
     let placed = 0;
     for (const { item: taskId, projectId } of order) {
       const outcome = await this.#store.transaction((tx) => placeTask(tx, taskId, this.#retryBackoff));
-      if (!outcome.ok && isOutage(outcome.error.code)) return outcome;
+      if (!outcome.ok && isOutage(outcome.error.code)) return { placed: outcome, next: cursor.next };
+      if (!outcome.ok && lacksCapacity(outcome.error)) cursor.ranOutOfCapacity();
       cursor.offered(projectId);
       if (outcome.ok && outcome.value.kind === 'placed') {
         cursor.placed(projectId);
@@ -103,7 +105,7 @@ export class PlacementService {
       }
       this.#settle(taskId, outcome);
     }
-    return ok(placed);
+    return { placed: ok(placed), next: cursor.next };
   }
 
   // A retry that backs off is not read until due; a task placed or no
@@ -145,9 +147,15 @@ async function stillWaitingAmong(queue: PlacementQueue, taskIds: readonly TaskId
   return waiting;
 }
 
+interface Offers {
+  readonly placed: Result<number>;
+  readonly next: ProjectId | undefined;
+}
+
 const PASS = 'pass';
 const NOT_WAITING = 'not-waiting';
-const NO_CANDIDATE: Result<never> = err(failure('precondition-failed', 'no candidate worker exists', { reason: 'no-candidate' }));
+const NO_CANDIDATE_REASON = 'no-candidate';
+const NO_CANDIDATE: Result<never> = err(failure('precondition-failed', 'no candidate worker exists', { reason: NO_CANDIDATE_REASON }));
 
 // What a placement transaction committed: an assignment, the end of an
 // attempt that a rejecting reason refused, or nothing while a retry waits.
@@ -184,7 +192,7 @@ async function placeTask(tx: ControlPlaneTransaction, taskId: TaskId, retryBacko
   const last = reserved.value;
   if (last?.kind === 'placed') return ok(PLACED);
   if (last?.kind === 'rejected') return endRejectedAttempt(tx, claimed.value);
-  const reason = last?.reason ?? 'no-candidate';
+  const reason = last?.reason ?? NO_CANDIDATE_REASON;
   return err(failure('precondition-failed', `no candidate accepted task ${taskId}`, { task: taskId, reason }));
 }
 
@@ -262,6 +270,12 @@ function placementRequest(task: Task): Omit<PlacementRequest, 'workerId'> {
     providerCredentials: [],
     ...(retryOf === undefined ? {} : { automaticRetryOf: retryOf }),
   };
+}
+
+// Contract section 13: a decline that no task's own limit explains.
+function lacksCapacity(error: Failure): boolean {
+  const { reason } = error.details;
+  return reason === NO_CANDIDATE_REASON || (typeof reason === 'string' && lacksFleetCapacity(reason));
 }
 
 function noLongerWaits(error: Failure): boolean {

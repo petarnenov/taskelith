@@ -25,6 +25,9 @@ export const REJECTING_REASONS = Object.freeze([
 // Reasons about one worker: placement tries the next candidate on them.
 export const WORKER_REASONS = Object.freeze(['worker-not-eligible', 'worker-capacity-exhausted', 'control-not-enforceable'] as const);
 
+// Reasons that no task's own limit explains: the fleet has no room for it.
+export const FLEET_REASONS = Object.freeze(['quarantined', 'worker-not-eligible', 'worker-capacity-exhausted'] as const);
+
 export type WaitingReason = (typeof WAITING_REASONS)[number];
 export type RejectingReason = (typeof REJECTING_REASONS)[number];
 export type StandingReason = (typeof STANDING_REASONS)[number];
@@ -43,4 +46,9 @@ export function reasonOutcome(reason: CapacityReason): ReasonOutcome {
 
 export function triesNextCandidate(reason: CapacityReason): boolean {
   return (WORKER_REASONS as readonly string[]).includes(reason);
+}
+
+// Takes any reason text, since failure details carry the reason untyped.
+export function lacksFleetCapacity(reason: string): boolean {
+  return (FLEET_REASONS as readonly string[]).includes(reason);
 }
