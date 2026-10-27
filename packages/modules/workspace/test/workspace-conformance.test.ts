@@ -37,7 +37,8 @@ const SNAPSHOT = 'snapshots exactly the clean head tree, in bytes that depend on
 const REMOVE = 'removes only its own clean workspace, keeps a dirty one, and never a control record';
 const SWEEP = 'sweeps interrupted prepares and removals without following links, across a restart';
 const HAND_OFF = 'hands the checkout to the execution and takes it back without outside links';
-const GIT_LINK = 'refuses Git work on a checkout whose Git directory holds a link or is gone';
+const GIT_LINK = 'refuses Git work on a checkout whose Git directory holds a link, is gone, or is nested';
+const ONE_HAND_OFF = 'holds one handed-off workspace at a time where executions share a separate account';
 
 // Each defect of the double breaks the guarantees of the named cases.
 const DEFECTS: readonly [string, DoubleDefects, readonly string[]][] = [
@@ -58,6 +59,7 @@ const DEFECTS: readonly [string, DoubleDefects, readonly string[]][] = [
   ['runs Git on a handed-off checkout', { ignoresHandOff: true }, [HAND_OFF]],
   ['keeps links from outside when it reclaims', { keepsOutsideLinks: true }, [HAND_OFF]],
   ['follows a link in the Git directory', { followsGitLinks: true }, [GIT_LINK]],
+  ['hands off a second workspace', { handsOffBeyondOne: true }, [ONE_HAND_OFF]],
 ];
 
 for (const [name, defects, failing] of DEFECTS) {

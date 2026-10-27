@@ -51,6 +51,8 @@ export const WORKSPACE_FAILURE_REASONS = Object.freeze([
   'not-fast-forward',
   'read-only-workspace',
   'workspace-handed-off',
+  'other-workspace-handed-off',
+  'reclaim-failed',
   'unsafe-checkout',
 ] as const);
 

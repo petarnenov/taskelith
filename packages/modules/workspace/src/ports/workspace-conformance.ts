@@ -483,7 +483,6 @@ const HANDOFF: readonly ConformanceCase<WorkspaceFixture>[] = [
       // The kind and the credential are checked before the hand-off.
       const foreignPush = await provider.push({ attemptId: FIRST, credential: foreign, expectedRemoteHead: null });
       expectReason(problems, 'foreign push while handed off', foreignPush, 'forbidden', 'credential-out-of-scope');
-      await expectReadOnlyWhileHandedOff(problems, fixture, workspace.head);
       await fixture.writeFile(FIRST, fixture.trackedPath, 'agent\n');
       const writeOutside = await fixture.hardLinkOutside(FIRST, fixture.trackedPath);
       expectSuccess(problems, 'reclaim', await provider.reclaim(FIRST));
@@ -491,24 +490,49 @@ const HANDOFF: readonly ConformanceCase<WorkspaceFixture>[] = [
       await writeOutside('written from outside\n');
       expectSame(problems, 'outside write reaches the checkout', (await fixture.workspaceText(FIRST)).includes('written from outside'), false);
       await expectDirty(problems, fixture, FIRST, ['modified']);
+      await expectReadOnlyWhileHandedOff(problems, fixture, workspace.head);
       expectCode(problems, 'hand off an absent workspace', await provider.handOff(SECOND), 'not-found');
       expectCode(problems, 'reclaim an absent workspace', await provider.reclaim(SECOND), 'not-found');
       return problems;
     },
   },
   {
-    name: 'refuses Git work on a checkout whose Git directory holds a link or is gone',
+    name: 'refuses Git work on a checkout whose Git directory holds a link, is gone, or is nested',
     async check(fixture) {
       const problems: string[] = [];
       const before = await fixture.controlRecords();
+      const workspaces: Workspace[] = [];
+      for (const attemptId of [FIRST, SECOND, THIRD]) {
+        const workspace = await prepared(problems, fixture, { attemptId });
+        if (workspace === undefined) return problems;
+        workspaces.push(workspace);
+      }
+      await fixture.nestGitFile(THIRD, `${workspaces[0]!.workingDirectory}/.git`);
+      await fixture.linkInGitDirectory(FIRST);
+      await fixture.removeGitDirectory(SECOND);
+      for (const attemptId of [FIRST, SECOND, THIRD]) await expectUnsafeCheckout(problems, fixture, attemptId);
+      expectSame(problems, 'listed', await fixture.provider.list(), [FIRST, SECOND, THIRD]);
+      expectSame(problems, 'control records', await fixture.controlRecords(), before);
+      return problems;
+    },
+  },
+  {
+    name: 'holds one handed-off workspace at a time where executions share a separate account',
+    async check(fixture) {
+      const problems: string[] = [];
+      if (!fixture.separateExecutionIdentity) return problems;
+      const { provider } = fixture;
       for (const attemptId of [FIRST, SECOND]) {
         if ((await prepared(problems, fixture, { attemptId })) === undefined) return problems;
       }
-      await fixture.linkInGitDirectory(FIRST);
-      await fixture.removeGitDirectory(SECOND);
-      for (const attemptId of [FIRST, SECOND]) await expectUnsafeCheckout(problems, fixture, attemptId);
-      expectSame(problems, 'listed', await fixture.provider.list(), [FIRST, SECOND]);
-      expectSame(problems, 'control records', await fixture.controlRecords(), before);
+      expectSuccess(problems, 'hand off', await provider.handOff(FIRST));
+      expectSuccess(problems, 'hand off the same again', await provider.handOff(FIRST));
+      const second = await provider.handOff(SECOND);
+      expectReason(problems, 'second hand-off', second, 'precondition-failed', 'other-workspace-handed-off');
+      const restarted = await fixture.reopen().handOff(SECOND);
+      expectReason(problems, 'second hand-off after a restart', restarted, 'precondition-failed', 'other-workspace-handed-off');
+      expectSuccess(problems, 'reclaim', await provider.reclaim(FIRST));
+      expectSuccess(problems, 'hand off after the reclaim', await provider.handOff(SECOND));
       return problems;
     },
   },

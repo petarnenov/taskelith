@@ -143,6 +143,7 @@ export interface DoubleDefects {
   readonly ignoresHandOff?: boolean;
   readonly keepsOutsideLinks?: boolean;
   readonly followsGitLinks?: boolean;
+  readonly handsOffBeyondOne?: boolean;
 }
 
 export class TempDirWorkspaces implements WorkspaceProvider {
@@ -234,9 +235,19 @@ export class TempDirWorkspaces implements WorkspaceProvider {
   async handOff(attemptId: AttemptId): Promise<Result<void>> {
     const checkout = await this.checkoutOf(attemptId);
     if (!checkout.ok) return checkout;
+    if (!this.defects.handsOffBeyondOne && (await this.handedOffElsewhere(attemptId))) {
+      return workspaceFailure('precondition-failed', 'other-workspace-handed-off', 'another workspace is handed off');
+    }
     await writeFile(handOffRecord(checkout.value), '', { mode: WORKSPACE_MODES.handOffRecord });
     await chmod(checkout.value, WORKSPACE_MODES.checkoutHandedOff);
     return ok(undefined);
+  }
+
+  // The double models a worker whose executions share a separate account.
+  private async handedOffElsewhere(attemptId: AttemptId): Promise<boolean> {
+    const others = (await this.list()).filter((other) => other !== attemptId);
+    const records = others.map((other) => exists(join(this.root, other, WORKSPACE_LAYOUT.handOffRecord)));
+    return (await Promise.all(records)).includes(true);
   }
 
   // A real adapter runs the copy and the grant as the execution account.
@@ -257,17 +268,20 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     if (!this.defects.ignoresHandOff && (await handedOff(checkout.value))) {
       return workspaceFailure('precondition-failed', 'workspace-handed-off', `workspace ${attemptId} is handed off`);
     }
-    if (await this.unsafeGitDirectory(join(checkout.value, '.git'))) {
+    if (await this.unsafeGitDirectory(checkout.value)) {
       return workspaceFailure('precondition-failed', 'unsafe-checkout', `the Git directory of ${attemptId} is not safe`);
     }
     return checkout;
   }
 
-  // A `.git` that is missing, no directory, or holds a link or redirection.
-  private async unsafeGitDirectory(gitDirectory: string): Promise<boolean> {
+  // A `.git` that is missing, no directory, holds a link or redirection, or
+  // has another `.git` below the top, such as a submodule's gitfile.
+  private async unsafeGitDirectory(checkout: string): Promise<boolean> {
+    const gitDirectory = join(checkout, '.git');
     const status = await lstat(gitDirectory).catch(() => undefined);
     if (status === undefined || !status.isDirectory()) return true;
-    return !this.defects.followsGitLinks && holdsRedirection(gitDirectory);
+    if (this.defects.followsGitLinks) return false;
+    return (await holdsRedirection(gitDirectory)) || holdsNestedGitEntry(checkout);
   }
 
   async inspect(attemptId: AttemptId): Promise<Result<WorkspaceStatus>> {
@@ -375,8 +389,9 @@ export class TempDirWorkspaces implements WorkspaceProvider {
   }
 
   private async checkout(directory: string, state: LocalState): Promise<void> {
-    await mkdir(join(directory, '.git'), { recursive: true });
+    await mkdir(directory, { mode: WORKSPACE_MODES.checkoutReclaimed });
     await chmod(directory, WORKSPACE_MODES.checkoutReclaimed);
+    await mkdir(join(directory, '.git'));
     for (const [path, entry] of Object.entries(this.service.entries(state.commit))) await writeEntry(join(directory, path), entry);
     await writeState(directory, state);
   }
@@ -430,8 +445,24 @@ async function holdsRedirection(directory: string): Promise<boolean> {
   return false;
 }
 
-// Copies every file with another hard link and lets the worker's group read
-// and write each entry, never following a link.
+async function holdsNestedGitEntry(checkout: string): Promise<boolean> {
+  for (const entry of await readdir(checkout, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name === '.git') continue;
+    if (await holdsGitEntry(join(checkout, entry.name))) return true;
+  }
+  return false;
+}
+
+async function holdsGitEntry(directory: string): Promise<boolean> {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    if (entry.name === '.git') return true;
+    if (entry.isDirectory() && (await holdsGitEntry(join(directory, entry.name)))) return true;
+  }
+  return false;
+}
+
+// Copies every regular file with another hard link and sets exact shared
+// modes on each entry, never following a link or opening a special file.
 async function normalize(directory: string, copiesLinked: boolean): Promise<void> {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
@@ -444,7 +475,7 @@ async function normalize(directory: string, copiesLinked: boolean): Promise<void
     const status = await lstat(path);
     const mode = sharedMode(status.mode);
     await chmod(path, mode);
-    if (copiesLinked && status.nlink > 1) await replaceWithCopy(path, mode);
+    if (copiesLinked && status.isFile() && status.nlink > 1) await replaceWithCopy(path, mode);
   }
 }
 
@@ -562,6 +593,7 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
     baseTree: BASE_TREE,
     trackedPath: TRACKED,
     ignoredPath: IGNORED,
+    separateExecutionIdentity: true,
     reopen: make,
     writeFile: (attemptId, path, text) => write(attemptId, path, textFile(text)),
     writeBytes: (attemptId, path, content) => write(attemptId, path, file(content)),
@@ -592,6 +624,11 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
       await symlink(join(dataRoot, 'worker/journal'), join(await checkout(attemptId), '.git', 'objects'));
     },
     removeGitDirectory: async (attemptId) => rm(join(await checkout(attemptId), '.git'), { recursive: true }),
+    nestGitFile: async (attemptId, gitDirectory) => {
+      const nested = join(await checkout(attemptId), 'nested');
+      await mkdir(nested);
+      await writeFile(join(nested, '.git'), `gitdir: ${gitDirectory}\n`);
+    },
     beginOperation: async (attemptId) => writeFile(join(await checkout(attemptId), OPERATION_FILE), 'merge'),
     switchBranch: async (attemptId, branch) => update(attemptId, (current) => ({ ...current, branch })),
     remoteHead: async (branch) => service.branches.get(branch),

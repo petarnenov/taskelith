@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
-import { chmod, link, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { chmod, link, lstat, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
+import { promisify } from 'node:util';
 import { parseIdentifier, type Result } from '@taskelith/kernel';
 import type { AttemptId } from '@taskelith/execution';
 import type { ProjectId, TaskId } from '@taskelith/sdlc';
@@ -49,6 +51,14 @@ test('a prepared workspace keeps its record closed and its checkout reclaimed', 
   assert.equal(await modeOf(attempt), WORKSPACE_MODES.attempt);
   assert.equal(await modeOf(join(attempt, WORKSPACE_LAYOUT.metadata)), WORKSPACE_MODES.metadata);
   assert.equal(await modeOf(checkout), WORKSPACE_MODES.checkoutReclaimed);
+}));
+
+// Linux directories inherit the set-group-ID bit; macOS ones do not.
+const onLinux = { skip: process.platform !== 'linux' };
+
+test('the clone writes into a checkout that is set-group-ID already', onLinux, () => withFixture(async (fixture, provider) => {
+  const checkout = must(await provider.prepare(request(fixture))).workingDirectory;
+  assert.equal((await modeOf(join(checkout, '.git'))) & 0o2000, 0o2000);
 }));
 
 test('a hand-off opens the checkout and a reclaim gives the group what the agent wrote', () => withFixture(async (fixture, provider) => {
@@ -128,6 +138,21 @@ test('a reclaim never writes through or over an entry the agent named like its c
     assert.equal(await readFile(join(checkout, 'b.txt.reclaim'), 'utf8'), 'linked\n');
     assert.equal(await readFile(join(checkout, 'c.txt.reclaim'), 'utf8'), 'project\n');
     for (const name of ['a.txt', 'b.txt', 'c.txt']) assert.equal(await readFile(join(checkout, name), 'utf8'), `${name[0]}\n`);
+  } finally {
+    await rm(outside, { recursive: true, force: true });
+  }
+}));
+
+test('a reclaim never opens a hard-linked special file', () => withFixture(async (fixture, provider) => {
+  const checkout = must(await provider.prepare(request(fixture))).workingDirectory;
+  must(await provider.handOff(FIRST));
+  const outside = await mkdtemp(join(tmpdir(), 'taskelith-outside-'));
+  try {
+    await promisify(execFile)('mkfifo', [join(checkout, 'pipe')]);
+    await link(join(checkout, 'pipe'), join(outside, 'pipe'));
+    must(await provider.reclaim(FIRST));
+    assert.equal((await lstat(join(checkout, 'pipe'))).isFIFO(), true);
+    assert.equal(await modeOf(join(checkout, 'pipe')), 0o660);
   } finally {
     await rm(outside, { recursive: true, force: true });
   }
