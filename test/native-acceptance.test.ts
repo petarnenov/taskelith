@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import { ACCEPTANCE_VARIABLE, type ScenarioRun } from '@taskelith/testing';
 import {
   AcceptanceFailure,
   acceptanceContext,
   dfMountPoint,
+  FILE_SYSTEM_PROBE,
   failureText,
   diskutilField,
   linuxPlatform,
@@ -50,7 +55,7 @@ const LINUX_ANSWERS = {
   'docker info --format {{.OperatingSystem}}|{{.KernelVersion}}|{{.Architecture}}|{{.ServerVersion}}|{{.Driver}}':
     'Docker Desktop|6.12.76-linuxkit|aarch64|29.6.1|overlay2\n',
   'docker run --rm ubuntu:24.04@sha256:68ee cat /etc/os-release': 'NAME="Ubuntu"\nPRETTY_NAME="Ubuntu 24.04.3 LTS"\n',
-  'docker run --rm --volume /probe ubuntu:24.04@sha256:68ee stat -f -c %T /probe': 'ext2/ext3\n',
+  [`docker run --rm --volume /probe ubuntu:24.04@sha256:68ee sh -c ${FILE_SYSTEM_PROBE} sh /probe`]: 'ext4\n',
   'docker run --rm --entrypoint node taskelith-linux-cgroup:test -v': 'v24.22.1\n',
 };
 
@@ -82,11 +87,34 @@ test('the Linux entry is the image release under the engine architecture', () =>
       os: 'Ubuntu 24.04.3 LTS in containers of the pinned base on Docker Desktop',
       architecture: 'arm64',
       kernel: 'Linux 6.12.76-linuxkit',
-      filesystem: 'ext2/ext3 on Docker volumes (the worker data root and the test container\'s temporary directory), storage driver overlay2',
+      filesystem: 'ext4 on Docker volumes (the worker data root and the test container\'s temporary directory), storage driver overlay2',
       node: 'v24.22.1',
       docker: 'Docker Desktop 4.50.0 (210000) 29.6.1; Docker Compose 5.2.0',
     },
   });
+});
+
+// Runs the probe with stub findmnt and stat programs as its only commands.
+function probeWith(programs: Record<string, string>): string {
+  const directory = mkdtempSync(join(tmpdir(), 'taskelith-probe-'));
+  try {
+    for (const [name, body] of Object.entries(programs)) {
+      writeFileSync(join(directory, name), `#!/bin/sh\n${body}\n`);
+      chmodSync(join(directory, name), 0o755);
+    }
+    return execFileSync('/bin/sh', ['-c', FILE_SYSTEM_PROBE, 'sh', '/probe'],
+      { encoding: 'utf8', env: { PATH: directory } }).trim();
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+test('the file system probe names the mount type and falls back to stat', () => {
+  const stat = 'echo "stat $*"';
+  assert.equal(probeWith({ findmnt: 'echo "findmnt $*"', stat }),
+    'findmnt -no FSTYPE --target /probe');
+  assert.equal(probeWith({ findmnt: 'exit 1', stat }), 'stat -f -c %T /probe');
+  assert.equal(probeWith({ stat }), 'stat -f -c %T /probe');
 });
 
 test('another Linux release or architecture is not a matrix entry', () => {

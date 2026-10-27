@@ -11,6 +11,9 @@ START_SECONDS=60
 REFUSAL_SECONDS=60
 RESTART_SECONDS=60
 RECONCILIATION_SECONDS=120
+# The type of the mount holding $1, as FILE_SYSTEM_PROBE of
+# native-acceptance.ts; stat -f alone names ext4 "ext2/ext3".
+FILE_SYSTEM_PROBE='findmnt -no FSTYPE --target "$1" 2>/dev/null || stat -f -c %T "$1"'
 
 scenario_tool() {
   node --experimental-strip-types "$repository/scripts/installation-scenario.ts" "$@"
@@ -475,7 +478,7 @@ platform() {
   local os kernel architecture version driver filesystem image
   IFS='|' read -r os kernel architecture version driver <<< "$(docker info --format \
     '{{.OperatingSystem}}|{{.KernelVersion}}|{{.Architecture}}|{{.ServerVersion}}|{{.Driver}}')"
-  filesystem="$(worker_exec stat -f -c %T /var/lib/taskelith)"
+  filesystem="$(worker_exec sh -c "$FILE_SYSTEM_PROBE" sh /var/lib/taskelith)"
   image="$(docker image inspect --format '{{.Id}}' "$worker_image")"
   echo "OS $os; architecture $architecture; kernel $kernel; file system $filesystem" \
     "(worker data root), storage driver $driver; Docker engine $version;" \
@@ -630,7 +633,7 @@ volume_of() {
   if command -v diskutil >/dev/null; then
     kind="$(diskutil info "$mount_point" | sed -n 's/^ *File System Personality: *//p')"
   else
-    kind="$(stat -f -c %T "$mount_point")"
+    kind="$(sh -c "$FILE_SYSTEM_PROBE" sh "$mount_point")"
   fi
   echo "$kind at '$mount_point' with $(df -Pk "$1" | tail -n 1 | awk '{ print int($4 / 1048576) }') GiB free"
 }
