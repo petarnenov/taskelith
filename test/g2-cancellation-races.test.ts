@@ -219,7 +219,7 @@ describe('cancellation races', SCENARIO_HOST, () => {
     await recordScenario({ scenario: 'cancel-crash-before-ack', seed: SEED }, () => withInstallation({ postgres: 'direct' }, async (installation) => {
       const name = 'cancel-crash';
       const crashing = await CrashingWorker.start({
-        apiUrl: installation.apiUrl.href, base: installation.base, nats: installation.nats.href, name, seed: SEED,
+        apiUrl: installation.apiUrl.href, installationCa: installation.installationCa, base: installation.base, nats: installation.nats.href, name, seed: SEED,
         enrollmentToken: await installation.enrollmentToken(), runMilliseconds: HELD_RUN, commandType: CANCELLATION,
       });
       let worker: ScenarioWorker | undefined;

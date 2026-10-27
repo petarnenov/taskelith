@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { connect, type PeerCertificate } from 'node:tls';
 import { after, before, describe, test } from 'node:test';
 import pg from 'pg';
 import { createAccount } from '@nats-io/nkeys';
+import { X509CertificateIssuer } from '@taskelith/certificates';
 import { checkHttpSchema, checkMessageSchema } from '@taskelith/contracts';
 import {
   adminMain,
@@ -33,10 +35,11 @@ import {
 import { openAttempt, type AttemptId, type WorkerId } from '@taskelith/execution';
 import { PostgresDatabase } from '@taskelith/postgres';
 import { createAssignment, parseResourceRequest } from '@taskelith/scheduling';
-import { ok } from '@taskelith/kernel';
+import { ok, parseInstant } from '@taskelith/kernel';
 import { InMemoryLogSink } from '@taskelith/observability';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
-import { integrationEndpoint, integrationSecret, value } from '@taskelith/testing';
+import { authorityValidity, serverCertificateValidity } from '@taskelith/fleet';
+import { failed, integrationEndpoint, integrationSecret, integrationSecretPath, trustCertificateAuthority, value } from '@taskelith/testing';
 import { productionDependencies, workerMain } from '@taskelith/worker';
 
 const POSTGRES = integrationEndpoint('TASKELITH_POSTGRES_URL');
@@ -77,7 +80,10 @@ const system = value(await connectSystemAccount({ server: NATS, creds: integrati
 value(await new NatsBrokerCredentials(authority, system.connection).publishRevocations([]));
 await system.close();
 
-const ENVIRONMENT = { TASKELITH_DATA_DIR: dataRoot, TASKELITH_POSTGRES_URL: database.href, TASKELITH_NATS_URL: NATS.href };
+const ENVIRONMENT = {
+  TASKELITH_DATA_DIR: dataRoot, TASKELITH_POSTGRES_URL: database.href, TASKELITH_NATS_URL: NATS.href,
+  TASKELITH_NATS_CA: integrationSecretPath('ca.pem'),
+};
 
 async function admin(argv: string[], extra: Record<string, string> = {}): Promise<Record<string, unknown>> {
   const lines: string[] = [];
@@ -86,7 +92,11 @@ async function admin(argv: string[], extra: Record<string, string> = {}): Promis
   return JSON.parse(lines.join('\n'));
 }
 
-const initialized = await admin(['init', '--actor', 'root@test', '--reason', 'api test']) as { identity: { installationId: string }; operatorSecret: string };
+const initialized = await admin(['init', '--actor', 'root@test', '--reason', 'api test']) as {
+  identity: { installationId: string }; operatorSecret: string; installationCa: string;
+};
+const installationCa = readFileSync(initialized.installationCa, 'utf8');
+trustCertificateAuthority(installationCa);
 const operator = initialized.operatorSecret;
 const address = value(TransportAddress.of(initialized.identity.installationId));
 const definition = value(parseWorkflowDefinition({
@@ -98,8 +108,19 @@ const definition = value(parseWorkflowDefinition({
 const logs = new InMemoryLogSink();
 let running: RunningControlPlane;
 
+// An operator's own authority and browser certificate, which workers never
+// trust (installation contract section 7).
+const issuer = new X509CertificateIssuer();
+const now = value(parseInstant(new Date().toISOString()));
+const operatorAuthority = value(await issuer.createAuthority({ commonName: 'Operator test authority', validity: value(authorityValidity(now)) }));
+const operatorCertificate = value(await issuer.issueServerCertificate(operatorAuthority, {
+  commonName: 'Operator browser', hosts: [{ kind: 'ip', name: '127.0.0.1' }], validity: value(serverCertificateValidity(now)),
+}));
+const BROWSER_TLS = { certificate: operatorCertificate.certificatePem, key: operatorCertificate.privateKeyPem };
+
 const SETTINGS: ControlPlaneSettings = {
   dataRoot, ownerUid, postgres: database, nats: NATS, api: { host: '127.0.0.1', port: 0 },
+  browser: { host: '127.0.0.1', port: 0, tls: BROWSER_TLS },
   workflows: [{ definition, digest: DIGEST }], logSink: logs, sweepMilliseconds: 200, shutdownMilliseconds: 1000,
   // The test server keeps JetStream in a small tmpfs.
   transportLimits: { ...TRANSPORT_LIMITS, streamMaxBytes: 64 * 1024 ** 2, retryInitialMilliseconds: 100, retryMaxMilliseconds: 200, idlePollMilliseconds: 50 },
@@ -156,7 +177,7 @@ async function call(method: string, path: string, options: { bearer?: string; bo
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (options.bearer !== undefined) headers.authorization = `Bearer ${options.bearer}`;
   if (options.correlationId !== undefined) headers['x-correlation-id'] = options.correlationId;
-  const response = await fetch(`http://127.0.0.1:${running.api.port}${path}`, {
+  const response = await fetch(`https://127.0.0.1:${running.api.port}${path}`, {
     method, headers, ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
   });
   return { status: response.status, body: await response.json() as Record<string, unknown>, correlationId: response.headers.get('x-correlation-id') };
@@ -166,6 +187,54 @@ const BINDING = {
   pluginId: 'openspec', pluginVersion: '0.1.0', upstreamToolVersion: '1.6.0', workflowId: 'api-workflow', workflowVersion: '1',
   workflowDigest: DIGEST, configurationRevision: 'config-1', policyRevision: 'policy-1',
 };
+
+// The certificate a TLS handshake on `port` presents, trusting `ca`.
+function presented(port: number, ca: string, minVersion: 'TLSv1' | 'TLSv1.2' = 'TLSv1.2', maxVersion: 'TLSv1.1' | 'TLSv1.3' = 'TLSv1.3'): Promise<PeerCertificate> {
+  return new Promise((resolve, reject) => {
+    const socket = connect({ host: '127.0.0.1', port, ca, minVersion, maxVersion }, () => {
+      resolve(socket.getPeerCertificate());
+      socket.end();
+    });
+    socket.once('error', reject);
+  });
+}
+
+describe('TLS listeners', () => {
+  test('the worker API presents the installation certificate over HTTPS', async () => {
+    const certificate = await presented(running.api.port, installationCa);
+    assert.equal(certificate.subject.CN, 'Taskelith API');
+    assert.equal(certificate.issuer.CN, 'Taskelith installation authority');
+    await assert.rejects(presented(running.api.port, operatorAuthority.certificatePem));
+  });
+
+  test('the browser endpoint presents the operator certificate', async () => {
+    assert.notEqual(running.browser.port, running.api.port);
+    const certificate = await presented(running.browser.port, operatorAuthority.certificatePem);
+    assert.equal(certificate.subject.CN, 'Operator browser');
+    await assert.rejects(presented(running.browser.port, installationCa));
+  });
+
+  test('a plain HTTP request and TLS 1.1 get no API answer', async () => {
+    await assert.rejects(fetch(`http://127.0.0.1:${running.api.port}/runs`));
+    await assert.rejects(presented(running.api.port, installationCa, 'TLSv1', 'TLSv1.1'));
+    await assert.rejects(presented(running.browser.port, operatorAuthority.certificatePem, 'TLSv1', 'TLSv1.1'));
+  });
+
+  test('an expired API certificate fails the start and names its file', async () => {
+    const later = value(parseInstant('2099-01-01T00:00:00.000Z'));
+    const refused = failed(await startControlPlane({ ...SETTINGS, browser: { host: '127.0.0.1', port: 0 }, now: () => later }));
+    assert.equal(refused.code, 'precondition-failed');
+    assert.equal(refused.details.path, join(dataRoot, 'control-plane', 'api-certificate.pem'));
+  });
+
+  test('an operator key of another certificate fails the start and names its setting', async () => {
+    const mismatched = { certificate: BROWSER_TLS.certificate, key: operatorAuthority.privateKeyPem };
+    const refused = failed(await startControlPlane({ ...SETTINGS, browser: { host: '127.0.0.1', port: 0, tls: mismatched } }));
+    assert.equal(refused.code, 'precondition-failed');
+    assert.equal(refused.details.variable, 'TASKELITH_BROWSER_TLS_CERT');
+    assert.doesNotMatch(refused.message, /PRIVATE KEY/);
+  });
+});
 
 describe('operator credential', () => {
   test('a request without or with a wrong bearer is refused with 401', async () => {
@@ -328,7 +397,7 @@ describe('evidence', () => {
     const form = new FormData();
     form.append('record', new Blob([JSON.stringify(record)], { type: 'application/json' }));
     form.append('content', new Blob([content], { type: 'application/octet-stream' }));
-    const response = await fetch(`http://127.0.0.1:${running.api.port}/evidence`, { method: 'POST', headers: { authorization: `Bearer ${bearer}` }, body: form });
+    const response = await fetch(`https://127.0.0.1:${running.api.port}/evidence`, { method: 'POST', headers: { authorization: `Bearer ${bearer}` }, body: form });
     return { status: response.status, body: await response.json() as Record<string, unknown>, correlationId: response.headers.get('x-correlation-id') };
   }
 
@@ -353,7 +422,7 @@ describe('evidence', () => {
 
     const read = await call('GET', '/evidence/evidence-e2e-1', { bearer: operator });
     assert.deepEqual([read.status, read.body.contentDigest], [200, `sha256:${hex}`]);
-    const download = async () => fetch(`http://127.0.0.1:${running.api.port}/evidence/evidence-e2e-1/content`, { headers: { authorization: `Bearer ${operator}` } });
+    const download = async () => fetch(`https://127.0.0.1:${running.api.port}/evidence/evidence-e2e-1/content`, { headers: { authorization: `Bearer ${operator}` } });
     const downloaded = await download();
     assert.deepEqual([downloaded.status, [...new Uint8Array(await downloaded.arrayBuffer())]], [200, [...content]]);
     writeFileSync(join(dataRoot, 'control-plane', 'evidence', 'sha256', hex.slice(0, 2), hex), 'tampered');
@@ -390,7 +459,7 @@ describe('enrollment and quarantine', () => {
   test('a worker enrolls on its first start, then connects with its stored broker credential', async () => {
     const issued = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operator });
     const environment = {
-      TASKELITH_DATA_DIR: join(base, 'worker-root'), TASKELITH_CONTROL_PLANE_URL: `http://127.0.0.1:${running.api.port}/`, TASKELITH_NATS_URL: NATS.href,
+      TASKELITH_DATA_DIR: join(base, 'worker-root'), TASKELITH_CONTROL_PLANE_URL: `https://127.0.0.1:${running.api.port}/`, TASKELITH_NATS_URL: NATS.href,
     };
     // The test volume may be tmpfs, which the real probe refuses.
     const dependencies = (settings: Parameters<typeof productionDependencies>[0]) => ({
@@ -417,7 +486,7 @@ describe('enrollment and quarantine', () => {
   test('a worker journals its commands before it acknowledges them and publishes its observations', async () => {
     const issued = await admin(['issue-enrollment-token'], { TASKELITH_OPERATOR_TOKEN: operator });
     const environment = {
-      TASKELITH_DATA_DIR: join(base, 'intake-root'), TASKELITH_CONTROL_PLANE_URL: `http://127.0.0.1:${running.api.port}/`, TASKELITH_NATS_URL: NATS.href,
+      TASKELITH_DATA_DIR: join(base, 'intake-root'), TASKELITH_CONTROL_PLANE_URL: `https://127.0.0.1:${running.api.port}/`, TASKELITH_NATS_URL: NATS.href,
       TASKELITH_ENROLLMENT_TOKEN: issued.enrollmentToken as string,
     };
     const limits = { ...TRANSPORT_LIMITS, retryInitialMilliseconds: 100, retryMaxMilliseconds: 200, idlePollMilliseconds: 50 };

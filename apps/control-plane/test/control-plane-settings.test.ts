@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
@@ -8,7 +8,13 @@ import {
   controlPlaneMain,
   DEFAULT_API_HOST,
   DEFAULT_API_PORT,
+  DEFAULT_BROWSER_HOST,
+  DEFAULT_BROWSER_PORT,
+  LOCAL_SERVER_HOSTS,
+  MAX_SERVER_HOSTS,
+  readBrokerTls,
   readControlPlaneSettings,
+  readServerHosts,
   serveUntilStopped,
   WorkflowRegistry,
 } from '@taskelith/control-plane';
@@ -36,6 +42,54 @@ test('the API binds loopback on the default port unless configured', () => {
   assert.equal(failed(readControlPlaneSettings({ ...BASE, TASKELITH_NATS_CA: join(directory, 'missing.pem') }, 'linux', 501)).details.variable, 'TASKELITH_NATS_CA');
   writeFileSync(join(directory, 'ca.pem'), 'PEM');
   assert.deepEqual(value(readControlPlaneSettings({ ...BASE, TASKELITH_NATS_CA: join(directory, 'ca.pem') }, 'linux', 501)).natsTls, { ca: 'PEM' });
+});
+
+test('the browser endpoint binds loopback on 8443 and takes both TLS files or none', () => {
+  assert.deepEqual(value(readControlPlaneSettings(BASE, 'linux', 501)).browser, { host: DEFAULT_BROWSER_HOST, port: DEFAULT_BROWSER_PORT });
+  assert.deepEqual([DEFAULT_BROWSER_HOST, DEFAULT_BROWSER_PORT], ['127.0.0.1', 8443]);
+  writeFileSync(join(directory, 'browser-cert.pem'), 'CERT');
+  writeFileSync(join(directory, 'browser-key.pem'), 'KEY');
+  const files = { TASKELITH_BROWSER_TLS_CERT: join(directory, 'browser-cert.pem'), TASKELITH_BROWSER_TLS_KEY: join(directory, 'browser-key.pem') };
+  const configured = value(readControlPlaneSettings({ ...BASE, ...files, TASKELITH_BROWSER_HOST: '0.0.0.0', TASKELITH_BROWSER_PORT: '9443' }, 'linux', 501));
+  assert.deepEqual(configured.browser, { host: '0.0.0.0', port: 9443, tls: { certificate: 'CERT', key: 'KEY' } });
+  const variable = (environment: Record<string, string>) => failed(readControlPlaneSettings({ ...BASE, ...environment }, 'linux', 501)).details.variable;
+  assert.equal(variable({ TASKELITH_BROWSER_TLS_CERT: files.TASKELITH_BROWSER_TLS_CERT }), 'TASKELITH_BROWSER_TLS_KEY');
+  assert.equal(variable({ TASKELITH_BROWSER_TLS_KEY: files.TASKELITH_BROWSER_TLS_KEY }), 'TASKELITH_BROWSER_TLS_CERT');
+  assert.equal(variable({ ...files, TASKELITH_BROWSER_TLS_CERT: join(directory, 'missing.pem') }), 'TASKELITH_BROWSER_TLS_CERT');
+  assert.equal(variable({ ...files, TASKELITH_BROWSER_TLS_KEY: join(directory, 'missing.pem') }), 'TASKELITH_BROWSER_TLS_KEY');
+  assert.equal(variable({ TASKELITH_BROWSER_PORT: 'https' }), 'TASKELITH_BROWSER_PORT');
+});
+
+test('without TASKELITH_NATS_CA the broker trusts the installation CA once it exists', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-broker-trust-'));
+  try {
+    assert.equal(value(readBrokerTls({}, root)), undefined, 'before init the connection stays plain');
+    mkdirSync(join(root, 'control-plane'), { mode: 0o700 });
+    writeFileSync(join(root, 'control-plane', 'installation-ca.pem'), 'INSTALLATION CA', { mode: 0o600 });
+    assert.deepEqual(value(readBrokerTls({}, root)), { ca: 'INSTALLATION CA' });
+    assert.deepEqual(value(readControlPlaneSettings({ ...BASE, TASKELITH_DATA_DIR: root }, 'linux', 501)).natsTls, { ca: 'INSTALLATION CA' });
+    writeFileSync(join(directory, 'ca.pem'), 'PEM');
+    assert.deepEqual(value(readBrokerTls({ TASKELITH_NATS_CA: join(directory, 'ca.pem') }, root)), { ca: 'PEM' }, 'the setting wins');
+    rmSync(join(root, 'control-plane', 'installation-ca.pem'));
+    mkdirSync(join(root, 'control-plane', 'installation-ca.pem'));
+    assert.equal(failed(readBrokerTls({}, root)).details.path, join(root, 'control-plane', 'installation-ca.pem'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the certificate hosts are DNS names or IP addresses, localhost by default', () => {
+  assert.deepEqual(value(readServerHosts({})), LOCAL_SERVER_HOSTS);
+  assert.deepEqual(LOCAL_SERVER_HOSTS.api.map((host) => host.name), ['localhost', '127.0.0.1', '::1']);
+  const hosts = value(readServerHosts({ TASKELITH_API_HOSTS: 'Control-Plane, 10.0.0.5,fd00::1,control-plane', TASKELITH_NATS_HOSTS: 'nats' }));
+  assert.deepEqual(hosts.api, [{ kind: 'dns', name: 'control-plane' }, { kind: 'ip', name: '10.0.0.5' }, { kind: 'ip', name: 'fd00::1' }]);
+  assert.deepEqual(hosts.nats, [{ kind: 'dns', name: 'nats' }]);
+  const tooMany = Array.from({ length: MAX_SERVER_HOSTS + 1 }, (_, index) => `host-${index}`).join(',');
+  for (const text of ['*.example.com', 'a,,b', '-leading', 'trailing-', 'under_score', `${'a'.repeat(64)}.com`, tooMany]) {
+    const failure = failed(readServerHosts({ TASKELITH_NATS_HOSTS: text }));
+    assert.deepEqual([failure.code, failure.details.variable], ['invalid', 'TASKELITH_NATS_HOSTS'], text);
+  }
+  assert.equal(failed(readServerHosts({ TASKELITH_API_HOSTS: 'bad host' })).details.variable, 'TASKELITH_API_HOSTS');
 });
 
 test('the streams take the target byte limit unless configured', () => {
@@ -101,7 +155,7 @@ function fakeRunning(outcome: 'stopped' | 'failed') {
   let finish!: (value: 'stopped' | 'failed') => void;
   const stopped = new Promise<'stopped' | 'failed'>((resolve) => { finish = resolve; });
   return {
-    running: { api: { host: '127.0.0.1', port: 0 }, metrics: undefined as never, stopped, stop: async () => { stops += 1; } },
+    running: { api: { host: '127.0.0.1', port: 0 }, browser: { host: '127.0.0.1', port: 0 }, metrics: undefined as never, stopped, stop: async () => { stops += 1; } },
     stops: () => stops,
     finish: () => finish(outcome),
   };
