@@ -48,13 +48,20 @@ The writes of D4, D5, and D6 fail only when the store does. A failed waiting wri
 
 `PlacementOutcomeRecords` (`packages/modules/scheduling/src/ports/placement-outcome-records.ts`) sits next to the other placement ports: `record`, `remove`, `get`, and `list` of given tasks in task id order by code unit, the order of the `"C"` collation. It is a member of `ControlPlaneTransaction` (`placementOutcomes`), so that the placement transaction writes it, and a projection reads it through `readCommitted`. The shared suite `PLACEMENT_OUTCOME_RECORDS_CONFORMANCE` runs over `InMemoryPlacementOutcomeRecords` and over `PostgresPlacementOutcomeRecords`, whose table `placement_outcomes` is created by migration `1792932600000_placement-outcomes`.
 
+### D9. Coordinator decisions
+
+The coordinator, Niki, decided on 2026-10-27 the two open points of the first handoff:
+
+- **Empty fleet (option a).** A pass that finds no candidate worker opens no placement transaction and records nothing; the board's obstacle projection derives "no candidate" from its own fleet read. Recording `no-candidate` for the read batch on every pass was rejected as up to 100 writes every 5 s.
+- **Cancellation (option a).** A cancellation does not remove the record; a reader, such as the board's obstacle projection, gates it on the task's state. Removing it on cancellation would touch writers outside this change.
+
 ## Fail-before evidence
 
 The unit tests of `apps/control-plane/test/placement-outcome.test.ts` were committed in `d744f2ff`, before the wiring in `cc2ad0a9`, and all five failed against the services of `d744f2ff` (`verification.md`, Evidence check). Their fixture stages the records of each transaction and applies them only on its commit, so a waiting record written inside the rolled-back placement transaction would be lost there too.
 
 ## Risks and limits
 
-- A pass that finds no candidate worker opens no placement transaction, so it records nothing; a task that waits only because the fleet is empty has no record, or keeps an older one. A retry that still backs off keeps the record of its last try.
-- A cancelled task keeps its last record (D6); the projection must read the task's state too.
+- A pass that finds no candidate worker opens no placement transaction, so it records nothing; a task that waits only because the fleet is empty has no record, or keeps an older one, and the projection derives "no candidate" from its fleet read (D9). A retry that still backs off keeps the record of its last try.
+- A cancelled task keeps its last record (D6, D9); the projection gates it on the task's state.
 - A try that rolls back for a waiting reason costs one more short transaction. With the pass ending at its first decline for lack of fleet capacity, a full fleet costs one such write per pass; an own-reason decline backs the task off, which bounds its writes.
 - Two existing tests of `apps/control-plane/test/placement-rotation.test.ts` count commits to lose a commit reply; each now counts the waiting record's commit too, so the lost reply still hits the placement it is about.

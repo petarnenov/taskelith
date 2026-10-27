@@ -60,11 +60,12 @@ None yet. The coordinator assigns reviewers A and B; each pass that runs to a re
 ## Limitations
 
 - `make verify`, the PostgreSQL integration tests, and the repository coverage gate did not run, because they need Docker, which the coordinator approves first.
-- A pass that finds no candidate worker records nothing, a cancelled task keeps its last record, and two control-plane instances may race on one task's record (`design.md`, D5, D6, Risks and limits).
+- A pass that finds no candidate worker records nothing, a cancelled task keeps its last record, both as the coordinator decided (`design.md`, D9), and two control-plane instances may race on one task's record (`design.md`, D5, Risks and limits).
 
 ## Remaining gates
 
 - `make verify`, with the PostgreSQL integration tests, once the coordinator approves Docker.
 - Review passes 1 (reviewer A), 2 (reviewer B), and 3 (reviewer A, if pass 2 has findings above Low).
 - Archive of the change on the branch (worker step 7).
+- Later outcome sources, delegation admission (`delegation-awaiting-capacity`) and worker refusals, need new `source` values and a migration of the table's `source` check, in a separate task (coordinator, Niki, 2026-10-27).
 - Integration into dev by the coordinator (single pull request).
