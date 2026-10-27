@@ -11,7 +11,10 @@ import {
 import { err, failure, ok, type Failure, type Instant, type Result } from '@taskelith/kernel';
 import {
   DEFAULT_ATTEMPT_REQUEST,
-  fairPlacementOrder,
+  NO_CANDIDATE_REASON,
+  RotationCursor,
+  fairWaitingOrder,
+  lacksFleetCapacity,
   placeInTransaction,
   placementBackoff,
   triesNextCandidate,
@@ -19,6 +22,7 @@ import {
   type PlacementQueue,
   type PlacementRequest,
   type ProjectId,
+  type WaitingPlacement,
 } from '@taskelith/scheduling';
 import type { TaskId } from '@taskelith/sdlc';
 import { derivedId, nextAttemptIdOf } from './attempt-identities.js';
@@ -43,7 +47,7 @@ export class PlacementService {
   readonly #passes: RetrySchedule<typeof PASS>;
   // The due time of each task's unplaced retry, fixed by one jitter draw.
   readonly #retries = new Map<TaskId, { readonly attemptId: AttemptId; readonly dueAt: number }>();
-  // The last project read; the next read starts after it.
+  // The rotation cursor; the next read starts after it.
   #after: ProjectId | undefined;
 
   constructor(store: ControlPlaneStore, timing: BackoffTiming) {
@@ -76,15 +80,35 @@ export class PlacementService {
     if (!read.ok) return read;
     const { anyCandidate, waiting, stillWaiting } = read.value;
     this.#forgetUnless(checked, stillWaiting);
-    this.#after = waiting.at(-1)?.projectId ?? this.#after;
+    const order = fairWaitingOrder(waiting, after);
+    if (!anyCandidate) {
+      for (const { item: taskId } of order) this.#settle(taskId, NO_CANDIDATE);
+      return ok({ waiting: waiting.length, placed: 0 });
+    }
+    const { outcome, next } = await this.#offer(order, after);
+    this.#after = next;
+    return outcome.ok ? ok({ waiting: waiting.length, placed: outcome.value }) : outcome;
+  }
+
+  // Offers each task until the store fails; answers the number placed, or
+  // the outage, and the rotation cursor for the next read.
+  async #offer(order: readonly WaitingPlacement<TaskId>[], after: ProjectId | undefined): Promise<Offers> {
+    const cursor = new RotationCursor(after);
     let placed = 0;
-    for (const taskId of fairPlacementOrder(waiting, after)) {
-      const outcome = anyCandidate ? await this.#store.transaction((tx) => placeTask(tx, taskId, this.#retryBackoff)) : NO_CANDIDATE;
-      if (!outcome.ok && isOutage(outcome.error.code)) return outcome;
-      if (outcome.ok && outcome.value.kind === 'placed') placed++;
+    for (const { item: taskId, projectId } of order) {
+      const outcome = await this.#store.transaction((tx) => placeTask(tx, taskId, this.#retryBackoff));
+      if (!outcome.ok && isOutage(outcome.error.code)) return { outcome, next: cursor.next };
+      if (outcome.ok && outcome.value.kind === 'placed') {
+        cursor.placed(projectId);
+        placed++;
+      } else if (!outcome.ok && lacksFleetCapacity(outcome.error.details.reason)) {
+        cursor.ranOutOfCapacity();
+      } else {
+        cursor.declined(projectId);
+      }
       this.#settle(taskId, outcome);
     }
-    return ok({ waiting: waiting.length, placed });
+    return { outcome: ok(placed), next: cursor.next };
   }
 
   // A retry that backs off is not read until due; a task placed or no
@@ -126,9 +150,15 @@ async function stillWaitingAmong(queue: PlacementQueue, taskIds: readonly TaskId
   return waiting;
 }
 
+interface Offers {
+  // The number of tasks placed, or the outage that stopped the pass.
+  readonly outcome: Result<number>;
+  readonly next: ProjectId | undefined;
+}
+
 const PASS = 'pass';
 const NOT_WAITING = 'not-waiting';
-const NO_CANDIDATE: Result<never> = err(failure('precondition-failed', 'no candidate worker exists', { reason: 'no-candidate' }));
+const NO_CANDIDATE: Result<never> = err(failure('precondition-failed', 'no candidate worker exists', { reason: NO_CANDIDATE_REASON }));
 
 // What a placement transaction committed: an assignment, the end of an
 // attempt that a rejecting reason refused, or nothing while a retry waits.
@@ -165,7 +195,7 @@ async function placeTask(tx: ControlPlaneTransaction, taskId: TaskId, retryBacko
   const last = reserved.value;
   if (last?.kind === 'placed') return ok(PLACED);
   if (last?.kind === 'rejected') return endRejectedAttempt(tx, claimed.value);
-  const reason = last?.reason ?? 'no-candidate';
+  const reason = last?.reason ?? NO_CANDIDATE_REASON;
   return err(failure('precondition-failed', `no candidate accepted task ${taskId}`, { task: taskId, reason }));
 }
 
