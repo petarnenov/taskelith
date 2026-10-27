@@ -1,0 +1,22 @@
+## Context
+
+The owner approved per-reviewer review statistics on 2026-10-27, relayed by the coordinator (Niki). `findings.jsonl` holds one line per finding, so a pass without findings leaves no trace, and nothing records the role of a pass or which pass missed a finding.
+
+## Decisions
+
+1. **A second file, `passes.jsonl`.** Pass summaries live in their own file next to `findings.jsonl`, not as a second record kind inside it. Every line of `findings.jsonl` stays one finding, so the finding schema, the index, and the checklist keep reading every line as a finding, and the archived findings, which have no record-kind field, stay valid without a rewrite or a default kind. Each file has one schema, and a missing summary file in an active change is a plain missing-file problem, like a missing `findings.jsonl`.
+2. **Schema reuse.** `docs/review-findings/pass.schema.json` refers to the finding schema's `change`, `pass`, `reviewer`, and `session` definitions and its new `$defs/role`, so the two records cannot drift apart. `ajvSchemaCheck` in `scripts/findings.ts` takes the referenced schemas as a second argument.
+3. **Same line checks.** Summary lines go through the same function as finding lines, `checkedValue` in `scripts/review-findings.ts`: the 4096-byte bound, JSON parsing without echoing input, the secret-like-value check before the schema, and schema diagnostics that never print an unknown property's name.
+4. **Required only in active changes.** Validation requires `passes.jsonl` in every active change, empty before the first pass. Archived changes need none and are not backfilled. Where a `passes.jsonl` exists, active or archived, it is validated in full.
+5. **Consistency checks.** Where a change has both files, `scripts/review-passes.ts` checks that each pass is summarized once, every finding's pass has a summary with the same reviewer and session, each summary's counts equal its pass's findings by severity, and a `missedBy` pass has a summary with the named role. These checks run only when both files parse without problems, so a broken line is reported once and not again as a count mismatch. Problems name the line of the finding or of the summary.
+6. **No role-by-pass rule.** Validation does not require role A for passes 1 and 3 and B for pass 2. A task under the previous one-reviewer rule has one reviewer for every pass, which governance calls reviewer A, and a fourth pass with the owner's permission has no fixed role. The summary records the role that ran the pass; `missedBy` must agree with it.
+7. **`missedBy`.** An optional finding field: `{"pass": n, "role": "A" | "B"}` for an earlier pass of the same change, or `"integration"` for work already integrated into `dev` that the integration missed. That the pass is earlier than the finding's pass is a line rule, checked also without `passes.jsonl`; the role check needs the summary.
+8. **Statistics over archived changes.** `make findings ARGS="reviewers"` reads archived changes only, like the index and the checklist. A pass is a summary line; for an archived change without `passes.jsonl` it is a pass number of its findings, with the reviewer of its first finding of that pass and role `(unknown)`, so a pass without findings is not counted. The text output and the JSON `note` and `derivedChanges` say so. A miss counts for the reviewer and role of the missed pass; a miss of a pass without a record counts as unattributed, and an integration miss on its own line.
+9. **Pure modules.** `scripts/review-passes.ts` holds the summary rules and `scripts/reviewer-statistics.ts` the statistics; `scripts/findings.ts` keeps the file access, as for the findings rules.
+10. **Agent task protocol delta.** Worker steps 2, 5, and 7 now create and check `passes.jsonl`, which the `agent-task-protocol` requirement "Review findings in the task flow" states for `findings.jsonl`; the requirement is modified so the spec and the protocol agree.
+11. **Requirement length.** The added and modified requirement bodies are 445, 307, 318, 430, and 416 characters, under the 500 that strict validation accepts after archive.
+
+## Risks
+
+- Statistics of archived changes without summaries undercount passes and carry no role until changes with `passes.jsonl` are archived; the output states the rule each time.
+- `missedBy` relies on the author's judgment that an earlier pass should have found the finding; validation checks only its form and its pass and role.
