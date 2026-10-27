@@ -1,7 +1,7 @@
 ## 1. Contract and spec
 
-- [ ] 1.1 State the cursor rule in `docs/contracts/capacity-reservation.md` sections 5 and 13, keeping section 12.
-- [ ] 1.2 Modify the `execution-placement` requirements "Project rotation" and "Waiting placements" and validate the change strictly.
+- [x] 1.1 State the cursor rule in `docs/contracts/capacity-reservation.md` sections 5 and 13, keeping section 12.
+- [x] 1.2 Modify the `execution-placement` requirements "Project rotation" and "Waiting placements" and validate the change strictly.
 
 ## 2. Tests first
 
