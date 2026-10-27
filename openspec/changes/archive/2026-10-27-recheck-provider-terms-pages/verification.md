@@ -123,3 +123,13 @@ Review pass 1 was Low-only, so passes 2 and 3 are not run.
 - Integration into dev by the coordinator (single pull request)
 
 The coordinator assigned two Claude Code reviewers, of the same harness with different models, because the task needs network access to re-read the provider pages and Codex has none ([External facts](/docs/governance.md#independent-review-process)).
+
+## Archive checks
+
+After `npm run openspec -- archive recheck-provider-terms-pages --yes`:
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived`: `change/2026-10-27-recheck-provider-terms-pages` valid.
+- `git diff fac1fd4a -- openspec/specs` (merge base): empty, as the change skips specs.
+- `make findings ARGS="validate"`: 41 findings files and 21 pass summary files valid.
+- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: passed.
