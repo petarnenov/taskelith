@@ -11,9 +11,22 @@ import {
   type SourceControlCapabilities,
   type WebhookEvent,
 } from './source-control.js';
-import { flag, identifier, oneOf, optional, readRecord, text, texts, type RecordShape } from './untrusted-shapes.js';
+import {
+  externalIdentifier,
+  externalIdentifiers,
+  flag,
+  kernelIdentifier,
+  nonEmptyText,
+  oneOf,
+  optional,
+  readRecord,
+  text,
+  texts,
+  type RecordShape,
+} from './untrusted-shapes.js';
 
-// The runtime shape of every value a source control plugin returns.
+// The runtime shape of every value a source control plugin returns. Run
+// identifiers are kernel ones; the SCM issues the other identifiers.
 
 function reader<Value>(label: string, shape: RecordShape): ValueReader<Value> {
   return (value) => readRecord<Value>(label, value, shape);
@@ -25,48 +38,48 @@ export const readCapabilities = reader<SourceControlCapabilities>('capabilities'
 });
 
 export const readRunCredential = reader<RunCredential>('credential', {
-  credentialId: identifier,
-  runId: text,
-  secret: identifier,
-  repositories: texts,
+  credentialId: externalIdentifier,
+  runId: kernelIdentifier,
+  secret: nonEmptyText,
+  repositories: externalIdentifiers,
   permissions: texts,
   expiresAt: text,
 });
 
 export const readMergeProtection = reader<MergeProtectionData>('protection', {
-  repository: text,
+  repository: externalIdentifier,
   branch: text,
   requiredStatuses: texts,
   bindsProvider: flag,
 });
 
 export const readChangeRequest = reader<ChangeRequestData>('changeRequest', {
-  id: identifier,
-  repository: text,
+  id: externalIdentifier,
+  repository: externalIdentifier,
   baseBranch: text,
   headBranch: text,
-  headCommit: identifier,
+  headCommit: externalIdentifier,
   state: oneOf(CHANGE_REQUEST_STATES),
   url: text,
 });
 
 export const readCommitStatus = reader<CommitStatusData>('status', {
-  repository: text,
-  commit: text,
+  repository: externalIdentifier,
+  commit: externalIdentifier,
   context: text,
   state: oneOf(COMMIT_STATUS_STATES),
 });
 
 export const readMergeResult = reader<MergeResult>('merge', {
-  changeRequest: text,
-  mergeCommit: identifier,
+  changeRequest: externalIdentifier,
+  mergeCommit: externalIdentifier,
   method: text,
 });
 
 export const readWebhookEvent = reader<WebhookEvent>('event', {
-  deliveryId: identifier,
+  deliveryId: externalIdentifier,
   kind: oneOf(WEBHOOK_EVENT_KINDS),
-  repository: text,
-  changeRequest: optional(text),
-  commit: optional(text),
+  repository: externalIdentifier,
+  changeRequest: optional(externalIdentifier),
+  commit: optional(externalIdentifier),
 });

@@ -2,7 +2,7 @@ import { fixtureStep, failsWith, succeeds, type ConformanceCase } from './confor
 import type { SourceControlConformanceFixture } from './source-control-fixture.js';
 import { readCapabilities, readChangeRequest, readCommitStatus, readMergeProtection } from './source-control-readers.js';
 import type { ChangeRequestData, MergeProtectionData, SourceControlCapabilities, SourceControlProvider } from './source-control.js';
-import { describe } from './untrusted-shapes.js';
+import { describeThrown } from './untrusted-shapes.js';
 
 // Steps that several cases share; each checks what the plugin returns.
 
@@ -30,7 +30,7 @@ export function declaredCapabilities(run: ConformanceCase, provider: SourceContr
   try {
     raw = provider.capabilities;
   } catch (error) {
-    run.abort('threw', `capabilities could not be read: ${describe(error)}`);
+    run.abort('threw', `capabilities could not be read: ${describeThrown(error)}`);
   }
   const capabilities = readCapabilities(raw);
   if (!capabilities.ok) run.abort('shape', capabilities.error.join('; '));
@@ -75,7 +75,7 @@ export async function openChangeRequest(run: ConformanceCase, fixture: SourceCon
   );
   checkIdentity(run, 'openChangeRequest', opened, { ...opened, repository: fixture.projectRepository, baseBranch: fixture.baseBranch, headBranch: head.branch });
   run.expect(opened.state === 'open', `openChangeRequest returned state ${opened.state}, not open`);
-  run.expect(opened.headCommit === head.commit, `openChangeRequest returned head ${opened.headCommit}, not ${head.commit}`);
+  run.expect(opened.headCommit === head.commit, 'openChangeRequest returned another headCommit than the prepared head');
   return opened;
 }
 
@@ -98,7 +98,7 @@ export async function readBack(
 function checkIdentity(run: ConformanceCase, operation: string, actual: ChangeRequestData, expected: ChangeRequestData): void {
   const fields = ['id', 'repository', 'baseBranch', 'headBranch'] as const;
   for (const field of fields.filter((name) => actual[name] !== expected[name])) {
-    run.report('outcome', `${operation} returned ${field} ${actual[field]}, not ${expected[field]}`);
+    run.report('outcome', `${operation} returned another ${field} than expected`);
   }
 }
 
@@ -128,7 +128,7 @@ export async function setStatus(
   );
   const fields = ['repository', 'commit', 'context', 'state'] as const;
   for (const field of fields.filter((name) => status[name] !== request[name])) {
-    run.report('outcome', `setCommitStatus returned ${field} ${status[field]}, not ${request[field]}`);
+    run.report('outcome', `setCommitStatus returned another ${field} than requested`);
   }
 }
 
@@ -174,8 +174,13 @@ export async function expectUnmerged(
 ): Promise<void> {
   const read = await readBack(run, fixture, changeRequest);
   const currentBase = await readBaseHead(run, fixture);
-  run.expect(currentBase === baseHead, `after ${label} ${fixture.baseBranch} moved from ${baseHead} to ${currentBase}`);
+  run.expect(currentBase === baseHead, `after ${label} the base branch moved`);
   if (read.state !== 'open') run.abort('outcome', `after ${label} the change request is ${read.state}, not open`);
+}
+
+// A context in a finding: the suite's own by name, any other by kind only.
+export function describeContext(context: string): string {
+  return SUITE_CONTEXTS.includes(context) ? context : 'another required context';
 }
 
 export function isSubset(values: readonly string[], allowed: readonly string[]): boolean {

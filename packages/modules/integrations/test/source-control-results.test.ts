@@ -15,7 +15,7 @@ function cases(lines: readonly string[]): string[] {
 test('a throwing operation is reported and the suite continues', async () => {
   const lines = await patched(() => ({ readChangeRequest: async () => { throw new Error('service down'); } }));
   assert.ok(lines.length > 1 && lines.every((line) => line.includes(' threw: ')));
-  assert.match(lines[0]!, /^change request threw: readChangeRequest threw instead of returning a Result: Error: service down/);
+  assert.match(lines[0]!, /^change request threw: readChangeRequest threw instead of returning a Result: an Error$/);
 });
 
 test('an unknown state string is a shape finding', async () => {
@@ -47,13 +47,13 @@ test('a value that is not a Result is reported', async () => {
 test('a failure with an unknown code or malformed details is reported', async () => {
   const unknownCode = await patched(() => ({ revokeRunCredential: async () => err({ code: 'gone', message: 'no', details: {} }) as never }));
   assert.deepEqual(headings(unknownCode), ['revoked credential result', 'credential isolation result']);
-  assert.equal(unknownCode[0], 'revoked credential result: revokeRunCredential: result.error.code gone is not a kernel failure code');
+  assert.equal(unknownCode[0], 'revoked credential result: revokeRunCredential: result.error.code is not a kernel failure code');
   const badDetails = await patched(() => ({ revokeRunCredential: async () => err({ code: 'internal', message: 'no', details: 123 }) as never }));
   assert.equal(badDetails[0], 'revoked credential result: revokeRunCredential: result.error.details must be a record of strings');
   const throwingDetails = await patched(() => ({
     revokeRunCredential: async () => err({ code: 'internal', message: 'no', details: { get reason() { throw new Error('no getter'); } } }) as never,
   }));
-  assert.match(throwingDetails[0]!, /result.error.details could not be read: Error: no getter/);
+  assert.match(throwingDetails[0]!, /result.error.details could not be read: an Error$/);
 });
 
 test('a revocation that returns a value is a shape finding', async () => {
@@ -102,11 +102,11 @@ test('a reported permission that the service does not grant is reported', async 
       return ok({ ...credential, permissions: [...new Set([...credential.permissions, 'write-statuses'])] });
     },
   }));
-  assert.deepEqual(lines.map((line) => line.replace(/cred-\d+/, 'cred')), [
-    'read-only credential outcome: write-statuses with credential cred to acme/project must succeed',
-    'write credential outcome: write-statuses with credential cred to acme/project must succeed',
-    'change request and status credentials outcome: write-statuses with credential cred to acme/project must succeed',
-    'refreshed credential outcome: refreshRunCredential granted ["read-code"] for ["read-code","write-statuses"]',
+  assert.deepEqual(lines, [
+    'read-only credential outcome: write-statuses to the project repository must succeed',
+    'write credential outcome: write-statuses to the project repository must succeed',
+    'change request and status credentials outcome: write-statuses to the project repository must succeed',
+    'refreshed credential outcome: refreshRunCredential granted permissions that miss a requested one or are not port permissions',
     'refreshed credential outcome: refreshRunCredential changed the permissions',
   ]);
 });
@@ -123,7 +123,7 @@ test('a read-only credential whose secret does not work is reported', async () =
     'change request and status credentials outcome',
     'credential isolation outcome',
   ]);
-  assert.match(lines[0]!, /^read-only credential outcome: read-code with credential cred-\d+ to acme\/project must succeed$/);
+  assert.match(lines[0]!, /^read-only credential outcome: read-code to the project repository must succeed$/);
 });
 
 test('a refresh that changes the permissions or moves the expiry back is reported', async () => {
@@ -138,12 +138,12 @@ test('a refresh that changes the permissions or moves the expiry back is reporte
     'refreshRunCredential granted',
     'refreshRunCredential changed',
     'refreshRunCredential must',
-    'write-code with',
-    'write-statuses with',
+    'write-code to',
+    'write-statuses to',
     'refreshRunCredential granted',
     'refreshRunCredential changed',
     'refreshRunCredential must',
-    'write-change-requests with',
+    'write-change-requests to',
   ]);
 });
 
@@ -192,7 +192,7 @@ test('a protection of another branch is reported', async () => {
   const lines = await patched(() => ({
     ensureMergeProtection: async (request) => ok({ ...request, branch: 'other', bindsProvider: true }),
   }));
-  assert.ok(lines.includes('merge protection outcome: ensureMergeProtection protected acme/project other, not the base branch'));
+  assert.ok(lines.includes('merge protection outcome: ensureMergeProtection must protect the base branch of the project repository'));
 });
 
 test('change requests that do not echo the request are reported', async () => {
@@ -206,9 +206,9 @@ test('change requests that do not echo the request are reported', async () => {
       return read.ok ? ok({ ...read.value, repository: 'acme/other', baseBranch: 'develop' }) : read;
     },
   }));
-  assert.ok(lines.some((line) => /^change request outcome: openChangeRequest returned headBranch elsewhere, not topic-\d+$/.test(line)));
-  assert.ok(lines.includes('change request outcome: readChangeRequest returned repository acme/other, not acme/project'));
-  assert.ok(lines.includes('change request outcome: readChangeRequest returned baseBranch develop, not main'));
+  assert.ok(lines.some((line) => /^change request outcome: openChangeRequest returned another headBranch than expected$/.test(line)));
+  assert.ok(lines.includes('change request outcome: readChangeRequest returned another repository than expected'));
+  assert.ok(lines.includes('change request outcome: readChangeRequest returned another baseBranch than expected'));
 });
 
 test('statuses that do not echo the request are reported', async () => {
@@ -219,8 +219,8 @@ test('statuses that do not echo the request are reported', async () => {
       return status.ok ? ok({ ...status.value, repository: 'acme/other', state }) : status;
     },
   }));
-  assert.ok(lines.includes('required statuses outcome: setCommitStatus returned repository acme/other, not acme/project'));
-  assert.ok(lines.includes('required statuses outcome: setCommitStatus returned state success, not pending'));
+  assert.ok(lines.includes('required statuses outcome: setCommitStatus returned another repository than requested'));
+  assert.ok(lines.includes('required statuses outcome: setCommitStatus returned another state than requested'));
 });
 
 test('a merge result that does not echo the request is reported', async () => {
@@ -250,7 +250,7 @@ test('a constant or changing delivery id is reported', async () => {
       return verified.ok ? ok({ ...verified.value, deliveryId: 'constant' }) : verified;
     },
   }));
-  assert.deepEqual(constant, ['webhook delivery outcome: two deliveries must have distinct deliveryIds, not both constant']);
+  assert.deepEqual(constant, ['webhook delivery outcome: two deliveries must have distinct deliveryIds']);
   let calls = 0;
   const changing = await patched((provider) => ({
     verifyWebhookDelivery: async (delivery) => {
@@ -265,7 +265,7 @@ test('a constant or changing delivery id is reported', async () => {
 
 test('a fixture whose delivery lacks the named signature header is reported', async () => {
   const lines = await findings({ ...new InMemoryScm().fixture(), signatureHeader: 'x-other' });
-  assert.deepEqual(lines, ['webhook delivery fixture: signDelivery returned no x-other header']);
+  assert.deepEqual(lines, ['webhook delivery fixture: signDelivery returned no signature header']);
 });
 
 test('a throwing fixture step and an empty signed body are fixture findings', async () => {
@@ -276,7 +276,7 @@ test('a throwing fixture step and an empty signed body are fixture findings', as
     signDelivery: async () => ({ headers: {}, rawBody: new Uint8Array() }),
   });
   assert.ok(lines.every((line) => line.includes(' fixture: ')));
-  assert.ok(lines.includes('change request fixture: prepareHeadBranch threw: Error: no git'));
+  assert.ok(lines.includes('change request fixture: prepareHeadBranch threw: an Error'));
   const empty = await findings({ ...new InMemoryScm().fixture(), signDelivery: async () => ({ headers: {}, rawBody: new Uint8Array() }) });
   assert.deepEqual(empty, ['webhook delivery fixture: signDelivery returned an empty body']);
 });
