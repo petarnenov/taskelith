@@ -16,5 +16,5 @@
 
 - [x] 4.1 Run `npm run openspec -- validate stop-placement-pass-at-fleet-decline --strict`, `make findings ARGS="validate"`, and `make verify`, and record them in `verification.md`.
 - [x] 4.2 Review pass 1 by reviewer A.
-- [ ] 4.3 Review pass 2 by reviewer B.
-- [ ] 4.4 Review pass 3 by reviewer A, if pass 2 has findings above Low.
+- [x] 4.3 Review pass 2 by reviewer B.
+- [x] 4.4 Review pass 3 by reviewer A, if pass 2 has findings above Low.

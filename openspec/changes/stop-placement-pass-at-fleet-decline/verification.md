@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-27. The author's verification and checks, and review passes 1 and 2 with their fixes, are recorded below; review pass 3 and the archive checks are pending.
+Date: 2026-10-27. The author's verification and checks, and review passes 1, 2 and 3 with their fixes, are recorded below; the archive checks are pending.
 
 ## Scope and source
 
@@ -78,7 +78,7 @@ The coordinator assigned reviewer A, OpenCode, model `opencode-go/kimi-k3.1-pro`
 - **Model confirmation:** `claude-opus-5-5` is the only model in the JSON `modelUsage`; `is_error` is false.
 - **Snapshot:** before and after the pass `7a34db5553ecc8788442b4d645a8009c7b5fd6e5d2bbe6f7d9e23a69672ce7bc`, identical.
 - **Pass 1 fixes:** all four confirmed; M1 predates the change, as the archived `advance-placement-rotation-cursor` design (`openspec/changes/archive/2026-10-27-advance-placement-rotation-cursor/design.md:25`) shows. The reviewer confirmed the soundness of the stop through the order of `decidePlacement` (`packages/modules/scheduling/src/domain/placement-decision.ts:62`), found the hard-control caveat already in Risks, accepted `ranOutOfCapacity` as a domain guard, found the multi-replica claims labelled as reasoned, and checked the citations, commits, and counts.
-- **Result:** Critical 0, High 0, Medium 1, Low 9, all in the spec and the records. The file lines below are those of `229e7596`.
+- **Result:** Critical 0, High 0, Medium 1, Low 9. The file lines below are those of `229e7596`.
 - **M1, spec-wording** (`specs/execution-placement/spec.md:22`-`:24`): the scenario "Capacity freed during a pass" expected the next pass to place `p-b`'s task, which fails with one replica when earlier offers of the pass were declined for their own reasons and one placed: a second-round decline of `p-b` then leaves the cursor at the placed project, and the next read reaches a project after it before `p-b`, as section 13 requires. Fixed in `f0a7d4f4`: the WHEN now names the first offer of the pass, a task of `p-b`, and drops "before a task of a later project is offered". Both tests match it: the unit test (`apps/control-plane/test/placement-service.test.ts:384`) declines `task-b1` as the first offer of its pass, and the PostgreSQL test (`apps/control-plane/test/placement.integration.test.ts:197`) declines `task-1` as the first offer. `missedBy` pass 1, role A: the scenario was unchanged since `a12f4db2`.
 - **L1, docs** (`proposal.md:8`): "offered first among the projects after it" was false in that case. Fixed in `f0a7d4f4`: "offered before any project after it in the next read's rotation". `missedBy` pass 1.
 - **L2, docs** (`design.md:24`): "or are placed" dropped from the offers before the decline on a full fleet. Fixed in `f0a7d4f4`. `missedBy` pass 1.
@@ -92,7 +92,15 @@ The coordinator assigned reviewer A, OpenCode, model `opencode-go/kimi-k3.1-pro`
 
 ### Review pass 3
 
-Not run yet; pass 2 has a Medium finding, so reviewer A runs it to confirm the resolutions of pass 2.
+- **Pass 3 — reviewer A, OpenCode CLI, model `opencode-go/kimi-k3.1-pro`, variant `high`, agent `reviewer`, session `ses_e8287152fffeq1pH276sgZZL6f`, revision `878c5abd`, 2026-10-27T13:07:19Z to 13:08:52Z.** Scope: confirm each pass 2 resolution only, no new scope.
+- **Invocation:** `opencode run --standalone --agent reviewer -m 'opencode-go/kimi-k3.1-pro#high' --format json --title stop-placement-pass-at-fleet-decline-p3 "$(cat <prompt-file>)" < /dev/null > <log>`, prompt and log kept outside the worktree.
+- **Model confirmation:** the stored assistant messages record provider `opencode-go`, model `kimi-k3.1-pro`, variant `high`, agent `reviewer`.
+- **Snapshot:** before and after `e3908e36ccf926e7976b676f93d756376a59e2fead7e11aebeb671ac7269bd4b`, identical.
+- **Pass 2 resolutions:** all ten confirmed (M1, L1 to L9), including both tests matching the M1 scenario, the 498-character requirement, the pass 2 lines of `passes.jsonl` and `findings.jsonl` with their `missedBy` choices, and the comment rule.
+- **Result:** Critical 0, High 0, Medium 0, Low 1.
+  1. **L1 (evidence-mismatch):** the pass 2 result line of this record said all pass 2 findings were in the spec and the records, although L8 and L9 are in source and test comments. **Fixed, unreviewed** (the archive's preceding records commit): the clause is removed.
+
+A Low-only pass 3 ends the review (governance "Low findings are fixed").
 
 ## Limitations
 
@@ -105,6 +113,5 @@ Not run yet; pass 2 has a Medium finding, so reviewer A runs it to confirm the r
 
 ## Remaining gates
 
-- Independent review: pass 3 by reviewer A, which confirms the resolutions of pass 2, with its record.
 - Archive under worker step 7, with the checks of the archived tree.
 - Integration into dev by the coordinator (single pull request)
