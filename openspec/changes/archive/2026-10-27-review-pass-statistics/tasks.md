@@ -22,4 +22,4 @@
 
 - [x] 5.1 Create this change's empty `findings.jsonl` and `passes.jsonl`.
 - [x] 5.2 Run `npm run openspec -- validate review-pass-statistics --strict` and `make verify`.
-- [ ] 5.3 Independent review: pass 1 by reviewer A, pass 2 by reviewer B if needed, pass 3 by reviewer A if needed.
+- [x] 5.3 Independent review: pass 1 by reviewer A, pass 2 by reviewer B if needed, pass 3 by reviewer A if needed.

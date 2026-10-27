@@ -72,12 +72,22 @@ Requirement bodies after the fixes: "Review pass summaries" 445, "Pass summary c
 
 After the fixes, on `b58d380c` with this record and the pass 2 lines of `findings.jsonl` and `passes.jsonl`: `test/findings.test.ts` 20 tests, all passing; `make verify` exit 0, with `npm run verify:findings` `Every findings file is valid: 18 file(s); every pass summary file is valid: 1 file(s).`, `npm test` 2119 tests, 2072 passed, 0 failed, 47 skipped, coverage of all files 99.22% lines, 92.09% branches, 98.86% functions, no undeclared breaking contract change, `validate --all --strict --no-interactive` 70 passed, 0 failed, and `verify:archive`, `verify:comments`, and `verify:package` passed.
 
+## Archive
+
+After review pass 2 and its fixes, every task in `tasks.md` was ticked and `npm run openspec -- archive review-pass-statistics --yes` moved the change to `openspec/changes/archive/2026-10-27-review-pass-statistics/`, applying 4 added requirements to `review-process` and 1 modified requirement to `agent-task-protocol`. The checks below ran on the resulting working tree, which is the tree of the archive commit:
+
+- `npm run openspec -- validate --all --strict --no-interactive`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line is `✓ change/2026-10-27-review-pass-statistics`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`, merge base `d3e9e636`: only `openspec/specs/agent-task-protocol/spec.md` (the modified "Review findings in the task flow" with the new "Pass summary" scenario) and `openspec/specs/review-process/spec.md` (the four added requirements), 82 insertions and 2 deletions.
+- The moved change has its `findings.jsonl` (7 lines) and `passes.jsonl` (2 lines); `make findings ARGS="validate"`: `Every findings file is valid: 18 file(s); every pass summary file is valid: 1 file(s).`
+- `make findings ARGS="reviewers"`: 18 archived changes with review records and 32 passes; 17 derived from findings only; 174 without either file, not counted.
+- `make verify`: exit 0; `npm test` 2119 tests, 2072 passed, 0 failed, 47 skipped, coverage of all files 99.22% lines, 92.07% branches, 98.86% functions; no undeclared breaking contract change; `verify:archive`, `verify:comments`, and `verify:package` passed.
+
 ## Limitations
 
-- No archived change has `passes.jsonl` yet, so the statistics of this repository are derived from findings until changes reviewed under this rule are archived.
+- This change is the first archived one with `passes.jsonl`; the statistics of the other archived changes stay derived from findings.
 
 ## Remaining gates
 
-- Archive of the change by the worker (worker step 7).
 - `make verify` by the `pre-push` hook on the pushed tree.
 - Integration into dev by the coordinator (single pull request).
