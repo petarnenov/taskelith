@@ -480,6 +480,45 @@ test('a journal read that fails before W2 defers the launch', async () => {
   assert.deepEqual(executions().map(({ state }) => state), ['exited']);
 });
 
+test('a W2 commit that fails and rolls back is tried again on a timer, with a new operation', async () => {
+  value(journal.recordCommand(offer()));
+  const beginAuthorization = journal.beginAuthorization.bind(journal);
+  const tried: string[] = [];
+  const turns: boolean[] = [];
+  let turned = true;
+  journal.beginAuthorization = (request) => {
+    tried.push(request.operationId);
+    turns.push(turned);
+    turned = false;
+    setImmediate(() => {
+      turned = true;
+    });
+    return tried.length <= 2 ? err(failure('internal', 'journal error: database is locked')) : beginAuthorization(request);
+  };
+  authority.answers = [unavailable()];
+  stopAfterRequests(1);
+  await orchestrator.run(controller.signal);
+  journal.beginAuthorization = beginAuthorization;
+
+  assert.deepEqual(turns, [true, true, true]);
+  assert.deepEqual(backOffs(), [7_500, 15_000]);
+  assert.equal(new Set(tried).size, 3);
+  assert.deepEqual(deferrals().map(({ fields }) => fields.message), Array(2).fill('journal error: database is locked'));
+  assert.deepEqual(authority.requests.map(({ operationId }) => operationId), [tried[2]]);
+  assert.deepEqual(executions()[0]?.authorizations.map(({ operationId }) => operationId), [tried[2]]);
+});
+
+test('a W2 commit that stops the journal ends the launch without a deferral', async () => {
+  value(journal.recordCommand(offer()));
+  const stopped = failure('unavailable', 'journal I/O error: disk I/O error', { reason: 'flush-failure' });
+  const beginAuthorization = journal.beginAuthorization.bind(journal);
+  journal.beginAuthorization = () => err(stopped);
+  await launchOnce();
+  journal.beginAuthorization = beginAuthorization;
+
+  assert.deepEqual([deferrals().length, authority.requests.length, executions().length], [0, 0, 0]);
+});
+
 test('a cancellation while a launch waits before W2 ends it without an operation or a seal', async () => {
   value(journal.recordCommand(offer()));
   failClockReads(Infinity);
