@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-28. The author's self-check and checks are recorded below, with review passes 1 and 2 and their fixes.
+Date: 2026-10-28. The author's self-check and checks are recorded below, with review passes 1, 2, and 3, their fixes, and the unreviewed fixes after pass 3.
 
 ## Scope and source
 
@@ -33,6 +33,7 @@ macOS 26.6.2 arm64 (Apple M3, `uname -m` `arm64`), Node.js 24.22.1 from `.nvmrc`
 - `make installation-smoke` (Docker) at `72cfabf4`: exit 0, the run ended with exit code 0 over HTTPS and TLS NATS, "submitted, assigned, executed, stored the result, removed".
 - After review pass 2, on the working tree of `6770d360`: `make verify`: exit 0, twice (the second a mistyped Linux suites run that make took as the default target); 2384 tests, 2381 pass, 0 fail, 3 skipped; coverage lines 99.34%, branches 92.32%, functions 99.04%; `validate --all --strict` 70 passed; every active OpenSpec change archives into strictly valid specs. `make verify-installation`: exit 0, "built, bootstrapped, started, enrolled, restarted, certificates re-issued and served, removed".
 - M3 attempts, on the same tree: `make linux-test-suites SUITES="test/g2-*.test.ts"`: exit 2, 14 of 21 fail because that target runs without network or services (`TASKELITH_POSTGRES_URL is not set`); the same three suites in the Linux test image on the host network against `scripts/services.sh run`: 14 fail with `ECONNREFUSED`, because Docker Desktop's host network does not reach the services' published ports on this macOS host. `make scenario-native-worker-lifecycle`: exit 2; the native Darwin arm64 worker enrolled over HTTPS (201), reached NATS over TLS (`worker.contact.online`), and the operator polled over HTTPS, but the task never ran: the worker reported admission pressure `disk-floor`, with 2.6 GiB free on the host disk.
+- After review pass 3, on the working tree of `ea509c5b` with the pass 3 records: `make findings ARGS="validate"`: 53 findings files and 33 pass summary files valid; `make verify`: exit 0; 2386 tests, 2383 pass, 0 fail, 3 skipped; coverage lines 99.34%, branches 92.30%, functions 99.04%; `validate --all --strict` 70 passed; every active OpenSpec change archives into strictly valid specs. `make verify-installation`: exit 0, "built, bootstrapped, started, enrolled, restarted, certificates re-issued and served, removed", so the pinned NATS passed the tightened plain client probe; its log holds no `PRIVATE KEY` line.
 - `npm audit --omit=dev`: 0 vulnerabilities. `npm run verify:dependencies`: 766 package paths verified.
 - After review pass 1, on the working tree of `74456be6` with the design, findings, and pass records of the records commit: `npm run openspec -- validate issue-installation-certificates --strict`: valid; `make findings ARGS="validate"`: 53 findings files and 33 pass summary files valid; `make verify`: exit 0; 2380 tests, 2377 pass, 0 fail, 3 skipped; coverage lines 99.34%, branches 92.31%, functions 99.04%; every active OpenSpec change archives into strictly valid specs; `validate --all --strict` 70 passed. `make verify-installation` at `706b6b6a` content (the restart in place): exit 0, "built, bootstrapped, started, enrolled, restarted, certificates re-issued and served, removed"; its log holds no `PRIVATE KEY` line.
 
@@ -100,17 +101,39 @@ Fails before the fixes, each run before its fix was written: findings 1 and 2, t
 
 Fails before the fixes, each run before its fix was written: L2, the new conformance case failed with success for both authorities; L3 and L4, the new unit assertions failed on the old messages and details; L8, the nested, one-line, and staged-key tests failed; L7's plain client probe and composition test are new checks of behavior that already held. M2 was shown as above.
 
+### Review pass 3
+
+- **Reviewer:** A, Codex CLI `gpt-6.1-sol`, reasoning effort `medium`, read-only, confirming the pass 2 fixes only.
+- **Invocation:** as pass 1, run by the coordinator, Maki, from the worktree.
+- **Confirmation:** session `01a17fb9-fa50-78f3-8402-692bad6f5849`.
+- **Revision reviewed:** `9c97bf65`, the range `d9d44ebf..9c97bf65`.
+- **Snapshot:** `86d2b94912373f7c009a586653be0024e80ae025d9d09747380e19fb889b9149` before and after, unchanged.
+- **Pass 2 fixes:** M2, L1 to L6, L8, L9, and L10 confirmed; M1 and L7 in part, which the new findings below complete; M3 still deferred, its deferral recorded honestly. The reviewer's `listen EPERM` in its sandbox kept it from running a TCP stand-in, so the Medium comes from reading the code.
+- **Result:** Critical 0, High 0, Medium 1, Low 2, written in Bulgarian and recorded in English. Each is a defect of a pass 2 fix, so none names a missed pass. M1 and L7 are now `fixed-unreviewed` in `findings.jsonl`, as their completion was not reviewed.
+
+| # | Severity | Finding | Resolution | Commit |
+| --- | --- | --- | --- | --- |
+| P3-M1 | Medium | The plain NATS client probe sent no credentials and took any `-ERR` as proof that TLS is required, so a broker with `allow_non_tls` that refuses the login would pass | Unreviewed fix: passes only when the INFO line advertises `tls_required` and the server then closes or sends `-ERR 'Secure Connection - TLS Required'`; an `Authorization Violation`, any other `-ERR`, `+OK`, `PONG`, a timeout, or a failed connection fails it; the probe still has no credentials | `af0e67d1` |
+| P3-L1 | Low | "The installation has neither" in the source control contract contradicted its HTTPS | Unreviewed fix: "has no externally reachable ingress" | `ea509c5b` |
+| P3-L2 | Low | Remaining gates left out `make verify-linux-cgroup` | Unreviewed fix: named below with the other Linux checks | this record |
+
+**Decision on the Medium.** Under the three pass cap ([review process](/docs/governance.md#independent-review-process)), a Medium left after pass 3 needs the owner. The owner's away delegate chose to fix it without review and to run no pass 4 (away run `20261027T233939Z-claude-6580`, 2026-10-28). The two Lows are fixed without review, as the Low rule requires after pass 3.
+
+**The refusal of the pinned broker.** Checked against `nats:2.15.1-alpine` at the pinned digest `sha256:7ae34c25…77fde`, with a certificate made at run time and user and password authorization: with TLS required, a plain client gets the INFO line with `"tls_required":true`, then the server logs "TLS handshake error: tls: first record does not look like a TLS handshake" and closes, with no `-ERR`. The binary holds the text `Secure Connection - TLS Required`, so that error also counts as the refusal. With `allow_non_tls` the INFO line has `"tls_available":true` without `tls_required`, and the plain client gets `-ERR 'Authorization Violation'`, which the old probe took as a refusal for TLS.
+
+**Fails before and passes after.** The new test "a broker that refuses a plain client only for its login fails the probe" uses a stand-in with `allow_non_tls` and authorization that refuses the plain login with `Authorization Violation`. On `9c97bf65` it failed: `reissueProblems` returned no problem instead of "NATS does not refuse a plain client as requiring TLS". On `af0e67d1` it passes, with the positive cases: the TLS stand-in that closes on the failed handshake and one that sends the TLS required error pass the probe; `PONG`, `+OK`, `Authorization Violation` after a `tls_required` INFO, a missing or false `tls_required`, a malformed INFO, a close before INFO, and a refused connection fail it.
+
 ## Limitations
 
 - The design's Risks and limitations apply: installations initialized before this change fail closed without an authority; `NODE_EXTRA_CA_CERTS` adds the CA to the system roots until 26b pins it; the composition's browser endpoint serves the installation certificate; `issue-installation-certificates` writes no audit row.
 - The composition still serves the browser endpoint on the API certificate (finding 9), as decided for 26d.
-- The checks ran on macOS arm64 only. Not run with their changed code (M3): `test/g2-scenarios/scenario-installation.ts`, `test/g2-scenarios/crashing-worker.ts`, `test/g2-scenarios/fixtures/crash-before-ack-worker.ts`, and `test/g2-cancellation-races.test.ts` (Linux only, `SCENARIO_HOST`); `scripts/installation-scenarios.sh` with `trust_installation_ca` and `TASKELITH_NATS_CA` past the native worker's enrollment and broker contact (stopped at the disk floor), and the G2 failure scenarios on the composition; the Linux suites of `make verify-linux-cgroup` and `make verify-linux-crash-windows`.
+- The checks ran on macOS arm64 only. Not run with their changed code (M3): `test/g2-scenarios/scenario-installation.ts`, `test/g2-scenarios/crashing-worker.ts`, `test/g2-scenarios/fixtures/crash-before-ack-worker.ts`, and `test/g2-cancellation-races.test.ts` (Linux only, `SCENARIO_HOST`); `scripts/installation-scenarios.sh` with `trust_installation_ca` and `TASKELITH_NATS_CA` past the native worker's enrollment and broker contact (stopped at the worker's disk floor, with 2.6 GiB free on this host; no disk was freed for it), and the G2 failure scenarios on the composition; the Linux suites of `make verify-linux-cgroup` and `make verify-linux-crash-windows`.
 
 ## Remaining gates
 
-- Review pass 3 (reviewer A confirms the pass 2 fixes) under the [review process](/docs/governance.md#independent-review-process).
+- Owner review of the away delegate's decision on the pass 3 Medium (fixed without review, no pass 4), and the owner's decision on the deferred M3.
 - Owner review of decisions 1, 2, 3, and 5 of the away run.
 - Archive under worker step 7.
-- On a Linux host: the G2 scenario suites (`test/g2-cancellation-races.test.ts`, `test/g2-partition.test.ts`, `test/g2-stale-generations.test.ts`) with services, `make verify-linux-crash-windows`, and the G2 failure scenarios on the composition.
+- On a Linux host: the G2 scenario suites (`test/g2-cancellation-races.test.ts`, `test/g2-partition.test.ts`, `test/g2-stale-generations.test.ts`) with services, `make verify-linux-cgroup`, `make verify-linux-crash-windows`, and the G2 failure scenarios on the composition. The coordinator chose to run the full `make verify` and these G2 Linux suites on a native Ubuntu x86_64 host (Liki); their results are recorded later.
 - On a host with free disk above the worker's floor: `make scenario-native-worker-lifecycle`.
 - Integration into dev by the coordinator (single pull request).
