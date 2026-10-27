@@ -37,7 +37,7 @@ import { runHeartbeats, type HeartbeatOptions } from './heartbeat-publisher.js';
 import { reportInventoryOnConnection } from './inventory-report.js';
 import { LaunchOrchestrator, openExecutions } from './launch-orchestrator.js';
 import { runObservationPublisher } from './observation-publisher.js';
-import { hasFailedCheck, runSelfCheck } from './self-check.js';
+import { checkComposition, hasFailedCheck, runSelfCheck } from './self-check.js';
 import type { WorkerSettings } from './settings.js';
 import { runTogether, TaskGroup } from './task-group.js';
 import { WorkerContact } from './worker-contact.js';
@@ -99,6 +99,8 @@ export interface RunningWorker {
 // Opens the enrolled root, or enrolls with the configured token first, then
 // starts offline and connects to the broker with the stored credential.
 export async function startWorker(settings: WorkerSettings, dependencies: WorkerDependencies): Promise<Result<RunningWorker>> {
+  const composed = checkComposition(dependencies.admissionChecks);
+  if (!composed.ok) return composed;
   const options = rootOptions(settings, dependencies);
   const opened = openWorkerRoot(options);
   const root = !opened.ok && failureReason(opened.error) === 'not-enrolled' ? await enroll(settings, dependencies, options) : opened;
@@ -173,14 +175,15 @@ async function startRuntime(settings: WorkerSettings, dependencies: WorkerDepend
   const pressure = admissionPressure(settings, dependencies, root);
   const credential = credentials.value.controlPlane;
   const selfCheck = await runSelfCheck(dependencies.admissionChecks, startFacts(settings));
-  const selfCheckFailed = hasFailedCheck(selfCheck);
+  if (!selfCheck.ok) return selfCheck;
+  const selfCheckFailed = hasFailedCheck(selfCheck.value);
   const launcher = launchOrchestrator({ settings, dependencies, root, credential, contact, pressure, selfCheckFailed });
   if (!launcher.ok) return launcher;
   const declared = declareCapacity(settings, root);
   if (!declared.ok) return declared;
   const pressured = pressure.refresh();
   if (!pressured.ok) return pressured;
-  const reported = root.journal.recordSelfCheck(selfCheck);
+  const reported = root.journal.recordSelfCheck(selfCheck.value);
   if (!reported.ok) return reported;
   const session = brokerSession({
     settings, dependencies, root, address: address.value, subjects: subjects.value, contact, pressure, broker: credentials.value.broker,
