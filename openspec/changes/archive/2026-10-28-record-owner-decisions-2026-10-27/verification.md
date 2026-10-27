@@ -12,6 +12,8 @@ Exclusions: `docs/governance.md`, `docs/agent-task-protocol.md`, and the skills,
 
 Branch `record-owner-decisions-2026-10-27` from `origin/dev` at `14e1a46e`, in its own worktree with `make setup` done. During the work the coordinator reported that q40 landed as #372, and the branch merged `origin/dev` at `579c227d` with a merge commit (`04302250`). The merge brought `docs/contracts/product-ports.md`, `docs/trust-model.md`, the `product-ports` spec, the archived `align-product-ports-with-g2-lifecycle`, and code under `packages/modules/execution`, `integrations`, and `scheduling`; it touched no file of this change and had no conflict. Every check below ran after the merge; after the pass 1 fixes the strict validations, `make findings ARGS="validate"`, and `make verify` were re-run on `a19b4cf6` and passed, and after the pass 2 fixes again on `59ce50cf`, which passed. Ubuntu Linux x86_64, Node.js v24.22.1, OpenSpec through `npm run openspec`, `make verify` with `TMPDIR=/home/petar/.cache/taskelith-verify-tmp` (a host quirk of this machine).
 
+After review pass 2 the branch merged `origin/dev` at `46e21ef1` (#373, `close-g3-item-0`) with merge commit `20c2fa54`. It conflicted in `docs/g3-plan.md` only, on the wave 1 sentence: the resolution keeps dev's text on the item 0 closure and appends this change's sentence on item 45. The merge also changed `docs/foundation.md` and added the item 0 closure section of `docs/g3-plan.md`, which touch no other line of this change. Line numbers cited in the review tables refer to the reviewed heads.
+
 ## Author self-check and evidence check
 
 - The owner's three points are quoted from the brief into the ADR 0005 amendment, the D15 amendment of the G3 work plan, the account pool contract section 7.1, and the Claude Code qualification's "Consequences for D15", with the same content in each; after review pass 1 (L5) all three name the last point in the same words, "with no rotation to another account". The amendment cites the evidence at `docs/qualification/claude-code.md` "Consequences for D15" (line 92 at `14e1a46e`).
@@ -79,3 +81,13 @@ Reviewer B: harness `claude`, model `claude-opus-5-5`, variant `high`, session `
 - Review complete: pass 1 (A) and pass 2 (B, Low-only); the pass 2 fixes are unreviewed, and no pass 3 runs.
 - Archive in the last commit of the branch, with its checks.
 - Integration into dev by the coordinator (single pull request)
+
+## Archive checks
+
+After `npm run openspec -- archive record-owner-decisions-2026-10-27 --yes` (archived as `2026-10-28-record-owner-decisions-2026-10-27`):
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived`: `change/2026-10-28-record-owner-decisions-2026-10-27` valid; 212 passed and 13 failed, all 13 older archived changes from 2026-10-24 to 2026-10-26 that this change does not touch.
+- `git diff 46e21ef1 -- openspec/specs` (merge base): only the applied deltas, `account-pool-port` and `harness-account-pools` (1 modified each).
+- `make findings ARGS="validate"`: 51 findings files and 31 pass summary files valid.
+- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: passed.

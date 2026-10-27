@@ -6,7 +6,7 @@ Run harness sessions on pools of subscription accounts per harness, with explici
 ## Requirements
 
 ### Requirement: Subscription account slots
-Taskelith SHALL manage harness accounts as slots, each bound to exactly one harness plugin, authenticated only through a subscription mechanism that plugin declares and for which Taskelith has a delivery admitted for that harness, and allowed to serve only the projects explicitly listed for it; any number of slots MAY be added per harness, and one slot MAY serve several listed projects. By G3 decision D6, Claude Code's only admitted delivery is `subscription-token`.
+Taskelith SHALL manage harness accounts as slots, each bound to exactly one harness plugin, authenticated only through a subscription mechanism that plugin declares and that has a delivery admitted for that harness, and allowed to serve only the projects explicitly listed for it; a harness MAY have any number of slots, and one slot MAY serve several listed projects. Claude Code SHALL have at most one non-removed slot (account pool contract 7.1), with D6's `subscription-token` delivery only.
 
 #### Scenario: Slot shared by two projects
 - **WHEN** a slot lists projects A and B
@@ -22,6 +22,10 @@ Taskelith SHALL manage harness accounts as slots, each bound to exactly one harn
 
 #### Scenario: Declared mechanism without an admitted delivery
 - **WHEN** an operator adds a Claude Code slot whose mechanism is `device-login`, which the plugin declares but for which Claude Code has no admitted delivery
+- **THEN** the configuration is rejected
+
+#### Scenario: Second Claude Code slot
+- **WHEN** an operator adds a Claude Code slot while another Claude Code slot is active or revoked
 - **THEN** the configuration is rejected
 
 ### Requirement: Least-loaded selection with cooldown
