@@ -1,0 +1,48 @@
+import { spawn, type ChildProcess } from 'node:child_process';
+import { once } from 'node:events';
+import { join } from 'node:path';
+import { createInterface } from 'node:readline';
+import type { CrashingWorkerArguments } from './fixtures/crash-before-ack-worker.ts';
+import { within } from './waiting.ts';
+
+const FIXTURE = join(import.meta.dirname, 'fixtures', 'crash-before-ack-worker.ts');
+const CRASHING_WORKER_MILLISECONDS = 20_000;
+
+// The parent's handle on a crash-before-ack worker process.
+export class CrashingWorker {
+  readonly workerId: string;
+  readonly #child: ChildProcess;
+  readonly #exited: Promise<NodeJS.Signals | null>;
+
+  private constructor(workerId: string, child: ChildProcess, exited: Promise<NodeJS.Signals | null>) {
+    this.workerId = workerId;
+    this.#child = child;
+    this.#exited = exited;
+  }
+
+  // Resolves once the worker is enrolled and started.
+  static async start(parameters: CrashingWorkerArguments): Promise<CrashingWorker> {
+    const child = spawn(process.execPath, ['--experimental-strip-types', '--no-warnings', FIXTURE, JSON.stringify(parameters)], {
+      stdio: ['ignore', 'pipe', 'inherit'],
+    });
+    const exited = once(child, 'exit').then(([, signal]) => signal as NodeJS.Signals | null);
+    const lines = createInterface({ input: child.stdout! });
+    const started = Promise.race([once(lines, 'line'), exited.then((signal) => {
+      throw new Error(`the crashing worker exited before it started (${signal})`);
+    })]) as Promise<[string]>;
+    const [line] = await within(started, CRASHING_WORKER_MILLISECONDS, 'the crashing worker start').catch((error: unknown) => {
+      child.kill('SIGKILL');
+      throw error;
+    });
+    return new CrashingWorker((JSON.parse(line) as { workerId: string }).workerId, child, exited);
+  }
+
+  // The signal that ended the process, within the crash bound.
+  exited(): Promise<NodeJS.Signals | null> {
+    return within(this.#exited, CRASHING_WORKER_MILLISECONDS, 'the crash exit');
+  }
+
+  kill(): void {
+    this.#child.kill('SIGKILL');
+  }
+}
