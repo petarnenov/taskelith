@@ -8,8 +8,20 @@ import type { CodeHeadIdentity, RepositoryId } from './code-head.js';
 export const WORKSPACE_LAYOUT = Object.freeze({
   root: 'worker/workspaces',
   checkout: 'checkout',
+  // The worker's own record of the workspace, beside its checkout.
+  metadata: 'workspace',
   stagingPrefix: '.staging-',
   removingPrefix: '.removing-',
+});
+
+// Modes where the execution account differs from the worker's (section 2).
+export const WORKSPACE_MODES = Object.freeze({
+  // The attempt directory: the execution group may pass, not list.
+  attempt: 0o710,
+  checkoutReclaimed: 0o700,
+  // Set-group-ID, so every new entry keeps the execution group.
+  checkoutHandedOff: 0o2770,
+  metadata: 0o600,
 });
 
 export const TASK_BRANCH_PREFIX = 'taskelith/';
@@ -35,6 +47,8 @@ export const WORKSPACE_FAILURE_REASONS = Object.freeze([
   'remote-moved',
   'not-fast-forward',
   'read-only-workspace',
+  'workspace-handed-off',
+  'unsafe-checkout',
 ] as const);
 
 export type WorkspaceFailureReason = (typeof WORKSPACE_FAILURE_REASONS)[number];

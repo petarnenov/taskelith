@@ -6,4 +6,5 @@ set -euo pipefail
 # shellcheck source=tools/linux-cgroup/cgroup-layout.sh
 source /usr/local/lib/taskelith/cgroup-layout.sh
 cd /repo
-exec node --experimental-strip-types --test "$@" packages/adapters/worker-supervisor/test/linux-cgroup.privileged.ts
+exec node --experimental-strip-types --test "$@" packages/adapters/worker-supervisor/test/linux-cgroup.privileged.ts \
+  packages/adapters/worker-journal/test/linux-execution-access.privileged.ts

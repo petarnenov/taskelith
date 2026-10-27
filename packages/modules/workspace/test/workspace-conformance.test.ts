@@ -36,6 +36,8 @@ const PUSH = 'pushes a clean task branch fast-forward at the remote head the por
 const SNAPSHOT = 'snapshots exactly the clean head tree, in bytes that depend on the tree alone';
 const REMOVE = 'removes only its own clean workspace, keeps a dirty one, and never a control record';
 const SWEEP = 'sweeps interrupted prepares and removals without following links, across a restart';
+const HAND_OFF = 'hands the checkout to the execution and takes it back without outside links';
+const GIT_LINK = 'refuses Git work on a checkout whose Git directory holds a link';
 
 // Each defect of the double breaks the guarantees of the named cases.
 const DEFECTS: readonly [string, DoubleDefects, readonly string[]][] = [
@@ -53,6 +55,9 @@ const DEFECTS: readonly [string, DoubleDefects, readonly string[]][] = [
   ['loses modes and link targets in the snapshot', { snapshotsWithoutMetadata: true }, [SNAPSHOT]],
   ['removes beyond its workspace', { removesWorkspacesRoot: true }, [REMOVE]],
   ['follows links when it sweeps', { sweepFollowsLinks: true }, [SWEEP]],
+  ['runs Git on a handed-off checkout', { ignoresHandOff: true }, [HAND_OFF]],
+  ['keeps links from outside when it reclaims', { keepsOutsideLinks: true }, [HAND_OFF]],
+  ['follows a link in the Git directory', { followsGitLinks: true }, [GIT_LINK]],
 ];
 
 for (const [name, defects, failing] of DEFECTS) {

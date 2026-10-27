@@ -10,6 +10,7 @@ import {
   WORKSPACE_FAILURE_REASONS,
   WORKSPACE_KINDS,
   WORKSPACE_LAYOUT,
+  WORKSPACE_MODES,
   checkCredentialScope,
   cleanHead,
   isSameCodeHead,
@@ -29,7 +30,8 @@ const CONTRACT_VALUES = [
   [
     'WORKSPACE_FAILURE_REASONS',
     WORKSPACE_FAILURE_REASONS,
-    ['unsafe-name', 'head-mismatch', 'workspace-dirty', 'credential-out-of-scope', 'remote-moved', 'not-fast-forward', 'read-only-workspace'],
+    ['unsafe-name', 'head-mismatch', 'workspace-dirty', 'credential-out-of-scope', 'remote-moved', 'not-fast-forward', 'read-only-workspace',
+      'workspace-handed-off', 'unsafe-checkout'],
   ],
 ] as const;
 
@@ -41,8 +43,12 @@ for (const [name, actual, expected] of CONTRACT_VALUES) {
 }
 
 test('the layout, branch prefix, and evidence kind hold the contract values', () => {
-  assert.deepEqual(WORKSPACE_LAYOUT, { root: 'worker/workspaces', checkout: 'checkout', stagingPrefix: '.staging-', removingPrefix: '.removing-' });
+  assert.deepEqual(WORKSPACE_LAYOUT, {
+    root: 'worker/workspaces', checkout: 'checkout', metadata: 'workspace', stagingPrefix: '.staging-', removingPrefix: '.removing-',
+  });
   assert.ok(Object.isFrozen(WORKSPACE_LAYOUT));
+  assert.deepEqual(WORKSPACE_MODES, { attempt: 0o710, checkoutReclaimed: 0o700, checkoutHandedOff: 0o2770, metadata: 0o600 });
+  assert.ok(Object.isFrozen(WORKSPACE_MODES));
   assert.equal(TASK_BRANCH_PREFIX, 'taskelith/');
   assert.equal(HEAD_SNAPSHOT_EVIDENCE_KIND, 'code-head-snapshot');
 });

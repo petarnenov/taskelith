@@ -55,6 +55,11 @@ export interface WorkspaceFixture {
   controlRecords(): Promise<string>;
   // The snapshot's tree, decoded by the adapter's format.
   readSnapshot(content: Uint8Array): Promise<Readonly<Record<string, TreeEntry>>>;
+  // A hard link outside the workspace to the checkout's file at `path`, as
+  // an agent leaves one; the returned function writes through it.
+  hardLinkOutside(attemptId: AttemptId, path: string): Promise<(text: string) => Promise<void>>;
+  // A symbolic link inside the checkout's Git directory to a control record.
+  linkInGitDirectory(attemptId: AttemptId): Promise<void>;
   // A staging entry holding a symbolic link to a control record.
   interruptPrepare(attemptId: AttemptId): Promise<void>;
   // The clean workspace renamed to its removing entry, not yet deleted.

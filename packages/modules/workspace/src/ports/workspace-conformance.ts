@@ -434,6 +434,58 @@ const CLEANUP: readonly ConformanceCase<WorkspaceFixture>[] = [
   },
 ];
 
+const HANDOFF: readonly ConformanceCase<WorkspaceFixture>[] = [
+  {
+    name: 'hands the checkout to the execution and takes it back without outside links',
+    async check(fixture) {
+      const problems: string[] = [];
+      const { provider } = fixture;
+      if ((await prepared(problems, fixture)) === undefined) return problems;
+      expectSuccess(problems, 'hand off', await provider.handOff(FIRST));
+      expectSuccess(problems, 'hand off again', await provider.handOff(FIRST));
+      const write = fixture.credentials.write;
+      const refusals: [string, Result<unknown>][] = [
+        ['inspect', await provider.inspect(FIRST)],
+        ['snapshot', await provider.snapshot(FIRST)],
+        ['push', await provider.push({ attemptId: FIRST, credential: write, expectedRemoteHead: null })],
+        ['remove', await provider.remove(FIRST)],
+      ];
+      for (const [label, result] of refusals) {
+        expectReason(problems, `${label} while handed off`, result, 'precondition-failed', 'workspace-handed-off');
+      }
+      // A removal that went through leaves nothing more to check.
+      if (refusals.some(([, result]) => result.ok)) return problems;
+      expectSame(problems, 'listed while handed off', await provider.list(), [FIRST]);
+      await fixture.writeFile(FIRST, fixture.trackedPath, 'agent\n');
+      const writeOutside = await fixture.hardLinkOutside(FIRST, fixture.trackedPath);
+      expectSuccess(problems, 'reclaim', await provider.reclaim(FIRST));
+      expectSuccess(problems, 'reclaim again', await provider.reclaim(FIRST));
+      await writeOutside('written from outside\n');
+      expectSame(problems, 'outside write reaches the checkout', (await fixture.workspaceText(FIRST)).includes('written from outside'), false);
+      await expectDirty(problems, fixture, FIRST, ['modified']);
+      expectCode(problems, 'hand off an absent workspace', await provider.handOff(SECOND), 'not-found');
+      expectCode(problems, 'reclaim an absent workspace', await provider.reclaim(SECOND), 'not-found');
+      return problems;
+    },
+  },
+  {
+    name: 'refuses Git work on a checkout whose Git directory holds a link',
+    async check(fixture) {
+      const problems: string[] = [];
+      const before = await fixture.controlRecords();
+      if ((await prepared(problems, fixture)) === undefined) return problems;
+      await fixture.linkInGitDirectory(FIRST);
+      const { provider } = fixture;
+      expectReason(problems, 'inspect', await provider.inspect(FIRST), 'precondition-failed', 'unsafe-checkout');
+      expectReason(problems, 'snapshot', await provider.snapshot(FIRST), 'precondition-failed', 'unsafe-checkout');
+      expectReason(problems, 'remove', await provider.remove(FIRST), 'precondition-failed', 'unsafe-checkout');
+      expectSame(problems, 'listed', await provider.list(), [FIRST]);
+      expectSame(problems, 'control records', await fixture.controlRecords(), before);
+      return problems;
+    },
+  },
+];
+
 export const WORKSPACE_CONFORMANCE: readonly ConformanceCase<WorkspaceFixture>[] = Object.freeze([
   ...WORKSPACE_PREPARATION,
   ...CREDENTIAL_USE,
@@ -441,4 +493,5 @@ export const WORKSPACE_CONFORMANCE: readonly ConformanceCase<WorkspaceFixture>[]
   ...PUSHES,
   ...SNAPSHOTS,
   ...CLEANUP,
+  ...HANDOFF,
 ]);

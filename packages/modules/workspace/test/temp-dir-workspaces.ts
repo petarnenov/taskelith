@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, link, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { err, failure, ok, parseIdentifier, type Result } from '@taskelith/kernel';
@@ -7,6 +7,7 @@ import type { AttemptId } from '@taskelith/execution';
 import {
   DIRTY_REASONS,
   WORKSPACE_LAYOUT,
+  WORKSPACE_MODES,
   checkCredentialScope,
   cleanHead,
   parseCodeHeadIdentity,
@@ -104,14 +105,19 @@ export class FakeGitService {
 }
 
 // What the double keeps in the checkout's `.git`; a real adapter uses Git.
+// The agent can change it, so nothing in it decides what may be pushed.
 interface LocalState {
-  readonly kind: WorkspaceKind;
-  readonly expectedBranch: string | null;
   readonly branch: string | null;
   readonly commit: string;
-  readonly remote: string;
   // The index: what the next commit would hold.
   readonly index: StoredTree;
+}
+
+// The worker's record beside the checkout, closed to the execution.
+interface Metadata {
+  readonly kind: WorkspaceKind;
+  readonly expectedBranch: string | null;
+  readonly remote: string;
 }
 
 const STATE_FILE = join('.git', 'state.json');
@@ -133,6 +139,9 @@ export interface DoubleDefects {
   readonly sweepFollowsLinks?: boolean;
   readonly ignoresIndex?: boolean;
   readonly corruptsBinary?: boolean;
+  readonly ignoresHandOff?: boolean;
+  readonly keepsOutsideLinks?: boolean;
+  readonly followsGitLinks?: boolean;
 }
 
 export class TempDirWorkspaces implements WorkspaceProvider {
@@ -173,9 +182,12 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     const secret = this.defects.storesSecret ? `https://${request.credential.secret}@` : '';
     const remote = `${secret}${request.binding.remote}`;
     const index = storeTree(this.service.entries(commit));
-    const state: LocalState = { kind: target.kind, expectedBranch: branch, branch, commit, remote, index };
     const staging = join(this.root, `${WORKSPACE_LAYOUT.stagingPrefix}${name.value}`);
-    await this.checkout(join(staging, WORKSPACE_LAYOUT.checkout), state);
+    await mkdir(staging, { mode: WORKSPACE_MODES.attempt });
+    await chmod(staging, WORKSPACE_MODES.attempt);
+    const metadata: Metadata = { kind: target.kind, expectedBranch: branch, remote };
+    await writeFile(join(staging, WORKSPACE_LAYOUT.metadata), JSON.stringify(metadata), { mode: WORKSPACE_MODES.metadata });
+    await this.checkout(join(staging, WORKSPACE_LAYOUT.checkout), { branch, commit, index });
     await rename(staging, final);
     return ok({
       attemptId: request.attemptId, projectId: request.projectId, taskId: request.taskId, kind: target.kind,
@@ -217,10 +229,41 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     }
   }
 
-  async inspect(attemptId: AttemptId): Promise<Result<WorkspaceStatus>> {
+  async handOff(attemptId: AttemptId): Promise<Result<void>> {
     const checkout = await this.checkoutOf(attemptId);
     if (!checkout.ok) return checkout;
+    await chmod(checkout.value, WORKSPACE_MODES.checkoutHandedOff);
+    return ok(undefined);
+  }
+
+  // A real adapter runs the copy and the grant as the execution account.
+  async reclaim(attemptId: AttemptId): Promise<Result<void>> {
+    const checkout = await this.checkoutOf(attemptId);
+    if (!checkout.ok) return checkout;
+    if (!(await handedOff(checkout.value))) return ok(undefined);
+    await normalize(checkout.value, !this.defects.keepsOutsideLinks);
+    await chmod(checkout.value, WORKSPACE_MODES.checkoutReclaimed);
+    return ok(undefined);
+  }
+
+  // The checkout, if the worker may run Git in it now.
+  private async reclaimedCheckout(attemptId: AttemptId): Promise<Result<string>> {
+    const checkout = await this.checkoutOf(attemptId);
+    if (!checkout.ok) return checkout;
+    if (!this.defects.ignoresHandOff && (await handedOff(checkout.value))) {
+      return workspaceFailure('precondition-failed', 'workspace-handed-off', `workspace ${attemptId} is handed off`);
+    }
+    if (!this.defects.followsGitLinks && (await unsafeGitDirectory(join(checkout.value, '.git')))) {
+      return workspaceFailure('precondition-failed', 'unsafe-checkout', `the Git directory of ${attemptId} is not safe`);
+    }
+    return checkout;
+  }
+
+  async inspect(attemptId: AttemptId): Promise<Result<WorkspaceStatus>> {
+    const checkout = await this.reclaimedCheckout(attemptId);
+    if (!checkout.ok) return checkout;
     const state = await readState(checkout.value);
+    const { expectedBranch } = await readMetadata(checkout.value);
     const committed = this.service.entries(state.commit);
     const working = await workingTree(checkout.value);
     const ignored = ignoredPaths(committed);
@@ -230,7 +273,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     const untracked = Object.keys(working).some((path) => !(path in committed) && !ignored.has(path));
     if (untracked && !this.defects.ignoresUntracked) reasons.add('untracked');
     if (await exists(join(checkout.value, OPERATION_FILE))) reasons.add('operation-in-progress');
-    if (state.branch !== state.expectedBranch) reasons.add('off-branch');
+    if (state.branch !== expectedBranch) reasons.add('off-branch');
     const dirtyReasons = DIRTY_REASONS.filter((reason) => reasons.has(reason));
     return ok({ head: this.head(state.commit), branch: state.branch, dirtyReasons });
   }
@@ -295,7 +338,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
   private async taskBranchOf(attemptId: AttemptId, credential: WorkspaceCredential, access: RemoteAccess): Promise<Result<{ branch: string }>> {
     const checkout = await this.checkoutOf(attemptId);
     if (!checkout.ok) return checkout;
-    const { expectedBranch } = await readState(checkout.value);
+    const { expectedBranch } = await readMetadata(checkout.value);
     if (expectedBranch === null) return workspaceFailure('invalid', 'read-only-workspace', 'an at-head workspace has no task branch');
     const scope = this.scope(credential, this.repository, access);
     return scope.ok ? ok({ branch: expectedBranch }) : scope;
@@ -322,6 +365,7 @@ export class TempDirWorkspaces implements WorkspaceProvider {
 
   private async checkout(directory: string, state: LocalState): Promise<void> {
     await mkdir(join(directory, '.git'), { recursive: true });
+    await chmod(directory, WORKSPACE_MODES.checkoutReclaimed);
     for (const [path, entry] of Object.entries(this.service.entries(state.commit))) await writeEntry(join(directory, path), entry);
     await writeState(directory, state);
   }
@@ -353,6 +397,49 @@ async function writeEntry(path: string, entry: TreeEntry): Promise<void> {
   if (entry.type === 'link') return symlink(entry.target, path);
   await writeFile(path, entry.content);
   await chmod(path, entry.mode === '100755' ? 0o755 : 0o644);
+}
+
+async function readMetadata(checkout: string): Promise<Metadata> {
+  return JSON.parse(await readFile(join(dirname(checkout), WORKSPACE_LAYOUT.metadata), 'utf8')) as Metadata;
+}
+
+async function handedOff(checkout: string): Promise<boolean> {
+  return ((await lstat(checkout)).mode & 0o070) !== 0;
+}
+
+// A `.git` that is no directory, or holds a link or a redirection.
+async function unsafeGitDirectory(gitDirectory: string): Promise<boolean> {
+  const status = await lstat(gitDirectory);
+  return !status.isDirectory() || holdsRedirection(gitDirectory);
+}
+
+async function holdsRedirection(directory: string): Promise<boolean> {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    if (entry.isSymbolicLink() || entry.name === 'commondir' || entry.name === 'alternates') return true;
+    if (entry.isDirectory() && (await holdsRedirection(join(directory, entry.name)))) return true;
+  }
+  return false;
+}
+
+// Copies every file with another hard link and lets the worker's group read
+// and write each entry, never following a link.
+async function normalize(directory: string, copiesLinked: boolean): Promise<void> {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isSymbolicLink()) continue;
+    if (entry.isDirectory()) {
+      await chmod(path, 0o2770);
+      await normalize(path, copiesLinked);
+      continue;
+    }
+    const status = await lstat(path);
+    if (copiesLinked && status.nlink > 1) {
+      const copy = `${path}.reclaim`;
+      await writeFile(copy, await readFile(path));
+      await rename(copy, path);
+    }
+    await chmod(path, (status.mode & 0o700) | ((status.mode & 0o700) >> 3));
+  }
 }
 
 async function readState(checkout: string): Promise<LocalState> {
@@ -468,6 +555,14 @@ export async function createFixture(defects: DoubleDefects = {}): Promise<{ fixt
         const { [path]: _staged, ...rest } = current.index;
         return { ...current, index: entry === undefined ? rest : { ...rest, [path]: store(entry) } };
       });
+    },
+    hardLinkOutside: async (attemptId, path) => {
+      const outside = join(dataRoot, `outside-${attemptId}`);
+      await link(join(await checkout(attemptId), path), outside);
+      return (text) => writeFile(outside, text);
+    },
+    linkInGitDirectory: async (attemptId) => {
+      await symlink(join(dataRoot, 'worker/journal'), join(await checkout(attemptId), '.git', 'objects'));
     },
     beginOperation: async (attemptId) => writeFile(join(await checkout(attemptId), OPERATION_FILE), 'merge'),
     switchBranch: async (attemptId, branch) => update(attemptId, (current) => ({ ...current, branch })),
