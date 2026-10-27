@@ -17,5 +17,5 @@
 
 ## 4. Review and archive
 
-- [ ] 4.1 Independent review (Codex CLI, `gpt-6-astra`, medium effort, read-only)
+- [x] 4.1 Independent review (Codex CLI, `gpt-6-astra`, medium effort, read-only)
 - [ ] 4.2 Archive the change

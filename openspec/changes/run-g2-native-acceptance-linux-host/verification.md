@@ -1,6 +1,6 @@
 # Verification: run-g2-native-acceptance-linux-host (25, native Linux host)
 
-Date: 2026-10-27. The author's verification and the evidence are recorded below; the independent review and the archive are still open.
+Date: 2026-10-27. The author's verification, the evidence, and the independent review are recorded below.
 
 ## Scope and source
 
@@ -46,6 +46,8 @@ G2 work item 25, the Linux entry on a native Linux host, `run-g2-native-acceptan
 | `make scenario-worker-namespace-confinement` on `9a5ef14`, with `TASKELITH_SCENARIO_RESULTS` set to this change's `results.jsonl` | Exit 0, 2026-10-27 05:32:55Z to 05:33:36Z UTC, seed `2677284533`: "refused the execution account's namespaces, ran a task, removed"; applied seccomp profile sha256 `4c5d107d…aed1`, equal to `infra/installation/seccomp/worker.json`; the execution ran as uid 10003 with `CapEff: 0000000000000000`, `NoNewPrivs: 1`, `Seccomp: 2`; `unshare -U`, `unshare -Urm` with a tmpfs mount, `clone` with `CLONE_NEWUSER`, and `setns` were refused with EPERM, `clone3` answered ENOSYS; line 12 |
 | `npm run openspec -- validate run-g2-native-acceptance-linux-host --strict` on the final records | Passed: "Change 'run-g2-native-acceptance-linux-host' is valid" |
 | `npm run verify:comments` on the final records | Passed: "Every comment is within the comment length rule." |
+| `make verify` after the pass 1 fixes, on the tree of `63be2c3` with this record and the `findings.jsonl` lines of the next commit | Exit 0: tests 2017, suites 39, pass 1971, fail 0, cancelled 0, skipped 46, todo 0; coverage of all files: lines 99.19 %, branches 91.86 %, functions 98.80 %; the comment rule, findings validation (3 files), `openspec validate --all --strict` 70 of 70, the archive dry run, and the packed allowlist and installed CLI verification passed |
+| `make findings ARGS="validate"`, `validate run-g2-native-acceptance-linux-host --strict`, and `verify:comments` after the pass 1 fixes | Passed: "Every findings file is valid: 3 file(s).", "Change 'run-g2-native-acceptance-linux-host' is valid", "Every comment is within the comment length rule." |
 | `npm run openspec -- validate run-g2-native-acceptance-linux-host --strict` on `4a2b45a` | Passed: "Change 'run-g2-native-acceptance-linux-host' is valid" (`skip_specs`, zero deltas) |
 
 ## Dependency check for the namespace-confinement scenario
@@ -70,7 +72,21 @@ A run before the merge would have been valid only until that change merged, so t
 
 ## Independent review
 
-TODO: Codex CLI, `gpt-6-astra`, medium effort, read-only; invocation, model confirmation, reviewed head, snapshot, findings, and fixes.
+Reviewer: Codex CLI, assigned by the coordinator. One pass; the coordinator ran it and handed its data to the author.
+
+- **Pass 1.**
+  - Invocation: `codex exec -m gpt-6-astra -c model_reasoning_effort='"medium"' -s read-only -C /home/petar/taskelith-worktrees/run-g2-native-acceptance-linux-host - < review-p1.md`.
+  - Model confirmation: the session header reports model `gpt-6-astra`, provider openai, sandbox read-only, and reasoning effort medium (Codex CLI v0.163.0).
+  - Session `01a17bdb-eab6-7043-8515-10a20f500b93`.
+  - Reviewed head `5153b3e` (`origin/dev...5153b3e`).
+  - Snapshot: the worktree snapshot before and after the pass was identical, `5093b5a6abf74f55df47d97156b95ee21b3cd9b2f38bb77a1b976c63edef773f`.
+  - Counts: Critical 0, High 0, Medium 0, Low 3.
+  - The reviewer confirmed that the 12 records, their outcomes, counts, seeds, revision, and timings match the documents. It confirmed that the host and container OS distinction is honest, that the AppArmor, reproducibility, crash-window, and duplicate-delivery limitations hold, and that `fe64386` is in the run revision.
+- **Findings and resolutions**, all fixed in `63be2c3`, recorded in [findings.jsonl](findings.jsonl) as `fixed-unreviewed`:
+  - L1 (`design.md:3`, `:7`, `:17`; `acceptance.md:3`, `:35`, `:44`; `verification.md:10`, `:81`, `:91`): the records attributed a GitHub-hosted `ubuntu-24.04` runner for Linux x86_64 to D11 (a). The labels of D11 (a) in `docs/g2-plan.md:90` name no such runner. The open hosted-runner check is now attributed to the coordinator's brief of 2026-10-27. D11 is cited only for requiring all four matrix entries and for recording any entry not established as open in the closure ADR. The other D11 and `ubuntu-24.04` mentions were rechecked and are correct (`proposal.md:3` and the `verification.md:7` source list).
+  - L2 (`acceptance.md:5`, `verification.md:14`): the records said all of this change's records were untracked at run time. They now say that only `results.jsonl` was new and untracked, that the documents were tracked, and that the runtime evidence stays fresh because the later commits change only records.
+  - L3 (`verification.md:22`): the self-check named only `docs` commits; it now names `docs` and `test`.
+- **Unreviewed fixes.** The pass found only Low findings, so under the [review process](../../../docs/governance.md#independent-review-process) the fixes of `63be2c3` were made without another pass and are unreviewed.
 
 ## Candidate product defects
 
@@ -87,8 +103,6 @@ None. Every proof of the evidence run and the namespace-confinement scenario pas
 
 ## Remaining gates
 
-- The independent review (pass 1 and any later passes) and its `findings.jsonl` lines.
 - The GitHub-hosted `ubuntu-24.04` runner check for Linux x86_64 (coordinator's brief of 2026-10-27); 25c (`macos-26-x86_64`).
 - The Linux composed crash windows and duplicate delivery, carried by the coordinator to `close-g2` as a candidate deferral or follow-up.
 - Integration into `dev` by the coordinator (single pull request).
-- Archive of the change.
