@@ -14,11 +14,15 @@ A standing rule SHALL record its author, scope as a normalized operation, policy
 ## ADDED Requirements
 
 ### Requirement: Product writers invalidate launches
-A spec gate decision, a passed gate made stale, by the conflict flow or a return to Specify, a new artifact revision, and a change of the run's policy revision SHALL each, in its own SERIALIZABLE transaction, read the live grants of its predicate, an empty read included, revoke each grant whose compared value it changes, and write a cancellation command per affected attempt (/docs/contracts/launch-authorization.md section 5).
+Every transaction that changes a spec gate's state (a decision, making a passed gate stale, reopening), a new artifact revision, which also updates the run's current revision, and a change of the run's policy revision SHALL each, in its own SERIALIZABLE transaction, read the live grants of its predicate, an empty read included, revoke each grant whose compared value it changes, and write a cancellation command per affected attempt (/docs/contracts/launch-authorization.md section 5).
 
 #### Scenario: Return to Specify during a running attempt
-- **WHEN** a return to Specify makes a passed spec gate stale while an attempt of the task runs under a grant that relies on the gate
-- **THEN** the transaction that makes the gate stale revokes the grant and writes the attempt's cancellation command
+- **WHEN** a return to Specify records a new spec revision that outdates a passed spec gate while an attempt of the task runs under a grant that relies on the gate
+- **THEN** the transaction that records the revision makes the gate stale, revokes the grant, and writes the attempt's cancellation command
+
+#### Scenario: Return to Specify without a new revision
+- **WHEN** a return to Specify records no new revision while an attempt of the task runs
+- **THEN** the task's active attempt is cancelled by assignment and its grants are revoked with `attempt-not-launchable`
 
 #### Scenario: Spec gate made stale concurrently with an authorization
 - **WHEN** a passed spec gate is made stale concurrently with a launch authorization that relies on it
@@ -36,8 +40,16 @@ After a product writer revokes a grant, the task SHALL NOT be dispatched again u
 - **THEN** the task is not dispatched again and its re-admission is refused
 
 ### Requirement: Standing rule use checked in one transaction
-A standing rule use SHALL read, in one SERIALIZABLE transaction with the answer and the use record, the rule, the run's current policy revision, and the request's attempt and task, and SHALL answer only if the rule may be used, the attempt is neither cancelled nor terminal, the task is at the ownership generation and admission the attempt was dispatched under, and the request's attempt generation is current.
+A standing rule use SHALL read, in one SERIALIZABLE transaction with the answer and the use record, the rule, the run's current policy revision, and the request's attempt and task, and SHALL answer only if the rule may be used, the attempt is neither cancelled nor terminal, the task's ownership generation equals that of the request's assignment, its admission is the one the assignment names, and the request's attempt generation is current.
 
 #### Scenario: Use for a cancelled attempt
 - **WHEN** a launch revocation that cancels the request's attempt is serialized before the use
+- **THEN** the rule answers nothing and no use is recorded
+
+#### Scenario: Use after a policy revision change
+- **WHEN** a change of the run's policy revision is serialized before a use of a rule of the older revision
+- **THEN** the rule answers nothing and no use is recorded
+
+#### Scenario: Use after an ownership change
+- **WHEN** an ownership change of the request's task is serialized before the use
 - **THEN** the rule answers nothing and no use is recorded

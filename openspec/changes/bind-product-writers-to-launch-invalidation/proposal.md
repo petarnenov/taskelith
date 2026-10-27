@@ -4,10 +4,10 @@ The G3 item 0 revalidation (`revalidate-g3-foundations`) of item 8 (`define-prod
 
 ## What Changes
 
-- `docs/contracts/product-ports.md` section 4.1: deciding a `spec-approval` item, or reopening its spec gate, is an invalidating writer of launch authorization section 5 (item 22); "After a revocation" states what the task waits for: the revoked attempt's end or reconciliation, then a re-admission by the writer of admissions of G3 plan item 44.
-- Section 5: a "Use transaction" bullet, the `SERIALIZABLE` reads and checks of a standing rule use (rule, the run's current policy revision, the attempt, the task's ownership generation and admission, the request's attempt generation), and an "Invalidation" bullet: recording, revoking, or using a rule revokes no grant, and a command that changes the run's policy revision is an invalidating writer by run.
-- Section 6.3: an "Invalidation" bullet that binds the conflict flow's stale evidence and new artifact revisions and the return to Specify (item 24) to launch authorization section 5.
-- Section 7: launch invalidation race tests for items 18, 22, 23, and 24.
+- `docs/contracts/product-ports.md` section 4.1: every transaction that changes a spec gate's state, deciding a `spec-approval` item (item 22), making a passed spec gate stale, and reopening it, is an invalidating writer of launch authorization section 5; "After a revocation" states what the task waits for: the revoked attempt's end or reconciliation, then a re-admission by the writer of admissions of G3 plan item 44.
+- Section 5: a "Use transaction" bullet, the `SERIALIZABLE` reads and checks of a standing rule use (rule, the run's current policy revision, the attempt, the task's ownership generation and admission, the request's attempt generation), and an "Invalidation" bullet: recording, revoking, or using a rule revokes no grant unless it changes the run's policy revision, and a command that does is an invalidating writer by run.
+- Section 6.3: an "Invalidation" bullet that binds the new artifact revisions of the conflict flow and the return to Specify (item 24) to launch authorization section 5, with the update of the run's current revision and the stale gates in the same transaction, and a return to Specify without a new revision to the cancellation writer by assignment.
+- Section 7: launch invalidation race tests for items 18, 22, 23, and 24, and for the item that adds a command that changes the run's policy revision.
 - `product-ports` spec: modifies "Standing approval rules recorded and audited" (a scenario); adds "Product writers invalidate launches", "Revoked attempt ends before re-admission", and "Standing rule use checked in one transaction".
 
 ## Capabilities
