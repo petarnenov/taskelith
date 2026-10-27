@@ -4,7 +4,7 @@ Date: 2026-10-26. Author verification is recorded below, followed by the review 
 
 ## Scope and source
 
-[G2 work plan](../../../docs/g2-plan.md) item 20, split by the coordinator; this is 20d. The coordinating session (Niki) assigned it to the worker session Pepi. The reviewer is OpenCode with `opencode-go/kimi-k3.1-pro` (`high`), as the coordinator assigned, with a cap of three passes.
+[G2 work plan](/docs/g2-plan.md) item 20, split by the coordinator; this is 20d. The coordinating session (Niki) assigned it to the worker session Pepi. The reviewer is OpenCode with `opencode-go/kimi-k3.1-pro` (`high`), as the coordinator assigned, with a cap of three passes.
 
 - Base revision: `85797b8` on `dev`.
 - Scope: as the design's coordinator decisions state.

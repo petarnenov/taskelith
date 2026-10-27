@@ -1,6 +1,6 @@
 ## Scope and source
 
-`run-g2-crash-windows-on-linux`, a worker task the coordinator assigned on 2026-10-27: run the G2 crash window and duplicate delivery scenarios of item 24b (`run-g2-crash-windows`, archived on 2026-10-26) on Linux. Coordinator decisions: option B, the privileged Linux test image with network to the services; a new Makefile target `verify-linux-crash-windows`, out of `make verify` unless it is as cheap and portable as `verify-linux-cgroup`; the macOS path unchanged; the Linux expectations of CP7 to CP9, and of any other window that differs, per section 6 of the [supervisor identity contract](../../../docs/contracts/supervisor-identity.md); a failing Linux scenario recorded as a candidate defect with its expectation kept, and no product fix. After the first evidence run the coordinator decided for candidate defect L1: mark CP9 on Linux `expectFailure`, citing L1, as 24b did for D1, with the CP9 expectation of section 6 unchanged and macOS unchanged; fix L1 in the separate change `stop-automatic-retry-of-unknown-exit`, which removes the mark as its fail-before test; document the target beside `make verify-linux-cgroup`. Excluded: product code, contracts, the macOS expectations, and `native-acceptance.sh`.
+`run-g2-crash-windows-on-linux`, a worker task the coordinator assigned on 2026-10-27: run the G2 crash window and duplicate delivery scenarios of item 24b (`run-g2-crash-windows`, archived on 2026-10-26) on Linux. Coordinator decisions: option B, the privileged Linux test image with network to the services; a new Makefile target `verify-linux-crash-windows`, out of `make verify` unless it is as cheap and portable as `verify-linux-cgroup`; the macOS path unchanged; the Linux expectations of CP7 to CP9, and of any other window that differs, per section 6 of the [supervisor identity contract](/docs/contracts/supervisor-identity.md); a failing Linux scenario recorded as a candidate defect with its expectation kept, and no product fix. After the first evidence run the coordinator decided for candidate defect L1: mark CP9 on Linux `expectFailure`, citing L1, as 24b did for D1, with the CP9 expectation of section 6 unchanged and macOS unchanged; fix L1 in the separate change `stop-automatic-retry-of-unknown-exit`, which removes the mark as its fail-before test; document the target beside `make verify-linux-cgroup`. Excluded: product code, contracts, the macOS expectations, and `native-acceptance.sh`.
 
 ## Revision and environment
 
@@ -39,7 +39,7 @@
 
 ## Windows and results
 
-Seed `2776760789` for every row, evidence run of `d18d6d5c`, on Linux in the privileged test image. "Journal section 5" is the recovery table of the [worker journal contract](../../../docs/contracts/worker-journal.md); "section 6" is the recovery table of the supervisor identity contract, Linux rows.
+Seed `2776760789` for every row, evidence run of `d18d6d5c`, on Linux in the privileged test image. "Journal section 5" is the recovery table of the [worker journal contract](/docs/contracts/worker-journal.md); "section 6" is the recovery table of the supervisor identity contract, Linux rows.
 
 | Window | How it is reached | Expected | Result |
 | --- | --- | --- | --- |
@@ -79,10 +79,10 @@ Seed `2776760789` for every row, evidence run of `d18d6d5c`, on Linux in the pri
   ```
 
 - Cause, as read: `isRetryableOutcome` (`packages/modules/scheduling/src/domain/automatic-retry.ts:14-17`) retries every `exited` outcome with a proven start that is not a clean exit, and an `unknown` status is not a clean exit; `followAttemptEnd` (`apps/control-plane/src/application/task-ending.ts:10-14`) opens the retry.
-- Expected, per supervisor identity contract section 6: "An exit with an unknown status ends the execution ... The attempt's outcome is still unknown, because side effects may have happened, and automatic retry needs operation-specific repeatability ... within the retry budget of `0` for uncertain execution"; [operational targets](../../../docs/operational-targets.md) section 1: `0` automatic retries for uncertain execution. So the attempt ends with no automatic retry.
+- Expected, per supervisor identity contract section 6: "An exit with an unknown status ends the execution ... The attempt's outcome is still unknown, because side effects may have happened, and automatic retry needs operation-specific repeatability ... within the retry budget of `0` for uncertain execution"; [operational targets](/docs/operational-targets.md) section 1: `0` automatic retries for uncertain execution. So the attempt ends with no automatic retry.
 - Observed: a second attempt, `retryOf` the first, without executions yet.
 - Why only Linux shows it: on macOS CP9 ends `uncertain` without an exit, so no attempt ends.
-- Contract: [`docs/contracts/supervisor-identity.md:107`](../../../docs/contracts/supervisor-identity.md), the retry budget of `0` for uncertain execution. Code: `packages/modules/scheduling/src/domain/automatic-retry.ts:14-17`, `isRetryableOutcome`.
+- Contract: [`docs/contracts/supervisor-identity.md:107`](/docs/contracts/supervisor-identity.md), the retry budget of `0` for uncertain execution. Code: `packages/modules/scheduling/src/domain/automatic-retry.ts:14-17`, `isRetryableOutcome`.
 - Not fixed here (coordinator decision 3). Coordinator decision of 2026-10-27: CP9 on Linux is marked `expectFailure` now, matched on L1's signature, as 24b did for D1, with its expectation unchanged; L1 is fixed in the separate change `stop-automatic-retry-of-unknown-exit`, which removes the constant `L1` and its use on the CP9 row as its fail-before test, after which CP9 passes unchanged.
 
 ## Limitations

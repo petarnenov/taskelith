@@ -4,15 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import {
-  applyBaseline,
-  BASELINE_PATH,
-  baselineLine,
   findLinkProblems,
   headingAnchors,
   linkReport,
   localDate,
   markdownLinks,
-  parseBaseline,
   type LinkProblem,
 } from '../scripts/check-record-links.ts';
 
@@ -197,54 +193,21 @@ test('checks relative links and anchors under docs', () => {
   ]);
 });
 
-test('a baseline suppresses known archived problems and reports stale entries', () => {
-  const known: LinkProblem = { file: `${ARCHIVED}/design.md`, line: 3, target: '../../docs/a.md', reason: 'target does not exist' };
-  const fresh: LinkProblem = { file: `${ARCHIVED}/tasks.md`, line: 1, target: 'gone.md', reason: 'target does not exist' };
-  const baseline = parseBaseline([
-    baselineLine(known),
-    `${ARCHIVED}/proposal.md\t../../docs/fixed.md`,
-    '',
-  ].join('\n'));
-
-  const result = applyBaseline([known, fresh], baseline);
-
-  assert.deepEqual(result.unbaselined, [fresh]);
-  assert.equal(result.baselined, 1);
-  assert.deepEqual(result.stale, [{ file: `${ARCHIVED}/proposal.md`, target: '../../docs/fixed.md' }]);
-});
-
-test('a baseline entry matches one occurrence of a repeated link', () => {
-  const problem: LinkProblem = { file: `${ARCHIVED}/design.md`, line: 3, target: 'gone.md', reason: 'target does not exist' };
-  const repeated = { ...problem, line: 4 };
-  const result = applyBaseline([problem, repeated], parseBaseline(`${baselineLine(problem)}\n`));
-  assert.deepEqual(result.unbaselined, [repeated]);
-});
-
-test('a baseline accepts only archived records', () => {
-  assert.throws(() => parseBaseline('docs/plan.md\tgone.md\n'), /docs\/plan\.md.*openspec\/changes\/archive\//);
-  assert.throws(() => parseBaseline(`${ARCHIVED}/design.md\n`), /tab/);
-});
-
-test('the report lists problems and stale entries, or counts the baseline', () => {
-  const archivedLink = '../../docs/governance.md';
+test('the report passes conforming records and lists every problem', () => {
   const root = repository({
     ...BASE_FILES,
-    [`${ARCHIVED}/tasks.md`]: `[governance](${archivedLink})\n`,
-    [BASELINE_PATH]: `${ARCHIVED}/tasks.md\t${archivedLink}\n`,
+    [`${ARCHIVED}/tasks.md`]: '[governance](/docs/governance.md)\n',
   });
   try {
-    assert.deepEqual(linkReport(root, ARCHIVE_DATE), {
-      errors: [],
-      summary: `Every checked link conforms; 1 archived links remain in ${BASELINE_PATH}.`,
-    });
+    assert.deepEqual(linkReport(root, ARCHIVE_DATE), { errors: [], summary: 'Every checked link conforms.' });
     writeFileSync(join(root, `${ACTIVE}/tasks.md`), '[gone](gone.md)\n');
-    writeFileSync(join(root, BASELINE_PATH), `${ARCHIVED}/tasks.md\t${archivedLink}\n${ARCHIVED}/tasks.md\tfixed.md\n`);
+    writeFileSync(join(root, `${ARCHIVED}/tasks.md`), '[governance](../../docs/governance.md)\n');
     assert.deepEqual(linkReport(root, ARCHIVE_DATE), {
       errors: [
         `${ACTIVE}/tasks.md:1: target does not exist: gone.md`,
-        `${BASELINE_PATH}: stale entry, remove it: ${ARCHIVED}/tasks.md\tfixed.md`,
+        `${ARCHIVED}/tasks.md:1: relative link leaves the change directory; use a root-relative link: ../../docs/governance.md`,
       ],
-      summary: 'Record link problems: 1, stale baseline entries: 1; see docs/agent-task-protocol.md step 6.',
+      summary: 'Record link problems: 2; see docs/agent-task-protocol.md step 6.',
     });
   } finally {
     rmSync(root, { recursive: true, force: true });

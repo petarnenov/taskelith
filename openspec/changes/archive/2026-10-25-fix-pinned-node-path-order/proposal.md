@@ -1,6 +1,6 @@
 ## Why
 
-Finding F1 of the [Linux verify observation](../../../docs/linux-verify-observation.md): on a host with a Node.js outside nvm earlier in `PATH`, for example in `~/.local/bin`, `scripts/with-pinned-node.sh` does not take effect. `nvm use` updates nvm's own `PATH` entry where it stands instead of putting it first, so the earlier Node.js still wins. `make setup` installs the pin and then fails its own checks, and `make doctor`, `make verify`, and the `pre-push` hook fail, contrary to the `development-environment` scenario "Shell on another Node.js after setup". The coordinator (Niki) assigned the fix on 2026-10-25.
+Finding F1 of the [Linux verify observation](/docs/linux-verify-observation.md): on a host with a Node.js outside nvm earlier in `PATH`, for example in `~/.local/bin`, `scripts/with-pinned-node.sh` does not take effect. `nvm use` updates nvm's own `PATH` entry where it stands instead of putting it first, so the earlier Node.js still wins. `make setup` installs the pin and then fails its own checks, and `make doctor`, `make verify`, and the `pre-push` hook fail, contrary to the `development-environment` scenario "Shell on another Node.js after setup". The coordinator (Niki) assigned the fix on 2026-10-25.
 
 ## What Changes
 

@@ -1,6 +1,6 @@
 ## Why
 
-G1 item 5 in the [G1 work plan](../../../docs/g1-plan.md). Its exit evidence requires domain tests that reject invalid transitions and keep structural validation and semantic approval distinct. Architecture section 6 normalizes gate states (pending, passed, failed, stale, blocked), separates automated structural validation from semantic approval, requires compare-and-set transitions, and invalidates decisions when the artifacts they judged change; invariants 11 and 12 forbid admission or completion on a prompt instruction, file existence, a checkbox, or an agent exit, and forbid carrying approvals across changed artifacts. Task admission (item 7) builds on these rules.
+G1 item 5 in the [G1 work plan](/docs/g1-plan.md). Its exit evidence requires domain tests that reject invalid transitions and keep structural validation and semantic approval distinct. Architecture section 6 normalizes gate states (pending, passed, failed, stale, blocked), separates automated structural validation from semantic approval, requires compare-and-set transitions, and invalidates decisions when the artifacts they judged change; invariants 11 and 12 forbid admission or completion on a prompt instruction, file existence, a checkbox, or an agent exit, and forbid carrying approvals across changed artifacts. Task admission (item 7) builds on these rules.
 
 ## What Changes
 

@@ -28,7 +28,7 @@ A failure other than a refusal for space is reported through `onFailure`, as bef
 
 ### D3: identity and ordering
 
-The adapter derives the `observationId` from `journalId` and the containment and journals nothing while an entry for the containment waits in the outbox, so a retried report gets the same identity and is recorded once per journal incarnation ([worker journal contract](../../../docs/contracts/worker-journal.md) section 6). The first pass journals the reports where it did before: after the plan is logged, the records are listed, and the leftovers are logged, and before the recovery actions. A later pass journals the due ones at the same point.
+The adapter derives the `observationId` from `journalId` and the containment and journals nothing while an entry for the containment waits in the outbox, so a retried report gets the same identity and is recorded once per journal incarnation ([worker journal contract](/docs/contracts/worker-journal.md) section 6). The first pass journals the reports where it did before: after the plan is logged, the records are listed, and the leftovers are logged, and before the recovery actions. A later pass journals the due ones at the same point.
 
 ## Risks / Trade-offs
 

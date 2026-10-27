@@ -1,6 +1,6 @@
 ## Why
 
-G1 item 6 in the [G1 work plan](../../../docs/g1-plan.md). Architecture section 6 proposes an `SdlcFramework` port through which framework plugins discover work, resolve versioned workflows, describe artifacts and prerequisites, prepare stage instructions, inspect artifact revisions, validate structure, and finalize, returning typed results and evidence references rather than an approval boolean. The fixtures (item 10), the first adapter (item 11), and the freeze against both frameworks (item 12) need a draft port and a framework-neutral conformance suite to run against.
+G1 item 6 in the [G1 work plan](/docs/g1-plan.md). Architecture section 6 proposes an `SdlcFramework` port through which framework plugins discover work, resolve versioned workflows, describe artifacts and prerequisites, prepare stage instructions, inspect artifact revisions, validate structure, and finalize, returning typed results and evidence references rather than an approval boolean. The fixtures (item 10), the first adapter (item 11), and the freeze against both frameworks (item 12) need a draft port and a framework-neutral conformance suite to run against.
 
 ## What Changes
 

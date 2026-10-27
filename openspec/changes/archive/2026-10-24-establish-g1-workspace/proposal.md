@@ -1,6 +1,6 @@
 ## Why
 
-G1 item 1 in the [G1 work plan](../../../docs/g1-plan.md). The owner chose npm workspaces with private packages under `packages/`, each created with its first real use (decision D1, 2026-10-24). Before the kernel and the first module can be added, the build, tests, coverage gate, dependency inventory, and boundary check must handle workspace packages.
+G1 item 1 in the [G1 work plan](/docs/g1-plan.md). The owner chose npm workspaces with private packages under `packages/`, each created with its first real use (decision D1, 2026-10-24). Before the kernel and the first module can be added, the build, tests, coverage gate, dependency inventory, and boundary check must handle workspace packages.
 
 ## What Changes
 

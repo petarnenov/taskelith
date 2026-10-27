@@ -33,7 +33,7 @@ Pass 1 (Claude Code):
   3. Low: the claim that Octokit sets no `X-GitHub-Api-Version` cited a README example. It now cites the defaults of `@octokit/endpoint@11.0.5`.
   4. Low: Node 24's maintenance LTS start on 2026-10-20 was missing. Added.
 
-By the [review process](../../../docs/governance.md#independent-review-process), a pass with only Low findings is fixed without another review; these fixes are **unreviewed**.
+By the [review process](/docs/governance.md#independent-review-process), a pass with only Low findings is fixed without another review; these fixes are **unreviewed**.
 
 ## Limitations
 

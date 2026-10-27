@@ -4,7 +4,7 @@ Date: 2026-10-26. Author verification is recorded below. Review passes are recor
 
 ## Scope and source
 
-The `unrecorded-process` follow-up of [`implement-worker-start-reconciliation`](../archive/2026-10-26-implement-worker-start-reconciliation/design.md) (design D5 and coordinator decision Q2). The implementing subagent stopped at its specification gate and reported the gap; the owner's away delegate chose option A (OpenCode run `20261026T110406Z-opencode-12993`), relayed by the coordinator. The scope is as the design's owner decision states.
+The `unrecorded-process` follow-up of [`implement-worker-start-reconciliation`](/openspec/changes/archive/2026-10-26-implement-worker-start-reconciliation/design.md) (design D5 and coordinator decision Q2). The implementing subagent stopped at its specification gate and reported the gap; the owner's away delegate chose option A (OpenCode run `20261026T110406Z-opencode-12993`), relayed by the coordinator. The scope is as the design's owner decision states.
 
 - Base revision: `503a0be` on `dev`.
 - Reviewed revisions: `ab9c95e` (pass 1) and `4853d57` (pass 2). Final checks: `make verify` at `59e034f`; the later commit that records them changes only this file (see "Checks and results").

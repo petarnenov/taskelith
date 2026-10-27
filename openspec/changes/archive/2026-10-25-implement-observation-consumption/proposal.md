@@ -1,6 +1,6 @@
 ## Why
 
-G2 work item 21 ([docs/g2-plan.md](../../../docs/g2-plan.md), row 21, `implement-execution-reconciliation`) is the control-plane execution service. On 2026-10-25 the coordinator split it into four changes, each merged and archived before the next: 21a `implement-execution-placement` (archived), 21b `implement-observation-consumption` (this change), 21c `implement-inventory-reconciliation`, and 21d `wire-launch-authority-reconciliation`.
+G2 work item 21 ([docs/g2-plan.md](/docs/g2-plan.md), row 21, `implement-execution-reconciliation`) is the control-plane execution service. On 2026-10-25 the coordinator split it into four changes, each merged and archived before the next: 21a `implement-execution-placement` (archived), 21b `implement-observation-consumption` (this change), 21c `implement-inventory-reconciliation`, and 21d `wire-launch-authority-reconciliation`.
 
 Before this change, no control-plane code read the observation stream. A worker's acceptance, refusal, or exit changed nothing, no worker ever became reachable, and no attempt ended.
 

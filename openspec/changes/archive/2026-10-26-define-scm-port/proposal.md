@@ -1,6 +1,6 @@
 ## Why
 
-G3 item 7 in the [G3 work plan](../../../docs/g3-plan.md). The GitHub plugin (item 20), the Git workspace (item 6), and the integration and merge items need a reviewed SCM port to build on. ADR 0006 makes GitHub.com the first SCM and Forgejo a later second one. Until Forgejo is added, the port's SCM-neutral design rests on review and on a shared conformance suite (ADR 0006 consequences, ADR 0004 principle 2). The coordinating session (Niki) assigned the task on 2026-10-26, after the owner started the first wave of G3 contracts.
+G3 item 7 in the [G3 work plan](/docs/g3-plan.md). The GitHub plugin (item 20), the Git workspace (item 6), and the integration and merge items need a reviewed SCM port to build on. ADR 0006 makes GitHub.com the first SCM and Forgejo a later second one. Until Forgejo is added, the port's SCM-neutral design rests on review and on a shared conformance suite (ADR 0006 consequences, ADR 0004 principle 2). The coordinating session (Niki) assigned the task on 2026-10-26, after the owner started the first wave of G3 contracts.
 
 ## What Changes
 

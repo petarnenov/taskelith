@@ -1,6 +1,6 @@
 ## Why
 
-Item 16 left worker authentication to item 17, as a lookup by credential hash in `FleetRegistry` (its design, Q6). Item 17's `authorizeLaunch` and item 19's `publishEvidence` both take the worker's control-plane credential as a bearer. So the coordinating session asked for the authentication to land first as its own change, which both items then build on ([G2 work plan](../../../docs/g2-plan.md) items 17 and 19).
+Item 16 left worker authentication to item 17, as a lookup by credential hash in `FleetRegistry` (its design, Q6). Item 17's `authorizeLaunch` and item 19's `publishEvidence` both take the worker's control-plane credential as a bearer. So the coordinating session asked for the authentication to land first as its own change, which both items then build on ([G2 work plan](/docs/g2-plan.md) items 17 and 19).
 
 ## What Changes
 

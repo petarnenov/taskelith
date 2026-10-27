@@ -1,6 +1,6 @@
 ## Why
 
-G2 work item 17 ([docs/g2-plan.md](../../../docs/g2-plan.md)) serves the exit evidence "Launch authorization", stale generations, and R27. The item 3 contract ([launch authorization](../../../docs/contracts/launch-authorization.md)) and the item 7 domain decide a launch, but before this change nothing served the decision or recorded it. Nothing found a recorded operation or recorded a final rejection. Only item 18's cancellation revoked grants, and no other writer could find the grants its change affects. The worker had no client.
+G2 work item 17 ([docs/g2-plan.md](/docs/g2-plan.md)) serves the exit evidence "Launch authorization", stale generations, and R27. The item 3 contract ([launch authorization](/docs/contracts/launch-authorization.md)) and the item 7 domain decide a launch, but before this change nothing served the decision or recorded it. Nothing found a recorded operation or recorded a final rejection. Only item 18's cancellation revoked grants, and no other writer could find the grants its change affects. The worker had no client.
 
 Item 16 left the `authorizeLaunch` HTTP operation here. The split-off change `add-worker-bearer-authentication` left the in-transaction re-read of the worker and its current-generation rule.
 

@@ -4,7 +4,7 @@ Date: 2026-10-25. Author verification is recorded below, followed by three indep
 
 ## Scope and source
 
-A G2 follow-up of the worker command intake change (20b of [G2 work plan](../../../docs/g2-plan.md) item 20), whose design left the removal of a revoked worker's command consumer to a later change. The coordinating session (Niki) assigned it to the worker session Ziki. The reviewer is Codex CLI `gpt-6.1-sol` (medium, read-only), as the coordinator assigned, with a cap of three passes.
+A G2 follow-up of the worker command intake change (20b of [G2 work plan](/docs/g2-plan.md) item 20), whose design left the removal of a revoked worker's command consumer to a later change. The coordinating session (Niki) assigned it to the worker session Ziki. The reviewer is Codex CLI `gpt-6.1-sol` (medium, read-only), as the coordinator assigned, with a cap of three passes.
 
 - Base revision: `f245956` on `dev`, which holds 20b and its archive.
 - Scope: `WorkerCommandConsumers.remove`, idempotent; the removal in `EnrollmentService.revoke` after the revocation commits, reported and never failing the revocation; the administration tool's broker connection for it; `FleetRegistry.recentlyRevokedWorkerIds`; the bounded removal in `repairCommandConsumers`; the bound in the operational targets.

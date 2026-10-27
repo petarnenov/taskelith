@@ -4,7 +4,7 @@ Date: 2026-10-25. Author verification and independent review are recorded below.
 
 ## Scope and source
 
-[G2 work plan](../../../docs/g2-plan.md) item 13, assigned by the coordinating session (Niki) to the worker session Pepi, with Codex `gpt-6.1-sol` (medium) as the reviewer by rotation. Base revision: `5878679` on `dev`, with items 8, 11, and 12 merged and archived. Scope: the row of item 13. Out of scope: the HTTP API (item 16) and launch authority (item 17).
+[G2 work plan](/docs/g2-plan.md) item 13, assigned by the coordinating session (Niki) to the worker session Pepi, with Codex `gpt-6.1-sol` (medium) as the reviewer by rotation. Base revision: `5878679` on `dev`, with items 8, 11, and 12 merged and archived. Scope: the row of item 13. Out of scope: the HTTP API (item 16) and launch authority (item 17).
 
 Decisions:
 - **The owner's own decisions**, relayed by the coordinator on 2026-10-25: O1 (b), O2 (a), O3 (c), and O4.

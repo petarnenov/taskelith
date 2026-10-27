@@ -2,7 +2,7 @@
 
 G2 crash scenario 24c found bug B3: a worker keeps counting the slot of a launch that the control plane rejected finally before any grant. `countedAttempts` in `apps/worker/src/assignment-admission.ts` treats every execution that is not `exited` or `not-started` as running, including one with no state at all. Such an execution never started and never can, yet a worker with one slot refuses the scheduler's next placement with `worker-slots-exhausted` after the rejected assignment has ended.
 
-The [capacity reservation contract](../../../docs/contracts/capacity-reservation.md) section 8 counts, once per attempt, every assignment that has not ended and every non-terminal execution; section 6 treats an execution for which no launch authorization was ever granted as no obstacle to a release. An execution without a grant has no state ([launch authorization contract](../../../docs/contracts/launch-authorization.md) section 4, [worker journal contract](../../../docs/contracts/worker-journal.md) section 5), so it is not a non-terminal execution.
+The [capacity reservation contract](/docs/contracts/capacity-reservation.md) section 8 counts, once per attempt, every assignment that has not ended and every non-terminal execution; section 6 treats an execution for which no launch authorization was ever granted as no obstacle to a release. An execution without a grant has no state ([launch authorization contract](/docs/contracts/launch-authorization.md) section 4, [worker journal contract](/docs/contracts/worker-journal.md) section 5), so it is not a non-terminal execution.
 
 ## What Changes
 

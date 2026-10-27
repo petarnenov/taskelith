@@ -1,6 +1,6 @@
 ## Why
 
-G1 work item 8 ([docs/g1-plan.md](../../../docs/g1-plan.md)). The OpenSpec framework adapter (item 11) must be registered through the microkernel of [ADR 0003](../../../docs/decisions/0003-first-integrations-and-plugin-kernel.md) decision 8, and architecture section 7 requires the composition root to validate compatibility before accepting work. Versioned plugin manifests and UI selection belong to G4 (architecture section 13); this change pulls forward only the minimum registration path: a validated manifest subset and a library-level registration function that rejects an incompatible plugin before admission.
+G1 work item 8 ([docs/g1-plan.md](/docs/g1-plan.md)). The OpenSpec framework adapter (item 11) must be registered through the microkernel of [ADR 0003](/docs/decisions/0003-first-integrations-and-plugin-kernel.md) decision 8, and architecture section 7 requires the composition root to validate compatibility before accepting work. Versioned plugin manifests and UI selection belong to G4 (architecture section 13); this change pulls forward only the minimum registration path: a validated manifest subset and a library-level registration function that rejects an incompatible plugin before admission.
 
 ## What Changes
 
@@ -9,7 +9,7 @@ G1 work item 8 ([docs/g1-plan.md](../../../docs/g1-plan.md)). The OpenSpec frame
   - `PLUGIN_API_VERSION`, the plugin API version the SDK implements, and `satisfiesCaretRange`, the compatibility rule, which rejects any version or range outside the release and caret forms it understands;
   - `registerPlugin(manifest, host)`, which validates a manifest with ajv's `Ajv2020` behind a local adapter and returns a kernel `Result`: an `invalid` failure for a manifest that fails the schema, `not-found` for a port the host does not offer, and `precondition-failed` for a plugin API range that excludes the SDK's version.
 - Tests in `packages/plugin-sdk/test/` that import the package by name.
-- Add `ajv@8.20.0` as the first runtime dependency, exact-pinned in the plugin SDK only; `ajv-formats` is not added, because the schema uses no `format` keyword. Update the `ajv`, `ajv-formats`, and `json-schema-to-typescript` rows of the [dependency register](../../../docs/dependencies.md#contract-tooling) and regenerate the dependency inventory.
+- Add `ajv@8.20.0` as the first runtime dependency, exact-pinned in the plugin SDK only; `ajv-formats` is not added, because the schema uses no `format` keyword. Update the `ajv`, `ajv-formats`, and `json-schema-to-typescript` rows of the [dependency register](/docs/dependencies.md#contract-tooling) and regenerate the dependency inventory.
 - Let workspace packages ship JSON documents from `src/`: the shared `tsconfig.package.json` enables `resolveJsonModule` and includes `src/**/*.json`, and `tsconfig.check.json` enables `resolveJsonModule`.
 
 ## Capabilities

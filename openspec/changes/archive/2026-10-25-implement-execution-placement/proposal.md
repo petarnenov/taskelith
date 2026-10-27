@@ -1,6 +1,6 @@
 ## Why
 
-G2 work item 21 ([docs/g2-plan.md](../../../docs/g2-plan.md), row 21, `implement-execution-reconciliation`) is the control-plane execution service. On 2026-10-25 the coordinator split it into four changes, each merged and archived before the next: 21a `implement-execution-placement` (this change), 21b `implement-observation-consumption`, 21c `implement-inventory-reconciliation`, and 21d `wire-launch-authority-reconciliation`, which follows item 17.
+G2 work item 21 ([docs/g2-plan.md](/docs/g2-plan.md), row 21, `implement-execution-reconciliation`) is the control-plane execution service. On 2026-10-25 the coordinator split it into four changes, each merged and archived before the next: 21a `implement-execution-placement` (this change), 21b `implement-observation-consumption`, 21c `implement-inventory-reconciliation`, and 21d `wire-launch-authority-reconciliation`, which follows item 17.
 
 Before this change a submitted task waited with no attempt: no loop opened an attempt or placed it on a worker, and no route served `requestDelegation`.
 

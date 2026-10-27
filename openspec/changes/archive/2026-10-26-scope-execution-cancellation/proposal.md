@@ -2,7 +2,7 @@
 
 G2 crash scenario 24c, scenario h, found bug B2: the launch orchestrator widens a cancellation that names one execution to the execution's whole intent. `#forward` in `apps/worker/src/launch-orchestrator.ts` cancelled the intent's live launch, which forwards `cancel` to the execution that launch runs, even when that is another execution, and it filed the `cancel` file for every open execution of the intent. An `unauthorized-start` cancellation of a stray execution therefore stopped the owning execution, and the control plane then created a retry.
 
-The [execution wire contracts](../../../docs/contracts/execution-wire-contracts.md) section 4 says: "A cancellation without `executionId` targets the attempt; with it, only that execution." The [launch authorization contract](../../../docs/contracts/launch-authorization.md) section 7 says an unauthorized start makes the authority write "a cancellation command for that execution only, never for another execution of the attempt".
+The [execution wire contracts](/docs/contracts/execution-wire-contracts.md) section 4 says: "A cancellation without `executionId` targets the attempt; with it, only that execution." The [launch authorization contract](/docs/contracts/launch-authorization.md) section 7 says an unauthorized start makes the authority write "a cancellation command for that execution only, never for another execution of the attempt".
 
 ## What Changes
 
