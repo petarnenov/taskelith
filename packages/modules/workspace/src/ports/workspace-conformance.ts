@@ -2,7 +2,7 @@ import { parseIdentifier, type Result } from '@taskelith/kernel';
 import type { AttemptId } from '@taskelith/execution';
 import { expectCode, expectSame, expectSuccess, type ConformanceCase, type ProjectId, type TaskId } from '@taskelith/sdlc';
 import { isSameCodeHead, parseGitObjectId, type CodeHeadIdentity, type GitObjectId, type RepositoryId } from '../domain/code-head.js';
-import type { HeadSnapshot, Workspace, WorkspaceCredential, WorkspaceStatus, WorkspaceTarget } from '../domain/workspace.js';
+import { taskBranchName, type HeadSnapshot, type Workspace, type WorkspaceCredential, type WorkspaceStatus, type WorkspaceTarget } from '../domain/workspace.js';
 import type { TreeEntry, WorkspaceFixture } from './workspace-fixture.js';
 import type { PrepareWorkspace } from './workspace-provider.js';
 
@@ -17,7 +17,7 @@ const id = <Kind extends string>(kind: Kind, text: string) => must(parseIdentifi
 const attempt = (text: string) => id('AttemptId', text) as AttemptId;
 const PROJECT = id('ProjectId', 'project-1') as ProjectId;
 const TASK = id('TaskId', 'task-1') as TaskId;
-const TASK_BRANCH = 'taskelith/task-1';
+const TASK_BRANCH = taskBranchName(TASK);
 const FIRST = attempt('attempt-1');
 const SECOND = attempt('attempt-2');
 const THIRD = attempt('attempt-3');
@@ -152,7 +152,7 @@ const WORKSPACE_PREPARATION: readonly ConformanceCase<WorkspaceFixture>[] = [
     },
   },
   {
-    name: 'rejects unsafe names, foreign or mismatched heads, and missing sources, leaving nothing',
+    name: 'rejects foreign or mismatched heads and missing sources, leaving nothing',
     async check(fixture) {
       const problems: string[] = [];
       const base = await prepared(problems, fixture, { attemptId: THIRD });
@@ -161,12 +161,7 @@ const WORKSPACE_PREPARATION: readonly ConformanceCase<WorkspaceFixture>[] = [
       const foreignRepository = id('RepositoryId', `${fixture.binding.repository}-other`) as RepositoryId;
       const { commit, tree } = base.head;
       const at = (head: CodeHeadIdentity): Partial<PrepareWorkspace> => ({ target: { kind: 'at-head', head } });
-      const unsafeTask = id('TaskId', '../unsafe') as TaskId;
-      const foreign = fixture.credentials.foreign;
       const cases: [string, Partial<PrepareWorkspace>, string, string | undefined][] = [
-        ['unsafe attempt', { attemptId: attempt('../attempt') }, 'invalid', 'unsafe-name'],
-        ['unsafe task', { taskId: id('TaskId', 'task/1') as TaskId }, 'invalid', 'unsafe-name'],
-        ['unsafe task at a head', { ...at(base.head), taskId: unsafeTask, credential: foreign }, 'invalid', 'unsafe-name'],
         ['foreign head', at({ repository: foreignRepository, commit, tree }), 'invalid', undefined],
         ['unknown head', at({ repository: fixture.binding.repository, commit: UNKNOWN_COMMIT, tree }), 'not-found', undefined],
         ['mismatched tree', at({ ...base.head, tree: commit }), 'invalid', 'head-mismatch'],
@@ -179,7 +174,31 @@ const WORKSPACE_PREPARATION: readonly ConformanceCase<WorkspaceFixture>[] = [
       }
       expectSame(problems, 'listed', await fixture.provider.list(), []);
       expectSame(problems, 'leftovers', await fixture.leftovers(), []);
-      expectCode(problems, 'unsafe removal', await fixture.provider.remove(attempt('..')), 'invalid');
+      return problems;
+    },
+  },
+  {
+    name: 'derives distinct workspace names and task branches from any identifiers',
+    async check(fixture) {
+      const problems: string[] = [];
+      const named = [['../attempt', 'feature/login'], ['a/b', 'a/b'], ['a_b', 'a_b'], ['..', 'v1.2']] as const;
+      const workspaces: Workspace[] = [];
+      for (const [attemptText, taskText] of named) {
+        const taskId = id('TaskId', taskText) as TaskId;
+        const workspace = await prepared(problems, fixture, { attemptId: attempt(attemptText), taskId });
+        if (workspace === undefined) return problems;
+        expectSame(problems, `branch of ${taskText}`, workspace.branch, taskBranchName(taskId));
+        workspaces.push(workspace);
+      }
+      expectSame(problems, 'distinct branches', new Set(workspaces.map(({ branch }) => branch)).size, named.length);
+      const review = { attemptId: attempt('../review'), taskId: id('TaskId', '../unsafe') as TaskId };
+      const atHead = { ...review, target: { kind: 'at-head', head: workspaces[0]!.head }, credential: fixture.credentials.foreign } as const;
+      const refused = await fixture.provider.prepare(request(fixture, atHead));
+      expectReason(problems, 'unsafe task at a head', refused, 'forbidden', 'credential-out-of-scope');
+      expectSame(problems, 'listed', await fixture.provider.list(), named.map(([text]) => text).sort());
+      expectSuccess(problems, 'remove', await fixture.provider.remove(attempt('../attempt')));
+      expectSame(problems, 'listed after removal', await fixture.provider.list(), ['..', 'a/b', 'a_b']);
+      expectSame(problems, 'leftovers', await fixture.leftovers(), []);
       return problems;
     },
   },

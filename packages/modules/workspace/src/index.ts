@@ -15,6 +15,7 @@ export {
   WORKSPACE_KINDS,
   WORKSPACE_LAYOUT,
   WORKSPACE_MODES,
+  WORKSPACE_NAME_RULES,
   checkCredentialScope,
   cleanHead,
   taskBranchName,

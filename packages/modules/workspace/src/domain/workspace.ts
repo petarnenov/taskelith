@@ -3,6 +3,7 @@ import type { AttemptId } from '@taskelith/execution';
 import type { RunCredential } from '@taskelith/integrations';
 import type { ProjectId, TaskId } from '@taskelith/sdlc';
 import type { CodeHeadIdentity, RepositoryId } from './code-head.js';
+import { sha256Hex } from './sha256.js';
 
 // Paths relative to `dataRoot` (G3 plan D4 (a), contract section 2).
 export const WORKSPACE_LAYOUT = Object.freeze({
@@ -29,8 +30,15 @@ export const WORKSPACE_MODES = Object.freeze({
 
 export const TASK_BRANCH_PREFIX = 'taskelith/';
 
-// A safe single path segment and Git ref component; never `.` or `..`.
-const WORKSPACE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+// A workspace name: a readable prefix of the identifier and a digest of it
+// (contract section 2), so any identifier gives a safe, distinct name.
+export const WORKSPACE_NAME_RULES = Object.freeze({
+  prefixMaxLength: 40,
+  digestHexLength: 32,
+});
+
+const OUTSIDE_NAME_CHARACTERS = /[^A-Za-z0-9_-]/gu;
+const LEADING_SEPARATORS = /^[_-]+/;
 
 export const WORKSPACE_KINDS = Object.freeze(['task-branch', 'at-head'] as const);
 
@@ -43,7 +51,6 @@ export type DirtyReason = (typeof DIRTY_REASONS)[number];
 
 // The `reason` detail of a workspace failure (contract section 9).
 export const WORKSPACE_FAILURE_REASONS = Object.freeze([
-  'unsafe-name',
   'head-mismatch',
   'workspace-dirty',
   'credential-out-of-scope',
@@ -100,13 +107,12 @@ export interface HeadSnapshot {
   readonly content: Uint8Array;
 }
 
-export function workspaceDirectoryName(attemptId: AttemptId): Result<string> {
-  return safeName('attemptId', attemptId);
+export function workspaceDirectoryName(attemptId: AttemptId): string {
+  return workspaceName(attemptId);
 }
 
-export function taskBranchName(taskId: TaskId): Result<string> {
-  const name = safeName('taskId', taskId);
-  return name.ok ? ok(`${TASK_BRANCH_PREFIX}${name.value}`) : name;
+export function taskBranchName(taskId: TaskId): string {
+  return `${TASK_BRANCH_PREFIX}${workspaceName(taskId)}`;
 }
 
 // A head for head-bound evidence comes only from a clean workspace.
@@ -129,7 +135,10 @@ export function workspaceFailure(
   return err(failure(code, message, { reason }));
 }
 
-function safeName(field: string, text: string): Result<string> {
-  if (WORKSPACE_NAME.test(text)) return ok(text);
-  return workspaceFailure('invalid', 'unsafe-name', `${field} must be letters, digits, '-' or '_', starting with a letter or digit`);
+function workspaceName(identifier: string): string {
+  const { prefixMaxLength, digestHexLength } = WORKSPACE_NAME_RULES;
+  const readable = identifier.replace(OUTSIDE_NAME_CHARACTERS, '_').replace(LEADING_SEPARATORS, '');
+  const prefix = readable.slice(0, prefixMaxLength);
+  const digest = sha256Hex(identifier).slice(0, digestHexLength);
+  return prefix === '' ? digest : `${prefix}-${digest}`;
 }
