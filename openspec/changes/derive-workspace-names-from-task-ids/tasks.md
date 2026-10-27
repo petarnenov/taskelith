@@ -5,7 +5,7 @@
 
 ## 2. Code and tests
 
-- [x] 2.1 Derive names in the `@taskelith/workspace` domain with a Node-free SHA-256, add `WORKSPACE_NAME_RULES`, and remove `unsafe-name`
+- [x] 2.1 Derive names in the `@taskelith/workspace` domain with a Node-free SHA-256 (superseded by 6.2), add `WORKSPACE_NAME_RULES`, and remove `unsafe-name`
 - [x] 2.2 Replace the suite's unsafe-name rows with the name derivation case, and make the test double derive its names, keep the attempt identifier in its record, and carry the four new defects
 - [x] 2.3 Domain tests for the form, safety, determinism, Git branch validity, shared prefixes, and the digest, with a fail-before run on the pre-change code
 
@@ -22,3 +22,10 @@
 ## 5. Review pass 2
 
 - [x] 5.1 Fix the six pass 2 Low findings without another review: the removal of every workspace in the name derivation case with a defective double that fails it, the canonical data root, the defect count, the order and heads of the recorded checks, Web Crypto in design D5, and the identifier wording of the contract
+
+## 6. Coordinator return
+
+- [x] 6.1 Restore the active change by reverting the archive commit; `origin/dev` had not advanced past `93b5065b`, so no merge or delta reconciliation was needed
+- [x] 6.2 Fix the coordinator's finding: remove the hand-written `sha256.ts` and its tests, inject an `IdentifierDigest` that the double supplies with `node:crypto`, and add the fixture's digest, a conformance case with SHA-256 vectors, and two defective doubles that fail it
+- [x] 6.3 Update the contract, the spec delta, the design D5, the proposal, and `verification.md`, and run `make verify`, the strict validation, `make findings ARGS="validate"`, and `npm run verify:links`
+- [ ] 6.4 Review pass 3 by reviewer A confirming the fix of the coordinator's finding, then archive again

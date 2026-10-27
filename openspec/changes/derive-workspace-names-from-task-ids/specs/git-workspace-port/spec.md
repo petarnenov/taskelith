@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Workspace name derivation
-Every attempt and task identifier SHALL get a name: the identifier with each character other than an ASCII letter, a digit, `-`, or `_` replaced by `_`, without leading `-` and `_`, cut to 40 characters, then `-` and the first 32 lowercase hexadecimal characters of the SHA-256 of its UTF-8 bytes, or that digest alone when the prefix is empty. The same identifier SHALL always give the same name, and no identifier SHALL be refused for its form.
+Every attempt and task identifier SHALL get a name: the identifier with each character other than an ASCII letter, a digit, `-`, or `_` replaced by `_`, without leading `-` and `_`, cut to 40 characters, then `-` and the first 32 characters of the adapter's `IdentifierDigest`, the lowercase hexadecimal SHA-256 of its UTF-8 bytes, or that digest alone when the prefix is empty. The same identifier SHALL always give the same name, and no identifier SHALL be refused for its form.
 
 #### Scenario: Task identifier with a slash
 - **WHEN** a `task-branch` workspace is prepared for the task `feature/login`
@@ -55,7 +55,7 @@ A `task-branch` workspace SHALL check out `taskelith/<taskName>`, where `<taskNa
 - **THEN** its workspace starts at the remote task branch head
 
 ### Requirement: Workspace conformance suite
-Every workspace adapter SHALL pass `WORKSPACE_CONFORMANCE` through its `WorkspaceFixture`, and the suite SHALL report an adapter that stores a credential, calls the remote before scoping, refuses or misnames identifiers, accepts a mismatched tree, misses untracked or staged changes, snapshots metadata, a stale tree, or altered entries, removes dirty or other workspaces, follows links in a sweep or `.git`, runs Git while handed off, keeps outside hard links, or hands off two workspaces.
+Every adapter SHALL pass `WORKSPACE_CONFORMANCE` through its `WorkspaceFixture`; the suite SHALL report an adapter that stores a credential, calls the remote before scoping, refuses, misnames, or misdigests identifiers, accepts a mismatched tree, misses untracked or staged changes, snapshots metadata, a stale tree, or altered entries, removes dirty or other workspaces, follows links in a sweep or `.git`, runs Git while handed off, keeps outside hard links, or hands off two at once.
 
 #### Scenario: Defective removal
 - **WHEN** the suite runs against an adapter whose removal deletes other workspaces
@@ -76,3 +76,7 @@ Every workspace adapter SHALL pass `WORKSPACE_CONFORMANCE` through its `Workspac
 #### Scenario: Misnamed workspace directory
 - **WHEN** the suite runs against an adapter whose working directory is not `worker/workspaces/<name>/checkout` under the data root, with the attempt's derived name
 - **THEN** the name derivation case reports a finding
+
+#### Scenario: Wrong identifier digest
+- **WHEN** the suite runs against an adapter whose `IdentifierDigest` is SHA-1, or SHA-256 of the identifier's Latin-1 bytes
+- **THEN** the digest case reports a finding for the FIPS 180-2 vector `abc` or for the UTF-8 text `café/ü`
