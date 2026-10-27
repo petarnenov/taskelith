@@ -1,0 +1,1 @@
+{"change": "align-account-pool-signals", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a17ef0-dbbf-7950-9182-235abcad61f4", "counts": {"critical": 0, "high": 0, "medium": 0, "low": 3}}
