@@ -3,7 +3,9 @@ import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { SeededRandom, integrationEndpoint, rerunHint, seedFromEnvironment } from '@taskelith/testing';
 import { OrderedAuthority } from './g2-scenarios/ordered-authority.ts';
-import { PARTITION_TIMEOUT_MILLISECONDS, recordScenario, withInstallation, withPartitions } from './g2-scenarios/scenario-run.ts';
+import {
+  PARTITION_TIMEOUT_MILLISECONDS, SCENARIO_HOST, guardScenarioFile, recordScenario, withInstallation, withPartitions,
+} from './g2-scenarios/scenario-run.ts';
 import { REDELIVERY_BUDGET_MILLISECONDS, SCENARIO_LIMITS, ScenarioInstallation } from './g2-scenarios/scenario-installation.ts';
 import { ScenarioWorker } from './g2-scenarios/scenario-worker.ts';
 import { assertExitedOnce, journalOf, journaledState, reachable, startedExecutions } from './g2-scenarios/scenario-reads.ts';
@@ -15,6 +17,7 @@ const SEED = seedFromEnvironment();
 console.log(`g2 partition scenarios: ${rerunHint(SEED)}`);
 const SETTLE_MILLISECONDS = 3_000;
 const TRAIL_REPORTS = 4;
+guardScenarioFile();
 
 // One intent per offered assignment, however often it was offered.
 async function assertOneIntentPerAssignment(installation: ScenarioInstallation, worker: ScenarioWorker): Promise<number> {
@@ -24,7 +27,7 @@ async function assertOneIntentPerAssignment(installation: ScenarioInstallation, 
   return offers.length;
 }
 
-describe('worker to NATS', () => {
+describe('worker to NATS', SCENARIO_HOST, () => {
   const proxied = integrationEndpoint('TASKELITH_NATS_PROXY_URL');
 
   async function connectedWorker(installation: ScenarioInstallation, name: string, random: SeededRandom): Promise<ScenarioWorker> {
@@ -115,7 +118,7 @@ describe('worker to NATS', () => {
   });
 });
 
-describe('control plane to PostgreSQL', () => {
+describe('control plane to PostgreSQL', SCENARIO_HOST, () => {
   // Seed: how many unavailable answers the worker gets before the heal; it
   // repeats the same operation, which the healed authority then grants.
   test('a partition during authorization is unavailable, and the same operation is granted after the heal', { timeout: PARTITION_TIMEOUT_MILLISECONDS }, async () => {
@@ -190,7 +193,7 @@ describe('control plane to PostgreSQL', () => {
       const routeCut = new Gate();
       const worker = new ScenarioWorker(installation, {
         name: 'pg-beyond', random, nats: installation.nats, runMilliseconds: 1_000, enrollmentToken: await installation.enrollmentToken(),
-        beforeSupervisorStart: () => routeCut.opened,
+        beforeSupervisorStart: () => routeCut.wait('the route cut'),
       });
       await worker.start();
       try {
@@ -216,6 +219,7 @@ describe('control plane to PostgreSQL', () => {
         assert.deepEqual(ofRun(await quarantined(installation), run), [], 'the redrive takes the run out of the quarantine');
         return `${records.length} quarantined; task ${beforeRedrive} before the redrive, ${exitFirst ? 'exit' : 'start'} first; ${executed.startKind} start`;
       } finally {
+        routeCut.open();
         await worker.stop();
       }
     })));

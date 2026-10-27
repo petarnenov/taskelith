@@ -11,6 +11,7 @@ import { startWorker, type RunningWorker, type WorkerDependencies, type WorkerSe
 import { HttpEnrollmentClient, HttpLaunchAuthorityClient } from '@taskelith/worker-control-plane-client';
 import { processGroupHost } from './process-group-supervision.ts';
 import { SCENARIO_LIMITS } from './scenario-installation.ts';
+import { within } from './waiting.ts';
 
 // The worker's own timers (heartbeats, broker retries, lost contact) and
 // its launch back-offs run this many times faster than the targets.
@@ -18,6 +19,8 @@ export const TIME_SCALE = 20;
 const LAUNCH_POLL_MILLISECONDS = 100;
 const GIBIBYTE = 2 ** 30;
 const EXT4_MAGIC = 0xef53n;
+const STOP_MILLISECONDS = 30_000;
+const runningWorkers = new Set<ScenarioWorker>();
 
 // Where a worker finds its installation: the API, and the base directory
 // that holds the scenario's data roots.
@@ -73,12 +76,16 @@ export class ScenarioWorker {
 
   async start(): Promise<RunningWorker> {
     this.#running = value(await startWorker(this.#settings(), this.#dependencies()));
+    runningWorkers.add(this);
     return this.#running;
   }
 
+  // Fails naming the worker if its runtime does not end within the bound.
   async stop(): Promise<void> {
-    await this.#running?.stop();
+    const running = this.#running;
     this.#running = undefined;
+    runningWorkers.delete(this);
+    if (running !== undefined) await within(running.stop(), STOP_MILLISECONDS, `the stop of worker ${this.#options.name}`);
   }
 
   #settings(): WorkerSettings {
@@ -124,6 +131,18 @@ export class ScenarioWorker {
       },
     };
   }
+}
+
+// Stops each worker even if another's stop fails, then fails naming them.
+export async function stopWorkers(...workers: readonly (ScenarioWorker | undefined)[]): Promise<void> {
+  const stopped = await Promise.allSettled(workers.map((worker) => worker?.stop()));
+  const failures = stopped.flatMap((result) => (result.status === 'rejected' ? [String(result.reason)] : []));
+  if (failures.length > 0) throw new Error(`worker stop failed: ${failures.join('; ')}`);
+}
+
+// The workers a timed-out scenario left running.
+export function stopRunningWorkers(): Promise<void> {
+  return stopWorkers(...runningWorkers);
 }
 
 // The G2 scripted process; the data root as an argument marks it, so a

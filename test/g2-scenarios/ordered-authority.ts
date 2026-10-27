@@ -25,9 +25,9 @@ export class OrderedAuthority implements LaunchAuthorityClient {
   async authorize(request: LaunchAuthorizationRequest): Promise<Result<LaunchOutcome>> {
     if (this.#client === undefined) throw new Error('the authority is not wrapped');
     this.sent.push(request);
-    await this.beforeRequest.opened;
+    await this.beforeRequest.wait('the gate before the request');
     const answer = await this.#client.authorize(request);
-    await this.beforeAnswer.opened;
+    await this.beforeAnswer.wait('the gate before the answer');
     this.answered.push({ request, answer });
     return answer;
   }

@@ -7,8 +7,10 @@ import { assignmentsOf, supersedeAssignment } from './g2-scenarios/invalidation-
 import { OrderedAuthority } from './g2-scenarios/ordered-authority.ts';
 import type { ScenarioInstallation } from './g2-scenarios/scenario-installation.ts';
 import { assertExitedOnce, grantsUnder, journaledUnder, reachable } from './g2-scenarios/scenario-reads.ts';
-import { PARTITION_TIMEOUT_MILLISECONDS, recordScenario, withInstallation, withPartitions } from './g2-scenarios/scenario-run.ts';
-import { ScenarioWorker, type ScenarioWorkerOptions } from './g2-scenarios/scenario-worker.ts';
+import {
+  PARTITION_TIMEOUT_MILLISECONDS, SCENARIO_HOST, guardScenarioFile, recordScenario, withInstallation, withPartitions,
+} from './g2-scenarios/scenario-run.ts';
+import { ScenarioWorker, stopWorkers, type ScenarioWorkerOptions } from './g2-scenarios/scenario-worker.ts';
 import { Gate, waitFor } from './g2-scenarios/waiting.ts';
 
 // G2 item 24c: a stale ownership generation and a stale recovery epoch,
@@ -16,6 +18,7 @@ import { Gate, waitFor } from './g2-scenarios/waiting.ts';
 const SEED = seedFromEnvironment();
 console.log(`g2 stale generation scenarios: ${rerunHint(SEED)}`);
 const EPOCH_TASKS = ['task-epoch-1', 'task-epoch-2'];
+guardScenarioFile();
 
 type WorkerOverrides = Partial<Omit<ScenarioWorkerOptions, 'name' | 'random'>>;
 
@@ -32,7 +35,7 @@ async function heldWorker(installation: ScenarioInstallation, name: string, rand
   return { worker, authority };
 }
 
-describe('stale generations', () => {
+describe('stale generations', SCENARIO_HOST, () => {
   // Seed: A's stale request answered before or after B's. A is cut off and
   // superseded; B owns the next generation and runs the attempt once.
   test('a stale ownership generation is rejected, and the current owner runs the attempt once', { timeout: PARTITION_TIMEOUT_MILLISECONDS }, async () => {
@@ -72,8 +75,7 @@ describe('stale generations', () => {
       } finally {
         a.authority.beforeRequest.open();
         b?.authority.beforeRequest.open();
-        await a.worker.stop();
-        await b?.worker.stop();
+        await stopWorkers(a.worker, b?.worker);
       }
     })));
   });
@@ -138,8 +140,7 @@ async function advanceEpochBetweenRequests(installation: ScenarioInstallation, r
   } finally {
     a.authority.beforeRequest.open();
     b.authority.beforeRequest.open();
-    await a.worker.stop();
-    await b.worker.stop();
+    await stopWorkers(a.worker, b.worker);
   }
 }
 

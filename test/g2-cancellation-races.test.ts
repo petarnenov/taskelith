@@ -18,7 +18,9 @@ import {
   reachable,
   startedExecutions,
 } from './g2-scenarios/scenario-reads.ts';
-import { PARTITION_TIMEOUT_MILLISECONDS, recordScenario, withInstallation, withPartitions } from './g2-scenarios/scenario-run.ts';
+import {
+  PARTITION_TIMEOUT_MILLISECONDS, SCENARIO_HOST, guardScenarioFile, recordScenario, withInstallation, withPartitions,
+} from './g2-scenarios/scenario-run.ts';
 import { ScenarioWorker, type ScenarioWorkerOptions } from './g2-scenarios/scenario-worker.ts';
 import { Gate, waitFor } from './g2-scenarios/waiting.ts';
 
@@ -28,6 +30,7 @@ const SEED = seedFromEnvironment();
 console.log(`g2 cancellation races: ${rerunHint(SEED)}`);
 const LONG_RUN_MILLISECONDS = 20_000;
 const CANCELLED_REASONS = ['assignment-not-active', 'attempt-not-launchable'];
+guardScenarioFile();
 
 type WorkerOverrides = Partial<Omit<ScenarioWorkerOptions, 'name' | 'random'>>;
 
@@ -68,7 +71,7 @@ async function assertCancelled(installation: ScenarioInstallation, worker: Scena
   return outcome.kind === 'exited' ? 'exited by SIGTERM' : outcome.kind;
 }
 
-describe('cancellation races', () => {
+describe('cancellation races', SCENARIO_HOST, () => {
   // Seed: whether the heal comes before or after the control plane marks
   // the worker lost. The offer and the end wait in the worker's stream.
   test('a. a cancel committed before the worker receives the offer launches nothing', { timeout: PARTITION_TIMEOUT_MILLISECONDS }, async () => {
@@ -151,7 +154,7 @@ describe('cancellation races', () => {
       const supervisorHeld = new Gate();
       if (afterStart) supervisorHeld.open();
       const worker = await startedWorker(installation, 'cancel-after-w4', random, {
-        runMilliseconds: LONG_RUN_MILLISECONDS, beforeSupervisorStart: () => supervisorHeld.opened,
+        runMilliseconds: LONG_RUN_MILLISECONDS, beforeSupervisorStart: () => supervisorHeld.wait('the held supervisor start'),
       });
       try {
         await installation.submitTask('task-c');
