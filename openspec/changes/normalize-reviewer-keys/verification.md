@@ -141,6 +141,10 @@ On 2026-10-28 `origin/dev` was merged into the branch with a merge commit, done 
   - **Reviewer's limitation:** its sandbox blocked the findings tests and the comment checker (`EROFS`, `EPERM`), so it did not repeat `make verify` or the coverage independently; strict OpenSpec validation and findings validation passed for it, and `test/reviewer-keys.test.ts` 6 of 6.
 - The file lines of "Author self-check" refer to `0968b548`; after the merge `checkChange` is at `scripts/findings.ts:314`, `reviewerProblems` at `:347`, and `withCanonicalReviewers` at `:354`.
 
+## Second merge of dev
+
+On 2026-10-28, after review pass 3, `origin/dev` `9b82cd9d` (pull requests #373 and #375) was merged into the branch with merge commit `3802a229`, base `579c227d`, without conflicts. It changed no living spec, script, or test and none of this change's requirements or contracts: only the Claude Code rows of the protocol's "Reviewer invocations" table, now `--output-format stream-json --verbose` as dev has them, `docs/foundation.md`, and `docs/g3-plan.md`. So it needs no delta reconciliation and no renewed review ([evidence freshness](/docs/governance.md#evidence-freshness)); only the checks are repeated, in the archive checks. Pass 2's recorded invocation with `--output-format json` is historical and stays.
+
 ## Limitations
 
 - The rule checks the provider prefix of a model, not that the model exists (`design.md`, D3).
