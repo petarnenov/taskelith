@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-27. The author's verification and checks, and review passes 1, 2 and 3 with their fixes, are recorded below; the archive checks are pending.
+Date: 2026-10-27. The author's verification and checks, and review passes 1, 2 and 3 with their fixes, are recorded below, with the archive checks.
 
 ## Scope and source
 
@@ -111,7 +111,17 @@ A Low-only pass 3 ends the review (governance "Low findings are fixed").
 - Since a pass ends at its first fleet capacity decline, no service test reaches an offer after it; `RotationCursor`'s own test (`packages/modules/scheduling/test/resource-admission.test.ts:259`) covers that guard. Review pass 1 removed the service test that no longer reached it (L3).
 - The multi-replica variant of L2 (`advance-placement-rotation-cursor`, design, Risks) was reasoned about, not tested. With one replica and no intervening change, a slot that frees during a pass is offered in the next pass, in rotation order, and a placement moves the cursor, so the rotation reaches every project while offers move it. When a second scheduler replica takes every slot that frees between this replica's passes, this replica places nothing and keeps its cursor, and the order of placements is that of the other replica's passes.
 
+## Archive
+
+Checked state: the tree of the archive commit (`docs: archive the stop-placement-pass-at-fleet-decline change`), on top of `4dcdf8a2`, which is the working tree these checks ran on. Environment and `TMPDIR` as in "Checks".
+
+- `npm run openspec -- archive stop-placement-pass-at-fleet-decline --yes`: archived as `2026-10-27-stop-placement-pass-at-fleet-decline`; `execution-placement` 1 modified.
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line passes (`change/2026-10-27-stop-placement-pass-at-fleet-decline`).
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/execution-placement/spec.md`, the "Project rotation" requirement and its scenarios "Capacity freed during a pass", "Many blocked projects", "Own decline during a pass", and "Fleet full for many passes".
+- The moved change has `findings.jsonl` (15 lines) and `passes.jsonl` (3 lines); `make findings ARGS="validate"`: every findings file is valid, 22 files; every pass summary file is valid, 2 files.
+- `make verify`: exit 0; 2138 tests, 2091 pass, 0 fail, 47 skipped; coverage lines 99.24%, branches 92.17%, functions 98.92%; every active OpenSpec change archives into strictly valid specs.
+
 ## Remaining gates
 
-- Archive under worker step 7, with the checks of the archived tree.
 - Integration into dev by the coordinator (single pull request)
