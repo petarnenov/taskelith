@@ -20,5 +20,6 @@
 
 - [x] 4.1 Contract section 13, spec delta, proposal, design, `verification.md`, empty `findings.jsonl` and `passes.jsonl`
 - [x] 4.2 `make verify`
-- [ ] 4.3 Independent review
-- [ ] 4.4 Archive under worker step 7
+- [x] 4.3 Independent review pass 1 (1 High, 2 Low), fixed in `83c9f799`
+- [ ] 4.4 Independent review pass 2
+- [ ] 4.5 Archive under worker step 7

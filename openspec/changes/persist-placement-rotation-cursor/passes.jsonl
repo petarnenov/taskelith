@@ -1,0 +1,1 @@
+{"change": "persist-placement-rotation-cursor", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a17d94-0ac4-7cd2-a59b-f90929daeb30", "counts": {"critical": 0, "high": 1, "medium": 0, "low": 2}}
