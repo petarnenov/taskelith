@@ -11,6 +11,7 @@ import {
   reasonOutcome,
   PLACEMENT_RETRY_ATTEMPTS,
   ResourceAdmissionService,
+  RotationCursor,
   decideDelegation,
   decidePlacement,
   fairPlacementOrder,
@@ -237,6 +238,28 @@ test('the projects of a round follow project id order by code unit', () => {
   const waiting = [entry('beta', 0, 'task-1'), entry('Gamma', 1, 'task-2')];
   assert.deepEqual(fairPlacementOrder(waiting, undefined), ['task-2', 'task-1']);
   assert.deepEqual(fairPlacementOrder([...waiting].reverse(), undefined), ['task-2', 'task-1']);
+});
+
+test('the rotation cursor moves to the project of the last placement', () => {
+  const cursor = new RotationCursor(projectId('a'));
+  cursor.offered(projectId('b'));
+  cursor.placed(projectId('b'));
+  cursor.offered(projectId('c'));
+  cursor.placed(projectId('c'));
+  cursor.offered(projectId('d'));
+  assert.equal(cursor.next, projectId('c'));
+});
+
+test('without a placement the rotation cursor moves to the last offer', () => {
+  const cursor = new RotationCursor(projectId('a'));
+  cursor.offered(projectId('b'));
+  cursor.offered(projectId('c'));
+  assert.equal(cursor.next, projectId('c'));
+});
+
+test('without an offer the rotation cursor stays where it started', () => {
+  assert.equal(new RotationCursor(projectId('a')).next, projectId('a'));
+  assert.equal(new RotationCursor(undefined).next, undefined);
 });
 
 test('backoff doubles from five seconds, jitters, and never exceeds sixty', () => {

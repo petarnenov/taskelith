@@ -5,8 +5,8 @@
 
 ## 2. Tests first
 
-- [ ] 2.1 `PlacementService` tests, failing on the current cursor: one slot per pass placing `a1`, `b1`, `a2`, `b2`, `a3`, `b3`; two slots per pass; a pass without a candidate; an outage in the middle of a pass.
-- [ ] 2.2 Domain unit tests for `RotationCursor`.
+- [x] 2.1 `PlacementService` tests, failing on the current cursor: one slot per pass placing `a1`, `b1`, `a2`, `b2`, `a3`, `b3`; two slots per pass; a pass without a candidate; an outage in the middle of a pass.
+- [x] 2.2 Domain unit tests for `RotationCursor`.
 
 ## 3. Fix
 
