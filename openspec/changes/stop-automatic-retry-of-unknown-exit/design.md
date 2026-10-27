@@ -21,7 +21,7 @@
 
 ## Open question
 
-`isSafeToRetry` gives an automatic retry an allowance after any `exited` outcome with a proven start, including an unknown status. Capacity reservation contract section 13 states exactly that ("until then a proven exit counts as safe"), which differs from supervisor identity contract section 6. After this change no retry of an unknown exit is opened, so the check is not reached for one; aligning it needs a contract change and is left to the coordinator.
+`isSafeToRetry` gives an automatic retry an allowance after any `exited` outcome with a proven start, including an unknown status. Capacity reservation contract section 13 ("until then a proven exit counts as safe") and the `resource-admission` requirement state exactly that, which differs from supervisor identity contract section 6. After this change no retry of an unknown exit is opened, so the check is not reached for one. The coordinator decided to align them in a separate contract-first follow-up change, `align-safe-to-retry-with-supervisor-identity`.
 
 ## Risks / Trade-offs
 

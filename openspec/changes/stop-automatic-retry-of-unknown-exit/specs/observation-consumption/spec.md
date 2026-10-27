@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Automatic retry
-An attempt that ended without a cancellation request, with the outcome `not-started` or `exited` with a proven start and an exit code other than 0 or a signal, SHALL be followed in the same transaction by a new attempt that retries it, while the task has fewer than 2 attempts that retry another. An exit with an unknown status SHALL open no retry. Its placement SHALL be an automatic retry of the earlier attempt.
+An attempt that ended without a cancellation request, with the outcome `not-started` or `exited` with a proven start and a status that is a signal or an exit code other than 0, SHALL be followed in the same transaction by a new attempt that retries it, while the task has fewer than 2 attempts that retry another. An exit with an unknown status SHALL open no retry. Its placement SHALL be an automatic retry of the earlier attempt.
 
 #### Scenario: Failed exit
 - **WHEN** an attempt's execution exits with code 1 after a proven start
