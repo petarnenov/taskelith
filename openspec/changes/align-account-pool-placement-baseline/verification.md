@@ -60,7 +60,12 @@ The review ended with pass 1: under governance "Low findings are fixed", a pass 
 - **Without conflict.** #366's other edits of the account pool contract (status, section 1, the `mechanismId` and `usage` rows of section 3.1, section 4.4 step 3, section 5, section 7.1, section 10) and its capacity reservation section 10 edit merged unchanged. Section 4.4 step 3 now says that a slot wait backs off and follows the fair order, which agrees with section 4.7. The capacity reservation section 4 writers list is changed to the same signals as rule 3.
 - **Reconciled requirements.** `git diff b87abe75 origin/dev -- openspec/specs` changes `account-pool-port` "Deterministic least-loaded order", which this delta modifies: the delta is rewritten from `dev`'s text, keeping its derived window end and the scenario "Ended usage window", and changes only the final clause to the insert of the reservation. "Serializable slot changes" follows #366's signals. The added requirement names do not exist in `dev`, and none contradicts #366's "Session reports applied to the reserving slot", "Usage window derived by the pool", or "Health from session failures". `harness-account-pools`, which #366 also changed, is not in this delta.
 - **Citations.** `git diff b87abe75 99333004 -- packages apps` is empty, so every code citation of `design.md` and this record still holds; `design.md` now names both revisions.
-- **Reviewer A pass of the return.** Pending: the coordinator relays reviewer A's review of the resolved diff and the reconciliation.
+- **Reviewer A pass of the return (pass 2).** The review of a returned branch is reviewer A's under governance, so it is recorded as pass 2, role A.
+  - Reviewer A: Codex CLI `gpt-6.1-sol`, reasoning effort `medium`, run by the worker session; reviewed head `fd8632c6`.
+  - Invocation as in pass 1.
+  - Model confirmation: the output header showed model `gpt-6.1-sol`, reasoning effort `medium`, the read-only sandbox, and the session. Session `01a17f08-9faf-7a73-a796-8d46e2401dd5`. Snapshot before and after: equal. Both as relayed by the worker session.
+  - The reviewer confirmed that the merge keeps every #366 edit and agrees with the slot-selection additions, that the MODIFIED requirement is `dev`'s current text with both scenarios and only the intended change to the insert of the reservation, that the ADDED requirements neither duplicate nor contradict #366, and that the reconciliation records, code citations, and requirement lengths match the tree.
+  - Findings: 0 Critical, 0 High, 0 Medium, 0 Low, matching its `passes.jsonl` line.
 
 ## Limitations
 
