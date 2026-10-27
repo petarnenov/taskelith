@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Runs the G2 crash windows in the privileged Linux test image against the
+# services of services.sh run; usage: linux-crash-windows.sh IMAGE [ARGS]
+set -euo pipefail
+
+if [ "$#" -lt 1 ]; then
+  echo "usage: linux-crash-windows.sh IMAGE [NODE_TEST_ARGS...]" >&2
+  exit 2
+fi
+image="$1"
+shift
+repository="$(cd "$(dirname "$0")/.." && pwd)"
+# The host network keeps the services' 127.0.0.1 URLs; the journal needs a
+# fresh volume, not overlayfs; the commit is read here, outside the image.
+options=(
+  --rm --init --privileged --cgroupns=private --network host --volume /tmp
+  --volume "$repository:/repo:ro" --volume "$TASKELITH_SERVICES_SECRETS:/secrets:ro"
+  --env TASKELITH_POSTGRES_URL --env TASKELITH_NATS_URL --env TASKELITH_SERVICES_SECRETS=/secrets
+  --env TASKELITH_SCENARIO_COMMIT="$(git -C "$repository" rev-parse HEAD)"
+)
+if [ -n "${TASKELITH_TEST_SEED:-}" ]; then options+=(--env TASKELITH_TEST_SEED); fi
+# The file is created here, so it stays the caller's after root appends.
+if [ -n "${TASKELITH_SCENARIO_RESULTS:-}" ]; then
+  touch "$TASKELITH_SCENARIO_RESULTS"
+  results="$(cd "$(dirname "$TASKELITH_SCENARIO_RESULTS")" && pwd)/$(basename "$TASKELITH_SCENARIO_RESULTS")"
+  options+=(--volume "$results:/results.jsonl" --env TASKELITH_SCENARIO_RESULTS=/results.jsonl)
+fi
+exec docker run "${options[@]}" --entrypoint /usr/local/bin/taskelith-linux-crash-windows "$image" "$@"
