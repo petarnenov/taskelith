@@ -25,7 +25,7 @@ UV_PIN := 0.13.5
 
 .PHONY: verify verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility findings \
 	test services-up services-down verify-linux-cgroup verify-linux-crash-windows installation-build installation-bootstrap installation-broker-config installation-start \
-	installation-stop installation-enroll installation-enrollment-token verify-installation installation-smoke qualify-harnesses \
+	installation-stop installation-enroll installation-enrollment-token verify-installation verify-worker-image-reproducible installation-smoke qualify-harnesses \
 	scenario-fresh-composition scenario-worker-disk-loss scenario-worker-kill \
 	scenario-worker-namespace-confinement worker-seccomp-profile linux-test-image linux-test-suites \
 	scenario-worker-lifecycle scenario-native-worker-lifecycle native-acceptance
@@ -161,6 +161,11 @@ installation-enrollment-token:
 # make verify, like verify-linux-cgroup.
 verify-installation:
 	@$(INSTALLATION_PINS) bash scripts/installation.sh verify $(INSTALLATION)-verify
+
+# Opt-in: builds the worker image twice without the build cache and fails
+# unless both builds give one image ID; kept out of make verify.
+verify-worker-image-reproducible:
+	@$(INSTALLATION_PINS) bash scripts/installation.sh check-reproducible $(INSTALLATION)-reproducible
 
 # Opt-in end-to-end smoke on a throwaway project: submit, assign, execute,
 # and store the result of a test-only scripted process.

@@ -4,7 +4,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: installation.sh build|bootstrap|broker-config|start|stop|enroll|enrollment-token|verify|smoke|check-containment|scenario-fresh-composition|scenario-worker-disk-loss|scenario-worker-kill|scenario-worker-namespace-confinement|scenario-worker-lifecycle|scenario-native-worker-lifecycle PROJECT" >&2
+  echo "usage: installation.sh build|bootstrap|broker-config|start|stop|enroll|enrollment-token|verify|check-reproducible|smoke|check-containment|scenario-fresh-composition|scenario-worker-disk-loss|scenario-worker-kill|scenario-worker-namespace-confinement|scenario-worker-lifecycle|scenario-native-worker-lifecycle PROJECT" >&2
   exit 2
 }
 
@@ -36,27 +36,68 @@ require() {
   fi
 }
 
+# SOURCE_DATE_EPOCH, the commit time of REVISION, fixes the image's dates.
 build_image() {
-  local context="$1" target="$2" image="$3"
-  docker build --file "$context/infra/installation/Dockerfile" --target "$target" --tag "$image" \
+  local context="$1" revision="$2" target="$3" image="$4"
+  shift 4
+  docker build "$@" --file "$context/infra/installation/Dockerfile" --target "$target" --tag "$image" \
     --build-arg BASE="$TASKELITH_UBUNTU_BASE" --build-arg NODE_VERSION="$TASKELITH_NODE_VERSION" \
     --build-arg NODE_SHA256_AMD64="$TASKELITH_NODE_SHA256_AMD64" \
-    --build-arg NODE_SHA256_ARM64="$TASKELITH_NODE_SHA256_ARM64" "$context"
+    --build-arg NODE_SHA256_ARM64="$TASKELITH_NODE_SHA256_ARM64" \
+    --build-arg SOURCE_DATE_EPOCH="$(git -C "$repository" log -1 --format=%ct "$revision")" "$context"
+}
+
+require_pins() {
+  local name
+  for name in TASKELITH_UBUNTU_BASE TASKELITH_NODE_VERSION TASKELITH_NODE_SHA256_AMD64 TASKELITH_NODE_SHA256_ARM64; do
+    require "$name" "run through make $1"
+  done
 }
 
 # The build context holds only tracked files, with their uncommitted edits,
 # so local credentials or state never reach an image.
+source_revision() {
+  local revision
+  revision="$(git -C "$repository" stash create)"
+  echo "${revision:-HEAD}"
+}
+
+unpack_context() {
+  git -C "$repository" archive --format=tar "$1" | tar -xf - -C "$2"
+}
+
 build() (
-  local name revision context
-  for name in TASKELITH_UBUNTU_BASE TASKELITH_NODE_VERSION TASKELITH_NODE_SHA256_AMD64 TASKELITH_NODE_SHA256_ARM64; do
-    require "$name" "run through make installation-build"
-  done
+  local revision context
+  require_pins installation-build
   context="$(mktemp -d)"
   trap 'rm -rf "$context"' EXIT
-  revision="$(git -C "$repository" stash create)"
-  git -C "$repository" archive --format=tar "${revision:-HEAD}" | tar -xf - -C "$context"
-  build_image "$context" control-plane "$control_plane_image"
-  build_image "$context" worker "$worker_image"
+  revision="$(source_revision)"
+  unpack_context "$revision" "$context"
+  build_image "$context" "$revision" control-plane "$control_plane_image"
+  build_image "$context" "$revision" worker "$worker_image"
+)
+
+# Builds the worker image twice from fresh contexts of one revision, without
+# the build cache, and passes only when both builds give one image ID.
+check_reproducible() (
+  local revision first="$worker_image-first" second="$worker_image-second" context="" image
+  local first_id second_id
+  require_pins verify-worker-image-reproducible
+  trap 'rm -rf "$context"; docker image rm "$first" "$second" >/dev/null 2>&1 || true' EXIT
+  revision="$(source_revision)"
+  for image in "$first" "$second"; do
+    rm -rf "$context"
+    context="$(mktemp -d)"
+    unpack_context "$revision" "$context"
+    build_image "$context" "$revision" worker "$image" --no-cache
+  done
+  first_id="$(docker image inspect --format '{{.Id}}' "$first")"
+  second_id="$(docker image inspect --format '{{.Id}}' "$second")"
+  if [ "$first_id" != "$second_id" ]; then
+    echo "installation.sh: two builds of one revision gave $first_id and $second_id" >&2
+    exit 1
+  fi
+  echo "installation.sh: both builds gave the worker image $first_id"
 )
 
 # Prints the init result once: it holds the operator secret (contract 4).
@@ -304,6 +345,7 @@ case "$command" in
   enroll) enroll ;;
   enrollment-token) enrollment_token ;;
   verify) verify ;;
+  check-reproducible) check_reproducible ;;
   smoke) smoke ;;
   check-containment) check_containment ;;
   scenario-fresh-composition) fresh_composition_scenario ;;

@@ -114,6 +114,27 @@ test('the Dockerfile builds only from the base and checks the Node.js tarballs',
   for (const line of downloads) assert.match(line, /^--checksum=sha256:\$\{NODE_SHA256_(AMD64|ARM64)\} https:\/\/nodejs\.org\//);
 });
 
+// The instructions of a stage, each with its continuation lines joined.
+function stageInstructions(name: string): readonly string[] {
+  const start = dockerfile.indexOf(` AS ${name}\n`);
+  assert.notEqual(start, -1, `the Dockerfile has the stage ${name}`);
+  const end = dockerfile.indexOf('\nFROM ', start);
+  return dockerfile.slice(start, end === -1 ? undefined : end).replace(/ \\\n\s*/g, ' ').split('\n').slice(1);
+}
+
+const SOURCE_DATE_CLAMP = '-newermt "@${SOURCE_DATE_EPOCH:?}" -exec touch -h -d "@${SOURCE_DATE_EPOCH}" {} +';
+
+test('every RUN of the worker image clamps the mtimes it changes to SOURCE_DATE_EPOCH', () => {
+  for (const name of ['node-amd64', 'node-arm64', 'build', 'runtime', 'worker']) {
+    const instructions = stageInstructions(name);
+    const runs = instructions.filter((instruction) => instruction.startsWith('RUN '));
+    assert.ok(instructions.includes('ARG SOURCE_DATE_EPOCH'), name);
+    assert.notEqual(runs.length, 0, name);
+    for (const run of runs) assert.ok(run.endsWith(SOURCE_DATE_CLAMP), `${name}: ${run}`);
+  }
+  assert.deepEqual(stageInstructions('node').filter((instruction) => instruction.trim() !== ''), ['COPY --from=node-files /node /usr/local']);
+});
+
 test('the effective user of a stage follows its parents', () => {
   const sample = dockerfileStages('FROM ${BASE} AS a\nUSER app\nFROM a AS b\nFROM b AS c\nUSER root\n');
   assert.equal(effectiveUser(sample, 'b'), 'app');
@@ -150,7 +171,7 @@ test('the worker image always names its containment parent and execution account
   assert.deepEqual(environment, [
     'TASKELITH_CONTAINMENT_PARENT=/sys/fs/cgroup/executions', 'TASKELITH_EXECUTION_UID=10003', 'TASKELITH_EXECUTION_GID=10003',
   ]);
-  assert.match(dockerfile, /^RUN useradd --uid 10003 --user-group .* taskelith-exec$/m);
+  assert.match(dockerfile, /^RUN useradd --uid 10003 --user-group .* taskelith-exec \\$/m);
 });
 
 test('the smoke adds only its workflow and the scripted process', () => {

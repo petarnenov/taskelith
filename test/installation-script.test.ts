@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -138,4 +138,108 @@ test('the containment check fails when the probe fails for another reason than a
   const outcome = checkContainment(1, WORKER_CAPABILITIES, 'service "worker" is not running');
   assert.equal(outcome.status, 1);
   assert.match(outcome.stderr, /cgroup\.procs probe failed: service "worker" is not running/);
+});
+
+// Answers the image ID of a tag ending in -first or -second from the setup;
+// FAKE_BUILD_STATUS is the exit status of a build.
+const buildDocker = `#!/bin/sh
+printf '%s\\n' "$*" >> "$FAKE_DOCKER_CALLS"
+case "$*" in
+  "build "*) exit "\${FAKE_BUILD_STATUS:-0}" ;;
+  "image inspect --format {{.Id}} "*-first) echo "$FAKE_FIRST_ID" ;;
+  "image inspect --format {{.Id}} "*-second) echo "$FAKE_SECOND_ID" ;;
+esac
+exit 0
+`;
+
+const COMMIT_TIME = 1700000000;
+
+const PINS = {
+  TASKELITH_UBUNTU_BASE: 'ubuntu:24.04@sha256:base', TASKELITH_NODE_VERSION: '24.0.0',
+  TASKELITH_NODE_SHA256_AMD64: 'amd64', TASKELITH_NODE_SHA256_ARM64: 'arm64',
+};
+
+const FIXTURE_SCRIPTS = ['installation.sh', 'installation-scenarios.sh', 'harness-qualification.sh'];
+
+interface BuildOutcome extends Outcome {
+  readonly stdout: string;
+}
+
+// Runs a copy of a script in a repository whose one commit has COMMIT_TIME.
+function runInFixture(script: string, args: readonly string[], environment: Record<string, string> = {}): BuildOutcome {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-image-build-'));
+  try {
+    const repository = join(root, 'repository');
+    mkdirSync(join(repository, 'scripts'), { recursive: true });
+    for (const name of FIXTURE_SCRIPTS) copyFileSync(resolve('scripts', name), join(repository, 'scripts', name));
+    const date = `@${COMMIT_TIME} +0000`;
+    const git = (...gitArgs: string[]) => spawnSync('git', ['-C', repository, '-c', 'user.name=test', '-c', 'user.email=test@example.invalid', ...gitArgs], {
+      encoding: 'utf8', env: { PATH: '/usr/bin:/bin', GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date },
+    });
+    git('init', '--quiet');
+    git('add', '.');
+    assert.equal(git('commit', '--quiet', '--message', 'fixture').status, 0);
+    const bin = join(root, 'bin');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'docker'), buildDocker);
+    chmodSync(join(bin, 'docker'), 0o755);
+    const calls = join(root, 'calls');
+    writeFileSync(calls, '');
+    const run = spawnSync('bash', [join(repository, 'scripts', script), ...args.map((arg) => arg.replace('{root}', root))], {
+      encoding: 'utf8',
+      env: { ...PINS, ...environment, PATH: [bin, '/usr/bin', '/bin'].join(':'), FAKE_DOCKER_CALLS: calls },
+    });
+    const recorded = readFileSync(calls, 'utf8').trim().split('\n');
+    return { status: run.status, stdout: run.stdout, stderr: run.stderr, calls: recorded };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function checkReproducible(firstId: string, secondId: string): BuildOutcome {
+  return runInFixture('installation.sh', ['check-reproducible', 'installation-script-test'], {
+    FAKE_FIRST_ID: firstId, FAKE_SECOND_ID: secondId,
+  });
+}
+
+function builds(calls: readonly string[]): readonly string[] {
+  return calls.filter((call) => call.startsWith('build '));
+}
+
+const COMMIT_EPOCH_ARGUMENT = ` --build-arg SOURCE_DATE_EPOCH=${COMMIT_TIME} `;
+
+test('the images are built with the commit time of the built revision as SOURCE_DATE_EPOCH', () => {
+  const outcome = runInFixture('installation.sh', ['build', 'installation-script-test']);
+  assert.equal(outcome.status, 0, outcome.stderr);
+  assert.equal(builds(outcome.calls).length, 2);
+  for (const call of builds(outcome.calls)) assert.ok(call.includes(COMMIT_EPOCH_ARGUMENT), call);
+});
+
+test('the harness variant is built with the commit time of the built tree as SOURCE_DATE_EPOCH', () => {
+  const outcome = runInFixture('harness-qualification.sh', ['{root}/out'], { PLATFORMS: 'linux/amd64', FAKE_BUILD_STATUS: '1' });
+  assert.equal(outcome.status, 1);
+  const [build, ...others] = builds(outcome.calls);
+  assert.equal(others.length, 0);
+  assert.ok(build?.includes(COMMIT_EPOCH_ARGUMENT), build);
+});
+
+test('the reproducibility check builds the worker twice without the cache and passes on one image ID', () => {
+  const outcome = checkReproducible('sha256:same', 'sha256:same');
+  assert.equal(outcome.status, 0, outcome.stderr);
+  const [first, second, ...others] = builds(outcome.calls);
+  assert.equal(others.length, 0);
+  for (const [call, tag] of [[first, 'first'], [second, 'second']] as const) {
+    assert.match(call ?? '', /^build --no-cache .* --target worker --tag taskelith-worker:installation-script-test-/);
+    assert.ok(call?.includes(`-${tag} `), call);
+    assert.ok(call?.includes(COMMIT_EPOCH_ARGUMENT), call);
+  }
+  assert.match(outcome.stdout, /both builds gave the worker image sha256:same/);
+  assert.ok(outcome.calls.some((call) => /^image rm .*-first .*-second$/.test(call)), 'both images are removed');
+});
+
+test('the reproducibility check fails and names both image IDs when they differ', () => {
+  const outcome = checkReproducible('sha256:one', 'sha256:two');
+  assert.equal(outcome.status, 1);
+  assert.match(outcome.stderr, /two builds of one revision gave sha256:one and sha256:two/);
+  assert.ok(outcome.calls.some((call) => /^image rm .*-first .*-second$/.test(call)), 'both images are removed');
 });

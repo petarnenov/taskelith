@@ -47,12 +47,13 @@ sha256_of() {
 }
 
 build_variant() {
-  local context="$1" platform="$2" image="$3"
+  local context="$1" tree="$2" platform="$3" image="$4"
   docker build --quiet --platform "$platform" --file "$context/infra/installation/Dockerfile" \
     --target worker-harnesses --tag "$image" --build-arg BASE="$TASKELITH_UBUNTU_BASE" \
     --build-arg NODE_VERSION="$TASKELITH_NODE_VERSION" \
     --build-arg NODE_SHA256_AMD64="$TASKELITH_NODE_SHA256_AMD64" \
-    --build-arg NODE_SHA256_ARM64="$TASKELITH_NODE_SHA256_ARM64" "$context" >/dev/null
+    --build-arg NODE_SHA256_ARM64="$TASKELITH_NODE_SHA256_ARM64" \
+    --build-arg SOURCE_DATE_EPOCH="$(git -C "$repository" log -1 --format=%ct "$tree")" "$context" >/dev/null
 }
 
 describe_run() {
@@ -104,7 +105,7 @@ run_platform() {
   result="$out/${platform#linux/}"
   rm -rf -- "$result"
   mkdir -p "$result"
-  if ! build_variant "$context" "$platform" "$image" 2> "$result/error.txt"; then
+  if ! build_variant "$context" "$tree" "$platform" "$image" 2> "$result/error.txt"; then
     echo "harness-qualification.sh: $platform build failed, see $result/error.txt" >&2
     return 1
   fi
