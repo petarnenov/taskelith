@@ -14,7 +14,8 @@
 
 ## 3. Records
 
-- [x] 3.1 Proposal, design, `verification.md`, and an empty `findings.jsonl`
+- [x] 3.1 Proposal, design, `verification.md`, and `findings.jsonl` with the review findings
 - [x] 3.2 `npm run openspec -- validate fix-platform-probe-filesystem-label --strict` and `make verify`
 - [x] 3.3 Independent review pass 1 (1 Medium), fixed
-- [ ] 3.4 Independent review pass 2
+- [x] 3.4 Independent review pass 2 (pass 1 resolved; 1 Low), fixed without re-review
+- [x] 3.5 Archive with the pinned CLI and the worker step 7 checks

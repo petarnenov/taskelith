@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-27. The author's verification and review pass 1 are recorded below; review pass 2 is pending.
+Date: 2026-10-27. The author's verification, review passes 1 and 2, and the archive checks are recorded below.
 
 ## Scope and source
 
@@ -49,13 +49,20 @@ This Linux host: Ubuntu 24.04.5 LTS, kernel Linux 6.8.0-147-generic, Docker engi
 - **Revision:** `e75e173`, diff `fe64386..e75e173`.
 - **Session:** `ses_e8406820effepKVtaNp0QOzyYp`.
 - **Snapshot:** `ff385e7059a32ba3bcbabca2bb05fab1192ee9f705d982cb7e3f0ffebe5fbf35` before and after; unchanged.
-- **Findings:** 0 Critical, 0 High, 1 Medium, 0 Low; fixed in `4b5d2d0` and `082ff61`, to be confirmed by pass 2. Recorded in `findings.jsonl` as `fixed-unreviewed`.
+- **Findings:** 0 Critical, 0 High, 1 Medium, 0 Low; fixed in `4b5d2d0` and `082ff61`, confirmed by pass 2. Recorded in `findings.jsonl` as `fixed`.
   1. **M1 (contract-drift):** `volume_of` in `scripts/installation-scenarios.sh:636` still named a Linux native worker's file system with `stat -f -c %T`, so its lifecycle record could say `ext2/ext3` for ext4. **Fixed:** its Linux branch runs `sh -c "$FILE_SYSTEM_PROBE" sh "$mount_point"`; the macOS branch is unchanged. The test `the native worker volume names the type of its Linux mount` failed before and passes after; the delta's ext4 scenario, the proposal, and the design name the native worker volume. No other `stat -f` file system label is left in `scripts/`.
 - **Checklist with no findings:** redaction and error handling (fallback quoting, `findmnt` stderr, a failing `stat` still failing).
 
 ### Pass 2
 
-Pending: the same reviewer, on the pass 1 resolutions.
+- **Reviewer and invocation:** as in pass 1 (OpenCode CLI, `opencode-go/kimi-k2.7-code`, default variant, `reviewer` agent, read-only).
+- **Revision:** `5e08d88`; the pass 1 resolutions are `e75e173..5e08d88`, the whole change `fe64386..5e08d88`.
+- **Session:** `ses_e83fb7fd2ffetIk8iBAk6L8p7d`.
+- **Snapshot:** `0692e9e4243541ccc1a604d8d07065c635cad141144fdb3cab06d49e9075bf75` before and after; unchanged.
+- **Pass 1 findings:** M1 resolved: `volume_of` runs the shared probe, its macOS branch is unchanged, and no other `stat -f` file system label is left in `scripts/`.
+- **New findings:** 0 Critical, 0 High, 0 Medium, 1 Low. A Low-only pass is fixed without another review ([review process](../../../docs/governance.md#independent-review-process)).
+  1. **L1 (docs):** task 3.1 in `tasks.md:17` called `findings.jsonl` empty although it holds M1. **Fixed, unreviewed:** the task names `findings.jsonl` with the review findings; recorded in `findings.jsonl` as `fixed-unreviewed`.
+- **Checklist with no findings:** redaction, contract drift apart from L1, and error handling.
 
 ## Limitations
 
@@ -65,5 +72,4 @@ Pending: the same reviewer, on the pass 1 resolutions.
 
 ## Remaining gates
 
-- Independent review pass 1 and the resolution of its findings in this file and `findings.jsonl`.
-- Handoff by the session, and integration and archive by the coordinator.
+- Integration into dev by the coordinator (single pull request).
