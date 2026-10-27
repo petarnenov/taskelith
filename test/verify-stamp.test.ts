@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import {
-  checkStamp, classifyPaths, decideProfile, DIRTY, finishVerify, gitIn, isDocsPath, isDryRun, PROFILE_VARIABLE, runCommand,
+  checkStamp, classifyPaths, decideProfile, DIRTY, finishVerify, gitIn, headRevision, isDocsPath, isDryRun, mergeBase, NO_MERGE_BASE,
+  PROFILE_VARIABLE, runCommand,
   satisfyingProfiles, serviceImages, stampDirectory, stampFields, stampKey, startTree, writeStamp, type Git,
   type StampContext,
 } from '../scripts/verify-stamp.ts';
@@ -120,12 +121,23 @@ test('dev, main, CI, a forced run, a missing merge base, and no change are full'
   });
 });
 
-test('the stamp key covers the tree, profile, toolchain, lockfile, and images', () => {
+test('a detached HEAD gets the full profile, also outside CI', () => {
+  withRepository((root, context) => {
+    write(root, 'docs/a.md', '# A\n');
+    commitAll(root, 'docs');
+    assert.equal(decideProfile(context.git, {}).profile, 'docs-only');
+    git(root, 'switch', '-q', '--detach');
+    assert.deepEqual(decideProfile(context.git, {}), { profile: 'full', reason: 'detached HEAD' });
+  });
+});
+
+test('the stamp key covers the tree, merge base, profile, toolchain, lockfile, and images', () => {
   withRepository((root) => {
-    const base = stampFields(root, 'tree-1', 'full', TOOLCHAIN);
+    const base = stampFields(root, { tree: 'tree-1', base: 'base-1' }, 'full', TOOLCHAIN);
     assert.deepEqual(base.images, ['postgres:18@sha256:abc']);
     const variants = [
       { ...base, tree: 'tree-2' },
+      { ...base, base: 'base-2' },
       { ...base, profile: 'docs-only' as const },
       { ...base, node: 'v24.0.0' },
       { ...base, npm: '11.0.0' },
@@ -134,6 +146,36 @@ test('the stamp key covers the tree, profile, toolchain, lockfile, and images', 
     ];
     for (const variant of variants) assert.notEqual(stampKey(variant), stampKey(base), JSON.stringify(variant));
     assert.equal(stampKey({ ...base }), stampKey(base));
+  });
+});
+
+// Review finding 4: contract compatibility and findings validation read the
+// merge base, so the same tree on another merge base is not verified.
+test('a stamp of the same tree on another merge base is not reused', () => {
+  withRepository((root, context) => {
+    write(root, 'docs/a.md', '# A\n');
+    commitAll(root, 'docs');
+    finishVerify(context, 'full', startTree(context.git), NOW);
+    assert.equal(checkStamp(context, 'full').verified, true);
+    const { tree, base } = headRevision(context.git);
+    git(root, 'switch', '-q', 'dev');
+    write(root, 'src/endpoint.ts', 'export {};\n');
+    commitAll(root, 'dev adds an endpoint');
+    git(root, 'update-ref', 'refs/remotes/origin/dev', 'HEAD');
+    const same = git(root, 'commit-tree', tree, '-p', 'HEAD', '-m', 'same tree on the new dev').trim();
+    git(root, 'switch', '-q', 'feature');
+    git(root, 'reset', '-q', '--hard', same);
+    assert.equal(headRevision(context.git).tree, tree);
+    assert.notEqual(headRevision(context.git).base, base);
+    assert.deepEqual(checkStamp(context, 'full').verified, false);
+    assert.match(checkStamp(context, 'full').message, /^no full stamp for tree [0-9a-f]{12} and merge base [0-9a-f]{12}$/);
+  });
+});
+
+test('a missing merge base is part of the key as none', () => {
+  withRepository((root, context) => {
+    git(root, 'update-ref', '-d', 'refs/remotes/origin/dev');
+    assert.equal(mergeBase(context.git), NO_MERGE_BASE);
   });
 });
 
@@ -207,13 +249,13 @@ test('a stamp is not reused on a dirty tree, in CI, or after a key change', () =
     write(root, 'package-lock.json', '{"changed":true}\n');
     assert.deepEqual(checkStamp(context, 'full'), { verified: false, message: 'the working tree is not clean' });
     commitAll(root, 'lockfile');
-    assert.match(checkStamp(context, 'full').message, /^no full stamp for tree [0-9a-f]{12}$/);
+    assert.match(checkStamp(context, 'full').message, /^no full stamp for tree [0-9a-f]{12} and merge base [0-9a-f]{12}$/);
   });
 });
 
 test('a corrupt or mismatched stamp file is ignored', () => {
   withRepository((_root, context) => {
-    const fields = stampFields(context.root, startTree(context.git), 'full', TOOLCHAIN);
+    const fields = stampFields(context.root, headRevision(context.git), 'full', TOOLCHAIN);
     const path = writeStamp(stampDirectory(context.git), fields, NOW);
     writeFileSync(path, 'not json');
     assert.equal(checkStamp(context, 'full').verified, false);
@@ -237,7 +279,7 @@ test('the commands print the profile, the start tree, the result, and the check'
     assert.equal(tree, git(root, 'rev-parse', 'HEAD^{tree}').trim());
     const missing = runCommand(['check'], () => context, NOW);
     assert.equal(missing.status, 1);
-    assert.match(missing.stdout, /^pre-push: no docs-only stamp for tree [0-9a-f]{12}; running make verify\n$/);
+    assert.match(missing.stdout, /^pre-push: no docs-only stamp for tree [0-9a-f]{12} and merge base [0-9a-f]{12}; running make verify\n$/);
     const written = runCommand(['write', 'docs-only', tree], () => context, NOW);
     assert.equal(written.stdout, `make verify: passed, profile docs-only, tree ${tree}; stamp written\n`);
     const hit = runCommand(['check'], () => context, NOW);

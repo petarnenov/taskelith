@@ -14,6 +14,7 @@ export type Environment = Readonly<Record<string, string | undefined>>;
 export const PROFILE_VARIABLE = 'TASKELITH_VERIFY_PROFILE';
 export const STAMP_DIRECTORY = 'taskelith-verify-stamps';
 export const DIRTY = 'dirty';
+export const NO_MERGE_BASE = 'none';
 const BASE_REF = 'origin/dev';
 const PROTECTED_BRANCHES = new Set(['dev', 'main']);
 const LOCKFILE = 'package-lock.json';
@@ -77,20 +78,25 @@ function forcedProfile(environment: Environment): ProfileDecision | undefined {
   return undefined;
 }
 
-// Docs-only applies only to feature branches; CI, dev, main, a forced full
-// run, and a missing merge base always get the full profile.
+// Docs-only applies only to feature branches; CI, dev, main, a detached
+// HEAD, a forced full run, and a missing merge base get the full profile.
 export function decideProfile(git: Git, environment: Environment): ProfileDecision {
   const forced = forcedProfile(environment);
   if (forced !== undefined) return forced;
   const branch = attempt(git, ['symbolic-ref', '--short', '-q', 'HEAD']);
-  if (branch !== undefined && PROTECTED_BRANCHES.has(branch)) return { profile: 'full', reason: `branch ${branch}` };
-  const base = attempt(git, ['merge-base', 'HEAD', BASE_REF]);
-  if (base === undefined || base === '') return { profile: 'full', reason: `no merge base with ${BASE_REF}` };
+  if (branch === undefined || branch === '') return { profile: 'full', reason: 'detached HEAD' };
+  if (PROTECTED_BRANCHES.has(branch)) return { profile: 'full', reason: `branch ${branch}` };
+  const base = mergeBase(git);
+  if (base === NO_MERGE_BASE) return { profile: 'full', reason: `no merge base with ${BASE_REF}` };
   const paths = changedPaths(git, base);
   const profile = classifyPaths(paths);
   if (profile === 'docs-only') return { profile, reason: `${paths.length} documentation path(s) since ${base.slice(0, 12)}` };
   const code = paths.find((path) => !isDocsPath(path));
   return { profile, reason: code === undefined ? `no change since ${base.slice(0, 12)}` : `${code} changed` };
+}
+
+export function mergeBase(git: Git): string {
+  return attempt(git, ['merge-base', 'HEAD', BASE_REF]) || NO_MERGE_BASE;
 }
 
 export function isClean(git: Git): boolean {
@@ -101,8 +107,20 @@ export function headTree(git: Git): string {
   return git(['rev-parse', 'HEAD^{tree}']).trim();
 }
 
+// The tree and the merge base with origin/dev, which the contract
+// compatibility check and the findings validation read.
+export interface Revision {
+  readonly tree: string;
+  readonly base: string;
+}
+
+export function headRevision(git: Git): Revision {
+  return { tree: headTree(git), base: mergeBase(git) };
+}
+
 export interface StampFields {
   readonly tree: string;
+  readonly base: string;
   readonly profile: VerifyProfile;
   readonly node: string;
   readonly npm: string;
@@ -130,9 +148,10 @@ export function serviceImages(root: string): string[] {
     .sort();
 }
 
-export function stampFields(root: string, tree: string, profile: VerifyProfile, toolchain: Toolchain): StampFields {
+export function stampFields(root: string, revision: Revision, profile: VerifyProfile, toolchain: Toolchain): StampFields {
   return {
-    tree,
+    tree: revision.tree,
+    base: revision.base,
     profile,
     node: toolchain.node,
     npm: toolchain.npm,
@@ -142,7 +161,7 @@ export function stampFields(root: string, tree: string, profile: VerifyProfile, 
 }
 
 export function stampKey(fields: StampFields): string {
-  const ordered = [fields.tree, fields.profile, fields.node, fields.npm, fields.lockfile, ...fields.images];
+  const ordered = [fields.tree, fields.base, fields.profile, fields.node, fields.npm, fields.lockfile, ...fields.images];
   return createHash('sha256').update(JSON.stringify(ordered)).digest('hex');
 }
 
@@ -195,15 +214,16 @@ export function checkStamp(context: StampContext, required: VerifyProfile): Chec
   const { git, root, toolchain, environment } = context;
   if (environment.CI !== undefined && environment.CI !== '') return { verified: false, message: 'CI never reuses a stamp' };
   if (!isClean(git)) return { verified: false, message: 'the working tree is not clean' };
-  const tree = headTree(git);
+  const revision = headRevision(git);
   const directory = stampDirectory(git);
+  const tree = revision.tree.slice(0, 12);
   for (const profile of satisfyingProfiles(required)) {
-    const stamp = readStamp(directory, stampFields(root, tree, profile, toolchain));
+    const stamp = readStamp(directory, stampFields(root, revision, profile, toolchain));
     if (stamp !== undefined) {
-      return { verified: true, message: `tree ${tree.slice(0, 12)} passed make verify (${profile}) at ${stamp.verifiedAt}` };
+      return { verified: true, message: `tree ${tree} passed make verify (${profile}) at ${stamp.verifiedAt}` };
     }
   }
-  return { verified: false, message: `no ${required} stamp for tree ${tree.slice(0, 12)}` };
+  return { verified: false, message: `no ${required} stamp for tree ${tree} and merge base ${revision.base.slice(0, 12)}` };
 }
 
 export function startTree(git: Git): string {
@@ -216,7 +236,7 @@ export function finishVerify(context: StampContext, profile: VerifyProfile, star
   if (started === DIRTY) return `${passed}, uncommitted working tree; no stamp written`;
   const { git, root, toolchain } = context;
   if (!isClean(git) || headTree(git) !== started) return `${passed}, tree ${started}; the tree changed during the run, no stamp written`;
-  writeStamp(stampDirectory(git), stampFields(root, started, profile, toolchain), now);
+  writeStamp(stampDirectory(git), stampFields(root, { tree: started, base: mergeBase(git) }, profile, toolchain), now);
   return `${passed}, tree ${started}; stamp written`;
 }
 
