@@ -1,0 +1,1 @@
+{"change": "record-placement-outcome", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a17e69-b940-7790-a5eb-8d06a3c2b497", "counts": {"critical": 0, "high": 0, "medium": 3, "low": 2}}
