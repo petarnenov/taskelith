@@ -70,6 +70,21 @@ A rotation SHALL store the new credential under a new version and then, in one c
 - **WHEN** a revoked slot is removed while a rotation stores its new credential
 - **THEN** the rotation fails with `conflict`, and no version of the slot's credential is kept
 
+### Requirement: Superseded credential versions discarded
+A rotation SHALL keep no superseded credential: after its switch commits, it SHALL discard, through `SlotCredentials.discardAllExcept`, the replaced version and every version that an earlier failed or stopped rotation left, and then advance the slot's revision, so that a concurrent rotation whose version was discarded fails its switch with `conflict`; `discardAllExcept` SHALL keep the named version, later stores, and other slots' versions, and succeed when nothing is stored.
+
+#### Scenario: Superseded version discarded
+- **WHEN** a rotation switches a slot to its new version
+- **THEN** the replaced version is discarded and only the new version can be revealed
+
+#### Scenario: Orphaned version discarded on recovery
+- **WHEN** an operator rotates a slot again after an earlier rotation stored a version and then crashed or failed with `conflict`
+- **THEN** after the switch the earlier rotation's version is discarded, and no version other than the new one can be revealed
+
+#### Scenario: Rotation racing the discard
+- **WHEN** a rotation stores its version before another rotation's discard removes it
+- **THEN** its switch fails with `conflict`, and the slot keeps naming a stored version
+
 ### Requirement: Credential kept out of worker records
 A delivered slot credential SHALL be held only in the worker host's memory for the execution it was delivered to, and SHALL never enter the worker journal, a launch authorization grant, `worker/executions/<executionId>/`, `worker/logs/`, or the local outbox; every execution after its W3 commit, a recovered or adopted one included, SHALL request it again through a new delivery with the delivery's checks.
 
