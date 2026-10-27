@@ -77,7 +77,7 @@ Third pass share by feature (50 changes):
 
 The capability history was computed without future information, from earlier changes only; it does not separate the groups and is therefore recorded as a feature but is no trigger of rule version 1. The rule of "Rule table" puts 17 changes in `elevated`, of which 9 (53%) needed a third pass, and 33 in `standard`, of which 7 (21%) did; over the 30 changes with `passes.jsonl`, 7 of 11 (64%) against 5 of 19 (26%). These figures are in-sample, because the thresholds were read off the same records, so they overstate the rule's accuracy; "Effect extension" measures it on later changes.
 
-Correction of phase 2: the rule figures above do not apply the `contracts` trigger as "Features" defines it. The scratch analysis counted one contract change, but `docs/contracts/**` matches 18 of the 50 changes. The rule-only offline evaluation applies the rule as implemented and gives 27 `elevated` changes, of which 13 (48%) needed a third pass, and 23 `standard`, of which 3 (13%) did; without the `contracts` trigger the same features give 9 of 15 and 7 of 35. `verification.md` records the run and the comparison; the rule is unchanged, so whether a later rule version narrows the trigger is a decision for the coordinator.
+Correction of phase 2: the rule figures above do not apply the `contracts` trigger as "Features" defines it. The scratch analysis counted one contract change, but `docs/contracts/**` matches 18 of the 50 changes. The rule-only offline evaluation applies the rule as implemented and gives 27 `elevated` changes, of which 13 (48%) needed a third pass, and 23 `standard`, of which 3 (13%) did; without the `contracts` trigger the same features give 9 of 15 and 7 of 35. `verification.md` records the run and the comparison; the rule is unchanged ("Decisions" 8).
 
 ## Features
 
@@ -346,6 +346,7 @@ The coordinator decided the open questions of phase 1 on 2026-10-28; the numbers
 5. **Evaluation population.** The offline evaluation runs on the 50 archived changes with review records; the 20 of them without `passes.jsonl` are reported separately, as lower bounds.
 6. **Owner hard floor.** The TypeSafe account, the acceptance of the Master Customer Agreement, paid credits, and the consent to send the features ("Owner actions") are pending with the owner. Until the owner confirms them, `JevRouter` is tested only with a fake and the constructed response, no live call is made from any host, and the offline evaluation may be implemented and tested against a fake but is not run live.
 7. **No OpenCode reviewer.** The rule never proposes OpenCode, also not as reviewer B of a documentation-only `standard` change, because the coordinator decided that there is no light tier (decision 4) and the router cannot know whether OpenCode's pause has ended (former open question 1, option (a)).
+8. **Keep the `contracts` trigger in rule version 1.** The coordinator decided on 2026-10-28 to keep rule version 1 as is. In the rule-only evaluation the trigger matches 18 of the 50 archived changes and alone elevates 12, of which 4 needed a third pass; without it, `elevated` is 9 of 15 and `standard` 7 of 35. The narrower variant (b), the trigger restricted to OpenAPI and AsyncAPI documents, is a candidate for rule version 2, to revisit with Jev shadow data.
 
 ## Phase 2 scope
 
