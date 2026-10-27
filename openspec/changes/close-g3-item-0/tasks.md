@@ -17,6 +17,6 @@
 ## 3. Review and archive
 
 - [x] 3.1 Independent review, pass 1 (reviewer A, Codex CLI, `gpt-6.1-sol`)
-- [ ] 3.2 Independent review, pass 2 (reviewer B, Claude Code, `claude-opus-5-5`, effort high)
-- [ ] 3.3 Independent review, pass 3 (reviewer A)
+- [x] 3.2 Independent review, pass 2 (reviewer B, Claude Code, `claude-opus-5-5`, effort high); its six Low findings fixed and recorded `fixed-unreviewed`
+- [x] 3.3 Pass 3 not needed: pass 2 was Low-only (governance, "Low findings are fixed")
 - [ ] 3.4 Archive the change
