@@ -15,7 +15,7 @@ import {
 } from '@taskelith/control-plane';
 import { openAttempt, type AttemptId, type Task, type WorkerId } from '@taskelith/execution';
 import { fleetToken, fleetWorker, type EnrolledWorker } from '@taskelith/fleet';
-import { ok, type CorrelationId } from '@taskelith/kernel';
+import { err, failure, ok, type CorrelationId } from '@taskelith/kernel';
 import { PostgresDatabase, migrate, type PostgresTransaction } from '@taskelith/postgres';
 import { endAssignment } from '@taskelith/scheduling';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
@@ -406,7 +406,77 @@ describe('placement', () => {
     assert.deepEqual(value(await new PlacementService(database, TIMING).placeWaiting()), { waiting: 1, placed: 1 });
     assert.equal(await outcomeRecord('task-1'), undefined);
   });
+
+  test('a placement whose removal of the outcome fails writes nothing and keeps the outcome', async () => {
+    await enroll('worker-a');
+    await submit('task-1');
+    await sql("INSERT INTO capacity_quotas (scope, scope_id, quota) VALUES ('project', 'project-1', 0)");
+    value(await placement.placeWaiting());
+    const [waiting, cursor] = [await outcomeRecord('task-1'), await sql('SELECT project_id FROM placement_rotation')];
+    await sql('DELETE FROM capacity_quotas');
+    const failing: ControlPlaneStore = {
+      transaction: (work) => database.transaction((tx) => work({ ...tx, now: () => tx.now(), placementOutcomes: failingRemoval(tx) })),
+      readCommitted: (work) => database.readCommitted(work),
+    };
+    assert.equal(failed(await new PlacementService(failing, TIMING).placeWaiting()).code, 'unavailable');
+    assert.deepEqual(await outcomeRecord('task-1'), waiting);
+    assert.deepEqual([await assignmentsOf('task-1'), await offers()], [[], []]);
+    assert.deepEqual(await sql('SELECT project_id FROM placement_rotation'), cursor);
+  });
+
+  for (const earlier of [false, true]) {
+    test(`a placement that overlaps the waiting record's transaction leaves no record, ${earlier ? 'replacing' : 'without'} an earlier one`, async () => {
+      await enroll('worker-a', { slots: 1 });
+      await submit('task-1');
+      if (earlier) {
+        await sql(`INSERT INTO placement_outcomes (task_id, disposition, reason, source, recorded_at)
+          VALUES ('task-1', 'waiting', 'project-quota-exhausted', 'scheduler', now())`);
+      }
+      await sql('UPDATE workers SET slots = 0');
+      let overlapping = { waiting: 0, placed: 0 };
+      const paused = pausingStore(async () => {
+        await sql('UPDATE workers SET slots = 1');
+        overlapping = value(await new PlacementService(database, TIMING).placeWaiting());
+      });
+      assert.deepEqual(value(await new PlacementService(paused.store, TIMING).placeWaiting()), { waiting: 1, placed: 0 });
+      assert.deepEqual(overlapping, { waiting: 1, placed: 1 });
+      assert.equal(paused.count(), 2, 'the waiting record\'s transaction lost its race and ran again');
+      assert.deepEqual([await placedTasks(), await outcomeRecord('task-1')], [['task-1'], undefined]);
+    });
+  }
 });
+
+// Removals of placement outcome records fail as an unavailable store does.
+function failingRemoval(tx: PostgresTransaction): ControlPlaneTransaction['placementOutcomes'] {
+  const outcomes = tx.placementOutcomes;
+  return {
+    record: (outcome) => outcomes.record(outcome), remove: async () => err(failure('unavailable', 'the store is down')),
+    get: (taskId) => outcomes.get(taskId), list: (taskIds) => outcomes.list(taskIds),
+  };
+}
+
+// The first waiting read in a SERIALIZABLE transaction, the waiting
+// record's, awaits `overlap` before it answers; `count` counts such reads.
+function pausingStore(overlap: () => Promise<void>) {
+  let reads = 0;
+  const pausing = (tx: PostgresTransaction): ControlPlaneTransaction => ({
+    ...tx,
+    now: () => tx.now(),
+    placements: {
+      waiting: (limit, excluding, after) => tx.placements.waiting(limit, excluding, after),
+      stillWaiting: async (taskIds) => {
+        const waiting = await tx.placements.stillWaiting(taskIds);
+        if (++reads === 1) await overlap();
+        return waiting;
+      },
+    },
+  });
+  const store: ControlPlaneStore = {
+    transaction: (work) => database.transaction((tx) => work(pausing(tx))),
+    readCommitted: (work) => database.readCommitted(work),
+  };
+  return { store, count: () => reads };
+}
 
 async function outcomeRecord(taskId: string) {
   return value(await database.transaction(async (tx) => ok(await tx.placementOutcomes.get(taskId as TaskId))));

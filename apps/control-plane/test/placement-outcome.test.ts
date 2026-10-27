@@ -65,21 +65,22 @@ const SMALL: WorkerPlacementRecord = { ...ROOMY, cpuMillicores: 500 };
 // does; the other in-memory stores of the fixture do not roll back.
 class StagedOutcomes implements PlacementOutcomeRecords {
   readonly #committed: PlacementOutcomeRecords;
-  readonly #recordFails: boolean;
+  readonly #writesFail: boolean;
   readonly #writes: (() => Promise<Result<void>>)[] = [];
 
-  constructor(committed: PlacementOutcomeRecords, recordFails: boolean) {
+  constructor(committed: PlacementOutcomeRecords, writesFail: boolean) {
     this.#committed = committed;
-    this.#recordFails = recordFails;
+    this.#writesFail = writesFail;
   }
 
   async record(outcome: PlacementOutcomeRecord): Promise<Result<void>> {
-    if (this.#recordFails) return DOWN;
+    if (this.#writesFail) return DOWN;
     this.#writes.push(() => this.#committed.record(outcome));
     return ok(undefined);
   }
 
   async remove(taskId: TaskId): Promise<Result<void>> {
+    if (this.#writesFail) return DOWN;
     this.#writes.push(() => this.#committed.remove(taskId));
     return ok(undefined);
   }
@@ -113,11 +114,11 @@ async function fixture(worker: WorkerPlacementRecord = ROOMY) {
     fleet: { worker: async () => ok(undefined), replaceJournal: undefined as never },
     revisions: new InMemoryCurrentRevisions(), launches: undefined as never, now,
   };
-  const hooks = { beforeTransaction: async () => {}, recordFails: false };
+  const hooks = { beforeTransaction: async () => {}, writesFail: false };
   const store: ControlPlaneStore = {
     transaction: async <Value>(work: (tx: ControlPlaneTransaction) => Promise<Result<Value>>) => {
       await hooks.beforeTransaction();
-      const staged = new StagedOutcomes(capacity.placementOutcomes, hooks.recordFails);
+      const staged = new StagedOutcomes(capacity.placementOutcomes, hooks.writesFail);
       const result = await work({ ...transaction, placementOutcomes: staged });
       if (result.ok) await staged.commit();
       return result;
@@ -214,7 +215,20 @@ test('a failed write of a waiting record stops the pass', async () => {
   context.projectQuotas.set('p-a' as ProjectId, 0);
   const declined = await context.submit('task-a1', 'run-a');
   await context.submit('task-b1', 'run-b');
-  context.hooks.recordFails = true;
+  context.hooks.writesFail = true;
   assert.equal(failed(await context.placement.placeWaiting()).code, 'unavailable');
   assert.deepEqual([context.placed(), await context.outcomeOf(declined)], [[], undefined], 'task-b1 is not offered');
+});
+
+test('a placement whose removal of the record fails is not placed and keeps the record', async () => {
+  const context = await fixture();
+  const taskId = await context.submit('task-1');
+  context.projectQuotas.set('p-a' as ProjectId, 0);
+  value(await context.placement.placeWaiting());
+  const waiting = await context.outcomeOf(taskId);
+  context.projectQuotas.delete('p-a' as ProjectId);
+  context.clock.at = START + 60_000;
+  context.hooks.writesFail = true;
+  assert.equal(failed(await context.placement.placeWaiting()).code, 'unavailable');
+  assert.deepEqual(await context.outcomeOf(taskId), waiting);
 });
