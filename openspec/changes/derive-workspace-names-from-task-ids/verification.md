@@ -71,7 +71,8 @@ After review pass 2:
 
 ### Pass 2, reviewer B
 
-- Reviewer: Claude Code, `claude-opus-5-5`, effort high, reviewed head `583eb088`, run by the coordinator.
+- Reviewer: Claude Code, `claude-opus-5-5`, effort high, reviewed head `583eb088`, run by worker Liki.
+- Invocation: `claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json < /dev/null`, run in the worktree; `modelUsage` names only `claude-opus-5-5`.
 - Session: `e9616865-3fb6-432d-9e1e-7131448d0cca`.
 - Snapshot: `022cfb5875fbb1d18d4ec8b238bb42172e637402ecf27c586493a80306cb3827` before and after the pass, unchanged.
 - Counts: Critical 0, High 0, Medium 0, Low 6.
