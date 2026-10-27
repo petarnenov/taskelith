@@ -8,8 +8,8 @@ The account pool is a capability of the Scheduling module, because a slot is a p
 
 | Port | Owner | Implemented by |
 | --- | --- | --- |
-| `AccountSlots`: slot records, read and written inside the reservation transaction | Scheduling | The item 12 PostgreSQL adapter in the `control-plane/` namespace |
-| `SlotCredentials`: encrypted slot credential material | Scheduling | The item 12 adapter; the encryption and key management choice belongs to item 12 |
+| `AccountSlots`: slot records, read and written inside the reservation transaction | Scheduling | The item 12 adapter in the installation's PostgreSQL database |
+| `SlotCredentials`: encrypted slot credential material | Scheduling | The item 12 adapter, whose encryption key, or whole store, lives in the `control-plane/` namespace ([installation and enrollment contract](installation-and-enrollment.md) section 3), never in the database; the encryption and key management choice belongs to item 12 |
 
 Harness plugins never call these ports. A plugin declares its subscription mechanisms in its `capabilities` and reports load, limit, and reset signals through the agent harness port (item 3); the control plane turns those signals into slot updates (section 5). A plugin receives a slot's credential only through the run that reserved the slot (section 7).
 
@@ -21,7 +21,7 @@ This item adds the port types, the contract values, and a conformance suite for 
 2. **Opaque identities.** A slot is identified by a `ProviderCredentialId`, the identifier that a reservation records in `providerCredentials`. The harness is a `HarnessPluginId` and the mechanism a `SubscriptionMechanismId`, both opaque to the pool. `HarnessPluginId` is the Execution module's type (`@taskelith/execution`), whose value is the harness plugin's manifest `id`; the agent harness port identifies a plugin by the same type ([agent harness port contract](agent-harness-port.md) section 4.1). `SubscriptionMechanismId` stays the pool's own opaque type: its values are drawn from the subscription mechanisms that the plugin declares through the agent harness port, and they are validated outside the pool. Wherever this contract orders by `id`, it means the code point order of the identifier's characters, as PostgreSQL's `COLLATE "C"` orders text, so that every replica and adapter agrees.
 3. **Compare-and-set.** Every slot change replaces the record at an expected revision, inside the transaction that decides it, and fails with `conflict` when the revision has moved. A slot's revision starts at `1` and grows by one with each change.
 4. **Failures.** Every operation that can fail for a domain reason returns a kernel `Result`: `invalid` for malformed input, `not-found`, and `conflict` for a duplicate or a lost compare-and-set. A read without a domain failure, such as `pool`, returns its value, as the capacity ledger does. A store that cannot be reached rejects the operation's promise, which aborts the reservation transaction.
-5. **Secrecy.** A slot credential never enters a log, a prompt, a lesson, an error payload, an event, an outbox record, a view, or a wire response (ADR 0005 decision 6). Only `SlotCredentials` holds it, and only the delivery to the reserving run reveals it.
+5. **Secrecy.** A slot credential never enters a log, a prompt, a lesson, an error payload, an event, an outbox record, a view, or a wire response (ADR 0005 decision 6), nor the worker journal, an execution directory, or the worker's local outbox (section 7.3). Only `SlotCredentials` holds it at rest, and only the delivery to the reserving run reveals it. A subscription token has no shape that the shape rules of `@taskelith/secrets` match, so a run is redacted by the value of its credential (section 7.4).
 
 ## 3. Slots
 
@@ -31,7 +31,7 @@ This item adds the port types, the contract values, and a conformance suite for 
 | --- | --- |
 | `id` | The slot's `ProviderCredentialId` |
 | `harnessId` | The harness plugin the slot belongs to; never changes |
-| `mechanismId` | One subscription mechanism that the plugin declares in its agent harness port `capabilities` (section 2, rule 2). The control plane's add-slot command checks it against that declaration before `add`, and rejects a mechanism the plugin does not declare as a subscription, such as an API key, with `invalid`; `add` itself treats it as opaque |
+| `mechanismId` | One subscription mechanism that the plugin declares in its agent harness port `capabilities` (section 2, rule 2). The control plane's add-slot command checks it against that declaration before `add`, and rejects a mechanism the plugin does not declare as a subscription, such as an API key, with `invalid`, as it rejects a `device-login` mechanism until device logins are deliverable (section 7.1); `add` itself treats it as opaque |
 | `allowedProjects` | The projects the slot may serve, at least one, without duplicates |
 | `concurrencyLimit` | The slot's provider credential concurrency (capacity reservation contract section 2), a positive integer, by default `DEFAULT_PROVIDER_CREDENTIAL_CONCURRENCY` (`4`) |
 | `state` | `active`, `revoked`, or `removed` (section 8) |
@@ -136,18 +136,34 @@ Read and written inside the reservation transaction; item 12 adds it to `Capacit
 | Operation | Contract |
 | --- | --- |
 | `store(slotId, secret)` | Stores or replaces the slot's credential, encrypted at rest; a rotation replaces it. It has no domain failure: the slot command checks that the slot exists and is not removed before it stores |
-| `reveal(slotId)` | The credential for delivery to the reserving run; `not-found` when none is stored |
+| `reveal(slotId)` | The credential for the delivery of section 7; `not-found` when none is stored. It checks no reservation, attempt, or slot state: the delivery checks them before it calls `reveal` |
 | `destroy(slotId)` | Destroys the stored credential; destroying a missing one succeeds, so that a retry is safe, and it has no domain failure |
 
-`SlotCredentials` is not part of `CapacityTransaction`, because its key and possibly its store live outside the database (section 7).
+`SlotCredentials` is not part of `CapacityTransaction`, because its key and possibly its store live outside the database (section 1).
 
-A `SlotSecret` reveals its text only through its `reveal()` method. Its string and JSON forms are `[redacted]`, so that a logged or serialized secret discloses nothing. The adapter encrypts the material at rest with a key that is not stored in the same database; this item states the requirement and leaves the algorithm and the key management to item 12.
+A `SlotSecret` is the text of one `subscription-token` credential (section 7.1). It reveals its text only through its `reveal()` method. Its string and JSON forms are the kernel's `REDACTED`, `[redacted]`, so that a logged or serialized secret discloses nothing. The adapter encrypts the material at rest with a key kept in the `control-plane/` namespace, never in the database (section 1); this item states the requirement and leaves the algorithm and the key management to item 12.
 
 ## 7. Credential delivery
 
-A credential is revealed only to deliver it to the run that reserved its slot. The delivery checks, in a capacity transaction, that the reservation is `held`, names the slot in `providerCredentials`, and belongs to the attempt that the worker launches, and that the slot is `active`; it reveals the credential only after that transaction commits, and sends it only with a valid launch authorization for that attempt ([launch authorization contract](launch-authorization.md)). The worker receives the credential with the launch of that attempt, inside the worker container on Linux, and the harness plugin injects it into its harness (item 18). The worker keeps no copy when the run ends, and no later run reuses it. A credential is never sent to another run, another worker, or another plugin.
+A credential is revealed only to deliver it to the run that reserved its slot. The delivery, not `SlotCredentials`, makes the checks: in a capacity transaction, it checks that the reservation is `held`, names the slot in `providerCredentials`, and belongs to the attempt that the worker launches, that the slot is `active`, and that its `mechanismId` is `subscription-token` (section 7.1). It calls `reveal` only after that transaction commits, because `SlotCredentials` is outside `CapacityTransaction` (section 6.2), and sends the credential only with a valid launch authorization for that attempt ([launch authorization contract](launch-authorization.md)) over a confidential transport (section 7.2). The worker receives the credential with the launch of that attempt, inside the worker container on Linux, and the harness plugin injects it into its harness (item 18). A credential is never sent to another run, another worker, or another plugin.
 
 A revoke or removal serialized after the delivery transaction commits but before the credential is sent does not stop that delivery: the attempt already checked receives the credential. Section 8 covers this window, because revocation and removal drain or end the in-flight attempts on the slot, that attempt among them.
+
+### 7.1 Subscription tokens only
+
+This contract delivers only `subscription-token` credentials (agent harness port contract section 4.1): one text per slot, which the harness reads and never changes, so the run has nothing to write back. A `device-login` slot holds a per-slot state directory that the harness updates during a run, for example a rotating refresh token. Delivering it needs a state directory format and a write-back that only the reserving run makes, by compare-and-set, and neither is defined. Until a later item defines both, a `device-login` slot is not deliverable: the control plane's add-slot command rejects it with `invalid` (section 3.1), and the delivery reveals nothing for a slot of another mechanism. G3 decision D6 chose a subscription token per slot for Claude Code, if item 35 confirms it ([G3 work plan](../g3-plan.md), "Owner decisions"); this restriction is revisited only if item 35 overturns D6.
+
+### 7.2 Transport
+
+G2 runs the API and the broker over plain HTTP and NATS ([installation and enrollment contract](installation-and-enrollment.md) section 7). A credential is therefore delivered only over the TLS of G3 item 26, or to a worker co-located with the control plane on its host. A remote worker receives no slot credential before item 26 provides that TLS.
+
+### 7.3 The credential on the worker
+
+The worker holds a delivered credential only in its host's memory, for the execution it was delivered to, and gives it to the harness plugin to inject. It never writes it to the worker journal, a launch authorization request or grant included, to the execution directory `worker/executions/<executionId>/`, to `worker/logs/`, or to the local outbox ([worker journal contract](worker-journal.md) sections 2, 5, and 6); a launch authorization grant carries no credential. The worker keeps no copy when the execution ends, and no execution reuses the credential of another. Every execution after its W3 commit, one that recovery starts with a new `executionId` and one that recovery adopts included, requests the credential again through a new delivery with the checks of section 7; an adopted execution requests it before it redacts or injects anything with it.
+
+### 7.4 Redaction for the run
+
+The shape rules of `@taskelith/secrets` ([installation and enrollment contract](installation-and-enrollment.md) section 8) match only Taskelith's own secrets, and a subscription token has no known shape. From the delivery to the end of the run, every text of the run that leaves the harness host, its harness output, logs, and failures, is therefore redacted by value: `redactSecrets(text, revealed)` and `redactFailure(failure, revealed)` replace each occurrence of each revealed credential text with `[redacted]` before they apply the shape rules. Item 18 applies them on the worker, and the control plane applies them to a failure of the delivery. Whether the agent's own commands can read the injected credential is a qualification result (agent harness port contract section 4.1; item 35), which this redaction does not change.
 
 ## 8. Revocation, reinstatement, and removal
 
@@ -171,9 +187,16 @@ The item 12 implementation adds:
 - The conformance suites run against its PostgreSQL adapter.
 - A selection test for each rule of section 4: the fewest held reservations, the usage tie-breaker only with every tied slot reporting, the least recently reserved slot, a resumed session that waits or is rejected and never moves, an `after-limit` request that never chooses another slot of the limited harness and falls back to the limited slot after its cooldown, and both policies for no eligible slot.
 - A cooldown test for a reported reset, the default, an extension, and a reset signal.
-- A delivery test that no credential is revealed for a released reservation, a reservation that names another slot, another attempt, or a revoked or removed slot.
+- A delivery test that no credential is revealed for a released reservation, a reservation that names another slot, another attempt, a revoked or removed slot, or a slot whose mechanism is not `subscription-token`, and that a `device-login` slot cannot be added.
 - A concurrency test that two transactions racing for the last unit of a slot reserve it at most once.
 - A secrecy test that a failing run's error payload, its logs, and the outbox contain no slot credential, and a neutrality test that the pool's code and tests name no harness or vendor.
+
+The follow-up `align-slot-credential-delivery` adds a test that `redactSecrets` and `redactFailure` redact a revealed credential without a known prefix by value.
+
+The item 18 implementation adds:
+
+- A test that the worker journal, `worker/executions/<executionId>/`, `worker/logs/`, and the local outbox hold no slot credential after a run, a failing run, and a recovery.
+- A test that a recovered and an adopted execution request the credential again through a new delivery, and that the run's harness output, logs, and failures are redacted by its value.
 
 ## 10. Not in this contract
 
@@ -181,4 +204,5 @@ The item 12 implementation adds:
 - The handoff that a limited session writes and the next session reads: items 4 and 18.
 - Wire schemas for slot commands and pool views: item 9.
 - The encryption algorithm, key storage, and key rotation: item 12.
+- The state directory format and the compare-and-set write-back of a `device-login` credential: a later item, only if item 35 overturns D6 (section 7.1).
 - The workers and pools screens: item 33.
