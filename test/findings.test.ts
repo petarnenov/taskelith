@@ -28,6 +28,7 @@ function repository(files: Readonly<Record<string, string>>): string {
   const root = mkdtempSync(join(tmpdir(), 'findings-'));
   for (const path of [SCHEMA_PATH, VOCABULARY_PATH]) cpSync(path, join(root, path));
   mkdirSync(join(root, 'openspec/changes/archive/2026-10-01-old-change'), { recursive: true });
+  mkdirSync(join(root, 'openspec/specs/review-process'), { recursive: true });
   for (const [path, text] of Object.entries(files)) {
     mkdirSync(join(root, path, '..'), { recursive: true });
     writeFileSync(join(root, path), text);
@@ -111,6 +112,28 @@ test('validate requires a file in every active change and reports each problem',
       `Review findings: 2 problem(s); the format is ${SCHEMA_PATH}.`,
     ]);
     assert.equal(runFindings(['index'], root).stderr.split('\n').length, 2, 'index ignores a missing active file');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate requires an existing capability only for active code findings', () => {
+  const outside = { file: 'scripts/x.ts', capability: undefined };
+  const root = repository({
+    'openspec/changes/archive/2026-10-02-first/findings.jsonl': `${line('first', 'docs', 'Old', outside)}\n`,
+    'openspec/changes/active-change/findings.jsonl': [
+      line('active-change', 'docs', 'No capability', outside),
+      line('active-change', 'docs', 'Unknown capability', { capability: 'not-a-spec' }),
+      line('active-change', 'docs', 'Record', { file: 'openspec/changes/active-change/verification.md', capability: undefined }),
+    ].join('\n') + '\n',
+  });
+  try {
+    const path = 'openspec/changes/active-change/findings.jsonl';
+    assert.deepEqual(runFindings(['validate'], root).stderr.split('\n'), [
+      `${path}:1: capability is required outside openspec/changes/; name the closest one under openspec/specs`,
+      `${path}:2: unknown capability "not-a-spec"; capabilities are the directories under openspec/specs`,
+      `Review findings: 2 problem(s); the format is ${SCHEMA_PATH}.`,
+    ]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
