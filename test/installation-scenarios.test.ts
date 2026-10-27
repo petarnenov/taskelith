@@ -532,3 +532,9 @@ test('the platform row probes the file system as the native acceptance does', ()
   const run = bash('printf %s "$FILE_SYSTEM_PROBE"');
   assert.equal(run.stdout, FILE_SYSTEM_PROBE);
 });
+
+test('the native worker volume names the type of its Linux mount', () => {
+  const run = bash(`${PLATFORM_STUBS}\nPATH="$stub_bin:/usr/bin:/bin" volume_of /`);
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /^ext4 at '\/' with \d+ GiB free$/m);
+});
