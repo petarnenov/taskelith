@@ -34,6 +34,16 @@ Each citation of the ADR note was checked against the files on `af558eb0`:
 | `npm run verify:links` | `Every checked link conforms.` |
 | `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` on the final tree | Exit 0: 2182 tests, 2135 passed, 0 failed, 47 skipped; coverage 99.24 % lines, 92.19 % branches, 98.92 % functions; comment rule, findings files, contract compatibility (0 breaking changes against `af558eb0`), dependency inventory, `openspec validate --all --strict` (70 of 70), `verify:links`, archive dry run, and package verification passed |
 
+## Archive checks
+
+On the tree of the archive commit, after `npm run openspec -- archive close-verify-linux-cgroup-multi-arch --yes` (no specs, `skip_specs: true`):
+
+- `npm run openspec -- validate --all --strict --no-interactive`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: `✓ change/2026-10-27-close-verify-linux-cgroup-multi-arch`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: empty.
+- The moved change has an empty `findings.jsonl` and a `passes.jsonl` with 1 pass; `npm run findings -- validate`: 28 findings files and 8 pass summary files valid.
+- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: exit 0; `npm test` 2182 tests, 2135 passed, 0 failed, 47 skipped, all files 99.24 % lines; `npm run verify:links` `Every checked link conforms.`
+
 ## Independent review
 
 Pass 1, reviewer A: OpenCode CLI, invoked as `opencode run --standalone --agent reviewer -m 'opencode-go/kimi-k3.1-pro#high' --format json --title close-verify-linux-cgroup-multi-arch "$(cat <prompt-file>)" < /dev/null > <log>` on `b904a018` (`af558eb0..b904a018`). Session `ses_e822b620effebvx0Xnyq1Pykdp`. Model confirmation from the stored assistant messages of the session (`session_message`): provider `opencode-go`, model `kimi-k3.1-pro`, variant `high`, agent `reviewer`. The `opencode run` process exited with status 0. The SHA-256 snapshot of the worktree before and after the review was equal: `10dc5ef9ba6d1122ed780a63bc4643c4ba5afa249d70793456952758e42aecc6`. Findings: Critical 0, High 0, Medium 0, Low 0, as in `passes.jsonl`. The reviewer checked `73c0b2f7` and its ancestry to `4b3d693` and `b82ad2f`, the 25b and 25c records, `Makefile:95-111`, `docs/dependencies.md:127`, the requirement at `openspec/specs/native-worker-acceptance/spec.md:87-92`, the fresh amd64 result, and that only the allowed ADR 0015 and `docs/foundation.md` lines changed. With no finding above Low, reviewer B did not run, as the coordinator's brief and the [review process](/docs/governance.md#independent-review-process) set.
