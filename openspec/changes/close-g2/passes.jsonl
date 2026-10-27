@@ -1,1 +1,2 @@
 {"change": "close-g2", "pass": 1, "role": "A", "reviewer": {"harness": "opencode", "model": "opencode-go/kimi-k3.1-pro", "variant": "high"}, "session": "ses_e82c9a9a6ffekHu2Tsz94tSyX6", "counts": {"critical": 0, "high": 1, "medium": 2, "low": 2}}
+{"change": "close-g2", "pass": 2, "role": "B", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a17d3d-a7f0-76c0-929f-46662130bfe1", "counts": {"critical": 0, "high": 1, "medium": 1, "low": 3}}
