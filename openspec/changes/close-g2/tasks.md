@@ -32,6 +32,6 @@
 
 ## 5. Verification and review
 
-- [ ] 5.1 Run `make verify` and the link and evidence checks.
-- [ ] 5.2 Obtain independent review under governance version 5, reviewer A OpenCode `opencode-go/kimi-k3.1-pro#high` and reviewer B Codex `gpt-6.1-sol`, by the coordinator's two exceptions of 2026-10-27, and record results in `verification.md` and `findings.jsonl`.
+- [x] 5.1 Run `make verify` and the link and evidence checks.
+- [x] 5.2 Obtain independent review under governance version 5, reviewer A OpenCode `opencode-go/kimi-k3.1-pro#high` and reviewer B Codex `gpt-6.1-sol`, by the coordinator's two exceptions of 2026-10-27, and record results in `verification.md` and `findings.jsonl`.
 - [ ] 5.3 Owner acceptance of ADR 0015; set its status.

@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-27. Draft: the author checks of the draft and of the evidence updates are recorded below. Every G2 change is on `dev` at `bd6108d4`, and no blocker remains. The fresh-clone reproduction of `bd6108d4` passed on 2026-10-27 ("Fresh-clone reproduction" below), `make verify` passed on this branch at `d7bc65bd`, and review passes 1 and 2 are recorded and fixed; review pass 3, the owner's acceptance, the archive, and the integration are not done yet.
+Date: 2026-10-27. Draft: the author checks of the draft and of the evidence updates are recorded below. Every G2 change is on `dev` at `bd6108d4`, and no blocker remains. The fresh-clone reproduction of `bd6108d4` passed on 2026-10-27 ("Fresh-clone reproduction" below), `make verify` passed on this branch at `d7bc65bd` and again at `1f8a04ba`, and review passes 1 to 3 are recorded; pass 3 confirmed every pass 2 fix and found nothing new, so the pass cap is reached. The archive, the owner's acceptance, and the integration are not done yet.
 
 ## Scope and source
 
@@ -18,7 +18,7 @@ The evidence update of 2026-10-27 follows the coordinator's brief of that day: f
 - `origin/dev` at `bd6108d4` (#342) merged in as `31dbd30f`, a merge commit, without conflicts, after `git fetch origin`. It brings #331 to #342: `stabilize-placement-fair-order-test`, `stop-automatic-retry-of-unknown-exit`, 24c `run-g2-partition-and-races`, `require-finding-capability`, `fix-platform-probe-filesystem-label`, `break-fair-order-ties-by-task-id`, `align-fair-order-rotation`, `advance-placement-rotation-cursor`, `centralize-log-redaction-rules`, `alternate-reviewers-per-pass` (governance policy version 5), `back-off-relaunch-after-pre-w2-failure`, and `align-safe-to-retry-with-supervisor-identity`. `npm ci --ignore-scripts` ran after it, and `npm run verify:dependencies` reported the inventory current ("Verified 731 package paths"), so it was not regenerated.
 - Fresh-clone record: on top of `2af551b6`. The fresh clone ran `dev` at `bd6108d4`, the `dev` side of the merge `31dbd30f`; every commit of this branch after that merge changes documentation and this change only.
 - `origin/dev` at `34af90f4` (#343, `review-pass-statistics`, not a G2 row) merged in as `2f9b1010`, a merge commit, without conflicts. It adds the rule that every change records its review pass summaries in `passes.jsonl`; `d7bc65bd` then added this change's empty `passes.jsonl`. `d7bc65bd` is the revision of `make verify` ("Checks") and of review pass 1.
-- `991324dd` fixed the pass 1 findings and `fa1b127d` recorded them; `fa1b127d` is the revision of review pass 2. `ac922f31` fixed the pass 2 findings, and the commit after it records them.
+- `991324dd` fixed the pass 1 findings and `fa1b127d` recorded them; `fa1b127d` is the revision of review pass 2. `ac922f31` fixed the pass 2 findings, and `35eb3d27` recorded them. `1f8a04ba` recorded the follow-up owners and is the revision of the second `make verify`; `6f5a2b32` only adds that `make verify` line and is the revision of review pass 3. The commit after it records pass 3.
 
 ## Evidence sources
 
@@ -198,6 +198,7 @@ Light checks only until `d7bc65bd`, because the host is shared with evidence run
 - Pass 2 fixes and record (`ac922f31` and the record commit after it): `npm run openspec -- validate close-g2 --strict` passed ("Change 'close-g2' is valid"); `npm run openspec -- validate --all --strict` passed (70 passed, 0 failed); `npm run verify:comments` passed; `npm run findings -- validate` passed ("Every findings file is valid: 21 file(s); every pass summary file is valid: 2 file(s)."); `git diff --check` reported nothing; the 95 relative link targets in the ADR, the ledger, `docs/fleet.md`, and this change's Markdown resolve. The requirement body is 497 characters. Archive test in a scratch copy of the tracked `openspec/` tree and this change, with this worktree's `node_modules`: `openspec archive close-g2 --yes` archived it as `2026-10-27-close-g2` with `findings.jsonl`, `passes.jsonl`, and `fresh-clone-results.jsonl` (`foundation-closure` + 1), and `openspec validate --all --strict` then passed (69 passed, 0 failed). `make verify` was not run again; these commits change documentation and records only.
 - Follow-up owners set by the coordinator (this update): `npm run openspec -- validate close-g2 --strict` passed ("Change 'close-g2' is valid"); `npm run openspec -- validate --all --strict` passed (70 passed, 0 failed); `npm run verify:comments` passed; `npm run findings -- validate` passed ("Every findings file is valid: 21 file(s); every pass summary file is valid: 2 file(s)."); `git diff --check` reported nothing; the 95 relative link targets in the ADR, the ledger, `docs/fleet.md`, and this change's Markdown resolve. `make verify` was not run; this commit changes documentation only.
 - `make verify` at `1f8a04ba`, after the pass 2 fixes and the follow-up owners, 2026-10-27: exit 0 in 166 s; 2113 tests, 2111 passed, 0 failed, 0 cancelled, 2 skipped; coverage of all files 99.29 % lines, 92.11 % branches, 99.00 % functions; findings valid (21 files) and pass summaries valid (2 files). Docker ran with `DOCKER_CONFIG` set to an empty configuration, as above.
+- Pass 3 record (this update): `npm run findings -- validate` passed ("Every findings file is valid: 21 file(s); every pass summary file is valid: 2 file(s)."); `npm run openspec -- validate close-g2 --strict` passed ("Change 'close-g2' is valid"); `npm run openspec -- validate --all --strict` passed (70 passed, 0 failed); `npm run verify:comments` passed; `git diff --check` reported nothing. `make verify` was not run again; this commit changes records only.
 
 ## Independent review
 
@@ -237,7 +238,7 @@ Next: pass 2 by reviewer B, Codex `gpt-6.1-sol`, a full independent review of th
 | L5: missing merge commits for #326 to #330 | Resolved: `3b1d1e33`, `33d341a9`, `2a26714b`, `1e48c93b`, and `92f0830b`, as the merge history shows |
 
 - Findings: 0 Critical, 1 High, 1 Medium, 3 Low, as `passes.jsonl` and `findings.jsonl` record them. Each was checked against the repository before it was fixed; none was wrong. All five were present at `d7bc65bd`, inside the full review of pass 1, so each names `missedBy` pass 1, reviewer A.
-- Fix commit: `ac922f31`. Every pass 2 finding is `fixed-unreviewed` until pass 3 checks it.
+- Fix commit: `ac922f31`. Every pass 2 finding was `fixed-unreviewed` until pass 3 confirmed it; their lines in `findings.jsonl` are now `fixed`.
 
 | Finding | Resolution |
 | --- | --- |
@@ -247,13 +248,29 @@ Next: pass 2 by reviewer B, Codex `gpt-6.1-sol`, a full independent review of th
 | L4: the record called every listed change archived, `check-change-record-links` and the image reproducibility follow-up included | The archive claim names the five landed changes; the three items without a record are named as exceptions |
 | L5: negative ancestry statements about the moving `dev` ref were stale | Stated against `92f0830b`, with the current disposition checked by `git merge-base --is-ancestor` and `git log --merges --first-parent`: `e5db6610` and `5bed450b` landed with #333 (`744689cb`), `e66d0d72` with #336 (`0864892f`), `1a9fa773` with #331 (`477a423e`), `b6d7dbb9` with #335 (`627c8c03`), and `d5f3baf3` with #337 (`37afc149`); the branch table has a "Landed" column |
 
-Next: pass 3 by reviewer A, OpenCode `opencode-go/kimi-k3.1-pro#high`: confirmation of the pass 2 fixes only, no new scope. The pass cap of three is reached after it.
+### Pass 3 (reviewer A)
+
+- Reviewer: OpenCode, model `opencode-go/kimi-k3.1-pro`, variant `high`, agent `reviewer`. Session `ses_e82b234deffe75YKL4ReFwwofo`.
+- Invocation: `opencode run --standalone --agent reviewer -m 'opencode-go/kimi-k3.1-pro#high' --format json --title close-g2-pass3 "<prompt>" < /dev/null`.
+- Run: 2026-10-27, 14:20:12 to 14:21:13 local, on `6f5a2b32`, read-only. The worktree snapshot was `d6f22a82b54945a5c117c1fc7ba7d49fe62a9104ffd4ca0f83c732dbc0c9dbd5` before and after the run. `make verify` ran on `1f8a04ba`; `6f5a2b32` only adds the record line of that run.
+- Scope: confirmation of the pass 2 fixes only, no new scope.
+- Pass 2 confirmation: all five pass 2 findings resolved; their lines in `findings.jsonl` are now `fixed`. The reviewer also found the records accurate (`findings.jsonl`, `passes.jsonl`, and the Pass 2 narrative), the requirement body 497 characters, and every unfinished item in ADR 0015 decision 5 and the ledger with a named gate or an owner.
+
+| Pass 2 finding | Pass 3 confirmation |
+| --- | --- |
+| H1: Linux cancellation and connectivity rows pointed to 24c | Resolved |
+| M2: closure requirement against non-blocking follow-ups | Resolved |
+| L3: multi-architecture `make verify-linux-cgroup` follow-up missing from the ledger | Resolved |
+| L4: archive claim covered changes without a record | Resolved |
+| L5: stale negative ancestry statements | Resolved |
+
+- Findings: 0 Critical, 0 High, 0 Medium, 0 Low, as `passes.jsonl` records it; no new finding.
+
+The pass cap of three is reached; no further review pass follows.
 
 ## Remaining gates
 
-- The owner's confirmation of each author's assignment, the widened deferral "Cancellation race g and the 24c-dependent rows on macOS and Linux" (macOS and Linux, all four entries and the native Linux host) and the in-memory rotation cursor included (the follow-up owners of ADR 0015 decision 5 are the coordinator's decision of 2026-10-27), and of the hosted-runner check left open, and the closure records (section 4 of `tasks.md`).
-- Independent review under governance version 5: pass 1 by reviewer A OpenCode `opencode-go/kimi-k3.1-pro#high` and pass 2 by reviewer B Codex `gpt-6.1-sol` are done and fixed; pass 3 by reviewer A remains, a confirmation of the pass 2 fixes only, after which the pass cap is reached; recorded here, in `findings.jsonl`, and in `passes.jsonl`.
-- `make verify` again on the head that is integrated, by the pre-push hook.
-- Owner acceptance of ADR 0015.
-- Archive of this change after review and verification, as the last commit of the branch; the archive commit points the ADR's links to `fresh-clone-results.jsonl` at the archived path.
+- Archive of this change, as the last commit of the branch; the archive commit points the ADR's links to `fresh-clone-results.jsonl` and this record at the archived path.
+- `make verify` on the head that is pushed, by the pre-push hook.
+- Owner acceptance of ADR 0015 and the owner's confirmation of each author's assignment, the widened deferral "Cancellation race g and the 24c-dependent rows on macOS and Linux" and the in-memory rotation cursor included (the follow-up owners of ADR 0015 decision 5 are the coordinator's decision of 2026-10-27), and of the hosted-runner check left open; then the closure records (section 4 of `tasks.md`).
 - Integration into dev by the coordinator (single pull request). Promotion to `main` is a later owner decision.
