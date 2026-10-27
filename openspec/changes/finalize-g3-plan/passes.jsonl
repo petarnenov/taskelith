@@ -1,0 +1,1 @@
+{"change": "finalize-g3-plan", "pass": 1, "role": "A", "reviewer": {"harness": "claude", "model": "claude-fable-5-1", "variant": "medium"}, "session": "749ee07e-4cc0-41b3-8463-07b8f0ba8a6b", "counts": {"critical": 0, "high": 0, "medium": 2, "low": 5}}

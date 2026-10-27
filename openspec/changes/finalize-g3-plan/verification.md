@@ -24,7 +24,7 @@ Out of scope: new owner decisions, changes to D1 to D18, starting any G3 item, e
 
 ## Checks
 
-Run after merging `origin/dev` at `eda6c283` and applying the coordinator's answers.
+Run after merging `origin/dev` at `eda6c283` and applying the coordinator's answers, and again after the pass 1 fixes (`1682cddd`) with the pass 1 records, with the same results; `verify:findings` was run as `make findings ARGS="validate"`.
 
 | Check | Result |
 | --- | --- |
@@ -44,7 +44,17 @@ Reviewers assigned by the coordinator: reviewer A, Claude Code `claude-fable-5-1
 
 ### Pass 1 (reviewer A)
 
-Not yet run.
+- Reviewer A: Claude Code `claude-fable-5-1`, effort `medium`, run by the worker session; reviewed head `7aa109245d6769ce5d5090d4eb3653c4188fbc69`.
+- Invocation, as in the [agent task protocol](/docs/agent-task-protocol.md#reviewer-invocations) row "Claude Code (claude-fable-5-1)": `claude -p "<prompt>" --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json < /dev/null`.
+- Model confirmation: `claude-fable-5-1` in the JSON `modelUsage`. Session `749ee07e-4cc0-41b3-8463-07b8f0ba8a6b`. Snapshot before and after: equal. Both as relayed by the worker session.
+- Findings: 0 Critical, 0 High, 2 Medium, 5 Low, matching its `passes.jsonl` line. All were fixed in `1682cddd`:
+  - **F1 (Medium, stale-citation):** the writers rule in the "Work items" introduction kept an unexpanded `{D}` placeholder. It now cites ADR 0015 decision 5, "Writers that invalidate launches".
+  - **F2 (Medium, process):** item 26 left PostgreSQL TLS open with the owner but named no open decision in "Blocked by". The owner's away delegate decided it (away run `20261027T142720Z-opencode-88550`, option A); item 26 and the TLS row record the decision, and nothing is left open.
+  - **F3 (Low, spec-wording):** the status kept the 2026-10-26 history in present tense and the D16 (a) start rule twice. The history is in past tense, and only the 2026-10-27 clause remains.
+  - **F4 (Low, docs):** item 41 ignored items 43 and 44. It now depends on 10–40, 43, and 44; both are in earlier waves, so item 41 stays in wave 11.
+  - **F5 (Low, spec-wording):** item 26, `design.md`, and this record quoted D11 inaccurately. They now quote D11 (b): the installation authority for the API, broker, and enrollment, and an operator-supplied certificate for the browser endpoint, falling back to the installation authority.
+  - **F6 (Low, docs):** `proposal.md` "Why" and task 1.2 omitted #349. Both name #344, #348, and #349.
+  - **F7 (Low, evidence-mismatch):** this record claimed root-relative links only although it links `design.md`. It now says root-relative or same-directory.
 
 ### Pass 2 (reviewer B)
 
