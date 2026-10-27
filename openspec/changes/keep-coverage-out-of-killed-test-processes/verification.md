@@ -2,7 +2,7 @@
 
 ## Scope and source
 
-Assigned on 2026-10-27 by the coordinator session, option A of its diagnosis. Source: on a loaded 2020 Intel iMac, `npm test` once exited 1 with every test passing, because the coverage summary threw `ERR_OPERATION_FAILED` ("coverage file is empty") on a 0-byte `coverage-<pid>-<timestamp>-<thread>.json` that a Node child killed while exiting had left in the runner's `NODE_V8_COVERAGE` directory. Base revision: `656a34d` on `dev`. Prepared in the git worktree `../taskelith-worktrees/keep-coverage-out-of-killed-test-processes` on branch `keep-coverage-out-of-killed-test-processes`; code commits `2079c3f` and `d2d2e5f`.
+Assigned on 2026-10-27 by the coordinator session, option A of its diagnosis. Source: on a loaded 2020 Intel iMac, `npm test` once exited 1 with every test passing, because the coverage summary threw `ERR_OPERATION_FAILED` ("coverage file is empty") on a 0-byte `coverage-<pid>-<timestamp>-<thread>.json` that a Node child killed while exiting had left in the runner's `NODE_V8_COVERAGE` directory. Base revision: `656a34d` on `dev`. Prepared in the git worktree `../taskelith-worktrees/keep-coverage-out-of-killed-test-processes` on branch `keep-coverage-out-of-killed-test-processes`; code commits `2079c3f` and `d2d2e5f`, change files `3c30662`. `origin/dev` at `5c60c15` was merged in as `85548f3` without conflicts; it brings the review findings record, so the change has an empty `findings.jsonl`, as worker step 2 requires.
 
 Scope: the helper module `packages/testing/src/coverage-environment.ts` with its export and unit test, the tests that start Node processes they or the product code they drive may kill, the refit of `apps/control-plane/test/harness-composition.ts`, and this change with an ADDED requirement in `deterministic-test-harness`. No product code changes. Worker-runtime and worker launch files were out of scope and are untouched; none of the listed call sites lives in them. Commit type `test`; the packages are private.
 
@@ -40,7 +40,9 @@ MacBook Air, macOS 26.6.2 (Darwin 25.6.0, arm64), Node.js v24.22.1, Docker servi
 - `npm run verify:comments`: every comment is within the rule.
 - `npm run openspec -- validate keep-coverage-out-of-killed-test-processes --strict`: valid.
 - First `make verify` on `2079c3f`: failed, 1976 tests, 1 failed (`an uncovered environment derives from this process by default`), which exposed the spawn propagation above.
-- `make verify` on `d2d2e5f` with this change's files: exit 0; 1976 tests, 1974 passed, 0 failed, 2 skipped; coverage 99.27 % lines, 91.93 % branches, 98.96 % functions; `coverage-environment.js` 100 % on all three; strict OpenSpec validation 70 passed, 0 failed; archive dry run, contract compatibility, dependency inventory, and package verification passed. The only later edit before review is this record.
+- `make verify` on `d2d2e5f` with this change's files: exit 0; 1976 tests, 1974 passed, 0 failed, 2 skipped; coverage 99.27 % lines, 91.93 % branches, 98.96 % functions; `coverage-environment.js` 100 % on all three; strict OpenSpec validation 70 passed, 0 failed; archive dry run, contract compatibility, dependency inventory, and package verification passed.
+- `npm run verify:findings`: every findings file is valid, 2 files.
+- `make verify` after the merge `85548f3`, with the empty `findings.jsonl` and the `tasks.md` wording for it: exit 0; 2009 tests, 2007 passed, 0 failed, 2 skipped; coverage 99.28 % lines, 91.95 % branches, 98.96 % functions; findings validation, strict OpenSpec validation (70 passed, 0 failed), archive dry run, dependency inventory check, and package verification passed. The only later edit before review is this record.
 
 ## Independent review
 

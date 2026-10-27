@@ -12,4 +12,4 @@
 
 - [x] 3.1 Show that a test process that removes `NODE_V8_COVERAGE` still writes its own coverage.
 - [x] 3.2 Run `npm run openspec -- validate keep-coverage-out-of-killed-test-processes --strict` and `make verify`.
-- [ ] 3.3 Independent review and record it in `verification.md`.
+- [ ] 3.3 Independent review, recorded in `verification.md` and `findings.jsonl`.
