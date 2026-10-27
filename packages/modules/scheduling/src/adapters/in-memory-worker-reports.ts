@@ -2,7 +2,8 @@ import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import type { Sequence, WorkerId } from '@taskelith/execution';
 import type { WorkerPlacementRecord } from '../ports/placement-workers.js';
 import type { CapacityDeclaration, WorkerReports } from '../ports/worker-reports.js';
-import { byCodeUnits, type InMemoryPlacementWorkers } from './in-memory-capacity.js';
+import { byCodeUnits } from '../domain/code-unit-order.js';
+import type { InMemoryPlacementWorkers } from './in-memory-capacity.js';
 
 type ReportFence = 'capacity' | 'pressure' | 'refusal' | 'protocol';
 

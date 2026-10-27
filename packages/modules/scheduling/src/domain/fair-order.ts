@@ -1,5 +1,6 @@
 import type { Instant } from '@taskelith/kernel';
 import type { ProjectId } from './capacity-reservation.js';
+import { byCodeUnits } from './code-unit-order.js';
 
 export interface WaitingPlacement<Item> {
   readonly projectId: ProjectId;
@@ -9,7 +10,7 @@ export interface WaitingPlacement<Item> {
 
 // Round-robin across projects, oldest waiting first within each, so that one
 // project's retry loop cannot take every offer (contract section 5).
-export function fairPlacementOrder<Item>(waiting: readonly WaitingPlacement<Item>[]): readonly Item[] {
+export function fairPlacementOrder<Item extends string>(waiting: readonly WaitingPlacement<Item>[]): readonly Item[] {
   const byProject = new Map<ProjectId, WaitingPlacement<Item>[]>();
   for (const entry of [...waiting].sort(byWaitingSince)) {
     byProject.set(entry.projectId, [...(byProject.get(entry.projectId) ?? []), entry]);
@@ -22,6 +23,7 @@ export function fairPlacementOrder<Item>(waiting: readonly WaitingPlacement<Item
   return order;
 }
 
-function byWaitingSince<Item>(left: WaitingPlacement<Item>, right: WaitingPlacement<Item>): number {
-  return Date.parse(left.waitingSince) - Date.parse(right.waitingSince) || left.projectId.localeCompare(right.projectId);
+function byWaitingSince<Item extends string>(left: WaitingPlacement<Item>, right: WaitingPlacement<Item>): number {
+  return Date.parse(left.waitingSince) - Date.parse(right.waitingSince)
+    || byCodeUnits(left.projectId, right.projectId) || byCodeUnits(left.item, right.item);
 }
