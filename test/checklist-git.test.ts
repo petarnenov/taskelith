@@ -149,3 +149,43 @@ test('an archive snapshot fails as a whole when git cannot list or read it', () 
   assert.equal(archiveSnapshot('c', listing, () => undefined), undefined);
   assert.deepEqual(archiveSnapshot('c', '', () => undefined), { commit: 'c', findings: [] });
 });
+
+// A loose object's file inside the repository's object store.
+function objectFile(root: string, object: string): string {
+  return join(root, '.git/objects', object.slice(0, 2), object.slice(2));
+}
+
+test('--save refuses an archive that git cannot list or read, and writes nothing', () => {
+  const archived = 'openspec/changes/archive/2026-10-02-first';
+  for (const [name, missing] of [['listing', archived.split('/').slice(0, 3).join('/')], ['file', `${archived}/findings.jsonl`]]) {
+    withGitRepository((root) => {
+      const brief = commit(root, { [`${archived}/findings.jsonl`]: finding('first', 'naming') }, 'brief');
+      write(root, active('new-change'));
+      rmSync(objectFile(root, git(root, 'rev-parse', `${brief}:${missing}`)));
+      const result = runFindings(['checklist', '--save', 'new-change', '--at', brief], root, GIT_ENVIRONMENT);
+      assert.equal(result.exitCode, 1, name);
+      assert.match(result.stderr, /^unknown commit /, name);
+      assert.equal(existsSync(join(root, 'openspec/changes/new-change/checklist.json')), false, name);
+    });
+  }
+});
+
+test('the git adapter reads the given root, whatever GIT_DIR a hook exported', () => {
+  withGitRepository((root) => {
+    const own = commit(root, { 'README.md': 'own\n' }, 'own');
+    git(root, 'update-ref', 'refs/remotes/origin/dev', own);
+    withGitRepository((other) => {
+      const foreign = commit(other, { 'README.md': 'other\n' }, 'other');
+      git(other, 'update-ref', 'refs/remotes/origin/dev', foreign);
+      const saved = process.env.GIT_DIR;
+      process.env.GIT_DIR = join(other, '.git');
+      try {
+        assert.equal(GIT_ENVIRONMENT.devCommit(root), own);
+        assert.equal(GIT_ENVIRONMENT.archiveAt(root, foreign), undefined);
+      } finally {
+        if (saved === undefined) delete process.env.GIT_DIR;
+        else process.env.GIT_DIR = saved;
+      }
+    });
+  });
+});
