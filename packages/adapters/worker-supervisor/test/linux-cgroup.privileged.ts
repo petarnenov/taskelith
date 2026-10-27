@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
-import { crashEnvironment, ScenarioProcess } from '@taskelith/testing';
+import { crashEnvironment, ScenarioProcess, withholdCoverageFromDescendants } from '@taskelith/testing';
 import {
   checkLinuxContainment,
   FileRecordStore,
@@ -20,6 +20,9 @@ import {
 } from '@taskelith/worker-supervisor';
 import { intent } from './fakes.ts';
 import { ProcessReaper, REAL_PROCESS_TEST_TIMEOUT } from './process-reaper.ts';
+
+// The supervisor programs, which kill their children, spawn with process.env.
+withholdCoverageFromDescendants();
 
 // Runs only in the privileged container of make verify-linux-cgroup, where
 // the namespace's cgroup root is writable and a leaf holds every process.

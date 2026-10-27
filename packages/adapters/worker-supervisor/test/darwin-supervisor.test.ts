@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
-import { crashEnvironment, ScenarioProcess } from '@taskelith/testing';
+import { crashEnvironment, ScenarioProcess, withholdCoverageFromDescendants } from '@taskelith/testing';
 import {
   darwinPlatform,
   FileRecordStore,
@@ -23,6 +23,9 @@ import {
 } from '@taskelith/worker-supervisor';
 import { intent } from './fakes.ts';
 import { ProcessReaper, REAL_PROCESS_TEST_TIMEOUT } from './process-reaper.ts';
+
+// The supervisor programs, which kill their children, spawn with process.env.
+withholdCoverageFromDescendants();
 
 // Real processes under the macOS native readers; the Linux counterpart is
 // linux-cgroup.privileged.ts.
