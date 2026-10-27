@@ -16,4 +16,4 @@
 
 ## 4. Archive
 
-- [ ] 4.1 Archive the change in the last commit of the branch
+- [x] 4.1 Archive the change in the last commit of the branch
