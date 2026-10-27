@@ -19,7 +19,7 @@
 - [x] 3.2 `make verify` (in the coordinator's Docker slot, on `bf7c0335`)
 - [x] 3.3 Record `verification.md`
 - [x] 3.4 `make verify` again after the review pass 1 fixes (in the coordinator's Docker slot, on `b00cdde8`)
-- [ ] 3.5 `make verify` again after the review pass 2 fixes and the discard of superseded versions (in the coordinator's Docker slot)
+- [x] 3.5 `make verify` again after the review pass 2 fixes and the discard of superseded versions (in the coordinator's Docker slot, on `6b3b5184`)
 
 ## 4. Review and archive
 
