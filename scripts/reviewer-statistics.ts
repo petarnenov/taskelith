@@ -34,6 +34,7 @@ export interface StatisticsRow extends SeverityCounts {
 
 export interface ReviewerStatistics {
   readonly changes: number;
+  readonly unrecordedChanges: number;
   readonly passes: number;
   readonly derivedChanges: readonly string[];
   readonly note: string;
@@ -103,7 +104,8 @@ function statisticsRow(key: string, { passes, counts, passesWithMediumOrWorse, m
 
 const ROLE_ORDER: readonly string[] = ['A', 'B', UNKNOWN_ROLE];
 
-export function reviewerStatistics(changes: readonly ReviewedChange[]): ReviewerStatistics {
+// unrecordedChanges counts archived changes without either record file.
+export function reviewerStatistics(changes: readonly ReviewedChange[], unrecordedChanges: number): ReviewerStatistics {
   const records = changes.flatMap(passRecords);
   const reviewers = new Tallies();
   const roles = new Tallies();
@@ -131,6 +133,7 @@ export function reviewerStatistics(changes: readonly ReviewedChange[]): Reviewer
   }
   return {
     changes: changes.length,
+    unrecordedChanges,
     passes: records.length,
     derivedChanges: changes.filter(({ summaries }) => summaries === undefined).map(({ change }) => change),
     note: DERIVED_NOTE,
@@ -149,16 +152,18 @@ function statisticsLine({ key, passes, critical, high, medium, low, findingsPerP
 }
 
 export function formatReviewerStatistics(statistics: ReviewerStatistics): string {
-  const { changes, passes, derivedChanges, reviewers, roles, integrationMisses, unattributedMisses } = statistics;
-  const summary = `Reviewer statistics of archived changes: ${changes} change(s), ${passes} pass(es).`;
+  const { changes, unrecordedChanges, passes, derivedChanges, reviewers, roles, integrationMisses, unattributedMisses } = statistics;
+  const summary = `Reviewer statistics of archived changes: ${changes} change(s) with review records, ${passes} pass(es).`;
+  const unrecorded = `${unrecordedChanges} archived change(s) have neither findings.jsonl nor ${PASSES_FILE} `
+    + 'and are not counted.';
   const derived = derivedChanges.length === 0
-    ? `Every archived change has ${PASSES_FILE}; every pass is counted.`
-    : `${derivedChanges.length} archived change(s) have no ${PASSES_FILE}. ${DERIVED_NOTE}`;
+    ? `Every archived change with review records has ${PASSES_FILE}; each of its passes is counted.`
+    : `${derivedChanges.length} archived change(s) have findings.jsonl but no ${PASSES_FILE}. ${DERIVED_NOTE}`;
   const legend = 'per pass is findings per pass; >=medium is the share of passes with at least one '
     + 'Medium or worse finding; misses are findings that a later pass attributed to it.';
   const table = (title: string, rows: readonly StatisticsRow[]) =>
     [title, row(HEADER, 'key'), ...rows.map(statisticsLine)].join('\n');
   const misses = `Misses attributed to the integration: ${integrationMisses}; `
     + `to a pass without a record: ${unattributedMisses}.`;
-  return [summary, derived, legend, table('By reviewer', reviewers), table('By role', roles), misses].join('\n\n');
+  return [summary, unrecorded, derived, legend, table('By reviewer', reviewers), table('By role', roles), misses].join('\n\n');
 }

@@ -60,6 +60,10 @@ A finding MAY name in `missedBy` what missed it: an earlier pass of its change w
 - **WHEN** an archived change has findings but no `passes.jsonl`
 - **THEN** the statistics count one pass per pass number of its findings, with role unknown, and the output names that rule and the number of such changes
 
+#### Scenario: Archived change without any review record
+- **WHEN** an archived change has neither `findings.jsonl` nor `passes.jsonl`
+- **THEN** it adds no pass, and the output states the number of such changes apart from the changes derived from findings
+
 #### Scenario: Attributed miss
 - **WHEN** an archived pass 2 finding names `missedBy` pass 1
 - **THEN** the miss counts for the reviewer and role of pass 1

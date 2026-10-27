@@ -163,6 +163,8 @@ export interface ChangeRecords {
 
 interface Repository {
   readonly changes: readonly ChangeRecords[];
+  // Archived changes with neither file, which predate the records.
+  readonly unrecordedArchived: number;
   readonly missing: readonly Problem[];
   readonly vocabularyText: string;
   readonly schema: object;
@@ -203,8 +205,10 @@ function loadRepository(root: string): Repository {
   const missing = changeLocations(root).filter(({ archived }) => !archived).flatMap(({ directory }) =>
     [FINDINGS_FILE, PASSES_FILE].filter((name) => !existsSync(posix.join(root, directory, name)))
       .map((name) => ({ file: posix.join(directory, name), message: MISSING[name] })));
+  const recorded = changes.filter(({ findings, passes }) => findings !== undefined || passes !== undefined);
   return {
-    changes: changes.filter(({ findings, passes }) => findings !== undefined || passes !== undefined),
+    changes: recorded,
+    unrecordedArchived: changes.filter(({ archived }) => archived).length - recorded.filter(({ archived }) => archived).length,
     missing,
     vocabularyText: read(VOCABULARY_PATH),
     schema: JSON.parse(read(SCHEMA_PATH)) as object,
@@ -284,14 +288,14 @@ function runCommand(command: Command, repository: Repository): RunResult {
     const summary = `Review findings: ${problems.length} problem(s); the formats are ${SCHEMA_PATH} and ${PASS_SCHEMA_PATH}.`;
     return { exitCode: 1, stdout: '', stderr: [...problems.map(formatProblem), summary].join('\n') };
   }
-  return { exitCode: 0, stdout: commandOutput(command, repository.changes, checked, vocabulary.categories), stderr: '' };
+  return { exitCode: 0, stdout: commandOutput(command, repository, checked, vocabulary.categories), stderr: '' };
 }
 
-function commandOutput(command: Command, files: readonly ChangeRecords[], checked: readonly CheckedChange[], categories: readonly Category[]): string {
-  if (command.name === 'validate') return validOutput(files);
+function commandOutput(command: Command, repository: Repository, checked: readonly CheckedChange[], categories: readonly Category[]): string {
+  if (command.name === 'validate') return validOutput(repository.changes);
   const archivedChanges = checked.filter(({ archived }) => archived);
   if (command.name === 'reviewers') {
-    const statistics = reviewerStatistics(archivedChanges);
+    const statistics = reviewerStatistics(archivedChanges, repository.unrecordedArchived);
     return command.json ? JSON.stringify(statistics, null, 2) : formatReviewerStatistics(statistics);
   }
   const archived: Finding[] = archivedChanges.flatMap(({ findings }) => findings);

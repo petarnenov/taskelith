@@ -276,8 +276,8 @@ test('reviewers counts summarized passes, also without findings, and misses', ()
     const { exitCode, stdout } = runFindings(['reviewers'], root);
     assert.equal(exitCode, 0);
     const lines = stdout.split('\n');
-    assert.equal(lines[0], 'Reviewer statistics of archived changes: 1 change(s), 2 pass(es).');
-    assert.equal(lines[2], 'Every archived change has passes.jsonl; every pass is counted.');
+    assert.equal(lines[0], 'Reviewer statistics of archived changes: 1 change(s) with review records, 2 pass(es).');
+    assert.equal(lines[4], 'Every archived change with review records has passes.jsonl; each of its passes is counted.');
     const cells = (...values: string[]) => values.map((value) => value.padStart(10)).join('');
     assert.ok(lines.includes(`${cells('1', '0', '0', '1', '0', '1.00', '100%', '0')}  claude claude-opus-5-5#high`));
     assert.ok(lines.includes(`${cells('1', '0', '0', '0', '0', '0.00', '0%', '1')}  codex gpt-6.1-sol#medium`));
@@ -292,16 +292,33 @@ test('reviewers derives the passes of archives without summaries and says so', (
   const root = repository({ ...ARCHIVED, ...STATISTICS_ARCHIVE });
   try {
     const text = runFindings(['reviewers'], root).stdout;
-    assert.match(text, /^Reviewer statistics of archived changes: 3 change\(s\), 4 pass\(es\)\.$/m);
-    assert.match(text, /^2 archived change\(s\) have no passes\.jsonl\. A change without passes\.jsonl counts only its passes with findings, derived from findings\.jsonl, with role \(unknown\)\.$/m);
+    assert.match(text, /^Reviewer statistics of archived changes: 3 change\(s\) with review records, 4 pass\(es\)\.$/m);
+    assert.match(text, /^2 archived change\(s\) have findings\.jsonl but no passes\.jsonl\. A change without passes\.jsonl counts only its passes with findings, derived from findings\.jsonl, with role \(unknown\)\.$/m);
     const json = JSON.parse(runFindings(['reviewers', '--json'], root).stdout) as {
+      changes: number;
+      unrecordedChanges: number;
       derivedChanges: string[];
       note: string;
       roles: { key: string; passes: number }[];
     };
+    assert.deepEqual([json.changes, json.unrecordedChanges], [3, 1]);
     assert.deepEqual(json.derivedChanges, ['first', 'second']);
     assert.match(json.note, /counts only its passes with findings/);
     assert.deepEqual(json.roles.map(({ key, passes }) => [key, passes]), [['A', 1], ['B', 1], ['(unknown)', 2]]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('reviewers names the archived changes without any review record', () => {
+  const root = repository({ 'openspec/changes/archive/2026-10-06-no-records/proposal.md': '# Proposal\n' });
+  try {
+    const { exitCode, stdout } = runFindings(['reviewers'], root);
+    assert.equal(exitCode, 0);
+    assert.match(stdout, /^Reviewer statistics of archived changes: 0 change\(s\) with review records, 0 pass\(es\)\.\n\n/);
+    assert.match(stdout, /^2 archived change\(s\) have neither findings\.jsonl nor passes\.jsonl and are not counted\.$/m);
+    const json = JSON.parse(runFindings(['reviewers', '--json'], root).stdout) as { changes: number; unrecordedChanges: number };
+    assert.deepEqual([json.changes, json.unrecordedChanges], [0, 2]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -315,7 +332,7 @@ test('reviewers leaves active changes out and fails on invalid records', () => {
     [`${active}/passes.jsonl`]: `${summary('active-change', 1, { low: 1 })}\n`,
   });
   try {
-    assert.match(runFindings(['reviewers'], root).stdout, /^Reviewer statistics of archived changes: 1 change\(s\), 2 pass\(es\)\./);
+    assert.match(runFindings(['reviewers'], root).stdout, /^Reviewer statistics of archived changes: 1 change\(s\) with review records, 2 pass\(es\)\./);
     writeFileSync(join(root, active, 'passes.jsonl'), `${summary('active-change', 1)}\n`);
     assert.equal(runFindings(['reviewers'], root).exitCode, 1);
   } finally {

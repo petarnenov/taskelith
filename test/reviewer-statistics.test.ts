@@ -50,7 +50,7 @@ const derived = {
 };
 
 test('summaries count every pass, also one without findings, by reviewer and role', () => {
-  const statistics = reviewerStatistics([summarized]);
+  const statistics = reviewerStatistics([summarized], 0);
   assert.equal(statistics.passes, 3);
   assert.deepEqual(statistics.derivedChanges, []);
   assert.deepEqual(statistics.reviewers, [
@@ -61,7 +61,7 @@ test('summaries count every pass, also one without findings, by reviewer and rol
 });
 
 test('a change without summaries counts only its passes with findings, role unknown', () => {
-  const statistics = reviewerStatistics([derived, summarized]);
+  const statistics = reviewerStatistics([derived, summarized], 0);
   assert.equal(statistics.changes, 2);
   assert.equal(statistics.passes, 5);
   assert.deepEqual(statistics.derivedChanges, ['derived']);
@@ -77,12 +77,13 @@ test('a change without summaries counts only its passes with findings, role unkn
 
 test('the text names the source of the passes and every column', () => {
   const cells = (...values: string[]) => values.map((value) => value.padStart(10)).join('');
-  const text = formatReviewerStatistics(reviewerStatistics([derived, summarized]));
-  assert.ok(text.startsWith('Reviewer statistics of archived changes: 2 change(s), 5 pass(es).\n\n'
-    + `1 archived change(s) have no passes.jsonl. ${DERIVED_NOTE}\n\n`));
+  const text = formatReviewerStatistics(reviewerStatistics([derived, summarized], 4));
+  assert.ok(text.startsWith('Reviewer statistics of archived changes: 2 change(s) with review records, 5 pass(es).\n\n'
+    + '4 archived change(s) have neither findings.jsonl nor passes.jsonl and are not counted.\n\n'
+    + `1 archived change(s) have findings.jsonl but no passes.jsonl. ${DERIVED_NOTE}\n\n`));
   assert.ok(text.includes(`By role\n${cells('passes', 'critical', 'high', 'medium', 'low', 'per pass', '>=medium', 'misses')}  key\n`));
   assert.ok(text.includes(`${cells('2', '1', '0', '0', '3', '2.00', '50%', '1')}  ${UNKNOWN_ROLE}`));
   assert.ok(text.endsWith('Misses attributed to the integration: 1; to a pass without a record: 1.'));
-  const empty = formatReviewerStatistics(reviewerStatistics([]));
-  assert.match(empty, /^Reviewer statistics of archived changes: 0 change\(s\), 0 pass\(es\)\.\n\nEvery archived change has passes\.jsonl/);
+  const empty = formatReviewerStatistics(reviewerStatistics([], 0));
+  assert.match(empty, /^Reviewer statistics of archived changes: 0 change\(s\) with review records, 0 pass\(es\)\.\n\n0 archived change\(s\) have neither .+\n\nEvery archived change with review records has passes\.jsonl/);
 });
