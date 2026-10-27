@@ -16,14 +16,17 @@ const CODE = /^[A-Z][A-Z0-9_]{0,30}$/;
 // Line breaks, then rules the logger's `redactText` lacks (decision 4).
 const BEFORE_REDACT_TEXT: readonly (readonly [RegExp, string])[] = [
   [/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' '],
-  [/\b[a-z][a-z0-9+.-]*:\/\/\S*/gi, '[url]'],
+  // Tried once per run of scheme characters, keeping the run's part before
+  // its first scheme start, so linear in time.
+  [/(?<![a-z0-9+.-])((?:[a-z0-9]|[+.-](?![a-z]))*[+.-])??\b[a-z][a-z0-9+.-]*:\/\/\S*/gi, '$1[url]'],
   // Tried once per run of user-information characters, so linear in time.
   [/(?<![^\s/?#@'"])(:*)[^\s/?#@:'"]+:[^\s/?#@'"]+@/g, `$1${REDACTED}@`],
   [/\b((?:proxy-)?authorization)(["']?\s*[=:]\s*["']?)[^;,"']*/gi, `$1$2${REDACTED}`],
   [/\b(password|passwd|passphrase|pass|pwd|secret|token|credentials?|cookie|private[_-]?key|api[_-]?key)(["']?\s*:\s*)("(?:[^"\\]|\\.)*"?|'(?:[^'\\]|\\.)*'?|\S+)/gi, `$1$2${REDACTED}`],
 ];
 const AFTER_REDACT_TEXT: readonly (readonly [RegExp, string])[] = [
-  [/eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*/g, REDACTED],
+  // Tried once per run of JWT characters, keeping the run before `eyJ`.
+  [/(?<![A-Za-z0-9_-])((?:(?!eyJ)[A-Za-z0-9_-])*)eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*/g, `$1${REDACTED}`],
   [/[A-Za-z0-9_+=/-]{32,}/g, REDACTED],
 ];
 
