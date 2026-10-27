@@ -5,12 +5,12 @@
 
 ## 2. Tests
 
-- [ ] 2.1 An unreadable clock through `run`: event loop turns, back-off spaced, logged; failing before 3.1
-- [ ] 2.2 Upper bound, recovery, identifier and journal read failures, cancellation during the wait
+- [x] 2.1 An unreadable clock through `run`: event loop turns, back-off spaced, logged; failing before 3.1
+- [x] 2.2 Upper bound, recovery, identifier and journal read failures, cancellation during the wait
 
 ## 3. Fix
 
-- [ ] 3.1 `Launch` backs off and retries a failure before W2
+- [x] 3.1 `Launch` backs off and retries a failure before W2
 
 ## 4. Records
 
