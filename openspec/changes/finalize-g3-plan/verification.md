@@ -30,11 +30,12 @@ Run after merging `origin/dev` at `eda6c283` and applying the coordinator's answ
 | --- | --- |
 | `npm run openspec -- validate finalize-g3-plan --strict` | `Change 'finalize-g3-plan' is valid` |
 | `npm run verify:links` | `Every checked link conforms; 332 archived links remain in scripts/record-links-baseline.tsv.` before #350; `Every checked link conforms.` after merging `origin/dev` at `af558eb0`, which removed the baseline |
-| `npm run verify:findings` | `Every findings file is valid: 27 file(s); every pass summary file is valid: 7 file(s).` (after merging #349; 26 and 6 before) |
+| `npm run verify:findings` | `Every findings file is valid: 26 file(s); every pass summary file is valid: 6 file(s).` before #349; 27 and 7 after merging `origin/dev` at `eda6c283`; `Every findings file is valid: 28 file(s); every pass summary file is valid: 8 file(s).` after merging `origin/dev` at `af558eb0` |
 | `npm run verify:comments` | `Every comment is within the comment length rule.` |
 | `make verify` on `7aa10924`, after merging `origin/dev` at `eda6c283`, before pass 1 | Exit 0; last line `Packed file allowlist and installed CLI verification passed.` Run by the worker session on the macOS x86_64 iMac |
 | `make verify` on `175d08d4`, after the pass 1 fixes, before pass 2 | Exit 0. Run by the worker session on the macOS x86_64 iMac |
-| `make verify` after the merge of `origin/dev` at `af558eb0` (`24061721`) and the pass 2 fixes, on the commit that records this merge here, before pass 3 | Pending: run by the worker session |
+| `make verify` on `e8cdeb44`, after the merge of `origin/dev` at `af558eb0` (`24061721`) and the pass 2 fixes, before pass 3 | Exit 0; last line `Packed file allowlist and installed CLI verification passed.` Run by the worker session on the macOS x86_64 iMac |
+| `make verify` on the archive commit | Pending: run by the worker session |
 
 ## Review checklist
 

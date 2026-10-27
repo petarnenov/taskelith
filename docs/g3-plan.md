@@ -70,7 +70,7 @@ G3, "Usable web product and first real agent", is defined in [architecture secti
 | Harness scenarios that call a model on Linux | G3 item 35 for Claude Code; the G4 admission for Codex | 35 |
 | Image package inventories and vulnerability scans | G8 | Not G3 |
 | Platform probe file-system name | Resolved (#335); no gate | — |
-| Archived records with the `ext2/ext3` label and broken relative links | Accepted limit (#346); no G2 gate | — |
+| Archived records with the `ext2/ext3` label and broken relative links | Accepted limit (#346); by owner decision B1 (2026-10-27) the links were repaired by #350 `repair-archived-record-links`, and the `ext2/ext3` labels keep their disposition; no G2 gate | — |
 | Docker Desktop credential helper on the Intel iMac | Owner's environment item; no gate | Not G3 |
 | GitHub-hosted `ubuntu-24.04` runner check for Linux x86_64 | Non-blocking follow-up, left open; no gate | Not G3 |
 | Residual process-identity risks | Accepted residual risks; no gate | — |
