@@ -10,6 +10,7 @@ A task (size L) from the coordinator's process and token analysis, whose ten rec
 - Commits, one or more per recommendation, in this order: `5950682a` change documents; `f3e7acaa` recommendation 1 (stamp and `pre-push` skip); `9126d1e1` recommendation 2 (Docker slot); `2a2d413b` recommendation 7 (docs-only profile, `AGENTS.md`); `aa3511cb` `make integrate`; `ba7c290e` recommendation 4 (`make record`); `4f9fdd61` recommendation 3 (conditional pass 3); `4424e155` protocol text for `make integrate`, the profiles, the stamp, and the slot; `f9c971db` recommendations 5 and 6 (context hook, thin sessions, fresh subagents); `f2945283` recommendation 9 (no owner `/clear`); `aefce4e0` recommendation 10 (test-authoring rule); `3bd2360c` a test cleanup; `d718fdb7` `docs/releases.md`; `ef246a1d` this record; `a7da856a` and `db7943dd` the coordinator decisions of 2026-10-27 (tested documentation excluded from the docs-only profile; the unpushed merge, the stamp limitation, and the context estimate recorded); `2e81f539` the review checklist saved as `checklist.json`; `16987d29` the `make verify` record.
 - Review pass 1 fixes: `b1201019` Docker slot (findings 2 and 3); `eeece5b3` stamp key and detached HEAD (findings 4 and 13); `deee0864` record generator (findings 10 and 11); `fd663be2` `make integrate` (findings 1, 5, 6, 7, 8, and 9); `6f795c93` protocol and coordinator skill; `31184e8b` design and spec deltas (findings 12 and 15); then this record (finding 14).
 - Merges of `origin/dev`: `1cfe104f` (`6b68d6c7`, no conflict); `f93316de` (`14e1a46e`, a conflict in `docs/agent-task-protocol.md` resolved by taking `dev`'s coordinator step 1 and keeping this change's step 2; `dev` changed no requirement that the spec deltas modify); `f726edbf` (`579c227d`, no conflict). The full `make verify` passed on `f726edbf`; `make record` and `make record-check` passed on `16987d29`, whose tree differs from `f726edbf`'s only in this record. The pass 1 fixes have not yet run `make verify`.
+- `make verify` of the pass 1 fixes passed on `1089addf`, the merge of `origin/dev` `3f23516a` (no conflict; it changed only the Claude Code reviewer rows of `docs/agent-task-protocol.md` and two living specs that no delta of this change touches); `make record` and `make record-check` passed.
 
 ## Environment
 
@@ -51,11 +52,15 @@ macOS 26.6.2 (Darwin 25.6.0, x86_64), the coordinator's iMac; Node.js 24.22.1 an
 
 Written by `make record`; `make record-check` checks it against the tree. Edit nothing between the markers.
 
-- `make verify`: passed, profile full, tree `de5a07028782e9a60d937c93d94008248ea0114a`; tests 2403, pass 2400, fail 0, skipped 3; all files 99.34% lines, 92.28% branches, 99.03% functions.
+- `make verify`: passed, profile full, tree `83772c1a11800cee9ac281d7c27bd666f6f89b75`; tests 2424, pass 2421, fail 0, skipped 3; all files 99.34% lines, 92.28% branches, 99.03% functions.
 - `npm run openspec -- validate adopt-process-performance-recommendations --strict`: passed, `Change 'adopt-process-performance-recommendations' is valid`.
-- `make findings ARGS="validate"`: passed, `Every findings file is valid: 50 file(s); every pass summary file is valid: 30 file(s).`.
-- Spec diff against the merge base `579c227d5593` with `origin/dev`: no change under `openspec/specs`.
-- Review passes in `passes.jsonl`: none yet.
+- `make findings ARGS="validate"`: passed, `Every findings file is valid: 53 file(s); every pass summary file is valid: 33 file(s).`.
+- Spec diff against the merge base `3f23516a2e4e` with `origin/dev`: no change under `openspec/specs`.
+- Review passes in `passes.jsonl`:
+
+| Pass | Role | Reviewer | Session | Critical | High | Medium | Low |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | A | `codex gpt-6.1-sol#medium` | `01a17f4c-3d06-77b2-b410-2f9550f5ebbd` | 0 | 5 | 8 | 2 |
 <!-- make record: end -->
 
 ## Independent review
@@ -107,7 +112,6 @@ Assigned: reviewer A Codex CLI (`gpt-6.1-sol`) for pass 1 and, under the new "Co
 
 ## Remaining gates
 
-- `make verify` (Docker) of the pass 1 fixes by the worker, then `make record CHANGE=adopt-process-performance-recommendations LOG=<log>` and `make record-check CHANGE=adopt-process-performance-recommendations`; the stamp key now covers the merge base, so the generated part above, from `f726edbf`, no longer passes `make record-check` until then
 - Independent review: pass 2 (reviewer B), and pass 3 if "Conditional third pass" requires it
 - Archive of the change
 - Integration into dev by the coordinator (single pull request)

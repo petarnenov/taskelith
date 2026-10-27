@@ -23,7 +23,7 @@
 ## 4. Review and archive
 
 - [x] 4.1 Review pass 1 (reviewer A) and its fixes
-- [ ] 4.2 `make verify`, `make record`, and `make record-check` of the pass 1 fixes
+- [x] 4.2 `make verify`, `make record`, and `make record-check` of the pass 1 fixes: passed on `1089addf` (after merging `origin/dev` `3f23516a`)
 - [ ] 4.3 Review pass 2 (reviewer B) and its fixes
 - [ ] 4.4 Review pass 3 (reviewer A), if "Conditional third pass" requires it
 - [ ] 4.5 Archive the change
