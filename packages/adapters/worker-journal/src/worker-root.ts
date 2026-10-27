@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
+import { chmodSync, chownSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { err, failure, ok, type Failure, type Result } from '@taskelith/kernel';
 import type { JournalId, RecoveryEpoch } from '@taskelith/execution';
@@ -29,7 +29,12 @@ export interface WorkerRootOptions {
   readonly onCommitPoint?: CommitPointHook;
   // Called after each journal write refused for lack of space.
   readonly onSpaceRefused?: () => void;
+  // The execution account's group, which may traverse to the workspaces.
+  readonly executionGroup?: number;
 }
+
+// Search permission for the group only: it cannot list or create entries.
+const TRAVERSE_ONLY = 0o710;
 
 // An open worker root: the root lock is held until `close`.
 export interface WorkerRoot {
@@ -52,6 +57,8 @@ export function openWorkerRoot(options: WorkerRootOptions): Result<WorkerRoot> {
     if (!bootId.ok) return bootId;
     const fault = checkJournalFault(paths.fault, bootId.value);
     if (!fault.ok) return fault;
+    const granted = grantWorkspaceTraversal(paths, options.executionGroup);
+    if (!granted.ok) return granted;
     return openJournal(paths, options, identity.value, lock);
   });
 }
@@ -132,6 +139,8 @@ function createJournalThenIdentity(
     const created = createPrivateDirectory(directory);
     if (!created.ok) return created;
   }
+  const granted = grantWorkspaceTraversal(paths, options.executionGroup);
+  if (!granted.ok) return granted;
   const created = createJournalDatabase(paths.journal, enrollment, options.clock.now());
   if (!created.ok) return created;
   created.value.close();
@@ -184,6 +193,22 @@ function prepareDataRoot(paths: WorkerPaths, options: WorkerRootOptions): Result
   return createPrivateDirectory(paths.worker);
 }
 
+// Opens the path to `worker/workspaces/` to the execution group for
+// traversal only (journal contract section 2); control records stay closed.
+function grantWorkspaceTraversal(paths: WorkerPaths, group: number | undefined): Result<void> {
+  if (group === undefined) return ok(undefined);
+  try {
+    for (const directory of [paths.dataRoot, paths.worker, paths.workspaces]) {
+      chownSync(directory, -1, group);
+      chmodSync(directory, TRAVERSE_ONLY);
+    }
+  } catch (error) {
+    const message = `cannot open the workspaces to group ${group}: ${(error as Error).message}`;
+    return err(failure('precondition-failed', message, { group: String(group) }));
+  }
+  return ok(undefined);
+}
+
 function nearestExisting(path: string): string {
   return existsSync(path) || dirname(path) === path ? path : nearestExisting(dirname(path));
 }
@@ -217,7 +242,11 @@ function withRootLock(paths: WorkerPaths, use: (lock: ExclusiveFileLock) => Resu
 
 function checkRecordsThen(paths: WorkerPaths, use: () => Result<WorkerRoot>): Result<WorkerRoot> {
   const uid = ownerUid();
-  const records = [paths.identity, paths.credentials, paths.fault, paths.journal, `${paths.journal}-wal`, paths.executions, paths.logs];
+  // The workspace root too: the execution group's grant must not follow it.
+  const records = [
+    paths.identity, paths.credentials, paths.fault, paths.journal, `${paths.journal}-wal`, paths.executions, paths.logs,
+    paths.workspaces,
+  ];
   for (const record of records) {
     const safe = checkControlPath(paths.dataRoot, record, uid);
     if (!safe.ok) return safe;
