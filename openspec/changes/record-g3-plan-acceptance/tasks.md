@@ -8,7 +8,7 @@
 - [x] 2.1 Strict OpenSpec validation, `npm run verify:links`, `make findings ARGS="validate"`, `npm run verify:comments`, and `verification.md`
 - [ ] 2.2 `make verify`, run by the worker session before pass 1 and again on the tree of the archive commit
 - [x] 2.3 Independent review pass 1 by replacement reviewer A, Codex CLI `gpt-6-astra` (reasoning effort `medium`), after the attempt by OpenCode CLI `opencode-go/qwen3.8-max#medium` stopped at its quota; a Low-only pass ends the review
-- [ ] 2.4 Independent review pass 2 by reviewer A, Codex CLI `gpt-6-astra`, to confirm the pass 1 fixes, because pass 1 had a Medium finding
+- [x] 2.4 Independent review pass 2 by reviewer A, Codex CLI `gpt-6-astra`, to confirm the pass 1 fixes, because pass 1 had a Medium finding
 
 ## 3. Archive
 

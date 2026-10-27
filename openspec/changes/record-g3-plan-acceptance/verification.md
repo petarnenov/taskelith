@@ -21,7 +21,7 @@ Out of scope: every other edit of the plan or the protocol, new owner decisions,
 
 ## Checks
 
-Run after both edits and the reviewer change, and again after the pass 1 fixes (`1dab286e`) with the pass 1 records, with the results below.
+Run after both edits and the reviewer change, and again after the pass 1 fixes (`1dab286e`) with the pass 1 records, and again with the pass 2 records, with the results below.
 
 | Check | Result |
 | --- | --- |
@@ -53,7 +53,11 @@ Reviewer A first assigned by the coordinator: OpenCode CLI `opencode-go/qwen3.8-
 
 ### Pass 2 (reviewer A)
 
-Pending, by Codex CLI `gpt-6-astra`, to confirm the pass 1 fixes, because pass 1 had a Medium finding.
+- Reviewer A: Codex CLI `gpt-6-astra`, reasoning effort `medium`, run by the worker session; reviewed head `1b5c2cdc1fecbd947bef9eeebb190b978e379530`.
+- Invocation as in pass 1.
+- Model confirmation: model `gpt-6-astra`, reasoning effort `medium`, and the read-only sandbox in the output header. Session `01a17e06-7c68-7112-b392-52db51c1c587`. Snapshot before and after: equal. Both as relayed by the worker session.
+- The reviewer confirmed the fixes of P1 and P2 and found no new problem.
+- Findings: 0 Critical, 0 High, 0 Medium, 0 Low, matching its `passes.jsonl` line. The review ends with this pass.
 
 ## Limitations
 
@@ -63,6 +67,5 @@ Pending, by Codex CLI `gpt-6-astra`, to confirm the pass 1 fixes, because pass 1
 ## Remaining gates
 
 - `make verify` on the tree of the archive commit, run by the worker session.
-- Independent review pass 2 by reviewer A, Codex CLI `gpt-6-astra`, to confirm the pass 1 fixes.
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
