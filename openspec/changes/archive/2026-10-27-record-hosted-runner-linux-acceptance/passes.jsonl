@@ -1,0 +1,1 @@
+{"change": "record-hosted-runner-linux-acceptance", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a17ef3-f8c8-76f1-88ce-ffdf7a1e36c2", "counts": {"critical": 0, "high": 0, "medium": 0, "low": 2}}
