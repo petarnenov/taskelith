@@ -40,6 +40,17 @@ Seeds of the loop before: 2541591296, 2448509289, 722750197, 1136287814, 1562078
 
 Seeds of the loop after: 643241266, 3243994778, 2991625628, 2515174527, 2281684739, 625906304, 3197156807, 2034818923, 2934515291, 3500529384, 1849712842, 3284369673, 726366428, 1630205910, 3328022717, 530409055, 1565959882, 628825491, 1505439601, 189863616, 717561874, 463699542, 3621985654, 227599177, 4099764052, 185617844, 3633032722, 1111508888, 2089570241, 2637940087, 2440419424, 4267800681, 151046396, 3823355134, 3772135807, 3310341652, 1844070244, 411469051, 980426156, 3453295673, 679046719, 1026291230, 3318820136, 1933504739, 4098822526, 177758919, 116691379, 680586212, 814247513, 926360602.
 
+## Archive checks
+
+On the tree of the archive commit, after `npm run openspec -- archive stabilize-g2-cancellation-races-exit-signal --yes` (no specs, `skip_specs: true`), with Node.js v24.22.1:
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: `✓ change/2026-10-27-stabilize-g2-cancellation-races-exit-signal`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: empty.
+- The moved change has `findings.jsonl` (4 findings of pass 1, 4 of pass 2), `passes.jsonl` (2 passes), and `results.jsonl` (8 rows); `make findings ARGS="validate"`: 30 findings files and 10 pass summary files valid.
+- `npm run verify:links`: `Every checked link conforms.`
+- `make verify`: exit 0 in 3 min 34 s; 2193 tests, 2146 passed, 0 failed, 47 skipped; coverage 99.24 % lines, 92.19 % branches, 98.92 % functions; `openspec validate --all --strict` 69 of 69, archive dry run and package verification passed.
+
 ## Independent review
 
 ### Review pass 1
