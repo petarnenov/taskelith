@@ -93,7 +93,17 @@ Not run. A Low-only pass 2 ends the review (governance, "Low findings are fixed"
 - A task beyond the batch is not read in the next pass; it keeps its place in the rotation, which the requirement states instead of promising the next pass.
 - The unit tests script the placement outcomes; only the integration test runs real placement transactions.
 
+## Archive
+
+Checked state: the tree of the archive commit (`docs: archive the placement-backoff-preserves-rotation change`), on top of `447d2725`, which is the working tree these checks ran on. Environment and `TMPDIR` as in "Checks".
+
+- `npm run openspec -- archive placement-backoff-preserves-rotation --yes`: archived as `2026-10-27-placement-backoff-preserves-rotation`; `execution-placement` 1 modified.
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line passes (`change/2026-10-27-placement-backoff-preserves-rotation`).
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/execution-placement/spec.md`, the "Placement backoff" requirement with the fleet capacity exception, the narrowed scenario "Repeated waiting", and the new scenario "Capacity decline".
+- The moved change has `findings.jsonl` (11 lines); `make findings ARGS="validate"`: every findings file is valid, 20 files.
+- `make verify`: exit 0; 2115 tests, 2068 pass, 0 fail, 47 skipped; coverage lines 99.24%, branches 92.15%, functions 98.92%; every active OpenSpec change archives into strictly valid specs.
+
 ## Remaining gates
 
-- Archive of the change under worker step 7.
 - Integration into dev by the coordinator (single pull request).
