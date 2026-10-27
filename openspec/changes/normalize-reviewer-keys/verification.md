@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-27. The author's verification and `make verify` are recorded below, then review pass 1 by reviewer A, its fixes, and `make verify` after them; passes 2 and 3 have not run yet.
+Date: 2026-10-27. The author's verification and `make verify` are recorded below, then review pass 1 by reviewer A, its fixes, and `make verify` after them, and review pass 2 by reviewer B, Low-only, with its unreviewed fixes; pass 3 did not run.
 
 ## Scope and source
 
@@ -96,11 +96,26 @@ The coordinator assigned reviewer A, Codex CLI (`gpt-6.1-sol`), for passes 1 and
 
 ### Review pass 2
 
-Not run yet: reviewer B, Claude Code (`claude-opus-5-5`, effort `high`), checks the pass 1 fixes and reviews the whole change.
+- **Reviewer:** B, Claude Code, model `claude-opus-5-5`, effort `high`, permission mode `plan`, editing tools disallowed, session `6915527b-b16b-438f-b2c9-812605f15292`; run by the coordinator.
+- **Revision reviewed:** `b87abe75...f39870d1`.
+- **Invocation:** `claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json < /dev/null`.
+- **Model confirmation:** `claude-opus-5-5` in the JSON `modelUsage`, as the coordinator reported it.
+- **Snapshot:** before and after the pass `97bbde177a3a3119bb9c80c86503be353d4782d367c9535b96792bd53b862cbe`, identical.
+- **Pass 1 fixes:** M1 confirmed fixed; M2 fixed except in coordinator step 1 of the protocol, which became L1.
+- **Result:** Critical 0, High 0, Medium 0, Low 7, as in `passes.jsonl` line 2 and `findings.jsonl` lines 3 to 9. File lines are those of `f39870d1`. All seven are fixed in `a776a0fc` and are **unreviewed fixes** (`fixed-unreviewed`), because a Low-only pass ends the review (governance "Low findings are fixed").
+- **L1, contract-drift** (`docs/agent-task-protocol.md:44`): coordinator step 1 skipped and replaced reviewers without the role test. Fixed, unreviewed: it skips a reviewer barred from the role by governance "Reviewer assignment", and the replacement must be one that may take the role.
+- **L2, contract-drift** (`specs/review-process/spec.md:4`, protocol `:78`): neither said that both parts of an OpenCode model are non-empty. Fixed, unreviewed: both say `<provider>/<model>` with both parts non-empty, for OpenCode only, and the delta adds the scenario "OpenCode model with an empty part"; "Canonical reviewer key" is now 477 characters.
+- **L3, evidence-mismatch** (`verification.md:44`): "both contract documents" where four are checked. Fixed, unreviewed: "the four contract documents".
+- **L4, stale-citation** (`tasks.md:4`, `design.md:66`): the spec changes after pass 1 were missing. Fixed, unreviewed: task 1.2 and D6 list "Unavailable reviewer" and "No reviewer of another harness" and the new scenarios "Replacement from the rotation" and "Barred reviewer of another harness".
+- **L5, evidence-mismatch** (`verification.md:108`): the scripts' coverage was called unmeasured. Fixed, unreviewed: measured and recorded under Limitations, `scripts/reviewer-keys.ts` 100/100/100, `scripts/findings.ts` lines 100%, branches 97.20%, functions 100%.
+- **L6, spec-wording** (`specs/review-process/spec.md:23`, `:29-30`): "needs network access" beside "depends on external facts". Fixed, unreviewed: "Reviewer assignment" and its scenario tie network access to a review that depends on external facts. "Reviewer assignment" is now 424 characters.
+- **L7** (`test/findings.test.ts:477`): the per-alias tests checked only `reviewers` and `index`. Fixed, unreviewed: each also asserts that `validate` exits 0 and that every archived `findings.jsonl` and `passes.jsonl` is byte-identical after `reviewers` and `index`. The vocabulary has no test category, so the finding is recorded as `contract-drift`: the tests did not guard the delta's "the archived file is not rewritten".
+
+`make verify` at `a776a0fc` (with `TMPDIR` on disk): the first run exited 2 with one failure outside this change, `a provider that races two concurrent hand-offs fails the suite` (`packages/modules/workspace/test/workspace-conformance.test.ts:76`), which expected the probe `lets one of two concurrent hand-offs through where executions share a separate account` to be reported and got none; 2319 tests, 2271 pass, 1 fail, 47 skipped. This change touches neither that test nor the workspace module. Run alone three times, `node --experimental-strip-types --test packages/modules/workspace/test/workspace-conformance.test.ts` passed each time, 43 of 43, so the author records it as a timing flake under load, outside the change. The rerun of `make verify` exited 0: 2319 tests, 2272 pass, 0 fail, 0 cancelled, 47 skipped (the same platform-bound skips); coverage of all files lines 99.28%, branches 92.32%, functions 98.94%; `validate --all --strict` 70 passed, 0 failed; every findings file is valid, 43 files, and every pass summary file, 23 files; every active OpenSpec change archives into strictly valid specs; 0 breaking changes in the four contract documents against `b87abe75`; 731 package paths verified, 41 with reviewed license coverage gaps; the comment, link, boundary, and package checks passed.
 
 ### Review pass 3
 
-Not run yet: reviewer A confirms the pass 2 fixes, if pass 2 has findings above Low.
+Not run: pass 2 found only Low findings, so the review ends under governance "Low findings are fixed", and its fixes are recorded as unreviewed.
 
 ## Limitations
 
@@ -109,6 +124,5 @@ Not run yet: reviewer A confirms the pass 2 fixes, if pass 2 has findings above 
 
 ## Remaining gates
 
-- Review pass 2 by reviewer B and, if it has findings above Low, pass 3 by reviewer A.
 - Archive of the change on its branch.
 - Integration into dev by the coordinator (single pull request).

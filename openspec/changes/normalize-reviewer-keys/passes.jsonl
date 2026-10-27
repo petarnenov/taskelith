@@ -1,1 +1,2 @@
 {"change":"normalize-reviewer-keys","pass":1,"role":"A","reviewer":{"harness":"codex","model":"gpt-6.1-sol","variant":"medium"},"session":"01a17f10-686f-7c82-9e3e-7c7c408c4366","counts":{"critical":0,"high":0,"medium":2,"low":0}}
+{"change":"normalize-reviewer-keys","pass":2,"role":"B","reviewer":{"harness":"claude","model":"claude-opus-5-5","variant":"high"},"session":"6915527b-b16b-438f-b2c9-812605f15292","counts":{"critical":0,"high":0,"medium":0,"low":7}}
