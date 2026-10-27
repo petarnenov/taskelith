@@ -53,6 +53,8 @@ Ubuntu Linux 6.8.0-147-generic x86_64 (host `hpz600`), Node.js v24.22.0 through 
 - After the pass 1 fixes, on `e039b771`: `npm run openspec -- validate align-fair-order-rotation --strict`: valid; `node --experimental-strip-types --test packages/modules/scheduling/test/*.test.ts apps/control-plane/test/placement-service.test.ts`: 121 tests, 121 passed; the PostgreSQL conformance file through `bash scripts/services.sh run postgres ...`: 34 tests, 34 passed, the new case included.
 - After the pass 1 fixes, `make verify` passed (exit 0) on `e039b771`: 2,030 tests, 1,984 passed, 0 failed, 46 skipped; coverage 99.18 % lines, 91.86 % branches, 98.80 % functions; strict OpenSpec validation 70 passed, 0 failed; findings validation, contract compatibility, dependency inventory, archive dry run, and package verification passed. With the pass 1 line in `findings.jsonl`, `make findings ARGS="validate"`: `Every findings file is valid: 6 file(s).`; `npm run verify:comments`: within the rule.
 
+- After the pass 2 fixes (records only), on `18ca564c`: `npm run openspec -- validate align-fair-order-rotation --strict`: valid; `npm run verify:comments`: within the rule; `make findings ARGS="validate"`: `Every findings file is valid: 6 file(s).`; `make verify` passed (exit 0): 2,030 tests, 1,984 passed, 0 failed, 46 skipped; coverage 99.18 % lines, 91.84 % branches, 98.80 % functions; strict OpenSpec validation 70 passed, 0 failed; archive dry run and package verification passed.
+
 ## Independent review
 
 ### Pass 1
