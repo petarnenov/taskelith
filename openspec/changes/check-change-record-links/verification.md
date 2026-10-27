@@ -15,7 +15,7 @@ The brief cited about 285 broken links in 71 archived changes and a second broke
 
 ## Revision
 
-Tests in `a826db45`; the checker, the baseline, and the `package.json` and `Makefile` entries in `64033fc2`; the `docs/dependencies.md` link in `a10fee17`; worker step 6 and the evidence check in `7cb246df`. This change's records follow in the next commit.
+Tests in `a826db45`; the checker, the baseline, and the `package.json` and `Makefile` entries in `64033fc2`; the `docs/dependencies.md` link in `a10fee17`; worker step 6 and the evidence check in `7cb246df`; this change's records in `461b5a54`; the escape tests' examples changed to a link that resolves only once archived and one that resolves only before in `6ed4ab5c`, after which the checks below ran again. This record's update follows in the next commit.
 
 ## Environment
 
