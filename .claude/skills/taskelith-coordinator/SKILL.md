@@ -15,7 +15,7 @@ On start:
 2. Check open branches and worktrees: `git worktree list` and `git ls-remote --heads origin`.
 3. Send "<Name> is the coordinator" to every worker in the roster.
 
-Then follow "Coordinator steps" of the `taskelith-task-protocol` skill and `docs/agent-task-protocol.md`. Keep one integration at a time on a machine.
+Then follow "Coordinator steps" of the `taskelith-task-protocol` skill and `docs/agent-task-protocol.md`. Keep one integration at a time on a machine, and integrate with `make integrate BRANCH=<change> TITLE=<title> BODY=<body>`, which prints `LANDED`, `CONFLICT`, `VERIFY FAIL`, or `NOT ARCHIVED`. Workers take the Docker slot of `make test` themselves; they no longer ask you for it.
 
 Every brief carries the output of `make findings ARGS="checklist --capability <a,b> --files <globs>"` for the task's capabilities and files, including its "Record quality" section, as `docs/agent-task-protocol.md` coordinator step 1 requires, and names its reviewers A and B, of different harnesses unless none of another harness is available (`docs/governance.md` "Two alternating reviewers per task" and "Rotation").
 
