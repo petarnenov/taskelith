@@ -67,10 +67,24 @@ test('a nested brace glob from the command line matches as one glob', () => {
   assert.equal(matchesQuery(of('src/d.ts'), command.query), false);
 });
 
+test('a character class glob from the command line stays whole and matches', () => {
+  const command = parseCommand(['checklist', '--files', 'scripts/[a,b]*.ts,docs/**']);
+  assert.ok(command.name === 'checklist');
+  assert.deepEqual(command.query.files, ['scripts/[a,b]*.ts', 'docs/**']);
+  const of = (file: string) => ({ file } as Finding);
+  assert.equal(matchesQuery(of('scripts/archive.ts'), command.query), true);
+  assert.equal(matchesQuery(of('scripts/,x.ts'), command.query), true);
+  assert.equal(matchesQuery(of('docs/x.md'), command.query), true);
+  assert.equal(matchesQuery(of('scripts/check.ts'), command.query), false);
+});
+
 test('a list splits at commas outside braces and drops empty items', () => {
   assert.deepEqual(splitList(' a, ,b/{c,d}/**,'), ['a', 'b/{c,d}/**']);
   assert.deepEqual(splitList('src/{a,{b,c}}.ts,docs/**'), ['src/{a,{b,c}}.ts', 'docs/**']);
   assert.deepEqual(splitList('a},b'), ['a}', 'b']);
+  assert.deepEqual(splitList('[],x],{a,[}]},y'), ['[],x]', '{a,[}]}', 'y']);
+  assert.deepEqual(splitList('[!,]a,b'), ['[!,]a', 'b']);
+  assert.deepEqual(splitList('a[,b'), ['a[', 'b']);
 });
 
 test('validate passes on valid files, empty active files, and archives without a file', () => {
