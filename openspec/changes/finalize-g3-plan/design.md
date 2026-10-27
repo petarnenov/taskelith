@@ -26,7 +26,7 @@ The questions of the first draft, answered by coordinator Niki:
 - **Writers rule (Q1).** The "Work items" rule for writers that invalidate launches stays as written, without naming an item for the first writer of artifact revisions (coordinator's decision).
 - **New items (Q3).** Items 43 and 44 stay as new items (coordinator's decision).
 - **G3 start (Q4).** The owner started G3 on 2026-10-27, relayed by the coordinator; the status records it, and the D16 (a) wording states that items now start in dependency order and by the waves, item 0 first. D16 itself is unchanged.
-- **PostgreSQL TLS (Q2).** Open with the owner: ADR 0015 lists plain PostgreSQL on localhost under the TLS deferral to item 26, while D11 names only the browser endpoint, the API, and NATS. Item 26 and the deferral table mark it open; this change does not decide it.
+- **PostgreSQL TLS (Q2).** ADR 0015 lists plain PostgreSQL on localhost under the TLS deferral to item 26, while D11 (b) names the installation authority for the API, broker, and enrollment, and an operator-supplied certificate for the browser endpoint, with no PostgreSQL. Decided by the owner's away delegate, OpenCode `kimi-k2.7-code`, in away run `20261027T142720Z-opencode-88550`, option A, relayed by the coordinator: item 26 covers TLS for the endpoints D11 (b) names and remote worker enrollment over TLS; PostgreSQL stays plain on localhost while it is co-located with the control plane, and its TLS is deferred to G6 and G7 with PostgreSQL on a separate host, failover, and pool sizing. This narrows ADR 0015's mapping of PostgreSQL into item 26, recorded in the deferral table's TLS row; ADR 0015 is not edited and D11 is unchanged.
 
 ## Risks / Trade-offs
 

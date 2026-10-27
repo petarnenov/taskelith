@@ -17,10 +17,10 @@ Out of scope: new owner decisions, changes to D1 to D18, starting any G3 item, e
 - **Starting point citations.** Fresh-clone base `bd6108d4` (ADR 0015 decision 4). Crash windows: 28 of 28 on `macos-26-x86_64` (decision 3), 29 of 29 on Linux after L1 (decision 2), 15 passed and 11 failed on D1 on `macos-26-arm64` (decision 3). 24c: 34 records, Linux x64, test-side process-group launch host, race g without a record (decisions 2 and 5); the skip is `SCENARIO_HOST` at `test/g2-scenarios/scenario-run.ts:16`, added by `6d40c0c4`. The cursor of the closure was `#after` at `apps/control-plane/src/application/placement-service.ts:51` on the first base; since #349 the pass reads it through `tx.rotation` (same file, line 73). Launch authorization contract sections 5 ("Invalidation ordering") and 11 ("G2 implementation") hold the writer rule and `current_revisions`. Execution wire contracts section 3 is "Protocol version".
 - **Placement changes.** #344 `placement-backoff-preserves-rotation` is merge `21f399a5`, after `bd6108d4` and before #347 `close-g2` (`09a11766`); #348 `stop-placement-pass-at-fleet-decline` is merge `56346d92`, after #347 (`git log --first-parent origin/dev`). Their behavior and limits are from their archived proposals and verifications, "Limitations".
 - **Cursor follow-up.** `persist-placement-rotation-cursor` landed with #349, merge `eda6c283` (`git log --first-parent origin/dev`); the starting point cites its archived proposal (port, table `placement_rotation`, contract section 13 "Durable cursor") and verification, "Limitations" (shared cursor, last writer wins; a decline-only move lost on an outage or a failed end-of-pass write).
-- **Coordinator decisions.** Q1 to Q4 of the first draft are recorded in `design.md`, "Coordinator decisions of 2026-10-27"; the owner's start of G3 on 2026-10-27 is in the status, and PostgreSQL TLS is marked open with the owner in item 26 and the deferral table.
+- **Coordinator decisions.** Q1 to Q4 of the first draft are recorded in `design.md`, "Coordinator decisions of 2026-10-27"; the owner's start of G3 on 2026-10-27 is in the status, and the PostgreSQL TLS decision of the owner's away delegate (away run `20261027T142720Z-opencode-88550`, option A) is in item 26 and the deferral table's TLS row. At `eda6c283`, ADR 0015 line 105 is the entry "TLS and the installation certificate authority" (plain HTTP, NATS, and PostgreSQL on localhost ports: G3 item 26, D11), and line 151 the entry "Failover, pool sizing under load, and expand/contract migrations" of PostgreSQL (G6 and G7). D11 (b) names the installation authority for the API, broker, and enrollment, and an operator-supplied certificate for the browser endpoint, falling back to the installation authority (plan, D11 row).
 - **Waves.** Item 43 depends only on item 0, as every other unmerged item does: wave 1. Item 44 depends on items 9 (wave 3) and 10 (wave 4): wave 5. The longest chain the plan names is unchanged.
 - **Owner decisions.** No row of D1 to D18 changed; item 0's per-item checks, decided by the owner on 2026-10-26, are unchanged; the arm64 re-run is run by the owner with physical access to the MacBook Air, as the owner decided on 2026-10-27.
-- **Links.** The plan's new links are same-directory or below `docs/` (`decisions/0015-g2-closure.md#5-deferrals`, `foundation.md#g2-status`, `contracts/...`, `worker-platforms.md#native-acceptance-gates`) and in-page anchors; this record links root-relative only.
+- **Links.** The plan's new links are same-directory or below `docs/` (`decisions/0015-g2-closure.md#5-deferrals`, `foundation.md#g2-status`, `contracts/...`, `worker-platforms.md#native-acceptance-gates`) and in-page anchors; this record links root-relative or same-directory only.
 
 ## Checks
 
@@ -62,7 +62,6 @@ Not yet run.
 
 ## Remaining gates
 
-- Owner decision: whether item 26 covers TLS for PostgreSQL, which ADR 0015 lists under the G3 TLS deferral while D11 names only the browser endpoint, the API, and NATS.
 - `make verify` on the branch head.
 - Independent review passes 1 to 3 and their records.
 - Archive of the change in the last commit of the branch.

@@ -1,7 +1,7 @@
 ## 1. Plan
 
 - [x] 1.1 Change the status of `docs/g3-plan.md` from draft to final on the G2 closure, keeping the owner-decision history
-- [x] 1.2 Correct "Starting point" to G2 as built (ADR 0015 decisions 1 to 4, foundation ledger "G2 status"), with the limits for G3 and the placement changes #344 and #348
+- [x] 1.2 Correct "Starting point" to G2 as built (ADR 0015 decisions 1 to 4, foundation ledger "G2 status"), with the limits for G3 and the placement changes #344, #348, and #349
 - [x] 1.3 Add "G2 closure deferrals" with every ADR 0015 decision 5 entry, its gate, and its G3 item or "Not G3"
 - [x] 1.4 Attach the G3 deferrals to items 9, 10, 26, 27, and 35 and to the "Work items" introduction
 - [x] 1.5 Add items 43 and 44 and update the dependency and wave tables
