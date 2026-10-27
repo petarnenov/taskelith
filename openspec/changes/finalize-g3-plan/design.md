@@ -17,7 +17,16 @@ Non-goals: any new owner decision, any change to D1 to D18, starting item 0 or a
 - **Item 43 holds the deferred native acceptance rows together.** ADR 0015 defers race g and the 24c-dependent rows "on the two macOS entries, with the arm64 re-run above, and on the two Linux entries", so the re-run and those rows form one item. The owner runs the arm64 re-run with physical access to the MacBook Air, as the owner decided.
 - **Item 44 for re-admission and the queue surface.** No existing item covers re-admission by a writer of admissions or a surface for the reconciliation queue; the new item uses the scope `wire-launch-authority-reconciliation` left open and puts its operations in item 9.
 - **Item 0 keeps the owner's checks.** Its per-item checks are the owner's decision of 2026-10-26 and are not changed; its scope now names G2 as ADR 0015 records it, with the later changes of the "Starting point".
-- **Placement after the closure.** #344 merged after `bd6108d4`, the revision the closure reproduced, and before the closure's merge #347; #348 merged after #347. The starting point says so, instead of calling both "after the closure". `persist-placement-rotation-cursor` is on its own branch and not on `dev`, so the plan calls it in progress.
+- **Placement after the closure.** #344 merged after `bd6108d4`, the revision the closure reproduced, and before the closure's merge #347; #348 merged after #347. The starting point says so, instead of calling both "after the closure". `persist-placement-rotation-cursor` landed with #349 (merge `eda6c283`) while this change was in progress; after merging `dev`, the starting point describes the cursor as persisted, with that change's limitations.
+
+## Coordinator decisions of 2026-10-27
+
+The questions of the first draft, answered by coordinator Niki:
+
+- **Writers rule (Q1).** The "Work items" rule for writers that invalidate launches stays as written, without naming an item for the first writer of artifact revisions (coordinator's decision).
+- **New items (Q3).** Items 43 and 44 stay as new items (coordinator's decision).
+- **G3 start (Q4).** The owner started G3 on 2026-10-27, relayed by the coordinator; the status records it, and the D16 (a) wording states that items now start in dependency order and by the waves, item 0 first. D16 itself is unchanged.
+- **PostgreSQL TLS (Q2).** Open with the owner: ADR 0015 lists plain PostgreSQL on localhost under the TLS deferral to item 26, while D11 names only the browser endpoint, the API, and NATS. Item 26 and the deferral table mark it open; this change does not decide it.
 
 ## Risks / Trade-offs
 
