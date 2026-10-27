@@ -1,0 +1,1 @@
+{"change": "measure-checklist-effect", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a17f0b-dff5-7873-98b0-4fab3289e994", "counts": {"critical": 0, "high": 0, "medium": 4, "low": 1}}
