@@ -188,6 +188,16 @@ These 11 findings are recorded in `findings.jsonl`, L8 as `deferred` and the oth
 
 - Evidence refresh after pass 3: the `1e48c93` merge and the pass 3 test fixes change verification inputs, so `results.jsonl` was dropped (`36481ad`) and both seeds ran at that commit: each run 24 tests, 23 passed, 1 skipped (g), 0 failed; 34 records, all `passed`.
 
+## Archive checks
+
+Worker step 7 (step 10.5 of the return), run after review pass 3 and its unreviewed Low fixes. The checked state is the tree of the archive commit: the working tree these checks ran on after `npm run openspec -- archive run-g2-partition-and-races --yes` (base `4095d6b`), which added 10 requirements to `g2-failure-scenarios`. `origin/dev` was last merged at `1e48c93` (`0656a4c`); a `git fetch origin` before the archive showed `origin/dev` at `92f0830` (#330, `bound-failure-cause-userinfo-redaction`: `apps/control-plane/src/failure-cause.ts`, its test, and the living `worker-runtime` spec), not merged here.
+
+- `npm run openspec -- validate --all --strict --no-interactive`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: `change/2026-10-27-run-g2-partition-and-races` passed. The command as a whole reports 168 passed and 13 failed, all of the failures in older archived changes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `1e48c93`): additions only, 86 lines in `openspec/specs/g2-failure-scenarios/spec.md`: the 10 requirements of this change's delta, from "Worker broker partition" to "Stale recovery epoch".
+- The moved `findings.jsonl` exists with 22 findings: pass 1 with 10 `fixed` and 1 `deferred` (L8), pass 2 with 6 `fixed`, pass 3 with 5 `fixed-unreviewed`. `make findings ARGS="validate"` passed.
+- `make verify` passed: 2050 tests, 2003 passed, 0 failed, 47 skipped, 0 todo, 0 cancelled; coverage 99.22 % lines, 92.03 % branches, 98.86 % functions; every findings file valid (7 files); strict OpenSpec validation 69 passed, 0 failed; no active change to archive in the dry run; package verification passed.
+
 ## Limitations and remaining gates
 
 - The 24a recorder knows only `passed` and `failed`, also after #306 added targets and an acceptance context, so scenario g, not applicable on Linux, has no record in `results.jsonl` and is recorded only in this document. A `not-applicable` outcome is a possible future extension of 24a; this change leaves the recorder unchanged.
