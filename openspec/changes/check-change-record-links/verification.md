@@ -46,6 +46,8 @@ The tests were written before the implementation. Against a stub that exported t
 - `npm run openspec -- validate --all --strict --no-interactive`: 70 passed, 0 failed.
 - `npm run verify:archive`: every active OpenSpec change archives into strictly valid specs.
 - `git diff --stat origin/dev -- openspec/changes/archive`: empty.
+- `make verify` on `e68d1528` (2026-10-27, worker session, Docker Desktop, iMac slot): failed at `npm run verify:dependencies` with `Dependency inventory is stale; changed inputs: package.json`, because the new `verify:links` script changed `package.json`. `make dependency-inventory` regenerated `docs/dependencies/licenses.json`, committed as `a0c58359`.
+- `make verify` on `a0c58359` (finished 2026-10-27T12:00:41Z): passed. 2131 tests, 2129 passed, 0 failed, 2 skipped; coverage of all files 99.29 % lines, 92.11 % branches, 99.00 % functions; contract documents without undeclared breaking change; 731 package paths verified; OpenSpec 70 passed, 0 failed; `Every checked link conforms; 331 archived links remain in scripts/record-links-baseline.tsv.`; every active change archives into strictly valid specs; packed file allowlist and installed CLI verification passed.
 
 ## Independent review
 
@@ -53,13 +55,11 @@ Not started.
 
 ## Limitations
 
-- `make verify` was not run by the author subagent: the machine's Docker slot was held by another session, and `make verify` starts integration services.
-- `npm test` was not run for the same reason; only the checker's test file ran.
+- The author subagent ran neither `make verify` nor `npm test`, because the machine's Docker slot was held by another session; the worker session ran `make verify`, which includes the tests, as recorded under Checks.
 - Reference-style link definitions are not checked; no checked file uses them.
 
 ## Remaining gates
 
-- `make verify`.
 - Independent review, reviewer A for passes 1 and 3 and reviewer B for pass 2.
 - Archive in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request)
