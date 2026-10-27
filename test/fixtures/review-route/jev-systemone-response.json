@@ -1,0 +1,19 @@
+{
+  "model": "jev-1.14.0",
+  "answers": {
+    "tier": {
+      "type": "choice",
+      "choice": "elevated",
+      "confidence": 0.62,
+      "probabilities": { "standard": 0.19, "elevated": 0.81 }
+    },
+    "passes": {
+      "type": "score",
+      "score": 1.4,
+      "confidence": 0.55,
+      "legend": { "0": "1 pass", "1": "2 passes", "2": "3 passes" },
+      "probabilities": { "0": 0.15, "1": 0.3, "2": 0.55 }
+    }
+  },
+  "usage": { "input_tokens": 610, "output_tokens": 4 }
+}
