@@ -36,6 +36,7 @@ interface Composition {
 interface Stage {
   readonly from: string;
   readonly user?: string;
+  readonly copiesFrom: readonly string[];
 }
 
 const DIGEST_PINNED = /^[^@\s]+@sha256:[0-9a-f]{64}$/;
@@ -62,11 +63,15 @@ function dockerfileStages(source: string): Map<string, Stage> {
   for (const line of source.split('\n')) {
     const from = /^FROM (\S+) AS (\S+)$/.exec(line);
     const user = /^USER (\S+)$/.exec(line);
+    const copy = /^COPY --from=(\S+) /.exec(line);
     if (from) {
-      current = { name: from[2], stage: { from: from[1] } };
+      current = { name: from[2], stage: { from: from[1], copiesFrom: [] } };
       stages.set(current.name, current.stage);
     } else if (user && current) {
       current.stage = { ...current.stage, user: user[1] };
+      stages.set(current.name, current.stage);
+    } else if (copy && current) {
+      current.stage = { ...current.stage, copiesFrom: [...current.stage.copiesFrom, copy[1]] };
       stages.set(current.name, current.stage);
     }
   }
@@ -114,6 +119,52 @@ test('the Dockerfile builds only from the base and checks the Node.js tarballs',
   for (const line of downloads) assert.match(line, /^--checksum=sha256:\$\{NODE_SHA256_(AMD64|ARM64)\} https:\/\/nodejs\.org\//);
 });
 
+// The instructions of a stage, each with its continuation lines joined.
+function stageInstructions(name: string): readonly string[] {
+  const start = dockerfile.indexOf(` AS ${name}\n`);
+  assert.notEqual(start, -1, `the Dockerfile has the stage ${name}`);
+  const end = dockerfile.indexOf('\nFROM ', start);
+  return dockerfile.slice(start, end === -1 ? undefined : end).replace(/ \\\n\s*/g, ' ').split('\n').slice(1);
+}
+
+// Every stage that a target is built from or copies from, for each
+// architecture of node-${TARGETARCH}.
+function stageChain(stages: Map<string, Stage>, target: string): ReadonlySet<string> {
+  const chain = new Set<string>();
+  const visit = (reference: string): void => {
+    for (const name of ['amd64', 'arm64'].map((architecture) => reference.replace('${TARGETARCH}', architecture))) {
+      const stage = stages.get(name);
+      if (stage === undefined || chain.has(name)) continue;
+      chain.add(name);
+      [stage.from, ...stage.copiesFrom].forEach(visit);
+    }
+  };
+  visit(target);
+  return chain;
+}
+
+const SOURCE_DATE_CLAMP = '-newermt "@${SOURCE_DATE_EPOCH:?}" -exec touch -h -d "@${SOURCE_DATE_EPOCH}" {} +';
+
+test('the stage chain of a target follows its parents and copy sources', () => {
+  const sample = dockerfileStages([
+    'FROM ${BASE} AS node-amd64', 'FROM ${BASE} AS node-arm64', 'FROM node-${TARGETARCH} AS node',
+    'FROM ${BASE} AS added', 'FROM node AS worker', 'COPY --from=added /x /x', 'FROM worker AS other', '',
+  ].join('\n'));
+  assert.deepEqual([...stageChain(sample, 'worker')].sort(), ['added', 'node', 'node-amd64', 'node-arm64', 'worker']);
+});
+
+test('every RUN of the worker image ends with the clamp to SOURCE_DATE_EPOCH', () => {
+  const chain = stageChain(stages, 'worker');
+  for (const name of ['build', 'node-amd64', 'node-arm64', 'runtime', 'worker']) assert.ok(chain.has(name), name);
+  for (const name of chain) {
+    const instructions = stageInstructions(name);
+    const runs = instructions.filter((instruction) => instruction.startsWith('RUN '));
+    if (runs.length > 0) assert.ok(instructions.includes('ARG SOURCE_DATE_EPOCH'), name);
+    for (const run of runs) assert.ok(run.endsWith(SOURCE_DATE_CLAMP), `${name}: ${run}`);
+  }
+  assert.deepEqual(stageInstructions('node').filter((instruction) => instruction.trim() !== ''), ['COPY --from=node-files /node /usr/local']);
+});
+
 test('the effective user of a stage follows its parents', () => {
   const sample = dockerfileStages('FROM ${BASE} AS a\nUSER app\nFROM a AS b\nFROM b AS c\nUSER root\n');
   assert.equal(effectiveUser(sample, 'b'), 'app');
@@ -150,7 +201,7 @@ test('the worker image always names its containment parent and execution account
   assert.deepEqual(environment, [
     'TASKELITH_CONTAINMENT_PARENT=/sys/fs/cgroup/executions', 'TASKELITH_EXECUTION_UID=10003', 'TASKELITH_EXECUTION_GID=10003',
   ]);
-  assert.match(dockerfile, /^RUN useradd --uid 10003 --user-group .* taskelith-exec$/m);
+  assert.match(dockerfile, /^RUN useradd --uid 10003 --user-group .* taskelith-exec \\$/m);
 });
 
 test('the smoke adds only its workflow and the scripted process', () => {

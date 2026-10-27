@@ -124,7 +124,7 @@ test('each qualification record pairs every locked version with its integrity', 
 
 test('the harness variant installs from the lockfile and leaves the worker unchanged', () => {
   const install = stageBody('harnesses');
-  assert.match(install, /^FROM node-\$\{TARGETARCH\} AS harnesses$/m);
+  assert.match(install, /^FROM node AS harnesses$/m);
   assert.match(install, /^COPY infra\/installation\/harnesses\/package\.json infra\/installation\/harnesses\/package-lock\.json \.\/$/m);
   assert.match(install, /^RUN npm ci --ignore-scripts$/m);
   assert.match(stageBody('worker-harnesses'), /^FROM worker AS worker-harnesses$/m);

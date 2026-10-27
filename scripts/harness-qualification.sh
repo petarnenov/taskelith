@@ -47,12 +47,13 @@ sha256_of() {
 }
 
 build_variant() {
-  local context="$1" platform="$2" image="$3"
+  local context="$1" epoch="$2" platform="$3" image="$4"
   docker build --quiet --platform "$platform" --file "$context/infra/installation/Dockerfile" \
     --target worker-harnesses --tag "$image" --build-arg BASE="$TASKELITH_UBUNTU_BASE" \
     --build-arg NODE_VERSION="$TASKELITH_NODE_VERSION" \
     --build-arg NODE_SHA256_AMD64="$TASKELITH_NODE_SHA256_AMD64" \
-    --build-arg NODE_SHA256_ARM64="$TASKELITH_NODE_SHA256_ARM64" "$context" >/dev/null
+    --build-arg NODE_SHA256_ARM64="$TASKELITH_NODE_SHA256_ARM64" \
+    --build-arg SOURCE_DATE_EPOCH="$epoch" "$context" >/dev/null
 }
 
 describe_run() {
@@ -99,12 +100,12 @@ find_credentials() {
 
 # A failed platform is recorded in error.txt, and the others still run.
 run_platform() {
-  local context="$1" tree="$2" platform="$3" image result status=0
+  local context="$1" tree="$2" epoch="$3" platform="$4" image result status=0
   image="taskelith-worker-harnesses:qualify-${platform#linux/}"
   result="$out/${platform#linux/}"
   rm -rf -- "$result"
   mkdir -p "$result"
-  if ! build_variant "$context" "$platform" "$image" 2> "$result/error.txt"; then
+  if ! build_variant "$context" "$epoch" "$platform" "$image" 2> "$result/error.txt"; then
     echo "harness-qualification.sh: $platform build failed, see $result/error.txt" >&2
     return 1
   fi
@@ -121,14 +122,15 @@ run_platform() {
 
 # The build context holds only tracked files, as in scripts/installation.sh.
 main() (
-  local context tree platform failed=0
+  local context tree epoch platform failed=0
   context="$(mktemp -d)"
   trap 'rm -rf "$context"' EXIT
   tree="$(git -C "$repository" stash create)"
   tree="${tree:-$(git -C "$repository" rev-parse HEAD)}"
+  epoch="$(git -C "$repository" log -1 --format=%ct "$tree")" || exit
   git -C "$repository" archive --format=tar "$tree" | tar -xf - -C "$context"
   for platform in "${platforms[@]}"; do
-    run_platform "$context" "$tree" "$platform" || failed=1
+    run_platform "$context" "$tree" "$epoch" "$platform" || failed=1
   done
   exit "$failed"
 )

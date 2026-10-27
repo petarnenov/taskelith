@@ -1,0 +1,1 @@
+{"change": "scope-review-passes-by-artifact", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a17dd2-11d5-78e2-94b8-a0f5833986fa", "counts": {"critical": 0, "high": 0, "medium": 0, "low": 1}}

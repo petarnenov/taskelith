@@ -359,3 +359,24 @@ test('missedBy names an earlier pass with its role, or the integration', () => {
   }
   assert.ok(messages.every((message) => !/^findings\.jsonl:[12]:/.test(message)));
 });
+
+test('the missedBy order diagnostic names the artifact when there is one', () => {
+  assert.deepEqual(messagesOf([
+    JSON.stringify(finding({ artifact: 'y', pass: 2, missedBy: { pass: 2, role: 'B' } })),
+    JSON.stringify(finding({ pass: 2, missedBy: { pass: 2, role: 'B' } })),
+  ]), [
+    `findings.jsonl:1: missedBy pass 2 of artifact "y" is not earlier than this finding's pass 2`,
+    "findings.jsonl:2: missedBy pass 2 is not earlier than this finding's pass 2",
+  ]);
+});
+
+test('a finding may name its artifact as an identifier', () => {
+  assert.deepEqual(parseLines([JSON.stringify(finding({ artifact: 'item-0-plan' }))]).findings[0].artifact, 'item-0-plan');
+  assert.deepEqual(messagesOf([
+    JSON.stringify(finding({ artifact: '' })),
+    JSON.stringify(finding({ artifact: 'with space' })),
+  ]), [
+    'findings.jsonl:1: /artifact must match pattern "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"',
+    'findings.jsonl:2: /artifact must match pattern "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"',
+  ]);
+});
