@@ -5,6 +5,10 @@ import { resolve } from 'node:path';
 import { isSeed, rerunHint } from './seeded-random.js';
 
 export const SCENARIO_RESULTS_VARIABLE = 'TASKELITH_SCENARIO_RESULTS';
+// The commit a run without the repository's git metadata names, such as a
+// test container's; the script that starts it reads it from git.
+export const SCENARIO_COMMIT_VARIABLE = 'TASKELITH_SCENARIO_COMMIT';
+const COMMIT = /^[0-9a-f]{40}$/;
 
 // Real modules against make services; the item 23 Compose installation;
 // node:test suites on the host; and the suites in a Linux test container.
@@ -145,6 +149,11 @@ export function scenarioResult(run: ScenarioRun, environment: RunEnvironment, re
 }
 
 function headCommit({ cwd, env }: RunEnvironmentOptions): string {
+  const named = (env ?? process.env)[SCENARIO_COMMIT_VARIABLE];
+  if (named !== undefined && named !== '') {
+    if (!COMMIT.test(named)) throw new RangeError(`${SCENARIO_COMMIT_VARIABLE} must be a full commit hash, got "${named}"`);
+    return named;
+  }
   try {
     const output = execFileSync('git', ['rev-parse', 'HEAD'], { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
     return output.trim();

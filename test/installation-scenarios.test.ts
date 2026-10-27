@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { FILE_SYSTEM_PROBE } from '../scripts/native-acceptance.ts';
 
 // The failure and lifecycle scenarios of installation-scenarios.sh against
 // stubbed compose, docker, and psql: the worker's state lives in a file.
@@ -494,4 +495,46 @@ test('a native worker that does not exit 0 on SIGTERM fails the lifecycle', () =
   assert.equal(run.status, 1);
   assert.match(run.stderr, /the native worker's exit status: expected '0', got '1'/);
   assert.equal(run.records, 'failed: failed while stopping the native worker\n');
+});
+
+// The worker container of the platform row: findmnt and stat are stubs that
+// answer what a container on an ext4 volume answers.
+const PLATFORM_STUBS = `
+stub_bin="$(mktemp -d)"
+trap 'rm -rf "$stub_bin"' EXIT
+printf '#!/bin/sh\\n%s\\n' "\${FINDMNT:-echo ext4}" > "$stub_bin/findmnt"
+printf '#!/bin/sh\\necho ext2/ext3\\n' > "$stub_bin/stat"
+chmod +x "$stub_bin/findmnt" "$stub_bin/stat"
+worker_exec() { PATH="$stub_bin:$PATH" "$@"; }
+docker() {
+  case "$1" in
+    info) echo 'Ubuntu 24.04.3 LTS|6.8.0-147-generic|x86_64|29.6.1|overlay2' ;;
+    image) echo sha256:feed ;;
+    compose) echo 5.2.0 ;;
+  esac
+}
+worker_image=taskelith-worker:test
+`;
+
+test('the platform row names the type of the worker data root mount', () => {
+  const run = bash(`${PLATFORM_STUBS}\nplatform`);
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /; file system ext4 \(worker data root\), storage driver overlay2;/);
+});
+
+test('the platform row falls back to stat when findmnt fails', () => {
+  const run = bash(`FINDMNT='exit 1'\n${PLATFORM_STUBS}\nplatform`);
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /; file system ext2\/ext3 \(worker data root\),/);
+});
+
+test('the platform row probes the file system as the native acceptance does', () => {
+  const run = bash('printf %s "$FILE_SYSTEM_PROBE"');
+  assert.equal(run.stdout, FILE_SYSTEM_PROBE);
+});
+
+test('the native worker volume names the type of its Linux mount', () => {
+  const run = bash(`${PLATFORM_STUBS}\nPATH="$stub_bin:/usr/bin:/bin" volume_of /`);
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /^ext4 at '\/' with \d+ GiB free$/m);
 });
