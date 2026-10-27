@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:taskelith:review-checklist",
+  "title": "Taskelith review checklist record",
+  "description": "An OpenSpec change's checklist.json: the review checklist of its brief, written by npm run findings -- checklist ... --save <change> before the first review pass. npm run findings -- effect compares the change's pass-1 findings with it. Unknown properties are rejected.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["change", "generatedAt", "devCommit", "query", "review", "recordQuality"],
+  "properties": {
+    "change": { "$ref": "urn:taskelith:review-finding#/properties/change" },
+    "generatedAt": {
+      "description": "UTC time of the generation, as JavaScript's Date.prototype.toISOString writes it.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "devCommit": {
+      "description": "Full SHA of the dev commit whose archived findings the checklist ranks: the merge base of HEAD and origin/dev.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "query": {
+      "description": "The arguments of the brief's checklist invocation.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilities", "files", "top"],
+      "properties": {
+        "capabilities": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "$ref": "urn:taskelith:review-finding#/$defs/identifier" }
+        },
+        "files": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "$ref": "urn:taskelith:review-finding#/$defs/text" }
+        },
+        "top": { "type": "integer", "minimum": 1, "maximum": 10 }
+      }
+    },
+    "size": {
+      "description": "Task size as the brief gives it; npm run findings -- effect weighs S 1, S-M 1.5, M 2, M-L 2.5, and L 3 size points.",
+      "type": "string",
+      "enum": ["S", "S-M", "M", "M-L", "L"]
+    },
+    "review": {
+      "description": "The review checklist section, whose baseline counts the archived findings outside openspec/changes/ that match the query.",
+      "$ref": "#/$defs/section"
+    },
+    "recordQuality": {
+      "description": "The record quality section, whose baseline counts the archived findings under openspec/changes/.",
+      "$ref": "#/$defs/section"
+    }
+  },
+  "$defs": {
+    "section": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["categories", "baseline"],
+      "properties": {
+        "categories": {
+          "description": "The ranked categories, most frequent first, with their counts.",
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["category", "count"],
+            "properties": {
+              "category": { "$ref": "urn:taskelith:review-finding#/properties/category" },
+              "count": { "$ref": "#/$defs/count" }
+            }
+          }
+        },
+        "baseline": {
+          "description": "The archived findings of the section's population, all and Medium or worse, and how many of them have a listed category.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["all", "mediumOrWorse"],
+          "properties": {
+            "all": { "$ref": "#/$defs/share" },
+            "mediumOrWorse": { "$ref": "#/$defs/share" }
+          }
+        }
+      }
+    },
+    "share": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["findings", "inChecklist"],
+      "properties": {
+        "findings": { "$ref": "#/$defs/count" },
+        "inChecklist": { "$ref": "#/$defs/count" }
+      }
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 999999
+    }
+  }
+}
