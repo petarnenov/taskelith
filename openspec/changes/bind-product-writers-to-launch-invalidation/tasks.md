@@ -15,7 +15,7 @@
 
 - [x] 3.1 `npm run openspec -- validate bind-product-writers-to-launch-invalidation --strict` and the checks of `make verify` that need no Docker
 - [x] 3.2 Record `verification.md`
-- [ ] 3.3 `make verify` in a Docker slot
+- [x] 3.3 `make verify` in a Docker slot
 
 ## 4. Review and archive
 

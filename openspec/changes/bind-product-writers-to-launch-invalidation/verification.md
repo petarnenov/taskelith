@@ -6,11 +6,11 @@ G3 item 0 follow-up for item 8 (`define-product-ports`), size M, assigned by the
 
 ## Revision
 
-Branch `bind-product-writers-to-launch-invalidation`, created from `origin/dev` at `9b0e6fd9` (#364). The checks below ran on the working tree of the change's first commit.
+Branch `bind-product-writers-to-launch-invalidation`, created from `origin/dev` at `9b0e6fd9` (#364); its first commit `947502be` then merged `origin/dev` at `b87abe75` (#365), which brought only the archive of `recheck-provider-terms-pages` and changed none of the change's inputs. The individual checks below ran on the working tree of `947502be`; `make verify` ran on the merge commit `4a502431`.
 
 ## Environment
 
-macOS (Darwin 25.6.0), Node.js v24.22.1 and npm 12.2.1 from `.nvmrc`. No Docker was used.
+macOS (Darwin 25.6.0), Node.js v24.22.1 and npm 12.2.1 from `.nvmrc`. Docker Desktop for the services of `make verify`, in a slot the coordinator granted.
 
 ## Author self-check
 
@@ -32,7 +32,7 @@ macOS (Darwin 25.6.0), Node.js v24.22.1 and npm 12.2.1 from `.nvmrc`. No Docker 
 | `npm run verify:links` | `Every checked link conforms.` |
 | `npm run verify:archive` | `Every active OpenSpec change archives into strictly valid specs.` |
 | `npm run verify:package` | After `npm run build`: `Packed file allowlist and installed CLI verification passed.` (without a build it fails on the missing `dist/cli.js`, which `make test` builds) |
-| `make verify` | Not run: its `test` step starts PostgreSQL, NATS, and Toxiproxy through `scripts/services.sh`, which needs Docker, and this run used no Docker. The other steps of `verify-checks` ran individually above |
+| `make verify` on `4a502431` | Exit 0; tests 2289, pass 2286, fail 0, skipped 3; `Packed file allowlist and installed CLI verification passed.` |
 
 ## Review
 
@@ -43,12 +43,10 @@ macOS (Darwin 25.6.0), Node.js v24.22.1 and npm 12.2.1 from `.nvmrc`. No Docker 
 ## Limitations
 
 - Documentation and specification only; the race tests are obligations on items 18, 22, 23, and 24, not run here.
-- `make verify` as a whole and `make test` did not run (no Docker).
 - The comparison of policy revisions remains with `align-product-ports-with-g2-lifecycle`; the standing rule use transaction refers to "the run's current policy revision" without defining it.
 
 ## Remaining gates
 
-- `make verify` in a Docker slot.
 - Independent review passes 1 to 3.
 - Archive of the change.
 - Integration into dev by the coordinator (single pull request)
