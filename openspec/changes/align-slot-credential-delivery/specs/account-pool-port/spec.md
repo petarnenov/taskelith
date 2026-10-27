@@ -24,7 +24,7 @@ Revoking a slot SHALL take it out of every pool and stop revealing its credentia
 - **THEN** the removal succeeds and destroys the credential, and the reservation stays held until the execution's terminal fact
 
 ### Requirement: Redacted slot credentials
-`SlotCredentials` SHALL store each slot credential encrypted under a new version it never replaces, and reveal the slot record's version only to deliver it to the reserving run; the delivery, not `SlotCredentials`, SHALL check that the reservation is held, names the slot, and belongs to the launched attempt, and that the slot is active; destroying SHALL remove every version and any later store, and succeed when none exists; a `SlotSecret` SHALL disclose its text only through `reveal()`.
+`SlotCredentials` SHALL store each credential encrypted under a new version it assigns and never replaces, and reveal the record's version only to deliver it to the reserving run; the delivery, not `SlotCredentials`, SHALL check that the reservation is held, names the slot, and belongs to the launched attempt, and that the slot is active; destroying SHALL remove every version and any later store, and succeed when none exists; a `SlotSecret` SHALL disclose its text only through `reveal()`.
 
 #### Scenario: Credential for another attempt
 - **WHEN** a worker launches an attempt whose reservation does not name the slot
@@ -52,7 +52,7 @@ A slot's credential SHALL be delivered only through a delivery admitted for the 
 - **THEN** the command fails with `invalid` and no slot or credential is stored
 
 ### Requirement: Credential rotation only on an unreserved revoked slot
-A rotation SHALL store the new credential under a new version and then, in one capacity transaction, switch the slot record to it by compare-and-set only while the slot is revoked, no held reservation names it, and its version is still the one the rotation read; otherwise it SHALL fail with `conflict` and discard the new version, so that every delivery to a run, a re-delivery included, reveals the credential that the run started with.
+A rotation SHALL store the new credential under a new version and then, in one capacity transaction, switch the slot record to it by compare-and-set only while the slot is revoked, no held reservation names it, and its version is still the one the rotation read; otherwise it SHALL fail with `conflict` and leave the new version unnamed, so that every delivery to a run, a re-delivery included, reveals the credential that the run started with.
 
 #### Scenario: Rotation while reserved
 - **WHEN** an operator rotates the credential of a revoked slot that a held reservation still names
@@ -64,26 +64,34 @@ A rotation SHALL store the new credential under a new version and then, in one c
 
 #### Scenario: Reinstatement during a rotation
 - **WHEN** a revoked slot is reinstated after a rotation stored its new credential but before the rotation switched to it
-- **THEN** the rotation fails with `conflict`, its new version is discarded, and every delivery reveals the old credential
+- **THEN** the rotation fails with `conflict`, no record names its new version, and every delivery reveals the old credential
 
 #### Scenario: Removal during a rotation
 - **WHEN** a revoked slot is removed while a rotation stores its new credential
 - **THEN** the rotation fails with `conflict`, and no version of the slot's credential is kept
 
 ### Requirement: Superseded credential versions discarded
-A rotation SHALL keep no superseded credential: after its switch commits, it SHALL discard, through `SlotCredentials.discardAllExcept`, the replaced version and every version that an earlier failed or stopped rotation left, and then advance the slot's revision, so that a concurrent rotation whose version was discarded fails its switch with `conflict`; `discardAllExcept` SHALL keep the named version, later stores, and other slots' versions, and succeed when nothing is stored.
+`SlotCredentials.store` SHALL assign a slot's versions from a stored per-slot counter, strictly increasing and never reused, even after a discard or destroy. After its switch commits, a rotation SHALL call `discardOlderThan` with its own version, which destroys only the slot's lower versions, and then advance the slot's revision; a rotation whose switch fails SHALL leave its version, which a later successful rotation with a higher version discards.
 
 #### Scenario: Superseded version discarded
-- **WHEN** a rotation switches a slot to its new version
-- **THEN** the replaced version is discarded and only the new version can be revealed
+- **WHEN** a rotation switches a slot to its new version after an earlier rotation crashed or failed and left a lower version
+- **THEN** the replaced version and the lower orphan are discarded, and the new version can be revealed
 
-#### Scenario: Orphaned version discarded on recovery
-- **WHEN** an operator rotates a slot again after an earlier rotation stored a version and then crashed or failed with `conflict`
-- **THEN** after the switch the earlier rotation's version is discarded, and no version other than the new one can be revealed
+#### Scenario: Cleanup after a later rotation
+- **WHEN** rotation A switches a slot to its version, and rotation B then stores and switches before A's cleanup runs
+- **THEN** A's cleanup keeps B's version, and the slot's credential can still be delivered
 
-#### Scenario: Rotation racing the discard
-- **WHEN** a rotation stores its version before another rotation's discard removes it
-- **THEN** its switch fails with `conflict`, and the slot keeps naming a stored version
+#### Scenario: Rotations that read the same revision
+- **WHEN** two rotations read the same revision of a slot and both store a version
+- **THEN** the first switch wins, the other fails with `conflict`, and the record never names a discarded version
+
+#### Scenario: Orphan newer than the current version
+- **WHEN** a failed rotation left a version higher than the slot's current one, and a later rotation stores after it and switches
+- **THEN** the later rotation's cleanup discards the orphan
+
+#### Scenario: Version never reused
+- **WHEN** a slot's highest version is discarded, or its credential destroyed, and a credential is stored for it again
+- **THEN** the new version is higher than every earlier version of the slot
 
 ### Requirement: Credential kept out of worker records
 A delivered slot credential SHALL be held only in the worker host's memory for the execution it was delivered to, and SHALL never enter the worker journal, a launch authorization grant, `worker/executions/<executionId>/`, `worker/logs/`, or the local outbox; every execution after its W3 commit, a recovered or adopted one included, SHALL request it again through a new delivery with the delivery's checks.
