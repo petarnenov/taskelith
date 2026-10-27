@@ -98,6 +98,25 @@ async function createSecondRun(): Promise<void> {
   value(await new RunService(database, new WorkflowRegistry([{ definition, digest: DIGEST }])).createRun({ runId: 'run-2', projectId: 'project-2', binding }));
 }
 
+// Two slots; task-1 and task-2 wait in project-1, task-3 in project-2.
+async function submitTwoProjects(): Promise<void> {
+  await enroll('worker-a', { slots: 2 });
+  await createSecondRun();
+  await submit('task-1');
+  await submit('task-2');
+  await submit('task-3', 'run-2');
+}
+
+// Sets the column the placement queue orders by, independent of the clock.
+async function waitingSince(taskId: string, at: string): Promise<void> {
+  await sql('UPDATE tasks SET placement_waiting_since = $2 WHERE id = $1', [taskId, at]);
+}
+
+async function placedTasks(): Promise<string[]> {
+  const rows = await sql<{ task_id: string }>('SELECT task_id FROM assignments ORDER BY task_id');
+  return rows.map((row) => row.task_id);
+}
+
 async function stored(taskId: string): Promise<Task> {
   return value(await database.transaction((tx) => tx.tasks.get(taskId as TaskId)));
 }
@@ -224,14 +243,21 @@ describe('placement', () => {
   });
 
   test('tasks are placed in fair order across projects', async () => {
-    await enroll('worker-a', { slots: 2 });
-    await createSecondRun();
-    await submit('task-1');
-    await submit('task-2');
-    await submit('task-3', 'run-2');
+    await submitTwoProjects();
+    await waitingSince('task-1', '2026-10-25T09:00:00.000Z');
+    await waitingSince('task-2', '2026-10-25T09:00:01.000Z');
+    await waitingSince('task-3', '2026-10-25T09:00:02.000Z');
     assert.deepEqual(value(await placement.placeWaiting()), { waiting: 3, placed: 2 });
-    const placed = await sql<{ task_id: string }>('SELECT task_id FROM assignments ORDER BY task_id');
-    assert.deepEqual(placed.map((row) => row.task_id), ['task-1', 'task-3'], 'project-2 is served before project-1 again');
+    assert.deepEqual(await placedTasks(), ['task-1', 'task-3'], 'project-2 is served before project-1 again');
+  });
+
+  test('within a project the task waiting longest is placed, not the first submitted', async () => {
+    await submitTwoProjects();
+    await waitingSince('task-1', '2026-10-25T09:00:01.000Z');
+    await waitingSince('task-2', '2026-10-25T09:00:00.000Z');
+    await waitingSince('task-3', '2026-10-25T09:00:02.000Z');
+    assert.deepEqual(value(await placement.placeWaiting()), { waiting: 3, placed: 2 });
+    assert.deepEqual(await placedTasks(), ['task-2', 'task-3']);
   });
 
   test('a full batch of one project\'s older blocked tasks does not hide another project\'s task', async () => {
