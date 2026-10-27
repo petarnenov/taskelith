@@ -10,6 +10,7 @@ import {
 import { err, failure, ok, parseIdentifier, parseInstant, type Result } from '@taskelith/kernel';
 import { parseArtifactRevision, parseGeneration, parseOwnershipGeneration, type ArtifactRevision } from '@taskelith/sdlc';
 import { postJson, statusFailure, type ControlPlaneEndpoint } from './control-plane-http.js';
+import { sanitizeFailureText } from './failure-cause.js';
 
 export interface ControlPlaneClientSettings extends ControlPlaneEndpoint {
   // The control-plane secret of the worker's current credential generation.
@@ -31,7 +32,7 @@ export class HttpLaunchAuthorityClient implements LaunchAuthorityClient {
     const { status, body } = answered.value;
     if (status !== 200) return err(statusFailure('authorizeLaunch', answered.value));
     const checked = checkHttpSchema('LaunchAuthorizationOutcome', body);
-    if (!checked.ok) return err(failure('internal', 'the launch outcome violates its schema', { violation: checked.error[0] ?? '' }));
+    if (!checked.ok) return err(failure('internal', 'the launch outcome violates its schema', { violation: sanitizeFailureText(checked.error[0] ?? '') }));
     const outcome = parseOutcome(body as HttpSchemas['LaunchAuthorizationOutcome']);
     if (!outcome.ok) return err(failure('internal', `the launch outcome is not valid: ${outcome.error.message}`));
     if (outcome.value.kind === 'granted' && !bindsRequest(outcome.value.grant, request)) {

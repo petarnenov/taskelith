@@ -1,4 +1,5 @@
 import { err, failure, ok, type Failure, type FailureCode, type Result } from '@taskelith/kernel';
+import { describeFailureCause, sanitizeFailureText } from './failure-cause.js';
 
 // Where the control-plane API is and how long one call may take.
 export interface ControlPlaneEndpoint {
@@ -36,8 +37,7 @@ async function post(endpoint: ControlPlaneEndpoint, path: string, headers: Recor
     return ok({ status: response.status, body: await response.json().catch(() => undefined) });
   } catch (error) {
     // The request may have reached a decision, which a retry replays.
-    const cause = error instanceof Error ? error.name : 'unknown';
-    return err(failure('unavailable', 'the control plane did not answer', { cause }));
+    return err(failure('unavailable', 'the control plane did not answer', describeFailureCause(error)));
   }
 }
 
@@ -48,13 +48,13 @@ const STATUS_CODES: ReadonlyMap<number, FailureCode> = new Map([
   [502, 'unavailable'], [503, 'unavailable'], [504, 'unavailable'],
 ]);
 
-// The failure of a non-success answer, with the server's reason if it gave
-// one; never the request's secrets.
+// The failure of a non-success answer, with the server's bounded and
+// sanitized message and reason; never the request's secrets.
 export function statusFailure(operation: string, answer: HttpAnswer): Failure {
   const { message, details } = (answer.body ?? {}) as { message?: unknown; details?: { reason?: unknown } };
-  const text = typeof message === 'string' && message !== '' ? `: ${message}` : '';
+  const text = typeof message === 'string' && message !== '' ? `: ${sanitizeFailureText(message)}` : '';
   const found: Record<string, string> = { status: String(answer.status) };
-  if (typeof details?.reason === 'string') found.reason = details.reason;
+  if (typeof details?.reason === 'string') found.reason = sanitizeFailureText(details.reason);
   const code = STATUS_CODES.get(answer.status) ?? 'internal';
   return failure(code, `${operation} answered ${answer.status}${text}`, found);
 }
