@@ -1,0 +1,85 @@
+# Verification: stabilize-workspace-handoff-race-conformance
+
+## Scope and source
+
+Assigned on 2026-10-27 by the coordinator to the worker session Maki. Source: `packages/modules/workspace/test/workspace-conformance.test.ts:76`, "a provider that races two concurrent hand-offs fails the suite", added in #359 (`align-git-workspace-with-execution-boundary`), failed 3 of 4 `make verify` runs at a load average of about 10 to 12 on an Apple M3 and passed alone. Base revision: `b87abe75` on `dev`. Prepared in the git worktree `../taskelith-worktrees/stabilize-workspace-handoff-race-conformance` on branch `stabilize-workspace-handoff-race-conformance`; the fix is commit `cd2abc0c`. Scope: the test double `packages/modules/workspace/test/temp-dir-workspaces.ts` and this change. No product code, conformance case, or requirement changes, so `.openspec.yaml` sets `skip_specs: true`. Commit types `test` and `docs`; the package is private.
+
+## Environment
+
+Apple M3 (8 CPUs), macOS 26.6.2 (Darwin 25.6.0, arm64), Node.js v24.22.1. The host also ran other sessions' work, so the load averages below include load that the runs did not start.
+
+## Author self-check
+
+- Against the requirement "One handed-off workspace per Linux worker", scenario "Concurrent hand-offs": the conformance case still expects exactly one of two concurrent hand-offs to succeed; the double with `racesHandOff` now lets both succeed every time, so the test proves that the case detects that race. The conforming double keeps the per-root chain and passes the case.
+- Against "Workspace conformance suite": every other case keeps its expected result with each defect; the defect list in the test file is unchanged.
+- Against the brief: the root cause is a scheduling assumption of the double, reproduced without load; the fix uses a barrier, not a sleep or a wider bound; mutation checks M1 and M2 show the test still fails against a double that does not race and against a case that does not count.
+- Comments: the two new comments and the moved one are within the comment length rule (`npm run verify:comments`).
+- Evidence check: no external link; each number below comes from the command named next to it. Logs and scripts of the load runs were kept in the session's scratch directory, outside the repository.
+
+## Diagnosis
+
+See `design.md`. Observed failure under load: `Expected values to be strictly deep-equal`, actual `[]`, expected `['lets one of two concurrent hand-offs through where executions share a separate account']`, at `workspace-conformance.test.ts:76:3`. The old double ran the racy hand-offs without any ordering, so under load one hand-off often wrote its record before the other checked, and the case correctly saw one success.
+
+## Checks
+
+### Deterministic perturbation
+
+Not committed. In a copy of the double, this line delays the check of the second attempt by 20 ms:
+
+```ts
+if (attemptId === 'attempt-2') await new Promise((r) => setTimeout(r, 20));
+```
+
+Before the fix it was inserted as the first line of `handOffAlone`, guarded by `this.defects.racesHandOff &&`; after the fix, right before `const mustWait = await this.mustWait(attemptId);` in `racingHandOff`. Without artificial load, 5 runs each of `node --experimental-strip-types --test --test-name-pattern='races two concurrent' packages/modules/workspace/test/workspace-conformance.test.ts`: before the fix 5 of 5 failed with the observed assertion; after the fix 5 of 5 passed.
+
+### Mutation checks (fail-before)
+
+Not committed; each was reverted after its run.
+
+- **M1, barrier off.** On the fixed double with the perturbation, `arrive` resolved at once (`return Promise.resolve();` instead of the `inFlight === 0` test): 3 of 3 runs of the race test failed with the observed assertion. The barrier is what makes the race happen.
+- **M2, case does not count.** On the fixed double, the line `expectSame(problems, 'concurrent hand-offs that succeed', …, 1)` in the built `packages/modules/workspace/dist/ports/workspace-conformance.js` was replaced by a comment: the race test failed (actual `[]`), while the conforming test of that case passed. The test still fails when the case stops detecting two successes. The built file was restored.
+
+### Runs under artificial load
+
+Runner: 8 `yes > /dev/null` processes, then N runs of the race test file, 8 at a time, each run its own process. In substance the runner was the following; the actual script also used the TAP reporter and recorded each exit code:
+
+```sh
+for i in $(seq 1 8); do yes > /dev/null & done
+seq 1 "$N" | xargs -P 8 -n 1 sh -c 'node --experimental-strip-types --test \
+  --test-name-pattern="races two concurrent" \
+  packages/modules/workspace/test/workspace-conformance.test.ts > "$0.log" 2>&1'
+```
+
+Load averages (1, 5, 15 minutes) are `sysctl -n vm.loadavg` before and after each series.
+
+| Double | Perturbation | Runs | Passed | Failed | Load before | Load after |
+|---|---|---|---|---|---|---|
+| before the fix (first series) | no | 40 | 37 | 3 | 17.44 9.16 7.30 | 19.97 9.83 7.55 |
+| before the fix | no | 60 | 58 | 2 | 20.54 13.65 9.41 | 21.38 14.06 9.60 |
+| before the fix | yes | 30 | 0 | 30 | 21.27 14.16 9.66 | 22.60 14.55 9.83 |
+| after the fix | no | 60 | 60 | 0 | 22.32 14.62 9.88 | 23.46 15.12 10.11 |
+| after the fix | yes | 30 | 30 | 0 | 23.34 15.23 10.18 | 23.55 15.41 10.27 |
+
+Every failure printed the observed assertion. All `yes` processes were stopped afterwards; `pgrep -fl yes` printed nothing.
+
+### Other checks
+
+- `node --experimental-strip-types --test packages/modules/workspace/test/*.test.ts` on `cd2abc0c`: 69 tests, 68 passed, 0 failed, 1 skipped ("the clone writes into a checkout that is set-group-ID already", skipped on this host).
+- `npx tsc -p tsconfig.check.json`: no errors.
+- `npm run verify:comments`: every comment is within the rule.
+- `npm run openspec -- validate stabilize-workspace-handoff-race-conformance --strict`: valid.
+
+## Independent review
+
+None yet.
+
+## Limitations
+
+- The conformance case detects a real adapter's race only probabilistically: it starts two hand-offs together and can see a race only if it happens during the run. That is correct for a black-box conformance check and is not a product gap; this change only makes the double's race certain.
+- The original failure was observed in `make verify` runs; it was reproduced here with the race test alone under artificial load and with the forced delay, not in full `make verify` runs.
+
+## Remaining gates
+
+- Independent review (reviewers assigned by the coordinator).
+- Archive of the change after the review.
+- Integration into dev by the coordinator (single pull request).
