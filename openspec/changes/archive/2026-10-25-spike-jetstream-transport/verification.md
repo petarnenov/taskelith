@@ -51,7 +51,7 @@ Assigned reviewer: Codex CLI, `codex exec -m gpt-6.1-sol -c model_reasoning_effo
   3. Low: some behaviors listed as not measured named no owning item. Each entry now names its item or gate; TLS is recorded as named by no G2 item.
   4. Low: the reproduction instruction bypassed the Makefile (ADR 0004 principle 7). It now names `make test` and `make verify` only.
 
-By the [review process](../../../docs/governance.md#independent-review-process), a pass with only Low findings is fixed without another review; the pass-3 fixes are **unreviewed**. After them, `make verify` passed again (see Checks).
+By the [review process](/docs/governance.md#independent-review-process), a pass with only Low findings is fixed without another review; the pass-3 fixes are **unreviewed**. After them, `make verify` passed again (see Checks).
 
 ## Limitations
 

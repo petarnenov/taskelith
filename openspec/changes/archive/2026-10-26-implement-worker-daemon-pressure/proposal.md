@@ -1,6 +1,6 @@
 ## Why
 
-[G2 work plan](../../../docs/g2-plan.md) item 20 builds the worker application, split by the coordinator into changes; this is 20e2, named in the Non-Goals of the archived `implement-worker-admission-pressure` design (20e). The worker reports admission pressure for its disk floor and journal backlog, but not for its own overhead, and a journal write refused for lack of space (`SQLITE_FULL`) neither sheds the buffered logs nor retries an execution fact: the watch of that execution ends until the next start. The [capacity reservation contract](../../../docs/contracts/capacity-reservation.md) section 8 ("Daemon overhead") and the [worker journal contract](../../../docs/contracts/worker-journal.md) section 7 ("Full disk") require both.
+[G2 work plan](/docs/g2-plan.md) item 20 builds the worker application, split by the coordinator into changes; this is 20e2, named in the Non-Goals of the archived `implement-worker-admission-pressure` design (20e). The worker reports admission pressure for its disk floor and journal backlog, but not for its own overhead, and a journal write refused for lack of space (`SQLITE_FULL`) neither sheds the buffered logs nor retries an execution fact: the watch of that execution ends until the next start. The [capacity reservation contract](/docs/contracts/capacity-reservation.md) section 8 ("Daemon overhead") and the [worker journal contract](/docs/contracts/worker-journal.md) section 7 ("Full disk") require both.
 
 ## What Changes
 

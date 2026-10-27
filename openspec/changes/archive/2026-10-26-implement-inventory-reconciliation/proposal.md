@@ -1,16 +1,16 @@
 ## Why
 
-G2 work item 21 ([docs/g2-plan.md](../../../docs/g2-plan.md), row 21, `implement-execution-reconciliation`) is the control-plane execution service. On 2026-10-25 the coordinator split it into four changes, each merged and archived before the next: 21a `implement-execution-placement` (archived), 21b `implement-observation-consumption` (archived), 21c `implement-inventory-reconciliation` (this change), and 21d `wire-launch-authority-reconciliation`.
+G2 work item 21 ([docs/g2-plan.md](/docs/g2-plan.md), row 21, `implement-execution-reconciliation`) is the control-plane execution service. On 2026-10-25 the coordinator split it into four changes, each merged and archived before the next: 21a `implement-execution-placement` (archived), 21b `implement-observation-consumption` (archived), 21c `implement-inventory-reconciliation` (this change), and 21d `wire-launch-authority-reconciliation`.
 
 Before this change the control plane quarantined every inventory report, every observation of uncertainty, unproven termination, unrecorded processes, and unapplied cancellation, and every observation whose sequence is a `rollback` or a `new-incarnation`. It never asked a worker for its inventory, and a worker that lost its journal stayed refused forever, with its unfinished assignments neither re-sent nor reconciled.
 
 Obligations this change meets:
-- item 8, wire contracts section 6 ([execution-wire-contracts.md](../../../docs/contracts/execution-wire-contracts.md) lines 74-84):
+- item 8, wire contracts section 6 ([execution-wire-contracts.md](/docs/contracts/execution-wire-contracts.md) lines 74-84):
   - `worker.inventory.requested` with a fresh `requestId`, the latest one kept per worker, and its bound (lines 79-80);
   - applying a snapshot only when every part and every observation through `throughSequence` arrived, the lower-`snapshot` filter, and the exemption of a fresh snapshot until its rollback check (line 76);
   - the meaning of an omission, and re-sending an offer with the same `commandId` only while no grant is recorded (lines 77-78);
   - the rollback check of a fresh snapshot (lines 81-84);
-- item 14, worker journal contract ([worker-journal.md](../../../docs/contracts/worker-journal.md)):
+- item 14, worker journal contract ([worker-journal.md](/docs/contracts/worker-journal.md)):
   - the control plane keeps the latest `journalId` per worker (line 145);
   - the sequence check and the inventory reconciliation (lines 160-161);
   - the disk-loss handling at the control plane, with the retry budget `0` for uncertain execution (lines 184-185);

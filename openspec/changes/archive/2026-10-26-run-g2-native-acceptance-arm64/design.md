@@ -1,6 +1,6 @@
 ## Context
 
-The [native acceptance gates](../../../docs/worker-platforms.md#native-acceptance-gates) list seven rows; G2 owns process ownership, journal and storage, cancellation, the G2 part of connectivity, and the G2 part of service lifecycle (install, start, stop, and restart of the worker with its persistent volume and dedicated account, [G2 plan](../../../docs/g2-plan.md) item 25). Resource budgets and real integrations belong to later gates. D11 (a) selects all four matrix entries. Items 24a, 24b, and 25a already proved parts of these rows on single hosts and recorded them through the harness's scenario recorder, but no record names the matrix entry or the row, the macOS-only crash windows have never been tied to the macOS entry, and `make verify-linux-cgroup` refused arm64.
+The [native acceptance gates](/docs/worker-platforms.md#native-acceptance-gates) list seven rows; G2 owns process ownership, journal and storage, cancellation, the G2 part of connectivity, and the G2 part of service lifecycle (install, start, stop, and restart of the worker with its persistent volume and dedicated account, [G2 plan](/docs/g2-plan.md) item 25). Resource budgets and real integrations belong to later gates. D11 (a) selects all four matrix entries. Items 24a, 24b, and 25a already proved parts of these rows on single hosts and recorded them through the harness's scenario recorder, but no record names the matrix entry or the row, the macOS-only crash windows have never been tied to the macOS entry, and `make verify-linux-cgroup` refused arm64.
 
 ## Decisions
 

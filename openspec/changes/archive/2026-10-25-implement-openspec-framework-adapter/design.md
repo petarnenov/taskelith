@@ -1,6 +1,6 @@
 ## Context
 
-The draft port (item 6) defines plain request and result shapes, and its conformance suite checks a plugin at run time. Item 8 added `registerPlugin`, which admits a plugin manifest for a port the host offers. Item 10 added the fixture working copy, the expected outputs as conformance cases, and the normalization rules in `packages/plugins/sdlc-openspec/fixtures/README.md`. [Contract tooling section 9](../../../docs/contract-tooling.md#9-openspec-json-output-for-the-adapter-d6) lists the confirmed `--json` outputs of the pinned CLI. The boundary check lets plugin source import only the kernel, plugin SDK, and contracts packages.
+The draft port (item 6) defines plain request and result shapes, and its conformance suite checks a plugin at run time. Item 8 added `registerPlugin`, which admits a plugin manifest for a port the host offers. Item 10 added the fixture working copy, the expected outputs as conformance cases, and the normalization rules in `packages/plugins/sdlc-openspec/fixtures/README.md`. [Contract tooling section 9](/docs/contract-tooling.md#9-openspec-json-output-for-the-adapter-d6) lists the confirmed `--json` outputs of the pinned CLI. The boundary check lets plugin source import only the kernel, plugin SDK, and contracts packages.
 
 ## Goals / Non-Goals
 

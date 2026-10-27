@@ -1,6 +1,6 @@
 ## Why
 
-G1 item 12 in the [G1 work plan](../../../docs/g1-plan.md): run the shared fixtures against both framework designs, revise the draft `SdlcFramework` port where they show a framework-specific or unstable shape, and freeze it as semantic version 1 (owner decision D7 (a)). Items 10 (the fixtures) and 11 (the OpenSpec adapter) are merged. The coordinating session Niki assigned the task with the owner's 2026-10-25 decision on port access: the plugin SDK re-exports the frozen port's types type-only.
+G1 item 12 in the [G1 work plan](/docs/g1-plan.md): run the shared fixtures against both framework designs, revise the draft `SdlcFramework` port where they show a framework-specific or unstable shape, and freeze it as semantic version 1 (owner decision D7 (a)). Items 10 (the fixtures) and 11 (the OpenSpec adapter) are merged. The coordinating session Niki assigned the task with the owner's 2026-10-25 decision on port access: the plugin SDK re-exports the frozen port's types type-only.
 
 ## What Changes
 

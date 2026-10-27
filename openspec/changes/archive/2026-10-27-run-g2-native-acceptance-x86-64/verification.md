@@ -4,7 +4,7 @@ Date: 2026-10-26, updated 2026-10-27. This record holds the setup and preflight,
 
 ## Scope and source
 
-G2 work item 25, part 25c, `run-g2-native-acceptance-x86_64`, assigned by the coordinating session and developed in a briefed subagent ([subagent execution](../../../docs/agent-task-protocol.md#subagent-execution)). OpenSpec refuses underscores in change names, so the change is `run-g2-native-acceptance-x86-64` on the branch `run-g2-native-acceptance-x86_64`. Sources: [docs/g2-plan.md](../../../docs/g2-plan.md) item 25 and D11; [docs/worker-platforms.md](../../../docs/worker-platforms.md#native-acceptance-gates) "Native acceptance gates"; the archive of 25b ([run-g2-native-acceptance-arm64](../archive/2026-10-26-run-g2-native-acceptance-arm64/design.md)), whose runner this change runs unchanged except for the build before the seed (design decision 6).
+G2 work item 25, part 25c, `run-g2-native-acceptance-x86_64`, assigned by the coordinating session and developed in a briefed subagent ([subagent execution](/docs/agent-task-protocol.md#subagent-execution)). OpenSpec refuses underscores in change names, so the change is `run-g2-native-acceptance-x86-64` on the branch `run-g2-native-acceptance-x86_64`. Sources: [docs/g2-plan.md](/docs/g2-plan.md) item 25 and D11; [docs/worker-platforms.md](/docs/worker-platforms.md#native-acceptance-gates) "Native acceptance gates"; the archive of 25b ([run-g2-native-acceptance-arm64](/openspec/changes/archive/2026-10-26-run-g2-native-acceptance-arm64/design.md)), whose runner this change runs unchanged except for the build before the seed (design decision 6).
 
 - **In scope:** the x86_64 evidence of `macos-26-x86_64` (natively) and `linux-ubuntu-24.04-x86_64` (worker image and its base under Docker Desktop for x86_64), the acceptance table ([acceptance.md](acceptance.md)), and the x86_64 observations in the platform documents.
 - **In-scope fix:** the runner builds the checkout before its seed (design decision 6), assigned by the coordinator after the preflight found the failure; the seccomp line of `docs/local-installation.md` cites 25a's x86_64 evidence.
@@ -119,7 +119,7 @@ State checked: the tree of the archive commit `docs: archive the G2 native accep
 | L2 | Low | `verification.md:18`: the dev-changed inputs omit `apps/control-plane/src/api/api-server.ts` (PR #317), which the crash-window proofs exercise | Added. Checked in pass 2 |
 | L3 | Low | `design.md:5`: 24c is said to be absent only at the base `843e293` | Also absent at the merged `1847570`: no `run-g2-partition-and-races` change is active or archived there. Checked in pass 2 |
 
-The four findings are also recorded in [findings.jsonl](findings.jsonl), the [review findings record](../../../docs/agent-task-protocol.md#review-findings-record), first with the outcome `fixed-unreviewed` and, after pass 2 confirmed them, `fixed`; `npm run findings -- validate` passes.
+The four findings are also recorded in [findings.jsonl](findings.jsonl), the [review findings record](/docs/agent-task-protocol.md#review-findings-record), first with the outcome `fixed-unreviewed` and, after pass 2 confirmed them, `fixed`; `npm run findings -- validate` passes.
 
 ### Pass 2
 
@@ -127,7 +127,7 @@ The four findings are also recorded in [findings.jsonl](findings.jsonl), the [re
 - Model confirmation: the JSON result's `modelUsage` lists only `claude-fable-5-1`.
 - Session `d2ea5b8e-c8ea-4461-99c8-203782c6e4fd`, started 2026-10-27 07:58:53; result `success`. Reviewed head `19e61cb`.
 - Snapshot: SHA-256 `1f7bd1844646cec97f6000312611fe6bc9d134017c92f672a14a28160b9c2289` before and after, unchanged.
-- Findings: 0 Critical, 0 High, 0 Medium, 6 Low. The pass is Low-only, so under the [review process](../../../docs/governance.md#independent-review-process) the six are fixed without another pass; they are **unreviewed fixes**, made in the commit `docs: fix and record review pass 2 of 25c`.
+- Findings: 0 Critical, 0 High, 0 Medium, 6 Low. The pass is Low-only, so under the [review process](/docs/governance.md#independent-review-process) the six are fixed without another pass; they are **unreviewed fixes**, made in the commit `docs: fix and record review pass 2 of 25c`.
 
 Confirmation of pass 1:
 

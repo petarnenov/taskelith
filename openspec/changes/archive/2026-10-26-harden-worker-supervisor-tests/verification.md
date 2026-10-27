@@ -4,7 +4,7 @@ Date: 2026-10-26. Author verification is recorded below; the review section is l
 
 ## Scope and source
 
-Follow-ups recorded in the [start reconciliation verification](../archive/2026-10-26-implement-worker-start-reconciliation/verification.md) ("Limitations and remaining gates"): the macOS supervisor tests hang on a failed assertion, and the journal port's `recordExit` accepts recovery evidence with a known status. The coordinating session briefed an implementation subagent, which wrote this change.
+Follow-ups recorded in the [start reconciliation verification](/openspec/changes/archive/2026-10-26-implement-worker-start-reconciliation/verification.md) ("Limitations and remaining gates"): the macOS supervisor tests hang on a failed assertion, and the journal port's `recordExit` accepts recovery evidence with a known status. The coordinating session briefed an implementation subagent, which wrote this change.
 
 - Base revision: `503a0be` on `dev`.
 - Out of scope: runtime behaviour, contracts (`docs/contracts`, AsyncAPI, OpenAPI), the journal and record formats, and the parallel tasks 20d2 and 20e in `apps/worker`.

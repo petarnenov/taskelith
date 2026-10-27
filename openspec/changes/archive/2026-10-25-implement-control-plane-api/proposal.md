@@ -1,6 +1,6 @@
 ## Why
 
-G2 work item 16 ([docs/g2-plan.md](../../../docs/g2-plan.md)) serves the exit evidence "Submit an admitted task", architecture section 9 step 1, and R18 for the API entry point. Before this change the control plane had no running service, HTTP adapter, or use case that binds a task to its admission.
+G2 work item 16 ([docs/g2-plan.md](/docs/g2-plan.md)) serves the exit evidence "Submit an admitted task", architecture section 9 step 1, and R18 for the API entry point. Before this change the control plane had no running service, HTTP adapter, or use case that binds a task to its admission.
 
 Earlier items left four obligations here:
 - item 12: real wire commands from the scheduling outbox, and the redrive API with its authorization;

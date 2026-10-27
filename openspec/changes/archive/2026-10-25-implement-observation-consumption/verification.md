@@ -4,7 +4,7 @@ Date: 2026-10-25. The author's verification and the independent review are recor
 
 ## Scope and source
 
-This is part 21b of item 21 of the [G2 work plan](../../../docs/g2-plan.md). The coordinating session (Niki) assigned it to the worker session Maki. The rotation assigns the reviewer, Codex CLI `gpt-6.1-sol` at medium effort.
+This is part 21b of item 21 of the [G2 work plan](/docs/g2-plan.md). The coordinating session (Niki) assigned it to the worker session Maki. The rotation assigns the reviewer, Codex CLI `gpt-6.1-sol` at medium effort.
 - **Base revision:** `fd4e3e7` on `dev`, fast-forwarded to `8b451e3` (#210, the clock-independent migration order) before any code, as the coordinator asked.
 - **Scope:** the proposal's obligations: the observation consumer, the producer cursor and its confirmation, first contact, acceptance, refusal, command rejection, exit and not-started outcomes, capacity and pressure reports, stale-generation rejection, automatic retries, the rejected-placement end, and the kept-versus-released release outcome.
 - **Out of scope:** the observation types and sequence classes that the proposal names for 21c and 21d, and lost-contact timeouts (items 20 and 24).

@@ -1,6 +1,6 @@
 ## Why
 
-Supervisor identity contract section 6 says that an exit with an unknown status ends the execution while the attempt's outcome stays unknown: side effects may have happened, and automatic retry stays within the retry budget of `0` for uncertain execution ([operational targets](../../../docs/operational-targets.md)). `automaticRetryOf` in `packages/modules/scheduling/src/domain/automatic-retry.ts` opened a retry for every `exited` outcome with a proven start that was not exit code 0, so an unknown exit after a proven start was retried. The Linux crash window CP9 showed it as candidate defect L1 of `run-g2-crash-windows-on-linux`, where the scenario expected the failure. It blocks G2.
+Supervisor identity contract section 6 says that an exit with an unknown status ends the execution while the attempt's outcome stays unknown: side effects may have happened, and automatic retry stays within the retry budget of `0` for uncertain execution ([operational targets](/docs/operational-targets.md)). `automaticRetryOf` in `packages/modules/scheduling/src/domain/automatic-retry.ts` opened a retry for every `exited` outcome with a proven start that was not exit code 0, so an unknown exit after a proven start was retried. The Linux crash window CP9 showed it as candidate defect L1 of `run-g2-crash-windows-on-linux`, where the scenario expected the failure. It blocks G2.
 
 ## What Changes
 

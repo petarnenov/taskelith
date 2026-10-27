@@ -7,7 +7,7 @@ Recorded 2026-10-27 on commit `9a5ef14`. At that commit `results.jsonl` did not 
 - `make native-acceptance ENTRIES=linux` ran with seed `1140438646` and wrote lines 1 to 11 of [results.jsonl](results.jsonl) ("line N" below). Each of these lines carries an `acceptance` field with its matrix entry, row, command, and platform.
 - `make scenario-worker-namespace-confinement` (task 3.3) ran with seed `2677284533` and wrote line 12. It ran outside the runner, so line 12 has no `acceptance` field.
 
-The rows are the G2 rows of the [native acceptance gates](../../../docs/worker-platforms.md#native-acceptance-gates). Resource budgets and real integrations belong to later gates and are not listed.
+The rows are the G2 rows of the [native acceptance gates](/docs/worker-platforms.md#native-acceptance-gates). Resource budgets and real integrations belong to later gates and are not listed.
 
 ## Platform
 

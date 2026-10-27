@@ -2,7 +2,7 @@
 
 The change `scope-execution-cancellation` scoped a live launch's handling of a cancellation by its target, and left one gap open (its design, Risks): `planJournalRecovery` (`packages/modules/execution/src/domain/journal-recovery.ts`, `isCancelled`) treats a cancellation that names any execution of an intent as cancelling the whole intent. After a worker restart, and on every later pass, the recovery plan then continues no launch and retries no authorization for that intent, even when the cancellation named only a superseded or unauthorized execution.
 
-The [execution wire contracts](../../../docs/contracts/execution-wire-contracts.md) section 4 says: "A cancellation without `executionId` targets the attempt; with it, only that execution." The [launch authorization contract](../../../docs/contracts/launch-authorization.md) section 7 says an unauthorized start makes the authority write "a cancellation command for that execution only, never for another execution of the attempt".
+The [execution wire contracts](/docs/contracts/execution-wire-contracts.md) section 4 says: "A cancellation without `executionId` targets the attempt; with it, only that execution." The [launch authorization contract](/docs/contracts/launch-authorization.md) section 7 says an unauthorized start makes the authority write "a cancellation command for that execution only, never for another execution of the attempt".
 
 ## What Changes
 

@@ -4,7 +4,7 @@ Date: 2026-10-26. The author's verification and the independent review are recor
 
 ## Scope and source
 
-This change fixes bug B3, found by G2 crash scenario 24c (not yet pushed): a launch rejected finally before any grant held its worker slot forever. The coordinating session (Niki) assigned it and ran it in a briefed subagent ([subagent execution](../../../docs/agent-task-protocol.md#subagent-execution)).
+This change fixes bug B3, found by G2 crash scenario 24c (not yet pushed): a launch rejected finally before any grant held its worker slot forever. The coordinating session (Niki) assigned it and ran it in a briefed subagent ([subagent execution](/docs/agent-task-protocol.md#subagent-execution)).
 - **Base revision:** `3486a89` on `dev`.
 - **Scope:** the slot counting of `apps/worker/src/assignment-admission.ts`, its tests, and the worker-runtime delta.
 - **Out of scope:** the inventory loop, per-execution cancellation, stale recovery epochs, launch authorization, and the relaunch path of the launch orchestrator, which another change covers.

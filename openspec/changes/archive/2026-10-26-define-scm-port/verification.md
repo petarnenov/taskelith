@@ -4,7 +4,7 @@ Date: 2026-10-26. Author verification and independent review are recorded below.
 
 ## Scope and source
 
-G3 item 7 of the [G3 work plan](../../../docs/g3-plan.md). The coordinating session (Niki) assigned it on 2026-10-26, after the owner started the first wave of G3 contracts (items 3, 5, 6, 7, and 8), and placed the port in the `@taskelith/integrations` module, which item 8 also adds to. Base revision: `c89cf6c` on `dev`. Prepared in its own git worktree from a fresh `origin/dev`. After pass 2, `origin/dev` at `cd2805e`, which contains item 8 (`define-product-ports`), was merged into the branch (`21d7166`); see [Merge of dev](#merge-of-dev).
+G3 item 7 of the [G3 work plan](/docs/g3-plan.md). The coordinating session (Niki) assigned it on 2026-10-26, after the owner started the first wave of G3 contracts (items 3, 5, 6, 7, and 8), and placed the port in the `@taskelith/integrations` module, which item 8 also adds to. Base revision: `c89cf6c` on `dev`. Prepared in its own git worktree from a fresh `origin/dev`. After pass 2, `origin/dev` at `cd2805e`, which contains item 8 (`define-product-ports`), was merged into the branch (`21d7166`); see [Merge of dev](#merge-of-dev).
 
 Scope:
 
@@ -48,7 +48,7 @@ Item 8 added `@taskelith/integrations` in `dev` while this change was in review,
 - Naming aligned with item 8: the port's `MergeRequest` collided with item 8's queue record and became `ChangeRequestMerge`.
 - The contract document that item 8's precedent and the coordinator's brief call for, `docs/contracts/source-control.md`, was added; the GitHub and Forgejo mapping moved there from `design.md`.
 
-These changes alter the contract and its inputs, so pass 3 reviews the whole change again ([evidence freshness](../../../docs/governance.md#evidence-freshness)).
+These changes alter the contract and its inputs, so pass 3 reviews the whole change again ([evidence freshness](/docs/governance.md#evidence-freshness)).
 
 ## Checks
 
@@ -161,7 +161,7 @@ On 2026-10-26 the owner, through the coordinator, chose to fix pass 4 finding 1 
 - The conformance suite has run only against a test-only in-memory SCM and its defective variants; item 20 runs it against GitHub.com with the plugin's own credential.
 - The Forgejo mapping is unverified.
 - The suite does not wait for a credential's original expiry; item 20 records a run that outlives it.
-- The Forgejo and GitHub mapping was reviewed against repository records ([ADR 0006](../../../docs/decisions/0006-github-first-scm.md) and the [GitHub qualification](../../../docs/qualification/github.md)) without network access, because the assigned reviewer has none.
+- The Forgejo and GitHub mapping was reviewed against repository records ([ADR 0006](/docs/decisions/0006-github-first-scm.md) and the [GitHub qualification](/docs/qualification/github.md)) without network access, because the assigned reviewer has none.
 
 ## Remaining gates
 

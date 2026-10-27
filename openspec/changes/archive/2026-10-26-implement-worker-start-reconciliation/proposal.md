@@ -1,6 +1,6 @@
 ## Why
 
-[G2 work plan](../../../docs/g2-plan.md) item 20 builds the worker application, split by the coordinator into changes; this is 20d. After 20c the worker launches accepted assignments, but an execution that an earlier process left open (a pending W2, an unused grant, or a journaled record) is never touched again, an execution record is never removed, and a long outage seals one execution and reports one `not-started` per deadline cycle. The [worker journal contract](../../../docs/contracts/worker-journal.md) section 5 recovery table and the [supervisor identity contract](../../../docs/contracts/supervisor-identity.md) recovery rules require the start reconciliation.
+[G2 work plan](/docs/g2-plan.md) item 20 builds the worker application, split by the coordinator into changes; this is 20d. After 20c the worker launches accepted assignments, but an execution that an earlier process left open (a pending W2, an unused grant, or a journaled record) is never touched again, an execution record is never removed, and a long outage seals one execution and reports one `not-started` per deadline cycle. The [worker journal contract](/docs/contracts/worker-journal.md) section 5 recovery table and the [supervisor identity contract](/docs/contracts/supervisor-identity.md) recovery rules require the start reconciliation.
 
 ## What Changes
 

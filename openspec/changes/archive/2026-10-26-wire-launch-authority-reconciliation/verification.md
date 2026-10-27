@@ -4,7 +4,7 @@ Date: 2026-10-26. The author's verification and the independent review are recor
 
 ## Scope and source
 
-This is part 21d, the last part, of item 21 of the [G2 work plan](../../../docs/g2-plan.md). The coordinating session (Niki) assigned it to the worker session Maki. The reviewer is OpenCode CLI with `opencode-go/kimi-k3.1-pro#high`; the owner set this model on 2026-10-26 and the coordinator assigned it.
+This is part 21d, the last part, of item 21 of the [G2 work plan](/docs/g2-plan.md). The coordinating session (Niki) assigned it to the worker session Maki. The reviewer is OpenCode CLI with `opencode-go/kimi-k3.1-pro#high`; the owner set this model on 2026-10-26 and the coordinator assigned it.
 - **Base revision:** `85797b8` on `dev`. It holds the worker heartbeat (#242, #243) and 20c's worker launch orchestration (#244, #245), as the coordinator required before work started.
 - **Scope:** the proposal's obligations: start and launch-rejected observations, the observations and attempts of a revoked worker, the reconciliation queue with unrecorded processes, the refusal of launch authorization under a retired journal, live grants in control-plane tests, and B8.
 - **Out of scope:** re-admission, an HTTP or CLI surface for the queue, the operator's resolution of an uncertain execution, the worker's production of `execution.unrecorded-process`, and wire contract changes.

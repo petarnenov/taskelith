@@ -7,7 +7,7 @@ Date: 2026-10-26, updated 2026-10-27. Author verification and review passes 1, 2
 Follow-up of defect D1 (`fix-launch-recovery-reauthorization`, archived), whose design "Risks" named the gap: the worker reported only the intent's last sealed execution, so one crash after a runtime seal, or a double fault on start, still ended the launch with the final `execution-conflict`. The coordinator's brief: report every unconfirmed sealed execution in a single list field, applied in order in the same transaction with D1's per-item rules, at most 8 entries (9 is `invalid`), the unconfirmed set derived from the journal in journal recovery, contract-first.
 
 - Base revision: `a38aefc` on `dev`; branch `report-all-unconfirmed-sealed-executions`, not pushed.
-- Scope: [launch authorization contract](../../../docs/contracts/launch-authorization.md) sections 4, 10, and 11; [worker journal contract](../../../docs/contracts/worker-journal.md) section 5; [execution wire contracts](../../../docs/contracts/execution-wire-contracts.md) version table; `execution.openapi.json` 0.4.0; the domain, the control plane's wire mapping, the worker's `Launch`; tests and the crash-window harness.
+- Scope: [launch authorization contract](/docs/contracts/launch-authorization.md) sections 4, 10, and 11; [worker journal contract](/docs/contracts/worker-journal.md) section 5; [execution wire contracts](/docs/contracts/execution-wire-contracts.md) version table; `execution.openapi.json` 0.4.0; the domain, the control plane's wire mapping, the worker's `Launch`; tests and the crash-window harness.
 - Out of scope: a journal format change (none needed, design D4); the late request of a sealed execution after a later grant (unchanged from D1).
 
 ## Evidence
@@ -56,11 +56,11 @@ Follow-up of defect D1 (`fix-launch-recovery-reauthorization`, archived), whose 
 
 ## Review
 
-The findings of every pass are also recorded one per line in `findings.jsonl` ([review findings record](../../../docs/agent-task-protocol.md#review-findings-record)): the 3 Low findings of pass 1, outcome `fixed-unreviewed`; passes 2 and 3 found nothing and add no line.
+The findings of every pass are also recorded one per line in `findings.jsonl` ([review findings record](/docs/agent-task-protocol.md#review-findings-record)): the 3 Low findings of pass 1, outcome `fixed-unreviewed`; passes 2 and 3 found nothing and add no line.
 
 ### Review pass 1
 
-OpenCode, model `opencode-go/kimi-k2.7-code`, run by the coordinator under the [review process](../../../docs/governance.md#independent-review-process). Session `ses_e85dbb9d5ffeIdmD4uBDZ38OXW`. Revision reviewed: `421ae58` (the merge of `origin/dev` at `843e293` into the branch). Findings: 0 Critical, 0 High, 0 Medium, 3 Low. The fixes below are **UNREVIEWED** (Low-only pass, governance); no further review follows.
+OpenCode, model `opencode-go/kimi-k2.7-code`, run by the coordinator under the [review process](/docs/governance.md#independent-review-process). Session `ses_e85dbb9d5ffeIdmD4uBDZ38OXW`. Revision reviewed: `421ae58` (the merge of `origin/dev` at `843e293` into the branch). Findings: 0 Critical, 0 High, 0 Medium, 3 Low. The fixes below are **UNREVIEWED** (Low-only pass, governance); no further review follows.
 
 - **L1 (UNREVIEWED fix):** this record named `make verify` at `29737c5` while the head was the merge `421ae58`. Resolution: the checks were rerun on the merged tree with the fixes (`96cdc4a`), recorded under Checks and results with revision and date; the earlier run stays as history.
 - **L2 (UNREVIEWED fix, `96cdc4a`):** the PostgreSQL test covered only a one-entry list. Resolution: `apps/control-plane/test/launch-authority.integration.test.ts:215` "a relaunch that reports two sealed executions ends both not-started and is granted in one commit": E3 reports [E1 already `not-started`, E2 the `authorized` owner]; a conflict in the second entry (E3 itself) leaves the grant rows unchanged; a crash before the commit leaves neither change; then E1 and E2 are `not-started` and E3 `authorized` in one task write. The file passes 18 of 18.

@@ -1,6 +1,6 @@
 # Proposed qualification evidence: `koffi`
 
-Status: the author's proposal for open owner decision D-A of this change, which a Claude Fable 5.1 subagent deferred to the owner on 2026-10-25 under the owner's delegation. Nothing here is installed or loaded. The format follows the G2 infrastructure evaluation ([g2-infrastructure](../../../docs/g2-infrastructure.md)) and the register's "G2 infrastructure" table. Observed on 2026-10-25 from the npm registry, the upstream repository, and a static review of the downloaded tarballs. Every runtime claim is **unverified**: no binary was loaded or run.
+Status: the author's proposal for open owner decision D-A of this change, which a Claude Fable 5.1 subagent deferred to the owner on 2026-10-25 under the owner's delegation. Nothing here is installed or loaded. The format follows the G2 infrastructure evaluation ([g2-infrastructure](/docs/g2-infrastructure.md)) and the register's "G2 infrastructure" table. Observed on 2026-10-25 from the npm registry, the upstream repository, and a static review of the downloaded tarballs. Every runtime claim is **unverified**: no binary was loaded or run.
 
 ## Purpose
 

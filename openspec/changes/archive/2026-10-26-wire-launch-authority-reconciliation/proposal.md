@@ -1,11 +1,11 @@
 ## Why
 
-G2 work item 21 ([docs/g2-plan.md](../../../docs/g2-plan.md), row 21, `implement-execution-reconciliation`) is the control-plane execution service. On 2026-10-25 the coordinator split it into four changes, each merged and archived before the next: 21a `implement-execution-placement`, 21b `implement-observation-consumption`, 21c `implement-inventory-reconciliation` (all archived), and 21d `wire-launch-authority-reconciliation` (this change, the last part).
+G2 work item 21 ([docs/g2-plan.md](/docs/g2-plan.md), row 21, `implement-execution-reconciliation`) is the control-plane execution service. On 2026-10-25 the coordinator split it into four changes, each merged and archived before the next: 21a `implement-execution-placement`, 21b `implement-observation-consumption`, 21c `implement-inventory-reconciliation` (all archived), and 21d `wire-launch-authority-reconciliation` (this change, the last part).
 
 Before this change the control plane left `execution.started` and `execution.launch.rejected` unconsumed, so they reached quarantine. It also refused every observation of a revoked worker. It kept no record of unrecorded processes and offered no read of the executions waiting for reconciliation. It authorized launches for a worker whose journal was retired. Its tests seeded launch grants directly into tasks instead of issuing them through the launch authority. Item 18's revocation recorded `launch-revoked` on the attempt while its command said `assignment-ended` (item 17 finding B8).
 
 Obligations this change meets:
-- launch authorization contract section 7 ([launch-authorization.md](../../../docs/contracts/launch-authorization.md)), start observations and `unauthorized-start`: the grant is found by `launchAuthId`, and a cancellation is written for that execution only (21a, 21b, and 21c proposals; 20c design; item 17 design B9);
+- launch authorization contract section 7 ([launch-authorization.md](/docs/contracts/launch-authorization.md)), start observations and `unauthorized-start`: the grant is found by `launchAuthId`, and a cancellation is written for that execution only (21a, 21b, and 21c proposals; 20c design; item 17 design B9);
 - launch authorization contract section 9: consuming `execution.launch.rejected` and the scheduler action of each reason;
 - installation and enrollment contract section 6 (item 13): the active attempts of a revoked worker become uncertain through reconciliation, never dead, and a revoked worker's in-flight observations settle its executions (coordinator decision Q5 (a) of 2026-10-25);
 - item 17's reconciliation request: a read of the executions waiting for reconciliation, and a worker-level record of unrecorded processes (21c design decision 13);

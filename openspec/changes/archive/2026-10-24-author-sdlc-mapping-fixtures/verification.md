@@ -4,7 +4,7 @@ Date: 2026-10-24. Author verification and independent review are recorded below.
 
 ## Scope and source
 
-G1 item 10 of the [G1 work plan](../../../docs/g1-plan.md), assigned by the coordinating session (Niki) under the owner's authorization to start G1 items in dependency order; items 6 and 9 are merged. Base revision: `4a3e69e` on `dev`, with `origin/dev` at `37445fc` (the agent task protocol) merged in before the first commit. Scope: the new packages `packages/plugins/sdlc-openspec` and `packages/plugins/sdlc-speckit` (manifest, tsconfig, an empty `src/index.ts`, `fixtures/`, and `test/`), the workspace links in `package-lock.json`, the regenerated `docs/dependencies/licenses.json` and `docs/dependencies/sbom.cdx.json`, and this change. Prepared in its own git worktree.
+G1 item 10 of the [G1 work plan](/docs/g1-plan.md), assigned by the coordinating session (Niki) under the owner's authorization to start G1 items in dependency order; items 6 and 9 are merged. Base revision: `4a3e69e` on `dev`, with `origin/dev` at `37445fc` (the agent task protocol) merged in before the first commit. Scope: the new packages `packages/plugins/sdlc-openspec` and `packages/plugins/sdlc-speckit` (manifest, tsconfig, an empty `src/index.ts`, `fixtures/`, and `test/`), the workspace links in `package-lock.json`, the regenerated `docs/dependencies/licenses.json` and `docs/dependencies/sbom.cdx.json`, and this change. Prepared in its own git worktree.
 
 ## Evidence
 

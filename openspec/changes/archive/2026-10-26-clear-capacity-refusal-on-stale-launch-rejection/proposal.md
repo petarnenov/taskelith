@@ -4,7 +4,7 @@ Zaki's dump of the G2 item 24c scenarios found bug B5, a liveness defect that fa
 
 ## What Changes
 
-- **Contract.** [Capacity reservation](../../../docs/contracts/capacity-reservation.md) section 8, "Refusal": the worker stays ineligible until its next capacity declaration or an observation that frees a slot (an exit, a `not-started`, or a launch rejection), which clears the refusal even at a stale ownership generation when it is about the worker's own assignment, as evidence that changes no task, attempt, or assignment, under the refusal's sequence fence and the epoch gate of launch authorization section 7.
+- **Contract.** [Capacity reservation](/docs/contracts/capacity-reservation.md) section 8, "Refusal": the worker stays ineligible until its next capacity declaration or an observation that frees a slot (an exit, a `not-started`, or a launch rejection), which clears the refusal even at a stale ownership generation when it is about the worker's own assignment, as evidence that changes no task, attempt, or assignment, under the refusal's sequence fence and the epoch gate of launch authorization section 7.
 - **Control plane.** `observation-effects.ts` clears the producer's capacity refusal on every consumed launch rejection, and `rejectedEffect` keeps that clear for a stale launch rejection, `not-started`, or exit of the producer's own assignment, an exit or `not-started` under the epoch gate; `observation-service.ts` applies it in the transaction that records the rejected observation.
 
 ## Capabilities
