@@ -45,6 +45,8 @@ macOS 26.6.2 (Darwin 25.6.0, arm64), Node.js v24.22.1 from `.nvmrc`, npm as pinn
   1. Medium, error-handling (`Makefile:71`): `$(ARGS)` went through the shell, so `make findings ARGS='checklist --files scripts/**'` failed with `unexpected argument`. Fixed: the recipe runs with `set -f`, so the documented forms work as written; the protocol says so; a test runs the real Makefile entry with `scripts/*.ts`, which matches several files.
   2. Low, redaction (`scripts/review-findings.ts:148`): the NATS seed pattern missed `SN`, `SC`, and `SX`. Fixed; tested through full finding validation for all six seed kinds, with a short non-seed string accepted.
   3. Low, contract-drift (`test/review-findings.test.ts:66`): the extension test assumed `supply-chain` is never seeded. Fixed: the test picks an id that the vocabulary does not hold and uses it throughout.
+- **Pass 3, the last — Codex CLI, model `gpt-6.1-sol`, reasoning effort medium, read-only sandbox, session `01a17aa5-5304-7f70-a992-c81585d955ea`, revision `9afd42b`.** Same invocation; the worker session confirmed the header, and the snapshot was `4bcddb69e6378e53885fbdee0912b3da8d58e3f18bd213c3ae39d4238af73a09` before and after the pass. The reviewer confirmed pass 2 findings 1, 2, and 3 as fixed. Findings: 0 Critical, 0 High, 0 Medium, 1 Low. Because the pass found only a Low finding, it was fixed without another review pass, as the review process allows; this fix is unreviewed and recorded in `findings.jsonl` with outcome `fixed-unreviewed`.
+  1. Low, contract-drift (`scripts/findings.ts:96`): `splitList` split at commas inside character classes, so `scripts/[a,b]*.ts` became two globs although `matchesGlob("scripts/archive.ts", "scripts/[a,b]*.ts")` is true. Unreviewed fix in `942f258`, test in `6381d8f`: `splitList` keeps a `[...]` class whole, also inside braces and with braces inside it; a `]` right after `[`, `[!`, or `[^` is a member, and an unclosed `[` is literal. The regression test goes through `parseCommand` and `matchesQuery`: the glob stays whole, matches `scripts/archive.ts` and `scripts/,x.ts`, not `scripts/check.ts`, and the glob after the separating comma still matches. With the pass 3 code restored, that test and the extended `splitList` test failed; both pass on the fixed code.
 
 ## Limitations
 
@@ -55,5 +57,4 @@ macOS 26.6.2 (Darwin 25.6.0, arm64), Node.js v24.22.1 from `.nvmrc`, npm as pinn
 
 ## Remaining gates
 
-- Independent review (pending).
 - Integration into dev by the coordinator (single pull request).

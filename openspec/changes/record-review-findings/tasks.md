@@ -24,4 +24,4 @@
 - [x] 4.2 Run `npm run openspec -- validate record-review-findings --strict` and `make verify`.
 - [x] 4.3 Review pass 1 (Codex CLI gpt-6.1-sol): fix its eight findings with regression tests, add `make findings`, and record them in `verification.md` and `findings.jsonl`.
 - [x] 4.4 Review pass 2 (Codex CLI gpt-6.1-sol): confirm the pass 1 fixes; fix its three findings with regression tests and record them.
-- [ ] 4.5 Review pass 3 confirms the pass 2 fixes.
+- [x] 4.5 Review pass 3 (Codex CLI gpt-6.1-sol), the last: confirm the pass 2 fixes; fix its Low finding as an unreviewed fix with a regression test and record it.
