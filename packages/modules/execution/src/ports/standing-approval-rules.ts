@@ -43,7 +43,12 @@ export interface StandingRuleUse {
 // Idempotent by rule identifier, and audited; a use is recorded in the
 // transaction that answers the request, and never by a revoked rule.
 export interface StandingApprovalRules {
-  active(projectId: ProjectId, operation: StandingRuleOperation): Promise<Result<readonly StandingRule[]>>;
+  // Only rules whose revision equals the run's current one (section 5).
+  active(
+    projectId: ProjectId,
+    operation: StandingRuleOperation,
+    policyRevision: PolicyRevision,
+  ): Promise<Result<readonly StandingRule[]>>;
   record(rule: StandingRule): Promise<Result<StandingRule>>;
   revoke(ruleId: StandingRuleId, revocation: StandingRuleRevocation): Promise<Result<StandingRule>>;
   recordUse(use: StandingRuleUse): Promise<Result<StandingRuleUse>>;
