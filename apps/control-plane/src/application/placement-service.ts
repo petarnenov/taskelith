@@ -68,7 +68,7 @@ export class PlacementService {
   }
 
   // Each task in its own transaction, in fair order across projects; one
-  // that no candidate accepts rolls back and keeps waiting unchanged.
+  // that no candidate accepts rolls back, and the task still waits.
   async #placeDue(): Promise<Result<PlacementPass>> {
     const checked = this.#tasks.pastDue();
     const after = this.#after;
@@ -271,8 +271,8 @@ function placementRequest(task: Task): Omit<PlacementRequest, 'workerId'> {
   };
 }
 
-// Contract section 5: such a task keeps its wait unchanged and is offered
-// again in the next pass, in rotation order.
+// Contract section 5: such a task keeps its wait unchanged, so the next
+// pass that reads it offers it in its place in the rotation.
 function isFleetCapacityDecline(outcome: Result<TaskPlacement>): boolean {
   return !outcome.ok && lacksFleetCapacity(outcome.error.details.reason);
 }
