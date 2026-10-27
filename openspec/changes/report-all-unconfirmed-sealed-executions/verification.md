@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-26, updated 2026-10-27. Author verification and review passes 1 and 2 are recorded below; the fixes of pass 1 (Low only) are UNREVIEWED.
+Date: 2026-10-26, updated 2026-10-27. Author verification and review passes 1 and 2 are recorded below, review pass 3 is pending; the fixes of pass 1 (Low only) are UNREVIEWED.
 
 ## Scope and source
 
@@ -94,6 +94,23 @@ Reviewed in review pass 2 above.
 - **Checks on `ae13b7a`** (the tree of the `4289b8f` merge plus its record commit), 2026-10-27:
   - `make verify`: passed (exit 0); 1965 tests, 1963 passed, 0 failed, 2 Linux-only tests skipped; coverage 99.29% lines, 92.13% branches, 99.05% functions; `execution.openapi.json: 3 breaking change(s) against 1847570fcee3`, declared, 0 for the other three documents; `Contract documents have no undeclared breaking change.`; OpenSpec `Totals: 70 passed, 0 failed (70 items)`; `Every active OpenSpec change archives into strictly valid specs.`; `Packed file allowlist and installed CLI verification passed.`
 
+## Return 1, second round
+
+Awaiting review pass 3, which reviews this round's merge and reconciliation.
+
+- **Archive undone:** an archive run on the working tree after review pass 2 was never committed; the change was moved back to the active directory and the living specs restored before this round. Its record edits were committed as `9dfed68` without the archive checks.
+- **Merge:** `dev` moved on to `656a34d` (#322, `report-control-plane-failure-cause`); `git merge origin/dev` as `eda2e56`. One conflict, in `docs/contracts/launch-authorization.md`, section 11: this change rewrote the "Reported seal" bullet (a list of at most 8), and #322 extended the "Worker client" bullet (the failure `cause` and `causeCode`, and the `worker.launch.authorization-failed` log). Resolution: this change's "Reported seal" bullet and #322's "Worker client" bullet, each verbatim. `package-lock.json` and `docs/dependencies/` equal `dev`'s; the post-merge inventory check reported nothing stale.
+- **What #322 changes for this change:** `Launch` logs each failed authorization with `#authorizationFailed` (`apps/worker/src/launch-orchestrator.ts:526`, `:549`), naming the execution, the operation, and the failure's code, message, and details; it reads neither the request nor its `reportsNotStartedFor`, which `#nextExecution` (`:470`) still builds from `unconfirmedSealedExecutions`. #322's test (`apps/worker/test/launch-orchestrator.test.ts:180`) checks only the log record, and none of its test changes reads `reportsNotStartedFor`. No code change was needed.
+- **Delta reconciliation (step 10.3, base `1847570`):** `git diff 1847570 origin/dev -- openspec/specs` changes `worker-runtime` only: "Journaled launch authorization" gains the sentence "Each failed request SHALL be logged with its failure." and the scenario "Logged authorization failure", and "Control-plane failure cause" is new. "Execution ownership" and "Start reconciliation" are unchanged. The `worker-runtime` delta (`2297222`) now keeps both sides: the scenario "Logged authorization failure" is copied verbatim after "Relaunch after a seal", and the body, which would have grown to 544 characters, is tightened to 491 (`dev`'s current body has 489) without losing a rule of either side: "A worker SHALL commit W2 before an operation's first request and W3 with each decision, SHALL log each request failure, and SHALL repeat an undecided request under the same `operationId`, after a jittered delay of 5 s doubling to 60 s, until its deadline. A retryable rejection SHALL be retried under a new `operationId`; a final one SHALL end the launch with its observation. A new or resumed execution SHALL report the intent's sealed ones no later grant confirms, oldest first, at most 8." Requirement bodies: 419 ("Execution ownership"), 491 ("Journaled launch authorization"), 472 ("Start reconciliation").
+- **Checks on `2297222`** (2026-10-27 04:55 UTC):
+  - `npm run openspec -- validate report-all-unconfirmed-sealed-executions --strict`: `Change 'report-all-unconfirmed-sealed-executions' is valid`.
+  - Archive in a scratch copy of `openspec/` (outside the worktree): `Totals: + 0, ~ 3, - 0, → 0`; then `validate --all --strict --no-interactive`: `Totals: 69 passed, 0 failed (69 items)`. The archived `worker-runtime` spec differs from `dev`'s only by the "Journaled launch authorization" body and the "Confirmed seal", "Crash after a runtime seal", and "Double fault on start" scenarios; it keeps "Logged authorization failure" and "Control-plane failure cause". The archived `launch-authorization` spec differs only in "Execution ownership".
+  - `make setup` and `npm run build`: passed.
+  - `node --experimental-strip-types --test` on `packages/modules/execution/test/journal-recovery.test.ts`, `apps/worker/test/launch-orchestrator.test.ts`, and `apps/worker/test/start-reconciliation.test.ts`: 105 tests, 105 passed.
+  - `npm run verify:comments`: `Every comment is within the comment length rule.`
+  - Crash windows were not rerun: this round changes no code, and `make verify` runs them.
+- **Not done yet:** `make verify` on this round's head; review pass 3 of this round; the archive again (step 7) as the last commit.
+
 ## Limitations
 
 - More than 8 unconfirmed sealed executions: the worker reports the oldest 8, and an owner among the newer ones still ends the launch (design D5).
@@ -102,4 +119,7 @@ Reviewed in review pass 2 above.
 
 ## Remaining gates
 
+- `make verify` on the head of Return 1, second round: pending.
+- Review pass 3 of Return 1, second round: pending.
+- Archive on the branch again (protocol step 7): pending.
 - Integration into `dev` by the coordinator (single pull request).

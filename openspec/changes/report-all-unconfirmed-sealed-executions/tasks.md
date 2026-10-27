@@ -27,5 +27,7 @@
 - [x] 4.7 Independent review (OpenCode, `opencode-go/kimi-k2.7-code`): pass 1, 3 Low, fixed unreviewed
 - [x] 4.8 Return 1: restore the change, merge `origin/dev` at `cc7f998`, reconcile the deltas, rerun the crash windows and `make verify`
   - [x] Merge `origin/dev` at `1847570` (#321) as `4289b8f`, without a conflict; no delta change; `make verify` on `ae13b7a` passed
+  - [x] Merge `origin/dev` at `656a34d` (#322) as `eda2e56`, one conflict in the launch authorization contract; "Journaled launch authorization" delta keeps #322's logging; `make verify` pending
 - [x] 4.9 Review pass 2 of the resolution and reconciliation: 0 findings
 - [ ] 4.10 Archive again on the branch (protocol step 7); integration into `dev` is the coordinator's
+- [ ] 4.11 Review pass 3 of Return 1, second round (merge of `656a34d` and reconciliation), before 4.10
