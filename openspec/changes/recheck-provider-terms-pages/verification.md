@@ -17,7 +17,7 @@ The brief names the declined finding "pass 2 H3"; the archived record files it a
 
 ## Revision and environment
 
-Branch `recheck-provider-terms-pages` from `origin/dev` at `4cbea974`, in its own worktree with `make setup` done. Ubuntu 26.04.1 LTS on Linux x86_64, Node.js v24.22.1, OpenSpec through `npm run openspec`. Pages fetched with `curl` (`-sSL --compressed`, a desktop browser user agent) on 2026-10-27 between 19:03 and 19:10 UTC; every time below is UTC. The raw copies were kept in the session's scratch directory, outside the repository, and are not part of the evidence set.
+Branch `recheck-provider-terms-pages` from `origin/dev` at `4cbea974`, in its own worktree with `make setup` done, then rebased onto `origin/dev` at `fac1fd4a` (#363), which leaves `docs/qualification/` unchanged. Ubuntu 26.04.1 LTS on Linux x86_64, Node.js v24.22.1, OpenSpec through `npm run openspec`. Pages fetched with `curl` (`-sSL --compressed`, a desktop browser user agent) on 2026-10-27 between 19:03 and 19:10 UTC; every time below is UTC. The raw copies were kept in the session's scratch directory, outside the repository, and are not part of the evidence set.
 
 ## Author self-check and evidence check
 
