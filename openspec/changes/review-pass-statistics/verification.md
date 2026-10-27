@@ -6,7 +6,7 @@ Coordinator brief from Niki, which the owner approved on 2026-10-27: per-reviewe
 
 ## Revision
 
-Tooling and tests: `58ef3a13` on base `d3e9e636`. Documentation and change records: `a1314b1e`, which `make verify` below ran on. This record follows them.
+Tooling and tests: `58ef3a13` on base `d3e9e636`. Documentation and change records: `a1314b1e`, which the first `make verify` below ran on, and the first verification record `2757558a`, which review pass 1 ran on. Review pass 1 fixes: `77f8c2a3`; their record follows it.
 
 ## Environment
 
@@ -30,13 +30,31 @@ Evidence check: no external link is added.
 - Requirement bodies: "Review pass summaries" 445, "Pass summary consistency" 307, "Missed finding attribution" 318, "Reviewer statistics" 430, and the modified "Review findings in the task flow" 416 characters.
 - Tests that fail on the base code: the new and changed tests were copied into a scratch worktree of `d3e9e636` and run there. `test/findings.test.ts` fails to load (`does not provide an export named 'PASS_SCHEMA_PATH'`), `test/review-passes.test.ts` and `test/reviewer-statistics.test.ts` fail to load (module not found), and `test/review-findings.test.ts` fails 1 of 29, the new `missedBy` test.
 - Tests of the findings tooling on `a1314b1e`: `test/findings.test.ts` 18 (12 before), `test/review-findings.test.ts` 29 (28 before), `test/review-passes.test.ts` 8, and `test/reviewer-statistics.test.ts` 3, all passing.
-- `npm run findings -- reviewers` on this repository: 17 archived changes, 30 passes, all 17 without `passes.jsonl`, so every pass is derived from findings with role `(unknown)`, as the output states.
+- `npm run findings -- reviewers` on this repository, after the pass 1 fixes: 17 archived changes with review records and 30 passes; all 17 have `findings.jsonl` but no `passes.jsonl`, so every pass is derived from findings with role `(unknown)`, and 174 archived changes have neither file and are not counted, as the output states. Before the fixes the output named only the 17 and left the 174 out (pass 1, Medium).
 - `make verify` on `a1314b1e`: exit 0. `npm run verify:comments`: `Every comment is within the comment length rule.` `npm run verify:findings`: `Every findings file is valid: 18 file(s); every pass summary file is valid: 1 file(s).` `npm test`: 2117 tests, 2070 passed, 0 failed, 47 skipped; coverage of all files 99.22% lines, 92.04% branches, 98.86% functions. Contract compatibility: 0 breaking changes in each of the four documents. `npm run openspec -- validate --all --strict --no-interactive`: 70 passed, 0 failed. `npm run verify:archive`: `Every active OpenSpec change archives into strictly valid specs.` `npm run verify:package`: `Packed file allowlist and installed CLI verification passed.`
 - Coverage note: `npm test` measures coverage over the built product modules (`dist/`), not over `scripts/`, so the new scripts do not change the coverage figures; their tests cover every command and rule above.
 
 ## Independent review
 
-Pending: pass 1 by reviewer A, pass 2 by reviewer B if needed, pass 3 by reviewer A if needed, as the coordinator assigns them.
+### Pass 1 (reviewer A)
+
+Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`, on `2757558a`, session `01a17d0a-add2-7f12-8c55-309cee0eeee9`, run by the coordinator:
+
+`codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`
+
+Model confirmation: the Codex header reported model `gpt-6.1-sol`, reasoning effort `medium`, sandbox `read-only`. Read-only proof: the SHA-256 snapshot of all tracked and untracked files was the same before and after the pass. Result: 0 Critical, 0 High, 1 Medium, 1 Low, recorded in `findings.jsonl` and summarized in `passes.jsonl`. Fixes in `77f8c2a3`:
+
+- Medium, contract-drift: `scripts/findings.ts` dropped archived changes with neither `findings.jsonl` nor `passes.jsonl` before the statistics, so the warning about incomplete history named only the changes derived from findings. The statistics now take the number of such changes; the text states it on its own line and the JSON as `unrecordedChanges`. A new test covers an archive with neither file, the `review-process` delta has the scenario "Archived change without any review record", and the protocol, `design.md` decision 8, the proposal, and the evidence above say the same.
+- Low, docs: the `Makefile` comment of the `findings` target now lists `reviewers [--json]`, within the comment length rule.
+
+The Low finding was fixed together with the Medium one, so pass 2 checks both.
+
+After the fixes, on `77f8c2a3` with this record and the pass 1 lines of `findings.jsonl` and `passes.jsonl`:
+
+- Tests of the findings tooling: `test/findings.test.ts` 19, the other three files unchanged in count, all passing.
+- `make verify`: exit 0. `npm run verify:findings`: `Every findings file is valid: 18 file(s); every pass summary file is valid: 1 file(s).` `npm test`: 2118 tests, 2071 passed, 0 failed, 47 skipped; coverage of all files 99.22% lines, 92.06% branches, 98.86% functions. Contract compatibility: 0 breaking changes in each of the four documents. `validate --all --strict --no-interactive`: 70 passed, 0 failed. `verify:archive`, `verify:comments`, and `verify:package` passed.
+
+Next: pass 2 by reviewer B, a full, independent review that also checks the pass 1 fixes.
 
 ## Limitations
 
@@ -44,7 +62,7 @@ Pending: pass 1 by reviewer A, pass 2 by reviewer B if needed, pass 3 by reviewe
 
 ## Remaining gates
 
-- Independent review passes, their records in `passes.jsonl`, `findings.jsonl`, and this file.
+- Review pass 2 by reviewer B, pass 3 by reviewer A if needed, and their records in `passes.jsonl`, `findings.jsonl`, and this file.
 - Archive of the change by the worker (worker step 7).
 - `make verify` by the `pre-push` hook on the pushed tree.
 - Integration into dev by the coordinator (single pull request).
