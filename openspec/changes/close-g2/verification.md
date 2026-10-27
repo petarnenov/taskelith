@@ -31,7 +31,7 @@ On branches of `origin`, read with `git show <head>:<path>` after `git fetch ori
 | Branch | Head | Record read |
 | --- | --- | --- |
 | `run-g2-crash-windows-on-linux` | `07568a20` (archive commit) | `openspec/changes/archive/2026-10-27-run-g2-crash-windows-on-linux/proposal.md`, `verification.md` |
-| `run-g2-partition-and-races` | `5bed450b` (archive commit) | `openspec/changes/archive/2026-10-27-run-g2-partition-and-races/proposal.md`, `verification.md`, `results.jsonl` |
+| `run-g2-partition-and-races` | `5bed450b` (archive commit; read before the coordinator returned the task to its worker) | `openspec/changes/archive/2026-10-27-run-g2-partition-and-races/proposal.md`, `verification.md`, `results.jsonl` |
 | `break-fair-order-ties-by-task-id` | `e66d0d72` (archive commit) | its archived `proposal.md` and `verification.md` |
 | `stabilize-placement-fair-order-test` | `1a9fa773` (archive commit) | its archived `proposal.md` and `verification.md` |
 | `fix-platform-probe-filesystem-label` | `b6d7dbb9` (archive commit) | its archived `proposal.md` and `verification.md` |
@@ -65,6 +65,17 @@ Not found in the repository or on any remote branch, so recorded only as the coo
 - The draft said that every entry ran on a local host, so no hosted-runner workflow was added; the Linux-host record keeps a hosted-runner check open, and the ADR now says both.
 - Deferral gates that no record names are marked as the author's assignment for the owner to confirm; the draft's assignments are unchanged.
 
+## Coordinator decisions of 2026-10-27
+
+Recorded in the ADR in commit `docs: record the G2 closure blockers set by the coordinator`:
+
+1. The macOS arm64 process ownership row is re-run on arm64 after the D1 fix before the closure (Maki); a blocker, not a deferral.
+2. The ReDoS fix of `failure-cause.ts` gates acceptance; a blocker set by the coordinator, no longer an author's assignment. It is cited as pending until it lands.
+3. The GitHub-hosted `ubuntu-24.04` check stays open and does not block; owner to confirm.
+4. 24c was handed off and returned to its worker because its tests hang on macOS in the coordinator's integration `make verify`; a blocker, not a deferral, and no longer cited as handed off.
+
+The G2 blockers are exactly 24c, the fix of L1, the ReDoS fix, and the macOS arm64 re-run.
+
 ## Remaining placeholders
 
 - ADR 0015 decision 1, "work items": archive dates on `dev` and pull requests of the branches still pending, and the fix changes still to come.
@@ -77,7 +88,8 @@ Not found in the repository or on any remote branch, so recorded only as the coo
 Light checks only, because the host is shared with evidence runs; `make verify` has not run on this change.
 
 - Draft, at `0bec0a6`: `npm run openspec -- validate close-g2 --strict` passed; `npm run verify:comments` passed; `make findings ARGS="validate"` passed (3 files).
-- Evidence update, on the working tree committed after `3faaa03f`: `npm run openspec -- validate close-g2 --strict` passed ("Change 'close-g2' is valid"); `npm run findings -- validate` passed ("Every findings file is valid: 6 file(s)."); `npm run verify:comments` passed ("Every comment is within the comment length rule."); `git diff --check` reported nothing.
+- Evidence update, in `ee66935f`: `npm run openspec -- validate close-g2 --strict` passed ("Change 'close-g2' is valid"); `npm run findings -- validate` passed ("Every findings file is valid: 6 file(s)."); `npm run verify:comments` passed ("Every comment is within the comment length rule."); `git diff --check` reported nothing.
+- Blocker update: `npm run openspec -- validate close-g2 --strict` passed; `npm run findings -- validate` passed (6 files); `npm run verify:comments` passed; `git diff --check` reported nothing.
 
 ## Independent review
 
@@ -85,10 +97,11 @@ Not started. Assigned reviewer: OpenCode `opencode-go/kimi-k3.1-pro#high`.
 
 ## Remaining gates
 
-- Blockers that must land before the closure: the fix of the Linux CP9 defect L1 (`stop-automatic-retry-of-unknown-exit`); the integration into `dev` of 24c with its macOS hang fix, `run-g2-crash-windows-on-linux`, and the other branches marked "integration pending"; and, by the author's assignment for the owner to confirm, the ReDoS fix of `failure-cause.ts`.
-- Re-check of the ADR's evidence against `dev` after those integrations (task 2.8) and the row map (task 2.5); task 2.1 stays open until 24c lands with its hang fix.
-- The fresh-clone reproduction (tasks 3.1 to 3.4), run only after every blocker above lands, because the host is shared.
-- The owner's confirmation of each author's assignment, and the closure records (section 4 of `tasks.md`).
+- The four G2 blockers set by the coordinator on 2026-10-27 (ADR 0015 decision 5): 24c `run-g2-partition-and-races`, returned to its worker for a hang of its tests on macOS and integrated into `dev` after that fix; the fix of the Linux CP9 defect L1 (`stop-automatic-retry-of-unknown-exit`); the ReDoS fix of `failure-cause.ts`; and the re-run of the macOS arm64 process ownership row after the D1 fix (Maki).
+- The integration into `dev` of the other branches marked "integration pending"; they do not block the closure.
+- Re-check of the ADR's evidence against `dev` after those land (task 2.8) and the row map (task 2.5); task 2.1 stays open until 24c lands.
+- The fresh-clone reproduction (tasks 3.1 to 3.4), run only after the four blockers land, because the host is shared.
+- The owner's confirmation of each author's assignment and of the hosted-runner check left open, and the closure records (section 4 of `tasks.md`).
 - `make verify` and the link and evidence checks.
 - Independent review by OpenCode `opencode-go/kimi-k3.1-pro#high`, recorded here and in `findings.jsonl`.
 - Owner acceptance of ADR 0015.

@@ -13,7 +13,7 @@
 - [ ] 2.5 Update the row map with the archive names and dates of these changes and any fix changes they produce.
 - [x] 2.6 Resolve or keep the `bound-failure-cause-userinfo-redaction` and `keep-coverage-out-of-killed-test-processes` deferrals.
 - [x] 2.7 Fill the blocking and deferred items the coordinator named on 2026-10-27; keep each without a record marked as the coordinator's statement.
-- [ ] 2.8 After each branch marked "integration pending" lands on `dev`, and after the fix of L1 lands, check the ADR's evidence against `dev` and replace the integration notes.
+- [ ] 2.8 After each blocker of ADR 0015 decision 5 lands (24c, the fix of L1, the ReDoS fix, the macOS arm64 re-run) and each branch marked "integration pending" is integrated, check the ADR's evidence against `dev` and replace the integration notes.
 
 ## 3. Fresh-clone reproduction
 
