@@ -187,20 +187,30 @@ function inHandOffChain<T>(root: string, work: () => Promise<T>): Promise<T> {
 
 // Holds each racing hand-off after its check until every hand-off in
 // flight has checked, so that none sees the record of another.
-class CheckBarrier {
+export class CheckBarrier {
   private inFlight = 0;
   private readonly held: (() => void)[] = [];
 
-  enter(): void {
+  // Counts the caller before its first await, as concurrent calls need.
+  async afterAllChecks<T>(check: () => Promise<T>): Promise<T> {
     this.inFlight += 1;
+    let checked: T;
+    try {
+      checked = await check();
+    } catch (error) {
+      this.leave();
+      throw error;
+    }
+    await this.arrive();
+    return checked;
   }
 
-  leave(): void {
+  private leave(): void {
     this.inFlight -= 1;
     if (this.inFlight === 0) for (const release of this.held.splice(0)) release();
   }
 
-  arrive(): Promise<void> {
+  private arrive(): Promise<void> {
     this.leave();
     if (this.inFlight === 0) return Promise.resolve();
     return new Promise((release) => this.held.push(release));
@@ -307,17 +317,17 @@ export class TempDirWorkspaces implements WorkspaceProvider {
     return markHandedOff(checkout);
   }
 
-  // Enters the barrier before its first await, as concurrent calls do.
   private async racingHandOff(attemptId: AttemptId): Promise<Result<void>> {
-    this.racingChecks.enter();
+    const checked = await this.racingChecks.afterAllChecks(() => this.handOffCheck(attemptId));
+    if (!checked.ok) return checked;
+    const { checkout, mustWait } = checked.value;
+    return mustWait ? otherWorkspaceHandedOff() : markHandedOff(checkout);
+  }
+
+  private async handOffCheck(attemptId: AttemptId): Promise<Result<{ checkout: string; mustWait: boolean }>> {
     const checkout = await this.checkoutOf(attemptId);
-    if (!checkout.ok) {
-      this.racingChecks.leave();
-      return checkout;
-    }
-    const mustWait = await this.mustWait(attemptId);
-    await this.racingChecks.arrive();
-    return mustWait ? otherWorkspaceHandedOff() : markHandedOff(checkout.value);
+    if (!checkout.ok) return checkout;
+    return ok({ checkout: checkout.value, mustWait: await this.mustWait(attemptId) });
   }
 
   private async mustWait(attemptId: AttemptId): Promise<boolean> {
