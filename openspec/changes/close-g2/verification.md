@@ -17,6 +17,7 @@ The evidence update of 2026-10-27 follows the coordinator's brief of that day: f
 - `origin/dev` at `92f0830b` (#330) merged in as `8667c9e7`, a merge commit, without conflicts. It brings `run-g2-crash-windows-on-linux` (#329, merge `1e48c93b`) and `bound-failure-cause-userinfo-redaction` (#330, merge `92f0830b`). The archived Linux crash-windows record on `dev` is identical to that of its branch head `07568a20`. `npm ci --ignore-scripts` ran, and `npm run verify:dependencies` reported the inventory current ("Verified 731 package paths"), so it was not regenerated.
 - `origin/dev` at `bd6108d4` (#342) merged in as `31dbd30f`, a merge commit, without conflicts, after `git fetch origin`. It brings #331 to #342: `stabilize-placement-fair-order-test`, `stop-automatic-retry-of-unknown-exit`, 24c `run-g2-partition-and-races`, `require-finding-capability`, `fix-platform-probe-filesystem-label`, `break-fair-order-ties-by-task-id`, `align-fair-order-rotation`, `advance-placement-rotation-cursor`, `centralize-log-redaction-rules`, `alternate-reviewers-per-pass` (governance policy version 5), `back-off-relaunch-after-pre-w2-failure`, and `align-safe-to-retry-with-supervisor-identity`. `npm ci --ignore-scripts` ran after it, and `npm run verify:dependencies` reported the inventory current ("Verified 731 package paths"), so it was not regenerated.
 - Fresh-clone record: on top of `2af551b6`. The fresh clone ran `dev` at `bd6108d4`, the `dev` side of the merge `31dbd30f`; every commit of this branch after that merge changes documentation and this change only.
+- `origin/dev` at `34af90f4` (#343, `review-pass-statistics`, not a G2 row) merged in as `2f9b1010`, a merge commit, without conflicts. It adds the rule that every change records its review pass summaries in `passes.jsonl`; `d7bc65bd` then added this change's empty `passes.jsonl`. `d7bc65bd` is the revision of `make verify` ("Checks") and of review pass 1.
 
 ## Evidence sources
 
@@ -89,7 +90,7 @@ Read from those archives: 24c `results.jsonl` on `dev` holds 34 records, all `pa
 - Linux host: lines 1 to 11 with seed `1140438646` and line 12 with seed `2677284533`, commit `9a5ef14`, all passed; `apparmor=unconfined`; the hosted-runner check kept open by its design decision 1.
 - arm64 re-run: every archived crash-window `results.jsonl` was searched; the runs after the D1 fix name arch `x64`, so the `macos-26-arm64` process ownership row is recorded as not re-run and open.
 - Linux crash windows: 29 records of `d18d6d5c`, 28 `passed` and `crash-window-cp9` `failed` on L1.
-- 24c: 34 records, all `passed`, commit `9630470a`, host Linux 6.8.0-147-generic, 17 records with seed `20261026` and 17 with seed `7`, 17 distinct scenarios.
+- 24c: 34 records, all `passed`, commit `36481ad9` in the archive on `dev` (`9630470a` on the branch head read at the update; "Landed changes" above), host Linux 6.8.0-147-generic, 17 records with seed `20261026` and 17 with seed `7`, 17 distinct scenarios.
 - The `assignment.age` away decision was read in full; the two code lines it names still hold on this branch.
 - The draft said that every entry ran on a local host, so no hosted-runner workflow was added; the Linux-host record keeps a hosted-runner check open, and the ADR now says both.
 - Deferral gates that no record names are marked as the author's assignment for the owner to confirm; the draft's assignments are unchanged.
@@ -180,7 +181,7 @@ The fresh-clone placeholder of decision 4 is filled, and the "work items" placeh
 
 ## Checks
 
-Light checks only, because the host is shared with evidence runs; `make verify` has not run on this change.
+Light checks only until `d7bc65bd`, because the host is shared with evidence runs; `make verify` then ran at `d7bc65bd` (last item).
 
 - Draft, at `0bec0a6`: `npm run openspec -- validate close-g2 --strict` passed; `npm run verify:comments` passed; `make findings ARGS="validate"` passed (3 files).
 - Evidence update, in `ee66935f`: `npm run openspec -- validate close-g2 --strict` passed ("Change 'close-g2' is valid"); `npm run findings -- validate` passed ("Every findings file is valid: 6 file(s)."); `npm run verify:comments` passed ("Every comment is within the comment length rule."); `git diff --check` reported nothing.
@@ -190,6 +191,7 @@ Light checks only, because the host is shared with evidence runs; `make verify` 
 - Landed ReDoS fix and Linux crash windows: `npm run openspec -- validate close-g2 --strict` passed; `npm run findings -- validate` passed (8 files, with the two archives of #329 and #330); `npm run verify:comments` passed; `git diff --check` reported nothing.
 - Owner decisions after #342 (this update): `npm run openspec -- validate close-g2 --strict` passed ("Change 'close-g2' is valid"); `npm run openspec -- validate --all --strict` passed (70 passed, 0 failed); `npm run verify:comments` passed; `npm run findings -- validate` passed ("Every findings file is valid: 20 file(s)."); `git diff --check` reported nothing; every relative link in the ADR, the ledger, `docs/fleet.md`, and this change resolves (a scratch script over `](...)` targets). Archive test in a scratch copy of the tracked `openspec/` tree and this change, with this worktree's `node_modules`: `openspec archive close-g2 --yes` archived it as `2026-10-27-close-g2` (`foundation-closure` + 1), and `openspec validate --all --strict` then passed (69 passed, 0 failed).
 - Fresh-clone record and coordinator answers (this update): `npm run openspec -- validate close-g2 --strict` passed ("Change 'close-g2' is valid"); `npm run openspec -- validate --all --strict` passed (70 passed, 0 failed); `npm run verify:comments` passed; `npm run findings -- validate` passed ("Every findings file is valid: 20 file(s)."); `git diff --check` reported nothing; the 93 relative link targets in the ADR, the ledger, `docs/fleet.md`, and this change's Markdown resolve, apart from the literal `](...)` in the check line above. Archive test in a scratch copy of the tracked `openspec/` tree and this change, with this worktree's `node_modules`: `openspec archive close-g2 --yes` archived it as `2026-10-27-close-g2` with `fresh-clone-results.jsonl` (`foundation-closure` + 1), and `openspec validate --all --strict` then passed (69 passed, 0 failed). `make verify` was not run on this branch.
+- `make verify` at `d7bc65bd`, the revision of review pass 1, 2026-10-27: exit 0 in 206 s; 2113 tests, 2111 passed, 0 failed, 0 cancelled, 2 skipped; coverage of all files 99.29 % lines, 92.11 % branches, 99.00 % functions; findings valid (21 files) and pass summaries valid (2 files). Docker ran with `DOCKER_CONFIG` set to an empty configuration, as in the fresh-clone reproduction.
 
 ## Independent review
 
