@@ -1,9 +1,7 @@
-import { err, failure, ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, REDACTED, type Result } from '@taskelith/kernel';
 
-export const REDACTED = '[redacted]';
-
-// Credential text that only reveal() discloses, so that a logged or
-// serialized secret shows nothing (account pool contract section 6.2).
+// A subscription token that only reveal() discloses, so that a logged or
+// serialized one shows nothing (account pool contract sections 6.2, 7.1).
 export class SlotSecret {
   readonly #text: string;
 

@@ -5,6 +5,12 @@ import type { ProjectId, ProviderCredentialId } from './capacity-reservation.js'
 // Opaque to the pool: no harness or vendor is ever named (contract section 1).
 export type SubscriptionMechanismId = Identifier<'SubscriptionMechanismId'>;
 
+declare const slotCredentialVersionBrand: unique symbol;
+
+// Assigned by the store from a per-slot counter, so ordered and never
+// reused; a rotation discards only older versions (sections 6.2, 8.1).
+export type SlotCredentialVersion = number & { readonly [slotCredentialVersionBrand]: true };
+
 export const SLOT_STATES = Object.freeze(['active', 'revoked', 'removed'] as const);
 export const SLOT_HEALTH = Object.freeze(['healthy', 'unhealthy'] as const);
 export const COOLDOWN_SOURCES = Object.freeze(['reported-reset', 'default'] as const);
@@ -44,6 +50,7 @@ export interface AccountSlot {
   readonly id: ProviderCredentialId;
   readonly harnessId: HarnessPluginId;
   readonly mechanismId: SubscriptionMechanismId;
+  readonly credentialVersion: SlotCredentialVersion;
   readonly allowedProjects: readonly ProjectId[];
   readonly concurrencyLimit: number;
   readonly state: SlotState;
@@ -62,6 +69,11 @@ export function parseAccountSlot(slot: AccountSlot): Result<AccountSlot> {
   return ok(Object.freeze({ ...slot, ...frozenParts(slot) }));
 }
 
+export function parseSlotCredentialVersion(value: number): Result<SlotCredentialVersion> {
+  if (!isPositiveInteger(value)) return err(failure('invalid', 'a credential version must be a positive integer'));
+  return ok(value as SlotCredentialVersion);
+}
+
 function frozenParts(slot: AccountSlot): Partial<AccountSlot> {
   const { allowedProjects, cooldown, usage } = slot;
   return {
@@ -72,10 +84,11 @@ function frozenParts(slot: AccountSlot): Partial<AccountSlot> {
 }
 
 function recordProblem(slot: AccountSlot): string | undefined {
-  const { allowedProjects, concurrencyLimit, usage, revision } = slot;
+  const { allowedProjects, concurrencyLimit, credentialVersion, usage, revision } = slot;
   if (allowedProjects.length === 0) return 'a slot must allow at least one project';
   if (new Set(allowedProjects).size !== allowedProjects.length) return 'a project is allowed twice';
   if (!isPositiveInteger(concurrencyLimit)) return 'the concurrency limit must be a positive integer';
+  if (!isPositiveInteger(credentialVersion)) return 'the credential version must be a positive integer';
   if (!isPositiveInteger(revision)) return 'the revision must be a positive integer';
   if (usage !== undefined && !(usage.fraction >= 0 && usage.fraction <= 1)) return 'usage must be a fraction from 0 to 1';
   return undefined;
