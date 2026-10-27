@@ -55,17 +55,17 @@ macOS 26.6.2 (Darwin 25.6.0), x86_64, the Intel iMac; Node.js v24.22.1 through `
 
 - `make verify` on `60cc4b80`, before pass 1, by the coordinator (Niki's worker session, macOS x86_64 iMac): exit 0, last line `Packed file allowlist and installed CLI verification passed.`
 - `make verify` on `8e8ce090`, after the pass 1 fixes and before pass 2, by the coordinator (Niki's worker session, macOS x86_64 iMac): exit 0, last line `Packed file allowlist and installed CLI verification passed.`
-- `make verify` after the pass 2 fixes: pending.
+- `make verify` on `97344117`, after the pass 2 fixes and before pass 3, by the coordinator (Niki's worker session, macOS x86_64 iMac): exit 0, last line `Packed file allowlist and installed CLI verification passed.`
 
 ## Independent review
 
-- Pass 1, reviewer A: Codex CLI `gpt-6.1-sol`, invoked as `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`. Model confirmation from the session header: model `gpt-6.1-sol`, reasoning effort medium, sandbox read-only, session `01a17e30-c2d5-7432-a273-61e226b7223f`. Run by the coordinator on HEAD `60cc4b80a5c52fc8a6232a8c8359f9cb1f831a92`; the worktree snapshot before and after was equal. The reviewer confirmed 77 of 77 tests and that the 16 tests of `29e42d82` fail on the code of `4fe09456`. Findings: Critical 0, High 2, Medium 2, Low 1, as in `passes.jsonl`; all fixed, unreviewed until pass 2:
+- Pass 1, reviewer A: Codex CLI `gpt-6.1-sol`, invoked as `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`. Model confirmation from the session header: model `gpt-6.1-sol`, reasoning effort medium, sandbox read-only, session `01a17e30-c2d5-7432-a273-61e226b7223f`. Run by the coordinator on HEAD `60cc4b80a5c52fc8a6232a8c8359f9cb1f831a92`; the worktree snapshot before and after was equal. The reviewer confirmed 77 of 77 tests and that the 16 tests of `29e42d82` fail on the code of `4fe09456`. Findings: Critical 0, High 2, Medium 2, Low 1, as in `passes.jsonl`; all fixed, reviewed in pass 2:
   - R1 High (redaction, `credential-cases.ts:100`): outcome findings interpolated plugin and fixture values, so a secret in permissions, an invalid `expiresAt`, `runId`, or repositories reached the report. Fixed in `b74d1954`: fixed field paths and mismatch descriptions; the contract (section 8) and "Conformance findings without payloads" now cover every finding, and the earlier limitation about checked values is removed.
   - R2 High (redaction, `merge-cases.ts:152`): `attemptBypassMerge` failure codes were interpolated without validating the fixture's `Result`. Fixed in `b74d1954` with `fixtureResult`.
   - R3 Medium (error-handling, `conformance-case.ts:38`): `instanceof CaseAborted` could run a thrown `Proxy`'s `getPrototypeOf` trap, which rejected the whole run. Fixed in `b74d1954` with the `WeakSet` of aborts.
   - R4 Medium (process, `verification.md:42`): the `make verify` before review was not recorded. Recorded above, with the post-fix run pending.
   - R5 Low (stale-citation, `verification.md:14`): the revision list and the per-revision counts were stale, as were contract citations. The revision list, the results table, and every citation were checked again.
-- Pass 2, reviewer B: Claude Code `claude-opus-5-5`, invoked as `claude -p ... --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json < /dev/null`. Model confirmation: `claude-opus-5-5` in the result's `modelUsage`; effort high from the invocation. Session `c8a4b74c-e6e5-4612-884d-720448756f3f`, run by the coordinator on HEAD `8e8ce090347f251e2ba3d4dafb38090706070a84`; the worktree snapshot before and after was equal. The reviewer confirmed the pass 1 fixes and found no path for a plugin or fixture value, a secret, or a raw payload to reach a finding; it did not run the integrations tests, which need a build that writes files. Findings: Critical 0, High 0, Medium 5, Low 7, as in `passes.jsonl`; all fixed, unreviewed until pass 3:
+- Pass 2, reviewer B: Claude Code `claude-opus-5-5`, invoked as `claude -p ... --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json < /dev/null`. Model confirmation: `claude-opus-5-5` in the result's `modelUsage`; effort high from the invocation. Session `c8a4b74c-e6e5-4612-884d-720448756f3f`, run by the coordinator on HEAD `8e8ce090347f251e2ba3d4dafb38090706070a84`; the worktree snapshot before and after was equal. The reviewer confirmed the pass 1 fixes and found no path for a plugin or fixture value, a secret, or a raw payload to reach a finding; it did not run the integrations tests, which need a build that writes files. Findings: Critical 0, High 0, Medium 5, Low 7, as in `passes.jsonl`; all fixed, confirmed in pass 3:
   - M1 Medium (docs, `docs/g3-plan.md:106`): no row owned the adoption confirmation. Within coordinator decision option A, row 9 carries the confirmation, row 18 sends it, and row 21 ends the previous secret through item 20's revised port; contract section 3 and "Refreshed credential delivery" say so.
   - M2 Medium (contract-drift, `docs/contracts/source-control.md:24`): rule 7 kept the port at `0.1.0`, against item 20's revision. Rule 7, plan row 20, and "Draft SCM port" now give the revision version `0.2.0`.
   - M3 Medium (docs, `docs/contracts/source-control.md:35`): the redaction obligation named `@taskelith/secrets`, which logs do not use. The contract, plan row 20, "Run credential secret", and design decision 1 now name the shared `SECRET_SHAPE_RULES` of `@taskelith/observability`.
@@ -78,7 +78,8 @@ macOS 26.6.2 (Darwin 25.6.0), x86_64, the Intel iMac; Node.js v24.22.1 through `
   - L5 Low (evidence-mismatch, `findings.jsonl:1`): R1 named one commit. Its resolution now names `b74d1954` and `8e8ce090`.
   - L6 Low (stale-citation, `verification.md:17`): the revision list did not name `8e8ce090`. It does now.
   - L7 Low (process, `verification.md:58`): pass 1 lacked its invocation and model confirmation. Both are recorded.
-- Pass 3, reviewer A: Codex CLI `gpt-6.1-sol`. Not run yet.
+- Pass 3, reviewer A: Codex CLI `gpt-6.1-sol`, invoked as in pass 1 with a confirm-only prompt. Model confirmation from the session header: model `gpt-6.1-sol`, reasoning effort medium, sandbox read-only, session `01a17e49-f3b6-7473-9945-b63e46e32bee`. Run by the coordinator on HEAD `973441170893a0a33d0597489d1cee05617ff995`; the worktree snapshot before and after was equal. The reviewer confirmed all 12 pass 2 fixes and 85 of 85 tests. Findings: Critical 0, High 0, Medium 0, Low 0, as in `passes.jsonl`.
+- Coordinator confirmations (Niki, 2026-10-27): the port version `0.2.0` after item 20's revision (pass 2, M2) is accepted, and the pass 2 M1 resolution follows coordinator decision option A.
 
 ## Limitations
 
@@ -88,7 +89,4 @@ macOS 26.6.2 (Darwin 25.6.0), x86_64, the Intel iMac; Node.js v24.22.1 through `
 
 ## Remaining gates
 
-- `make verify` after the pass 2 fixes.
-- Independent review: reviewer A pass 3.
-- Archive of the change.
 - Integration into dev by the coordinator (single pull request).

@@ -22,5 +22,5 @@
 
 - [x] 4.1 Independent review pass 1 (reviewer A) and its fixes
 - [x] 4.2 Independent review pass 2 (reviewer B) and its fixes
-- [ ] 4.3 Independent review pass 3 (reviewer A)
+- [x] 4.3 Independent review pass 3 (reviewer A)
 - [ ] 4.4 Archive the change
