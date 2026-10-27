@@ -37,19 +37,19 @@ test('a read-only credential that can write is reported', async () => {
     'refreshed credential outcome',
     'credential isolation outcome',
   ]);
-  assert.match(lines[0]!, /^read-only credential outcome: write-code with credential cred-\d+ to acme\/project must fail with forbidden$/);
+  assert.match(lines[0]!, /^read-only credential outcome: write-code to the project repository must fail with forbidden$/);
 });
 
 test('a credential that works for no access at all is reported', async () => {
   const lines = await defective({ unusableCredentials: true });
   assert.ok(lines.length > 0 && lines.every((line) => line.endsWith('must succeed')));
-  assert.match(lines[0]!, /^read-only credential outcome: read-code with credential cred-\d+ to acme\/project must succeed$/);
+  assert.match(lines[0]!, /^read-only credential outcome: read-code to the project repository must succeed$/);
   assert.ok(lines.some((line) => /^revoked credential outcome: write-code .* must succeed$/.test(line)));
 });
 
 test('a credential not limited to the project repositories is reported', async () => {
   const lines = await defective({ unscopedCredentials: true });
-  assert.ok(lines.every((line) => line.endsWith('to acme/other must fail with forbidden')));
+  assert.ok(lines.every((line) => line.endsWith('to the foreign repository must fail with forbidden')));
   assert.deepEqual(cases(lines), [
     'read-only credential outcome',
     'write credential outcome',
@@ -62,7 +62,7 @@ test('a credential not limited to the project repositories is reported', async (
 test('a refreshed credential that the service widened is reported', async () => {
   const lines = await defective({ refreshUnscopes: true });
   assert.deepEqual(headings(lines), Array(5).fill('refreshed credential outcome'));
-  assert.ok(lines.every((line) => line.endsWith('to acme/other must fail with forbidden')));
+  assert.ok(lines.every((line) => line.endsWith('to the foreign repository must fail with forbidden')));
 });
 
 test('a refresh that does not extend the expiry is reported', async () => {
@@ -74,7 +74,7 @@ test('a refresh that does not extend the expiry is reported', async () => {
 test('a refresh that returns the same secret with a later expiry is reported', async () => {
   const lines = await defective({ refreshKeepsSecret: true });
   assert.equal(lines[0], 'refreshed credential outcome: refreshRunCredential must return a new secret');
-  assert.match(lines[4]!, /write-code with credential cred-\d+ to acme\/project after its refresh must fail with forbidden/);
+  assert.match(lines[4]!, /write-code to the project repository after its refresh must fail with forbidden/);
 });
 
 test('a refresh that leaves the previous secret working is reported', async () => {
@@ -101,7 +101,7 @@ test('one secret shared between runs is reported', async () => {
 test('a credential that reads outside the project is reported', async () => {
   const lines = await defective({ readsOutsideProject: true });
   assert.ok(lines.length > 0);
-  assert.ok(lines.every((line) => /: read-code with credential cred-\d+ to acme\/other must fail with forbidden$/.test(line)));
+  assert.ok(lines.every((line) => /: read-code to the foreign repository must fail with forbidden$/.test(line)));
   assert.deepEqual(cases(lines), [
     'read-only credential outcome',
     'write credential outcome',
@@ -113,11 +113,11 @@ test('a credential that reads outside the project is reported', async () => {
 
 test('a refreshed or revoked credential that still reads is reported', async () => {
   const lines = await defective({ endedCanRead: true });
-  assert.deepEqual(lines.map((line) => line.replace(/cred-\d+/, 'cred')), [
-    'refreshed credential outcome: read-code with credential cred to acme/project after its refresh must fail with forbidden',
-    'refreshed credential outcome: read-code with credential cred to acme/project after its refresh must fail with forbidden',
-    'revoked credential outcome: read-code with credential cred to acme/project after its revocation must fail with forbidden',
-    'credential isolation outcome: read-code with credential cred to acme/project after its revocation must fail with forbidden',
+  assert.deepEqual(lines, [
+    'refreshed credential outcome: read-code to the project repository after its refresh must fail with forbidden',
+    'refreshed credential outcome: read-code to the project repository after its refresh must fail with forbidden',
+    'revoked credential outcome: read-code to the project repository after its revocation must fail with forbidden',
+    'credential isolation outcome: read-code to the project repository after its revocation must fail with forbidden',
   ]);
 });
 
@@ -134,7 +134,7 @@ for (const permission of ['write-change-requests', 'write-statuses']) {
 
   test(`a credential that lists ${permission} without honouring it is reported`, async () => {
     const lines = await defective({ grantsOnPaper: permission });
-    assert.ok(lines.length > 0 && lines.every((line) => line.includes(`${permission} with credential`) && line.endsWith('must succeed')));
+    assert.ok(lines.length > 0 && lines.every((line) => line.includes(`${permission} to the project repository`) && line.endsWith('must succeed')));
     assert.deepEqual(cases(lines), [
       'change request and status credentials outcome',
       'refreshed credential outcome',
@@ -171,7 +171,7 @@ test('a merge that ignores one required context is reported', async () => {
 test('an existing required context that is not enforced is reported', async () => {
   const lines = await defective({ ignoredContext: EXTRA_CONTEXT }, { existingRequiredStatuses: [EXTRA_CONTEXT] });
   assert.deepEqual(cases(lines), ['required statuses outcome']);
-  assert.match(lines[0]!, /^required statuses outcome: mergeChangeRequest with merge-commit and existing\/required missing succeeded/);
+  assert.match(lines[0]!, /^required statuses outcome: mergeChangeRequest with merge-commit and another required context missing succeeded/);
 });
 
 test('a merge that treats failure and error as success is reported', async () => {
@@ -188,7 +188,7 @@ test('a method other than the fixture method that only pending blocks is reporte
 test('a refused merge that merged anyway is reported', async () => {
   const lines = await defective({ mergesDespiteRefusal: true });
   assert.deepEqual(cases(lines), ['required statuses outcome']);
-  assert.match(lines[0]!, /after mergeChangeRequest with merge-commit and taskelith\/review missing main moved from/);
+  assert.match(lines[0]!, /after mergeChangeRequest with merge-commit and taskelith\/review missing the base branch moved$/);
   assert.match(lines[1]!, /the change request is merged, not open$/);
 });
 
@@ -206,15 +206,15 @@ test('a merge of a stale head is reported', async () => {
 
 test('a merge by another method than the requested one is reported', async () => {
   assert.deepEqual(await defective({ alwaysSquashes: true }), [
-    'merge methods outcome: mergeChangeRequest with merge-commit merged by squash',
+    'merge methods outcome: mergeChangeRequest with merge-commit merged by another method',
   ]);
 });
 
 test('a merge commit that is not the new base head is reported', async () => {
   const lines = await defective({ fabricatedMergeCommit: true });
   assert.deepEqual(headings(lines), Array(4).fill('merge methods outcome'));
-  assert.match(lines[0]!, /mergeChangeRequest with merge-commit returned mergeCommit nonexistent, not the base head c\d+/);
-  assert.equal(lines[1], 'merge methods outcome: mergeChangeRequest with merge-commit merged by none');
+  assert.match(lines[0]!, /mergeChangeRequest with merge-commit returned a mergeCommit that is not the new base head$/);
+  assert.equal(lines[1], 'merge methods outcome: mergeChangeRequest with merge-commit merged by another method');
 });
 
 test('a native bypass probe that fails for another reason is a fixture finding', async () => {
