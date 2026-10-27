@@ -200,3 +200,13 @@ test('a Proxy thrown from a fixture getter stops only its case', async () => {
   assertNoSecret(lines);
   assert.ok(lines.includes('read-only credential threw: the case stopped: a value that is not an Error'));
 });
+
+test('a revoked Proxy as a returned value is a shape finding', async () => {
+  const revoked = (): object => {
+    const { proxy, revoke } = Proxy.revocable({}, {});
+    revoke();
+    return proxy;
+  };
+  const value = await patched(() => ({ issueRunCredential: async () => ok(revoked()) as never }));
+  assert.equal(value[0], 'read-only credential shape: issueRunCredential: credential could not be read: a TypeError');
+});

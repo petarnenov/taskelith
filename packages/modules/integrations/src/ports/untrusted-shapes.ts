@@ -42,9 +42,9 @@ export const flag: FieldCheck = (value) => (typeof value === 'boolean' ? undefin
 
 // A record of string values; reading an entry may run a plugin getter.
 export const textRecord: FieldCheck = (value) => {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return 'must be a record of strings';
   try {
-    return Object.values(value).every((item) => typeof item === 'string') ? undefined : 'must be a record of strings';
+    const isRecord = isObjectRecord(value) && Object.values(value).every((item) => typeof item === 'string');
+    return isRecord ? undefined : 'must be a record of strings';
   } catch (error) {
     return `could not be read: ${describeThrown(error)}`;
   }
@@ -59,9 +59,16 @@ export function optional(check: FieldCheck): FieldCheck {
   return (value) => (value === undefined ? undefined : check(value));
 }
 
+// Array.isArray throws on a revoked Proxy, so callers check inside a try.
+function isObjectRecord(value: unknown): value is object {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export function readRecord<Value>(label: string, value: unknown, shape: RecordShape): Reading<Value> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return { ok: false, error: [`${label} must be an object`] };
+  try {
+    if (!isObjectRecord(value)) return { ok: false, error: [`${label} must be an object`] };
+  } catch (error) {
+    return { ok: false, error: [`${label} could not be read: ${describeThrown(error)}`] };
   }
   const fields = readFields(value as Record<string, unknown>, Object.keys(shape));
   if (!fields.ok) return { ok: false, error: [`${label} could not be read: ${fields.error}`] };
