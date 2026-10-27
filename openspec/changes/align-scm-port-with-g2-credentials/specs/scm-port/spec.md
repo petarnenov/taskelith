@@ -36,11 +36,18 @@ A credential's effective permissions SHALL cover the request and MAY exceed it, 
 ## ADDED Requirements
 
 ### Requirement: Run credential secret
-A run credential's secret SHALL be delivered only to its run and SHALL NOT be logged or stored. G2 has no mechanism for this, so it is G3 work: item 20 SHALL add the secret to the redaction of `@taskelith/secrets`, and item 21 SHALL scrub it on the path that delivers the credential to a run.
+A run credential's secret SHALL be delivered only to its run and SHALL NOT be logged or stored. G2 has no mechanism for this, so it is G3 work: item 20 SHALL add the secret to the redaction of `@taskelith/secrets`, and item 21, which delivers the credential to a run, SHALL scrub it on that path.
 
 #### Scenario: Secret on the delivery path
 - **WHEN** the delivery path hands a run credential to its run, and a log line, an error payload, or a child process environment on that path holds the secret
 - **THEN** the secret is redacted or scrubbed there and reaches only its run
+
+### Requirement: Refreshed credential delivery
+A refreshed credential SHALL reach its running run, and the run SHALL adopt it. This is G3 work: item 9 defines the message, item 21 delivers it, item 18 adopts it, and item 20 SHALL revise the port so that the previous secret stays valid until the run confirms adoption. Until that revision, the port ends the previous secret when the refresh returns.
+
+#### Scenario: Failed delivery of a refreshed credential
+- **WHEN** a credential is refreshed under the revised port and its delivery to the running run fails
+- **THEN** the run keeps working with the previous secret, which ends only after the run confirms adoption of the new one
 
 ### Requirement: Conformance findings without payloads
 A conformance finding SHALL name a thrown value only by a fixed category and SHALL NOT carry its message, name, stack, or other payload, nor the value of a malformed or unknown result field.

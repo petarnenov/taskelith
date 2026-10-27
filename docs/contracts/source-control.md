@@ -32,9 +32,10 @@ The ports belong to the Integrations module, the "SCM / Tracker integrations" mo
 - `issueRunCredential` takes the run, its repositories, and the permissions it needs, and returns a credential for that run only, limited to those repositories for every permission, reads included, with its effective repositories, permissions, and expiry.
 - The effective permissions are what the credential can actually do: each one works in the project, and a permission not listed does not.
 - Effective permissions cover the request and may exceed it when the service has no narrower permission, and the plugin reports them; a credential requested without `write-code` never has it. A service whose only permission for change request or status writes also writes code therefore cannot serve a request for them without `write-code`, and the conformance suite reports such a grant (section 7 records this gate for Forgejo). The policy that accepts or refuses a wider set belongs to the module's use cases.
-- The secret goes only to its run and is never logged or stored. G2 has no mechanism for this: the redaction rules of `@taskelith/secrets` match only Taskelith's own secret shapes (`tkop_`, `tken_`, and `tkwk_` tokens, NKey seeds, JWTs, and `.creds` blocks), and no production path calls its `scrubEnvironment`. Both are G3 obligations: item 20 (`implement-github-scm-plugin`) adds the per-run SCM credential's secret to the redaction of `@taskelith/secrets`, and item 21 (`implement-review-and-verification-stages`), which with item 23 owns the module's credential delivery to a run (section 10), scrubs it on that delivery path.
+- The secret goes only to its run and is never logged or stored. G2 has no mechanism for this: the redaction rules of `@taskelith/secrets` match only Taskelith's own secret shapes (`tkop_`, `tken_`, and `tkwk_` tokens, NKey seeds, JWTs, and `.creds` blocks), and no production path calls its `scrubEnvironment`. Both are G3 obligations: item 20 (`implement-github-scm-plugin`) adds the per-run SCM credential's secret to the redaction of `@taskelith/secrets`, and item 21 (`implement-review-and-verification-stages`), which owns the delivery of the credential to a run (section 10), scrubs it on that delivery path.
 - Credentials of different runs are independent: neither widens the other, and revoking one leaves the other usable.
 - `refreshRunCredential` returns a new secret for the same repositories and permissions with a later expiry, and ends the previous secret, reads included, so that a long run keeps working. `credentialId` may stay the same.
+- Delivery of a refreshed credential to a running run is open G3 work. Item 9 (`define-g3-wire-contracts`) defines the message that carries it to the worker, item 21 delivers it, and item 18 (`implement-harness-host-in-worker`) adopts it by passing the run's current credential to the item 16 workspace per operation. Because a refresh ends the previous secret on return, the run cannot work between that end and its adoption of the new secret, and a failed delivery leaves it with none. Item 20 revises the port so that the previous secret stays valid until the run confirms adoption, as item 26 does for worker credentials; until then, version `0.1.0` ends it on return.
 - `revokeRunCredential` ends the credential, reads included, and returns no value.
 
 ## 4. Change requests, statuses, and merges
@@ -107,13 +108,14 @@ The gaps are recorded, not hidden: Forgejo's coarser token scopes make the effec
 ## 9. Required tests
 
 - This item: the suite against a test-only in-memory SCM, and against defective variants of it, each of which the suite must report.
-- Item 20: the suite through `make` against GitHub.com with the plugin's own credential and disposable repositories, including a run that outlives a credential's original expiry.
+- Item 20: the suite through `make` against GitHub.com with the plugin's own credential and disposable repositories, including a run that outlives a credential's original expiry, and the revised refresh, whose previous secret works until the run confirms adoption.
+- Item 21: a refreshed credential delivered to a running run and adopted by it, and a failed delivery, after which the run keeps the previous secret.
 - Forgejo's admission: the suite against Forgejo, with the mapping of section 7 confirmed.
 
 ## 10. Not in this contract
 
 - SCM plugins and their I/O: item 20 for GitHub; Forgejo later.
 - The Git workspace and its use of the run credential: item 6, the [Git workspace contract](git-workspace.md).
-- The module's use cases: credential delivery to a run, webhook deduplication, and merge orchestration (items 21 and 23).
+- The module's use cases: credential delivery to a run, a refreshed credential included (item 21, with its message in item 9 and its adoption in item 18), webhook deduplication, and merge orchestration (items 21 and 23).
 - The plugin SDK re-export and the plugin API version: item 20.
 - Wire schemas, including the webhook receiver's HTTP operation: item 9.
