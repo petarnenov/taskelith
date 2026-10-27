@@ -56,6 +56,17 @@ export const PLACEMENT_OUTCOME_RECORDS_CONFORMANCE: readonly ConformanceCase<Pla
     },
   },
   {
+    name: 'a record keeps what was written, whatever happens to its input later',
+    async check(records: PlacementOutcomeRecords) {
+      const problems: string[] = [];
+      const input = { ...WAITING };
+      expectSuccess(problems, 'record', await records.record(input));
+      Object.assign(input, { reason: 'run-quota-exhausted' });
+      expectSame(problems, 'get', await records.get(TASK), WAITING);
+      return problems;
+    },
+  },
+  {
     name: 'a later record replaces the task\'s earlier one',
     async check(records: PlacementOutcomeRecords) {
       const problems: string[] = [];

@@ -73,12 +73,12 @@ export class InMemoryPlacementRotation implements PlacementRotation {
   }
 }
 
-// Each task's record, kept for every service over the same store.
+// Each task's record as written, kept for every service over one store.
 export class InMemoryPlacementOutcomeRecords implements PlacementOutcomeRecords {
   readonly #records = new Map<TaskId, PlacementOutcomeRecord>();
 
   async record(outcome: PlacementOutcomeRecord): Promise<Result<void>> {
-    this.#records.set(outcome.taskId, outcome);
+    this.#records.set(outcome.taskId, Object.freeze({ ...outcome }));
     return ok(undefined);
   }
 
