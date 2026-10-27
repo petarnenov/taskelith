@@ -70,8 +70,6 @@ After the M3 plan amendment (`12aa98e6`), on the working tree of its record comm
 | L1 (Low, stale-citation): design D1 attributed both helpers' calls to `worker-revocation.ts:11` and the conformance calls to `reopenGate` (`design.md:9`) | D1 now says `invalidateLaunches` has no caller outside tests and only `invalidateWorkerLaunches` is called there, and only `recordGateEvidence` is called by the conformance suites; the conclusion stands |
 | L2 (Low, evidence-mismatch): the record said the merge of `b87abe75` brought only an archive, although it also changed two qualification documents (`verification.md:9`) | The Revision section names `docs/qualification/claude-code.md` and `docs/qualification/codex.md`, which are no inputs of this change |
 
-### Later passes
-
 ### Pass 2 (reviewer B)
 
 - Reviewer: Claude Code, model `claude-opus-5-5`, effort `high`, role B, run by the worker session (Pepi).
@@ -97,7 +95,14 @@ After the M3 plan amendment (`12aa98e6`), on the working tree of its record comm
 | L6 (Low, docs): the proposal described section 4.1 as before (`proposal.md:7`) | The proposal matches sections 4.1, 5, 6.3, and 7 |
 | L7 (Low, evidence-mismatch): pass 1 M3's commit, the `make verify` owner, and the remaining gates were inconsistent (`verification.md:37`) | Pass 1 M3 names `19cbad02`; the record says the worker runs `make verify`; the remaining gates name pass 3 |
 
-- Pass 3 (reviewer A): Codex `gpt-6.1-sol`. Pending.
+### Pass 3 (reviewer A)
+
+- Reviewer: Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, role A, run by the worker session (Pepi).
+- Invocation: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, read-only sandbox.
+- Model confirmation: the output header named `gpt-6.1-sol` with reasoning effort `medium` and sandbox `read-only`, as Pepi read it.
+- Session: `01a17f06-1eea-7a51-b485-7323f1f869a5`. Reviewed the range `ebdcb23f..94324564`, HEAD `94324564`.
+- Snapshot: `0cf2e4ffb0e983a38c00a97932672b31186d2ea3701ce614127ac3f8765838ad` before and after, unchanged.
+- Findings: critical 0, high 0, medium 0, low 0. All 11 pass 2 findings (M1 to M4, L1 to L7) confirmed resolved, and no problem introduced by their fixes. The review is complete.
 
 ## Limitations
 
@@ -107,6 +112,5 @@ After the M3 plan amendment (`12aa98e6`), on the working tree of its record comm
 ## Remaining gates
 
 - Owner confirmation of the item 44 plan amendment.
-- Independent review pass 3.
 - Archive of the change.
 - Integration into dev by the coordinator (single pull request)

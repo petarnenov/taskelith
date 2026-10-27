@@ -22,5 +22,5 @@
 - [x] 4.1 Independent review pass 1 (reviewer A) and its fixes
 - [x] 4.2 Independent review pass 2 (reviewer B) and its fixes
 - [x] 4.2.1 Amend G3 plan item 44 to re-admit a task whose grant a product writer revoked (owner's away delegate, 2026-10-27, relayed by the coordinator; pending the owner's confirmation)
-- [ ] 4.3 Independent review pass 3 (reviewer A)
+- [x] 4.3 Independent review pass 3 (reviewer A)
 - [ ] 4.4 Archive the change
