@@ -72,7 +72,7 @@ G3, "Usable web product and first real agent", is defined in [architecture secti
 | Platform probe file-system name | Resolved (#335); no gate | — |
 | Archived records with the `ext2/ext3` label and broken relative links | Accepted limit (#346); by owner decision B1 (2026-10-27) the links were repaired by #350 `repair-archived-record-links`, and the `ext2/ext3` labels keep their disposition; no G2 gate | — |
 | Docker Desktop credential helper on the Intel iMac | Owner's environment item; no gate | Not G3 |
-| GitHub-hosted `ubuntu-24.04` runner check for Linux x86_64 | Non-blocking follow-up, left open; no gate | Not G3 |
+| GitHub-hosted `ubuntu-24.04` runner check for Linux x86_64 | Resolved (#367 `record-hosted-runner-linux-acceptance`): the dispatch-only workflow of #355 ran the Linux entry `linux-ubuntu-24.04-x86_64` on `dev` at `4fe09456` on a GitHub-hosted `ubuntu-24.04` x86_64 runner (run 40534340382, 2026-10-27), and all ten proofs passed, 42 records ([its acceptance](../openspec/changes/archive/2026-10-27-record-hosted-runner-linux-acceptance/acceptance.md)). Process ownership is not marked met, because the worker-kill proof killed the worker after the task had exited; the cancellation and connectivity parts left to 24c stay with item 43, and the arm64 Linux entry is not covered; no gate | — |
 | Residual process-identity risks | Accepted residual risks; no gate | — |
 | **Tests and tooling** | | |
 | Flaky fair-order placement test | Resolved (#331); no gate | — |
@@ -94,7 +94,7 @@ G3, "Usable web product and first real agent", is defined in [architecture secti
 
 | # | Change | Scope | Source | Depends on | Blocked by | UI |
 | --- | --- | --- | --- | --- | --- | --- |
-| 0 | `revalidate-g3-foundations` | Re-review the merged G3 groundwork against G2 as built, as ADR 0015 records it with the later changes and limits of the [Starting point](#starting-point), each artifact by its own independent reviewer in rotation with at most three passes, and fix the findings in follow-up changes before any other G3 item starts. Item 1: its libraries are still current and qualified. Item 2: the provider terms are unchanged. Item 3: the G2 supervisor, launch orchestrator, and admission pressure. Item 5: the identifiers that `align-harness-identifiers` aligned and the PostgreSQL schema. Item 6: the G2 worker directory layout, cgroup containment, and home layout. Item 7: the G2 credential model and the G2 item 23 installation. Item 8: the task lifecycle as G2 built it. | Owner decision of 2026-10-26; items 1, 2, 3, 5, 6, 7, and 8; G2 as built (ADR 0015) | G2 closure | — | — |
+| 0 | `revalidate-g3-foundations` | **Done on 2026-10-27** ([Item 0 closure](#item-0-closure)). Re-review the merged G3 groundwork against G2 as built, as ADR 0015 records it with the later changes and limits of the [Starting point](#starting-point), each artifact by its own independent reviewer in rotation with at most three passes, and fix the findings in follow-up changes before any other G3 item starts. Item 1: its libraries are still current and qualified. Item 2: the provider terms are unchanged. Item 3: the G2 supervisor, launch orchestrator, and admission pressure. Item 5: the identifiers that `align-harness-identifiers` aligned and the PostgreSQL schema. Item 6: the G2 worker directory layout, cgroup containment, and home layout. Item 7: the G2 credential model and the G2 item 23 installation. Item 8: the task lifecycle as G2 built it. | Owner decision of 2026-10-26; items 1, 2, 3, 5, 6, 7, and 8; G2 as built (ADR 0015) | G2 closure | — | — |
 | 1 | `qualify-g3-dependencies` | Documentation only: evaluate, at their latest versions, the libraries and tools of the decided options: the SPA libraries (D1) and Mantine (D17), the session and password-hashing libraries (D2), the `git` CLI (D3), the pinned Claude Agent SDK and CLI (D5), the GitHub API client, and xterm.js and node-pty for the web terminal (D18); record versions, licenses, security reporting routes, advisories, and maintenance evidence, and register each as `candidate`. | Established OSS dependencies (ADR 0004, R35) | — | — | — |
 | 2 | `review-g3-provider-terms` | Documentation only: review the Anthropic, GitHub, and OpenAI terms, including whether they allow pooled subscriptions for automated use, and record the findings in the qualification records; the owner decides the remaining risk in D15. | ADR 0007 terms review; ADR 0005 risk | — | — | — |
 | 3 | `define-agent-harness-port` | Reviewed contract, spec, and port types: declared capabilities (chat, prompt correlation, resume, permission and input requests, interruption, exit observation, and the delegation and terminal capabilities, both implemented in G3 by D13 (c): a delegation's result returns to the parent attempt by its correlation, and a terminal attaches only to a running attempt's execution), host-generated turn IDs mapped to native correlation, native request IDs with a single response, terminal outcomes and error mapping, the subscription mechanisms and load, limit, and reset signals a plugin declares, pinned binaries with self-update disabled, the process-group obligation on macOS, and a harness-neutral conformance suite run against a scripted test harness. | Architecture section 7; ADR 0003 decisions 8 and 11; Claude Code qualification; G2 item 15 hand-off | — | — | — |
@@ -164,9 +164,40 @@ Items 0, 1, 2, 3, 5, 6, 7, and 8 depend on no other G3 item, and items 26, 27, a
 | 11 | 41 |
 | 12 | 42 |
 
-Items 1, 2, 3, 5, 6, 7, and 8 of wave 1 are already merged; they are the subject of item 0, which runs first after the G2 closure.
+Items 1, 2, 3, 5, 6, 7, and 8 of wave 1 are already merged; they are the subject of item 0, which ran first after the G2 closure and was done on 2026-10-27 ([Item 0 closure](#item-0-closure)). The other items of wave 1, 26, 27, and 43, are next.
 
 One of the longest dependency chains is 3 → 4 → 9 → 13 → 18 → 19 → 21 → 23 → 25 → 30 → 41 → 42.
+
+## Item 0 closure
+
+Item 0 was done on 2026-10-27. Its change `revalidate-g3-foundations` recorded the review of items 1, 2, 3, 5, 6, 7, and 8 and named a follow-up change for each item that needed a fix; item 3 needed none ([its verification](../openspec/changes/archive/2026-10-27-revalidate-g3-foundations/verification.md#follow-up-changes)). By [its proposal](../openspec/changes/archive/2026-10-27-revalidate-g3-foundations/proposal.md), item 0 is done when every follow-up change it lists has landed in `dev`. Item 0's changes, each archived under `openspec/changes/archive/` with the date prefix `2026-10-27-`:
+
+| Pull request | Change | Item | Subject |
+| --- | --- | --- | --- |
+| #357 | `revalidate-g3-foundations` | 0 | docs: revalidate the G3 foundations against G2 as built |
+| #358 | `align-scm-port-with-g2-credentials` | 7 | chore: align the SCM port with the G2 credential model |
+| #359 | `align-git-workspace-with-execution-boundary` | 6 | chore: align the Git workspace with the execution boundary |
+| #360 | `record-placement-outcome` | 8 | chore: record the placement outcome of each task |
+| #362 | `derive-workspace-names-from-task-ids` | 6 | chore: derive workspace names from task identifiers |
+| #363 | `refresh-g3-dependency-observations` | 1 | docs: refresh the G3 dependency observations |
+| #364 | `align-slot-credential-delivery` | 5 | chore: align slot credential delivery with the G2 boundary |
+| #365 | `recheck-provider-terms-pages` | 2 | docs: recheck the provider terms pages |
+| #366 | `align-account-pool-signals` | 5 | docs: align the account pool signals with G2 |
+| #367 | `record-hosted-runner-linux-acceptance` | — | docs: record the hosted runner Linux acceptance |
+| #368 | `align-account-pool-placement-baseline` | 5 | docs: align the account pool placement baseline with G2 |
+| #369 | `bind-product-writers-to-launch-invalidation` | 8 | docs: bind the product writers to launch invalidation |
+| Pending | `align-product-ports-with-g2-lifecycle` | 8 | Pending: the next integration into `dev` |
+
+`record-hosted-runner-linux-acceptance` is not a follow-up of the revalidation: it resolved the hosted-runner check that ADR 0015 decision 5 left open ([G2 closure deferrals](#g2-closure-deferrals)). Two related test changes landed in the same period: #361 `stabilize-g2-cancellation-races-exit-signal` ("test: stabilize the G2 cancellation race exit signal") and #370 `stabilize-workspace-handoff-race-conformance` ("test: stabilize the workspace handoff race conformance case"), which stabilized a conformance test that #359 added.
+
+### Open owner confirmations
+
+The owner's away delegate decided these points of item 0's changes on 2026-10-27, and each waits for the owner's confirmation. This list records them and decides none of them.
+
+1. Item 6, `align-git-workspace-with-execution-boundary` (#359), design open questions 1 and 2: question 1 option (a), at most one handed-off workspace per Linux worker in G3, with option (b), an execution account per execution slot, deferred, because all executions share one uid and can reach each other's handed-off checkouts; question 2 option (a), accepting that an execution can stat named paths under `worker/`, so no name there encodes a secret (away run `20261027T160711Z-claude-46821`). The round 2 decision on item 41 keeps the cap (away run `20261027T162806Z-claude-44593`). Source: [its design](../openspec/changes/archive/2026-10-27-align-git-workspace-with-execution-boundary/design.md#open-questions) and [its verification](../openspec/changes/archive/2026-10-27-align-git-workspace-with-execution-boundary/verification.md#remaining-gates).
+2. Item 5, `align-slot-credential-delivery` (#364): the fixes of review pass 3, its Medium finding, the rotation cleanup race (ordered credential versions and `discardOlderThan`), and its Low finding, stale citations, were applied without another review and recorded `fixed-unreviewed`. Source: [its verification](../openspec/changes/archive/2026-10-27-align-slot-credential-delivery/verification.md#remaining-gates) and its `findings.jsonl`.
+3. Item 8, `align-product-ports-with-g2-lifecycle`: design D1, one board card per root run keyed by `runId`, with the card and task vocabulary that its contract section 3.3 reads against ADR 0008 decisions 4 and 5, confirmed by the delegate together with D4, D7, and D8 (away run `20261027T200403Z-claude-78187`). ADR 0008 is not edited; an optional editorial note in it on the run and admissions wording waits for the owner. Source: the change's `verification.md`, lines 20 to 24 and 151, on its branch until it lands.
+4. Item 44, widened by `bind-product-writers-to-launch-invalidation` (#369): it also re-admits a task whose launch grant a product writer revoked (review pass 2 M3, option (a), away run `20261027T201212Z-claude-24852`); the item 44 row carries the amendment. Source: [its verification](../openspec/changes/archive/2026-10-27-bind-product-writers-to-launch-invalidation/verification.md#remaining-gates).
 
 ## Owner decisions
 
