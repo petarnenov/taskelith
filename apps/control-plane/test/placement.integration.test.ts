@@ -184,7 +184,7 @@ describe('placement', () => {
     await createSecondRun();
     await submit('task-b', 'run-2');
     const clock = { at: Date.now() };
-    // A long jitter for the first decline, task-b's; none for the rest.
+    // A long jitter, were the fleet capacity decline to back off.
     const draws = [0.9];
     const timed = new PlacementService(database, { now: () => clock.at, draw: () => draws.shift() ?? 0 });
     assert.deepEqual(value(await timed.placeWaiting()), { waiting: 51, placed: 1 });
@@ -192,6 +192,29 @@ describe('placement', () => {
     clock.at += 5_000;
     assert.equal(value(await timed.placeWaiting()).placed, 1);
     assert.deepEqual(await placedTasks(), ['task-a01', 'task-b']);
+  });
+
+  test('a slot freed during a pass after a fleet capacity decline goes to the declined project', async () => {
+    await enroll('worker-a', { slots: 1 });
+    await createSecondRun();
+    await submit('task-1');
+    await submit('task-3', 'run-2');
+    await sql('UPDATE workers SET slots = 0');
+    let transactions = 0;
+    // Frees the slot right after the first placement transaction ends.
+    const freeing: ControlPlaneStore = {
+      readCommitted: (work) => database.readCommitted(work),
+      transaction: async (work) => {
+        const outcome = await database.transaction(work);
+        if (++transactions === 1) await sql('UPDATE workers SET slots = 1');
+        return outcome;
+      },
+    };
+    const pass = new PlacementService(freeing, TIMING);
+    assert.deepEqual(value(await pass.placeWaiting()), { waiting: 2, placed: 0 });
+    assert.deepEqual([transactions, await placedTasks()], [1, []]);
+    assert.deepEqual(value(await pass.placeWaiting()), { waiting: 2, placed: 1 });
+    assert.deepEqual(await placedTasks(), ['task-1']);
   });
 
   test('without a candidate no placement transaction is opened', async () => {

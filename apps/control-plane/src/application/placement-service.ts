@@ -86,8 +86,8 @@ export class PlacementService {
     return outcome.ok ? ok({ waiting: waiting.length, placed: outcome.value }) : outcome;
   }
 
-  // Offers each task until the store fails; answers the number placed, or
-  // the outage, and the rotation cursor for the next read.
+  // Offers each task until the store fails or the fleet lacks capacity;
+  // answers the number placed, or the outage, and the cursor for the next read.
   async #offer(order: readonly WaitingPlacement<TaskId>[], after: ProjectId | undefined): Promise<Offers> {
     const cursor = new RotationCursor(after);
     let placed = 0;
@@ -99,6 +99,7 @@ export class PlacementService {
         placed++;
       } else if (isFleetCapacityDecline(outcome)) {
         cursor.ranOutOfCapacity();
+        break;
       } else {
         cursor.declined(projectId);
       }
@@ -107,10 +108,9 @@ export class PlacementService {
     return { outcome: ok(placed), next: cursor.next };
   }
 
-  // A fleet capacity decline keeps the wait, a backing-off retry waits until
-  // due, a task placed or not waiting has none; any other backs off again.
+  // Never given a fleet capacity decline, which keeps the wait. A backing-off
+  // retry waits until due, one placed or not waiting has none; others back off.
   #settle(taskId: TaskId, outcome: Result<TaskPlacement>): void {
-    if (isFleetCapacityDecline(outcome)) return;
     if (outcome.ok && outcome.value.kind === 'backing-off') this.#tasks.delayUntil(taskId, outcome.value.dueAt);
     else if (outcome.ok || noLongerWaits(outcome.error)) this.#forget(taskId);
     else this.#tasks.failed(taskId);
@@ -281,7 +281,7 @@ function noLongerWaits(error: Failure): boolean {
   return error.details.reason === NOT_WAITING;
 }
 
-// A pass stops when the store fails; a task that is not placed does not.
+// A store failure, which stops the pass and backs off the next passes.
 function isOutage(code: string): boolean {
   return code === 'unavailable' || code === 'internal';
 }

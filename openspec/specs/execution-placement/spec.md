@@ -29,10 +29,10 @@ A task SHALL wait for placement while it has no attempt, or while its active att
 - **THEN** the other project's task is offered before the first project's next task
 
 ### Requirement: Project rotation
-Each waiting read SHALL take each project's oldest task before any project's next, and SHALL start with the projects after the rotation cursor, wrapping around. After a pass the cursor SHALL move only by its offers before its first decline for lack of fleet capacity, an offer the store failed not counting: to the project of the last of them placed, else of the last of them, else it SHALL stay, so that every project with a waiting task is read within a bounded number of passes.
+Each waiting read SHALL take each project's oldest task before any project's next, starting after the rotation cursor, wrapping around. A pass SHALL make no offer after its first decline for lack of fleet capacity; the cursor SHALL move only by its offers before it, one the store failed not counting: to the project of the last of them placed, else of the last of them, else it SHALL stay, so that, while offers move it, every project with a waiting task is read within a bounded number of passes.
 
 #### Scenario: Many blocked projects
-- **WHEN** 1200 older projects each have a blocked waiting task and a later project has a placeable one
+- **WHEN** 1200 older projects each have a waiting task blocked by its own project's limit and a later project has a placeable one
 - **THEN** that task is placed within about 1200 / 100 passes
 
 #### Scenario: Wrap-around
@@ -48,8 +48,16 @@ Each waiting read SHALL take each project's oldest task before any project's nex
 - **THEN** the passes place `a1`, `b1`, `a2`, `b2`, `a3`, `b3`
 
 #### Scenario: Capacity freed during a pass
-- **WHEN** a pass declines a task of `p-b` for lack of fleet capacity and then places a task of a later project
-- **THEN** the next read starts with `p-b`
+- **WHEN** the first offer of a pass, a task of `p-b`, is declined for lack of fleet capacity, a slot frees during the rest of the pass, and nothing else changes
+- **THEN** the pass offers no later task, and the next pass places the task of `p-b` in that slot
+
+#### Scenario: Fleet full for many passes
+- **WHEN** more than 100 projects wait, the fleet stays full for many passes, and then a slot frees
+- **THEN** those passes place nothing and keep the cursor, and the next pass offers the slot first to the task of the first project after the cursor
+
+#### Scenario: Own decline during a pass
+- **WHEN** a pass declines a task of `p-a` because its project quota is used, and a task of the later project `p-b` is placeable
+- **THEN** the same pass places the task of `p-b`
 
 #### Scenario: Several placements in a pass
 - **WHEN** a pass places tasks of several projects

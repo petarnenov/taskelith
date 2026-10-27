@@ -1,0 +1,2 @@
+{"change": "check-change-record-links", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6-astra", "variant": "medium"}, "session": "01a17d3c-4cc5-71a1-9d83-43ca490f6410", "counts": {"critical": 0, "high": 0, "medium": 4, "low": 3}}
+{"change": "check-change-record-links", "pass": 2, "role": "B", "reviewer": {"harness": "opencode", "model": "kimi-k2.7-code", "variant": "default"}, "session": "ses_e82b7b208ffekpUdWoya6ayllc", "counts": {"critical": 0, "high": 0, "medium": 0, "low": 1}}

@@ -360,27 +360,51 @@ const ONE_TASK_EACH: Backlog = [
   ['task-a1', 'p-a', 0], ['task-b1', 'p-b', 1], ['task-c1', 'p-c', 2], ['task-d1', 'p-d', 3], ['task-e1', 'p-e', 4],
 ];
 
-test('a decline after the fleet ran out of capacity does not move the cursor', async () => {
-  const placed: string[] = [];
-  const fleet = oneSlot();
-  const { clock, service } = serviceOf(await fleetStore(ONE_TASK_EACH.slice(0, 4), placed, fleet));
-  await runPasses(service, clock, 1);
-  fleet.slots = [0];
-  fleet.scripted = { 'task-c1': UNPLACED };
-  await runPasses(service, clock, 1);
-  fleet.slots = [1];
-  await runPasses(service, clock, 3);
-  assert.deepEqual(placed, ['task-a1', 'task-b1', 'task-c1', 'task-d1']);
+// One task in each of 120 projects, more than one placement batch.
+const BEYOND_ONE_BATCH: Backlog = Array.from({ length: 120 }, (_, index) => {
+  const number = String(index).padStart(3, '0');
+  return [`task-${number}`, `p-${number}`, index] as const;
 });
 
-test('a slot freed after a capacity decline does not move the cursor past it', async () => {
+test('a fleet that stays full keeps the cursor until capacity returns', async () => {
+  const placed: string[] = [];
+  const fleet = oneSlot();
+  const { clock, service } = serviceOf(await fleetStore(BEYOND_ONE_BATCH, placed, fleet));
+  await runPasses(service, clock, 1);
+  fleet.slots = [0];
+  for (let pass = 0; pass < 3; pass++) {
+    await runPass(service, clock, (result) => assert.deepEqual(value(result), { waiting: 100, placed: 0 }));
+  }
+  fleet.slots = [1];
+  await runPasses(service, clock, 1);
+  assert.deepEqual(placed, ['task-000', 'task-001']);
+});
+
+// task-b1 finds the fleet full and the free slot appears after it.
+test('a slot freed during a pass after a fleet capacity decline waits for the declined project', async () => {
   const placed: string[] = [];
   const fleet = oneSlot();
   const { clock, service } = serviceOf(await fleetStore(ONE_TASK_EACH, placed, fleet));
   await runPasses(service, clock, 1);
-  fleet.scripted = { 'task-b1': FULL, 'task-c1': FULL };
+  fleet.scripted = { 'task-b1': FULL };
+  await runPass(service, clock, (pass) => assert.deepEqual(value(pass), { waiting: 4, placed: 0 }));
   await runPasses(service, clock, 4);
-  assert.deepEqual(placed, ['task-a1', 'task-d1', 'task-b1', 'task-c1', 'task-e1']);
+  assert.deepEqual(placed, ['task-a1', 'task-b1', 'task-c1', 'task-d1', 'task-e1']);
+});
+
+test('a decline for a reason of its own does not end the pass', async () => {
+  const placed: string[] = [];
+  const fleet: Fleet = { ...oneSlot(), scripted: { 'task-a1': QUOTA_USED } };
+  const { clock, service } = serviceOf(await fleetStore(ONE_TASK_EACH.slice(0, 2), placed, fleet));
+  await runPass(service, clock, (pass) => assert.deepEqual(value(pass), { waiting: 2, placed: 1 }));
+  assert.deepEqual(placed, ['task-b1']);
+});
+
+test('a full fleet costs one placement transaction per pass', async () => {
+  const { state, store } = scriptedStore([FULL, FULL, FULL]);
+  state.waiting = ['task-1', 'task-2', 'task-3'];
+  assert.deepEqual(value(await new PlacementService(store, timing().timing).placeWaiting()), { waiting: 3, placed: 0 });
+  assert.equal(state.opened, 1);
 });
 
 // Fifty tasks of `p-big`, then one of `p-small`, waiting in id order.
@@ -392,7 +416,7 @@ const BIG_AND_SMALL: Backlog = [
 test('a freed slot follows the rotation after a fleet capacity decline, not a backoff', async () => {
   const placed: string[] = [];
   const clock = { at: 0 };
-  // A long jitter for the first decline, task-small's; none for the rest.
+  // A long jitter, were the fleet capacity decline to back off.
   const draws = [0.9];
   const timed = { now: () => clock.at, draw: () => draws.shift() ?? 0 };
   const service = new PlacementService(await fleetStore(BIG_AND_SMALL, placed, oneSlot()), timed);
