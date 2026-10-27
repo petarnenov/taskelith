@@ -64,3 +64,13 @@ Environment: Linux (`Linux 7.0.0-38-generic`, x86_64), Node from `.nvmrc`, Docke
 
 - Integration into dev by the coordinator (single pull request).
 - Follow-up change `align-safe-to-retry-with-supervisor-identity`, decided by the coordinator and listed in the `close-g2` deferrals: contract-first, it reconciles capacity reservation contract section 13 and the `resource-admission` requirement with supervisor identity contract section 6, and `isSafeToRetry` (`packages/modules/scheduling/src/application/capacity-operations.ts`) with them.
+
+## Archive checks
+
+Worker step 7, run by the worker session after review pass 1 and its unreviewed fixes. The checked state is the tree of the archive commit, which is the working tree these checks ran on after `npm run openspec -- archive stop-automatic-retry-of-unknown-exit --yes` (base `ec57900d`). The two findings paths into the change were moved to the archived directory in the same commit.
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `make verify` (with `TMPDIR` outside `/tmp`, environment above): exit 0; 2025 tests, 1979 pass, 0 fail, 46 skipped; coverage lines 99.18%, branches 91.85%, functions 98.80%; package verification passed.
+- `npm run openspec -- validate --archived --no-interactive`: the line of `change/2026-10-27-stop-automatic-retry-of-unknown-exit` passes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/observation-consumption/spec.md`, where the requirement "Automatic retry" takes the reviewed delta text and gains the scenario "Unknown exit after a proven start", the intended edit.
+- The moved change has its `findings.jsonl` with the three pass 1 lines; `make findings ARGS="validate"`: every findings file is valid (7 files).
