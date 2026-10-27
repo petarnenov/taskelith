@@ -24,7 +24,7 @@ G2 work item 24, third part (24c), `run-g2-partition-and-races`, assigned by the
 | `partition-worker-nats-while-running` | Route cut after the recorded start | heal before or after the exit | passed (both) |
 | `partition-worker-nats-inventory-settles` | Route cut until lost contact, task submitted, healed | ids and draws | passed (both, 2 inventory requests) since the B1 fix (#311); `todo`, expected failure B1, before |
 | `partition-control-plane-postgres-authorization` | PostgreSQL route cut with the request held | 1 to 3 unavailable answers | passed (2 and 3 answers, same `operationId`) |
-| `partition-control-plane-postgres-while-running` | Route cut after the journaled start | heal before or after the exit | passed (both; historical start at seed `20261026`, current start at seed `7`) |
+| `partition-control-plane-postgres-while-running` | Route cut after the journaled start | heal before or after the exit | passed (both; the start kind varies between runs: historical at both seeds in the latest evidence runs, current at seed `7` in earlier ones) |
 | `partition-control-plane-postgres-beyond-redelivery` | Supervisor start held until the route is cut; route cut until the start and the exit used their 5 deliveries | redrive order | passed (both orders) |
 | `cancel-before-offer` (a) | Broker route cut, submit, `cancelInTransaction`, heal | heal before or after lost contact | passed (both) |
 | `cancel-during-authorization` (b) | Request or grant held at an `OrderedAuthority` gate, cancel, release | request or grant held | passed (both) |
@@ -151,7 +151,7 @@ These 11 findings are recorded in `findings.jsonl`, L8 as `deferred` and the oth
 | Finding | Resolution | Commit |
 | --- | --- | --- |
 | L1: scenario f took `answered[sent]`, which a re-placement's grant could be | The round waits for the answer to its held request, as scenario b does | `e2907eb` (unreviewed) |
-| L2: the postgres while-running row named the start kinds by run age | Historical start at seed `20261026`, current start at seed `7` | `8e58a4f` (unreviewed) |
+| L2: the postgres while-running row named the start kinds by run age | The row says the start kind varies between runs and names it per seed; the latest evidence has a historical start at both seeds | `8e58a4f` (unreviewed) |
 | L3: merge `72003c4` described only as the UI proof-of-concept documents | Also names the G3 foundation revalidation (#290 to #293) | `8e58a4f` (unreviewed) |
 | L4: `proposal.md` and `design.md` still described `todo` tests for B1 to B4 | Both state that the fixed defects have regular tests now | `8e58a4f` (unreviewed) |
 | L5: unused `ScenarioInstallation.revokeWorker` and `ScenarioWorker.executions` | Removed | `e2907eb` (unreviewed) |
