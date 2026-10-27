@@ -1,0 +1,1 @@
+{"change": "run-hosted-runner-linux-check", "pass": 1, "role": "A", "reviewer": {"harness": "opencode", "model": "opencode-go/deepseek-v4-pro", "variant": "high"}, "session": "ses_e820c60eaffex2o4DiDkSYJ45B", "counts": {"critical": 0, "high": 0, "medium": 0, "low": 2}}
