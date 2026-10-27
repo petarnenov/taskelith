@@ -1,0 +1,1 @@
+{"change": "recheck-provider-terms-pages", "pass": 1, "role": "A", "reviewer": {"harness": "claude", "model": "claude-fable-5-1", "variant": "medium"}, "session": "38d59e1b-13be-4bdb-b2ef-405d14df5a4f", "counts": {"critical": 0, "high": 0, "medium": 0, "low": 3}}
