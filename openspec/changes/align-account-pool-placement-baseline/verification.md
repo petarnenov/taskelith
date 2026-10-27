@@ -29,7 +29,7 @@ Out of scope: slot selection code and its tests (G3 item 12, [design](design.md)
 | `npm run verify:links` | `Every checked link conforms.` |
 | `npm run verify:comments` | `Every comment is within the comment length rule.` |
 | `make findings ARGS="validate"` | `Every findings file is valid: 43 file(s); every pass summary file is valid: 23 file(s).` |
-| `make verify` | Pending |
+| `make verify` on `2d94cf63`, before pass 1 | Exit 0; `npm run openspec -- validate --all --strict` inside it: `Totals: 70 passed, 0 failed (70 items)`; last line `Packed file allowlist and installed CLI verification passed.` Run on the Apple M3 host |
 
 ## Independent review
 
