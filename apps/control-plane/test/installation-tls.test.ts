@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -22,7 +22,7 @@ import {
   type ApiServer,
 } from '@taskelith/control-plane';
 import { ControlPlaneNamespace } from '@taskelith/control-plane-store';
-import type { CertificateIssuer } from '@taskelith/fleet';
+import { authorityValidity, type CertificateIssuer } from '@taskelith/fleet';
 import { err, failure, parseInstant, type Instant } from '@taskelith/kernel';
 import { failed, value } from '@taskelith/testing';
 
@@ -92,15 +92,27 @@ test('server certificates are written owner-only and read back with their path',
   value(checkServerTls({ certificate: api.certificatePem, key: api.privateKeyPem }, { name: api.path, details: { path: api.path } }, NOW));
 });
 
-test('a missing server file names its path, and a refused issuance stops the writes', async () => {
+test('a missing server file names its path, and a refused issuance writes nothing', async () => {
   const store = namespace();
   const missing = failed(readServerCertificate(store, 'nats'));
   assert.deepEqual([missing.code, missing.details.path], ['precondition-failed', join(store.directory, 'nats-certificate.pem')]);
   const authority = value(await ensureInstallationAuthority(store, false, issuer, NOW));
   assert.equal(failed(await issueServerCertificates(store, authority, countingIssuer(2), LOCAL_SERVER_HOSTS, NOW)).message, 'refused');
-  assert.equal(existsSync(join(store.directory, 'nats-key.pem')), false, 'the second server got no files');
+  for (const name of ['installation-ca.pem', 'api-key.pem', 'nats-key.pem']) assert.equal(existsSync(join(store.directory, name)), false, name);
   writeFileSync(join(store.directory, 'nats-certificate.pem'), 'x', { mode: 0o600 });
   assert.equal(failed(readServerCertificate(store, 'nats')).details.path, join(store.directory, 'nats-key.pem'));
+});
+
+test('a mismatched authority is refused before any file changes', async () => {
+  const store = namespace();
+  const kept = value(await ensureInstallationAuthority(store, false, issuer, NOW));
+  value(await issueServerCertificates(store, kept, issuer, LOCAL_SERVER_HOSTS, NOW));
+  const files = ['installation-ca.pem', 'api-certificate.pem', 'api-key.pem', 'nats-certificate.pem', 'nats-key.pem'];
+  const before = files.map((name) => readFileSync(join(store.directory, name), 'utf8'));
+  const other = value(await issuer.createAuthority({ commonName: 'Other authority', validity: value(authorityValidity(NOW)) }));
+  const mixed = { certificatePem: other.certificatePem, privateKeyPem: kept.privateKeyPem };
+  assert.equal(failed(await issueServerCertificates(store, mixed, issuer, LOCAL_SERVER_HOSTS, NOW)).code, 'precondition-failed');
+  assert.deepEqual(files.map((name) => readFileSync(join(store.directory, name), 'utf8')), before);
 });
 
 const authority = value(await issuer.createAuthority({ commonName: 'Test authority', validity: { notBefore: NOW, notAfter: later(30) } }));

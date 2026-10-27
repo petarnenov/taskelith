@@ -1,6 +1,6 @@
 // tsyringe, which @peculiar/x509 loads, needs the Reflect metadata API first.
 import 'reflect-metadata';
-import { randomBytes, webcrypto } from 'node:crypto';
+import { createPrivateKey, randomBytes, webcrypto, X509Certificate } from 'node:crypto';
 import * as x509 from '@peculiar/x509';
 import type {
   AuthorityRequest,
@@ -64,10 +64,11 @@ interface Signer {
   readonly key: CryptoKey;
 }
 
-// The failure names the authority, never the key or the library's text,
-// which could quote the input.
+// A CA certificate with its own key, checked before anything is signed. The
+// failure never quotes the input or the library's text, which could.
 async function readAuthority(authority: IssuedCertificate): Promise<Result<Signer>> {
   try {
+    if (!isCaWithKey(authority)) return err(failure('precondition-failed', 'the installation authority is no CA certificate with its key'));
     const certificate = new x509.X509Certificate(authority.certificatePem);
     const der = x509.PemConverter.decodeFirst(authority.privateKeyPem);
     const key = await webcrypto.subtle.importKey('pkcs8', der, ALGORITHM, false, ['sign']);
@@ -75,6 +76,11 @@ async function readAuthority(authority: IssuedCertificate): Promise<Result<Signe
   } catch {
     return err(failure('precondition-failed', 'the installation authority is not an ECDSA P-256 certificate and key'));
   }
+}
+
+function isCaWithKey(authority: IssuedCertificate): boolean {
+  const certificate = new X509Certificate(authority.certificatePem);
+  return certificate.ca && certificate.checkPrivateKey(createPrivateKey(authority.privateKeyPem));
 }
 
 async function issuing(subject: string, issue: () => Promise<IssuedCertificate>): Promise<Result<IssuedCertificate>> {

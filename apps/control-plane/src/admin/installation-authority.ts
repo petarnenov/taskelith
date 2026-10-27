@@ -56,8 +56,8 @@ export function storedInstallationAuthority(namespace: ControlPlaneNamespace): R
   return stored.value === undefined ? err(lostAuthority()) : ok(stored.value);
 }
 
-// Writes the public authority, then each server's key and certificate; a
-// crash between the two files of one server fails the next start.
+// Issues all certificates before writing any file, so a refusal changes none;
+// a crash between a server's key and certificate fails the next start.
 export async function issueServerCertificates(
   namespace: ControlPlaneNamespace,
   authority: IssuedCertificate,
@@ -67,16 +67,18 @@ export async function issueServerCertificates(
 ): Promise<Result<IssuedServerCertificates>> {
   const validity = serverCertificateValidity(now);
   if (!validity.ok) return validity;
+  const issued: [ServerName, IssuedCertificate][] = [];
+  for (const name of Object.keys(SERVER_CERTIFICATES) as ServerName[]) {
+    const request = { commonName: SERVER_CERTIFICATES[name].commonName, hosts: hosts[name], validity: validity.value };
+    const certificate = await issuer.issueServerCertificate(authority, request);
+    if (!certificate.ok) return certificate;
+    issued.push([name, certificate.value]);
+  }
   const installationCa = namespace.writeText(INSTALLATION_CA_FILE, authority.certificatePem);
   if (!installationCa.ok) return installationCa;
-  for (const name of Object.keys(SERVER_CERTIFICATES) as ServerName[]) {
-    const files = SERVER_CERTIFICATES[name];
-    const issued = await issuer.issueServerCertificate(authority, { commonName: files.commonName, hosts: hosts[name], validity: validity.value });
-    if (!issued.ok) return issued;
-    const key = namespace.writeText(files.key, issued.value.privateKeyPem);
-    if (!key.ok) return key;
-    const certificate = namespace.writeText(files.certificate, issued.value.certificatePem);
-    if (!certificate.ok) return certificate;
+  for (const [name, certificate] of issued) {
+    const written = writeServerCertificate(namespace, name, certificate);
+    if (!written.ok) return written;
   }
   return ok({
     installationCa: installationCa.value,
@@ -84,6 +86,12 @@ export async function issueServerCertificates(
     natsCertificate: join(namespace.directory, SERVER_CERTIFICATES.nats.certificate),
     notAfter: validity.value.notAfter,
   });
+}
+
+function writeServerCertificate(namespace: ControlPlaneNamespace, name: ServerName, issued: IssuedCertificate): Result<string> {
+  const files = SERVER_CERTIFICATES[name];
+  const key = namespace.writeText(files.key, issued.privateKeyPem);
+  return key.ok ? namespace.writeText(files.certificate, issued.certificatePem) : key;
 }
 
 // A server certificate with the path of its file, for failures to name.

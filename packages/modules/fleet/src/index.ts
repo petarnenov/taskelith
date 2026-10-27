@@ -46,6 +46,11 @@ export {
 } from './domain/installation.js';
 export type { BrokerCredentials, IssuedBrokerCredential } from './ports/broker-credentials.js';
 export type { WorkerCommandConsumers } from './ports/command-consumers.js';
+export {
+  CERTIFICATE_ISSUER_CONFORMANCE,
+  type CertificateInspector,
+  type CertificateIssuerConformanceTarget,
+} from './ports/certificate-issuer-conformance.js';
 export { FLEET_REGISTRY_CONFORMANCE, INSTALLATION_TABLE_CONFORMANCE, fleetToken, fleetWorker } from './ports/fleet-conformance.js';
 export type { EnrollmentClient } from './ports/enrollment-client.js';
 export type { FleetRegistry } from './ports/fleet-registry.js';
