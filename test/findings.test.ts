@@ -48,16 +48,7 @@ function repository(files: Readonly<Record<string, string>>): string {
     mkdirSync(join(root, path, '..'), { recursive: true });
     writeFileSync(join(root, path), text);
   }
-  for (const change of activeChanges(files)) {
-    writeFileSync(join(root, 'openspec/changes', change, '.openspec.yaml'), 'created: 2026-10-01\n');
-  }
   return root;
-}
-
-// Active fixture changes predate the checklist record rule.
-function activeChanges(files: Readonly<Record<string, string>>): Set<string> {
-  const names = Object.keys(files).map((path) => /^openspec\/changes\/(?!archive\/)([^/]+)\//.exec(path)?.[1]);
-  return new Set(names.filter((name) => name !== undefined));
 }
 
 const ARCHIVED = {

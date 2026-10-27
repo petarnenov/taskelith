@@ -164,6 +164,9 @@ test('make findings effect reads archived checklists and asks only for missing s
   const environment: ChecklistEnvironment = {
     now: () => new Date(),
     devCommit: () => 'a'.repeat(40),
+    archiveAt: () => undefined,
+    landingCommit: () => undefined,
+    openedAfter: () => false,
     linesChanged: (_root, directory, devCommit) => {
       requests.push(`${directory} ${devCommit.slice(0, 3)}`);
       return 400;
