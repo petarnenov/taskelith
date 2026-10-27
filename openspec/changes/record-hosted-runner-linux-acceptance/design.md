@@ -41,4 +41,4 @@ How this change meets it is in `verification.md`, "Author self-check".
 ## Risks and limitations
 
 - One hosted run on one runner image; a later image update can change the kernel or Docker versions without a change here.
-- The kill of the worker-kill proof landed after the task had exited (the record: executions `exited` just after the kill), so this run does not show a kill during a running execution; the Linux-host run did ([its acceptance](/openspec/changes/archive/2026-10-27-run-g2-native-acceptance-linux-host/acceptance.md), process ownership).
+- The kill of the `scenario-worker-kill` proof landed after the task had exited (the record: executions `exited` just after the kill), so this run does not show a restart with a kept journal after a kill during a running execution; the disk-loss proof killed the worker with its attempt started but then removed the journal. The Linux-host run's worker-kill proof showed it ([its acceptance](/openspec/changes/archive/2026-10-27-run-g2-native-acceptance-linux-host/acceptance.md), process ownership).

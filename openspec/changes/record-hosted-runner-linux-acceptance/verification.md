@@ -24,7 +24,7 @@ A worker task of size S that the coordinator assigned on 2026-10-27, developed i
 - Run metadata: workflow "Linux acceptance", display title "Linux acceptance", event `workflow_dispatch`, branch `dev`, head `4fe094562e6ccb9e568dee91be24ff2c93108004`, conclusion `success`; job `linux-x86_64`, ID 122295371633, started 2026-10-27T15:46:44Z, completed 15:54:27Z (7 min 43 s), every step `success`. The artifact name and its 90-day retention are those of `.github/workflows/linux-acceptance.yml`.
 - `results.jsonl`: `cmp` with the artifact's file reports no difference; SHA-256 `61acc8e503829e692279a60b9de1e5caa3cc08ae4c463671a5f46b7cf4acdb64`; 42 lines. A script that parses each line found: outcome `passed` on all 42; commit `4fe094562e6ccb9e568dee91be24ff2c93108004` on all; one seed, `3469395170`; host `Linux 6.17.0-1022-azure`, arch `x64`; acceptance entry `linux-ubuntu-24.04-x86_64` on all, with one platform value; rows process-ownership 32, journal-and-storage 3, connectivity 3, service-lifecycle 2, cancellation 2; targets `compose-installation`, `linux-test-container`, `harness-composition`; recorded from 15:51:10.667Z to 15:54:22.752Z.
 - Proof counts in `acceptance.md` come from the records' `detail`: cgroup 14 of 14 (line 5), journal suites 99 tests, 97 passed, 2 skipped (line 6), cancellation cgroup 2 of 2 (line 9), cancellation suites 19 tests, 17 passed, 2 skipped (line 10), connectivity suites 25 of 25 (line 11), crash windows 28 of 28 (line 40; lines 12 to 39 are 28 windows, 25 ending `exited-code-0` with one spawn, CP8 and CP9 `exited-unknown` with one spawn, CP7 `exited-unknown` with none), duplicate delivery 1 of 1 (line 42; line 41: 1 copy during, 3 after). The skipped tests' names are in `run.log`.
-- `environment.txt`: Ubuntu 24.04.5 LTS, kernel 6.17.0-1022-azure, x86_64, 4 CPUs, 15.61 GiB, Docker Engine - Community 28.0.4, Compose v2.38.2, containerd v2.4.1, runc 1.5.2, storage driver overlay2 on extfs, cgroup driver `systemd`, cgroup version 2, `stat -fc %T /sys/fs/cgroup` `cgroup2fs`, security options `apparmor`, `seccomp` (builtin), `cgroupns`. `disk-before.txt` and `disk-after.txt`: 86 GiB and 103 GiB available of 145 GiB. `run.log`: ten proof headers, one per proof, and the last line "native-acceptance.sh: every proof passed".
+- `environment.txt`: Ubuntu 24.04.5 LTS, kernel 6.17.0-1022-azure, x86_64, 4 CPUs, 15.61 GiB, Docker Engine - Community 28.0.4, Compose v2.38.2, containerd v2.4.1, runc 1.5.2, storage driver overlay2 on extfs, cgroup driver `systemd`, cgroup version 2, `stat -fc %T /sys/fs/cgroup` `cgroup2fs`, security options `apparmor`, `seccomp` (builtin), `cgroupns`. `disk-before.txt` and `disk-after.txt`: 86 GiB and 103 GiB available of 145 GiB. `run.log`: ten proof headers, one per proof, and the last line "native-acceptance.sh: every proof passed; see /home/runner/work/_temp/acceptance/results.jsonl".
 - Review checklist ([design.md](design.md), "Review checklist"):
   - evidence-mismatch: every number in `acceptance.md`, `docs/foundation.md`, and this record was checked against the files above; no row is reported beyond what its proofs show, and the worker-kill record's `exited` state is reported as it is.
   - docs: `docs/foundation.md` lines 66 and 87 now record the run; the other documents that still call the check open are listed below and are not edited.
@@ -33,7 +33,7 @@ A worker task of size S that the coordinator assigned on 2026-10-27, developed i
   - spec-wording: no spec delta; the existing requirements fit the run.
   - contract-drift, error-handling, missing-fail-before-test: the change has no code, workflow, or contract edits.
   - scope: only this change directory and the two named rows of `docs/foundation.md` change.
-- Process ownership: every proof passed, crash windows 28 of 28 included, but it is not marked met, because the worker kill came after the task had exited (design decision 4); the limits of ADR 0015 decision 5 stay.
+- Process ownership: every proof passed, crash windows 28 of 28 included, but it is not marked met, because the `scenario-worker-kill` proof killed the worker after the task had exited (design decision 4); the limits of ADR 0015 decision 5 stay.
 
 ## Documents that still call the check open
 
@@ -64,7 +64,7 @@ Not yet run. Assigned reviewers ([review process](/docs/governance.md#independen
 
 - One run on one GitHub-hosted `ubuntu-24.04` x86_64 runner; no arm64 entry, no macOS entry, and no other runner image.
 - The evidence is of `4fe09456`; later `dev` commits change exercised code and are not covered (design decision 1).
-- The crash windows ran as root in the privileged test image, not in the worker image; the worker kill came after the task had exited; namespace confinement and AppArmor were not exercised ([acceptance.md](acceptance.md), "What this run does not show").
+- The crash windows ran as root in the privileged test image, not in the worker image; the `scenario-worker-kill` proof killed the worker after the task had exited; namespace confinement and AppArmor were not exercised ([acceptance.md](acceptance.md), "What this run does not show").
 - `run.log` and the environment files stay in the artifact, which GitHub deletes after 90 days; only `results.jsonl` is kept here.
 
 ## Remaining gates
