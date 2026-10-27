@@ -1,0 +1,1 @@
+{"change": "close-verify-linux-cgroup-multi-arch", "pass": 1, "role": "A", "reviewer": {"harness": "opencode", "model": "opencode-go/kimi-k3.1-pro", "variant": "high"}, "session": "ses_e822b620effebvx0Xnyq1Pykdp", "counts": {"critical": 0, "high": 0, "medium": 0, "low": 0}}
