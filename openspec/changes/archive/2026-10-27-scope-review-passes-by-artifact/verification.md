@@ -69,7 +69,16 @@ Not run: pass 1 was Low-only.
 
 `make verify` ran on `edea1619`, the merge of `origin/dev` `e4ea6077` (pull request #351, which touches no review-record file) into the change and its pass 1 fix and records: exit 0; coverage of all files 99.29 % lines, 92.15 % branches, 99.01 % functions; OpenSpec validation 70 passed, 0 failed; the link, archive, and package checks passed.
 
+## Archive
+
+The checked state is the tree of the archive commit, the working tree the checks ran on after `npm run openspec -- archive scope-review-passes-by-artifact --yes` on `edea1619` and the record of the post-fix `make verify`:
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line `change/2026-10-27-scope-review-passes-by-artifact` passed.
+- The spec diff against the merge base with `origin/dev` touches only `openspec/specs/review-process/spec.md`: the four modified requirements and their new scenarios.
+- The moved change has `findings.jsonl` (1 finding) and `passes.jsonl` (1 pass); `make findings ARGS="validate"` passed: 29 findings files, 9 pass summary files.
+- `make verify`: exit 0; coverage of all files 99.29 % lines, 92.14 % branches, 99.01 % functions; OpenSpec validation 69 passed, 0 failed.
+
 ## Remaining gates
 
-- Archive in the last commit of the branch, with its checks.
 - Integration into dev by the coordinator (single pull request).
