@@ -79,14 +79,14 @@ G2 delivered PostgreSQL state and outbox, NATS transport, installation bootstrap
 | Image package inventories and vulnerability scans | G8 |
 | macOS arm64 process ownership re-run after the D1 fix, on the MacBook Air | G3 (owner's decision, 2026-10-27) |
 | Cancellation race g (an adopting macOS supervisor that ignores a cancel) and the cancellation and connectivity parts that 25b, 25c, and the Linux-host run leave to 24c on all four entries; 24c's records come from the test-side process-group launch host on Linux x64, not the cgroup supervisor or a native worker | G3 (owner-confirmed at acceptance, 2026-10-27) |
-| Placement back-off that preserves the project rotation (`placement-backoff-preserves-rotation`) | Non-blocking follow-up after G2, contract-first; owned by Liki, in progress (coordinator's decision, 2026-10-27) |
+| Placement back-off that preserves the project rotation (`placement-backoff-preserves-rotation`) | Non-blocking follow-up after G2, contract-first, owned by Liki (coordinator's decision, 2026-10-27); landed with #344 (merge `21f399a5`, archive `2026-10-27-placement-backoff-preserves-rotation`); no gate |
 | AppArmor and SELinux confinement of the worker (`apparmor=unconfined`) | G6 (owner-confirmed at acceptance, 2026-10-27) |
 | Linux composed crash windows and duplicate delivery beyond one x86_64 host and the test image; supplementary groups of an execution | Before Linux worker support is claimed (owner-confirmed at acceptance, 2026-10-27) |
 | In-memory placement rotation cursor | Non-blocking follow-up without a G2 gate, owned by the coordinator (coordinator's decision, 2026-10-27); keeping it in memory is owner-confirmed at acceptance, 2026-10-27 |
-| `make native-acceptance` without the Linux crash windows | Non-blocking follow-up without a G2 gate, owned by Zaki, in progress as `wire-linux-crash-windows-into-native-acceptance` (coordinator's decision, 2026-10-27) |
+| `make native-acceptance` without the Linux crash windows | Non-blocking follow-up without a G2 gate, owned by Zaki (coordinator's decision, 2026-10-27); landed with #345 as `wire-linux-crash-windows-into-native-acceptance` (merge `5f915ad7`, archive `2026-10-27-wire-linux-crash-windows-into-native-acceptance`); the arm64 Linux entry is not covered |
 | Hosted-runner Linux x86_64 check; multi-architecture `make verify-linux-cgroup` | Non-blocking follow-ups without a G2 gate, owned by the coordinator (coordinator's decision, 2026-10-27); the hosted-runner check left open (owner-confirmed at acceptance, 2026-10-27) |
 | Worker image reproducibility | Non-blocking follow-up owned by Zaki as change `make-worker-image-reproducible` (coordinator's decision, 2026-10-27); no G2 gate (owner-confirmed at acceptance, 2026-10-27) |
-| Archived record links and file-system labels (`check-change-record-links`) | Non-blocking follow-up owned by Pepi, in progress (coordinator's decision, 2026-10-27); no G2 gate |
+| Archived record links and file-system labels (`check-change-record-links`) | Non-blocking follow-up owned by Pepi (coordinator's decision, 2026-10-27); landed with #346 (merge `8aa75985`, archive `2026-10-27-check-change-record-links`): the record link check and its baseline; archived records unchanged, so their broken links stay in the baseline and the `ext2/ext3` labels stay; no G2 gate |
 
 ## Later phases
 

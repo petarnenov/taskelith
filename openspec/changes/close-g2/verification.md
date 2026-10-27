@@ -4,7 +4,7 @@ Date: 2026-10-27. Accepted: the owner accepted ADR 0015 and every author's assig
 
 ## Scope and source
 
-G2 work plan item 27, `close-g2`, assigned by coordinator Niki and developed in a briefed implementation subagent ([subagent execution](../../../docs/agent-task-protocol.md#subagent-execution)), in worktree `taskelith-worktrees/close-g2` on branch `close-g2`. Scope: `docs/decisions/0015-g2-closure.md` (new), `docs/foundation.md` (G2 section), `docs/fleet.md` (the roster row removed by the owner's instruction of 2026-10-27), and this change. Documentation only.
+G2 work plan item 27, `close-g2`, assigned by coordinator Niki and developed in a briefed implementation subagent ([subagent execution](/docs/agent-task-protocol.md#subagent-execution)), in worktree `taskelith-worktrees/close-g2` on branch `close-g2`. Scope: `docs/decisions/0015-g2-closure.md` (new), `docs/foundation.md` (G2 section), `docs/fleet.md` (the roster row removed by the owner's instruction of 2026-10-27), and this change. Documentation only.
 
 The evidence update of 2026-10-27 follows the coordinator's brief of that day: fill the placeholders for G2 work that is on `dev` or handed off on a branch, and add the deferrals the coordinator named, each with its source, its gate, and whether it blocks the closure.
 
@@ -19,6 +19,7 @@ The evidence update of 2026-10-27 follows the coordinator's brief of that day: f
 - Fresh-clone record: on top of `2af551b6`. The fresh clone ran `dev` at `bd6108d4`, the `dev` side of the merge `31dbd30f`; every commit of this branch after that merge changes documentation and this change only.
 - `origin/dev` at `34af90f4` (#343, `review-pass-statistics`, not a G2 row) merged in as `2f9b1010`, a merge commit, without conflicts. It adds the rule that every change records its review pass summaries in `passes.jsonl`; `d7bc65bd` then added this change's empty `passes.jsonl`. `d7bc65bd` is the revision of `make verify` ("Checks") and of review pass 1.
 - `991324dd` fixed the pass 1 findings and `fa1b127d` recorded them; `fa1b127d` is the revision of review pass 2. `ac922f31` fixed the pass 2 findings, and `35eb3d27` recorded them. `1f8a04ba` recorded the follow-up owners and is the revision of the second `make verify`; `6f5a2b32` only adds that `make verify` line and is the revision of review pass 3. The commit after it records pass 3.
+- `origin/dev` at `8aa75985` (#346) merged in as `c4332afd`, a merge commit, without conflicts, after the owner's acceptance (`de20f888`). It brings #344 to #346 ("Merge of `dev` at `8aa75985` and record updates" below). `npm ci --ignore-scripts` ran after it, and `npm run verify:dependencies` reported the inventory current ("Verified 731 package paths"), so it was not regenerated.
 
 ## Evidence sources
 
@@ -45,7 +46,7 @@ On branches of `origin`, read with `git show <head>:<path>` after `git fetch ori
 
 Outside the repository: the away run `20261027T045006Z-opencode-96871` (`decision.md`, `meta.txt`, `packet.md`) in the coordinator's local away run directory, a local, unversioned record; the ADR names it as such. No web link is used; pull request numbers are those of the GitHub repository `petarnenov/taskelith`, each named with its merge commit.
 
-Not found in the repository or on any remote branch at the evidence update, so recorded then only as the coordinator stated them: `stop-automatic-retry-of-unknown-exit`, `centralize-log-redaction-rules`, `advance-placement-rotation-cursor`, `check-change-record-links`, the worker image reproducibility follow-up, the quadratic behaviour of `redactText`, the 24c macOS hang, Desi's diagnostic of 2026-10-27 on the Intel iMac, `back-off-relaunch-after-pre-w2-failure`, and `align-safe-to-retry-with-supervisor-identity`. Every branch in the table above is now archived on `dev`, and so are `stop-automatic-retry-of-unknown-exit`, `centralize-log-redaction-rules`, `advance-placement-rotation-cursor`, `back-off-relaunch-after-pre-w2-failure`, and `align-safe-to-retry-with-supervisor-identity` ("Landed changes" below); the 24c record and the `centralize-log-redaction-rules` proposal record the macOS hang and the quadratic rules. The exceptions, still without an archive or any record in the repository: `check-change-record-links`, the worker image reproducibility follow-up, and Desi's diagnostic.
+Not found in the repository or on any remote branch at the evidence update, so recorded then only as the coordinator stated them: `stop-automatic-retry-of-unknown-exit`, `centralize-log-redaction-rules`, `advance-placement-rotation-cursor`, `check-change-record-links`, the worker image reproducibility follow-up, the quadratic behaviour of `redactText`, the 24c macOS hang, Desi's diagnostic of 2026-10-27 on the Intel iMac, `back-off-relaunch-after-pre-w2-failure`, and `align-safe-to-retry-with-supervisor-identity`. Every branch in the table above is now archived on `dev`, and so are `stop-automatic-retry-of-unknown-exit`, `centralize-log-redaction-rules`, `advance-placement-rotation-cursor`, `back-off-relaunch-after-pre-w2-failure`, and `align-safe-to-retry-with-supervisor-identity` ("Landed changes" below); the 24c record and the `centralize-log-redaction-rules` proposal record the macOS hang and the quadratic rules. The exceptions, still without an archive or any record in the repository at that update: `check-change-record-links`, the worker image reproducibility follow-up, and Desi's diagnostic. `check-change-record-links` has since landed with #346 ("Landed changes" below).
 
 ### Landed changes
 
@@ -65,6 +66,14 @@ On `dev` at `bd6108d4`, each archived under `openspec/changes/archive/2026-10-27
 | `alternate-reviewers-per-pass` (not a G2 row) | #340 | `d3e9e636` |
 | `back-off-relaunch-after-pre-w2-failure` | #341 | `1fc7006f` |
 | `align-safe-to-retry-with-supervisor-identity` | #342 | `bd6108d4` |
+
+After the owner's acceptance, `dev` at `8aa75985` added three follow-ups, found the same way:
+
+| Change | Pull request | `dev` merge |
+| --- | --- | --- |
+| `placement-backoff-preserves-rotation` | #344 | `21f399a5` |
+| `wire-linux-crash-windows-into-native-acceptance` | #345 | `5f915ad7` |
+| `check-change-record-links` | #346 | `8aa75985` |
 
 Read from those archives: 24c `results.jsonl` on `dev` holds 34 records, all `passed`, of commit `36481ad9` (Linux 6.8.0-147-generic, `x64`), 17 with seed `20261026` and 17 with seed `7`; the branch head read earlier had `9630470a`, re-run after the return (its verification, "Revision and environment"). `stop-automatic-retry-of-unknown-exit` verification, "Evidence check": `make verify-linux-crash-windows` passed 29 of 29, CP9 included. The ADR's remaining code lines were re-checked on this branch: `placement-service.ts:51` (the `#after` field) and `:89` (its assignment) moved from `:47` and `:78`; the scheme-less user-information rule moved to `packages/modules/observability/src/domain/redaction-rules.ts:44` with #339; `signals.ts:21`, `control-plane-signals.ts:25`, `compose.yaml:108`, and `crash-windows.integration.test.ts:38` still hold. Lines the ADR no longer cites, because the entries now cite the landed change: `launch-orchestrator.ts`, `capacity-operations.ts`, `redaction.ts`, the two contract lines, and the probe script lines.
 
@@ -140,7 +149,7 @@ Read with `jq` from `fresh-clone-results.jsonl`: 48 records, each `passed`, seed
 - `macos-26-x86_64`, 37 records: 2 `compose-installation` (the native worker lifecycle and its proof), 31 `harness-composition` (28 crash windows, the crash-window proof 28 of 28, duplicate delivery and its proof 1 of 1), and 4 `host-test-suite` proofs (supervisor suites 113 of 113, journal suites 99 of 99, cancellation suites 19 of 19, connectivity suites 25 of 25). By row: process ownership 30, service lifecycle 2, connectivity 3, journal and storage 1, cancellation 1.
 - `linux-ubuntu-24.04-x86_64` under Docker Desktop, 11 records: 6 `compose-installation` (worker lifecycle, worker kill, and worker disk loss, each with its proof) and 5 `linux-test-container` proofs (cgroup 14 of 14, journal suites 97 of 99 with 2 skipped, cgroup cancellation 2 of 2, cancellation suites 17 of 19 with 2 skipped, connectivity suites 25 of 25). By row: process ownership 3, journal and storage 3, cancellation 2, service lifecycle 2, connectivity 1.
 
-Compared with 25c's [`results.jsonl`](../archive/2026-10-27-run-g2-native-acceptance-x86-64/results.jsonl), lines 1 to 48 (commit `b82ad2f`, seed `4080300788`, the same host): the same 48 scenarios with the same entry, row, and target, all `passed`, and the same 15 proofs; the crash windows finish in another order. The only count that differs is the journal suites, 99 tests instead of 97 on both entries, because the journal tests grew on `dev` after `b82ad2f`. 25c's line 49, the namespace-confinement extra, was not part of this run. The results match.
+Compared with 25c's [`results.jsonl`](/openspec/changes/archive/2026-10-27-run-g2-native-acceptance-x86-64/results.jsonl), lines 1 to 48 (commit `b82ad2f`, seed `4080300788`, the same host): the same 48 scenarios with the same entry, row, and target, all `passed`, and the same 15 proofs; the crash windows finish in another order. The only count that differs is the journal suites, 99 tests instead of 97 on both entries, because the journal tests grew on `dev` after `b82ad2f`. 25c's line 49, the namespace-confinement extra, was not part of this run. The results match.
 
 Content check: `grep` for token, secret, password, bearer, API key, authorization, and credential shapes found only the text "started again without a token" in the native lifecycle detail; no secret. Like 25c's committed records, one record names the local user `petarnenov` and the native data root under the user's temporary directory `/private/var/folders/...`; the session's scratch path does not appear. They are kept, consistent with 25c.
 
@@ -195,6 +204,7 @@ Light checks only until `d7bc65bd`, because the host is shared with evidence run
 - `make verify` at `1f8a04ba`, after the pass 2 fixes and the follow-up owners, 2026-10-27: exit 0 in 166 s; 2113 tests, 2111 passed, 0 failed, 0 cancelled, 2 skipped; coverage of all files 99.29 % lines, 92.11 % branches, 99.00 % functions; findings valid (21 files) and pass summaries valid (2 files). Docker ran with `DOCKER_CONFIG` set to an empty configuration, as above.
 - Pass 3 record (this update): `npm run findings -- validate` passed ("Every findings file is valid: 21 file(s); every pass summary file is valid: 2 file(s)."); `npm run openspec -- validate close-g2 --strict` passed ("Change 'close-g2' is valid"); `npm run openspec -- validate --all --strict` passed (70 passed, 0 failed); `npm run verify:comments` passed; `git diff --check` reported nothing. `make verify` was not run again; this commit changes records only.
 - Owner acceptance (this update): `npm run openspec -- validate close-g2 --strict` passed ("Change 'close-g2' is valid"); `npm run openspec -- validate --all --strict` passed (70 passed, 0 failed); `npm run verify:comments` passed; `npm run findings -- validate` passed ("Every findings file is valid: 21 file(s); every pass summary file is valid: 2 file(s)."); `git diff --check` reported nothing; the 126 relative link targets in the ADR, the ledger, the G2 plan, the execution wire contracts, architecture, README, `docs/fleet.md`, and this change's Markdown resolve; a search for the capitalized placeholder marker in `docs`, this change, and `README.md` finds nothing. Archive test in a scratch copy of the tracked `openspec/` tree and this change, with this worktree's `node_modules`: `openspec archive close-g2 --yes` archived it as `2026-10-27-close-g2` (`foundation-closure` + 1), `openspec validate --all --strict` then passed (69 passed, 0 failed), and `openspec validate --archived --strict` passed `change/2026-10-27-close-g2` (13 earlier archives fail it on incomplete tasks, none of them this change). `make verify` was not run; these commits change documentation and records only.
+- Merge of `dev` at `8aa75985` and record updates (this update): `npm run verify:links` reported "Record link problems: 2, stale baseline entries: 0", the two ADR 0015 links to this active change (lines 58 and 86), which the archive commit points at the archived path; `npm run findings -- validate` passed ("Every findings file is valid: 24 file(s); every pass summary file is valid: 4 file(s)."); `npm run openspec -- validate close-g2 --strict` passed ("Change 'close-g2' is valid"); `npm run openspec -- validate --all --strict` passed (70 passed, 0 failed); `npm run verify:comments` passed; `git diff --check` reported nothing. `make verify` was not run; this commit changes documentation and records only.
 
 ## Independent review
 
@@ -287,9 +297,25 @@ Edits made after review pass 3, directed by the owner's acceptance. They apply t
 - `docs/contracts/execution-wire-contracts.md` section 5: the protocol version 1 pre-release exception ended with the G2 closure (ADR 0015 decision 5 and task 4.2).
 - This change: tasks 4.1 to 4.3 and 5.3 ticked with their source; the status line, "Remaining placeholders", "Checks", and "Remaining gates" of this record; the word marking placeholders in `design.md` decision 1 no longer in capitals, so that a search for the marker finds none.
 
+## Merge of `dev` at `8aa75985` and record updates
+
+The merge `c4332afd` brings, each archived under `openspec/changes/archive/2026-10-27-<change>/`:
+
+- `placement-backoff-preserves-rotation` (#344, merge `21f399a5`, Liki): a decline for lack of fleet capacity no longer backs the task off, so the task keeps its place in the rotation; the capacity reservation contract and the `execution-placement` spec state it. It moves the cursor assignment the ADR cites from `placement-service.ts:89` to `:85`; `:51` still holds.
+- `wire-linux-crash-windows-into-native-acceptance` (#345, merge `5f915ad7`, Zaki): the Linux entry of `make native-acceptance` runs `make verify-linux-crash-windows` on a Linux host and reports both proofs as not applicable on a macOS host.
+- `check-change-record-links` (#346, merge `8aa75985`, Pepi): `npm run verify:links` in `make verify`, the record link rule of the agent task protocol step 6, and `scripts/record-links-baseline.tsv` for the archived links that predate it.
+
+After the merge, `npm run verify:links` reported four problems in this branch: the two links of ADR 0015 to this active change's `fresh-clone-results.jsonl` (lines 58 and 86), which the archive commit points at the archived path, and two relative links of this record that leave the change directory ("Scope and source" and "Native acceptance records").
+
+Edits directed by the coordinator after the merge. They are record updates after review pass 3 and were not independently reviewed: the pass cap of three is reached.
+
+- This record: the two relative links that leave the change directory are root-relative, as step 6 requires; no other Markdown file of this change links out of it with `../`.
+- ADR 0015 decision 5: `placement-backoff-preserves-rotation`, the Linux crash windows in `make native-acceptance`, and `check-change-record-links` are recorded as landed, each with its pull request, merge, archive, and the limitations its record leaves open; the cursor citation is `placement-service.ts:51`, `:85`. `check-change-record-links` changes no archived record, so the broken archived links stay in its baseline and the `ext2/ext3` labels stay as written.
+- The foundation ledger: the three rows record the same landings.
+- This record: "Landed changes", the revision, this section, "Checks", and "Remaining gates".
+
 ## Remaining gates
 
-- Merge `dev` into this branch after the two integrations running on 2026-10-27, and pass `npm run verify:links` if `dev` then has it.
 - Archive of this change, as the last commit of the branch; the archive commit points the ADR's links to `fresh-clone-results.jsonl` and this record at the archived path.
 - `make verify` on the head that is pushed, by the pre-push hook.
 - Integration into `dev` by the coordinator (single pull request). Promotion to `main` is a later owner decision.
