@@ -12,7 +12,7 @@
 
 - [x] 3.1 Run the test repeatedly under artificial load, before and after the fix, with and without the perturbation.
 - [x] 3.2 Run `npm run openspec -- validate stabilize-workspace-handoff-race-conformance --strict` and `make verify`.
-- [ ] 3.3 Independent review and record it in `verification.md`.
+- [x] 3.3 Independent review and record it in `verification.md`.
 
 ## 4. Archive
 
