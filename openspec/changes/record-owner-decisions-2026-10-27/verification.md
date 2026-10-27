@@ -10,7 +10,7 @@ Exclusions: `docs/governance.md`, `docs/agent-task-protocol.md`, and the skills,
 
 ## Revision and environment
 
-Branch `record-owner-decisions-2026-10-27` from `origin/dev` at `14e1a46e`, in its own worktree with `make setup` done. During the work the coordinator reported that q40 landed as #372, and the branch merged `origin/dev` at `579c227d` with a merge commit (`04302250`). The merge brought `docs/contracts/product-ports.md`, `docs/trust-model.md`, the `product-ports` spec, the archived `align-product-ports-with-g2-lifecycle`, and code under `packages/modules/execution`, `integrations`, and `scheduling`; it touched no file of this change and had no conflict. Every check below ran after the merge. Ubuntu Linux x86_64, Node.js v24.22.1, OpenSpec through `npm run openspec`, `make verify` with `TMPDIR=/home/petar/.cache/taskelith-verify-tmp` (a host quirk of this machine).
+Branch `record-owner-decisions-2026-10-27` from `origin/dev` at `14e1a46e`, in its own worktree with `make setup` done. During the work the coordinator reported that q40 landed as #372, and the branch merged `origin/dev` at `579c227d` with a merge commit (`04302250`). The merge brought `docs/contracts/product-ports.md`, `docs/trust-model.md`, the `product-ports` spec, the archived `align-product-ports-with-g2-lifecycle`, and code under `packages/modules/execution`, `integrations`, and `scheduling`; it touched no file of this change and had no conflict. Every check below ran after the merge; after the pass 1 fixes the strict validations, `make findings ARGS="validate"`, and `make verify` were re-run on `a19b4cf6` and passed. Ubuntu Linux x86_64, Node.js v24.22.1, OpenSpec through `npm run openspec`, `make verify` with `TMPDIR=/home/petar/.cache/taskelith-verify-tmp` (a host quirk of this machine).
 
 ## Author self-check and evidence check
 
@@ -31,7 +31,7 @@ Branch `record-owner-decisions-2026-10-27` from `origin/dev` at `14e1a46e`, in i
 | `npm run openspec -- validate --all --strict` | Passed: 70 passed, 0 failed |
 | `make findings ARGS="validate"` | Passed: 50 findings files, 30 pass summary files valid |
 | `npm run verify:links` | Passed: "Every checked link conforms" |
-| `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` on the working tree after the merge and the part B note, and again on `364c1191` | Passed both times, exit 0, including the archive dry run ("Every active OpenSpec change archives into strictly valid specs") and the package check |
+| `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` on the working tree after the merge and the part B note, again on `364c1191`, and after the pass 1 fixes on `a19b4cf6` | Passed each time, exit 0, including the archive dry run ("Every active OpenSpec change archives into strictly valid specs") and the package check |
 
 ## Review
 
