@@ -1,0 +1,1 @@
+{"change": "refresh-g3-dependency-observations", "pass": 1, "role": "A", "reviewer": {"harness": "claude", "model": "claude-fable-5-1", "variant": "medium"}, "session": "4d6f5b56-9983-4716-a379-a0997ac14bce", "counts": {"critical": 0, "high": 0, "medium": 0, "low": 2}}

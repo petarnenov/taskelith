@@ -13,7 +13,14 @@
 ## 3. Checks and review
 
 - [x] 3.1 Run `make verify`, `npm run openspec -- validate refresh-g3-dependency-observations --strict`, and `make findings ARGS="validate"`
-- [ ] 3.2 Review pass 1 by reviewer A (Claude Code `claude-fable-5-1`); record it, its findings, and their resolutions
-- [ ] 3.3 Review pass 2 by reviewer B (Claude Code `claude-opus-5-5`, effort high), unless pass 1 was Low-only
-- [ ] 3.4 Review pass 3 by reviewer A, if pass 2 needs it
-- [ ] 3.5 Archive the change and record the archive checks
+- [x] 3.2 Review pass 1 by reviewer A (Claude Code `claude-fable-5-1`); record it, its findings, and their resolutions
+- [x] 3.3 Review pass 2 by reviewer B (Claude Code `claude-opus-5-5`, effort high), unless pass 1 was Low-only: not run, pass 1 was Low-only
+- [x] 3.4 Review pass 3 by reviewer A, if pass 2 needs it: not run, no pass 2
+
+## 4. Review pass 1
+
+- [x] 4.1 Fix the two pass 1 Low findings without another review: the Vitest repository advisory ranges in the observation table and the count of `anthropics/claude-code` advisories that name the npm package
+
+## 5. Archive
+
+- [ ] 5.1 Archive the change and record the archive checks

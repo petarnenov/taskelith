@@ -20,7 +20,7 @@ Follow-up `refresh-g3-dependency-observations` (size S) of G3 item 0, assigned b
 ## Revision
 
 - Base: `origin/dev` `4cbea974` (#362).
-- Reviewed revision: to be recorded with review pass 1.
+- Reviewed revision: `b75b7881` (review pass 1). Pass 1 fixes: `df4873a9`.
 
 ## Environment
 
@@ -78,11 +78,32 @@ Run on 2026-10-27 on this host.
 - **`make findings ARGS="validate"`**: `Every findings file is valid: 40 file(s); every pass summary file is valid: 20 file(s).`
 - **`npm run verify:links`** and **`npm run verify:comments`**, after this section was written: `Every checked link conforms.` and `Every comment is within the comment length rule.`
 
+After the review pass 1 fixes (`df4873a9`) and with this record staged (tree `b31933e09ddef255cea05bc2f167930c0d1e5cc4`, which differs from the record commit only in this paragraph):
+
+- **`TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`**: exit 0, last line `Packed file allowlist and installed CLI verification passed.` Coverage over all files: 99.28 % lines, 92.33 % branches, 98.94 % functions. OpenSpec: `Totals: 70 passed, 0 failed (70 items)`.
+- **`npm run openspec -- validate refresh-g3-dependency-observations --strict`**: `Change 'refresh-g3-dependency-observations' is valid`.
+- **`make findings ARGS="validate"`**: `Every findings file is valid: 40 file(s); every pass summary file is valid: 20 file(s).`
+- **`npm run verify:links`**: `Every checked link conforms.`
+
 ## Independent review
 
 Reviewer A: Claude Code `claude-fable-5-1`, effort medium. Reviewer B: Claude Code `claude-opus-5-5`, effort high. Both are Claude Code models for the reason under Environment.
 
-No pass has run yet.
+### Pass 1, reviewer A
+
+- Reviewer: Claude Code, `claude-fable-5-1`, effort medium, reviewed head `b75b7881`, run by worker Liki.
+- Invocation: `claude -p "<prompt>" --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json < /dev/null`, run in the worktree; `modelUsage` names only `claude-fable-5-1`.
+- Session: `4d6f5b56-9983-4716-a379-a0997ac14bce`.
+- Snapshot: `633094da4c9b33817a53f344913a4dc892bd41027cc5c7813f3ef32576bf63ff` before and after the pass, unchanged.
+- Counts: Critical 0, High 0, Medium 0, Low 2.
+- Reviewer re-observation, 2026-10-27 18:50 to 18:51 UTC: every recorded fact matched. The SDK `latest` 0.3.311 (`claudeCodeVersion` 2.1.311) and `next` 0.3.312 (2.1.312), with 0.3.309 and 0.3.310 between the pin and `latest`; the CLI dist-tags `stable` 2.1.308, `latest` 2.1.311, and `next` 2.1.312; no SDK advisory in the GitHub Advisory Database, the repository, or the bulk endpoint. The 36 `anthropics/claude-code` advisories, all `published` with a patched version, 35 before 2026-10-25, highest fix 2.1.260 (GHSA-gfvf-j8jh-jxxw), newest high GHSA-5xjx-9qx6-jcrv fixed in 2.1.251. Mantine 9.7.4 and TanStack Query 5.105.0 as `latest` with the recorded times. The two `@vitest/mocker` advisories, their database and repository ranges, the bulk results for 5.0.2 and 5.0.5, and `vitest@5.0.5` depending on `@vitest/mocker` 5.0.5. GHSA-8g5g-mxqh-grgj with range `6.4.4`, fix 6.4.5, no CVE, and 404 in the database; 23 `vite` and 10 `vitest` repository advisories; `vite` and `vitest` `latest` unchanged.
+- Reviewer checks: every cited line of the two docs, of the archived revalidation record, and of design D3 matched; the docs edits add no lines (8/8 and 5/5 in `git diff --numstat`); a `grep` found no stale fact outside the D3 list; no other active change exists; the strict validation, `make findings ARGS="validate"`, and the recorded checks reproduced; nothing outside scope changed.
+- A Low-only pass ends the review under governance "Low findings are fixed", so reviewer B is not used and passes 2 and 3 do not run. The two fixes, in `df4873a9`, have the outcome `fixed-unreviewed`; commands 9 and 10 record their rechecks.
+
+| # | Severity | Finding | Resolution | Commit |
+| --- | --- | --- | --- | --- |
+| 1 | Low | The observation table said the Vitest repository advisories list only the 4.1 ranges, though GHSA-qxg6-89mg-rqv8 covers `>= 2.1.0-beta.7, < 4.1.12` | The row says "only the ranges fixed in 4.1.12", rechecked at 18:54:03 UTC (command 10) | `df4873a9` |
+| 2 | Low | The SDK record counted all 36 `anthropics/claude-code` advisories as advisories of `@anthropic-ai/claude-code`, though 4 name only Claude Desktop | `docs/g3-dependencies.md:98`, the observation table, and design L1 say 32 of the 36 name the npm package and none affects 2.1.308, 2.1.310, or 2.1.311 (command 9, 18:53:50 UTC); `docs/dependencies.md:132` states no count and is unchanged | `df4873a9` |
 
 ## Limitations
 
@@ -91,8 +112,7 @@ No pass has run yet.
 
 ## Remaining gates
 
-- Review pass 1 by reviewer A (Claude Code claude-fable-5-1)
-- Review pass 2 by reviewer B (Claude Code claude-opus-5-5, effort high)
-- Review pass 3 by reviewer A
+Review pass 1 was Low-only, so passes 2 and 3 are not run.
+
 - Archive
 - Integration into dev by the coordinator (single pull request)
