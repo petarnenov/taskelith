@@ -26,7 +26,7 @@ The coordinator's integration flow moves into the repository as `scripts/integra
 ### Modified Capabilities
 
 - `integration-flow`: the `make verify` profiles, the verified-tree stamp, and the stamp in the `pre-push` gate.
-- `development-environment`: the Docker slot lock of `make test`.
+- `development-environment`: the Docker slot lock of `make test`, and integration tests in verification limited to the full profile.
 - `agent-task-protocol`: the shared integration command, the unpushed coordinator merge, the generated verification record, thin session context, fresh subagents for fix rounds, deterministic test authoring, and no context clear after integration.
 - `review-process`: the conditional third pass and the record check before the first pass.
 

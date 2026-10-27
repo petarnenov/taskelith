@@ -53,7 +53,7 @@ The checks SHALL be defined once, as `make verify`, which SHALL run with the `.n
 ## ADDED Requirements
 
 ### Requirement: Verified-tree stamp
-`make verify` SHALL write a stamp under the clone's common git directory, never tracked, when it passes on a tree that was clean when it started and is unchanged when it ends. The stamp key SHALL cover the HEAD tree, the profile, the Node.js and npm versions, the lockfile hash, and the integration service images. A docs-only stamp SHALL NOT satisfy a full requirement, CI SHALL never reuse a stamp, and a dry run SHALL write none.
+`make verify` SHALL write a stamp under the clone's common git directory, never tracked, when it passes on a tree that was clean when it started and is unchanged when it ends. The stamp key SHALL cover the HEAD tree, its merge base with `origin/dev`, the profile, the Node.js and npm versions, the lockfile hash, and the service images. A docs-only stamp SHALL NOT satisfy a full requirement, CI SHALL never reuse a stamp, and a dry run SHALL write none.
 
 #### Scenario: Clean tree passes
 - **WHEN** `make verify` passes on a clean tree that it leaves unchanged
@@ -67,12 +67,16 @@ The checks SHALL be defined once, as `make verify`, which SHALL run with the `.n
 - **WHEN** the npm version, the Node.js version, or the lockfile differs from a stamp's
 - **THEN** that stamp does not satisfy a check of the same tree
 
+#### Scenario: Same tree on another merge base
+- **WHEN** HEAD has a stamped tree but another merge base with `origin/dev` than the stamped run
+- **THEN** that stamp does not satisfy a check
+
 #### Scenario: Docs-only stamp for a full requirement
 - **WHEN** a tree has only a docs-only stamp and a full `make verify` is required, as at integration
 - **THEN** the stamp does not satisfy it
 
 ### Requirement: Docs-only verify profile
-`make verify` SHALL use the docs-only profile, which skips only `make test`, on a feature branch whose committed, staged, unstaged, and untracked changes since its merge base with `origin/dev` touch only `docs/**` except `docs/review-findings/**` and `docs/qualification/**`, `openspec/**`, or root-level Markdown other than `CHANGELOG.md`. Every other branch, `dev`, `main`, CI, an empty change, a missing merge base, and `TASKELITH_VERIFY_PROFILE=full` SHALL get the full profile.
+`make verify` SHALL use the docs-only profile, which skips only `make test`, on a feature branch whose committed, staged, unstaged, and untracked changes since its merge base with `origin/dev` touch only `docs/**` except `docs/review-findings/**` and `docs/qualification/**`, `openspec/**`, or root-level Markdown other than `CHANGELOG.md`. `dev`, `main`, other branches, a detached HEAD, CI, an empty change, no merge base, and `TASKELITH_VERIFY_PROFILE=full` SHALL get the full profile.
 
 #### Scenario: Documentation branch
 - **WHEN** a feature branch changes only `docs/governance.md` and its OpenSpec change
