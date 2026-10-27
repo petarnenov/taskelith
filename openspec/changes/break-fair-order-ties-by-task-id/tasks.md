@@ -7,6 +7,7 @@
 - [x] 2.1 Add a unit test with equal waiting times in shuffled and reversed input that fails on the current order.
 - [x] 2.2 Break the remaining ties in `fairPlacementOrder` by task id in code-unit order.
 - [x] 2.3 State the tie-break in the `execution-placement` requirement "Waiting placements".
+- [x] 2.4 Review pass 1: order project ids by code unit, with a test that fails before; share `byCodeUnits` from the domain; state the tie-breaks in the capacity contract.
 
 ## 3. Verify
 
