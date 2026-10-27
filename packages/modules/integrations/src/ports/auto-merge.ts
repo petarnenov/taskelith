@@ -1,6 +1,6 @@
 import type { Identifier, Instant, Result } from '@taskelith/kernel';
 import type { PrincipalId } from '@taskelith/execution';
-import type { ProjectId, TaskId, WorkflowRunId } from '@taskelith/sdlc';
+import type { ProjectId, WorkflowRunId } from '@taskelith/sdlc';
 
 export type MergeRequestId = Identifier<'MergeRequestId'>;
 export type BranchName = Identifier<'BranchName'>;
@@ -67,11 +67,11 @@ export interface AutoMergeSettings {
   change(change: AutoMergeChange): Promise<Result<AutoMergeSetting>>;
 }
 
+// A run's change at one head; the run is the board card's key.
 export interface MergeRequest {
   readonly id: MergeRequestId;
   readonly projectId: ProjectId;
   readonly runId: WorkflowRunId;
-  readonly taskId: TaskId;
   readonly targetBranch: BranchName;
   readonly head: CodeHead;
   readonly state: MergeRequestState;
@@ -85,7 +85,6 @@ export interface MergeRequest {
 export interface MergeEnqueue {
   readonly projectId: ProjectId;
   readonly runId: WorkflowRunId;
-  readonly taskId: TaskId;
   readonly targetBranch: BranchName;
   readonly head: CodeHead;
 }
@@ -102,7 +101,6 @@ export type MergeClaim =
 export interface ManualMerge {
   readonly projectId: ProjectId;
   readonly runId: WorkflowRunId;
-  readonly taskId: TaskId;
   readonly targetBranch: BranchName;
   readonly head: CodeHead;
   readonly integratedRevision: IntegratedRevision;
