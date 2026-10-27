@@ -59,3 +59,13 @@ macOS 26.6.2 (Darwin 25.6.0, arm64), Node.js v24.22.1 from `.nvmrc`, npm as pinn
 ## Remaining gates
 
 - Integration into dev by the coordinator (single pull request).
+
+## Archive checks
+
+Worker step 7, run after review pass 3 and its unreviewed fix. `git fetch origin` just before the archive showed `origin/dev` still at `1847570`, already merged (`ccfc372`), so no merge was needed. The checked state is the tree of the archive commit: the working tree these checks ran on after `npm run openspec -- archive record-review-findings --yes` (base `4af15ef`), which applied 3 added requirements, 1 to `agent-task-protocol` and 2 to `review-process`.
+
+- `npm run openspec -- validate --all --strict --no-interactive`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: `change/2026-10-27-record-review-findings` passed. The command as a whole reports 160 passed and 13 failed, all of the failures in older archived changes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` (merge base `1847570`): additions only. `agent-task-protocol` gains "Review findings in the task flow", and `review-process` gains "Review findings record" and "Findings index and checklist", which are this change's two capability deltas.
+- The moved `openspec/changes/archive/2026-10-27-record-review-findings/findings.jsonl` exists with 12 findings. `make findings ARGS="validate"` passed. `make findings ARGS="index"` counts 12 archived findings, all fixed: redaction 5, contract-drift 4, error-handling 2, process 1.
+- `make verify` passed: `npm run verify:findings` valid; 1,986 tests, 1,984 passed, 0 failed, 2 skipped; coverage 99.29 % lines, 92.10 % branches, 99.04 % functions; no undeclared breaking contract change; dependency inventory verified (731 paths); strict OpenSpec validation 69 passed, 0 failed; archive dry run and package verification passed.
