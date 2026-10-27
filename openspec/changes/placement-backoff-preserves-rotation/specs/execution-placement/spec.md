@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Placement backoff
-A task that no candidate accepts SHALL wait before its next try unless it was declined for lack of fleet capacity, and a pass after a store outage SHALL wait before the next pass, backing off exponentially from 5 seconds to at most 60 seconds with jitter (capacity reservation section 5); a success SHALL reset the wait. A task declined for lack of fleet capacity SHALL be offered in the next pass in rotation order. A task that waits before its next try SHALL NOT be read as waiting.
+A task that no candidate accepts SHALL wait before its next try unless declined for lack of fleet capacity, and a pass after a store outage SHALL wait before the next pass, backing off exponentially from 5 seconds to at most 60 seconds with jitter (capacity reservation section 5); a success SHALL reset the wait. A task declined for lack of fleet capacity SHALL keep its wait unchanged, so the rotation decides when it is offered. A task that waits before its next try SHALL NOT be read as waiting.
 
 #### Scenario: Repeated waiting
 - **WHEN** a task is not placed in two consecutive tries for a reason other than a lack of fleet capacity

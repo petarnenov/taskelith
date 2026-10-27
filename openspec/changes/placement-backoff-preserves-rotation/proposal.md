@@ -6,7 +6,7 @@ The owner's delegate chose option (a) (away decision `20261027T085757Z-opencode-
 
 ## What Changes
 
-- A task declined for lack of fleet capacity (`quarantined`, `worker-not-eligible`, `worker-capacity-exhausted`, or `no-candidate`, the set `lacksFleetCapacity` names) does not back off: its wait stays as it was, so the next pass offers it in its place in the rotation. Any other decline backs off as before, and the pass backoff after a store outage is unchanged.
+- A task declined for lack of fleet capacity (`quarantined`, `worker-not-eligible`, `worker-capacity-exhausted`, or `no-candidate`, the set `lacksFleetCapacity` names) does not back off: its wait stays as it was, so it keeps its place in the rotation and the next pass that reads it offers it. Any other decline backs off as before, and the pass backoff after a store outage is unchanged.
 - The capacity reservation contract sections 5 and 13 and the operational targets state the rule, and section 5 states that the placement batch bounds the transactions a full fleet costs per pass.
 - The `execution-placement` requirement "Placement backoff" excepts the decline for lack of fleet capacity and gains the scenario "Capacity decline".
 
@@ -16,7 +16,7 @@ The owner's delegate chose option (a) (away decision `20261027T085757Z-opencode-
 
 ### Modified Capabilities
 
-- `execution-placement`: a decline for lack of fleet capacity does not back off the task; the next pass offers it in rotation order.
+- `execution-placement`: a decline for lack of fleet capacity does not back off the task, which keeps its wait unchanged and its place in the rotation.
 
 ## Impact
 
