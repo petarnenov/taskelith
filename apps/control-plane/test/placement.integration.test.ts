@@ -201,21 +201,25 @@ describe('placement', () => {
     await submit('task-1');
     await submit('task-3', 'run-2');
     await sql('UPDATE workers SET slots = 0');
-    let transactions = 0;
-    // Frees the slot right after the first placement transaction ends.
+    // task-1's outcome after each SERIALIZABLE transaction; the slot frees
+    // right after the first, the declined placement of task-1.
+    const recorded: (string | undefined)[] = [];
     const freeing: ControlPlaneStore = {
       readCommitted: (work) => database.readCommitted(work),
       transaction: async (work) => {
         const outcome = await database.transaction(work);
-        if (++transactions === 1) await sql('UPDATE workers SET slots = 1');
+        const record = await outcomeRecord('task-1');
+        recorded.push(record && `${record.disposition} ${record.reason}`);
+        if (recorded.length === 1) await sql('UPDATE workers SET slots = 1');
         return outcome;
       },
     };
     const pass = new PlacementService(freeing, TIMING);
     assert.deepEqual(value(await pass.placeWaiting()), { waiting: 2, placed: 0 });
-    assert.deepEqual([transactions, await placedTasks()], [1, []]);
+    assert.deepEqual(recorded, [undefined, 'waiting worker-capacity-exhausted'], 'a rollback, then its waiting record');
+    assert.deepEqual(await placedTasks(), []);
     assert.deepEqual(value(await pass.placeWaiting()), { waiting: 2, placed: 1 });
-    assert.deepEqual(await placedTasks(), ['task-1']);
+    assert.deepEqual([await placedTasks(), await outcomeRecord('task-1')], [['task-1'], undefined]);
   });
 
   test('without a candidate no placement transaction is opened', async () => {
