@@ -254,7 +254,7 @@ speckit-lock:
 
 # make would expand these arguments when it exports them, so they reach
 # the script under other names, as typed; its makes get no MAKEFLAGS.
-unexport BRANCH TITLE BODY RESUME
+unexport BRANCH TITLE BODY RESUME CHANGE LOG
 
 # Coordinator: integrates the archived change BRANCH into dev with one pull
 # request (scripts/integrate.sh); RESUME=1 continues a stopped integration.
@@ -268,13 +268,16 @@ integrate:
 
 # Writes the generated part of CHANGE's verification.md from LOG, a make
 # verify log; record-check fails when that part differs from the tree.
+record record-check: export TASKELITH_RECORD_CHANGE := $(value CHANGE)
+record: export TASKELITH_RECORD_LOG := $(value LOG)
 record:
-	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use \
-		node --experimental-strip-types scripts/verification-record.ts write "$$CHANGE" "$$LOG"
+	@NODE_PIN=$(NODE_PIN) env -u MAKEFLAGS -u MFLAGS -u MAKELEVEL bash scripts/with-pinned-node.sh use \
+		node --experimental-strip-types scripts/verification-record.ts write \
+		"$$TASKELITH_RECORD_CHANGE" "$$TASKELITH_RECORD_LOG"
 
 record-check:
-	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use \
-		node --experimental-strip-types scripts/verification-record.ts check "$$CHANGE"
+	@NODE_PIN=$(NODE_PIN) env -u MAKEFLAGS -u MFLAGS -u MAKELEVEL bash scripts/with-pinned-node.sh use \
+		node --experimental-strip-types scripts/verification-record.ts check "$$TASKELITH_RECORD_CHANGE"
 
 # Checks that this clone can build and verify; changes nothing.
 # Uses the .nvmrc Node.js when nvm has it.

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
@@ -318,4 +318,30 @@ test('the system probes report the real validations of this repository', () => {
   const probes = systemProbes(repository);
   assert.match(probes.findingsValidate(), /^passed, `Every findings file is valid: \d+ file\(s\); every pass summary file is valid: \d+ file\(s\)\.`$/);
   assert.match(probes.openspecValidate('no-such-change-for-the-test', false), /^failed, `/);
+});
+
+// Found after review pass 1, as H1: CHANGE and LOG reach the script as typed.
+test('make record and make record-check pass their arguments as typed', () => {
+  const root = mkdtempSync(join(tmpdir(), 'taskelith-record-make-'));
+  try {
+    write(root, '.nvmrc', readFileSync(join(repository, '.nvmrc'), 'utf8'));
+    write(root, '.github/workflows/release.yml', '');
+    write(root, 'scripts/with-pinned-node.sh', 'shift\nprintf \'%s\\0\' "$@" > args\nenv > environment\n');
+    const marker = join(root, 'expanded');
+    const change = `demo $HOME $$ $(shell touch ${marker}) "q" 'q'`;
+    const log = `log with \`ticks\` $(shell touch ${marker}) and $(MAKE)`;
+    const script = 'scripts/verification-record.ts';
+    const node = ['node', '--experimental-strip-types', script];
+    for (const [target, expected] of [['record', ['write', change, log]], ['record-check', ['check', change]]] as const) {
+      const run = spawnSync('make', ['-f', join(repository, 'Makefile'), '--no-print-directory', target, `CHANGE=${change}`, `LOG=${log}`], {
+        cwd: root, encoding: 'utf8', env: { ...fixtureEnv, MAKEFLAGS: '' },
+      });
+      assert.equal(run.status, 0, run.stderr);
+      assert.equal(existsSync(marker), false, `make ${target} ran a $(shell) of the arguments`);
+      assert.deepEqual(readFileSync(join(root, 'args'), 'utf8').split('\0').slice(0, -1), [...node, ...expected]);
+      assert.doesNotMatch(readFileSync(join(root, 'environment'), 'utf8'), /^MAKEFLAGS=/m);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
