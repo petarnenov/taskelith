@@ -29,14 +29,27 @@ const ENDED = ok({ kind: 'ended' });
 
 type Work = (tx: never) => Promise<Result<unknown>>;
 
-// Runs the work over `rotation`; a placement, which reads its task first,
-// commits nothing of its own and answers `placementOf` that task instead.
+// The cursor a scripted store keeps and the project of each of its tasks.
+interface ScriptedRotation {
+  readonly rotation: PlacementRotation;
+  projectOf(taskId: string): Promise<ProjectId>;
+}
+
+// Runs the work over the rotation; a placement, which reads its task first,
+// answers `placementOf` that task instead and, if placed, moves the cursor.
 async function scriptedTransaction(
-  work: Work, rotation: PlacementRotation, placementOf: (taskId: string) => Result<unknown>,
+  work: Work, { rotation, projectOf }: ScriptedRotation, placementOf: (taskId: string) => Result<unknown>,
 ): Promise<Result<unknown>> {
   const asked: string[] = [];
   const result = await work({ tasks: { get: async (taskId: string) => (asked.push(taskId), UNPLACED) }, rotation } as never);
-  return asked[0] === undefined ? result : placementOf(asked[0]);
+  if (asked[0] === undefined) return result;
+  const placement = placementOf(asked[0]);
+  if (placement.ok && (placement.value as { kind: string }).kind === 'placed') value(await rotation.advance(await projectOf(asked[0])));
+  return placement;
+}
+
+function rotationOver(rotation: PlacementRotation, lineage: InMemoryTaskLineage): ScriptedRotation {
+  return { rotation, projectOf: async (taskId) => (await lineage.get(taskId as TaskId))!.projectId };
 }
 
 // Answers the waiting read and each placement transaction from scripts,
@@ -67,7 +80,7 @@ function scriptedStore(placements: Result<unknown>[]) {
         },
       });
     },
-    transaction: (work: Work) => scriptedTransaction(work, rotation, () => {
+    transaction: (work: Work) => scriptedTransaction(work, { rotation, projectOf: async () => 'project-1' as ProjectId }, () => {
       state.opened++;
       return placements.shift() ?? UNPLACED;
     }),
@@ -256,7 +269,7 @@ async function blockedProjectsStore(): Promise<ControlPlaneStore> {
   return {
     readCommitted: (work) => work({ workers: { candidates: async () => ['worker-a'] }, placements, rotation } as never),
     // Places the placeable task only; the others stay blocked.
-    transaction: (work) => scriptedTransaction(work, rotation, (taskId) => (taskId === PLACEABLE ? PLACED : UNPLACED)) as never,
+    transaction: (work) => scriptedTransaction(work, rotationOver(rotation, lineage), (taskId) => (taskId === PLACEABLE ? PLACED : UNPLACED)) as never,
   };
 }
 
@@ -308,7 +321,7 @@ async function fleetStore(
       freeSlots = fleet.slots[reads++ % fleet.slots.length]!;
       return work({ workers: { candidates: async () => fleet.candidates }, placements, rotation } as never);
     },
-    transaction: (work) => scriptedTransaction(work, rotation, (taskId) => {
+    transaction: (work) => scriptedTransaction(work, rotationOver(rotation, lineage), (taskId) => {
       const scripted = fleet.scripted[taskId];
       if (scripted !== undefined) {
         delete fleet.scripted[taskId];
@@ -566,6 +579,14 @@ test('a pass that a fleet capacity decline stops does not write the unchanged cu
   fleet.slots = [1];
   await runPasses(service, clock, 1);
   assert.deepEqual(placed, ['task-a1', 'task-b1']);
+});
+
+test('a pass that an outage stops does not store its decline-only move', async () => {
+  const fleet: Fleet = { ...oneSlot(), scripted: { 'task-a1': QUOTA_USED, 'task-b1': DOWN } };
+  const { writes, rotation } = recordingRotation();
+  const store = await fleetStore([['task-a1', 'p-a', 0], ['task-b1', 'p-b', 1]], [], fleet, rotation);
+  failed(await serviceOf(store).service.placeWaiting());
+  assert.deepEqual(writes, [], 'the outage may hide a committed placement');
 });
 
 test('a failed write of a decline-only move fails the pass', async () => {

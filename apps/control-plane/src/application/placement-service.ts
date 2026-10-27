@@ -83,8 +83,8 @@ export class PlacementService {
     this.#forgetUnless(checked, stillWaiting);
     if (!anyCandidate) return ok({ waiting: waiting.length, placed: 0 });
     const { outcome, next, stored } = await this.#offer(fairWaitingOrder(waiting, after), after);
-    const kept = await this.#storeUnstoredMove(after, next, stored);
     if (!outcome.ok) return outcome;
+    const kept = await this.#storeUnstoredMove(after, next, stored);
     return kept.ok ? ok({ waiting: waiting.length, placed: outcome.value }) : kept;
   }
 
@@ -98,7 +98,7 @@ export class PlacementService {
       const outcome = await this.#store.transaction((tx) => placeMovingCursor(tx, taskId, this.#retryBackoff, projectId));
       if (!outcome.ok && isOutage(outcome.error.code)) return { outcome, next: cursor.next, stored };
       if (outcome.ok && outcome.value.kind === 'placed') {
-        if (outcome.value.cursorStored) stored = projectId;
+        stored = projectId;
         cursor.placed(projectId);
         placed++;
       } else if (isFleetCapacityDecline(outcome)) {
@@ -112,8 +112,8 @@ export class PlacementService {
     return { outcome: ok(placed), next: cursor.next, stored };
   }
 
-  // Section 13: a decline-only move is stored once, after an outage too, and
-  // only over the cursor the pass read, never over an unseen placement's.
+  // Section 13: a decline-only move of a pass without an outage, which may
+  // hide a commit, is stored once, and only over the cursor the pass read.
   async #storeUnstoredMove(
     after: ProjectId | undefined, next: ProjectId | undefined, stored: ProjectId | undefined,
   ): Promise<Result<void>> {
@@ -171,15 +171,13 @@ interface Offers {
 const PASS = 'pass';
 const NOT_WAITING = 'not-waiting';
 
-// What a placement transaction committed: an assignment, with the cursor
-// or not, an attempt a rejecting reason ended, or nothing while one waits.
+// What a placement transaction committed: an assignment, the end of an
+// attempt that a rejecting reason refused, or nothing while a retry waits.
 type TaskPlacement =
-  | { readonly kind: 'placed'; readonly cursorStored: boolean }
-  | { readonly kind: 'ended' }
+  | { readonly kind: 'placed' | 'ended' }
   | { readonly kind: 'backing-off'; readonly dueAt: number };
 
-const PLACED: TaskPlacement = Object.freeze({ kind: 'placed', cursorStored: false });
-const PLACED_WITH_CURSOR: TaskPlacement = Object.freeze({ kind: 'placed', cursorStored: true });
+const PLACED: TaskPlacement = Object.freeze({ kind: 'placed' });
 const ENDED: TaskPlacement = Object.freeze({ kind: 'ended' });
 
 // An active attempt that retries an ended one and was never placed.
@@ -201,7 +199,7 @@ async function placeMovingCursor(
   const placement = await placeTask(tx, taskId, retryBackoff);
   if (!placement.ok || placement.value.kind !== 'placed') return placement;
   const moved = await tx.rotation.advance(projectId);
-  return moved.ok ? ok(PLACED_WITH_CURSOR) : moved;
+  return moved.ok ? placement : moved;
 }
 
 // Reads the candidates in the task's transaction, so that each placement,
