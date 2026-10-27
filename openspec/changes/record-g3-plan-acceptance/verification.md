@@ -2,7 +2,9 @@
 
 Task `record-g3-plan-acceptance`, assigned by coordinator Niki on 2026-10-27. Source: the owner's away delegate, OpenCode `kimi-k2.7-code` in away run `20261027T152855Z-opencode-52355`, accepted the finalized G3 plan as merged in #354 `finalize-g3-plan` (merge `a00cbe3a`). Scope: one sentence in the status of [`docs/g3-plan.md`](/docs/g3-plan.md), "Accepted by the owner through the away delegate on 2026-10-27.", placed immediately after the sentence that records the finalization on 2026-10-27 on the G2 closure ([ADR 0015](/docs/decisions/0015-g2-closure.md)).
 
-Out of scope: every other edit of the plan, new owner decisions, changes to D1 to D18, and starting any G3 item.
+Second edit, by coordinator Niki's instruction: [Reviewer pauses](/docs/agent-task-protocol.md#reviewer-pauses) in `docs/agent-task-protocol.md` gets one row each for OpenCode CLI (kimi-k3.1-pro), OpenCode CLI (deepseek-v4-pro), OpenCode CLI (kimi-k2.7-code), and OpenCode CLI (qwen3.8-max), paused until about 2026-11-02 02:00 local time for the OpenCode Go weekly quota (HTTP 429 `GoUsageLimitError`). The Antigravity CLI row stays.
+
+Out of scope: every other edit of the plan or the protocol, new owner decisions, changes to D1 to D18, and starting any G3 item.
 
 ## Revision and environment
 
@@ -13,10 +15,13 @@ Out of scope: every other edit of the plan, new owner decisions, changes to D1 t
 ## Author self-check
 
 - **Placement.** In the status (line 3), the new sentence follows "Status: final, finalized on 2026-10-27 on the G2 closure (ADR 0015)." and precedes "On 2026-10-25 the owner approved drafting this plan ...". The status reads finalization, then acceptance, then the history of owner decisions.
-- **Diff.** `git diff a00cbe3a -- docs` changes only line 3 of `docs/g3-plan.md`, by the inserted sentence.
-- **Links.** This record links root-relative only; the plan edit adds no link.
+- **Diff.** `git diff a00cbe3a -- docs` changes only line 3 of `docs/g3-plan.md`, by the inserted sentence, and adds four rows after the Antigravity CLI row of the "Reviewer pauses" table in `docs/agent-task-protocol.md`.
+- **Pause rows.** Each row names its reviewer exactly as the "Reviewer invocations" row does, in the table's three columns.
+- **Links.** This record links root-relative only; the two documentation edits add no link.
 
 ## Checks
+
+Run after both edits and the reviewer change, with the results below.
 
 | Check | Result |
 | --- | --- |
@@ -28,11 +33,16 @@ Out of scope: every other edit of the plan, new owner decisions, changes to D1 t
 
 ## Independent review
 
-Reviewer A assigned by the coordinator: OpenCode CLI `opencode-go/qwen3.8-max#medium`, one pass; a Low-only pass ends the review.
+Reviewer A first assigned by the coordinator: OpenCode CLI `opencode-go/qwen3.8-max#medium`, one pass; a Low-only pass ends the review.
+
+### Unavailable reviewer
+
+- The review attempt by OpenCode CLI `opencode-go/qwen3.8-max#medium` on 2026-10-27 at about 17:30 local time (OpenCode session `ses_e82021465ffecfkYs61mTgKNYg`) did not run to a report: HTTP 429 `GoUsageLimitError`, weekly limit, retry after about 462444 s. Snapshot unchanged. No pass is recorded.
+- The reviewer is only paused from use; the attempt is not a pass. The coordinator assigned Codex CLI `gpt-6-astra`, reasoning effort `medium`, as the replacement reviewer A for the single pass; a Low-only pass ends the review.
 
 ### Pass 1 (reviewer A)
 
-Pending.
+Pending, by Codex CLI `gpt-6-astra`.
 
 ## Limitations
 
@@ -42,6 +52,6 @@ Pending.
 ## Remaining gates
 
 - `make verify`, run by the worker session.
-- Independent review pass 1 by reviewer A.
+- Independent review pass 1 by replacement reviewer A, Codex CLI `gpt-6-astra`.
 - Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).
