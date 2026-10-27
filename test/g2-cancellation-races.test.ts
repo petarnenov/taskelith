@@ -268,14 +268,17 @@ describe('cancellation races', () => {
           const sent = authority.sent.length;
           await installation.submitTask(taskId);
           await waitFor(() => authority.sent.length > sent, 20_000, `round ${round}: the request`);
+          const held = authority.sent[sent];
           const cancelled = await firstAssignment(installation, taskId);
           const [requestOffset, cancelOffset] = [random.nextInt(RACE_WINDOW_MILLISECONDS), random.nextInt(RACE_WINDOW_MILLISECONDS)];
           await Promise.all([
             delay(requestOffset).then(() => gate.open()),
             delay(cancelOffset).then(() => cancelAssignment(installation, cancelled.assignmentId)),
           ]);
-          await waitFor(() => authority.answered.length > sent, 20_000, `round ${round}: the answer`);
-          const answer = authority.answered[sent]!.answer;
+          // A re-placement's request may be answered first, as in scenario b.
+          const answerToHeld = () => authority.answered.find(({ request }) => request === held);
+          await waitFor(() => answerToHeld() !== undefined, 20_000, `round ${round}: the answer`);
+          const { answer } = answerToHeld()!;
           const grants = grantsUnder(await installation.task(taskId), cancelled.assignmentId);
           assert.ok(grants.every(({ state }) => state === 'revoked'), `round ${round}: no live grant: ${JSON.stringify(grants)}`);
           outcomes.push(`${requestOffset}/${cancelOffset} ms: ${await settleRace(installation, worker, taskId, answer.ok ? answer.value.kind : 'failed')}`);

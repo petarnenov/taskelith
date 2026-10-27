@@ -141,10 +141,6 @@ export class ScenarioInstallation {
     return (await admin(this.environment(), ['issue-enrollment-token']) as { enrollmentToken: string }).enrollmentToken;
   }
 
-  async revokeWorker(workerId: string): Promise<void> {
-    await admin(this.environment(), ['revoke-worker', workerId]);
-  }
-
   async call(method: string, path: string, body?: unknown): Promise<Answer> {
     const url = new URL(path.replace(/^\//, ''), this.apiUrl);
     const sent = Date.now();

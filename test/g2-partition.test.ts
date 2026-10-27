@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { SeededRandom, integrationEndpoint, rerunHint, seedFromEnvironment, value } from '@taskelith/testing';
+import { setTimeout as delay } from 'node:timers/promises';
+import { SeededRandom, integrationEndpoint, rerunHint, seedFromEnvironment } from '@taskelith/testing';
 import { OrderedAuthority } from './g2-scenarios/ordered-authority.ts';
 import { PARTITION_TIMEOUT_MILLISECONDS, recordScenario, withInstallation, withPartitions } from './g2-scenarios/scenario-run.ts';
 import { REDELIVERY_BUDGET_MILLISECONDS, SCENARIO_LIMITS, ScenarioInstallation } from './g2-scenarios/scenario-installation.ts';
 import { ScenarioWorker } from './g2-scenarios/scenario-worker.ts';
-import { assertExitedOnce, journaledState, reachable, startedExecutions } from './g2-scenarios/scenario-reads.ts';
+import { assertExitedOnce, journalOf, journaledState, reachable, startedExecutions } from './g2-scenarios/scenario-reads.ts';
 import { Gate, waitFor } from './g2-scenarios/waiting.ts';
 
 // G2 item 24c: partition and reconnect through Toxiproxy, of the worker's
@@ -19,7 +20,7 @@ const TRAIL_REPORTS = 4;
 async function assertOneIntentPerAssignment(installation: ScenarioInstallation, worker: ScenarioWorker): Promise<number> {
   const offers = (await installation.commandsTo(worker.workerId)).filter(({ type }) => type === 'execution.assignment.offer');
   const assignments = new Set(offers.map(({ payload }) => payload.assignmentId));
-  assert.equal(value(worker.running.root.journal.snapshot()).intents.length, assignments.size, 'one intent per assignment');
+  assert.equal(journalOf(worker).intents.length, assignments.size, 'one intent per assignment');
   return offers.length;
 }
 
@@ -50,7 +51,7 @@ describe('worker to NATS', () => {
         await waitFor(() => worker.logs.records.some(({ event }) => event === 'worker.contact.offline'), 20_000, 'the worker is offline');
         if (submitAfterLostContact) await installation.submitTask('task-nats-offer');
         assert.equal((await installation.result('task-nats-offer')).state, 'pending', 'nothing runs during the partition');
-        assert.equal(value(worker.running.root.journal.snapshot()).executions.length, 0, 'the worker launches nothing offline');
+        assert.equal(journalOf(worker).executions.length, 0, 'the worker launches nothing offline');
         await nats.heal();
         const executed = await assertExitedOnce(installation, 'task-nats-offer');
         const offers = await assertOneIntentPerAssignment(installation, worker);
@@ -73,9 +74,9 @@ describe('worker to NATS', () => {
         await installation.submitTask('task-nats-inventory');
         await nats.heal();
         await assertExitedOnce(installation, 'task-nats-inventory');
-        await delayMilliseconds(SETTLE_MILLISECONDS);
+        await delay(SETTLE_MILLISECONDS);
         const settled = await inventoryRequests(installation);
-        await delayMilliseconds(SETTLE_MILLISECONDS);
+        await delay(SETTLE_MILLISECONDS);
         const later = await inventoryRequests(installation);
         const trail = later - settled <= 1 ? '' : `; last (requestId, snapshot): ${await inventoryTrail(installation, TRAIL_REPORTS)}`;
         assert.ok(later - settled <= 1, `${later - settled} inventory requests in ${SETTLE_MILLISECONDS} ms after the task ended${trail}`);
@@ -135,7 +136,7 @@ describe('control plane to PostgreSQL', () => {
         await postgres.disconnect();
         authority.beforeRequest.open();
         await waitFor(() => unavailableAnswers(authority) >= failedAnswers, 30_000, `${failedAnswers} unavailable answers`);
-        assert.equal(installation.stopped === undefined ? 'running' : await settledOrRunning(installation.stopped), 'running',
+        assert.equal(await controlPlaneState(installation), 'running',
           'the control plane keeps running without its database');
         await postgres.heal();
         await assertExitedOnce(installation, 'task-pg-authorization');
@@ -164,8 +165,8 @@ describe('control plane to PostgreSQL', () => {
         await waitFor(() => journaledState(worker) === 'started', 20_000, 'the start is journaled');
         await postgres.disconnect();
         if (healAfterExit) await waitFor(() => journaledState(worker) === 'exited', 20_000, 'the exit is journaled');
-        await delayMilliseconds(1_000);
-        assert.equal(installation.stopped === undefined ? 'running' : await settledOrRunning(installation.stopped), 'running',
+        await delay(1_000);
+        assert.equal(await controlPlaneState(installation), 'running',
           'the control plane keeps running without its database');
         await postgres.heal();
         const executed = await assertExitedOnce(installation, 'task-pg-running');
@@ -271,10 +272,7 @@ function unavailableAnswers(authority: OrderedAuthority): number {
   return authority.answered.filter(({ answer }) => !answer.ok && answer.error.code === 'unavailable').length;
 }
 
-async function settledOrRunning(stopped: Promise<'stopped' | 'failed'>): Promise<string> {
-  return Promise.race([stopped, delayMilliseconds(0).then(() => 'running')]);
-}
-
-function delayMilliseconds(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+async function controlPlaneState(installation: ScenarioInstallation): Promise<string> {
+  if (installation.stopped === undefined) return 'running';
+  return Promise.race([installation.stopped, delay(0).then(() => 'running')]);
 }

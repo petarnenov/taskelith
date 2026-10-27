@@ -71,10 +71,6 @@ export class ScenarioWorker {
     return this.running.identity.workerId;
   }
 
-  get executions(): string {
-    return join(this.dataRoot, 'worker', 'executions');
-  }
-
   async start(): Promise<RunningWorker> {
     this.#running = value(await startWorker(this.#settings(), this.#dependencies()));
     return this.#running;
