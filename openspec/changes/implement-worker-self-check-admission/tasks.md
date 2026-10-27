@@ -35,6 +35,6 @@
 - [x] 5.2 `npm run openspec -- validate implement-worker-self-check-admission --strict`
 - [x] 5.3 `make verify`
 - [x] 5.4 `verification.md`
-- [ ] 5.5 Independent review passes, recorded in `passes.jsonl` and `findings.jsonl`
+- [x] 5.5 Independent review passes, recorded in `passes.jsonl` and `findings.jsonl`
 - [ ] 5.6 `make verify-installation` and `make verify-linux-cgroup` with Docker, run by the developing worker (Desi) before the handoff
 - [ ] 5.7 Archive, handoff, and integration by the coordinator
