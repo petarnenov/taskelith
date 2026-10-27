@@ -29,7 +29,7 @@ export const WORKER_REASONS = Object.freeze(['worker-not-eligible', 'worker-capa
 export const NO_CANDIDATE_REASON = 'no-candidate';
 
 // Reasons the fleet's lack of room explains, exact while all requests are
-// equal: they stop the rotation cursor and back off no task (contract §5, §13).
+// equal: a pass ends at one, the cursor stops, no task backs off (§5, §13).
 export const FLEET_REASONS = Object.freeze([
   'quarantined', 'worker-not-eligible', 'worker-capacity-exhausted', NO_CANDIDATE_REASON,
 ] as const);
