@@ -76,9 +76,34 @@ Run on 2026-10-27 at head `f54e1353`, the branch's three commits after the rebas
 | `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` | Passed (exit 0), last line "Packed file allowlist and installed CLI verification passed."; coverage over all files 99.28 % lines, 92.30 % branches, 98.94 % functions; OpenSpec "Totals: 70 passed, 0 failed (70 items)"; `verify:links` ("Every checked link conforms.") and `verify:archive` |
 | `npm run verify:links` | Passed: "Every checked link conforms." |
 
-## Review
+After the review pass 1 fixes (`b17619b0`) and with this record staged (tree `bf163094f0dabddabe94c2f8dcef540ada27002f`, which differs from the record commit only in this paragraph):
 
-Not yet reviewed. `passes.jsonl` and `findings.jsonl` are empty.
+- **`TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`**: exit 0, last line `Packed file allowlist and installed CLI verification passed.` Coverage over all files: 99.28 % lines, 92.29 % branches, 98.94 % functions. OpenSpec: `Totals: 70 passed, 0 failed (70 items)`. Links: `Every checked link conforms.`
+- **`npm run openspec -- validate recheck-provider-terms-pages --strict`**: `Change 'recheck-provider-terms-pages' is valid`.
+- **`make findings ARGS="validate"`**: `Every findings file is valid: 41 file(s); every pass summary file is valid: 21 file(s).`
+- **`npm run verify:links`**: `Every checked link conforms.`
+
+## Independent review
+
+Reviewer A: Claude Code `claude-fable-5-1`, effort medium. Reviewer B: Claude Code `claude-opus-5-5`, effort high. Both are Claude Code models for the reason under Remaining gates.
+
+### Pass 1, reviewer A
+
+- Reviewer: Claude Code, `claude-fable-5-1`, effort medium, reviewed head `f54e1353`, run by worker Liki.
+- Invocation: `claude -p "<prompt>" --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json < /dev/null`, run in the worktree; `modelUsage` names only `claude-fable-5-1`.
+- Session: `38d59e1b-13be-4bdb-b2ef-405d14df5a4f`.
+- Snapshot: `ad22c2b771cec3cba76b616af1ba04274bca371101b6d79da6f084450f52f1fc` before and after the pass, unchanged.
+- Counts: Critical 0, High 0, Medium 0, Low 3.
+- Reviewer re-fetch, 2026-10-27 19:21:37 to 19:21:51 UTC, every request HTTP 200, each quote checked as a substring after removing tags, decoding entities, mapping U+2019 to ASCII, and collapsing whitespace: all nine added quotes are verbatim on the live pages and on every cited Wayback snapshot (Usage Policy 20261020080942, 20261024120451, 20261026081456; Legal and compliance 20261020141144, 20261024042054; Agent SDK overview 20261020141633, 20261024042705). The Sep 15, 2025 archive page carries the clause quoted at line 47 and none of "consumer subscriptions", "route requests", "sign-up", and "log-in", so "omitted, not added" holds. The CDX lists have no 2026-10-25 snapshot of the three Anthropic pages (Usage Policy 10-24 then 10-26, Legal and compliance 10-24 then 10-27, Agent SDK overview 10-24 then 10-26), as recorded.
+- The declined pass 1 H3 holds: `learn.chatgpt.com/docs/app-server` answered 200 with both sentences verbatim, `developers.openai.com/codex/app-server` redirects there, and Wayback 20261024043009 carries them; `openai.com/policies/terms-of-use/` answered 403.
+- Reviewer checks: the line placements of the quoted passages table match the working tree; "next paragraph", the heading "Do Not Abuse Our Platform", the order of the clauses, and the "(accessed 2026-10-27)" markers are correct; the record draws no conclusion and makes no recommendation on D15 or ADR 0005 decision 2, only the open question; `docs/g3-plan.md` and ADR 0005 are untouched; the strict validation passes, the checklist output equals the one in design, `verify:links` and `verify:comments` pass, and the rebase leaves `docs/qualification/` unchanged. The reviewer did not run `make verify`, which builds and tests outside a read-only pass.
+- A Low-only pass ends the review under governance "Low findings are fixed", so reviewer B is not used and passes 2 and 3 do not run. The three fixes, in `b17619b0`, have the outcome `fixed-unreviewed`.
+
+| # | Severity | Finding | Resolution | Commit |
+| --- | --- | --- | --- | --- |
+| 1 | Low | Checks (lines 70 and 75) gave the pre-rebase counts of 40 findings and 20 pass summary files and spoke of two commits; after the rebase there are 41, 21, and three commits | The checks were re-run at head `f54e1353`, and the section states that head and each result; the re-run after the fixes is recorded below | `b17619b0` |
+| 2 | Low | The Markdown export check (line 25) did not match under the normalization of design D1: the exports write `[Anthropic's Commercial Terms of Service](…)` and `**The Claude Code binary must not be modified.**` | Line 25 and design D1 state that a check against an export replaces each link with its text and removes the emphasis markers; rechecked on exports fetched at 19:26:12 UTC | `b17619b0` |
+| 3 | Low | `docs/qualification/claude-code.md:61` and `:88` called the sign-up or log-in circumvention the bypass clause's named example, omitting "instructing the model to produce harmful outputs" | Both lines quote both named examples verbatim from the live Usage Policy, rechecked at 19:26:11 UTC, with no conclusion on D15 or ADR 0005 decision 2 | `b17619b0` |
 
 ## Open question for the owner
 
@@ -92,9 +117,8 @@ The owner decided D15 (a) on 2026-10-25 from a review that omitted the passages 
 
 ## Remaining gates
 
-- Review pass 1 by reviewer A (Claude Code claude-fable-5-1)
-- pass 2 by reviewer B (Claude Code claude-opus-5-5, effort high) unless pass 1 is Low-only
-- pass 3 by reviewer A
+Review pass 1 was Low-only, so passes 2 and 3 are not run.
+
 - Archive
 - Integration into dev by the coordinator (single pull request)
 

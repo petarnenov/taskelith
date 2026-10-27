@@ -9,7 +9,14 @@
 ## 2. Verification and review
 
 - [x] 2.1 Run `make verify`, strict validation of this change, and `make findings ARGS="validate"`.
-- [ ] 2.2 Review pass 1 by reviewer A (Claude Code `claude-fable-5-1`), recorded in `verification.md`, `passes.jsonl`, and `findings.jsonl`.
-- [ ] 2.3 Review pass 2 by reviewer B (Claude Code `claude-opus-5-5`, effort `high`) unless pass 1 is Low-only.
-- [ ] 2.4 Review pass 3 by reviewer A, if pass 2 leaves fixes to confirm.
-- [ ] 2.5 Archive the change in the last commit of the branch.
+- [x] 2.2 Review pass 1 by reviewer A (Claude Code `claude-fable-5-1`), recorded in `verification.md`, `passes.jsonl`, and `findings.jsonl`.
+- [x] 2.3 Review pass 2 by reviewer B (Claude Code `claude-opus-5-5`, effort `high`) unless pass 1 is Low-only: not run, pass 1 was Low-only.
+- [x] 2.4 Review pass 3 by reviewer A, if pass 2 leaves fixes to confirm: not run, no pass 2.
+
+## 3. Review pass 1
+
+- [x] 3.1 Fix the three pass 1 Low findings without another review: the stale check results after the rebase, the markup removal of the Markdown export check, and the second named example of the Usage Policy bypass clause.
+
+## 4. Archive
+
+- [ ] 4.1 Archive the change in the last commit of the branch and record the archive checks.
