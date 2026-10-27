@@ -83,7 +83,7 @@ export class PlacementService {
     this.#forgetUnless(checked, stillWaiting);
     if (!anyCandidate) return ok({ waiting: waiting.length, placed: 0 });
     const { outcome, next, stored } = await this.#offer(fairWaitingOrder(waiting, after), after);
-    const kept = await this.#storeUnstoredMove(next, stored);
+    const kept = await this.#storeUnstoredMove(after, next, stored);
     if (!outcome.ok) return outcome;
     return kept.ok ? ok({ waiting: waiting.length, placed: outcome.value }) : kept;
   }
@@ -112,11 +112,13 @@ export class PlacementService {
     return { outcome: ok(placed), next: cursor.next, stored };
   }
 
-  // Capacity reservation section 13: a move by own-reason declines alone,
-  // which no placement stored, is stored once, after an outage too.
-  async #storeUnstoredMove(next: ProjectId | undefined, stored: ProjectId | undefined): Promise<Result<void>> {
+  // Section 13: a decline-only move is stored once, after an outage too, and
+  // only over the cursor the pass read, never over an unseen placement's.
+  async #storeUnstoredMove(
+    after: ProjectId | undefined, next: ProjectId | undefined, stored: ProjectId | undefined,
+  ): Promise<Result<void>> {
     if (next === undefined || next === stored) return ok(undefined);
-    return this.#store.transaction((tx) => tx.rotation.advance(next));
+    return this.#store.transaction((tx) => tx.rotation.advanceFrom(after, next));
   }
 
   // Never given a fleet capacity decline, which keeps the wait. A backing-off

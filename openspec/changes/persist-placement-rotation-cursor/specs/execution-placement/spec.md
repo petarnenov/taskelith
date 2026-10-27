@@ -50,7 +50,7 @@ Each waiting read SHALL take each project's oldest task before any project's nex
 ## ADDED Requirements
 
 ### Requirement: Rotation cursor storage
-The installation SHALL store one rotation cursor, which survives a control-plane restart. Each placement SHALL store it in the placement's own transaction. A move by declines alone SHALL be stored in one transaction at the end of the pass, also after an outage stopped the pass. A pass whose offers do not move the cursor SHALL NOT write it. Control-plane instances SHALL share the cursor, and the last write SHALL win.
+The installation SHALL store one rotation cursor, which survives a control-plane restart. Each placement SHALL store it in the placement's own transaction, the last one winning. A move by declines alone SHALL be stored in one transaction at the end of the pass, also after an outage, and only while the stored cursor is still the one the pass read. A pass whose offers do not move the cursor SHALL NOT write it.
 
 #### Scenario: Crash after a placement
 - **WHEN** a pass commits the placement of a task of `p-a` and every later transaction of the pass fails
@@ -63,3 +63,7 @@ The installation SHALL store one rotation cursor, which survives a control-plane
 #### Scenario: Unmoved cursor
 - **WHEN** a pass's first offer is declined for lack of fleet capacity
 - **THEN** the pass does not write the cursor
+
+#### Scenario: Lost commit reply
+- **WHEN** a pass declines a task of `p-a` for its project's quota, then commits the placement of a task of `p-b` whose commit reply is lost
+- **THEN** the stored cursor stays `p-b`

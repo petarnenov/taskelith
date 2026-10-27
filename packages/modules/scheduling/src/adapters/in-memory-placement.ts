@@ -64,6 +64,11 @@ export class InMemoryPlacementRotation implements PlacementRotation {
     this.#cursor = projectId;
     return ok(undefined);
   }
+
+  async advanceFrom(expected: ProjectId | undefined, next: ProjectId): Promise<Result<void>> {
+    if (this.#cursor === expected) this.#cursor = next;
+    return ok(undefined);
+  }
 }
 
 // Checks and writes without awaiting, so concurrent writers cannot both

@@ -206,6 +206,17 @@ export class PostgresPlacementRotation implements PlacementRotation {
     );
     return ok(undefined);
   }
+
+  // No row is no cursor: without one expected, only a first move inserts.
+  async advanceFrom(expected: ProjectId | undefined, next: ProjectId): Promise<Result<void>> {
+    await this.#session.query(
+      expected === undefined
+        ? 'INSERT INTO placement_rotation (project_id) VALUES ($1) ON CONFLICT (singleton) DO NOTHING'
+        : 'UPDATE placement_rotation SET project_id = $1 WHERE project_id = $2',
+      expected === undefined ? [next] : [next, expected],
+    );
+    return ok(undefined);
+  }
 }
 
 // The tasks the placement queue reads, open for further conditions.

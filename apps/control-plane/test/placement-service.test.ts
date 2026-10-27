@@ -523,6 +523,7 @@ function recordingRotation() {
   const recording: PlacementRotation = {
     read: () => rotation.read(),
     advance: (projectId) => (writes.push(projectId), rotation.advance(projectId)),
+    advanceFrom: (expected, projectId) => (writes.push(projectId), rotation.advanceFrom(expected, projectId)),
   };
   return { writes, rotation: recording };
 }
@@ -569,7 +570,7 @@ test('a pass that a fleet capacity decline stops does not write the unchanged cu
 
 test('a failed write of a decline-only move fails the pass', async () => {
   const fleet: Fleet = { ...oneSlot(), slots: [0], scripted: { 'task-a1': QUOTA_USED } };
-  const failing: PlacementRotation = { read: async () => undefined, advance: async () => DOWN };
+  const failing: PlacementRotation = { read: async () => undefined, advance: async () => DOWN, advanceFrom: async () => DOWN };
   const store = await fleetStore([['task-a1', 'p-a', 0], ['task-b1', 'p-b', 1]], [], fleet, failing);
   assert.equal(failed(await serviceOf(store).service.placeWaiting()).code, 'unavailable');
 });

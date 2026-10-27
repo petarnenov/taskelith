@@ -430,6 +430,21 @@ export const PLACEMENT_ROTATION_CONFORMANCE: readonly ConformanceCase<PlacementR
       return problems;
     },
   },
+  {
+    name: 'a conditional move stores only over the expected cursor',
+    async check(rotation: PlacementRotation) {
+      const problems: string[] = [];
+      const other = id('ProjectId', 'project-2') as ProjectId;
+      expectSuccess(problems, 'first move', await rotation.advanceFrom(undefined, PROJECT));
+      expectSame(problems, 'after the first move', await rotation.read(), PROJECT);
+      expectSuccess(problems, 'move from none', await rotation.advanceFrom(undefined, other));
+      expectSuccess(problems, 'move from another', await rotation.advanceFrom(other, other));
+      expectSame(problems, 'after the stale moves', await rotation.read(), PROJECT);
+      expectSuccess(problems, 'move from the cursor', await rotation.advanceFrom(PROJECT, other));
+      expectSame(problems, 'after the matching move', await rotation.read(), other);
+      return problems;
+    },
+  },
 ]);
 
 // An enrolled worker before its first contact, which a test stores.
