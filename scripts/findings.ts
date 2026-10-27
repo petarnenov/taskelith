@@ -10,8 +10,10 @@ import {
   formatChecklist,
   formatIndex,
   formatProblem,
+  formatRecordChecklist,
   parseFindings,
   parseVocabulary,
+  recordChecklist,
   SPECS_DIRECTORY,
   VOCABULARY_PATH,
   type Category,
@@ -227,9 +229,17 @@ function runCommand(command: Command, repository: Repository): RunResult {
 
 function commandOutput(command: Command, archived: readonly Finding[], files: number, categories: readonly Category[]): string {
   if (command.name === 'validate') return `Every findings file is valid: ${files} file(s).`;
-  if (command.name === 'checklist') return formatChecklist(checklist(archived, categories, command.query), command.query);
+  if (command.name === 'checklist') return checklistOutput(command.query, archived, categories);
   const index = findingsIndex(archived);
   return command.json ? JSON.stringify(index, null, 2) : formatIndex(index);
+}
+
+// Record quality is listed whatever the query, because record findings
+// often name no capability and no file of the task.
+function checklistOutput(query: ChecklistQuery, archived: readonly Finding[], categories: readonly Category[]): string {
+  const forQuery = formatChecklist(checklist(archived, categories, query), query);
+  const forRecords = formatRecordChecklist(recordChecklist(archived, categories, query.top));
+  return `${forQuery}\n\n${forRecords}`;
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {

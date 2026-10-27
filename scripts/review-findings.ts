@@ -290,10 +290,17 @@ export function matchesQuery(finding: Finding, query: ChecklistQuery): boolean {
   return capability || query.files.some((glob) => posix.matchesGlob(finding.file, glob));
 }
 
-// Findings are in archive order, so the last one of a category is the newest.
 export function checklist(findings: readonly Finding[], categories: readonly Category[], query: ChecklistQuery): ChecklistItem[] {
-  const matched = findings.filter((finding) => matchesQuery(finding, query));
-  return tallyBy(matched, DIMENSION_KEYS.category).slice(0, query.top).map(({ key, total }) => ({
+  return rankCategories(findings.filter((finding) => matchesQuery(finding, query)), categories, query.top);
+}
+
+export function recordChecklist(findings: readonly Finding[], categories: readonly Category[], top: number): ChecklistItem[] {
+  return rankCategories(findings.filter(isRecordFinding), categories, top);
+}
+
+// Findings are in archive order, so the last one of a category is the newest.
+function rankCategories(matched: readonly Finding[], categories: readonly Category[], top: number): ChecklistItem[] {
+  return tallyBy(matched, DIMENSION_KEYS.category).slice(0, top).map(({ key, total }) => ({
     category: key,
     description: categories.find((category) => category.id === key)?.description ?? '',
     count: total,
@@ -310,9 +317,16 @@ function describeQuery({ capabilities, files }: ChecklistQuery): string {
 }
 
 export function formatChecklist(items: readonly ChecklistItem[], query: ChecklistQuery): string {
-  const scope = describeQuery(query);
-  if (items.length === 0) return `Review checklist (${scope}): no archived findings match.`;
+  return formatRanking(`Review checklist (${describeQuery(query)})`, items);
+}
+
+export function formatRecordChecklist(items: readonly ChecklistItem[]): string {
+  return formatRanking(`Record quality (archived findings under ${RECORD_DIRECTORY})`, items);
+}
+
+function formatRanking(title: string, items: readonly ChecklistItem[]): string {
+  if (items.length === 0) return `${title}: no archived findings match.`;
   const lines = items.map(({ category, description, count, example }, index) =>
     `${index + 1}. ${category} (${count}): ${description} Example: "${example}"`);
-  return [`Review checklist (${scope}), most frequent finding categories first:`, ...lines].join('\n');
+  return [`${title}, most frequent finding categories first:`, ...lines].join('\n');
 }
