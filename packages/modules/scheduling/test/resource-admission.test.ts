@@ -16,6 +16,7 @@ import {
   decidePlacement,
   fairPlacementOrder,
   isWaitingReason,
+  lacksFleetCapacity,
   parseResourceRequest,
   placementBackoff,
   type CapacityStore,
@@ -255,6 +256,25 @@ test('without a placement the rotation cursor moves to the last offer', () => {
   cursor.offered(projectId('b'));
   cursor.offered(projectId('c'));
   assert.equal(cursor.next, projectId('c'));
+});
+
+test('after the fleet runs out of capacity, offers no longer move the cursor', () => {
+  const cursor = new RotationCursor(projectId('a'));
+  cursor.offered(projectId('b'));
+  cursor.ranOutOfCapacity();
+  cursor.offered(projectId('c'));
+  assert.equal(cursor.next, projectId('b'));
+  cursor.placed(projectId('d'));
+  assert.equal(cursor.next, projectId('d'));
+});
+
+test('only quarantine, worker eligibility, and worker capacity lack fleet capacity', () => {
+  for (const reason of ['quarantined', 'worker-not-eligible', 'worker-capacity-exhausted'] as const) {
+    assert.equal(lacksFleetCapacity(reason), true, reason);
+  }
+  for (const reason of ['control-not-enforceable', 'project-quota-exhausted', 'run-quota-exhausted', 'retry-budget-exhausted'] as const) {
+    assert.equal(lacksFleetCapacity(reason), false, reason);
+  }
 });
 
 test('without an offer the rotation cursor stays where it started', () => {
