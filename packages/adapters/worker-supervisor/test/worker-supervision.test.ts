@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { withholdCoverageFromDescendants } from '@taskelith/testing';
 import {
   darwinPlatform,
   encodeRecord,
@@ -15,6 +16,9 @@ import {
   superviseLaunch,
 } from '@taskelith/worker-supervisor';
 import { identity, intent, rig, SUPERVISOR_PID, type Rig } from './fakes.ts';
+
+// The Node spawner passes this environment to the children it kills.
+withholdCoverageFromDescendants();
 
 const CLAIM = encodeRecord({ kind: 'claim', launchAuthId: 'launch-1', supervisor: 1 });
 const HANDLE = encodeRecord({ kind: 'spawned', process: identity(500), processGroupId: 500 });
