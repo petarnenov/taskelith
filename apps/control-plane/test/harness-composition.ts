@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, chownSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -54,6 +54,19 @@ const BINDING = {
   workflowDigest: DIGEST, configurationRevision: 'config-1', policyRevision: 'policy-1',
 };
 const LIMITS = { ...TRANSPORT_LIMITS, streamMaxBytes: 64 * 1024 ** 2, ackWaitMilliseconds: 3_000, retryInitialMilliseconds: 100, retryMaxMilliseconds: 500, idlePollMilliseconds: 50 };
+
+// What a Linux worker needs to launch (apps/worker settings): the delegated
+// cgroup and the execution account; make verify-linux-crash-windows sets it.
+const LINUX_LAUNCH_VARIABLES = ['TASKELITH_CONTAINMENT_PARENT', 'TASKELITH_EXECUTION_UID', 'TASKELITH_EXECUTION_GID'] as const;
+
+// The Linux launch settings when all are set; none on any other host.
+export const LINUX_LAUNCH = linuxLaunch(process.env);
+
+function linuxLaunch(env: NodeJS.ProcessEnv): Readonly<Record<string, string>> | undefined {
+  if (process.platform !== 'linux') return undefined;
+  const entries = LINUX_LAUNCH_VARIABLES.map((variable) => [variable, env[variable] ?? ''] as const);
+  return entries.every(([, setting]) => setting !== '') ? Object.freeze(Object.fromEntries(entries)) : undefined;
+}
 
 // The worker's structured logs that show its first pass and its contact.
 const READY_EVENTS = ['worker.reconciliation.planned', 'worker.contact.online'];
@@ -213,6 +226,7 @@ export class HarnessInstallation {
     database.pathname = `/${databaseName}`;
     const base = mkdtempSync(join(tmpdir(), 'taskelith-crash-'));
     releases.add(() => rmSync(base, { recursive: true, force: true }));
+    if (LINUX_LAUNCH !== undefined) admitExecutionAccount(base, LINUX_LAUNCH);
     const dataRoot = join(base, 'control-plane');
     const authority = await bounded('the broker account', () => registeredAuthority(dataRoot), { signal });
     const environment = { TASKELITH_DATA_DIR: dataRoot, TASKELITH_POSTGRES_URL: database.href, TASKELITH_NATS_URL: NATS.href };
@@ -376,9 +390,10 @@ export class ComposedWorker {
     const env = {
       ...inherited, ...(armed === undefined ? {} : armedEnvironment(armed)), ...(run.holdNotStarted === true ? { [HOLD_NOT_STARTED_VARIABLE]: '1' } : {}),
       ...(run.failsFirstPrepare === true ? { [FAIL_FIRST_PREPARE_VARIABLE]: '1' } : {}),
-      [SEED_VARIABLE]: String(seed), [CRASH_TRACE_VARIABLE]: crashTrace(installation), [ORDER_TRACE_VARIABLE]: orderTrace(installation),
+      [SEED_VARIABLE]: String(seed), [CRASH_TRACE_VARIABLE]: crashTrace(installation), [ORDER_TRACE_VARIABLE]: orderTrace(installation.base),
       TASKELITH_DATA_DIR: join(installation.base, 'worker'), TASKELITH_CONTROL_PLANE_URL: installation.apiUrl,
       TASKELITH_NATS_URL: NATS.href, TASKELITH_ENROLLMENT_TOKEN: enrollmentToken, TASKELITH_WORKER_COMMAND: childCommand(installation),
+      ...LINUX_LAUNCH,
     };
     // The base names the scenario on the command line, for leftoverProcesses.
     const started = await ScenarioProcess.start(process.execPath, ['--experimental-strip-types', COMPOSED_WORKER, installation.base], { env });
@@ -444,17 +459,27 @@ export function tracedCrashes(installation: HarnessInstallation): string[] {
   return readLines(crashTrace(installation));
 }
 
-function orderTrace(installation: HarnessInstallation): string {
-  return join(installation.base, 'order-trace');
+function orderTrace(base: string): string {
+  return join(base, 'order-trace');
 }
 
 // The steps the test-side barriers established, in the order they came.
 export function establishedOrder(installation: HarnessInstallation): string[] {
-  return readLines(orderTrace(installation));
+  return readLines(orderTrace(installation.base));
 }
 
-function spawnsFile(installation: HarnessInstallation): string {
-  return join(installation.base, 'spawns');
+function spawnsFile(base: string): string {
+  return join(base, 'spawns');
+}
+
+// On Linux the scripted child runs as the execution account: it looks for
+// the release in the base and appends to the spawns and the order trace.
+function admitExecutionAccount(base: string, launch: Readonly<Record<string, string>>): void {
+  chmodSync(base, 0o711);
+  for (const file of [spawnsFile(base), orderTrace(base)]) {
+    writeFileSync(file, '');
+    chownSync(file, Number(launch.TASKELITH_EXECUTION_UID), Number(launch.TASKELITH_EXECUTION_GID));
+  }
 }
 
 function releaseFile(installation: HarnessInstallation): string {
@@ -469,7 +494,7 @@ export function releaseChild(installation: HarnessInstallation): void {
 // The test-only scripted process: it appends its process ID to `spawns`
 // once it starts, then exits 0 once released or at its bound.
 function childCommand(installation: HarnessInstallation): string {
-  const [spawns, release, order] = [spawnsFile(installation), releaseFile(installation), orderTrace(installation)].map((path) => JSON.stringify(path));
+  const [spawns, release, order] = [spawnsFile(installation.base), releaseFile(installation), orderTrace(installation.base)].map((path) => JSON.stringify(path));
   const script = `const fs = require('node:fs'); fs.appendFileSync(${spawns}, process.pid + '\\n');`
     + ` const bound = Date.now() + ${CHILD_BOUND_MILLISECONDS};`
     + ' (function wait() { if (fs.existsSync(' + release + ')) return;'
@@ -479,7 +504,7 @@ function childCommand(installation: HarnessInstallation): string {
 }
 
 export function spawnedChildren(installation: HarnessInstallation): string[] {
-  return readLines(spawnsFile(installation));
+  return readLines(spawnsFile(installation.base));
 }
 
 // The records of adopting supervisors: a claim names supervisor.1, so an
