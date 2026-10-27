@@ -1,7 +1,7 @@
 # review-process Specification
 
 ## Purpose
-Govern independent review of Taskelith changes: authorized read-only reviewers, one reviewer per change at a time with rotation and a replacement when a reviewer is unavailable, at most three passes, owner decisions on remaining findings, and Low-only passes fixed without another review.
+Govern independent review of Taskelith changes: authorized read-only reviewers, two alternating reviewers of different harnesses per change, A for passes 1 and 3 and B for pass 2, with rotation and a replacement when a reviewer is unavailable, at most three passes, owner decisions on remaining findings, and Low-only passes fixed without another review.
 
 ## Requirements
 

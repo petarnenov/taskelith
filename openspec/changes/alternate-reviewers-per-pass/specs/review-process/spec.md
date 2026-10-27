@@ -85,8 +85,19 @@ Rotation SHALL follow the order of the governance policy's authorized reviewer l
 ## ADDED Requirements
 
 ### Requirement: Changes under the one-reviewer rule
-A change briefed before the alternating-reviewer rule reached `dev` on 2026-10-27, including one already in review, SHALL finish under the earlier rule: one assigned reviewer makes every pass, no second reviewer cross-reviews it, and an unavailable reviewer's replacement takes over the remaining passes, its first pass confirming the earlier findings and then reviewing the whole change.
+A change briefed before the alternating-reviewer rule reached `dev`, including one already in review, SHALL finish under the earlier rule: one assigned reviewer makes every pass, no second reviewer cross-reviews it, and an unavailable reviewer's replacement takes over the remaining passes, its first pass confirming the earlier findings and then reviewing the whole change.
 
 #### Scenario: Change in review at the rule change
 - **WHEN** a change had its first review pass before the rule reached `dev` and needs a second pass
 - **THEN** its assigned reviewer makes the second pass, and no reviewer B is assigned
+
+### Requirement: No reviewer of another harness
+When no authorized reviewer of a harness different from the change's other reviewer is available, that is, not paused or unavailable and meeting the change's review requirements, the coordinator MAY assign a reviewer of the same harness with a different model, as reviewer B or as a replacement, and SHALL record the reason in the change's `verification.md`.
+
+#### Scenario: Replacement without another harness
+- **WHEN** reviewer B fails to run and every reviewer of a harness different from A's is paused or unavailable
+- **THEN** the coordinator may assign a reviewer of A's harness with a different model as reviewer B, and `verification.md` records why
+
+#### Scenario: Reviewer B without another harness
+- **WHEN** a new change is assigned and no reviewer in the turn has a harness different from reviewer A's
+- **THEN** the coordinator may assign another model of A's harness as reviewer B, and `verification.md` records why
