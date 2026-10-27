@@ -18,12 +18,14 @@ INSTALLATION := taskelith-$(SERVICES_ID)-installation
 INSTALLATION_PINS := TASKELITH_UBUNTU_BASE=$(UBUNTU_BASE) TASKELITH_NODE_VERSION=$(NODE_PIN) \
 	TASKELITH_NODE_SHA256_AMD64=$(NODE_LINUX_X64_SHA256) TASKELITH_NODE_SHA256_ARM64=$(NODE_LINUX_ARM64_SHA256)
 
+VERIFY_STAMP := node --experimental-strip-types scripts/verify-stamp.ts
+
 SPECKIT_IMAGE := taskelith-speckit:1.2.3
 SPECKIT_BASE := python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962
 SPECKIT_CAPTURE := docs/qualification/speckit-1.2.3
 UV_PIN := 0.13.5
 
-.PHONY: verify verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility findings \
+.PHONY: verify verify-stamped verify-checks toolchain hooks dependency-inventory doctor setup speckit-image speckit-capture speckit-lock contract-compatibility findings \
 	test services-up services-down verify-linux-cgroup verify-linux-crash-windows installation-build installation-bootstrap installation-broker-config installation-start \
 	installation-stop installation-enroll installation-enrollment-token verify-installation verify-worker-image-reproducible installation-smoke qualify-harnesses \
 	scenario-fresh-composition scenario-worker-disk-loss scenario-worker-kill \
@@ -32,7 +34,14 @@ UV_PIN := 0.13.5
 
 # Uses the .nvmrc Node.js when nvm has it, so no 'nvm use' is needed first.
 verify:
-	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use $(MAKE) --no-print-directory verify-checks
+	@NODE_PIN=$(NODE_PIN) bash scripts/with-pinned-node.sh use $(MAKE) --no-print-directory verify-stamped
+
+# Runs the checks of the branch's profile and stamps a clean tree that
+# passed them, so that the pre-push hook can reuse the run.
+verify-stamped: toolchain
+	@profile="$$($(VERIFY_STAMP) profile)" && tree="$$($(VERIFY_STAMP) start)" && \
+		$(MAKE) --no-print-directory verify-checks VERIFY_PROFILE="$$profile" && \
+		$(VERIFY_STAMP) write "$$profile" "$$tree"
 
 verify-checks: toolchain
 	npm run verify:comments
