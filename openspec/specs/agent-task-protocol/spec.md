@@ -85,3 +85,37 @@ A change's `verification.md` SHALL name integration into `dev` by the coordinato
 #### Scenario: Coordinator merges an archived change
 - **WHEN** the coordinator merges a branch whose archived `verification.md` names integration as its remaining gate
 - **THEN** the record stays unchanged, and the pull request records the integration checks
+
+### Requirement: Named fleet roles
+The repository SHALL keep a fleet roster in `docs/fleet.md`, linked from the protocol, that names each session, its role, and its machine, with exactly one coordinator, and the owner's procedure to change the coordinator with a handover note; the `taskelith-coordinator` and `taskelith-worker` skills SHALL take a name, check it against the roster, and announce it.
+
+#### Scenario: Session starts as a named worker
+- **WHEN** the owner runs `/taskelith-worker <Name>` and the roster lists `<Name>` as a worker
+- **THEN** the session sends `<Name> ready` to the roster's coordinator and waits for a brief
+
+#### Scenario: Name conflicts with the roster
+- **WHEN** the owner runs `/taskelith-coordinator <Name>` and the roster names another coordinator
+- **THEN** the session stops and asks the owner
+
+#### Scenario: Coordinator changes
+- **WHEN** the owner names a new coordinator in the roster
+- **THEN** the outgoing coordinator finishes running integrations and writes a handover note, and the new coordinator reads it and broadcasts its name to every worker
+
+### Requirement: Review findings in the task flow
+A worker SHALL create an empty `findings.jsonl` with its change, append each finding of every review pass that runs to a report, and at the archive check that the file exists and validates. Failed review attempts SHALL add no findings. The coordinator SHALL include in every brief the checklist that `make findings ARGS="checklist"` prints for the task's capabilities and files.
+
+#### Scenario: Pass with findings
+- **WHEN** a review pass reports findings
+- **THEN** the worker appends one line per finding to `findings.jsonl` with its outcome once the pass's findings are resolved
+
+#### Scenario: Review without findings
+- **WHEN** a change is archived after a review that found nothing
+- **THEN** its archived `findings.jsonl` exists and is empty
+
+#### Scenario: Failed review attempt
+- **WHEN** a review attempt does not run to a report
+- **THEN** no line is added to `findings.jsonl`
+
+#### Scenario: Brief for a new task
+- **WHEN** the coordinator assigns a task
+- **THEN** the brief contains the checklist printed for the capabilities and files the task is expected to touch
