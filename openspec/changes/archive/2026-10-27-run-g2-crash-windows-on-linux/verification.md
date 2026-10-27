@@ -109,6 +109,17 @@ Criteria: the ADR 0004 principles, every instance of a problem. Snapshots: SHA-2
 
 Pass 1 found only Low findings, so they are fixed without another pass (governance, "Low findings are fixed"); these fixes are unreviewed. `findings.jsonl` holds the five findings with outcome `fixed-unreviewed`; the failed attempt adds none.
 
+## Archive checks
+
+Worker step 7, after review pass 1 and its unreviewed fixes, 2026-10-27. The checked state is the tree of the archive commit (`docs: archive the run G2 crash windows on Linux change`): the working tree these checks ran on after `npm run openspec -- archive run-g2-crash-windows-on-linux --yes` on `d13aa294` (merge base with `origin/dev`: `fe643864`).
+
+- Archive: `Totals: + 0, ~ 2, - 0, → 0`; archived as `2026-10-27-run-g2-crash-windows-on-linux`, with `findings.jsonl` (five rows) and `results.jsonl` (29 rows).
+- `npm run openspec -- validate --all --strict`: `Totals: 69 passed, 0 failed (69 items)`.
+- `npm run openspec -- validate --archived --no-interactive`: the line `✓ change/2026-10-27-run-g2-crash-windows-on-linux` passes; only this change's line counts.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/g2-failure-scenarios/spec.md`, the two modified requirements of this delta: "Supervisor window crash recovery" gains the Linux scenarios of CP7, CP8, and CP9, and "Crash scenario records" gains the Linux run through `make verify-linux-crash-windows`, the scenario "Evidence run on Linux", and the new text of "Linux host".
+- `make findings ARGS="validate"`: Every findings file is valid: 3 file(s).
+- `make verify`: Passed: 2018 tests, 1972 passed, 0 failed, 46 skipped; coverage of all files 99.19% lines, 91.86% branches, 98.80% functions; OpenSpec 69 passed; every active change archives into strictly valid specs; packed file allowlist and installed CLI verification passed.
+
 ## Remaining gates
 
 - The fix of candidate defect L1 in `stop-automatic-retry-of-unknown-exit`, outside this change; it removes CP9's `expectFailure` as its fail-before test.
