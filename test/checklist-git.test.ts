@@ -1,34 +1,15 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { GIT_ENVIRONMENT } from '../scripts/checklist-environment.ts';
+import { archiveSnapshot, GIT_ENVIRONMENT } from '../scripts/checklist-environment.ts';
 import { CHECKLIST_SCHEMA_PATH, LANDING_CHANGE } from '../scripts/checklist-record.ts';
 import { PASS_SCHEMA_PATH, runFindings, SCHEMA_PATH } from '../scripts/findings.ts';
 import { VOCABULARY_PATH } from '../scripts/review-findings.ts';
+import { commit, git, write } from './checklist-git-fixture.ts';
 
 // The git adapter against real temporary repositories.
-
-function git(root: string, ...args: string[]): string {
-  const identity = ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', '-c', 'commit.gpgsign=false'];
-  return execFileSync('git', [...identity, ...args], { cwd: root, encoding: 'utf8' }).trim();
-}
-
-function write(root: string, files: Readonly<Record<string, string>>): void {
-  for (const [path, text] of Object.entries(files)) {
-    mkdirSync(join(root, path, '..'), { recursive: true });
-    writeFileSync(join(root, path), text);
-  }
-}
-
-function commit(root: string, files: Readonly<Record<string, string>>, message: string): string {
-  write(root, files);
-  git(root, 'add', '.');
-  git(root, 'commit', '--quiet', '-m', message);
-  return git(root, 'rev-parse', 'HEAD');
-}
 
 function withGitRepository(check: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), 'checklist-git-'));
@@ -114,4 +95,57 @@ test('the git adapter finds no dev commit outside a repository with origin/dev',
     assert.equal(GIT_ENVIRONMENT.devCommit(root), undefined);
     assert.equal(GIT_ENVIRONMENT.archiveAt(root, 'fedcba9'), undefined);
   });
+});
+
+const LANDING_FILE = `openspec/changes/archive/2026-10-28-${LANDING_CHANGE}/proposal.md`;
+
+test('a change opened before the landing stays exempt after its branch merges the landing', () => {
+  withGitRepository((root) => {
+    commit(root, { 'README.md': 'base\n' }, 'base');
+    const main = git(root, 'rev-parse', '--abbrev-ref', 'HEAD');
+    git(root, 'switch', '--quiet', '-c', 'old-branch');
+    commit(root, active('opened-on-old'), 'open on the old branch');
+    git(root, 'switch', '--quiet', main);
+    commit(root, { [LANDING_FILE]: '# Proposal\n' }, 'land');
+    git(root, 'switch', '--quiet', 'old-branch');
+    git(root, 'merge', '--quiet', '--no-edit', main);
+    const landing = GIT_ENVIRONMENT.landingCommit(root)!;
+    assert.equal(GIT_ENVIRONMENT.openedAfter(root, 'openspec/changes/opened-on-old', landing), false);
+    assert.equal(runFindings(['validate'], root, GIT_ENVIRONMENT).exitCode, 0);
+  });
+});
+
+test('--save with an unknown --at writes nothing', () => {
+  withGitRepository((root) => {
+    commit(root, active('new-change'), 'open');
+    const result = runFindings(['checklist', '--save', 'new-change', '--at', 'fedcba9'], root, GIT_ENVIRONMENT);
+    assert.equal(result.exitCode, 1);
+    assert.equal(existsSync(join(root, 'openspec/changes/new-change/checklist.json')), false);
+  });
+});
+
+test('a shallow clone requires no checklist, because it cannot tell when a change was opened', () => {
+  withGitRepository((source) => {
+    commit(source, { [LANDING_FILE]: '# Proposal\n' }, 'land');
+    commit(source, active('opened-after'), 'after');
+    const parent = mkdtempSync(join(tmpdir(), 'checklist-shallow-'));
+    try {
+      git(parent, 'clone', '--quiet', '--depth', '1', `file://${source}`, 'clone');
+      const clone = join(parent, 'clone');
+      assert.equal(GIT_ENVIRONMENT.landingCommit(clone), undefined);
+      assert.equal(runFindings(['validate'], clone, GIT_ENVIRONMENT).exitCode, 0);
+      assert.ok(GIT_ENVIRONMENT.landingCommit(source) !== undefined, 'the full history has the landing');
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+});
+
+test('an archive snapshot fails as a whole when git cannot list or read it', () => {
+  const findings = 'openspec/changes/archive/2026-10-02-first/findings.jsonl';
+  const listing = [findings, 'openspec/changes/archive/2026-10-02-first/proposal.md', 'openspec/changes/archive/x/y/findings.jsonl'].join('\n');
+  assert.deepEqual(archiveSnapshot('c', listing, () => 'line\n'), { commit: 'c', findings: [{ path: findings, text: 'line\n' }] });
+  assert.equal(archiveSnapshot('c', undefined, () => 'line\n'), undefined);
+  assert.equal(archiveSnapshot('c', listing, () => undefined), undefined);
+  assert.deepEqual(archiveSnapshot('c', '', () => undefined), { commit: 'c', findings: [] });
 });

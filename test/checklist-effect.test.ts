@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,6 +8,7 @@ import { GIT_ENVIRONMENT, type ChecklistEnvironment } from '../scripts/checklist
 import { CHECKLIST_SCHEMA_PATH, type ChecklistRecord, type Size } from '../scripts/checklist-record.ts';
 import { PASS_SCHEMA_PATH, runFindings, SCHEMA_PATH } from '../scripts/findings.ts';
 import { VOCABULARY_PATH, type Finding, type Severity } from '../scripts/review-findings.ts';
+import { git, NO_GIT } from './checklist-git-fixture.ts';
 
 const RECORD_FILE = 'openspec/changes/archive/x/verification.md';
 
@@ -159,14 +159,31 @@ const jsonLines = (findings: readonly Finding[], change: string) =>
   findings.map((finding) => JSON.stringify({ ...finding, change, capability: finding.file.startsWith('scripts/') ? 'review-process' : undefined }))
     .join('\n') + '\n';
 
+test('the effect of a change with zero changed lines has no rate', () => {
+  const lines = formatChecklistEffect(checklistEffect([{ ...BETA, linesChanged: 0 }], [])).split('\n');
+  assert.ok(lines.includes('2026-10-28 beta: 1 pass-1 finding(s), 0 changed lines, rate unknown'));
+});
+
+test('make findings effect keeps archives of a reused change name apart', () => {
+  const root = repository({
+    'openspec/specs/review-process/spec.md': '',
+    'openspec/changes/archive/2026-10-28-alpha/checklist.json': JSON.stringify(ALPHA.record),
+    'openspec/changes/archive/2026-10-28-alpha/findings.jsonl': jsonLines(ALPHA.findings.filter(({ pass }) => pass === 1), 'alpha'),
+    'openspec/changes/archive/2026-10-30-alpha/checklist.json': JSON.stringify(DELTA.record).replace('"delta"', '"alpha"'),
+    'openspec/changes/archive/2026-10-30-alpha/findings.jsonl': jsonLines([found('docs', 'low', 'code')], 'alpha'),
+  });
+  try {
+    const json = JSON.parse(runFindings(['effect', '--json'], root, NO_GIT).stdout) as ReturnType<typeof checklistEffect>;
+    assert.deepEqual(json.changes.map(({ archivedOn, passOneFindings }) => [archivedOn, passOneFindings]), [['2026-10-28', 5], ['2026-10-30', 1]]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('make findings effect reads archived checklists and asks only for missing sizes', () => {
   const requests: string[] = [];
   const environment: ChecklistEnvironment = {
-    now: () => new Date(),
-    devCommit: () => 'a'.repeat(40),
-    archiveAt: () => undefined,
-    landingCommit: () => undefined,
-    openedAfter: () => false,
+    ...NO_GIT,
     linesChanged: (_root, directory, devCommit) => {
       requests.push(`${directory} ${devCommit.slice(0, 3)}`);
       return 400;
@@ -193,10 +210,6 @@ test('make findings effect reads archived checklists and asks only for missing s
     rmSync(root, { recursive: true, force: true });
   }
 });
-
-function git(root: string, ...args: string[]): string {
-  return execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', ...args], { cwd: root, encoding: 'utf8' }).trim();
-}
 
 test('the git environment finds the dev commit and the lines a change archived', () => {
   const root = mkdtempSync(join(tmpdir(), 'checklist-git-'));

@@ -59,7 +59,7 @@ function snapshotAt(commit: string): ArchiveSnapshot | undefined {
 // Before the landing of this rule unless a test says otherwise.
 const ENVIRONMENT: ChecklistEnvironment = {
   now: () => new Date('2026-10-28T09:30:00.000Z'),
-  devCommit: () => DEV_COMMIT,
+  devCommit: () => BRIEF_COMMIT,
   archiveAt: (_root, commit) => snapshotAt(commit),
   landingCommit: () => undefined,
   openedAfter: () => false,
@@ -152,14 +152,17 @@ test('--save writes the record of the archive at the brief commit', () => {
   });
 });
 
-test('the checklist text names its dev commit when there is one', () => {
+test('without --at the checklist ranks the archive of its dev commit and names it', () => {
   withRepository({ ...ARCHIVE, ...LATER_ARCHIVE }, (root) => {
-    const current = runFindings(['checklist'], root, ENVIRONMENT).stdout;
-    assert.ok(current.endsWith(`\n\nDev commit: ${DEV_COMMIT}.`));
-    assert.match(current, /redaction/, 'without --at the working tree archive counts');
-    assert.doesNotMatch(runFindings(['checklist', '--at', BRIEF_COMMIT], root, ENVIRONMENT).stdout, /redaction/);
-    const unknown = runFindings(['checklist'], root, { ...ENVIRONMENT, devCommit: () => undefined }).stdout;
-    assert.doesNotMatch(unknown, /Dev commit/);
+    const atDev = runFindings(['checklist'], root, ENVIRONMENT).stdout;
+    assert.ok(atDev.endsWith(`\n\nDev commit: ${DEV_COMMIT}.`));
+    assert.doesNotMatch(atDev, /redaction/, 'the working tree archive is not what the line names');
+    assert.equal(atDev, runFindings(['checklist', '--at', BRIEF_COMMIT], root, ENVIRONMENT).stdout);
+    for (const devCommit of [() => undefined, () => 'fedcba9']) {
+      const tree = runFindings(['checklist'], root, { ...ENVIRONMENT, devCommit }).stdout;
+      assert.match(tree, /redaction/, 'without a readable dev commit the working tree archive counts');
+      assert.doesNotMatch(tree, /Dev commit/);
+    }
   });
 });
 
