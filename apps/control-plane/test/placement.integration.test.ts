@@ -15,7 +15,7 @@ import {
 } from '@taskelith/control-plane';
 import { openAttempt, type AttemptId, type Task, type WorkerId } from '@taskelith/execution';
 import { fleetToken, fleetWorker, type EnrolledWorker } from '@taskelith/fleet';
-import type { CorrelationId } from '@taskelith/kernel';
+import { ok, type CorrelationId } from '@taskelith/kernel';
 import { PostgresDatabase, migrate, type PostgresTransaction } from '@taskelith/postgres';
 import { endAssignment } from '@taskelith/scheduling';
 import { parseWorkflowDefinition, type TaskId } from '@taskelith/sdlc';
@@ -61,7 +61,7 @@ const binding = {
 const TABLES = [
   'workflow_runs', 'gates', 'admissions', 'tasks', 'assignments', 'outbox', 'task_lineage', 'capacity_charges', 'delegations',
   'capacity_quotas', 'workers', 'installation', 'enrollment_tokens', 'delegation_requests', 'current_revisions', 'producer_cursors',
-  'placement_rotation',
+  'placement_rotation', 'placement_outcomes',
 ];
 const CORRELATION = 'correlation-1' as CorrelationId;
 const tasks = new TaskService(database);
@@ -381,7 +381,32 @@ describe('placement', () => {
     assert.equal(before.ownershipGeneration, 2);
     assert.deepEqual((await assignmentsOf('task-1')).map((row) => row.reservation_state), ['released']);
   });
+
+  test('a waiting outcome outlives the rolled-back placement, without the attempt it opened', async () => {
+    await enroll('worker-a', { cpuMillicores: 500 });
+    await submit('task-1');
+    assert.deepEqual(value(await placement.placeWaiting()), { waiting: 1, placed: 0 });
+    assert.deepEqual((await stored('task-1')).attempts, []);
+    const { recordedAt, ...outcome } = (await outcomeRecord('task-1'))!;
+    assert.deepEqual(outcome, { taskId: 'task-1', disposition: 'waiting', reason: 'worker-capacity-exhausted', source: 'scheduler' });
+    assert.match(recordedAt, /^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  test('a placement removes the task\'s waiting outcome', async () => {
+    await enroll('worker-a');
+    await submit('task-1');
+    await sql("INSERT INTO capacity_quotas (scope, scope_id, quota) VALUES ('project', 'project-1', 0)");
+    value(await placement.placeWaiting());
+    assert.equal((await outcomeRecord('task-1'))?.reason, 'project-quota-exhausted');
+    await sql('DELETE FROM capacity_quotas');
+    assert.deepEqual(value(await new PlacementService(database, TIMING).placeWaiting()), { waiting: 1, placed: 1 });
+    assert.equal(await outcomeRecord('task-1'), undefined);
+  });
 });
+
+async function outcomeRecord(taskId: string) {
+  return value(await database.transaction(async (tx) => ok(await tx.placementOutcomes.get(taskId as TaskId))));
+}
 
 describe('delegation', () => {
   const PRINCIPAL = { workerId: 'worker-a' as WorkerId, generation: 1 };

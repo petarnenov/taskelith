@@ -75,7 +75,7 @@ const TABLES = [
   'workflow_runs', 'gates', 'admissions', 'tasks', 'assignments', 'outbox', 'inbox', 'task_lineage', 'capacity_charges', 'delegations',
   'capacity_quotas', 'workers', 'installation', 'enrollment_tokens', 'delegation_requests', 'current_revisions', 'producer_cursors',
   'inventory_requests', 'inventory_report_parts', 'launch_authorizations', 'launch_rejections', 'broker_revocations', 'unrecorded_processes',
-  'placement_rotation',
+  'placement_rotation', 'placement_outcomes',
 ];
 const CORRELATION = 'correlation-1' as CorrelationId;
 const WORKER = 'worker-a';
@@ -673,18 +673,26 @@ describe('outcomes', () => {
 });
 
 describe('placement after outcomes', () => {
-  test('a placement rejected with retry-budget-exhausted ends its attempt not-started', async () => {
+  const retryId = 'attempt-retry' as AttemptId;
+
+  // A retry of an attempt whose exit was not proven to start, which
+  // placement rejects with retry-budget-exhausted after its backoff.
+  async function uncertainRetry() {
     await enroll();
     value(await declare(1));
     const at = await placed();
     value(await exit(2, at, await launch(at), 1, false));
-    const retryId = 'attempt-retry' as AttemptId;
     value(await database.transaction(async (tx) => {
       const task = await tx.tasks.get(at.taskId);
       if (!task.ok) return task;
       const retry = openAttempt(task.value, task.value.ownershipGeneration, { id: retryId, retryOf: at.attemptId }, await tx.now());
       return retry.ok ? tx.tasks.replace(retry.value, task.value.generation) : retry;
     }));
+    return at;
+  }
+
+  test('a placement rejected with retry-budget-exhausted ends its attempt not-started', async () => {
+    const at = await uncertainRetry();
     const failed = await result(at.taskId);
     assert.deepEqual([failed.state, failed.state === 'ended' && failed.attemptId], ['ended', at.attemptId]);
     clock.skew = 60_000;
@@ -694,8 +702,32 @@ describe('placement after outcomes', () => {
     const answer = await result(at.taskId);
     assert.deepEqual([answer.state, answer.state === 'ended' && answer.attemptId], ['ended', retryId]);
     assert.deepEqual(value(await placement.placeWaiting()), { waiting: 0, placed: 0 }, 'the task no longer waits');
+    const { recordedAt, ...outcome } = (await outcomeRecord(at.taskId))!;
+    assert.deepEqual(outcome, { taskId: at.taskId, attemptId: retryId, disposition: 'rejected', reason: 'retry-budget-exhausted', source: 'scheduler' });
+    assert.equal(recordedAt, task.attempts[1]!.outcome?.endedAt, 'written in the transaction that ended the attempt');
+  });
+
+  test('a rejected record that fails rolls the end of its attempt back', async () => {
+    const at = await uncertainRetry();
+    clock.skew = 60_000;
+    const failing: ControlPlaneStore = {
+      transaction: (work) => database.transaction((tx) => work({ ...tx, now: () => tx.now(), placementOutcomes: failingRecords(tx) })),
+      readCommitted: (work) => database.readCommitted(work),
+    };
+    assert.equal(failed(await new PlacementService(failing, TIMING).placeWaiting()).code, 'unavailable');
+    assert.deepEqual([(await stored(at.taskId)).attempts[1]!.outcome, await outcomeRecord(at.taskId)], [undefined, undefined]);
   });
 });
+
+async function outcomeRecord(taskId: TaskId) {
+  return value(await database.transaction(async (tx) => ok(await tx.placementOutcomes.get(taskId))));
+}
+
+// Placement outcome records whose writes fail as an unavailable store does.
+function failingRecords(tx: PostgresTransaction): ControlPlaneTransaction['placementOutcomes'] {
+  const down = async () => err(failure('unavailable', 'the store is down'));
+  return { record: down, remove: down, get: (taskId) => tx.placementOutcomes.get(taskId), list: (taskIds) => tx.placementOutcomes.list(taskIds) };
+}
 
 describe('capacity and pressure', () => {
   test('an older declaration after a newer one changes nothing and is still confirmed', async () => {
