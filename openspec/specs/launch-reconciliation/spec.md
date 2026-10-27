@@ -31,7 +31,7 @@ The control plane SHALL apply each `execution.launch.rejected` by its reason and
 - **THEN** the assignment ends as `superseded`, and its attempt can be placed again
 
 ### Requirement: Launch rejections that reconcile or only record
-A launch rejected with `stale-recovery-epoch` or `execution-conflict` SHALL request the worker's inventory. A launch rejected with `assignment-not-active`, `stale-ownership-generation`, `attempt-not-launchable`, or `operation-mismatch` SHALL only be recorded.
+A launch rejected with `stale-recovery-epoch` or `execution-conflict` SHALL request the worker's inventory. A launch rejected with `assignment-not-active`, `stale-ownership-generation`, `attempt-not-launchable`, or `operation-mismatch` SHALL change no assignment or task. Every launch rejection of the producer's own assignment, at the current or a stale generation, SHALL clear the producer's capacity refusal.
 
 #### Scenario: Execution conflict
 - **WHEN** a worker reports a launch rejected with `execution-conflict`
@@ -44,6 +44,10 @@ A launch rejected with `stale-recovery-epoch` or `execution-conflict` SHALL requ
 #### Scenario: Stale generation
 - **WHEN** a worker reports a launch rejected with `stale-ownership-generation`
 - **THEN** the assignment is unchanged, and the rejection is logged
+
+#### Scenario: Rejection after a refusal for slots
+- **WHEN** a worker refuses an offer with `worker-slots-exhausted` and then reports a launch of its current assignment rejected with `assignment-not-active`
+- **THEN** the assignment is unchanged, and the worker is eligible for placement again
 
 ### Requirement: Observations of a revoked worker
 The control plane SHALL apply an observation of a revoked worker only when it names the worker's enrolled journal and that journal is not retired. Such an observation SHALL record no contact and SHALL be logged as a structured event. An acceptance, a capacity declaration, or an admission-pressure report from a revoked worker SHALL be rejected. A journal never seen from a revoked worker, its heartbeats, and its inventory reports SHALL be refused.

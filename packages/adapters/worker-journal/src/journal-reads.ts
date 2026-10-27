@@ -1,20 +1,22 @@
-import type {
-  AuthorizationOutcome,
-  CancellationTarget,
-  ExecutionId,
-  ExecutionState,
-  JournalBinding,
-  JournaledAuthorization,
-  JournaledCancellation,
-  JournaledExecution,
-  JournaledIntent,
-  JournalSnapshot,
-  LaunchAuthId,
-  LaunchRejectionReason,
-  ObservationFact,
-  ObservationPosition,
-  OutboxEntry,
-  ResourceRequest,
+import {
+  endsAssignment,
+  type AssignmentId,
+  type AuthorizationOutcome,
+  type CancellationTarget,
+  type ExecutionId,
+  type ExecutionState,
+  type JournalBinding,
+  type JournaledAuthorization,
+  type JournaledCancellation,
+  type JournaledExecution,
+  type JournaledIntent,
+  type JournalSnapshot,
+  type LaunchAuthId,
+  type LaunchRejectionReason,
+  type ObservationFact,
+  type ObservationPosition,
+  type OutboxEntry,
+  type ResourceRequest,
 } from '@taskelith/execution';
 import type { JournalDatabase } from './journal-connection.js';
 import { optionalText, storedInteger, storedText, type Row } from './stored-values.js';
@@ -33,13 +35,20 @@ export function readBinding(database: JournalDatabase): JournalBinding {
 
 export function readSnapshot(database: JournalDatabase): JournalSnapshot {
   const authorizations = database.prepare('SELECT * FROM authorization_request ORDER BY execution_id, position').all();
+  const executions = database.prepare('SELECT * FROM execution ORDER BY rowid').all().map((row) => toExecution(row, authorizations));
+  const rejected = executions.filter(endedByItsRejection);
+  const endedByRejection: ReadonlySet<AssignmentId> = new Set(rejected.map(({ assignmentId }) => assignmentId));
   return Object.freeze({
     intents: Object.freeze(database.prepare(`SELECT launch_intent.*, assignment_end.command_id IS NOT NULL AS ended
-      FROM launch_intent LEFT JOIN assignment_end USING (assignment_id) ORDER BY launch_intent.rowid`).all().map(toIntent)),
+      FROM launch_intent LEFT JOIN assignment_end USING (assignment_id) ORDER BY launch_intent.rowid`).all()
+      .map((row) => toIntent(row, endedByRejection))),
     cancellations: Object.freeze(database.prepare('SELECT * FROM cancellation_request ORDER BY rowid').all().map(toCancellation)),
-    executions: Object.freeze(database.prepare('SELECT * FROM execution ORDER BY rowid').all()
-      .map((row) => toExecution(row, authorizations))),
+    executions: Object.freeze(executions),
   });
+}
+
+function endedByItsRejection(execution: JournaledExecution): boolean {
+  return execution.authorizations.some(({ rejection }) => rejection !== undefined && endsAssignment(rejection));
 }
 
 export function readOutbox(database: JournalDatabase, binding: JournalBinding): OutboxEntry[] {
@@ -59,14 +68,15 @@ export function readOutbox(database: JournalDatabase, binding: JournalBinding): 
   });
 }
 
-function toIntent(row: Row): JournaledIntent {
+function toIntent(row: Row, endedByRejection: ReadonlySet<AssignmentId>): JournaledIntent {
   const requested: ResourceRequest = {
     cpuMillicores: storedInteger(row, 'cpu_millicores'),
     memoryMebibytes: storedInteger(row, 'memory_mebibytes'),
     hardControls: Object.freeze(JSON.parse(storedText(row, 'hard_controls')) as string[]),
   };
+  const assignmentId = storedText<AssignmentId>(row, 'assignment_id');
   const intent: JournaledIntent = {
-    assignmentId: storedText(row, 'assignment_id'),
+    assignmentId,
     attemptId: storedText(row, 'attempt_id'),
     ownershipGeneration: storedInteger(row, 'ownership_generation'),
     admissionId: storedText(row, 'admission_id'),
@@ -74,7 +84,8 @@ function toIntent(row: Row): JournaledIntent {
     recoveryEpoch: storedInteger(row, 'recovery_epoch'),
     requested: Object.freeze(requested),
     commandId: storedText(row, 'command_id'),
-    ended: row.ended === 1,
+    // By its end command, or by a rejection that ends it.
+    ended: row.ended === 1 || endedByRejection.has(assignmentId),
   };
   return Object.freeze(intent);
 }

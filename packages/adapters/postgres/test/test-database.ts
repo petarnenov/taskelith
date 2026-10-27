@@ -67,6 +67,18 @@ export async function sentinelCredentials(url: URL): Promise<URL> {
   return credentialed;
 }
 
+// Sentinel credentials whose `now()` resolves before pg_catalog's and stands
+// at `at`, so an age is read on a database clock that never steps.
+export async function pinnedClockCredentials(url: URL, at: string): Promise<URL> {
+  const credentials = await sentinelCredentials(url);
+  const role = credentials.username;
+  await query(url, 'CREATE SCHEMA pinned_clock');
+  await query(url, `CREATE FUNCTION pinned_clock.now() RETURNS timestamptz LANGUAGE sql IMMUTABLE AS $$ SELECT '${at}'::timestamptz $$`);
+  await query(url, `GRANT USAGE ON SCHEMA pinned_clock TO ${role}`);
+  await query(url, `ALTER ROLE ${role} SET search_path = pinned_clock, pg_catalog, "$user", public`);
+  return credentials;
+}
+
 export function assertNoPassword(text: string, password: string): void {
   for (const form of [password, encodeURIComponent(password)]) assert.ok(!text.includes(form), 'the password was logged');
 }
