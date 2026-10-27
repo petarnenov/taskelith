@@ -48,13 +48,30 @@ On the working tree of the merged branch, after the checklist record:
 - `npm run verify:comments`: `Every comment is within the comment length rule.`
 - `npm run verify:archive`: `Every active OpenSpec change archives into strictly valid specs.`
 
+`make verify` on the working tree of `3513bbe4`, run on 2026-10-27 with Docker: exit 0; 2334 tests, 44 suites, 2331 pass, 0 fail, 0 cancelled, 3 skipped, 0 todo; coverage of all files lines 99.34%, branches 92.29%, functions 99.03%; every product module is in the coverage report; verified 731 package paths, 41 with license coverage gaps (all reviewed; 4 declaration-only); `validate --all --strict` `Totals: 70 passed, 0 failed (70 items)`; every checked link conforms; every active OpenSpec change archives into strictly valid specs; every findings file is valid, 50 findings files and 30 pass summary files; packed file allowlist and installed CLI verification passed.
+
+Sequence deviation: worker step 4 runs `make verify` before the first review pass. Review pass 1 started before it, because the coordinator (Niki) instructed so while the Docker slot was busy. `make verify` then ran on `3513bbe4`, the same revision that pass 1 reviewed, and passed.
+
+## Review
+
+### Pass 1
+
+- **Reviewer:** A, Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, read-only sandbox. Invocation: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`. Model confirmation: the model, reasoning effort, and read-only sandbox in the output header. Session `01a17f4b-bef1-7143-9744-4bf7b946c0fd`.
+- **Reviewed revision:** `3513bbe4`. Snapshot of the worktree before and after the pass: `2c9fc781fa4cbcb8e6a2c9677766c58f77db7ea3b08293f60cd1cd54887eac66` both, so the reviewer changed nothing.
+- **Counts:** critical 0, high 0, medium 1, low 1 (`passes.jsonl`). Both findings were fixed; none was declined.
+
+| Finding | Resolution |
+| --- | --- |
+| M1 (`verification.md:57`, process): pass 1 started before `make verify`, against worker step 4 | Fixed: the `make verify` result on `3513bbe4` and the coordinator-directed sequence deviation are recorded above |
+| L2 (`proposal.md:3`, docs): stale wording that `align-product-ports-with-g2-lifecycle` is pending integration | Fixed: it was integrated as #372 on 2026-10-27 |
+
 ## Limitations
 
 - The list of item 0's changes follows the coordinator's brief; #367 is not a follow-up of the revalidation, and the plan says so.
 
 ## Remaining gates
 
-- `make verify` (Docker), pending a coordinator slot.
-- Review pass 1 (reviewer A, Codex CLI, `gpt-6.1-sol`), pass 2 (reviewer B, Claude Code, `claude-opus-5-5`, effort high), and pass 3 (reviewer A).
+- `make verify` after the pass 1 fixes (worker step 4).
+- Review pass 2 (reviewer B, Claude Code, `claude-opus-5-5`, effort high) and pass 3 (reviewer A).
 - Archive.
 - Integration into dev by the coordinator (single pull request).

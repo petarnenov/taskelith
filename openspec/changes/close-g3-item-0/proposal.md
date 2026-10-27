@@ -1,6 +1,6 @@
 ## Why
 
-G3 item 0 ([G3 work plan](/docs/g3-plan.md#work-items), row 0) re-reviews the merged G3 groundwork against G2 as built before any other G3 item starts. Its change `revalidate-g3-foundations` (#357) is done when every follow-up change it lists has landed in `dev` ([its proposal](/openspec/changes/archive/2026-10-27-revalidate-g3-foundations/proposal.md)). The follow-ups have landed, except `align-product-ports-with-g2-lifecycle`, which lands as the next integration. The plan and the foundation ledger still describe item 0 as pending, and the plan still calls the hosted-runner Linux check open although `record-hosted-runner-linux-acceptance` (#367) resolved it. Wave 1, items 26, 27, and 43, starts once item 0 is recorded as done.
+G3 item 0 ([G3 work plan](/docs/g3-plan.md#work-items), row 0) re-reviews the merged G3 groundwork against G2 as built before any other G3 item starts. Its change `revalidate-g3-foundations` (#357) is done when every follow-up change it lists has landed in `dev` ([its proposal](/openspec/changes/archive/2026-10-27-revalidate-g3-foundations/proposal.md)). The follow-ups have landed; the last, `align-product-ports-with-g2-lifecycle`, was integrated as #372 on 2026-10-27. The plan and the foundation ledger still describe item 0 as pending, and the plan still calls the hosted-runner Linux check open although `record-hosted-runner-linux-acceptance` (#367) resolved it. Wave 1, items 26, 27, and 43, starts once item 0 is recorded as done.
 
 ## What Changes
 

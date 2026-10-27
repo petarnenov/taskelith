@@ -12,11 +12,11 @@
 - [x] 2.6 Run the checks without Docker and record `verification.md`
 - [x] 2.7 Add the review checklist output to `design.md` and save `checklist.json`
 - [x] 2.8 Merge `origin/dev` at `579c227d` and finalize the `align-product-ports-with-g2-lifecycle` entry (#372) and the closure date
-- [ ] 2.9 Run `make verify`
+- [x] 2.9 Run `make verify`
 
 ## 3. Review and archive
 
-- [ ] 3.1 Independent review, pass 1 (reviewer A, Codex CLI, `gpt-6.1-sol`)
+- [x] 3.1 Independent review, pass 1 (reviewer A, Codex CLI, `gpt-6.1-sol`)
 - [ ] 3.2 Independent review, pass 2 (reviewer B, Claude Code, `claude-opus-5-5`, effort high)
 - [ ] 3.3 Independent review, pass 3 (reviewer A)
 - [ ] 3.4 Archive the change

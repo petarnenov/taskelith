@@ -1,0 +1,1 @@
+{"change": "close-g3-item-0", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a17f4b-bef1-7143-9744-4bf7b946c0fd", "counts": {"critical": 0, "high": 0, "medium": 1, "low": 1}}
