@@ -16,8 +16,8 @@ A task SHALL wait for placement while it has no attempt, or while its active att
 - **THEN** the fair order takes them in task id order by code unit
 
 #### Scenario: Equal oldest waiting times across projects
-- **WHEN** the oldest waiting tasks of two projects started waiting at the same instant and the previous read ended with neither
-- **THEN** the fair order takes the project whose id is first by code unit first, as it would for different waiting times
+- **WHEN** the oldest waiting tasks of two projects started waiting at the same instant and the previous read's project is between their ids
+- **THEN** the fair order takes the project after it first, then the wrapped one, as it would for different waiting times
 
 #### Scenario: Round order across projects
 - **WHEN** one project has an older backlog, another project waits, and the previous read ended with the first project
