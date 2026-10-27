@@ -15,7 +15,7 @@ In all, 26 archived findings are record findings (9 of them name a capability): 
 
 ## Revision
 
-Implementation and documentation at `54dec1e4`; this record in `e25d3151`. Review pass 1 fixes at `8e38e16a`; their record is in the following commit.
+Implementation and documentation at `54dec1e4`; this record in `e25d3151`. Review pass 1 fixes at `8e38e16a`; their record in `a6f58114`. `23b7b811` merges `origin/dev` at `744689cb`; `make verify` ran on that merge, and its record is in the following commit.
 
 ## Environment
 
@@ -61,14 +61,22 @@ Claude Code, model `claude-fable-5-1`, effort medium, session `7abb7178-7435-4fe
 
 After the fixes the checks above were repeated with the same results (40 of 40 tests, 9 valid findings files, comments within the rule, the change valid with `--strict`), and the archive in a scratch copy again applied 2 modified requirements with 69 passed, 0 failed. The coverage run was not repeated: the fixes touch no script.
 
+## Merge of dev
+
+`23b7b811` merges `origin/dev` at `744689cb` into the branch. The merge brings PR #332 (`stop-automatic-retry-of-unknown-exit`, the L1 fix: no automatic retry of an exit with an unknown status) and PR #333 (`run-g2-partition-and-races`, the G2 partition and race scenarios), both archived, with edits to the living specs `g2-failure-scenarios` and `observation-consumption`. It touches none of this change's inputs: no file under `scripts/`, `docs/agent-task-protocol.md`, the findings schema, or the `review-process` spec. After the merge `npm run findings -- validate` reports `Every findings file is valid: 11 file(s).`, so neither an active change nor one of the two new archives from `dev` breaks the capability rule.
+
+## make verify
+
+`make verify` on `23b7b811`: exit 0 in 185 s on 2026-10-27. 2047 tests, 2045 passed, 0 failed, 0 cancelled, 2 skipped; coverage of all files 99.27 % lines, 91.96 % branches, 98.94 % functions; every comment within the rule; every findings file valid (11 files); package allowlist and installed CLI verification passed. The Docker CLI ran with `DOCKER_CONFIG` set to an empty configuration (`{}`) in the session's scratch directory, because Docker Desktop's credential helper (`credsStore: desktop`) hangs on this iMac, as in [the x86_64 native acceptance record](../archive/2026-10-27-run-g2-native-acceptance-x86-64/verification.md); public images are pulled anonymously from the same engine, no credential was read, and the Makefile and the product were not changed.
+
 ## Limitations
 
 - The 4 archived code and doc findings without a capability still miss capability-based checklists; only file globs reach them.
 - Active changes on other branches with code or doc findings without a capability fail validation after merging `dev`, until they add one.
-- `make verify` has not run on this branch.
+- `make verify` ran with an empty Docker configuration, not the user's, because its credential helper hangs (see "make verify").
 
 ## Remaining gates
 
-- `make verify`.
-- Archive.
+- Archive, the next commit.
+- `make verify` on the archive commit, run by the `pre-push` hook.
 - Integration into dev by the coordinator (single pull request).
