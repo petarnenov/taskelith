@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import test from 'node:test';
 import {
-  CRASH_POINT_VARIABLE, CrashPoints, ScenarioProcess, SimulatedCrash, crashEnvironment, crashPointsFromEnvironment,
+  CRASH_POINT_VARIABLE, CrashPoints, ScenarioProcess, SimulatedCrash, crashEnvironment, crashPointsFromEnvironment, uncoveredEnvironment,
 } from '@taskelith/testing';
 
 const JOURNAL_WRITER = join(import.meta.dirname, 'fixtures', 'journal-writer.ts');
@@ -42,7 +42,7 @@ test('the crash environment round-trips through the variable', () => {
 
 test('an armed child process dies by SIGKILL at the armed occurrence', async () => {
   const run = async (env: Record<string, string>) => {
-    const child = await ScenarioProcess.start(process.execPath, ['--experimental-strip-types', JOURNAL_WRITER], { env: { ...process.env, [CRASH_POINT_VARIABLE]: '', ...env } });
+    const child = await ScenarioProcess.start(process.execPath, ['--experimental-strip-types', JOURNAL_WRITER], { env: { ...uncoveredEnvironment(), [CRASH_POINT_VARIABLE]: '', ...env } });
     return { exit: await child.exited, stdout: child.stdout };
   };
   assert.deepEqual(await run({}), {
