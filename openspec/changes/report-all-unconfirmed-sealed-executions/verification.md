@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-26. Author verification and review pass 1 are recorded below; the fixes of pass 1 (Low only) are UNREVIEWED.
+Date: 2026-10-26, updated 2026-10-27. Author verification and review passes 1 and 2 are recorded below; the fixes of pass 1 (Low only) are UNREVIEWED.
 
 ## Scope and source
 
@@ -64,9 +64,18 @@ OpenCode, model `opencode-go/kimi-k2.7-code`, run by the coordinator under the [
 - **L2 (UNREVIEWED fix, `96cdc4a`):** the PostgreSQL test covered only a one-entry list. Resolution: `apps/control-plane/test/launch-authority.integration.test.ts:215` "a relaunch that reports two sealed executions ends both not-started and is granted in one commit": E3 reports [E1 already `not-started`, E2 the `authorized` owner]; a conflict in the second entry (E3 itself) leaves the grant rows unchanged; a crash before the commit leaves neither change; then E1 and E2 are `not-started` and E3 `authorized` in one task write. The file passes 18 of 18.
 - **L3 (UNREVIEWED fix, `96cdc4a`):** no worker test exercised the cap. Resolution: `apps/worker/test/start-reconciliation.test.ts:266` "after recovery, the first request reports exactly the oldest 8 of 10 unconfirmed sealed executions, in order". The file passes 41 of 41.
 
+### Review pass 2
+
+OpenCode, model `opencode-go/kimi-k2.7-code` (default variant, none passed), run by the worker (Pepi) from the worktree as `opencode run --standalone --agent reviewer -m 'opencode-go/kimi-k2.7-code' --format json --title report-all-unconfirmed-sealed-executions "$(cat <prompt-file>)" < /dev/null > <log>`, with the prompt and log outside the worktree. Session `ses_e8458010bffet2OY8uVNIDFp33`. Revision reviewed: `ae13b7a` (the merge of `dev` at `1847570` as `4289b8f` and its record). Findings: 0 Critical, 0 High, 0 Medium, 0 Low.
+
+- Scope: the integration return only (Return 1 below): the restore commit `53a7b4e`, the conflict resolution in the merge `7416c02` (`journal-recovery.test.ts`), the clean merge `4289b8f`, the delta reconciliation against the living `launch-authorization` and `worker-runtime` specs, and the Return 1 record.
+- Read-only: `git ls-files -co --exclude-standard | xargs shasum -a 256 | shasum -a 256` before and after the run gave `48f3951f2082434a3f4f292c1f3fd5ce0b125d62ec82be5564a8254ffb77553e` both times.
+- The reviewer confirmed (its answer was in Bulgarian; paraphrased here): the restore is an exact revert; the resolution keeps both sides' tests, drops the `lastSealedExecution` test correctly, and merges the imports correctly; #314's `recoverIntent` change does not affect the report of `unconfirmedSealedExecutions` through `Launch.#nextExecution`; `4289b8f` touches no input of this change; the deltas keep every scenario and edit of `dev`'s current text and touch neither "Cancellation forwarding" nor "Assignment ended by a launch rejection"; the record is accurate.
+- Limitation: a standalone OpenCode session stores no model field in its JSON events, so the model is confirmed by the `-m` argument only.
+
 ## Return 1 (integration conflict)
 
-Awaiting review pass 2, which reviews the resolved diff and the reconciliation below.
+Reviewed in review pass 2 above.
 
 - **Return:** the coordinator's merge of `origin/dev` at `cc7f998` into the archived head `ceea886` conflicted in `packages/modules/execution/test/journal-recovery.test.ts`, against `scope-execution-cancellation-recovery` (#314). The coordinator aborted the merge; the branch was unchanged.
 - **Restore (worker step 10.1):** `git revert --no-commit ceea886`, committed as `53a7b4e` "docs: restore the active unconfirmed sealed executions report change to merge dev"; the change is active again and the living specs are `dev`'s of `843e293`.
@@ -82,7 +91,8 @@ Awaiting review pass 2, which reviews the resolved diff and the reconciliation b
 - **Checks on `4289b8f`** (2026-10-27 04:38 UTC):
   - `npm run openspec -- validate report-all-unconfirmed-sealed-executions --strict`: valid.
   - Archive in a scratch copy of `openspec/`: `Totals: + 0, ~ 3, - 0, → 0`; then `validate --all --strict --no-interactive`: `69 passed, 0 failed`.
-- **Not done yet:** `make verify` on the merged head `4289b8f`; review pass 2 of this resolution and reconciliation, then the archive again (step 7) as the last commit.
+- **Checks on `ae13b7a`** (the tree of the `4289b8f` merge plus its record commit), 2026-10-27:
+  - `make verify`: passed (exit 0); 1965 tests, 1963 passed, 0 failed, 2 Linux-only tests skipped; coverage 99.29% lines, 92.13% branches, 99.05% functions; `execution.openapi.json: 3 breaking change(s) against 1847570fcee3`, declared, 0 for the other three documents; `Contract documents have no undeclared breaking change.`; OpenSpec `Totals: 70 passed, 0 failed (70 items)`; `Every active OpenSpec change archives into strictly valid specs.`; `Packed file allowlist and installed CLI verification passed.`
 
 ## Limitations
 
@@ -92,8 +102,4 @@ Awaiting review pass 2, which reviews the resolved diff and the reconciliation b
 
 ## Remaining gates
 
-- Independent review: done, pass 1 above; its Low fixes are unreviewed.
-- `make verify` on the merged head `4289b8f` (merge of `dev` at `1847570`): pending.
-- Review pass 2 of Return 1 (resolved merge and delta reconciliation): pending.
-- Archive on the branch again (protocol step 7): pending; the first archive (`ceea886`) was reverted in `53a7b4e`.
-- Integration into `dev` by the coordinator.
+- Integration into `dev` by the coordinator (single pull request).
