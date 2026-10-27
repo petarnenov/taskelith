@@ -41,6 +41,10 @@ macOS 26.6.2 (Darwin 25.6.0, x86_64), the coordinator's iMac; Node.js 24.22.1 an
 - `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 70 passed, 0 failed (70 items)`.
 - `npm run verify:comments`: every comment is within the rule. `npm run verify:links`: every checked link conforms. `npm run verify:findings`: 48 findings files and 28 pass summary files valid. `npm run verify:archive`: every active change archives into strictly valid specs. `npm run verify:dependencies`: 731 package paths verified.
 - Not run here: `make contract-compatibility`, which starts the `oasdiff` container, and `make verify`, which needs Docker; the worker runs `make verify`.
+- Review pass 1 fixes, on `42f78be3` without Docker:
+  - Fail-before, each new test against the scripts, `Makefile`, and tests of `16987d29` in a scratch copy: `test/docker-slot.test.ts` does not load (`CHOOSING` is not exported), and old-API copies of its two new behavior tests fail, the ticket path reused after a release (finding 2) and `first-start, second-start, first-end` for a command that outlives its killed holder (finding 3): tests 2, pass 0, fail 2. Old-API copies of the stamp tests, the same tree on a new merge base reused (finding 4) and a detached HEAD given docs-only (finding 13): tests 2, pass 0, fail 2. `test/verification-record.test.ts --test-name-pattern="only the last complete run|hand edit of the recorded"` (findings 11 and 10): tests 2, pass 0, fail 2. The nine new tests of `test/integrate-script.test.ts` (findings 1, 5, 6, 7, 8, and 9): tests 9, pass 0, fail 9; the alarm test without its message assertion still fails with `process 1273 survived`.
+  - After the fixes, `node --experimental-strip-types --test --experimental-test-coverage` with the four new TypeScript scripts included, over the eight test files listed above: tests 117, pass 117, fail 0. Coverage: `verify-stamp.ts` 100% lines, 100% branches, 100% functions; `docker-slot.ts` 98.35%, 94.62%, 98.04%; `verification-record.ts` 98.26%, 92.76%, 100%; `context-warning.ts` 98.08%, 97.37%, 100%. `test/integrate-script.test.ts` has 17 tests and reaches every exit status of `scripts/integrate.sh`.
+  - `npx tsc -p tsconfig.check.json`: no error in the changed scripts and tests. `npm run openspec -- validate adopt-process-performance-recommendations --strict`: valid; the longest requirement body is 491 characters. `npm run verify:comments`, `verify:links`, `verify:findings`, and `verify:archive`: pass; their outputs are under "Review pass 1".
 
 <!-- make record: begin -->
 ## Generated checks
@@ -56,7 +60,36 @@ Written by `make record`; `make record-check` checks it against the tree. Edit n
 
 ## Independent review
 
-Pending. Assigned: reviewer A Codex CLI (`gpt-6.1-sol`) for pass 1 and, under the new "Conditional third pass", for pass 3 if it is required; reviewer B Claude Code (`claude-opus-5-5`, effort `high`) for pass 2.
+Assigned: reviewer A Codex CLI (`gpt-6.1-sol`) for pass 1 and, under the new "Conditional third pass", for pass 3 if it is required; reviewer B Claude Code (`claude-opus-5-5`, effort `high`) for pass 2.
+
+### Review pass 1
+
+- **Reviewer:** A, Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, read-only sandbox, run by the worker session from the worktree.
+- **Invocation:** `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`.
+- **Revision:** `16987d29`.
+- **Model confirmation:** the output header records `model: gpt-6.1-sol`, `reasoning effort: medium`, `sandbox: read-only`; session `01a17f4c-3d06-77b2-b410-2f9550f5ebbd`.
+- **Snapshot:** `8abdcdd96ee51690a01105acc40e7fdf56c32abeee8abd409eb2bdd55273f595` before and after; unchanged.
+- **Findings:** 0 Critical, 5 High, 8 Medium, 2 Low, all **fixed** for pass 2 to check; `findings.jsonl` has one line per finding.
+
+| # | Severity | Category | Finding | Fix |
+| --- | --- | --- | --- | --- |
+| 1 | High | contract-drift | `make integrate` let `make` expand `TITLE` and `BODY`, so `$(shell ...)` ran (`Makefile:259`) | `fd663be2`: raw `$(value ...)` under other names, no `MAKEFLAGS`; a real `make` run proves the arguments arrive as typed |
+| 2 | High | concurrency-race | A reused ticket number let two runs hold the Docker slot (`scripts/docker-slot.ts:80`) | `b1201019`: bakery tickets with a choosing marker and never-reused paths; step tests replay the interleaving |
+| 3 | High | concurrency-race | Stale recovery freed the slot while the killed holder's command ran (`scripts/docker-slot.ts:119`) | `b1201019`: the holder leads the command's process group; stale only when the process and the group are gone |
+| 4 | High | contract-drift | The stamp key omitted the merge base (`scripts/verify-stamp.ts:144`) | `eeece5b3`: the key covers the merge base with `origin/dev`, or `none` |
+| 5 | High | error-handling | `make integrate` pushed without a stamp of the merged tree (`scripts/integrate.sh:89`) | `fd663be2`: a clean tree (exit 7) and a full stamp after `make verify` (exit 4) before the push |
+| 6 | Medium | error-handling | The alarm left the verify run's children running (`scripts/integrate.sh:46`) | `fd663be2`: a process-group supervisor stops the whole group and waits; tested for survivors |
+| 7 | Medium | error-handling | A failed delete push or `ls-remote` looked like a deleted branch (`scripts/integrate.sh:104`) | `fd663be2`: exit 6 for a remaining branch, exit 9 for an unconfirmed deletion |
+| 8 | Medium | error-handling | A resume opened a second pull request (`scripts/integrate.sh:96`) | `fd663be2`: `gh pr list` finds the open or merged pull request |
+| 9 | Medium | error-handling | The main clone was not checked before remote changes (`scripts/integrate.sh:54`) | `fd663be2`: `MAIN NOT READY`, exit 8, unless on a clean, fast-forwardable `dev` |
+| 10 | Medium | evidence-mismatch | `make record-check` accepted edited counts and coverage (`scripts/verification-record.ts:216`) | `deee0864`: the recorded line must equal the one `make record` stored next to the stamp |
+| 11 | Medium | evidence-mismatch | The log parser mixed runs and accepted a failure after the stamp (`scripts/verification-record.ts:65`) | `deee0864`: only the last run, ending the log, with consistent totals |
+| 12 | Medium | contract-drift | "Integration tests in verification" still required `npm test` in every `make verify` | `31184e8b`: a MODIFIED delta limits it to the full profile |
+| 13 | Medium | contract-drift | A detached HEAD could get the docs-only profile (`scripts/verify-stamp.ts:85`) | `eeece5b3`: a detached HEAD is full |
+| 14 | Low | evidence-mismatch | This record listed passed gates as remaining and missed `16987d29` | `42f78be3`: revision, ticks, gates, and citations updated |
+| 15 | Low | docs | The design said CI is never stamped | `31184e8b`: "CI never reuses a stamp" |
+
+- **Checks after the fixes:** under "Checks and results"; `npm run verify:comments`: every comment is within the rule; `npm run verify:links`: every checked link conforms; `npm run verify:findings`: 50 findings files and 30 pass summary files valid; `npm run verify:archive`: every active change archives into strictly valid specs; `npm run openspec -- validate --all --strict --no-interactive`: `Totals: 70 passed, 0 failed (70 items)`. The generated part above still shows the state of `f726edbf` and no review pass; `make record` after the next `make verify` regenerates it.
 
 ## Limitations
 

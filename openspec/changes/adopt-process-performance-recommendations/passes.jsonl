@@ -1,0 +1,1 @@
+{"change": "adopt-process-performance-recommendations", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a17f4c-3d06-77b2-b410-2f9550f5ebbd", "counts": {"critical": 0, "high": 5, "medium": 8, "low": 2}}
