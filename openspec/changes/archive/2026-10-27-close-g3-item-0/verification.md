@@ -94,8 +94,13 @@ On the working tree after the pass 2 fixes, without Docker:
 
 - The list of item 0's changes follows the coordinator's brief; #367 is not a follow-up of the revalidation, and the plan says so.
 
+## Archive
+
+Archived as `openspec/changes/archive/2026-10-27-close-g3-item-0/` on 2026-10-27 on top of `origin/dev` `579c227d` (`skip_specs: true`, so no change under `openspec/specs/`). `validate --all --strict`: `Totals: 69 passed, 0 failed (69 items)`. `make findings ARGS="validate"`: every findings file is valid, 50 findings files and 30 pass summary files.
+
+`make verify` on the archive tree, run on 2026-10-27 with Docker: exit 0; 2334 tests, 44 suites, 2331 pass, 0 fail, 0 cancelled, 3 skipped, 0 todo; coverage of all files lines 99.34%, branches 92.28%, functions 99.03%; every product module is in the coverage report; verified 731 package paths, 41 with license coverage gaps (all reviewed; 4 declaration-only); `Totals: 69 passed, 0 failed (69 items)`; every checked link conforms; no active OpenSpec change; packed file allowlist and installed CLI verification passed.
+
 ## Remaining gates
 
 - Review pass 2 is done. No pass 3: pass 2 found only Low findings, which are fixed without another review ([independent review process](/docs/governance.md#independent-review-process)).
-- Archive, with `make verify` on the archive tree (step 7).
 - Integration into dev by the coordinator (single pull request).
