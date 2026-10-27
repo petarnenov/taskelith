@@ -1,0 +1,1 @@
+{"change": "align-product-ports-with-g2-lifecycle", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a17efb-ef45-7bf1-aa88-bcfd74bcb0ea", "counts": {"critical": 0, "high": 0, "medium": 6, "low": 5}}

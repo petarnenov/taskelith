@@ -9,6 +9,7 @@ Follow-up of G3 item 0, `revalidate-g3-foundations`: item 8 `product-ports`, pas
 - **Base revision:** `b87abe75` (`origin/dev`, merge of pull request #365); the worktree was created at `9b0e6fd9` and fast-forwarded to it before the first commit.
 - **Revision verified:** the records commit (`docs: record the verification of the align-product-ports-with-g2-lifecycle change`) on top of the port types (`b905e448`), their tests (`77e02025`), the contract (`02ecee86`), and the change records (`0574128a`). The checks below ran on the working tree of `0574128a`, which the records commit holds with only this record changed.
 - **Revision after the confirmed decisions:** the commit `docs: apply the confirmed product ports decisions` on top of the records commit; its checks are in Checks.
+- **Revision after review pass 1:** the records commit of pass 1 (`docs: record review pass 1 of the align-product-ports-with-g2-lifecycle change`) on top of the fixes `475eebff` (the retry backoff reason), `19e28a2b` (its test), and `27553d4a` (contract, spec delta, and design); the checks without Docker in Checks ran on the working tree of `27553d4a`.
 - **Scope:** `docs/trust-model.md` section 3 (`installation-owner` row); `docs/contracts/product-ports.md` (sections 2, 3.2 to 3.4, 3.6 to 3.9, 4.1, 4.3, 5, 6.1, 6.3, and 7); the `product-ports` requirements of `specs/product-ports/spec.md`; `packages/modules/execution/src/ports/{board-read-model,needs-you,standing-approval-rules}.ts` and their exports; `packages/modules/integrations/src/ports/auto-merge.ts`; `packages/modules/execution/test/product-ports.test.ts`; `packages/modules/scheduling/test/board-obstacle-mirror.test.ts`.
 - **Out of scope:** pass 1 H1 and pass 2 M1, the launch invalidation obligations of product writers (`bind-product-writers-to-launch-invalidation`, not on `dev` when this record was written); any adapter, projection, wire schema, or UI.
 - **Design source:** the owner's UI proof of concept, read as data; `design.md`, Context, names where the contract follows it.
@@ -27,7 +28,7 @@ The coordinator brought decisions D1 (pass 2 H1, card per root run), D4 (merge r
 - **ADR 0008.** The card mapping keeps ADR 0008's card and task as one root run with its change (design D1); no decision of the ADR changes, and no ADR file is edited.
 - **Contract, spec, and code agree.** `grep` for `WAITING_REASONS`, `WaitingReason`, `byTask`, `TaskCount`, and `taskDetail(projectId, taskId)` over `docs/`, `openspec/specs/`, `packages/`, and `apps/` finds no use of the replaced board names: the remaining matches are Scheduling's names and their control-plane users, the board's new `PLACEMENT_WAITING_REASONS`, and the proof of concept's own type in `docs/ui-poc/src/ui.tsx`. The merge gate values of contract section 3.4 equal `MERGE_GATE_STATES`; the obstacle reasons of section 3.8 equal the mirrors, which the Scheduling test compares with Scheduling's lists.
 - **Citations.** Every `file:line` in `design.md` and the contract was checked against `b87abe75`: `task-service.ts:32`, `task.ts:116`, `delegation-admission.ts:61`, `stage-progress.ts:15` and `:37`, `gate.ts:20`, `capacity-reasons.ts:3`, `assignment.ts:44`, `automatic-retry.ts:15`, `reconciliation-queue.ts:7`, `execution.ts:105`, `worker-revocation.ts:8`, `workflow-run-binding.ts:10`.
-- **Requirement length.** Added requirements: 340 ("One card per root run"), 288 ("Completed workflow projection"), 378 ("Merge readiness by passed stages"), 401 ("Placement obstacle projection"), 287 ("Task end without merge"), and 355 ("Reconciliation in the inbox") characters; modified: 351 ("Needs you items answered once by their source") and 344 ("Standing approval rules recorded and audited"); all under 500. `npm run verify:archive` archives the change in a temporary copy into strictly valid specs.
+- **Requirement length** (after review pass 1). Added requirements: 340 ("One card per root run"), 367 ("Completed workflow projection"), 378 ("Merge readiness by passed stages"), 480 ("Placement obstacle projection"), 287 ("Task end without merge"), and 355 ("Reconciliation in the inbox") characters; modified: 491 ("Board columns from the framework mapping", added by pass 1 L7), 351 ("Needs you items answered once by their source"), and 344 ("Standing approval rules recorded and audited"); all under 500. `npm run verify:archive` archives the change in a temporary copy into strictly valid specs.
 - New and changed comments are at most two lines of at most 80 characters; `npm run verify:comments` passes.
 - Commit types are `chore`, `test`, and `docs`; only private workspace packages and documents change. Links from these records are inside the change or root-relative.
 
@@ -55,11 +56,31 @@ Run on the working tree of `0574128a` with Node.js 24.22.1 and npm 12.2.1, witho
 
 After the confirmed decisions, on the working tree of that commit: `npm run verify:comments`, `npm run verify:links`, and `npm run verify:findings` (43 findings files, 23 pass summary files) pass; `validate align-product-ports-with-g2-lifecycle --strict` is valid; `validate --all --strict` gives 70 passed, 0 failed; `git diff origin/dev -- 'docs/decisions/0008-*'` is empty; `grep -n acknowledge-process docs/trust-model.md` matches line 29. Only Markdown changed, so the build and tests were not rerun.
 
+After review pass 1, on the working tree of `27553d4a`: `npm run build` and `npm run check:boundaries` exit 0; unit tests of the touched packages (26 files) with coverage, 396 tests, 396 pass, 0 fail, `board-read-model.js`, `needs-you.js`, `standing-approval-rules.js`, and `auto-merge.js` 100% lines, branches, and functions each, the modules' total 86.58% lines, 93.01% branches, 87.02% functions; `verify:comments`, `verify:links`, and `verify:archive` pass; `verify:findings` and `make findings ARGS="validate"`: 43 findings files, 23 pass summary files valid; `validate align-product-ports-with-g2-lifecycle --strict` valid; `validate --all --strict` 70 passed, 0 failed. `make verify` after these fixes is pending the coordinator's Docker slot.
+
 `make verify` on the working tree of `120c6842`, run by the coordinator with Node.js from `.nvmrc` and Docker available: exit 0; 2305 tests, 44 suites, 2302 pass, 0 fail, 0 cancelled, 3 skipped, 0 todo; coverage of all files lines 99.33%, branches 92.27%, functions 99.03%; every product module is in the coverage report; `validate --all --strict` 70 passed, 0 failed; every checked link conforms; every active OpenSpec change archives into strictly valid specs; the package verification passed; verified 731 package paths, 41 with license coverage gaps (all reviewed; 4 declaration-only). The author checked these numbers against the run's log.
 
 ## Review
 
-No review pass has run yet.
+### Pass 1
+
+- **Reviewer:** A, Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, read-only sandbox; run by the coordinator. Invocation: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`. Model confirmation: the model and effort set in the invocation, as reported by the coordinator. Session `01a17efb-ef45-7bf1-aa88-bcfd74bcb0ea`.
+- **Reviewed revision:** `da5275f2`. Snapshot of the worktree before and after the pass: `d9afecbe4e6bf43f59dfdde704acd100026b348f83ca82e340449ef9359abbf9` both, so the reviewer changed nothing.
+- **Counts:** critical 0, high 0, medium 6, low 5 (`passes.jsonl`). Every finding was checked against the code and fixed; none was declined.
+
+| Finding | Resolution |
+| --- | --- |
+| M1 (`product-ports.md:156`): `retries-exhausted` omits a last `not-started` attempt after the retries are spent (`apps/control-plane/test/observation.integration.test.ts:1339`) | Fixed: the kind covers a `not-started` outcome or a known failing exit once `MAX_AUTOMATIC_RETRIES` are spent; scenario "Retries spent after not started", required test, design D6 |
+| M2 (`:141`): the fleet obstacle does not check that the task waits for placement | Fixed: section 3.8 decides applicability first (G2 `placementNeed`); scenario "Rejected in an empty fleet", design D5 |
+| M3 (`:142`): the automatic retry obstacle has no checkable backoff criterion and hides a newer record | Fixed: the most recent observation by `observedAt` wins among retry, refusal, and scheduler record; scenario "Newer scheduler record", design D5 |
+| M4 (`:143`): an older worker refusal hides a newer scheduler outcome | Fixed by the same rule; required test |
+| M5 (`:146`): a rejection stays shown after a re-admission | Fixed: a rejection and a task end hold only at the ownership generation the attempt ended in; scenario "Re-admitted after a rejection", design D5 and D6 |
+| M6 (`:62`): the last stage of the order need not be the Close stage | Fixed: the Close stage is the last stage with the `closure` obligation in graph order, which every admissible graph has; scenario "Closure stage not last", design D3 |
+| L7 (delta `spec.md:15`): the restart rule is unconditional, and the living board columns requirement lacks the terminal fallback | Fixed: condition added; MODIFIED "Board columns from the framework mapping" |
+| L8 (`board-read-model.ts:145`): the retry variant has no reason | Fixed: `RETRY_BACKOFF_REASON` (`retry-backoff`) with a value test |
+| L9 (`product-ports.md:26`): "every query and command names one project" against the installation scope | Fixed: section 2.1 excepts the installation-scoped inbox |
+| L10 (`:13`): the port table omits the reconciliation source | Fixed: added, with its implementing item not yet assigned |
+| L11 (`:133`): doubled comma | Fixed |
 
 ## Limitations
 
@@ -67,7 +88,7 @@ No review pass has run yet.
 
 ## Remaining gates
 
-- Review pass 1 by reviewer A, Codex `gpt-6.1-sol`.
+- `make verify` after the pass 1 fixes.
 - Review pass 2 by reviewer B, Claude Code `claude-opus-5-5`, effort `high`.
 - Review pass 3 by reviewer A, if pass 2 has findings above Low.
 - Merge of `origin/dev` once `bind-product-writers-to-launch-invalidation` lands, and reconciliation of its section 5 "Invalidation" bullet.
