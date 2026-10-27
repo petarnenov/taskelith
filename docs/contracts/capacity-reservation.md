@@ -232,7 +232,7 @@ Items 18, 20, and 24 implement these as tests through the deterministic test har
 
 G2 item 18 (`implement-resource-admission`) implements the scheduler side in the `Scheduling` module and `@taskelith/postgres`, and fixes what this contract left to it, as provisional values recorded in the [operational targets](../operational-targets.md) section 1:
 
-- **Fair order.** Round-robin across projects, oldest waiting task first within each (`fairPlacementOrder`).
+- **Fair order.** Round-robin across projects, oldest waiting task first within each (`fairPlacementOrder`). Equal waiting times are ordered by project id, then task id, both in code-unit order, the order of PostgreSQL's `"C"` collation for ASCII identifiers.
 - **Backoff.** A base doubling from `5s` to `60s`, each delay within `[5s, 60s]` with jitter; a transiently failed placement is tried at most `5` times.
 - **Delegation wait.** A delegation waits with `delegation-awaiting-capacity` for at most `10 min`, then is rejected with that reason.
 - **Supersession.** An assignment without a grant is superseded after `2 min` unacknowledged, after `10 min` under admission pressure, and at once when its worker is unknown, unreachable, draining, or revoked.

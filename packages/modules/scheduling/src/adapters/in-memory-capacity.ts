@@ -4,6 +4,7 @@ import type { TaskId } from '@taskelith/sdlc';
 import { DEFAULT_PROJECT_QUOTA, DEFAULT_RUN_QUOTA } from '../domain/capacity-limits.js';
 import type { ProjectId, ProviderCredentialId, RunId } from '../domain/capacity-reservation.js';
 import type { Assignment } from '../domain/assignment.js';
+import { byCodeUnits } from '../domain/code-unit-order.js';
 import type { TaskLineageLink } from '../domain/delegation-admission.js';
 import type { CapacityCharge, CapacityLedger, OpenDelegation, WorkerOccupancy } from '../ports/capacity-ledger.js';
 import type { InstallationGuard } from '../ports/installation-guard.js';
@@ -52,12 +53,6 @@ export class InMemoryPlacementWorkers implements PlacementWorkers {
     const eligible = [...this.#workers.keys()].filter((workerId) => isEligibleForPlacement(this.#workers.get(workerId)!));
     return Object.freeze(eligible.sort((left, right) => held(left) - held(right) || byCodeUnits(left, right)));
   }
-}
-
-// The order of PostgreSQL's "C" collation, which the database adapters use.
-export function byCodeUnits(left: string, right: string): number {
-  if (left === right) return 0;
-  return left < right ? -1 : 1;
 }
 
 // `undefined` is an installation without its record, which admits nothing.
