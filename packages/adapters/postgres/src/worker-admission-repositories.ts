@@ -97,7 +97,9 @@ export class PostgresWorkerAdmissions implements WorkerAdmissions, WorkerAdmissi
 
 function entryOf(row: AdmissionRow, results: readonly ResultRow[]): Result<WorkerAdmissionEntry> {
   const enrolledAt = parseInstant(row.enrolled_at);
-  if (!enrolledAt.ok) return enrolledAt;
+  if (!enrolledAt.ok) {
+    return err(failure('unavailable', `worker ${row.worker_id} has an unreadable enrollment record`, { worker: row.worker_id }));
+  }
   return ok(Object.freeze({
     workerId: row.worker_id,
     host: Object.freeze({ ...row.host }),

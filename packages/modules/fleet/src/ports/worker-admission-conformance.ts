@@ -19,10 +19,12 @@ export function stubAdmissionCheck(run: SelfCheckRun = { outcome: 'passed' }): W
   return Object.freeze({ checkId: LINUX_CONTAINMENT_CHECK_ID, scope: LINUX_CONTAINMENT_SCOPE, run: async () => run });
 }
 
-// The registry enrolls the workers whose admission the store keeps.
+// The registry enrolls the workers whose admission the store keeps;
+// `breakWorker` makes that worker's stored record unreadable.
 export interface WorkerAdmissionFixture {
   readonly registry: FleetRegistry;
   readonly admissions: WorkerAdmissions & WorkerAdmissionView;
+  readonly breakWorker: (workerId: WorkerId) => Promise<void>;
 }
 
 function must<T>(result: Result<T>): T {
@@ -100,6 +102,34 @@ export const WORKER_ADMISSION_CONFORMANCE: readonly ConformanceCase<WorkerAdmiss
       expectSame(problems, 'awaiting', [awaiting?.admission, awaiting?.results, awaiting?.reportedAt], ['awaiting-self-check', [], undefined]);
       expectSuccess(problems, 'first report', await admissions.record(workerId, decision(PASSED), sequence(1), LATER));
       expectSame(problems, 'admitted again', (await entryOf(admissions, workerId))?.admission, 'admitted');
+      return problems;
+    },
+  },
+  {
+    name: 'a report that names a check twice stores one failed result and never admits',
+    async check({ registry, admissions }) {
+      const problems: string[] = [];
+      const workerId = await enrolled(registry, 'w1', 'j1');
+      must(await admissions.record(workerId, decision(PASSED), sequence(1), REPORTED_AT));
+      const repeated: SelfCheckResult = { checkId: 'linux-containment', outcome: 'failed', details: ['the check was reported more than once'] };
+      for (const [index, report] of [[PASSED, PASSED], [PASSED, FAILED]].entries()) {
+        const decided = decideWorkerAdmission(report, 'linux');
+        expectSuccess(problems, `report ${index}`, await admissions.record(workerId, decided, sequence(index + 2), LATER));
+        const entry = await entryOf(admissions, workerId);
+        expectSame(problems, `state ${index}`, [entry?.admission, entry?.results], ['self-check-failed', [repeated]]);
+      }
+      return problems;
+    },
+  },
+  {
+    name: 'a view whose source cannot be read is unavailable and returns no workers',
+    async check({ registry, admissions, breakWorker }) {
+      const problems: string[] = [];
+      const readable = await enrolled(registry, 'w1', 'j1');
+      const broken = await enrolled(registry, 'w2', 'j2');
+      must(await admissions.record(readable, decision(PASSED), sequence(1), REPORTED_AT));
+      await breakWorker(broken);
+      expectCode(problems, 'view', await admissions.workers(), 'unavailable');
       return problems;
     },
   },
