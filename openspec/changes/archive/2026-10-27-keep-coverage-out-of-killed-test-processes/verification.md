@@ -77,3 +77,12 @@ MacBook Air, macOS 26.6.2 (Darwin 25.6.0, arm64), Node.js v24.22.1, Docker servi
 ## Remaining gates
 
 - Integration into dev by the coordinator (single pull request).
+
+## Archive checks
+
+Worker step 7, run by the worker after review pass 2 and its unreviewed fixes. The checked state is the tree of the archive commit, which is the working tree these checks ran on after `npm run openspec -- archive keep-coverage-out-of-killed-test-processes --yes` (base `908d0fc`, merge base with `origin/dev` `5c60c15`).
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `make verify`: exit 0; 2010 tests, 2008 passed, 0 failed, 2 skipped; coverage 99.27 % lines, 91.94 % branches, 98.96 % functions; findings validation passed (the moved `findings.jsonl` with 13 lines).
+- `npm run openspec -- validate --archived --no-interactive`: the line of `change/2026-10-27-keep-coverage-out-of-killed-test-processes` passes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only the ADDED requirement "Coverage kept out of killed processes" with its two scenarios in `deterministic-test-harness`.
