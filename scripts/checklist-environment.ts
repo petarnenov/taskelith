@@ -4,11 +4,14 @@ import { execFileSync } from 'node:child_process';
 // need; tests replace them.
 export interface ChecklistEnvironment {
   now(): Date;
-  // The dev commit whose archived findings the working tree holds.
+  // The dev commit whose archived findings the working tree holds; throws
+  // DevCommitError when there is none.
   devCommit(root: string): string;
   // Lines a change altered outside openspec/changes/, or undefined.
   linesChanged(root: string, archiveDirectory: string, devCommit: string): number | undefined;
 }
+
+export class DevCommitError extends Error {}
 
 function git(root: string, args: readonly string[]): string {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
@@ -37,6 +40,10 @@ function linesChanged(root: string, archiveDirectory: string, devCommit: string)
 
 export const GIT_ENVIRONMENT: ChecklistEnvironment = {
   now: () => new Date(),
-  devCommit: (root) => git(root, ['merge-base', 'HEAD', 'origin/dev']),
+  devCommit: (root) => {
+    const commit = tryGit(root, ['merge-base', 'HEAD', 'origin/dev']);
+    if (commit === undefined) throw new DevCommitError('git merge-base HEAD origin/dev found no dev commit; fetch origin first.');
+    return commit;
+  },
   linesChanged,
 };

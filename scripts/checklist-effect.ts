@@ -227,5 +227,6 @@ export function formatChecklistEffect({ changes, byDate, noChecklist }: Checklis
     ...sectionLines(date),
   ]);
   const excluded = noChecklist.length === 0 ? 'No checklist: none' : `No checklist: ${noChecklist.join(', ')}`;
-  return [summary, LEGEND, ['By change', ...perChange].join('\n'), ['By archive date', ...perDate].join('\n'), excluded].join('\n\n');
+  const block = (title: string, lines: readonly string[]) => [title, ...(lines.length === 0 ? ['none'] : lines)].join('\n');
+  return [summary, LEGEND, block('By change', perChange), block('By archive date', perDate), excluded].join('\n\n');
 }

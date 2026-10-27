@@ -142,7 +142,7 @@ test('the effect text shows observed against expected per change and per day', (
 test('the effect of no recorded checklist says so', () => {
   const text = formatChecklistEffect(checklistEffect([], ['gamma', 'zeta']));
   assert.match(text, /^Checklist effect over archived changes with checklist\.json: 0 change\(s\); 2 archived change\(s\) without one are excluded\.$/m);
-  assert.match(text, /^No checklist: gamma, zeta$/m);
+  assert.match(text, /\n\nBy change\nnone\n\nBy archive date\nnone\n\nNo checklist: gamma, zeta$/);
 });
 
 function repository(files: Readonly<Record<string, string>>): string {

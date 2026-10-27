@@ -1,7 +1,7 @@
 import { existsSync, writeFileSync } from 'node:fs';
 import { posix } from 'node:path';
 import { checklistEffect, formatChecklistEffect, type ArchivedChecklist } from './checklist-effect.ts';
-import type { ChecklistEnvironment } from './checklist-environment.ts';
+import { DevCommitError, type ChecklistEnvironment } from './checklist-environment.ts';
 import {
   CHECKLIST_FILE,
   checklistRecord,
@@ -65,13 +65,14 @@ function saveChecklist(target: SaveTarget, query: ChecklistQuery, sections: Chec
     return failure(`${path} already exists; the checklist is recorded once, at plan time.`);
   }
   const { environment, root, archived } = context;
-  const recordContext = {
-    change: target.change,
-    generatedAt: environment.now().toISOString(),
-    devCommit: environment.devCommit(root),
-    query,
-    size: target.size,
-  };
+  let devCommit: string;
+  try {
+    devCommit = environment.devCommit(root);
+  } catch (error) {
+    if (!(error instanceof DevCommitError)) throw error;
+    return failure(error.message);
+  }
+  const recordContext = { change: target.change, generatedAt: environment.now().toISOString(), devCommit, query, size: target.size };
   writeFileSync(posix.join(root, path), formatChecklistRecord(checklistRecord(recordContext, sections, archived)), { flag: 'wx' });
   return success(`${text}\n\nSaved the checklist to ${path}.`);
 }

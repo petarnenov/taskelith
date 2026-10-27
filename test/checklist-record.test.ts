@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { CHECKLIST_REQUIRED_FROM, CHECKLIST_SCHEMA_PATH, createdDate, requiresChecklist } from '../scripts/checklist-record.ts';
-import type { ChecklistEnvironment } from '../scripts/checklist-environment.ts';
+import { GIT_ENVIRONMENT, type ChecklistEnvironment } from '../scripts/checklist-environment.ts';
 import { PASS_SCHEMA_PATH, parseCommand, runFindings, SCHEMA_PATH, UsageError } from '../scripts/findings.ts';
 import { VOCABULARY_PATH } from '../scripts/review-findings.ts';
 
@@ -150,6 +150,16 @@ test('--save refuses an existing record and a change that is not active', () => 
     assert.equal(absent.exitCode, 1);
     assert.equal(absent.stderr, 'openspec/changes/other-change is not an active change; create the change first.');
     assert.equal(existsSync(join(root, 'openspec/changes/other-change')), false);
+  });
+});
+
+test('--save without a dev commit fails and writes nothing', () => {
+  withRepository({ ...ARCHIVE, ...activeChange('new-change', '2026-10-28') }, (root) => {
+    const environment = { ...ENVIRONMENT, devCommit: () => GIT_ENVIRONMENT.devCommit(root) };
+    const result = runFindings(['checklist', '--save', 'new-change'], root, environment);
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stderr, 'git merge-base HEAD origin/dev found no dev commit; fetch origin first.');
+    assert.equal(existsSync(join(root, 'openspec/changes/new-change/checklist.json')), false);
   });
 });
 
