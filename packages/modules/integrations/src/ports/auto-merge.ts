@@ -106,12 +106,13 @@ export interface ManualMerge {
   readonly integratedRevision: IntegratedRevision;
 }
 
-// Serial per target branch; enqueueing is idempotent per run and head, and
-// every transition compares the revision. `latestForRun` may be `not-found`.
+// Serial per target branch, transitions compare the revision; enqueue is
+// idempotent per run and head but re-queues a request withdrawn as section 6.3.
 export interface MergeQueue {
   enqueue(request: MergeEnqueue): Promise<Result<MergeRequest>>;
   claimNext(projectId: ProjectId, targetBranch: BranchName): Promise<Result<MergeClaim>>;
   transition(id: MergeRequestId, expectedRevision: Revision, change: MergeTransition): Promise<Result<MergeRequest>>;
+  // `not-found` when the run has no request.
   latestForRun(runId: WorkflowRunId): Promise<Result<MergeRequest>>;
   recordManualMerge(merge: ManualMerge): Promise<Result<MergeRequest>>;
 }

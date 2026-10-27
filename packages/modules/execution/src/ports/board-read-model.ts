@@ -240,7 +240,8 @@ export interface AdmissionView {
   readonly workItemId?: WorkItemId;
   readonly state: AdmissionState;
   readonly policyRevision: PolicyRevision;
-  readonly ownershipGeneration?: OwnershipGeneration;
+  // The generation the admission's dispatch started, not the task's current.
+  readonly dispatchedGeneration?: OwnershipGeneration;
 }
 
 export interface DelegationView {
@@ -251,7 +252,9 @@ export interface DelegationView {
 // A G2 task of the card's run, or a delegated child of one of them.
 export interface TaskView {
   readonly taskId: TaskId;
-  readonly runId: WorkflowRunId;
+  // The task's own run: a child run for a delegated task, not the card's key.
+  readonly taskRunId: WorkflowRunId;
+  readonly ownershipGeneration: OwnershipGeneration;
   readonly admission: AdmissionView;
   readonly delegation?: DelegationView;
   readonly session: SessionActivity;
