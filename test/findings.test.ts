@@ -47,7 +47,16 @@ function repository(files: Readonly<Record<string, string>>): string {
     mkdirSync(join(root, path, '..'), { recursive: true });
     writeFileSync(join(root, path), text);
   }
+  for (const change of activeChanges(files)) {
+    writeFileSync(join(root, 'openspec/changes', change, '.openspec.yaml'), 'created: 2026-10-01\n');
+  }
   return root;
+}
+
+// Active fixture changes predate the checklist record rule.
+function activeChanges(files: Readonly<Record<string, string>>): Set<string> {
+  const names = Object.keys(files).map((path) => /^openspec\/changes\/(?!archive\/)([^/]+)\//.exec(path)?.[1]);
+  return new Set(names.filter((name) => name !== undefined));
 }
 
 const ARCHIVED = {
@@ -70,6 +79,7 @@ test('commands and their options parse, and misuse is a usage error', () => {
   assert.deepEqual(parseCommand(['checklist', '--capability', 'a,b', '--capability', 'c', '--files', 'x/**,{y,z}.ts', '--top', '3']), {
     name: 'checklist',
     query: { capabilities: ['a', 'b', 'c'], files: ['x/**', '{y,z}.ts'], top: 3 },
+    json: false,
   });
   assert.equal((parseCommand(['checklist']) as { query: { top: number } }).query.top, DEFAULT_TOP);
   for (const args of [[], ['nope'], ['validate', 'extra'], ['validate', '--json'], ['checklist', '--top', '0'], ['checklist', '--top', '11'], ['index', '--unknown'], ['reviewers', '--top', '3']]) {
