@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { uncoveredEnvironment } from '@taskelith/testing';
 import {
   activeChanges,
   archiveProblem,
@@ -99,7 +100,7 @@ interface Run {
 // Optionally sends a signal once the check has created its copy.
 function runCheck({ project, temporary }: Fixture, signal?: NodeJS.Signals): Promise<Run> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['--experimental-strip-types', SCRIPT], { cwd: project, env: { ...process.env, TMPDIR: temporary } });
+    const child = spawn(process.execPath, ['--experimental-strip-types', SCRIPT], { cwd: project, env: { ...uncoveredEnvironment(), TMPDIR: temporary } });
     const timer = setInterval(() => {
       if (signal === undefined || readdirSync(temporary).length === 0) return;
       clearInterval(timer);

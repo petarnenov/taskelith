@@ -4,7 +4,7 @@ import { after, afterEach, test } from 'node:test';
 import type { NatsConnection } from '@nats-io/nats-core';
 import { ok } from '@taskelith/kernel';
 import { connectWorkerTransport, encodeJson, JetStreamPublisher, workerCommandConsumer } from '@taskelith/nats';
-import { acquireProcessLock, crashEnvironment, integrationEndpoint, integrationSecret, ScenarioProcess, Toxiproxy } from '@taskelith/testing';
+import { acquireProcessLock, crashEnvironment, integrationEndpoint, integrationSecret, ScenarioProcess, Toxiproxy, uncoveredEnvironment } from '@taskelith/testing';
 import { offer } from './messages.ts';
 import { connected, expectOk, installation, NATS_URL, recordingHandler, running, TEST_LIMITS, waitFor } from './nats-fixtures.ts';
 
@@ -27,7 +27,7 @@ function connectionStatuses(connection: NatsConnection): string[] {
 }
 
 async function publishWithCrashAt(installationId: string, point?: string): Promise<{ signal: string | null; stdout: string }> {
-  const env = { ...process.env, ...(point === undefined ? {} : crashEnvironment(point)) };
+  const env = { ...uncoveredEnvironment(), ...(point === undefined ? {} : crashEnvironment(point)) };
   const child = await ScenarioProcess.start(process.execPath, ['--experimental-strip-types', PUBLISHER, NATS_URL.href, installationId], { env });
   const timer = setTimeout(() => child.kill(), 30_000);
   const exit = await child.exited.finally(() => clearTimeout(timer));

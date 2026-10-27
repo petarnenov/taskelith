@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ScenarioProcess, acquireProcessLock, lockPort } from '@taskelith/testing';
+import { ScenarioProcess, acquireProcessLock, lockPort, uncoveredEnvironment } from '@taskelith/testing';
 
 test('a second holder waits until the first releases', async () => {
   const release = await acquireProcessLock('harness-lock-test');
@@ -34,7 +34,7 @@ test('a killed holder frees the lock, and a live holder times out a waiter', asy
   const port = lockPort('harness-lock-kill');
   const holder = await ScenarioProcess.start(process.execPath, [
     '-e', `require('node:net').createServer().listen(${port}, '127.0.0.1', () => console.log('held'))`,
-  ]);
+  ], { env: uncoveredEnvironment() });
   await holder.waitForOutput('held');
   await assert.rejects(acquireProcessLock('harness-lock-kill', 100), /is still held after 100 ms/);
   holder.kill();
