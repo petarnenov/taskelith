@@ -50,13 +50,20 @@ function withRepository(body: (root: string, context: StampContext) => void): vo
 }
 
 test('D1 paths: docs, openspec, and root Markdown except the changelog', () => {
-  for (const path of ['docs/governance.md', 'docs/review-findings/categories.txt', 'openspec/specs/a/spec.md', 'AGENTS.md', 'README.md']) {
+  for (const path of ['docs/governance.md', 'docs/review-findings-guide.md', 'openspec/specs/a/spec.md', 'AGENTS.md', 'README.md']) {
     assert.equal(isDocsPath(path), true, path);
   }
   for (const path of ['CHANGELOG.md', 'scripts/a.ts', '.claude/settings.json', 'Makefile', 'packages/a/README.md', 'docs', 'openspec']) {
     assert.equal(isDocsPath(path), false, path);
   }
 });
+
+for (const path of ['docs/review-findings/categories.txt', 'docs/qualification/speckit.md']) {
+  test(`D1 paths: tests read ${path}, so it needs the full profile`, () => {
+    assert.equal(isDocsPath(path), false);
+    assert.equal(classifyPaths(['docs/governance.md', path]), 'full');
+  });
+}
 
 test('a profile is docs-only only when every changed path is documentation', () => {
   assert.equal(classifyPaths(['docs/a.md', 'AGENTS.md']), 'docs-only');

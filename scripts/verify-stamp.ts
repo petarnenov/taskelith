@@ -21,9 +21,13 @@ const SERVICES_COMPOSE = 'infra/services/compose.yaml';
 
 export class StampError extends Error {}
 
-// Decision D1: docs/**, openspec/**, and root-level Markdown files except
-// CHANGELOG.md; every other path needs the full profile.
+// Tests read these documentation directories, so they need the full profile.
+const TESTED_DOCS_DIRECTORIES = ['docs/review-findings/', 'docs/qualification/'];
+
+// Decision D1: docs/** except the tested directories, openspec/**, and
+// root-level Markdown files except CHANGELOG.md; the rest is full.
 export function isDocsPath(path: string): boolean {
+  if (TESTED_DOCS_DIRECTORIES.some((directory) => path.startsWith(directory))) return false;
   if (path.startsWith('docs/') || path.startsWith('openspec/')) return true;
   return !path.includes('/') && path.endsWith('.md') && path !== 'CHANGELOG.md';
 }
