@@ -16,4 +16,4 @@
 
 ## 4. Archive
 
-- [ ] 4.1 Archive the change after the review.
+- [x] 4.1 Archive the change after the review.

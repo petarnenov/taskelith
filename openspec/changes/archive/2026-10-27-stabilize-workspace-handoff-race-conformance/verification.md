@@ -106,3 +106,15 @@ After the pass-1 fix, on `3b29f979`, the same runner without `yes` processes ran
 ## Remaining gates
 
 - Integration into dev by the coordinator (single pull request).
+
+## Archive checks
+
+Worker step 7, run by the worker session after review pass 2. Before archiving, `origin/dev` at `dc9f1b66` was merged into the branch with the merge commit `60bbb653`, without conflicts; `dev` had not changed `packages/modules/workspace`. `make verify` on `60bbb653`, started at a load average of 3.05 (1 minute), passed (exit 0): 2,292 tests, 2,289 passed, 0 failed, 3 skipped; coverage 99.33 % lines, 92.29 % branches, 99.03 % functions; strict OpenSpec validation 70 passed, 0 failed.
+
+The checked state is the tree of the archive commit, which is the working tree these checks ran on after `npm run openspec -- archive stabilize-workspace-handoff-race-conformance --yes` (base `60bbb653`). The archive commit also points the record finding's `file` at the moved `verification.md`.
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `make verify`, started at a load average of 5.66 (1 minute): exit 0; 2,292 tests, 2,289 passed, 0 failed, 3 skipped; coverage 99.34 % lines, 92.30 % branches, 99.03 % functions; strict OpenSpec validation 69 passed, 0 failed; findings, links, contract compatibility, archive dry run, and package verification passed.
+- `npm run openspec -- validate --archived --no-interactive`: the line of `change/2026-10-27-stabilize-workspace-handoff-race-conformance` passes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: empty, as intended for a change with `skip_specs: true`.
+- The moved change has its `findings.jsonl` with the two pass-1 lines and its `passes.jsonl` with the pass-1 and pass-2 lines, and `make findings ARGS="validate"` passes.
