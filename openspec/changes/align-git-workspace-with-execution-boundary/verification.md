@@ -135,7 +135,7 @@ Findings 2, 10, and 11 are fixed at the contract and spec level; their tests nee
 - Invocation: `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`.
 - Model confirmation: the output header names model `gpt-6.1-sol`, reasoning effort medium, sandbox read-only.
 - Session: `01a17e4d-3958-7ac1-8df5-2cd6de118af0`.
-- Snapshot: the worktree snapshot was unchanged before and after the pass.
+- Snapshot: `95232746f5d220bff674378380dddd3ad7b85327e6d83d1547847f9d9c16b304` before and after the pass, unchanged.
 - Counts: Critical 0, High 0, Medium 0, Low 1.
 - Verdicts on pass 2: findings 2, 3, 4, 6, 7, 8, 9, 10, and 11 resolved; finding 5 declined as recorded; finding 1 not resolved, because concurrent hand-offs in the double could hand off two workspaces. The pass 3 finding below completes finding 1.
 
