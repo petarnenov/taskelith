@@ -14,6 +14,8 @@ import {
   NO_CANDIDATE_REASON,
   RotationCursor,
   fairWaitingOrder,
+  isRecordedWaitingReason,
+  isRejectingReason,
   lacksFleetCapacity,
   placeInTransaction,
   placementBackoff,
@@ -22,6 +24,8 @@ import {
   type PlacementQueue,
   type PlacementRequest,
   type ProjectId,
+  type RecordedWaitingReason,
+  type RejectingReason,
   type WaitingPlacement,
 } from '@taskelith/scheduling';
 import type { TaskId } from '@taskelith/sdlc';
@@ -97,6 +101,8 @@ export class PlacementService {
     for (const { item: taskId, projectId } of order) {
       const outcome = await this.#store.transaction((tx) => placeMovingCursor(tx, taskId, this.#retryBackoff, projectId));
       if (!outcome.ok && isOutage(outcome.error.code)) return { outcome, next: cursor.next, stored };
+      const recorded = await this.#recordWait(taskId, outcome);
+      if (!recorded.ok) return { outcome: recorded, next: cursor.next, stored };
       if (outcome.ok && outcome.value.kind === 'placed') {
         stored = projectId;
         cursor.placed(projectId);
@@ -119,6 +125,14 @@ export class PlacementService {
   ): Promise<Result<void>> {
     if (next === undefined || next === stored) return ok(undefined);
     return this.#store.transaction((tx) => tx.rotation.advanceFrom(after, next));
+  }
+
+  // Section 13, "Recorded outcome": a waiting reason rolled its placement
+  // back, so its record is written in a transaction of its own.
+  async #recordWait(taskId: TaskId, outcome: Result<TaskPlacement>): Promise<Result<void>> {
+    const reason = outcome.ok ? undefined : outcome.error.details.reason;
+    if (!isRecordedWaitingReason(reason)) return ok(undefined);
+    return this.#store.transaction((tx) => recordWaiting(tx, taskId, reason));
   }
 
   // Never given a fleet capacity decline, which keeps the wait. A backing-off
@@ -170,6 +184,7 @@ interface Offers {
 
 const PASS = 'pass';
 const NOT_WAITING = 'not-waiting';
+const SCHEDULER = 'scheduler';
 
 // What a placement transaction committed: an assignment, the end of an
 // attempt that a rejecting reason refused, or nothing while a retry waits.
@@ -215,8 +230,8 @@ async function placeTask(tx: ControlPlaneTransaction, taskId: TaskId, retryBacko
   const reserved = await reserveOnCandidate(tx, claimed.value, await tx.workers.candidates());
   if (!reserved.ok) return reserved;
   const last = reserved.value;
-  if (last?.kind === 'placed') return ok(PLACED);
-  if (last?.kind === 'rejected') return endRejectedAttempt(tx, claimed.value);
+  if (last?.kind === 'placed') return removeOutcome(tx, taskId);
+  if (last !== undefined && isRejectingReason(last.reason)) return endRejectedAttempt(tx, claimed.value, last.reason);
   const reason = last?.reason ?? NO_CANDIDATE_REASON;
   return err(failure('precondition-failed', `no candidate accepted task ${taskId}`, { task: taskId, reason }));
 }
@@ -258,15 +273,39 @@ async function reserveOnCandidate(
 }
 
 // The attempt owns no execution, so it ends `not-started`; the task's
-// delegation closes, and no retry follows (capacity contract section 11).
-async function endRejectedAttempt(tx: ControlPlaneTransaction, task: Task): Promise<Result<TaskPlacement>> {
+// delegation closes, no retry follows, and the reason is recorded (§11).
+async function endRejectedAttempt(tx: ControlPlaneTransaction, task: Task, reason: RejectingReason): Promise<Result<TaskPlacement>> {
   const at = await tx.now();
-  const ended = endAttempt(task, task.attempts.at(-1)!.id, at);
+  const attemptId = task.attempts.at(-1)!.id;
+  const ended = endAttempt(task, attemptId, at);
   if (!ended.ok) return ended;
   const stored = await tx.tasks.replace(ended.value, task.generation);
   if (!stored.ok) return stored;
   const closed = await closeDelegationOf(tx, task.id, at);
-  return closed.ok ? ok(ENDED) : closed;
+  if (!closed.ok) return closed;
+  const recorded = await tx.placementOutcomes.record({
+    taskId: task.id, attemptId, disposition: 'rejected', reason, source: SCHEDULER, recordedAt: at,
+  });
+  return recorded.ok ? ok(ENDED) : recorded;
+}
+
+// A placed task has no outcome record (section 13, "Recorded outcome").
+async function removeOutcome(tx: ControlPlaneTransaction, taskId: TaskId): Promise<Result<TaskPlacement>> {
+  const removed = await tx.placementOutcomes.remove(taskId);
+  return removed.ok ? ok(PLACED) : removed;
+}
+
+// Only while the task still waits, so that a placement committed since its
+// rollback, which ends the wait, is never covered by an older reason.
+async function recordWaiting(tx: ControlPlaneTransaction, taskId: TaskId, reason: RecordedWaitingReason): Promise<Result<void>> {
+  const [waiting] = await tx.placements.stillWaiting([taskId]);
+  if (waiting === undefined) return ok(undefined);
+  const task = await tx.tasks.get(taskId);
+  if (!task.ok) return task;
+  const attemptId = activeAttempt(task.value)?.id;
+  return tx.placementOutcomes.record({
+    taskId, ...(attemptId === undefined ? {} : { attemptId }), disposition: 'waiting', reason, source: SCHEDULER, recordedAt: await tx.now(),
+  });
 }
 
 async function unplacedRetryOf(tx: ControlPlaneTransaction, task: Task): Promise<UnplacedRetry | undefined> {

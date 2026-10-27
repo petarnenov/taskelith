@@ -14,6 +14,7 @@ import {
   DELEGATION_REQUESTS_CONFORMANCE,
   OUTBOX_LOOKUP_CONFORMANCE,
   PLACEMENT_CANDIDATES_CONFORMANCE,
+  PLACEMENT_OUTCOME_RECORDS_CONFORMANCE,
   PLACEMENT_QUEUE_CONFORMANCE,
   PLACEMENT_ROTATION_CONFORMANCE,
   PLACEMENT_WORKERS_CONFORMANCE,
@@ -62,6 +63,7 @@ runSuite('candidates', PLACEMENT_CANDIDATES_CONFORMANCE, (tx) => ({ workers: tx.
 });
 runSuite('placement queue', PLACEMENT_QUEUE_CONFORMANCE, (tx) => ({ queue: tx.placements, tasks: tx.tasks, lineage: tx.lineage, assignments: tx.assignments }));
 runSuite('placement rotation', PLACEMENT_ROTATION_CONFORMANCE, (tx) => tx.rotation);
+runSuite('placement outcomes', PLACEMENT_OUTCOME_RECORDS_CONFORMANCE, (tx) => tx.placementOutcomes);
 runSuite('delegation requests', DELEGATION_REQUESTS_CONFORMANCE, (tx) => tx.delegations);
 runSuite('producer cursors', PRODUCER_CURSORS_CONFORMANCE, (tx) => tx.cursors);
 runSuite('inventory requests', INVENTORY_REQUESTS_CONFORMANCE, (tx) => tx.inventoryRequests);

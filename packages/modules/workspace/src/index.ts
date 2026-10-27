@@ -14,6 +14,7 @@ export {
   WORKSPACE_FAILURE_REASONS,
   WORKSPACE_KINDS,
   WORKSPACE_LAYOUT,
+  WORKSPACE_MODES,
   checkCredentialScope,
   cleanHead,
   taskBranchName,

@@ -14,6 +14,7 @@ import {
   InMemoryInstallationGuard,
   InMemoryOutboxLookup,
   OUTBOX_LOOKUP_CONFORMANCE,
+  InMemoryPlacementOutcomeRecords,
   InMemoryPlacementQueue,
   InMemoryPlacementRotation,
   InMemoryPlacementWorkers,
@@ -21,6 +22,7 @@ import {
   InMemoryTaskLineage,
   InMemoryWorkerReports,
   PLACEMENT_CANDIDATES_CONFORMANCE,
+  PLACEMENT_OUTCOME_RECORDS_CONFORMANCE,
   PLACEMENT_QUEUE_CONFORMANCE,
   PLACEMENT_ROTATION_CONFORMANCE,
   PLACEMENT_WORKERS_CONFORMANCE,
@@ -66,6 +68,7 @@ runSuite('in-memory placement queue', PLACEMENT_QUEUE_CONFORMANCE, () => {
   return { queue: new InMemoryPlacementQueue(() => tasks.all(), lineage, () => assignments.all()), tasks, lineage, assignments };
 });
 runSuite('in-memory placement rotation', PLACEMENT_ROTATION_CONFORMANCE, () => new InMemoryPlacementRotation());
+runSuite('in-memory placement outcomes', PLACEMENT_OUTCOME_RECORDS_CONFORMANCE, () => new InMemoryPlacementOutcomeRecords());
 runSuite('in-memory outbox lookup', OUTBOX_LOOKUP_CONFORMANCE, () => {
   const outbox = new InMemoryOutbox();
   return { outbox, lookup: new InMemoryOutboxLookup(() => outbox.messages) };

@@ -26,6 +26,7 @@ import { PostgresInventoryReports, PostgresInventoryRequests } from './inventory
 import { PostgresFleetRegistry, PostgresInstallationTable, PostgresOperatorCredentials } from './fleet-repositories.js';
 import { PostgresProducerCursors, PostgresWorkerReports } from './observation-repositories.js';
 import { PostgresReconciliationQueue, PostgresUnrecordedProcesses } from './reconciliation-repositories.js';
+import { PostgresPlacementOutcomeRecords } from './placement-outcome-records.js';
 import { PostgresRunCatalog } from './run-catalog.js';
 import type { Session } from './session.js';
 
@@ -46,6 +47,7 @@ export class PostgresTransaction {
   readonly ledger: PostgresCapacityLedger;
   readonly placements: PostgresPlacementQueue;
   readonly rotation: PostgresPlacementRotation;
+  readonly placementOutcomes: PostgresPlacementOutcomeRecords;
   readonly delegations: PostgresDelegationRequests;
   readonly fleet: PostgresFleetRegistry;
   readonly catalog: PostgresRunCatalog;
@@ -82,6 +84,7 @@ export class PostgresTransaction {
     this.ledger = new PostgresCapacityLedger(session);
     this.placements = new PostgresPlacementQueue(session);
     this.rotation = new PostgresPlacementRotation(session);
+    this.placementOutcomes = new PostgresPlacementOutcomeRecords(session);
     this.delegations = new PostgresDelegationRequests(session);
     this.fleet = new PostgresFleetRegistry(session);
     this.catalog = new PostgresRunCatalog(session);

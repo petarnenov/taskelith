@@ -50,6 +50,10 @@ export function reasonOutcome(reason: CapacityReason): ReasonOutcome {
   return (STANDING_REASONS as readonly string[]).includes(reason) ? 'standing' : 'rejected';
 }
 
+export function isRejectingReason(reason: CapacityReason): reason is RejectingReason {
+  return reasonOutcome(reason) === 'rejected';
+}
+
 export function triesNextCandidate(reason: CapacityReason): boolean {
   return (WORKER_REASONS as readonly string[]).includes(reason);
 }

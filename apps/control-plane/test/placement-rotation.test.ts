@@ -103,7 +103,8 @@ test('a decline-only move does not overwrite a placement whose commit reply was 
   const { store, transaction, outage, submit } = await fixture(new Map([['p-a' as ProjectId, 0]]));
   await submit('task-a1', 'run-a');
   await submit('task-b1', 'run-b');
-  outage.commitsBeforeLoss = 1;
+  // The decline of task-a1 and its waiting record commit; task-b1's is lost.
+  outage.commitsBeforeLoss = 2;
   assert.equal(failed(await new PlacementService(store, TIMING).placeWaiting()).code, 'unavailable');
   assert.equal(await transaction.rotation.read(), 'p-b', 'the committed placement keeps its move');
 });
@@ -114,7 +115,8 @@ test('a pass that an outage stops does not overwrite a placement of the cursor\'
   value(await new PlacementService(store, TIMING).placeWaiting());
   await submit('task-a1', 'run-a');
   await submit('task-b1', 'run-b');
-  outage.commitsBeforeLoss = 1;
+  // The decline of task-b1 and its waiting record commit; task-a1's is lost.
+  outage.commitsBeforeLoss = 2;
   assert.equal(failed(await new PlacementService(store, TIMING).placeWaiting()).code, 'unavailable');
   assert.equal(await transaction.rotation.read(), 'p-a', 'task-a1 committed after the decline of task-b1');
 });
