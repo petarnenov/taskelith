@@ -12,7 +12,7 @@ A worker task of size S that the coordinator assigned on 2026-10-27, developed i
 
 - Base: `origin/dev` at `b87abe75`. Branch `record-hosted-runner-linux-acceptance`.
 - Tested revision of the run: `4fe094562e6ccb9e568dee91be24ff2c93108004`, the merge commit of #355 (`run-hosted-runner-linux-check`), parents `a00cbe3a` and `9aed75c5`. `git merge-base --is-ancestor 4fe09456 origin/dev` succeeds; it lies 10 first-parent commits before `b87abe75` on `origin/dev`, and `git diff --stat 4fe09456 b87abe75` outside `openspec/` and `docs/` changes 63 files, including code the run exercises (design decision 1).
-- The checks below ran on the working tree of this change's commit.
+- The checks below ran on the working tree of the second commit, which no longer marks process ownership met; they gave the same results as on the first commit.
 
 ## Environment
 
@@ -33,7 +33,7 @@ A worker task of size S that the coordinator assigned on 2026-10-27, developed i
   - spec-wording: no spec delta; the existing requirements fit the run.
   - contract-drift, error-handling, missing-fail-before-test: the change has no code, workflow, or contract edits.
   - scope: only this change directory and the two named rows of `docs/foundation.md` change.
-- Judgment: process ownership is recorded as met in its G2 part on the hosted runner (design decision 4), because every proof passed and the crash windows, the open part named by the Linux-host and 25c tables, ran; the deferral "before Linux worker support is claimed" of ADR 0015 decision 5 stays.
+- Process ownership: every proof passed, crash windows 28 of 28 included, but it is not marked met, because the worker kill came after the task had exited (design decision 4); the limits of ADR 0015 decision 5 stay.
 
 ## Documents that still call the check open
 
