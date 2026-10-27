@@ -1,4 +1,14 @@
-import { REDACTED, redactText } from '@taskelith/observability';
+import {
+  MARKED_SECRET_RULES,
+  REDACTED,
+  redactAuthorizationValues,
+  redactJwtsWithEmptyParts,
+  redactKeyColonValues,
+  redactSchemelessUserinfo,
+  redactWith,
+  textRule,
+  type TextRule,
+} from '@taskelith/observability';
 
 // The bounds of a described cause chain (design decision 5).
 const MAX_CAUSE_LINKS = 4;
@@ -13,21 +23,19 @@ const ELLIPSIS = '…';
 const NAME = /^[A-Za-z][A-Za-z0-9_$]{0,30}$/;
 const CODE = /^[A-Z][A-Z0-9_]{0,30}$/;
 
-// Line breaks, then rules the logger's `redactText` lacks (decision 4).
-const BEFORE_REDACT_TEXT: readonly (readonly [RegExp, string])[] = [
-  [/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' '],
+// Line breaks and URLs, the shared rules of decision 4, then JWTs and long
+// runs; the logger's secret shapes are left out, as the output predates them.
+const FAILURE_TEXT_RULES: readonly TextRule[] = [
+  textRule(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' '),
   // Tried once per run of scheme characters, keeping the run's part before
   // its first scheme start, so linear in time.
-  [/(?<![a-z0-9+.-])((?:[a-z0-9]|[+.-](?![a-z]))*[+.-])??\b[a-z][a-z0-9+.-]*:\/\/\S*/gi, '$1[url]'],
-  // Tried once per run of user-information characters, so linear in time.
-  [/(?<![^\s/?#@'"])(:*)[^\s/?#@:'"]+:[^\s/?#@'"]+@/g, `$1${REDACTED}@`],
-  [/\b((?:proxy-)?authorization)(["']?\s*[=:]\s*["']?)[^;,"']*/gi, `$1$2${REDACTED}`],
-  [/\b(password|passwd|passphrase|pass|pwd|secret|token|credentials?|cookie|private[_-]?key|api[_-]?key)(["']?\s*:\s*)("(?:[^"\\]|\\.)*"?|'(?:[^'\\]|\\.)*'?|\S+)/gi, `$1$2${REDACTED}`],
-];
-const AFTER_REDACT_TEXT: readonly (readonly [RegExp, string])[] = [
-  // Tried once per run of JWT characters, keeping the run before `eyJ`.
-  [/(?<![A-Za-z0-9_-])((?:(?!eyJ)[A-Za-z0-9_-])*)eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*/g, `$1${REDACTED}`],
-  [/[A-Za-z0-9_+=/-]{32,}/g, REDACTED],
+  textRule(/(?<![a-z0-9+.-])((?:[a-z0-9]|[+.-](?![a-z]))*[+.-])??\b[a-z][a-z0-9+.-]*:\/\/\S*/gi, '$1[url]'),
+  redactSchemelessUserinfo,
+  redactAuthorizationValues,
+  redactKeyColonValues,
+  ...MARKED_SECRET_RULES,
+  redactJwtsWithEmptyParts,
+  textRule(/[A-Za-z0-9_+=/-]{32,}/g, REDACTED),
 ];
 
 // A type, not an interface, so it is a failure's details record.
@@ -64,12 +72,7 @@ function describeChain(chain: readonly object[]): FailureCause {
 // One line of text without secrets, cut only after the whole text is
 // redacted, and unable to fake a link of a cause chain.
 export function sanitizeFailureText(text: string): string {
-  return truncate(toChainSafeLine(redactAll(text)), MAX_FAILURE_TEXT);
-}
-
-function redactAll(text: string): string {
-  const prepared = BEFORE_REDACT_TEXT.reduce(replace, text);
-  return AFTER_REDACT_TEXT.reduce(replace, redactText(prepared));
+  return truncate(toChainSafeLine(redactWith(text, FAILURE_TEXT_RULES)), MAX_FAILURE_TEXT);
 }
 
 function toChainSafeLine(text: string): string {
@@ -113,10 +116,6 @@ function describeLink(link: object): CauseLink {
 function renderLink({ name, code, message }: CauseLink): string {
   const coded = code === undefined ? name : `${name}[${code}]`;
   return message === '' ? coded : `${coded}: ${message}`;
-}
-
-function replace(text: string, [pattern, replacement]: readonly [RegExp, string]): string {
-  return text.replace(pattern, replacement);
 }
 
 function truncate(text: string, limit: number): string {

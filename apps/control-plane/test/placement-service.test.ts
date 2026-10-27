@@ -259,12 +259,21 @@ test('a placeable task after 1200 older blocked projects is placed within a boun
   assert.ok(passes <= bound, `placed after ${passes} passes`);
 });
 
-// Project p-a has an older backlog than p-b; one slot frees per pass, and a
-// placed task no longer waits.
-async function oneSlotStore(placed: string[]): Promise<ControlPlaneStore> {
+type Backlog = readonly (readonly [taskId: string, projectId: string, seconds: number])[];
+
+// The nth read frees `slots[n]`, cycling, and a task without a free slot
+// gets `full`; a task in `scripted` gets its result there once instead.
+interface Fleet { slots: readonly number[]; candidates: string[]; full: Result<unknown>; scripted: Record<string, Result<unknown>> }
+
+const FULL = err(failure('precondition-failed', 'every candidate is full', { reason: 'worker-capacity-exhausted' }));
+const NONE_IN_TRANSACTION = err(failure('precondition-failed', 'no candidate accepted it', { reason: 'no-candidate' }));
+const oneSlot = (): Fleet => ({ slots: [1], candidates: ['worker-a'], full: FULL, scripted: {} });
+
+// Tasks waiting since their seconds; a placed task no longer waits, and the
+// placed ones are appended to `placed` in the order they were placed.
+async function fleetStore(backlog: Backlog, placed: string[], fleet: Fleet): Promise<ControlPlaneStore> {
   const lineage = new InMemoryTaskLineage();
   let waiting: Task[] = [];
-  const backlog = [['task-a1', 'p-a', 0], ['task-a2', 'p-a', 1], ['task-a3', 'p-a', 2], ['task-b1', 'p-b', 5]] as const;
   for (const [taskId, projectId, seconds] of backlog) {
     waiting.push(Object.freeze({
       id: taskId as TaskId, admissionId: `admission-${taskId}` as AdmissionId, ownershipGeneration: value(parseOwnershipGeneration(1)),
@@ -273,17 +282,24 @@ async function oneSlotStore(placed: string[]): Promise<ControlPlaneStore> {
     value(await lineage.add({ taskId: taskId as TaskId, rootTaskId: taskId as TaskId, depth: 0, projectId: projectId as ProjectId, runId: 'run-1' as RunId }));
   }
   const placements = new InMemoryPlacementQueue(() => waiting, lineage, () => []);
-  let slotFree = false;
+  let reads = 0;
+  let freeSlots = 0;
   return {
     readCommitted: (work) => {
-      slotFree = true;
-      return work({ workers: { candidates: async () => ['worker-a'] }, placements } as never);
+      freeSlots = fleet.slots[reads++ % fleet.slots.length]!;
+      return work({ workers: { candidates: async () => fleet.candidates }, placements } as never);
     },
     transaction: async (work) => {
       const asked: string[] = [];
       await work({ tasks: { get: async (taskId: string) => (asked.push(taskId), UNPLACED) } } as never);
-      if (!slotFree) return UNPLACED as never;
-      slotFree = false;
+      const scripted = asked.find((taskId) => taskId in fleet.scripted);
+      if (scripted !== undefined) {
+        const result = fleet.scripted[scripted]!;
+        delete fleet.scripted[scripted];
+        return result as never;
+      }
+      if (freeSlots === 0) return fleet.full as never;
+      freeSlots--;
       placed.push(...asked);
       waiting = waiting.filter((task) => !asked.includes(task.id));
       return PLACED as never;
@@ -291,13 +307,127 @@ async function oneSlotStore(placed: string[]): Promise<ControlPlaneStore> {
   };
 }
 
-test('with one free slot, the next project is offered before the older backlog of the last one', async () => {
+// Runs a pass, checks its result, and moves the clock a minute, past every
+// task and pass backoff.
+async function runPass(service: PlacementService, clock: { at: number }, check: (pass: Result<unknown>) => unknown): Promise<void> {
+  check(await service.placeWaiting());
+  clock.at += 60_000;
+}
+
+async function runPasses(service: PlacementService, clock: { at: number }, passes: number): Promise<void> {
+  for (let pass = 0; pass < passes; pass++) await runPass(service, clock, value);
+}
+
+function serviceOf(store: ControlPlaneStore) {
   const clock = { at: 0 };
+  return { clock, service: new PlacementService(store, { now: () => clock.at, draw: () => 0 }) };
+}
+
+const A_BACKLOG: Backlog = [['task-a1', 'p-a', 0], ['task-a2', 'p-a', 1], ['task-a3', 'p-a', 2]];
+const B_BACKLOG: Backlog = [['task-b1', 'p-b', 5], ['task-b2', 'p-b', 6], ['task-b3', 'p-b', 7]];
+const ALTERNATING = ['task-a1', 'task-b1', 'task-a2', 'task-b2', 'task-a3', 'task-b3'];
+
+test('with one free slot, the next project is offered before the older backlog of the last one', async () => {
   const placed: string[] = [];
-  const service = new PlacementService(await oneSlotStore(placed), { now: () => clock.at, draw: () => 0 });
-  for (let pass = 0; pass < 4; pass++) {
-    value(await service.placeWaiting());
-    clock.at += 60_000;
-  }
+  const { clock, service } = serviceOf(await fleetStore([...A_BACKLOG, ['task-b1', 'p-b', 5]], placed, oneSlot()));
+  await runPasses(service, clock, 4);
   assert.deepEqual(placed, ['task-a1', 'task-b1', 'task-a2', 'task-a3']);
+});
+
+test('with one free slot, two backlogs alternate across six passes', async () => {
+  const placed: string[] = [];
+  const { clock, service } = serviceOf(await fleetStore([...A_BACKLOG, ...B_BACKLOG], placed, oneSlot()));
+  await runPasses(service, clock, 6);
+  assert.deepEqual(placed, ALTERNATING);
+});
+
+test('a pass that finds the fleet full keeps the rotation cursor', async () => {
+  const placed: string[] = [];
+  const fleet: Fleet = { ...oneSlot(), slots: [1, 0] };
+  const { clock, service } = serviceOf(await fleetStore([...A_BACKLOG, ...B_BACKLOG], placed, fleet));
+  await runPasses(service, clock, 12);
+  assert.deepEqual(placed, ALTERNATING);
+});
+
+test('a transaction that finds no candidate keeps the rotation cursor', async () => {
+  const placed: string[] = [];
+  const fleet: Fleet = { ...oneSlot(), slots: [1, 0], full: NONE_IN_TRANSACTION };
+  const { clock, service } = serviceOf(await fleetStore([...A_BACKLOG, ...B_BACKLOG], placed, fleet));
+  await runPasses(service, clock, 12);
+  assert.deepEqual(placed, ALTERNATING);
+});
+
+const ONE_TASK_EACH: Backlog = [
+  ['task-a1', 'p-a', 0], ['task-b1', 'p-b', 1], ['task-c1', 'p-c', 2], ['task-d1', 'p-d', 3], ['task-e1', 'p-e', 4],
+];
+
+test('a decline after the fleet ran out of capacity does not move the cursor', async () => {
+  const placed: string[] = [];
+  const fleet = oneSlot();
+  const { clock, service } = serviceOf(await fleetStore(ONE_TASK_EACH.slice(0, 4), placed, fleet));
+  await runPasses(service, clock, 1);
+  fleet.slots = [0];
+  fleet.scripted = { 'task-c1': UNPLACED };
+  await runPasses(service, clock, 1);
+  fleet.slots = [1];
+  await runPasses(service, clock, 3);
+  assert.deepEqual(placed, ['task-a1', 'task-b1', 'task-c1', 'task-d1']);
+});
+
+test('a slot freed after a capacity decline does not move the cursor past it', async () => {
+  const placed: string[] = [];
+  const fleet = oneSlot();
+  const { clock, service } = serviceOf(await fleetStore(ONE_TASK_EACH, placed, fleet));
+  await runPasses(service, clock, 1);
+  fleet.scripted = { 'task-b1': FULL, 'task-c1': FULL };
+  await runPasses(service, clock, 4);
+  assert.deepEqual(placed, ['task-a1', 'task-d1', 'task-b1', 'task-c1', 'task-e1']);
+});
+
+test('after several placements in a pass, the next read starts after the last one', async () => {
+  const placed: string[] = [];
+  const backlog: Backlog = [...A_BACKLOG, ['task-a4', 'p-a', 3], ['task-b1', 'p-b', 5], ['task-b2', 'p-b', 6], ['task-c1', 'p-c', 7]];
+  const { clock, service } = serviceOf(await fleetStore(backlog, placed, { ...oneSlot(), slots: [2] }));
+  await runPasses(service, clock, 4);
+  assert.deepEqual(placed, ['task-a1', 'task-b1', 'task-c1', 'task-a2', 'task-b2', 'task-a3', 'task-a4']);
+});
+
+test('a pass without a candidate worker keeps the rotation cursor', async () => {
+  const placed: string[] = [];
+  const fleet = oneSlot();
+  const backlog: Backlog = [['task-a1', 'p-a', 0], ['task-a2', 'p-a', 1], ['task-b1', 'p-b', 5]];
+  const { clock, service } = serviceOf(await fleetStore(backlog, placed, fleet));
+  await runPasses(service, clock, 1);
+  fleet.candidates = [];
+  await runPasses(service, clock, 1);
+  fleet.candidates = ['worker-a'];
+  await runPasses(service, clock, 2);
+  assert.deepEqual(placed, ['task-a1', 'task-b1', 'task-a2']);
+});
+
+test('after an outage stops a pass, the next read starts after its last placement', async () => {
+  const placed: string[] = [];
+  const backlog: Backlog = [
+    ['task-a1', 'p-a', 0], ['task-b1', 'p-b', 1], ['task-c1', 'p-c', 2], ['task-d1', 'p-d', 3], ['task-b2', 'p-b', 4],
+    ['task-a2', 'p-a', 5],
+  ];
+  const fleet: Fleet = { ...oneSlot(), slots: [4, 1], scripted: { 'task-b1': DOWN } };
+  const { clock, service } = serviceOf(await fleetStore(backlog, placed, fleet));
+  await runPass(service, clock, failed);
+  assert.deepEqual(placed, ['task-a1']);
+  fleet.slots = [1];
+  await runPasses(service, clock, 5);
+  assert.deepEqual(placed, ['task-a1', 'task-b1', 'task-c1', 'task-d1', 'task-a2', 'task-b2']);
+});
+
+test('an outage at the first offer of a pass keeps the rotation cursor', async () => {
+  const placed: string[] = [];
+  const fleet = oneSlot();
+  const backlog: Backlog = [['task-a1', 'p-a', 0], ['task-a2', 'p-a', 1], ['task-b1', 'p-b', 2], ['task-c1', 'p-c', 3]];
+  const { clock, service } = serviceOf(await fleetStore(backlog, placed, fleet));
+  await runPasses(service, clock, 1);
+  fleet.scripted = { 'task-b1': DOWN };
+  await runPass(service, clock, failed);
+  await runPasses(service, clock, 3);
+  assert.deepEqual(placed, ['task-a1', 'task-b1', 'task-c1', 'task-a2']);
 });

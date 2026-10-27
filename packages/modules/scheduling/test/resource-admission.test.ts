@@ -11,10 +11,12 @@ import {
   reasonOutcome,
   PLACEMENT_RETRY_ATTEMPTS,
   ResourceAdmissionService,
+  RotationCursor,
   decideDelegation,
   decidePlacement,
   fairPlacementOrder,
   isWaitingReason,
+  lacksFleetCapacity,
   parseResourceRequest,
   placementBackoff,
   type CapacityStore,
@@ -237,6 +239,44 @@ test('the projects of a round follow project id order by code unit', () => {
   const waiting = [entry('beta', 0, 'task-1'), entry('Gamma', 1, 'task-2')];
   assert.deepEqual(fairPlacementOrder(waiting, undefined), ['task-2', 'task-1']);
   assert.deepEqual(fairPlacementOrder([...waiting].reverse(), undefined), ['task-2', 'task-1']);
+});
+
+test('the rotation cursor moves to the project of the last placement', () => {
+  const cursor = new RotationCursor(projectId('a'));
+  cursor.placed(projectId('b'));
+  cursor.placed(projectId('c'));
+  cursor.declined(projectId('d'));
+  assert.equal(cursor.next, projectId('c'));
+});
+
+test('without a placement the rotation cursor moves to the last decline', () => {
+  const cursor = new RotationCursor(projectId('a'));
+  cursor.declined(projectId('b'));
+  cursor.declined(projectId('c'));
+  assert.equal(cursor.next, projectId('c'));
+});
+
+test('after the fleet runs out of capacity, no offer moves the cursor', () => {
+  const cursor = new RotationCursor(projectId('a'));
+  cursor.declined(projectId('b'));
+  cursor.ranOutOfCapacity();
+  cursor.declined(projectId('c'));
+  cursor.placed(projectId('d'));
+  assert.equal(cursor.next, projectId('b'));
+});
+
+test('only quarantine, worker eligibility, worker capacity, and no candidate lack fleet capacity', () => {
+  for (const reason of ['quarantined', 'worker-not-eligible', 'worker-capacity-exhausted', 'no-candidate']) {
+    assert.equal(lacksFleetCapacity(reason), true, reason);
+  }
+  for (const reason of ['control-not-enforceable', 'project-quota-exhausted', 'run-quota-exhausted', 'retry-budget-exhausted', undefined]) {
+    assert.equal(lacksFleetCapacity(reason), false, String(reason));
+  }
+});
+
+test('without an offer the rotation cursor stays where it started', () => {
+  assert.equal(new RotationCursor(projectId('a')).next, projectId('a'));
+  assert.equal(new RotationCursor(undefined).next, undefined);
 });
 
 test('backoff doubles from five seconds, jitters, and never exceeds sixty', () => {

@@ -26,6 +26,35 @@ export function fairWaitingOrder<Item extends string>(
     || wrapped(left) - wrapped(right) || byCodeUnits(left.projectId, right.projectId) || byWaitingSince(left, right));
 }
 
+// Contract section 13: one event per offer; the offers after the first that
+// lacked fleet capacity do not move it.
+export class RotationCursor {
+  readonly #start: ProjectId | undefined;
+  #lastDeclined: ProjectId | undefined;
+  #lastPlaced: ProjectId | undefined;
+  #capacityRanOut = false;
+
+  constructor(start: ProjectId | undefined) {
+    this.#start = start;
+  }
+
+  placed(projectId: ProjectId): void {
+    if (!this.#capacityRanOut) this.#lastPlaced = projectId;
+  }
+
+  declined(projectId: ProjectId): void {
+    if (!this.#capacityRanOut) this.#lastDeclined = projectId;
+  }
+
+  ranOutOfCapacity(): void {
+    this.#capacityRanOut = true;
+  }
+
+  get next(): ProjectId | undefined {
+    return this.#lastPlaced ?? this.#lastDeclined ?? this.#start;
+  }
+}
+
 function ranksWithinProject<Item extends string>(waiting: readonly WaitingPlacement<Item>[]): Map<WaitingPlacement<Item>, number> {
   const ranks = new Map<WaitingPlacement<Item>, number>();
   const counts = new Map<ProjectId, number>();
