@@ -35,7 +35,12 @@ Run after merging `origin/dev` at `eda6c283` and applying the coordinator's answ
 | `make verify` on `7aa10924`, after merging `origin/dev` at `eda6c283`, before pass 1 | Exit 0; last line `Packed file allowlist and installed CLI verification passed.` Run by the worker session on the macOS x86_64 iMac |
 | `make verify` on `175d08d4`, after the pass 1 fixes, before pass 2 | Exit 0. Run by the worker session on the macOS x86_64 iMac |
 | `make verify` on `e8cdeb44`, after the merge of `origin/dev` at `af558eb0` (`24061721`) and the pass 2 fixes, before pass 3 | Exit 0; last line `Packed file allowlist and installed CLI verification passed.` Run by the worker session on the macOS x86_64 iMac |
-| `make verify` on the archive commit | Pending: run by the worker session |
+| `make verify` on the tree of the archive commit, after merging `origin/dev` at `e4ea6077` | Exit 0; last line `Packed file allowlist and installed CLI verification passed.`; `Every findings file is valid: 29 file(s); every pass summary file is valid: 9 file(s).` Run by the worker session on the macOS x86_64 iMac |
+| `npm run openspec -- archive finalize-g3-plan --yes` | `Change 'finalize-g3-plan' archived as '2026-10-27-finalize-g3-plan'.` |
+| `npm run openspec -- validate --all --strict` on the tree of the archive commit | `Totals: 69 passed, 0 failed (69 items)` |
+| `npm run openspec -- validate --archived --no-interactive`, this change's line | `✓ change/2026-10-27-finalize-g3-plan` |
+| `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` | Empty: the change skips specs |
+| Moved change files | `findings.jsonl` (12 lines) and `passes.jsonl` (3 lines) present; `make findings ARGS="validate"` passes inside `make verify` |
 
 ## Review checklist
 
@@ -80,16 +85,14 @@ Reviewers assigned by the coordinator: reviewer A, Claude Code `claude-fable-5-1
   - **H1 (Low, evidence-mismatch; fixed, unreviewed):** the `verify:findings` row kept 27 and 7 files after the merge of `af558eb0`. It now gives the counts at each base, 28 and 8 after `af558eb0`.
   - **H2 (Low, docs; fixed, unreviewed):** the deferral row "Archived records with the `ext2/ext3` label and broken relative links" omitted #350. It now says that, by owner decision B1 (2026-10-27), #350 `repair-archived-record-links` repaired the links and the `ext2/ext3` labels keep their disposition (ADR 0015 at `af558eb0`, line 140).
 - Out-of-scope note of the reviewer, fixed in the same commit (unreviewed): task 2.2 said `make verify` is run by the coordinator's session; it is run by the worker session.
+- After pass 3, the worker session merged `origin/dev` at `e4ea6077` (#351 `make-worker-image-reproducible`) and updated the deferral row "Worker image not reproducible" to resolved by #351, with its recorded limits (unreviewed author edit, no finding).
 
 ## Limitations
 
 - Documentation only; no runtime behavior is affected, so no runtime check applies.
-- The deferral table summarizes ADR 0015 decision 5 as of the base; later edits of the ADR are not reflected.
+- The deferral table summarizes ADR 0015 decision 5 as merged at `e4ea6077`; later edits of the ADR are not reflected.
 - The writers rule names no item for the first writer of artifact revisions.
 
 ## Remaining gates
 
-- `make verify` on the archive commit (task 2.2 stays open until then).
-- Independent review passes 1 to 3 and their records.
-- Archive of the change in the last commit of the branch.
 - Integration into dev by the coordinator (single pull request).

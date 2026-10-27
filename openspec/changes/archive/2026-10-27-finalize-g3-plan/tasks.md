@@ -10,11 +10,11 @@
 ## 2. Checks
 
 - [x] 2.1 Strict OpenSpec validation, `npm run verify:links`, `npm run verify:findings`, and `verification.md`
-- [ ] 2.2 `make verify`, run by the worker session
+- [x] 2.2 `make verify`, run by the worker session
 - [x] 2.3 Independent review pass 1 by reviewer A, Claude Code `claude-fable-5-1`
 - [x] 2.4 Independent review pass 2 by reviewer B, Codex `gpt-6.1-sol`
 - [x] 2.5 Independent review pass 3 by reviewer A, if needed
 
 ## 3. Archive
 
-- [ ] 3.1 Archive the change in the last commit of the branch
+- [x] 3.1 Archive the change in the last commit of the branch

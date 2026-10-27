@@ -63,7 +63,7 @@ G3, "Usable web product and first real agent", is defined in [architecture secti
 | Crash windows and duplicate delivery in a Linux composition beyond one x86_64 host and the privileged test image | Before Linux worker support is claimed | Not G3 |
 | `make native-acceptance` without `make verify-linux-crash-windows` | Resolved (#345); the arm64 Linux entry is not covered; no gate | — |
 | Supplementary groups of an execution | Before Linux worker support is claimed | Not G3 |
-| Worker image not reproducible | Non-blocking follow-up `make-worker-image-reproducible`; no G2 gate | Not G3 |
+| Worker image not reproducible | Resolved (#351 `make-worker-image-reproducible`): two builds of one commit without the build cache give the same worker image ID on one engine; cached builds and the `worker-harnesses` variant are not claimed; no gate | — |
 | macOS journal durability (`F_FULLFSYNC`) | G6 | Not G3 |
 | macOS service lifecycle; Linux reboot, host supervisor, and drain | G6 | Not G3 |
 | Sleep, wake, and network changes on macOS | G6 | Not G3 |
