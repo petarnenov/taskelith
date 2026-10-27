@@ -1,6 +1,6 @@
 ## Why
 
-`openspec archive` moves a change directory from `openspec/changes/<change>/` to `openspec/changes/archive/<date>-<change>/` without rewriting its links, so a relative link written for the active location breaks one level short once archived. On `dev` at `bd6108d4`, 331 links in 82 of the 193 archived changes leave their change directory with `../`: 323 are one `../` too shallow and miss their target, 1 links a sibling change that was active when written and has since moved, and 7 resolve. `docs/dependencies.md:126` links a change that has since been archived. No convention or check exists. The owner-delegated decision D+A+B2, relayed by the worker brief on 2026-10-27, sets the rule, the check, and a baseline for the archived links.
+`openspec archive` moves a change directory from `openspec/changes/<change>/` to `openspec/changes/archive/<date>-<change>/` without rewriting its links, so a relative link written for the active location breaks one level short once archived. On `dev` at `bd6108d4`, 331 links in 82 of the 193 archived changes leave their change directory with `../`: 323 are one `../` too shallow and miss their target, 1 links a sibling change that was active when written and has since moved, and 7 resolve. `docs/dependencies.md:126` on `bd6108d4` links a change that has since been archived. No convention or check exists. The owner-delegated decision D+A+B2, relayed by the worker brief on 2026-10-27, sets the rule, the check, and a baseline for the archived links.
 
 ## What Changes
 
@@ -10,7 +10,7 @@
   - a relative link in a change record stays inside the change directory, a relative link in a spec delta is rejected, and one in a main spec stays inside its capability directory;
   - an active change is checked at the path that `openspec archive` will give it.
 - `scripts/record-links-baseline.tsv` lists the 331 archived links that break the rule, one line per occurrence; the check accepts only those, fails on an entry that no longer occurs, and reports how many remain.
-- `docs/dependencies.md:126` links the archived record of `compose-minimal-local-installation-images`.
+- `docs/dependencies.md:127` (line 126 on `bd6108d4`) links the archived record of `compose-minimal-local-installation-images`.
 - Worker step 6 of [the agent task protocol](/docs/agent-task-protocol.md#worker-steps) states the record link rule, and the evidence check of [the review process](/docs/governance.md#independent-review-process) includes it.
 
 ## Capabilities
