@@ -81,6 +81,16 @@ On `54d2b2d2` with this record, except the test count of the checker, run on `b8
 - `npm run openspec -- validate repair-archived-record-links --strict`: `Change 'repair-archived-record-links' is valid`.
 - `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify` on `54d2b2d2` with this record: exit 0; `npm test` 2165 tests, 2118 passed, 0 failed, 47 skipped, all files 99.24 % lines, 92.22 % branches, 98.92 % functions; `npm run verify:links` `Every checked link conforms.`; `npm run openspec -- validate --all --strict --no-interactive` 70 passed, 0 failed; `npm run verify:findings` 26 findings files and 6 pass summary files valid; `npm run verify:archive` and `npm run verify:package` passed.
 
+## Archive checks
+
+On the tree of the archive commit, after `npm run openspec -- archive repair-archived-record-links --yes` (modified 1 requirement, removed 1):
+
+- `npm run openspec -- validate --all --strict --no-interactive`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: `✓ change/2026-10-27-repair-archived-record-links`.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `integration-flow/spec.md`, removing "Record link baseline" and adding the scenario "Archived record" to "Record link check", 3 insertions and 18 deletions.
+- The moved change has `findings.jsonl` (1 finding) and `passes.jsonl` (1 pass); `npm run findings -- validate`: 26 findings files and 6 pass summary files valid.
+- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: exit 0; `npm test` 2165 tests, 2118 passed, 0 failed, 47 skipped, all files 99.24 % lines; `npm run verify:links` `Every checked link conforms.`
+
 ## Independent review
 
 Pass 1, reviewer A: Codex CLI `gpt-6-astra`, invoked as `codex exec -m gpt-6-astra -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>` on `0a06da1e` (`56346d92..0a06da1e`). The output header confirmed model `gpt-6-astra`, reasoning effort `medium`, sandbox `read-only`, and session `01a17dbf-8e90-7591-9c30-5cfea401bfe1`. The worktree snapshot was `3b5706a7c286f538b6be7224cb3781cb9d2c8883ecc368ce67595a4ca3cd1274` before and after the pass. Findings: Critical 0, High 0, Medium 0, Low 1, as in `passes.jsonl`.
