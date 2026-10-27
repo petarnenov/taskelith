@@ -1,8 +1,8 @@
 # G2 native acceptance: Linux entry on a native Linux host (item 25)
 
-**Native-host evidence.** This table records the Linux entry `linux-ubuntu-24.04-x86_64` on a native Linux host with Docker Engine, not Docker Desktop. It is additional evidence of a native kernel and cgroup v2. It does not replace the D11 `ubuntu-24.04` hosted-runner entry (design decision 1).
+**Native-host evidence.** This table records the Linux entry `linux-ubuntu-24.04-x86_64` on a native Linux host with Docker Engine, not Docker Desktop. It is additional evidence of a native kernel and cgroup v2. It does not replace the GitHub-hosted `ubuntu-24.04` runner check for Linux x86_64 that the coordinator's brief of 2026-10-27 keeps open (design decision 1).
 
-Recorded 2026-10-27 on commit `9a5ef14`, with this change's records untracked:
+Recorded 2026-10-27 on commit `9a5ef14`. At that commit `results.jsonl` did not exist yet; the runs created it untracked, and the later commits add it and edit only this change's tracked records, so the runtime evidence stays fresh:
 
 - `make native-acceptance ENTRIES=linux` ran with seed `1140438646` and wrote lines 1 to 11 of [results.jsonl](results.jsonl) ("line N" below). Each of these lines carries an `acceptance` field with its matrix entry, row, command, and platform.
 - `make scenario-worker-namespace-confinement` (task 3.3) ran with seed `2677284533` and wrote line 12. It ran outside the runner, so line 12 has no `acceptance` field.
@@ -32,7 +32,7 @@ Outcome is that of the proofs that ran. A row is **met (G2 part)** only when eve
 | Connectivity (G2) | offline launch and worker contact suites in the test image (`linux-test-container`) | Passed: 25 of 25 | line 11 | Open: partition, reconnect, and stale writes (24c); credential rotation (G3); epoch quarantine (G6). Revocation was exercised by the disk loss (line 7). |
 | Process ownership | 24b crash windows W1 to W6 and CP1 to CP12 in a Linux composition (`harness-composition`) | Not run | None | Open: `apps/control-plane/test/crash-windows.integration.test.ts` skips them off Darwin. The composed Linux worker needs a delegated cgroup and an execution account. Only the privileged `verify-linux-cgroup` container provides them, and it has no network to the services (design decision 4). Carried to `close-g2`. |
 | Connectivity (G2) | 24b duplicate delivery in a Linux composition (`harness-composition`) | Not run | None | Open: same composition as the crash windows (design decision 4). Carried to `close-g2`. |
-| All rows | D11 `ubuntu-24.04` GitHub-hosted runner entry | Not run | None | Open: this host runs Ubuntu 26.04.1 LTS, not the pinned `ubuntu-24.04` hosted runner (design decision 1). |
+| All rows | GitHub-hosted `ubuntu-24.04` runner check for Linux x86_64 (coordinator's brief of 2026-10-27) | Not run | None | Open: this host runs Ubuntu 26.04.1 LTS, not a GitHub-hosted `ubuntu-24.04` runner (design decision 1). D11 requires all four matrix entries and records any entry not established as open in the closure ADR. |
 
 ## Summary
 
@@ -41,5 +41,5 @@ All eight proofs of the Linux entry and the namespace-confinement scenario passe
 Journal and storage is met in its G2 part on this host. Namespace confinement is met for this host. No row is fully accepted for the matrix entry:
 
 - The composed crash windows and duplicate delivery on Linux stay open (design decision 4).
-- The D11 hosted-runner entry stays open.
+- The hosted-runner Linux x86_64 check of the coordinator's brief stays open.
 - Every other row keeps an open part that 24c or later gates (G3, G6) own.

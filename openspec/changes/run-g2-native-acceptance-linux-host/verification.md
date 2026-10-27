@@ -7,11 +7,11 @@ Date: 2026-10-27. The author's verification and the evidence are recorded below;
 G2 work item 25, the Linux entry on a native Linux host, `run-g2-native-acceptance-linux-host`, assigned by the coordinating session (Niki) in its brief of 2026-10-27 and developed in a briefed subagent ([subagent execution](../../../docs/agent-task-protocol.md#subagent-execution)). Sources: [docs/g2-plan.md](../../../docs/g2-plan.md) item 25 and D11; [docs/worker-platforms.md](../../../docs/worker-platforms.md#native-acceptance-gates) "Native acceptance gates"; the archives of 25a ([harden-worker-container-seccomp](../archive/2026-10-26-harden-worker-container-seccomp/design.md)), 25b ([run-g2-native-acceptance-arm64](../archive/2026-10-26-run-g2-native-acceptance-arm64/design.md)), and 24b ([run-g2-crash-windows](../archive/2026-10-26-run-g2-crash-windows/design.md), decision 8).
 
 - **In scope:** the eight Linux proofs of `make native-acceptance`, `make scenario-worker-namespace-confinement` on `x86_64`, `results.jsonl`, and the acceptance table ([acceptance.md](acceptance.md)).
-- **Out of scope:** product, runner, and test code; the macOS x86_64 entry (25c); the D11 `ubuntu-24.04` hosted-runner entry; fixes of any defect found.
+- **Out of scope:** product, runner, and test code; the macOS x86_64 entry (25c); the GitHub-hosted `ubuntu-24.04` runner check for Linux x86_64 that the coordinator's brief of 2026-10-27 keeps open; fixes of any defect found.
 
 ## Revision and environment
 
-- Base: the branch was created from `dev` at `0d317f8`, which the first `make verify` runs below used; `origin/dev` at `656a34d` was then merged in with a merge commit, `4a2b45a`, without conflicts, and the host gate, the dry run, and the first validation ran on the tree of `4a2b45a`. When `report-all-unconfirmed-sealed-executions` landed (#325), `origin/dev` at `fe64386` was merged in with a merge commit, `4880193`, without conflicts, and the empty `findings.jsonl` was added in `9a5ef14`. The second host gate, `make verify`, the evidence run, and the namespace-confinement scenario ran on `9a5ef14`, which every `results.jsonl` line names as its `commit`; the records themselves were untracked during the runs and are committed after them. Branch `run-g2-native-acceptance-linux-host`. Neither merge changed the dependency inventory (`make dependency-inventory` left the tree clean).
+- Base: the branch was created from `dev` at `0d317f8`, which the first `make verify` runs below used; `origin/dev` at `656a34d` was then merged in with a merge commit, `4a2b45a`, without conflicts, and the host gate, the dry run, and the first validation ran on the tree of `4a2b45a`. When `report-all-unconfirmed-sealed-executions` landed (#325), `origin/dev` at `fe64386` was merged in with a merge commit, `4880193`, without conflicts, and the empty `findings.jsonl` was added in `9a5ef14`. The second host gate, `make verify`, the evidence run, and the namespace-confinement scenario ran on `9a5ef14`, which every `results.jsonl` line names as its `commit`. At `9a5ef14` the change's documents were tracked and `results.jsonl` did not exist; the runs created it untracked. The later commits add `results.jsonl` and edit only this change's tracked records, so the runtime evidence stays fresh. Branch `run-g2-native-acceptance-linux-host`. Neither merge changed the dependency inventory (`make dependency-inventory` left the tree clean).
 - Host: native Ubuntu 26.04.1 LTS, `x86_64`, kernel 7.0.0-38-generic, cgroup v2; Node.js 24.22.1 from `.nvmrc` via `nvm use`.
 - Engine: Docker Engine - Community 29.8.2 (not Docker Desktop), Docker Compose 5.6.0, storage driver overlayfs, cgroup version 2, Docker root `/var/lib/docker`; security options AppArmor (profile `default`), seccomp (profile `builtin`), and cgroupns. Worker and test images: the digest-pinned Ubuntu 24.04 base (`Makefile:11`), which reports Ubuntu 24.04.5 LTS.
 - Docker disk headroom: the root file system that holds `/var/lib/docker` is 467 GiB with 163 GiB free (64 % used), on `4a2b45a` and again on `9a5ef14`; `docker system df` shows 26.73 GB of images, 24.75 GB of local volumes, and 5.0 GB of build cache. Nothing was pruned.
@@ -19,7 +19,7 @@ G2 work item 25, the Linux entry on a native Linux host, `run-g2-native-acceptan
 
 ## Author self-check and evidence check
 
-- **AGENTS.md.** The records are in English. The change is evidence only: `git diff origin/dev --stat` lists only files under `openspec/changes/run-g2-native-acceptance-linux-host/`, with no product, runner, test, script, `make`, contract, Compose, document, or dependency change. The commits use `docs`, with no attribution. Nothing was pushed or published.
+- **AGENTS.md.** The records are in English. The change is evidence only: `git diff origin/dev --stat` lists only files under `openspec/changes/run-g2-native-acceptance-linux-host/`, with no product, runner, test, script, `make`, contract, Compose, document, or dependency change. The commits use `docs` and `test`, with no attribution. Nothing was pushed or published.
 - **Comment rule.** No comment-bearing file changed; `npm run verify:comments` passes.
 - **ADR 0004.** Every proof ran through a `make` target (`native-acceptance`, `scenario-worker-namespace-confinement`) in Docker containers of the pinned base. The change is bound to OpenSpec. `make verify` keeps coverage above 75 % (lines 99.19 %, branches 91.88 %, functions 98.80 %). No code, port, adapter, plugin, or OpenAPI contract changed.
 - **Docker hygiene.** Each composed scenario removed its own Compose project (`taskelith-3913158916-installation-scenario`, "removed" in lines 2, 4, and 8 and in the namespace-confinement run). After the runs no `taskelith` container or volume of this worktree was left. No image, volume, or build cache was pruned, and no other project's container, volume, or file was touched.
@@ -78,7 +78,7 @@ None. Every proof of the evidence run and the namespace-confinement scenario pas
 
 ## Limitations
 
-- The host runs Ubuntu 26.04.1 LTS, not the pinned `ubuntu-24.04` hosted runner of D11; only the containers run the Ubuntu 24.04 base. The D11 `ubuntu-24.04` row stays open.
+- The host runs Ubuntu 26.04.1 LTS, not a GitHub-hosted `ubuntu-24.04` runner; only the containers run the Ubuntu 24.04 base. The hosted-runner Linux x86_64 check of the coordinator's brief of 2026-10-27 stays open; D11 requires all four matrix entries and records any entry not established as open in the closure ADR.
 - The 24b crash windows and the duplicate delivery in a Linux composition are not run (design decision 4).
 - The worker container runs with `apparmor=unconfined` (`infra/installation/compose.yaml`), so the host's AppArmor does not confine it, and no AppArmor or SELinux confinement is claimed. The seccomp profile was applied by this host's own kernel (line 12).
 - The worker image was built twice from the same commit, with different digests: `sha256:3e787b33…` in the evidence run (line 1) and `sha256:5cfad4b3…` in the namespace-confinement scenario (line 12). Each run builds its own image, so the image is not claimed to be reproducible.
@@ -88,7 +88,7 @@ None. Every proof of the evidence run and the namespace-confinement scenario pas
 ## Remaining gates
 
 - The independent review (pass 1 and any later passes) and its `findings.jsonl` lines.
-- The D11 `ubuntu-24.04` hosted-runner entry; 25c (`macos-26-x86_64`).
+- The GitHub-hosted `ubuntu-24.04` runner check for Linux x86_64 (coordinator's brief of 2026-10-27); 25c (`macos-26-x86_64`).
 - The Linux composed crash windows and duplicate delivery, carried by the coordinator to `close-g2` as a candidate deferral or follow-up.
 - Integration into `dev` by the coordinator (single pull request).
 - Archive of the change.
