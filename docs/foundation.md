@@ -81,12 +81,14 @@ G2 delivered PostgreSQL state and outbox, NATS transport, installation bootstrap
 | Image package inventories and vulnerability scans | G8 |
 | macOS arm64 process ownership re-run after the D1 fix, on the MacBook Air | G3 (owner's decision, 2026-10-27) |
 | Cancellation race g (an adopting macOS supervisor that ignores a cancel) and the cancellation and connectivity parts that 25b, 25c, and the Linux-host run leave to 24c on all four entries; 24c's records come from the test-side process-group launch host on Linux x64, not the cgroup supervisor or a native worker | G3 (author's assignment) |
-| Placement back-off that preserves the project rotation (`placement-backoff-preserves-rotation`) | Non-blocking follow-up after G2, contract-first; owned by the coordinator (author's assignment) |
+| Placement back-off that preserves the project rotation (`placement-backoff-preserves-rotation`) | Non-blocking follow-up after G2, contract-first; owned by Liki, in progress (coordinator's decision, 2026-10-27) |
 | AppArmor and SELinux confinement of the worker (`apparmor=unconfined`) | G6 (author's assignment) |
 | Linux composed crash windows and duplicate delivery beyond one x86_64 host and the test image; supplementary groups of an execution | Before Linux worker support is claimed (author's assignment) |
-| In-memory placement rotation cursor; `make native-acceptance` without the Linux crash windows; hosted-runner Linux x86_64 check; multi-architecture `make verify-linux-cgroup` | Non-blocking follow-ups without a G2 gate, owned by the coordinator (author's assignment) |
-| Worker image reproducibility | Non-blocking follow-up owned by Liki; no G2 gate (author's assignment) |
-| Archived record links and file-system labels (`check-change-record-links`) | Non-blocking follow-up owned by Pepi, in progress; no G2 gate |
+| In-memory placement rotation cursor | Non-blocking follow-up without a G2 gate, owned by the coordinator (coordinator's decision, 2026-10-27); keeping it in memory is the author's assignment, for the owner to decide at the acceptance of ADR 0015 |
+| `make native-acceptance` without the Linux crash windows | Non-blocking follow-up without a G2 gate, owned by Zaki, in progress as `wire-linux-crash-windows-into-native-acceptance` (coordinator's decision, 2026-10-27) |
+| Hosted-runner Linux x86_64 check; multi-architecture `make verify-linux-cgroup` | Non-blocking follow-ups without a G2 gate, owned by the coordinator (coordinator's decision, 2026-10-27) |
+| Worker image reproducibility | Non-blocking follow-up owned by the coordinator, not assigned to a worker yet (coordinator's decision, 2026-10-27); no G2 gate (author's assignment) |
+| Archived record links and file-system labels (`check-change-record-links`) | Non-blocking follow-up owned by Pepi, in progress (coordinator's decision, 2026-10-27); no G2 gate |
 
 ## Later phases
 
