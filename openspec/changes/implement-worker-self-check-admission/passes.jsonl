@@ -1,1 +1,2 @@
 {"change": "implement-worker-self-check-admission", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a17f9a-13d0-7710-b277-84350ffd49c4", "counts": {"critical": 0, "high": 0, "medium": 5, "low": 3}}
+{"change": "implement-worker-self-check-admission", "pass": 2, "role": "B", "reviewer": {"harness": "claude", "model": "claude-opus-5-5", "variant": "high"}, "session": "a4f863a0-4df0-4cbe-ad71-9b5fec921c7d", "counts": {"critical": 0, "high": 0, "medium": 2, "low": 7}}

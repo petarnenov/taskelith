@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-28. The author's verification and checks, and review pass 1 with its fixes, are recorded below.
+Date: 2026-10-28. The author's verification and checks, and review passes 1 and 2 with their fixes, are recorded below.
 
 ## Scope and source
 
@@ -13,7 +13,8 @@ Date: 2026-10-28. The author's verification and checks, and review pass 1 with i
 
 - **Base revision:** `46e21ef1` (`origin/dev`).
 - **Revision verified:** the working tree that the commits of this change hold, before the records commit; the records commit adds only this file's results. The `make verify` run of Checks and results covers `fb19fa39`, the head that review pass 1 reviewed.
-- **Revision after review pass 1:** the records commit of pass 1 (`docs: record review pass 1 for implement-worker-self-check-admission`) on top of the fixes `7cd60cd5`, `53ac3f6b`, `760ef9d8`, `2fd62e43`, and `70745c83`; section Review pass 1 records its checks. No `make verify` has run on it yet.
+- **Revision after review pass 1:** the records commit of pass 1 (`docs: record review pass 1 for implement-worker-self-check-admission`) on top of the fixes `7cd60cd5`, `53ac3f6b`, `760ef9d8`, `2fd62e43`, and `70745c83`; section Review pass 1 records its checks. The coordinator's worker, Desi, ran `make verify` on `9c849c02` in the coordinator's Docker slot: exit 0 (section Review pass 2).
+- **Revision after review pass 2:** the records commit of pass 2 (`docs: record review pass 2 for implement-worker-self-check-admission`) on top of the fixes `f779be36`, `4fb14625`, `015387eb`, `34fac2d6`, and `0feead08`; section Review pass 2 records its checks. No `make verify` has run on it yet.
 
 ## Environment
 
@@ -51,7 +52,7 @@ With the new tests and six production lines reverted, after `npm run build`, aga
 - Worker: `after a failed self-check every offer is refused, before any limit or pressure, and none is journaled to launch`; `each start reports its self-check once, after its capacity and pressure`; `a Linux worker without a launch command and a macOS worker never run the containment check`; `a launching Linux worker runs the check before it connects, and a pass is reported`; `a failed self-check still starts the worker, reports the failure, and never authorizes a launch`.
 - Scheduling and Fleet: `in-memory workers: workers read back as stored, and only eligible ones count their slots`; `PostgreSQL workers: workers read back as stored, and only eligible ones count their slots`; `supersession is due for a gone worker at once and otherwise after its bounds`; `in-memory worker admissions: a report above the fence decides and replaces the results; one at or below it changes nothing` and its PostgreSQL run; `a report without a failed result admits the worker, and one with a failed result does not`; `a not-applicable claim without a recognised reason counts as failed`.
 
-The broad revert of `decideWorkerAdmission` also failed results that were already failed; a narrower revert (the refutation alone returning the result unchanged) failed `a not-applicable claim without a recognised reason counts as failed` and `the control plane admits a macOS worker without the check, and refutes a Linux worker's claim`. After the restore and a full rebuild, every test passes (below). `a running execution keeps its assignment through a failed self-check and ends normally` and `an offer refused after a failed self-check releases its assignment for another worker` guard behavior that no reverted line changes; they pass before and after.
+The broad revert of `decideWorkerAdmission` also failed results that were already failed; a narrower revert (the refutation alone returning the result unchanged) failed `a not-applicable claim without a recognised reason counts as failed` and `the control plane admits a macOS worker without the check, and refutes a Linux worker's claim`. After the restore and a full rebuild, every test passes (below). `a running execution keeps its ownership, reservation, and grant through a failed self-check and ends normally` (named `a running execution keeps its assignment through a failed self-check and ends normally` until `2fd62e43`) and `an offer refused after a failed self-check releases its assignment for another worker` guard behavior that no reverted line changes; they pass before and after.
 
 ## Review pass 1
 
@@ -77,6 +78,33 @@ The broad revert of `decideWorkerAdmission` also failed results that were alread
   - `npm run openspec -- validate implement-worker-self-check-admission --strict`: valid; `npm run verify:comments`, `npm run verify:links`, and `make findings ARGS="validate"`: pass.
 - **Changed and not run:** `packages/adapters/postgres/test/fleet-conformance.integration.test.ts`, which runs the two new conformance cases against PostgreSQL (including the `breakWorker` fixture), needs the services; the coordinator's `make verify` covers it, together with coverage and `make contract-compatibility` for the changed AsyncAPI description.
 
+## Review pass 2
+
+- **Reviewer:** role B, Claude Code, model `claude-opus-5-5`, effort `high`, session `a4f863a0-4df0-4cbe-ad71-9b5fec921c7d`, invoked as `claude -p "<prompt>" --model claude-opus-5-5 --effort high --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format stream-json --verbose < /dev/null > log.jsonl`, with the result taken by `grep '"type":"result"' | tail -1`; its `modelUsage` lists only `claude-opus-5-5`.
+- **Reviewed head:** `9c849c02`; the snapshot (SHA-256 manifest) was the same before and after.
+- **Pass 1 fixes:** the reviewer confirmed all eight.
+- **Counts:** 0 critical, 0 high, 2 medium, 7 low; all fixed, recorded in `findings.jsonl` and `passes.jsonl`. The coordinator decided the fixes of M1 and M2.
+- **`make verify` on `9c849c02`** (Desi, in the coordinator's Docker slot): exit 0; 2382 tests, 2379 pass, 0 fail, 3 skipped; coverage 99.35% lines, 92.31% branches, 99.02% functions; `make contract-compatibility`: 112 declared breaking changes in `execution.asyncapi.json`, none in the other documents. It ran the PostgreSQL conformance cases of review pass 1.
+
+| Finding | Resolution |
+| --- | --- |
+| M1: the launch authority ignored worker admission, so a worker that is not admitted still got new grants | `checkWorkerAdmission` (`apps/control-plane/src/application/launch-authority.ts:171`) runs in `#decide` after the installation and worker checks (`:71`) and refuses a new operation of a worker that is not admitted with the existing non-retryable `worker-not-authorized`; the worker journals it as a final rejection and the control plane releases the assignment (`RELEASING_REJECTIONS`). Replays are not gated (`f779be36`). No wire change and no new reason. Contract sections 4a (trust model) and 7, launch authorization section 9, and the requirement New grants only for admitted workers state it (`0feead08`). |
+| M2: an accepted assignment without a grant on a `self-check-failed` worker was never freed | `selfCheckReport` frees each unfinished assignment of the worker without a grant through `freeIdleAssignment` (`apps/control-plane/src/application/observation-effects.ts:176`) and keeps the granted ones (`4fb14625`); D6, contract section 7, and the resource-admission scenario say "due at once" and "freed" (`0feead08`). |
+| L1: D7 misstated the wire compatibility argument | D7 now speaks of an older build that sends no report; wire contract section 3 adds that such a worker is never admitted (`0feead08`). |
+| L2: the deferred-resume log said `no launch command` also after a failed self-check | `#deferResume` logs `no launch authority`, and its comment names both causes (`apps/worker/src/launch-orchestrator.ts:223`) (`015387eb`). |
+| L3: no migration test for existing rows | A held-migration test inserts a worker before the migration and asserts `awaiting-self-check`, fence 0, no report time, and not eligible (`packages/adapters/postgres/test/migrations.integration.test.ts`) (`34fac2d6`); not run here. |
+| L4: the journal adapter's new fact had no spec delta | `specs/worker-journal-adapter/spec.md` adds Self-check report facts with scenario Two reports, covered by the existing journal test; the proposal lists the capability (`0feead08`). |
+| L5: "before enrollment" for an enrolled worker | The requirement and scenario say "before it enrolls or opens its journal" (`0feead08`). |
+| L6: a stale test name in this record | The fail-before section gives the current name (this records commit). |
+| L7: the passing `make verify` was not recorded | Recorded above; the limitation and gate now concern only the head after pass 2 (this records commit). |
+
+- **Fails before the fixes.** With the new tests and the M1 and M2 production lines reverted, after `npm run build`: `apps/control-plane/test/observation-service.test.ts`, 25 tests, 23 pass, 2 fail: `only an admitted worker gets a new launch grant, and a recorded grant is still replayed` and `a failed self-check frees an accepted assignment that holds no grant`. After the restore and a rebuild both pass.
+- **Checks after the fixes,** without Docker:
+  - `npm run build`, `npx tsc -p tsconfig.check.json`, and `npm run check:boundaries`: pass.
+  - Every test file outside `*.integration.test.ts`: 1927 tests, 1924 pass, 0 fail, 0 cancelled, 3 skipped.
+  - `npm run openspec -- validate implement-worker-self-check-admission --strict`: valid; `npm run verify:comments`, `npm run verify:links`, and `make findings ARGS="validate"`: pass.
+- **Changed and not run:** `packages/adapters/postgres/test/migrations.integration.test.ts` (the new test for existing rows) and `apps/control-plane/test/launch-authority.integration.test.ts` (worker-2 is admitted first, so its replay still meets `assignment-not-active` after the new admission check).
+
 ## Sequence deviation
 
 The Docker runs of phase 2 ran without the coordinator's Docker slot, which the coordinator later required for this iMac: several integration runs through `scripts/services.sh run taskelith-wsca-int`, the fail-before run, and one `make verify` (log `wsca-verify-1.log`). No harm resulted: each run used its own Compose project, removed its containers, and pruned no volume; the last integration run and `make verify` passed, and the fail-before run failed only the tests it was meant to. After pass 1, no command that starts containers ran.
@@ -86,11 +114,11 @@ The Docker runs of phase 2 ran without the coordinator's Docker slot, which the 
 - `make verify-installation` and `make verify-linux-cgroup` did not run: the real `linux-containment` check runs only in the Linux worker image with a delegated cgroup, so its pass in production is not shown here (task 5.6).
 - The fail-before run reverted lines in a working tree, not at a commit; the reverted sources were restored and rebuilt before the checks above.
 - `make verify` starts Docker containers for the integration services, which the phase 2 brief's "no Docker" rule did not foresee; see Sequence deviation.
-- The fixes of review pass 1 have no `make verify` run yet; the PostgreSQL conformance cases they add are untested against PostgreSQL until the coordinator's run.
+- The fixes of review pass 2 have no `make verify` run yet: the PostgreSQL migration test for existing rows and the changed launch authority integration test are not run until the coordinator's next run.
 
 ## Remaining gates
 
 - `make verify-installation` and `make verify-linux-cgroup` with Docker, by the developing worker (Desi) before the handoff (task 5.6), and again by the coordinator at integration.
-- `make verify` on the head after review pass 1, by the coordinator in its Docker slot.
-- Independent review passes 2 and 3 under the [independent review process](/docs/governance.md#independent-review-process), recorded in `passes.jsonl` and `findings.jsonl` (task 5.5).
+- `make verify` on the head after review pass 2, by the coordinator in its Docker slot.
+- Independent review pass 3 (A, confirming the pass 2 fixes) under the [independent review process](/docs/governance.md#independent-review-process), recorded in `passes.jsonl` and `findings.jsonl` (task 5.5).
 - Archive, handoff, and integration into dev by the coordinator (single pull request) (task 5.7).
