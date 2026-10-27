@@ -78,7 +78,11 @@ Awaiting review pass 2, which reviews the resolved diff and the reconciliation b
   - Archive in a scratch copy of `openspec/`: `Totals: + 0, ~ 3, - 0, → 0`; then `validate --all --strict --no-interactive`: `69 passed, 0 failed`; the archived `worker-runtime` spec differs from `dev`'s by the 14 changed lines of this delta only.
   - Crash windows: `TASKELITH_TEST_SEED=2776760789 TASKELITH_SCENARIO_RESULTS=openspec/changes/report-all-unconfirmed-sealed-executions/results.jsonl bash scripts/services.sh run taskelith-rause node --experimental-strip-types --test apps/control-plane/test/crash-windows.integration.test.ts`: 29 tests, 29 passed; `results.jsonl` regenerated: 29 rows, all `passed`, 29 distinct scenarios, commit `7416c02`, seed `2776760789`, arch `x64`.
   - `make verify`: passed (exit 0) on the first run; 1965 tests, 1963 passed, 0 failed, 2 Linux-only tests skipped; coverage 99.29% lines, 92.13% branches, 99.05% functions; `execution.openapi.json: 3 breaking change(s) against cc7f9986d7a5`, declared, 0 for the other documents; OpenSpec `70 passed, 0 failed`; `Every active OpenSpec change archives into strictly valid specs.`; `Packed file allowlist and installed CLI verification passed.`
-- **Not done yet:** review pass 2 of this resolution and reconciliation, then the archive again (step 7) as the last commit.
+- **Second merge:** `dev` moved on to `1847570` (#321, `add-fleet-skills`); `git merge origin/dev` as `4289b8f`, without a conflict. #321 changes only the fleet skills (`.claude/skills/taskelith-*/SKILL.md`), `docs/agent-task-protocol.md`, `docs/fleet.md`, its archived change, and the `agent-task-protocol` spec, where it adds "Named fleet roles". `git diff cc7f998 1847570` touches no code, test, contract, or crash-window harness file of this change, and `-- openspec/specs` none of its three modified requirements, so no evidence above is invalidated and the deltas need no rewrite.
+- **Checks on `4289b8f`** (2026-10-27 04:38 UTC):
+  - `npm run openspec -- validate report-all-unconfirmed-sealed-executions --strict`: valid.
+  - Archive in a scratch copy of `openspec/`: `Totals: + 0, ~ 3, - 0, → 0`; then `validate --all --strict --no-interactive`: `69 passed, 0 failed`.
+- **Not done yet:** `make verify` on the merged head `4289b8f`; review pass 2 of this resolution and reconciliation, then the archive again (step 7) as the last commit.
 
 ## Limitations
 
@@ -89,6 +93,7 @@ Awaiting review pass 2, which reviews the resolved diff and the reconciliation b
 ## Remaining gates
 
 - Independent review: done, pass 1 above; its Low fixes are unreviewed.
+- `make verify` on the merged head `4289b8f` (merge of `dev` at `1847570`): pending.
 - Review pass 2 of Return 1 (resolved merge and delta reconciliation): pending.
 - Archive on the branch again (protocol step 7): pending; the first archive (`ceea886`) was reverted in `53a7b4e`.
 - Integration into `dev` by the coordinator.
