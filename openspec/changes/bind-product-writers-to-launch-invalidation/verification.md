@@ -47,6 +47,8 @@ After the review pass 1 fixes (`ce677cbf`), on the working tree of the record co
 
 After the review pass 2 fixes (`d9589bdb`), on the working tree of the record commit, without Docker, the same six checks gave the same results; `verify:findings` again reported 43 findings files and 23 pass summary files, all valid, and `make contract-compatibility` checked against `b87abe75`.
 
+After the M3 plan amendment (`12aa98e6`), on the working tree of its record commit, without Docker, the same six checks passed again with the same output; `git diff origin/dev -- docs/g3-plan.md` shows only item 44's row.
+
 ## Review
 
 ### Pass 1 (reviewer A)
@@ -78,13 +80,13 @@ After the review pass 2 fixes (`d9589bdb`), on the working tree of the record co
 - Session: `84349d0e-ff53-4732-a920-7e63750965bd`. Reviewed HEAD `ebdcb23f`.
 - Snapshot: `315688f150f02a0005f6830589aa9688281b2c7ebe7030b87cd01f1d46d3a1b2` before and after, unchanged.
 - Pass 1 fixes M1 to M4, L1, and L2: confirmed resolved.
-- Findings: critical 0, high 0, medium 4, low 7. All but M3 fixed in `d9589bdb`; L7 in the record commit. M3 awaits the coordinator's decision.
+- Findings: critical 0, high 0, medium 4, low 7. All but M3 and L7 fixed in `d9589bdb`; L7 in `d1644fa4`; M3 in `12aa98e6`.
 
 | Finding | Resolution |
 | --- | --- |
 | M1 (Medium, contract-drift): a return to Specify was said to make passed spec gates stale, although `markGateStale` needs a revision that outdates the gate (`docs/contracts/product-ports.md:185`) | Section 6.3, the spec delta, and design D2: the transaction that records the new revision makes the outdated gates stale and revokes; a return without a new revision cancels the active attempt by assignment, revoking its grants with `attempt-not-launchable` |
 | M2 (Medium, contract-drift): the new revision writer did not update the run's current revision, which only a G3 writer of `CurrentRevisions` can do (`docs/contracts/product-ports.md:185`) | Section 6.3 and the requirement update it through `CurrentRevisions` in the same transaction, which its first writer extends; the artifact race test asserts it |
-| M3 (Medium, scope): plan item 44 covers only an attempt rejected under a stale admission, not a revoked one (`docs/g3-plan.md:141`) | Pending the coordinator's decision |
+| M3 (Medium, scope): plan item 44 covers only an attempt rejected under a stale admission, not a revoked one (`docs/g3-plan.md:141`) | Option (a), decided by the owner's away delegate (run `20261027T201212Z-claude-24852`, 2026-10-27) and relayed by the coordinator: `docs/g3-plan.md` item 44 keeps its text and adds that the same writer of admissions re-admits a task whose grant a product writer revoked; design D3 points re-admission after a revocation to item 44. A plan amendment pending the owner's confirmation |
 | M4 (Medium, contract-drift): section 5 said a rule change revokes no grant, while D2 left the policy revision open (`docs/contracts/product-ports.md:160`) | Section 5: no grant is revoked unless the run's policy revision changes; D2 aligned |
 | L1 (Low, spec-wording): the policy revision race test had no owner (`docs/contracts/product-ports.md:201`) | Assigned to the item that adds a command that changes the run's policy revision, in section 7, D5, and the proposal |
 | L2 (Low, spec-wording): the writer requirement omitted reopening and was ambiguous (`specs/product-ports/spec.md:17`) | Rewritten as every transaction that changes a spec gate's state, a new artifact revision, and a policy revision change |
@@ -103,7 +105,7 @@ After the review pass 2 fixes (`d9589bdb`), on the working tree of the record co
 
 ## Remaining gates
 
-- Coordinator decision on review pass 2 M3 (plan item 44).
+- Owner confirmation of the item 44 plan amendment
 - `make verify` after the review pass 2 fixes.
 - Independent review pass 3.
 - Archive of the change.
