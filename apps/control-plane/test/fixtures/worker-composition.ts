@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { LaunchAuthorityClient } from '@taskelith/execution';
-import { ok, type Result } from '@taskelith/kernel';
+import { err, failure, ok, type Result } from '@taskelith/kernel';
 import { TRANSPORT_LIMITS, type TransportConnection } from '@taskelith/nats';
 import { SeededRandom, seedFromEnvironment } from '@taskelith/testing';
 import {
@@ -15,7 +15,7 @@ import {
   type WorkerSettings,
 } from '@taskelith/worker';
 import { startDetachedProcess } from '@taskelith/worker-supervisor';
-import { armedPoint, HOLD_NOT_STARTED_VARIABLE, noteOrder, reachCrashPoint } from './crash-hook.ts';
+import { armedPoint, FAIL_FIRST_PREPARE_VARIABLE, HOLD_NOT_STARTED_VARIABLE, noteOrder, reachCrashPoint } from './crash-hook.ts';
 
 // The real worker of a crash scenario: the production composition with
 // test timings, seeded jitter, and crash points at the supervision port.
@@ -25,6 +25,7 @@ const LIMITS = { ...TRANSPORT_LIMITS, ackWaitMilliseconds: 3_000, retryInitialMi
 const random = new SeededRandom(seedFromEnvironment());
 const draw = () => random.nextUint32() / 2 ** 32;
 const BARRIER_MILLISECONDS = 20_000;
+let preparesToFail = process.env[FAIL_FIRST_PREPARE_VARIABLE] === '1' ? 1 : 0;
 
 // The host's free space and the daemon's overhead are not under test; a
 // busy test host must not refuse the offer.
@@ -109,6 +110,7 @@ function armedHost(host: Result<LaunchHost>, executions: string): Result<LaunchH
 function armedSupervision(supervision: ExecutionSupervision, directory: string): ExecutionSupervision {
   return {
     prepare: async (plan) => {
+      if (failsThisPrepare()) return err(failure('unavailable', 'the scenario fails this preparation'));
       reachCrashPoint('CP1');
       return reachedOn(await supervision.prepare(plan), 'CP2');
     },
@@ -124,6 +126,14 @@ function armedSupervision(supervision: ExecutionSupervision, directory: string):
     recover: (round) => supervision.recover(round),
     remove: () => supervision.remove(),
   };
+}
+
+// A failed preparation seals the granted execution at runtime, before W4.
+function failsThisPrepare(): boolean {
+  if (preparesToFail === 0) return false;
+  preparesToFail -= 1;
+  noteOrder('prepare failed');
+  return true;
 }
 
 // A crash at CP4 may come before or after the supervisor's claim; the

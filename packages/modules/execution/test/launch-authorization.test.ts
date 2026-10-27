@@ -151,7 +151,7 @@ test('after not-started, a new identity is authorized against the same reservati
 
 // The relaunch after a seal whose `not-started` has not reached the authority.
 function relaunch(task: Task, sealed: Partial<SealedExecution> = {}, issue = grantIssue('launch-2', T3)) {
-  const reportsNotStartedFor = { executionId: EXECUTION, operationId: operationId('operation-1'), ...sealed };
+  const reportsNotStartedFor = [{ executionId: EXECUTION, operationId: operationId('operation-1'), ...sealed }];
   const request = launchRequest(task, { operationId: operationId('operation-2'), executionId: executionId('execution-2'), reportsNotStartedFor });
   return authorizeLaunch(task, request, launchContext(task), issue);
 }
@@ -201,7 +201,7 @@ test('a reported seal of another attempt\'s execution, or naming another executi
   const sealed = value(recordNotStarted(first.task, { workerId: WORKER, executionId: EXECUTION }, T2)).task;
   const second = value(relaunch(sealed)).task;
   const crossed = { executionId: executionId('execution-2'), operationId: operationId('operation-1') };
-  const third = { operationId: operationId('operation-3'), executionId: executionId('execution-3'), reportsNotStartedFor: crossed };
+  const third = { operationId: operationId('operation-3'), executionId: executionId('execution-3'), reportsNotStartedFor: [crossed] };
   const result = authorizeLaunch(second, launchRequest(second, third), launchContext(second), grantIssue('launch-3', T3));
   assert.match(sealRefusal(result), /cannot be reported sealed: operation operation-1 granted another execution/);
 });
@@ -209,7 +209,7 @@ test('a reported seal of another attempt\'s execution, or naming another executi
 test('a report naming the requested execution itself conflicts, known or never granted', () => {
   for (const task of [authorized().task, placedTask()]) {
     const itself = { executionId: executionId('execution-2'), operationId: operationId('operation-1') };
-    const request = launchRequest(task, { operationId: operationId('operation-2'), executionId: executionId('execution-2'), reportsNotStartedFor: itself });
+    const request = launchRequest(task, { operationId: operationId('operation-2'), executionId: executionId('execution-2'), reportsNotStartedFor: [itself] });
     const result = authorizeLaunch(task, request, launchContext(task), grantIssue('launch-2', T3));
     assert.match(sealRefusal(result), /cannot be reported sealed: it is the requested execution/);
   }
@@ -218,16 +218,57 @@ test('a report naming the requested execution itself conflicts, known or never g
 test('a reported seal of another worker\'s execution conflicts and changes nothing', () => {
   const first = authorized();
   const request = { ...launchRequest(first.task, { operationId: operationId('operation-2'), executionId: executionId('execution-2') }), workerId: OTHER_WORKER };
-  const reported = { ...request, reportsNotStartedFor: { executionId: EXECUTION, operationId: operationId('operation-1') } };
+  const reported = { ...request, reportsNotStartedFor: [{ executionId: EXECUTION, operationId: operationId('operation-1') }] };
   const context = launchContext(first.task, { assignment: { ...launchContext(first.task).assignment!, workerId: OTHER_WORKER }, reservation: { state: 'held', attemptId: ATTEMPT, workerId: OTHER_WORKER } });
   assert.match(sealRefusal(authorizeLaunch(first.task, reported, context, grantIssue('launch-2', T3))), /cannot be reported sealed: it is not of this attempt and worker/);
+});
+
+// E1 sealed and delivered, E2 granted and owning: the state of a worker
+// that sealed E2 too, before either observation reached the authority.
+function twoSealed(): Task {
+  const sealed = value(recordNotStarted(authorized().task, { workerId: WORKER, executionId: EXECUTION }, T2)).task;
+  return value(relaunch(sealed)).task;
+}
+
+function reportAll(task: Task, reports: readonly (readonly [string, string])[]) {
+  const reportsNotStartedFor = reports.map(([execution, operation]) => ({ executionId: executionId(execution), operationId: operationId(operation) }));
+  const request = launchRequest(task, { operationId: operationId('operation-3'), executionId: executionId('execution-3'), reportsNotStartedFor });
+  return authorizeLaunch(task, request, launchContext(task), grantIssue('launch-3', T3));
+}
+
+test('every reported seal is applied in order: unknown, already not-started, and the owner, then the new grant', () => {
+  const task = twoSealed();
+  const reports = [['execution-never', 'operation-never'], ['execution-1', 'operation-1'], ['execution-2', 'operation-2'], ['execution-2', 'operation-2']] as const;
+  const third = value(reportAll(task, reports));
+  assert.deepEqual(third.task.attempts[0]!.executions.map(({ id, state }) => [id, state]), [
+    ['execution-1', 'not-started'], ['execution-2', 'not-started'], ['execution-3', 'authorized'],
+  ]);
+  assert.equal(third.task.generation, task.generation + 1);
+});
+
+test('one conflicting entry anywhere in the list rejects the request, and no entry is recorded', () => {
+  const task = twoSealed();
+  for (const reports of [
+    [['execution-2', 'operation-2'], ['execution-3', 'operation-3']],
+    [['execution-3', 'operation-3'], ['execution-2', 'operation-2']],
+    [['execution-1', 'operation-1'], ['execution-2', 'operation-1']],
+  ] as const) {
+    assert.match(sealRefusal(reportAll(task, reports)), /cannot be reported sealed/);
+  }
+  assert.equal(task.attempts[0]!.executions[1]!.state, 'authorized');
+});
+
+test('only the reported seals end the owner: a list without it conflicts by the ownership rule', () => {
+  const rejection = failed(reportAll(twoSealed(), [['execution-1', 'operation-1']]));
+  assert.equal(rejection.reason, 'execution-conflict');
+  assert.match(rejection.message, /execution execution-2 is authorized/);
 });
 
 test('a transport retry of a relaunch replays its grant without a second seal', () => {
   const second = value(relaunch(authorized().task));
   const request = launchRequest(second.task, {
     operationId: operationId('operation-2'), executionId: executionId('execution-2'),
-    reportsNotStartedFor: { executionId: EXECUTION, operationId: operationId('operation-1') },
+    reportsNotStartedFor: [{ executionId: EXECUTION, operationId: operationId('operation-1') }],
   });
   const context = { installation: { recoveryEpoch: EPOCH, quarantined: false }, workerAuthorized: true };
   assert.deepEqual(replayLaunchOperation(second.task, second.grant, request, context, T3), { kind: 'granted', grant: second.grant });
