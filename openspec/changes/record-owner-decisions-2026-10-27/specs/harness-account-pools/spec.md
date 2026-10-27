@@ -21,4 +21,4 @@ Taskelith SHALL manage harness accounts as slots, each bound to exactly one harn
 
 #### Scenario: Second Claude Code slot
 - **WHEN** an operator adds a Claude Code slot while another Claude Code slot is active or revoked
-- **THEN** the configuration is rejected, and no rotation across Claude accounts can arise
+- **THEN** the configuration is rejected
