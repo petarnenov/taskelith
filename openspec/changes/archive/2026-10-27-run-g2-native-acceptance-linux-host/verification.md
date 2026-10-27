@@ -50,6 +50,16 @@ G2 work item 25, the Linux entry on a native Linux host, `run-g2-native-acceptan
 | `make findings ARGS="validate"`, `validate run-g2-native-acceptance-linux-host --strict`, and `verify:comments` after the pass 1 fixes | Passed: "Every findings file is valid: 3 file(s).", "Change 'run-g2-native-acceptance-linux-host' is valid", "Every comment is within the comment length rule." |
 | `npm run openspec -- validate run-g2-native-acceptance-linux-host --strict` on `4a2b45a` | Passed: "Change 'run-g2-native-acceptance-linux-host' is valid" (`skip_specs`, zero deltas) |
 
+## Archive checks
+
+These checks ran on the tree of the archive commit: the working tree after `npm run openspec -- archive run-g2-native-acceptance-linux-host --yes`, which moved the change to `openspec/changes/archive/2026-10-27-run-g2-native-acceptance-linux-host/` with every task done.
+
+- `npm run openspec -- validate --all --strict`: "Totals: 69 passed, 0 failed (69 items)".
+- `npm run openspec -- validate --archived --no-interactive`: this change's line is "✓ change/2026-10-27-run-g2-native-acceptance-linux-host".
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs` is empty, as the change has no spec delta (`skip_specs`).
+- The moved change has `findings.jsonl` (3 lines) and `results.jsonl` (12 lines), and `make findings ARGS="validate"` passes: "Every findings file is valid: 3 file(s)."
+- `make verify` exit 0: tests 2017, suites 39, pass 1971, fail 0, cancelled 0, skipped 46, todo 0. Coverage of all files: lines 99.19 %, branches 91.87 %, functions 98.80 %. The comment rule, findings validation, `openspec validate --all --strict` 69 of 69, the archive dry run, and the packed allowlist and installed CLI verification passed.
+
 ## Dependency check for the namespace-confinement scenario
 
 On 2026-10-27 the coordinator asked for task 3.3 to run only if its inputs are disjoint from `report-all-unconfirmed-sealed-executions` (Pepi), which is not on `dev` yet. After `git fetch origin`, the branch `origin/report-all-unconfirmed-sealed-executions` at `ceea886` changes 30 files against `origin/dev` `656a34d` (`git diff --stat origin/dev...origin/report-all-unconfirmed-sealed-executions`). None of them is under `infra/`, `scripts/`, `Makefile`, or `packages/adapters/`.
