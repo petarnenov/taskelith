@@ -3,7 +3,7 @@ import type { AssignmentId, AttemptId, WorkerId } from '@taskelith/execution';
 import { checkGeneration, checkNextGeneration, type Generation } from '@taskelith/sdlc';
 import type { Assignment } from '../domain/assignment.js';
 import type { AssignmentRepository } from '../ports/assignment-repository.js';
-import { byCodeUnits } from './in-memory-capacity.js';
+import { byCodeUnits } from '../domain/code-unit-order.js';
 
 // Keeps assignments in process memory; it checks and writes without
 // awaiting, so concurrent writers cannot both pass a check.

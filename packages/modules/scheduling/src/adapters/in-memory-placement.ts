@@ -8,7 +8,7 @@ import type { WaitingPlacement } from '../domain/fair-order.js';
 import type { DelegationRequests } from '../ports/delegation-requests.js';
 import type { PlacementQueue } from '../ports/placement-queue.js';
 import type { TaskLineage } from '../ports/task-lineage.js';
-import { byCodeUnits } from './in-memory-capacity.js';
+import { byCodeUnits } from '../domain/code-unit-order.js';
 
 // Reads the waiting tasks from task, lineage, and assignment stores, as the
 // database queue does with its query columns.
