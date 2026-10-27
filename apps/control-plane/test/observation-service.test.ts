@@ -12,16 +12,23 @@ import {
 import {
   InMemoryEvidenceRecords,
   InMemoryTaskRepository,
+  authorizeLaunch,
+  parseLaunchParameters,
+  parseRecoveryEpoch,
+  recordStartObservation,
   type AttemptId,
   type Execution,
   type ExecutionId,
+  type LaunchAuthId,
+  type OperationId,
   type SelfCheckResult,
+  type Task,
   type WorkerId,
 } from '@taskelith/execution';
 import { InMemoryFleetRegistry, fleetToken, fleetWorker, type EnrolledWorker } from '@taskelith/fleet';
 import { err, failure, ok, type Instant, type Result } from '@taskelith/kernel';
 import { InMemoryLogSink, Logger } from '@taskelith/observability';
-import { InMemoryTaskLineage, type Assignment, type WorkerPlacementRecord } from '@taskelith/scheduling';
+import { InMemoryTaskLineage, supersedeInTransaction, type Assignment, type WorkerPlacementRecord } from '@taskelith/scheduling';
 import {
   InMemoryAdmissionRepository,
   InMemoryCurrentRevisions,
@@ -305,6 +312,19 @@ test('the control plane admits a macOS worker without the check, and refutes a L
   assert.deepEqual(await admissionOf(macos), ['admitted', [notApplicable('platform-not-covered')]]);
 });
 
+test('a report naming a check twice, alike or not, never leaves the worker admitted', async () => {
+  const admitted = await fixture();
+  const { service, transaction } = admitted;
+  const repeated = { checkId: 'linux-containment', outcome: 'failed', details: ['the check was reported more than once'] };
+  value(await service.apply(message('worker.capacity.declared', 1, DECLARATION)));
+  value(await service.apply(message('worker.self-check.reported', 2, { results: [PASSED] })));
+  for (const [index, results] of [[PASSED, PASSED], [PASSED, FAILED]].entries()) {
+    assert.equal(value(await service.apply(message('worker.self-check.reported', index + 3, { results }))), 'applied');
+    assert.deepEqual(await admissionOf(admitted), ['self-check-failed', [repeated]]);
+    assert.deepEqual(await transaction.workers.candidates(), []);
+  }
+});
+
 test('an offer refused after a failed self-check releases its assignment for another worker', async () => {
   const placedFixture = await fixture();
   const { store, service } = placedFixture;
@@ -319,9 +339,40 @@ test('an offer refused after a failed self-check releases its assignment for ano
   assert.deepEqual([refused?.end?.reason, refused?.end?.reason === 'refused' && refused.end.refusal], ['refused', 'worker-self-check-failed']);
 });
 
-test('a running execution keeps its assignment through a failed self-check and ends normally', async () => {
+// Authorizes and starts an execution under the placed attempt, as the
+// launch authority and the worker's start report would.
+async function startedUnder({ transaction }: Fixture, placed: PlacedAttempt): Promise<ExecutionId> {
+  const task = value(await transaction.tasks.get(placed.assignment.reservation.scope.taskId));
+  const admission = value(await transaction.admissions.get(task.admissionId));
+  const recoveryEpoch = value(parseRecoveryEpoch(1));
+  const installation = { recoveryEpoch, quarantined: false };
+  const executionId = 'execution-running' as ExecutionId;
+  const launchAuthId = 'launch-running' as LaunchAuthId;
+  const scope = { assignmentId: placed.assignment.id, attemptId: placed.attemptId, workerId: WORKER, ownershipGeneration: task.ownershipGeneration };
+  const authorization = authorizeLaunch(task, {
+    ...scope, operationId: 'operation-running' as OperationId, recoveryEpoch, executionId,
+    admissionId: task.admissionId, admissionGeneration: admission.generation, reportsNotStarted: false,
+  }, {
+    installation, workerAuthorized: true, assignment: { ...scope, active: true },
+    reservation: { state: 'held', attemptId: placed.attemptId, workerId: WORKER },
+    admission, definition, gates: [], currentRevisions: [], policyRevision: binding.policyRevision as never,
+  }, { launchAuthId, issuedAt: AT, parameters: value(parseLaunchParameters({ ttlMilliseconds: 30_000, skewMilliseconds: 5_000 })) });
+  assert.ok(authorization.ok);
+  const { task: authorized, grant } = authorization.value;
+  const started = value(recordStartObservation(authorized, { workerId: WORKER, launchAuthId, executionId, recoveryEpoch }, { installation, grant }, AT));
+  assert.equal(started.decision, 'started');
+  // Two domain steps, one stored write.
+  value(await transaction.tasks.replace({ ...started.task, generation: (task.generation + 1) as never }, task.generation));
+  return executionId;
+}
+
+function executionOf(task: Task, executionId: ExecutionId): Execution | undefined {
+  return task.attempts.flatMap((attempt) => attempt.executions).find((execution) => execution.id === executionId);
+}
+
+test('a running execution keeps its ownership, reservation, and grant through a failed self-check and ends normally', async () => {
   const placedFixture = await fixture();
-  const { store, service, tasks } = placedFixture;
+  const { store, service, tasks, transaction, outbox } = placedFixture;
   value(await service.apply(message('worker.capacity.declared', 1, DECLARATION)));
   value(await submit(placedFixture, 'task-1'));
   value(await new PlacementService(store, { now: () => Date.parse(AT), draw: () => 0 }).placeWaiting());
@@ -329,9 +380,24 @@ test('a running execution keeps its assignment through a failed self-check and e
   value(await service.apply(message('execution.assignment.accepted', 2, {
     commandId: placed.assignment.offerCommandId, assignmentId: placed.assignment.id,
   }, { attemptId: placed.attemptId, ownershipGeneration: placed.generation })));
+  const executionId = await startedUnder(placedFixture, placed);
+  const commandsBefore = outbox.messages.length;
   value(await service.apply(message('worker.self-check.reported', 3, { results: [FAILED] })));
-  assert.equal((await lastAttempt(placedFixture)).assignment.end, undefined);
-  assert.equal(value(await exitWith(placedFixture, placed, { sequence: 4, code: 0 })), 'applied');
+
+  const task = value(await transaction.tasks.get(placed.assignment.reservation.scope.taskId));
+  const execution = executionOf(task, executionId);
+  assert.deepEqual([task.ownershipGeneration, task.attempts.at(-1)?.id], [placed.generation, placed.attemptId], 'ownership');
+  assert.deepEqual([execution?.state, execution?.grants.map((grant) => grant.state)], ['started', ['granted']], 'grant');
+  const kept = (await lastAttempt(placedFixture)).assignment;
+  assert.deepEqual([kept.end, kept.reservation.state], [undefined, 'held'], 'assignment and reservation');
+  const sent = outbox.messages.slice(commandsBefore).map((each) => each.metadata.eventType);
+  assert.deepEqual(sent.filter((type) => type !== 'execution.observations.confirmed'), [], 'no cancellation or assignment end');
+  const request = { assignmentId: placed.assignment.id, commandId: 'supersede-1' as never, correlationId: 'correlation-1' as never };
+  assert.equal(failed(await supersedeInTransaction(transaction, request)).code, 'precondition-failed', 'not superseded');
+
+  assert.equal(value(await service.apply(message('execution.exited', 4, {
+    executionId, recoveryEpoch: 1, status: { kind: 'code', code: 0 }, startProven: true, spawnFailed: false, terminationEvidence: 'containment-empty',
+  }, { attemptId: placed.attemptId, ownershipGeneration: placed.generation }))), 'applied');
   const result = value(await tasks.readTaskResult('run-1', 'task-1'));
   assert.deepEqual([result.state, result.state === 'ended' && result.attemptId], ['ended', placed.attemptId]);
 });

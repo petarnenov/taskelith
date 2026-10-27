@@ -540,6 +540,13 @@ test('a launching worker begins no authorization before its first broker connect
   await until(() => launching.authority.requests.length > 0);
 });
 
+test('a composition of more than eight checks fails the start before enrollment', async () => {
+  admissionChecks = Array.from({ length: 9 }, (_, index) => ({ ...stubAdmissionCheck(), checkId: `check-${index}` }));
+  const started = await startWorker(settings, dependencies());
+  assert.equal(failed(started).code, 'invalid');
+  assert.deepEqual([enrollment.calls, broker.endpoints], [[], []]);
+});
+
 test('a launch host that cannot be built fails the start', async () => {
   const launching = new RecordingLaunching();
   launching.hostAnswer = err(failure('unavailable', 'no supervisor platform'));

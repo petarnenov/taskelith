@@ -42,6 +42,11 @@ runSuite('installation table', INSTALLATION_TABLE_CONFORMANCE, () => new Committ
 runSuite('operator credentials', OPERATOR_CREDENTIALS_CONFORMANCE, () => new CommittingOperatorCredentials(database));
 runSuite('worker admissions', WORKER_ADMISSION_CONFORMANCE, () => ({
   registry: new CommittingFleetRegistry(database), admissions: new CommittingWorkerAdmissions(database),
+  // A record whose enrollment time no longer parses cannot be read.
+  breakWorker: async (workerId) => {
+    await query(url, `UPDATE workers SET enrollment = jsonb_set(enrollment::jsonb, '{enrolledAt}', '"never"')::text
+      WHERE worker_id = $1`, [workerId]);
+  },
 }));
 
 test('an enrolled worker is placeable once reachable and admitted, and a revoked one is not', { concurrency: false }, async () => {

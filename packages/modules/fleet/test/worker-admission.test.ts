@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { SelfCheckResult, WorkerId } from '@taskelith/execution';
-import { parseInstant } from '@taskelith/kernel';
+import { err, failure, parseInstant, type Result } from '@taskelith/kernel';
 import {
   InMemoryFleetRegistry,
   InMemoryWorkerAdmissions,
@@ -12,15 +12,27 @@ import {
   fleetWorker,
   notApplicableReason,
   stubAdmissionCheck,
+  type EnrolledWorker,
 } from '@taskelith/fleet';
 import { value } from '@taskelith/testing';
 
 const now = () => value(parseInstant('2026-10-28T09:00:00.000Z'));
 
+// A registry whose broken workers' records cannot be read.
+class BreakableRegistry extends InMemoryFleetRegistry {
+  readonly broken = new Set<WorkerId>();
+
+  override async worker(workerId: WorkerId): Promise<Result<EnrolledWorker | undefined>> {
+    if (this.broken.has(workerId)) return err(failure('unavailable', `worker ${workerId} cannot be read`));
+    return super.worker(workerId);
+  }
+}
+
 for (const conformance of WORKER_ADMISSION_CONFORMANCE) {
   test(`in-memory worker admissions: ${conformance.name}`, async () => {
-    const registry = new InMemoryFleetRegistry(now);
-    assert.deepEqual(await conformance.check({ registry, admissions: new InMemoryWorkerAdmissions({ registry, now }) }), []);
+    const registry = new BreakableRegistry(now);
+    const breakWorker = async (workerId: WorkerId) => { registry.broken.add(workerId); };
+    assert.deepEqual(await conformance.check({ registry, admissions: new InMemoryWorkerAdmissions({ registry, now }), breakWorker }), []);
   });
 }
 
@@ -92,4 +104,11 @@ test('the stub check has the containment check identity and scope', async () => 
   const stub = stubAdmissionCheck({ outcome: 'failed', problems: ['broken'] });
   assert.deepEqual([stub.checkId, stub.scope, await stub.run()], ['linux-containment', LINUX_CONTAINMENT_SCOPE, { outcome: 'failed', problems: ['broken'] }]);
   assert.deepEqual(await stubAdmissionCheck().run(), { outcome: 'passed' });
+});
+
+test('a check reported twice, alike or not, is one failed result and never admits', () => {
+  const repeated = { checkId: 'linux-containment', outcome: 'failed', details: ['the check was reported more than once'] };
+  for (const report of [[passed(), passed()], [passed(), failed()], [notApplicable('no-launch-command'), passed()]]) {
+    assert.deepEqual(decideWorkerAdmission(report, 'linux'), { state: 'self-check-failed', results: [repeated] });
+  }
 });
