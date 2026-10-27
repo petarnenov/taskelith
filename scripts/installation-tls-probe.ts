@@ -73,7 +73,29 @@ function withTimeout<T>(promise: Promise<T>): Promise<T> {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-// Problems, one per server whose presented certificate is not its file's.
+// Whether a NATS server answers a plain client's PING with a PONG; one that
+// requires TLS sends an error or closes the connection instead.
+export function acceptsPlainClient(endpoint: Endpoint): Promise<boolean> {
+  const socket = connectTcp(endpoint.port, endpoint.host);
+  return withTimeout(new Promise<boolean>((resolve) => {
+    let text = '';
+    let connected = false;
+    socket.on('data', (chunk: Buffer) => {
+      text += chunk.toString('latin1');
+      if (!connected && text.includes('\n')) {
+        connected = true;
+        socket.write('CONNECT {"verbose":false,"tls_required":false}\r\nPING\r\n');
+      }
+      if (text.includes('PONG')) resolve(true);
+      if (text.includes('-ERR')) resolve(false);
+    });
+    socket.once('close', () => resolve(false));
+    socket.once('error', () => resolve(false));
+  })).finally(() => socket.destroy());
+}
+
+// Problems: a server presenting another certificate than its file, and a
+// NATS server that accepts a plain client.
 export async function reissueProblems(api: Endpoint, nats: Endpoint, directory: string): Promise<string[]> {
   const read = (name: string) => readFileSync(join(directory, name), 'utf8');
   const ca = read('installation-ca.pem');
@@ -83,12 +105,15 @@ export async function reissueProblems(api: Endpoint, nats: Endpoint, directory: 
     const presented = await presentedFingerprint(endpoint, ca, natsInfoFirst);
     if (presented !== fileFingerprint(read(file))) problems.push(`${name} presents another certificate than ${file}`);
   }
+  if (await acceptsPlainClient(nats)) problems.push('NATS accepts a plain client');
   return problems;
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [api, nats, directory] = process.argv.slice(2);
-  const problems = await reissueProblems(parseEndpoint(api ?? ''), parseEndpoint(nats ?? ''), directory ?? '');
+  // A server still restarting refuses or drops the probe; the caller retries.
+  const problems = await reissueProblems(parseEndpoint(api ?? ''), parseEndpoint(nats ?? ''), directory ?? '')
+    .catch((error: unknown) => [error instanceof Error ? error.message : String(error)]);
   for (const problem of problems) console.error(`installation-tls-probe: ${problem}`);
   process.exit(problems.length === 0 ? 0 : 1);
 }

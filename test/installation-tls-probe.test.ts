@@ -9,7 +9,7 @@ import { X509CertificateIssuer } from '@taskelith/certificates';
 import { authorityValidity, serverCertificateValidity, type IssuedCertificate } from '@taskelith/fleet';
 import { parseInstant } from '@taskelith/kernel';
 import { value } from '@taskelith/testing';
-import { parseEndpoint, reissueProblems } from '../scripts/installation-tls-probe.ts';
+import { acceptsPlainClient, parseEndpoint, reissueProblems } from '../scripts/installation-tls-probe.ts';
 
 const NOW = value(parseInstant(new Date().toISOString()));
 const issuer = new X509CertificateIssuer();
@@ -53,6 +53,21 @@ test('servers that present the issued certificates pass the probe', async () => 
 test('servers that still present older certificates fail the probe by name', async () => {
   const problems = await reissueProblems(parseEndpoint(await listening(tlsServer(stale))), parseEndpoint(await listening(natsServer(stale))), directory);
   assert.deepEqual(problems, ['API presents another certificate than api-certificate.pem', 'NATS presents another certificate than nats-certificate.pem']);
+});
+
+// A NATS stand-in that accepts plain clients, as allow_non_tls would.
+function plainNatsServer(): Server {
+  return createTcpServer((socket) => {
+    socket.write('INFO {"tls_required":false}\r\n');
+    socket.on('data', (chunk: Buffer) => {
+      if (chunk.toString('latin1').includes('PING')) socket.write('PONG\r\n');
+    });
+  });
+}
+
+test('a broker that requires TLS refuses a plain client, and one that does not is named', async () => {
+  assert.equal(await acceptsPlainClient(parseEndpoint(await listening(natsServer(nats)))), false);
+  assert.equal(await acceptsPlainClient(parseEndpoint(await listening(plainNatsServer()))), true);
 });
 
 test('an address without a port is refused', () => {

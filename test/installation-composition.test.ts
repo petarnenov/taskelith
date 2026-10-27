@@ -248,6 +248,14 @@ test('the broker requires TLS and the worker trusts the installation CA read-onl
   assert.match(services.worker.environment?.TASKELITH_CONTROL_PLANE_URL ?? '', /^https:\/\//);
 });
 
+test('the composition passes no operator browser certificate, even when the host sets one', () => {
+  const host = { ...COMPOSITION_ENVIRONMENT, TASKELITH_BROWSER_TLS_CERT: '/host/browser.pem', TASKELITH_BROWSER_TLS_KEY: '/host/browser.key' };
+  const controlPlane = resolvedComposition('infra/installation/compose.yaml', host).services['control-plane'];
+  const browserSettings = Object.keys(controlPlane.environment ?? {}).filter((name) => name.startsWith('TASKELITH_BROWSER_TLS_'));
+  assert.deepEqual(browserSettings, []);
+  assert.equal(controlPlane.volumes?.some((mount) => mount.source?.startsWith('/host/')), false);
+});
+
 test('secrets come from the environment of the make targets', () => {
   assert.equal(services.postgres.environment?.POSTGRES_PASSWORD, PASSWORD);
   for (const name of ['control-plane', 'admin']) {

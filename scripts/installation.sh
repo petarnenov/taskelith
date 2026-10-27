@@ -24,7 +24,7 @@ esac
 export TASKELITH_IMAGE_TAG="$project"
 control_plane_image="taskelith-control-plane:$project"
 worker_image="taskelith-worker:$project"
-# Covers the worker's broker reconnect after a restart and a 10 s heartbeat.
+# Covers the restart, the worker's broker reconnect, and a 10 s heartbeat.
 CONTACT_SECONDS=90
 
 compose() {
@@ -326,8 +326,8 @@ verify() {
   remove_throwaway "built, bootstrapped, started, enrolled, restarted, certificates re-issued and served, removed"
 }
 
-# Right after `certificates`, with no restart of its own: the API and NATS
-# present the new certificates, and a worker heartbeat crosses both again.
+# After `certificates`, with no restart of its own: new certificates served,
+# no plain NATS client, and a worker heartbeat crossing both again.
 check_reissued_certificates() {
   local since file files
   since="$(sql 'SELECT now()')"
@@ -335,13 +335,27 @@ check_reissued_certificates() {
   for file in installation-ca.pem api-certificate.pem nats-certificate.pem; do
     compose run --rm --no-deps -T --entrypoint cat admin "/var/lib/taskelith/control-plane/$file" > "$files/$file"
   done
-  if ! node --experimental-strip-types "$repository/scripts/installation-tls-probe.ts" \
-    "$(compose port control-plane 8080)" "$(compose port nats 4222)" "$files"; then
+  if ! await_served_certificates "$files"; then
     rm -rf "$files"
     exit 1
   fi
   rm -rf "$files"
   await_contact_since "$since"
+}
+
+# Retries the probe while the restarted services come up; a service that
+# still serves its old certificate fails at the deadline.
+await_served_certificates() {
+  local deadline=$((SECONDS + CONTACT_SECONDS))
+  until node --experimental-strip-types "$repository/scripts/installation-tls-probe.ts" \
+    "$(compose port control-plane 8080)" "$(compose port nats 4222)" "$1" 2> "$1/probe.log"; do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      cat "$1/probe.log" >&2
+      echo "installation.sh: the re-issued certificates are not served within ${CONTACT_SECONDS}s" >&2
+      return 1
+    fi
+    sleep 2
+  done
 }
 
 # A heartbeat of the enrolled worker, recorded at database time after SINCE.
