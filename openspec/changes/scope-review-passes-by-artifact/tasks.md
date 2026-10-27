@@ -17,7 +17,8 @@
 ## 4. Verify
 
 - [x] 4.1 Run `npm run openspec -- validate scope-review-passes-by-artifact --strict`, the findings tests with coverage, `npm run verify:comments`, `npm run verify:findings`, and `npm run verify:links`, and record them in `verification.md`.
-- [ ] 4.2 Run `make verify` and record it in `verification.md`.
-- [ ] 4.3 Review pass 1 by reviewer A, Codex CLI, model `gpt-6.1-sol`.
-- [ ] 4.4 Review pass 2 by reviewer B, OpenCode CLI, model `opencode-go/qwen3.8-max#medium`.
-- [ ] 4.5 Review pass 3 by reviewer A, if pass 2 has findings above Low.
+- [x] 4.2 Run `make verify` and record it in `verification.md` (on `c474a3a3`, before pass 1).
+- [x] 4.3 Review pass 1 by reviewer A, Codex CLI, model `gpt-6.1-sol`.
+- [x] 4.4 Review pass 2 by reviewer B, OpenCode CLI, model `opencode-go/qwen3.8-max#medium` (not run: pass 1 was Low-only).
+- [x] 4.5 Review pass 3 by reviewer A, if pass 2 has findings above Low (not run: pass 1 was Low-only).
+- [ ] 4.6 Run `make verify` after the pass 1 fix and record it in `verification.md`.
