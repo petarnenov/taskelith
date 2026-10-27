@@ -24,5 +24,5 @@
 - [x] 5.2 Review pass 1 by reviewer A, and its fixes.
 - [x] 5.3 Review pass 2 by reviewer B, and its Low fixes.
 - [x] 5.4 Review pass 3 by reviewer A, if pass 2 has findings above Low: not needed, pass 2 was Low-only.
-- [ ] 5.5 Review of the merge of dev (`579c227d`) by reviewer A: the resolved diff and the delta reconciliation.
+- [x] 5.5 Review of the merge of dev (`579c227d`) by reviewer A: the resolved diff and the delta reconciliation.
 - [ ] 5.6 Archive the change.

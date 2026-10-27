@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-27. The author's verification and `make verify` are recorded below, then review pass 1 by reviewer A, its fixes, and `make verify` after them, and review pass 2 by reviewer B, Low-only, with its unreviewed fixes; pass 3 did not run. "Merge of dev" records the merge of `579c227d` on 2026-10-28.
+Date: 2026-10-27. The author's verification and `make verify` are recorded below, then review pass 1 by reviewer A, its fixes, and `make verify` after them, and review pass 2 by reviewer B, Low-only, with its unreviewed fixes. Pass 3 did not run as a confirmation of the pass 2 fixes, which were Low-only; it ran as reviewer A's review of the merge of `579c227d` on 2026-10-28, which "Merge of dev" records.
 
 ## Scope and source
 
@@ -115,7 +115,7 @@ The coordinator assigned reviewer A, Codex CLI (`gpt-6.1-sol`), for passes 1 and
 
 ### Review pass 3
 
-Not run: pass 2 found only Low findings, so the review ends under governance "Low findings are fixed", and its fixes are recorded as unreviewed.
+Pass 2 found only Low findings, so no pass 3 ran to confirm its fixes, which are recorded as unreviewed (governance "Low findings are fixed"). Pass 3 ran instead as reviewer A's review of the merge of dev and its reconciliation, recorded under "Merge of dev" below.
 
 ## Merge of dev
 
@@ -130,7 +130,15 @@ On 2026-10-28 `origin/dev` was merged into the branch with a merge commit, done 
 - **Delta reconciliation** (`git diff b87abe75 origin/dev -- openspec/specs/review-process/spec.md`): dev changed only "Findings index and checklist" (a scenario reworded and "Dev commit of the checklist" added) and added "Checklist record", "Checklist record validation", and "Checklist effect". None of the four requirements this delta modifies changed on dev, so their MODIFIED blocks stay as they are: "Authorized alternating reviewers", "Rotation order", "Unavailable reviewer", and "No reviewer of another harness". The ADDED names "Canonical reviewer key" and "Reviewer assignment" do not collide with dev's new requirements. Governance, the protocol, and the skills were searched for the turn assigning new tasks (`Rotation"`, "of different harnesses unless", "in turn"); only governance's own "Two alternating reviewers per task" and "Reviewer assignment" remain, which already state the assignment.
 - **Checks** on the working tree of `4ddc1494` with Node.js 24.22.0 (`TMPDIR` on disk): `npm run openspec -- validate normalize-reviewer-keys --strict`: valid. `npm run openspec -- validate --all --strict`: 70 passed, 0 failed. `make verify`: exit 0 on the first run; tests 2364, 2317 pass, 0 fail, 0 cancelled, 47 skipped (the same platform-bound skips); coverage of all files lines 99.29%, branches 92.33%, functions 98.94%; every findings file is valid, 50 files, and every pass summary file, 30 files; every active OpenSpec change archives into strictly valid specs; 0 breaking changes in the four contract documents against `579c227d`; 731 package paths verified, 41 with reviewed license coverage gaps; the comment, link, boundary, and package checks passed. Measured apart, `test/findings.test.ts` and `test/reviewer-keys.test.ts`: 33 tests, 33 pass; `scripts/reviewer-keys.ts` 100/100/100; `scripts/findings.ts` lines 97.57%, branches 91.72%, functions 97.06%, the uncovered lines being dev's checklist and effect paths, which `test/checklist-*.test.ts` covers.
 - **Reviewer statistics after the merge:** `make findings ARGS="reviewers"` still has one row per reviewer, 8 rows, now over 49 changes with review records and 112 passes (42 and 96 before), because dev archived more records; for example `codex gpt-6.1-sol#medium` 40 passes, 36 misses, and `claude claude-opus-5-5#high` 20 passes. The "By reviewer" section of `index` also has 8 rows. The governance statistics are the owner's of 2026-10-27 and are unchanged.
-- **Evidence freshness:** the merge changes this change's implementation and records in the resolved parts (`scripts/findings.ts`, coordinator step 1 of the protocol, the coordinator skill), so the review evidence of passes 1 and 2 no longer covers them ([evidence freshness](/docs/governance.md#evidence-freshness)). Reviewer A, Codex CLI (`gpt-6.1-sol`), reviews the resolved diff and this reconciliation before the archive: **pending**.
+- **Evidence freshness:** the merge changes this change's implementation and records in the resolved parts (`scripts/findings.ts`, coordinator step 1 of the protocol, the coordinator skill), so the review evidence of passes 1 and 2 no longer covers them ([evidence freshness](/docs/governance.md#evidence-freshness)). Reviewer A reviewed the resolved diff and this reconciliation in review pass 3.
+- **Review pass 3, the merge review:**
+  - **Reviewer:** A, Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, read-only sandbox, session `01a17f6a-6494-72b2-8bc5-bd0e9cd306d6`; run by the coordinator.
+  - **Scope:** the merge resolution of `4ddc1494`, the delta reconciliation against `579c227d`, and this "Merge of dev" record, at `1caf63b8`.
+  - **Invocation:** `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, with the prompt outside the worktree.
+  - **Model confirmation:** the model, reasoning effort, read-only sandbox, and session id in the output header, as the coordinator reported them.
+  - **Snapshot:** before and after the pass `71f6bb812b9176c29b37f4148b5c8fd929c7d7deb328693a2fb4036d283ca716`, identical.
+  - **Result:** no findings, Critical 0, High 0, Medium 0, Low 0, as in `passes.jsonl` line 3.
+  - **Reviewer's limitation:** its sandbox blocked the findings tests and the comment checker (`EROFS`, `EPERM`), so it did not repeat `make verify` or the coverage independently; strict OpenSpec validation and findings validation passed for it, and `test/reviewer-keys.test.ts` 6 of 6.
 - The file lines of "Author self-check" refer to `0968b548`; after the merge `checkChange` is at `scripts/findings.ts:314`, `reviewerProblems` at `:347`, and `withCanonicalReviewers` at `:354`.
 
 ## Limitations
@@ -140,6 +148,5 @@ On 2026-10-28 `origin/dev` was merged into the branch with a merge commit, done 
 
 ## Remaining gates
 
-- Review of the merge of dev by reviewer A, Codex CLI (`gpt-6.1-sol`).
 - Archive of the change on its branch.
 - Integration into dev by the coordinator (single pull request).
