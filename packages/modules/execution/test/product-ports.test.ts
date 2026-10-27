@@ -15,6 +15,7 @@ import {
   PLACEMENT_REJECTING_REASONS,
   PLACEMENT_WAITING_REASONS,
   RECONCILIATION_REASONS,
+  RETRY_BACKOFF_REASON,
   SESSION_ACTIVITIES,
   SPEC_APPROVERS,
   STANDING_RULE_OPERATIONS,
@@ -138,4 +139,10 @@ test('the fleet obstacle reasons are placement waiting reasons', () => {
 test('a placement reason is either waiting or rejecting, never both', () => {
   const rejecting: readonly string[] = PLACEMENT_REJECTING_REASONS;
   for (const reason of PLACEMENT_WAITING_REASONS) assert.ok(!rejecting.includes(reason), reason);
+});
+
+test('the retry backoff reason is no placement reason', () => {
+  assert.equal(RETRY_BACKOFF_REASON, 'retry-backoff');
+  const placement: readonly string[] = [...PLACEMENT_WAITING_REASONS, ...PLACEMENT_REJECTING_REASONS];
+  assert.ok(!placement.includes(RETRY_BACKOFF_REASON));
 });
