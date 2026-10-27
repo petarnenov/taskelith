@@ -63,14 +63,6 @@ interface CrashWindow {
   readonly failsFirstPrepare?: boolean;
   // Whether the exit proves the start; false only without a `handle`.
   readonly startProven?: boolean;
-  // A known product defect the scenario fails on, until it is fixed.
-  readonly defect?: KnownDefect;
-}
-
-interface KnownDefect {
-  readonly name: string;
-  // Matches the scenario's error, so any other failure stays red.
-  readonly signature: RegExp;
 }
 
 const exitedOnce = (window: string, ...points: string[]): CrashWindow => ({ window, points, outcome: 'exited-code-0', spawns: 1, childRelease: 'after-restart' });
@@ -87,16 +79,12 @@ const MACOS_UNSUPERVISED: readonly CrashWindow[] = [
   { window: 'CP9', points: ['CP9'], outcome: 'uncertain', spawns: 1, childRelease: 'after-adoption' },
 ];
 
-// Candidate defect L1 (verification.md): an unknown exit with a proven start
-// is retried; stop-automatic-retry-of-unknown-exit removes this and its use.
-const L1: KnownDefect = { name: 'L1', signature: /one attempt: .*"retryOf":"t[0-9a-f]+"/ };
-
 // The same section on Linux: the containment decides. An empty one ends the
 // execution, a populated one is adopted until it empties; both exit unknown.
 const LINUX_UNSUPERVISED: readonly CrashWindow[] = [
   { window: 'CP7', points: ['CP7'], outcome: 'exited-unknown', startProven: false, spawns: 0, childRelease: 'after-restart' },
   { window: 'CP8', points: ['CP8'], outcome: 'exited-unknown', startProven: false, spawns: 1, childRelease: 'after-adoption' },
-  { window: 'CP9', points: ['CP9'], outcome: 'exited-unknown', startProven: true, spawns: 1, childRelease: 'after-adoption', defect: L1 },
+  { window: 'CP9', points: ['CP9'], outcome: 'exited-unknown', startProven: true, spawns: 1, childRelease: 'after-adoption' },
 ];
 
 // The expected results follow the recovery tables: journal contract
@@ -461,9 +449,7 @@ test('a redelivered offer and assignment give one execution and one result', NAT
 describe('a crash at each launch and supervisor window recovers to one durable outcome', { concurrency: 4 }, () => {
   for (const window of WINDOWS) {
     const relaunch = window.holdsNotStarted === true ? ', relaunched before the not-started went out' : '';
-    const failing = window.defect === undefined ? '' : `, failing on ${window.defect.name}`;
-    const name = `a crash at ${window.window} ends ${window.outcome} with ${window.spawns} spawn(s)${relaunch}${failing}`;
-    const options = window.defect === undefined ? NATIVE : { ...NATIVE, expectFailure: window.defect.signature };
-    test(name, options, (context) => recorded(scenarioName(window.window), () => runCrashWindow(window, scenarioSignal(context))));
+    const name = `a crash at ${window.window} ends ${window.outcome} with ${window.spawns} spawn(s)${relaunch}`;
+    test(name, NATIVE, (context) => recorded(scenarioName(window.window), () => runCrashWindow(window, scenarioSignal(context))));
   }
 });
