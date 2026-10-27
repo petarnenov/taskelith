@@ -14,4 +14,4 @@
 - [x] 2.4 Report every failed proof to the coordinator as a candidate defect
 - [x] 2.5 Add the x86_64 observations to `docs/worker-platforms.md`, `docs/local-installation.md`, and the Ubuntu register row
 - [x] 2.6 Run `make verify` and record `verification.md`
-- [ ] 2.7 Independent review by Claude Code (claude-fable-5-1)
+- [x] 2.7 Independent review by Claude Code (claude-fable-5-1)

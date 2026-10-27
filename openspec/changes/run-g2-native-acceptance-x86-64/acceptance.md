@@ -1,6 +1,6 @@
 # G2 native acceptance: x86_64 entries (item 25c)
 
-Recorded 2026-10-27 by `make native-acceptance` on commit `b82ad2f` (the dev merge `46a6a59` and the findings record), seed `4080300788`, into [results.jsonl](results.jsonl) (49 lines; "line N" below): lines 1 to 48 are the acceptance run, line 49 the namespace confinement extra (design decision 7). Each acceptance line carries an `acceptance` field with its matrix entry, row, command, and platform. The rows are the G2 rows of the [native acceptance gates](../../../docs/worker-platforms.md#native-acceptance-gates), as in 25b's [table](../archive/2026-10-26-run-g2-native-acceptance-arm64/acceptance.md); resource budgets and real integrations belong to later gates and are not listed.
+Recorded 2026-10-27 by `make native-acceptance` on commit `b82ad2f` (the dev merge `46a6a59` and the findings record), seed `4080300788`, into [results.jsonl](results.jsonl) (49 lines; "line N" below): lines 1 to 48 are the acceptance run, line 49 the namespace confinement extra (design decision 7). Each acceptance line carries an `acceptance` field with its matrix entry, row, command, and platform. The rows are the G2 rows of the [native acceptance gates](../../../docs/worker-platforms.md#native-acceptance-gates), as in 25b's [table](../archive/2026-10-26-run-g2-native-acceptance-arm64/acceptance.md); resource budgets and real integrations belong to later gates and are not listed. The Docker CLI ran with an empty `DOCKER_CONFIG`, because the user's credential helper hung ([verification](verification.md#environment-re-check-before-the-evidence-run-2026-10-27)); the engine, images, and plugins were Docker Desktop's own.
 
 ## Platforms
 
@@ -34,4 +34,4 @@ Outcome is that of the proofs that ran; a row is **met (G2 part)** only when eve
 
 ## Summary
 
-Every proof of both x86_64 entries passed: 48 records, all `passed`, and the confinement extra passed. With D1 fixed on `dev`, the macOS process ownership row is met for its G2 part, unlike in 25b's arm64 run. No row is fully accepted otherwise: each keeps an open part that later G2 work (24c, a Linux privileged composition) or later gates (G3, G6) own. No candidate product defect was observed.
+Every proof of both x86_64 entries passed: 48 records, all `passed`, and the confinement extra passed. With D1 fixed on `dev`, the macOS process ownership row is met for its G2 part, unlike in 25b's arm64 run. Journal and storage is met for its G2 part on both entries. The other rows stay partly open and keep the open parts the table names, which later G2 work (24c, a Linux privileged composition) or later gates (G3, G6) own; no row is accepted beyond its G2 part. No candidate product defect was observed.

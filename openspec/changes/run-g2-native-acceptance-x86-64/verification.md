@@ -1,6 +1,6 @@
 # Verification: run-g2-native-acceptance-x86-64 (25c)
 
-Date: 2026-10-26, updated 2026-10-27. This record holds the setup and preflight, the evidence run and the confinement extra on the merged head, the checks, and review pass 1; pass 2 is pending.
+Date: 2026-10-26, updated 2026-10-27. This record holds the setup and preflight, the evidence run and the confinement extra on the merged head, the checks, and review passes 1 and 2.
 
 ## Scope and source
 
@@ -94,7 +94,7 @@ Self-check of the evidence run (`46a6a59` to the final commit):
 - Session `ce36db0f-4a5b-4036-b905-5f140f511cae`, started 2026-10-27 06:52; result `success`. Reviewed head `53b5b19`: the branch diff `843e293..784f3ef` and `53b5b19`.
 - Snapshot: SHA-256 `459af8553d1ce191cf777abb2fbf3a1a71275b3152325ee17e4dff8396e9246e` before and after, unchanged.
 - The reviewer's own checks included a simulated failing build: `main` stops before the seed with npm's exit code.
-- Findings: 0 Critical, 0 High, 1 Medium, 3 Low. M1 and the three Lows are fixed in `354258b` and the commit that records this pass; pass 2 confirms M1 and checks the Low fixes with it.
+- Findings: 0 Critical, 0 High, 1 Medium, 3 Low. M1 is fixed in `354258b`, and the three Lows in `0991490`, the commit that records this pass; pass 2 confirmed all four.
 
 | # | Severity | Finding | Fix |
 | --- | --- | --- | --- |
@@ -103,7 +103,37 @@ Self-check of the evidence run (`46a6a59` to the final commit):
 | L2 | Low | `verification.md:18`: the dev-changed inputs omit `apps/control-plane/src/api/api-server.ts` (PR #317), which the crash-window proofs exercise | Added. Checked in pass 2 |
 | L3 | Low | `design.md:5`: 24c is said to be absent only at the base `843e293` | Also absent at the merged `1847570`: no `run-g2-partition-and-races` change is active or archived there. Checked in pass 2 |
 
-The four findings are also recorded in [findings.jsonl](findings.jsonl), the [review findings record](../../../docs/agent-task-protocol.md#review-findings-record), with the outcome `fixed-unreviewed` until pass 2 checks them; `npm run findings -- validate` passes.
+The four findings are also recorded in [findings.jsonl](findings.jsonl), the [review findings record](../../../docs/agent-task-protocol.md#review-findings-record), first with the outcome `fixed-unreviewed` and, after pass 2 confirmed them, `fixed`; `npm run findings -- validate` passes.
+
+### Pass 2
+
+- Reviewer: Claude Code (claude-fable-5-1), effort medium, the same reviewer and invocation as pass 1: `claude -p "<prompt>" --model claude-fable-5-1 --effort medium --permission-mode plan --disallowedTools Edit Write NotebookEdit --output-format json < /dev/null`, run from the worktree. The prompt named pass 1's session and asked for each finding's resolution before a review of the whole change.
+- Model confirmation: the JSON result's `modelUsage` lists only `claude-fable-5-1`.
+- Session `d2ea5b8e-c8ea-4461-99c8-203782c6e4fd`, started 2026-10-27 07:58:53; result `success`. Reviewed head `19e61cb`.
+- Snapshot: SHA-256 `1f7bd1844646cec97f6000312611fe6bc9d134017c92f672a14a28160b9c2289` before and after, unchanged.
+- Findings: 0 Critical, 0 High, 0 Medium, 6 Low. The pass is Low-only, so under the [review process](../../../docs/governance.md#independent-review-process) the six are fixed without another pass; they are **unreviewed fixes**, made in the commit `docs: fix and record review pass 2 of 25c`.
+
+Confirmation of pass 1:
+
+| # | Pass 2 result |
+| --- | --- |
+| M1 | Resolved: the order test now fails when the build follows the `tool seed` call |
+| L1 | Resolved |
+| L2 | Resolved |
+| L3 | Resolved for the state of pass 1; extended by pass 2 L2 to the later `dev` merge |
+
+| # | Severity | Finding | Fix (unreviewed) |
+| --- | --- | --- | --- |
+| L1 | Low | `docs/worker-platforms.md:31`, `acceptance.md:37`: every row is said to keep an open part, though macOS process ownership and journal and storage on both entries are met for their G2 part with nothing open | The document says those rows are met for their G2 part and that the rows the table leaves partly open keep the open parts it names; the summary of `acceptance.md` says the same and that no row is accepted beyond its G2 part |
+| L2 | Low | `design.md:5`: 24c is said to be absent at the base and at `1847570`, not at `fe64386`, the `dev` merged before the evidence run | Added `fe64386`; `git ls-tree -r --name-only fe64386 openspec/changes` lists no `run-g2-partition-and-races` path |
+| L3 | Low | `docs/dependencies.md`, Ubuntu row: "the linux/arm64 images are not yet built or run" is stale | Replaced: both installation image architectures ran the lifecycle, kill, and disk-loss scenarios, linux/arm64 in 25b (its `results.jsonl` lines 36, 38, and 43, `arch` `arm64`, all `passed`) and linux/amd64 in 25c |
+| L4 | Low | `acceptance.md`: the table does not say that the Docker CLI ran with an empty `DOCKER_CONFIG` | One sentence after the introduction, linking "Environment re-check before the evidence run"; the engine, images, and plugins were Docker Desktop's own |
+| L5 | Low | `proposal.md:27`: the commit types omit `test` for the runner test | `chore` for the runner fix, `test` for its test, and `docs` for the rest |
+| L6 | Low | `verification.md:97`: "the commit that records this pass" does not name it | Names `0991490` |
+
+The six findings are in [findings.jsonl](findings.jsonl) with the outcome `fixed-unreviewed`.
+
+The reviewer also observed, outside this change's scope, that relative links inside change records break when the directory moves under `archive/`, as they did in 25b. The coordinator was told; nothing was changed here.
 
 ## Candidate product defects
 
@@ -123,6 +153,5 @@ None: every proof passed, so task 2.4 had nothing to report.
 
 ## Remaining gates
 
-- The independent review, pass 2: it confirms M1 of pass 1, checks the Low fixes, and reviews the evidence, the table, and the documents; `findings.jsonl` changes the outcomes it confirms to `fixed`.
 - At archive: the links of `docs/worker-platforms.md`, `docs/local-installation.md`, and `docs/dependencies.md` to this change's `acceptance.md` move to the archived path.
 - Integration into dev by the coordinator (single pull request).

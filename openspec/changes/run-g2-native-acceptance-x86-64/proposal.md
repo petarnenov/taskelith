@@ -24,4 +24,4 @@ None. The run exercises the existing requirements of `native-worker-acceptance` 
 
 ## Impact
 
-This change directory, the three documents named above, `scripts/native-acceptance.sh`, and `test/native-acceptance-runner.test.ts`. No product code, Makefile target, contract, OpenAPI, AsyncAPI, JSON schema, Compose file, or npm dependency changes. The commits use `chore` for the runner fix, which is outside the published package, and `docs` for the rest.
+This change directory, the three documents named above, `scripts/native-acceptance.sh`, and `test/native-acceptance-runner.test.ts`. No product code, Makefile target, contract, OpenAPI, AsyncAPI, JSON schema, Compose file, or npm dependency changes. The commits use `chore` for the runner fix, which is outside the published package, `test` for its test, and `docs` for the rest.

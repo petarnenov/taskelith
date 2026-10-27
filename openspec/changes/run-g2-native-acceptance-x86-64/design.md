@@ -2,7 +2,7 @@
 
 25b ([design](../archive/2026-10-26-run-g2-native-acceptance-arm64/design.md)) added `make native-acceptance`, which detects the host's matrix entries and runs the proofs of the five G2 rows (service lifecycle, process ownership, journal and storage, cancellation, and the G2 part of connectivity) on each, and it ran the arm64 entries on an Apple Silicon Mac. Its design decision 1 states that nothing in the runner depends on the architecture, so 25c runs it unchanged except for decision 6 (the build before the seed). This host is a 2020 Intel iMac (Intel Core i7-10700K, 16 logical CPUs, 40 GiB memory) with macOS 26.6.2 (25G83), Darwin 25.6.0 `x86_64`, and Docker Desktop for x86_64.
 
-Since 25b's base (`9cec6bb`), `dev` gained `fix-launch-recovery-reauthorization`, the fix of D1, and the 24b crash windows were flipped from D1's expected failures to passing recovery (commits `8e6145e`, `1f21eb8`). 24c (`run-g2-partition-and-races`) is still not on `dev` at this change's base `843e293`, nor at `1847570`, the `dev` merged into the branch: no `run-g2-partition-and-races` change is active or archived there.
+Since 25b's base (`9cec6bb`), `dev` gained `fix-launch-recovery-reauthorization`, the fix of D1, and the 24b crash windows were flipped from D1's expected failures to passing recovery (commits `8e6145e`, `1f21eb8`). 24c (`run-g2-partition-and-races`) is still not on `dev` at this change's base `843e293`, nor at `1847570` and `fe64386`, the `dev` revisions merged into the branch, the later one before the evidence run: no `run-g2-partition-and-races` change is active or archived at any of them.
 
 ## Decisions
 
