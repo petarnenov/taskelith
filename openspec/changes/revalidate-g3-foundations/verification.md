@@ -13,11 +13,15 @@ G3 item 0 ([G3 work plan](/docs/g3-plan.md#work-items), row 0), by the owner's d
 
 ## Environment
 
-To be filled: host, Node.js version from `.nvmrc`, and the network access of each reviewer.
+- Host: macOS, Darwin 25.6.0. Node.js through nvm at the version of `.nvmrc`.
+- Reviewer CLIs: OpenCode (`opencode`), Codex CLI `codex-cli` 0.164.0 (from the log header), and Claude Code (`claude`).
+- Network access: the OpenCode `reviewer` agent and Claude Code reach the web; Codex runs read-only without network access. Items 1 and 2 therefore use OpenCode or Claude Code only (design D3).
 
 ## Author self-check
 
-To be filled before pass 1 of any item: the records against the review criteria, the baseline of design D1 against `eda6c283`, and the evidence check (every external link pinned or labeled, and `npm run verify:links`).
+- Records: checked against the review criteria of design D2 and the [review findings record](/docs/agent-task-protocol.md#review-findings-record).
+- Baseline: design D1 checked against `eda6c283`. The reviews found four errors in it, corrected as record findings: the Dockerfile lines (item 2 pass 1 L2), the Linux worker's account (item 6 pass 2 R1), the backoff of rejecting outcomes (item 8 pass 1 L1), and the unknown-exit rule and the deferred writers (item 8 pass 2 L3, L4).
+- Evidence: every external link in these records is pinned or labeled with its access date, and `npm run verify:links` passes.
 
 ## Checks and results
 
@@ -41,9 +45,17 @@ To be filled before pass 1 of any item: the records against the review criteria,
 
 | Proposed name | Item | Size S/M/L | Findings |
 | --- | --- | --- | --- |
-| `recheck-provider-terms-pages` | 2 | S | Pass 1 H1, H2 (Medium), H3, L1 |
-| `align-git-workspace-with-execution-boundary` | 6 | M | Pass 1 H1, M1 |
-| `align-scm-port-with-g2-credentials` | 7 | S | Pass 1 H1, M1, L1 |
+| `refresh-g3-dependency-observations` | 1 | S | Pass 1 L1, L2, L3, L4, L5 |
+| `recheck-provider-terms-pages` | 2 | S | Pass 1 H1, H2 (Medium), L1; pass 2 M2, M3, L1, L2. Not pass 1 H3, which is declined |
+| `align-account-pool-signals` | 5 | M | Pass 1 M1, M2, L1, L2, including capacity reservation section 10 and its living spec `capacity-reservation`; pass 2 M4, L5, L10, L11, L12, L13. Decision for M2: no separate reset signal; a cooldown ends at its stored time |
+| `align-account-pool-placement-baseline` | 5 | M | Pass 2 M3, L3, L4 |
+| `align-slot-credential-delivery` | 5 | M | Pass 2 M5, M6, M7, L6, L7, L8, L9. M7 depends on the `@taskelith/secrets` shape that `align-scm-port-with-g2-credentials` sets |
+| `align-git-workspace-with-execution-boundary` | 6 | L | Pass 1 H1, M1; pass 2 M1, L1, L2. Assigned to Liki |
+| `derive-workspace-names-from-task-ids` | 6 | To be sized by the coordinator | Pass 2 M2. Decision: encode the names (a readable prefix and a digest); the API does not restrict task identifiers |
+| `align-scm-port-with-g2-credentials` | 7 | M | Pass 1 H1, M1, L1; pass 2 H1, M1, M2, L1. Assigned to Desi |
+| `bind-product-writers-to-launch-invalidation` | 8 | M | Pass 1 H1 (Medium after pass 2 M1); pass 2 M1. Links the re-admission of plan item 44 |
+| `align-product-ports-with-g2-lifecycle` | 8 | M | Pass 1 M1, M3, M4; pass 2 H1, M2 (parts b and c), M3, M4, M5, L1, L2. Depends on `record-placement-outcome`; to Desi |
+| `record-placement-outcome` | 8 | L | Pass 1 M2 (its G2 part); pass 2 M2 (part a). Scheduling and PostgreSQL |
 
 ## Independent review
 
@@ -98,10 +110,10 @@ Reviewer A: OpenCode `deepseek-v4-pro`, variant `high`; pass 3 by Claude Code `c
 
 | Finding | Resolution |
 | --- | --- |
-| Pass 1 H1 (High): the current Anthropic Usage Policy names services that route requests through consumer subscriptions; `docs/qualification/claude-code.md` omits the clause and still says pooling is not named | Deferred to `recheck-provider-terms-pages`. Reported to the coordinator for the owner, because it bears on owner decision D15 |
-| Pass 1 H2 (Medium, labelled H2 by the reviewer): the Agent SDK overview now states that the SDK is governed by the Commercial Terms; the record does not say so | Deferred to `recheck-provider-terms-pages` |
-| Pass 1 H3 (High): the Codex App Server page was rewritten and no longer carries the authentication statement that `docs/qualification/codex.md` quotes as its most direct source | Deferred to `recheck-provider-terms-pages` |
-| Pass 1 L1 (Low): the legal and compliance page adds a sentence allowing customers to provision their own API keys; the record misses it | Deferred to `recheck-provider-terms-pages` |
+| Pass 1 H1 (High): the Anthropic Usage Policy names services that route requests through consumer subscriptions; the 2026-10-25 review omitted the clause, which Wayback snapshots of 2026-10-24 (`20261024120451`) and 2026-10-26 (`20261026081456`) carry, and `docs/qualification/claude-code.md` still says pooling is not named | Deferred to `recheck-provider-terms-pages`. The coordinator notified the owner on D15: the clause was omitted at decision time; the anti-circumvention clause (pass 2 M2) and the carve-out conditions against ADR 0005 decision 2 (pass 2 M3) bear on it too |
+| Pass 1 H2 (Medium, labelled H2 by the reviewer): the Agent SDK overview states that the SDK is governed by the Commercial Terms; the 2026-10-25 review omitted it, which snapshots `20261020141633` and `20261024042705` carry | Deferred to `recheck-provider-terms-pages` |
+| Pass 1 H3 (High): the Codex App Server page was rewritten and no longer carries the authentication statement that `docs/qualification/codex.md` quotes as its most direct source | Declined after pass 2 H1: the live page, checked by pass 2 on 2026-10-27, carries both quoted sentences word for word; pass 1 read a truncated copy. Not part of the follow-up |
+| Pass 1 L1 (Low): the legal and compliance page has a sentence allowing customers to provision their own API keys; the 2026-10-25 review omitted it, which snapshots `20261020141144` and `20261024042054` carry | Deferred to `recheck-provider-terms-pages` |
 | Pass 1 L2 (Low, record): design D1 cited `infra/installation/Dockerfile:53` to `:55` for the `worker-harnesses` stage | Fixed in `e9f35c5d`: the stage and its `DISABLE_AUTOUPDATER=1` are at lines 72 to 74 |
 
 The reviewer found the GitHub terms unchanged and no GitHub finding.
@@ -179,7 +191,6 @@ Reviewer A: Codex `gpt-6-astra`, replacing OpenCode `kimi-k2.7-code`. Reviewer B
 
 - Pass 1 of items 1, 5, and 8 with the replacement reviewers; passes 2 and, where needed, 3 of items 2, 6, and 7
 - `make verify` before the pass 2 records
-- Coordinator confirmation of the proposed pass 3 replacements
 - Summary per item and follow-up list complete, handed to the coordinator
 - Integration into dev by the coordinator (single pull request)
 - Follow-up fixes land before any other G3 item starts
