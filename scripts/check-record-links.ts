@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { posix } from 'node:path';
+import { Lexer, marked, type Token } from 'marked';
 
 // Checks the links of OpenSpec records and docs; an active change is checked
 // at its future archived path, so a link that archiving breaks fails now.
@@ -12,10 +13,8 @@ const SPECS_DIR = 'openspec/specs';
 // A name with this prefix keeps it when `openspec archive` moves the change.
 const DATE_PREFIX = /^\d{4}-\d{2}-\d{2}-/;
 const EXTERNAL = /^[a-z][a-z\d+.-]*:/i;
-const FENCE = /^ {0,3}(`{3,}|~{3,})/;
-const INLINE_CODE = /(`+)[^`][\s\S]*?\1(?!`)/g;
-const LINK = /!?\[(?:[^[\]]|\[[^[\]]*\])*\]\(\s*(<[^>]*>|[^\s)]+)(?:\s+(?:"[^"]*"|'[^']*'))?\s*\)/g;
-const HEADING = /^ {0,3}#{1,6}[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/;
+const ENTITY = /&(#x[\da-f]+|#\d+|[a-z]+);/gi;
+const NAMED_ENTITIES: Readonly<Record<string, string>> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
 
 export interface MarkdownLink {
   line: number;
@@ -53,33 +52,55 @@ interface Location {
 
 type Resolution = { path: string } | { reason: string };
 
-function proseLines(text: string): { line: number; content: string }[] {
-  const lines: { line: number; content: string }[] = [];
-  let fence: string | undefined;
-  text.split('\n').forEach((content, index) => {
-    const marker = FENCE.exec(content)?.[1];
-    if (fence) {
-      if (marker?.[0] === fence[0] && marker.length >= fence.length) fence = undefined;
-    } else if (marker) {
-      fence = marker;
-    } else {
-      lines.push({ line: index + 1, content });
-    }
-  });
-  return lines;
+function lineAt(text: string, offset: number): number {
+  return text.slice(0, offset).split('\n').length;
 }
 
-export function markdownLinks(text: string): MarkdownLink[] {
-  return proseLines(text).flatMap(({ line, content }) =>
-    [...content.replace(INLINE_CODE, '').matchAll(LINK)].map((match) =>
-      ({ line, target: match[1].replace(/^<(.*)>$/, '$1') })));
+// Tokens carry no position, so each raw text is searched from the last
+// match; a link spanning block quote lines keeps the position before it.
+function positionOf(text: string, raw: string, from: number): number {
+  const at = text.indexOf(raw, from);
+  return at === -1 ? from : at;
+}
+
+// marked's GFM lexer finds the links GitHub renders, none in code or HTML.
+export function markdownLinks(source: string): MarkdownLink[] {
+  const text = source.replace(/\r\n?/g, '\n');
+  const links: MarkdownLink[] = [];
+  let blockStart = 0;
+  for (const block of Lexer.lex(text)) {
+    blockStart = positionOf(text, block.raw, blockStart);
+    let linkStart = blockStart;
+    marked.walkTokens([block], (token) => {
+      if (token.type !== 'link' && token.type !== 'image') return;
+      linkStart = positionOf(text, token.raw, linkStart);
+      links.push({ line: lineAt(text, linkStart), target: token.href });
+    });
+    blockStart += block.raw.length;
+  }
+  return links;
+}
+
+function decodeEntities(text: string): string {
+  return text.replace(ENTITY, (entity, name: string) => {
+    if (!name.startsWith('#')) return NAMED_ENTITIES[name.toLowerCase()] ?? entity;
+    const hex = name[1].toLowerCase() === 'x';
+    return String.fromCodePoint(Number.parseInt(name.slice(hex ? 2 : 1), hex ? 16 : 10));
+  });
+}
+
+// The text GitHub renders: code verbatim, images and raw HTML dropped.
+function plainText(tokens: readonly Token[]): string {
+  return tokens.map((token) => {
+    if (token.type === 'image' || token.type === 'html') return '';
+    if (token.type === 'codespan') return token.text;
+    if ('tokens' in token && token.tokens) return plainText(token.tokens);
+    return decodeEntities('text' in token ? token.text : '');
+  }).join('');
 }
 
 function headingSlug(heading: string): string {
   return heading
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/<[^>]+>/g, '')
-    .replace(/[`*]/g, '')
     .toLowerCase()
     .replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, '')
     .replace(/ /g, '-');
@@ -89,10 +110,9 @@ function headingSlug(heading: string): string {
 export function headingAnchors(text: string): Set<string> {
   const anchors = new Set<string>();
   const repeats = new Map<string, number>();
-  for (const { content } of proseLines(text)) {
-    const heading = HEADING.exec(content)?.[1];
-    if (heading === undefined) continue;
-    const base = headingSlug(heading);
+  marked.walkTokens(Lexer.lex(text), (token) => {
+    if (token.type !== 'heading') return;
+    const base = headingSlug(plainText(token.tokens ?? []));
     let anchor = base;
     while (anchors.has(anchor)) {
       const repeat = (repeats.get(base) ?? 0) + 1;
@@ -100,7 +120,7 @@ export function headingAnchors(text: string): Set<string> {
       anchor = `${base}-${repeat}`;
     }
     anchors.add(anchor);
-  }
+  });
   return anchors;
 }
 
@@ -146,6 +166,7 @@ function resolvePath(location: Location, path: string): Resolution {
   if (!rootRelative && isSpecDelta(location.placedFile)) {
     return { reason: 'relative link in a spec delta; use a root-relative link' };
   }
+  if (path === '') return { path: location.file };
   const placed = rootRelative
     ? posix.normalize(path.slice(1))
     : posix.join(posix.dirname(location.placedFile), path);
@@ -188,7 +209,7 @@ class LinkChecker {
     const hashAt = target.indexOf('#');
     const path = decoded((hashAt === -1 ? target : target.slice(0, hashAt)).replace(/\?.*$/, ''));
     const anchor = hashAt === -1 ? '' : decoded(target.slice(hashAt + 1));
-    const resolution = path === '' ? { path: location.file } : resolvePath(location, path);
+    const resolution = resolvePath(location, path);
     if ('reason' in resolution) return resolution.reason;
     const stats = statSync(posix.join(this.root, resolution.path), { throwIfNoEntry: false });
     if (!stats) return 'target does not exist';
