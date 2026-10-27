@@ -1,0 +1,1 @@
+{"change": "issue-installation-certificates", "pass": 1, "role": "A", "reviewer": {"harness": "codex", "model": "gpt-6.1-sol", "variant": "medium"}, "session": "01a17f91-f1b2-7712-83bd-fa2b090dcdfd", "counts": {"critical": 0, "high": 3, "medium": 6, "low": 2}}
