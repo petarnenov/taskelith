@@ -21,7 +21,7 @@
 ## 5. Verify and review
 
 - [x] 5.1 Run `npm run openspec -- validate normalize-reviewer-keys --strict` and `make verify`, and record them in `verification.md`.
-- [ ] 5.2 Review pass 1 by reviewer A.
+- [x] 5.2 Review pass 1 by reviewer A, and its fixes.
 - [ ] 5.3 Review pass 2 by reviewer B.
 - [ ] 5.4 Review pass 3 by reviewer A, if pass 2 has findings above Low.
 - [ ] 5.5 Archive the change.

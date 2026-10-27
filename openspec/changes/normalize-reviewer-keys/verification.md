@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-27. The author's verification and `make verify` are recorded below; the independent review has not run yet.
+Date: 2026-10-27. The author's verification and `make verify` are recorded below, then review pass 1 by reviewer A, its fixes, and `make verify` after them; passes 2 and 3 have not run yet.
 
 ## Scope and source
 
@@ -78,7 +78,29 @@ The "By reviewer" section of `make findings ARGS="index"` likewise has 8 rows af
 
 ## Independent review
 
-Not run yet. The coordinator assigned reviewer A, Codex CLI (`gpt-6.1-sol`), for passes 1 and 3, and reviewer B, Claude Code (`claude-opus-5-5`, effort `high`), for pass 2. Each pass that runs to a report adds its section here and a line in `passes.jsonl`.
+The coordinator assigned reviewer A, Codex CLI (`gpt-6.1-sol`), for passes 1 and 3, and reviewer B, Claude Code (`claude-opus-5-5`, effort `high`), for pass 2. Each pass that runs to a report adds its section here and a line in `passes.jsonl`.
+
+### Review pass 1
+
+- **Reviewer:** A, Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, read-only sandbox, session `01a17f10-686f-7c82-9e3e-7c7c408c4366`; run by the coordinator.
+- **Revision reviewed:** `b87abe75...20e90fd2`.
+- **Invocation:** `codex exec -m gpt-6.1-sol -c model_reasoning_effort='"medium"' -s read-only -C <worktree> - < <prompt-file>`, with the prompt outside the worktree.
+- **Model confirmation:** the model, reasoning effort, read-only sandbox, and session id in the output header, as the coordinator reported them.
+- **Snapshot:** before and after the pass `d9d02468213ce27dcf71beebaef817271db331abaa5ed3d38a42ddb8aafc28cb`, identical.
+- **Result:** Critical 0, High 0, Medium 2, Low 0, as in `passes.jsonl` line 1 and `findings.jsonl` lines 1 and 2. File lines are those of `20e90fd2`.
+- **M1, contract-drift** (`scripts/reviewer-keys.ts:41`): the OpenCode model rule checked only that the model contains `/`, so `opencode-go/` passed both the schema and the canonical key rule. Fixed in `6412f287`: an OpenCode model must have a non-empty provider and a non-empty model around its first `/`, with the message `an OpenCode model is <provider>/<model>, both parts non-empty`; `design.md` D3 and D4 and the proposal say so. Tests: `an OpenCode model needs a non-empty provider and a non-empty model` (`test/reviewer-keys.test.ts`) and `validate rejects an OpenCode model with an empty part only in active changes` (`test/findings.test.ts`), which rejects the key in an active `findings.jsonl` and `passes.jsonl` and passes the same records in an archived change. Fail-before: with `scripts/reviewer-keys.ts` of `20e90fd2` and the new tests, the two files gave 33 tests, 31 pass, 2 fail, the two new tests; after the fix 33 of 33 pass. The category is `contract-drift`, because the code accepted what the spec's "Canonical reviewer key" excludes.
+- **M2, contract-drift** (`docs/governance.md:45`): the same-harness fallback counted a reviewer of another harness as available without asking whether it may take the role, so an OpenCode reviewer barred from role B of a code task could block the fallback to another model of A's harness; the same gap was in `docs/agent-task-protocol.md:102`, `.claude/skills/taskelith-task-protocol/SKILL.md:15`, the living requirement "No reviewer of another harness", and the scenarios "Assigned reviewer fails to run" and "Unavailable reviewer at assignment" of "Unavailable reviewer", which the delta did not modify. Fixed in `6412f287`: governance "Unavailable reviewer" counts only reviewers allowed in the role under "Reviewer assignment" in its fallback; the protocol and the skill say the same for the proposed replacement and the fallback, pointing to governance; the delta modifies "Unavailable reviewer" (486 characters) and "No reviewer of another harness" (405 characters), keeping every scenario, rewording those two scenarios and the two of the fallback, and adding "Barred reviewer of another harness"; `design.md` D6 and the proposal name the change. `npm run openspec -- validate normalize-reviewer-keys --strict` and `npm run verify:archive` pass.
+- These fixes go to reviewer B in pass 2, so their outcome is `fixed`.
+
+`make verify` at `6412f287` (with `TMPDIR` on disk): exit 0. Tests: 2319, 2272 pass, 0 fail, 0 cancelled, 47 skipped (the same platform-bound skips). Coverage of all files: lines 99.28%, branches 92.34%, functions 98.94%. `validate --all --strict`: 70 passed, 0 failed. Every findings file is valid, 43 files; every pass summary file is valid, 23 files; every active OpenSpec change archives into strictly valid specs; 0 breaking changes in the four contract documents against `b87abe75`; 731 package paths verified, 41 with reviewed license coverage gaps; the comment, link, boundary, and package checks passed.
+
+### Review pass 2
+
+Not run yet: reviewer B, Claude Code (`claude-opus-5-5`, effort `high`), checks the pass 1 fixes and reviews the whole change.
+
+### Review pass 3
+
+Not run yet: reviewer A confirms the pass 2 fixes, if pass 2 has findings above Low.
 
 ## Limitations
 
@@ -87,6 +109,6 @@ Not run yet. The coordinator assigned reviewer A, Codex CLI (`gpt-6.1-sol`), for
 
 ## Remaining gates
 
-- Review passes 1 and 3 by reviewer A and pass 2 by reviewer B.
+- Review pass 2 by reviewer B and, if it has findings above Low, pass 3 by reviewer A.
 - Archive of the change on its branch.
 - Integration into dev by the coordinator (single pull request).
