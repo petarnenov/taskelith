@@ -101,6 +101,16 @@ test('PEM private keys of every type are redacted, whole or cut, and certificate
   assert.equal(sink.records[0]!.fields['cause'], `tls: ${REDACTED}`);
 });
 
+test('a marked secret in front of a PEM key leaves no part of the key', () => {
+  const key = `${pem('BEGIN', 'PRIVATE KEY')}\n${KEY_BODY}\n${pem('END', 'PRIVATE KEY')}`;
+  const { sink, logger: log } = logger();
+  log.with({ correlationId: `password=${key}` }).warn('e', { cause: `password=${key}`, detail: `x token= ${key} y` });
+  const { fields, correlation } = sink.records[0]!;
+  assert.deepEqual([fields['cause'], fields['detail'], correlation.correlationId], [
+    `password=${REDACTED}`, `x token=${REDACTED} y`, `password=${REDACTED}`,
+  ]);
+});
+
 test('text is redacted in linear time on long runs', () => {
   const units = ['a.', '.a', 'A.', 'a.b', 'a-', 'a+', 'eyJ.', 'eyJ', 'eyJ_', 'eyJa.b.', 'proxy-', 'x.eyJ'];
   assertLinearOnRuns(redactText, [...units, 'bearer ', 'token=', 'tkop_', 'SA', 'a://', 'a://b@']);

@@ -1,5 +1,12 @@
-import { REDACTED, redactUrlUserinfoEvenEmpty, redactWith, SECRET_SHAPE_RULES } from '@taskelith/observability';
-import { replaceSpans, revealedSpans } from './revealed-spans.js';
+import {
+  pemPrivateKeySpans,
+  REDACTED,
+  redactUrlUserinfoEvenEmpty,
+  redactWith,
+  replaceSpans,
+  SECRET_SHAPE_RULES,
+} from '@taskelith/observability';
+import { mergedSpans, revealedSpans } from './revealed-spans.js';
 
 export { REDACTED };
 
@@ -11,9 +18,9 @@ const SECRET_TEXT_RULES = [redactUrlUserinfoEvenEmpty, ...SECRET_SHAPE_RULES];
 const SECRET_VARIABLE = /(?:TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDS|SEED|PRIVATE_KEY|API_KEY|TLS_KEY|SSL_KEY)/i;
 
 // Redacts the credentials revealed to a run, which may have no known shape
-// (account pool contract section 7.4), then the installation's shapes.
+// (account pool section 7.4), with PEM keys found first, then the shapes.
 export function redactSecrets(text: string, revealed: readonly string[] = []): string {
-  const spans = revealedSpans(text, revealed, SECRET_TEXT_RULES);
+  const spans = mergedSpans([...pemPrivateKeySpans(text), ...revealedSpans(text, revealed, SECRET_TEXT_RULES)]);
   return redactWith(replaceSpans(text, spans, REDACTED), SECRET_TEXT_RULES);
 }
 

@@ -90,6 +90,13 @@ test('a child environment drops TLS key files and PEM keys, and keeps the CA', (
   assert.equal(redactSecrets(`failed: ${key}`), `failed: ${REDACTED}`);
 });
 
+test('a revealed value inside PEM markers leaves no part of the key', () => {
+  const key = ['-----BEGIN PRIVATE KEY-----', 'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49', '-----END PRIVATE KEY-----'].join('\n');
+  assert.equal(redactSecrets(`failed: ${key} end`, ['PRIVATE']), `failed: ${REDACTED} end`);
+  const redacted = redactFailure(failure('internal', `tls: ${key}`, { key }), ['PRIVATE', 'BEGIN']);
+  assert.deepEqual([redacted.message, redacted.details], [`tls: ${REDACTED}`, { key: REDACTED }]);
+});
+
 // A subscription token shape that no rule knows (account pool section 7.4).
 const SLOT_TOKEN = 'q8Rz3vLmN2pXw7Kd';
 

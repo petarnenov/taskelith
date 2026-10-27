@@ -87,28 +87,46 @@ export function redactCredsBlocks(text: string): string {
 const PEM_KEY_BEGIN = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/g;
 const PEM_KEY_END = /-----END [A-Z0-9 ]*PRIVATE KEY-----/g;
 
-// Each begin marker hides the text up to the next end marker, and without
+// A half-open range of text positions.
+export interface TextSpan {
+  readonly start: number;
+  readonly end: number;
+}
+
+// One marker per sorted span; the text between spans is kept as it was.
+export function replaceSpans(text: string, spans: readonly TextSpan[], marker: string): string {
+  let replaced = '';
+  let kept = 0;
+  for (const span of spans) {
+    replaced += `${text.slice(kept, span.start)}${marker}`;
+    kept = span.end;
+  }
+  return replaced + text.slice(kept);
+}
+
+// Each begin marker spans the text up to the next end marker, and without
 // one to the end of the text, since a cut key is still secret. One scan.
-export function redactPemPrivateKeys(text: string): string {
-  let redacted = '';
-  let from = 0;
+export function pemPrivateKeySpans(text: string): TextSpan[] {
+  const spans: TextSpan[] = [];
   PEM_KEY_BEGIN.lastIndex = 0;
   for (let begin = PEM_KEY_BEGIN.exec(text); begin !== null; begin = PEM_KEY_BEGIN.exec(text)) {
     PEM_KEY_END.lastIndex = PEM_KEY_BEGIN.lastIndex;
     const end = PEM_KEY_END.exec(text);
-    redacted += `${text.slice(from, begin.index)}${REDACTED}`;
-    from = end === null ? text.length : PEM_KEY_END.lastIndex;
+    spans.push({ start: begin.index, end: end === null ? text.length : PEM_KEY_END.lastIndex });
     if (end === null) break;
-    PEM_KEY_BEGIN.lastIndex = from;
+    PEM_KEY_BEGIN.lastIndex = PEM_KEY_END.lastIndex;
   }
-  return `${redacted}${text.slice(from)}`;
+  return spans;
+}
+
+export function redactPemPrivateKeys(text: string): string {
+  return replaceSpans(text, pemPrivateKeySpans(text), REDACTED);
 }
 
 // Secrets marked by their syntax: URL user information, a bearer token, and
 // a `key=value` pair.
 export const MARKED_SECRET_RULES: readonly TextRule[] = [redactUrlUserinfo, redactBearerTokens, redactKeyValuePairs];
-// Bearer secrets, NKey seeds, `.creds` blocks, JWTs (trust model 5), and PEM
-// private keys, first, so no other rule cuts a key's markers apart.
-export const SECRET_SHAPE_RULES: readonly TextRule[] = [
-  redactPemPrivateKeys, redactIssuedSecrets, redactCredsBlocks, redactNkeySeeds, redactJwts,
-];
+// Bearer secrets, NKey seeds, `.creds` blocks, and JWTs (trust model 5).
+export const TOKEN_SHAPE_RULES: readonly TextRule[] = [redactIssuedSecrets, redactCredsBlocks, redactNkeySeeds, redactJwts];
+// PEM private keys come first, so no other rule cuts a key's markers apart.
+export const SECRET_SHAPE_RULES: readonly TextRule[] = [redactPemPrivateKeys, ...TOKEN_SHAPE_RULES];
