@@ -22,7 +22,7 @@ Linux 7.0.0-38-generic x86_64, Node.js v24.22.1 through `nvm use`, Git 2.55.0, D
 - Checked in the Linux test image that a Node.js child spawned with `uid` and `gid` from a parent with supplementary groups 2000 and 4 has no supplementary group (`Groups:` empty), and that the image has no `git`, so the Git-based Linux tests stay item 16's.
 - Checked that `@taskelith/worker-journal` and `@taskelith/workspace` are private workspace packages, not part of the published `taskelith` package (`files` of the root `package.json`), so the commit type is `chore`.
 - Requirement bodies measured after the pass 1 fixes: 416, 494, 468, 403, 289, 398, 347, 363, and 331 characters (`git-workspace-port`), 494 (`worker-journal`), 416 (`worker-journal-adapter`).
-- Checked the delegate's assumption that no G3 item before a uid pool needs more than one concurrent Git-backed attempt per Linux worker against `docs/g3-plan.md`: it does not hold for item 41 (`run-g3-acceptance`) as planned with the one remote worker of D14. Its delegation step has a waiting parent attempt, whose workspace stays handed off while its child runs, and the capacity reservation contract section 7 admits a delegation only while waiting parents hold fewer worker slots than the fleet's eligible slots. With one slot per Linux worker and one such worker, the child cannot be admitted. Items 38 and 21 (D7 review at the same head) run sequentially after the implementation and do not need a second slot. Reported to the coordinator for the owner.
+- G3 item 41 decision, round 2 (the owner's away delegate, Claude, away run `20261027T162806Z-claude-44593`, relayed by the coordinator Niki, 2026-10-27), replacing the earlier conflict note: keep the cap of one handed-off workspace per Linux worker and reject option (c), reclaim while waiting; a waiting parent stays live, and `openspec/specs/capacity-reservation/spec.md:92` counts its slot anyway. Item 41 runs on the item 37 installation, a local Linux worker container plus the D14 remote worker, each with slot count 1, so a delegating parent and its child are placed on different workers. Citations checked: `docs/g3-plan.md:134` is item 37 (the coordinator's brief named line 136, which is item 39), `:138` is item 41, `:190` is D14, and `capacity-reservation/spec.md:92` is the requirement "Progress across delegation trees". The worker-slots-exhausted refusal and the waiting stay; no resume or reclaim rule and no new G3 item were added. Added the scenario "Delegated child on a second worker" to the `git-workspace-port` delta and its mirror in the contract's section 13 test list.
 
 ## Evidence: fail before, pass after
 
@@ -40,6 +40,11 @@ Linux 7.0.0-38-generic x86_64, Node.js v24.22.1 through `nvm use`, Git 2.55.0, D
 | Conformance cases "hands the checkout to the execution and takes it back without outside links" and "refuses Git work on a checkout whose Git directory holds a link" | Did not exist: the port had no `handOff` or `reclaim` | Pass for the double; each fails for its defective variants (Git on a handed-off checkout, outside hard links kept, a link followed in `.git`) |
 
 ## Checks and results
+
+After the round 2 decision on item 41, on the working tree of `5bc6e3f5`:
+
+- `npm run openspec -- validate align-git-workspace-with-execution-boundary --strict`: valid. `make findings ARGS="validate"`: valid, 32 findings files and 12 pass summary files. `npm run verify:links`: every checked link conforms.
+- `TMPDIR=/home/petar/.cache/taskelith-verify-tmp make verify`: passed; 2217 tests, 2170 passed, 0 failed, 47 skipped; coverage of all files 99.24 % lines, 92.19 % branches, 98.93 % functions.
 
 After the pass 1 fixes and the scope addition, on the working tree of `732fe1ad`:
 
@@ -92,6 +97,7 @@ Findings 2 and 8 are fixed at the contract level; their tests need the Git adapt
 
 - Review pass 2 by reviewer B (Claude Code, `claude-fable-5-1`), which checks the pass 1 fixes and reviews the whole change.
 - Review pass 3 by reviewer A, only if pass 2 has findings above Low; a Low-only pass 2 is fixed without another review.
-- The owner's confirmation of the away delegate's decisions on open questions 1 and 2, and the conflict of the one-slot cap with item 41's delegation step (author self-check).
+- The owner's confirmation of the away delegate's decisions on open questions 1 and 2 and the round 2 decision on item 41.
+- Before item 41 starts: if the D14 remote worker is not eligible for the acceptance task (wrong harness or platform), escalate to the owner.
 - Later work, not in this change: (i) a uid pool, an execution account per slot, which lifts the one-workspace cap; (ii) the shared execution account uid 10003 lets executions of one Linux worker signal each other's processes, an exposure since G2.
 - Integration into dev by the coordinator (single pull request)

@@ -65,6 +65,10 @@ A Linux worker whose executions run under a separate, shared execution account S
 - **WHEN** a Linux worker with a separate execution account holds a handed-off workspace and receives a second assignment
 - **THEN** it refuses it with `worker-slots-exhausted`, and the second attempt waits for placement
 
+#### Scenario: Delegated child on a second worker
+- **WHEN** a parent on one worker waits for its delegated child and a second worker has a free slot
+- **THEN** the child is placed on the second worker, and each worker keeps one handed-off workspace
+
 ### Requirement: Reclaim program containment
 Before it starts the reclaim program, the worker SHALL record the program's containment in the hand-off record, and when it finds one recorded there, after a restart or an interrupted reclaim, it SHALL prove that containment's process set empty before it reclaims again, runs Git on the workspace, or hands it off, and SHALL otherwise keep the workspace handed off and report it for reconciliation.
 
