@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-26, updated 2026-10-27. Author verification and review passes 1 and 2 are recorded below, review pass 3 is pending; the fixes of pass 1 (Low only) are UNREVIEWED.
+Date: 2026-10-26, updated 2026-10-27. Author verification and review passes 1, 2, and 3 are recorded below; the fixes of pass 1 (Low only) are UNREVIEWED.
 
 ## Scope and source
 
@@ -73,6 +73,15 @@ OpenCode, model `opencode-go/kimi-k2.7-code` (default variant, none passed), run
 - The reviewer confirmed (its answer was in Bulgarian; paraphrased here): the restore is an exact revert; the resolution keeps both sides' tests, drops the `lastSealedExecution` test correctly, and merges the imports correctly; #314's `recoverIntent` change does not affect the report of `unconfirmedSealedExecutions` through `Launch.#nextExecution`; `4289b8f` touches no input of this change; the deltas keep every scenario and edit of `dev`'s current text and touch neither "Cancellation forwarding" nor "Assignment ended by a launch rejection"; the record is accurate.
 - Limitation: a standalone OpenCode session stores no model field in its JSON events, so the model is confirmed by the `-m` argument only.
 
+### Review pass 3
+
+OpenCode, model `opencode-go/kimi-k2.7-code` (default variant, none passed), run by the worker (Pepi) from the worktree with the same invocation as pass 2, with the prompt and log outside the worktree. Session `ses_e8447b3c8ffe8QYk8bdDlmTmcQ`. Revision reviewed: `9f4f37b`. Findings: 0 Critical, 0 High, 0 Medium, 0 Low. Pass 3 is the last pass the governance cap of three allows; no further review pass follows.
+
+- Scope: the changes since `ae13b7a` (Return 1, second round, below): the pass 2 record commit `9dfed68`, the merge `eda2e56` of `dev` at `656a34d` (#322) with its conflict in `docs/contracts/launch-authorization.md` section 11, the interaction of #322's `#authorizationFailed` with `#nextExecution`, the delta reconciliation `2297222` and `9f4f37b` of "Journaled launch authorization", and the "Return 1, second round" record; it also confirmed pass 2's record.
+- Read-only: `git ls-files -co --exclude-standard | xargs shasum -a 256 | shasum -a 256` before and after the run gave `1c0078671423cc334d7b4dbbb64f32338707bb233288e50abebffb45ccf4596d` both times.
+- The reviewer confirmed: `9dfed68` changes only `tasks.md` and `verification.md`; the "Reported seal" and "Worker client" bullets are each kept verbatim (diffed against each parent); `#authorizationFailed` (`apps/worker/src/launch-orchestrator.ts:549`, called at `:526`) only logs and does not read `reportsNotStartedFor`, which `#nextExecution` (`:470`) still builds from `unconfirmedSealedExecutions`; #322's test (`apps/worker/test/launch-orchestrator.test.ts:169-190`) checks only the log and the request count; "Logged authorization failure" is kept verbatim; the 491-character body keeps every rule of `dev`'s text; "Execution ownership" and "Start reconciliation" are unchanged by `dev` since `1847570`; no delta touches "Control-plane failure cause"; the body lengths are 419, 491, and 472; the record is accurate.
+- Limitation: a standalone OpenCode session stores no model field in its JSON events, so the model is confirmed by the `-m` argument only.
+
 ## Return 1 (integration conflict)
 
 Reviewed in review pass 2 above.
@@ -96,7 +105,7 @@ Reviewed in review pass 2 above.
 
 ## Return 1, second round
 
-Awaiting review pass 3, which reviews this round's merge and reconciliation.
+Reviewed in review pass 3 above, with 0 findings.
 
 - **Archive undone:** an archive run on the working tree after review pass 2 was never committed; the change was moved back to the active directory and the living specs restored before this round. Its record edits were committed as `9dfed68` without the archive checks.
 - **Merge:** `dev` moved on to `656a34d` (#322, `report-control-plane-failure-cause`); `git merge origin/dev` as `eda2e56`. One conflict, in `docs/contracts/launch-authorization.md`, section 11: this change rewrote the "Reported seal" bullet (a list of at most 8), and #322 extended the "Worker client" bullet (the failure `cause` and `causeCode`, and the `worker.launch.authorization-failed` log). Resolution: this change's "Reported seal" bullet and #322's "Worker client" bullet, each verbatim. `package-lock.json` and `docs/dependencies/` equal `dev`'s; the post-merge inventory check reported nothing stale.
@@ -109,7 +118,7 @@ Awaiting review pass 3, which reviews this round's merge and reconciliation.
   - `node --experimental-strip-types --test` on `packages/modules/execution/test/journal-recovery.test.ts`, `apps/worker/test/launch-orchestrator.test.ts`, and `apps/worker/test/start-reconciliation.test.ts`: 105 tests, 105 passed.
   - `npm run verify:comments`: `Every comment is within the comment length rule.`
   - Crash windows were not rerun: this round changes no code, and `make verify` runs them.
-- **Not done yet:** `make verify` on this round's head; review pass 3 of this round; the archive again (step 7) as the last commit.
+- **`make verify`:** it runs once on the reconciled tree, on the tree of the archive commit (step 7, Archive checks below), which contains the merge, the reconciliation, and this record. Before it, only the targeted checks above ran on this round's tree.
 
 ## Limitations
 
@@ -119,7 +128,4 @@ Awaiting review pass 3, which reviews this round's merge and reconciliation.
 
 ## Remaining gates
 
-- `make verify` on the head of Return 1, second round: pending.
-- Review pass 3 of Return 1, second round: pending.
-- Archive on the branch again (protocol step 7): pending.
 - Integration into `dev` by the coordinator (single pull request).
