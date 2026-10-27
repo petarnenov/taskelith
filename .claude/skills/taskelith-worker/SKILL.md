@@ -19,5 +19,6 @@ The handoff message names:
 - a short summary;
 - the evidence;
 - the review passes, with session IDs and finding counts;
+- that the review findings are recorded in the change's `findings.jsonl`;
 - the `make verify` totals;
 - the remaining gates.

@@ -1,9 +1,9 @@
 import {
-  lastSealedExecution,
   launchRejection,
   launchRetryDelay,
   parseLaunchParameters,
   planJournalRecovery,
+  unconfirmedSealedExecutions,
   workerLaunchDeadline,
   type CancellationTarget,
   type CommandId,
@@ -22,7 +22,7 @@ import {
   type SealedExecution,
   type WorkerJournal,
 } from '@taskelith/execution';
-import { ok, parseIdentifier, type Result } from '@taskelith/kernel';
+import { ok, parseIdentifier, type Failure, type Result } from '@taskelith/kernel';
 import { SILENT_LOGGER, type Logger } from '@taskelith/observability';
 import type { AdmissionCheck } from './admission-pressure.js';
 import {
@@ -199,7 +199,7 @@ export class LaunchOrchestrator {
     if (authority === undefined || intent === undefined || unsettled || this.#launches.has(assignmentId)) return false;
     // Registered before it runs, so a cancellation always finds it.
     const launch = new Launch({
-      options: this.#options, authority, watch: this.#watch, space: this.#space, intent, stopping: signal,
+      options: this.#options, authority, watch: this.#watch, space: this.#space, logger: this.#logger, intent, stopping: signal,
       cancellations: (executionId) => this.#cancellationsOf(assignmentId, executionId),
       ...(resume === undefined ? {} : { resume }),
     });
@@ -399,7 +399,7 @@ type Executed = 'relaunch' | 'end';
 interface LaunchedExecution {
   readonly executionId: ExecutionId;
   readonly authorizedBefore: boolean;
-  readonly reportsNotStartedFor?: SealedExecution;
+  readonly reportsNotStartedFor?: readonly SealedExecution[];
 }
 
 // What one intent's launches work with; `resume` continues an execution
@@ -409,6 +409,7 @@ interface LaunchContext {
   readonly authority: LaunchAuthorityClient;
   readonly watch: ExecutionWatch;
   readonly space: SpaceRetry;
+  readonly logger: Logger;
   readonly intent: JournaledIntent;
   readonly stopping: AbortSignal;
   readonly cancellations: (executionId: ExecutionId) => Result<readonly CommandId[]>;
@@ -464,14 +465,14 @@ class Launch {
     }
   }
 
-  // A new or resumed execution reports the intent's last sealed one, whose
-  // `not-started` may not have reached the authority yet (journal section 5).
+  // A new or resumed execution reports the intent's unconfirmed sealed ones,
+  // whose `not-started` may not have reached the authority (journal, 5).
   #nextExecution(resume: ExecutionId | undefined): LaunchedExecution | undefined {
     const executionId = resume ?? this.#newId('ExecutionId');
     const snapshot = this.#options.journal.snapshot();
     if (executionId === undefined || !reported(this.#options, snapshot)) return undefined;
-    const sealed = lastSealedExecution(snapshot.value, this.#intent.assignmentId);
-    const report = sealed === undefined ? {} : { reportsNotStartedFor: sealed };
+    const sealed = unconfirmedSealedExecutions(snapshot.value, this.#intent.assignmentId);
+    const report = sealed.length === 0 ? {} : { reportsNotStartedFor: sealed };
     return { executionId, authorizedBefore: resume !== undefined, ...report };
   }
 
@@ -522,6 +523,7 @@ class Launch {
       const answer = await this.#context.authority.authorize(sent);
       if (this.#stopping.aborted) return { kind: 'end' };
       if (!answer.ok) {
+        this.#authorizationFailed(executionId, operationId, answer.error);
         if (!this.#beforeDeadline(reading.value, DEFAULT_PARAMETERS)) return this.#expired(executionId, operationId);
         await this.#backOff();
         await this.#awaitAdmission();
@@ -540,6 +542,12 @@ class Launch {
           return this.#rejected(executionId, operationId, outcome.rejection);
       }
     }
+  }
+
+  // The details name the cause, such as the code of a lost connection;
+  // they never replace the known fields.
+  #authorizationFailed(executionId: ExecutionId, operationId: OperationId, { code, message, details }: Failure): void {
+    this.#context.logger.warn('worker.launch.authorization-failed', { ...details, executionId, operationId, code, message });
   }
 
   // Capacity reservation section 8: the launch waits, keeping its

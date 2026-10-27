@@ -7,6 +7,7 @@ import {
   type WorkerJournal,
 } from '@taskelith/execution';
 import { err, failure, ok } from '@taskelith/kernel';
+import { InMemoryLogSink, Logger } from '@taskelith/observability';
 import { value } from '@taskelith/testing';
 import { LaunchOrchestrator, LIVENESS_POLLS } from '@taskelith/worker';
 import type { WorkerRoot } from '@taskelith/worker-journal';
@@ -38,6 +39,7 @@ let pressure: FakePressure;
 let authority: FakeAuthority;
 let supervisions: FakeSupervisions;
 let delays: number[];
+let sink: InMemoryLogSink;
 let controller: AbortController;
 let orchestrator: LaunchOrchestrator;
 
@@ -49,6 +51,7 @@ beforeEach(() => {
   authority = new FakeAuthority();
   supervisions = new FakeSupervisions();
   delays = [];
+  sink = new InMemoryLogSink();
   controller = new AbortController();
   let ids = 0;
   orchestrator = new LaunchOrchestrator({
@@ -62,6 +65,7 @@ beforeEach(() => {
       await new Promise((resolve) => setImmediate(resolve));
     },
     pollMilliseconds: 100,
+    logger: new Logger(sink, { now: () => T0 }),
   });
 });
 
@@ -160,6 +164,29 @@ test('a request without a decision is repeated with the same operation, backing 
   assert.deepEqual(backoff, [7_500, 15_000]);
   assert.ok(backoff.every((delay) => delay <= LAUNCH_RETRY_DELAY.maximumMilliseconds));
   assert.equal(executions()[0]?.state, 'exited');
+});
+
+test('a request without an answer is logged with its cause, never over its known fields, before it is repeated', async () => {
+  value(journal.recordCommand(offer()));
+  const cause = { cause: 'TypeError: fetch failed <- Error[ECONNRESET]: read ECONNRESET', causeCode: 'ECONNRESET' };
+  const spoofed = { executionId: 'spoofed', operationId: 'spoofed', code: 'spoofed', message: 'spoofed' };
+  const answered = failure('unavailable', 'the control plane did not answer', { ...spoofed, ...cause });
+  authority.answers = [err(answered), granted()];
+  supervisions.onCreated = (supervision) => {
+    supervision.facts = [{ problems: [], process: PROCESS, exit: CLEAN_EXIT }];
+  };
+  await launchOnce();
+
+  const logged = sink.records.filter(({ event }) => event === 'worker.launch.authorization-failed');
+  const [request] = authority.requests;
+  assert.deepEqual(logged.map(({ level, fields }) => ({ level, fields })), [{
+    level: 'warn',
+    fields: {
+      executionId: request?.executionId, operationId: request?.operationId,
+      code: 'unavailable', message: 'the control plane did not answer', ...cause,
+    },
+  }]);
+  assert.equal(authority.requests.length, 2);
 });
 
 test('under admission pressure no authorization is journaled or requested until it clears', async () => {
@@ -315,7 +342,23 @@ test('a grant that arrives after the deadline is journaled and never used', asyn
   assert.equal(authority.requests.length, 2);
   assert.equal(authority.requests[0]?.reportsNotStartedFor, undefined);
   const sealed = { executionId: first?.executionId, operationId: authority.requests[0]?.operationId };
-  assert.deepEqual(authority.requests[1]?.reportsNotStartedFor, sealed);
+  assert.deepEqual(authority.requests[1]?.reportsNotStartedFor, [sealed]);
+});
+
+test('a later grant confirms the sealed executions before it, so the next request reports only the newer one', async () => {
+  value(journal.recordCommand(offer()));
+  authority.answers = [granted()];
+  authority.onRequest = () => {
+    if (authority.requests.length <= 2) clock.milliseconds += 25_000;
+    else controller.abort();
+  };
+  await launchOnce();
+
+  const [, second] = executions();
+  assert.equal(authority.requests.length, 3);
+  assert.equal(authority.requests[1]?.reportsNotStartedFor?.length, 1);
+  const sealed = { executionId: second?.executionId, operationId: authority.requests[1]?.operationId };
+  assert.deepEqual(authority.requests[2]?.reportsNotStartedFor, [sealed]);
 });
 
 test('a reading from another boot never hands a grant out', async () => {
@@ -534,7 +577,7 @@ test('cancellation names a superseded execution: the running one goes on, and ev
   assert.equal(callCount(supervisions.byExecution.get(running), 'cancel'), 0);
   assert.equal(executions()[1]?.state, 'started');
   assert.equal(executions().length, 2);
-  assert.equal(authority.requests[1]?.reportsNotStartedFor?.executionId, superseded);
+  assert.deepEqual(authority.requests[1]?.reportsNotStartedFor?.map(({ executionId }) => executionId), [superseded]);
   assert.equal(value(journal.snapshot()).cancellations[0]?.evidenceRecorded, true);
 });
 

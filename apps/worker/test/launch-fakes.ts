@@ -115,8 +115,8 @@ export function granted(ttlMilliseconds = 30_000): (request: LaunchAuthorization
 export function grantedToOwner(initialOwner?: string): (request: LaunchAuthorizationRequest) => Result<LaunchOutcome> {
   let owner = initialOwner;
   return (request) => {
-    const sealed = request.reportsNotStartedFor?.executionId;
-    if (owner !== undefined && owner !== request.executionId && owner !== sealed) {
+    const sealed = request.reportsNotStartedFor?.some(({ executionId }) => executionId === owner) === true;
+    if (owner !== undefined && owner !== request.executionId && !sealed) {
       return ok({ kind: 'rejected', rejection: launchRejection('execution-conflict', `execution ${owner} owns the attempt`) });
     }
     owner = request.executionId;
