@@ -12,4 +12,4 @@
 
 - [x] 3.1 Show that the reproduction no longer fails the fixed test, and run the file repeatedly.
 - [x] 3.2 Run `npm run openspec -- validate stabilize-placement-fair-order-test --strict` and `make verify`.
-- [ ] 3.3 Independent review and record it in `verification.md`.
+- [x] 3.3 Independent review and record it in `verification.md`.

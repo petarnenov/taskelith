@@ -37,7 +37,8 @@ MacBook Air, macOS 26.6.2 (Darwin 25.6.0, arm64), Node.js v24.22.1, Docker 29.6.
 
 ## Independent review
 
-Pending.
+- **Pass 1 — OpenCode CLI, model `opencode-go/deepseek-v4-pro`, variant `high`, agent `reviewer`, session `ses_e8410dbc3ffe58rP3mqWyXhWcz`, revision `b80528a`, 2026-10-27T05:57:11Z to 06:07:29Z.** Invocation: `opencode run --standalone --agent reviewer -m 'opencode-go/deepseek-v4-pro#high' --format json --title stabilize-placement-fair-order-test "$(cat prompt-1.md)" < /dev/null > pass-1.jsonl`, with the prompt and log in the coordinator session's scratchpad, outside the worktree. Model confirmation: the session's stored assistant messages record model `deepseek-v4-pro`, provider `opencode-go`, variant `high`, and agent `reviewer`. The SHA-256 tree snapshot was `2221f5ac5b0882093e0f41d344699165d0a6bc5d5123d526b511a528229772fc` before and after the pass. The prompt included the coordinator's checklist item `missing-fail-before-test`. The reviewer confirmed the diagnosis, the test logic, the fail-before run, `skip_specs`, the records, and the clean code. Findings: 0 Critical, 0 High, 0 Medium, 1 Low. Because the pass found only a Low finding, it was resolved without another review pass, as the review process allows; this fix is unreviewed:
+  1. Low (`verification.md:32`, `evidence-mismatch`): the after-fix perturbation is inserted before the `waitingSince` pins, which overwrite it, so the run does not show that the fixed test survives the perturbation. Accepted in `da0af03`: the record now says the run shows only that the pinned test passes, because the pins replace the submit stamps, and names the mirror test as the evidence that a state with `task-2` waiting longer places `task-2`.
 
 ## Limitations
 
@@ -46,7 +47,6 @@ Pending.
 
 ## Remaining gates
 
-- Independent review.
 - Integration into dev by the coordinator (single pull request).
 
 ## Follow-up outside scope
