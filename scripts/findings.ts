@@ -87,12 +87,19 @@ function checklistQuery(capabilities: readonly string[], files: readonly string[
   return { capabilities: capabilities.flatMap(splitList), files: files.flatMap(splitList), top: topCount(top) };
 }
 
-// Splits at commas outside braces, nested ones included, so a glob such as
-// `src/{a,{b,c}}.ts` stays whole.
+// Splits at commas outside braces, nested ones included, and outside
+// character classes, so `src/{a,{b,c}}.ts` and `[a,b]*.ts` stay whole.
 export function splitList(value: string): string[] {
   const items = [''];
   let depth = 0;
-  for (const character of value) {
+  for (let index = 0; index < value.length; index += 1) {
+    const classEnd = characterClassEnd(value, index);
+    if (classEnd !== undefined) {
+      items[items.length - 1] += value.slice(index, classEnd + 1);
+      index = classEnd;
+      continue;
+    }
+    const character = value[index];
     if (character === ',' && depth === 0) {
       items.push('');
       continue;
@@ -102,6 +109,16 @@ export function splitList(value: string): string[] {
     items[items.length - 1] += character;
   }
   return items.map((item) => item.trim()).filter((item) => item !== '');
+}
+
+// The index of the `]` closing a class that opens at `start`; a `]` right
+// after `[`, `[!`, or `[^` is a member, and an unclosed `[` is literal.
+function characterClassEnd(value: string, start: number): number | undefined {
+  if (value[start] !== '[') return undefined;
+  let first = start + 1;
+  if (value[first] === '!' || value[first] === '^') first += 1;
+  const end = value.indexOf(']', first + 1);
+  return end === -1 ? undefined : end;
 }
 
 function topCount(value: string | undefined): number {
