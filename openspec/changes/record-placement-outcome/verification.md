@@ -1,6 +1,6 @@
 # Verification
 
-Date: 2026-10-27. The author's verification, the checks without Docker, and `make verify` after the merge of `dev` are recorded below; review passes 1 and 2 and their fixes follow; pass 3 is a remaining gate.
+Date: 2026-10-27. The author's verification, the checks without Docker, and `make verify` after the merge of `dev` are recorded below; review passes 1 and 2 and their fixes follow, and pass 3 confirms them.
 
 ## Scope and source
 
@@ -106,13 +106,22 @@ The coordinator assigns reviewers A and B; each pass that runs to a report adds 
 - **L8, missing-fail-before-test** (`placement-outcome.test.ts:213`, `:218`): the failure flag also failed removals, so an ignored waiting write failure could still surface from task-b1's removal. Fixed in `35f0c7d3`: record and removal failures have their own flags, and `a failed write of a waiting record stops the pass` (`:219`) fails only records. With `#offer` changed to ignore the failure of `#recordWait` and rebuilt, it failed (`expected a failure`); restored, it passes.
 - **L9, missing-fail-before-test** (`packages/adapters/postgres/migrations/1792932600000_placement-outcomes.sql:8`): no test tried a disposition or source outside the table's values. Fixed in `35f0c7d3` with `the placement outcomes table rejects a disposition or source outside its values` (`packages/adapters/postgres/test/migrations.integration.test.ts:421`), which expects the two check constraints to reject `standing` and `worker` and accepts a valid row. It passes in `make verify` at `c561c77d` (Checks).
 
+### Review pass 3
+
+- **Reviewer:** A, Codex CLI, model `gpt-6.1-sol`, reasoning effort `medium`, read-only sandbox, session `01a17e88-a6c2-7f92-a899-a7b3a97f173c`; run by the coordinator. Scope: confirm the pass 2 fixes only.
+- **Revision reviewed:** `b95d2fe5..768a1910`.
+- **Invocation:** as in pass 1.
+- **Snapshot:** before and after the pass `d962f02ee2f81a18f0c307c055166c538d4ec942f88a553f432b684c65c0f953`, identical.
+- **Pass 2 fixes:** all ten confirmed (M1, L1 to L9).
+- **Checks run by the reviewer:** the seven unit tests of `placement-outcome.test.ts`, `verify:findings`, `verify:comments`, `verify:links`, and `git diff --check`, all passing; no PostgreSQL integration test.
+- **Result:** Critical 0, High 0, Medium 0, Low 0.
+
 ## Limitations
 
 - A pass that finds no candidate worker records nothing, a cancelled task keeps its last record, both as the coordinator decided (`design.md`, D9), and two control-plane instances may race on one task's record (`design.md`, D5, Risks and limits).
 
 ## Remaining gates
 
-- Review pass 3 by reviewer A, since pass 2 has a finding above Low.
 - Archive of the change on the branch (worker step 7).
 - Later outcome sources, delegation admission (`delegation-awaiting-capacity`) and worker refusals, need new `source` values and a migration of the table's `source` check, in a separate task (coordinator, Niki, 2026-10-27).
 - Integration into dev by the coordinator (single pull request).

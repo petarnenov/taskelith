@@ -25,4 +25,4 @@
 - [x] 5.2 Run `make verify`, which needs Docker, once the coordinator approves it.
 - [x] 5.3 Review pass 1 by reviewer A.
 - [x] 5.4 Review pass 2 by reviewer B.
-- [ ] 5.5 Review pass 3 by reviewer A, if pass 2 has findings above Low.
+- [x] 5.5 Review pass 3 by reviewer A, if pass 2 has findings above Low.
