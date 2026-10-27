@@ -26,6 +26,7 @@ jobs:
       - run: npm install --global npm@12.2.1 --ignore-scripts
       - run: npm ci --ignore-scripts
       - name: Record the environment
+        id: environment
         run: |
           mkdir -p "$RUNNER_TEMP/acceptance"
           {
@@ -47,7 +48,7 @@ jobs:
           make native-acceptance ENTRIES=linux \
             RESULTS="$RUNNER_TEMP/acceptance/results.jsonl" 2>&1 \
             | tee "$RUNNER_TEMP/acceptance/run.log"
-      - if: always()
+      - if: always() && steps.environment.outcome != 'skipped'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: linux-x86_64-acceptance
