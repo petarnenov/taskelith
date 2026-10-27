@@ -384,6 +384,93 @@ test('reviewers leaves active changes out and fails on invalid records', () => {
   }
 });
 
+test('validate rejects a non-canonical reviewer key of an active change by file and line', () => {
+  const cases = {
+    'claude-code': { harness: 'claude-code', model: 'claude-opus-5-5', variant: 'high' },
+    'no-provider': { harness: 'opencode', model: 'kimi-k2.7-code' },
+    'with-provider': { harness: 'codex', model: 'openai/gpt-6.1-sol', variant: 'medium' },
+  };
+  const files = Object.entries(cases).flatMap(([change, reviewer]) => [
+    [`openspec/changes/${change}/findings.jsonl`, `${line(change, 'docs', 'Finding', { reviewer })}\n`],
+    [`openspec/changes/${change}/passes.jsonl`, `${summary(change, 1, { low: 1 }, { reviewer })}\n`],
+  ]);
+  const root = repository(Object.fromEntries(files));
+  const rejected = (file: string, key: string, reason: string) => `${file}:1: reviewer "${key}" is not canonical: ${reason}`;
+  const harness = 'harness "claude-code" is none of claude, codex, opencode, agy';
+  const provider = 'an OpenCode model names its provider as its CLI takes it, for example opencode-go/kimi-k2.7-code';
+  const variant = 'variant is missing; record the effort, "default" when the harness default ran';
+  const prefixed = 'only an OpenCode model has a provider prefix; name the model as the codex CLI takes it';
+  try {
+    const result = runFindings(['validate'], root);
+    assert.equal(result.exitCode, 1);
+    assert.deepEqual(result.stderr.split('\n'), [
+      rejected('openspec/changes/claude-code/findings.jsonl', 'claude-code claude-opus-5-5#high', harness),
+      rejected('openspec/changes/claude-code/passes.jsonl', 'claude-code claude-opus-5-5#high', harness),
+      rejected('openspec/changes/no-provider/findings.jsonl', 'opencode kimi-k2.7-code', provider),
+      rejected('openspec/changes/no-provider/findings.jsonl', 'opencode kimi-k2.7-code', variant),
+      rejected('openspec/changes/no-provider/passes.jsonl', 'opencode kimi-k2.7-code', provider),
+      rejected('openspec/changes/no-provider/passes.jsonl', 'opencode kimi-k2.7-code', variant),
+      rejected('openspec/changes/with-provider/findings.jsonl', 'codex openai/gpt-6.1-sol#medium', prefixed),
+      rejected('openspec/changes/with-provider/passes.jsonl', 'codex openai/gpt-6.1-sol#medium', prefixed),
+      `Review findings: 8 problem(s); ${FORMATS}.`,
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validate accepts canonical reviewer keys in active changes and legacy ones in archives', () => {
+  const canonical = [
+    { harness: 'claude', model: 'claude-fable-5-1', variant: 'medium' },
+    { harness: 'opencode', model: 'opencode-go/kimi-k2.7-code', variant: 'default' },
+    { harness: 'agy', model: 'gemini-4-argon-medium', variant: 'medium' },
+  ];
+  const active = canonical.flatMap((reviewer, index) => [
+    [`openspec/changes/active-${index}/findings.jsonl`, `${line(`active-${index}`, 'docs', 'Finding', { reviewer })}\n`],
+    [`openspec/changes/active-${index}/passes.jsonl`, `${summary(`active-${index}`, 1, { low: 1 }, { reviewer })}\n`],
+  ]);
+  const legacy = { harness: 'claude-code', model: 'claude-opus-5-5' };
+  const root = repository({
+    ...Object.fromEntries(active),
+    'openspec/changes/archive/2026-10-08-legacy/findings.jsonl': `${line('legacy', 'docs', 'Old', { reviewer: legacy })}\n`,
+    'openspec/changes/archive/2026-10-08-legacy/passes.jsonl': `${summary('legacy', 1, { low: 1 }, { reviewer: legacy })}\n`,
+  });
+  try {
+    assert.equal(runFindings(['validate'], root).exitCode, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+const OPUS = { harness: 'claude', model: 'claude-opus-5-5', variant: 'high' };
+const KIMI_K2_7_CODE = { harness: 'opencode', model: 'opencode-go/kimi-k2.7-code', variant: 'default' };
+
+const LEGACY_SPELLINGS = [
+  { legacy: { harness: 'claude-code', model: 'claude-opus-5-5', variant: 'high' }, canonical: OPUS },
+  { legacy: { harness: 'opencode', model: 'kimi-k2.7-code', variant: 'default' }, canonical: KIMI_K2_7_CODE },
+  { legacy: { harness: 'opencode', model: 'opencode-go/kimi-k2.7-code' }, canonical: KIMI_K2_7_CODE },
+];
+
+for (const { legacy, canonical } of LEGACY_SPELLINGS) {
+  const spelling = `${legacy.harness} ${legacy.model}${'variant' in legacy ? `#${legacy.variant}` : ''}`;
+  test(`reviewers and index count the archived spelling "${spelling}" as its canonical reviewer`, () => {
+    const records = (change: string, reviewer: object) => ({
+      [`openspec/changes/archive/2026-10-09-${change}/findings.jsonl`]: `${line(change, 'docs', 'Finding', { reviewer })}\n`,
+      [`openspec/changes/archive/2026-10-09-${change}/passes.jsonl`]: `${summary(change, 1, { low: 1 }, { reviewer })}\n`,
+    });
+    const root = repository({ ...records('legacy', legacy), ...records('canonical', canonical) });
+    const key = `${canonical.harness} ${canonical.model}#${canonical.variant}`;
+    try {
+      const statistics = JSON.parse(runFindings(['reviewers', '--json'], root).stdout) as { reviewers: { key: string; passes: number }[] };
+      assert.deepEqual(statistics.reviewers.map(({ key, passes }) => [key, passes]), [[key, 2]]);
+      const index = JSON.parse(runFindings(['index', '--json'], root).stdout) as { reviewer: { key: string; total: number }[] };
+      assert.deepEqual(index.reviewer.map(({ key, total }) => [key, total]), [[key, 2]]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
 test('a usage error prints the usage and exits with 2', () => {
   const result = runFindings(['checklist', '--top', 'many'], '/nonexistent');
   assert.deepEqual(result, { exitCode: 2, stdout: '', stderr: `--top must be 1 to 10\n${USAGE}` });

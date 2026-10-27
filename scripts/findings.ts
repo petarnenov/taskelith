@@ -21,9 +21,11 @@ import {
   type Finding,
   type FindingRules,
   type Problem,
+  type Reviewer,
   type SchemaCheck,
 } from './review-findings.ts';
 import { consistencyProblems, parsePassSummaries, PASSES_FILE, type PassSummary } from './review-passes.ts';
+import { reviewerKeyProblems, withCanonicalReviewer } from './reviewer-keys.ts';
 import { formatReviewerStatistics, reviewerStatistics, type ReviewedChange } from './reviewer-statistics.ts';
 
 // npm run findings: validates the review records of OpenSpec changes and
@@ -267,12 +269,38 @@ function checkChange(records: ChangeRecords, rules: ChangeRules): CheckedChange 
       summaries: passes.located,
     })
     : [];
+  const reviewerKeys = archived ? [] : [
+    ...reviewerProblems(records.findings?.path, findings?.located.map(({ line, finding }) => ({ line, record: finding }))),
+    ...reviewerProblems(records.passes?.path, passes?.located.map(({ line, summary }) => ({ line, record: summary }))),
+  ];
   return {
     change,
     archived,
     findings: findings?.located.map(({ finding }) => finding) ?? [],
     summaries: passes?.located.map(({ summary }): PassSummary => summary),
-    problems: [...(findings?.problems ?? []), ...(passes?.problems ?? []), ...consistency],
+    problems: [...(findings?.problems ?? []), ...(passes?.problems ?? []), ...consistency, ...reviewerKeys],
+  };
+}
+
+interface ReviewerLine {
+  readonly line: number;
+  readonly record: { readonly reviewer: Reviewer };
+}
+
+// Active records must use the canonical reviewer key; archived ones keep
+// their spelling and are read through the alias table.
+function reviewerProblems(file: string | undefined, lines: readonly ReviewerLine[] = []): Problem[] {
+  if (file === undefined) return [];
+  return lines.flatMap(({ line, record }) =>
+    reviewerKeyProblems(record.reviewer).map((message) => ({ file, line, message })));
+}
+
+// The reports count each reviewer under its canonical key.
+function withCanonicalReviewers(change: CheckedChange): CheckedChange {
+  return {
+    ...change,
+    findings: change.findings.map(withCanonicalReviewer),
+    summaries: change.summaries?.map(withCanonicalReviewer),
   };
 }
 
@@ -299,7 +327,7 @@ function runCommand(command: Command, repository: Repository): RunResult {
 
 function commandOutput(command: Command, repository: Repository, checked: readonly CheckedChange[], categories: readonly Category[]): string {
   if (command.name === 'validate') return validOutput(repository.changes);
-  const archivedChanges = checked.filter(({ archived }) => archived);
+  const archivedChanges = checked.filter(({ archived }) => archived).map(withCanonicalReviewers);
   if (command.name === 'reviewers') {
     const statistics = reviewerStatistics(archivedChanges, repository.unrecordedArchived);
     return command.json ? JSON.stringify(statistics, null, 2) : formatReviewerStatistics(statistics);
