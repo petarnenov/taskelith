@@ -73,3 +73,14 @@ This Linux host: Ubuntu 24.04.5 LTS, kernel Linux 6.8.0-147-generic, Docker engi
 ## Remaining gates
 
 - Integration into dev by the coordinator (single pull request).
+
+## Archive checks
+
+Worker step 7, run after review pass 2 and its unreviewed L1 fix. The checked state is the tree of the archive commit, the working tree these checks ran on after `npm run openspec -- archive fix-platform-probe-filesystem-label --yes` (base `f02cb57`), which applied the delta to `native-worker-acceptance` (1 requirement modified).
+
+- `npm run openspec -- validate --all --strict`: 69 passed, 0 failed.
+- `npm run openspec -- validate --archived --no-interactive`: this change's line `change/2026-10-27-fix-platform-probe-filesystem-label` passes.
+- `git diff "$(git merge-base HEAD origin/dev)" -- openspec/specs`: only `openspec/specs/native-worker-acceptance/spec.md`, where "Platform facts of a proof" gains the mount-type sentence and the scenarios "An ext4 volume on Linux" and "No mount type readable"; the existing scenario is unchanged.
+- The moved change has its `findings.jsonl` (M1 `fixed`, L1 `fixed-unreviewed`); `make findings ARGS="validate"`: every findings file is valid (3 files).
+- `make verify`: exit 0; 2022 tests, 1976 pass, 0 fail, 46 skipped (the macOS-only native supervision suites); coverage lines 99.19%, branches 91.86%, functions 98.80%; `validate --all --strict` 69 passed; archive dry run and package verification passed; no flaky rerun was needed.
+- `origin/dev` moved to `33d341a` after the base `fe64386`; the branch is not merged with it. The new commits touch none of this change's scripts, tests, or living spec.
